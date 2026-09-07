@@ -95,7 +95,7 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
              mission_catalog["applications"]
 
     args = [
-      Path.join(app_root, "assets/test/federation_browser_smoke.mjs"),
+      Path.join(app_root, "../../frontend/tools/phoenix/federation_browser_smoke.mjs"),
       "--comms-url",
       "#{base_url}/missions/#{context.mission.mission_id}/applications/comms/federated",
       "--telemetry-url",
@@ -156,14 +156,15 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
         timeout_ms -> args ++ ["--scenario-timeout-ms", timeout_ms]
       end
 
-    assert {output, 0} =
-             DashboardRenderedViewportRunner.run_dashboard_viewport_smoke(args,
-               cd: app_root,
-               timeout: 540_000,
-               shutdown_timeout: 15_000,
-               stdin: Jason.encode!(%{"password" => TestFixtures.default_password()}) <> "\n"
-             )
+    {output, status} =
+      DashboardRenderedViewportRunner.run_dashboard_viewport_smoke(args,
+        cd: app_root,
+        timeout: 540_000,
+        shutdown_timeout: 15_000,
+        stdin: Jason.encode!(%{"password" => TestFixtures.default_password()}) <> "\n"
+      )
 
+    assert status == 0, output
     assert output =~ "federation_browser_smoke passed"
     :ok
   end
@@ -200,16 +201,6 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       })
 
     host_context = HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id)
-    mission_context = HostContext.mission(mission.mission_id)
-
-    assert {:ok, _installation} =
-             ApplicationInstallations.install(scope, mission_context, "ops_console")
-
-    assert {:ok, _installation} =
-             ApplicationInstallations.install(scope, mission_context, "comms")
-
-    assert {:ok, _installation} =
-             ApplicationInstallations.install(scope, mission_context, "spacecraft")
 
     assert {:ok, _installation} =
              ApplicationInstallations.install(scope, host_context, "telemetry_decom")

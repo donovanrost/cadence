@@ -736,8 +736,11 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
                "/missions/#{mission.mission_id}/applications"
              )
 
-    assert LiveVue.Test.get_vue(management_view, id: "mission-applications-page-component").component ==
-             "MissionApplicationManagement"
+    assert is_map(
+             LiveVue.Test.get_vue(management_view, id: "application-shell").props["snapshot"][
+               "presentation"
+             ]
+           )
 
     query_response =
       post_host_bridge(

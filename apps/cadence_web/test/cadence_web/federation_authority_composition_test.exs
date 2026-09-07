@@ -2,8 +2,8 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
   use ExUnit.Case, async: true
 
   alias Cadence.Applications.{CatalogRegistry, ReleaseContribution, ReleaseRegistry}
+  alias Cadence.Applications.OrganizationAdmin
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry, as: SurfaceProviderRegistry
-  alias CadenceWeb.ApplicationContributions.OrganizationAdmin
 
   @provider_ledger [
     Cadence.Applications.Comms,

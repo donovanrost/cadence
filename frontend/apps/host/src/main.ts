@@ -1,4 +1,4 @@
-import "@cadence/design-tokens/base.css";
+import "./styles.css";
 import "./style.css";
 import { bootstrapHost } from "./host-bootstrap";
 

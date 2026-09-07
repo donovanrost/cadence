@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import AccountDropdownMenu from "./ui/reka/AccountDropdownMenu.vue";
-import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue";
+import AccountDropdownMenu from "@cadence/ui/AccountDropdownMenu.vue";
+import CadenceMenuItem from "@cadence/ui/CadenceMenuItem.vue";
 
 type Attributes = Record<string, string>;
 

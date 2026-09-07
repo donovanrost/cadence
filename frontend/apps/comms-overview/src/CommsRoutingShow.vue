@@ -1,11 +1,8 @@
 <script setup lang="ts">
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
+import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
 import StatusBadge from "./StatusBadge.vue";
 
 type Breadcrumb = {
@@ -50,42 +47,13 @@ defineProps<{
 
 <template>
   <div id="comms-routing-show-surface" class="space-y-6">
-    <CadencePageHeaderFrame variant="compact">
-      <CadenceCompactPageHeaderBodyFrame>
-        <template #content>
-          <CadenceBreadcrumbs>
-            <template
-              v-for="(breadcrumb, index) in navigation.breadcrumbs"
-              :key="`${index}-${breadcrumb.label}`"
-            >
-              <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-              <span v-if="breadcrumb.href === null" class="text-primary/90">
-                {{ breadcrumb.label }}
-              </span>
-              <a
-                v-else
-                :href="breadcrumb.href"
-                data-phx-link="redirect"
-                data-phx-link-state="push"
-                class="hover:text-primary transition-colors"
-                >{{ breadcrumb.label }}</a
-              >
-            </template>
-          </CadenceBreadcrumbs>
-
-          <CadencePageTitle>
-            {{ rule.display_name }}
-          </CadencePageTitle>
-          <p class="mt-1 max-w-3xl text-sm text-base-content/70">
-            {{ rule.routing_rule_id }}
-          </p>
-        </template>
-
-        <template #actions>
-          <StatusBadge :status="rule.state.tone" :label="rule.state.label" />
-        </template>
-      </CadenceCompactPageHeaderBodyFrame>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading :breadcrumbs="navigation.breadcrumbs">
+      <template #title>{{ rule.display_name }}</template>
+      <template #description>{{ rule.routing_rule_id }}</template>
+      <template #actions
+        ><StatusBadge :status="rule.state.tone" :label="rule.state.label"
+      /></template>
+    </CadencePageHeading>
 
     <div class="grid gap-4 xl:grid-cols-[1fr_22rem]">
       <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">

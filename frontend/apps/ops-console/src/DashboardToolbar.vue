@@ -8,7 +8,7 @@ import DashboardRuntimeControls from "./DashboardRuntimeControls.vue";
 import DashboardTimePicker from "./DashboardTimePicker.vue";
 import DashboardToolbarMenu from "./DashboardToolbarMenu.vue";
 import WidgetWarning from "./WidgetWarning.vue";
-import CadencePopover from "./ui/reka/CadencePopover.vue";
+import CadencePopover from "@cadence/ui/CadencePopover.vue";
 
 type ToolbarPresentation = Record<string, any>;
 
@@ -44,7 +44,7 @@ const dataHealthPanelAttrs = computed(() => {
 <template>
   <div v-bind="props.presentation.root.attrs">
     <div :class="props.presentation.title.wrapper_class">
-      <h1 v-bind="props.presentation.title.attrs">{{ props.presentation.title.text }}</h1>
+      <h2 v-bind="props.presentation.title.attrs">{{ props.presentation.title.text }}</h2>
     </div>
 
     <div v-if="props.presentation.viewer" v-bind="props.presentation.viewer.root.attrs">

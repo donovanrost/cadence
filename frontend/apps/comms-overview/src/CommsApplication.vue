@@ -86,7 +86,7 @@ async function executeAction(actionId: string, input: unknown = {}): Promise<voi
     if (actionId === "save") {
       const href = actionResultHref(receipt);
       if (href) {
-        window.location.assign(href);
+        (props.bridge.navigate ?? ((target) => window.location.assign(target)))(href);
         return;
       }
     }

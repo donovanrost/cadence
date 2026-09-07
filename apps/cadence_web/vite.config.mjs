@@ -1,3 +1,4 @@
+import {fileURLToPath} from "node:url"
 import commonjs from "@rollup/plugin-commonjs"
 import vue from "@vitejs/plugin-vue"
 import liveVuePlugin from "live_vue/vitePlugin"
@@ -5,6 +6,10 @@ import {defineConfig} from "vite"
 
 export default defineConfig({
   root: "assets",
+  resolve: {
+    alias: {"@cadence/ui": fileURLToPath(new URL("../../frontend/packages/ui/src", import.meta.url))},
+    dedupe: ["vue", "reka-ui"]
+  },
   publicDir: "public",
   server: {
     host: "127.0.0.1",

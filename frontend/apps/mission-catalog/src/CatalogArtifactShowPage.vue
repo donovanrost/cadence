@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { pageContentAttrs } from "@cadence/ui/page-chrome";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { presentationBreadcrumbs } from "@cadence/ui/page-chrome";
 import CatalogArtifactShow from "./CatalogArtifactShow.vue";
 
 type Attrs = Record<string, string>;
@@ -47,27 +50,12 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div v-bind="props.presentation.root.attrs">
-    <header v-bind="props.presentation.header.attrs">
-      <div v-bind="props.presentation.header.body.attrs">
-        <div v-bind="props.presentation.header.content.attrs">
-          <nav v-bind="props.presentation.header.breadcrumbs.attrs">
-            <template v-for="item in props.presentation.header.breadcrumbs.items" :key="item.key">
-              <span v-if="item.separator" v-bind="item.separator.attrs">
-                {{ item.separator.text }}
-              </span>
-              <a v-if="item.link" v-bind="item.link.attrs">{{ item.link.text }}</a>
-              <span v-if="item.current" v-bind="item.current.attrs">
-                {{ item.current.text }}
-              </span>
-            </template>
-          </nav>
-          <h1 v-bind="props.presentation.header.title.attrs">
-            {{ props.presentation.header.title.text }}
-          </h1>
-        </div>
-      </div>
-    </header>
+  <div v-bind="pageContentAttrs(props.presentation.root.attrs)">
+    <CadencePageHeading
+      :breadcrumbs="presentationBreadcrumbs(props.presentation.header.breadcrumbs)"
+    >
+      <template #title>{{ props.presentation.header.title.text }}</template>
+    </CadencePageHeading>
 
     <div v-bind="props.presentation.child_wrapper.attrs">
       <CatalogArtifactShow

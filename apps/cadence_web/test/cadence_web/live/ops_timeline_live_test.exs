@@ -11,8 +11,8 @@ defmodule CadenceWeb.OpsTimelineLiveTest do
   alias Cadence.Applications.{HostContext, SurfaceQueryRequest}
   alias Cadence.Auth.Scope
   alias Cadence.Reads.ApplicationSurfaces.OpsConsole
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
-  alias LiveVue.Test
 
   test "authenticated mission members mount the descriptor-only timeline" do
     user = TestFixtures.persist_user!()
@@ -27,8 +27,11 @@ defmodule CadenceWeb.OpsTimelineLiveTest do
       )
 
     assert_surface(view, "ops-timeline-page-component", "timeline", mission, %{})
-    assert has_element?(view, "#ops-context-rail-component")
-    refute has_element?(view, "#ops-timeline-page")
+
+    assert LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["context"][
+             "ops_context"
+           ]["modules"] !=
+             []
   end
 
   test "timeline query provider rejects forged and unsupported context" do
@@ -47,22 +50,14 @@ defmodule CadenceWeb.OpsTimelineLiveTest do
              )
   end
 
-  defp assert_surface(view, id, surface_id, mission, query_params) do
-    assert has_element?(view, "##{id}.contents")
-    vue = Test.get_vue(view, id: id)
-    assert vue.component == "FederatedFullPageSurface"
-    assert vue.id == id
-    assert vue.class == "contents"
-    assert vue.ssr == false
-    assert vue.handlers == %{}
-
-    assert vue.props == %{
-             "application_key" => "ops_console",
-             "host_scope" => "mission",
-             "mission_id" => mission.mission_id,
-             "query_params" => query_params,
-             "surface_id" => surface_id
-           }
+  defp assert_surface(view, _id, surface_id, mission, query_params) do
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => "ops_console",
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => query_params,
+      "surface_id" => surface_id
+    })
   end
 
   defp request(surface_id, params) do

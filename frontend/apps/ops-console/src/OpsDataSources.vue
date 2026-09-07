@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { reactive, ref, watch } from "vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadencePanel from "./ui/components/CadencePanel.vue";
-import CadenceStatTile from "./ui/components/CadenceStatTile.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
+import CadenceStatTile from "@cadence/ui/CadenceStatTile.vue";
 
 type EmptyPayload = Record<string, never>;
 type StringMap = Record<string, string>;
@@ -696,18 +697,12 @@ const deploymentFields = [
     :data-source-focus-evidence-state="page.focus.selected_source_evidence_state"
   >
     <div class="flex-1 min-w-0 overflow-y-auto">
-      <div class="mx-auto max-w-6xl px-6 py-8">
-        <div
-          class="flex flex-col gap-3 border-b border-base-300/60 pb-5 md:flex-row md:items-end md:justify-between"
-        >
-          <div>
-            <h1 class="text-lg font-semibold text-base-content">{{ page.header.heading }}</h1>
-            <p class="mt-1 font-mono text-xs text-base-content/60">
-              {{ page.header.mission_id }}
-            </p>
-          </div>
-          <div class="flex flex-col items-stretch gap-3 md:items-end">
-            <a
+      <div class="">
+        <CadencePageHeading>
+          <template #title>{{ page.header.heading }}</template>
+          <template #description>{{ page.header.mission_id }}</template>
+          <template #actions
+            ><a
               v-if="page.header.register_link"
               :id="page.header.register_link.id"
               :href="page.header.register_link.href"
@@ -718,32 +713,34 @@ const deploymentFields = [
               <span :class="[page.header.register_link.icon, 'h-4 w-4']"></span>
               {{ page.header.register_link.label }}
             </a>
-            <div class="grid grid-cols-3 gap-2 text-right">
-              <CadenceStatTile v-for="stat in page.header.stats" :key="stat.label">
-                <template #label>{{ stat.label }}</template>
-                <p class="mt-1 font-mono text-xl text-base-content">{{ stat.value }}</p>
-              </CadenceStatTile>
-            </div>
-            <div
-              :id="page.header.readiness_policy.id"
-              class="border border-base-300 bg-base-200 px-3 py-2 text-right"
-              :data-source-readiness-policy-id="page.header.readiness_policy.policy_id"
-              :data-source-readiness-block-health="page.header.readiness_policy.block_source_health"
-              :data-source-readiness-block-freshness="page.header.readiness_policy.block_freshness"
-              :data-source-readiness-block-connection-test="
-                page.header.readiness_policy.block_connection_test
-              "
-            >
-              <p class="hud-label">{{ page.header.readiness_policy.label }}</p>
-              <p class="font-mono text-xs text-base-content">
-                {{ page.header.readiness_policy.policy_id }}
-              </p>
-              <p class="mt-1 font-mono text-[0.65rem] text-base-content/60">
-                {{ page.header.readiness_policy.connection_summary }}
-              </p>
-            </div>
+          </template>
+        </CadencePageHeading>
+        <section class="mb-6 grid gap-4 md:grid-cols-2" aria-label="Source readiness">
+          <div class="grid grid-cols-3 gap-2 text-right">
+            <CadenceStatTile v-for="stat in page.header.stats" :key="stat.label">
+              <template #label>{{ stat.label }}</template>
+              <p class="mt-1 font-mono text-xl text-base-content">{{ stat.value }}</p>
+            </CadenceStatTile>
           </div>
-        </div>
+          <div
+            :id="page.header.readiness_policy.id"
+            class="border border-base-300 bg-base-200 px-3 py-2 text-right"
+            :data-source-readiness-policy-id="page.header.readiness_policy.policy_id"
+            :data-source-readiness-block-health="page.header.readiness_policy.block_source_health"
+            :data-source-readiness-block-freshness="page.header.readiness_policy.block_freshness"
+            :data-source-readiness-block-connection-test="
+              page.header.readiness_policy.block_connection_test
+            "
+          >
+            <p class="hud-label">{{ page.header.readiness_policy.label }}</p>
+            <p class="font-mono text-xs text-base-content">
+              {{ page.header.readiness_policy.policy_id }}
+            </p>
+            <p class="mt-1 font-mono text-[0.65rem] text-base-content/60">
+              {{ page.header.readiness_policy.connection_summary }}
+            </p>
+          </div>
+        </section>
 
         <div
           v-if="page.focus.notice"

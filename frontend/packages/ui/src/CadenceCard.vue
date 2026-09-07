@@ -5,11 +5,13 @@ export default defineComponent({
   name: "CadenceCard",
   inheritAttrs: false,
   props: {
-    bodyClass: { type: String, required: true },
+    bodyClass: { type: String, default: "card-body" },
   },
   setup(props, { attrs, slots }) {
     return () =>
-      h("section", attrs, [h("div", { class: props.bodyClass }, [...(slots.default?.() ?? [])])]);
+      h("section", { ...attrs, class: attrs.class ?? "card" }, [
+        h("div", { class: props.bodyClass }, [...(slots.default?.() ?? [])]),
+      ]);
   },
 });
 </script>

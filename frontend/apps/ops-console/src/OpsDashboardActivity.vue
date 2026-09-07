@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { computed } from "vue";
 
 type Page = {
@@ -100,40 +100,31 @@ const activity = computed(() => props.dashboard_activity ?? []);
 </script>
 
 <template>
-  <CadencePageHeaderFrame v-if="surface === 'header'" variant="ops">
-    <div class="mx-auto flex max-w-[100rem] items-end justify-between gap-4">
-      <div>
-        <p class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-primary/70">
-          {{ page.header.eyebrow }}
-        </p>
-        <h1 class="mt-1 text-2xl font-bold tracking-tight">{{ page.header.heading }}</h1>
-        <p class="mt-2 text-sm text-base-content/60">
-          {{ page.header.copy }}
-        </p>
-      </div>
-      <div class="flex gap-2">
-        <a
-          v-if="page.actions.editor.visible"
-          :id="page.actions.editor.id"
-          :href="page.actions.editor.href"
-          data-phx-link="redirect"
-          data-phx-link-state="push"
-          class="btn btn-primary btn-sm"
-        >
-          {{ page.actions.editor.label }}
-        </a>
-        <a
-          :id="page.actions.viewer.id"
-          :href="page.actions.viewer.href"
-          data-phx-link="redirect"
-          data-phx-link-state="push"
-          class="btn btn-ghost btn-sm"
-        >
-          {{ page.actions.viewer.label }}
-        </a>
-      </div>
-    </div>
-  </CadencePageHeaderFrame>
+  <CadencePageHeading v-if="surface === 'header'">
+    <template #title>{{ page.header.heading }}</template>
+    <template #eyebrow>{{ page.header.eyebrow }}</template>
+    <template #description>{{ page.header.copy }}</template>
+    <template #actions
+      ><a
+        v-if="page.actions.editor.visible"
+        :id="page.actions.editor.id"
+        :href="page.actions.editor.href"
+        data-phx-link="redirect"
+        data-phx-link-state="push"
+        class="btn btn-primary btn-sm"
+      >
+        {{ page.actions.editor.label }} </a
+      ><a
+        :id="page.actions.viewer.id"
+        :href="page.actions.viewer.href"
+        data-phx-link="redirect"
+        data-phx-link-state="push"
+        class="btn btn-ghost btn-sm"
+      >
+        {{ page.actions.viewer.label }}
+      </a></template
+    >
+  </CadencePageHeading>
 
   <nav v-if="surface === 'versions'" class="space-y-3" aria-label="Dashboard versions">
     <div class="flex items-center justify-between">

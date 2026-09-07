@@ -8,8 +8,8 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
-  alias LiveVue.Test
 
   test "authenticated routing list mounts the federated mission surface" do
     {conn, _organization, mission} = signed_in_org_and_mission()
@@ -38,8 +38,6 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
     {:ok, view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/comms/routing/#{routing_rule_id}")
 
-    assert has_element?(view, "#comms-routing-show-page")
-
     assert_surface(
       view,
       "comms-routing-show-component",
@@ -59,23 +57,14 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/routing"
       )
 
-    assert has_element?(view, "#spacecraft-routing-page")
-
-    vue = Test.get_vue(view, id: "spacecraft-routing-page")
-
-    assert vue.component == "FederatedFullPageSurface"
-    assert vue.id == "spacecraft-routing-page"
-    assert vue.ssr == false
-    assert vue.handlers == %{}
-
-    assert vue.props == %{
-             "application_key" => "spacecraft",
-             "surface_id" => "routing",
-             "host_scope" => "spacecraft",
-             "mission_id" => mission.mission_id,
-             "spacecraft_id" => spacecraft.spacecraft_id,
-             "query_params" => %{}
-           }
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => "spacecraft",
+      "surface_id" => "routing",
+      "host_scope" => "spacecraft",
+      "mission_id" => mission.mission_id,
+      "spacecraft_id" => spacecraft.spacecraft_id,
+      "query_params" => %{}
+    })
   end
 
   test "routing routes redirect unauthenticated users to sign in", %{conn: conn} do
@@ -83,27 +72,14 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
              live(conn, "/missions/mission-test/comms/routing")
   end
 
-  defp assert_surface(view, id, surface_id, mission, query_params, opts \\ []) do
-    assert has_element?(view, "##{id}")
-
-    vue = Test.get_vue(view, id: id)
-
-    assert vue.component == "FederatedFullPageSurface"
-    assert vue.id == id
-    assert vue.ssr == false
-    assert vue.handlers == %{}
-
-    if class = Keyword.get(opts, :class) do
-      assert vue.class == class
-    end
-
-    assert vue.props == %{
-             "application_key" => "comms",
-             "surface_id" => surface_id,
-             "host_scope" => "mission",
-             "mission_id" => mission.mission_id,
-             "query_params" => query_params
-           }
+  defp assert_surface(view, _id, surface_id, mission, query_params, _opts \\ []) do
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => "comms",
+      "surface_id" => surface_id,
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => query_params
+    })
   end
 
   defp signed_in_org_and_mission do

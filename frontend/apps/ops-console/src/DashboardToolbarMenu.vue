@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-import CadenceMenu from "./ui/reka/CadenceMenu.vue";
-import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue";
+import CadenceMenu from "@cadence/ui/CadenceMenu.vue";
+import CadenceMenuItem from "@cadence/ui/CadenceMenuItem.vue";
 
 type AttrValue = string | boolean | null;
 type Attrs = Record<string, AttrValue>;

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import CadenceListToolbarFrame from "./ui/components/CadenceListToolbarFrame.vue";
-import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue";
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import CadenceListToolbarFrame from "@cadence/ui/CadenceListToolbarFrame.vue";
+import CadencePaginationFrame from "@cadence/ui/CadencePaginationFrame.vue";
+import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
 
 type GroundStationRow = {
   id: string;

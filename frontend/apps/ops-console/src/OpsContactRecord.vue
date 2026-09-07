@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePanel from "./ui/components/CadencePanel.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
 
 type Action = {
   id: string;
@@ -94,57 +94,48 @@ defineProps<{
 
 <template>
   <main :id="record.id" class="min-h-0 flex-1 overflow-y-auto bg-base-100">
-    <CadencePageHeaderFrame variant="ops">
-      <div
-        class="mx-auto flex max-w-[90rem] flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"
+    <CadencePageHeading>
+      <template #title>{{ record.header.title }}</template>
+      <template #description>{{ record.header.canonical_id }}</template>
+      <template #actions
+        ><a
+          :id="record.header.back.id"
+          :href="record.header.back.href"
+          data-phx-link="redirect"
+          data-phx-link-state="push"
+          class="inline-flex items-center gap-1 font-mono text-[0.65rem] uppercase tracking-[0.18em] text-primary/70 hover:text-primary"
+        >
+          <span :class="[record.header.back.icon, 'h-3 w-3']"></span>
+          {{ record.header.back.label }}
+        </a>
+
+        <a
+          v-for="action in record.header.actions"
+          :id="action.id"
+          :key="action.id"
+          :href="action.href"
+          data-phx-link="redirect"
+          data-phx-link-state="push"
+          :class="action.class"
+        >
+          <span :class="[action.icon, 'h-4 w-4']"></span>
+          {{ action.label }}
+        </a></template
       >
-        <div class="min-w-0">
-          <a
-            :id="record.header.back.id"
-            :href="record.header.back.href"
-            data-phx-link="redirect"
-            data-phx-link-state="push"
-            class="inline-flex items-center gap-1 font-mono text-[0.65rem] uppercase tracking-[0.18em] text-primary/70 hover:text-primary"
-          >
-            <span :class="[record.header.back.icon, 'h-3 w-3']"></span>
-            {{ record.header.back.label }}
-          </a>
-          <div class="mt-3 flex flex-wrap items-center gap-3">
-            <h1 class="text-2xl font-bold tracking-tight">{{ record.header.title }}</h1>
-            <span
-              :class="[
-                'border px-2 py-1 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em]',
-                record.header.lifecycle.class,
-              ]"
-            >
-              {{ record.header.lifecycle.label }}
-            </span>
-          </div>
-          <p id="contact-record-id" class="mt-2 break-all font-mono text-xs text-base-content/50">
-            {{ record.header.canonical_id }}
-          </p>
-        </div>
 
-        <div class="flex flex-wrap gap-2">
-          <a
-            v-for="action in record.header.actions"
-            :id="action.id"
-            :key="action.id"
-            :href="action.href"
-            data-phx-link="redirect"
-            data-phx-link-state="push"
-            :class="action.class"
-          >
-            <span :class="[action.icon, 'h-4 w-4']"></span>
-            {{ action.label }}
-          </a>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
-
-    <div
-      class="mx-auto grid max-w-[90rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.65fr)] lg:p-7"
+      <template #metadata
+        ><span
+          :class="[
+            'border px-2 py-1 font-mono text-[0.65rem] font-bold uppercase tracking-[0.14em]',
+            record.header.lifecycle.class,
+          ]"
+        >
+          {{ record.header.lifecycle.label }}
+        </span></template
+      ></CadencePageHeading
     >
+
+    <div class="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.65fr)]">
       <div class="min-w-0 space-y-5">
         <CadencePanel
           :id="record.window.id"

@@ -6,7 +6,7 @@ import type {
   HostBridge,
   SpacecraftHostContext,
 } from "@cadence/plugin-sdk";
-import type { Component } from "vue";
+import { h, type Component } from "vue";
 import RemoteApplicationBoundary from "./RemoteApplicationBoundary.vue";
 import { loadFederatedApplication } from "./remote-loader";
 
@@ -49,6 +49,46 @@ const context: SpacecraftHostContext = {
 };
 
 describe("RemoteApplicationBoundary", () => {
+  it("exposes mounted identity only after admitting and rendering the remote", async () => {
+    vi.mocked(loadFederatedApplication).mockResolvedValueOnce({
+      manifest: {
+        schema: "cadence.first-party-federated-application.v1",
+        hostContract: "cadence.application-host.v1",
+        package: { ...application.package, trust: "first_party" },
+        compatibility: {
+          cadenceApplicationContract: 1,
+          cadenceSurfaceContract: 1,
+          cadenceFederatedRendererContract: 1,
+          cadenceThemeContract: 1,
+        },
+        application: {
+          applicationKey: application.applicationKey,
+          version: application.applicationVersion,
+          displayName: application.displayName,
+          description: application.description,
+          installableScopes: [application.surface.scope],
+        },
+        surfaces: [application.surface],
+      },
+      default: { render: () => h("main", { id: "admitted-remote" }) },
+    });
+    const wrapper = mount(RemoteApplicationBoundary, {
+      props: {
+        application,
+        context: { ...context, scope: "mission", spacecraftId: null, spacecraftName: null },
+        bridge: {} as HostBridge,
+        fallbackHref: "/",
+      },
+    });
+    expect(wrapper.find("[data-mounted-release]").exists()).toBe(false);
+    await flushPromises();
+    const boundary = wrapper.get('[data-remote-state="ready"]');
+    expect(boundary.attributes("data-mounted-release")).toBe(application.release.releaseId);
+    expect(boundary.attributes("data-mounted-application")).toBe(application.applicationKey);
+    expect(boundary.attributes("data-mounted-surface")).toBe(application.surface.surfaceId);
+    expect(boundary.find("#admitted-remote").exists()).toBe(true);
+    wrapper.unmount();
+  });
   it("contains an approved remote load failure and exposes retry", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.mocked(loadFederatedApplication).mockRejectedValueOnce(
@@ -67,6 +107,7 @@ describe("RemoteApplicationBoundary", () => {
     await flushPromises();
 
     expect(wrapper.find("#remote-error").exists()).toBe(true);
+    expect(wrapper.find("[data-mounted-release]").exists()).toBe(false);
     expect(wrapper.find("#remote-error-message").text()).toBe(
       "The approved application release could not be loaded.",
     );

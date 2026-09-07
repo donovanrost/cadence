@@ -1,5 +1,5 @@
 <script setup>
-import CadenceField from "./ui/components/CadenceField.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
 import TimeRangeRecents from "./TimeRangeRecents.vue";
 
 const props = defineProps({

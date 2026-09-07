@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 defineProps<{
   missionId: string;
   missionName: string;
@@ -12,10 +13,13 @@ defineProps<{
       <p class="font-mono text-xs font-semibold uppercase tracking-wide text-primary">
         Mission Operations
       </p>
-      <h1 class="card-title mt-2 text-2xl tracking-tight text-base-content">{{ missionName }}</h1>
+      <CadencePageHeading
+        ><template #title>{{ missionName }}</template></CadencePageHeading
+      >
       <p class="mt-1 max-w-2xl text-sm leading-6 text-base-content/70">
         Phoenix selected this Ops Console surface for mission
-        <code class="font-mono text-base-content">{{ missionId }}</code>.
+        <code class="font-mono text-base-content">{{ missionId }}</code
+        >.
       </p>
       <div class="mt-6 flex items-center gap-2 text-sm text-success" role="status">
         <span class="h-2 w-2 rounded-full bg-success" aria-hidden="true"></span>

@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import CadenceToggle from "./ui/reka/CadenceToggle.vue";
+import CadenceToggle from "@cadence/ui/CadenceToggle.vue";
 import WidgetFormCallout from "./WidgetFormCallout.vue";
-import WidgetFormField from "./ui/components/WidgetFormField.vue";
+import WidgetFormField from "@cadence/ui/WidgetFormField.vue";
 import type { CalloutPresentation, IconPresentation } from "./widget_form_callout";
 import type {
   Attributes,
   FieldPresentation,
   TextPresentation,
-} from "./ui/components/widget_form_field";
+} from "@cadence/ui/widget_form_field";
 
 type ButtonPresentation = {
   key?: string;

@@ -1,7 +1,7 @@
 <script lang="ts">
 import { Fragment, defineComponent, h, isVNode, type VNodeChild } from "vue";
 
-const opsViewportClass = "h-full overflow-y-auto bg-base-100";
+const opsViewportClass = "min-h-0";
 
 const flattenSlotChildren = (children: VNodeChild[]): VNodeChild[] =>
   children.flatMap((child) => {

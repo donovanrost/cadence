@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import { federation } from "@module-federation/vite";
 import vue from "@vitejs/plugin-vue";
 import { defineConfig, lazyPlugins } from "vite-plus";
@@ -16,5 +17,5 @@ export default defineConfig(({ command }) => ({
     target: "chrome89",
     outDir: "dist/current",
   },
-  plugins: lazyPlugins(() => [vue(), federation(federationConfig)]),
+  plugins: lazyPlugins(() => [tailwindcss(), vue(), federation(federationConfig)]),
 }));

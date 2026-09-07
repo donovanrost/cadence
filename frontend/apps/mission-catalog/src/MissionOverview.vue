@@ -1,11 +1,10 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import StatusBadge from "./StatusBadge.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
-import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue";
-import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
+import CadenceMenuItem from "@cadence/ui/CadenceMenuItem.vue";
+import CadenceModalMenu from "@cadence/ui/CadenceModalMenu.vue";
 
 type StatusTone = "ready" | "attention" | "blocked" | "info";
 
@@ -71,19 +70,11 @@ defineProps<{
 </script>
 
 <template>
-  <CadencePageHeaderFrame variant="compact">
-    <div>
-      <div>
-        <p class="hud-label">{{ overview.mission.eyebrow }}</p>
-        <CadencePageTitle>
-          {{ overview.mission.display_name }}
-        </CadencePageTitle>
-        <p class="mt-1 max-w-3xl text-sm text-base-content/70">
-          {{ overview.mission.slug }}
-        </p>
-      </div>
-    </div>
-  </CadencePageHeaderFrame>
+  <CadencePageHeading>
+    <template #title>{{ overview.mission.display_name }}</template>
+    <template #eyebrow>{{ overview.mission.eyebrow }}</template>
+    <template #description>{{ overview.mission.slug }}</template>
+  </CadencePageHeading>
 
   <div class="grid gap-4 md:grid-cols-3">
     <CadenceCard

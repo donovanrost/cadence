@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import CadencePopover from "./ui/reka/CadencePopover.vue";
+import CadencePopover from "@cadence/ui/CadencePopover.vue";
 
 type Attrs = Record<string, string>;
 type ButtonType = "button" | "submit" | "reset";

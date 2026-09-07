@@ -1,0 +1,43 @@
+/* Host/standalone entry only. Federated modules inherit this stylesheet. */
+@import "tailwindcss" source(none);
+@source "./";
+@import "../../design-tokens/src/base.css";
+
+@plugin "../vendor/heroicons.cjs";
+
+@theme inline {
+  --color-base-100: var(--theme-base-100);
+  --color-base-200: var(--theme-base-200);
+  --color-base-300: var(--theme-base-300);
+  --color-base-content: var(--theme-base-content);
+  --color-primary: var(--theme-primary);
+  --color-primary-content: var(--theme-primary-content);
+  --color-secondary: var(--theme-secondary);
+  --color-secondary-content: var(--theme-secondary-content);
+  --color-accent: var(--theme-accent);
+  --color-accent-content: var(--theme-accent-content);
+  --color-neutral: var(--theme-neutral);
+  --color-neutral-content: var(--theme-neutral-content);
+  --color-info: var(--theme-info);
+  --color-info-content: var(--theme-info-content);
+  --color-success: var(--theme-success);
+  --color-success-content: var(--theme-success-content);
+  --color-warning: var(--theme-warning);
+  --color-warning-content: var(--theme-warning-content);
+  --color-error: var(--theme-error);
+  --color-error-content: var(--theme-error-content);
+
+  --color-muted: var(--text-muted);
+  --color-line: var(--border-subtle);
+  --color-line-strong: var(--border-strong);
+  --color-panel: var(--surface-raised);
+  --color-panel-strong: var(--surface-elevated);
+}
+@import "./styles/hud-system.css";
+@import "./styles/controls.css";
+@import "./styles/navigation.css";
+@import "./styles/overlay.css";
+@import "./styles/sidebar.css";
+@import "./styles/dashboard-query-controls.css";
+
+@import "./styles/page.css";

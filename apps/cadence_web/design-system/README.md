@@ -1,3 +1,9 @@
+> Historical design-system reference. The maintained source and workshop now live in
+> [`frontend/packages`](../../../frontend/packages) and
+> [`frontend/apps/storybook`](../../../frontend/apps/storybook).
+> See the [current architecture](../../../frontend/docs/design-system/architecture.md).
+> Older paths and DaisyUI references below describe the former implementation.
+
 # Cadence Design System
 
 The canonical visual reference for Cadence's HUD aesthetic — Tokyo Night /

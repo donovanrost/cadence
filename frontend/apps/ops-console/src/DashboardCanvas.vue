@@ -1,9 +1,9 @@
 <script setup>
 import { reactive } from "vue";
 
-import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue";
-import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue";
-import CadenceCollapsibleTrigger from "./ui/reka/CadenceCollapsibleTrigger.vue";
+import CadenceCollapsible from "@cadence/ui/CadenceCollapsible.vue";
+import CadenceCollapsibleContent from "@cadence/ui/CadenceCollapsibleContent.vue";
+import CadenceCollapsibleTrigger from "@cadence/ui/CadenceCollapsibleTrigger.vue";
 import DashboardComparisonInspector from "./DashboardComparisonInspector.vue";
 import DashboardGrid from "./DashboardGrid.vue";
 

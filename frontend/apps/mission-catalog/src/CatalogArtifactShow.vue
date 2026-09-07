@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
-import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue";
-import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
+import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
+import CadenceMenuItem from "@cadence/ui/CadenceMenuItem.vue";
+import CadenceModalMenu from "@cadence/ui/CadenceModalMenu.vue";
 
 type Status = "info" | "ready" | "blocked";
 

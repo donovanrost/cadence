@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
+import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
 import { computed, reactive, watch } from "vue";
-import CadencePanel from "./ui/components/CadencePanel.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
 
 type Option = {
   label: string;
@@ -229,9 +229,12 @@ const activeError = computed(() =>
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <CadencePageHeaderFrame variant="ops">
-      <div class="mx-auto max-w-5xl">
-        <a
+    <CadencePageHeading>
+      <template #title>{{ page.heading }}</template>
+      <template #eyebrow>{{ page.eyebrow }}</template>
+      <template #description>{{ page.description }}</template>
+      <template #actions
+        ><a
           :id="actions.back.id"
           :href="actions.back.href"
           data-phx-link="redirect"
@@ -240,18 +243,11 @@ const activeError = computed(() =>
         >
           <span :class="[actions.back.icon, 'h-3.5 w-3.5']"></span>
           {{ actions.back.label }}
-        </a>
-        <p class="mt-4 font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
-          {{ page.eyebrow }}
-        </p>
-        <h1 class="mt-1 text-2xl font-bold tracking-tight">{{ page.heading }}</h1>
-        <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-          {{ page.description }}
-        </p>
-      </div>
-    </CadencePageHeaderFrame>
+        </a></template
+      >
+    </CadencePageHeading>
 
-    <div class="mx-auto max-w-5xl p-5 lg:p-7">
+    <div class="">
       <form :id="form.id" class="space-y-5" @submit.prevent="save">
         <CadencePanel
           :id="journey.outcome.id"

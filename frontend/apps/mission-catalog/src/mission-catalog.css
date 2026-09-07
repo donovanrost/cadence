@@ -5,11 +5,11 @@
 body {
   min-width: 320px;
   margin: 0;
-  color: var(--cadence-color-text);
+  color: var(--color-base-content);
   background:
-    radial-gradient(circle at 82% 12%, rgb(50 114 126 / 18%), transparent 28rem),
-    linear-gradient(135deg, var(--cadence-color-surface-inset), var(--cadence-color-surface));
-  font-family: var(--cadence-font-body);
+    radial-gradient(circle at 82% 12%, var(--surface-raised), transparent 28rem),
+    linear-gradient(135deg, var(--surface-inset), var(--surface-base));
+  font-family: var(--font-body);
 }
 
 .mission-catalog-application,
@@ -26,14 +26,14 @@ body {
   justify-content: space-between;
   gap: 1.5rem;
   padding-bottom: 1.5rem;
-  border-bottom: 1px solid var(--cadence-color-border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .mission-catalog-application h1,
 .mission-catalog-standalone h1 {
   margin: 0.35rem 0 0;
-  color: var(--cadence-color-text-strong);
-  font-family: var(--cadence-font-display);
+  color: var(--text-bright);
+  font-family: var(--font-display);
   font-size: clamp(2rem, 5vw, 4rem);
   font-weight: 520;
   letter-spacing: -0.055em;
@@ -44,15 +44,15 @@ body {
 .mission-catalog-standalone__intro {
   max-width: 48rem;
   margin: 0.9rem 0 0;
-  color: var(--cadence-color-text-secondary);
+  color: var(--text-subtle);
   font-size: 0.95rem;
   line-height: 1.6;
 }
 
 .mission-catalog-eyebrow {
   margin: 0;
-  color: var(--cadence-color-signal);
-  font-family: var(--cadence-font-mono);
+  color: var(--color-action);
+  font-family: var(--font-mono);
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -72,9 +72,9 @@ body {
   gap: 0.75rem;
   min-height: 3.2rem;
   padding: 0.75rem 0.9rem;
-  border: 1px solid var(--cadence-color-border);
-  color: var(--cadence-color-text-secondary);
-  background: rgb(255 255 255 / 2%);
+  border: 1px solid var(--border-default);
+  color: var(--text-subtle);
+  background: var(--surface-raised);
   font: inherit;
   font-size: 0.78rem;
   text-align: left;
@@ -86,16 +86,16 @@ body {
 }
 
 .mission-catalog-surface-nav button span {
-  color: var(--cadence-color-signal);
-  font-family: var(--cadence-font-mono);
+  color: var(--color-action);
+  font-family: var(--font-mono);
   font-size: 0.68rem;
 }
 
 .mission-catalog-surface-nav button:hover,
 .mission-catalog-surface-nav button.is-active {
-  border-color: var(--cadence-color-signal);
-  color: var(--cadence-color-text-strong);
-  background: rgb(50 114 126 / 13%);
+  border-color: var(--color-action);
+  color: var(--text-bright);
+  background: var(--surface-raised);
 }
 
 .mission-catalog-standalone__intro {

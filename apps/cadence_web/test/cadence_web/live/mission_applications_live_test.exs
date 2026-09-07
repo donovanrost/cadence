@@ -35,10 +35,14 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
           {"disable", "disabled"},
           {"uninstall", "uninstalled"}
         ] do
-      render_hook(view, event, %{"key" => "limits"})
+      render_hook(view, "host:manage", %{
+        "event" => event,
+        "key" => "limits",
+        "path" => Test.get_vue(view, id: "application-shell").props["snapshot"]["path"]
+      })
 
       applications =
-        Test.get_vue(view, id: "mission-applications-page-component").props["presentation"][
+        Test.get_vue(view, id: "application-shell").props["snapshot"]["presentation"][
           "applications_component"
         ]["props"]["applications"]
 
@@ -46,7 +50,11 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
                state
     end
 
-    render_hook(view, "install", %{"key" => "mission_catalog"})
+    render_hook(view, "host:manage", %{
+      "event" => "install",
+      "key" => "mission_catalog",
+      "path" => Test.get_vue(view, id: "application-shell").props["snapshot"]["path"]
+    })
 
     refute Cadence.Repo.get_by(Cadence.Applications.ApplicationInstallations.InstallationRow,
              mission_id: mission.mission_id,
@@ -67,20 +75,25 @@ defmodule CadenceWeb.MissionApplicationsLiveTest do
     {TestFixtures.member_conn(user), mission}
   end
 
-  defp assert_surface(view, id, _surface_id, _mission, _query_params) do
-    assert has_element?(view, "##{id}.contents")
+  defp assert_surface(view, _id, _surface_id, _mission, _query_params) do
+    assert has_element?(view, "#application-shell")
 
-    vue = Test.get_vue(view, id: id)
+    vue = Test.get_vue(view, id: "application-shell")
 
-    assert vue.component == "MissionApplicationManagement"
-    assert vue.id == id
-    assert vue.class == "contents"
+    assert vue.component == "BrowserHost"
+    assert vue.id == "application-shell"
     assert vue.ssr == false
-    assert Enum.sort(Map.keys(vue.handlers)) == ["disable", "install", "uninstall"]
-    assert is_map(vue.props["presentation"])
+    assert vue.handlers == %{}
+    assert is_map(vue.props["snapshot"]["presentation"])
 
     applications =
-      get_in(vue.props, ["presentation", "applications_component", "props", "applications"])
+      get_in(vue.props, [
+        "snapshot",
+        "presentation",
+        "applications_component",
+        "props",
+        "applications"
+      ])
 
     assert Enum.map(applications, & &1["application_key"]) == ["derived_telemetry", "limits"]
   end

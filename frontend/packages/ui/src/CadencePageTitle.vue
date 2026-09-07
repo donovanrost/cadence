@@ -1,7 +1,7 @@
 <script lang="ts">
 import { Fragment, defineComponent, h, isVNode, type VNodeChild } from "vue";
 
-const pageTitleClass = "mt-2 text-2xl font-bold text-base-content tracking-tight";
+const pageTitleClass = "cd-page-title";
 
 const flattenSlotChildren = (children: VNodeChild[]): VNodeChild[] =>
   children.flatMap((child) => {

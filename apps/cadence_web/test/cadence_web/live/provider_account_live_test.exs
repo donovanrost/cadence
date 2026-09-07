@@ -8,8 +8,8 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
-  alias LiveVue.Test
 
   test "organization administrators can mount provider account surfaces" do
     {conn, _user, organization} = signed_in_organization_admin()
@@ -56,28 +56,19 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
              live(TestFixtures.member_conn(user), ~p"/provider-accounts")
   end
 
-  defp assert_provider_account_surface(conn, path, id, surface_id, opts) do
+  defp assert_provider_account_surface(conn, path, _id, surface_id, opts) do
     {:ok, view, _html} = live(conn, path)
-
-    assert has_element?(view, "##{id}")
-    vue = Test.get_vue(view, id: id)
-
-    assert vue.component == "FederatedFullPageSurface"
-    assert vue.id == id
-    assert vue.ssr == false
-    assert vue.class == Keyword.fetch!(opts, :class)
-    assert vue.handlers == %{}
 
     query_params = Keyword.fetch!(opts, :query_params)
     organization_id = Keyword.fetch!(opts, :organization_id)
 
-    assert vue.props == %{
-             "application_key" => "organization_admin",
-             "surface_id" => surface_id,
-             "host_scope" => "organization",
-             "organization_id" => organization_id,
-             "query_params" => query_params
-           }
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => "organization_admin",
+      "surface_id" => surface_id,
+      "host_scope" => "organization",
+      "organization_id" => organization_id,
+      "query_params" => query_params
+    })
   end
 
   defp signed_in_organization_admin do

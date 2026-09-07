@@ -8,31 +8,21 @@ defmodule CadenceWeb.MissionListLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
-  alias LiveVue.Test
 
   test "authenticated organization members mount the mission list surface" do
     {conn, organization} = signed_in_org()
 
     {:ok, view, _html} = live(conn, ~p"/missions")
 
-    assert has_element?(view, "#mission-list-component")
-
-    vue = Test.get_vue(view, id: "mission-list-component")
-
-    assert vue.component == "FederatedFullPageSurface"
-    assert vue.id == "mission-list-component"
-    assert vue.class == ""
-    assert vue.ssr == false
-    assert vue.handlers == %{}
-
-    assert vue.props == %{
-             "application_key" => "mission_catalog",
-             "surface_id" => "mission_list",
-             "host_scope" => "organization",
-             "organization_id" => organization.organization_id,
-             "query_params" => %{}
-           }
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => "mission_catalog",
+      "surface_id" => "mission_list",
+      "host_scope" => "organization",
+      "organization_id" => organization.organization_id,
+      "query_params" => %{}
+    })
   end
 
   test "unauthenticated requests redirect to sign in", %{conn: conn} do

@@ -1,11 +1,8 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import StatusBadge from "./StatusBadge.vue";
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue";
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
 
 type StatusTone = "ready" | "attention" | "blocked" | "info";
 
@@ -72,42 +69,18 @@ defineProps<{
 
 <template>
   <div :id="page.id" class="space-y-6">
-    <CadencePageHeaderFrame variant="compact">
-      <CadenceCompactPageHeaderBodyFrame>
-        <template #content>
-          <CadenceBreadcrumbs>
-            <template
-              v-for="(breadcrumb, index) in page.breadcrumbs"
-              :key="`${index}-${breadcrumb.label}`"
-            >
-              <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-              <span v-if="breadcrumb.href === null" class="text-primary/90">
-                {{ breadcrumb.label }}
-              </span>
-              <a
-                v-else
-                :href="breadcrumb.href"
-                data-phx-link="redirect"
-                data-phx-link-state="push"
-                class="hover:text-primary transition-colors"
-                >{{ breadcrumb.label }}</a
-              >
-            </template>
-          </CadenceBreadcrumbs>
-
-          <CadencePageTitle>
-            {{ page.title }}
-            <span class="ml-3 font-mono text-base text-base-content/60">
-              {{ page.title_suffix }}
-            </span>
-          </CadencePageTitle>
-          <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
-        </template>
-        <template #actions>
-          <StatusBadge :status="page.status.tone" :label="page.status.label" />
-        </template>
-      </CadenceCompactPageHeaderBodyFrame>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
+      <template #title>{{ page.title }} </template>
+      <template #description>{{ page.subtitle }}</template>
+      <template #metadata
+        ><span>
+          {{ page.title_suffix }}
+        </span></template
+      >
+      <template #actions
+        ><StatusBadge :status="page.status.tone" :label="page.status.label"
+      /></template>
+    </CadencePageHeading>
 
     <div class="grid gap-4 xl:grid-cols-2">
       <CadenceCard

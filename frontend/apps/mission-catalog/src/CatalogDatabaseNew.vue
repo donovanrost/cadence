@@ -1,9 +1,7 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import CatalogUploadForm from "./CatalogUploadForm.vue";
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
-import CadenceFormPageFrame from "./ui/components/CadenceFormPageFrame.vue";
+import CadenceFormPageFrame from "@cadence/ui/CadenceFormPageFrame.vue";
 
 type Breadcrumb = {
   label: string;
@@ -40,34 +38,9 @@ const emit = defineEmits<{
 
 <template>
   <CadenceFormPageFrame :id="page.id">
-    <CadencePageHeaderFrame variant="compact">
-      <div>
-        <div>
-          <CadenceBreadcrumbs>
-            <template
-              v-for="(breadcrumb, index) in page.breadcrumbs"
-              :key="`${index}-${breadcrumb.label}`"
-            >
-              <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-              <span v-if="breadcrumb.href === null" class="text-primary/90">
-                {{ breadcrumb.label }}
-              </span>
-              <a
-                v-else
-                :href="breadcrumb.href"
-                data-phx-link="redirect"
-                data-phx-link-state="push"
-                class="hover:text-primary transition-colors"
-                >{{ breadcrumb.label }}</a
-              >
-            </template>
-          </CadenceBreadcrumbs>
-          <CadencePageTitle>
-            {{ page.heading }}
-          </CadencePageTitle>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
+      <template #title>{{ page.heading }}</template>
+    </CadencePageHeading>
 
     <CatalogUploadForm
       :form="form"

@@ -8,8 +8,8 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
-  alias LiveVue.Test
 
   test "authenticated organization members mount the organization surface" do
     user = TestFixtures.persist_user!()
@@ -18,21 +18,13 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
 
     {:ok, view, _html} = live(TestFixtures.member_conn(user), ~p"/")
 
-    assert has_element?(view, "#organization-home-component")
-    vue = Test.get_vue(view, id: "organization-home-component")
-
-    assert vue.component == "FederatedFullPageSurface"
-    assert vue.id == "organization-home-component"
-    assert vue.ssr == false
-    assert vue.handlers == %{}
-
-    assert vue.props == %{
-             "application_key" => "organization_admin",
-             "surface_id" => "organization_home",
-             "host_scope" => "organization",
-             "organization_id" => organization.organization_id,
-             "query_params" => %{}
-           }
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => "organization_admin",
+      "surface_id" => "organization_home",
+      "host_scope" => "organization",
+      "organization_id" => organization.organization_id,
+      "query_params" => %{}
+    })
   end
 
   test "active admin mode redirects to /admin even from /" do

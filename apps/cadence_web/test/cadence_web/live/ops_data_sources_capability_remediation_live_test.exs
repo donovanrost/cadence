@@ -10,8 +10,8 @@ defmodule CadenceWeb.OpsDataSourcesCapabilityRemediationLiveTest do
 
   alias Cadence.Applications.{HostContext, SurfaceQueryRequest}
   alias Cadence.Reads.ApplicationSurfaces.OpsConsole
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
-  alias LiveVue.Test
 
   test "capability remediation forwards only the source subject" do
     {conn, mission} = signed_in()
@@ -54,23 +54,13 @@ defmodule CadenceWeb.OpsDataSourcesCapabilityRemediationLiveTest do
     {TestFixtures.member_conn(user), mission}
   end
 
-  defp assert_surface(view, id, surface_id, mission, query_params) do
-    assert has_element?(view, "##{id}.contents")
-    vue = Test.get_vue(view, id: id)
-
-    assert vue.component == "FederatedFullPageSurface"
-    assert vue.id == id
-    assert vue.class == "contents"
-    assert vue.ssr == false
-    assert vue.handlers == %{}
-    assert vue.slots == %{}
-
-    assert vue.props == %{
-             "application_key" => "ops_console",
-             "surface_id" => surface_id,
-             "host_scope" => "mission",
-             "mission_id" => mission.mission_id,
-             "query_params" => query_params
-           }
+  defp assert_surface(view, _id, surface_id, mission, query_params) do
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => "ops_console",
+      "surface_id" => surface_id,
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => query_params
+    })
   end
 end

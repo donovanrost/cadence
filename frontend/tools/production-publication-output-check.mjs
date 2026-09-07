@@ -15,8 +15,18 @@ const publicationRoot = resolve(
 );
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const hostFiles = new Set(["host.js"]);
-const authoritativeHostJavascriptDigest =
-  "6b5012fd41011960b83ea5de1a0afc51592beb66055ab5b5b8b0292117f9f343";
+// Explicitly reviewed producer outputs; never derive this allowlist from the artifact being checked.
+const authoritativeHostJavascriptDigests = new Set([
+  // Reviewed route-scoped page chrome injection and heading level; two identical pinned builds.
+  "d25c815d2df0a75d51affb35484ad820843056584e8f32c09f520a1651338667",
+  // Reviewed host navigation callback and stale-bridge enforcement; two identical pinned builds.
+  "5833897c38ef7237883805c8f037ad6e3b9f5a0a4ea72313afcc96a02eb3f035",
+  "6b5012fd41011960b83ea5de1a0afc51592beb66055ab5b5b8b0292117f9f343",
+  // Shared design-system consolidation: two identical pinned build:phoenix runs.
+  "2f6b02fbac438b374f8ee5af736b953d8f0e7dbdf96d058cd00c1c9c31cfc0e5",
+  // Reviewed mounted-boundary metadata; two identical pinned build:phoenix runs.
+  "d05e3fd0e993aa512018627ea68f8772e5fc7c8860d3958428c5575a2b322a55",
+]);
 
 function fail(message) {
   throw new Error(`Production publication check failed: ${message}`);
@@ -77,7 +87,9 @@ function isAuthoritativeHostJavascript(name, source, files) {
     name === "host.js" &&
     files.size === hostFiles.size &&
     [...hostFiles].every((file) => files.has(file)) &&
-    createHash("sha256").update(source, "utf8").digest("hex") === authoritativeHostJavascriptDigest
+    authoritativeHostJavascriptDigests.has(
+      createHash("sha256").update(source, "utf8").digest("hex"),
+    )
   );
 }
 

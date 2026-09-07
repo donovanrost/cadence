@@ -1,13 +1,11 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { reactive, watch } from "vue";
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadenceFormActions from "./ui/components/CadenceFormActions.vue";
-import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue";
-import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue";
-import CadenceFormPageFrame from "./ui/components/CadenceFormPageFrame.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
+import CadenceFormActions from "@cadence/ui/CadenceFormActions.vue";
+import CadenceFormSectionHeader from "@cadence/ui/CadenceFormSectionHeader.vue";
+import CadenceFormSectionFrame from "@cadence/ui/CadenceFormSectionFrame.vue";
+import CadenceFormPageFrame from "@cadence/ui/CadenceFormPageFrame.vue";
 
 type Breadcrumb = {
   label: string;
@@ -130,35 +128,10 @@ const save = () => emit("save", { routing_rule: routingRuleValues() });
 
 <template>
   <CadenceFormPageFrame :id="page.id">
-    <CadencePageHeaderFrame variant="compact">
-      <div>
-        <div>
-          <CadenceBreadcrumbs>
-            <template
-              v-for="(breadcrumb, index) in page.breadcrumbs"
-              :key="`${index}-${breadcrumb.label}`"
-            >
-              <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-              <span v-if="breadcrumb.href === null" class="text-primary/90">
-                {{ breadcrumb.label }}
-              </span>
-              <a
-                v-else
-                :href="breadcrumb.href"
-                data-phx-link="redirect"
-                data-phx-link-state="push"
-                class="hover:text-primary transition-colors"
-                >{{ breadcrumb.label }}</a
-              >
-            </template>
-          </CadenceBreadcrumbs>
-          <CadencePageTitle>
-            {{ page.title }}
-          </CadencePageTitle>
-          <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
+      <template #title>{{ page.title }}</template>
+      <template #description>{{ page.subtitle }}</template>
+    </CadencePageHeading>
 
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
       <CadenceFormSectionFrame id="routing-rule-intent-section">

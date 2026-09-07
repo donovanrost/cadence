@@ -86,7 +86,7 @@ const handleInteractOutside = (event: Event) => {
   closeWithoutFocus();
 };
 
-const handleEscapeKeyDown = (_event: Event) => {
+const handleEscapeKeyDown = () => {
   if (root.value?.querySelector("[data-overlay-open]")) suppressEscapeDismiss = true;
 };
 

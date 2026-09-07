@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadenceBadge from "./ui/components/CadenceBadge.vue";
+import CadenceBadge from "@cadence/ui/CadenceBadge.vue";
 
 type Status = "info" | "ready" | "attention" | "blocked";
 

@@ -1,13 +1,10 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { reactive, watch } from "vue";
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue";
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
-import CadencePanel from "./ui/components/CadencePanel.vue";
-import CadenceStatTile from "./ui/components/CadenceStatTile.vue";
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
+import CadenceStatTile from "@cadence/ui/CadenceStatTile.vue";
+import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
 
 type FilterKey =
   | "dashboard_id"
@@ -200,43 +197,31 @@ const updateFilter = (key: FilterKey, event: Event) => {
     :data-runtime-decision-filter-affected-placement="filters.values.affected_placement_id"
     :data-runtime-selected-decision-state="summary.selected_decision_state"
   >
-    <CadencePageHeaderFrame variant="compact">
-      <CadenceCompactPageHeaderBodyFrame>
-        <template #content>
-          <CadenceBreadcrumbs>
-            <a
-              :href="navigation.admin_href"
-              data-phx-link="redirect"
-              data-phx-link-state="push"
-              class="hover:text-primary transition-colors"
-              >Platform Admin</a
-            >
-            <span class="text-base-content/20" aria-hidden="true">/</span>
-            <span class="text-primary/90">Runtime Diagnostics</span>
-          </CadenceBreadcrumbs>
-          <CadencePageTitle>
-            Runtime Diagnostics
-            <span class="ml-3 font-mono text-base text-base-content/60">
-              {{ summary.decision_count }} decisions
-            </span>
-          </CadencePageTitle>
-          <p class="mt-1 max-w-3xl text-sm text-base-content/70">
-            Process-local runtime health for support workflows, including dashboard invalidation
-            decisions emitted by open dashboards.
-          </p>
-        </template>
-        <template #actions>
-          <button
-            id="admin-runtime-refresh"
-            type="button"
-            class="btn btn-secondary btn-sm"
-            @click="emit('refresh')"
-          >
-            <span class="hero-arrow-path h-4 w-4" aria-hidden="true"></span> Refresh
-          </button>
-        </template>
-      </CadenceCompactPageHeaderBodyFrame>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading
+      :breadcrumbs="[
+        { label: 'Platform Admin', href: navigation.admin_href },
+        { label: 'Runtime Diagnostics' },
+      ]"
+    >
+      <template #title> Runtime Diagnostics </template>
+      <template #description>
+        Process-local runtime health for support workflows, including dashboard invalidation
+        decisions emitted by open dashboards.
+      </template>
+      <template #metadata
+        ><span> {{ summary.decision_count }} decisions </span></template
+      >
+      <template #actions
+        ><button
+          id="admin-runtime-refresh"
+          type="button"
+          class="btn btn-secondary btn-sm"
+          @click="emit('refresh')"
+        >
+          <span class="hero-arrow-path h-4 w-4" aria-hidden="true"></span> Refresh
+        </button></template
+      >
+    </CadencePageHeading>
 
     <div class="grid gap-3 md:grid-cols-4">
       <CadenceStatTile v-for="stat in summary.stats" :id="stat.id" :key="stat.id">

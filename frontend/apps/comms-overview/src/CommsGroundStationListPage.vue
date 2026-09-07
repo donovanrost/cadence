@@ -1,14 +1,15 @@
 <script setup lang="ts">
+import { pageContentAttrs } from "@cadence/ui/page-chrome";
 import CommsGroundStationList from "./CommsGroundStationList.vue";
-import CadenceEmptyState from "./ui/components/CadenceEmptyState.vue";
-import CadencePageHeader from "./ui/components/CadencePageHeader.vue";
+import CadenceEmptyState from "@cadence/ui/CadenceEmptyState.vue";
+import CadencePageHeader from "@cadence/ui/CadencePageHeader.vue";
 import type {
   Attrs,
   ElementPresentation,
   EmptyStatePresentation,
   PageHeaderAction,
   PageHeaderPresentation,
-} from "./ui/components/page_shell";
+} from "@cadence/ui/page_shell";
 
 type GroundStationListProps = InstanceType<typeof CommsGroundStationList>["$props"];
 
@@ -42,7 +43,7 @@ const props = defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
-  <div v-bind="props.presentation.root.attrs">
+  <div v-bind="pageContentAttrs(props.presentation.root.attrs)">
     <CadencePageHeader
       :header="props.presentation.header"
       :action="props.presentation.header.actions.new_ground_station"

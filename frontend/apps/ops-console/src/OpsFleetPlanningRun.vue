@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
+import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
 import { reactive, watch } from "vue";
-import CadencePanel from "./ui/components/CadencePanel.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
 
 type EmptyPayload = Record<string, never>;
 
@@ -264,61 +264,44 @@ const repairFleetRun = () => {
 
 <template>
   <CadenceOpsViewport :id="page.id" :aria-busy="planning">
-    <CadencePageHeaderFrame variant="ops">
-      <div class="mx-auto max-w-[110rem]">
-        <a
-          :href="page.back.href"
+    <CadencePageHeading
+      :breadcrumbs="[
+        { label: page.back.label, href: page.back.href },
+        { label: page.header.title },
+      ]"
+    >
+      <template #title>{{ page.header.title }}</template>
+      <template #description>{{ page.header.run_id }}</template>
+      <template #actions>
+        <button
+          :id="page.header.refresh.id"
+          type="button"
+          class="btn btn-ghost btn-sm gap-2"
+          @click="refreshFleetRun"
+        >
+          <span :class="[page.header.refresh.icon, 'h-4 w-4']"></span>
+          {{ page.header.refresh.label }}</button
+        ><a
+          v-if="page.header.candidate_plan"
+          :id="page.header.candidate_plan.id"
+          :href="page.header.candidate_plan.href"
           data-phx-link="redirect"
           data-phx-link-state="push"
-          class="inline-flex items-center gap-1 font-mono text-xs text-base-content/55 hover:text-primary"
+          class="btn btn-primary btn-sm gap-2"
         >
-          <span :class="[page.back.icon, 'h-3.5 w-3.5']"></span>
-          {{ page.back.label }}
-        </a>
-        <div class="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div class="flex flex-wrap items-center gap-2">
-              <span :class="page.header.lifecycle.class">
-                {{ page.header.lifecycle.label }}
-              </span>
-              <span class="font-mono text-[0.65rem] uppercase text-base-content/45">
-                {{ page.header.algorithm }}
-              </span>
-            </div>
-            <h1 class="mt-2 text-2xl font-bold tracking-tight">
-              {{ page.header.title }}
-            </h1>
-            <p class="mt-2 font-mono text-[0.65rem] text-base-content/45">
-              {{ page.header.run_id }}
-            </p>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <button
-              :id="page.header.refresh.id"
-              type="button"
-              class="btn btn-ghost btn-sm gap-2"
-              @click="refreshFleetRun"
-            >
-              <span :class="[page.header.refresh.icon, 'h-4 w-4']"></span>
-              {{ page.header.refresh.label }}
-            </button>
-            <a
-              v-if="page.header.candidate_plan"
-              :id="page.header.candidate_plan.id"
-              :href="page.header.candidate_plan.href"
-              data-phx-link="redirect"
-              data-phx-link-state="push"
-              class="btn btn-primary btn-sm gap-2"
-            >
-              {{ page.header.candidate_plan.label }}
-              <span :class="[page.header.candidate_plan.icon, 'h-4 w-4']"></span>
-            </a>
-          </div>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
+          {{ page.header.candidate_plan.label }}
+          <span :class="[page.header.candidate_plan.icon, 'h-4 w-4']"></span> </a
+      ></template>
 
-    <div class="mx-auto max-w-[110rem] space-y-5 p-5 lg:p-7">
+      <template #metadata
+        ><span :class="page.header.lifecycle.class"> {{ page.header.lifecycle.label }} </span>
+        <span class="font-mono text-[0.65rem] uppercase text-base-content/45">
+          {{ page.header.algorithm }}
+        </span></template
+      ></CadencePageHeading
+    >
+
+    <div class="space-y-5">
       <section
         :id="page.phase_strip.id"
         class="grid border border-base-300 bg-base-200/20 sm:grid-cols-3 xl:grid-cols-6"

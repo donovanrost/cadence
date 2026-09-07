@@ -22,7 +22,7 @@ defmodule Cadence.Applications.CatalogRegistry do
     TelemetryDecomCatalogContribution,
     OpsConsole
   ]
-  @optional_contributors [CadenceWeb.ApplicationContributions.OrganizationAdmin]
+  @additional_contributors [Cadence.Applications.OrganizationAdmin]
 
   @spec validate() :: :ok | {:error, :invalid_application_catalog_registry}
   def validate do
@@ -75,7 +75,7 @@ defmodule Cadence.Applications.CatalogRegistry do
   def fetch_default(_scope), do: {:error, :unknown_catalog_contribution}
 
   defp contributors do
-    @contributors ++ Enum.filter(@optional_contributors, &Code.ensure_loaded?/1)
+    @contributors ++ @additional_contributors
   end
 
   defp collect(contributors), do: collect_contributors(contributors)

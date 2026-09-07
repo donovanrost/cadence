@@ -848,3 +848,16 @@ function scopeFrom(hostContext: HostContext) {
     spacecraftId: hostContext.spacecraftId,
   };
 }
+
+it("delegates navigation to the owning host and rejects stale or external navigation", () => {
+  const navigate = vi.fn();
+  const bridge = createHttpHostBridge(session, telemetryApplication, { navigate });
+  const href = new URL("/missions/mission-1", globalThis.location.href).href;
+  bridge.navigate!(href);
+  expect(navigate).toHaveBeenCalledWith(href);
+  expect(() => bridge.navigate!("https://other.test/missions")).toThrow("same-origin");
+  expect(() => bridge.navigate!("javascript:alert(1)")).toThrow("same-origin");
+  bridge.invalidate();
+  expect(() => bridge.navigate!(href)).toThrow();
+  expect(navigate).toHaveBeenCalledTimes(1);
+});

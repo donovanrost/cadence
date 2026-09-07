@@ -8,7 +8,7 @@ defmodule CadenceWeb.OrganizationInvitationController do
 
   alias Cadence.Auth.Scope
   alias CadenceWeb.AuthenticatedEntry
-  alias CadenceWeb.OrganizationInvitationLive.Presentation
+  alias Phoenix.HTML.Form
 
   def show(conn, %{"invitation_token" => invitation_token}) do
     case invitation_assigns(invitation_token) do
@@ -86,11 +86,27 @@ defmodule CadenceWeb.OrganizationInvitationController do
 
   defp render_invitation(conn, assigns, error_message) do
     conn
-    |> put_layout(html: {CadenceWeb.Layouts, :auth})
+    |> put_layout(false)
     |> live_render(CadenceWeb.OrganizationInvitationLive,
-      session: live_session(conn, Presentation.build(assigns, error_message)),
+      session: live_session(conn, invitation_page(assigns, error_message)),
       container: {:div, class: "contents"}
     )
+  end
+
+  defp invitation_page(assigns, error_message) do
+    %{
+      csrf_token: Plug.CSRFProtection.get_csrf_token(),
+      token: assigns.invitation_token,
+      available: assigns.invitation_available?,
+      error: error_message,
+      display_name: Form.input_value(assigns.form, :display_name) || "",
+      organization:
+        if(assigns.organization, do: Map.take(assigns.organization, [:display_name, :slug])),
+      invitation:
+        if(assigns.invitation,
+          do: Map.take(assigns.invitation, [:email, :membership_role, :grant_platform_admin])
+        )
+    }
   end
 
   defp invitation_assigns(invitation_token) when is_binary(invitation_token) do
@@ -183,12 +199,12 @@ defmodule CadenceWeb.OrganizationInvitationController do
     |> clear_session()
   end
 
-  defp live_session(conn, presentation) do
+  defp live_session(conn, page) do
     %{
       "admin_mode_expires_at" => get_session(conn, :admin_mode_expires_at),
       "current_organization_id" => get_session(conn, :current_organization_id),
       "user_session_token" => get_session(conn, :user_session_token),
-      "presentation" => presentation
+      "page" => page
     }
   end
 end

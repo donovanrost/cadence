@@ -13,25 +13,9 @@ defmodule CadenceWeb.NoOrganizationControllerTest do
     conn = TestFixtures.member_conn(user)
 
     vue = no_organization_vue(conn)
-    presentation = vue.props["presentation"]
-
-    assert presentation["body"]["text"] ==
-             "You don't have access to any organization yet. Ask an administrator for an invitation."
-
-    assert presentation["sign_out"]["button"]["text"] == "Sign out"
-    assert presentation["pending_invitations"] == nil
-
-    assert presentation["sign_out"]["form"]["attrs"] == %{
-             "action" => "/session",
-             "class" => "w-full",
-             "method" => "post"
-           }
-
-    assert [method, csrf] = presentation["sign_out"]["form"]["hidden_fields"]
-    assert method["attrs"]["name"] == "_method"
-    assert method["attrs"]["value"] == "delete"
-    assert csrf["attrs"]["name"] == "_csrf_token"
-    assert csrf["attrs"]["value"] != ""
+    assert vue.props["page"]["pending_invitations_count"] == 0
+    assert is_binary(vue.props["page"]["csrf_token"])
+    assert vue.props["page"]["csrf_token"] != ""
   end
 
   test "renders pending-invitations block when the user has unread invitation notifications" do
@@ -49,11 +33,9 @@ defmodule CadenceWeb.NoOrganizationControllerTest do
 
     conn = TestFixtures.member_conn(user)
 
-    pending = no_organization_vue(conn).props["presentation"]["pending_invitations"]
+    pending = no_organization_vue(conn).props["page"]["pending_invitations_count"]
 
-    assert pending["message"]["count"]["text"] == "1"
-    assert pending["message"]["suffix"] == "pending invitation."
-    assert pending["link"]["attrs"]["href"] == "/notifications"
+    assert pending == 1
   end
 
   test "uses plural copy for multiple invitations" do
@@ -73,10 +55,9 @@ defmodule CadenceWeb.NoOrganizationControllerTest do
 
     conn = TestFixtures.member_conn(user)
 
-    pending = no_organization_vue(conn).props["presentation"]["pending_invitations"]
+    pending = no_organization_vue(conn).props["page"]["pending_invitations_count"]
 
-    assert pending["message"]["count"]["text"] == "2"
-    assert pending["message"]["suffix"] == "pending invitations."
+    assert pending == 2
   end
 
   test "redirects to /sign-in when unauthenticated", %{conn: conn} do
@@ -91,7 +72,7 @@ defmodule CadenceWeb.NoOrganizationControllerTest do
     assert vue.component == "NoOrganizationPage"
     assert vue.ssr == false
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    assert vue.props |> Map.keys() |> Enum.sort() == ["presentation"]
+    assert vue.props |> Map.keys() |> Enum.sort() == ["page"]
     assert vue.handlers == %{}
 
     vue

@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { pageContentAttrs } from "@cadence/ui/page-chrome";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { presentationBreadcrumbs } from "@cadence/ui/page-chrome";
 import ProviderAccountCards from "./ProviderAccountCards.vue";
 
 type RawAttrs = Record<string, string>;
@@ -66,39 +69,24 @@ const props = defineProps<{
 </script>
 
 <template>
-  <div v-bind="props.presentation.root.attrs">
-    <header v-bind="props.presentation.header.attrs">
-      <div v-bind="props.presentation.header.body.attrs">
-        <div v-bind="props.presentation.header.content.attrs">
-          <nav v-bind="props.presentation.header.breadcrumbs.attrs">
-            <template v-for="item in props.presentation.header.breadcrumbs.items" :key="item.key">
-              <span v-if="item.separator" v-bind="item.separator.attrs">
-                {{ item.separator.text }}
-              </span>
-              <a v-if="item.link" v-bind="item.link.attrs">{{ item.link.text }}</a>
-              <span v-if="item.current" v-bind="item.current.attrs">
-                {{ item.current.text }}
-              </span>
-            </template>
-          </nav>
-          <h1 v-bind="props.presentation.header.title.attrs">
-            {{ props.presentation.header.title.text }}
-            <span v-bind="props.presentation.header.title.suffix.attrs">
-              {{ props.presentation.header.title.suffix.text }}
-            </span>
-          </h1>
-          <p v-bind="props.presentation.header.subtitle.attrs">
-            {{ props.presentation.header.subtitle.text }}
-          </p>
-        </div>
-        <div v-bind="props.presentation.header.actions.attrs">
-          <a v-bind="props.presentation.header.actions.new_account.attrs">
-            <span v-bind="props.presentation.header.actions.new_account.icon.attrs"></span>
-            {{ props.presentation.header.actions.new_account.text }}
-          </a>
-        </div>
-      </div>
-    </header>
+  <div v-bind="pageContentAttrs(props.presentation.root.attrs)">
+    <CadencePageHeading
+      :breadcrumbs="presentationBreadcrumbs(props.presentation.header.breadcrumbs)"
+    >
+      <template #title>{{ props.presentation.header.title.text }} </template>
+      <template #description>{{ props.presentation.header.subtitle.text }}</template>
+      <template #metadata
+        ><span>
+          {{ props.presentation.header.title.suffix.text }}
+        </span></template
+      >
+      <template #actions
+        ><a v-bind="props.presentation.header.actions.new_account.attrs">
+          <span v-bind="props.presentation.header.actions.new_account.icon.attrs"></span>
+          {{ props.presentation.header.actions.new_account.text }}
+        </a></template
+      >
+    </CadencePageHeading>
 
     <div v-if="props.presentation.empty_state" v-bind="props.presentation.empty_state.attrs">
       <span v-bind="props.presentation.empty_state.icon.attrs"></span>

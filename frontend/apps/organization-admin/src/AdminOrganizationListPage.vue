@@ -1,13 +1,14 @@
 <script setup lang="ts">
+import { pageContentAttrs } from "@cadence/ui/page-chrome";
 import AdminOrganizationList from "./AdminOrganizationList.vue";
-import CadenceEmptyState from "./ui/components/CadenceEmptyState.vue";
-import CadencePageHeader from "./ui/components/CadencePageHeader.vue";
+import CadenceEmptyState from "@cadence/ui/CadenceEmptyState.vue";
+import CadencePageHeader from "@cadence/ui/CadencePageHeader.vue";
 import type {
   CompactPageHeaderPresentation,
   ElementPresentation,
   EmptyStatePresentation,
   TextPresentation,
-} from "./ui/components/page_shell";
+} from "@cadence/ui/page_shell";
 
 type OrganizationRow = {
   id: string;
@@ -88,7 +89,7 @@ const emptyStatePresentation = (
 </script>
 
 <template>
-  <div v-bind="props.presentation.root.attrs">
+  <div v-bind="pageContentAttrs(props.presentation.root.attrs)">
     <CadencePageHeader
       :header="headerPresentation(props.presentation.header)"
       :action="props.presentation.header.create_action"

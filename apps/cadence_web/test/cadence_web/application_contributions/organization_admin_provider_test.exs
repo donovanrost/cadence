@@ -1,4 +1,4 @@
-defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
+defmodule Cadence.Applications.OrganizationAdminProviderTest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Accounts.User
@@ -14,14 +14,14 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
     SurfaceQueryRequest
   }
 
+  alias Cadence.Applications.{OrganizationAdmin, OrganizationAdminAction}
+  alias Cadence.Applications.OrganizationAdminProviders, as: Providers
+  alias Cadence.Applications.OrganizationAdminQuery
   alias Cadence.Applications.Registry
   alias Cadence.Auth.Scope
   alias Cadence.GroundNetworks.{ProviderAccounts, ProviderCredentials}
   alias Cadence.Reads.ApplicationSurfaces
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry, as: SurfaceProviderRegistry
-  alias CadenceWeb.ApplicationContributions.{OrganizationAdmin, OrganizationAdminAction}
-  alias CadenceWeb.ApplicationContributions.OrganizationAdminProviders, as: Providers
-  alias CadenceWeb.ApplicationContributions.OrganizationAdminQuery
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -122,7 +122,7 @@ defmodule CadenceWeb.ApplicationContributions.OrganizationAdminProviderTest do
                )
              )
 
-    assert {:ok, %{"data" => %{presentation: _presentation}}} =
+    assert {:ok, %{"data" => %{count: 0, notifications: []}}} =
              OrganizationAdminQuery.load(
                user_scope,
                HostContext.user(user_scope.user.user_id),

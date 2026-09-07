@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { lstatSync, realpathSync, statSync } from "node:fs";
@@ -642,6 +643,7 @@ export default defineConfig(({ command, mode }) => {
       environment: "happy-dom",
     },
     plugins: lazyPlugins(() => [
+      tailwindcss(),
       vue(),
       federation(releaseBuild ? releaseFederationConfig : federationConfig),
       ...(releaseBuild ? [releaseOutputPlugin()] : []),

@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import { federation } from "@module-federation/vite";
 import vue from "@vitejs/plugin-vue";
 import { lstatSync, realpathSync, statSync } from "node:fs";
@@ -181,6 +182,7 @@ export default defineConfig(({ command, mode }) => {
     },
     test: { environment: "happy-dom" },
     plugins: lazyPlugins(() => [
+      tailwindcss(),
       vue(),
       federation(releaseBuild ? releaseFederationConfig : federationConfig),
       ...(releaseBuild ? [releaseOutputPlugin()] : []),

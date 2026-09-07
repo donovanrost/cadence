@@ -8,14 +8,23 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
-    "./*": "./src/*"
+    "./*": "./src/*",
+    "./styles.css": "./src/styles.css",
+    "./dashboard.css": "./src/dashboard.css",
+    "./page_shell": "./src/page_shell.ts",
+    "./widget_form_field": "./src/widget_form_field.ts",
+    "./presentation_types": "./src/presentation_types.ts",
+    "./status-symbol": "./src/status-symbol.ts",
+    "./page-chrome": "./src/page-chrome.ts"
   },
   "scripts": {
     "build": "vue-tsc -p tsconfig.json --noEmit",
     "test": "vp test --run"
   },
   "dependencies": {
-    "reka-ui": "catalog:"
+    "@cadence/design-tokens": "workspace:*",
+    "reka-ui": "catalog:",
+    "tailwindcss": "4.1.12"
   },
   "devDependencies": {
     "@storybook/vue3-vite": "catalog:",

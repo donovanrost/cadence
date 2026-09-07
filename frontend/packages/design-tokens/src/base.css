@@ -1,61 +1,55 @@
 @import "./theme.css";
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    color: var(--color-base-content);
+    background: var(--surface-base);
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
 }
-
-html {
-  color: var(--cadence-color-text);
-  background: var(--cadence-color-canvas);
-  font-family: var(--cadence-font-sans);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-}
-
+/* Page-level base */
+html,
 body {
-  min-width: 320px;
-  min-height: 100vh;
   margin: 0;
-  background: var(--cadence-color-canvas);
+  min-height: 100vh;
 }
 
-button,
-input,
-select,
-textarea {
-  border-radius: 0;
-  font: inherit;
+/* In @layer base so daisyUI's component styles (e.g. .btn-primary text color
+   on link-mode <.button>s) can override it — unlayered, this reset beat every
+   layered rule and washed out filled link-buttons to base-content. */
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
-button,
-a {
-  -webkit-tap-highlight-color: transparent;
-}
-
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-[role="checkbox"]:focus-visible {
-  outline: 2px solid var(--cadence-color-signal);
-  outline-offset: 3px;
-}
-
-::selection {
-  color: var(--cadence-color-text-inverse);
-  background: var(--cadence-color-signal);
-}
-
+/* Reduced motion — honor the OS setting. Decorative loops (status pulses)
+   stop; functional transitions go instant (state still changes, it just
+   doesn't tween). 0.01ms, not 0, so JS transitionend/animationend listeners
+   still fire. See the "Reduced motion" design-system card. */
 @media (prefers-reduced-motion: reduce) {
   *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
+  ::before,
+  ::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* The critical strobe carried salience, not just meaning — without motion a
+     static red dot is easy to miss during an anomaly. Substitute a static
+     ring so "critical" stays prominent. */
+  .hud-status-critical .hud-status-dot {
+    box-shadow:
+      0 0 0 3px oklch(68% 0.2 10 / 0.45),
+      0 0 6px oklch(68% 0.2 10 / 0.8);
   }
 }

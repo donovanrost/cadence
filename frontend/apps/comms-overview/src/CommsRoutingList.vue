@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
-import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue";
+import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
+import CadenceHoverTableRow from "@cadence/ui/CadenceHoverTableRow.vue";
 
 type RoutingRuleRow = {
   id: string;

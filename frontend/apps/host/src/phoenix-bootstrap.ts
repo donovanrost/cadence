@@ -1,3 +1,4 @@
+import { pageChromeKey, type PageChrome } from "@cadence/ui/page-chrome";
 import {
   assertHostQueryParams,
   HOST_QUERY_PARAMS_MAX_BYTES,
@@ -75,12 +76,19 @@ export function parsePhoenixQueryParams(raw: string | undefined): HostQueryParam
   return parsed;
 }
 
-export function bootstrapPhoenixHost(root: HTMLElement): PhoenixHostMount {
+export function bootstrapPhoenixHost(
+  root: HTMLElement,
+  options: { navigate?: (href: string) => void; pageChrome?: PageChrome } = {},
+): PhoenixHostMount {
   const existing = mountedRoots.get(root);
   if (existing) return existing;
 
   const config = readPhoenixHostConfig(root);
-  const app = createApp(PhoenixHostApp, config as unknown as Record<string, unknown>);
+  const app = createApp(PhoenixHostApp, { ...config, ...options } as unknown as Record<
+    string,
+    unknown
+  >);
+  if (options.pageChrome) app.provide(pageChromeKey, options.pageChrome);
   app.mount(root);
 
   let mounted = true;

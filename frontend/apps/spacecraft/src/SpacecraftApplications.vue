@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
 
 type StatusTone = "info" | "ready" | "attention" | "blocked";
 type ButtonVariant = "primary" | "secondary" | "danger";

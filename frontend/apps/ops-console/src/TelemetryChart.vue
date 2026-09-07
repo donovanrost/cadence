@@ -8,6 +8,12 @@ import uPlot from "./vendor/uplot/uPlot.esm.js";
 // or placement id. A context switch changes the LiveVue root id through
 // chart_epoch, preserving the legacy remount boundary.
 const TelemetryChartController = {
+  themeColor(token) {
+    this.themeStyles ??= getComputedStyle(this.el);
+    const value = this.themeStyles.getPropertyValue(token).trim();
+    if (!value) throw new Error(`Missing Cadence chart token ${token}`);
+    return value;
+  },
   handleAppend({
     series,
     markers,
@@ -129,6 +135,14 @@ const TelemetryChartController = {
       this.renderLiveEdge();
     });
     this.resizeObserver.observe(this.el);
+    this.themeObserver = new MutationObserver(() => {
+      this.themeStyles = getComputedStyle(this.el);
+      this.rebuildChart();
+    });
+    this.themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme", "data-skin", "style", "class"],
+    });
   },
 
   updated() {
@@ -139,6 +153,7 @@ const TelemetryChartController = {
   destroyed() {
     if (this.handleClick) this.el.removeEventListener("click", this.handleClick);
     if (this.resizeObserver) this.resizeObserver.disconnect();
+    this.themeObserver?.disconnect();
     if (this.liveHeartbeatTimer) clearTimeout(this.liveHeartbeatTimer);
     if (this.liveArrivalTimer) clearTimeout(this.liveArrivalTimer);
     if (this.rangeSelectionOverlay && this.handleRangeSelection) {
@@ -803,12 +818,12 @@ const TelemetryChartController = {
       top: "0",
       display: "none",
       maxWidth: "55%",
-      border: "1px solid rgba(204, 204, 220, 0.2)",
+      border: `1px solid ${this.themeColor("--chart-label-20")}`,
       borderRadius: "2px",
-      background: "rgba(17, 18, 23, 0.96)",
-      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.35)",
-      color: "rgba(230, 230, 235, 0.94)",
-      font: "11px ui-sans-serif, system-ui, sans-serif",
+      background: `${this.themeColor("--chart-tooltip-surface-96")}`,
+      boxShadow: `0 4px 12px ${this.themeColor("--chart-shadow-35")}`,
+      color: `${this.themeColor("--chart-foreground-94")}`,
+      font: this.themeColor("--chart-font"),
       lineHeight: "1.45",
       padding: "6px 8px",
       pointerEvents: "none",
@@ -941,7 +956,9 @@ const TelemetryChartController = {
         border: "0",
         borderRadius: "2px",
         background: "transparent",
-        color: visible ? "rgba(204, 204, 220, 0.9)" : "rgba(153, 153, 170, 0.62)",
+        color: visible
+          ? `${this.themeColor("--chart-label-90")}`
+          : `${this.themeColor("--chart-muted-62")}`,
         cursor: "pointer",
         font: "500 11px ui-sans-serif, system-ui, sans-serif",
         lineHeight: "1",
@@ -982,7 +999,7 @@ const TelemetryChartController = {
       border: "0",
       borderRadius: "2px",
       background: "transparent",
-      color: "rgba(204, 204, 220, 0.72)",
+      color: `${this.themeColor("--chart-label-72")}`,
       cursor: "pointer",
       font: "500 11px ui-sans-serif, system-ui, sans-serif",
       lineHeight: "1",
@@ -1312,12 +1329,12 @@ const TelemetryChartController = {
       left: `${absoluteLeft - wrapperLeft}px`,
       bottom: "10px",
       width: `${tooltipWidth}px`,
-      border: "1px solid rgba(148, 163, 184, 0.30)",
+      border: `1px solid ${this.themeColor("--chart-border-30")}`,
       borderTop: `2px solid ${color}`,
       borderRadius: "4px",
-      background: "rgba(10, 15, 25, 0.98)",
-      boxShadow: "0 14px 34px rgba(0, 0, 0, 0.38)",
-      color: "rgba(226, 232, 240, 0.96)",
+      background: `${this.themeColor("--chart-panel-98")}`,
+      boxShadow: `0 14px 34px ${this.themeColor("--chart-shadow-38")}`,
+      color: `${this.themeColor("--chart-text-96")}`,
       font: "400 12px ui-sans-serif, system-ui, sans-serif",
       lineHeight: "1.4",
       pointerEvents: "auto",
@@ -1328,8 +1345,8 @@ const TelemetryChartController = {
     const header = document.createElement("div");
     Object.assign(header.style, {
       padding: "7px 9px",
-      borderBottom: "1px solid rgba(148, 163, 184, 0.18)",
-      color: "rgba(226, 232, 240, 0.90)",
+      borderBottom: `1px solid ${this.themeColor("--chart-border-18")}`,
+      color: `${this.themeColor("--chart-text-90")}`,
       font: "500 11px ui-monospace, SFMono-Regular, Menlo, monospace",
       letterSpacing: "0.01em",
     });
@@ -1341,7 +1358,7 @@ const TelemetryChartController = {
 
     const title = document.createElement("div");
     Object.assign(title.style, {
-      color: "rgba(248, 250, 252, 0.98)",
+      color: `${this.themeColor("--chart-text-strong-98")}`,
       fontWeight: "650",
       marginBottom: annotation.text ? "4px" : "0",
     });
@@ -1351,7 +1368,7 @@ const TelemetryChartController = {
     if (annotation.text && annotation.text !== annotation.title) {
       const description = document.createElement("div");
       Object.assign(description.style, {
-        color: "rgba(203, 213, 225, 0.86)",
+        color: `${this.themeColor("--chart-text-secondary-86")}`,
         marginBottom: "8px",
       });
       description.textContent = annotation.text;
@@ -1372,10 +1389,10 @@ const TelemetryChartController = {
       tags.forEach((tag) => {
         const tagElement = document.createElement("span");
         Object.assign(tagElement.style, {
-          border: "1px solid rgba(148, 163, 184, 0.24)",
+          border: `1px solid ${this.themeColor("--chart-border-24")}`,
           borderRadius: "999px",
           padding: "1px 6px",
-          color: "rgba(203, 213, 225, 0.88)",
+          color: `${this.themeColor("--chart-text-secondary-88")}`,
           font: "500 10px ui-monospace, SFMono-Regular, Menlo, monospace",
         });
         tagElement.textContent = String(tag);
@@ -1387,7 +1404,7 @@ const TelemetryChartController = {
     const provenance = document.createElement("div");
     provenance.dataset.chartAnnotationProvenance = "true";
     Object.assign(provenance.style, {
-      color: "rgba(148, 163, 184, 0.78)",
+      color: `${this.themeColor("--chart-border-78")}`,
       font: "500 10px ui-monospace, SFMono-Regular, Menlo, monospace",
       letterSpacing: "0.035em",
       overflow: "hidden",
@@ -1406,7 +1423,7 @@ const TelemetryChartController = {
         justifyContent: "flex-end",
         marginTop: "9px",
         paddingTop: "8px",
-        borderTop: "1px solid rgba(148, 163, 184, 0.14)",
+        borderTop: `1px solid ${this.themeColor("--chart-border-14")}`,
       });
 
       const evidenceControl = document.createElement("button");
@@ -1418,8 +1435,8 @@ const TelemetryChartController = {
         border: `1px solid ${color}`,
         borderRadius: "3px",
         padding: "0 8px",
-        background: `color-mix(in srgb, ${color} 12%, rgba(15, 23, 42, 0.96))`,
-        color: "rgba(248, 250, 252, 0.96)",
+        background: `color-mix(in srgb, ${color}12%, ${this.themeColor("--chart-surface-96")})`,
+        color: `${this.themeColor("--chart-text-strong-96")}`,
         cursor: "pointer",
         font: "650 10px ui-monospace, SFMono-Regular, Menlo, monospace",
         letterSpacing: "0.055em",
@@ -1526,13 +1543,13 @@ const TelemetryChartController = {
 
   annotationColor(annotation) {
     const namedColors = {
-      amber: "rgba(251, 191, 36, 0.90)",
-      cyan: "rgba(34, 211, 238, 0.90)",
-      green: "rgba(34, 197, 94, 0.86)",
-      indigo: "rgba(129, 140, 248, 0.88)",
-      red: "rgba(248, 113, 113, 0.90)",
-      teal: "rgba(45, 212, 191, 0.88)",
-      violet: "rgba(167, 139, 250, 0.90)",
+      amber: `${this.themeColor("--chart-warning-90")}`,
+      cyan: `${this.themeColor("--chart-action-90")}`,
+      green: `${this.themeColor("--chart-success-86")}`,
+      indigo: `${this.themeColor("--chart-revision-88")}`,
+      red: `${this.themeColor("--chart-critical-90")}`,
+      teal: `${this.themeColor("--chart-current-88")}`,
+      violet: `${this.themeColor("--chart-compare-90")}`,
     };
 
     if (namedColors[annotation.color]) return namedColors[annotation.color];
@@ -1569,7 +1586,7 @@ const TelemetryChartController = {
       borderLeft: `1px solid ${this.sourceBindingIntervalColor(marker)}`,
       borderRight: `1px solid ${this.sourceBindingIntervalColor(marker)}`,
       padding: "0",
-      background: "rgba(129, 140, 248, 0.07)",
+      background: `${this.themeColor("--chart-revision-7")}`,
       cursor: "pointer",
       pointerEvents: "auto",
     });
@@ -1628,7 +1645,7 @@ const TelemetryChartController = {
       border: "0",
       borderRight: `1px solid ${this.retentionGapColor(marker)}`,
       padding: "0",
-      background: "rgba(248, 113, 113, 0.09)",
+      background: `${this.themeColor("--chart-critical-9")}`,
       cursor: "pointer",
       pointerEvents: "auto",
     });
@@ -1729,8 +1746,7 @@ const TelemetryChartController = {
       height: `${this.chart.bbox.height || this.el.clientHeight}px`,
       borderLeft: `1px dashed ${this.sourceWatermarkCursorColor(marker)}`,
       backgroundColor: this.sourceWatermarkRegionColor(marker),
-      backgroundImage:
-        "repeating-linear-gradient(135deg, transparent 0, transparent 8px, rgba(148, 163, 184, 0.07) 8px, rgba(148, 163, 184, 0.07) 9px)",
+      backgroundImage: `repeating-linear-gradient(135deg, transparent 0, transparent 8px, ${this.themeColor("--chart-border-7")} 8px, ${this.themeColor("--chart-border-7")} 9px)`,
       pointerEvents: "none",
     });
     this.watermarkOverlayLayer.appendChild(region);
@@ -1759,8 +1775,12 @@ const TelemetryChartController = {
       top: "8px",
       border: `1px solid ${this.sourceWatermarkStatusBorder(marker, boundaryVisible)}`,
       borderRadius: "3px",
-      background: boundaryVisible ? "rgba(30, 23, 10, 0.90)" : "rgba(6, 31, 31, 0.86)",
-      color: boundaryVisible ? "rgba(253, 230, 138, 0.96)" : "rgba(153, 246, 228, 0.94)",
+      background: boundaryVisible
+        ? `${this.themeColor("--chart-warning-surface-90")}`
+        : `${this.themeColor("--chart-current-surface-86")}`,
+      color: boundaryVisible
+        ? `${this.themeColor("--chart-warning-text-96")}`
+        : `${this.themeColor("--chart-current-text-94")}`,
       cursor: "pointer",
       font: "600 10px ui-monospace, SFMono-Regular, Menlo, monospace",
       letterSpacing: "0.06em",
@@ -1871,14 +1891,15 @@ const TelemetryChartController = {
   },
 
   sourceWatermarkStatusBorder(marker, boundaryVisible) {
-    if (!boundaryVisible) return "rgba(45, 212, 191, 0.36)";
+    if (!boundaryVisible) return `${this.themeColor("--chart-current-36")}`;
     return this.sourceWatermarkCursorColor(marker);
   },
 
   sourceWatermarkRegionColor(marker) {
-    if (marker.freshness_state === "retention_gap") return "rgba(127, 29, 29, 0.10)";
-    if (marker.freshness_state === "stale") return "rgba(120, 53, 15, 0.10)";
-    return "rgba(51, 65, 85, 0.10)";
+    if (marker.freshness_state === "retention_gap")
+      return `${this.themeColor("--chart-retention-surface-10")}`;
+    if (marker.freshness_state === "stale") return `${this.themeColor("--chart-stale-surface-10")}`;
+    return `${this.themeColor("--chart-unknown-surface-10")}`;
   },
 
   collapseSourceWatermarkMarkers(markers) {
@@ -1973,8 +1994,8 @@ const TelemetryChartController = {
       padding: "0",
       background:
         marker.revision_state === "backfill"
-          ? "rgba(14, 165, 233, 0.08)"
-          : "rgba(251, 191, 36, 0.10)",
+          ? `${this.themeColor("--chart-backfill-8")}`
+          : `${this.themeColor("--chart-warning-10")}`,
       cursor: "pointer",
       pointerEvents: "auto",
     });
@@ -2308,7 +2329,7 @@ const TelemetryChartController = {
       margin: "0 auto",
       borderRadius: "999px",
       background: this.markerColor(marker),
-      boxShadow: `0 0 0 1px rgba(0, 0, 0, 0.35), 0 0 8px ${this.markerColor(marker)}`,
+      boxShadow: `0 0 0 1px ${this.themeColor("--chart-shadow-35")}, 0 0 8px ${this.markerColor(marker)}`,
     });
     button.appendChild(line);
 
@@ -2352,7 +2373,7 @@ const TelemetryChartController = {
       borderLeft: `1px solid ${this.limitIntervalColor(marker)}`,
       borderRight: `1px solid ${this.limitIntervalColor(marker)}`,
       padding: "0",
-      background: "rgba(250, 204, 21, 0.055)",
+      background: `${this.themeColor("--chart-caution-5-5")}`,
       cursor: "pointer",
       pointerEvents: "auto",
     });
@@ -2591,11 +2612,11 @@ const TelemetryChartController = {
       transform: "translate(-6px, -6px)",
       border:
         this.selectedRef.series_role === "compare"
-          ? "2px dashed rgba(203, 213, 225, 0.95)"
-          : "2px solid rgba(125, 211, 252, 0.95)",
+          ? `2px dashed ${this.themeColor("--chart-text-secondary-95")}`
+          : `2px solid ${this.themeColor("--chart-selection-95")}`,
       borderRadius: "999px",
-      background: "rgba(14, 165, 233, 0.18)",
-      boxShadow: "0 0 0 1px rgba(0, 0, 0, 0.35), 0 0 10px rgba(125, 211, 252, 0.75)",
+      background: `${this.themeColor("--chart-backfill-18")}`,
+      boxShadow: `0 0 0 1px ${this.themeColor("--chart-shadow-35")}, 0 0 10px ${this.themeColor("--chart-selection-75")}`,
     });
     this.selectionLayer.appendChild(marker);
   },
@@ -2614,8 +2635,8 @@ const TelemetryChartController = {
       top: `${this.chart.bbox.top || 0}px`,
       height: `${this.chart.bbox.height || this.el.clientHeight}px`,
       width: "0",
-      borderLeft: "1px dashed rgba(125, 211, 252, 0.68)",
-      boxShadow: "0 0 8px rgba(125, 211, 252, 0.42)",
+      borderLeft: `1px dashed ${this.themeColor("--chart-selection-68")}`,
+      boxShadow: `0 0 8px ${this.themeColor("--chart-selection-42")}`,
     });
     this.selectionLayer.appendChild(cursor);
   },
@@ -2660,7 +2681,7 @@ const TelemetryChartController = {
       transform: "translateX(-9px)",
       borderLeft: `3px solid ${this.markerColor(marker)}`,
       borderRight: `3px solid ${this.markerColor(marker)}`,
-      background: "rgba(250, 250, 250, 0.08)",
+      background: `${this.themeColor("--chart-highlight-8")}`,
       boxShadow: `0 0 12px ${this.markerColor(marker)}`,
     });
     this.selectionLayer.appendChild(selection);
@@ -2700,7 +2721,7 @@ const TelemetryChartController = {
       width: `${interval.width}px`,
       height: `${this.chart.bbox.height || this.el.clientHeight}px`,
       border: `1px solid ${this.limitIntervalColor(marker)}`,
-      background: "rgba(250, 204, 21, 0.13)",
+      background: `${this.themeColor("--chart-caution-13")}`,
       boxShadow: `0 0 10px ${this.limitIntervalColor(marker)}`,
     });
     this.selectionLayer.appendChild(selection);
@@ -2722,7 +2743,7 @@ const TelemetryChartController = {
       transform: "translateX(-8px)",
       borderLeft: `2px solid ${this.eventColor(marker)}`,
       borderRight: `2px solid ${this.eventColor(marker)}`,
-      background: "rgba(250, 250, 250, 0.06)",
+      background: `${this.themeColor("--chart-highlight-6")}`,
       boxShadow: `0 0 10px ${this.eventColor(marker)}`,
     });
     this.selectionLayer.appendChild(selection);
@@ -2754,8 +2775,8 @@ const TelemetryChartController = {
   },
 
   markerColor(marker) {
-    if (marker.normalized_state === "red") return "rgba(248, 113, 113, 0.95)";
-    return "rgba(250, 204, 21, 0.95)";
+    if (marker.normalized_state === "red") return `${this.themeColor("--chart-critical-95")}`;
+    return `${this.themeColor("--chart-caution-95")}`;
   },
 
   limitAnalysisBucketTitle(marker) {
@@ -2781,39 +2802,39 @@ const TelemetryChartController = {
   },
 
   limitAnalysisBucketFill(marker) {
-    if (marker.normalized_state === "red") return "rgba(248, 113, 113, 0.14)";
-    return "rgba(250, 204, 21, 0.12)";
+    if (marker.normalized_state === "red") return `${this.themeColor("--chart-critical-14")}`;
+    return `${this.themeColor("--chart-caution-12")}`;
   },
 
   limitAnalysisBucketSelectionFill(marker) {
-    if (marker.normalized_state === "red") return "rgba(248, 113, 113, 0.20)";
-    return "rgba(250, 204, 21, 0.18)";
+    if (marker.normalized_state === "red") return `${this.themeColor("--chart-critical-20")}`;
+    return `${this.themeColor("--chart-caution-18")}`;
   },
 
   limitAnalysisBucketEdge(marker) {
-    if (marker.normalized_state === "red") return "rgba(248, 113, 113, 0.28)";
-    return "rgba(250, 204, 21, 0.24)";
+    if (marker.normalized_state === "red") return `${this.themeColor("--chart-critical-28")}`;
+    return `${this.themeColor("--chart-caution-24")}`;
   },
 
   limitIntervalColor(_marker) {
-    return "rgba(250, 204, 21, 0.58)";
+    return `${this.themeColor("--chart-caution-58")}`;
   },
 
   limitThresholdColor(name) {
-    if (name.startsWith("red")) return "rgba(248, 113, 113, 0.82)";
-    return "rgba(250, 204, 21, 0.82)";
+    if (name.startsWith("red")) return `${this.themeColor("--chart-critical-82")}`;
+    return `${this.themeColor("--chart-caution-82")}`;
   },
 
   limitThresholdBandColor(name) {
-    if (name.startsWith("red")) return "rgba(248, 113, 113, 0.08)";
-    return "rgba(250, 204, 21, 0.07)";
+    if (name.startsWith("red")) return `${this.themeColor("--chart-critical-8")}`;
+    return `${this.themeColor("--chart-caution-7")}`;
   },
 
   eventColor(marker) {
     if (marker.severity === "critical" || marker.severity === "error")
-      return "rgba(248, 113, 113, 0.90)";
+      return `${this.themeColor("--chart-critical-90")}`;
     if (marker.severity === "warning" || marker.status === "canceled")
-      return "rgba(251, 191, 36, 0.90)";
+      return `${this.themeColor("--chart-warning-90")}`;
     if (marker.marker_type === "retention_gap") return this.retentionGapColor(marker);
     if (marker.marker_type === "source_binding_interval")
       return this.sourceBindingIntervalColor(marker);
@@ -2828,26 +2849,27 @@ const TelemetryChartController = {
       marker.marker_type === "telemetry_backfill_lifecycle"
     )
       return this.telemetryRevisionColor(marker);
-    return "rgba(129, 140, 248, 0.86)";
+    return `${this.themeColor("--chart-revision-86")}`;
   },
 
   retentionGapColor(_marker) {
-    return "rgba(248, 113, 113, 0.76)";
+    return `${this.themeColor("--chart-critical-76")}`;
   },
 
   sourceBindingIntervalColor(_marker) {
-    return "rgba(129, 140, 248, 0.68)";
+    return `${this.themeColor("--chart-revision-68")}`;
   },
 
   sourceWatermarkCursorColor(marker) {
-    if (marker.freshness_state === "stale") return "rgba(251, 191, 36, 0.82)";
-    if (marker.freshness_state === "retention_gap") return "rgba(248, 113, 113, 0.78)";
-    return "rgba(45, 212, 191, 0.76)";
+    if (marker.freshness_state === "stale") return `${this.themeColor("--chart-warning-82")}`;
+    if (marker.freshness_state === "retention_gap")
+      return `${this.themeColor("--chart-critical-78")}`;
+    return `${this.themeColor("--chart-current-76")}`;
   },
 
   telemetryRevisionColor(marker) {
-    if (marker.revision_state === "backfill") return "rgba(14, 165, 233, 0.72)";
-    return "rgba(251, 191, 36, 0.78)";
+    if (marker.revision_state === "backfill") return `${this.themeColor("--chart-backfill-72")}`;
+    return `${this.themeColor("--chart-warning-78")}`;
   },
 
   eventMarkerOverlapsWindow(marker, cutoff) {
@@ -3112,13 +3134,13 @@ const TelemetryChartController = {
   },
 
   chartPalette() {
-    const accent = getComputedStyle(this.el).color || "#c0caf5";
+    const accent = getComputedStyle(this.el).color || this.themeColor("--chart-series-primary");
     return [
       accent,
-      "rgba(45, 212, 191, 0.92)",
-      "rgba(251, 191, 36, 0.90)",
-      "rgba(248, 113, 113, 0.88)",
-      "rgba(167, 139, 250, 0.90)",
+      `${this.themeColor("--chart-current-92")}`,
+      `${this.themeColor("--chart-warning-90")}`,
+      `${this.themeColor("--chart-critical-88")}`,
+      `${this.themeColor("--chart-compare-90")}`,
     ];
   },
 
@@ -3127,10 +3149,10 @@ const TelemetryChartController = {
     // hardcoding palette values.
     const palette = this.chartPalette();
     const axis = {
-      stroke: "rgba(204, 204, 220, 0.62)",
-      grid: { stroke: "rgba(204, 204, 220, 0.08)" },
-      ticks: { stroke: "rgba(204, 204, 220, 0.12)" },
-      font: "11px ui-sans-serif, system-ui, sans-serif",
+      stroke: `${this.themeColor("--chart-label-62")}`,
+      grid: { stroke: `${this.themeColor("--chart-label-8")}` },
+      ticks: { stroke: `${this.themeColor("--chart-label-12")}` },
+      font: this.themeColor("--chart-font"),
     };
 
     return {
@@ -3283,7 +3305,7 @@ const TelemetryChartController = {
         label: `${series.label || series.id || this.widgetId} ${entry.kind === "envelope_low" ? "min" : "max"}`,
         show: this.seriesVisible(series),
         scale: this.unitScaleKey(series.unit),
-        stroke: "rgba(0, 0, 0, 0)",
+        stroke: `${this.themeColor("--chart-shadow-0")}`,
         width: 0,
         points: { show: false },
         spanGaps: false,
@@ -3299,7 +3321,7 @@ const TelemetryChartController = {
   },
 
   compareSeriesColor(_color) {
-    return "rgba(203, 213, 225, 0.76)";
+    return `${this.themeColor("--chart-text-secondary-76")}`;
   },
 
   lineWidthValue() {
@@ -3314,7 +3336,7 @@ const TelemetryChartController = {
       const parts = color.slice(5, -1).split(",");
       if (parts.length >= 3) return `rgba(${parts.slice(0, 3).join(",")}, ${alpha})`;
     }
-    return `rgba(125, 211, 252, ${alpha})`;
+    return `rgba(${this.themeColor("--chart-color-selection")}, ${alpha})`;
   },
 
   installRangeSelection() {
@@ -3378,7 +3400,7 @@ const TelemetryChartController = {
       if (parts.length >= 3) return `rgba(${parts.slice(0, 3).join(",")}, 0.16)`;
     }
 
-    return "rgba(125, 211, 252, 0.14)";
+    return `${this.themeColor("--chart-selection-14")}`;
   },
 };
 

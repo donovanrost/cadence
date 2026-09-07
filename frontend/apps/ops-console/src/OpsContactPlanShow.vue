@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
-import CadenceInlineWarning from "./ui/components/CadenceInlineWarning.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
+import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
+import CadenceInlineWarning from "@cadence/ui/CadenceInlineWarning.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
 import { ref, watch } from "vue";
-import CadencePanel from "./ui/components/CadencePanel.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
 
 type EmptyPayload = Record<string, never>;
 
@@ -226,47 +226,36 @@ const executePlan = () => emit("execute-plan", {});
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <CadencePageHeaderFrame variant="ops">
-      <div class="mx-auto max-w-[96rem]">
-        <a
-          :href="page.back_action.href"
-          data-phx-link="redirect"
-          data-phx-link-state="push"
-          class="inline-flex items-center gap-1 font-mono text-xs text-base-content/55 hover:text-primary"
-        >
-          <span class="hero-arrow-left h-3.5 w-3.5"></span>
-          {{ page.back_action.label }}
-        </a>
-        <div class="mt-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div class="flex flex-wrap items-center gap-2">
-              <span :class="page.header.state.class">{{ page.header.state.label }}</span>
-              <span class="font-mono text-[0.65rem] text-base-content/45">
-                {{ page.header.version_label }}
-              </span>
-            </div>
-            <h1 class="mt-2 text-2xl font-bold tracking-tight">{{ page.header.heading }}</h1>
-            <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-              {{ page.header.description }}
-            </p>
-          </div>
-          <button
-            v-if="page.header.execute_action !== null"
-            :id="page.header.execute_action.id"
-            type="button"
-            :disabled="page.header.execute_action.disabled"
-            class="btn btn-primary btn-sm min-w-40 font-mono text-xs uppercase tracking-wider"
-            @click="executePlan"
-          >
-            {{ page.header.execute_action.label }}
-          </button>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
-
-    <div
-      class="mx-auto grid max-w-[96rem] gap-5 p-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(21rem,0.7fr)] lg:p-7"
+    <CadencePageHeading
+      :breadcrumbs="[
+        { label: page.back_action.label, href: page.back_action.href },
+        { label: page.header.heading },
+      ]"
     >
+      <template #title>{{ page.header.heading }}</template>
+      <template #description>{{ page.header.description }}</template>
+      <template #actions>
+        <button
+          v-if="page.header.execute_action !== null"
+          :id="page.header.execute_action.id"
+          type="button"
+          :disabled="page.header.execute_action.disabled"
+          class="btn btn-primary btn-sm min-w-40 font-mono text-xs uppercase tracking-wider"
+          @click="executePlan"
+        >
+          {{ page.header.execute_action.label }}
+        </button></template
+      >
+
+      <template #metadata
+        ><span :class="page.header.state.class">{{ page.header.state.label }}</span>
+        <span class="font-mono text-[0.65rem] text-base-content/45">
+          {{ page.header.version_label }}
+        </span></template
+      ></CadencePageHeading
+    >
+
+    <div class="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(21rem,0.7fr)]">
       <div class="min-w-0 space-y-5">
         <CadencePanel
           :id="page.summary.id"

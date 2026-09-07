@@ -40,8 +40,7 @@ const dashboardResponse = {
         header: {
           eyebrow: "Observe / Dashboards",
           heading: "Dashboard Directory",
-          copy:
-            "Find mission telemetry workspaces without crowding the navigation rail. Stars and recents are personal; dashboard definitions and tags remain mission shared.",
+          copy: "Find mission telemetry workspaces without crowding the navigation rail. Stars and recents are personal; dashboard definitions and tags remain mission shared.",
           count: { id: "dashboard-directory-count", value: 1, suffix: "matching" },
           author_actions: [
             {
@@ -60,8 +59,7 @@ const dashboardResponse = {
             id: "dashboard-directory-empty",
             icon: "hero-magnifying-glass",
             heading: "No matching dashboards",
-            copy:
-              "Change the search, tag, or lifecycle filter. The filter state is preserved in the URL.",
+            copy: "Change the search, tag, or lifecycle filter. The filter state is preserved in the URL.",
           },
         },
       },
@@ -662,7 +660,9 @@ describe("Ops Console federated application", () => {
 
   it("renders the backend-shaped dashboard directory DTO without optional props", async () => {
     const query = vi.fn<TestQuery>().mockResolvedValue(dashboardResponse);
-    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "dashboard_directory")!;
+    const surface = surfaceContracts.find(
+      (candidate) => candidate.surfaceId === "dashboard_directory",
+    )!;
     const baseProps = propsFor(query);
     const wrapper = mount(OpsConsoleApplication, {
       props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
@@ -680,7 +680,9 @@ describe("Ops Console federated application", () => {
 
   it("mounts the Phoenix telemetry contract without containment", async () => {
     const query = vi.fn<TestQuery>().mockResolvedValue(telemetryResponse);
-    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "telemetry_explore")!;
+    const surface = surfaceContracts.find(
+      (candidate) => candidate.surfaceId === "telemetry_explore",
+    )!;
     const baseProps = propsFor(query);
     const wrapper = mount(OpsConsoleApplication, {
       props: { ...baseProps, surface, application: { ...baseProps.application, surface } },

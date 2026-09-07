@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
 import { reactive, watch } from "vue";
 
 type Page = {
@@ -173,16 +173,12 @@ const updateDwellSeconds = (event: Event) => {
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <CadencePageHeaderFrame variant="ops-author">
-      <div class="mx-auto max-w-6xl">
-        <p class="hud-label">{{ page.eyebrow }}</p>
-        <h1 class="mt-1 text-2xl font-semibold">{{ page.heading }}</h1>
-        <p class="mt-2 text-sm text-base-content/60">
-          {{ page.copy }}
-        </p>
-      </div>
-    </CadencePageHeaderFrame>
-    <div class="mx-auto grid max-w-6xl gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+    <CadencePageHeading>
+      <template #title>{{ page.heading }}</template>
+      <template #eyebrow>{{ page.eyebrow }}</template>
+      <template #description>{{ page.copy }}</template>
+    </CadencePageHeading>
+    <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div :id="page.list.id" class="space-y-3">
         <div
           :id="page.list.empty.id"

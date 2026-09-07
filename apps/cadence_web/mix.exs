@@ -88,15 +88,15 @@ defmodule CadenceWeb.MixProject do
         "phx.digest"
       ],
       "test.browser": [
-        "test --include browser_smoke --only browser_smoke browser_test/cadence_web/assets/dashboard_rendered_viewport_smoke_test.exs"
+        "test.browser.federation"
       ],
       "test.browser.full": [
-        "test --include browser --include browser_smoke browser_test/cadence_web/assets"
+        "test.browser.federation"
       ],
       "test.browser.federation": [
         "cmd --cd ../../frontend corepack pnpm@11.22.0 run test:browser:contract",
-        "cmd node assets/test/run_federation_publication_build.mjs assets.deploy",
-        "test --include browser_smoke --only browser_smoke browser_test/cadence_web/assets/federation_browser_smoke_test.exs"
+        "cmd node ../../frontend/tools/phoenix/run_federation_publication_build.mjs assets.deploy",
+        "cmd env CADENCE_BROWSER_PROPS_DIFF=true MIX_ENV=test mix test --include browser_smoke --only browser_smoke browser_test/cadence_web/assets/federation_browser_smoke_test.exs browser_test/cadence_web/assets/admin_mode_browser_smoke_test.exs"
       ]
     ]
   end

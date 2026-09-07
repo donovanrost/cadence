@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import CadencePopover from "./ui/reka/CadencePopover.vue";
+import CadencePopover from "@cadence/ui/CadencePopover.vue";
 import WidgetDataLinks from "./WidgetDataLinks.vue";
 import WidgetQueryDiagnostics from "./WidgetQueryDiagnostics.vue";
 import WidgetWarning from "./WidgetWarning.vue";

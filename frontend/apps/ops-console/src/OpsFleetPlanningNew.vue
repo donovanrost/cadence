@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
+import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
+import CadenceValidationMessage from "@cadence/ui/CadenceValidationMessage.vue";
 import { reactive, watch } from "vue";
 
 type Header = {
@@ -150,9 +150,11 @@ const createFleetRun = () => emit("create-fleet-run", { fleet_run: values() });
 
 <template>
   <CadenceOpsViewport :id="header.id">
-    <CadencePageHeaderFrame variant="ops">
-      <div class="mx-auto max-w-5xl">
-        <a
+    <CadencePageHeading>
+      <template #title>{{ header.title }}</template>
+      <template #description>{{ header.copy }}</template>
+      <template #actions
+        ><a
           :id="header.back.id"
           :href="paths.planning"
           data-phx-link="redirect"
@@ -161,15 +163,11 @@ const createFleetRun = () => emit("create-fleet-run", { fleet_run: values() });
         >
           <span :class="[header.back.icon, 'h-3.5 w-3.5']"></span>
           {{ header.back.label }}
-        </a>
-        <h1 class="mt-4 text-2xl font-bold tracking-tight">{{ header.title }}</h1>
-        <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-          {{ header.copy }}
-        </p>
-      </div>
-    </CadencePageHeaderFrame>
+        </a></template
+      >
+    </CadencePageHeading>
 
-    <div class="mx-auto grid max-w-5xl gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:p-7">
+    <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <section class="border border-base-300 bg-base-200/15 p-5">
         <form
           v-if="policy_state.active && form"

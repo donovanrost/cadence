@@ -1,38 +1,15 @@
-# Organization Admin federation ownership
+# Organization administration ownership
 
-This remote is the first-party renderer boundary for post-auth organization and
-platform administration surfaces. Its Phoenix counterpart remains authoritative
-for scope, authorization, validation, forms, CSRF, durable state, navigation, and
-LiveView events.
+This remote renders organization and platform administration screens. Shared controls and
+styles come from `@cadence/ui` and `@cadence/design-tokens`.
 
-## Frozen Vue closure
+`Cadence.Applications.OrganizationAdmin` registers the application in Cadence core, alongside
+its query and action providers. The web app authenticates transport requests and adapts session
+and delivery operations. Core does not conditionally load an application from `cadence_web`.
 
-The following entry components are copied from the pre-batch surface family:
+The frontend host owns sign-in, invitation, no-organization, and admin-mode screens. Their native
+forms submit to Phoenix session endpoints. Organization switching and administrative eligibility
+remain enforced on the server. Invitation mail uses a configured delivery port so domain actions
+do not depend on the Phoenix endpoint or mail implementation.
 
-- `OrganizationHome.vue`
-- `ProviderAccountListPage.vue`
-- `ProviderAccountNew.vue`
-- `ProviderAccountShow.vue`
-- `NotificationsPage.vue`
-- `NotificationsBell.vue`
-- `AdminHome.vue`
-- `AdminRuntime.vue`
-- `AdminOrganizationListPage.vue`
-- `AdminOrganizationNew.vue`
-- `AdminOrganizationShow.vue`
-- `AdminOrganizationInvite.vue`
-
-Their local `src/ui/**` dependencies, `ProviderAccountCards.vue`,
-`OrganizationStats.vue`, `RecentMissions.vue`, `NotificationsPanel.vue`, and
-`StatusBadge.vue` are owned here as well. No module imports from
-`apps/cadence_web/assets/vue`.
-
-## Deliberate host-owned flows
-
-Sign-in, invitation acceptance, no-organization bootstrap, and admin-mode
-transitions remain Phoenix/host-owned. The copied notification and admin
-surfaces emit bounded events to those Phoenix handlers; they do not become an
-authorization, session, or persistence boundary.
-
-Existing LiveViews and local Vue mounts remain compatibility wrappers until a
-central composition change is separately authorized.
+See [host architecture](../../docs/host-architecture.md) for composition and validation boundaries.

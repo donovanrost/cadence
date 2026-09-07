@@ -6,9 +6,5 @@
   "exports": {
     "./base.css": "./src/base.css",
     "./theme.css": "./src/theme.css"
-  },
-  "dependencies": {
-    "@fontsource-variable/archivo": "catalog:",
-    "@fontsource-variable/jetbrains-mono": "catalog:"
   }
 }

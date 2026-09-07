@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
 type JourneyStep = {
   number: string;
   label: string;
@@ -61,20 +61,12 @@ defineProps<{
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <CadencePageHeaderFrame variant="ops">
-      <div
-        class="mx-auto flex max-w-[96rem] flex-col gap-5 md:flex-row md:items-end md:justify-between"
-      >
-        <div>
-          <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
-            {{ page.header.eyebrow }}
-          </p>
-          <h1 class="mt-1 text-2xl font-bold tracking-tight">{{ page.header.title }}</h1>
-          <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-            {{ page.header.description }}
-          </p>
-        </div>
-        <a
+    <CadencePageHeading>
+      <template #title>{{ page.header.title }}</template>
+      <template #eyebrow>{{ page.header.eyebrow }}</template>
+      <template #description>{{ page.header.description }}</template>
+      <template #actions
+        ><a
           :id="page.header.create_action.id"
           :href="page.header.create_action.href"
           data-phx-link="redirect"
@@ -83,11 +75,11 @@ defineProps<{
         >
           <span class="hero-plus h-4 w-4" aria-hidden="true"></span>
           {{ page.header.create_action.label }}
-        </a>
-      </div>
-    </CadencePageHeaderFrame>
+        </a></template
+      >
+    </CadencePageHeading>
 
-    <div class="mx-auto max-w-[96rem] p-5 lg:p-7">
+    <div class="">
       <div class="mb-5 grid border border-base-300 bg-base-200/25 sm:grid-cols-4">
         <div
           v-for="step in page.journey_steps"

@@ -22,7 +22,12 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
   test "a forged install event cannot bypass the pinned profile declaration" do
     {conn, mission, spacecraft} = signed_in_spacecraft()
     {:ok, view, _html} = live(conn, inventory_path(mission, spacecraft))
-    render_hook(view, "install", %{"key" => "telemetry_decom"})
+
+    render_hook(view, "host:manage", %{
+      "event" => "install",
+      "key" => "telemetry_decom",
+      "path" => Test.get_vue(view, id: "application-shell").props["snapshot"]["path"]
+    })
 
     refute Cadence.Repo.get_by(Cadence.Applications.ApplicationInstallations.InstallationRow,
              scope_id: spacecraft.spacecraft_id,
@@ -51,15 +56,14 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
   end
 
   defp assert_surface(view, _mission, _spacecraft) do
-    assert has_element?(view, "#spacecraft-applications-page-component.contents")
+    assert has_element?(view, "#application-shell")
 
-    vue = Test.get_vue(view, id: "spacecraft-applications-page-component")
-    assert vue.component == "SpacecraftApplicationManagement"
-    assert vue.id == "spacecraft-applications-page-component"
-    assert vue.class == "contents"
+    vue = Test.get_vue(view, id: "application-shell")
+    assert vue.component == "BrowserHost"
+    assert vue.id == "application-shell"
     assert vue.ssr == false
-    assert Enum.sort(Map.keys(vue.handlers)) == ["disable", "install", "uninstall"]
-    assert is_map(vue.props["presentation"])
+    assert vue.handlers == %{}
+    assert is_map(vue.props["snapshot"]["presentation"])
   end
 
   defp signed_in_spacecraft do

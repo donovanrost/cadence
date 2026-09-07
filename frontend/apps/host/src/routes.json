@@ -1,0 +1,1198 @@
+[
+  {
+    "path": "/",
+    "application": "organization_admin",
+    "surface": "organization_home",
+    "scope": "organization",
+    "mountId": "organization-home-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "nav_item": "organization_home"
+    }
+  },
+  {
+    "path": "/missions",
+    "application": "mission_catalog",
+    "surface": "mission_list",
+    "scope": "organization",
+    "mountId": "mission-list-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "Missions",
+      "nav_item": "missions"
+    }
+  },
+  {
+    "path": "/missions/new",
+    "application": "mission_catalog",
+    "surface": "mission_new",
+    "scope": "organization",
+    "mountId": "mission-new-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "space-y-6 max-w-xl",
+    "metadata": {
+      "page_title": "New Mission",
+      "nav_item": "missions"
+    }
+  },
+  {
+    "path": "/provider-accounts",
+    "application": "organization_admin",
+    "surface": "provider_accounts",
+    "scope": "organization",
+    "mountId": "provider-account-list-page-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "nav_item": "provider_accounts"
+    }
+  },
+  {
+    "path": "/provider-accounts/new",
+    "application": "organization_admin",
+    "surface": "provider_account_new",
+    "scope": "organization",
+    "mountId": "provider-account-new-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "max-w-3xl space-y-6",
+    "metadata": {
+      "nav_item": "provider_accounts"
+    }
+  },
+  {
+    "path": "/provider-accounts/:provider_account_id",
+    "application": "organization_admin",
+    "surface": "provider_account_show",
+    "scope": "organization",
+    "mountId": "provider-account-show-component",
+    "queryKeys": ["provider_account_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "nav_item": "provider_accounts"
+    }
+  },
+  {
+    "path": "/missions/:mission_id",
+    "application": "mission_catalog",
+    "surface": "mission_overview",
+    "scope": "mission",
+    "mountId": "mission-overview-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "space-y-6",
+    "metadata": {
+      "nav_item": "mission_overview"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/spacecraft",
+    "application": "spacecraft",
+    "surface": "list",
+    "scope": "mission",
+    "mountId": "spacecraft-list-component",
+    "queryKeys": ["q", "sort", "dir", "page", "pageSize", "filter"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Spacecraft",
+      "nav_item": "spacecraft"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/spacecraft/new",
+    "application": "spacecraft",
+    "surface": "new",
+    "scope": "mission",
+    "mountId": "spacecraft-new-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "New Spacecraft",
+      "nav_item": "spacecraft"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/spacecraft/profiles",
+    "application": "spacecraft",
+    "surface": "profile_list",
+    "scope": "mission",
+    "mountId": "spacecraft-type-list-page-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Spacecraft Profiles",
+      "nav_item": "spacecraft"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/spacecraft/profiles/new",
+    "application": "spacecraft",
+    "surface": "profile_new",
+    "scope": "mission",
+    "mountId": "spacecraft-profile-new-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "space-y-6 max-w-2xl",
+    "metadata": {
+      "page_title": "New Spacecraft Profile",
+      "nav_item": "spacecraft"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/spacecraft/profiles/:profile_id",
+    "application": "spacecraft",
+    "surface": "profile_show",
+    "scope": "mission",
+    "mountId": "spacecraft-profile-show-component",
+    "queryKeys": ["profile_id"],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "Spacecraft Profile",
+      "nav_item": "spacecraft"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/spacecraft/:spacecraft_id",
+    "application": "spacecraft",
+    "surface": "show",
+    "scope": "spacecraft",
+    "mountId": "spacecraft-show-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "nav_item": "spacecraft"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/spacecraft/:spacecraft_id/identity",
+    "application": "spacecraft",
+    "surface": "edit",
+    "scope": "spacecraft",
+    "mountId": "spacecraft-edit-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "#{spacecraft.display_name} Identity",
+      "nav_item": "spacecraft"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/spacecraft/:spacecraft_id/edit",
+    "application": "spacecraft",
+    "surface": "edit",
+    "scope": "spacecraft",
+    "mountId": "spacecraft-edit-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "#{spacecraft.display_name} Identity",
+      "nav_item": "spacecraft"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/spacecraft/:spacecraft_id/readiness",
+    "application": "spacecraft",
+    "surface": "readiness",
+    "scope": "spacecraft",
+    "mountId": "spacecraft-readiness-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "#{spacecraft.display_name} Readiness",
+      "nav_item": "spacecraft"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/spacecraft/:spacecraft_id/routing",
+    "application": "spacecraft",
+    "surface": "routing",
+    "scope": "spacecraft",
+    "mountId": "spacecraft-routing-page",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "#{spacecraft.display_name} Routing",
+      "nav_item": "spacecraft"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/spacecraft/:spacecraft_id/commanding",
+    "application": "spacecraft",
+    "surface": "commanding",
+    "scope": "spacecraft",
+    "mountId": "spacecraft-commanding-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "#{spacecraft.display_name} Command Interpretation",
+      "nav_item": "spacecraft"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/catalog",
+    "application": "mission_catalog",
+    "surface": "catalog_index",
+    "scope": "mission",
+    "mountId": "catalog-index-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Catalog",
+      "nav_item": "catalog"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/catalog/new",
+    "application": "mission_catalog",
+    "surface": "catalog_database_new",
+    "scope": "mission",
+    "mountId": "catalog-database-new-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "New catalog database",
+      "nav_item": "catalog"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/catalog/databases/:catalog_database_id",
+    "application": "mission_catalog",
+    "surface": "catalog_database_show",
+    "scope": "mission",
+    "mountId": "catalog-database-show-component",
+    "queryKeys": ["catalog_database_id"],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "Catalog database",
+      "nav_item": "catalog"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/catalog/revisions/:catalog_revision_id",
+    "application": "mission_catalog",
+    "surface": "catalog_revision_show",
+    "scope": "mission",
+    "mountId": "catalog-revision-show-component",
+    "queryKeys": ["catalog_revision_id"],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "Catalog revision",
+      "nav_item": "catalog"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/catalog/artifacts/:artifact_id",
+    "application": "mission_catalog",
+    "surface": "catalog_artifact_show",
+    "scope": "mission",
+    "mountId": "catalog-artifact-show-page-component",
+    "queryKeys": ["artifact_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Catalog artifact",
+      "nav_item": "catalog"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/catalog/imports/:import_run_id",
+    "application": "mission_catalog",
+    "surface": "catalog_import_run_show",
+    "scope": "mission",
+    "mountId": "catalog-import-run-show-component",
+    "queryKeys": ["import_run_id"],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "Import run",
+      "nav_item": "catalog"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/comms",
+    "application": "comms",
+    "surface": "overview",
+    "scope": "mission",
+    "mountId": "comms-overview-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "Comms",
+      "nav_item": "comms_overview"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/comms/transports",
+    "application": "comms",
+    "surface": "transports",
+    "scope": "mission",
+    "mountId": "comms-transport-list-page-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Comms Transports",
+      "nav_item": "comms_transports"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/comms/transports/new",
+    "application": "comms",
+    "surface": "transport_new",
+    "scope": "mission",
+    "mountId": "comms-transport-new-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "New Transport",
+      "nav_item": "comms_transports"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/comms/transports/:transport_id",
+    "application": "comms",
+    "surface": "transport",
+    "scope": "mission",
+    "mountId": "comms-transport-show-component",
+    "queryKeys": ["transport_id"],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "Transport",
+      "nav_item": "comms_transports"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/comms/ground-stations",
+    "application": "comms",
+    "surface": "ground_stations",
+    "scope": "mission",
+    "mountId": "comms-ground-station-list-page-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Ground Stations",
+      "nav_item": "comms_ground_stations"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/comms/ground-stations/new",
+    "application": "comms",
+    "surface": "ground_station_new",
+    "scope": "mission",
+    "mountId": "comms-ground-station-form-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "New Ground Station",
+      "nav_item": "comms_ground_stations"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/comms/ground-stations/:ground_station_id/edit",
+    "application": "comms",
+    "surface": "ground_station_edit",
+    "scope": "mission",
+    "mountId": "comms-ground-station-form-component",
+    "queryKeys": ["ground_station_id"],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "New Ground Station",
+      "nav_item": "comms_ground_stations"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/comms/ground-stations/:ground_station_id",
+    "application": "comms",
+    "surface": "ground_station",
+    "scope": "mission",
+    "mountId": "comms-ground-station-show-component",
+    "queryKeys": ["ground_station_id"],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "Ground Station",
+      "nav_item": "comms_ground_stations"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/comms/routing",
+    "application": "comms",
+    "surface": "routing",
+    "scope": "mission",
+    "mountId": "comms-routing-list-page-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Comms Routing",
+      "nav_item": "comms_routing"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/comms/routing/new",
+    "application": "comms",
+    "surface": "routing_new",
+    "scope": "mission",
+    "mountId": "comms-routing-new-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "space-y-6 max-w-2xl",
+    "metadata": {
+      "page_title": "New Routing Rule",
+      "nav_item": "comms_routing"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/comms/routing/:routing_rule_id",
+    "application": "comms",
+    "surface": "routing_detail",
+    "scope": "mission",
+    "mountId": "comms-routing-show-component",
+    "queryKeys": ["routing_rule_id"],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "Routing Rule",
+      "nav_item": "comms_routing"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/comms/validation",
+    "application": "comms",
+    "surface": "validation",
+    "scope": "mission",
+    "mountId": "comms-validation-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "page_title": "Comms Validation",
+      "nav_item": "comms_validation"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/comms/providers",
+    "application": "comms",
+    "surface": "provider_list",
+    "scope": "mission",
+    "mountId": "comms-provider-list-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Ground Network Providers",
+      "nav_item": "comms_providers"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/comms/providers/new",
+    "application": "comms",
+    "surface": "provider_new",
+    "scope": "mission",
+    "mountId": "comms-provider-new-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "max-w-3xl space-y-6",
+    "metadata": {
+      "page_title": "New Ground Network Provider",
+      "nav_item": "comms_providers"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/comms/providers/:provider_id",
+    "application": "comms",
+    "surface": "provider_show",
+    "scope": "mission",
+    "mountId": "comms-provider-show-component",
+    "queryKeys": ["provider_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Ground Network Provider",
+      "nav_item": "comms_providers"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/dashboards/new",
+    "application": "ops_console",
+    "surface": "dashboard_new",
+    "scope": "mission",
+    "mountId": "ops-dashboard-new-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "New Dashboard",
+      "ops_nav_item": "dashboards"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/dashboards/library",
+    "application": "ops_console",
+    "surface": "dashboard_library",
+    "scope": "mission",
+    "mountId": "dashboard-library-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Dashboard Library",
+      "ops_nav_item": "dashboards"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/dashboards/playlists",
+    "application": "ops_console",
+    "surface": "dashboard_playlists",
+    "scope": "mission",
+    "mountId": "dashboard-playlists-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Dashboard Playlists",
+      "ops_nav_item": "dashboards"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/dashboards/:dashboard_id/edit",
+    "application": "ops_console",
+    "surface": "dashboard_editor",
+    "scope": "mission",
+    "mountId": "ops-dashboard-editor-surface",
+    "queryKeys": ["dashboard_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {}
+  },
+  {
+    "path": "/missions/:mission_id/ops/dashboards/:dashboard_id/settings",
+    "application": "ops_console",
+    "surface": "dashboard_settings",
+    "scope": "mission",
+    "mountId": "ops-dashboard-settings-component",
+    "queryKeys": ["dashboard_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Dashboard Settings",
+      "ops_nav_item": "dashboards"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/dashboards",
+    "application": "ops_console",
+    "surface": "dashboard_directory",
+    "scope": "mission",
+    "mountId": "ops-dashboard-directory-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Dashboards",
+      "ops_nav_item": "dashboards"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/dashboard-shares/:share_id",
+    "application": "ops_console",
+    "surface": "dashboard_share",
+    "scope": "mission",
+    "mountId": "ops-dashboard-share-component",
+    "queryKeys": ["share_id"],
+    "queryAliases": {},
+    "viewClass": "h-full",
+    "metadata": {
+      "page_title": "Shared Dashboard",
+      "ops_nav_item": "dashboards"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/dashboard-snapshots/:snapshot_id",
+    "application": "ops_console",
+    "surface": "dashboard_snapshot",
+    "scope": "mission",
+    "mountId": "ops-dashboard-snapshot-component",
+    "queryKeys": ["snapshot_id"],
+    "queryAliases": {},
+    "viewClass": "h-full",
+    "metadata": {
+      "page_title": "Dashboard Snapshot",
+      "ops_nav_item": "dashboards"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/dashboards/playlists/:playlist_id/present",
+    "application": "ops_console",
+    "surface": "dashboard_playlist_present",
+    "scope": "mission",
+    "mountId": "dashboard-playlist-present-component",
+    "queryKeys": ["playlist_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Dashboard Playlist",
+      "ops_nav_item": "dashboards"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/data-operations",
+    "application": "ops_console",
+    "surface": "data_operations",
+    "scope": "mission",
+    "mountId": "ops-data-operations-component",
+    "queryKeys": ["group"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Data Operations",
+      "ops_nav_item": "data_operations"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/planning",
+    "application": "ops_console",
+    "surface": "fleet_planning",
+    "scope": "mission",
+    "mountId": "ops-fleet-planning-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Fleet Planning",
+      "ops_nav_item": "planning"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/planning/new",
+    "application": "ops_console",
+    "surface": "fleet_planning_new",
+    "scope": "mission",
+    "mountId": "ops-fleet-planning-new-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Plan Fleet Horizon",
+      "ops_nav_item": "planning"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/planning/policy",
+    "application": "ops_console",
+    "surface": "fleet_planning_policy",
+    "scope": "mission",
+    "mountId": "ops-fleet-planning-policy-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Fleet Planning Policy",
+      "ops_nav_item": "planning"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/planning/runs/:fleet_planning_run_id",
+    "application": "ops_console",
+    "surface": "fleet_planning_run",
+    "scope": "mission",
+    "mountId": "ops-fleet-planning-run-component",
+    "queryKeys": ["fleet_planning_run_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Fleet Planning Run",
+      "ops_nav_item": "planning"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/requirement-templates",
+    "application": "ops_console",
+    "surface": "contact_requirement_template",
+    "scope": "mission",
+    "mountId": "ops-contact-requirement-template-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Requirement Templates",
+      "ops_nav_item": "planning"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/requirements",
+    "application": "ops_console",
+    "surface": "contact_requirement_list",
+    "scope": "mission",
+    "mountId": "ops-contact-requirements-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Contact Requirements",
+      "ops_nav_item": "requirements"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/requirements/new",
+    "application": "ops_console",
+    "surface": "contact_requirement_new",
+    "scope": "mission",
+    "mountId": "ops-contact-requirement-new-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Declare Contact Need",
+      "ops_nav_item": "requirements"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/requirements/:contact_requirement_id",
+    "application": "ops_console",
+    "surface": "contact_requirement_show",
+    "scope": "mission",
+    "mountId": "ops-contact-requirement-show-component",
+    "queryKeys": ["contact_requirement_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Contact Requirement",
+      "ops_nav_item": "requirements"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/plans/:contact_plan_id",
+    "application": "ops_console",
+    "surface": "contact_plan_show",
+    "scope": "mission",
+    "mountId": "ops-contact-plan-show-component",
+    "queryKeys": ["contact_plan_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Contact Plan",
+      "ops_nav_item": "requirements"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/contacts",
+    "application": "ops_console",
+    "surface": "contact_schedule",
+    "scope": "mission",
+    "mountId": "ops-contact-schedule-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Contact Schedule",
+      "ops_nav_item": "contacts"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/contacts/records/:contact_id",
+    "application": "ops_console",
+    "surface": "contact_record",
+    "scope": "mission",
+    "mountId": "ops-contact-record-component",
+    "queryKeys": ["contact_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Contact Record",
+      "ops_nav_item": "contacts"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/contacts/:provider_reservation_id",
+    "application": "ops_console",
+    "surface": "contact_detail",
+    "scope": "mission",
+    "mountId": "ops-contact-detail-component",
+    "queryKeys": ["provider_reservation_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Provider reservation #{reservation_id}",
+      "ops_nav_item": "contacts"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/alarms",
+    "application": "ops_console",
+    "surface": "alarms",
+    "scope": "mission",
+    "mountId": "ops-alarms-component",
+    "queryKeys": ["severity", "state", "spacecraft_id", "query"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Alarms",
+      "ops_nav_item": "alarms"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/timeline",
+    "application": "ops_console",
+    "surface": "timeline",
+    "scope": "mission",
+    "mountId": "ops-timeline-page-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Mission Timeline",
+      "ops_nav_item": "timeline"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/commands",
+    "application": "ops_console",
+    "surface": "commands",
+    "scope": "mission",
+    "mountId": "ops-commands-component",
+    "queryKeys": ["status", "target", "query", "focus_command_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Commands",
+      "ops_nav_item": "commands"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/dashboards/:dashboard_id/activity",
+    "application": "ops_console",
+    "surface": "dashboard_activity",
+    "scope": "mission",
+    "mountId": "ops-dashboard-activity-surface",
+    "queryKeys": ["dashboard_id", "version", "selected_publish_issue"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {}
+  },
+  {
+    "path": "/missions/:mission_id/ops/dashboards/:dashboard_id/diagnostics",
+    "application": "ops_console",
+    "surface": "dashboard_diagnostics",
+    "scope": "mission",
+    "mountId": "ops-dashboard-diagnostics-page-component",
+    "queryKeys": ["dashboard_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Dashboard Diagnostics",
+      "ops_nav_item": "dashboards"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/dashboards/:dashboard_id",
+    "application": "ops_console",
+    "surface": "dashboard_show",
+    "scope": "mission",
+    "mountId": "ops-dashboard-show-surface",
+    "queryKeys": [
+      "dashboard_id",
+      "panel",
+      "activity_filter",
+      "activity_event",
+      "selected_publish_issue",
+      "selected_time",
+      "time_mode",
+      "time_axis",
+      "from",
+      "to",
+      "limit_mode",
+      "replay_run_id",
+      "selection_view",
+      "selected_widget",
+      "selected_target",
+      "selected_id",
+      "selected_placement",
+      "selected_data_view",
+      "selected_scope_kind",
+      "selected_scope_id",
+      "selected_resource_id",
+      "selected_spacecraft_id",
+      "selected_contact_id",
+      "selected_transport_id",
+      "selected_source_endpoint_id",
+      "selected_ground_station_id",
+      "selected_scope_link_id",
+      "realm",
+      "data_source_id",
+      "source_binding_id"
+    ],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {}
+  },
+  {
+    "path": "/missions/:mission_id/ops/activations",
+    "application": "ops_console",
+    "surface": "activation_requests",
+    "scope": "mission",
+    "mountId": "activation-requests-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Activation approvals",
+      "ops_nav_item": "activations"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/data-operations/manage",
+    "application": "ops_console",
+    "surface": "data_operations_manage",
+    "scope": "mission",
+    "mountId": "ops-data-operations-component",
+    "queryKeys": ["group"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Data Operations",
+      "ops_nav_item": "data_operations"
+    }
+  },
+  {
+    "path": "/notifications",
+    "application": "organization_admin",
+    "surface": "notifications",
+    "scope": "user",
+    "mountId": "notifications-page-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {}
+  },
+  {
+    "path": "/admin",
+    "application": "organization_admin",
+    "surface": "admin_home",
+    "scope": "admin",
+    "mountId": "admin-home-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "nav_item": "admin_dashboard"
+    }
+  },
+  {
+    "path": "/admin/runtime",
+    "application": "organization_admin",
+    "surface": "admin_runtime",
+    "scope": "admin",
+    "mountId": "admin-runtime-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "nav_item": "admin_runtime"
+    }
+  },
+  {
+    "path": "/admin/organizations",
+    "application": "organization_admin",
+    "surface": "admin_organizations",
+    "scope": "admin",
+    "mountId": "admin-organization-list-page-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "nav_item": "admin_organizations"
+    }
+  },
+  {
+    "path": "/admin/organizations/new",
+    "application": "organization_admin",
+    "surface": "admin_organization_new",
+    "scope": "admin",
+    "mountId": "admin-organization-new-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "",
+    "metadata": {
+      "nav_item": "admin_organizations"
+    }
+  },
+  {
+    "path": "/admin/organizations/:org_id",
+    "application": "organization_admin",
+    "surface": "admin_organization_show",
+    "scope": "admin",
+    "mountId": "admin-organization-show-component",
+    "queryKeys": ["organization_id"],
+    "queryAliases": {
+      "organization_id": "org_id"
+    },
+    "viewClass": "",
+    "metadata": {
+      "nav_item": "admin_organizations"
+    }
+  },
+  {
+    "path": "/admin/organizations/:org_id/invite",
+    "application": "organization_admin",
+    "surface": "admin_organization_invite",
+    "scope": "admin",
+    "mountId": "admin-organization-invite-component",
+    "queryKeys": ["organization_id"],
+    "queryAliases": {
+      "organization_id": "org_id"
+    },
+    "viewClass": "",
+    "metadata": {
+      "nav_item": "admin_organizations"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/data-sources",
+    "application": "ops_console",
+    "surface": "data_sources",
+    "scope": "mission",
+    "mountId": "ops-data-sources-component",
+    "queryKeys": ["data_source_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Data Sources",
+      "ops_nav_item": "data_sources"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/data-sources/:data_source_id",
+    "application": "ops_console",
+    "surface": "data_sources",
+    "scope": "mission",
+    "mountId": "ops-data-sources-component",
+    "queryKeys": ["data_source_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Data Sources",
+      "ops_nav_item": "data_sources"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/explore",
+    "application": "ops_console",
+    "surface": "telemetry_explore",
+    "scope": "mission",
+    "mountId": "ops-telemetry-explore-component",
+    "queryKeys": [
+      "point_id",
+      "spacecraft_id",
+      "scope_kind",
+      "scope_id",
+      "time_mode",
+      "time_axis",
+      "from",
+      "to",
+      "replay_run_id",
+      "order",
+      "limit",
+      "selection_view",
+      "validity_state",
+      "realm",
+      "logical_source",
+      "data_source_id",
+      "source_binding_id",
+      "source_dashboard_id",
+      "sample_id",
+      "selected_time",
+      "question",
+      "limit_mode"
+    ],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Telemetry Explore",
+      "ops_nav_item": "explore"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/data-sources/registration/new",
+    "application": "ops_console",
+    "surface": "data_source_registration",
+    "scope": "mission",
+    "mountId": "ops-data-sources-component",
+    "queryKeys": ["data_source_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Data Sources",
+      "ops_nav_item": "data_sources"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/data-sources/:data_source_id/settings",
+    "application": "ops_console",
+    "surface": "data_source_settings",
+    "scope": "mission",
+    "mountId": "ops-data-sources-component",
+    "queryKeys": ["data_source_id"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Data Sources",
+      "ops_nav_item": "data_sources"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/applications",
+    "kind": "application_management",
+    "component": "MissionApplicationManagement",
+    "scope": "mission",
+    "mountId": "mission-applications-page-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Applications",
+      "nav_item": "mission_applications"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/spacecraft/:spacecraft_id/applications",
+    "kind": "application_management",
+    "component": "SpacecraftApplicationManagement",
+    "scope": "spacecraft",
+    "mountId": "spacecraft-applications-page-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Applications",
+      "nav_item": "spacecraft"
+    }
+  }
+]

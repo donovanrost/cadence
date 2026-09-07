@@ -177,7 +177,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
                  now: @activation_now
                )
 
-      assert response.status == 201
+      assert response.status == 201, response.body
       assert response.outcome == "initial"
       assert response.replay? == false
 

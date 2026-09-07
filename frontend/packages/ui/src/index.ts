@@ -1,19 +1,16 @@
-export { default as CButton } from "./CButton.vue";
-export { default as CCheckbox } from "./CCheckbox.vue";
-export { default as CSpinner } from "./CSpinner.vue";
-export { default as CStatePanel } from "./CStatePanel.vue";
-export { default as CStatus } from "./CStatus.vue";
-export { default as CStatusSymbol } from "./CStatusSymbol.vue";
+export { default as CadenceButton } from "./CadenceButton.vue";
+export { default as CadenceCheckbox } from "./CadenceCheckbox.vue";
+export { default as CadenceSpinner } from "./CadenceSpinner.vue";
+export { default as CadenceStatePanel } from "./CadenceStatePanel.vue";
+export { default as CadenceStatus } from "./CadenceStatus.vue";
+export { default as CadenceStatusSymbol } from "./CadenceStatusSymbol.vue";
 export type { StatusSymbolRole } from "./status-symbol";
-export { default as CTextField } from "./CTextField.vue";
-export { default as CTooltip } from "./CTooltip.vue";
+export { default as CadenceTextField } from "./CadenceTextField.vue";
+export { default as CadenceTooltip } from "./CadenceTooltip.vue";
 
-// Cadence presentation primitives. These exports are the canonical shared UI
-// surface for first-party remotes; the Phoenix asset copies remain temporary
-// compatibility shims until each domain remote switches import paths.
+// Shared layout and presentation components used by Phoenix and every remote.
 export { default as CadenceBadge } from "./CadenceBadge.vue";
 export { default as CadenceBreadcrumbs } from "./CadenceBreadcrumbs.vue";
-export { default as CadenceButton } from "./CadenceButton.vue";
 export { default as CadenceCard } from "./CadenceCard.vue";
 export { default as CadenceCompactPageHeaderBodyFrame } from "./CadenceCompactPageHeaderBodyFrame.vue";
 export { default as CadenceDashboardSettingsSectionFrame } from "./CadenceDashboardSettingsSectionFrame.vue";
@@ -47,7 +44,6 @@ export { default as CadenceStatTile } from "./CadenceStatTile.vue";
 export { default as CadenceTableFrame } from "./CadenceTableFrame.vue";
 export { default as CadenceValidationMessage } from "./CadenceValidationMessage.vue";
 export { default as WidgetFormField } from "./WidgetFormField.vue";
-
 export { default as AccountDropdownMenu } from "./AccountDropdownMenu.vue";
 export { default as CadenceCollapsible } from "./CadenceCollapsible.vue";
 export { default as CadenceCollapsibleContent } from "./CadenceCollapsibleContent.vue";
@@ -65,7 +61,6 @@ export {
   preservesPopoverOpenState,
   subscribeToLegacyOverlayOpen,
 } from "./popover_compatibility.js";
-
 export type {
   Attrs,
   BreadcrumbItem,
@@ -79,3 +74,9 @@ export type {
 } from "./page_shell";
 export type { PresentationNode } from "./presentation_types";
 export type { Attributes, FieldPresentation, OptionPresentation } from "./widget_form_field";
+
+export { default as CadencePageHeading } from "./CadencePageHeading.vue";
+export { default as CadencePageChrome } from "./CadencePageChrome.vue";
+export { default as CadenceBreadcrumbTrail } from "./CadenceBreadcrumbTrail.vue";
+export { default as CadencePageActions } from "./CadencePageActions.vue";
+export { default as CadencePageDescription } from "./CadencePageDescription.vue";

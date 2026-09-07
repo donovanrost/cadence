@@ -1,27 +1,29 @@
-import "@cadence/design-tokens/base.css";
+import "../src/styles.css";
 import type { Preview } from "@storybook/vue3-vite";
 import "../src/storybook.css";
 
 const preview: Preview = {
   tags: ["autodocs"],
   initialGlobals: {
-    theme: "dark",
+    skin: "standard",
   },
   globalTypes: {
-    theme: {
-      description: "Cadence color mode",
+    skin: {
+      description: "Cadence presentation",
       toolbar: {
         icon: "contrast",
         items: [
-          { value: "dark", title: "Dark mode" },
-          { value: "light", title: "Light mode" },
+          { value: "standard", title: "Production" },
+          { value: "legible", title: "Reduced decoration" },
         ],
       },
     },
   },
   decorators: [
     (story, context) => {
-      document.documentElement.dataset.theme = context.globals.theme === "light" ? "light" : "dark";
+      document.documentElement.dataset.theme = "dark";
+      document.documentElement.dataset.skin =
+        context.globals.skin === "legible" ? "legible" : "standard";
 
       return {
         components: { story },

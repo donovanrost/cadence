@@ -1,6 +1,6 @@
 <script setup>
 import ClipboardButton from "./ClipboardButton.vue";
-import CadencePopover from "./ui/reka/CadencePopover.vue";
+import CadencePopover from "@cadence/ui/CadencePopover.vue";
 
 defineProps({
   presentation: { type: Object, required: true },

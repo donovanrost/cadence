@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
 import { reactive, watch } from "vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadenceFormActions from "./ui/components/CadenceFormActions.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
+import CadenceFormActions from "@cadence/ui/CadenceFormActions.vue";
 
 type CloneSource = {
   id: string;
@@ -143,16 +144,12 @@ const save = () => emit("save", payload());
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <div class="mx-auto max-w-3xl px-6 py-12 lg:py-16">
-      <div class="border-l-2 border-primary pl-4">
-        <p class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-primary/70">
-          {{ page.eyebrow }}
-        </p>
-        <h1 class="mt-1 text-2xl font-bold tracking-tight">{{ page.heading }}</h1>
-        <p class="mt-2 max-w-2xl text-sm text-base-content/65">
-          {{ page.description }}
-        </p>
-      </div>
+    <div class="">
+      <CadencePageHeading
+        ><template #title>{{ page.heading }}</template
+        ><template #eyebrow>{{ page.eyebrow }}</template
+        ><template #description>{{ page.description }}</template></CadencePageHeading
+      >
 
       <div
         v-if="page.source !== null"

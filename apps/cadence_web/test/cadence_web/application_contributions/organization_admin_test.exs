@@ -1,7 +1,7 @@
-defmodule CadenceWeb.ApplicationContributions.OrganizationAdminTest do
+defmodule Cadence.Applications.OrganizationAdminTest do
   use ExUnit.Case, async: true
 
-  alias CadenceWeb.ApplicationContributions.{
+  alias Cadence.Applications.{
     OrganizationAdmin,
     OrganizationAdminAction,
     OrganizationAdminQuery

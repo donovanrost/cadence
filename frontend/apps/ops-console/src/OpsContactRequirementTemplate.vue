@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
-import CadenceInlineWarning from "./ui/components/CadenceInlineWarning.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
+import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
+import CadenceInlineWarning from "@cadence/ui/CadenceInlineWarning.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
+import CadenceValidationMessage from "@cadence/ui/CadenceValidationMessage.vue";
 import { reactive, watch } from "vue";
-import CadencePanel from "./ui/components/CadencePanel.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
 
 type Option = { label: string; value: string };
 
@@ -188,30 +188,19 @@ const fieldClass = (field: FormField) => [
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <CadencePageHeaderFrame variant="ops">
-      <div class="mx-auto max-w-[100rem]">
-        <a
-          :href="page.back.href"
-          data-phx-link="redirect"
-          data-phx-link-state="push"
-          class="inline-flex items-center gap-1 font-mono text-xs text-base-content/55 hover:text-primary"
-        >
-          <span :class="[page.back.icon, 'h-3.5 w-3.5']"></span>
-          {{ page.back.label }}
-        </a>
-        <div class="mt-4">
-          <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
-            {{ page.header.eyebrow }}
-          </p>
-          <h1 class="mt-1 text-2xl font-bold tracking-tight">{{ page.header.title }}</h1>
-          <p class="mt-2 max-w-3xl text-sm text-base-content/60">{{ page.header.copy }}</p>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
-
-    <div
-      class="mx-auto grid max-w-[100rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(26rem,0.85fr)] lg:p-7"
+    <CadencePageHeading
+      :breadcrumbs="[
+        { label: page.back.label, href: page.back.href },
+        { label: page.header.title },
+      ]"
     >
+      <template #title>{{ page.header.title }}</template>
+      <template #eyebrow>{{ page.header.eyebrow }}</template>
+      <template #description>{{ page.header.copy }}</template>
+      <template #actions></template>
+    </CadencePageHeading>
+
+    <div class="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(26rem,0.85fr)]">
       <CadencePanel
         class="min-w-0 border border-base-300 bg-base-200/15"
         header-class="flex items-center justify-between border-b border-base-300 px-4 py-3"

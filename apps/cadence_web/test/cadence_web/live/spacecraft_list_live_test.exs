@@ -8,8 +8,8 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
-  alias LiveVue.Test
 
   test "authenticated list route mounts the federated mission surface" do
     {conn, mission} = signed_in_mission()
@@ -44,22 +44,13 @@ defmodule CadenceWeb.SpacecraftListLiveTest do
   end
 
   defp assert_surface(view, mission, query_params) do
-    assert has_element?(view, "#spacecraft-list-component.contents")
-
-    vue = Test.get_vue(view, id: "spacecraft-list-component")
-    assert vue.component == "FederatedFullPageSurface"
-    assert vue.id == "spacecraft-list-component"
-    assert vue.class == "contents"
-    assert vue.ssr == false
-    assert vue.handlers == %{}
-
-    assert vue.props == %{
-             "application_key" => "spacecraft",
-             "surface_id" => "list",
-             "host_scope" => "mission",
-             "mission_id" => mission.mission_id,
-             "query_params" => query_params
-           }
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => "spacecraft",
+      "surface_id" => "list",
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => query_params
+    })
   end
 
   defp signed_in_mission do

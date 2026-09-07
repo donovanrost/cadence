@@ -21,6 +21,8 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationFixtures do
 
   @tracked_inputs [
     "frontend/apps/telemetry-decom",
+    "frontend/packages",
+    "frontend/vite.config.ts",
     "frontend/tools/frontend-release-package.mjs",
     "frontend/tools/frontend-release-output-check.mjs",
     "frontend/package.json",
@@ -373,13 +375,23 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationFixtures do
       |> Enum.sort()
 
     Map.new(paths, fn path ->
-      bytes = File.read!(Path.join(@repo_root, path))
-      {path, {byte_size(bytes), digest_hex(bytes)}}
+      state =
+        case File.read(Path.join(@repo_root, path)) do
+          {:ok, bytes} -> {byte_size(bytes), digest_hex(bytes)}
+          {:error, :enoent} -> :deleted
+          {:error, reason} -> raise File.Error, reason: reason, action: "read", path: path
+        end
+
+      {path, state}
     end)
   end
 
   defp git_ls_files!(paths) do
-    case System.cmd("git", ["ls-files", "-z", "--" | paths], cd: @repo_root) do
+    case System.cmd(
+           "git",
+           ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--" | paths],
+           cd: @repo_root
+         ) do
       {output, 0} -> String.split(output, <<0>>, trim: true)
       {output, status} -> raise "git ls-files failed (#{status}): #{output}"
     end

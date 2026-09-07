@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "../StatusBadge.vue";
-import CadenceDiagnosticsSectionFrame from "../ui/components/CadenceDiagnosticsSectionFrame.vue";
+import CadenceDiagnosticsSectionFrame from "@cadence/ui/CadenceDiagnosticsSectionFrame.vue";
 import type { DiagnosticSeverity, Diagnostics } from "./presentation_types";
 
 defineProps<{ diagnostics: Diagnostics }>();

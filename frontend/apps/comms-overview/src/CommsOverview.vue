@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceEmptyStateFrame from "./ui/components/CadenceEmptyStateFrame.vue";
+import { findingDomId } from "./finding-dom-id";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceEmptyStateFrame from "@cadence/ui/CadenceEmptyStateFrame.vue";
 import StatusBadge from "./StatusBadge.vue";
 import type { CommsOverview } from "./comms-overview";
 
@@ -131,7 +132,7 @@ defineProps<{ overview: CommsOverview }>();
 
           <div
             v-for="(finding, index) in group.findings"
-            :id="finding.id ?? undefined"
+            :id="findingDomId(group.id, finding.id, index)"
             :key="finding.id ?? `${group.id}-${index}`"
             class="border border-base-300 bg-base-100/40 p-4"
           >

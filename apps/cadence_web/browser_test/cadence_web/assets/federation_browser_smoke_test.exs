@@ -9,6 +9,28 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeTest do
   alias Ecto.Adapters.SQL.Sandbox
   alias CadenceWeb.Assets.FederationBrowserSmokeSetup
   alias CadenceWeb.Assets.DashboardRenderedViewportRunner
+  import Phoenix.LiveViewTest
+
+  @tag :browser_smoke
+  test "mission entry sends authorized context through incremental props" do
+    assert Application.fetch_env!(:live_vue, :enable_props_diff)
+    user = CadenceWeb.TestFixtures.persist_user!()
+    organization = CadenceWeb.TestFixtures.persist_org!()
+    CadenceWeb.TestFixtures.grant_membership!(user, organization)
+    mission = CadenceWeb.TestFixtures.persist_mission!(organization)
+    {:ok, view, _html} = live(CadenceWeb.TestFixtures.member_conn(user), "/missions")
+    initial = LiveVue.Test.get_vue(view, id: "application-shell")
+    assert initial.use_diff
+    assert initial.component == "BrowserHost"
+
+    render_hook(view, "host:context", %{"path" => "/missions/#{mission.mission_id}"})
+    shell = LiveVue.Test.get_vue(view, id: "application-shell")
+
+    assert ["replace", "/snapshot", snapshot] =
+             Enum.find(shell.props_diff, fn [_op, path | _value] -> path == "/snapshot" end)
+
+    assert snapshot["context"]["mission"]["mission_id"] == mission.mission_id
+  end
 
   @tag :browser_smoke
   test "concurrent ephemeral Bandit endpoints retain their owned ports", %{

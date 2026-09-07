@@ -1,16 +1,13 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { reactive, watch } from "vue";
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
 
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
-import CadencePanel from "./ui/components/CadencePanel.vue";
-import CadenceStatTile from "./ui/components/CadenceStatTile.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
+import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
+import CadenceStatTile from "@cadence/ui/CadenceStatTile.vue";
 import StatusBadge from "./StatusBadge.vue";
 
 type EmptyPayload = Record<string, never>;
@@ -234,75 +231,48 @@ const revokeGrant = (grant: Grant) => {
 
 <template>
   <div :id="page.id" class="space-y-6">
-    <CadencePageHeaderFrame variant="compact">
-      <CadenceCompactPageHeaderBodyFrame>
-        <template #content>
-          <CadenceBreadcrumbs>
-            <template
-              v-for="(breadcrumb, index) in page.header.breadcrumbs"
-              :key="`${index}-${breadcrumb.label}`"
-            >
-              <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-              <span v-if="breadcrumb.href === null" class="text-primary/90">
-                {{ breadcrumb.label }}
-              </span>
-              <a
-                v-else
-                :href="breadcrumb.href"
-                data-phx-link="redirect"
-                data-phx-link-state="push"
-                class="hover:text-primary transition-colors"
-                >{{ breadcrumb.label }}</a
-              >
-            </template>
-          </CadenceBreadcrumbs>
-          <CadencePageTitle>
-            {{ page.header.title }}
-            <span class="ml-3 font-mono text-base text-base-content/60">
-              <span class="font-mono text-xs text-base-content/60">
-                {{ page.header.config_label }}
-              </span>
-            </span>
-          </CadencePageTitle>
-          <p class="mt-1 max-w-3xl text-sm text-base-content/70">
-            {{ page.header.subtitle }}
-          </p>
-        </template>
-        <template #actions>
-          <button
-            :id="actions.validate.id"
-            type="button"
-            class="btn btn-secondary btn-sm"
-            :disabled="actions.validate.disabled"
-            @click="emit('validate-account', actions.validate.payload)"
-          >
-            <span :class="[actions.validate.icon, 'h-4 w-4']"></span>
-            {{ actions.validate.label }}
-          </button>
-          <button
-            :id="actions.rotate.id"
-            type="button"
-            class="btn btn-primary btn-sm"
-            :disabled="actions.rotate.disabled"
-            @click="emit('rotate-credential', actions.rotate.payload)"
-          >
-            <span :class="[actions.rotate.icon, 'h-4 w-4']"></span>
-            {{ actions.rotate.label }}
-          </button>
-          <button
-            v-if="actions.revoke"
-            :id="actions.revoke.id"
-            type="button"
-            class="btn btn-error btn-outline btn-sm"
-            :data-confirm="actions.revoke.confirm"
-            :disabled="actions.revoke.disabled"
-            @click="revokeCredential"
-          >
-            {{ actions.revoke.label }}
-          </button>
-        </template>
-      </CadenceCompactPageHeaderBodyFrame>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading :breadcrumbs="page.header.breadcrumbs">
+      <template #title>{{ page.header.title }} </template>
+      <template #description>{{ page.header.subtitle }}</template>
+      <template #metadata
+        ><span>
+          <span class="font-mono text-xs text-base-content/60">
+            {{ page.header.config_label }}
+          </span>
+        </span></template
+      >
+      <template #actions
+        ><button
+          :id="actions.validate.id"
+          type="button"
+          class="btn btn-secondary btn-sm"
+          :disabled="actions.validate.disabled"
+          @click="emit('validate-account', actions.validate.payload)"
+        >
+          <span :class="[actions.validate.icon, 'h-4 w-4']"></span>
+          {{ actions.validate.label }}</button
+        ><button
+          :id="actions.rotate.id"
+          type="button"
+          class="btn btn-primary btn-sm"
+          :disabled="actions.rotate.disabled"
+          @click="emit('rotate-credential', actions.rotate.payload)"
+        >
+          <span :class="[actions.rotate.icon, 'h-4 w-4']"></span>
+          {{ actions.rotate.label }}</button
+        ><button
+          v-if="actions.revoke"
+          :id="actions.revoke.id"
+          type="button"
+          class="btn btn-error btn-outline btn-sm"
+          :data-confirm="actions.revoke.confirm"
+          :disabled="actions.revoke.disabled"
+          @click="revokeCredential"
+        >
+          {{ actions.revoke.label }}
+        </button></template
+      >
+    </CadencePageHeading>
 
     <div class="grid gap-3 md:grid-cols-4">
       <CadenceStatTile v-for="stat in stats" :id="stat.id" :key="stat.id">

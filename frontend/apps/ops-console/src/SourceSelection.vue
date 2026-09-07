@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePopover from "./ui/reka/CadencePopover.vue";
+import CadencePopover from "@cadence/ui/CadencePopover.vue";
 
 type DataAttrs = Record<string, string | null>;
 

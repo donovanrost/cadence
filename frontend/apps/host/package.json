@@ -15,11 +15,16 @@
     "@cadence/plugin-sdk": "workspace:*",
     "@cadence/ui": "workspace:*",
     "@module-federation/runtime": "catalog:",
-    "vue": "catalog:"
+    "live_vue": "file:../../../deps/live_vue",
+    "phoenix": "file:../../../deps/phoenix",
+    "phoenix_live_view": "file:../../../deps/phoenix_live_view",
+    "vue": "catalog:",
+    "vue-router": "5.3.1"
   },
   "devDependencies": {
     "@module-federation/vite": "catalog:",
     "@types/node": "catalog:",
+    "@types/phoenix": "^1.6.7",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",
     "@vue/tsconfig": "catalog:",

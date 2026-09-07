@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { pageContentAttrs } from "@cadence/ui/page-chrome";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import NotificationsPanel from "./NotificationsPanel.vue";
 
 type Attrs = Record<string, string>;
@@ -48,19 +50,11 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div v-bind="props.presentation.root.attrs">
-    <header v-bind="props.presentation.header.attrs">
-      <div v-bind="props.presentation.header.body.attrs">
-        <div v-bind="props.presentation.header.content.attrs">
-          <h1 v-bind="props.presentation.header.title.attrs">
-            {{ props.presentation.header.title.text }}
-          </h1>
-          <p v-bind="props.presentation.header.subtitle.attrs">
-            {{ props.presentation.header.subtitle.text }}
-          </p>
-        </div>
-      </div>
-    </header>
+  <div v-bind="pageContentAttrs(props.presentation.root.attrs)">
+    <CadencePageHeading>
+      <template #title>{{ props.presentation.header.title.text }}</template>
+      <template #description>{{ props.presentation.header.subtitle.text }}</template>
+    </CadencePageHeading>
 
     <div
       v-if="props.presentation.empty_state"

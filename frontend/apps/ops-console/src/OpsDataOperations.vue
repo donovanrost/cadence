@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { reactive, watch } from "vue";
-import CadenceField from "./ui/components/CadenceField.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
 
 type NavigationAction = {
   id: string;
@@ -220,42 +221,40 @@ const requestCorrection = (action: Action) => {
 
 <template>
   <main :id="page.id" class="min-h-0 flex-1 overflow-y-auto">
-    <div class="mx-auto max-w-[96rem] space-y-5 px-5 py-6">
-      <header
-        class="flex flex-col gap-3 border-b border-primary/20 pb-4 lg:flex-row lg:items-end lg:justify-between"
-      >
-        <div>
-          <p class="hud-label">System / Historical data plane</p>
-          <h1 class="mt-1 text-xl font-semibold tracking-tight">Data Operations</h1>
-          <p class="mt-1 max-w-3xl text-sm text-base-content/60">
-            Request, follow, correct, and close historical telemetry repair without returning to the
-            dashboard that exposed the gap.
-          </p>
-        </div>
-        <nav aria-label="Data Operations view" class="flex flex-wrap gap-2">
-          <a
-            v-if="page.navigation.manage"
-            :id="page.navigation.manage.id"
-            :href="page.navigation.manage.href"
-            data-phx-link="redirect"
-            data-phx-link-state="push"
-            class="btn btn-sm btn-outline"
-          >
-            <span class="hero-wrench-screwdriver h-4 w-4"></span>
-            {{ page.navigation.manage.label }}
-          </a>
-          <a
-            v-if="page.navigation.reader"
-            :id="page.navigation.reader.id"
-            :href="page.navigation.reader.href"
-            data-phx-link="redirect"
-            data-phx-link-state="push"
-            class="btn btn-sm btn-ghost"
-          >
-            {{ page.navigation.reader.label }}
-          </a>
-        </nav>
-      </header>
+    <div class="space-y-5">
+      <CadencePageHeading>
+        <template #title>Data Operations</template>
+        <template #eyebrow>System / Historical data plane</template>
+        <template #description>
+          Request, follow, correct, and close historical telemetry repair without returning to the
+          dashboard that exposed the gap.
+        </template>
+        <template #actions
+          ><nav aria-label="Data Operations view" class="flex flex-wrap gap-2">
+            <a
+              v-if="page.navigation.manage"
+              :id="page.navigation.manage.id"
+              :href="page.navigation.manage.href"
+              data-phx-link="redirect"
+              data-phx-link-state="push"
+              class="btn btn-sm btn-outline"
+            >
+              <span class="hero-wrench-screwdriver h-4 w-4"></span>
+              {{ page.navigation.manage.label }}
+            </a>
+            <a
+              v-if="page.navigation.reader"
+              :id="page.navigation.reader.id"
+              :href="page.navigation.reader.href"
+              data-phx-link="redirect"
+              data-phx-link-state="push"
+              class="btn btn-sm btn-ghost"
+            >
+              {{ page.navigation.reader.label }}
+            </a>
+          </nav></template
+        >
+      </CadencePageHeading>
 
       <section class="grid min-h-[42rem] gap-4 xl:grid-cols-[22rem_minmax(0,1fr)_24rem]">
         <aside class="border border-base-300 bg-base-200/45" aria-label="Historical request groups">

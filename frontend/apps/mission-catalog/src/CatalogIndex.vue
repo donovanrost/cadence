@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { pageContentAttrs } from "@cadence/ui/page-chrome";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import CatalogDatabaseTable from "./CatalogDatabaseTable.vue";
 
 type Attrs = Record<string, string>;
@@ -52,37 +54,25 @@ const props = defineProps<{ presentation: Presentation }>();
 </script>
 
 <template>
-  <div v-bind="props.presentation.root.attrs">
-    <header v-bind="props.presentation.header.attrs">
-      <div v-bind="props.presentation.header.body.attrs">
-        <div v-bind="props.presentation.header.content.attrs">
-          <nav v-bind="props.presentation.header.breadcrumbs.attrs">
-            <a v-bind="props.presentation.header.breadcrumbs.mission.attrs">
-              {{ props.presentation.header.breadcrumbs.mission.text }}
-            </a>
-            <span v-bind="props.presentation.header.breadcrumbs.separator.attrs">
-              {{ props.presentation.header.breadcrumbs.separator.text }}
-            </span>
-            <span v-bind="props.presentation.header.breadcrumbs.current.attrs">
-              {{ props.presentation.header.breadcrumbs.current.text }}
-            </span>
-          </nav>
-
-          <h1 v-bind="props.presentation.header.title.attrs">
-            {{ props.presentation.header.title.text }}
-          </h1>
-          <p v-bind="props.presentation.header.subtitle.attrs">
-            {{ props.presentation.header.subtitle.text }}
-          </p>
-        </div>
-        <div v-bind="props.presentation.header.actions.attrs">
-          <a v-bind="props.presentation.header.new_database.attrs">
-            <span v-bind="props.presentation.header.new_database.icon.attrs"></span>
-            {{ props.presentation.header.new_database.text }}
-          </a>
-        </div>
-      </div>
-    </header>
+  <div v-bind="pageContentAttrs(props.presentation.root.attrs)">
+    <CadencePageHeading
+      :breadcrumbs="[
+        {
+          label: props.presentation.header.breadcrumbs.mission.text,
+          href: props.presentation.header.breadcrumbs.mission.attrs.href,
+        },
+        { label: props.presentation.header.breadcrumbs.current.text },
+      ]"
+    >
+      <template #title>{{ props.presentation.header.title.text }}</template>
+      <template #description>{{ props.presentation.header.subtitle.text }}</template>
+      <template #actions
+        ><a v-bind="props.presentation.header.new_database.attrs">
+          <span v-bind="props.presentation.header.new_database.icon.attrs"></span>
+          {{ props.presentation.header.new_database.text }}
+        </a></template
+      >
+    </CadencePageHeading>
 
     <div
       v-if="props.presentation.empty_state.visible"

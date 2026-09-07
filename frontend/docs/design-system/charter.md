@@ -2,10 +2,10 @@
 
 ## Status
 
-Working direction for the Vue frontend proof of concept. This document defines
+Product principles for the production design system. This document defines
 the design system's purpose and operational principles. It does not select a
-visual style, approve the current experimental tokens, or establish a finished
-component catalog.
+visual style or establish a finished component catalog. The production baseline
+and package ownership are defined in [architecture](architecture.md).
 
 ## Purpose
 
@@ -242,9 +242,8 @@ workflow guidance.
 - [Symbology](symbology.md) defines icon classes, invariant status shapes,
   state-to-symbol policy, monitoring-symbol anatomy, accessibility, and the
   starter mission glyph vocabulary.
-- [Visual foundations](visual-foundations.md) defines operational monochrome,
-  informative color, zero-radius geometry, typography, motion, and dark/light
-  mode requirements.
+- [Visual foundations](visual-foundations.md) defines the production baseline,
+  semantic tokens, typography, geometry, motion, and accessible theme evolution.
 
 ## Explicit non-goals
 

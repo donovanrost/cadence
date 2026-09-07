@@ -50,13 +50,11 @@ defmodule CadenceWeb do
   defp html_helpers do
     quote do
       import Phoenix.HTML
-      import CadenceWeb.Components.OpsContextRail
-      import CadenceWeb.UI
 
       alias CadenceWeb.Layouts
 
       use LiveVue
-      use LiveVue.Components, vue_root: ["./assets/vue", "./lib/cadence_web"]
+      use LiveVue.Components, vue_root: ["../../frontend/apps/host/src/shell"]
 
       import Phoenix.Component, except: [sigil_H: 2]
       import LiveVue.SharedPropsView, only: [sigil_H: 2]

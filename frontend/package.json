@@ -1,5 +1,5 @@
 {
-  "name": "@cadence/federated-frontend-poc",
+  "name": "@cadence/frontend",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,15 +9,17 @@
     "build:publication": "node tools/build-first-party-publication.mjs && node tools/production-publication-output-check.mjs",
     "release:package": "node tools/frontend-release-package.mjs",
     "test:publication": "node tools/production-publication-output-check.mjs",
-    "test:browser:contract": "node --test ../apps/cadence_web/assets/test/federation_browser_smoke_contract_test.mjs ../apps/cadence_web/assets/test/federation_browser_smoke_hardening_test.mjs ../apps/cadence_web/assets/test/federation_publication_build_lock_test.mjs",
+    "test:browser:contract": "node --test tools/phoenix/federation_browser_smoke_contract.test.mjs tools/phoenix/federation_browser_smoke_hardening.test.mjs tools/phoenix/federation_publication_build_lock.test.mjs",
     "preview": "node tools/production-server.ts",
     "check": "vp check",
-    "test": "vp run -r test",
+    "test": "vp run -r test && corepack pnpm test:transport",
     "storybook": "corepack pnpm --filter @cadence/storybook storybook",
     "storybook:build": "corepack pnpm --filter @cadence/storybook build-storybook",
-    "storybook:test": "corepack pnpm --filter @cadence/storybook test"
+    "storybook:test": "corepack pnpm --filter @cadence/storybook test",
+    "test:transport": "node --test tools/phoenix/*.test.mjs"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "4.1.12",
     "@types/node": "^24.13.3",
     "typescript": "~6.0.2",
     "vite-plus": "catalog:"

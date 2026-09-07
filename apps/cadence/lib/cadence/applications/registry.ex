@@ -21,14 +21,12 @@ defmodule Cadence.Applications.Registry do
     LegacyCommsOverview,
     MissionCatalog,
     OpsConsole,
+    OrganizationAdmin,
     Spacecraft,
     TelemetryDecom
   }
 
   alias Cadence.Extensions.Presentation.ReferenceDefinition
-
-  @compile {:no_warn_undefined,
-            {CadenceWeb.ApplicationContributions.OrganizationAdmin, :definition, 0}}
 
   @type fetch_error ::
           :unknown_application
@@ -38,26 +36,18 @@ defmodule Cadence.Applications.Registry do
 
   @spec all() :: [ApplicationDefinition.t()]
   def all,
-    do:
-      [
-        TelemetryDecom.definition(),
-        derived_telemetry(),
-        limits(),
-        CommsApplication.definition(),
-        LegacyCommsOverview.definition(),
-        MissionCatalog.definition(),
-        Spacecraft.definition(),
-        OpsConsole.definition(),
-        cfdp()
-      ] ++ optional_web_definitions()
-
-  defp optional_web_definitions do
-    module = CadenceWeb.ApplicationContributions.OrganizationAdmin
-
-    if Code.ensure_loaded?(module) and function_exported?(module, :definition, 0),
-      do: [module.definition()],
-      else: []
-  end
+    do: [
+      TelemetryDecom.definition(),
+      derived_telemetry(),
+      limits(),
+      CommsApplication.definition(),
+      LegacyCommsOverview.definition(),
+      MissionCatalog.definition(),
+      Spacecraft.definition(),
+      OpsConsole.definition(),
+      cfdp(),
+      OrganizationAdmin.definition()
+    ]
 
   @spec available() :: [ApplicationDefinition.t()]
   def available do

@@ -8,8 +8,8 @@ defmodule CadenceWeb.SpacecraftShowLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
-  alias LiveVue.Test
 
   test "authenticated show route mounts the federated spacecraft surface" do
     {conn, mission, spacecraft} = signed_in_spacecraft()
@@ -34,22 +34,14 @@ defmodule CadenceWeb.SpacecraftShowLiveTest do
   end
 
   defp assert_surface(view, mission, spacecraft) do
-    assert has_element?(view, "#spacecraft-show-component")
-
-    vue = Test.get_vue(view, id: "spacecraft-show-component")
-    assert vue.component == "FederatedFullPageSurface"
-    assert vue.id == "spacecraft-show-component"
-    assert vue.ssr == false
-    assert vue.handlers == %{}
-
-    assert vue.props == %{
-             "application_key" => "spacecraft",
-             "surface_id" => "show",
-             "host_scope" => "spacecraft",
-             "mission_id" => mission.mission_id,
-             "spacecraft_id" => spacecraft.spacecraft_id,
-             "query_params" => %{}
-           }
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => "spacecraft",
+      "surface_id" => "show",
+      "host_scope" => "spacecraft",
+      "mission_id" => mission.mission_id,
+      "spacecraft_id" => spacecraft.spacecraft_id,
+      "query_params" => %{}
+    })
   end
 
   defp signed_in_spacecraft do

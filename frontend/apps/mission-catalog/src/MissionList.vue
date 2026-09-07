@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import MissionTable from "./MissionTable.vue";
 
 type RawAttrs = Record<string, string>;
@@ -57,27 +58,21 @@ defineProps<{ presentation: MissionListPresentation }>();
 
 <template>
   <div :class="presentation.root_class">
-    <header :class="presentation.header.class">
-      <div :class="presentation.header.content_class">
-        <div>
-          <p :class="presentation.header.eyebrow.class">
-            {{ presentation.header.eyebrow.text }}
-          </p>
-          <h1 :class="presentation.header.title.class">
-            {{ presentation.header.title.text }}
-            <span :class="presentation.header.title.suffix.class">
-              {{ presentation.header.title.suffix.text }}
-            </span>
-          </h1>
-        </div>
-        <div :class="presentation.header.actions_class">
-          <a v-bind="presentation.header.action.attrs" :class="presentation.header.action.class">
-            <span :class="presentation.header.action.icon_class"></span>
-            {{ presentation.header.action.label }}
-          </a>
-        </div>
-      </div>
-    </header>
+    <CadencePageHeading>
+      <template #title>{{ presentation.header.title.text }} </template>
+      <template #eyebrow>{{ presentation.header.eyebrow.text }}</template>
+      <template #metadata
+        ><span>
+          {{ presentation.header.title.suffix.text }}
+        </span></template
+      >
+      <template #actions
+        ><a v-bind="presentation.header.action.attrs" :class="presentation.header.action.class">
+          <span :class="presentation.header.action.icon_class"></span>
+          {{ presentation.header.action.label }}
+        </a></template
+      >
+    </CadencePageHeading>
 
     <div v-if="presentation.empty_state.visible" :id="presentation.empty_state.id">
       <div :class="presentation.empty_state.class">

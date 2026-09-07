@@ -4,12 +4,10 @@ defmodule Cadence.Applications.ActionProviderRegistry do
   alias Cadence.Applications.JSONBoundary
 
   @max_providers 16
-  @optional_contributors [CadenceWeb.ApplicationContributions.OrganizationAdmin]
+  @additional_contributors [Cadence.Applications.OrganizationAdmin]
 
-  @compile {:no_warn_undefined,
-            {CadenceWeb.ApplicationContributions.OrganizationAdmin, :application_key, 0}}
-  @compile {:no_warn_undefined,
-            {CadenceWeb.ApplicationContributions.OrganizationAdmin, :action_provider, 0}}
+  @compile {:no_warn_undefined, {Cadence.Applications.OrganizationAdmin, :application_key, 0}}
+  @compile {:no_warn_undefined, {Cadence.Applications.OrganizationAdmin, :action_provider, 0}}
   @contributors [
     Cadence.Applications.Comms,
     Cadence.Applications.Spacecraft,
@@ -24,7 +22,7 @@ defmodule Cadence.Applications.ActionProviderRegistry do
   def providers do
     core_providers = providers(@contributors)
 
-    case providers(optional_contributors()) do
+    case providers(additional_contributors()) do
       optional_providers when is_map(optional_providers) ->
         Map.merge(core_providers, optional_providers)
     end
@@ -126,8 +124,8 @@ defmodule Cadence.Applications.ActionProviderRegistry do
   defp contributor_entry(_contributor),
     do: {:error, :invalid_application_action_provider_registry}
 
-  defp optional_contributors do
-    Enum.filter(@optional_contributors, &Code.ensure_loaded?/1)
+  defp additional_contributors do
+    @additional_contributors
   end
 
   defp valid_provider?(provider) when is_atom(provider) do

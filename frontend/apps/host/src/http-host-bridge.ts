@@ -20,6 +20,7 @@ interface HostProblem {
 }
 
 export interface BridgeOptions {
+  navigate?: (href: string) => void;
   fetch?: typeof globalThis.fetch;
   requestTimeoutMs?: number;
   onSessionFailure?: (operation: HostActivityEvent["kind"], error: HostBridgeError) => void;
@@ -225,6 +226,14 @@ export function createHttpHostBridge(
       }
     },
 
+    navigate(href: string): void {
+      assertBridgeActive();
+      const target = new URL(href, globalThis.location.href);
+      if (target.origin !== globalThis.location.origin || target.username || target.password)
+        throw new Error("Navigation must be same-origin.");
+      if (options.navigate) options.navigate(target.href);
+      else globalThis.location.assign(target.href);
+    },
     subscribe(listener: HostActivityListener): () => void {
       if (!active) return () => undefined;
 

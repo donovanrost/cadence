@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue";
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
-import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue";
+import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
+import CadenceHoverTableRow from "@cadence/ui/CadenceHoverTableRow.vue";
 
 type ProviderRow = {
   id: string;

@@ -21,9 +21,9 @@ config :cadence_web,
 config :cadence_web, dashboard_live_refresh_ms: 60_000
 
 # LiveVue tests inspect complete component contracts after LiveView patches.
-# Disable client-oriented prop diffs so data-props always contains the current
-# JSON-safe projection rather than only the initial mount payload.
-config :live_vue, enable_props_diff: false
+# Browser tests exercise the production incremental protocol in a separate VM;
+# contract tests retain complete projections for their server-side assertions.
+config :live_vue, enable_props_diff: System.get_env("CADENCE_BROWSER_PROPS_DIFF") == "true"
 
 config :cadence_web,
   dashboard_engine_source_execution: [

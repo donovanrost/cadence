@@ -1,188 +1,41 @@
 defmodule CadenceWeb.FederatedMountCoverageTest do
   use ExUnit.Case, async: true
+  @routes Path.expand("../../../../../frontend/apps/host/src/routes.json", __DIR__)
 
-  @web_root Path.expand("../../../", __DIR__)
-  @live_root Path.join(@web_root, "lib/cadence_web/live")
-  @components_root Path.join(@web_root, "lib/cadence_web/components")
-  @allowlist_path Path.join(@web_root, "assets/federation-host-owned-surfaces.json")
-  @dev_config_path Path.join(@web_root, "config/dev.exs")
-  @root_layout_path Path.join(@web_root, "lib/cadence_web/components/layouts/root.html.heex")
+  test "the frontend route catalog and authenticated Phoenix routes agree" do
+    catalog = @routes |> File.read!() |> Jason.decode!()
+    phoenix_routes = CadenceWeb.Router.__routes__()
+    host_routes = Enum.filter(phoenix_routes, &(&1.plug_opts == CadenceWeb.HostPageLive))
+    # LiveView route metadata is authoritative across Phoenix versions.
+    host_routes =
+      if host_routes == [],
+        do:
+          Enum.filter(phoenix_routes, fn route ->
+            case route.metadata[:phoenix_live_view] do
+              {CadenceWeb.HostPageLive, _, _, _} -> true
+              _ -> false
+            end
+          end),
+        else: host_routes
 
-  @ops_route_mounts [
-    {"ops_activation_requests_live.ex", "activation_requests"},
-    {"ops_alarms_live.ex", "alarms"},
-    {"ops_commands_live.ex", "commands"},
-    {"ops_contact_detail_live.ex", "contact_detail"},
-    {"ops_contact_plan_show_live.ex", "contact_plan_show"},
-    {"ops_contact_record_live.ex", "contact_record"},
-    {"ops_contact_requirement_list_live.ex", "contact_requirement_list"},
-    {"ops_contact_requirement_new_live.ex", "contact_requirement_new"},
-    {"ops_contact_requirement_show_live.ex", "contact_requirement_show"},
-    {"ops_contact_requirement_template_live.ex", "contact_requirement_template"},
-    {"ops_contact_schedule_live.ex", "contact_schedule"},
-    {"ops_dashboard_diagnostics_live.ex", "dashboard_diagnostics"},
-    {"ops_dashboard_library_live.ex", "dashboard_library"},
-    {"ops_dashboard_list_live.ex", "dashboard_directory"},
-    {"ops_dashboard_viewer_live.ex", "dashboard_show"},
-    {"ops_dashboard_editor_live.ex", "dashboard_editor"},
-    {"ops_dashboard_activity_live.ex", "dashboard_activity"},
-    {"ops_dashboard_new_live.ex", "dashboard_new"},
-    {"ops_dashboard_playlist_present_live.ex", "dashboard_playlist_present"},
-    {"ops_dashboard_playlists_live.ex", "dashboard_playlists"},
-    {"ops_dashboard_settings_live.ex", "dashboard_settings"},
-    {"ops_dashboard_share_live.ex", "dashboard_share"},
-    {"ops_dashboard_snapshot_live.ex", "dashboard_snapshot"},
-    {"ops_fleet_planning_live.ex", "fleet_planning"},
-    {"ops_fleet_planning_new_live.ex", "fleet_planning_new"},
-    {"ops_fleet_planning_policy_live.ex", "fleet_planning_policy"},
-    {"ops_fleet_planning_run_live.ex", "fleet_planning_run"},
-    {"ops_telemetry_explore_components.ex", "telemetry_explore"},
-    {"ops_timeline_live.ex", "timeline"}
-  ]
+    assert Enum.sort(Enum.map(host_routes, & &1.path)) ==
+             Enum.sort(Enum.map(catalog, & &1["path"]))
 
-  test "every production LiveVue mount is federated or explicitly allowlisted" do
-    allowlist = @allowlist_path |> File.read!() |> Jason.decode!()
-    allowed = MapSet.new(allowlist["local_fallbacks"], & &1["component"])
-    federated = allowlist["federated_component"]
-
-    mounts =
-      [@live_root, @components_root]
-      |> Enum.flat_map(&Path.wildcard(Path.join(&1, "**/*.{ex,heex}")))
-      |> Enum.flat_map(fn path ->
-        path
-        |> File.read!()
-        |> then(&Regex.scan(~r/v-component="([A-Za-z0-9_]+)"/, &1, capture: :all_but_first))
-        |> Enum.map(fn [component] -> {path, component} end)
-      end)
-
-    assert mounts != []
-
-    uncovered =
-      mounts
-      |> Enum.reject(fn {_path, component} ->
-        component == federated or MapSet.member?(allowed, component)
-      end)
-
-    assert uncovered == [],
-           Enum.map_join(uncovered, "\n", fn {path, component} ->
-             "#{path}: #{component}"
-           end)
+    for route <- host_routes do
+      path = Regex.replace(~r/:[a-z_]+/, route.path, "example")
+      info = Phoenix.Router.route_info(CadenceWeb.Router, "GET", path, "localhost")
+      assert {CadenceWeb.HostPageLive, _, _, %{name: :application}} = info.phoenix_live_view
+      assert is_atom(info.host_policy)
+      assert :browser in info.pipe_through
+      assert :require_authenticated_scope in info.pipe_through
+    end
   end
 
-  test "federated page resolver and host boot are present" do
-    vue = File.read!(Path.join(@web_root, "assets/vue.ts"))
-    surface = File.read!(Path.join(@web_root, "assets/vue/federated_full_page_surface.ts"))
-    app = File.read!(Path.join(@web_root, "assets/js/app.js"))
-
-    assert vue =~ "FederatedFullPageSurface"
-    assert vue =~ "createLiveVue"
-    assert surface =~ "data-catalog-url"
-    refute vue =~ "surfaceForPath"
-    refute vue =~ "location.pathname"
-    assert app =~ "MutationObserver"
-    assert app =~ "/assets/application-host/host/host.js"
-    assert app =~ "window.location.origin"
-    assert app =~ "phx:page-loading-stop"
-    assert app =~ "mounted.unmount()"
-  end
-
-  test "development serves the current LiveVue entrypoint through Vite" do
-    dev_config = File.read!(@dev_config_path)
-    root_layout = File.read!(@root_layout_path)
-
-    assert dev_config =~ ~s(config :live_vue, vite_host: "http://127.0.0.1:5173")
-    assert root_layout =~ ~s(<LiveVue.Reload.vite_assets assets={["/js/app.js"]}>)
-    assert root_layout =~ ~s(href={~p"/assets/app.css"})
-    refute root_layout =~ "/css/app.css"
-  end
-
-  test "non-Ops federated full pages pass descriptors without legacy renderer bindings" do
-    mounts =
-      @live_root
-      |> Path.join("**/*.{ex,heex}")
-      |> Path.wildcard()
-      |> Enum.reject(&String.contains?(&1, "/ops_"))
-      |> Enum.filter(fn path ->
-        File.read!(path) =~ "v-component=\"FederatedFullPageSurface\""
-      end)
-
-    assert mounts != []
-
-    Enum.each(mounts, fn path ->
-      source = File.read!(path)
-      [mount] = Regex.run(~r/v-component="FederatedFullPageSurface"[\s\S]*?\/>/, source)
-
-      assert mount =~ ~r/\bapplication_key=/, path
-      assert mount =~ ~r/\bsurface_id=/, path
-      assert mount =~ ~r/\bhost_scope=/, path
-      assert mount =~ "v-ssr={false}"
-
-      refute mount =~ ~r/\bv-on:/, path
-      refute mount =~ ~r/\b(presentation|page|form|navigation|overview|actions)=/, path
-    end)
-  end
-
-  test "the owned Ops route cohort has descriptor-only mission mounts" do
-    assert length(@ops_route_mounts) == 29
-
-    Enum.each(@ops_route_mounts, fn {relative_path, surface_id} ->
-      source = File.read!(Path.join(@live_root, relative_path))
-
-      assert source =~ "application_key=\"ops_console\"", relative_path
-      assert source =~ "surface_id=\"#{surface_id}\"", relative_path
-      assert source =~ "host_scope=\"mission\"", relative_path
-      assert source =~ "mission_id={@current_mission.mission_id}", relative_path
-      assert source =~ "query_params=", relative_path
-      assert source =~ "v-ssr={false}", relative_path
-      refute source =~ "v-on:", relative_path
-    end)
-  end
-
-  test "route-owned ids use bounded query parameters or canonical host props" do
-    contracts = [
-      {"catalog/catalog_artifact_show_live.ex", ~w(artifact_id), []},
-      {"catalog/catalog_database_show_live.ex", ~w(catalog_database_id), []},
-      {"catalog/catalog_revision_show_live.ex", ~w(catalog_revision_id), []},
-      {"catalog/catalog_import_run_show_live.ex", ~w(import_run_id), []},
-      {"provider_account_show_live.ex", ~w(provider_account_id), []},
-      {"comms_ground_station_show_live.ex", ~w(ground_station_id), []},
-      {"comms_routing_show_live.ex", ~w(routing_rule_id), []}
-    ]
-
-    Enum.each(contracts, fn {relative_path, query_keys, prop_bindings} ->
-      source = File.read!(Path.join(@live_root, relative_path))
-      [mount] = Regex.run(~r/v-component="FederatedFullPageSurface"[\s\S]*?\/>/, source)
-
-      assert mount =~ ~r/\bquery_params=/, relative_path
-
-      Enum.each(query_keys, fn key ->
-        assert mount =~ ~r/#{key}: /, "#{relative_path} omits #{key}"
-      end)
-
-      Enum.each(prop_bindings, fn binding ->
-        assert mount =~ binding, "#{relative_path} omits #{binding}"
-      end)
-    end)
-  end
-
-  test "mode-specific Ops routes select first-class surface identities" do
-    sources = %{
-      "data_sources" => File.read!(Path.join(@live_root, "ops_data_sources_live/page.ex")),
-      "data_operations" => File.read!(Path.join(@live_root, "ops_data_operations_live.ex"))
-    }
-
-    assert sources["data_sources"] =~ "data_source_registration"
-    assert sources["data_sources"] =~ "data_source_settings"
-    assert sources["data_sources"] =~ "surface_id={@surface_id}"
-    assert sources["data_operations"] =~ "data_operations_manage"
-    assert sources["data_operations"] =~ "surface_id={if(@data_operations_admin?"
-
-    Enum.each(sources, fn {path, source} ->
-      assert source =~ "v-component=\"FederatedFullPageSurface\"", path
-      assert source =~ "host_scope=\"mission\"", path
-      assert source =~ "query_params=", path
-      assert source =~ "v-ssr={false}", path
-      refute source =~ "v-on:", path
-    end)
+  test "route query contracts exclude host authority fields" do
+    for route <- @routes |> File.read!() |> Jason.decode!() do
+      refute "application_key" in route["queryKeys"]
+      refute "host_scope" in route["queryKeys"]
+      assert Enum.all?(Map.keys(route["queryAliases"]), &(&1 in route["queryKeys"]))
+    end
   end
 end

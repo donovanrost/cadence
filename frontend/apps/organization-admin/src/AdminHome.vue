@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
 
 type Navigation = {
   organizations_href: string;
@@ -43,18 +42,10 @@ defineProps<{
 
 <template>
   <div id="admin-home" class="space-y-8">
-    <CadencePageHeaderFrame variant="compact">
-      <div>
-        <div>
-          <CadencePageTitle>
-            {{ presentation.title }}
-          </CadencePageTitle>
-          <p class="mt-1 max-w-3xl text-sm text-base-content/70">
-            {{ presentation.subtitle }}
-          </p>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading>
+      <template #title>{{ presentation.title }}</template>
+      <template #description>{{ presentation.subtitle }}</template>
+    </CadencePageHeading>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
       <CadenceCard

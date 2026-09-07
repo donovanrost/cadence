@@ -95,12 +95,7 @@ function failureFor(message: string, reason: unknown): { message: string; refere
       Reference ID: {{ error.referenceId }}
     </p>
     <p class="text-sm">The current Cadence page remains available.</p>
-    <button
-      id="retry-remote"
-      type="button"
-      class="btn btn-primary btn-sm"
-      @click="$emit('retry')"
-    >
+    <button id="retry-remote" type="button" class="btn btn-primary btn-sm" @click="$emit('retry')">
       Retry approved release
     </button>
     <a id="remote-fallback" class="link text-sm" :href="fallbackHref">Return to Cadence</a>
@@ -122,9 +117,17 @@ function failureFor(message: string, reason: unknown): { message: string; refere
     </div>
   </section>
 
-  <FullPageSurface
+  <div
     v-else
-    :renderer="component"
-    :mount="fullPageSurfaceProps(application, context, bridge)"
-  />
+    class="contents"
+    data-remote-state="ready"
+    :data-mounted-application="application.applicationKey"
+    :data-mounted-surface="application.surface.surfaceId"
+    :data-mounted-release="application.release.releaseId"
+  >
+    <FullPageSurface
+      :renderer="component"
+      :mount="fullPageSurfaceProps(application, context, bridge)"
+    />
+  </div>
 </template>

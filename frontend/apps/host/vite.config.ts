@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
 import tidewave from "tidewave/vite-plugin";
 import { defineConfig, lazyPlugins } from "vite-plus";
@@ -24,6 +25,7 @@ export default defineConfig({
     environment: "happy-dom",
   },
   plugins: lazyPlugins(() => [
+    tailwindcss(),
     tidewave(),
     {
       name: "cadence-demo-host-api",

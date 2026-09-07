@@ -46,11 +46,9 @@ defmodule CadenceWeb.BrowserShellTest do
 
     assert LazyHTML.attribute(sign_in_component, "data-name") == ["UserSession"]
 
-    assert [props] = LazyHTML.attribute(sign_in_component, "data-props")
-    assert props =~ "^heading^:^Sign in^"
-    assert props =~ "^id^:^sign-in-form^"
-    refute response =~ "setup-access-sign-in-form"
-    refute response =~ "durable-sign-in-form"
+    vue = Test.get_vue(response, id: "user-session-component")
+    assert Map.keys(vue.props) == ["csrf-token"]
+    assert is_binary(vue.props["csrf-token"])
   end
 
   test "environment admin credentials on /sign-in enter admin mode and route to admin dashboard",
@@ -170,17 +168,8 @@ defmodule CadenceWeb.BrowserShellTest do
     assert admin_mode_vue.component == "AdminModePage"
     assert admin_mode_vue.ssr == false
     assert admin_mode_vue.props == Jason.decode!(Jason.encode!(admin_mode_vue.props))
-    admin_mode_form = admin_mode_vue.props["presentation"]["form"]
-
-    assert admin_mode_form["attrs"]["id"] == "admin-mode-form"
-    assert admin_mode_form["attrs"]["action"] == "/admin-mode"
-    assert admin_mode_form["attrs"]["method"] == "post"
-    assert admin_mode_form["password"]["input"]["attrs"]["name"] == "admin_mode[password]"
-
-    assert [%{"attrs" => %{"name" => "_csrf_token", "value" => csrf_token}}] =
-             admin_mode_form["hidden_fields"]
-
-    assert csrf_token != ""
+    assert is_binary(admin_mode_vue.props["page"]["csrf_token"])
+    assert admin_mode_vue.props["page"]["csrf_token"] != ""
 
     elevated_conn =
       build_conn()
@@ -199,20 +188,9 @@ defmodule CadenceWeb.BrowserShellTest do
       })
       |> live("/admin")
 
-    assert has_element?(admin_home_view, "#admin-home-page")
-    assert has_element?(admin_home_view, "#admin-home-component")
-
-    admin_home_vue = Test.get_vue(admin_home_view, id: "admin-home-component")
-    assert admin_home_vue.component == "FederatedFullPageSurface"
-    assert admin_home_vue.id == "admin-home-component"
-    assert admin_home_vue.ssr == false
-    assert admin_home_vue.handlers == %{}
-
-    assert admin_home_vue.props == %{
-             "application_key" => "organization_admin",
-             "surface_id" => "admin_home",
-             "host_scope" => "admin"
-           }
+    snapshot = CadenceWeb.HostTransportTestSupport.assert_context(admin_home_view, %{})
+    assert snapshot["path"] == "/admin"
+    assert snapshot["context"]["admin_mode"]
   end
 
   test "leaving admin mode removes the durable administrator's elevation", %{conn: _conn} do
@@ -275,12 +253,8 @@ defmodule CadenceWeb.BrowserShellTest do
     assert invitation_vue.ssr == false
     assert invitation_vue.props == Jason.decode!(Jason.encode!(invitation_vue.props))
 
-    assert invitation_vue.props["presentation"]["form"]["attrs"]["id"] ==
-             "organization-invitation-acceptance-form"
-
-    assert Enum.at(invitation_vue.props["presentation"]["cards"]["items"], 1)["primary"][
-             "text"
-           ] == "new-admin@example.com"
+    assert invitation_vue.props["page"]["available"]
+    assert invitation_vue.props["page"]["invitation"]["email"] == "new-admin@example.com"
 
     accepted_conn =
       build_conn()

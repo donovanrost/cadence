@@ -1,15 +1,13 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { ref, watch } from "vue";
 import CatalogUploadForm from "./CatalogUploadForm.vue";
 import StatusBadge from "./StatusBadge.vue";
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
-import CadenceCollapsible from "./ui/reka/CadenceCollapsible.vue";
-import CadenceCollapsibleContent from "./ui/reka/CadenceCollapsibleContent.vue";
-import CadenceCollapsibleTrigger from "./ui/reka/CadenceCollapsibleTrigger.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
+import CadenceCollapsible from "@cadence/ui/CadenceCollapsible.vue";
+import CadenceCollapsibleContent from "@cadence/ui/CadenceCollapsibleContent.vue";
+import CadenceCollapsibleTrigger from "@cadence/ui/CadenceCollapsibleTrigger.vue";
 
 type NavigationItem = {
   label: string;
@@ -94,49 +92,30 @@ const requestRevisionFormChange = (open: boolean) => {
     @request-change="requestRevisionFormChange"
   >
     <div id="catalog-database-show-surface" class="space-y-6">
-      <CadencePageHeaderFrame variant="compact">
-        <CadenceCompactPageHeaderBodyFrame>
-          <template #content>
-            <CadenceBreadcrumbs>
-              <a
-                :href="navigation.mission.href"
-                data-phx-link="redirect"
-                data-phx-link-state="push"
-                class="transition-colors hover:text-primary"
-                >{{ navigation.mission.label }}</a
-              >
-              <span class="text-base-content/20" aria-hidden="true">/</span>
-              <a
-                :href="navigation.catalog.href"
-                data-phx-link="redirect"
-                data-phx-link-state="push"
-                class="transition-colors hover:text-primary"
-                >{{ navigation.catalog.label }}</a
-              >
-              <span class="text-base-content/20" aria-hidden="true">/</span>
-              <span class="text-primary/90">{{ navigation.current.label }}</span>
-            </CadenceBreadcrumbs>
-
-            <h1 class="mt-2 text-2xl font-bold tracking-tight text-base-content">
-              {{ database.name }}
-              <span class="ml-3 font-mono text-base text-base-content/60">{{ database.slug }}</span>
-            </h1>
-          </template>
-
-          <template #actions>
-            <CadenceCollapsibleTrigger>
-              <button
-                id="add-revision-toggle"
-                type="button"
-                class="btn"
-                :class="revisionFormOpen ? 'btn-ghost' : 'btn-primary'"
-              >
-                {{ revisionFormOpen ? "Cancel" : "+ Add revision" }}
-              </button>
-            </CadenceCollapsibleTrigger>
-          </template>
-        </CadenceCompactPageHeaderBodyFrame>
-      </CadencePageHeaderFrame>
+      <CadencePageHeading
+        :breadcrumbs="[
+          { label: navigation.mission.label, href: navigation.mission.href },
+          { label: navigation.catalog.label, href: navigation.catalog.href },
+          { label: navigation.current.label },
+        ]"
+      >
+        <template #title>{{ database.name }} </template>
+        <template #metadata
+          ><span>{{ database.slug }}</span></template
+        >
+        <template #actions
+          ><CadenceCollapsibleTrigger>
+            <button
+              id="add-revision-toggle"
+              type="button"
+              class="btn"
+              :class="revisionFormOpen ? 'btn-ghost' : 'btn-primary'"
+            >
+              {{ revisionFormOpen ? "Cancel" : "+ Add revision" }}
+            </button>
+          </CadenceCollapsibleTrigger></template
+        >
+      </CadencePageHeading>
 
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <CadenceCard

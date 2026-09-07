@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "../StatusBadge.vue";
-import CadenceCard from "../ui/components/CadenceCard.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import type { Stat } from "./presentation_types";
 
 defineProps<{ stats: Stat[] }>();

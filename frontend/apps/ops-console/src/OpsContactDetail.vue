@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
+import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
 import { reactive, watch } from "vue";
-import CadencePanel from "./ui/components/CadencePanel.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
 
 type LabelValue = {
   label: string;
@@ -246,58 +246,45 @@ const acknowledge = (change: ProviderChange, form: DecisionForm | null | undefin
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <CadencePageHeaderFrame variant="ops">
-      <div
-        class="mx-auto flex max-w-[96rem] flex-col gap-4 xl:flex-row xl:items-end xl:justify-between"
-      >
-        <div class="min-w-0">
-          <a
-            :id="page.navigation.id"
-            :href="page.navigation.href"
-            data-phx-link="redirect"
-            data-phx-link-state="push"
-            class="inline-flex items-center gap-1 font-mono text-[0.65rem] uppercase tracking-[0.18em] text-primary/70 hover:text-primary"
-          >
-            <span class="hero-arrow-left h-3 w-3"></span>
-            {{ page.navigation.label }}
-          </a>
-          <div class="mt-3 flex flex-wrap items-center gap-3">
-            <h1 class="text-2xl font-bold tracking-tight text-base-content">
-              {{ page.header.heading }}
-            </h1>
-            <span
-              :class="[
-                'border px-2 py-1 font-mono text-[0.62rem] font-bold uppercase tracking-wider',
-                page.header.state.class,
-              ]"
-              >{{ page.header.state.label }}</span
-            >
-          </div>
-          <p class="mt-2 truncate font-mono text-xs text-base-content/50">
-            {{ page.header.reservation_id }}
-          </p>
-        </div>
+    <CadencePageHeading>
+      <template #title>{{ page.header.heading }}</template>
+      <template #description>{{ page.header.reservation_id }}</template>
+      <template #actions
+        ><a
+          :id="page.navigation.id"
+          :href="page.navigation.href"
+          data-phx-link="redirect"
+          data-phx-link-state="push"
+          class="inline-flex items-center gap-1 font-mono text-[0.65rem] uppercase tracking-[0.18em] text-primary/70 hover:text-primary"
+        >
+          <span class="hero-arrow-left h-3 w-3"></span>
+          {{ page.navigation.label }}
+        </a>
 
         <div
-          class="grid grid-cols-3 gap-px border border-primary/20 bg-primary/20 font-mono text-xs"
+          v-for="fact in page.header.facts"
+          :key="fact.label"
+          class="min-w-24 bg-base-200/90 px-3 py-2"
         >
-          <div
-            v-for="fact in page.header.facts"
-            :key="fact.label"
-            class="min-w-24 bg-base-200/90 px-3 py-2"
-          >
-            <p class="text-[0.58rem] uppercase tracking-[0.14em] text-base-content/35">
-              {{ fact.label }}
-            </p>
-            <p class="mt-1 font-semibold text-primary">{{ fact.value }}</p>
-          </div>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
+          <p class="text-[0.58rem] uppercase tracking-[0.14em] text-base-content/35">
+            {{ fact.label }}
+          </p>
+          <p class="mt-1 font-semibold text-primary">{{ fact.value }}</p>
+        </div></template
+      >
 
-    <div
-      class="mx-auto grid max-w-[96rem] gap-5 p-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(20rem,0.62fr)] lg:p-7"
+      <template #metadata
+        ><span
+          :class="[
+            'border px-2 py-1 font-mono text-[0.62rem] font-bold uppercase tracking-wider',
+            page.header.state.class,
+          ]"
+          >{{ page.header.state.label }}</span
+        ></template
+      ></CadencePageHeading
     >
+
+    <div class="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(20rem,0.62fr)]">
       <main class="min-w-0 space-y-5">
         <CadencePanel
           :id="page.values.id"

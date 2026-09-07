@@ -1,10 +1,8 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import StatusBadge from "./StatusBadge.vue";
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
 
 type Breadcrumb = {
   label: string;
@@ -60,37 +58,12 @@ defineProps<{
 
 <template>
   <div id="catalog-import-run-show-surface" class="space-y-6">
-    <CadencePageHeaderFrame variant="compact">
-      <div>
-        <div>
-          <CadenceBreadcrumbs>
-            <template
-              v-for="(breadcrumb, index) in navigation.breadcrumbs"
-              :key="`${index}-${breadcrumb.label}`"
-            >
-              <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-              <span v-if="breadcrumb.href === null" class="text-primary/90">
-                {{ breadcrumb.label }}
-              </span>
-              <a
-                v-else
-                :href="breadcrumb.href"
-                data-phx-link="redirect"
-                data-phx-link-state="push"
-                class="hover:text-primary transition-colors"
-                >{{ breadcrumb.label }}</a
-              >
-            </template>
-          </CadenceBreadcrumbs>
-          <CadencePageTitle>
-            Import run
-            <span class="ml-3 font-mono text-base text-base-content/60">
-              <StatusBadge :status="status.tone" :label="status.label" />
-            </span>
-          </CadencePageTitle>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading :breadcrumbs="navigation.breadcrumbs">
+      <template #title> Import run </template>
+      <template #metadata
+        ><span> <StatusBadge :status="status.tone" :label="status.label" /> </span
+      ></template>
+    </CadencePageHeading>
 
     <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">
       <div class="text-sm space-y-1">

@@ -11,8 +11,8 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
   alias Cadence.Applications.{ActionRequest, HostContext, OpsConsole}
   alias Cadence.Applications.OpsConsole.ActionProvider
   alias Cadence.Auth.{Scope, ServiceIdentity}
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
-  alias LiveVue.Test
 
   test "authenticated mission operators can navigate the fleet planning descriptor surfaces" do
     user = TestFixtures.persist_user!()
@@ -92,22 +92,14 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
              OpsConsole.surface_query_contract("fleet_planning_run")
   end
 
-  defp assert_surface(view, id, surface_id, mission, query_params) do
-    assert has_element?(view, "##{id}.contents")
-    vue = Test.get_vue(view, id: id)
-    assert vue.component == "FederatedFullPageSurface"
-    assert vue.id == id
-    assert vue.class == "contents"
-    assert vue.ssr == false
-    assert vue.handlers == %{}
-
-    assert vue.props == %{
-             "application_key" => "ops_console",
-             "host_scope" => "mission",
-             "mission_id" => mission.mission_id,
-             "query_params" => query_params,
-             "surface_id" => surface_id
-           }
+  defp assert_surface(view, _id, surface_id, mission, query_params) do
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => "ops_console",
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => query_params,
+      "surface_id" => surface_id
+    })
   end
 
   defp service_scope do

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { FederatedApplicationProps } from "@cadence/plugin-sdk";
-import { CButton, CStatePanel, CStatus } from "@cadence/ui";
+import { CadenceButton, CadenceStatePanel, CadenceStatus } from "@cadence/ui";
 import { onMounted, ref } from "vue";
 
 interface ProbeSnapshot {
@@ -41,18 +41,20 @@ async function loadSnapshot(): Promise<void> {
 
 <template>
   <div class="probe-app">
-    <CStatePanel
+    <CadenceStatePanel
       v-if="loading"
       title="Interrogating host contracts"
       description="The second independent remote is requesting a scoped host snapshot."
       tone="loading"
     />
-    <CStatePanel v-else-if="!snapshot" title="Contract snapshot unavailable" tone="error">
+    <CadenceStatePanel v-else-if="!snapshot" title="Contract snapshot unavailable" tone="error">
       <p>{{ error }}</p>
       <template #action>
-        <CButton id="retry-contract-probe" size="sm" @click="loadSnapshot">Retry query</CButton>
+        <CadenceButton id="retry-contract-probe" size="sm" @click="loadSnapshot"
+          >Retry query</CadenceButton
+        >
       </template>
-    </CStatePanel>
+    </CadenceStatePanel>
     <template v-else>
       <section class="probe-hero">
         <div>
@@ -69,7 +71,7 @@ async function loadSnapshot(): Promise<void> {
       <section class="probe-grid" aria-label="Runtime contract checks">
         <article v-for="(check, index) in snapshot.checks" :key="check.id">
           <span>0{{ index + 1 }}</span>
-          <CStatus tone="nominal" pulse>{{ check.label }}</CStatus>
+          <CadenceStatus tone="nominal" pulse>{{ check.label }}</CadenceStatus>
           <small>VERIFIED BY HOST QUERY</small>
         </article>
       </section>
@@ -96,10 +98,8 @@ async function loadSnapshot(): Promise<void> {
 .probe-app {
   min-height: 467px;
   padding: 34px;
-  color: var(--cadence-color-text);
-  background:
-    linear-gradient(120deg, rgb(70 217 208 / 4%), transparent 42%),
-    var(--cadence-color-surface-inset);
+  color: var(--color-base-content);
+  background: linear-gradient(120deg, var(--surface-raised), transparent 42%), var(--surface-inset);
 }
 
 .probe-hero {
@@ -108,27 +108,27 @@ async function loadSnapshot(): Promise<void> {
   gap: 40px;
   align-items: start;
   padding-bottom: 34px;
-  border-bottom: 1px solid var(--cadence-color-border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .probe-hero p,
 .probe-evidence span,
 .probe-grid small {
   margin: 0;
-  color: var(--cadence-color-text-muted);
-  font-family: var(--cadence-font-mono);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 620;
   letter-spacing: 0.1em;
 }
 
 .probe-hero p {
-  color: var(--cadence-color-signal);
+  color: var(--color-action);
 }
 
 .probe-hero h2 {
   margin: 10px 0 13px;
-  color: var(--cadence-color-text-strong);
+  color: var(--text-bright);
   font-size: clamp(28px, 5vw, 46px);
   font-weight: 590;
   letter-spacing: -0.045em;
@@ -137,14 +137,14 @@ async function loadSnapshot(): Promise<void> {
 .probe-hero div > span {
   display: block;
   max-width: 700px;
-  color: var(--cadence-color-text-secondary);
+  color: var(--text-subtle);
   font-size: 13px;
   line-height: 1.6;
 }
 
 .probe-hero > strong {
-  color: rgb(70 217 208 / 20%);
-  font-family: var(--cadence-font-mono);
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
   font-size: 76px;
   font-weight: 400;
   line-height: 0.9;
@@ -154,29 +154,29 @@ async function loadSnapshot(): Promise<void> {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   margin-top: 28px;
-  border: 1px solid var(--cadence-color-border);
+  border: 1px solid var(--border-default);
 }
 
 .probe-grid article {
   display: grid;
   min-height: 126px;
   padding: 18px;
-  background: rgb(255 255 255 / 1.5%);
+  background: var(--surface-raised);
 }
 
 .probe-grid article + article {
-  border-left: 1px solid var(--cadence-color-border);
+  border-left: 1px solid var(--border-default);
 }
 
 .probe-grid article > span {
-  color: var(--cadence-color-text-muted);
-  font-family: var(--cadence-font-mono);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
   font-size: 10px;
 }
 
 .probe-grid .cui-status {
   align-self: end;
-  color: var(--cadence-color-text);
+  color: var(--color-base-content);
   font-size: 12px;
 }
 
@@ -195,13 +195,13 @@ async function loadSnapshot(): Promise<void> {
   display: grid;
   gap: 7px;
   padding-left: 12px;
-  border-left: 2px solid var(--cadence-color-signal);
+  border-left: 2px solid var(--color-action);
 }
 
 .probe-evidence strong {
   overflow: hidden;
-  color: var(--cadence-color-text-secondary);
-  font-family: var(--cadence-font-mono);
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 520;
   text-overflow: ellipsis;
@@ -215,7 +215,7 @@ async function loadSnapshot(): Promise<void> {
   }
 
   .probe-grid article + article {
-    border-top: 1px solid var(--cadence-color-border);
+    border-top: 1px solid var(--border-default);
     border-left: 0;
   }
 

@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from "vue";
-import CadencePopover from "./ui/reka/CadencePopover.vue";
+import CadencePopover from "@cadence/ui/CadencePopover.vue";
 
 const props = defineProps({
   presentation: { type: Object, required: true },

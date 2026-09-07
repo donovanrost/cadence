@@ -11,7 +11,7 @@ defmodule CadenceWeb.AdminLiveTest do
   alias Cadence.Accounts.{Authentication, Password, User, UserLocalCredentialRow, UserRow}
   alias Cadence.Ids
   alias Cadence.Repo
-  alias LiveVue.Test
+  alias CadenceWeb.HostTransportTestSupport
 
   setup %{conn: conn} do
     issued_session = issue_platform_admin_session!()
@@ -111,24 +111,8 @@ defmodule CadenceWeb.AdminLiveTest do
     end
   end
 
-  defp assert_admin_surface(conn, path, id, surface_id, opts \\ []) do
+  defp assert_admin_surface(conn, path, _id, surface_id, opts \\ []) do
     {:ok, view, _html} = live(conn, path)
-
-    if page_id = Keyword.get(opts, :page_id) do
-      assert has_element?(view, "##{page_id}")
-    end
-
-    assert has_element?(view, "##{id}")
-    vue = Test.get_vue(view, id: id)
-
-    assert vue.component == "FederatedFullPageSurface"
-    assert vue.id == id
-    assert vue.ssr == false
-    assert vue.handlers == %{}
-
-    if class = Keyword.get(opts, :class) do
-      assert vue.class == class
-    end
 
     expected_props = %{
       "application_key" => "organization_admin",
@@ -136,11 +120,11 @@ defmodule CadenceWeb.AdminLiveTest do
       "host_scope" => "admin"
     }
 
-    assert vue.props ==
-             Map.merge(expected_props, query_props(Keyword.get(opts, :query_params, %{})))
+    HostTransportTestSupport.assert_context(
+      view,
+      Map.merge(expected_props, query_props(Keyword.get(opts, :query_params, %{})))
+    )
   end
-
-  defp query_props(%{} = query_params) when map_size(query_params) == 0, do: %{}
 
   defp query_props(query_params), do: %{"query_params" => query_params}
 

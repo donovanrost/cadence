@@ -9,17 +9,18 @@ defmodule Cadence.Applications.ActionContractLedgerTest do
     ledgers = ActionContractLedger.ledgers()
 
     assert map_size(ledgers) == 3
-    assert length(ledgers.declared) == 41
+    assert length(ledgers.declared) == 60
     assert ledgers.declared == ledgers.provider
     assert ledgers.declared == ledgers.registry
-    assert length(Enum.uniq(ledgers.declared)) == 41
+    assert length(Enum.uniq(ledgers.declared)) == 60
 
     assert ledgers.declared
            |> Enum.frequencies_by(&elem(&1, 0)) == %{
              "mission_catalog" => 13,
              "spacecraft" => 12,
              "telemetry_decom" => 4,
-             "comms" => 12
+             "comms" => 12,
+             "organization_admin" => 19
            }
   end
 

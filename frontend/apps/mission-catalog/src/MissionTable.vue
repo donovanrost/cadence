@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue";
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
 
 type MissionRow = {
   id: string;

@@ -14,39 +14,21 @@ defmodule CadenceWeb.OrganizationInvitationControllerTest do
 
     {:ok, view, _html} = live(conn, path)
     vue = invitation_vue(view)
-    presentation = vue.props["presentation"]
+    presentation = vue.props["page"]
 
-    assert presentation["root"]["attrs"]["id"] == "organization-invitation"
+    assert presentation["available"] == true
     assert presentation["error"] == nil
-
-    assert presentation["form"]["attrs"]["id"] ==
-             "organization-invitation-acceptance-form"
-
-    assert presentation["form"]["attrs"]["action"] == path
-    assert presentation["form"]["attrs"]["method"] == "post"
-
-    assert Enum.map(presentation["form"]["fields"], & &1["input"]["attrs"]["name"]) == [
-             "organization_invitation_acceptance[display_name]",
-             "organization_invitation_acceptance[password]",
-             "organization_invitation_acceptance[password_confirmation]"
-           ]
-
-    [csrf] = presentation["form"]["hidden_fields"]
-    assert csrf["attrs"]["name"] == "_csrf_token"
-    assert csrf["attrs"]["value"] != ""
+    assert presentation["token"] == String.replace_prefix(path, "/invitations/", "")
+    assert presentation["csrf_token"] != ""
   end
 
   test "GET preserves not-found status and unavailable presentation", %{conn: conn} do
     response = get(conn, "/invitations/not-a-valid-invitation-token")
     html = html_response(response, 404)
-    presentation = invitation_vue(html).props["presentation"]
+    presentation = invitation_vue(html).props["page"]
 
-    assert presentation["error"]["attrs"]["id"] == "organization-invitation-error"
-    assert presentation["error"]["text"] == "This invitation link is not valid."
-    assert presentation["form"] == nil
-
-    assert presentation["header"]["heading"]["text"] ==
-             "This invitation is no longer available."
+    assert presentation["error"] == "This invitation link is not valid."
+    assert presentation["available"] == false
   end
 
   test "GET preserves gone status for expired and unavailable invitations", %{conn: conn} do
@@ -59,7 +41,7 @@ defmodule CadenceWeb.OrganizationInvitationControllerTest do
     expired_response = get(conn, expired.path)
     expired_presentation = expired_response |> html_response(410) |> invitation_vue()
 
-    assert expired_presentation.props["presentation"]["error"]["text"] ==
+    assert expired_presentation.props["page"]["error"] ==
              "This invitation link has expired."
 
     unavailable = invitation_fixture()
@@ -71,7 +53,7 @@ defmodule CadenceWeb.OrganizationInvitationControllerTest do
     unavailable_response = get(recycle(conn), unavailable.path)
     unavailable_presentation = unavailable_response |> html_response(410) |> invitation_vue()
 
-    assert unavailable_presentation.props["presentation"]["error"]["text"] ==
+    assert unavailable_presentation.props["page"]["error"] ==
              "This invitation can no longer be used."
   end
 
@@ -88,15 +70,13 @@ defmodule CadenceWeb.OrganizationInvitationControllerTest do
       })
 
     presentation = response |> html_response(422) |> invitation_vue() |> Map.fetch!(:props)
-    presentation = presentation["presentation"]
+    presentation = presentation["page"]
 
-    assert presentation["error"]["text"] == "Password confirmation does not match."
-    assert presentation["form"]["attrs"]["action"] == path
-
-    [display_name, password, confirmation] = presentation["form"]["fields"]
-    assert display_name["input"]["attrs"]["value"] == "Flight Operator"
-    refute Map.has_key?(password["input"]["attrs"], "value")
-    refute Map.has_key?(confirmation["input"]["attrs"], "value")
+    assert presentation["error"] == "Password confirmation does not match."
+    assert presentation["token"] == String.replace_prefix(path, "/invitations/", "")
+    assert presentation["display_name"] == "Flight Operator"
+    refute Map.has_key?(presentation, "password")
+    refute Map.has_key?(presentation, "password_confirmation")
   end
 
   test "POST preserves malformed payload status and hides the unavailable form", %{conn: conn} do
@@ -104,10 +84,10 @@ defmodule CadenceWeb.OrganizationInvitationControllerTest do
 
     response = post(conn, path, %{"organization_invitation_acceptance" => "invalid"})
     presentation = response |> html_response(422) |> invitation_vue() |> Map.fetch!(:props)
-    presentation = presentation["presentation"]
+    presentation = presentation["page"]
 
-    assert presentation["error"]["text"] == "Submit a valid invitation acceptance form."
-    assert presentation["form"] == nil
+    assert presentation["error"] == "Submit a valid invitation acceptance form."
+    assert presentation["available"] == false
   end
 
   defp invitation_fixture do
@@ -135,7 +115,7 @@ defmodule CadenceWeb.OrganizationInvitationControllerTest do
     assert vue.component == "OrganizationInvitationPage"
     assert vue.ssr == false
     assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    assert vue.props |> Map.keys() |> Enum.sort() == ["presentation"]
+    assert vue.props |> Map.keys() |> Enum.sort() == ["page"]
     assert vue.handlers == %{}
 
     vue

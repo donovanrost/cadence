@@ -1,7 +1,7 @@
 <script lang="ts">
 import { Fragment, cloneVNode, defineComponent, h, isVNode, type VNodeChild } from "vue";
 
-const frameClass = "mx-auto max-w-[100rem] space-y-5 p-5 lg:p-7";
+const frameClass = "space-y-6";
 
 const flattenSlotChildren = (
   children: VNodeChild[],

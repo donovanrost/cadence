@@ -1,4 +1,4 @@
-import type { Attributes } from "./ui/components/widget_form_field";
+import type { Attributes } from "@cadence/ui/widget_form_field";
 
 export type IconPresentation = {
   name: string;

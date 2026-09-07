@@ -1,10 +1,9 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { onMounted, reactive, ref, watch } from "vue";
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
-import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
+import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
+import CadenceHoverTableRow from "@cadence/ui/CadenceHoverTableRow.vue";
 
 type Organization = {
   organization_id: string;
@@ -98,57 +97,36 @@ const issueServiceIdentity = () => {
 
 <template>
   <main id="admin-organization-detail" class="space-y-6">
-    <CadencePageHeaderFrame variant="compact">
-      <CadenceBreadcrumbs>
+    <CadencePageHeading
+      :breadcrumbs="[
+        { label: 'Platform Admin', href: navigation.platform_admin_href },
+        { label: 'Organizations', href: navigation.organizations_href },
+        { label: organization.display_name },
+      ]"
+    >
+      <template #title>{{ organization.display_name }}</template>
+      <template #description>{{ organization.slug }}</template>
+      <template #actions
+        ><form
+          id="open-organization-form"
+          :action="navigation.open_organization_action"
+          method="post"
+        >
+          <input type="hidden" name="_csrf_token" :value="csrfToken" />
+          <input type="hidden" name="_method" value="put" />
+          <input type="hidden" name="organization_id" :value="organization.organization_id" />
+          <button type="submit" class="btn btn-secondary btn-sm">Open organization</button>
+        </form>
         <a
-          :href="navigation.platform_admin_href"
+          id="admin-organization-invite-link"
+          :href="navigation.invite_href"
           data-phx-link="redirect"
           data-phx-link-state="push"
-          class="transition-colors hover:text-primary"
-          >Platform Admin</a
-        >
-        <span class="text-base-content/20" aria-hidden="true">/</span>
-        <a
-          :href="navigation.organizations_href"
-          data-phx-link="redirect"
-          data-phx-link-state="push"
-          class="transition-colors hover:text-primary"
-          >Organizations</a
-        >
-        <span class="text-base-content/20" aria-hidden="true">/</span>
-        <span class="text-primary/90">{{ organization.display_name }}</span>
-      </CadenceBreadcrumbs>
-
-      <div class="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 class="text-2xl font-bold tracking-tight text-base-content">
-            {{ organization.display_name }}
-          </h1>
-          <p class="mt-1 font-mono text-sm text-base-content/70">{{ organization.slug }}</p>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2">
-          <form
-            id="open-organization-form"
-            :action="navigation.open_organization_action"
-            method="post"
-          >
-            <input type="hidden" name="_csrf_token" :value="csrfToken" />
-            <input type="hidden" name="_method" value="put" />
-            <input type="hidden" name="organization_id" :value="organization.organization_id" />
-            <button type="submit" class="btn btn-secondary btn-sm">Open organization</button>
-          </form>
-          <a
-            id="admin-organization-invite-link"
-            :href="navigation.invite_href"
-            data-phx-link="redirect"
-            data-phx-link-state="push"
-            class="btn btn-primary btn-sm"
-            >Invite User</a
-          >
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
+          class="btn btn-primary btn-sm"
+          >Invite User</a
+        ></template
+      >
+    </CadencePageHeading>
 
     <div class="grid gap-6 xl:grid-cols-2">
       <section id="admin-organization-members" aria-labelledby="admin-organization-members-title">

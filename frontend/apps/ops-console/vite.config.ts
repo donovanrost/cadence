@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import { federation } from "@module-federation/vite";
 import vue from "@vitejs/plugin-vue";
 import { isAbsolute, resolve } from "node:path";
@@ -73,8 +74,11 @@ export default defineConfig(({ mode }) => {
       environment: "happy-dom",
     },
     plugins: lazyPlugins(() => [
+      tailwindcss(),
       vue(),
-      federation(releaseBuild ? { ...releaseFederationConfig, publicPath: "auto" } : federationConfig),
+      federation(
+        releaseBuild ? { ...releaseFederationConfig, publicPath: "auto" } : federationConfig,
+      ),
       releaseOutputPlugin(),
     ]),
   };

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { defineComponent, h, type Component, type PropType } from "vue";
+import { defineComponent, h, type Component, type PropType, type VNode } from "vue";
 import type { PresentationNode } from "./presentation_types";
 
 const CadencePresentationNode: Component = defineComponent({
@@ -8,7 +8,7 @@ const CadencePresentationNode: Component = defineComponent({
     node: { type: Object as PropType<PresentationNode>, required: true },
   },
   setup(componentProps) {
-    return () =>
+    return (): VNode =>
       h(
         componentProps.node.tag,
         { ...componentProps.node.attrs, key: componentProps.node.key },

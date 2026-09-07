@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import CadenceDefinitionListPanel from "./ui/components/CadenceDefinitionListPanel.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceDefinitionListPanel from "@cadence/ui/CadenceDefinitionListPanel.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
+import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
 import { useOpsVue } from "./ops-events";
 import { onBeforeUnmount, reactive, ref, watch } from "vue";
 
@@ -457,19 +458,11 @@ onBeforeUnmount(() => {
     :data-explore-selected-sample-id="selectedSampleId"
   >
     <div class="flex-1 min-w-0 overflow-y-auto">
-      <div class="mx-auto max-w-7xl px-6 py-8">
-        <div
-          class="flex flex-col gap-3 border-b border-base-300/60 pb-5 md:flex-row md:items-end md:justify-between"
-        >
-          <div>
-            <div class="flex flex-wrap items-center gap-2">
-              <h1 class="text-lg font-semibold text-base-content">{{ page.heading }}</h1>
-              <span v-if="page.realm" class="badge badge-xs badge-outline">{{ page.realm }}</span>
-              <span v-if="page.time_mode" class="badge badge-xs">{{ page.time_mode }}</span>
-            </div>
-            <p class="mt-1 font-mono text-xs text-base-content/60">{{ page.point_label }}</p>
-          </div>
-          <div class="flex flex-wrap gap-2">
+      <div class="">
+        <CadencePageHeading>
+          <template #title>{{ page.heading }}</template>
+          <template #description>{{ page.point_label }}</template>
+          <template #actions>
             <button
               :id="clipboard.button_id"
               type="button"
@@ -481,17 +474,15 @@ onBeforeUnmount(() => {
               @click="copyInvestigationLink"
             >
               <span :class="[clipboard.icon, clipboard.icon_class]" aria-hidden="true"></span>
-              {{ clipboard.label }}
-            </button>
-            <span class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+              {{ clipboard.label }}</button
+            ><span class="sr-only" role="status" aria-live="polite" aria-atomic="true">
               <template v-if="clipboardFeedback === 'copied'">{{
                 clipboard.copied_message
               }}</template>
               <template v-else-if="clipboardFeedback === 'failed'">{{
                 clipboard.failed_message
-              }}</template>
-            </span>
-            <a
+              }}</template> </span
+            ><a
               v-if="navigation.back_to_dashboard"
               :id="navigation.back_to_dashboard.id"
               :href="navigation.back_to_dashboard.href"
@@ -504,9 +495,14 @@ onBeforeUnmount(() => {
                 aria-hidden="true"
               ></span>
               {{ navigation.back_to_dashboard.label }}
-            </a>
-          </div>
-        </div>
+            </a></template
+          >
+
+          <template #metadata
+            ><span v-if="page.realm" class="badge badge-xs badge-outline">{{ page.realm }}</span>
+            <span v-if="page.time_mode" class="badge badge-xs">{{ page.time_mode }}</span></template
+          ></CadencePageHeading
+        >
 
         <section
           id="telemetry-explore-questions"

@@ -17,17 +17,15 @@ defmodule Cadence.Applications.ActionContractLedger do
   @type binding :: {binary(), pos_integer(), binary(), pos_integer(), binary()}
 
   @contributors [MissionCatalog, Spacecraft, TelemetryDecom, Comms]
-  @optional_contributors [CadenceWeb.ApplicationContributions.OrganizationAdmin]
+  @additional_contributors [Cadence.Applications.OrganizationAdmin]
   @max_bindings 128
 
-  @compile {:no_warn_undefined,
-            {CadenceWeb.ApplicationContributions.OrganizationAdmin, :definition, 0}}
-  @compile {:no_warn_undefined,
-            {CadenceWeb.ApplicationContributions.OrganizationAdmin, :action_provider, 0}}
+  @compile {:no_warn_undefined, {Cadence.Applications.OrganizationAdmin, :definition, 0}}
+  @compile {:no_warn_undefined, {Cadence.Applications.OrganizationAdmin, :action_provider, 0}}
 
   @spec contributors() :: [module()]
   def contributors do
-    @contributors ++ Enum.filter(@optional_contributors, &Code.ensure_loaded?/1)
+    @contributors ++ @additional_contributors
   end
 
   @doc "Returns the rows declared by the authoritative application modules."

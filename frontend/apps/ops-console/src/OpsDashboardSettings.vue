@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadenceDashboardSettingsSectionFrame from "./ui/components/CadenceDashboardSettingsSectionFrame.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
+import CadenceDashboardSettingsSectionFrame from "@cadence/ui/CadenceDashboardSettingsSectionFrame.vue";
 import { reactive, watch } from "vue";
 
 type EmptyState = {
@@ -301,29 +301,23 @@ const archiveDashboard = () => {
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <CadencePageHeaderFrame variant="ops">
-      <div class="mx-auto flex max-w-5xl items-end justify-between gap-4">
-        <div>
-          <p class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-primary/70">
-            {{ page.header.eyebrow }}
-          </p>
-          <h1 class="mt-1 text-2xl font-bold tracking-tight">{{ page.header.heading }}</h1>
-          <p class="mt-2 text-sm text-base-content/60">
-            {{ page.header.copy }}
-          </p>
-        </div>
-        <a
+    <CadencePageHeading>
+      <template #title>{{ page.header.heading }}</template>
+      <template #eyebrow>{{ page.header.eyebrow }}</template>
+      <template #description>{{ page.header.copy }}</template>
+      <template #actions
+        ><a
           :id="page.header.viewer.id"
           :href="page.header.viewer.href"
           data-phx-link="redirect"
           data-phx-link-state="push"
           class="btn btn-ghost btn-sm"
           >{{ page.header.viewer.label }}</a
-        >
-      </div>
-    </CadencePageHeaderFrame>
+        ></template
+      >
+    </CadencePageHeading>
 
-    <div class="mx-auto grid max-w-5xl gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:p-7">
+    <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <div class="space-y-5">
         <form
           :id="settings_form.id"

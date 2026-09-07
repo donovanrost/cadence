@@ -6,8 +6,9 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
   alias Cadence.Applications.{ApplicationInstallations, HostContext}
   alias Cadence.Auth.Scope
   alias Cadence.Missions.Mission
+  alias Cadence.Reads.ApplicationSurfaces.Comms, as: CommsSurface
   alias Cadence.Repo
-  alias CadenceWeb.{ApplicationHostCatalog, CommsOverviewPresenter, TestFixtures}
+  alias CadenceWeb.{ApplicationHostCatalog, TestFixtures}
 
   @catalog_suffix "/api/cadence/application-host/v1/missions"
 
@@ -50,7 +51,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     {:ok, view, _html} =
       live(member_conn, "/missions/#{mission.mission_id}/comms")
 
-    assert has_element?(view, "#comms-overview-component")
+    assert has_element?(view, "#application-shell")
   end
 
   test "organization-scope host shells retain the authenticated browser gate", %{conn: conn} do
@@ -427,7 +428,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
         "actor" => %{"displayName" => "Ignored actor", "permissions" => ["admin"]}
       })
 
-    presentation = CommsOverviewPresenter.build(scope, mission)
+    assert {:ok, presentation} = CommsSurface.overview_presentation(scope, mission)
 
     response = json_response(query_response, 200)
 
@@ -439,7 +440,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     assert Jason.decode!(Jason.encode!(presentation)) == response["presentation"]
   end
 
-  test "scoped Comms queries preserve the legacy presenter and identity", %{conn: _conn} do
+  test "scoped Comms queries preserve the core read contract and identity", %{conn: _conn} do
     {member_conn, organization, mission, scope} = signed_in_scope_and_mission()
     {catalog_conn, catalog} = fetch_catalog(member_conn, mission)
     valid_scope = scope_document(organization, mission)
@@ -455,7 +456,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
         "scope" => valid_scope
       })
 
-    presentation = CommsOverviewPresenter.build(scope, mission)
+    assert {:ok, presentation} = CommsSurface.overview_presentation(scope, mission)
 
     assert json_response(response, 200) == %{
              "queryVersion" => 1,

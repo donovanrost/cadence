@@ -61,7 +61,7 @@ describe("Comms canonical federated application", () => {
       context,
     });
     expect(wrapper.find("#comms-application-error").exists()).toBe(false);
-    expect(wrapper.find(".space-y-6").exists()).toBe(true);
+    expect(wrapper.find(`[data-surface-id="${surfaceId}"]`).exists()).toBe(true);
     wrapper.unmount();
   });
 

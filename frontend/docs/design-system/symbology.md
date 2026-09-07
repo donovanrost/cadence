@@ -27,8 +27,7 @@ Cadence will retain the durable part of Astro UXDS symbology:
 - symbol usage is governed as a learned operator language, not chosen locally
   for decoration.
 
-Cadence will redraw the glyphs and apply its own operational-monochrome visual
-language. It will not import Astro Web Components, icon packages, palettes,
+Cadence will redraw the glyphs and apply its production visual language. It will not import Astro Web Components, icon packages, palettes,
 typography, spacing, or compliance claims.
 
 The central rule is:
@@ -356,7 +355,7 @@ requires a new semantic distinction, not merely a different screen context.
 The first implementation proves the status vocabulary in Storybook before a
 large asset package is created:
 
-- `CStatusSymbol` renders only a supplied status role and accessible contract.
+- `CadenceStatusSymbol` renders only a supplied status role and accessible contract.
   Its operational-vocabulary story shows the six retained shapes together;
   separate stories verify supported sizes, monochrome recognition, and the
   Cadence `unknown` extension.
@@ -370,28 +369,17 @@ Names and APIs remain provisional until scenario stories prove them. Status
 geometry and role meaning are not provisional. Domain-specific glyphs remain
 with their owning application until repeated use justifies promotion.
 
-The current proof keeps that boundary explicit:
-
-- `frontend/apps/storybook/src/SubjectGlyph.vue` owns the provisional spacecraft,
-  ground-station, telemetry-stream, and command-path artwork.
-- `frontend/apps/storybook/src/MonitoringSymbol.vue` composes one subject with a
-  `CStatusSymbol`, visible state text, observed time, and keyboard-operable
-  evidence disclosure.
-- `frontend/apps/storybook/src/MissionMonitoringRail.vue` provides mission scope
-  and UTC context without collapsing the subject assessments into an aggregate
-  health claim.
-- `frontend/apps/storybook/src/monitoring-fixtures.ts` defines deterministic
-  nominal, standby, caution, serious, critical, off, and unknown situations.
-
-These application-owned components must not be exported from `@cadence/ui`
-until a second real composition demonstrates the same contract. The status
-geometry remains the only shared primitive in this slice.
+The shared `CadenceStatusSymbol` component and its colocated stories implement the
+retained status vocabulary. The earlier Storybook-only subject artwork, monitoring
+composition, and mission rail were experimental fixtures and have been removed.
+Subject, monitoring, and notification compositions above remain proposed boundaries;
+future implementations must use production components and tokens.
 
 ## Verification
 
 Every public status symbol and monitoring symbol must be tested in:
 
-- dark and light themes;
+- every supported theme and skin;
 - monochrome and grayscale;
 - all supported sizes;
 - every status role, including unknown and intentional status absence;

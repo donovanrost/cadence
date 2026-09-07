@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
 
 type Breadcrumb = {
   label: string;
@@ -65,36 +64,14 @@ const valueClasses: Record<DetailRow["style"], string> = {
 
 <template>
   <div id="catalog-revision-show-surface" class="space-y-6">
-    <CadencePageHeaderFrame variant="compact">
-      <div>
-        <CadenceBreadcrumbs>
-          <template
-            v-for="(breadcrumb, index) in navigation.breadcrumbs"
-            :key="`${index}-${breadcrumb.label}`"
-          >
-            <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-            <span v-if="breadcrumb.href === null" class="text-primary/90">
-              {{ breadcrumb.label }}
-            </span>
-            <a
-              v-else
-              :href="breadcrumb.href"
-              data-phx-link="redirect"
-              data-phx-link-state="push"
-              class="transition-colors hover:text-primary"
-              >{{ breadcrumb.label }}</a
-            >
-          </template>
-        </CadenceBreadcrumbs>
-
-        <h1 class="mt-2 text-2xl font-bold tracking-tight text-base-content">
-          {{ revision.title }}
-          <span class="ml-3 font-mono text-base text-base-content/60">
-            {{ revision.number_label }}
-          </span>
-        </h1>
-      </div>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading :breadcrumbs="navigation.breadcrumbs">
+      <template #title>{{ revision.title }} </template>
+      <template #metadata
+        ><span>
+          {{ revision.number_label }}
+        </span></template
+      >
+    </CadencePageHeading>
 
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <CadenceCard

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
 
 type DefinitionItem = {
   label: string;
@@ -30,18 +31,13 @@ defineProps<{ snapshot: DashboardSnapshot }>();
 </script>
 
 <template>
-  <CadenceOpsViewport :id="snapshot.id" class="p-6">
-    <div class="mx-auto max-w-4xl space-y-5">
-      <header class="border border-primary/30 bg-base-200/30 p-6">
-        <p class="hud-label">{{ snapshot.eyebrow }}</p>
-        <h1 class="mt-2 text-2xl font-semibold">{{ snapshot.name }}</h1>
-        <p :id="snapshot.policy.id" class="mt-2 text-sm text-base-content/60">
-          {{ snapshot.policy.text }}
-        </p>
-        <p class="mt-3 text-xs text-warning">
-          {{ snapshot.warning }}
-        </p>
-      </header>
+  <CadenceOpsViewport :id="snapshot.id" class="">
+    <div class="space-y-5">
+      <CadencePageHeading>
+        <template #title>{{ snapshot.name }}</template>
+        <template #eyebrow>{{ snapshot.eyebrow }}</template>
+        <template #description>{{ snapshot.policy.text }} {{ snapshot.warning }}</template>
+      </CadencePageHeading>
       <section :id="snapshot.definition.id" class="grid gap-3 sm:grid-cols-3">
         <div
           v-for="item in snapshot.definition.items"

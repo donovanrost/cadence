@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue";
+import CadenceValidationMessage from "@cadence/ui/CadenceValidationMessage.vue";
 
 type Attributes = Record<string, string>;
 

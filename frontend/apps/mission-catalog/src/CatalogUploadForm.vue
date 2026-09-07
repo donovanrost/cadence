@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
-import CadenceField from "./ui/components/CadenceField.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
 
 type UploadError = {
   ref: string;

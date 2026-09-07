@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { pageContentAttrs } from "@cadence/ui/page-chrome";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { reactive, watch } from "vue";
 import ClipboardButton from "./ClipboardButton.vue";
 
@@ -152,28 +154,22 @@ const clearSelection = () => emit("clear_timeline_selection", {});
 </script>
 
 <template>
-  <main v-bind="props.presentation.root.attrs">
+  <main v-bind="pageContentAttrs(props.presentation.root.attrs)">
     <div v-bind="props.presentation.container.attrs">
-      <header v-bind="props.presentation.header.attrs">
-        <div v-bind="props.presentation.header.content.attrs">
-          <p v-bind="props.presentation.header.eyebrow.attrs">
-            {{ props.presentation.header.eyebrow.text }}
-          </p>
-          <h1 v-bind="props.presentation.header.title.attrs">
-            {{ props.presentation.header.title.text }}
-          </h1>
-          <p v-bind="props.presentation.header.description.attrs">
-            {{ props.presentation.header.description.text }}
-          </p>
-        </div>
-        <a
-          v-if="props.presentation.header.return_link"
-          v-bind="props.presentation.header.return_link.attrs"
+      <CadencePageHeading>
+        <template #title>{{ props.presentation.header.title.text }}</template>
+        <template #eyebrow>{{ props.presentation.header.eyebrow.text }}</template>
+        <template #description>{{ props.presentation.header.description.text }}</template>
+        <template #actions
+          ><a
+            v-if="props.presentation.header.return_link"
+            v-bind="props.presentation.header.return_link.attrs"
+          >
+            <span v-bind="props.presentation.header.return_link.icon.attrs"></span>
+            {{ props.presentation.header.return_link.text }}
+          </a></template
         >
-          <span v-bind="props.presentation.header.return_link.icon.attrs"></span>
-          {{ props.presentation.header.return_link.text }}
-        </a>
-      </header>
+      </CadencePageHeading>
 
       <form v-bind="props.presentation.filters.attrs" @submit.prevent="applyFilters">
         <div

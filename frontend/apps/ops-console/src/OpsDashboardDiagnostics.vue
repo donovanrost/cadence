@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { pageContentAttrs } from "@cadence/ui/page-chrome";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import ClipboardButton from "./ClipboardButton.vue";
 
 type RawAttrs = Record<string, string>;
@@ -94,25 +96,17 @@ const props = defineProps<{
 </script>
 
 <template>
-  <section v-bind="props.presentation.root.attrs">
-    <header v-bind="props.presentation.header.attrs">
-      <div v-bind="props.presentation.header.inner.attrs">
-        <div v-bind="props.presentation.header.content.attrs">
-          <p v-bind="props.presentation.header.eyebrow.attrs">
-            {{ props.presentation.header.eyebrow.text }}
-          </p>
-          <h1 v-bind="props.presentation.header.heading.attrs">
-            {{ props.presentation.header.heading.text }}
-          </h1>
-          <p v-bind="props.presentation.header.copy.attrs">
-            {{ props.presentation.header.copy.text }}
-          </p>
-        </div>
-        <a v-bind="props.presentation.header.viewer.attrs">
+  <section v-bind="pageContentAttrs(props.presentation.root.attrs)">
+    <CadencePageHeading>
+      <template #title>{{ props.presentation.header.heading.text }}</template>
+      <template #eyebrow>{{ props.presentation.header.eyebrow.text }}</template>
+      <template #description>{{ props.presentation.header.copy.text }}</template>
+      <template #actions
+        ><a v-bind="props.presentation.header.viewer.attrs">
           {{ props.presentation.header.viewer.text }}
-        </a>
-      </div>
-    </header>
+        </a></template
+      >
+    </CadencePageHeading>
 
     <div v-bind="props.presentation.content.attrs">
       <nav v-bind="props.presentation.collections.attrs">

@@ -1,15 +1,15 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { onBeforeUnmount, ref, watch } from "vue";
 
 import ApplicationDiagnostics from "./application_host/ApplicationDiagnostics.vue";
 import ApplicationNavigation from "./application_host/ApplicationNavigation.vue";
 import ApplicationStats from "./application_host/ApplicationStats.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
-import CadenceValidationMessage from "./ui/components/CadenceValidationMessage.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
+import CadencePaginationFrame from "@cadence/ui/CadencePaginationFrame.vue";
+import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
+import CadenceValidationMessage from "@cadence/ui/CadenceValidationMessage.vue";
 import type {
   Diagnostics,
   Navigation,
@@ -445,17 +445,14 @@ const packetRailClasses: Record<PacketGroupState, string> = {
     <ApplicationNavigation v-if="navigation" :navigation="navigation" />
 
     <div v-if="declarative_surface" :id="declarative_surface.id" class="space-y-6">
-      <CadencePageHeaderFrame variant="compact">
-        <h1 class="text-2xl font-bold tracking-tight text-base-content">
-          {{ declarative_surface.page.title }}
-        </h1>
-        <p
-          v-if="declarative_surface.page.subtitle"
-          class="mt-1 max-w-3xl text-sm text-base-content/70"
+      <CadencePageHeading>
+        <template #title>{{ declarative_surface.page.title }}</template>
+        <template #description
+          ><template v-if="declarative_surface.page.subtitle">{{
+            declarative_surface.page.subtitle
+          }}</template></template
         >
-          {{ declarative_surface.page.subtitle }}
-        </p>
-      </CadencePageHeaderFrame>
+      </CadencePageHeading>
 
       <aside
         v-if="declarative_surface.action_feedback"

@@ -1,4 +1,4 @@
-import "@cadence/design-tokens/base.css";
+import "./styles.css";
 import { createApp } from "vue";
 import StandaloneApp from "./StandaloneApp.vue";
 

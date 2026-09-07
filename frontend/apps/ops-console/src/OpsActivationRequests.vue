@@ -1,9 +1,8 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { ref, watch } from "vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
 
 type Page = {
   id: string;
@@ -127,16 +126,10 @@ const decide = (event: SubmitEvent) => {
 
 <template>
   <section :id="page.id" class="space-y-4">
-    <CadencePageHeaderFrame variant="compact">
-      <div>
-        <div>
-          <CadencePageTitle>
-            {{ page.heading }}
-          </CadencePageTitle>
-          <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading>
+      <template #title>{{ page.heading }}</template>
+      <template #description>{{ page.subtitle }}</template>
+    </CadencePageHeading>
 
     <CadenceCard
       :id="page.list.card_id"

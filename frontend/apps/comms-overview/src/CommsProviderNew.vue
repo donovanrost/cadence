@@ -1,12 +1,11 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { reactive, watch } from "vue";
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadenceNoticeFrame from "./ui/components/CadenceNoticeFrame.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadenceFormActions from "./ui/components/CadenceFormActions.vue";
-import CadenceFormSectionHeader from "./ui/components/CadenceFormSectionHeader.vue";
-import CadenceFormSectionFrame from "./ui/components/CadenceFormSectionFrame.vue";
+import CadenceNoticeFrame from "@cadence/ui/CadenceNoticeFrame.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
+import CadenceFormActions from "@cadence/ui/CadenceFormActions.vue";
+import CadenceFormSectionHeader from "@cadence/ui/CadenceFormSectionHeader.vue";
+import CadenceFormSectionFrame from "@cadence/ui/CadenceFormSectionFrame.vue";
 
 type Breadcrumb = {
   label: string;
@@ -207,33 +206,10 @@ const save = () => emit("save", { provider: values() });
 
 <template>
   <div :id="page.id" class="max-w-3xl space-y-6">
-    <CadencePageHeaderFrame variant="compact">
-      <div>
-        <CadenceBreadcrumbs>
-          <template
-            v-for="(breadcrumb, index) in page.breadcrumbs"
-            :key="`${index}-${breadcrumb.label}`"
-          >
-            <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-            <span v-if="breadcrumb.href === null" class="text-primary/90">
-              {{ breadcrumb.label }}
-            </span>
-            <a
-              v-else
-              :href="breadcrumb.href"
-              data-phx-link="redirect"
-              data-phx-link-state="push"
-              class="transition-colors hover:text-primary"
-              >{{ breadcrumb.label }}</a
-            >
-          </template>
-        </CadenceBreadcrumbs>
-        <h1 class="mt-2 text-2xl font-bold tracking-tight text-base-content">
-          {{ page.title }}
-        </h1>
-        <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
-      </div>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
+      <template #title>{{ page.title }}</template>
+      <template #description>{{ page.subtitle }}</template>
+    </CadencePageHeading>
 
     <div
       v-if="accounts.empty"

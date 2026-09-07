@@ -5,14 +5,13 @@ defmodule CadenceWeb.AdminModeController do
 
   alias Cadence.Auth.Scope
   alias CadenceWeb.AdminMode
-  alias CadenceWeb.AdminModeLive.Presentation
 
   def new(conn, _params) do
     if Scope.platform_admin_eligible?(conn.assigns.current_scope) do
       conn
-      |> put_layout(html: {CadenceWeb.Layouts, :auth})
+      |> put_layout(false)
       |> live_render(CadenceWeb.AdminModeLive,
-        session: live_session(conn, Presentation.build()),
+        session: live_session(conn, %{csrf_token: Plug.CSRFProtection.get_csrf_token()}),
         container: {:div, class: "contents"}
       )
     else
@@ -58,12 +57,12 @@ defmodule CadenceWeb.AdminModeController do
     |> redirect(to: ~p"/")
   end
 
-  defp live_session(conn, presentation) do
+  defp live_session(conn, page) do
     %{
       "admin_mode_expires_at" => get_session(conn, :admin_mode_expires_at),
       "current_organization_id" => get_session(conn, :current_organization_id),
       "user_session_token" => get_session(conn, :user_session_token),
-      "presentation" => presentation
+      "page" => page
     }
   end
 end

@@ -181,6 +181,8 @@ export interface HostActivityEvent {
 export type HostActivityListener = (event: HostActivityEvent) => void;
 
 export interface HostBridge {
+  /** Host-owned navigation, with native fallback for older hosts. */
+  navigate?(href: string): void;
   query<TResult>(request: HostQueryRequest): Promise<TResult>;
   execute<TInput, TResult>(request: HostActionRequest<TInput>): Promise<HostActionReceipt<TResult>>;
   subscribe(listener: HostActivityListener): () => void;

@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
+import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
 import StatusBadge from "./StatusBadge.vue";
 
 type StatusTone = "ready" | "attention" | "blocked" | "info";
@@ -107,40 +105,19 @@ defineProps<{
 
 <template>
   <div :id="page.id" class="space-y-6">
-    <CadencePageHeaderFrame variant="compact">
-      <div>
-        <div>
-          <CadenceBreadcrumbs>
-            <template
-              v-for="(breadcrumb, index) in page.header.breadcrumbs"
-              :key="breadcrumb.label + '-' + index"
-            >
-              <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-              <a
-                v-if="breadcrumb.href"
-                :href="breadcrumb.href"
-                data-phx-link="redirect"
-                data-phx-link-state="push"
-                class="hover:text-primary transition-colors"
-                >{{ breadcrumb.label }}</a
-              >
-              <span v-else class="text-primary/90">{{ breadcrumb.label }}</span>
-            </template>
-          </CadenceBreadcrumbs>
-          <CadencePageTitle>
-            {{ page.header.title }}
-            <span class="ml-3 font-mono text-base text-base-content/60">
-              <span v-if="page.header.title_suffix.set" class="mc-value-small text-base-content">{{
-                page.header.title_suffix.label
-              }}</span>
-              <span v-else class="hud-label text-warning/70">
-                {{ page.header.title_suffix.label }}
-              </span>
-            </span>
-          </CadencePageTitle>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading :breadcrumbs="page.header.breadcrumbs">
+      <template #title>{{ page.header.title }} </template>
+      <template #metadata
+        ><span>
+          <span v-if="page.header.title_suffix.set" class="mc-value-small text-base-content">{{
+            page.header.title_suffix.label
+          }}</span>
+          <span v-else class="hud-label text-warning/70">
+            {{ page.header.title_suffix.label }}
+          </span>
+        </span></template
+      >
+    </CadencePageHeading>
 
     <CadenceCard
       :id="profile_binding.id"

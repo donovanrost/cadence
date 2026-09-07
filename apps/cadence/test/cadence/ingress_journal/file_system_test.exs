@@ -237,10 +237,12 @@ defmodule Cadence.IngressJournal.FileSystemTest do
           [:cadence, :ingress_journal, :reclaim],
           [:cadence, :ingress_journal, :maintenance]
         ],
-        fn event, measurements, metadata, _config ->
-          send(test_pid, {:journal_event, event, measurements, metadata})
+        fn event, measurements, metadata, provider_binding_id ->
+          if metadata.provider_binding_id == provider_binding_id do
+            send(test_pid, {:journal_event, event, measurements, metadata})
+          end
         end,
-        nil
+        Keyword.fetch!(ctx.opts, :provider_binding_id)
       )
 
     on_exit(fn -> :telemetry.detach(handler_id) end)

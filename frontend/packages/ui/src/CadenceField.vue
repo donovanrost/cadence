@@ -5,9 +5,9 @@ const CadenceField = defineComponent({
   name: "CadenceField",
   props: {
     controlId: { type: String, required: false },
-    wrapperClass: { type: String, required: true },
+    wrapperClass: { type: String, default: "fieldset mb-3" },
     label: { type: String, required: true },
-    labelClass: { type: String, required: true },
+    labelClass: { type: String, default: "hud-label block mb-1.5" },
   },
   setup(props, { slots }) {
     return () =>

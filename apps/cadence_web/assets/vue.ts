@@ -1,11 +1,4 @@
-import {createLiveVue, findComponent} from "live_vue"
-import {FederatedFullPageSurface} from "./vue/federated_full_page_surface"
+import {createLiveVue} from "live_vue"
+import {resolveHostComponent} from "../../../frontend/apps/host/src/shell/registry"
 
-const components = import.meta.glob("./vue/**/*.vue", {eager: true})
-
-export default createLiveVue({
-  resolve: (name) =>
-    name === "FederatedFullPageSurface"
-      ? FederatedFullPageSurface
-      : findComponent(components, name)
-})
+export default createLiveVue({resolve: resolveHostComponent})

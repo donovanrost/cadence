@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePanel from "./ui/components/CadencePanel.vue";
-import CadenceToggle from "./ui/reka/CadenceToggle.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
+import CadenceToggle from "@cadence/ui/CadenceToggle.vue";
 import { computed, ref, watch } from "vue";
 
 type EmptyPayload = Record<string, never>;
@@ -195,50 +195,39 @@ const createPlan = () =>
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <CadencePageHeaderFrame variant="ops">
-      <div class="mx-auto max-w-[96rem]">
-        <a
-          :href="page.back_action.href"
-          data-phx-link="redirect"
-          data-phx-link-state="push"
-          class="inline-flex items-center gap-1 font-mono text-xs text-base-content/55 hover:text-primary"
-        >
-          <span class="hero-arrow-left h-3.5 w-3.5"></span>
-          {{ page.back_action.label }}
-        </a>
-        <div class="mt-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div class="flex items-center gap-2">
-              <span
-                class="border border-primary/30 bg-primary/5 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-primary"
-              >
-                {{ page.header.priority }}
-              </span>
-              <span class="font-mono text-[0.65rem] text-base-content/45">
-                {{ page.header.version_label }}
-              </span>
-            </div>
-            <h1 class="mt-2 text-2xl font-bold tracking-tight">{{ page.header.intent }}</h1>
-            <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-              {{ page.header.outcome }}
-            </p>
-          </div>
-          <button
-            :id="page.header.plan_action.id"
-            type="button"
-            :disabled="page.header.plan_action.disabled"
-            class="btn btn-primary btn-sm min-w-40 font-mono text-xs uppercase tracking-wider"
-            @click="plan"
-          >
-            {{ page.header.plan_action.label }}
-          </button>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
-
-    <div
-      class="mx-auto grid max-w-[96rem] gap-5 p-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(20rem,0.65fr)] lg:p-7"
+    <CadencePageHeading
+      :breadcrumbs="[
+        { label: page.back_action.label, href: page.back_action.href },
+        { label: page.header.intent },
+      ]"
     >
+      <template #title>{{ page.header.intent }}</template>
+      <template #description>{{ page.header.outcome }}</template>
+      <template #actions>
+        <button
+          :id="page.header.plan_action.id"
+          type="button"
+          :disabled="page.header.plan_action.disabled"
+          class="btn btn-primary btn-sm min-w-40 font-mono text-xs uppercase tracking-wider"
+          @click="plan"
+        >
+          {{ page.header.plan_action.label }}
+        </button></template
+      >
+
+      <template #metadata
+        ><span
+          class="border border-primary/30 bg-primary/5 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase text-primary"
+        >
+          {{ page.header.priority }}
+        </span>
+        <span class="font-mono text-[0.65rem] text-base-content/45">
+          {{ page.header.version_label }}
+        </span></template
+      ></CadencePageHeading
+    >
+
+    <div class="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(20rem,0.65fr)]">
       <div class="min-w-0 space-y-5">
         <CadencePanel
           :id="page.horizon.id"

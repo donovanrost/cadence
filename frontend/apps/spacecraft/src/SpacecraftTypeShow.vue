@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
+import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
 type NavigationItem = {
   label: string;
   href: string;
@@ -74,45 +72,22 @@ defineProps<{
 
 <template>
   <div id="spacecraft-profile-show-surface" class="space-y-6">
-    <CadencePageHeaderFrame variant="compact">
-      <div>
-        <CadenceBreadcrumbs>
-          <a
-            :href="navigation.mission.href"
-            data-phx-link="redirect"
-            data-phx-link-state="push"
-            class="hover:text-primary transition-colors"
-            >{{ navigation.mission.label }}</a
-          >
-          <span class="text-base-content/20" aria-hidden="true">/</span>
-          <a
-            :href="navigation.spacecraft.href"
-            data-phx-link="redirect"
-            data-phx-link-state="push"
-            class="hover:text-primary transition-colors"
-            >{{ navigation.spacecraft.label }}</a
-          >
-          <span class="text-base-content/20" aria-hidden="true">/</span>
-          <a
-            :href="navigation.profiles.href"
-            data-phx-link="redirect"
-            data-phx-link-state="push"
-            class="hover:text-primary transition-colors"
-            >{{ navigation.profiles.label }}</a
-          >
-          <span class="text-base-content/20" aria-hidden="true">/</span>
-          <span class="text-primary/90">{{ navigation.current.label }}</span>
-        </CadenceBreadcrumbs>
-
-        <CadencePageTitle>
-          {{ profile.display_name }}
-          <span class="ml-3 font-mono text-base text-base-content/60">
-            <span class="mc-value-medium text-base-content">{{ profile.version }}</span>
-            <span class="hud-label">{{ profile.lifecycle }}</span>
-          </span>
-        </CadencePageTitle>
-      </div>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading
+      :breadcrumbs="[
+        { label: navigation.mission.label, href: navigation.mission.href },
+        { label: navigation.spacecraft.label, href: navigation.spacecraft.href },
+        { label: navigation.profiles.label, href: navigation.profiles.href },
+        { label: navigation.current.label },
+      ]"
+    >
+      <template #title>{{ profile.display_name }} </template>
+      <template #metadata
+        ><span>
+          <span class="mc-value-medium text-base-content">{{ profile.version }}</span>
+          <span class="hud-label">{{ profile.lifecycle }}</span>
+        </span></template
+      >
+    </CadencePageHeading>
 
     <CadenceCard
       id="spacecraft-profile-byte-interpretation"

@@ -5,7 +5,7 @@ import DashboardAbsoluteRangePane from "./DashboardAbsoluteRangePane.vue";
 import DashboardQuickRangeList from "./DashboardQuickRangeList.vue";
 import DashboardSelectedDatumActions from "./DashboardSelectedDatumActions.vue";
 import DashboardTimeReplay from "./DashboardTimeReplay.vue";
-import CadencePopover from "./ui/reka/CadencePopover.vue";
+import CadencePopover from "@cadence/ui/CadencePopover.vue";
 
 type AttrValue = string | boolean | null;
 type Attrs = Record<string, AttrValue>;

@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 
 type Breadcrumb = {
   label: string;
@@ -46,50 +43,21 @@ defineProps<{ page: Page }>();
 
 <template>
   <div class="space-y-6">
-    <CadencePageHeaderFrame variant="compact">
-      <CadenceCompactPageHeaderBodyFrame>
-        <template #content>
-          <CadenceBreadcrumbs>
-            <template
-              v-for="(breadcrumb, index) in page.breadcrumbs"
-              :key="`${index}-${breadcrumb.label}`"
-            >
-              <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-              <span v-if="breadcrumb.href === null" class="text-primary/90">
-                {{ breadcrumb.label }}
-              </span>
-              <a
-                v-else
-                :href="breadcrumb.href"
-                data-phx-link="redirect"
-                data-phx-link-state="push"
-                class="hover:text-primary transition-colors"
-                >{{ breadcrumb.label }}</a
-              >
-            </template>
-          </CadenceBreadcrumbs>
-
-          <CadencePageTitle>
-            {{ page.title }}
-          </CadencePageTitle>
-          <p class="mt-1 max-w-3xl text-sm text-base-content/70">
-            {{ page.subtitle }}
-          </p>
-        </template>
-
-        <template #actions>
-          <a
-            :id="page.new_rule.id"
-            :href="page.new_rule.href"
-            data-phx-link="redirect"
-            data-phx-link-state="push"
-            class="btn btn-primary btn-sm gap-1"
-          >
-            <span class="hero-plus h-4 w-4"></span> {{ page.new_rule.label }}
-          </a>
-        </template>
-      </CadenceCompactPageHeaderBodyFrame>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
+      <template #title>{{ page.title }}</template>
+      <template #description>{{ page.subtitle }}</template>
+      <template #actions
+        ><a
+          :id="page.new_rule.id"
+          :href="page.new_rule.href"
+          data-phx-link="redirect"
+          data-phx-link-state="push"
+          class="btn btn-primary btn-sm gap-1"
+        >
+          <span class="hero-plus h-4 w-4"></span> {{ page.new_rule.label }}
+        </a></template
+      >
+    </CadencePageHeading>
 
     <div
       v-if="page.rows.length === 0"

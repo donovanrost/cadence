@@ -28,6 +28,7 @@ type HostFailure = {
 const props = withDefaults(
   defineProps<
     PhoenixHostConfig & {
+      navigate?: (href: string) => void;
       fetcher?: typeof globalThis.fetch;
       catalogTimeoutMs?: number;
     }
@@ -95,6 +96,7 @@ async function loadCatalog({ automaticRecovery = false } = {}): Promise<void> {
     context.value = nextCatalog.session.context;
     const nextBridge = createHttpHostBridge(nextCatalog.session, nextApplication, {
       queryParams: props.queryParams,
+      navigate: props.navigate,
       onSessionFailure: handleBridgeSessionFailure,
     });
     if (generation !== loadGeneration || controller.signal.aborted) {
@@ -219,7 +221,7 @@ function boundedCatalogFetch(
 
     <section v-else-if="bootError" id="phoenix-host-error" class="m-6 max-w-3xl" role="alert">
       <div class="alert alert-error flex flex-col items-start gap-3">
-        <h1 class="text-lg font-semibold">The application catalog could not be loaded.</h1>
+        <h2 class="text-lg font-semibold">The application catalog could not be loaded.</h2>
         <p>{{ bootError.message }}</p>
         <p id="phoenix-host-error-reference" class="font-mono text-xs">
           Reference ID: {{ bootError.referenceId }}

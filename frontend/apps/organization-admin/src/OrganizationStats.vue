@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadenceCard from "./ui/components/CadenceCard.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
 
 defineProps<{
   mission_count: number;

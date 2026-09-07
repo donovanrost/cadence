@@ -5,7 +5,7 @@ import type {
   FrontendApplicationCatalog,
   HostActivityEvent,
 } from "@cadence/plugin-sdk";
-import { CButton, CStatus, CTooltip } from "@cadence/ui";
+import { CadenceButton, CadenceStatus, CadenceTooltip } from "@cadence/ui";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { loadFrontendApplicationCatalog } from "./catalog-client";
 import { createHttpHostBridge, type HttpHostBridge } from "./http-host-bridge";
@@ -231,14 +231,18 @@ function messageFor(reason: unknown, fallback: string): string {
       </div>
 
       <div class="operator-context">
-        <CStatus class="operator-context__status" :tone="context ? 'nominal' : 'warning'" pulse>
+        <CadenceStatus
+          class="operator-context__status"
+          :tone="context ? 'nominal' : 'warning'"
+          pulse
+        >
           {{ context ? "CATALOG AUTHENTICATED" : "CATALOG CHECK" }}
-        </CStatus>
-        <CTooltip align="end" :content="operatorTooltip">
+        </CadenceStatus>
+        <CadenceTooltip align="end" :content="operatorTooltip">
           <span id="operator-menu" aria-label="Current catalog actor">
             {{ initials(context?.actor.displayName) }}
           </span>
-        </CTooltip>
+        </CadenceTooltip>
       </div>
     </header>
 
@@ -272,7 +276,9 @@ function messageFor(reason: unknown, fallback: string): string {
         <p class="eyebrow">Catalog unavailable</p>
         <h1>The application catalog was rejected.</h1>
         <p>{{ bootError }}</p>
-        <CButton id="retry-catalog" variant="primary" @click="loadCatalog">Retry catalog</CButton>
+        <CadenceButton id="retry-catalog" variant="primary" @click="loadCatalog"
+          >Retry catalog</CadenceButton
+        >
       </section>
 
       <template v-else-if="activeApplication && bridge && context">

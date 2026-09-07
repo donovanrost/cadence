@@ -1,14 +1,11 @@
 <script setup lang="ts">
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
-import CadencePanel from "./ui/components/CadencePanel.vue";
-import CadenceStatTile from "./ui/components/CadenceStatTile.vue";
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
+import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
+import CadenceStatTile from "@cadence/ui/CadenceStatTile.vue";
+import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
 import StatusBadge from "./StatusBadge.vue";
 
 type StatusTone = "info" | "ready" | "attention" | "blocked";
@@ -166,81 +163,52 @@ const archiveProvider = () => {
 
 <template>
   <div :id="provider.page_id" class="space-y-6">
-    <CadencePageHeaderFrame variant="compact">
-      <CadenceCompactPageHeaderBodyFrame>
-        <template #content>
-          <CadenceBreadcrumbs>
-            <template
-              v-for="(breadcrumb, index) in navigation.breadcrumbs"
-              :key="`${index}-${breadcrumb.label}`"
-            >
-              <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-              <span v-if="breadcrumb.href === null" class="text-primary/90">
-                {{ breadcrumb.label }}
-              </span>
-              <a
-                v-else
-                :href="breadcrumb.href"
-                data-phx-link="redirect"
-                data-phx-link-state="push"
-                class="hover:text-primary transition-colors"
-                >{{ breadcrumb.label }}</a
-              >
-            </template>
-          </CadenceBreadcrumbs>
-
-          <CadencePageTitle>
-            {{ provider.display_name }}
-            <span class="ml-3 font-mono text-base text-base-content/60">
-              <span
-                :id="provider.simulated_badge.id"
-                class="inline-flex rounded-full bg-info/20 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide text-info"
-                >{{ provider.simulated_badge.label }}</span
-              >
-              <span class="ml-2 font-mono text-xs text-base-content/60">
-                {{ provider.version }}
-              </span>
-            </span>
-          </CadencePageTitle>
-          <p class="mt-1 max-w-3xl text-sm text-base-content/70">
-            {{ provider.provider_id }}
-          </p>
-        </template>
-
-        <template #actions>
-          <button
-            :id="actions.validate.id"
-            type="button"
-            class="btn btn-secondary btn-sm"
-            :disabled="actions.validate.disabled"
-            @click="emit('validate-provider')"
+    <CadencePageHeading :breadcrumbs="navigation.breadcrumbs">
+      <template #title>{{ provider.display_name }} </template>
+      <template #description>{{ provider.provider_id }}</template>
+      <template #metadata
+        ><span>
+          <span
+            :id="provider.simulated_badge.id"
+            class="inline-flex rounded-full bg-info/20 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide text-info"
+            >{{ provider.simulated_badge.label }}</span
           >
-            <span class="hero-shield-check h-4 w-4"></span>
-            {{ actions.validate.label }}
-          </button>
-          <button
-            :id="actions.sync.id"
-            type="button"
-            class="btn btn-primary btn-sm"
-            :disabled="actions.sync.disabled"
-            @click="emit('sync-provider')"
-          >
-            <span class="hero-arrow-path h-4 w-4"></span>
-            {{ actions.sync.label }}
-          </button>
-          <button
-            :id="actions.archive.id"
-            type="button"
-            class="btn btn-error btn-outline btn-sm"
-            :data-confirm="actions.archive.confirm"
-            :disabled="actions.archive.disabled"
-            @click="archiveProvider"
-          >
-            {{ actions.archive.label }}
-          </button>
-        </template>
-      </CadenceCompactPageHeaderBodyFrame>
-    </CadencePageHeaderFrame>
+          <span class="ml-2 font-mono text-xs text-base-content/60">
+            {{ provider.version }}
+          </span>
+        </span></template
+      >
+      <template #actions
+        ><button
+          :id="actions.validate.id"
+          type="button"
+          class="btn btn-secondary btn-sm"
+          :disabled="actions.validate.disabled"
+          @click="emit('validate-provider')"
+        >
+          <span class="hero-shield-check h-4 w-4"></span>
+          {{ actions.validate.label }}</button
+        ><button
+          :id="actions.sync.id"
+          type="button"
+          class="btn btn-primary btn-sm"
+          :disabled="actions.sync.disabled"
+          @click="emit('sync-provider')"
+        >
+          <span class="hero-arrow-path h-4 w-4"></span>
+          {{ actions.sync.label }}</button
+        ><button
+          :id="actions.archive.id"
+          type="button"
+          class="btn btn-error btn-outline btn-sm"
+          :data-confirm="actions.archive.confirm"
+          :disabled="actions.archive.disabled"
+          @click="archiveProvider"
+        >
+          {{ actions.archive.label }}
+        </button></template
+      >
+    </CadencePageHeading>
 
     <div class="grid gap-3 md:grid-cols-4">
       <CadenceStatTile v-for="summary in provider.summary_tiles" :id="summary.id" :key="summary.id">

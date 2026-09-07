@@ -21,8 +21,11 @@ export default mergeConfig(
           ],
           test: {
             name: "storybook",
+            setupFiles: [resolve(import.meta.dirname, "visual.setup.ts")],
             browser: {
               enabled: true,
+              viewport: { width: 1280, height: 1100 },
+              screenshotDirectory: resolve(import.meta.dirname, "dist/screenshots"),
               headless: true,
               provider: playwright({ launchOptions: { channel: "chrome" } }),
               instances: [{ browser: "chromium" }],

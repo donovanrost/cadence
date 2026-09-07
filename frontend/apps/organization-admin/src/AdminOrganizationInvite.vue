@@ -1,10 +1,8 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { reactive, watch } from "vue";
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceFormActions from "./ui/components/CadenceFormActions.vue";
-import CadenceNarrowFormPageFrame from "./ui/components/CadenceNarrowFormPageFrame.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
+import CadenceFormActions from "@cadence/ui/CadenceFormActions.vue";
+import CadenceNarrowFormPageFrame from "@cadence/ui/CadenceNarrowFormPageFrame.vue";
 
 type Breadcrumb = {
   label: string;
@@ -110,33 +108,10 @@ const save = () => {
 
 <template>
   <CadenceNarrowFormPageFrame id="admin-organization-invite-page">
-    <CadencePageHeaderFrame variant="compact">
-      <div>
-        <CadenceBreadcrumbs>
-          <template
-            v-for="(breadcrumb, index) in page.breadcrumbs"
-            :key="`${index}-${breadcrumb.label}`"
-          >
-            <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-            <span v-if="breadcrumb.href === null" class="text-primary/90">
-              {{ breadcrumb.label }}
-            </span>
-            <a
-              v-else
-              :href="breadcrumb.href"
-              data-phx-link="redirect"
-              data-phx-link-state="push"
-              class="transition-colors hover:text-primary"
-              >{{ breadcrumb.label }}</a
-            >
-          </template>
-        </CadenceBreadcrumbs>
-        <CadencePageTitle>
-          {{ page.title }}
-        </CadencePageTitle>
-        <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
-      </div>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
+      <template #title>{{ page.title }}</template>
+      <template #description>{{ page.subtitle }}</template>
+    </CadencePageHeading>
 
     <form id="invite-form" class="space-y-4" @submit.prevent="save">
       <div class="fieldset mb-3">

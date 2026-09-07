@@ -1,61 +1,12 @@
-<div class="drawer lg:drawer-open">
-  <input id="sidebar-drawer" type="checkbox" class="drawer-toggle" />
-
-  <div class="drawer-content flex flex-col">
-    <div class="lg:hidden flex items-center justify-between p-4 border-b border-base-300">
-      <label for="sidebar-drawer" class="btn btn-ghost btn-sm">
-        <span class="hero-bars-3 h-5 w-5"></span>
-      </label>
-      <div class="flex-1 text-center font-semibold text-sm tracking-wider uppercase">Cadence</div>
-      <div class="flex items-center gap-2">
-        <%= if @current_scope && @current_scope.user do %>
-          <.notifications_bell
-            id="notifications-bell-mobile"
-            count={assigns[:unread_notifications_count] || 0}
-            notifications={assigns[:recent_notifications] || []}
-          />
-          <.user_menu
-            id="user-menu-mobile"
-            scope={@current_scope}
-            memberships={assigns[:user_menu_memberships] || []}
-            platform_admin?={assigns[:user_menu_platform_admin?] || false}
-          />
-        <% end %>
-      </div>
-    </div>
-
-    <div class="hidden lg:flex items-center justify-end gap-3 px-4 h-10 border-b border-primary/20 bg-base-200 hud-grid shrink-0">
-      <%= if @current_scope && @current_scope.user do %>
-        <.notifications_bell
-          id="notifications-bell-desktop"
-          count={assigns[:unread_notifications_count] || 0}
-          notifications={assigns[:recent_notifications] || []}
-        />
-        <.user_menu
-          id="user-menu-desktop"
-          scope={@current_scope}
-          memberships={assigns[:user_menu_memberships] || []}
-          platform_admin?={assigns[:user_menu_platform_admin?] || false}
-        />
-      <% end %>
-    </div>
-
-    <main class="flex-1 overflow-y-auto bg-base-100">
-      <div class="p-6">
-        {@inner_content}
-      </div>
-    </main>
-  </div>
-
-  <.vue
-    id="mission-sidebar-navigation"
-    v-component="MissionSidebarNavigation"
-    presentation={mission_sidebar_navigation_presentation(assigns)}
-    v-ssr={false}
-    class="drawer-side"
-  />
-</div>
-
+<.vue
+  id="application-shell"
+  v-component="ApplicationShell"
+  v-socket={assigns[:socket]}
+  variant="mission_sidebar"
+  context={CadenceWeb.HostContext.from_assigns(assigns)}
+  v-ssr={false}
+/>
+{@inner_content}
 <LiveToast.toast_group
   flash={@flash}
   connected={assigns[:socket] != nil}

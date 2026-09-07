@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadencePanel from "./ui/components/CadencePanel.vue";
+import { findingDomId } from "./finding-dom-id";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
 import StatusBadge from "./StatusBadge.vue";
 
 type StatusTone = "ready" | "attention" | "blocked" | "info";
@@ -57,44 +55,18 @@ defineProps<{ validation: Validation }>();
 
 <template>
   <div :id="validation.id" class="space-y-6">
-    <CadencePageHeaderFrame variant="compact">
-      <CadenceCompactPageHeaderBodyFrame>
-        <template #content>
-          <CadenceBreadcrumbs>
-            <template
-              v-for="(breadcrumb, index) in validation.breadcrumbs"
-              :key="`${index}-${breadcrumb.label}`"
-            >
-              <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-              <span v-if="breadcrumb.href === null" class="text-primary/90">
-                {{ breadcrumb.label }}
-              </span>
-              <a
-                v-else
-                :href="breadcrumb.href"
-                data-phx-link="redirect"
-                data-phx-link-state="push"
-                class="hover:text-primary transition-colors"
-                >{{ breadcrumb.label }}</a
-              >
-            </template>
-          </CadenceBreadcrumbs>
-
-          <CadencePageTitle>
-            {{ validation.title }}
-            <span class="ml-3 font-mono text-base text-base-content/60">
-              {{ validation.finding_count_suffix }}
-            </span>
-          </CadencePageTitle>
-          <p class="mt-1 max-w-3xl text-sm text-base-content/70">
-            {{ validation.subtitle }}
-          </p>
-        </template>
-        <template #actions>
-          <StatusBadge :status="validation.status.tone" :label="validation.status.label" />
-        </template>
-      </CadenceCompactPageHeaderBodyFrame>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading :breadcrumbs="validation.breadcrumbs">
+      <template #title>{{ validation.title }} </template>
+      <template #description>{{ validation.subtitle }}</template>
+      <template #metadata
+        ><span>
+          {{ validation.finding_count_suffix }}
+        </span></template
+      >
+      <template #actions
+        ><StatusBadge :status="validation.status.tone" :label="validation.status.label"
+      /></template>
+    </CadencePageHeading>
 
     <CadenceCard
       v-if="validation.empty"
@@ -128,7 +100,7 @@ defineProps<{ validation: Validation }>();
           <div class="divide-y divide-base-300">
             <div
               v-for="(finding, index) in group.findings"
-              :id="finding.id ?? undefined"
+              :id="findingDomId(group.id, finding.id, index)"
               :key="finding.id ?? `${group.id}-${index}`"
               class="px-4 py-4"
             >

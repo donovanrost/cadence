@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import StatusBadge from "./StatusBadge.vue";
-import CadenceEmptyStateFrame from "./ui/components/CadenceEmptyStateFrame.vue";
-import CadenceListToolbarFrame from "./ui/components/CadenceListToolbarFrame.vue";
-import CadencePaginationFrame from "./ui/components/CadencePaginationFrame.vue";
-import CadencePanel from "./ui/components/CadencePanel.vue";
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
-import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue";
-import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue";
-import CadenceModalMenu from "./ui/reka/CadenceModalMenu.vue";
+import CadenceEmptyStateFrame from "@cadence/ui/CadenceEmptyStateFrame.vue";
+import CadenceListToolbarFrame from "@cadence/ui/CadenceListToolbarFrame.vue";
+import CadencePaginationFrame from "@cadence/ui/CadencePaginationFrame.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
+import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
+import CadenceHoverTableRow from "@cadence/ui/CadenceHoverTableRow.vue";
+import CadenceMenuItem from "@cadence/ui/CadenceMenuItem.vue";
+import CadenceModalMenu from "@cadence/ui/CadenceModalMenu.vue";
 
 type Status = "ready" | "attention";
 

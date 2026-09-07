@@ -1,5 +1,7 @@
 import Config
 
+config :cadence, :organization_invitation_delivery, CadenceWeb.UserNotifier
+
 # The web application is the Cadence server composition root. Load the core
 # application's owned defaults before applying web and release-specific policy.
 import_config "../../cadence/config/config.exs"

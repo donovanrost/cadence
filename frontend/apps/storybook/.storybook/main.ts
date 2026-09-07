@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import type { StorybookConfig } from "@storybook/vue3-vite";
 
 const config: StorybookConfig = {
@@ -17,6 +18,7 @@ const config: StorybookConfig = {
     const { mergeConfig } = await import("vite-plus");
 
     return mergeConfig(viteConfig, {
+      plugins: [tailwindcss()],
       build: {
         // Docs and accessibility panels are intentionally large development-only chunks.
         chunkSizeWarningLimit: 1200,

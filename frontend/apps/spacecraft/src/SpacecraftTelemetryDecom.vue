@@ -1,12 +1,10 @@
 <script setup lang="ts">
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { ref, watch } from "vue";
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceDiagnosticsSectionFrame from "./ui/components/CadenceDiagnosticsSectionFrame.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
-import CadenceStatTile from "./ui/components/CadenceStatTile.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceDiagnosticsSectionFrame from "@cadence/ui/CadenceDiagnosticsSectionFrame.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
+import CadenceStatTile from "@cadence/ui/CadenceStatTile.vue";
 
 type StatusTone = "ready" | "attention" | "blocked" | "info";
 type PreflightState = "ready" | "attention" | "blocked";
@@ -298,33 +296,10 @@ const buttonClasses: Record<ButtonVariant, string> = {
 
 <template>
   <div :id="page.id" class="space-y-6">
-    <CadencePageHeaderFrame variant="compact">
-      <div>
-        <div>
-          <CadenceBreadcrumbs>
-            <template v-for="(breadcrumb, index) in page.breadcrumbs" :key="breadcrumb.id">
-              <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-              <span v-if="breadcrumb.href === null" :id="breadcrumb.id" class="text-primary/90">{{
-                breadcrumb.label
-              }}</span>
-              <a
-                v-else
-                :id="breadcrumb.id"
-                :href="breadcrumb.href"
-                data-phx-link="redirect"
-                data-phx-link-state="push"
-                class="hover:text-primary transition-colors"
-                >{{ breadcrumb.label }}</a
-              >
-            </template>
-          </CadenceBreadcrumbs>
-          <CadencePageTitle>
-            {{ page.title }}
-          </CadencePageTitle>
-          <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ page.subtitle }}</p>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
+      <template #title>{{ page.title }}</template>
+      <template #description>{{ page.subtitle }}</template>
+    </CadencePageHeading>
 
     <CadenceCard
       :id="card.id"

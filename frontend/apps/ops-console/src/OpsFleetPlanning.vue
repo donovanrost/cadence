@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadenceOpsPageBodyFrame from "./ui/components/CadenceOpsPageBodyFrame.vue";
-import CadencePanel from "./ui/components/CadencePanel.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
+import CadenceOpsPageBodyFrame from "@cadence/ui/CadenceOpsPageBodyFrame.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
 
 type ControlTone = "warning" | "muted" | "quiet";
 type CoverageTone = "warning" | "quiet";
@@ -134,52 +134,40 @@ const coverageToneClasses: Record<CoverageTone, string> = {
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <CadencePageHeaderFrame variant="ops">
-      <div
-        class="mx-auto flex max-w-[100rem] flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"
+    <CadencePageHeading>
+      <template #title>{{ page.header.title }}</template>
+      <template #eyebrow>{{ page.header.eyebrow }}</template>
+      <template #description>{{ page.header.copy }}</template>
+      <template #actions
+        ><button
+          :id="actions.refresh.id"
+          type="button"
+          class="btn btn-ghost btn-sm gap-2 font-mono text-xs uppercase tracking-wider"
+          @click="emit('refresh-planning')"
+        >
+          <span :class="[actions.refresh.icon, 'h-4 w-4']"></span>
+          {{ actions.refresh.label }}</button
+        ><a
+          :id="actions.policy.id"
+          :href="actions.policy.href"
+          data-phx-link="redirect"
+          data-phx-link-state="push"
+          class="btn btn-ghost btn-sm gap-2 font-mono text-xs uppercase tracking-wider"
+        >
+          <span :class="[actions.policy.icon, 'h-4 w-4']"></span>
+          {{ actions.policy.label }} </a
+        ><a
+          :id="actions.new_run.id"
+          :href="actions.new_run.href"
+          data-phx-link="redirect"
+          data-phx-link-state="push"
+          class="btn btn-primary btn-sm gap-2 font-mono text-xs uppercase tracking-wider"
+        >
+          <span :class="[actions.new_run.icon, 'h-4 w-4']"></span>
+          {{ actions.new_run.label }}
+        </a></template
       >
-        <div>
-          <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
-            {{ page.header.eyebrow }}
-          </p>
-          <h1 class="mt-1 text-2xl font-bold tracking-tight">{{ page.header.title }}</h1>
-          <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-            {{ page.header.copy }}
-          </p>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <button
-            :id="actions.refresh.id"
-            type="button"
-            class="btn btn-ghost btn-sm gap-2 font-mono text-xs uppercase tracking-wider"
-            @click="emit('refresh-planning')"
-          >
-            <span :class="[actions.refresh.icon, 'h-4 w-4']"></span>
-            {{ actions.refresh.label }}
-          </button>
-          <a
-            :id="actions.policy.id"
-            :href="actions.policy.href"
-            data-phx-link="redirect"
-            data-phx-link-state="push"
-            class="btn btn-ghost btn-sm gap-2 font-mono text-xs uppercase tracking-wider"
-          >
-            <span :class="[actions.policy.icon, 'h-4 w-4']"></span>
-            {{ actions.policy.label }}
-          </a>
-          <a
-            :id="actions.new_run.id"
-            :href="actions.new_run.href"
-            data-phx-link="redirect"
-            data-phx-link-state="push"
-            class="btn btn-primary btn-sm gap-2 font-mono text-xs uppercase tracking-wider"
-          >
-            <span :class="[actions.new_run.icon, 'h-4 w-4']"></span>
-            {{ actions.new_run.label }}
-          </a>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
+    </CadencePageHeading>
 
     <CadenceOpsPageBodyFrame>
       <CadencePanel

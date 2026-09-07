@@ -54,6 +54,9 @@ const handleEscapeKeyDown = (event: Event) => {
 
 const handleTabKeyDown = () => closeWithoutFocus();
 const handleItemSelect = () => closeWithoutFocus();
+const handleInteractOutside = () => {
+  suppressCloseAutoFocus = true;
+};
 
 onBeforeUnmount(() => {
   suppressCloseAutoFocus = true;
@@ -68,22 +71,26 @@ onBeforeUnmount(() => {
 <template>
   <div ref="root" v-bind="rootAttrs" :class="rootClass">
     <DropdownMenuRoot :open="open" :modal="false" @update:open="updateOpen">
-      <DropdownMenuTrigger as-child>
+      <DropdownMenuTrigger as-child data-dropdown-trigger>
         <slot name="trigger" :open="open"></slot>
       </DropdownMenuTrigger>
 
       <DropdownMenuContent
         v-if="open"
         as-child
+        class="cd-account-menu"
+        align="end"
+        :side-offset="8"
+        :collision-padding="16"
         :loop="true"
         @open-auto-focus="handleOpenAutoFocus"
         @close-auto-focus="handleCloseAutoFocus"
+        @interact-outside="handleInteractOutside"
         @escape-key-down="handleEscapeKeyDown"
         @keydown.tab="handleTabKeyDown"
       >
         <slot name="content" :open="open" :onItemSelect="handleItemSelect"></slot>
       </DropdownMenuContent>
-      <slot v-else name="content" :open="open" :onItemSelect="handleItemSelect"></slot>
     </DropdownMenuRoot>
   </div>
 </template>

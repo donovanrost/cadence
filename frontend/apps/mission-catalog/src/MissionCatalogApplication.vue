@@ -67,7 +67,7 @@ const actionLifecycle = createFederatedActionLifecycle({
   context: props.context,
   execute: props.bridge.execute,
   requery: loadSurface,
-  navigate: (href) => window.location.assign(href),
+  navigate: (href) => (props.bridge.navigate ?? ((target) => window.location.assign(target)))(href),
   onStarted: () => {
     actionPending.value = true;
     actionError.value = undefined;

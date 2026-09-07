@@ -6,7 +6,8 @@
     "src/**/*.vue",
     "../../packages/ui/src/**/*.stories.ts",
     "vite.config.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "visual.setup.ts"
   ],
   "compilerOptions": {
     "noEmit": true,

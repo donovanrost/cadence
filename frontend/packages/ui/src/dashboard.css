@@ -1,0 +1,14 @@
+@import "./styles/dashboard-widgets.css";
+.dashboard-review-placement-focus > .grid-stack-item-content {
+  border-color: oklch(from var(--status-warning) l c h / 0.85);
+  box-shadow:
+    0 0 0 1px oklch(from var(--status-warning) l c h / 0.42),
+    0 0 18px oklch(from var(--status-warning) l c h / 0.18);
+}
+
+.dashboard-review-placement-selected > .grid-stack-item-content {
+  border-color: var(--status-warning);
+  box-shadow:
+    0 0 0 2px oklch(from var(--status-warning) l c h / 0.65),
+    0 0 24px oklch(from var(--status-warning) l c h / 0.28);
+}

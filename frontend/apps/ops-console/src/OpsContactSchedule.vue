@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
+import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
 import { reactive, watch } from "vue";
-import CadencePanel from "./ui/components/CadencePanel.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
 
 type Option = {
   label: string;
@@ -256,43 +256,31 @@ const cancel = (reservation: Reservation) => {
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <CadencePageHeaderFrame variant="ops">
-      <div
-        class="mx-auto flex max-w-[96rem] flex-col gap-4 md:flex-row md:items-end md:justify-between"
-      >
+    <CadencePageHeading>
+      <template #title>{{ page.header.title }}</template>
+      <template #eyebrow>{{ page.header.eyebrow }}</template>
+      <template #description>{{ page.header.description }}</template>
+      <template #actions
+        ><div>
+          <p class="hud-label">{{ page.header.scope.label }}</p>
+          <p class="mt-1 text-base-content/70">{{ page.header.scope.value }}</p>
+        </div>
         <div>
-          <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
-            {{ page.header.eyebrow }}
-          </p>
-          <h1 class="mt-1 text-2xl font-bold tracking-tight text-base-content">
-            {{ page.header.title }}
-          </h1>
-          <p class="mt-2 max-w-2xl text-sm text-base-content/60">
-            {{ page.header.description }}
+          <p class="hud-label">{{ page.header.contact_count.label }}</p>
+          <p :id="page.header.contact_count.id" class="mt-1 text-primary">
+            {{ page.header.contact_count.value }}
           </p>
         </div>
-        <div class="flex items-center gap-4 border-l border-primary/30 pl-4 font-mono text-xs">
-          <div>
-            <p class="hud-label">{{ page.header.scope.label }}</p>
-            <p class="mt-1 text-base-content/70">{{ page.header.scope.value }}</p>
-          </div>
-          <div>
-            <p class="hud-label">{{ page.header.contact_count.label }}</p>
-            <p :id="page.header.contact_count.id" class="mt-1 text-primary">
-              {{ page.header.contact_count.value }}
-            </p>
-          </div>
-          <div>
-            <p class="hud-label">{{ page.header.reservation_count.label }}</p>
-            <p :id="page.header.reservation_count.id" class="mt-1 text-primary">
-              {{ page.header.reservation_count.value }}
-            </p>
-          </div>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
+        <div>
+          <p class="hud-label">{{ page.header.reservation_count.label }}</p>
+          <p :id="page.header.reservation_count.id" class="mt-1 text-primary">
+            {{ page.header.reservation_count.value }}
+          </p>
+        </div></template
+      >
+    </CadencePageHeading>
 
-    <div class="mx-auto max-w-[96rem] p-5 lg:p-7">
+    <div class="">
       <CadencePanel
         :id="page.contact_ledger.id"
         class="border border-base-300 bg-base-200/20 shadow-sm"

@@ -6,11 +6,11 @@ defmodule CadenceWeb.NoOrganizationLive do
   alias CadenceWeb.ScopeLoader
 
   @impl true
-  def mount(_params, %{"presentation" => presentation} = session, socket) do
+  def mount(_params, %{"page" => page} = session, socket) do
     {:ok,
      socket
      |> ScopeLoader.assign_scope_from_session(session)
-     |> assign(:presentation, presentation), layout: false}
+     |> assign(:page, page), layout: {CadenceWeb.Layouts, :auth}}
   end
 
   @impl true
@@ -20,7 +20,7 @@ defmodule CadenceWeb.NoOrganizationLive do
       <.vue
         id="no-organization-page-component"
         v-component="NoOrganizationPage"
-        presentation={@presentation}
+        page={@page}
         v-ssr={false}
         class="contents"
       />

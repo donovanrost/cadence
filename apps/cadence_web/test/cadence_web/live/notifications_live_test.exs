@@ -8,29 +8,21 @@ defmodule CadenceWeb.NotificationsLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
-  alias LiveVue.Test
 
   test "authenticated users mount the notifications surface" do
     user = TestFixtures.persist_user!()
 
     {:ok, view, _html} = live(TestFixtures.member_conn(user), ~p"/notifications")
 
-    assert has_element?(view, "#notifications-page-component.contents")
-    vue = Test.get_vue(view, id: "notifications-page-component")
-
-    assert vue.component == "FederatedFullPageSurface"
-    assert vue.id == "notifications-page-component"
-    assert vue.class == "contents"
-    assert vue.ssr == false
-    assert vue.handlers == %{}
-
-    assert vue.props == %{
-             "application_key" => "organization_admin",
-             "surface_id" => "notifications",
-             "host_scope" => "user",
-             "user_id" => user.user_id
-           }
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => "organization_admin",
+      "surface_id" => "notifications",
+      "host_scope" => "user",
+      "query_params" => %{},
+      "user_id" => user.user_id
+    })
   end
 
   test "unauthenticated requests redirect to /sign-in", %{conn: conn} do

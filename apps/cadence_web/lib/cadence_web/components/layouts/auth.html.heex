@@ -1,17 +1,14 @@
-<div class="min-h-screen flex flex-col items-center justify-center px-4 py-12">
-  <div class="w-full max-w-sm space-y-6">
-    <.vue
-      id="auth-layout-brand"
-      v-component="AuthLayoutBrand"
-      presentation={auth_layout_brand_presentation()}
-      v-ssr={false}
-      class="text-center"
-    />
-    {@inner_content}
-  </div>
-  <LiveToast.toast_group
-    flash={@flash}
-    connected={assigns[:socket] != nil}
-    toasts_sync={assigns[:toasts_sync]}
-  />
-</div>
+<.vue
+  id="application-shell"
+  v-component="ApplicationShell"
+  v-socket={assigns[:socket]}
+  variant="auth"
+  context={CadenceWeb.HostContext.from_assigns(assigns)}
+  v-ssr={false}
+/>
+{@inner_content}
+<LiveToast.toast_group
+  flash={@flash}
+  connected={assigns[:socket] != nil}
+  toasts_sync={assigns[:toasts_sync]}
+/>

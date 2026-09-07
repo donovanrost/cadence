@@ -128,7 +128,7 @@ async function executeAction(actionId: string, input: unknown): Promise<void> {
 
     const navigation = navigationHref(receipt.result);
     if (navigation) {
-      window.location.assign(navigation);
+      (props.bridge.navigate ?? ((target) => window.location.assign(target)))(navigation);
       return;
     }
 

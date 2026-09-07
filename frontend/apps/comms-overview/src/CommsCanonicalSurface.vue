@@ -1,14 +1,12 @@
 <script setup lang="ts">
+import { findingDomId } from "./finding-dom-id";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { computed } from "vue";
-import CadenceBreadcrumbs from "./ui/components/CadenceBreadcrumbs.vue";
-import CadenceCard from "./ui/components/CadenceCard.vue";
-import CadenceCompactPageHeaderBodyFrame from "./ui/components/CadenceCompactPageHeaderBodyFrame.vue";
-import CadenceDataRow from "./ui/components/CadenceDataRow.vue";
-import CadenceDetailsFrame from "./ui/components/CadenceDetailsFrame.vue";
-import CadenceHoverTableRow from "./ui/components/CadenceHoverTableRow.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadencePageTitle from "./ui/components/CadencePageTitle.vue";
-import CadenceTableFrame from "./ui/components/CadenceTableFrame.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
+import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
+import CadenceHoverTableRow from "@cadence/ui/CadenceHoverTableRow.vue";
+import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
 import CommsOverviewPage from "./CommsOverviewPage.vue";
 import StatusBadge from "./StatusBadge.vue";
 import { isCommsOverviewPresentation, type CommsOverviewPresentation } from "./comms-overview";
@@ -150,46 +148,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   />
 
   <div v-else :id="rootId" class="space-y-6">
-    <CadencePageHeaderFrame variant="compact">
-      <CadenceCompactPageHeaderBodyFrame>
-        <template #content>
-          <CadenceBreadcrumbs>
-            <template
-              v-for="(breadcrumb, index) in breadcrumbs"
-              :key="`${index}-${breadcrumb.label}`"
-            >
-              <span v-if="index > 0" class="text-base-content/20" aria-hidden="true">/</span>
-              <span v-if="breadcrumb.href === null" class="text-primary/90">
-                {{ breadcrumb.label }}
-              </span>
-              <a
-                v-else
-                :href="breadcrumb.href"
-                data-phx-link="redirect"
-                data-phx-link-state="push"
-                class="hover:text-primary transition-colors"
-                >{{ breadcrumb.label }}</a
-              >
-            </template>
-          </CadenceBreadcrumbs>
-
-          <CadencePageTitle>
-            {{ title }}
-            <span class="ml-3 font-mono text-base text-base-content/60">
-              {{ text("finding_count", text("total_count", "")) }}
-            </span>
-          </CadencePageTitle>
-          <p class="mt-1 max-w-3xl text-sm text-base-content/70">{{ subtitle }}</p>
-        </template>
-        <template #actions>
-          <StatusBadge
-            v-if="props.surfaceId === 'validation'"
-            :status="statusTone"
-            :label="text('status', 'Attention')"
-          />
-        </template>
-      </CadenceCompactPageHeaderBodyFrame>
-    </CadencePageHeaderFrame>
+    <CadencePageHeading :breadcrumbs="breadcrumbs">
+      <template #title>{{ title }} </template>
+      <template #description>{{ subtitle }}</template>
+      <template #metadata
+        ><span>
+          {{ text("finding_count", text("total_count", "")) }}
+        </span></template
+      >
+      <template #actions
+        ><StatusBadge
+          v-if="props.surfaceId === 'validation'"
+          :status="statusTone"
+          :label="text('status', 'Attention')"
+      /></template>
+    </CadencePageHeading>
 
     <template v-if="props.surfaceId === 'validation'">
       <CadenceCard
@@ -207,9 +180,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
       </CadenceCard>
       <div v-else id="comms-validation-findings" class="space-y-5">
         <CadenceCard
-          v-for="group in findingGroups"
-          :id="textValue(group, 'id', 'comms-validation-group')"
-          :key="textValue(group, 'id', 'comms-validation-group')"
+          v-for="(group, groupIndex) in findingGroups"
+          :id="textValue(group, 'id', `comms-validation-group-${groupIndex + 1}`)"
+          :key="textValue(group, 'id', `comms-validation-group-${groupIndex + 1}`)"
           class="card bg-base-200 border border-base-300"
           body-class="card-body p-0"
         >
@@ -226,7 +199,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
               v-for="(finding, index) in Array.isArray(group.findings)
                 ? group.findings.filter(isRecord)
                 : []"
-              :id="textValue(finding, 'id', `finding-${index + 1}`)"
+              :id="
+                findingDomId(
+                  textValue(group, 'id', `comms-validation-group-${groupIndex + 1}`),
+                  finding.id,
+                  index,
+                )
+              "
               :key="textValue(finding, 'id', `${textValue(group, 'id', 'group')}-${index}`)"
               class="px-4 py-4"
             >

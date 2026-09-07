@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadenceOpsPageBodyFrame from "./ui/components/CadenceOpsPageBodyFrame.vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadenceToggle from "./ui/reka/CadenceToggle.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
+import CadenceOpsPageBodyFrame from "@cadence/ui/CadenceOpsPageBodyFrame.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
+import CadenceToggle from "@cadence/ui/CadenceToggle.vue";
 import { onBeforeUnmount, reactive, watch } from "vue";
 
 type LinkAction = {
@@ -189,41 +189,34 @@ const restoreDashboard = (row: DirectoryRow) => {
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <CadencePageHeaderFrame variant="ops">
-      <div
-        class="mx-auto flex max-w-[100rem] flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"
+    <CadencePageHeading>
+      <template #title>{{ page.header.heading }}</template>
+      <template #eyebrow>{{ page.header.eyebrow }}</template>
+      <template #description>{{ page.header.copy }}</template>
+      <template #actions
+        ><a
+          v-for="action in page.header.author_actions"
+          :id="action.id"
+          :key="action.id"
+          :href="action.href"
+          data-phx-link="redirect"
+          data-phx-link-state="push"
+          :class="action.class"
+        >
+          <span :class="[action.icon, action.icon_class]" aria-hidden="true"></span>
+          {{ action.label }}
+        </a></template
       >
-        <div>
-          <p class="font-mono text-[0.65rem] uppercase tracking-[0.2em] text-primary/70">
-            {{ page.header.eyebrow }}
-          </p>
-          <h1 class="mt-1 text-2xl font-bold tracking-tight">{{ page.header.heading }}</h1>
-          <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-            {{ page.header.copy }}
-          </p>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <span
-            :id="page.header.count.id"
-            class="font-mono text-xs uppercase tracking-wider text-base-content/50"
-          >
-            {{ page.header.count.value }} {{ page.header.count.suffix }}
-          </span>
-          <a
-            v-for="action in page.header.author_actions"
-            :id="action.id"
-            :key="action.id"
-            :href="action.href"
-            data-phx-link="redirect"
-            data-phx-link-state="push"
-            :class="action.class"
-          >
-            <span :class="[action.icon, action.icon_class]" aria-hidden="true"></span>
-            {{ action.label }}
-          </a>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
+
+      <template #metadata
+        ><span
+          :id="page.header.count.id"
+          class="font-mono text-xs uppercase tracking-wider text-base-content/50"
+        >
+          {{ page.header.count.value }} {{ page.header.count.suffix }}
+        </span></template
+      ></CadencePageHeading
+    >
 
     <CadenceOpsPageBodyFrame>
       <form

@@ -8,8 +8,8 @@ defmodule CadenceWeb.OpsDashboardSharingLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
-  alias LiveVue.Test
 
   test "share and snapshot routes forward their exact subjects" do
     {conn, mission} = signed_in()
@@ -51,23 +51,13 @@ defmodule CadenceWeb.OpsDashboardSharingLiveTest do
     {TestFixtures.member_conn(user), mission}
   end
 
-  defp assert_surface(view, id, surface_id, mission, query_params, class) do
-    assert has_element?(view, "##{id}.#{class}")
-    vue = Test.get_vue(view, id: id)
-
-    assert vue.component == "FederatedFullPageSurface"
-    assert vue.id == id
-    assert vue.class == class
-    assert vue.ssr == false
-    assert vue.handlers == %{}
-    assert vue.slots == %{}
-
-    assert vue.props == %{
-             "application_key" => "ops_console",
-             "surface_id" => surface_id,
-             "host_scope" => "mission",
-             "mission_id" => mission.mission_id,
-             "query_params" => query_params
-           }
+  defp assert_surface(view, _id, surface_id, mission, query_params, _class) do
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => "ops_console",
+      "surface_id" => surface_id,
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => query_params
+    })
   end
 end

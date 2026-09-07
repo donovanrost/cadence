@@ -221,6 +221,7 @@ defmodule Cadence.Applications.RegistryTest do
              "limits",
              "mission_catalog",
              "ops_console",
+             "organization_admin",
              "spacecraft",
              "telemetry_decom"
            ]

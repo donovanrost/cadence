@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import CadenceOpsViewport from "./ui/components/CadenceOpsViewport.vue";
+import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
 import { onBeforeUnmount, reactive, watch } from "vue";
-import CadenceField from "./ui/components/CadenceField.vue";
-import CadencePageHeaderFrame from "./ui/components/CadencePageHeaderFrame.vue";
-import CadenceOpsListFrame from "./ui/components/CadenceOpsListFrame.vue";
-import CadenceOpsListBodyFrame from "./ui/components/CadenceOpsListBodyFrame.vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
+import CadenceOpsListFrame from "@cadence/ui/CadenceOpsListFrame.vue";
+import CadenceOpsListBodyFrame from "@cadence/ui/CadenceOpsListBodyFrame.vue";
 
 type Severity = "critical" | "warning" | "info" | "nominal";
 
@@ -172,20 +172,12 @@ const resetFilters = () => {
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <CadencePageHeaderFrame variant="ops">
-      <div
-        class="mx-auto flex max-w-[100rem] flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"
-      >
-        <div>
-          <p class="font-mono text-[0.65rem] uppercase tracking-[0.28em] text-primary/70">
-            {{ page.header.eyebrow }}
-          </p>
-          <h1 class="mt-1 text-2xl font-bold tracking-tight">{{ page.header.heading }}</h1>
-          <p class="mt-2 max-w-3xl text-sm text-base-content/60">
-            {{ page.header.copy }}
-          </p>
-        </div>
-        <div
+    <CadencePageHeading>
+      <template #title>{{ page.header.heading }}</template>
+      <template #eyebrow>{{ page.header.eyebrow }}</template>
+      <template #description>{{ page.header.copy }}</template>
+      <template #actions
+        ><div
           :id="summary.id"
           class="flex flex-wrap gap-2"
           :data-alarm-active-count="summary.active_count"
@@ -200,9 +192,9 @@ const resetFilters = () => {
             <span class="font-mono">{{ badge.count }}</span>
             <span class="uppercase text-[0.65rem]">{{ badge.label }}</span>
           </span>
-        </div>
-      </div>
-    </CadencePageHeaderFrame>
+        </div></template
+      >
+    </CadencePageHeading>
 
     <CadenceOpsListBodyFrame>
       <form

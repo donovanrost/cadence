@@ -1,132 +1,83 @@
 <script setup lang="ts">
-import AccountDropdownMenu from "./ui/reka/AccountDropdownMenu.vue";
-import CadenceMenuItem from "./ui/reka/CadenceMenuItem.vue";
-
-type Attributes = Record<string, string>;
-
-type TextPresentation = {
-  class: string;
-  text: string | null;
-};
-
-type NotificationPresentation = {
-  key: string;
+import AccountDropdownMenu from "@cadence/ui/AccountDropdownMenu.vue";
+import CadenceMenuItem from "@cadence/ui/CadenceMenuItem.vue";
+type Notification = {
   notification_id: string;
-  link: { class: string; attrs: Attributes };
-  dot_class: string | null;
-  action: "mark_read" | null;
-  content_class: string;
-  title: TextPresentation;
-  body: TextPresentation | null;
+  title: string;
+  body: string | null;
+  unread: boolean;
 };
-
-type Presentation = {
-  root: { class: string };
-  trigger: {
-    class: string;
-    attrs: Attributes;
-    icon_class: string;
-    badge: TextPresentation | null;
-  };
-  menu: {
-    id: string;
-    class: string;
-    attrs: Attributes;
-    title: {
-      item_class: string;
-      label_class: string;
-      label: string;
-      unread_class: string;
-      unread_label: string | null;
-    };
-    empty_state: { class: string; label: string } | null;
-    notifications: NotificationPresentation[];
-    footer: {
-      item_class: string;
-      class: string;
-      attrs: Attributes;
-      label: string;
-    };
-  };
-};
-
-const props = defineProps<{ presentation: Presentation }>();
-
-const emit = defineEmits<{
-  "mark-read": [payload: { notification_id: string }];
-}>();
-
-const markRead = (notification: NotificationPresentation, event: MouseEvent) => {
-  if (notification.action !== "mark_read") return;
-
-  event.preventDefault();
-  emit("mark-read", { notification_id: notification.notification_id });
-};
+defineProps<{ count: number; notifications: Notification[] }>();
+const emit = defineEmits<{ "mark-read": [params: { notification_id: string }] }>();
+function select(event: MouseEvent, notification: Notification) {
+  if (notification.unread) {
+    event.preventDefault();
+    emit("mark-read", { notification_id: notification.notification_id });
+  }
+}
 </script>
-
 <template>
-  <AccountDropdownMenu :class="presentation.root.class">
-    <template #trigger="{ open }">
-      <button
-        :class="presentation.trigger.class"
-        v-bind="presentation.trigger.attrs"
+  <AccountDropdownMenu class="dropdown dropdown-end">
+    <template #trigger="{ open }"
+      ><button
+        id="notifications-bell-application"
+        type="button"
+        aria-label="Notifications"
         :aria-expanded="open"
+        class="btn btn-ghost btn-sm btn-circle relative"
       >
-        <span :class="presentation.trigger.icon_class"></span>
-        <span v-if="presentation.trigger.badge" :class="presentation.trigger.badge.class">{{
-          presentation.trigger.badge.text
-        }}</span>
-      </button>
-    </template>
-
-    <template #content="{ open, onItemSelect }">
-      <div
-        :id="presentation.menu.id"
-        :class="presentation.menu.class"
-        v-bind="presentation.menu.attrs"
+        <span class="hero-bell h-5 w-5"></span
+        ><span
+          v-if="count"
+          class="badge badge-primary badge-xs absolute -top-0.5 -right-0.5 font-mono"
+          >{{ count > 9 ? "9+" : count }}</span
+        >
+      </button></template
+    >
+    <template #content="{ open, onItemSelect }"
+      ><div
+        role="menu"
+        class="dropdown-content menu bg-base-200 z-[var(--z-popover)] w-80 p-2 shadow-lg border border-primary/20 max-h-96 overflow-y-auto"
       >
-        <li :class="presentation.menu.title.item_class">
-          <span :class="presentation.menu.title.label_class">
-            {{ presentation.menu.title.label }}
-            <span
-              v-if="presentation.menu.title.unread_label"
-              :class="presentation.menu.title.unread_class"
-              >{{ presentation.menu.title.unread_label }}</span
-            >
-          </span>
-        </li>
-
-        <li v-if="presentation.menu.empty_state" :class="presentation.menu.empty_state.class">
-          {{ presentation.menu.empty_state.label }}
-        </li>
-        <template v-else>
-          <li v-for="notification in presentation.menu.notifications" :key="notification.key">
-            <CadenceMenuItem :active="open" @select="onItemSelect">
-              <a
-                :class="notification.link.class"
-                v-bind="notification.link.attrs"
-                @click="markRead(notification, $event)"
-              >
-                <span v-if="notification.dot_class" :class="notification.dot_class"></span>
-                <span :class="notification.content_class">
-                  <span :class="notification.title.class">{{ notification.title.text }}</span>
-                  <span v-if="notification.body" :class="notification.body.class">
-                    {{ notification.body.text }}
-                  </span>
-                </span>
-              </a>
-            </CadenceMenuItem>
-          </li>
-        </template>
-
-        <li :class="presentation.menu.footer.item_class">
-          <CadenceMenuItem :active="open" @select="onItemSelect">
-            <a :class="presentation.menu.footer.class" v-bind="presentation.menu.footer.attrs">
-              {{ presentation.menu.footer.label }}
-            </a>
-          </CadenceMenuItem>
-        </li>
-      </div>
-    </template>
+        <p class="hud-label px-3 py-2">
+          Notifications <span v-if="count" class="text-primary">({{ count }} unread)</span>
+        </p>
+        <p v-if="!notifications.length" class="px-3 py-4 text-center text-sm text-base-content/60">
+          No notifications
+        </p>
+        <CadenceMenuItem
+          v-for="notification in notifications"
+          :key="notification.notification_id"
+          :active="open"
+          @select="onItemSelect"
+          ><a
+            href="/notifications"
+            data-phx-link="redirect"
+            data-phx-link-state="push"
+            class="flex items-start gap-2 px-3 py-2"
+            @click="select($event, notification)"
+            ><span
+              v-if="notification.unread"
+              class="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0"
+            ></span
+            ><span class="min-w-0"
+              ><span class="block text-xs font-semibold truncate">{{ notification.title }}</span
+              ><span v-if="notification.body" class="block text-xs text-base-content/70 truncate">{{
+                notification.body
+              }}</span></span
+            ></a
+          ></CadenceMenuItem
+        >
+        <CadenceMenuItem :active="open" @select="onItemSelect"
+          ><a
+            href="/notifications"
+            data-phx-link="redirect"
+            data-phx-link-state="push"
+            class="border-t border-primary/10 mt-1 pt-2 text-xs text-primary uppercase tracking-wide"
+            >See all notifications</a
+          ></CadenceMenuItem
+        >
+      </div></template
+    >
   </AccountDropdownMenu>
 </template>

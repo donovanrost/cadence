@@ -20,7 +20,7 @@ defmodule Cadence.Applications.ReleaseRegistry do
     TelemetryDecomCatalogContribution,
     OpsConsole
   ]
-  @optional_contributors [CadenceWeb.ApplicationContributions.OrganizationAdmin]
+  @additional_contributors [Cadence.Applications.OrganizationAdmin]
 
   @spec all() :: [ReleaseContribution.t()]
   def all, do: all(contributors())
@@ -59,7 +59,7 @@ defmodule Cadence.Applications.ReleaseRegistry do
   def validate(_contributors), do: {:error, :invalid_release_contribution_registry}
 
   defp contributors do
-    @contributors ++ Enum.filter(@optional_contributors, &Code.ensure_loaded?/1)
+    @contributors ++ @additional_contributors
   end
 
   @spec fetch(binary(), pos_integer(), binary(), pos_integer()) ::
