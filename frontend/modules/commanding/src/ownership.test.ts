@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,7 +16,7 @@ test("legacy entries delegate to the exact public feature implementations", () =
     ["../../../apps/ops-console/src/OpsCommands.vue", "mission-commands"],
     ["../../../apps/spacecraft/src/SpacecraftCommanding.vue", "spacecraft-commanding"],
   ]) {
-    const source = readFileSync(resolve(directory, path!), "utf8");
+    const source = readFileSync(resolve(directory, required(path)), "utf8");
     expect(source).toContain(`@cadence/commanding/${entry}`);
     expect(source).not.toContain("<template>");
   }
@@ -28,7 +29,7 @@ test("features own their contracts and cannot depend on delivery or sibling inte
     const source = readFileSync(absolute, "utf8");
     const feature = file.split(sep)[0] === "features" ? file.split(sep)[1] : undefined;
     for (const match of source.matchAll(/(?:from\s*|import\s*\()["']([^"']+)["']/g)) {
-      const specifier = match[1]!;
+      const specifier = required(match[1]);
       expect(specifier, file).not.toMatch(/@cadence\/(?:plugin-host|.*-plugin)(?:\/|$)/);
       if (!specifier.startsWith(".")) continue;
       const target = relative(directory, resolve(dirname(absolute), specifier));

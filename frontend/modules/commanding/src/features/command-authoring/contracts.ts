@@ -116,7 +116,8 @@ export function readAuthoringPage(value: unknown, context: OpsPageContext): Auth
   )
     return fail();
   if (value.operation !== null && !preview) return fail();
-  const operation = value.operation === null ? null : readOperation(value.operation, preview!);
+  const operation =
+    value.operation === null ? null : preview ? readOperation(value.operation, preview) : fail();
   return { catalog, preview, operation };
 }
 export function readPreviewResult(value: unknown, catalog: Catalog): PreviewResult {

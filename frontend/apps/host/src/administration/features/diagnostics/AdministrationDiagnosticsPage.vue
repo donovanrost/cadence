@@ -5,7 +5,7 @@ import { administrationDiagnostics } from "./contributions";
 import DiagnosticsContributionBoundary from "./DiagnosticsContributionBoundary.vue";
 
 defineProps<{
-  snapshots: DiagnosticsSnapshot[];
+  snapshots: readonly DiagnosticsSnapshot[];
   interactions: DiagnosticsPanelInteractions;
   refreshing?: boolean;
 }>();

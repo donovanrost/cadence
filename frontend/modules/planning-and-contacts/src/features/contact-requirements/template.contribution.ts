@@ -7,6 +7,7 @@ export const requirementTemplateContribution = {
   slot: "ops.page",
   version: 1,
   title: "Requirement Templates",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor; the lint type service cannot resolve Vue modules.
   component: TemplateContribution,
   query: true,
   actions: templateActions,

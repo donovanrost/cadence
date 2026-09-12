@@ -1,3 +1,6 @@
+import { required } from "../../../test-support/required";
+import { repairFixture } from "../../../modules/planning-and-contacts/src/features/fleet-planning/fleet-run.test-support";
+import type { FleetRunCommand } from "../../../modules/planning-and-contacts/src/features/fleet-planning/OpsFleetPlanningRun.contracts";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import type {
@@ -11,7 +14,7 @@ import { surfaceContracts } from "./federated-application";
 import OpsConsoleApplication from "./OpsConsoleApplication.vue";
 
 function harness() {
-  const surface = surfaceContracts.find((s) => s.surfaceId === "fleet_planning_run")!;
+  const surface = required(surfaceContracts.find((s) => s.surfaceId === "fleet_planning_run"));
   const query = vi.fn<(request: HostQueryRequest) => Promise<unknown>>();
   const execute = vi.fn<(request: HostActionRequest<unknown>) => Promise<unknown>>();
   const props: FullPageSurfaceProps = {
@@ -52,7 +55,7 @@ function harness() {
 
 test("the run port performs only the captured declared read", async () => {
   const { props, query, execute } = harness();
-  const port = createFleetRunPort(props, () => true)!;
+  const port = required(createFleetRunPort(props, () => true));
   query.mockResolvedValue({
     trusted_surface: {
       queryVersion: 1,
@@ -81,7 +84,7 @@ test("a departed run port refuses new reads and late responses", async () => {
         resolve = done;
       }),
   );
-  const port = createFleetRunPort(props, () => active)!;
+  const port = required(createFleetRunPort(props, () => active));
   const pending = port.refresh();
   active = false;
   resolve({});
@@ -91,7 +94,7 @@ test("a departed run port refuses new reads and late responses", async () => {
 });
 test("the port rejects other presentations and other surfaces", async () => {
   const { props, query } = harness();
-  const port = createFleetRunPort(props, () => true)!;
+  const port = required(createFleetRunPort(props, () => true));
   query.mockResolvedValue({
     queryVersion: 1,
     presentation: { component: "OpsContactDetail", props: { run: {} } },
@@ -129,14 +132,22 @@ test("the mounted host injects run read recovery through the module entry", asyn
 test("run and review use only the captured declared actions and reject departure", async () => {
   const { props, execute } = harness();
   let active = true;
-  const port = createFleetRunPort(props, () => active)!;
+  const port = required(createFleetRunPort(props, () => active));
   execute.mockResolvedValue({ receiptId: "captured" });
-  for (const [action, actionId] of [
-    ["continue", "refresh-fleet-run"],
-    ["repair", "repair-fleet-run"],
-  ] as const) {
-    const input = { fleet_run: {}, evidence: {} };
-    await port.execute(action, input);
+  const model = repairFixture();
+  const repairInput = {
+    fleet_planning_run_id: model.id,
+    evidence: model.repair.evidence,
+    repair: model.repair.defaults,
+  };
+  const commands: FleetRunCommand[] = [
+    ["continue", { fleet_planning_run_id: model.id, evidence: model.evidence }],
+    ["repair", repairInput],
+  ];
+  for (const command of commands) {
+    const [action, input] = command;
+    const actionId = action === "continue" ? "refresh-fleet-run" : "repair-fleet-run";
+    await port.execute(...command);
     expect(execute).toHaveBeenLastCalledWith({
       applicationKey: "ops_console",
       applicationVersion: 1,
@@ -148,12 +159,11 @@ test("run and review use only the captured declared actions and reject departure
     });
   }
   active = false;
-  await expect(port.execute("repair", {})).rejects.toThrow("departed");
+  await expect(port.execute("repair", repairInput)).rejects.toThrow("departed");
   expect(execute).toHaveBeenCalledTimes(2);
-  const undeclared = createFleetRunPort(
-    { ...props, surface: { ...props.surface, actions: [] } },
-    () => true,
-  )!;
-  await expect(undeclared.execute("repair", {})).rejects.toThrow("Undeclared");
+  const undeclared = required(
+    createFleetRunPort({ ...props, surface: { ...props.surface, actions: [] } }, () => true),
+  );
+  await expect(undeclared.execute("repair", repairInput)).rejects.toThrow("Undeclared");
   expect(execute).toHaveBeenCalledTimes(2);
 });

@@ -4,7 +4,8 @@ import {
   admitRequirementOperation,
   admitRequirementPage,
   requirementContext,
-  type RequirementAction,
+  type RequirementCommand,
+  type RequirementRequest,
   type RequirementOperation,
   type RequirementPage,
 } from "./requirement-workflow";
@@ -26,21 +27,15 @@ export function useRequirementWorkflow(
   let active = true,
     generation = 0,
     sequence = initial.sequence;
-  let attempted: {
-    action: RequirementAction;
-    sequence: number;
-    input: Record<string, any>;
-  } | null = null;
+  let attempted: (RequirementCommand & { sequence: number }) | null = null;
   const disabled = computed(() => pending.value || uncertain.value || needsRead.value);
   const result = computed(() =>
     operation.value?.status === "completed"
-      ? { actionId: operation.value.action, result: operation.value.receipt!.result }
+      ? { actionId: operation.value.action, result: operation.value.receipt.result }
       : undefined,
   );
   const nextHref = computed(() =>
-    operation.value?.status === "completed"
-      ? (operation.value.receipt!.result.navigation.href as string)
-      : null,
+    operation.value?.status === "completed" ? operation.value.receipt.result.navigation.href : null,
   );
   function settle(op: RequirementOperation, command: NonNullable<typeof attempted>) {
     if (
@@ -86,9 +81,24 @@ export function useRequirementWorkflow(
       if (active && n === generation) pending.value = false;
     }
   }
-  async function submit(action: RequirementAction, payload: Record<string, any>) {
+  async function submit(...[action, payload]: RequirementRequest) {
     if (disabled.value || !active) return;
-    const command = { action, input: JSON.parse(JSON.stringify(payload)), sequence: sequence + 1 };
+    const command: RequirementCommand & { sequence: number } =
+      action === "plan"
+        ? {
+            action,
+            input: { ...payload, requirement_evidence: { ...payload.requirement_evidence } },
+            sequence: sequence + 1,
+          }
+        : {
+            action,
+            input: {
+              ...payload,
+              requirement_evidence: { ...payload.requirement_evidence },
+              selected_snapshot_ids: [...payload.selected_snapshot_ids],
+            },
+            sequence: sequence + 1,
+          };
     attempted = command;
     const n = ++generation;
     pending.value = true;

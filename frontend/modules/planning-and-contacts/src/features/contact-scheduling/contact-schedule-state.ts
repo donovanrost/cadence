@@ -1,14 +1,20 @@
-import { useCapturedSchedule } from "./captured-schedule-state";
-import { onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from "vue";
+import {
+  useScheduleDraft,
+  scheduleSearch,
+  invalidScheduleWindow,
+  availableOpportunity,
+} from "./schedule-draft";
+import { useSchedulePageWorkflow } from "./schedule-page-workflow";
+import { onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import type {
   ContactSchedulePort,
   ScheduleOpportunity,
   ScheduleReservation,
   ScheduleReceipt,
   ScheduleSearchResult,
+  ScheduleInputs,
 } from "./OpsContactSchedule.contracts";
 import {
-  parseScheduleUTC,
   admitContactSchedule,
   completedResult,
   admitReceipt,
@@ -18,7 +24,7 @@ import {
   sameEvidence,
 } from "./contact-schedule";
 export function useContactSchedule(input: () => unknown, port?: ContactSchedulePort) {
-  if (port?.captured) return useCapturedSchedule(input, port);
+  if (port?.protocol === "page-snapshot") return useSchedulePageWorkflow(input, port);
   const schedule = shallowRef(admitContactSchedule(input(), port?.context));
   const pending = ref(false),
     notice = ref(""),
@@ -27,24 +33,11 @@ export function useContactSchedule(input: () => unknown, port?: ContactScheduleP
     receipt = shallowRef<ScheduleReceipt | null>(null),
     cancellation = shallowRef<ScheduleReservation | null>(null);
   const usedTokens = new Set<string>();
-  const draft = reactive({ route_key: "", starts_at: "", ends_at: "" });
-  const now = ref(Date.now());
-  let ticker: ReturnType<typeof setInterval> | undefined;
-  onMounted(() => {
-    ticker = setInterval(() => {
-      now.value = Date.now();
-    }, 1000);
-  });
+  const { draft, now } = useScheduleDraft(() => schedule.value);
   let active = true,
     generation = 0;
   const initialContext = schedule.value?.context ?? port?.context;
   const initialQuery = schedule.value?.query;
-  function initialize() {
-    draft.route_key = schedule.value?.routes.entries[0]?.key ?? "";
-    draft.starts_at = schedule.value?.initial_window.starts_at.slice(0, 16) ?? "";
-    draft.ends_at = schedule.value?.initial_window.ends_at.slice(0, 16) ?? "";
-  }
-  initialize();
   function admitted(value: unknown) {
     const next = admitContactSchedule(value, initialContext);
     return next && (!initialQuery || sameEvidence(next.query, initialQuery)) ? next : null;
@@ -59,7 +52,6 @@ export function useContactSchedule(input: () => unknown, port?: ContactScheduleP
     cancellation.value = null;
   });
   onBeforeUnmount(() => {
-    clearInterval(ticker);
     active = false;
     generation++;
   });
@@ -98,24 +90,11 @@ export function useContactSchedule(input: () => unknown, port?: ContactScheduleP
       uncertain.value
     )
       return;
-    const starts = parseScheduleUTC(draft.starts_at),
-      ends = parseScheduleUTC(draft.ends_at);
-    if (
-      !Number.isFinite(starts) ||
-      !Number.isFinite(ends) ||
-      ends <= starts ||
-      starts < Date.now() - 60000 ||
-      ends - starts > 604800000
-    ) {
-      notice.value = "Choose a future UTC window of at most seven days.";
+    const form = scheduleSearch(draft, reviewed);
+    if (!form) {
+      notice.value = invalidScheduleWindow;
       return;
     }
-    const form = {
-      spacecraft_id: reviewed.spacecraft_id,
-      route_key: reviewed.key,
-      starts_at: new Date(starts).toISOString().replace(".000Z", "Z"),
-      ends_at: new Date(ends).toISOString().replace(".000Z", "Z"),
-    };
     const run = ++generation;
     pending.value = true;
     result.value = null;
@@ -145,9 +124,7 @@ export function useContactSchedule(input: () => unknown, port?: ContactScheduleP
       !pending.value &&
       !uncertain.value &&
       !usedTokens.has(o.token) &&
-      ["available", "limited"].includes(o.availability) &&
-      Date.parse(o.expires_at) > Math.max(now.value, Date.now()) &&
-      result.value?.opportunities.includes(o)
+      availableOpportunity(result.value, o, Math.max(now.value, Date.now()))
     );
   }
   function reviewCancel(row: ScheduleReservation) {
@@ -163,17 +140,25 @@ export function useContactSchedule(input: () => unknown, port?: ContactScheduleP
     cancellation.value = structuredClone(row);
   }
   async function mutate(
-    action: "reserve" | "cancel",
-    payload: Record<string, unknown>,
-    expected?: string,
+    ...request:
+      | [action: "reserve", payload: ScheduleInputs["reserve"], expected?: string]
+      | [action: "cancel", payload: ScheduleInputs["cancel"], expected?: string]
   ) {
     if (!port || pending.value || uncertain.value) return;
+    const [action, payload, expected] = request;
     const run = ++generation;
     pending.value = true;
     receipt.value = null;
     notice.value = "";
     try {
-      const next = admitReceipt(completedResult(await port.execute(action, payload)), expected);
+      const next = admitReceipt(
+        completedResult(
+          await port.execute(
+            ...(action === "reserve" ? ([action, payload] as const) : ([action, payload] as const)),
+          ),
+        ),
+        expected,
+      );
       if (!current(run)) return;
       if (
         !next ||

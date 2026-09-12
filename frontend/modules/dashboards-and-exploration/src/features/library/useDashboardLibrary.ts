@@ -73,9 +73,10 @@ export function useDashboardLibrary(props: {
     window.removeEventListener("beforeunload", unload);
   });
   function changeMode(next: "create_item" | "add_version") {
+    const selected = model.value.selected;
     if (
       disabled.value ||
-      (next === "add_version" && !model.value.selected) ||
+      (next === "add_version" && !selected) ||
       (dirty.value && !window.confirm("Discard the unsaved widget definition?"))
     )
       return;
@@ -84,7 +85,7 @@ export function useDashboardLibrary(props: {
       name: "",
       description: "",
       change_summary: "",
-      widget_json: next === "add_version" ? model.value.selected!.widget_json : widgetExample,
+      widget_json: next === "add_version" && selected ? selected.widget_json : widgetExample,
     });
     clean.value = JSON.stringify(draft);
     jsonError.value = "";
@@ -133,10 +134,17 @@ export function useDashboardLibrary(props: {
       jsonError.value = error instanceof Error ? error.message : "Check the widget definition.";
       return;
     }
+    const target = model.value.target;
     if (
       action === "add_to_draft" &&
+      (typeof input.version !== "number" || typeof input.expected_version !== "number" || !target)
+    )
+      return;
+    if (
+      action === "add_to_draft" &&
+      target &&
       !window.confirm(
-        `Add library v${input.version} to ${model.value.target!.name} as a new draft after v${input.expected_version}? Publication stays unchanged.`,
+        `Add library v${String(input.version)} to ${target.name} as a new draft after v${String(input.expected_version)}? Publication stays unchanged.`,
       )
     )
       return;

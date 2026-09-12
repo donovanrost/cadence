@@ -1,3 +1,4 @@
+import { record as isRecord } from "@cadence/plugin-sdk/admission";
 import type { OpsPageContext } from "@cadence/plugin-sdk/ops-pages";
 import type { HistoryModel, Release, Verifier, MatchedRecord } from "./types";
 import { identity, readHistoryQuery } from "./query";
@@ -6,6 +7,7 @@ const text = (v: unknown, max = 512): v is string =>
   typeof v === "string" &&
   v.length > 0 &&
   new TextEncoder().encode(v).length <= max &&
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(v);
 const oneOf =
   (...values: unknown[]): Check =>
@@ -32,7 +34,7 @@ function shape(value: unknown, fields: Record<string, Check>): Record<string, un
     keys = Object.keys(fields);
   if (
     Object.keys(v).length !== keys.length ||
-    keys.some((k) => !Object.hasOwn(v, k) || !fields[k]!(v[k]))
+    Object.entries(fields).some(([key, check]) => !Object.hasOwn(v, key) || !check(v[key]))
   )
     fail();
   return v;
@@ -48,8 +50,8 @@ const json: Check = (v) => {
   }
 };
 const canonical = (v: unknown) =>
-  JSON.stringify(v, (_, item) =>
-    object(item)
+  JSON.stringify(v, (_, item: unknown) =>
+    isRecord(item)
       ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
       : item,
   );

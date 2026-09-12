@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { test } from "vite-plus/test";
 import assert from "node:assert/strict";
 import {
@@ -22,7 +23,7 @@ test("exact decimal and scientific integers preserve boundary digits", () => {
     ["10e-1", "1"],
     ["-1.2e2", "-120"],
   ])
-    assert.equal(exactInteger(input), expected, input);
+    assert.equal(exactInteger(required(input)), expected, input);
 });
 test("fractional, nonfinite and unbounded integers fail before transport", () => {
   for (const input of [
@@ -54,8 +55,8 @@ test("scalar JSON map retains lexical values and differentiates numeric-looking 
   assert.equal(values.float, "1.25e-7");
   assert.equal(Object.hasOwn(values, "__proto__"), true);
   assert.deepEqual(parseArgumentValues(argumentValuesJson(values)), values);
-  assert.equal(scalarInputText(values.wide!), "18446744073709551615");
-  assert.equal(scalarInputText(values.text!), "18446744073709551615");
+  assert.equal(scalarInputText(required(values.wide)), "18446744073709551615");
+  assert.equal(scalarInputText(required(values.text)), "18446744073709551615");
 });
 test("malformed, duplicate, nested and unbounded argument maps are rejected", () => {
   for (const raw of [
@@ -93,12 +94,19 @@ test("every integer around the safe-number boundary round-trips exactly", () => 
 });
 
 test("builders reject implicit numeric coercion and injected scalar fragments", () => {
-  assert.throws(() =>
-    argumentValuesJson({ amount: Number("18446744073709551615") as unknown as string }),
-  );
+  assert.throws(() => {
+    // @ts-expect-error Negative runtime fixture: a rounded number is not exact source text.
+    argumentValuesJson({ amount: Number("18446744073709551615") });
+  });
   assert.throws(() => argumentValuesJson({ amount: 'true,"injected":42' }));
-  assert.throws(() => exactInteger(42 as unknown as string));
-  assert.throws(() => scalarInputText(42 as unknown as string));
+  assert.throws(() => {
+    // @ts-expect-error The runtime boundary also rejects untyped numeric input.
+    exactInteger(42);
+  });
+  assert.throws(() => {
+    // @ts-expect-error The runtime boundary also rejects untyped numeric input.
+    scalarInputText(42);
+  });
 });
 test("resolved values retain their larger existing read allowance", () => {
   const value = JSON.stringify({ default: "x".repeat(40000) });

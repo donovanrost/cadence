@@ -41,6 +41,6 @@ export function unwrapOpsConsoleResponse(
   return { component, props };
 }
 
-function isRecord(value: unknown): value is Record<string, any> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

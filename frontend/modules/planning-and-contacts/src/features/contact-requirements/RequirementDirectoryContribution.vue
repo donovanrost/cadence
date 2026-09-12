@@ -11,19 +11,19 @@ import OpsContactRequirementList from "./OpsContactRequirementList.vue";
 defineOptions({ inheritAttrs: false });
 const props = defineProps<{ directory: RequirementDirectory; readPort: OpsPageReadPort }>();
 const initial = props.directory,
-  directory = shallowRef(initial),
+  currentDirectory = shallowRef(initial),
   pending = ref(false),
   notice = ref("");
 let active = true,
   generation = 0;
-const presentation = computed(() => requirementDirectoryPresentation(directory.value));
+const presentation = computed(() => requirementDirectoryPresentation(currentDirectory.value));
 watch(
   () => props.directory,
   (next) => {
     if (!requirementDataEqual(next, initial)) {
       generation++;
       pending.value = false;
-      directory.value = next;
+      currentDirectory.value = next;
     }
   },
 );
@@ -40,7 +40,7 @@ async function refresh() {
     if (!active || n !== generation) return;
     const admitted = admitRequirementDirectory(value, initial.context, initial.query);
     if (!admitted) throw Error("Unavailable directory");
-    directory.value = admitted;
+    currentDirectory.value = admitted;
     notice.value = "Requirement evidence refreshed.";
   } catch {
     if (active && n === generation)

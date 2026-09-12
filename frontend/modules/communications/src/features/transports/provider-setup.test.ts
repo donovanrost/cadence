@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import TransportCreation from "./TransportCreation.vue";
@@ -65,7 +66,7 @@ test("provider changes clear dependent selections and cannot admit an obsolete c
   let finish!: (value: unknown) => void;
   const port = {
     execute: vi.fn(async (_action: string, draft: FormInput): Promise<unknown> => {
-      if (draft.transport.mission_provider_id === "provider-1")
+      if (required(draft.transport).mission_provider_id === "provider-1")
         return new Promise((resolve) => {
           finish = resolve;
         });
@@ -80,7 +81,7 @@ test("provider changes clear dependent selections and cannot admit an obsolete c
     await wrapper.get("#transport-origin").setValue("provider_managed");
     await flushPromises();
     await wrapper.get("#transport-provider").setValue("provider-1");
-    const obsolete = port.execute.mock.calls.at(-1)![1];
+    const obsolete = required(port.execute.mock.calls.at(-1))[1];
     await wrapper.get("#transport-provider").setValue("provider-2");
     finish(providerValidation(obsolete));
     await flushPromises();
@@ -91,7 +92,9 @@ test("provider changes clear dependent selections and cannot admit an obsolete c
     await flushPromises();
     await wrapper.get("#transport-service-profile").setValue("");
     await flushPromises();
-    expect(port.execute.mock.calls.at(-1)![1].transport.delivery_profile_id).toBe("");
+    expect(
+      required(required(port.execute.mock.calls.at(-1))[1].transport).delivery_profile_id,
+    ).toBe("");
     expect(wrapper.get("#configuration").text()).not.toContain("1115");
     expect(wrapper.get("#create-transport-button").attributes("disabled")).toBeDefined();
   } finally {
@@ -115,13 +118,13 @@ test("provider receipt admission rejects forged identity, choices, versions and 
       r.provider_setup.deliveries = [];
     },
     (r: ReturnType<typeof providerValidation>) => {
-      r.provider_setup.services.push(r.provider_setup.services[0]);
+      r.provider_setup.services.push(required(r.provider_setup.services[0]));
     },
     (r: ReturnType<typeof providerValidation>) => {
-      r.provider_setup.configuration[0].value = "other-endpoint";
+      required(r.provider_setup.configuration[0]).value = "other-endpoint";
     },
     (r: ReturnType<typeof providerValidation>) => {
-      r.provider_setup.configuration[0].label = "secret";
+      required(r.provider_setup.configuration[0]).label = "secret";
     },
   ]) {
     const receipt = providerValidation(draft);

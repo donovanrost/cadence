@@ -19,6 +19,7 @@ const identifier = (value: unknown): value is string =>
   typeof value === "string" &&
   new TextEncoder().encode(value).length >= 1 &&
   new TextEncoder().encode(value).length <= 256 &&
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   !/[\x00-\x20\x7f]/.test(value);
 
 // Fail closed for stale renderer/server contracts; a missing reference must never
@@ -36,8 +37,9 @@ export function admitPolicyEvidence(value: unknown): PolicyEvidence | null {
     !identifier(record.organization_id) ||
     !identifier(record.mission_id) ||
     !identifier(record.policy_id) ||
+    typeof record.policy_version !== "number" ||
     !Number.isSafeInteger(record.policy_version) ||
-    (record.policy_version as number) <= 0 ||
+    record.policy_version <= 0 ||
     typeof record.content_sha256 !== "string" ||
     record.content_sha256.length !== 64 ||
     !/^[0-9a-f]{64}$/.test(record.content_sha256)
@@ -48,7 +50,7 @@ export function admitPolicyEvidence(value: unknown): PolicyEvidence | null {
     organization_id: record.organization_id,
     mission_id: record.mission_id,
     policy_id: record.policy_id,
-    policy_version: record.policy_version as number,
+    policy_version: record.policy_version,
     content_sha256: record.content_sha256,
   });
 }

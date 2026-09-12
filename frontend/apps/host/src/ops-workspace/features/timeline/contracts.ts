@@ -84,6 +84,14 @@ export function readTimeline(
   organizationId: unknown,
   missionId: unknown,
 ): TimelineModel {
+  assertTimeline(value, organizationId, missionId);
+  return value;
+}
+function assertTimeline(
+  value: unknown,
+  organizationId: unknown,
+  missionId: unknown,
+): asserts value is TimelineModel {
   if (
     !identity(organizationId) ||
     !identity(missionId) ||
@@ -99,7 +107,10 @@ export function readTimeline(
     !queryKeys.every((key) => text((value.query as Record<string, unknown>)[key], 512)) ||
     !Array.isArray(value.errors) ||
     value.errors.length > 8 ||
-    !value.errors.every((key) => [...filterKeys, "time_range", "cursor"].includes(key)) ||
+    !value.errors.every(
+      (key: unknown) =>
+        typeof key === "string" && [...filterKeys, "time_range", "cursor"].includes(key),
+    ) ||
     !(
       value.next_cursor === null ||
       (record(value.next_cursor) && time(value.next_cursor.at) && identity(value.next_cursor.id))
@@ -121,7 +132,6 @@ export function readTimeline(
       value.source_dashboard_id !== value.query.source_dashboard_id)
   )
     throw Error("Invalid timeline evidence");
-  return value as unknown as TimelineModel;
 }
 export function timelineHref(missionId: string, query: Partial<TimelineQuery>): string {
   if (!identity(missionId)) throw Error("Invalid mission identity");

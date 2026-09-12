@@ -112,7 +112,8 @@ export function createReleaseAwareRuntime(
 
       if (!slot && family.fallback?.identity === identity) {
         slot = family.fallback;
-        family.fallback = family.current;
+        if (family.current) family.fallback = family.current;
+        else delete family.fallback;
         family.current = slot;
       }
 
@@ -127,7 +128,8 @@ export function createReleaseAwareRuntime(
           identity,
           client: clientFor(application, identity),
         };
-        family.fallback = family.current;
+        if (family.current) family.fallback = family.current;
+        else delete family.fallback;
         family.current = slot;
       }
 

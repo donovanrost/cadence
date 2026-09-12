@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { transportFormPayload } from "./fixtures.test-support";
 import type { FormInput } from "../../shared/form-workflow.contracts";
 
@@ -37,13 +38,13 @@ export function providerTransportForm() {
 }
 
 export function providerValidation(input: FormInput) {
-  const draft = input.transport;
+  const draft = required(input.transport);
   const selected = !!draft.mission_provider_id;
   const prefix = draft.mission_provider_id;
   const configured = !!draft.service_profile_id && !!draft.delivery_profile_id;
   const endpoint = configured ? "127.0.0.1:5100" : null;
   return {
-    valid: configured && !!draft.display_name.trim(),
+    valid: configured && !!draft.display_name?.trim(),
     transport_review: { origin: "provider_managed", endpoint },
     provider_setup: {
       version: 1,
@@ -61,7 +62,7 @@ export function providerValidation(input: FormInput) {
         : [],
       configuration: configured
         ? [
-            ["Endpoint", endpoint!],
+            ["Endpoint", required(endpoint)],
             ["Mode", "listen"],
             ["Direction", "inbound"],
             ["Framing", "fixed_size"],

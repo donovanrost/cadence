@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import AuthLayoutBrand from "./AuthLayoutBrand.vue";
 import {
   PrimaryNavigation as ShellNavigation,
@@ -6,11 +6,11 @@ import {
   navigateAttrs,
 } from "../auth-and-navigation";
 import OpsWorkspaceFrame from "../ops-workspace/features/frame/OpsWorkspaceFrame.vue";
-const props = defineProps({
-  managedPage: Boolean,
-  variant: { type: String, required: true },
-  context: { type: Object, required: true },
-});
+defineProps<{
+  managedPage?: boolean;
+  variant: "auth" | "ops" | "sidebar" | "mission_sidebar" | "user_shell";
+  context: unknown;
+}>();
 </script>
 <template>
   <div

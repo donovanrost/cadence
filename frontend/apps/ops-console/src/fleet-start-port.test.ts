@@ -1,3 +1,6 @@
+import { required } from "../../../test-support/required";
+import { startReviewFixture } from "../../../modules/planning-and-contacts/src/features/fleet-planning/fleet-start.test-support";
+import type { FleetStartCommand } from "../../../modules/planning-and-contacts/src/features/fleet-planning/OpsFleetPlanningNew.contracts";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import type {
@@ -11,7 +14,7 @@ import { surfaceContracts } from "./federated-application";
 import OpsConsoleApplication from "./OpsConsoleApplication.vue";
 
 function harness() {
-  const surface = surfaceContracts.find((s) => s.surfaceId === "fleet_planning_new")!;
+  const surface = required(surfaceContracts.find((s) => s.surfaceId === "fleet_planning_new"));
   const query = vi.fn<(request: HostQueryRequest) => Promise<unknown>>();
   const execute = vi.fn<(request: HostActionRequest<unknown>) => Promise<unknown>>();
   const props: FullPageSurfaceProps = {
@@ -52,7 +55,7 @@ function harness() {
 
 test("the creation port performs only the captured declared read", async () => {
   const { props, query, execute } = harness();
-  const port = createFleetStartPort(props, () => true)!;
+  const port = required(createFleetStartPort(props, () => true));
   query.mockResolvedValue({
     trusted_surface: {
       queryVersion: 1,
@@ -81,7 +84,7 @@ test("a departed creation port refuses new reads and late responses", async () =
         resolve = done;
       }),
   );
-  const port = createFleetStartPort(props, () => active)!;
+  const port = required(createFleetStartPort(props, () => active));
   const pending = port.refresh();
   active = false;
   resolve({});
@@ -91,7 +94,7 @@ test("a departed creation port refuses new reads and late responses", async () =
 });
 test("the port rejects other presentations and other surfaces", async () => {
   const { props, query } = harness();
-  const port = createFleetStartPort(props, () => true)!;
+  const port = required(createFleetStartPort(props, () => true));
   query.mockResolvedValue({
     queryVersion: 1,
     presentation: { component: "OpsContactDetail", props: { start: {} } },
@@ -129,14 +132,18 @@ test("the mounted host injects creation read recovery through the module entry",
 test("creation and review use only the captured declared actions and reject departure", async () => {
   const { props, execute } = harness();
   let active = true;
-  const port = createFleetStartPort(props, () => active)!;
+  const port = required(createFleetStartPort(props, () => active));
   execute.mockResolvedValue({ receiptId: "captured" });
-  for (const [action, actionId] of [
-    ["preview", "validate-fleet-run"],
-    ["create", "create-fleet-run"],
-  ] as const) {
-    const input = { fleet_run: {}, evidence: {} };
-    await port.execute(action, input);
+  const review = startReviewFixture();
+  const createInput = { fleet_run: review.window, evidence: review.evidence };
+  const commands: FleetStartCommand[] = [
+    ["preview", { fleet_run: review.window, requirements_page: 1, templates_page: 1 }],
+    ["create", createInput],
+  ];
+  for (const command of commands) {
+    const [action, input] = command;
+    const actionId = action === "preview" ? "validate-fleet-run" : "create-fleet-run";
+    await port.execute(...command);
     expect(execute).toHaveBeenLastCalledWith({
       applicationKey: "ops_console",
       applicationVersion: 1,
@@ -148,12 +155,11 @@ test("creation and review use only the captured declared actions and reject depa
     });
   }
   active = false;
-  await expect(port.execute("create", {})).rejects.toThrow("departed");
+  await expect(port.execute("create", createInput)).rejects.toThrow("departed");
   expect(execute).toHaveBeenCalledTimes(2);
-  const undeclared = createFleetStartPort(
-    { ...props, surface: { ...props.surface, actions: [] } },
-    () => true,
-  )!;
-  await expect(undeclared.execute("create", {})).rejects.toThrow("Undeclared");
+  const undeclared = required(
+    createFleetStartPort({ ...props, surface: { ...props.surface, actions: [] } }, () => true),
+  );
+  await expect(undeclared.execute("create", createInput)).rejects.toThrow("Undeclared");
   expect(execute).toHaveBeenCalledTimes(2);
 });

@@ -21,6 +21,7 @@ function text(value: unknown, max = 512): string {
 }
 function id(value: unknown): string {
   const s = text(value, 256);
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   return s && !/[\u0000-\u001f]/.test(s) ? s : fail();
 }
 function integer(value: unknown, min = 0, max = Number.MAX_SAFE_INTEGER): number {
@@ -107,12 +108,9 @@ const enums: Partial<Record<keyof WidgetFields, string[]>> = {
 function fields(value: unknown): WidgetFields {
   const f = exact(value, Object.keys(widgetDefaults));
   for (const [key, value] of Object.entries(f)) {
-    text(value);
-    if (
-      enums[key as keyof WidgetFields] &&
-      !enums[key as keyof WidgetFields]!.includes(value as string)
-    )
-      fail();
+    const decoded = text(value),
+      choices = enums[key as keyof WidgetFields];
+    if (choices && !choices.includes(decoded)) fail();
   }
   for (const k of ["show_unit", "show_min_max_band", "span_gaps", "show_points", "shared_tooltip"])
     if (!["true", "false"].includes(f[k] as string)) fail();
@@ -121,6 +119,11 @@ function fields(value: unknown): WidgetFields {
   return f as WidgetFields;
 }
 export function readEditor(value: unknown, context: OpsPageContext): EditorState {
+  assertEditor(value, context);
+  return value;
+}
+
+function assertEditor(value: unknown, context: OpsPageContext): asserts value is EditorState {
   const s = exact(value, ["version", "sequence", "phase", "revision", "dirty", "model"]);
   if (s.version !== 2) fail();
   integer(s.revision, 0, 1_000_000);
@@ -209,5 +212,4 @@ export function readEditor(value: unknown, context: OpsPageContext): EditorState
     if (preview.document_mode !== "draft" || preview.document_version !== m.document_version)
       fail();
   }
-  return s as unknown as EditorState;
 }

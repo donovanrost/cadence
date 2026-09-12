@@ -1,3 +1,5 @@
+import { fixtureRows, fixtureString } from "../../../../../test-support/json-fixture.ts";
+import { required } from "../../../../../test-support/required.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,15 +19,19 @@ const server = await createServer({
 });
 try {
   const { shareContribution, snapshotContribution, readSharedView } =
-    await server.ssrLoadModule("/src/sharing.ts");
-  for (const model of JSON.parse(process.argv[2])) {
+    /** @type {typeof import("../../sharing.ts")} */ (
+      await server.ssrLoadModule("/src/sharing.ts")
+    );
+  for (const raw of fixtureRows(process.argv[2])) {
     const context = {
-      organizationId: model.organization_id,
-      missionId: model.mission_id,
-      resourceId: model.id,
+      organizationId: fixtureString(raw.organization_id),
+      missionId: fixtureString(raw.mission_id),
+      resourceId: fixtureString(raw.id),
     };
-    const registration = model.kind === "share" ? shareContribution : snapshotContribution;
-    const props = registration.read(model, context);
+    const registration = raw.kind === "share" ? shareContribution : snapshotContribution;
+    const props = registration.read(raw, context);
+    const model = props.model;
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks the SFC constructor at this registration or render boundary.
     const app = createSSRApp(registration.component, {
       ...props,
       refresh: async () => {},
@@ -49,13 +55,15 @@ try {
       assert.equal(!!doc.querySelector("[data-workspace-snapshot]"), model.canvas !== null);
       if (model.definition)
         assert.deepEqual(
-          JSON.parse(doc.querySelector("#shared-view-definition pre").textContent),
+          JSON.parse(required(doc.querySelector("#shared-view-definition pre")).textContent),
           JSON.parse(model.definition.json),
         );
       if (model.canvas)
-        assert.ok(doc.getElementById("shared-dashboard-feature").textContent.includes("28.4"));
+        assert.ok(
+          required(doc.getElementById("shared-dashboard-feature")).textContent.includes("28.4"),
+        );
       assert.equal(
-        doc.getElementById("shared-view-directory").getAttribute("href"),
+        required(doc.getElementById("shared-view-directory")).getAttribute("href"),
         "/missions/" + encodeURIComponent(model.mission_id) + "/ops/dashboards",
       );
     } finally {

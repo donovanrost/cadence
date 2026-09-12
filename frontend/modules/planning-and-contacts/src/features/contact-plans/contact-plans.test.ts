@@ -1,11 +1,16 @@
+import { required } from "../../../../../test-support/required";
+import { jsonFixture } from "../../../../../test-support/json-fixture";
+import { oneOf } from "@cadence/plugin-sdk/admission";
+import { planReviewActions } from "./plan-review";
 import { test, expect, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
-import { OpsContactPlanShow, type PlanDetailPort, type PlanAction } from "../../contact-plans";
+import { OpsContactPlanShow, type PlanDetailPort } from "../../contact-plans";
 import { planFixture } from "./fixtures.test-support";
 import { admitPlanDetail, canAct, planDecision, reviewHref } from "./plan-detail";
 function harness() {
   const props = planFixture();
   const port: PlanDetailPort = {
+    protocol: "remote-query" as const,
     context: { ...props.detail.context, plan_id: props.detail.plan.id },
     execute: vi.fn(),
     refresh: vi.fn(),
@@ -106,12 +111,7 @@ test("new versions clear reasons and historical, denied and malformed reviews ca
   historical.plan.current_version = 2;
   await wrapper.setProps({ detail: historical });
   expect(wrapper.find("#plan-review-historical").exists()).toBe(true);
-  for (const action of [
-    "submit-plan",
-    "approve-plan",
-    "reject-plan",
-    "execute-plan",
-  ] as PlanAction[])
+  for (const action of ["submit-plan", "approve-plan", "reject-plan", "execute-plan"] as const)
     expect(canAct(historical, action)).toBe(false);
   const denied = structuredClone(props.detail);
   denied.permissions.operate = false;
@@ -124,7 +124,7 @@ test("new versions clear reasons and historical, denied and malformed reviews ca
 });
 test("departed pages ignore late completions", async () => {
   const { props, port, wrapper } = harness();
-  let finish!: (v: unknown) => void;
+  let finish: ((v: unknown) => void) | undefined;
   vi.mocked(port.execute).mockImplementation(
     () =>
       new Promise((resolve) => {
@@ -134,7 +134,7 @@ test("departed pages ignore late completions", async () => {
   await wrapper.get("#submission-reason").setValue("Review");
   await wrapper.get("#submission").trigger("submit");
   wrapper.unmount();
-  finish(receipt(props.detail));
+  required(finish)(receipt(props.detail));
   await flushPromises();
   expect(port.refresh).not.toHaveBeenCalled();
 });
@@ -142,7 +142,7 @@ test("admission rejects scope substitution, mismatched approval hashes and execu
   const { detail } = planFixture();
   expect(admitPlanDetail(detail)).toEqual(detail);
   expect(admitPlanDetail(detail, { ...detail.context, plan_id: "different" })).toBeNull();
-  const bad: any = structuredClone(detail);
+  const bad = structuredClone(detail);
   bad.plan.reviewed_decision = {
     id: "a",
     version: 1,
@@ -173,16 +173,18 @@ test("page links retain reviewed version and independent evidence pages", () => 
 });
 test("producer-supplied plan review emits native decision evidence", async () => {
   if (!process.env.CADENCE_PLAN_REVIEW_MODEL) return;
-  const props = JSON.parse(process.env.CADENCE_PLAN_REVIEW_MODEL),
-    action = (process.env.CADENCE_PLAN_REVIEW_ACTION ?? "submit-plan") as PlanAction;
-  const detail = admitPlanDetail(props.detail);
+  const props = jsonFixture(process.env.CADENCE_PLAN_REVIEW_MODEL),
+    action = process.env.CADENCE_PLAN_REVIEW_ACTION ?? "submit-plan";
+  if (!oneOf(planReviewActions, action)) throw Error("Unknown producer action");
+  const detail = required(admitPlanDetail(props.detail));
   expect(detail).not.toBeNull();
   const port: PlanDetailPort = {
-    context: { ...detail!.context, plan_id: detail!.plan.id },
+    protocol: "remote-query" as const,
+    context: { ...required(detail).context, plan_id: required(detail).plan.id },
     refresh: vi.fn(),
     execute: vi.fn(() => new Promise(() => {})),
   };
-  const wrapper = mount(OpsContactPlanShow, { props: { ...props, port } });
+  const wrapper = mount(OpsContactPlanShow, { props: { detail, port } });
   if (action === "execute-plan") await wrapper.get("#execute-plan").trigger("click");
   else {
     const form =
@@ -196,7 +198,7 @@ test("producer-supplied plan review emits native decision evidence", async () =>
   }
   expect(port.execute).toHaveBeenCalledTimes(1);
   process.stdout.write(
-    "PLAN_PAYLOAD=" + JSON.stringify(vi.mocked(port.execute).mock.calls[0]![1]) + "\n",
+    "PLAN_PAYLOAD=" + JSON.stringify(required(vi.mocked(port.execute).mock.calls[0])[1]) + "\n",
   );
   wrapper.unmount();
 });

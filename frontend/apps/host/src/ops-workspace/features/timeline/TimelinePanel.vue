@@ -39,7 +39,7 @@ const apply = () =>
   props.navigate(
     timelineHref(missionId.value, { ...draft, event_id: "", before_at: "", before_id: "" }),
   );
-async function refresh() {
+async function refreshPage() {
   if (busy.value) return;
   busy.value = true;
   refreshError.value = false;
@@ -94,7 +94,7 @@ const options = {
           class="btn btn-sm"
           type="button"
           :disabled="busy"
-          @click="refresh"
+          @click="refreshPage"
         >
           {{ busy ? "Refreshing…" : "Refresh" }}
         </button>

@@ -1,21 +1,25 @@
+import { record } from "./policy-native-fixture.test-support";
+import { required, deferred } from "./policy-test-helpers";
 import { mount, flushPromises } from "@vue/test-utils";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { fleetPolicyContribution } from "../../fleet-planning";
-import { admitPolicyPage, type PolicyAction, type PolicyPage } from "./fleet-policy";
+import { fleetPolicyContribution } from "./policy.contribution";
+import { admitPolicyPage, type PolicyPage } from "./fleet-policy";
 import {
   policyPageFixture,
   policyOperationFixture,
   policyAfterOperation,
 } from "./policy-workflow.test-support";
-const wrappers: ReturnType<typeof mount>[] = [];
+const wrappers: { unmount(): void }[] = [];
 afterEach(() => wrappers.splice(0).forEach((w) => w.unmount()));
-function harness(page = policyPageFixture()) {
+function harness(page: PolicyPage = policyPageFixture()) {
   let server = structuredClone(page);
-  const execute = vi.fn(async (action: PolicyAction, input: any) => {
-    const op = policyOperationFixture(server, action, input);
-    server = policyAfterOperation(server, op);
-    return op;
-  });
+  const execute = vi.fn(
+    async (action: string, input: Record<string, unknown>): Promise<unknown> => {
+      const op = policyOperationFixture(server, action, input);
+      server = policyAfterOperation(server, op);
+      return op;
+    },
+  );
   const read = vi.fn(async () => structuredClone(server));
   const wrapper = mount(fleetPolicyContribution.component, {
     props: { page, port: { execute, navigate: vi.fn() }, readPort: { read } },
@@ -33,32 +37,31 @@ function harness(page = policyPageFixture()) {
 test("semantic policy admission rejects impossible dates and unsafe identity text", () => {
   const page = policyPageFixture();
   const invalidDate = structuredClone(page);
-  invalidDate.model.grants.entries[0]!.valid_until = "2026-02-30T00:00:00Z";
+  required(invalidDate.model.grants.entries[0]).valid_until = "2026-02-30T00:00:00Z";
   expect(admitPolicyPage(invalidDate)).toBeNull();
   const invalidId = structuredClone(page);
-  invalidId.model.identities.entries[0]!.id = String.fromCharCode(0xd800);
+  required(invalidId.model.identities.entries[0]).id = String.fromCharCode(0xd800);
   expect(admitPolicyPage(invalidId)).toBeNull();
 });
 test("native saves wait for validation, retain the exact base and accept a real-shaped receipt", async () => {
   const h = harness();
-  let settle!: (v: unknown) => void;
-  h.execute.mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        settle = resolve;
-      }) as any,
-  );
+  const { promise, resolve: settle } = deferred<unknown>();
+  h.execute.mockImplementationOnce(() => promise);
   await h.wrapper.get("#policy-requirement-concurrency").setValue("5");
   expect(h.execute).toHaveBeenCalledTimes(1);
   await h.wrapper.get("#fleet-policy-form").trigger("submit");
   expect(h.execute).toHaveBeenCalledTimes(1);
-  const [action, command] = h.execute.mock.calls[0]!;
+  const [action, command] = required(h.execute.mock.calls[0]);
   settle(policyOperationFixture(h.server, action, command));
   await flushPromises();
   expect(h.execute.mock.calls.map((c) => c[0])).toEqual(["validate-policy", "save-policy"]);
-  expect(h.execute.mock.calls[1]![1].sequence).toBe(2);
-  expect(h.execute.mock.calls[1]![1].payload.policy.requirement_concurrency).toBe("5");
-  expect(h.execute.mock.calls[1]![1].payload.edit_reference.base.policy_version).toBe(2);
+  expect(required(h.execute.mock.calls[1])[1]).toMatchObject({
+    sequence: 2,
+    payload: {
+      policy: { requirement_concurrency: "5" },
+      edit_reference: { base: { policy_version: 2 } },
+    },
+  });
   expect(h.wrapper.find("#fleet-policy-operation-receipt").exists()).toBe(true);
   expect(h.wrapper.find("#fleet-policy-edit-unavailable").exists()).toBe(false);
   expect(h.wrapper.get("#policy-requirement-concurrency").element.getAttribute("type")).toBe(
@@ -125,9 +128,9 @@ test("unknown effects stay locked and revocation carries the displayed immutable
   await h.wrapper.get("#revoke-automation-grant-reason").setValue("Reviewed grant");
   await h.wrapper.get("#automation-grant-revocation-form").trigger("submit");
   await flushPromises();
-  expect(h.execute.mock.calls[0]![1].payload.grant_evidence).toEqual(
-    h.server.model.grants.entries[0]!.reference,
-  );
+  expect(required(h.execute.mock.calls[0])[1]).toMatchObject({
+    payload: { grant_evidence: required(h.server.model.grants.entries[0]).reference },
+  });
   await h.wrapper.get("#fleet-policy-refresh").trigger("click");
   await flushPromises();
   expect(h.wrapper.find("#fleet-policy-unconfirmed").exists()).toBe(true);
@@ -138,12 +141,16 @@ test("policy and grant receipt admission rejects a substituted outcome", () => {
   const page = policyPageFixture();
   expect(admitPolicyPage(page)).not.toBeNull();
   const payload = {
-    decision: { reason: "Reviewed", policy_evidence: page.model.current!.reference },
+    decision: { reason: "Reviewed", policy_evidence: required(page.model.current).reference },
   };
   const op = policyOperationFixture(page, "approve-policy", { sequence: 1, payload });
   expect(admitPolicyPage(policyAfterOperation(page, op))).not.toBeNull();
-  op.receipt!.result.contentSha256 = "f".repeat(64);
-  expect(admitPolicyPage(policyAfterOperation(page, op))).toBeNull();
+  if (op.action !== "approve-policy") throw Error("Expected approval fixture");
+  const substituted = {
+    ...op,
+    receipt: { ...op.receipt, result: { ...op.receipt.result, contentSha256: "f".repeat(64) } },
+  };
+  expect(admitPolicyPage(policyAfterOperation(page, substituted))).toBeNull();
   expect(() =>
     fleetPolicyContribution.read(page, {
       organizationId: "foreign",
@@ -153,9 +160,23 @@ test("policy and grant receipt admission rejects a substituted outcome", () => {
 });
 test("producer-supplied policy contribution sends native payloads and admits completed receipts", async () => {
   if (!process.env.CADENCE_POLICY_WORKFLOW) return;
-  const supplied = JSON.parse(process.env.CADENCE_POLICY_WORKFLOW),
-    page = supplied.snapshot.data as PolicyPage;
-  expect(fleetPolicyContribution.read(page, supplied.snapshot.context)).toHaveProperty("page");
+  const supplied = record(JSON.parse(process.env.CADENCE_POLICY_WORKFLOW));
+  const snapshot = record(supplied.snapshot);
+  const page = required(admitPolicyPage(snapshot.data));
+  const context = record(snapshot.context);
+  if (
+    typeof context.organizationId !== "string" ||
+    typeof context.missionId !== "string" ||
+    context.resourceId !== undefined
+  )
+    throw Error("Invalid producer context");
+  expect(
+    fleetPolicyContribution.read(page, {
+      organizationId: context.organizationId,
+      missionId: context.missionId,
+    }),
+  ).toHaveProperty("page");
+  if (typeof supplied.action !== "string") throw Error("Missing producer action");
   const h = harness(page);
   h.execute.mockImplementation(async (action, input) => {
     if (action.startsWith("validate-")) return policyOperationFixture(page, action, input);
@@ -168,7 +189,7 @@ test("producer-supplied policy contribution sends native payloads and admits com
     "issue-grant": ["#grant-approval-reason", "#automation-grant-form"],
     "revoke-grant": ["#revoke-automation-grant-reason", "#automation-grant-revocation-form"],
   };
-  const [field, form] = selectors[supplied.action]!;
+  const [field, form] = required(selectors[supplied.action]);
   await h.wrapper
     .get(field)
     .setValue(supplied.action === "save-policy" ? "5" : "Reviewed exact producer evidence");
@@ -180,5 +201,5 @@ test("producer-supplied policy contribution sends native payloads and admits com
   if (supplied.operation)
     expect(h.wrapper.find("#fleet-policy-operation-receipt").exists()).toBe(true);
   process.stdout.write(`POLICY_CONTRIBUTION_COMMANDS=${JSON.stringify(h.execute.mock.calls)}\n`);
-  process.stdout.write(`POLICY_CONTRIBUTION_INPUT=${JSON.stringify(call![1])}\n`);
+  process.stdout.write(`POLICY_CONTRIBUTION_INPUT=${JSON.stringify(required(call)[1])}\n`);
 });

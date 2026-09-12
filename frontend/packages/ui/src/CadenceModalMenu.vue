@@ -5,7 +5,8 @@ import {
   DropdownMenuRoot,
   DropdownMenuTrigger,
 } from "reka-ui";
-import { CadencePrimitiveChild } from "./cadence_primitive_child.js";
+import { computed } from "vue";
+import { CadencePrimitiveChild } from "./cadence_primitive_child";
 
 defineOptions({ inheritAttrs: false });
 
@@ -14,6 +15,12 @@ const props = defineProps<{
   align?: "start" | "center" | "end";
   sideOffset?: number;
 }>();
+
+const positioning = computed(() => ({
+  ...(props.side === undefined ? {} : { side: props.side }),
+  ...(props.align === undefined ? {} : { align: props.align }),
+  ...(props.sideOffset === undefined ? {} : { sideOffset: props.sideOffset }),
+}));
 
 const emit = defineEmits<{
   "update:open": [open: boolean];
@@ -29,12 +36,7 @@ const emit = defineEmits<{
     </DropdownMenuTrigger>
 
     <DropdownMenuPortal>
-      <DropdownMenuContent
-        as-child
-        :side="props.side"
-        :align="props.align"
-        :side-offset="props.sideOffset"
-      >
+      <DropdownMenuContent as-child v-bind="positioning">
         <CadencePrimitiveChild contract-name="CadenceModalMenu content" :enforce-attrs="[]">
           <slot name="content" :open="open"></slot>
         </CadencePrimitiveChild>

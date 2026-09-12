@@ -1,3 +1,5 @@
+import type { OpsPageAction } from "@cadence/plugin-sdk/ops-pages";
+import { required } from "../../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import OpsModulePage from "./OpsModulePage.vue";
@@ -25,7 +27,8 @@ test("host captures reservation identity, query port and token for native decisi
   };
   const query = vi.fn(),
     refresh = vi.fn();
-  const execute = vi.fn(async ({ event, input }) => {
+  const execute = vi.fn(async ({ event, input }: OpsPageAction) => {
+    if (event !== "approve-provider-change") throw Error("Unexpected host action");
     query.mockResolvedValue({
       ...initial,
       data: completedContact(data, contactOperation(data, event, input)),
@@ -48,7 +51,7 @@ test("host captures reservation identity, query port and token for native decisi
     await w.get("#approve-provider-change-form").trigger("submit");
     await flushPromises();
     expect(execute).toHaveBeenCalledOnce();
-    expect(execute.mock.calls[0]![0]).toMatchObject({
+    expect(required(execute.mock.calls[0])[0]).toMatchObject({
       id: initial.id,
       token: initial.token,
       event: "approve-provider-change",

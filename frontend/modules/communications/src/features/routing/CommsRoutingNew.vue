@@ -246,7 +246,11 @@ const save = () => emit("save", { routing_rule: routingRuleValues() });
           >{{ form.actions.cancel.label }}</a
         >
       </CadenceFormActions>
-      <FormFeedback :id="form.id + '-feedback'" :feedback="feedback" @retry="validate" />
+      <FormFeedback
+        :id="form.id + '-feedback'"
+        v-bind="feedback ? { feedback } : {}"
+        @retry="validate"
+      />
     </form>
   </CadenceFormPageFrame>
 </template>

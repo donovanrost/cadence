@@ -125,13 +125,15 @@ function surface(
           telemetry_decom: 70,
         };
 
+  const order = orderBySurfaceId[surfaceId];
+  if (order === undefined) throw new Error(`Missing navigation order for ${scope}/${surfaceId}`);
   return {
     surfaceId,
     version: 1,
     purpose,
     scope,
     placement: "application_workspace" as const,
-    navigation: { label, order: orderBySurfaceId[surfaceId] },
+    navigation: { label, order },
     dataContract: { id: queryId, version: 1 },
     actions,
     renderer: { kind: "federated-vue" as const, exposedModule: "./Application" },

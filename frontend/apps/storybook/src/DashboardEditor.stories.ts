@@ -1,7 +1,12 @@
+import { required } from "../../../test-support/required";
 import type { Meta, StoryObj } from "@storybook/vue3-vite";
 import { expect, userEvent, within } from "storybook/test";
 import { ref } from "vue";
-import { DashboardEditor, type EditorState } from "@cadence/dashboards-and-exploration/editor";
+import {
+  DashboardEditor,
+  readEditor,
+  type EditorState,
+} from "@cadence/dashboards-and-exploration/editor";
 
 const widgetDefaults = {
   type: "value_tile",
@@ -86,7 +91,7 @@ const meta = {
   render: (args, { parameters }) => ({
     components: { DashboardEditor },
     setup() {
-      let current: EditorState = JSON.parse(JSON.stringify(args.state));
+      let current: EditorState = readEditor(JSON.parse(JSON.stringify(args.state)), editorContext);
       let saved = editorFixture().model;
       const destination = ref("");
       const requests = ref<string[]>([]);
@@ -100,7 +105,7 @@ const meta = {
           const command = input.command as Record<string, unknown>;
           if (parameters.failSave && event === "save_draft")
             throw Error("Preview save unavailable");
-          const next: EditorState = JSON.parse(JSON.stringify(current));
+          const next: EditorState = structuredClone(current);
           next.sequence = input.sequence as number;
           next.revision++;
           if (event === "rename") {
@@ -110,9 +115,9 @@ const meta = {
           } else if (event === "save_draft") {
             if (next.dirty) next.model.document_version++;
             next.dirty = false;
-            saved = JSON.parse(JSON.stringify(next.model));
+            saved = structuredClone(next.model);
           } else if (event === "discard_draft" || event === "reload_editor") {
-            next.model = JSON.parse(JSON.stringify(saved));
+            next.model = structuredClone(saved);
             next.dirty = false;
             if (event === "reload_editor") next.revision = 0;
           } else {
@@ -138,8 +143,8 @@ export const SavedDraft: Story = {};
 export const SaveAndReview: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.clear(canvasElement.querySelector("#editor-name")!);
-    await userEvent.type(canvasElement.querySelector("#editor-name")!, "Power candidate");
+    await userEvent.clear(required(canvasElement.querySelector("#editor-name")));
+    await userEvent.type(required(canvasElement.querySelector("#editor-name")), "Power candidate");
     await userEvent.click(canvas.getByRole("button", { name: "Apply to candidate" }));
     await expect(canvasElement.querySelector("#editor-version")).toHaveTextContent("Draft v1");
     await expect(canvasElement.querySelector("#editor-save-state")).toHaveTextContent(
@@ -170,7 +175,7 @@ export const StagedCandidate: Story = {
   },
 };
 export const FailedSave: Story = {
-  args: StagedCandidate.args,
+  args: { ...StagedCandidate.args },
   parameters: { failSave: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -184,7 +189,7 @@ export const FailedSave: Story = {
 };
 export const PreviewUnavailable: Story = {
   play: async ({ canvasElement }) => {
-    await userEvent.click(canvasElement.querySelector("#editor-preview summary")!);
+    await userEvent.click(required(canvasElement.querySelector("#editor-preview summary")));
     await expect(within(canvasElement).getByText(/Preview is unavailable/)).toBeVisible();
     await expect(canvasElement.querySelector("#editor-name")).toBeEnabled();
   },

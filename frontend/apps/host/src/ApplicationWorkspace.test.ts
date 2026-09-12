@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -20,9 +21,9 @@ const RemoteBoundaryStub = defineComponent({
 });
 
 type TestBridge = HttpHostBridge & {
-  invalidate: ReturnType<typeof vi.fn>;
-  subscribeMock: ReturnType<typeof vi.fn>;
-  unsubscribe: ReturnType<typeof vi.fn>;
+  invalidate: ReturnType<typeof vi.fn<() => void>>;
+  subscribeMock: ReturnType<typeof vi.fn<HttpHostBridge["subscribe"]>>;
+  unsubscribe: ReturnType<typeof vi.fn<() => void>>;
 };
 
 const workspaceCatalog = catalogFromDemo();
@@ -37,16 +38,20 @@ function catalogFromDemo(): FrontendApplicationCatalog {
 }
 
 function testBridge(): TestBridge {
-  const unsubscribe = vi.fn();
-  const subscribe = vi.fn(() => unsubscribe);
+  const unsubscribe = vi.fn<() => void>();
+  const subscribe = vi.fn<HttpHostBridge["subscribe"]>(() => unsubscribe);
   return {
-    query: vi.fn(),
-    execute: vi.fn(),
+    query: vi.fn(async () => {
+      throw Error("Unexpected query in bridge ownership test");
+    }),
+    execute: vi.fn(async () => {
+      throw Error("Unexpected action in bridge ownership test");
+    }),
     subscribe,
     subscribeMock: subscribe,
     unsubscribe,
-    invalidate: vi.fn(),
-  } as unknown as TestBridge;
+    invalidate: vi.fn<() => void>(),
+  };
 }
 
 function useBridgeSequence(bridges: TestBridge[]): void {
@@ -81,15 +86,15 @@ describe("ApplicationWorkspace bridge ownership", () => {
     const secondBridge = testBridge();
     const wrapper = await mountWorkspace([firstBridge, secondBridge]);
 
-    const firstApplicationId = `#application-${workspaceCatalog.applications[0].applicationKey}`;
-    const secondApplicationId = `#application-${workspaceCatalog.applications[1].applicationKey}`;
+    const firstApplicationId = `#application-${required(workspaceCatalog.applications[0]).applicationKey}`;
+    const secondApplicationId = `#application-${required(workspaceCatalog.applications[1]).applicationKey}`;
     expect(wrapper.find(firstApplicationId).exists()).toBe(true);
     await wrapper.get(secondApplicationId).trigger("click");
 
     expect(firstBridge.unsubscribe).toHaveBeenCalledTimes(1);
     expect(firstBridge.invalidate).toHaveBeenCalledTimes(1);
-    expect(firstBridge.unsubscribe.mock.invocationCallOrder[0]).toBeLessThan(
-      firstBridge.invalidate.mock.invocationCallOrder[0],
+    expect(required(firstBridge.unsubscribe.mock.invocationCallOrder[0])).toBeLessThan(
+      required(firstBridge.invalidate.mock.invocationCallOrder[0]),
     );
     expect(secondBridge.subscribeMock).toHaveBeenCalledTimes(1);
     expect(wrapper.find(secondApplicationId).classes()).toContain("active");
@@ -108,8 +113,8 @@ describe("ApplicationWorkspace bridge ownership", () => {
 
     expect(firstBridge.unsubscribe).toHaveBeenCalledTimes(1);
     expect(firstBridge.invalidate).toHaveBeenCalledTimes(1);
-    expect(firstBridge.unsubscribe.mock.invocationCallOrder[0]).toBeLessThan(
-      firstBridge.invalidate.mock.invocationCallOrder[0],
+    expect(required(firstBridge.unsubscribe.mock.invocationCallOrder[0])).toBeLessThan(
+      required(firstBridge.invalidate.mock.invocationCallOrder[0]),
     );
     expect(vi.mocked(createHttpHostBridge)).toHaveBeenCalledTimes(2);
     expect(secondBridge.subscribeMock).toHaveBeenCalledTimes(1);
@@ -126,8 +131,8 @@ describe("ApplicationWorkspace bridge ownership", () => {
 
     expect(bridge.unsubscribe).toHaveBeenCalledTimes(1);
     expect(bridge.invalidate).toHaveBeenCalledTimes(1);
-    expect(bridge.unsubscribe.mock.invocationCallOrder[0]).toBeLessThan(
-      bridge.invalidate.mock.invocationCallOrder[0],
+    expect(required(bridge.unsubscribe.mock.invocationCallOrder[0])).toBeLessThan(
+      required(bridge.invalidate.mock.invocationCallOrder[0]),
     );
   });
 });

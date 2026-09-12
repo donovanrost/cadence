@@ -1,3 +1,5 @@
+import type { OpsPageAction } from "@cadence/plugin-sdk/ops-pages";
+import { required } from "../../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
@@ -20,7 +22,7 @@ function harness() {
     context,
     data: policyPageFixture(),
   };
-  const execute = vi.fn(),
+  const execute = vi.fn<(request: OpsPageAction) => Promise<unknown>>(),
     query = vi.fn().mockResolvedValue(initial),
     refresh = vi.fn();
   wrapper = mount(OpsModulePage, {
@@ -55,7 +57,7 @@ test("host binds reviewed approval and receipt recovery to the captured policy p
       payload: {
         decision: {
           reason: "Approve reviewed version",
-          policy_evidence: h.initial.data.model.current!.reference,
+          policy_evidence: required(h.initial.data.model.current).reference,
         },
       },
     },
@@ -78,7 +80,7 @@ test("unchanged host bootstrap rerenders cannot interrupt an approval receipt", 
   );
   await wrapper.get("#fleet-policy-approval-reason").setValue("Reviewed");
   await wrapper.get("#fleet-policy-approval-form").trigger("submit");
-  const command = h.execute.mock.calls[0]![0];
+  const command = required(h.execute.mock.calls[0])[0];
   const op = policyOperationFixture(h.initial.data, command.event, command.input);
   h.query.mockResolvedValue({ ...h.initial, data: policyAfterOperation(h.initial.data, op) });
   await wrapper.setProps({ snapshot: structuredClone(h.initial), context: { ...context } });

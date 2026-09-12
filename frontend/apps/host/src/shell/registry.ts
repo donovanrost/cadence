@@ -23,10 +23,9 @@ const components = new Map<string, Component>([
   ["SpacecraftApplicationManagement", inApplicationShell(SpacecraftApplicationsPage)],
 ]);
 for (const [path, module] of Object.entries(modules)) {
-  const name = path
-    .split("/")
-    .at(-1)!
-    .replace(/\.vue$/, "");
+  const filename = path.split("/").at(-1);
+  if (!filename) throw new Error(`Invalid host component path: ${path}`);
+  const name = filename.replace(/\.vue$/, "");
   if (components.has(name)) throw new Error(`Duplicate host component: ${name}`);
   components.set(name, pageNames.has(name) ? inApplicationShell(module.default) : module.default);
 }

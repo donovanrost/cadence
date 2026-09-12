@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 import { createHash } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -12,7 +13,7 @@ export function assertOwnershipOracle(
   const filename = fileURLToPath(url);
   const { descriptor } = parse(reconstruct(readFileSync(filename, "utf8")), { filename });
   const script = compileScript(descriptor, {
-    id: "ownership-" + filename.split("/").at(-1)!.replace(".vue", ""),
+    id: "ownership-" + required(filename.split("/").at(-1)).replace(".vue", ""),
     fs: { fileExists: existsSync, readFile: (path) => readFileSync(path, "utf8") },
   }).content;
   const runtime = ts.transpileModule(script, {
@@ -24,5 +25,5 @@ export function assertOwnershipOracle(
   }).outputText;
   const hash = (value: string) => createHash("sha256").update(value).digest("hex");
   expect(hash(runtime), "compiled executable script").toBe(expected.script);
-  expect(hash(descriptor.template!.content), "unchanged template").toBe(expected.template);
+  expect(hash(required(descriptor.template).content), "unchanged template").toBe(expected.template);
 }

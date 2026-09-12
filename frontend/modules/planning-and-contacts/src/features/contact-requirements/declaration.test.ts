@@ -1,19 +1,32 @@
+import { containing } from "../../../../../test-support/matchers";
+import {
+  fixtureRecord,
+  fixtureString,
+  jsonFixture,
+  fixtureContext,
+} from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { requirementDeclarationContribution as contribution } from "./declaration.contribution";
 import { declarationFixture, declarationOperation } from "./declaration.test-support";
-import { admitDeclarationPage, type DeclarationAction, type DeclarationPage } from "./declaration";
-const wrappers: ReturnType<typeof mount>[] = [];
+import { admitDeclarationPage, type DeclarationAction } from "./declaration";
+const wrappers: { unmount(): void }[] = [];
 afterEach(() => wrappers.splice(0).forEach((w) => w.unmount()));
 function harness(initial = declarationFixture()) {
   let server = structuredClone(initial),
     guard = () => true;
-  const execute = vi.fn(async (action: DeclarationAction, input: any) => {
-      const op = declarationOperation(server, action, input);
-      server = { ...server, sequence: op.sequence, operation: op };
-      if (action === "spacecraft-page") server.model.spacecraft = op.receipt!.result.spacecraft;
-      return op;
-    }),
+  const execute = vi.fn(
+      async (
+        action: DeclarationAction,
+        input: { sequence: number; payload: unknown },
+      ): Promise<unknown> => {
+        const op = declarationOperation(server, action, input);
+        server = { ...server, sequence: op.sequence, operation: op };
+        if (op.action === "spacecraft-page") server.model.spacecraft = op.receipt.result.spacecraft;
+        return op;
+      },
+    ),
     read = vi.fn(async () => structuredClone(server)),
     navigate = vi.fn(),
     dispose = vi.fn();
@@ -46,7 +59,7 @@ function harness(initial = declarationFixture()) {
 }
 test("queued save uses the latest native draft after domain validation without duplicating creation", async () => {
   const h = harness();
-  let finish!: (v: any) => void;
+  let finish: ((v: unknown) => void) | undefined;
   h.execute.mockImplementationOnce(
     () =>
       new Promise((r) => {
@@ -58,15 +71,17 @@ test("queued save uses the latest native draft after domain validation without d
   await h.wrapper.get("#contact-requirement-form").trigger("submit");
   expect(h.execute).toHaveBeenCalledTimes(1);
   expect(h.canLeave()).toBe(false);
-  finish(declarationOperation(h.server, "validate", h.execute.mock.calls[0]![1]));
+  required(finish)(
+    declarationOperation(h.server, "validate", required(h.execute.mock.calls[0])[1]),
+  );
   await flushPromises();
   expect(h.execute).toHaveBeenCalledTimes(2);
   expect(h.execute.mock.calls[1]).toEqual([
     "save",
-    expect.objectContaining({
+    containing({
       sequence: 2,
-      payload: expect.objectContaining({
-        contact_requirement: expect.objectContaining({
+      payload: containing({
+        contact_requirement: containing({
           rationale: "Reviewed latest draft",
           earliest_start: "2027-01-01T01:00:37",
         }),
@@ -114,7 +129,11 @@ test("spacecraft paging retains selected craft, edited UTC seconds and rationale
   expect(h.wrapper.get("#requirement-earliest-start").attributes("step")).toBe("1");
   await h.wrapper.get("#contact-requirement-form").trigger("submit");
   await flushPromises();
-  expect(h.execute.mock.calls.at(-1)![1].payload.contact_requirement.spacecraft_id).toBe("craft-1");
+  expect(
+    fixtureRecord(
+      fixtureRecord(required(h.execute.mock.calls.at(-1))[1].payload).contact_requirement,
+    ).spacecraft_id,
+  ).toBe("craft-1");
 });
 test("lost receipt recovery retains the draft and never repeats the save", async () => {
   const h = harness();
@@ -194,13 +213,19 @@ test("receipt admission rejects other actors, inconsistent choices and malformed
 });
 test("producer supplied native declaration contribution", async () => {
   if (!process.env.CADENCE_DECLARATION) return;
-  const supplied = JSON.parse(process.env.CADENCE_DECLARATION),
-    snapshot = supplied.snapshot,
-    props = contribution.read(snapshot.data, snapshot.context),
-    page = props.page as DeclarationPage;
+  const supplied = jsonFixture(process.env.CADENCE_DECLARATION),
+    snapshot = fixtureRecord(supplied.snapshot),
+    props = contribution.read(snapshot.data, fixtureContext(snapshot.context)),
+    page = required(admitDeclarationPage(props.page));
+  const operations = supplied.operations;
+  if (operations !== undefined && !Array.isArray(operations))
+    throw Error("Invalid producer operations");
   const execute = vi.fn(
-    async (action: DeclarationAction, input: any) =>
-      supplied.operations?.find((o: any) => o.sequence === input.sequence) ??
+    async (
+      action: DeclarationAction,
+      input: { sequence: number; payload: unknown },
+    ): Promise<unknown> =>
+      operations?.map(fixtureRecord).find((o) => o.sequence === input.sequence) ??
       declarationOperation(page, action, input),
   );
   const w = mount(contribution.component, {
@@ -209,7 +234,11 @@ test("producer supplied native declaration contribution", async () => {
   wrappers.push(w);
   await w
     .get("#requirement-rationale")
-    .setValue(supplied.rationale ?? "Native declaration rationale");
+    .setValue(
+      supplied.rationale === undefined
+        ? "Native declaration rationale"
+        : fixtureString(supplied.rationale),
+    );
   await flushPromises();
   if (supplied.save !== false) {
     await w.get("#contact-requirement-form").trigger("submit");

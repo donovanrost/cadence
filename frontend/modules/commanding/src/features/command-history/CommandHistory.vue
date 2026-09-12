@@ -48,7 +48,7 @@ function selectRelease(id: string): HistoryQuery {
 function selectVerifier(id: string, release: string): HistoryQuery {
   return { ...selectRelease(release), verifier: id };
 }
-async function refresh() {
+async function refreshPage() {
   if (pending.value) return;
   pending.value = true;
   try {
@@ -90,7 +90,7 @@ async function refresh() {
           type="button"
           class="btn btn-ghost btn-sm"
           :disabled="pending"
-          @click="refresh"
+          @click="refreshPage"
         >
           Refresh history
         </button>

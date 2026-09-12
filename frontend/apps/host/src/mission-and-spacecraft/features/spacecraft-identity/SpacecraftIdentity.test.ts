@@ -1,3 +1,4 @@
+import { required } from "../../../../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import SpacecraftIdentityPage from "./SpacecraftIdentityPage.vue";
@@ -12,7 +13,7 @@ test("editing preserves a current pin and offers an explicit newer version or No
   const select = wrapper.get("#spacecraft-edit-spacecraft-type-id");
   expect((select.element as HTMLSelectElement).value).toBe(JSON.stringify(["profile-one", 1]));
   await wrapper.get("#spacecraft-edit-form").trigger("submit");
-  expect(wrapper.emitted("save")![0]).toEqual([
+  expect(required(wrapper.emitted("save"))[0]).toEqual([
     {
       spacecraft: {
         display_name: "Vehicle One",
@@ -23,11 +24,11 @@ test("editing preserves a current pin and offers an explicit newer version or No
     },
   ]);
   await select.setValue(JSON.stringify(["profile-one", 2]));
-  expect(wrapper.emitted("validate")!.at(-1)).toMatchObject([
+  expect(required(wrapper.emitted("validate")).at(-1)).toMatchObject([
     { spacecraft: { spacecraft_type_id: "profile-one", spacecraft_type_version: 2 } },
   ]);
   await select.setValue(JSON.stringify(["", null]));
-  expect(wrapper.emitted("validate")!.at(-1)).toMatchObject([
+  expect(required(wrapper.emitted("validate")).at(-1)).toMatchObject([
     { spacecraft: { spacecraft_type_id: "", spacecraft_type_version: null } },
   ]);
   wrapper.unmount();
@@ -40,9 +41,9 @@ test("server refreshes and out-of-order validation replies do not erase drafts o
   await wrapper.get("#spacecraft-display-name").setValue("First");
   await wrapper.get("#spacecraft-display-name").setValue("Latest");
   await wrapper.setProps({ data: identityFixture() });
-  replies[1]!({ status: "invalid", errors: { display_name: ["Current error"] } });
+  required(replies[1])({ status: "invalid", errors: { display_name: ["Current error"] } });
   await flushPromises();
-  replies[0]!({ status: "invalid", errors: { display_name: ["Old error"] } });
+  required(replies[0])({ status: "invalid", errors: { display_name: ["Old error"] } });
   await flushPromises();
   expect((wrapper.get("#spacecraft-display-name").element as HTMLInputElement).value).toBe(
     "Latest",

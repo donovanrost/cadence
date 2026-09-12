@@ -17,6 +17,8 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const hostFiles = new Set(["host.js"]);
 // Explicitly reviewed producer outputs; never derive this allowlist from the artifact being checked.
 const authoritativeHostJavascriptDigests = new Set([
+  // Reviewed optional-prop forwarding and typed frontend readers; two identical pinned Phoenix builds.
+  "6516c6c54a7f191ef86bbb8e4872bb1a8653149907d9245e424121c2a8adef9a",
   // Reviewed fixed preflight guidance in the host bridge; two identical pinned builds.
   "67e88fede201e7c1b264707229b3b530baea77c2ed5dcc6e33c30f68053cbbd5",
   // Reviewed route-scoped page chrome injection and heading level; two identical pinned builds.
@@ -30,10 +32,12 @@ const authoritativeHostJavascriptDigests = new Set([
   "d05e3fd0e993aa512018627ea68f8772e5fc7c8860d3958428c5575a2b322a55",
 ]);
 
+/** @param {string} message @returns {never} */
 function fail(message) {
   throw new Error(`Production publication check failed: ${message}`);
 }
 
+/** @param {string} directory @param {string} outputRoot @returns {Promise<string[]>} */
 async function outputFiles(directory, outputRoot) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
@@ -53,7 +57,9 @@ async function outputFiles(directory, outputRoot) {
   return files;
 }
 
+/** @param {string} source @param {string} name */
 function assertHostReferences(source, name) {
+  /** @type {[string, RegExp][]} */
   const forbidden = [
     ["demo-auth service", /\bdemo[-_]?auth(?:[-_]?service)?\b/i],
     ["contract probe", /(?:\bcontract[-_]?probe\b|cadence[._-]contract[._-]probe)/i],
@@ -84,6 +90,7 @@ function assertHostReferences(source, name) {
   }
 }
 
+/** @param {string} name @param {string} source @param {Set<string>} files */
 function isAuthoritativeHostJavascript(name, source, files) {
   return (
     name === "host.js" &&
@@ -95,6 +102,7 @@ function isAuthoritativeHostJavascript(name, source, files) {
   );
 }
 
+/** @param {string} root */
 async function validateHostPublication(root) {
   const stats = await lstat(root).catch(() => fail(`host publication is unavailable: ${root}`));
   if (stats.isSymbolicLink()) fail("host publication directory must not be a symlink");

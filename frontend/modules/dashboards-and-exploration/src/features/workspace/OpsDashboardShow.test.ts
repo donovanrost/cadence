@@ -1,7 +1,8 @@
+import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test } from "vite-plus/test";
 import { mount } from "@vue/test-utils";
 import OpsDashboardShow from "./OpsDashboardShow.vue";
-let app: ReturnType<typeof mount>;
+let app: Pick<ReturnType<typeof mount>, "find" | "get" | "setProps" | "unmount">;
 afterEach(() => app?.unmount());
 
 test("viewer compatibility preserves runtime selectors and unsupported drilldown identity verbatim", () => {
@@ -15,7 +16,7 @@ test("viewer compatibility preserves runtime selectors and unsupported drilldown
   app = mount(OpsDashboardShow, {
     props: { mission_id: "mission/a", dashboard_id: "dashboard/a?+", mode: "view", query },
   });
-  const url = new URL(app.get("a").attributes("href")!, "https://cadence.test");
+  const url = new URL(required(app.get("a").attributes("href")), "https://cadence.test");
   expect(url.pathname).toBe("/missions/mission%2Fa/ops/dashboards/dashboard%2Fa%3F%2B");
   expect(Object.fromEntries(url.searchParams)).toEqual(query);
   expect(app.find("form, button, .grid-stack, #ops-dashboard-canvas").exists()).toBe(false);

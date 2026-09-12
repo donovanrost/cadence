@@ -57,16 +57,16 @@ function page(value: unknown, row: (value: Record<string, unknown>) => boolean) 
     (value.next_after !== null && !identifier(value.next_after))
   )
     throw Error("Invalid detail page");
+  const entries: unknown[] = value.entries;
+  let lastId: string | undefined;
   const ids = new Set();
-  for (const item of value.entries) {
+  for (const item of entries) {
     if (!record(item) || !identifier(item.id) || ids.has(item.id) || !row(item))
       throw Error("Invalid detail row");
     ids.add(item.id);
+    lastId = item.id;
   }
-  if (
-    value.next_after !== null &&
-    (value.entries.length !== 25 || value.next_after !== value.entries.at(-1)?.id)
-  )
+  if (value.next_after !== null && (value.entries.length !== 25 || value.next_after !== lastId))
     throw Error("Invalid detail continuation");
 }
 function query(value: unknown): value is Query {

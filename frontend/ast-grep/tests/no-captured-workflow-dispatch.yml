@@ -1,0 +1,8 @@
+id: no-captured-workflow-dispatch
+valid:
+  - "if (port?.protocol === 'page-snapshot') return usePageWorkflow(input, port);"
+  - "const captured = receipt.input;"
+  - "const text = 'port.captured';"
+invalid:
+  - "if (port?.captured) return useCaptured(input, port);"
+  - "if (port.captured) { return useCaptured(input, port); }"

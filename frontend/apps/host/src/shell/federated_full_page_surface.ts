@@ -1,4 +1,4 @@
-import { defineComponent, h } from "vue";
+import { defineComponent, h, type PropType } from "vue";
 
 const genericCatalogUrl = "/api/cadence/application-host/v1/catalog";
 
@@ -42,32 +42,13 @@ export function catalogUrlForPlacement(
   return `${path}?${query.toString()}`;
 }
 
-type SurfaceProps = {
-  surfaceId?: string;
-  applicationKey?: string;
-  hostScope?: FederatedHostScope;
-  organizationId?: string;
-  userId?: string;
-  missionId?: string;
-  spacecraftId?: string;
-  queryParams?: unknown;
-  application_key?: string;
-  surface_id?: string;
-  host_scope?: FederatedHostScope;
-  organization_id?: string;
-  user_id?: string;
-  mission_id?: string;
-  spacecraft_id?: string;
-  query_params?: unknown;
-};
-
 export const FederatedFullPageSurface = defineComponent({
   name: "FederatedFullPageSurface",
   inheritAttrs: false,
   props: {
     applicationKey: String,
     surfaceId: String,
-    hostScope: String,
+    hostScope: String as PropType<FederatedHostScope>,
     organizationId: String,
     userId: String,
     missionId: String,
@@ -75,14 +56,14 @@ export const FederatedFullPageSurface = defineComponent({
     queryParams: Object,
     application_key: String,
     surface_id: String,
-    host_scope: String,
+    host_scope: String as PropType<FederatedHostScope>,
     organization_id: String,
     user_id: String,
     mission_id: String,
     spacecraft_id: String,
     query_params: Object,
   },
-  setup(props: SurfaceProps, { attrs }) {
+  setup(props, { attrs }) {
     return () => {
       const applicationKey = props.applicationKey ?? props.application_key;
       const surfaceId = props.surfaceId ?? props.surface_id;
@@ -147,6 +128,6 @@ function serializeQueryParams(value: unknown): string {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
+  const prototype: unknown = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
 }

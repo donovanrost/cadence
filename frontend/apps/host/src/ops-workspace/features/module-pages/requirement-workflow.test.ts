@@ -1,3 +1,5 @@
+import type { OpsPageAction } from "@cadence/plugin-sdk/ops-pages";
+import { containing } from "../../../../../../test-support/matchers";
 import { mount, flushPromises } from "@vue/test-utils";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
@@ -22,12 +24,12 @@ function harness() {
     context,
     data: requirementPageFixture(),
   };
-  const execute = vi.fn(),
+  const execute = vi.fn<(request: OpsPageAction) => Promise<unknown>>(),
     query = vi.fn().mockResolvedValue(initial),
     refresh = vi.fn(),
     dispose = vi.fn();
   let guard = () => true;
-  const guardNavigation = vi.fn((next) => {
+  const guardNavigation = vi.fn((next: () => boolean) => {
     guard = next;
     return dispose;
   });
@@ -48,6 +50,7 @@ function harness() {
 test("host binds planning action and lost receipt recovery to the captured resource and token", async () => {
   const h = harness();
   h.execute.mockImplementationOnce(async ({ event, input }) => {
+    if (event !== "plan") throw Error("Unexpected host action");
     const op = requirementOperationFixture(h.initial.data, event, input);
     h.query.mockResolvedValue({
       ...h.initial,
@@ -58,13 +61,13 @@ test("host binds planning action and lost receipt recovery to the captured resou
   await wrapper.get("#plan-contact-requirement").trigger("click");
   await flushPromises();
   expect(h.execute).toHaveBeenCalledExactlyOnceWith(
-    expect.objectContaining({
+    containing({
       id: h.initial.id,
       token: h.initial.token,
       event: "plan",
       input: {
         sequence: 1,
-        payload: expect.objectContaining({ contact_requirement_id: "requirement-1" }),
+        payload: containing({ contact_requirement_id: "requirement-1" }),
       },
     }),
   );

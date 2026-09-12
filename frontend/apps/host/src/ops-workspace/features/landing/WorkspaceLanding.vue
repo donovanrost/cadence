@@ -14,14 +14,15 @@ const model = computed(() => {
     return null;
   }
 });
-const groups = computed(() =>
-  model.value
+const groups = computed(() => {
+  const current = model.value;
+  return current
     ? workspaceGroups(
-        (path) => `/missions/${encodeURIComponent(model.value!.context.mission_id)}/ops/${path}`,
-        model.value.can_administer,
+        (path) => `/missions/${encodeURIComponent(current.context.mission_id)}/ops/${path}`,
+        current.can_administer,
       )
-    : [],
-);
+    : [];
+});
 const descriptions: Record<string, string> = {
   observe: "Follow telemetry, investigate changes and inspect mission events.",
   act: "Prepare commands and review operations that need a decision.",

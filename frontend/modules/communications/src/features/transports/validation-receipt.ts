@@ -39,7 +39,7 @@ export function admitValidation(receipt: unknown, input?: FormInput): TransportR
     ["provider_version", "mission_provider_version"],
     ["service_profile_id", "service_profile_id"],
     ["delivery_profile_id", "delivery_profile_id"],
-  ])
+  ] as const)
     if (text(source[field], true, 240) !== (draft[key] ?? "")) return invalid();
   const options = array(
     object({
@@ -54,7 +54,7 @@ export function admitValidation(receipt: unknown, input?: FormInput): TransportR
   unique(services.map((option) => option.value));
   unique(deliveries.map((option) => option.value));
   const setup: ProviderSetup = {
-    kind: draft.transport_kind,
+    kind: text(draft.transport_kind),
     providerId: draft.mission_provider_id ?? "",
     providerVersion: draft.mission_provider_version ?? "",
     serviceId: draft.service_profile_id ?? "",

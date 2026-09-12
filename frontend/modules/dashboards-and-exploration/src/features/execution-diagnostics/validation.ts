@@ -1,3 +1,4 @@
+import { arrayOf, record as isRecord } from "@cadence/plugin-sdk/admission";
 import type { OpsPageContext } from "@cadence/plugin-sdk/ops-pages";
 import { collectionIds, type ExecutionDiagnostics } from "./contracts";
 
@@ -15,6 +16,7 @@ function text(v: unknown, limit = 256): string {
   if (
     typeof v !== "string" ||
     !v ||
+    // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
     /[\u0000-\u001f\u007f]/.test(v) ||
     new TextEncoder().encode(v).length > limit
   )
@@ -175,21 +177,29 @@ export function readExecutionDiagnostics(
       const row = exact(value, ["kind", "id", "identity", "title", "status", "details"]);
       if (row.kind !== c.id && !(c.id === "plan" && row.kind === "plan_warning")) invalid();
       const keys = detailKeys[row.kind as string];
+      if (!keys) return invalid();
       const id = text(row.id, 64);
       if (!/^[a-f0-9]{64}$/.test(id) || rowIds.has(id)) invalid();
       rowIds.add(id);
       text(row.identity);
       text(row.title);
       text(row.status);
-      if (!Array.isArray(row.details) || row.details.length !== keys.length) return invalid();
+      if (!arrayOf(row.details, isRecord) || row.details.length !== keys.length) return invalid();
       for (const [i, value] of row.details.entries()) {
         const d = exact(value, ["key", "value"]);
-        if (d.key !== keys[i]) invalid();
-        detailValue(keys[i], d.value);
+        const key = keys[i];
+        if (key === undefined || d.key !== key) return invalid();
+        detailValue(key, d.value);
       }
       if (row.kind === "plan_warning") {
         if (!["info", "warning", "error"].includes(row.status as string)) invalid();
-        if (!["dashboard", "placement", "frame", "field"].includes(row.details[1].value)) invalid();
+        const scope = row.details[1];
+        if (
+          !scope ||
+          typeof scope.value !== "string" ||
+          !["dashboard", "placement", "frame", "field"].includes(scope.value)
+        )
+          invalid();
         for (const [index, detail] of row.details.entries()) {
           if (index < 2 || detail.value !== null) text(detail.value);
         }

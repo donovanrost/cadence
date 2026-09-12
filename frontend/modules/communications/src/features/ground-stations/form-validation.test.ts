@@ -1,3 +1,4 @@
+import { containing } from "../../../../../test-support/matchers";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import Form from "./CommsGroundStationForm.vue";
@@ -21,7 +22,7 @@ test.each(["new", "edit"] as const)(
       await wrapper.get("#ground-station-form").trigger("submit");
       expect(wrapper.emitted("save")?.[0]).toEqual([
         {
-          ground_station: expect.objectContaining({
+          ground_station: containing({
             display_name: "Boulder",
             ground_station_id: mode === "edit" ? "station-1" : "",
           }),

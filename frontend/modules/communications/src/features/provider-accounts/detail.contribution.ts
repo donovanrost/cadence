@@ -12,6 +12,7 @@ export const providerAccountDetailContribution: OrganizationPageContribution<
   slot: "organization.page",
   version: 1,
   title: "Provider account",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   component: ProviderAccountDetailPage,
   actions: [...Object.keys(providerAccountActions.provider_account_show), "refresh"],
   read(value, context) {

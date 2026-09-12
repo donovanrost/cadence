@@ -1,17 +1,19 @@
-<script setup>
+<script setup lang="ts">
 import { onBeforeUnmount, onMounted, onUpdated, ref } from "vue";
-import { createNavRailController } from "./nav_rail_controller.js";
+import type { contextRail, contextSections } from "./context";
+import { createNavRailController } from "./nav_rail_controller";
 
-const props = defineProps({
-  rail: { type: Object, required: true },
-  sections: { type: Array, required: true },
-});
+const props = defineProps<{
+  rail: typeof contextRail;
+  sections: ReturnType<typeof contextSections>;
+}>();
 
-const rail = ref(null);
-let controller;
+const railElement = ref<HTMLElement | null>(null);
+let controller: ReturnType<typeof createNavRailController> | undefined;
 
 onMounted(() => {
-  controller = createNavRailController({ el: rail.value });
+  if (!railElement.value) return;
+  controller = createNavRailController({ el: railElement.value });
   controller.mount();
 });
 
@@ -26,7 +28,7 @@ onBeforeUnmount(() => {
 <template>
   <aside
     :id="props.rail.id"
-    ref="rail"
+    ref="railElement"
     :aria-label="props.rail.aria_label"
     data-ops-context-rail
     :data-storage-key="props.rail.storage_key"

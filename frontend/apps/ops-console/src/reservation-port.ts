@@ -1,3 +1,4 @@
+import { queryPresentation } from "./query-presentation";
 import type { FullPageSurfaceProps } from "@cadence/plugin-sdk";
 import type { ReservationPort } from "@cadence/planning-and-contacts/contact-scheduling";
 const actions = [
@@ -8,13 +9,14 @@ const actions = [
 export function createReservationPort(
   props: FullPageSurfaceProps,
   active: () => boolean,
-): ReservationPort | undefined {
+): Extract<ReservationPort, { protocol: "remote-query" }> | undefined {
   const { context, surface, application, bridge } = props;
   if (context.scope !== "mission" || surface.surfaceId !== "contact_detail") return undefined;
   function admitted() {
     if (!active()) throw new Error("The reservation review has departed.");
   }
   return {
+    protocol: "remote-query",
     context: { organization_id: context.organizationId, mission_id: context.missionId },
     async execute(action, input) {
       admitted();
@@ -34,19 +36,18 @@ export function createReservationPort(
     },
     async refresh() {
       admitted();
-      const result: any = await bridge.query({
+      const result = await bridge.query({
         queryId: surface.dataContract.id,
         version: surface.dataContract.version,
         context,
       });
       admitted();
-      const candidate = result?.trusted_surface ?? result;
-      if (
-        candidate?.queryVersion !== 1 ||
-        candidate?.presentation?.component !== "OpsContactDetail"
-      )
-        throw new Error("Unavailable reservation review.");
-      return candidate.presentation.props?.detail;
+      return queryPresentation(
+        result,
+        "OpsContactDetail",
+        "detail",
+        "Unavailable reservation review.",
+      );
     },
   };
 }

@@ -1,3 +1,4 @@
+import { queryPresentation } from "./query-presentation";
 import type { FullPageSurfaceProps } from "@cadence/plugin-sdk";
 import type { ContactRecordPort } from "@cadence/planning-and-contacts/contact-scheduling";
 export function createContactRecordPort(
@@ -10,22 +11,17 @@ export function createContactRecordPort(
     if (!active()) throw new Error("The contact record has departed.");
   }
   return {
+    protocol: "remote-query",
     context: { organization_id: context.organizationId, mission_id: context.missionId },
     async refresh() {
       admitted();
-      const result: any = await bridge.query({
+      const result = await bridge.query({
         queryId: surface.dataContract.id,
         version: surface.dataContract.version,
         context,
       });
       admitted();
-      const candidate = result?.trusted_surface ?? result;
-      if (
-        candidate?.queryVersion !== 1 ||
-        candidate?.presentation?.component !== "OpsContactRecord"
-      )
-        throw new Error("Unavailable contact record.");
-      return candidate.presentation.props?.record;
+      return queryPresentation(result, "OpsContactRecord", "record", "Unavailable contact record.");
     },
   };
 }

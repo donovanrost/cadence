@@ -1,14 +1,15 @@
+import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mount, flushPromises } from "@vue/test-utils";
 import { workspaceContribution } from "./contribution";
 import DashboardWorkspace from "./DashboardWorkspace.vue";
 import { snapshotContext, snapshotFixture } from "./snapshot-fixture.test-support";
-const apps: ReturnType<typeof mount>[] = [];
+const apps: { unmount: () => void }[] = [];
 afterEach(() => {
   for (const app of apps.splice(0)) app.unmount();
 });
 function render(refresh = vi.fn(async () => {})) {
-  const port = { execute: vi.fn(), navigate: vi.fn() };
+  const port = { execute: vi.fn(), navigate: vi.fn((_: string) => {}) };
   const model = snapshotFixture();
   const app = mount(DashboardWorkspace, {
     props: { model, context: snapshotContext, port, refresh },
@@ -49,7 +50,7 @@ test("applying context navigates through the host port and validates bounds with
   await app.get("#dashboard-viewer-to").setValue("2026-09-07T01:00:00Z");
   await app.get("#dashboard-viewer-axis").setValue("receipt_time");
   await app.get("#dashboard-viewer-context-form").trigger("submit");
-  const url = new URL(port.navigate.mock.calls[0][0], "http://cadence.test");
+  const url = new URL(required(port.navigate.mock.calls[0])[0], "http://cadence.test");
   expect(url.pathname).toBe("/missions/mission/ops/dashboards/dashboard");
   expect(url.searchParams.get("time_axis")).toBe("receipt_time");
   expect(url.searchParams.get("from")).toBe("2026-09-07T00:00:00Z");
@@ -60,14 +61,16 @@ test("applying context navigates through the host port and validates bounds with
   await app.get("#dashboard-viewer-mode").setValue("live");
   await app.get("#dashboard-viewer-context-form").trigger("submit");
   expect(
-    new URL(port.navigate.mock.calls[1][0], "http://cadence.test").searchParams.has("from"),
+    new URL(required(port.navigate.mock.calls[1])[0], "http://cadence.test").searchParams.has(
+      "from",
+    ),
   ).toBe(false);
   expect(port.execute).not.toHaveBeenCalled();
 });
 test("diagnostics handoff preserves the displayed runtime context and rejects unsupported replay context", async () => {
   const { app, model } = render();
   const url = new URL(
-    app.get("#dashboard-viewer-diagnostics").attributes("href")!,
+    required(app.get("#dashboard-viewer-diagnostics").attributes("href")),
     "http://cadence.test",
   );
   expect(url.pathname).toBe("/missions/mission/ops/dashboards/dashboard/diagnostics");
@@ -109,7 +112,8 @@ test("context timestamps preserve offsets and microseconds and reject calendar n
   await app.get("#dashboard-viewer-from").setValue(from);
   await app.get("#dashboard-viewer-to").setValue(to);
   await app.get("#dashboard-viewer-context-form").trigger("submit");
-  const query = new URL(port.navigate.mock.calls[0][0], "http://cadence.test").searchParams;
+  const query = new URL(required(port.navigate.mock.calls[0])[0], "http://cadence.test")
+    .searchParams;
   expect(query.get("from")).toBe(from);
   expect(query.get("to")).toBe(to);
   for (const invalid of [

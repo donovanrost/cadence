@@ -73,7 +73,7 @@ async function save() {
         label="Display name"
         required
         :disabled="disabled"
-        :error="errors.display_name"
+        :error="errors.display_name ?? ''"
       />
       <CadenceTextField
         id="organization_slug"
@@ -82,7 +82,7 @@ async function save() {
         label="Slug"
         required
         :disabled="disabled"
-        :error="errors.slug"
+        :error="errors.slug ?? ''"
         hint="A unique label used to identify the organization."
       />
       <p v-if="errors.form" role="alert">{{ errors.form }}</p>

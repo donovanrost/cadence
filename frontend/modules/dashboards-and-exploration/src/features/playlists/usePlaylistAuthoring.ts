@@ -80,6 +80,7 @@ export function usePlaylistAuthoring(props: {
     const control = event?.currentTarget as HTMLButtonElement | undefined;
     const restoreFocus = control && document.activeElement === control;
     const [entry] = queue.value.splice(index, 1);
+    if (!entry) return;
     queue.value.splice(target, 0, entry);
     if (restoreFocus)
       void nextTick(() => {

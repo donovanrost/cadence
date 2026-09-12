@@ -1,3 +1,6 @@
+import { fixtureValue, fixtureDisabled } from "../../../../../test-support/json-fixture.ts";
+import { required } from "../../../../../test-support/required.ts";
+import { fixtureRows, fixtureString } from "../../../../../test-support/json-fixture.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,12 +17,20 @@ const server = await createServer({
   logLevel: "error",
 });
 try {
-  const { libraryContribution } = await server.ssrLoadModule("/src/library.ts");
-  for (const model of JSON.parse(process.argv[2])) {
+  // Vite loads the checked module dynamically; its exported type supplies the SSR interop contract.
+  const { libraryContribution } = /** @type {typeof import("../../library.ts")} */ (
+    await server.ssrLoadModule("/src/library.ts")
+  );
+  for (const raw of fixtureRows(process.argv[2])) {
     const props = libraryContribution.read(
-      { model, sequence: 0, phase: "ready" },
-      { organizationId: model.organization_id, missionId: model.mission_id },
+      { model: raw, sequence: 0, phase: "ready" },
+      {
+        organizationId: fixtureString(raw.organization_id),
+        missionId: fixtureString(raw.mission_id),
+      },
     );
+    const model = props.state.model;
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks the SFC constructor at this registration or render boundary.
     const app = createSSRApp(libraryContribution.component, {
       ...props,
       port: {
@@ -42,17 +53,20 @@ try {
       assert.equal(!!doc.getElementById("library-selected"), model.selected !== null);
       if (model.selected) {
         assert.equal(
-          doc.getElementById("library-selected-name").textContent.trim(),
+          required(doc.getElementById("library-selected-name")).textContent.trim(),
           model.selected.item.name,
         );
         assert.equal(
           doc.querySelectorAll("#library-consumers>li").length,
           model.selected.consumers.rows.length,
         );
-        assert.equal(doc.getElementById("library-widget-json").value, model.selected.widget_json);
+        assert.equal(
+          fixtureValue(doc.getElementById("library-widget-json")),
+          model.selected.widget_json,
+        );
       }
       assert.equal(
-        doc.getElementById("library-add-to-draft").disabled,
+        fixtureDisabled(doc.getElementById("library-add-to-draft")),
         !model.selected || !model.target,
       );
     } finally {

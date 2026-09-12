@@ -1,3 +1,10 @@
+import {
+  jsonFixture,
+  fixtureRecord,
+  fixtureString,
+} from "../../../../../test-support/json-fixture";
+import { fixtureArrayAt, fixtureRecordAt } from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
 import { test, expect, vi } from "vite-plus/test";
 import ConfigurationSurface from "./ConfigurationSurface.vue";
@@ -84,19 +91,26 @@ test("admits the versioned configuration and rejects scope, identity, readiness 
   const p = page();
   expect(admitConfiguration(p, expected)).toEqual(p);
   for (const mutate of [
-    (p: any) => (p.contract_version = 2),
-    (p: any) => delete p.review,
-    (p: any) => (p.review.configuration_token = "foreign"),
-    (p: any) => (p.review.total_count = 2),
-    (p: any) => (p.review.mission_token = null),
-    (p: any) => (p.context.spacecraft_id = "foreign"),
-    (p: any) => (p.preflight.activation_ready = true),
-    (p: any) => (p.preflight.check_count = 3),
-    (p: any) => p.revision.field.options.push(p.revision.field.options[0]),
-    (p: any) =>
-      p.page.breadcrumbs.push({ id: "foreign", label: "Foreign", href: "/missions/other" }),
-    (p: any) => (p.preflight.checks = []),
-    (p: any) => (p.revision.field.value = "missing"),
+    (p: unknown) => (fixtureRecordAt(p).contract_version = 2),
+    (p: unknown) => delete fixtureRecordAt(p).review,
+    (p: unknown) => (fixtureRecordAt(p, "review").configuration_token = "foreign"),
+    (p: unknown) => (fixtureRecordAt(p, "review").total_count = 2),
+    (p: unknown) => (fixtureRecordAt(p, "review").mission_token = null),
+    (p: unknown) => (fixtureRecordAt(p, "context").spacecraft_id = "foreign"),
+    (p: unknown) => (fixtureRecordAt(p, "preflight").activation_ready = true),
+    (p: unknown) => (fixtureRecordAt(p, "preflight").check_count = 3),
+    (p: unknown) =>
+      fixtureArrayAt(p, "revision", "field", "options").push(
+        fixtureArrayAt(p, "revision", "field", "options")[0],
+      ),
+    (p: unknown) =>
+      fixtureArrayAt(p, "page", "breadcrumbs").push({
+        id: "foreign",
+        label: "Foreign",
+        href: "/missions/other",
+      }),
+    (p: unknown) => (fixtureRecordAt(p, "preflight").checks = []),
+    (p: unknown) => (fixtureRecordAt(p, "revision", "field").value = "missing"),
   ]) {
     const bad = structuredClone(p);
     mutate(bad);
@@ -136,7 +150,7 @@ test("refresh retains a revision draft and requires explicit review when the sav
     enabled: true,
     handled_apids: [],
   };
-  fresh.revision!.field.value = "revision-1";
+  required(fresh.revision).field.value = "revision-1";
   fresh.review.configuration_token = "c".repeat(64);
   await w.setProps(fresh);
   expect((w.get("#telemetry-decom-revision-select").element as HTMLSelectElement).value).toBe(
@@ -160,16 +174,16 @@ test("refresh retains a revision draft and requires explicit review when the sav
 
 test("producer supplied configuration mounts the public feature and emits the selected revision", async () => {
   if (!process.env.CADENCE_DECOM) return;
-  const supplied = JSON.parse(process.env.CADENCE_DECOM);
+  const supplied = jsonFixture(process.env.CADENCE_DECOM);
   expect(admitConfiguration(supplied.page)).not.toBeNull();
-  const w = mount(ConfigurationSurface, { attrs: supplied.page });
-  await w.get("#telemetry-decom-revision-select").setValue(supplied.revision_id);
+  const w = mount(ConfigurationSurface, { attrs: fixtureRecord(supplied.page) });
+  await w.get("#telemetry-decom-revision-select").setValue(fixtureString(supplied.revision_id));
   expect(w.emitted("save_catalog_revision")).toBeUndefined();
   await w.get("#telemetry-decom-revision-form").trigger("submit");
   await flushPromises();
-  const events = w.emitted("save_catalog_revision")!;
+  const events = required(w.emitted("save_catalog_revision"));
   expect(events).toHaveLength(1);
-  process.stdout.write("CADENCE_DECOM_INPUT=" + JSON.stringify(events[0][0]) + "\n");
+  process.stdout.write("CADENCE_DECOM_INPUT=" + JSON.stringify(required(events[0])[0]) + "\n");
   w.unmount();
 });
 
@@ -199,12 +213,12 @@ test("mission submission requires review and a refresh cannot silently acknowled
     enabled: true,
     handled_apids: [],
   };
-  p.revision!.field.value = "revision-1";
+  required(p.revision).field.value = "revision-1";
   p.review.total_count = 1;
   p.review.configurations = [{ spacecraft_id: "spacecraft", ...p.configuration }];
   p.preflight.state = "ready";
   p.preflight.activation_ready = true;
-  p.preflight.checks[0].state = "ready";
+  required(p.preflight.checks[0]).state = "ready";
   p.lifecycle_actions = {
     empty_message: null,
     disable: null,

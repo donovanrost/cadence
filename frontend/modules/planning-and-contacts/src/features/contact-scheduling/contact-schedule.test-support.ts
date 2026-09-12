@@ -1,10 +1,12 @@
+import { required } from "../../../../../test-support/required";
+import { mutableFixture, type MutableFixture } from "../../../../../test-support/mutable-fixture";
 import type {
   ContactSchedule,
   ScheduleSearch,
   ScheduleSearchResult,
   ScheduleReceipt,
 } from "./OpsContactSchedule.contracts";
-export const scheduleFixture = (): ContactSchedule => ({
+export const scheduleFixture = (): MutableFixture<ContactSchedule> => ({
   permissions: { operate: true, cancel: true },
   contract_version: 1,
   context: { organization_id: "org-one", mission_id: "mission-one" },
@@ -103,17 +105,17 @@ export const scheduleFixture = (): ContactSchedule => ({
   },
 });
 export function searchFixture(
-  model = scheduleFixture(),
+  model: ContactSchedule = scheduleFixture(),
   search?: ScheduleSearch,
-): ScheduleSearchResult {
-  return {
+): MutableFixture<ScheduleSearchResult> {
+  return mutableFixture<ScheduleSearchResult>({
     contract_version: 1,
     context: model.context,
     truncated: false,
-    route: model.routes.entries[0]!,
+    route: required(model.routes.entries[0]),
     search: search ?? {
-      spacecraft_id: model.selected_spacecraft!.id,
-      route_key: model.routes.entries[0]!.key,
+      spacecraft_id: required(model.selected_spacecraft).id,
+      route_key: required(model.routes.entries[0]).key,
       ...model.initial_window,
     },
     opportunities: [
@@ -130,14 +132,16 @@ export function searchFixture(
         token: "opaque-token-one",
       },
     ],
-  };
+  });
 }
 export const completion = (result: unknown) => ({
   receiptId: "receipt-one",
   completedAt: "2026-09-09T12:00:00Z",
   result,
 });
-export const receiptFixture = (lifecycleState = "confirmed"): ScheduleReceipt => ({
+export const receiptFixture = (
+  lifecycleState: ScheduleReceipt["lifecycleState"] = "confirmed",
+): ScheduleReceipt => ({
   providerReservationId: "reservation-one",
   providerRevision: 5,
   lifecycleState,

@@ -5,6 +5,7 @@ import {
   ExecutionDiagnosticsView,
   collectionIds,
   initialSelection,
+  readSelection,
   type ExecutionDiagnostics,
   type DiagnosticSelection,
 } from "@cadence/dashboards-and-exploration/execution-diagnostics";
@@ -78,7 +79,7 @@ const meta = {
   render: (args) => ({
     components: { ExecutionDiagnosticsView },
     setup() {
-      const selection = ref<DiagnosticSelection>(args.selection);
+      const selection = ref<DiagnosticSelection>(readSelection(args.selection));
       return { args, selection };
     },
     template:
@@ -130,7 +131,9 @@ partial.collections[1] = {
   limited: false,
   rows: [],
 };
-partial.collections[5].source = "process_local";
+const localCollection = partial.collections[5];
+if (!localCollection) throw Error("Missing local diagnostics story collection");
+localCollection.source = "process_local";
 export const PartialEvidence: Story = {
   args: { model: partial, selection: { collection: "requests", row: null, filter: "" } },
   play: async ({ canvasElement }) => {

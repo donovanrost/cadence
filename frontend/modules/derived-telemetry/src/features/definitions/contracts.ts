@@ -280,13 +280,15 @@ export function admitDocument(value: unknown, expected?: unknown): DefinitionsDo
       )
         return null;
       if (
-        selected.history.items.some(
-          (item, index, items) =>
+        selected.history.items.some((item, index, items) => {
+          const previous = items[index - 1];
+          return (
             item.id !== current.id ||
             item.point_id !== current.point_id ||
             item.version > current.version ||
-            (index > 0 && item.version >= items[index - 1].version),
-        )
+            (index > 0 && (!previous || item.version >= previous.version))
+          );
+        })
       )
         return null;
     }

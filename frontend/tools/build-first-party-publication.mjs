@@ -22,6 +22,7 @@ export async function buildFirstPartyPublication() {
   }));
 }
 
+/** @param {string[]} argumentsList @returns {Promise<void>} */
 function runPnpm(argumentsList) {
   const command = process.platform === "win32" ? "corepack.cmd" : "corepack";
   const commandArguments = ["pnpm", ...argumentsList];

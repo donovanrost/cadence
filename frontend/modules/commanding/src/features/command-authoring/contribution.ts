@@ -7,6 +7,7 @@ export const commandAuthoringContribution = {
   slot: "ops.page",
   version: 1,
   title: "Create command request",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks this SFC constructor.
   component: CommandAuthoringPage,
   query: true,
   actions: ["preview", "create"],

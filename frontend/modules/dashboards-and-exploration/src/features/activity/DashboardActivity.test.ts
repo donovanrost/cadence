@@ -1,3 +1,4 @@
+import { fixtureArrayAt, fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mount, flushPromises } from "@vue/test-utils";
 import DashboardActivity from "./DashboardActivity.vue";
@@ -5,7 +6,7 @@ import { readActivity } from "./validation";
 import { activityContribution } from "./contribution";
 import { activityContext, activityFixture, versionFixture } from "./fixtures.test-support";
 import type { ActivityState } from "./contracts";
-const wrappers: ReturnType<typeof mount>[] = [];
+const wrappers: { unmount: () => void }[] = [];
 afterEach(() => {
   wrappers.splice(0).forEach((w) => w.unmount());
   vi.restoreAllMocks();
@@ -31,7 +32,7 @@ function setup(
       port: {
         execute,
         navigate,
-        guardNavigation: (g) => {
+        guardNavigation: (g: () => boolean) => {
           guard = g;
           return dispose;
         },
@@ -48,16 +49,17 @@ test("admits exact resource-bound metadata without raw documents, audit payloads
   const state = activityFixture();
   expect(activityContribution.read(state, activityContext).state).toEqual(state);
   for (const mutate of [
-    (s: any) => (s.model.version = 2),
-    (s: any) => (s.model.dashboard_id = "foreign"),
-    (s: any) => (s.model.document = {}),
-    (s: any) => (s.model.revision = 1.5),
-    (s: any) => (s.model.selected.version = 2),
-    (s: any) => s.model.versions.reverse(),
-    (s: any) => (s.model.next_version = 1),
-    (s: any) => (s.model.versions = Array(26).fill(versionFixture(1))),
-    (s: any) =>
-      (s.model.events = [
+    (s: unknown) => (fixtureRecordAt(s, "model").version = 2),
+    (s: unknown) => (fixtureRecordAt(s, "model").dashboard_id = "foreign"),
+    (s: unknown) => (fixtureRecordAt(s, "model").document = {}),
+    (s: unknown) => (fixtureRecordAt(s, "model").revision = 1.5),
+    (s: unknown) => (fixtureRecordAt(s, "model", "selected").version = 2),
+    (s: unknown) => fixtureArrayAt(s, "model", "versions").reverse(),
+    (s: unknown) => (fixtureRecordAt(s, "model").next_version = 1),
+    (s: unknown) =>
+      (fixtureRecordAt(s, "model").versions = Array.from({ length: 26 }, () => versionFixture(1))),
+    (s: unknown) =>
+      (fixtureRecordAt(s, "model").events = [
         {
           id: "event",
           event_type: "published",

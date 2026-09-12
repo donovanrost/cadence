@@ -1,3 +1,4 @@
+import { required } from "../../../../test-support/required";
 import { afterEach, expect, test } from "vite-plus/test";
 import { mount, flushPromises } from "@vue/test-utils";
 import { defineComponent, h, nextTick } from "vue";
@@ -33,14 +34,16 @@ test("page survives shell updates, delayed shell mount and transport prop change
   wrappers.push(shell);
   await flushPromises();
   await nextTick();
-  const field = document.querySelector<HTMLInputElement>('[name="email"]')!;
+  const field = required(document.querySelector<HTMLInputElement>('[name="email"]'));
   field.value = "typed@example.test";
   await shell.setProps({ count: 1 });
   await page.setProps({ csrfToken: "refreshed" });
   await flushPromises();
   expect(document.querySelector('[name="email"]')).toBe(field);
   expect(field.value).toBe("typed@example.test");
-  expect(document.querySelector<HTMLInputElement>('[name="_csrf_token"]')!.value).toBe("refreshed");
+  expect(required(document.querySelector<HTMLInputElement>('[name="_csrf_token"]')).value).toBe(
+    "refreshed",
+  );
   page.unmount();
   expect(document.querySelector("#portal-form")).toBeNull();
 });

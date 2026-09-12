@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 
 // Use the same client-side Vue compilation and DOM environment as the feature
 // tests, with real server-produced props. SSR output cannot exercise DOM events.
-const model = JSON.parse(process.argv[2]);
+const input = process.argv[2];
+if (input === undefined) throw Error("Missing native decision fixture");
+/** @type {unknown} */
+const model = JSON.parse(input);
 const output = execFileSync(
   "corepack",
   [

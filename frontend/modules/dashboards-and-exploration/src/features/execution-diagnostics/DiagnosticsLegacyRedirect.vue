@@ -6,6 +6,7 @@ const valid = (value: unknown): value is string =>
   typeof value === "string" &&
   value.length > 0 &&
   new TextEncoder().encode(value).length <= 256 &&
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   !/[\u0000-\u001f\u007f]/.test(value);
 const href = computed(() =>
   valid(props.mission_id) && valid(props.dashboard_id)

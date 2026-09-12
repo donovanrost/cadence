@@ -15,6 +15,7 @@ function text(v: unknown, max = 512): string {
 }
 export function id(v: unknown): string {
   const s = text(v, 256);
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   return s && !/[\u0000-\u001f]/.test(s) ? s : fail();
 }
 function number(v: unknown, min = 1, max = Number.MAX_SAFE_INTEGER - 1): number {
@@ -58,6 +59,11 @@ function next(v: unknown, rows: Record<string, unknown>[], key: string) {
   if (v !== null && (rows.length !== 25 || v !== rows.at(-1)?.[key])) fail();
 }
 export function readLibrary(value: unknown, context: OpsPageContext): LibraryState {
+  assertLibrary(value, context);
+  return value;
+}
+
+function assertLibrary(value: unknown, context: OpsPageContext): asserts value is LibraryState {
   const s = exact(value, ["sequence", "phase", "model"]);
   number(s.sequence, 0, 1000000);
   if (!["ready", "review"].includes(s.phase as string) || context.resourceId !== undefined) fail();
@@ -150,9 +156,13 @@ export function readLibrary(value: unknown, context: OpsPageContext): LibrarySta
     unique(rows.map((r) => r.id));
     next(consumers.next, rows, "id");
   }
-  return s as unknown as LibraryState;
 }
 export function readReceipt(value: unknown): LibraryReceipt {
+  assertReceipt(value);
+  return value;
+}
+
+function assertReceipt(value: unknown): asserts value is LibraryReceipt {
   const r = exact(value, [
     "version",
     "event",
@@ -175,5 +185,4 @@ export function readReceipt(value: unknown): LibraryReceipt {
     id(r.placement_id);
   } else if (r.dashboard_id !== null || r.document_version !== null || r.placement_id !== null)
     fail();
-  return r as unknown as LibraryReceipt;
 }

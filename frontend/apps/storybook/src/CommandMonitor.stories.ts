@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 import type { Meta, StoryObj } from "@storybook/vue3-vite";
 import { expect, userEvent, within } from "storybook/test";
 import { ref } from "vue";
@@ -92,7 +93,9 @@ const meta = {
   render: (args) => ({
     components: { CommandMonitor },
     setup() {
-      const model = ref<CommandMonitorModel>(JSON.parse(JSON.stringify(args.model)));
+      const model = ref<CommandMonitorModel>(
+        readCommandMonitor(JSON.parse(JSON.stringify(args.model)), monitorContext),
+      );
       const all = [...model.value.rows],
         destination = ref("");
       const port = {
@@ -148,7 +151,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const ReadOnlyProjection: Story = {
   play: async ({ canvasElement }) => {
-    await userEvent.click(canvasElement.querySelector("details summary")!);
+    await userEvent.click(required(canvasElement.querySelector("details summary")));
     await expect(
       canvasElement.querySelector('[data-command-verifier="verifier-request-a"]'),
     ).toBeVisible();
@@ -157,10 +160,12 @@ export const ReadOnlyProjection: Story = {
 export const FocusAndFilter: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvasElement.querySelector('[data-command-follow="request-a"]')!);
+    await userEvent.click(
+      required(canvasElement.querySelector('[data-command-follow="request-a"]')),
+    );
     await expect(canvasElement.querySelector("#command-monitor-focus")).toBeVisible();
     await userEvent.type(
-      canvasElement.querySelector("#command-monitor-query")!,
+      required(canvasElement.querySelector("#command-monitor-query")),
       "no matching request",
     );
     await userEvent.click(canvas.getByRole("button", { name: "Apply filters" }));

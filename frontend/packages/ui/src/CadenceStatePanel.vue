@@ -8,7 +8,6 @@ withDefaults(
     tone?: "loading" | "error" | "neutral";
   }>(),
   {
-    description: undefined,
     tone: "neutral",
   },
 );

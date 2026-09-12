@@ -93,7 +93,7 @@ async function invite() {
         label="Email"
         required
         :disabled="disabled"
-        :error="errors.email"
+        :error="errors.email ?? ''"
       />
       <CadenceTextField
         id="invite_display_name"
@@ -102,7 +102,7 @@ async function invite() {
         label="Display name"
         hint="Optional."
         :disabled="disabled"
-        :error="errors.display_name"
+        :error="errors.display_name ?? ''"
       />
       <label for="invite_membership_role" class="fieldset"
         ><span class="hud-label">Membership role</span

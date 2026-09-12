@@ -14,6 +14,7 @@ function text(v: unknown, max = 512): string {
 }
 function id(v: unknown): string {
   const s = text(v, 256);
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   return s && !/[\u0000-\u001f]/.test(s) ? s : fail();
 }
 function number(v: unknown, min = 1, max = Number.MAX_SAFE_INTEGER - 1): number {
@@ -63,6 +64,11 @@ function summary(v: unknown, latest: number, selected = false) {
   return s;
 }
 export function readActivity(value: unknown, context: OpsPageContext): ActivityState {
+  assertActivity(value, context);
+  return value;
+}
+
+function assertActivity(value: unknown, context: OpsPageContext): asserts value is ActivityState {
   const s = exact(value, ["sequence", "phase", "model"]);
   number(s.sequence, 0, 1_000_000);
   if (!["ready", "review"].includes(s.phase as string)) fail();
@@ -138,5 +144,4 @@ export function readActivity(value: unknown, context: OpsPageContext): ActivityS
   });
   if (new Set(events.map((e) => e.id)).size !== events.length) fail();
   if (m.next_event !== null && (events.length !== 25 || m.next_event !== events.at(-1)?.id)) fail();
-  return s as unknown as ActivityState;
 }

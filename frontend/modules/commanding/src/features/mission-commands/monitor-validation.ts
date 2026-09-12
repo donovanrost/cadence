@@ -31,7 +31,7 @@ const oneOf = (v: unknown, values: readonly string[]) =>
 const verification = (v: unknown) =>
   v === null || oneOf(v, ["not_required", "pending", "satisfied", "failed", "timed_out"]);
 const canonical = (v: unknown) =>
-  JSON.stringify(v, (_, value) =>
+  JSON.stringify(v, (_, value: unknown) =>
     value && typeof value === "object" && !Array.isArray(value)
       ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)))
       : value,
@@ -232,7 +232,7 @@ export function readCommandMonitor(value: unknown, context: OpsPageContext): Com
   if (f.status === "ready") {
     if (!query.focus_command_id || observation(f.row).id !== query.focus_command_id)
       throw Error("Invalid command focus");
-    const visible = m.rows.find((row) => row.id === query.focus_command_id);
+    const visible = rows.find((row) => row.id === query.focus_command_id);
     if (visible && canonical(visible) !== canonical(f.row))
       throw Error("Conflicting command focus");
   } else if (f.row !== null || f.status !== (query.focus_command_id ? "not_found" : "not_selected"))

@@ -82,6 +82,7 @@ export const record = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 export const bytes = (v: string) => new TextEncoder().encode(v).length;
 export const text = (v: unknown, max = 2000): v is string =>
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   typeof v === "string" && bytes(v) <= max && !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(v);
 export const id = (v: unknown): v is string =>
   typeof v === "string" && v.length <= 120 && /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(v);
@@ -116,6 +117,7 @@ export const fail = (): never => {
 export function readQuery(v: unknown): Query {
   if (!record(v) || Object.keys(v).length !== queryKeys.length) return fail();
   for (const key of queryKeys)
+    // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
     if (!text(v[key], 240) || /[\x00-\x1f\x7f]/.test(v[key])) return fail();
   for (const key of ["command", "target", "command_after", "target_after"] as const)
     if (v[key] !== "" && !id(v[key])) return fail();
@@ -293,7 +295,7 @@ function argumentDocument(value: unknown, maxBytes: 32768 | 131072 = 32768): val
 function jsonText(value: unknown, array = false): value is string {
   if (!text(value, 131072) || !value) return false;
   try {
-    const decoded = JSON.parse(value);
+    const decoded: unknown = JSON.parse(value);
     return (!array || Array.isArray(decoded)) && json(decoded);
   } catch {
     return false;

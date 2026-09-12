@@ -1,5 +1,6 @@
+import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
 import type { PlanDetail } from "./OpsContactPlanShow.contracts";
-export function planFixture(): { detail: PlanDetail } {
+export function planFixture(): { detail: MutableFixture<PlanDetail> } {
   const hash = "a".repeat(64),
     time = "2027-01-01T00:00:00Z";
   const page = <T>(entries: T[]) => ({ page: 1, more: false, entries });
@@ -53,9 +54,9 @@ export function planFixture(): { detail: PlanDetail } {
         },
       ]),
       opportunities: page(
-        ["selected", "locked"].map((disposition, index) => ({
+        (["selected", "locked"] as const).map((disposition, index) => ({
           id: "snapshot-" + index,
-          disposition: disposition as "selected" | "locked",
+          disposition,
           content_sha256: hash,
           requirement_id: "requirement-one",
           requirement_version: 1,

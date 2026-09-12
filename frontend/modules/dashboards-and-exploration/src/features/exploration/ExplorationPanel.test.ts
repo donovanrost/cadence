@@ -1,15 +1,16 @@
+import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import ExplorationPanel from "./ExplorationPanel.vue";
 import { context, fixture, selectedFixture } from "./fixtures.test-support";
 import { explorationHref } from "./query";
 import { readExploration } from "./validation";
-const wrappers: ReturnType<typeof mount>[] = [];
+const wrappers: { unmount: () => void }[] = [];
 afterEach(() => wrappers.splice(0).forEach((w) => w.unmount()));
 function setup(model = fixture(), refresh = vi.fn().mockResolvedValue(undefined)) {
   const port = {
     execute: vi.fn(),
-    navigate: vi.fn(),
+    navigate: vi.fn((_: string) => {}),
     guardNavigation: vi.fn((_guard: () => boolean) => vi.fn()),
   };
   const wrapper = mount(ExplorationPanel, { props: { model, context, port, refresh } });
@@ -36,7 +37,7 @@ test("submitting filters preserves source and origin context and clears a differ
   const { wrapper, port } = setup(model);
   await wrapper.get("#exploration-point-id").setValue("HK.current+raw");
   await wrapper.get("#exploration-query").trigger("submit");
-  const url = new URL(port.navigate.mock.calls[0][0], "https://cadence.test");
+  const url = new URL(required(port.navigate.mock.calls[0])[0], "https://cadence.test");
   expect(url.searchParams.get("point_id")).toBe("HK.current+raw");
   expect(url.searchParams.get("source_binding_id")).toBe("binding-a");
   expect(url.searchParams.get("source_dashboard_id")).toBe("origin");
@@ -47,7 +48,7 @@ test("submitting filters preserves source and origin context and clears a differ
 test("following a sample freezes the executed window and clearing selection keeps origin context", async () => {
   const { wrapper, port } = setup();
   await wrapper.get("#exploration-results button").trigger("click");
-  const url = new URL(port.navigate.mock.calls[0][0], "https://cadence.test");
+  const url = new URL(required(port.navigate.mock.calls[0])[0], "https://cadence.test");
   expect(url.searchParams.get("sample_id")).toBe("sample/one");
   expect(url.searchParams.get("selected_time")).toBe("2026-09-07T11:59:59.654321Z");
   expect(url.searchParams.get("time_mode")).toBe("range");
@@ -59,7 +60,7 @@ test("following a sample freezes the executed window and clearing selection keep
   next.query = Object.fromEntries(url.searchParams);
   await wrapper.setProps({ model: next });
   await wrapper.get("#exploration-clear-selection").trigger("click");
-  const cleared = new URL(port.navigate.mock.calls[1][0], "https://cadence.test");
+  const cleared = new URL(required(port.navigate.mock.calls[1])[0], "https://cadence.test");
   expect(cleared.searchParams.has("sample_id")).toBe(false);
   expect(cleared.searchParams.has("selected_data_source_id")).toBe(false);
   expect(cleared.searchParams.has("selected_source_binding_id")).toBe(false);
@@ -69,14 +70,14 @@ test("following a sample freezes the executed window and clearing selection keep
 test("historical row selection pins inspection without replacing the query source context", async () => {
   const model = fixture();
   model.rows.push({
-    ...model.rows[0],
+    ...required(model.rows[0]),
     key: "b".repeat(64),
-    source: { ...model.rows[0].source, data_source_id: "source-b" },
+    source: { ...required(model.rows[0]).source, data_source_id: "source-b" },
   });
   const { wrapper, port } = setup(model);
-  await wrapper.findAll("#exploration-results button")[1].trigger("click");
+  await required(wrapper.findAll("#exploration-results button")[1]).trigger("click");
   const query = Object.fromEntries(
-    new URL(port.navigate.mock.calls[0][0], "https://cadence.test").searchParams,
+    new URL(required(port.navigate.mock.calls[0])[0], "https://cadence.test").searchParams,
   );
   expect(query.source_binding_id).toBe("binding-a");
   expect(query.data_source_id).toBeUndefined();
@@ -88,8 +89,8 @@ test("historical row selection pins inspection without replacing the query sourc
   selected.inspection.sample.source.data_source_id = "source-b";
   await wrapper.setProps({ model: selected });
   const rows = wrapper.findAll("#exploration-results tbody tr");
-  expect(rows[0].classes()).not.toContain("bg-primary/10");
-  expect(rows[1].classes()).toContain("bg-primary/10");
+  expect(required(rows[0]).classes()).not.toContain("bg-primary/10");
+  expect(required(rows[1]).classes()).toContain("bg-primary/10");
 });
 test("unsupported and empty results leave the query controls usable", async () => {
   const model = fixture();
@@ -114,7 +115,7 @@ test("failed refresh hides old rows and a pending read prevents duplicate work a
   await wrapper.get("#exploration-reload").trigger("click");
   expect(refresh).toHaveBeenCalledOnce();
   expect(wrapper.get("#exploration-clear-selection").attributes("disabled")).toBeDefined();
-  expect(port.guardNavigation.mock.calls[0][0]()).toBe(false);
+  expect(required(port.guardNavigation.mock.calls[0])[0]()).toBe(false);
   expect(wrapper.get("#exploration-open-origin").attributes("aria-disabled")).toBe("true");
   await wrapper.get("#exploration-open-origin").trigger("click");
   expect(port.navigate).not.toHaveBeenCalled();
@@ -184,10 +185,10 @@ test("contract rejects extra metadata, mismatched scope, malformed values and ov
     { ...model, raw_metadata: {} },
     { ...model, rows: [...model.rows, ...model.rows] },
     { ...model, query: { ...model.query, mission_id: "other" } },
-    { ...model, rows: [{ ...model.rows[0], value: Infinity }] },
-    { ...model, rows: [{ ...model.rows[0], value: { credentials: "private" } }] },
-    { ...model, rows: [{ ...model.rows[0], sample_id: 123 }] },
-    { ...model, rows: [{ ...model.rows[0], time: "invalid" }] },
+    { ...model, rows: [{ ...required(model.rows[0]), value: Infinity }] },
+    { ...model, rows: [{ ...required(model.rows[0]), value: { credentials: "private" } }] },
+    { ...model, rows: [{ ...required(model.rows[0]), sample_id: 123 }] },
+    { ...model, rows: [{ ...required(model.rows[0]), time: "invalid" }] },
     { ...model, warnings: [{ code: "failed", severity: "error", message: "private" }] },
   ];
   for (const value of invalid) expect(() => readExploration(value, context)).toThrow();

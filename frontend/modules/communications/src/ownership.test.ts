@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -50,8 +51,8 @@ test("domain source cannot depend on delivery packages or sibling feature intern
     for (const match of source.matchAll(/(?:from\s*|import\s*\()["']([^"']+)["']/g)) {
       const specifier = match[1];
       expect(specifier, file).not.toMatch(/@cadence\/(?:plugin-host|.*-plugin)(?:\/|$)/);
-      if (!specifier.startsWith(".")) continue;
-      const target = relative(directory, resolve(dirname(absolute), specifier));
+      if (!required(specifier).startsWith(".")) continue;
+      const target = relative(directory, resolve(dirname(absolute), required(specifier)));
       expect(target.startsWith(".."), file + " -> " + specifier).toBe(false);
       if (feature && target.startsWith("features" + sep)) {
         expect(target.split(sep)[1], file + " -> " + specifier).toBe(feature);

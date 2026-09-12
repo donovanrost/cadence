@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
@@ -524,7 +525,7 @@ type TestQuery = (request: HostQueryRequest) => Promise<unknown>;
 type TestExecute = (request: HostActionRequest<unknown>) => Promise<HostActionReceipt<unknown>>;
 
 function propsFor(query: TestQuery, execute: TestExecute = vi.fn(), surfaceId = "fleet_planning") {
-  const surface = surfaceContracts.find((candidate) => candidate.surfaceId === surfaceId)!;
+  const surface = required(surfaceContracts.find((candidate) => candidate.surfaceId === surfaceId));
   return {
     application: {
       applicationKey: "ops_console",
@@ -554,7 +555,9 @@ function propsFor(query: TestQuery, execute: TestExecute = vi.fn(), surfaceId = 
 
 describe("Ops Console federated application", () => {
   it("queries the preserved Ops workspace surface and renders its Phoenix DTO", async () => {
-    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "workspace")!;
+    const surface = required(
+      surfaceContracts.find((candidate) => candidate.surfaceId === "workspace"),
+    );
     const query = vi.fn<TestQuery>().mockResolvedValue(response);
     const baseProps = propsFor(query);
     const wrapper = mount(OpsConsoleApplication, {
@@ -577,7 +580,9 @@ describe("Ops Console federated application", () => {
   it("binds legacy landing responses to host identity and removes links after context changes", async () => {
     const query = vi.fn<TestQuery>().mockResolvedValue(response);
     const baseProps = propsFor(query);
-    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "workspace")!;
+    const surface = required(
+      surfaceContracts.find((candidate) => candidate.surfaceId === "workspace"),
+    );
     const wrapper = mount(OpsConsoleApplication, {
       props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
     });
@@ -607,7 +612,9 @@ describe("Ops Console federated application", () => {
       },
     });
     const baseProps = propsFor(query);
-    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "workspace")!;
+    const surface = required(
+      surfaceContracts.find((candidate) => candidate.surfaceId === "workspace"),
+    );
     const wrapper = mount(OpsConsoleApplication, {
       props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
     });
@@ -629,7 +636,9 @@ describe("Ops Console federated application", () => {
       presentation: { component: "OpsDashboardNew", props: { model } },
     });
     const baseProps = propsFor(query);
-    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "dashboard_new")!;
+    const surface = required(
+      surfaceContracts.find((candidate) => candidate.surfaceId === "dashboard_new"),
+    );
     const wrapper = mount(OpsConsoleApplication, {
       props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
     });
@@ -660,7 +669,9 @@ describe("Ops Console federated application", () => {
       },
     });
     const baseProps = propsFor(query);
-    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "dashboard_new")!;
+    const surface = required(
+      surfaceContracts.find((candidate) => candidate.surfaceId === "dashboard_new"),
+    );
     const wrapper = mount(OpsConsoleApplication, {
       props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
     });
@@ -673,9 +684,9 @@ describe("Ops Console federated application", () => {
   it("preserves directory filters through the owner and removes destinations on host context change", async () => {
     const query = vi.fn<TestQuery>().mockResolvedValue(dashboardResponse);
     const baseProps = propsFor(query);
-    const surface = surfaceContracts.find(
-      (candidate) => candidate.surfaceId === "dashboard_directory",
-    )!;
+    const surface = required(
+      surfaceContracts.find((candidate) => candidate.surfaceId === "dashboard_directory"),
+    );
     const wrapper = mount(OpsConsoleApplication, {
       props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
     });
@@ -702,9 +713,9 @@ describe("Ops Console federated application", () => {
       },
     });
     const baseProps = propsFor(query);
-    const surface = surfaceContracts.find(
-      (candidate) => candidate.surfaceId === "dashboard_directory",
-    )!;
+    const surface = required(
+      surfaceContracts.find((candidate) => candidate.surfaceId === "dashboard_directory"),
+    );
     const wrapper = mount(OpsConsoleApplication, {
       props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
     });
@@ -722,9 +733,9 @@ describe("Ops Console federated application", () => {
         props: { mission_id: "mission-a", query: { point_id: "HK.temp" } },
       },
     });
-    const surface = surfaceContracts.find(
-      (candidate) => candidate.surfaceId === "telemetry_explore",
-    )!;
+    const surface = required(
+      surfaceContracts.find((candidate) => candidate.surfaceId === "telemetry_explore"),
+    );
     const baseProps = propsFor(query);
     const wrapper = mount(OpsConsoleApplication, {
       props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
@@ -769,10 +780,12 @@ describe("Ops Console federated application", () => {
 
     expect(query).toHaveBeenCalledOnce();
     expect(query.mock.calls[0]?.[0]).toEqual({
-      queryId: surfaceContracts.find((candidate) => candidate.surfaceId === "fleet_planning")!
-        .dataContract.id,
-      version: surfaceContracts.find((candidate) => candidate.surfaceId === "fleet_planning")!
-        .dataContract.version,
+      queryId: required(
+        surfaceContracts.find((candidate) => candidate.surfaceId === "fleet_planning"),
+      ).dataContract.id,
+      version: required(
+        surfaceContracts.find((candidate) => candidate.surfaceId === "fleet_planning"),
+      ).dataContract.version,
       context,
     });
     expect(query.mock.calls[0]?.[0]).not.toHaveProperty("params");
@@ -960,7 +973,7 @@ describe("Ops Console federated application", () => {
             ? "OpsDashboardShow"
             : surface.surfaceId === "dashboard_activity"
               ? "OpsDashboardActivitySurface"
-              : `Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_, _prefix, letter) => letter.toUpperCase())}`;
+              : `Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_: string, _prefix: string, letter: string) => letter.toUpperCase())}`;
         return Boolean(OPS_COMPONENTS[componentName]);
       }),
     ).toBe(true);

@@ -1,3 +1,5 @@
+import { containing } from "../../../../../test-support/matchers";
+import { required } from "../../../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import ProviderAccountRegistration from "./ProviderAccountRegistration.vue";
@@ -39,8 +41,8 @@ test("validation updates the same form and native input instead of querying a ne
   await flushPromises();
   expect(execute.mock.calls.at(-1)).toEqual([
     "save",
-    expect.objectContaining({
-      provider_account: expect.objectContaining({
+    containing({
+      provider_account: containing({
         provider_account_id: "account-1",
         max_quota: "0",
         display_name: "Second",
@@ -59,11 +61,13 @@ test("coalesces validation and preserves newer typing until its matching reply",
   await wrapper.get("#account-display_name").setValue("Third");
   expect(execute).toHaveBeenCalledTimes(1);
   first.resolve(
-    validationReceipt((execute.mock.calls[0][1] as ProviderAccountPayload).provider_account),
+    validationReceipt(
+      (required(execute.mock.calls[0])[1] as ProviderAccountPayload).provider_account,
+    ),
   );
   await flushPromises();
   expect(execute).toHaveBeenCalledTimes(2);
-  expect(execute.mock.calls[1][1].provider_account.display_name).toBe("Third");
+  expect(required(execute.mock.calls[1])[1].provider_account.display_name).toBe("Third");
   expect(wrapper.get("#account-display_name").element).toHaveProperty("value", "Third");
   wrapper.unmount();
 });
@@ -162,7 +166,7 @@ test("changing organization invalidates an in-flight validation without overwrit
   const pending = deferred<unknown>();
   execute.mockImplementationOnce(() => pending.promise);
   await wrapper.get("#account-display_name").setValue("Old organization");
-  const old = execute.mock.calls[0][1].provider_account;
+  const old = required(execute.mock.calls[0])[1].provider_account;
   await wrapper.setProps({ organizationId: "org-2", model: registrationModel() });
   await wrapper.get("#account-display_name").setValue("New organization");
   await flushPromises();

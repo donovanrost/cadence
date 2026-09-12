@@ -1,3 +1,6 @@
+import { fixtureRows, fixtureContext } from "../../../../../test-support/json-fixture.ts";
+import { fixtureValue } from "../../../../../test-support/json-fixture.ts";
+import { required } from "../../../../../test-support/required.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,12 +19,15 @@ const server = await createServer({
   logLevel: "error",
 });
 try {
-  const { workspaceContribution } = await server.ssrLoadModule("/src/workspace.ts");
-  for (const page of JSON.parse(process.argv[2])) {
+  const { workspaceContribution } = /** @type {typeof import("../../workspace.ts")} */ (
+    await server.ssrLoadModule("/src/workspace.ts")
+  );
+  for (const page of fixtureRows(process.argv[2])) {
     assert.equal(page.id, workspaceContribution.id);
     assert.equal(page.slot, workspaceContribution.slot);
     assert.equal(page.version, workspaceContribution.version);
-    const props = workspaceContribution.read(page.data, page.context);
+    const props = workspaceContribution.read(page.data, fixtureContext(page.context));
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks the SFC constructor at this registration or render boundary.
     const app = createSSRApp(workspaceContribution.component, {
       ...props,
       port: {
@@ -40,23 +46,31 @@ try {
     try {
       window.document.body.innerHTML = html;
       const doc = window.document;
-      if (page.data.state === "publication_required") {
+      if (props.requirement) {
         assert.ok(doc.getElementById("dashboard-publication-required"));
-        assert.equal(!!doc.getElementById("dashboard-publication-editor"), page.data.author);
+        assert.equal(
+          !!doc.getElementById("dashboard-publication-editor"),
+          props.requirement.author,
+        );
         assert.equal(!!doc.getElementById("dashboard-workspace-feature"), false);
         continue;
       }
+      const model = props.model;
+      assert.ok(model);
       assert.ok(doc.getElementById("dashboard-workspace-feature"));
-      assert.equal(doc.getElementById("dashboard-viewer-title").textContent, page.data.name);
+      assert.equal(required(doc.getElementById("dashboard-viewer-title")).textContent, model.name);
       assert.equal(
-        doc.getElementById("dashboard-viewer-version").textContent,
-        `Published v${page.data.document_version}`,
+        required(doc.getElementById("dashboard-viewer-version")).textContent,
+        `Published v${model.document_version}`,
       );
-      assert.equal(doc.getElementById("dashboard-viewer-mode").value, page.data.context.time_mode);
-      assert.equal(!!doc.getElementById("dashboard-viewer-edit"), page.data.author);
       assert.equal(
-        doc.getElementById("dashboard-viewer-directory").getAttribute("href"),
-        `/missions/${encodeURIComponent(page.data.mission_id)}/ops/dashboards`,
+        fixtureValue(doc.getElementById("dashboard-viewer-mode")),
+        model.context.time_mode,
+      );
+      assert.equal(!!doc.getElementById("dashboard-viewer-edit"), model.author);
+      assert.equal(
+        required(doc.getElementById("dashboard-viewer-directory")).getAttribute("href"),
+        `/missions/${encodeURIComponent(model.mission_id)}/ops/dashboards`,
       );
     } finally {
       await window.happyDOM.close();

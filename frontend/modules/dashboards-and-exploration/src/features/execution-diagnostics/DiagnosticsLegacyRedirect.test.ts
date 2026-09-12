@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 import { mount } from "@vue/test-utils";
 import DiagnosticsLegacyRedirect from "./DiagnosticsLegacyRedirect.vue";
 
-const wrappers: ReturnType<typeof mount>[] = [];
+const wrappers: { unmount: () => void }[] = [];
 afterEach(() => wrappers.splice(0).forEach((wrapper) => wrapper.unmount()));
 
 test("the compatibility surface links to the canonical host page without interpreting old evidence", () => {
@@ -25,9 +25,11 @@ test("missing, oversized or control-character identities never produce a navigat
   });
   wrappers.push(wrapper);
   for (const invalid of [undefined, "", "a\n", "a\u007f", "é".repeat(129)]) {
+    // @ts-expect-error Vue supports removing an optional prop with undefined during reconciliation.
     await wrapper.setProps({ mission_id: invalid, dashboard_id: "dashboard" });
     expect(wrapper.find("#diagnostics-open-workspace").exists()).toBe(false);
     expect(wrapper.find('[role="status"]').exists()).toBe(true);
+    // @ts-expect-error Exercise the same runtime removal for the dashboard identity.
     await wrapper.setProps({ mission_id: "mission", dashboard_id: invalid });
     expect(wrapper.find("#diagnostics-open-workspace").exists()).toBe(false);
   }

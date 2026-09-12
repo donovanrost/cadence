@@ -1,5 +1,10 @@
 {
-  "include": ["vite.config.*", "module-federation.config.ts"],
+  "include": [
+    "vite*.config.*",
+    "module-federation.config.ts",
+    "../../tools/publication-metadata.ts",
+    "*.mjs"
+  ],
   "compilerOptions": {
     "composite": true,
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
@@ -10,6 +15,10 @@
     "types": ["node"],
     "strict": true,
     "skipLibCheck": true,
-    "noEmit": true
-  }
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "checkJs": true
+  },
+  "extends": ["../../tsconfig.strict.json"]
 }

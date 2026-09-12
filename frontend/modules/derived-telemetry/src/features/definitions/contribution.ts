@@ -6,5 +6,6 @@ export const definitionsContribution = {
   surfaceId: "manage",
   query: { id: "cadence.derived_telemetry.manage", version: 1 },
   actionId: "save_definition",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   component: DefinitionsSurface,
 } as const;

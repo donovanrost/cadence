@@ -32,7 +32,7 @@ async function perform(action: Action, row: Notification) {
     busy.value = false;
   }
 }
-async function refresh() {
+async function refreshPage() {
   if (busy.value) return;
   busy.value = true;
   const previous = props.model.observed_at;
@@ -71,7 +71,7 @@ const state = (row: Notification) =>
           type="button"
           class="btn btn-sm"
           :disabled="busy"
-          @click="refresh"
+          @click="refreshPage"
         >
           Refresh
         </button></template

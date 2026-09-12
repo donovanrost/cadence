@@ -1,3 +1,6 @@
+import { fixtureValue } from "../../../../../test-support/json-fixture.ts";
+import { required } from "../../../../../test-support/required.ts";
+import { fixtureRows, fixtureString } from "../../../../../test-support/json-fixture.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,12 +18,17 @@ const server = await createServer({
   logLevel: "error",
 });
 try {
-  const { creationContribution } = await server.ssrLoadModule("/src/creation.ts");
-  for (const model of JSON.parse(process.argv[2])) {
+  // Vite loads the checked module dynamically; its exported type supplies the SSR interop contract.
+  const { creationContribution } = /** @type {typeof import("../../creation.ts")} */ (
+    await server.ssrLoadModule("/src/creation.ts")
+  );
+  for (const raw of fixtureRows(process.argv[2])) {
     const props = creationContribution.read(
-      { model, sequence: 0, phase: "editing" },
-      { organizationId: "producer-test", missionId: model.mission_id },
+      { model: raw, sequence: 0, phase: "editing" },
+      { organizationId: "producer-test", missionId: fixtureString(raw.mission_id) },
     );
+    const model = props.state.model;
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks the SFC constructor at this registration or render boundary.
     const app = createSSRApp(creationContribution.component, {
       ...props,
       port: {
@@ -41,7 +49,7 @@ try {
       const doc = window.document;
       assert.ok(doc.getElementById("dashboard-new-form"));
       assert.equal(
-        doc.getElementById("dashboard-name").value,
+        fixtureValue(doc.getElementById("dashboard-name")),
         model.source ? "Copy of " + model.source.name : "",
       );
       assert.equal(!!doc.getElementById("dashboard-document-json"), model.mode === "import");
@@ -51,7 +59,7 @@ try {
         model.source?.id ?? null,
       );
       assert.equal(
-        doc.getElementById("dashboard-new-cancel").getAttribute("href"),
+        required(doc.getElementById("dashboard-new-cancel")).getAttribute("href"),
         "/missions/" + encodeURIComponent(model.mission_id) + "/ops/dashboards",
       );
     } finally {

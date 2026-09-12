@@ -1,3 +1,5 @@
+import { jsonFixture, fixtureContext } from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
 import { test, expect, vi } from "vite-plus/test";
 import { writeFileSync } from "node:fs";
@@ -28,7 +30,7 @@ test("confirmation gates one queue operation and its durable receipt", async () 
     await c.wrapper.get("#command-queue-form").trigger("submit");
     await flushPromises();
     expect(c.execute).toHaveBeenCalledExactlyOnceWith("submit", {
-      expected_queue: page.preview!.token,
+      expected_queue: required(page.preview).token,
     });
     expect(c.wrapper.get("#command-queue-receipt").text()).toContain("queue_saved");
     expect(c.wrapper.find("#command-queue-form").exists()).toBe(false);
@@ -83,7 +85,7 @@ test("a fresh review token clears confirmation before queueing", async () => {
   const page = fixture(),
     c = mountPage(page),
     next = fixture();
-  next.preview!.token = "22222222-2222-4222-8222-222222222222";
+  required(next.preview).token = "22222222-2222-4222-8222-222222222222";
   c.read.mockResolvedValue(next);
   try {
     await c.wrapper.get("#command-queue-confirm").setValue(true);
@@ -99,7 +101,7 @@ test("server JSON text retains exact integers beyond JavaScript's safe range", (
   const page = fixture(),
     exact = '{"amount":9223372036854775807}';
   page.model.request.resolved_argument_values_json = exact;
-  page.preview!.request.resolved_argument_values_json = exact;
+  required(page.preview).request.resolved_argument_values_json = exact;
   const c = mountPage(readQueuePage(page, page.model.context));
   try {
     expect(c.wrapper.get("#command-queue-resolved").text()).toBe(exact);
@@ -124,8 +126,8 @@ test("pending approval has no queue control", () => {
 test.skipIf(!process.env.CADENCE_COMMAND_QUEUE_DOCUMENT)(
   "actual producer yields the feature-owned queue action or receipt",
   async () => {
-    const raw = JSON.parse(process.env.CADENCE_COMMAND_QUEUE_DOCUMENT!);
-    const page = readQueuePage(raw.data, raw.context),
+    const raw = jsonFixture(required(process.env.CADENCE_COMMAND_QUEUE_DOCUMENT));
+    const page = readQueuePage(raw.data, fixtureContext(raw.context)),
       c = mountPage(page);
     let captured: unknown;
     c.execute.mockImplementation(async (_event, input) => {
@@ -147,7 +149,10 @@ test.skipIf(!process.env.CADENCE_COMMAND_QUEUE_DOCUMENT)(
         expect(c.execute).not.toHaveBeenCalled();
       }
       expect(captured).toBeDefined();
-      writeFileSync(process.env.CADENCE_COMMAND_QUEUE_INPUT_FILE!, JSON.stringify(captured));
+      writeFileSync(
+        required(process.env.CADENCE_COMMAND_QUEUE_INPUT_FILE),
+        JSON.stringify(captured),
+      );
     } finally {
       c.wrapper.unmount();
     }

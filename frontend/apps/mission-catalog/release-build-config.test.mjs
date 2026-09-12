@@ -1,3 +1,4 @@
+import { readPublication, publicationOutputDirectory } from "../../tools/publication-metadata.ts";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -9,15 +10,18 @@ const federation = await readFile(
   "utf8",
 );
 
-test("publication config uses the mission-catalog asset boundary", () => {
-  assert.match(config, /application-host\/mission-catalog/);
+void test("publication config uses the mission-catalog asset boundary", () => {
+  assert.match(
+    publicationOutputDirectory(readPublication(import.meta.dirname)),
+    /application-host\/mission-catalog$/,
+  );
   assert.match(config, /CADENCE_RELEASE_OUTPUT_DIR|publicationRoot/);
-  assert.match(federation, /cadence_mission_catalog/);
+  assert.equal(readPublication(import.meta.dirname).remoteName, "cadence_mission_catalog");
   assert.match(federation, /"\.\/Application"/);
   assert.doesNotMatch(federation, /CatalogImportRunShow/);
 });
 
-test("release builds do not emit an unexpected Vite manifest directory", () => {
+void test("release builds do not emit an unexpected Vite manifest directory", () => {
   assert.match(releaseConfig, /mode === ["']release["']/);
   assert.match(releaseConfig, /config\.build\.manifest = false/);
   assert.match(releaseConfig, /base: releaseBuild \? ["']\.\/["']/);

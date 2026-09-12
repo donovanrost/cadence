@@ -3,14 +3,31 @@ import { computed, ref } from "vue";
 import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
-import { same, type HistoryPage, type HistoryAction } from "./native-contract";
+import { same, type HistoryPage, type HistoryInputs } from "./native-contract";
 import { useHistoricalWorkflows } from "./native-state";
 defineOptions({ inheritAttrs: false });
 const props = defineProps<{ page: HistoryPage; port: OpsPagePort; readPort: OpsPageReadPort }>();
 const state = useHistoricalWorkflows(() => props.page, props.port, props.readPort);
-const { page, draft, reasons, selectedBinding, lastEffect, pending, locked, disabled, notice } =
-  state;
-const model = computed(() => page.value.model),
+const {
+  page: currentPage,
+  draft,
+  reasons,
+  selectedBinding,
+  lastEffect,
+  pending,
+  locked,
+  disabled,
+  notice,
+} = state;
+const receipt = computed(() =>
+  lastEffect.value?.status === "completed" ? lastEffect.value.result : null,
+);
+const retryCounts = computed(() =>
+  lastEffect.value?.status === "completed" && lastEffect.value.action === "retry-group"
+    ? lastEffect.value.result.retry_counts
+    : null,
+);
+const model = computed(() => currentPage.value.model),
   selected = computed(() => model.value.selected);
 const search = ref(model.value.query.binding_q),
   correctionEvent = ref("");
@@ -70,7 +87,8 @@ const detailPages = computed(() =>
     : [],
 );
 function bindingChanged(event: Event) {
-  const value = (event.target as HTMLSelectElement).value;
+  if (!(event.currentTarget instanceof HTMLSelectElement)) return;
+  const value = event.currentTarget.value;
   const b = model.value.bindings.entries.find((x) => x.id === value);
   if (b) state.selectBinding(b);
 }
@@ -81,22 +99,36 @@ function request(action: "validate-request" | "record-request") {
     binding_evidence: selectedBinding.value?.evidence ?? "",
   });
 }
-async function decide(action: HistoryAction, extra: Record<string, string>, reason: string) {
+async function decide(
+  ...[action, extra, reason]:
+    | ["transition-group", Pick<HistoryInputs["transition-group"], "stage">, string]
+    | ["retry-group", Record<never, never>, string]
+    | ["request-correction", Pick<HistoryInputs["request-correction"], "event_id">, string]
+) {
   const group = selected.value;
   if (!group || disabled.value || !reason.trim() || new TextEncoder().encode(reason).length > 4096)
     return;
   if (!window.confirm(`Apply this decision to request group ${group.id}?`)) return;
-  await state.execute(action, {
+  const decision = {
     group_id: group.id,
     evidence: group.evidence,
     reason,
-    confirmed: true,
-    ...extra,
-  });
+    confirmed: true as const,
+  };
+  if (action === "transition-group")
+    await state.execute(action, { ...decision, stage: extra.stage });
+  else if (action === "request-correction")
+    await state.execute(action, { ...decision, event_id: extra.event_id });
+  else await state.execute(action, decision);
 }
 function utc(event: Event, key: "source_from" | "source_to") {
-  const value = (event.target as HTMLInputElement).value;
+  if (!(event.currentTarget instanceof HTMLInputElement)) return;
+  const value = event.currentTarget.value;
   draft[key] = value ? value + "Z" : "";
+}
+function confirmRequest(event: Event) {
+  if (event.currentTarget instanceof HTMLInputElement)
+    draft.confirmed = event.currentTarget.checked ? "true" : "false";
 }
 </script>
 <template>
@@ -170,33 +202,30 @@ function utc(event: Event, key: "source_from" | "source_to") {
         <a :href="groupHref(lastEffect.result.group_id)" target="_blank" rel="noopener" class="link"
           >Inspect group {{ lastEffect.result.group_id }}</a
         >
-        <p v-if="lastEffect.result.event_count !== undefined">
-          {{ lastEffect.result.event_count }} audit event(s),
-          {{ lastEffect.result.job_count }} job(s) returned.
+        <p v-if="receipt">
+          {{ receipt.event_count }} audit event(s), {{ receipt.job_count }} job(s) returned.
         </p>
         <ul
-          v-if="lastEffect.result.event_ids?.length"
+          v-if="receipt?.event_ids.length"
           aria-label="Recorded event identities"
           class="space-y-1 font-mono text-xs"
         >
-          <li v-for="id in lastEffect.result.event_ids" :key="id" class="break-all">{{ id }}</li>
+          <li v-for="id in receipt.event_ids" :key="id" class="break-all">{{ id }}</li>
         </ul>
         <ul
-          v-if="lastEffect.result.job_ids?.length"
+          v-if="receipt?.job_ids.length"
           aria-label="Returned job identities"
           class="space-y-1 font-mono text-xs"
         >
-          <li v-for="id in lastEffect.result.job_ids" :key="id" class="break-all">{{ id }}</li>
+          <li v-for="id in receipt.job_ids" :key="id" class="break-all">{{ id }}</li>
         </ul>
-        <p v-if="lastEffect.result.event_ids_truncated || lastEffect.result.job_ids_truncated">
+        <p v-if="receipt && (receipt.event_ids_truncated || receipt.job_ids_truncated)">
           Showing the first 25 identities. Use the group audit and job pages to inspect the full
           result.
         </p>
-        <p v-if="lastEffect.result.retry_counts">
-          Retries: {{ lastEffect.result.retry_counts.retried }}; skipped:
-          {{ lastEffect.result.retry_counts.skipped }}; nonretryable:
-          {{ lastEffect.result.retry_counts.nonretryable }}; errors:
-          {{ lastEffect.result.retry_counts.failed }}.
+        <p v-if="retryCounts">
+          Retries: {{ retryCounts.retried }}; skipped: {{ retryCounts.skipped }}; nonretryable:
+          {{ retryCounts.nonretryable }}; errors: {{ retryCounts.failed }}.
         </p>
       </template>
     </section>
@@ -616,9 +645,7 @@ function utc(event: Event, key: "source_from" | "source_to") {
             type="checkbox"
             class="checkbox checkbox-sm"
             :checked="draft.confirmed === 'true'"
-            @change="
-              draft.confirmed = ($event.target as HTMLInputElement).checked ? 'true' : 'false'
-            "
+            @change="confirmRequest($event)"
           />I confirm this historical telemetry request.</label
         >
         <div class="flex flex-wrap gap-2">

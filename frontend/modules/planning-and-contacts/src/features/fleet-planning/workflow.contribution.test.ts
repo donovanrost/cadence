@@ -1,3 +1,11 @@
+import { required } from "../../../../../test-support/required";
+import {
+  jsonFixture,
+  fixtureRecord,
+  fixtureString,
+} from "../../../../../test-support/json-fixture";
+import type { OpsPagePort } from "@cadence/plugin-sdk/ops-pages";
+import { windowValid } from "./fleet-start";
 import { mount, flushPromises } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import { fleetStartContribution, fleetRunContribution } from "../../fleet-planning";
@@ -35,7 +43,8 @@ test("public workflow contributions bind context, resources and their declared a
 
 test("the start adapter preserves reviewed native payloads and successful receipts", async () => {
   const start = startFixture();
-  const execute = vi.fn(async (action, input) => {
+  const execute = vi.fn<OpsPagePort["execute"]>(async (action, input) => {
+    if (!windowValid(input.fleet_run)) throw Error("Invalid fleet window");
     const review = startReviewFixture(start, input.fleet_run);
     return startCompletion(
       action === "validate-fleet-run" ? { review } : startReceiptFixture(review),
@@ -57,7 +66,7 @@ test("the start adapter preserves reviewed native payloads and successful receip
     "validate-fleet-run",
     "create-fleet-run",
   ]);
-  expect(execute.mock.calls[1]![1].evidence).toEqual(startReviewFixture(start).evidence);
+  expect(required(execute.mock.calls[1])[1].evidence).toEqual(startReviewFixture(start).evidence);
   expect(wrapper.get("#fleet-start-open-run").attributes("href")).toBe(
     "/missions/mission-one/ops/planning/runs/run-one",
   );
@@ -70,26 +79,36 @@ test("the start adapter preserves reviewed native payloads and successful receip
 
 test("producer-supplied host fleet workflow", async () => {
   if (!process.env.CADENCE_FLEET_WORKFLOW) return;
-  const supplied = JSON.parse(process.env.CADENCE_FLEET_WORKFLOW);
-  const { snapshot } = supplied;
+  const supplied = jsonFixture(process.env.CADENCE_FLEET_WORKFLOW);
+  const snapshot = fixtureRecord(supplied.snapshot),
+    rawContext = fixtureRecord(snapshot.context);
+  const context = {
+    organizationId: fixtureString(rawContext.organizationId),
+    missionId: fixtureString(rawContext.missionId),
+    ...(rawContext.resourceId === undefined
+      ? {}
+      : { resourceId: fixtureString(rawContext.resourceId) }),
+  };
   const contribution =
     snapshot.id === fleetStartContribution.id ? fleetStartContribution : fleetRunContribution;
-  const execute = vi.fn().mockRejectedValue(Error("Captured request"));
+  const execute = vi.fn<OpsPagePort["execute"]>().mockRejectedValue(Error("Captured request"));
   const wrapper = mount(contribution.component, {
     props: {
-      ...contribution.read(snapshot.data, snapshot.context),
+      ...contribution.read(snapshot.data, context),
       port: { execute, navigate: vi.fn() },
       readPort: { read: vi.fn().mockResolvedValue(snapshot.data) },
     },
   });
   if (contribution === fleetStartContribution) {
+    const window = supplied.window;
+    if (!windowValid(window)) throw Error("Invalid native fleet window");
     await wrapper
       .get("#fleet-start-horizon-start")
-      .setValue(supplied.window.horizon_start.slice(0, 19));
+      .setValue(fixtureString(fixtureRecord(supplied.window).horizon_start).slice(0, 19));
     await wrapper
       .get("#fleet-start-horizon-end")
-      .setValue(supplied.window.horizon_end.slice(0, 19));
-    await wrapper.get("#fleet-start-recurring").setValue(supplied.window.include_recurring);
+      .setValue(fixtureString(fixtureRecord(supplied.window).horizon_end).slice(0, 19));
+    await wrapper.get("#fleet-start-recurring").setValue(window.include_recurring);
     if (supplied.review) execute.mockResolvedValueOnce(supplied.review);
     await wrapper.get("#fleet-start-form").trigger("submit");
     await flushPromises();
@@ -102,8 +121,10 @@ test("producer-supplied host fleet workflow", async () => {
   } else if (supplied.action === "repair-fleet-run") {
     await wrapper
       .get("#fleet-run-repair-start")
-      .setValue(supplied.window.horizon_start.slice(0, 19));
-    await wrapper.get("#fleet-run-repair-end").setValue(supplied.window.horizon_end.slice(0, 19));
+      .setValue(fixtureString(fixtureRecord(supplied.window).horizon_start).slice(0, 19));
+    await wrapper
+      .get("#fleet-run-repair-end")
+      .setValue(fixtureString(fixtureRecord(supplied.window).horizon_end).slice(0, 19));
     if (supplied.receipt) execute.mockResolvedValueOnce(supplied.receipt);
     await wrapper.get("#fleet-run-repair-form").trigger("submit");
     await flushPromises();
@@ -116,7 +137,7 @@ test("producer-supplied host fleet workflow", async () => {
     expect(wrapper.find("#fleet-run-receipt").exists()).toBe(true);
   expect(execute.mock.calls.at(-1)?.[0]).toBe(supplied.action);
   process.stdout.write(
-    `FLEET_CONTRIBUTION_INPUT=${JSON.stringify(execute.mock.calls.at(-1)![1])}\n`,
+    `FLEET_CONTRIBUTION_INPUT=${JSON.stringify(required(execute.mock.calls.at(-1))[1])}\n`,
   );
   wrapper.unmount();
 });

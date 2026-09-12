@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
-import { evaluate, waitForExpression, runBrowserGate } from "./federation_browser_smoke.mjs";
+import {
+  evaluate,
+  evaluateRecord,
+  waitForExpression,
+  runBrowserGate,
+} from "./federation_browser_smoke.mjs";
 
 const [base, email, activation = "pointer"] = process.argv.slice(2);
+assert.ok(base, "base URL is required");
+assert.ok(email, "login email is required");
 assert.ok(["pointer", "keyboard"].includes(activation));
 const origin = new URL(base);
 assert.equal(origin.protocol, "http:");
@@ -13,8 +20,12 @@ assert.ok(
 await runBrowserGate(["--login-email", email, "--scenario-timeout-ms", "60000"], {
   originUrl: base,
   async runScenarioImpl(client, _diagnostics, _args, { secret, signal }) {
+    assert.ok(secret, "login secret is required");
+    /** @param {string} expression @param {string} label */
     const inspect = (expression, label) => evaluate(client, expression, label, { signal });
+    /** @param {string} expression @param {string} label */
     const waitFor = (expression, label) => waitForExpression(client, expression, label, { signal });
+    /** @param {string} selector @param {string} label */
     const click = async (selector, label) => {
       if (activation === "keyboard") {
         await waitFor(`!!document.querySelector(${JSON.stringify(selector)})`, label);
@@ -39,7 +50,8 @@ await runBrowserGate(["--login-email", email, "--scenario-timeout-ms", "60000"],
         return;
       }
       await waitFor(`!!document.querySelector(${JSON.stringify(selector)})`, label);
-      const point = await inspect(
+      const point = await evaluateRecord(
+        client,
         `(() => {
         const element = document.querySelector(${JSON.stringify(selector)});
         const rect = element.getBoundingClientRect();
@@ -48,9 +60,19 @@ await runBrowserGate(["--login-email", email, "--scenario-timeout-ms", "60000"],
         return { x, y, visible: rect.width > 0 && rect.height > 0 && element.contains(document.elementFromPoint(x, y)) };
       })()`,
         label + " bounds",
+        { signal },
       );
       assert.ok(point.visible, label + " must be visible and unobstructed");
-      const params = { x: point.x, y: point.y, button: "left", clickCount: 1 };
+      assert.ok(
+        typeof point.x === "number" && typeof point.y === "number",
+        "pointer coordinates are required",
+      );
+      const params = {
+        x: point.x,
+        y: point.y,
+        button: /** @type {const} */ ("left"),
+        clickCount: 1,
+      };
       await client.send("Input.dispatchMouseEvent", { ...params, type: "mouseMoved" });
       await client.send("Input.dispatchMouseEvent", { ...params, type: "mousePressed" });
       await client.send("Input.dispatchMouseEvent", { ...params, type: "mouseReleased" });
@@ -72,6 +94,7 @@ await runBrowserGate(["--login-email", email, "--scenario-timeout-ms", "60000"],
       "document.querySelector('[id^=account-desktop-switch-]').id",
       "switch form ID",
     );
+    assert.ok(typeof switchId === "string", "organization switch ID is required");
     await click(`#${switchId} button`, "switch organization");
     await waitFor(
       `!document.getElementById(${JSON.stringify(switchId)}) && !!document.querySelector('#account-desktop-user')`,

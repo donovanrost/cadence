@@ -1,3 +1,5 @@
+import { fixtureArrayAt, fixtureRecordAt } from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
 import { beforeEach, test, expect, vi } from "vite-plus/test";
 import PacketBindingsSurface from "./PacketBindingsSurface.vue";
@@ -95,8 +97,8 @@ function receipt(input: SelectionInput) {
 }
 function saved(p: PacketDocument, input: SelectionInput): PacketDocument {
   const next = structuredClone(p);
-  next.configuration!.id = "configuration-1";
-  next.configuration!.version = 1;
+  required(next.configuration).id = "configuration-1";
+  required(next.configuration).version = 1;
   next.review_token = "b".repeat(64);
   next.selection = {
     ...next.selection,
@@ -111,7 +113,7 @@ function saved(p: PacketDocument, input: SelectionInput): PacketDocument {
 function port(p: PacketDocument): PacketPort {
   return {
     read: vi.fn().mockResolvedValue(p),
-    save: vi.fn().mockImplementation(async (input) => receipt(input)),
+    save: vi.fn<PacketPort["save"]>().mockImplementation(async (input) => receipt(input)),
     navigate: vi.fn(),
   };
 }
@@ -133,15 +135,17 @@ test("admits scoped packet evidence and rejects malformed identities, counts and
   const p = document();
   expect(admitPacketDocument(p, expected)).toEqual(p);
   for (const change of [
-    (x: any) => (x.contract_version = 2),
-    (x: any) => (x.context.mission_id = "other"),
-    (x: any) => (x.review_token = "bad"),
-    (x: any) => x.packets.items.push(x.packets.items[0]),
-    (x: any) => (x.packets.items[0].detail_href = "https://foreign.test/"),
-    (x: any) => (x.summary.selected_count = 3),
-    (x: any) => (x.input.maximum = 1000),
-    (x: any) => (x.selection.ids = ["unknown"]),
-    (x: any) => (x.endpoints.next_href = base + "?mission_id=foreign"),
+    (x: unknown) => (fixtureRecordAt(x).contract_version = 2),
+    (x: unknown) => (fixtureRecordAt(x, "context").mission_id = "other"),
+    (x: unknown) => (fixtureRecordAt(x).review_token = "bad"),
+    (x: unknown) =>
+      fixtureArrayAt(x, "packets", "items").push(fixtureArrayAt(x, "packets", "items")[0]),
+    (x: unknown) =>
+      (fixtureRecordAt(x, "packets", "items", 0).detail_href = "https://foreign.test/"),
+    (x: unknown) => (fixtureRecordAt(x, "summary").selected_count = 3),
+    (x: unknown) => (fixtureRecordAt(x, "input").maximum = 1000),
+    (x: unknown) => (fixtureRecordAt(x, "selection").ids = ["unknown"]),
+    (x: unknown) => (fixtureRecordAt(x, "endpoints").next_href = base + "?mission_id=foreign"),
   ]) {
     const bad = structuredClone(p);
     change(bad);
@@ -171,7 +175,7 @@ test("selection is local, clearing the endpoint persists, and save carries exact
   });
   await w.get("#save-packet-bindings").trigger("click");
   await flushPromises();
-  const [input, key] = vi.mocked(bridge.save).mock.calls[0];
+  const [input, key] = required(vi.mocked(bridge.save).mock.calls[0]);
   expect(key).toMatch(/^[a-f0-9-]{36}$/);
   expect(input).toEqual({
     expected_review: p.review_token,
@@ -221,7 +225,7 @@ test("drafts survive packet-page remounts and are isolated by actor", async () =
   await next.get("#packet-select-packet-25").setValue(true);
   await next.get("#save-packet-bindings").trigger("click");
   await flushPromises();
-  expect(vi.mocked(bridge.save).mock.calls[0][0].selected_packet_ids).toEqual([
+  expect(required(vi.mocked(bridge.save).mock.calls[0])[0].selected_packet_ids).toEqual([
     "packet-0",
     "packet-25",
   ]);
@@ -271,7 +275,7 @@ test("a lost response survives remount and recovery reuses the exact key and inp
   await flushPromises();
   expect(recovered.find("#packet-bindings-pending").exists()).toBe(true);
   expect(vi.mocked(bridge.save).mock.calls[1]).toEqual(first);
-  vi.mocked(bridge.read).mockResolvedValue(saved(p, first[0]));
+  vi.mocked(bridge.read).mockResolvedValue(saved(p, required(first)[0]));
   await recovered.get("#recover-packet-save").trigger("click");
   await flushPromises();
   expect(vi.mocked(bridge.save).mock.calls[2]).toEqual(first);
@@ -304,7 +308,9 @@ test("a legacy selection exceeding the binding limit requires explicit replaceme
   await w.get("#packet-select-packet-0").setValue(true);
   await w.get("#save-packet-bindings").trigger("click");
   await flushPromises();
-  expect(vi.mocked(bridge.save).mock.calls[0][0].selected_packet_ids).toEqual(["packet-0"]);
+  expect(required(vi.mocked(bridge.save).mock.calls[0])[0].selected_packet_ids).toEqual([
+    "packet-0",
+  ]);
   w.unmount();
 });
 
@@ -331,19 +337,21 @@ test("producer supplied packet configuration reaches the public feature and yiel
   const bridge = port(p);
   vi.mocked(bridge.save).mockRejectedValue(new Error("capture only"));
   const w = mount(PacketBindingsSurface, { props: { document: p, port: bridge } });
-  const first = p.packets.items.find((p) => p.selectable)!;
-  await w
-    .findAll("[data-packet-id]")
-    .find((row) => row.attributes("data-packet-id") === first.id)!
+  const first = required(p.packets.items.find((p) => p.selectable));
+  await required(
+    w.findAll("[data-packet-id]").find((row) => row.attributes("data-packet-id") === first.id),
+  )
     .get("input[type=checkbox]")
     .setValue(true);
   if (!p.selection.endpoint)
-    await w.get("#packet-source-endpoint").setValue(p.endpoints.items[0].id);
+    await w.get("#packet-source-endpoint").setValue(required(p.endpoints.items[0]).id);
   await w.get("#save-packet-bindings").trigger("click");
   await flushPromises();
   expect(bridge.save).toHaveBeenCalledTimes(1);
   process.stdout.write(
-    "CADENCE_PACKET_INPUT=" + JSON.stringify(vi.mocked(bridge.save).mock.calls[0][0]) + "\n",
+    "CADENCE_PACKET_INPUT=" +
+      JSON.stringify(required(vi.mocked(bridge.save).mock.calls[0])[0]) +
+      "\n",
   );
   w.unmount();
 });

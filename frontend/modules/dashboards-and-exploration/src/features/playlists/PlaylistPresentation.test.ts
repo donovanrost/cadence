@@ -1,10 +1,11 @@
+import { fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mount } from "@vue/test-utils";
 import PlaylistPresentation from "./PlaylistPresentation.vue";
 import { presentationFixture, playlistContext } from "./fixtures.test-support";
 import { readPresentation } from "./validation";
 import { snapshotFixture } from "../workspace/snapshot-fixture.test-support";
-const wrappers: ReturnType<typeof mount>[] = [];
+const wrappers: { unmount: () => void }[] = [];
 afterEach(() => {
   wrappers.splice(0).forEach((w) => w.unmount());
   vi.useRealTimers();
@@ -14,7 +15,7 @@ function setup(playing = false) {
   vi.useFakeTimers();
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
   const model = { ...presentationFixture(), playing };
-  const navigate = vi.fn(),
+  const navigate = vi.fn((_: string) => {}),
     refresh = vi.fn(async () => {}),
     wrapper = mount(PlaylistPresentation, {
       props: {
@@ -40,11 +41,11 @@ test("presentation admits only bound published snapshots and valid positions", (
   model.current.snapshot = snapshot;
   expect(readPresentation(model, context)).toEqual(model);
   for (const mutate of [
-    (p: any) => (p.current.snapshot.document_mode = "draft"),
-    (p: any) => (p.current.snapshot.dashboard_id = "foreign"),
-    (p: any) => (p.index = p.total),
-    (p: any) => (p.playlist.id = "foreign"),
-    (p: any) => (p.total = 101),
+    (p: unknown) => (fixtureRecordAt(p, "current", "snapshot").document_mode = "draft"),
+    (p: unknown) => (fixtureRecordAt(p, "current", "snapshot").dashboard_id = "foreign"),
+    (p: unknown) => (fixtureRecordAt(p).index = fixtureRecordAt(p).total),
+    (p: unknown) => (fixtureRecordAt(p, "playlist").id = "foreign"),
+    (p: unknown) => (fixtureRecordAt(p).total = 101),
   ]) {
     const bad = structuredClone(model);
     mutate(bad);

@@ -1,3 +1,4 @@
+import { record } from "@cadence/plugin-sdk/admission";
 import { computed, onBeforeUnmount, reactive, ref, shallowRef, watch } from "vue";
 import type {
   FleetStartPort,
@@ -68,14 +69,19 @@ export function useFleetStart(input: () => unknown, port?: FleetStartPort) {
     review.value = null;
     notice.value = "";
     try {
-      const value: any = fleetCompletion(
+      const value = fleetCompletion(
         await port.execute("preview", { fleet_run: captured, requirements_page, templates_page }),
       );
       if (!current(n)) return;
-      const admitted = admitFleetStartReview(value?.review, base, captured, {
-        requirements_page,
-        templates_page,
-      });
+      const admitted = admitFleetStartReview(
+        record(value) ? value.review : undefined,
+        base,
+        captured,
+        {
+          requirements_page,
+          templates_page,
+        },
+      );
       if (!admitted) throw Error("Unavailable review");
       review.value = admitted;
       notice.value = "Review the exact inputs below before creating the run.";

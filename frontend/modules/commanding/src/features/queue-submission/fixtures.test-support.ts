@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import type { QueuePage, Operation } from "./contracts";
 const source: QueuePage = {
   operation: null,
@@ -104,11 +105,11 @@ export const fixture = () => structuredClone(source);
 export const completed = (p: QueuePage): Operation => ({
   status: "completed",
   receipt: {
-    operation_id: p.preview!.operation_id,
+    operation_id: required(p.preview).operation_id,
     queue_id: "queue_saved",
-    request_id: p.model.context.resourceId!,
+    request_id: required(p.model.context.resourceId),
     actor_id: p.model.actor_id,
     enqueued_at: p.model.observed_at,
-    approved_content_sha256: p.preview!.approval.basis_sha256,
+    approved_content_sha256: required(p.preview).approval.basis_sha256,
   },
 });

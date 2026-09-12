@@ -1,3 +1,6 @@
+import { fixtureString } from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
+import { fixtureArrayAt, fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { mount, flushPromises } from "@vue/test-utils";
 import { test, expect, vi } from "vite-plus/test";
 import CommandHistory from "./CommandHistory.vue";
@@ -55,7 +58,7 @@ test("release selection clears incompatible cursors and verifier selection; nati
 test("paging keeps selections even when neither selected record is on the visible page", async () => {
   const model = fixture();
   model.releases.entries = Array.from({ length: 25 }, (_, n) => ({
-    ...model.selection.release!,
+    ...required(model.selection.release),
     id: `release-${n}`,
   }));
   model.releases.next_after = "release-24";
@@ -63,7 +66,10 @@ test("paging keeps selections even when neither selected record is on the visibl
   try {
     expect(w.get("[data-selected-release]").attributes("data-selected-release")).toBe("release-a");
     await w.get("#command-history-releases-next").trigger("click");
-    const query = new URL(port.navigate.mock.calls[0]![0], "https://cadence.test").searchParams;
+    const query = new URL(
+      fixtureString(required(port.navigate.mock.calls[0])[0]),
+      "https://cadence.test",
+    ).searchParams;
     expect(Object.fromEntries(query)).toEqual({
       release: "release-a",
       release_after: "release-24",
@@ -91,8 +97,8 @@ test.each(["unavailable", "unmatched", "not_selected"] as const)(
     const model = fixture();
     model.evidence = { status, record: null };
     if (status === "unmatched") {
-      model.selection.verifier!.matched_record_id = null;
-      model.selection.verifier!.matched_record_kind = null;
+      required(model.selection.verifier).matched_record_id = null;
+      required(model.selection.verifier).matched_record_kind = null;
     }
     if (status === "not_selected") {
       model.query.verifier = "";
@@ -130,53 +136,62 @@ test("query identities preserve Unicode and delimiters through canonical native 
   expect(() => commandHistoryHref("..", "request")).toThrow();
 });
 test.each([
-  (m: any) => {
-    m.version = 2;
+  (m: unknown) => {
+    fixtureRecordAt(m).version = 2;
   },
-  (m: any) => {
-    m.request.id = "foreign";
+  (m: unknown) => {
+    fixtureRecordAt(m, "request").id = "foreign";
   },
-  (m: any) => {
-    m.organization_id = "foreign";
+  (m: unknown) => {
+    fixtureRecordAt(m).organization_id = "foreign";
   },
-  (m: any) => {
-    m.selection.release = { ...m.selection.release, id: "foreign" };
+  (m: unknown) => {
+    fixtureRecordAt(m, "selection").release = {
+      ...fixtureRecordAt(m, "selection", "release"),
+      id: "foreign",
+    };
   },
-  (m: any) => {
-    m.verifiers.entries[0].release_attempt_id = "foreign";
+  (m: unknown) => {
+    fixtureRecordAt(m, "verifiers", "entries", 0).release_attempt_id = "foreign";
   },
-  (m: any) => {
-    m.releases.entries[0].request_id = "foreign";
+  (m: unknown) => {
+    fixtureRecordAt(m, "releases", "entries", 0).request_id = "foreign";
   },
-  (m: any) => {
-    m.evidence.record.id = "other-sample";
+  (m: unknown) => {
+    fixtureRecordAt(m, "evidence", "record").id = "other-sample";
   },
-  (m: any) => {
-    m.evidence.record.mission_id = "foreign";
+  (m: unknown) => {
+    fixtureRecordAt(m, "evidence", "record").mission_id = "foreign";
   },
-  (m: any) => {
-    m.evidence.record.provenance = { secret: true };
+  (m: unknown) => {
+    fixtureRecordAt(m, "evidence", "record").provenance = { secret: true };
   },
-  (m: any) => {
-    m.evidence.record.raw_value_json = "invalid JSON";
+  (m: unknown) => {
+    fixtureRecordAt(m, "evidence", "record").raw_value_json = "invalid JSON";
   },
-  (m: any) => {
-    m.evidence.record.raw_value_json = 18446744073709551615;
+  (m: unknown) => {
+    // oxlint-disable-next-line no-loss-of-precision -- Negative fixture: admission must reject a number already rounded by JavaScript.
+    fixtureRecordAt(m, "evidence", "record").raw_value_json = 18446744073709551615;
   },
-  (m: any) => {
-    m.evidence.record.raw_value_json = JSON.stringify("x".repeat(65536));
+  (m: unknown) => {
+    fixtureRecordAt(m, "evidence", "record").raw_value_json = JSON.stringify("x".repeat(65536));
   },
-  (m: any) => {
-    m.releases.next_after = "not-the-last-row";
+  (m: unknown) => {
+    fixtureRecordAt(m, "releases").next_after = "not-the-last-row";
   },
-  (m: any) => {
-    m.verifiers.entries = Array(26).fill(m.verifiers.entries[0]);
+  (m: unknown) => {
+    fixtureRecordAt(m, "verifiers").entries = Array(26).fill(
+      fixtureArrayAt(m, "verifiers", "entries")[0],
+    );
   },
-  (m: any) => {
-    m.selection.verifier = { ...m.selection.verifier, state: "failed" };
+  (m: unknown) => {
+    fixtureRecordAt(m, "selection").verifier = {
+      ...fixtureRecordAt(m, "selection", "verifier"),
+      state: "failed",
+    };
   },
-  (m: any) => {
-    m.evidence = { status: "not_selected", record: null };
+  (m: unknown) => {
+    fixtureRecordAt(m).evidence = { status: "not_selected", record: null };
   },
 ])("rejects inconsistent or unbounded producer data %#", (mutate) => {
   const m = fixture();
@@ -188,9 +203,9 @@ test("uncertain release remains selectable with exact identity and no successful
   const model = fixture();
   model.request.state = "queued";
   model.request.verification_state = null;
-  model.selection.release!.state = "release_uncertain";
-  model.selection.release!.released_at = null;
-  model.selection.release!.verification_state = null;
+  required(model.selection.release).state = "release_uncertain";
+  required(model.selection.release).released_at = null;
+  required(model.selection.release).verification_state = null;
   model.selection.verifier = null;
   model.query.verifier = "";
   model.verifiers.entries = [];

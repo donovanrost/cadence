@@ -31,7 +31,16 @@ export function presentationBreadcrumbs(value?: {
   return (
     value?.items.flatMap((item) => {
       const entry = item.link ?? item.current;
-      return entry ? [{ label: entry.text, href: item.link?.attrs.href, id: entry.attrs.id }] : [];
+      if (!entry) return [];
+      const href = item.link?.attrs.href;
+      const id = entry.attrs.id;
+      return [
+        {
+          label: entry.text,
+          ...(href === undefined ? {} : { href }),
+          ...(id === undefined ? {} : { id }),
+        },
+      ];
     }) ?? []
   );
 }

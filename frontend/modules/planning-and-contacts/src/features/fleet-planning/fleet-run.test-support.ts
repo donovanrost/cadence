@@ -1,6 +1,8 @@
-import type { FleetRunModel, FleetRunReceipt } from "./OpsFleetPlanningRun.contracts";
+import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
+import { required } from "../../../../../test-support/required";
+import type { FleetRunModel, FleetRunReceipt, RepairReview } from "./OpsFleetPlanningRun.contracts";
 import { startFixture } from "./fleet-start.test-support";
-export function runFixture(): FleetRunModel {
+export function runFixture(): MutableFixture<FleetRunModel> {
   const start = startFixture();
   return {
     contract_version: 1,
@@ -22,7 +24,7 @@ export function runFixture(): FleetRunModel {
     inserted_at: start.defaults.horizon_start,
     started_at: null,
     completed_at: null,
-    policy: start.policy!,
+    policy: required(start.policy),
     evidence: {
       contract_version: 1,
       ...start.context,
@@ -61,7 +63,9 @@ export function runFixture(): FleetRunModel {
     failure: null,
   };
 }
-export function repairFixture(): FleetRunModel {
+export function repairFixture(): MutableFixture<FleetRunModel> & {
+  repair: MutableFixture<RepairReview>;
+} {
   const m = runFixture();
   m.lifecycle_state = "completed";
   m.phase = "finished";
@@ -141,17 +145,28 @@ export function repairFixture(): FleetRunModel {
       },
     ],
   };
-  return m;
+  return { ...m, repair: m.repair };
 }
 export function runReceipt(m: FleetRunModel, action: "continue" | "repair"): FleetRunReceipt {
-  return {
-    contract_version: 1,
+  const common = {
+    contract_version: 1 as const,
     organization_id: m.context.organization_id,
     mission_id: m.context.mission_id,
     fleetPlanningRunId: action === "continue" ? m.id : "repair-one",
-    lifecycleState: action === "continue" ? "completed" : "queued",
-    phase: action === "continue" ? "finished" : "queued",
-    outcome: action === "continue" ? "continued" : "repair_created",
-    evidence: action === "continue" ? m.evidence : m.repair.evidence!,
   };
+  return action === "continue"
+    ? {
+        ...common,
+        lifecycleState: "completed",
+        phase: "finished",
+        outcome: "continued",
+        evidence: m.evidence,
+      }
+    : {
+        ...common,
+        lifecycleState: "queued",
+        phase: "queued",
+        outcome: "repair_created",
+        evidence: required(m.repair.evidence),
+      };
 }

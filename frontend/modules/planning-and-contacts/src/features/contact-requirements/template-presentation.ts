@@ -32,7 +32,8 @@ export function templatePresentation(
     errors: [],
     ...extra,
   });
-  const options = (pairs: string[][]) => pairs.map(([value, label]) => ({ value, label }));
+  const options = (pairs: readonly (readonly [string, string])[]) =>
+    pairs.map(([value, label]) => ({ value, label }));
   const lifecycle = (ref: TemplateReference) => {
     const id = requirementSegment(ref.template_id);
     return {
@@ -105,7 +106,7 @@ export function templatePresentation(
       },
       version_label: `v${e.reference.version}`,
       title: `${e.spacecraft_id} · ${e.contact_intent.replaceAll("_", " ")}`,
-      schedule: `${e.schedule.type === "daily" ? `Daily at ${e.schedule.time_utc} UTC` : `Every ${duration(e.schedule.interval_seconds!)}`} · ${duration(e.schedule.window_duration_seconds)} window`,
+      schedule: `${e.schedule.type === "daily" ? `Daily at ${e.schedule.time_utc} UTC` : `Every ${duration(e.schedule.interval_seconds)}`} · ${duration(e.schedule.window_duration_seconds)} window`,
       content_sha256: e.reference.content_sha256,
       ...(m.can_manage ? { actions: lifecycle(e.reference) } : {}),
     })),

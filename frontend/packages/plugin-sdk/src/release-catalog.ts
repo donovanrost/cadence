@@ -242,7 +242,17 @@ export async function verifySignedFrontendDocument(
   options: VerifyOptions = {},
 ): Promise<VerificationResult<VerifiedSignedFrontendDocument>> {
   try {
-    return await verifyEnvelope(document, keyRecords, options);
+    const result = await verifyEnvelope(document, keyRecords, options);
+    if (!result.ok) return result;
+    return {
+      ok: true,
+      value: {
+        payload: result.value.payload,
+        payloadBytes: result.value.payloadBytes,
+        keyId: result.value.keyId,
+        signingRole: result.value.signingRole,
+      },
+    };
   } catch {
     return fail("invalid_document", "$");
   }
@@ -314,7 +324,7 @@ export async function verifyFirstPartyFrontendReleaseCatalog(
     return {
       ok: true,
       value: {
-        catalog: envelope.value.payload as unknown as FirstPartyFrontendReleaseCatalog,
+        catalog: catalog.value.document,
         entries: catalog.value.entries,
         payloadBytes: envelope.value.payloadBytes,
         keyId: envelope.value.keyId,
@@ -337,7 +347,9 @@ async function verifyEnvelope(
   keyRecords: FrontendReleaseKeyRecords,
   options: VerifyOptions,
   expectedRole?: SigningRole,
-): Promise<VerificationResult<VerifiedSignedFrontendDocument>> {
+): Promise<
+  VerificationResult<VerifiedSignedFrontendDocument & { document: SignedFrontendDocument }>
+> {
   const decoded = decodeDocument(document);
   if (!decoded.ok) return decoded;
   const envelope = decoded.value;
@@ -376,8 +388,8 @@ async function verifyEnvelope(
   if (!encoding.ok) return encoding;
   const keyIdType = boundedString(envelope.keyId, "$.keyId");
   if (!keyIdType.ok) return keyIdType;
-  const keyIdError = safeIdentifier(envelope.keyId, "$.keyId");
-  if (keyIdError) return fail(keyIdError.code, keyIdError.path);
+  const keyId = safeIdentifier(envelope.keyId, "$.keyId");
+  if (!keyId.ok) return keyId;
 
   const payloadEncoded = decodeBase64Url(envelope.payload, "$.payload", MAX_ENCODED_PAYLOAD_BYTES);
   if (!payloadEncoded.ok) return payloadEncoded;
@@ -427,8 +439,17 @@ async function verifyEnvelope(
     value: {
       payload: payload.value,
       payloadBytes: payloadEncoded.value,
-      keyId: envelope.keyId as string,
-      signingRole: envelope.signingRole as SigningRole,
+      keyId: keyId.value,
+      signingRole: envelope.signingRole,
+      document: {
+        schema: schema.value,
+        keyId: keyId.value,
+        algorithm: algorithm.value,
+        signingRole: envelope.signingRole,
+        payloadEncoding: encoding.value,
+        payload: encodeBase64Url(payloadEncoded.value),
+        signature: encodeBase64Url(signature.value),
+      },
     },
   };
 }
@@ -511,10 +532,12 @@ async function validateRelease(
     `${path}.schema`,
   );
   if (!schema.ok) return schema;
-  for (const key of ["application", "package", "surface"] as const) {
-    const identity = identityVersion(value[key], `${path}.${key}`);
-    if (!identity.ok) return identity;
-  }
+  const application = identityVersion(value.application, `${path}.application`);
+  if (!application.ok) return application;
+  const pkg = identityVersion(value.package, `${path}.package`);
+  if (!pkg.ok) return pkg;
+  const surface = identityVersion(value.surface, `${path}.surface`);
+  if (!surface.ok) return surface;
   const releaseId = await releaseIdValue(value.releaseId, `${path}.releaseId`, value);
   if (!releaseId.ok) return releaseId;
   const transport = exactConstant(
@@ -526,12 +549,12 @@ async function validateRelease(
   );
   if (!transport.ok) return transport;
   const remote = safeIdentifier(value.remoteName, `${path}.remoteName`);
-  if (remote) return fail(remote.code, remote.path);
+  if (!remote.ok) return remote;
   if (typeof value.exposedModule !== "string")
     return fail("invalid_value", `${path}.exposedModule`);
   const exposed = boundedString(value.exposedModule, `${path}.exposedModule`);
   if (!exposed.ok) return exposed;
-  if (!/^\.[/][A-Za-z][A-Za-z0-9._-]{0,127}$/.test(value.exposedModule as string))
+  if (!/^\.[/][A-Za-z][A-Za-z0-9._-]{0,127}$/.test(value.exposedModule))
     return fail("invalid_value", `${path}.exposedModule`);
   const artifacts = validateArtifacts(value.manifest, value.artifacts, path);
   if (!artifacts.ok) return artifacts;
@@ -539,7 +562,7 @@ async function validateRelease(
   if (!host.ok) return host;
   const provenance = validateProvenance(value.provenance, `${path}.provenance`);
   if (!provenance.ok) return provenance;
-  const releasedAt = parseTimestamp(value.releasedAt, `${path}.releasedAt`);
+  const releasedAt = timestampValue(value.releasedAt, `${path}.releasedAt`);
   if (!releasedAt.ok) return releasedAt;
   const base = validateArtifactBaseUrl(
     value.artifactBaseUrl,
@@ -548,24 +571,42 @@ async function validateRelease(
     `${path}.artifactBaseUrl`,
   );
   if (!base.ok) return base;
-  return { ok: true, value: value as unknown as FirstPartyFrontendRelease };
+  return {
+    ok: true,
+    value: {
+      schema: schema.value,
+      releaseId: releaseId.value,
+      application: application.value,
+      package: pkg.value,
+      surface: surface.value,
+      transport: transport.value,
+      remoteName: remote.value,
+      exposedModule: exposed.value,
+      artifactBaseUrl: base.value,
+      manifest: artifacts.value.manifest,
+      artifacts: artifacts.value.artifacts,
+      hostCompatibility: host.value,
+      provenance: provenance.value,
+      releasedAt: releasedAt.value.text,
+    },
+  };
 }
 
 async function releaseIdValue(
   value: unknown,
   path: string,
   release: Record<string, unknown>,
-): Promise<VerificationResult<null>> {
+): Promise<VerificationResult<string>> {
   if (typeof value !== "string") return fail("invalid_sha256", path);
   const bounded = boundedString(value, path);
   if (!bounded.ok) return bounded;
-  if (!/^sha256:[0-9a-f]{64}$/.test(value as string)) return fail("invalid_sha256", path);
+  if (!/^sha256:[0-9a-f]{64}$/.test(value)) return fail("invalid_sha256", path);
   const logical = { ...release };
   delete logical.releaseId;
   delete logical.artifactBaseUrl;
   const expected = await digest(new TextEncoder().encode(canonicalJson(logical)));
   if (value !== expected) return fail("release_id_mismatch", path);
-  return { ok: true, value: null };
+  return { ok: true, value };
 }
 
 function identityVersion(value: unknown, path: string): VerificationResult<ReleaseIdentityVersion> {
@@ -573,7 +614,7 @@ function identityVersion(value: unknown, path: string): VerificationResult<Relea
   const fields = exactFields(value, ["id", "version"], path);
   if (!fields.ok) return fields;
   const id = safeIdentifier(value.id, `${path}.id`);
-  if (id) return fail(id.code, id.path);
+  if (!id.ok) return id;
   const version = value.version;
   if (
     typeof version !== "number" ||
@@ -582,14 +623,17 @@ function identityVersion(value: unknown, path: string): VerificationResult<Relea
     version > MAX_VERSION
   )
     return fail("invalid_value", `${path}.version`);
-  return { ok: true, value: value as unknown as ReleaseIdentityVersion };
+  return { ok: true, value: { id: id.value, version } };
 }
 
 function validateArtifacts(
   manifest: unknown,
   artifacts: unknown,
   path: string,
-): VerificationResult<readonly ArtifactInventoryEntry[]> {
+): VerificationResult<{
+  manifest: ArtifactInventoryEntry;
+  artifacts: readonly ArtifactInventoryEntry[];
+}> {
   if (!Array.isArray(artifacts)) return fail("invalid_type", `${path}.artifacts`);
   if (artifacts.length === 0) return fail("incomplete_required_fields", `${path}.artifacts`);
   if (artifacts.length > MAX_ARTIFACTS) return fail("unbounded_value", `${path}.artifacts`);
@@ -611,7 +655,7 @@ function validateArtifacts(
   }
   if (!entries.some((entry) => canonicalJson(entry) === canonicalJson(manifestResult.value)))
     return fail("incomplete_required_fields", `${path}.manifest`);
-  return { ok: true, value: entries };
+  return { ok: true, value: { manifest: manifestResult.value, artifacts: entries } };
 }
 
 function validateArtifact(
@@ -649,11 +693,14 @@ function validateArtifact(
     return fail("unbounded_value", `${path}.mediaType`);
   if (
     !/^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,63}\/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,63}$/.test(
-      value.mediaType as string,
+      value.mediaType,
     )
   )
     return fail("invalid_value", `${path}.mediaType`);
-  return { ok: true, value: value as unknown as ArtifactInventoryEntry };
+  return {
+    ok: true,
+    value: { path: artifactPath, sha256: value.sha256, size, mediaType: media.value },
+  };
 }
 
 function validateHostCompatibility(
@@ -700,10 +747,25 @@ function validateHostCompatibility(
     `${path}.vueRange`,
   );
   if (!vueRange.ok) return vueRange;
-  return { ok: true, value: value as unknown as HostCompatibility };
+  return {
+    ok: true,
+    value: {
+      hostContract: hostContract.value,
+      vueRange: vueRange.value,
+      compatibility: {
+        cadenceApplicationContract: 1,
+        cadenceSurfaceContract: 1,
+        cadenceFederatedRendererContract: 1,
+        cadenceThemeContract: 1,
+      },
+    },
+  };
 }
 
-function validateProvenance(value: unknown, path: string): VerificationResult<null> {
+function validateProvenance(
+  value: unknown,
+  path: string,
+): VerificationResult<FirstPartyFrontendRelease["provenance"]> {
   if (!isRecord(value)) return fail("invalid_type", path);
   const fields = exactFields(
     value,
@@ -718,13 +780,25 @@ function validateProvenance(value: unknown, path: string): VerificationResult<nu
     !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value.sourceRevision)
   )
     return fail("invalid_value", `${path}.sourceRevision`);
-  for (const key of ["buildId", "builder", "workflow"] as const) {
-    const bounded = boundedString(value[key], `${path}.${key}`);
-    if (!bounded.ok) return bounded;
-  }
-  const built = parseTimestamp(value.builtAt, `${path}.builtAt`);
+  const buildId = boundedString(value.buildId, `${path}.buildId`);
+  if (!buildId.ok) return buildId;
+  const builder = boundedString(value.builder, `${path}.builder`);
+  if (!builder.ok) return builder;
+  const workflow = boundedString(value.workflow, `${path}.workflow`);
+  if (!workflow.ok) return workflow;
+  const built = timestampValue(value.builtAt, `${path}.builtAt`);
   if (!built.ok) return built;
-  return { ok: true, value: null };
+  return {
+    ok: true,
+    value: {
+      sourceRepository: source.value.origin + source.value.path,
+      sourceRevision: value.sourceRevision,
+      buildId: buildId.value,
+      builder: builder.value,
+      workflow: workflow.value,
+      builtAt: built.value.text,
+    },
+  };
 }
 
 function validateArtifactBaseUrl(
@@ -732,7 +806,7 @@ function validateArtifactBaseUrl(
   release: Record<string, unknown>,
   origins: readonly string[],
   path: string,
-): VerificationResult<null> {
+): VerificationResult<string> {
   const parsed = strictHttpsUrl(value, path);
   if (!parsed.ok) return parsed;
   if (!origins.includes(parsed.value.origin)) return fail("invalid_base_url", path);
@@ -745,7 +819,7 @@ function validateArtifactBaseUrl(
     return fail("invalid_base_url", path);
   const expected = `/releases/${application.id}/${release.releaseId}/artifacts/`;
   if (parsed.value.path !== expected) return fail("invalid_base_url", path);
-  return { ok: true, value: null };
+  return { ok: true, value: parsed.value.origin + parsed.value.path };
 }
 
 async function validateCatalog(
@@ -759,6 +833,7 @@ async function validateCatalog(
     publishedAt: string;
     expiresAt: string;
     entries: readonly VerifiedCatalogEntry[];
+    document: FirstPartyFrontendReleaseCatalog;
   }>
 > {
   const path = "$.payload";
@@ -784,24 +859,26 @@ async function validateCatalog(
     sequence > MAX_SEQUENCE
   )
     return fail("invalid_sequence", `${path}.sequence`);
-  const published = parseTimestamp(value.publishedAt, `${path}.publishedAt`);
+  const published = timestampValue(value.publishedAt, `${path}.publishedAt`);
   if (!published.ok) return published;
-  const expires = parseTimestamp(value.expiresAt, `${path}.expiresAt`);
+  const expires = timestampValue(value.expiresAt, `${path}.expiresAt`);
   if (!expires.ok) return expires;
-  if (expires.value <= published.value) return fail("invalid_timestamp", `${path}.expiresAt`);
-  if (expires.value - published.value > MAX_CATALOG_LIFETIME_MS)
+  if (expires.value.milliseconds <= published.value.milliseconds)
+    return fail("invalid_timestamp", `${path}.expiresAt`);
+  if (expires.value.milliseconds - published.value.milliseconds > MAX_CATALOG_LIFETIME_MS)
     return fail("unbounded_value", path);
   if (!Array.isArray(value.entries)) return fail("invalid_type", `${path}.entries`);
   if (value.entries.length === 0) return fail("incomplete_required_fields", `${path}.entries`);
   if (value.entries.length > MAX_CATALOG_ENTRIES) return fail("unbounded_value", `${path}.entries`);
   const entries: VerifiedCatalogEntry[] = [];
+  const documents: FrontendReleaseCatalogEntry[] = [];
   const identities = new Set<string>();
   const releaseIds = new Set<string>();
   const names = new Map<string, string>();
   let previous: CatalogIdentity | undefined;
   for (let index = 0; index < value.entries.length; index += 1) {
     const itemPath = `${path}.entries[${index}]`;
-    const entry = value.entries[index];
+    const entry: unknown = value.entries[index];
     if (!isRecord(entry)) return fail("invalid_type", itemPath);
     const entryFields = exactFields(entry, ["identity", "current"], itemPath, ["fallback"]);
     if (!entryFields.ok) return entryFields;
@@ -839,7 +916,7 @@ async function validateCatalog(
       `${itemPath}.current.releasedAt`,
     );
     if (!currentReleased.ok) return currentReleased;
-    if (currentReleased.value > published.value)
+    if (currentReleased.value > published.value.milliseconds)
       return fail("not_yet_published", `${itemPath}.current.releasedAt`);
     if (fallbackValue !== undefined) {
       const fallbackReleased = parseTimestamp(
@@ -847,7 +924,7 @@ async function validateCatalog(
         `${itemPath}.fallback.releasedAt`,
       );
       if (!fallbackReleased.ok) return fallbackReleased;
-      if (fallbackReleased.value > published.value)
+      if (fallbackReleased.value > published.value.milliseconds)
         return fail("not_yet_published", `${itemPath}.fallback.releasedAt`);
     }
     if (
@@ -898,6 +975,11 @@ async function validateCatalog(
       `${itemPath}.fallback.exposedModule`,
     );
     if (!unique.ok) return unique;
+    documents.push({
+      identity: identity.value,
+      current: current.value.document,
+      ...(fallbackValue === undefined ? {} : { fallback: fallbackValue.document }),
+    });
     entries.push({
       identity: identity.value,
       current: current.value.release,
@@ -907,10 +989,17 @@ async function validateCatalog(
   return {
     ok: true,
     value: {
-      sequence: value.sequence as number,
-      publishedAt: value.publishedAt as string,
-      expiresAt: value.expiresAt as string,
+      sequence,
+      publishedAt: published.value.text,
+      expiresAt: expires.value.text,
       entries,
+      document: {
+        schema: schema.value,
+        sequence,
+        publishedAt: published.value.text,
+        expiresAt: expires.value.text,
+        entries: documents,
+      },
     },
   };
 }
@@ -950,7 +1039,9 @@ async function verifyNestedRelease(
   options: VerifyOptions,
   origins: readonly string[],
   path: string,
-): Promise<VerificationResult<VerifiedFirstPartyFrontendRelease>> {
+): Promise<
+  VerificationResult<VerifiedFirstPartyFrontendRelease & { document: SignedFrontendDocument }>
+> {
   const result = await verifyEnvelope(document, keys, options, "release");
   if (!result.ok) return { ok: false, error: prefixError(result.error, path) };
   const release = await validateRelease(result.value.payload, `${path}.payload`, origins);
@@ -959,6 +1050,7 @@ async function verifyNestedRelease(
     ok: true,
     value: {
       release: release.value,
+      document: result.value.document,
       payload: result.value.payload,
       payloadBytes: result.value.payloadBytes,
       keyId: result.value.keyId,
@@ -1033,7 +1125,7 @@ async function validateState(
   const names = new Map<string, string>();
   let previousIdentity: CatalogIdentity | undefined;
   for (let index = 0; index < state.entries.length; index += 1) {
-    const entry = state.entries[index];
+    const entry: unknown = state.entries[index];
     if (
       !isRecord(entry) ||
       !exactKeys(entry, [
@@ -1141,7 +1233,7 @@ function normalizeKeyRecords(
   const values: Array<{ trustKey?: string; value: unknown }> = [];
   if (Array.isArray(records)) {
     if (records.length > MAX_KEY_RECORDS) return fail("unbounded_value", "$.keys");
-    values.push(...records.map((value) => ({ value })));
+    values.push(...records.map((value: unknown) => ({ value })));
   } else if (isRecord(records)) {
     if ("keyId" in records) values.push({ value: records });
     else {
@@ -1152,11 +1244,11 @@ function normalizeKeyRecords(
   } else return fail("invalid_key_record", "$.keys");
   const normalized: NormalizedFrontendReleasePublicKey[] = [];
   const ids = new Set<string>();
-  for (let index = 0; index < values.length; index += 1) {
-    const result = normalizeKeyRecord(values[index]!.value, `$.keys[${index}]`);
+  for (const [index, entry] of values.entries()) {
+    const result = normalizeKeyRecord(entry.value, `$.keys[${index}]`);
     if (!result.ok) return result;
-    if (values[index]!.trustKey !== undefined) {
-      const trustKey = boundedString(values[index]!.trustKey, `$.keys[${index}]`);
+    if (entry.trustKey !== undefined) {
+      const trustKey = boundedString(entry.trustKey, `$.keys[${index}]`);
       if (!trustKey.ok || trustKey.value !== result.value.keyId)
         return fail("invalid_key_record", `$.keys[${index}]`);
     }
@@ -1179,7 +1271,7 @@ function normalizeKeyRecord(
   );
   if (!fields.ok) return fail("invalid_key_record", fields.error.path);
   const id = safeIdentifier(value.keyId, `${path}.keyId`);
-  if (id) return fail("invalid_key_record", `${path}.keyId`);
+  if (!id.ok) return fail("invalid_key_record", `${path}.keyId`);
   if (value.algorithm !== FRONTEND_RELEASE_ALGORITHM)
     return fail("invalid_key_record", `${path}.algorithm`);
   const publicKey = decodeBase64Url(value.publicKey, `${path}.publicKey`, 128);
@@ -1198,25 +1290,35 @@ function normalizeKeyRecord(
     return fail("invalid_key_record", `${path}.allowedRoles`);
   if ([...value.allowedRoles].sort().join(",") !== [...value.allowedRoles].join(","))
     return fail("invalid_key_record", `${path}.allowedRoles`);
-  const from = parseTimestamp(value.validFrom, `${path}.validFrom`);
+  const from = timestampValue(value.validFrom, `${path}.validFrom`);
   if (!from.ok) return fail("invalid_key_record", from.error.path);
-  const until = parseTimestamp(value.validUntil, `${path}.validUntil`);
+  const until = timestampValue(value.validUntil, `${path}.validUntil`);
   if (!until.ok) return fail("invalid_key_record", until.error.path);
-  if (until.value <= from.value) return fail("invalid_key_record", `${path}.validUntil`);
+  if (until.value.milliseconds <= from.value.milliseconds)
+    return fail("invalid_key_record", `${path}.validUntil`);
   let revokedAtMs: number | null = null;
+  let revokedAt: string | null = null;
   if (value.revokedAt !== null) {
-    const revoked = parseTimestamp(value.revokedAt, `${path}.revokedAt`);
+    const revoked = timestampValue(value.revokedAt, `${path}.revokedAt`);
     if (!revoked.ok) return fail("invalid_key_record", revoked.error.path);
-    if (revoked.value < from.value) return fail("invalid_key_record", `${path}.revokedAt`);
-    revokedAtMs = revoked.value;
+    if (revoked.value.milliseconds < from.value.milliseconds)
+      return fail("invalid_key_record", `${path}.revokedAt`);
+    revokedAtMs = revoked.value.milliseconds;
+    revokedAt = revoked.value.text;
   }
   return {
     ok: true,
     value: {
-      ...(value as unknown as FrontendReleasePublicKey),
+      keyId: id.value,
+      algorithm: value.algorithm,
+      publicKey: encodeBase64Url(publicKey.value),
+      allowedRoles: value.allowedRoles,
+      validFrom: from.value.text,
+      validUntil: until.value.text,
+      revokedAt,
       publicKeyBytes: publicKey.value,
-      validFromMs: from.value,
-      validUntilMs: until.value,
+      validFromMs: from.value.milliseconds,
+      validUntilMs: until.value.milliseconds,
       revokedAtMs,
     },
   };
@@ -1320,6 +1422,16 @@ function parseTimestamp(value: unknown, path: string): VerificationResult<number
   return { ok: true, value: milliseconds };
 }
 
+function timestampValue(
+  value: unknown,
+  path: string,
+): VerificationResult<{ text: string; milliseconds: number }> {
+  const parsed = parseTimestamp(value, path);
+  if (!parsed.ok) return parsed;
+  if (typeof value !== "string") return fail("invalid_timestamp", path);
+  return { ok: true, value: { text: value, milliseconds: parsed.value } };
+}
+
 function exactFields(
   value: Record<string, unknown>,
   required: readonly string[],
@@ -1357,14 +1469,14 @@ function boundedString(value: unknown, path: string): VerificationResult<string>
   return { ok: true, value };
 }
 
-function safeIdentifier(value: unknown, path: string): VerificationError | undefined {
-  if (typeof value !== "string") return { code: "invalid_value", path };
+function safeIdentifier(value: unknown, path: string): VerificationResult<string> {
+  if (typeof value !== "string") return fail("invalid_value", path);
   const bounded = boundedString(value, path);
-  if (!bounded.ok) return bounded.error;
+  if (!bounded.ok) return bounded;
   if (new TextEncoder().encode(bounded.value).byteLength > MAX_IDENTIFIER_BYTES)
-    return { code: "unbounded_value", path };
-  if (!/^[a-z][a-z0-9._-]{0,127}$/.test(bounded.value)) return { code: "invalid_value", path };
-  return undefined;
+    return fail("unbounded_value", path);
+  if (!/^[a-z][a-z0-9._-]{0,127}$/.test(bounded.value)) return fail("invalid_value", path);
+  return { ok: true, value: bounded.value };
 }
 
 function isSigningRole(value: unknown): value is SigningRole {
@@ -1522,8 +1634,12 @@ function compareUtf8(left: string, right: string): number {
   const a = new TextEncoder().encode(left);
   const b = new TextEncoder().encode(right);
   const length = Math.min(a.length, b.length);
-  for (let index = 0; index < length; index += 1)
-    if (a[index] !== b[index]) return a[index]! < b[index]! ? -1 : 1;
+  for (const [index, byte] of a.entries()) {
+    if (index >= length) break;
+    const other = b[index];
+    if (other === undefined) throw Error("Incomplete UTF-8 byte comparison");
+    if (byte !== other) return byte < other ? -1 : 1;
+  }
   return a.length === b.length ? 0 : a.length < b.length ? -1 : 1;
 }
 
@@ -1545,7 +1661,7 @@ function canonicalJson(value: unknown): string {
 function preflightJson(text: string, path: string): VerificationResult<null> {
   let index = 0;
   const whitespace = (): void => {
-    while (index < text.length && " \t\n\r".includes(text[index]!)) index += 1;
+    while (index < text.length && " \t\n\r".includes(text.charAt(index))) index += 1;
   };
   const stringToken = (
     stringPath: string,
@@ -1555,7 +1671,7 @@ function preflightJson(text: string, path: string): VerificationResult<null> {
     if (text[index] !== '"') return fail("invalid_json", stringPath);
     index += 1;
     while (index < text.length) {
-      const character = text[index]!;
+      const character = text.charAt(index);
       if (character === '"') {
         index += 1;
         if (new TextEncoder().encode(text.slice(start, index)).byteLength > maxBytes + 2)
@@ -1663,11 +1779,11 @@ function preflightJson(text: string, path: string): VerificationResult<null> {
     const start = index;
     if (text[index] === "-") index += 1;
     const digitStart = index;
-    while (index < text.length && /[0-9]/.test(text[index]!)) index += 1;
+    while (index < text.length && /[0-9]/.test(text.charAt(index))) index += 1;
     if (index === digitStart) return fail("invalid_json", valuePath);
     if (text[index] === "." || text[index] === "e" || text[index] === "E")
       return fail("invalid_scalar", valuePath);
-    if (index < text.length && !" \t\n\r,]}".includes(text[index]!))
+    if (index < text.length && !" \t\n\r,]}".includes(text.charAt(index)))
       return fail("invalid_json", valuePath);
     if (text.slice(start, index).startsWith("-0") && index > start + 2)
       return fail("invalid_json", valuePath);

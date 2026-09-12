@@ -27,7 +27,7 @@ export function providerNewSurface(empty = false) {
     label: b.summary.display_name + " · " + b.summary.version_label,
     value: b.grant_id,
   }));
-  data.accounts.selected = empty ? null : bindings[0].summary;
+  data.accounts.selected = empty ? null : (bindings[0]?.summary ?? null);
   data.form.fields.provider_account_grant_id.options = data.accounts.options;
   data.form.fields.provider_account_grant_id.value = empty ? "" : "grant-1";
   data.form.fields.display_name.value = "Mission downlink";

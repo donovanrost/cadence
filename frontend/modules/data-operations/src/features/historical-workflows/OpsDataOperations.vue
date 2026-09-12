@@ -14,15 +14,11 @@ const href = computed(() => {
     Array.isArray(props.query)
   )
     return null;
-  const entries = Object.entries(props.query);
-  if (
-    entries.some(
-      ([key, value]) =>
-        key !== "group" || typeof value !== "string" || !value || value.length > 240,
-    )
-  )
-    return null;
-  const query = new URLSearchParams(entries as [string, string][]);
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(props.query)) {
+    if (key !== "group" || typeof value !== "string" || !value || value.length > 240) return null;
+    query.set(key, value);
+  }
   return `/missions/${encodeURIComponent(props.mission_id)}/ops/data-operations${props.mode === "manage" ? "/manage" : ""}${query.size ? "?" + query : ""}`;
 });
 </script>

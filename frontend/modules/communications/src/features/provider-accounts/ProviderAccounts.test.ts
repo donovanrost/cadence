@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { readFileSync } from "node:fs";
 import { mount } from "@vue/test-utils";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -151,9 +152,9 @@ test("credential and grant revocation require confirmation; disabled actions sta
   expect(wrapper.emitted("rotate-credential")).toEqual([[{}]]);
   await wrapper.setProps({
     actions: {
-      ...props.actions!,
-      validate: { ...props.actions!.validate, disabled: true },
-      rotate: { ...props.actions!.rotate, disabled: true },
+      ...required(props.actions),
+      validate: { ...required(props.actions).validate, disabled: true },
+      rotate: { ...required(props.actions).rotate, disabled: true },
       revoke: null,
     },
   });

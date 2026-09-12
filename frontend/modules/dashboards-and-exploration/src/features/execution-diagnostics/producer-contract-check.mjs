@@ -1,3 +1,4 @@
+import { fixtureRows, fixtureString } from "../../../../../test-support/json-fixture.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,14 +13,18 @@ const server = await createServer({
   logLevel: "error",
 });
 try {
-  const { readExecutionDiagnostics } = await server.ssrLoadModule("/src/execution-diagnostics.ts");
-  for (const model of JSON.parse(process.argv[2])) {
+  const { readExecutionDiagnostics } =
+    /** @type {typeof import("../../execution-diagnostics.ts")} */ (
+      await server.ssrLoadModule("/src/execution-diagnostics.ts")
+    );
+  for (const raw of fixtureRows(process.argv[2])) {
     const context = {
-      organizationId: model.organization_id,
-      missionId: model.mission_id,
-      resourceId: model.dashboard_id,
+      organizationId: fixtureString(raw.organization_id),
+      missionId: fixtureString(raw.mission_id),
+      resourceId: fixtureString(raw.dashboard_id),
     };
-    assert.deepEqual(readExecutionDiagnostics(model, context), model);
+    const model = readExecutionDiagnostics(raw, context);
+    assert.deepEqual(model, raw);
     assert.throws(() => readExecutionDiagnostics(model, { ...context, missionId: "foreign" }));
     await checkRenderer(server, model, context);
   }

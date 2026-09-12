@@ -1,57 +1,28 @@
-<script setup>
+<script setup lang="ts">
 import { onBeforeUnmount, onMounted } from "vue";
-
-const DashboardEditorGuardController = {
-  mounted() {
-    this.beforeUnload = (event) => {
-      if (!this.dirty()) return;
-
-      event.preventDefault();
-      event.returnValue = "";
-    };
-
-    this.documentClick = (event) => {
-      if (!this.dirty()) return;
-
-      const anchor = event.target.closest?.("a[href]");
-      if (!anchor || anchor.hasAttribute("data-editor-discard")) return;
-      if (anchor.target === "_blank" || anchor.hasAttribute("download")) return;
-
-      if (!window.confirm("Discard unsaved dashboard changes and leave the Editor?")) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
-    };
-
-    window.addEventListener("beforeunload", this.beforeUnload);
-    document.addEventListener("click", this.documentClick, true);
-  },
-
-  destroyed() {
-    window.removeEventListener("beforeunload", this.beforeUnload);
-    document.removeEventListener("click", this.documentClick, true);
-  },
-
-  dirty() {
-    return this.dirtyValue();
-  },
-};
-
-const props = defineProps({
-  editor_dirty: { type: Boolean, default: false },
-});
-
-let controller = null;
-
+const props = withDefaults(defineProps<{ editor_dirty?: boolean }>(), { editor_dirty: false });
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (!props.editor_dirty) return;
+  event.preventDefault();
+  event.returnValue = "";
+}
+function documentClick(event: MouseEvent) {
+  if (!props.editor_dirty || !(event.target instanceof Element)) return;
+  const anchor = event.target.closest("a[href]");
+  if (!anchor || anchor.hasAttribute("data-editor-discard")) return;
+  if (anchor.getAttribute("target") === "_blank" || anchor.hasAttribute("download")) return;
+  if (!window.confirm("Discard unsaved dashboard changes and leave the Editor?")) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+}
 onMounted(() => {
-  controller = Object.create(DashboardEditorGuardController);
-  controller.dirtyValue = () => props.editor_dirty;
-  controller.mounted();
+  window.addEventListener("beforeunload", beforeUnload);
+  document.addEventListener("click", documentClick, true);
 });
-
 onBeforeUnmount(() => {
-  controller?.destroyed();
-  controller = null;
+  window.removeEventListener("beforeunload", beforeUnload);
+  document.removeEventListener("click", documentClick, true);
 });
 </script>
 

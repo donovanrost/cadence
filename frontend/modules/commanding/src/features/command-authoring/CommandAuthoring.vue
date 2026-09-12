@@ -374,7 +374,7 @@ const format = (value: unknown) =>
           <CommandArguments
             ref="argumentControls"
             :arguments="command?.arguments ?? []"
-            :supplied="preview?.argument_values_json"
+            v-bind="preview ? { supplied: preview.argument_values_json } : {}"
             id-prefix="authoring"
             heading="3. Arguments"
             @edited="edited"

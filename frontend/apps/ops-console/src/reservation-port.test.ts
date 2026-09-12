@@ -1,3 +1,5 @@
+import { required } from "../../../test-support/required";
+import type { ReservationDecision } from "@cadence/planning-and-contacts/contact-scheduling";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import type {
@@ -10,8 +12,22 @@ import { createReservationPort } from "./reservation-port";
 import { surfaceContracts } from "./federated-application";
 import OpsConsoleApplication from "./OpsConsoleApplication.vue";
 
+const decision: ReservationDecision = {
+  provider_reservation_id: "reservation-one",
+  reason: "Reviewed provider change",
+  change_evidence: {
+    contract_version: 1,
+    organization_id: "org-one",
+    mission_id: "mission-one",
+    reservation_id: "reservation-one",
+    change_id: "change-one",
+    provider_revision: 2,
+    proposal_hash: "a".repeat(64),
+  },
+};
+
 function harness() {
-  const surface = surfaceContracts.find((s) => s.surfaceId === "contact_detail")!;
+  const surface = required(surfaceContracts.find((s) => s.surfaceId === "contact_detail"));
   const query = vi.fn<(request: HostQueryRequest) => Promise<unknown>>();
   const execute = vi.fn<(request: HostActionRequest<unknown>) => Promise<unknown>>();
   const props: FullPageSurfaceProps = {
@@ -52,11 +68,8 @@ function harness() {
 
 test("the reservation port captures host authority and only delegates declared reservation decisions", async () => {
   const { props, query, execute } = harness();
-  const port = createReservationPort(props, () => true)!;
-  const input = {
-    provider_reservation_id: "plan-one",
-    change_evidence: { content_sha256: "a".repeat(64) },
-  };
+  const port = required(createReservationPort(props, () => true));
+  const input = decision;
   execute.mockResolvedValue({ receiptId: "completed" });
   await port.execute("approve-provider-change", input);
   expect(execute).toHaveBeenCalledExactlyOnceWith({
@@ -69,7 +82,8 @@ test("the reservation port captures host authority and only delegates declared r
     context: props.context,
   });
   expect(port.context).toEqual({ organization_id: "org-one", mission_id: "mission-one" });
-  await expect(port.execute("delete-plan" as never, {})).rejects.toThrow("Undeclared");
+  // @ts-expect-error Exercise admission of a malformed external action.
+  await expect(port.execute("delete-plan", decision)).rejects.toThrow("Undeclared");
   expect(execute).toHaveBeenCalledTimes(1);
   query.mockResolvedValue({
     trusted_surface: {
@@ -95,20 +109,20 @@ test("departed authority refuses new operations and drops late responses", async
         resolve = done;
       }),
   );
-  const port = createReservationPort(props, () => active)!;
-  const pending = port.execute("approve-provider-change", {});
+  const port = required(createReservationPort(props, () => active));
+  const pending = port.execute("approve-provider-change", decision);
   active = false;
   resolve({ receiptId: "late" });
   await expect(pending).rejects.toThrow("departed");
   await expect(port.refresh()).rejects.toThrow("departed");
-  await expect(port.execute("acknowledge-provider-change", {})).rejects.toThrow("departed");
+  await expect(port.execute("acknowledge-provider-change", decision)).rejects.toThrow("departed");
   expect(query).not.toHaveBeenCalled();
   expect(execute).toHaveBeenCalledTimes(1);
 });
 
 test("the read adapter rejects other presentations and does not exist outside its surface", async () => {
   const { props, query } = harness();
-  const port = createReservationPort(props, () => true)!;
+  const port = required(createReservationPort(props, () => true));
   query.mockResolvedValue({
     queryVersion: 1,
     presentation: { component: "OpsContactRequirementShow", props: { detail: {} } },

@@ -1,3 +1,8 @@
+import {
+  jsonFixture,
+  fixtureRecord,
+  fixtureString,
+} from "../../../../../test-support/json-fixture";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import { fleetDirectoryContribution } from "../../fleet-planning";
@@ -27,11 +32,16 @@ test("public contribution owns admission and uses the existing fleet workflow", 
 });
 test("producer-supplied directory contribution", async () => {
   if (!process.env.CADENCE_FLEET_CONTRIBUTION) return;
-  const snapshot = JSON.parse(process.env.CADENCE_FLEET_CONTRIBUTION);
+  const snapshot = jsonFixture(process.env.CADENCE_FLEET_CONTRIBUTION),
+    rawContext = fixtureRecord(snapshot.context);
+  const context = {
+    organizationId: fixtureString(rawContext.organizationId),
+    missionId: fixtureString(rawContext.missionId),
+  };
   const read = vi.fn().mockResolvedValue(snapshot.data);
   const wrapper = mount(fleetDirectoryContribution.component, {
     props: {
-      ...fleetDirectoryContribution.read(snapshot.data, snapshot.context),
+      ...fleetDirectoryContribution.read(snapshot.data, context),
       readPort: { read },
     },
   });

@@ -1,43 +1,67 @@
+import { mutableFixture, type MutableFixture } from "../../../../../test-support/mutable-fixture";
+import { record } from "@cadence/plugin-sdk/admission";
+import { admitReviewOperation } from "./plan-review";
 import { planFixture } from "./fixtures.test-support";
 import type { PlanAction } from "./OpsContactPlanShow.contracts";
 import type { PlanReviewPage, ReviewOperation } from "./plan-review";
-export const reviewFixture = (): PlanReviewPage => ({
+export const reviewFixture = (): MutableFixture<PlanReviewPage> => ({
   ...planFixture(),
   actor_id: "review-actor",
   sequence: 0,
   operation: null,
 });
+type Completed<A extends PlanAction = PlanAction> = MutableFixture<
+  Extract<ReviewOperation, { action: A; status: "completed" }>
+>;
+export function reviewOperation<A extends PlanAction>(
+  page: PlanReviewPage,
+  action: A,
+  input: unknown,
+): Completed<A>;
 export function reviewOperation(
   page: PlanReviewPage,
   action: PlanAction,
-  input: { sequence: number; payload: Record<string, any> },
-): ReviewOperation {
+  input: unknown,
+): Completed {
+  if (!record(input)) throw Error("Invalid review command fixture");
   const d = page.detail;
-  return {
-    sequence: input.sequence,
-    action,
-    input: input.payload,
-    status: "completed",
-    receipt: {
-      receiptId: "receipt-review",
-      completedAt: "2027-01-01T00:00:00Z",
-      result: {
-        contract_version: 1,
-        actor_id: page.actor_id,
-        ...d.context,
-        action,
-        contactPlanId: d.plan.id,
-        version: d.plan.version,
-        contentSha256: d.plan.content_sha256,
-        ...(action === "execute-plan" ? { lifecycleState: "reserved", executionItemCount: 1 } : {}),
+  const operation = admitReviewOperation(
+    {
+      sequence: input.sequence,
+      action,
+      input: input.payload,
+      status: "completed",
+      receipt: {
+        receiptId: "receipt-review",
+        completedAt: "2027-01-01T00:00:00Z",
+        result: {
+          contract_version: 1,
+          actor_id: page.actor_id,
+          ...d.context,
+          action,
+          contactPlanId: d.plan.id,
+          version: d.plan.version,
+          contentSha256: d.plan.content_sha256,
+          ...(action === "execute-plan"
+            ? { lifecycleState: "reserved", executionItemCount: 1 }
+            : {}),
+        },
       },
     },
-  };
+    d,
+    page.actor_id,
+  );
+  if (!operation || operation.status !== "completed" || operation.action !== action)
+    throw Error("Invalid review operation fixture");
+  return mutableFixture(operation);
 }
-export function completedReview(page: PlanReviewPage, op: ReviewOperation): PlanReviewPage {
-  const next = structuredClone(page);
+export function completedReview(
+  page: PlanReviewPage,
+  op: ReviewOperation,
+): MutableFixture<PlanReviewPage> {
+  const next = mutableFixture(page);
   next.sequence = op.sequence;
-  next.operation = op;
+  next.operation = mutableFixture(op);
   if (op.status !== "completed") return next;
   const p = next.detail.plan;
   p.lifecycle_state =

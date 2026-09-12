@@ -1,3 +1,5 @@
+import { required } from "../../../../../test-support/required";
+import { fixtureArrayAt, fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import {
@@ -28,25 +30,25 @@ test("admission validates the semantic model, bounds, evidence and exact scope",
   expect(commandMonitorContribution.navigation).toBe(true);
   expect("actions" in commandMonitorContribution).toBe(false);
   const mutate = [
-    (m: any) => (m.version = 2),
-    (m: any) => (m.can_review = "true"),
-    (m: any) => (m.organization_id = "foreign"),
-    (m: any) => (m.page_size = 100),
-    (m: any) => (m.status = "empty"),
-    (m: any) => (m.rows[0].status = ["in_flight"]),
-    (m: any) => (m.rows[0].release.encoded_binary_base64 = "secret"),
-    (m: any) => (m.rows[0].verifiers[0].state = "unknown"),
-    (m: any) => (m.rows[0].verifier_total = 2),
-    (m: any) => (m.query.document = {}),
-    (m: any) => (m.summary.active_count = 0),
-    (m: any) => (m.focus = { status: "not_found", row: null }),
-    (m: any) => m.rows.push(m.rows[0]),
-    (m: any) => (m.query.status = "queued"),
-    (m: any) => (m.query.target = "other-endpoint"),
-    (m: any) => (m.targets_limited = true),
-    (m: any) => {
-      m.query.focus_command_id = "request-a";
-      m.focus = { status: "not_found", row: null };
+    (m: unknown) => (fixtureRecordAt(m).version = 2),
+    (m: unknown) => (fixtureRecordAt(m).can_review = "true"),
+    (m: unknown) => (fixtureRecordAt(m).organization_id = "foreign"),
+    (m: unknown) => (fixtureRecordAt(m).page_size = 100),
+    (m: unknown) => (fixtureRecordAt(m).status = "empty"),
+    (m: unknown) => (fixtureRecordAt(m, "rows", 0).status = ["in_flight"]),
+    (m: unknown) => (fixtureRecordAt(m, "rows", 0, "release").encoded_binary_base64 = "secret"),
+    (m: unknown) => (fixtureRecordAt(m, "rows", 0, "verifiers", 0).state = "unknown"),
+    (m: unknown) => (fixtureRecordAt(m, "rows", 0).verifier_total = 2),
+    (m: unknown) => (fixtureRecordAt(m, "query").document = {}),
+    (m: unknown) => (fixtureRecordAt(m, "summary").active_count = 0),
+    (m: unknown) => (fixtureRecordAt(m).focus = { status: "not_found", row: null }),
+    (m: unknown) => fixtureArrayAt(m, "rows").push(fixtureArrayAt(m, "rows")[0]),
+    (m: unknown) => (fixtureRecordAt(m, "query").status = "queued"),
+    (m: unknown) => (fixtureRecordAt(m, "query").target = "other-endpoint"),
+    (m: unknown) => (fixtureRecordAt(m).targets_limited = true),
+    (m: unknown) => {
+      fixtureRecordAt(m, "query").focus_command_id = "request-a";
+      fixtureRecordAt(m).focus = { status: "not_found", row: null };
     },
   ];
   for (const change of mutate) {
@@ -55,8 +57,8 @@ test("admission validates the semantic model, bounds, evidence and exact scope",
     expect(() => readCommandMonitor(value, monitorContext)).toThrow();
   }
   expect(() => readCommandMonitor(model, { ...monitorContext, resourceId: "request-a" })).toThrow();
-  const sorted = JSON.parse(
-    JSON.stringify(model, (_, v) =>
+  const sorted: unknown = JSON.parse(
+    JSON.stringify(model, (_, v: unknown) =>
       v && typeof v === "object" && !Array.isArray(v)
         ? Object.fromEntries(Object.entries(v).reverse())
         : v,
@@ -112,7 +114,7 @@ test("focus is URL navigation, survives filters and has scoped clear and native 
   );
   const next = monitorFixture();
   next.query.focus_command_id = "request-a";
-  next.focus = { status: "ready", row: next.rows[0]! };
+  next.focus = { status: "ready", row: required(next.rows[0]) };
   await wrapper.setProps({ model: next, port: { ...port } });
   expect(wrapper.get("#command-monitor-focus").attributes("data-followed-command")).toBe(
     "request-a",
@@ -187,12 +189,12 @@ test("empty, unavailable focus and verifier truncation are explicit", () => {
   expect(wrapper.get("#command-monitor-focus").text()).toContain("not available");
   wrapper.unmount();
   const limited = monitorFixture();
-  const verifier = limited.rows[0]!.verifiers[0]!;
-  limited.rows[0]!.verifiers = Array.from({ length: 20 }, (_, i) => ({
+  const verifier = required(required(limited.rows[0]).verifiers[0]);
+  required(limited.rows[0]).verifiers = Array.from({ length: 20 }, (_, i) => ({
     ...verifier,
     id: `v-${i}`,
   }));
-  limited.rows[0]!.verifier_total = 21;
+  required(limited.rows[0]).verifier_total = 21;
   const view = setup(limited).wrapper;
   expect(view.text()).toContain("Showing 20 of 21 verifier records");
   view.unmount();
@@ -270,13 +272,13 @@ test.each(["release_pending", "release_uncertain"] as const)(
   "%s holds the lane and preserves evidence navigation",
   (state) => {
     const model = monitorFixture();
-    const row = model.rows[0]!;
+    const row = required(model.rows[0]);
     row.status = state === "release_uncertain" ? "indeterminate" : "release_pending";
     row.request_state = "queued";
-    row.queue!.state = "release_pending";
-    row.release!.state = state;
-    row.release!.released_at = null;
-    row.release!.verification_state = null;
+    required(row.queue).state = "release_pending";
+    required(row.release).state = state;
+    required(row.release).released_at = null;
+    required(row.release).verification_state = null;
     row.verifiers = [];
     row.verifier_total = 0;
     row.verification_state = null;

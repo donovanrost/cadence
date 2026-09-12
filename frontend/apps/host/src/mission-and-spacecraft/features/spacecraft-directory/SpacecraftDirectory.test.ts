@@ -1,3 +1,4 @@
+import { required } from "../../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import SpacecraftListPage from "./SpacecraftListPage.vue";
@@ -20,25 +21,25 @@ test("directory renders real roster, profile preview and compact producer breadc
 });
 test("search, sorting and pagination preserve filters and cancel searches after unmount", async () => {
   vi.useFakeTimers();
-  const navigate = vi.fn();
+  const navigate = vi.fn<(href: string, replace?: boolean) => void>();
   const wrapper = mount(SpacecraftListPage, {
     props: { ...spacecraftDirectoryFixture(), navigate },
   });
   await wrapper.get("#spacecraft-roster-toolbar-search").setValue("Vehicle & Two");
   expect(navigate).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(300);
-  const query = new URL(navigate.mock.calls[0]![0], "https://cadence.test").searchParams;
+  const query = new URL(required(navigate.mock.calls[0])[0], "https://cadence.test").searchParams;
   expect(Object.fromEntries(query)).toMatchObject({
     q: "Vehicle & Two",
     filter: "missing_profile",
     page: "1",
     pageSize: "1",
   });
-  expect(navigate.mock.calls[0]![1]).toBe(true);
+  expect(required(navigate.mock.calls[0])[1]).toBe(true);
   await wrapper.get("#spacecraft-sort-scid").trigger("click");
-  expect(navigate.mock.calls[1]![0]).toContain("dir=desc");
+  expect(required(navigate.mock.calls[1])[0]).toContain("dir=desc");
   await wrapper.get("#spacecraft-next-page").trigger("click");
-  expect(navigate.mock.calls[2]![0]).toContain("page=2");
+  expect(required(navigate.mock.calls[2])[0]).toContain("page=2");
   await wrapper.get("#spacecraft-roster-toolbar-search").setValue("late");
   wrapper.unmount();
   await vi.advanceTimersByTimeAsync(300);
@@ -61,10 +62,16 @@ test("empty fleet and filtered empty states remain distinct", async () => {
 });
 test("malformed rows, navigation and executable attributes are rejected", () => {
   for (const mutate of [
-    (data: any) => (data.presentation.roster.rows[0].href = "javascript:alert(1)"),
-    (data: any) => (data.presentation.root.attrs.onclick = "alert(1)"),
-    (data: any) => (data.presentation.profiles.rows[0].fleet_entries = null),
-    (data: any) => (data.presentation.roster.page_size = 0),
+    (data: ReturnType<typeof spacecraftDirectoryFixture>) =>
+      (required(data.presentation.roster.rows[0]).href = "javascript:alert(1)"),
+    (data: ReturnType<typeof spacecraftDirectoryFixture>) =>
+      (data.presentation.root.attrs.onclick = "alert(1)"),
+    (data: ReturnType<typeof spacecraftDirectoryFixture>) => {
+      // @ts-expect-error Null fleet entries are a malformed producer response.
+      required(data.presentation.profiles.rows[0]).fleet_entries = null;
+    },
+    (data: ReturnType<typeof spacecraftDirectoryFixture>) =>
+      (data.presentation.roster.page_size = 0),
   ]) {
     const data = spacecraftDirectoryFixture();
     mutate(data);

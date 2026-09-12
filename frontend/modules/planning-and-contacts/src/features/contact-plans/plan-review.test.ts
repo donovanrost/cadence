@@ -1,13 +1,26 @@
+import { required } from "../../../../../test-support/required";
+import { mutableFixture, type MutableFixture } from "../../../../../test-support/mutable-fixture";
+import { fixtureRecord, jsonFixture } from "../../../../../test-support/json-fixture";
+import { oneOf } from "@cadence/plugin-sdk/admission";
 import { expect, test, vi } from "vite-plus/test";
 import { mount, flushPromises } from "@vue/test-utils";
 import { planReviewContribution } from "../../contact-plans";
 import type { PlanAction } from "./OpsContactPlanShow.contracts";
-import { admitPlanReviewPage, admitReviewOperation, type PlanReviewPage } from "./plan-review";
+import {
+  admitPlanReviewPage,
+  admitReviewOperation,
+  type PlanReviewPage,
+  type ReviewOperation,
+  planReviewActions,
+} from "./plan-review";
 import { planDecision } from "./plan-detail";
 import { reviewFixture, reviewOperation, completedReview } from "./plan-review.test-support";
 
 function harness(page = reviewFixture()) {
-  const execute = vi.fn(),
+  const execute =
+      vi.fn<
+        (action: PlanAction, input: { sequence: number; payload: unknown }) => Promise<unknown>
+      >(),
     read = vi.fn(),
     dispose = vi.fn();
   let canLeave = () => true;
@@ -75,7 +88,7 @@ test("captured plan forms serialize native evidence and retain other decision re
 });
 test("lost responses recover only the exact captured operation and preserve drafts until confirmation", async () => {
   const h = harness();
-  let recovered!: PlanReviewPage;
+  let recovered: MutableFixture<PlanReviewPage> | undefined;
   h.execute.mockImplementation(async (action, input) => {
     recovered = completedReview(h.page, reviewOperation(h.page, action, input));
     throw Error("private transport error");
@@ -88,8 +101,8 @@ test("lost responses recover only the exact captured operation and preserve draf
   expect((h.w.get("#submission-reason").element as HTMLTextAreaElement).value).toBe(
     "Keep this reason",
   );
-  const foreign = structuredClone(recovered);
-  foreign.operation!.receipt!.result.actor_id = "foreign";
+  const foreign = mutableFixture(required(recovered));
+  required(required(foreign.operation).receipt).result.actor_id = "foreign";
   h.read.mockResolvedValue(foreign);
   await h.w.get("#refresh-plan-review").trigger("click");
   await flushPromises();
@@ -107,7 +120,7 @@ test("lost responses recover only the exact captured operation and preserve draf
 });
 test("bootstrap copies cannot cancel pending decisions and departure releases the host guard", async () => {
   const h = harness();
-  let finish!: (v: unknown) => void;
+  let finish: ((v: unknown) => void) | undefined;
   h.execute.mockImplementation(
     () =>
       new Promise((resolve) => {
@@ -120,14 +133,14 @@ test("bootstrap copies cannot cancel pending decisions and departure releases th
   await h.w.get("#submission").trigger("submit");
   expect(h.execute).toHaveBeenCalledTimes(1);
   h.w.unmount();
-  finish(reviewOperation(h.page, "submit-plan", h.execute.mock.calls[0]![1]));
+  required(finish)(reviewOperation(h.page, "submit-plan", required(h.execute.mock.calls[0])[1]));
   await flushPromises();
   expect(h.read).not.toHaveBeenCalled();
   expect(h.dispose).toHaveBeenCalledOnce();
 });
 test("known rejections preserve reasons and require a fresh admitted review", async () => {
   const h = harness();
-  let op: any;
+  let op: ReviewOperation | undefined;
   h.execute.mockImplementation(async (action, input) => {
     op = {
       ...reviewOperation(h.page, action, input),
@@ -143,7 +156,7 @@ test("known rejections preserve reasons and require a fresh admitted review", as
     "Reviewed exact proposal",
   );
   expect(h.w.get("#submit-plan").attributes("disabled")).toBeDefined();
-  h.read.mockResolvedValue(completedReview(h.page, op));
+  h.read.mockResolvedValue(completedReview(h.page, required(op)));
   await h.w.get("#refresh-plan-review").trigger("click");
   await flushPromises();
   expect(h.w.get("#submit-plan").attributes("disabled")).toBeUndefined();
@@ -203,7 +216,7 @@ test("public contribution rejects foreign context and forged actual-result ident
     "version",
   ]) {
     const bad = structuredClone(op);
-    bad.receipt!.result[field] = "foreign";
+    fixtureRecord(bad.receipt.result)[field] = "foreign";
     expect(admitReviewOperation(bad, p.detail, p.actor_id)).toBeNull();
   }
   expect(() =>
@@ -217,17 +230,20 @@ test("public contribution rejects foreign context and forged actual-result ident
 });
 test("producer supplied native plan review contribution", async () => {
   if (!process.env.CADENCE_PLAN_WORKFLOW) return;
-  const supplied = JSON.parse(process.env.CADENCE_PLAN_WORKFLOW),
-    h = harness(supplied.snapshot.data);
+  const supplied = jsonFixture(process.env.CADENCE_PLAN_WORKFLOW),
+    h = harness(
+      mutableFixture(required(admitPlanReviewPage(fixtureRecord(supplied.snapshot).data))),
+    );
+  if (!oneOf(planReviewActions, supplied.action)) throw Error("Unknown producer action");
   h.execute.mockImplementation(async () => {
     if (!supplied.operation) return new Promise(() => {});
     expect(admitReviewOperation(supplied.operation, h.page.detail, h.page.actor_id)).not.toBeNull();
-    h.read.mockResolvedValue(supplied.refreshed.data);
+    h.read.mockResolvedValue(fixtureRecord(supplied.refreshed).data);
     return supplied.operation;
   });
   await native(h.w, supplied.action, "Reviewed actual producer evidence");
   expect(h.execute).toHaveBeenCalledTimes(1);
-  if (supplied.operation?.status === "completed")
+  if (supplied.operation && fixtureRecord(supplied.operation).status === "completed")
     expect(h.w.find("#plan-operation-receipt").exists()).toBe(true);
   process.stdout.write("PLAN_CONTRIBUTION_INPUT=" + JSON.stringify(h.execute.mock.calls[0]) + "\n");
   h.w.unmount();
@@ -241,10 +257,11 @@ test("a completed execution waits for evidence beyond the pre-execution approved
     payload: planDecision(page.detail, "approve-plan", "Approve reviewed selection"),
   });
   const h = harness(completedReview(page, approval));
-  let updated!: PlanReviewPage;
+  let updated: MutableFixture<PlanReviewPage> | undefined;
   h.execute.mockImplementation(async (action, input) => {
     const op = reviewOperation(h.page, action, input);
-    op.receipt!.result.lifecycleState = "failed";
+    if (op.action !== "execute-plan") throw Error("Expected execution");
+    op.receipt.result.lifecycleState = "failed";
     updated = completedReview(h.page, op);
     updated.detail.plan.lifecycle_state = "failed";
     const stale = structuredClone(updated);

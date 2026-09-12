@@ -22,6 +22,7 @@ const requiredPages = [
   "CatalogUploadForm.vue",
 ];
 
+/** @param {URL} directory @returns {Promise<string[]>} */
 async function filesUnder(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
@@ -33,7 +34,7 @@ async function filesUnder(directory) {
   return files;
 }
 
-test("mission remote entries retain public compatibility adapters for core Catalog pages", async () => {
+void test("mission remote entries retain public compatibility adapters for core Catalog pages", async () => {
   for (const page of requiredPages) {
     await readFile(new URL(page, root), "utf8");
   }

@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { required } from "../../../test-support/required";
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
@@ -100,6 +101,11 @@ describe("signed first-party frontend release contracts", () => {
       "sha256:1c1bd2f62ada2a7e6b9ab35f4e0f36d3bb4c46995221a1c5d7eb8f7f9f6a4470",
     );
     expect(catalog.value.acceptedState.digest).toBe(catalog.value.digest);
+    const releasePayload: unknown = JSON.parse(corpus.release.payload);
+    const catalogPayload: unknown = JSON.parse(corpus.catalog.payload);
+    expect(release.value.release).toEqual(releasePayload);
+    expect(catalog.value.catalog).toEqual(catalogPayload);
+    expect(new TextDecoder().decode(catalog.value.payloadBytes)).toBe(corpus.catalog.payload);
   });
 
   it("requires explicit verification time and keeps signed identities clock-independent", async () => {
@@ -334,7 +340,7 @@ describe("signed first-party frontend release contracts", () => {
     await expectCode(
       verifyFirstPartyFrontendRelease(
         corpus.release.envelope,
-        [{ ...releaseKey, validFrom: "2026-08-31T00:00:00Z" }, corpus.keys[0]!],
+        [{ ...releaseKey, validFrom: "2026-08-31T00:00:00Z" }, required(corpus.keys[0])],
         options,
       ),
       "not_yet_valid_key",
@@ -342,7 +348,7 @@ describe("signed first-party frontend release contracts", () => {
     await expectCode(
       verifyFirstPartyFrontendRelease(
         corpus.release.envelope,
-        [{ ...releaseKey, validUntil: "2026-08-30T18:30:00Z" }, corpus.keys[0]!],
+        [{ ...releaseKey, validUntil: "2026-08-30T18:30:00Z" }, required(corpus.keys[0])],
         options,
       ),
       "expired_key",
@@ -350,7 +356,7 @@ describe("signed first-party frontend release contracts", () => {
     await expectCode(
       verifyFirstPartyFrontendRelease(
         corpus.release.envelope,
-        [{ ...releaseKey, revokedAt: corpus.now }, corpus.keys[0]!],
+        [{ ...releaseKey, revokedAt: corpus.now }, required(corpus.keys[0])],
         options,
       ),
       "revoked_key",
@@ -362,7 +368,7 @@ describe("signed first-party frontend release contracts", () => {
     await expectCode(
       verifyFirstPartyFrontendRelease(
         corpus.release.envelope,
-        [{ ...releaseKey, publicKey: "A" }, corpus.keys[0]!],
+        [{ ...releaseKey, publicKey: "A" }, required(corpus.keys[0])],
         options,
       ),
       "invalid_key_record",
@@ -640,8 +646,8 @@ function setEnvelopePayload(document: unknown, payload: string): unknown {
 
 function corpusKeys(corpusCase: CorpusCase): FrontendReleaseKeyRecords {
   if (corpusCase.keys === "empty") return [];
-  if (corpusCase.keys === "wrong-trust-map") return { wrong: corpus.keys[0]! };
-  if (corpusCase.keys === "duplicate") return [...corpus.keys, corpus.keys[1]!];
+  if (corpusCase.keys === "wrong-trust-map") return { wrong: required(corpus.keys[0]) };
+  if (corpusCase.keys === "duplicate") return [...corpus.keys, required(corpus.keys[1])];
   return applyOperations(corpus.keys, corpusCase.keyPatches) as FrontendReleasePublicKey[];
 }
 
@@ -721,7 +727,7 @@ function putPointer(value: unknown, path: string[], replacement: unknown): unkno
   if (head === undefined) return replacement;
   if (Array.isArray(value)) {
     const index = Number(head);
-    const copy = [...value];
+    const copy = Array.from(value, (item: unknown) => item);
     copy[index] = tail.length === 0 ? replacement : putPointer(copy[index], tail, replacement);
     return copy;
   }
@@ -738,7 +744,7 @@ function deletePointer(value: unknown, path: string[]): unknown {
   if (Array.isArray(value)) {
     const index = Number(head);
     if (tail.length === 0) return value.filter((_item, itemIndex) => itemIndex !== index);
-    const copy = [...value];
+    const copy = Array.from(value, (item: unknown) => item);
     copy[index] = deletePointer(copy[index], tail);
     return copy;
   }
@@ -783,7 +789,7 @@ function corpusProjection(actual: CorpusResult, expected: JsonRecord): JsonRecor
 
 function corpusCatalogCurrent(): SignedFrontendDocument {
   const payload = JSON.parse(corpus.catalog.payload) as JsonRecord;
-  return (payload.entries as JsonRecord[])[0]!.current as SignedFrontendDocument;
+  return required((payload.entries as JsonRecord[])[0]).current as SignedFrontendDocument;
 }
 
 async function signedRelease(release: JsonRecord): Promise<SignedFrontendDocument> {
@@ -894,7 +900,7 @@ function compareUtf8(left: string, right: string): number {
   const a = new TextEncoder().encode(left);
   const b = new TextEncoder().encode(right);
   for (let index = 0; index < Math.min(a.length, b.length); index += 1)
-    if (a[index] !== b[index]) return a[index]! < b[index]! ? -1 : 1;
+    if (a[index] !== b[index]) return required(a[index]) < required(b[index]) ? -1 : 1;
   return a.length - b.length;
 }
 

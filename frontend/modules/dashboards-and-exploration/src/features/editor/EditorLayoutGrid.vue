@@ -1,38 +1,35 @@
-<script setup>
+<script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { GridStack } from "gridstack";
+import { GridStack, type GridStackWidget } from "gridstack";
 import "../../workspace.css";
-import { layoutEdits } from "./layout-draft";
-const props = defineProps({
-  placements: {
-    type: /** @type {import("vue").PropType<import("./contracts").EditorPlacement[]>} */ (Array),
-    required: true,
-  },
-  edits: {
-    type: /** @type {import("vue").PropType<import("./layout-draft").LayoutEdit[]>} */ (Array),
-    required: true,
-  },
-  grid: {
-    type: /** @type {import("vue").PropType<import("./contracts").EditorModel["grid"]>} */ (Object),
-    required: true,
-  },
-  disabled: Boolean,
-});
-const emit = defineEmits(["change", "gesture"]);
-const element = ref(null),
+import { layoutEdits, type LayoutEdit } from "./layout-draft";
+import type { EditorPlacement, EditorModel } from "./contracts";
+defineSlots<{ default(props: { placement: EditorPlacement }): unknown }>();
+const props = withDefaults(
+  defineProps<{
+    placements: EditorPlacement[];
+    edits: LayoutEdit[];
+    grid: EditorModel["grid"];
+    disabled?: boolean;
+  }>(),
+  { disabled: false },
+);
+const emit = defineEmits<{ change: [edits: LayoutEdit[]]; gesture: [active: boolean] }>();
+const element = ref<HTMLElement | null>(null),
   notice = ref("");
-let grid,
-  active = false,
+let layoutGrid: GridStack | undefined;
+let active = false,
   disposed = false,
   epoch = 0;
-function nodes() {
+function nodes(): GridStackWidget[] {
   return props.placements.map((p) => {
     const layout = props.edits.find((edit) => edit.placement_id === p.id) || p.layout;
+    const { x, y, ...dimensions } = layout;
     return {
       id: p.id,
-      ...layout,
-      x: layout.x ?? undefined,
-      y: layout.y ?? undefined,
+      ...dimensions,
+      ...(x === null ? {} : { x }),
+      ...(y === null ? {} : { y }),
       autoPosition: layout.x === null || layout.y === null,
       minW: p.constraints.min_w,
       minH: p.constraints.min_h,
@@ -42,20 +39,20 @@ function nodes() {
   });
 }
 function sync() {
-  if (disposed || !grid || active) return;
-  grid.load(nodes(), false);
-  grid.setStatic(props.disabled);
+  if (disposed || !layoutGrid || active) return;
+  layoutGrid.load(nodes(), false);
+  layoutGrid.setStatic(props.disabled);
 }
 function publish() {
-  if (disposed || props.disabled) return;
+  if (disposed || props.disabled || !layoutGrid) return;
   try {
-    const edits = layoutEdits(grid.engine.nodes, props.placements);
+    const edits = layoutEdits(layoutGrid.engine.nodes, props.placements);
     notice.value =
       "Layout updated locally. Apply it to the candidate, then Save draft to persist it.";
     emit("change", edits);
   } catch {
     notice.value =
-      "That layout exceeds the supported grid bounds. The last local layout was restored.";
+      "That layout exceeds the supported layoutGrid bounds. The last local layout was restored.";
     sync();
   }
 }
@@ -76,14 +73,28 @@ function stop() {
     emit("gesture", false);
   });
 }
-function keyboard(event, id, resize) {
-  const delta = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[
-    event.key
-  ];
-  if (!delta || props.disabled || active) return;
+const keyboardDeltas: Record<string, readonly [number, number]> = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
+function keyboard(event: KeyboardEvent, id: string, resize: boolean) {
+  const delta = keyboardDeltas[event.key];
+  if (!delta || props.disabled || active || !layoutGrid || disposed) return;
   event.preventDefault();
-  const node = grid.engine.nodes.find((n) => n.id === id);
-  const bounds = props.placements.find((p) => p.id === id).constraints;
+  const node = layoutGrid.engine.nodes.find((n) => n.id === id);
+  const placement = props.placements.find((p) => p.id === id);
+  if (
+    !node?.el ||
+    !placement ||
+    node.x === undefined ||
+    node.y === undefined ||
+    node.w === undefined ||
+    node.h === undefined
+  )
+    return;
+  const bounds = placement.constraints;
   const change = resize
     ? {
         w: Math.max(bounds.min_w, Math.min(bounds.max_w - node.x, node.w + delta[0])),
@@ -93,11 +104,12 @@ function keyboard(event, id, resize) {
         x: Math.max(0, Math.min(bounds.max_w - node.w, node.x + delta[0])),
         y: Math.max(0, Math.min(bounds.max_y, node.y + delta[1])),
       };
-  grid.update(node.el, change);
+  layoutGrid.update(node.el, change);
   publish();
 }
 onMounted(() => {
-  grid = GridStack.init(
+  if (!element.value) return;
+  layoutGrid = GridStack.init(
     {
       column: props.grid.columns,
       cellHeight: props.grid.row_height_px,
@@ -114,8 +126,8 @@ onMounted(() => {
     element.value,
   );
   sync();
-  grid.on("dragstart resizestart", start);
-  grid.on("dragstop resizestop", stop);
+  layoutGrid.on("dragstart resizestart", start);
+  layoutGrid.on("dragstop resizestop", stop);
 });
 watch(() => props.edits, sync, { deep: true, flush: "post" });
 watch(
@@ -130,7 +142,7 @@ watch(
 onBeforeUnmount(() => {
   disposed = true;
   epoch++;
-  grid?.destroy(false);
+  layoutGrid?.destroy(false);
   emit("gesture", false);
 });
 </script>

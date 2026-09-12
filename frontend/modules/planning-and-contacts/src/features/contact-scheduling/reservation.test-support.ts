@@ -1,6 +1,7 @@
+import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
 import type { ReservationDetail } from "./OpsContactDetail.contracts";
-export function reservationFixture(): ReservationDetail {
-  const selected = {
+export function reservationFixture(): MutableFixture<ReservationDetail> {
+  const selected: NonNullable<MutableFixture<ReservationDetail>["selected"]> = {
     id: "change-2",
     provider_revision: 2,
     proposal_hash: "a".repeat(64),

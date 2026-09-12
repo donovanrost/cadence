@@ -1,5 +1,6 @@
+import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
 import type { CommandReviewPage, Operation } from "./contracts";
-export const fixture = (): CommandReviewPage => ({
+export const fixture = (): MutableFixture<CommandReviewPage> => ({
   review: {
     version: 1,
     context: {
@@ -47,7 +48,7 @@ export const fixture = (): CommandReviewPage => ({
   },
   operation: null,
 });
-export const completed = (page = fixture()): Operation => ({
+export const completed = (page: CommandReviewPage = fixture()): MutableFixture<Operation> => ({
   status: "completed",
   receipt: {
     approval_id: "approval_saved",

@@ -1,3 +1,6 @@
+import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
+import { required } from "../../../../../test-support/required";
+import { fixtureRecord, jsonFixture } from "../../../../../test-support/json-fixture";
 import { mount, flushPromises } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import NativeHistoricalWorkflows from "./NativeHistoricalWorkflows.vue";
@@ -5,9 +8,17 @@ import {
   historicalWorkflowsContribution,
   historicalWorkflowsManageContribution,
 } from "./native-contribution";
-import { admitHistoryPage, type HistoryPage, type HistoryOperation } from "./native-contract";
+import {
+  admitHistoryPage,
+  admitHistoryOperation,
+  isHistoryEffect,
+  type HistoryPage,
+  type HistoryOperation,
+  type HistoryInputs,
+  isHistoryCommand,
+} from "./native-contract";
 const context = { organization_id: "org", mission_id: "mission" };
-function fixture(): HistoryPage {
+function fixture(): MutableFixture<HistoryPage> {
   return {
     actor_id: "actor",
     sequence: 0,
@@ -58,7 +69,10 @@ function fixture(): HistoryPage {
     },
   };
 }
-function completed(input: Record<string, any>, p = fixture()): HistoryOperation {
+function completed(
+  input: HistoryInputs["record-request"],
+  p = fixture(),
+): Extract<HistoryOperation<"record-request">, { status: "completed" }> {
   return {
     id: "operation",
     sequence: 1,
@@ -83,7 +97,7 @@ function completed(input: Record<string, any>, p = fixture()): HistoryOperation 
     },
   };
 }
-async function fill(w: ReturnType<typeof mount>) {
+async function fill(w: Pick<ReturnType<typeof mount>, "get">) {
   await w.get("#history-binding").setValue("binding");
   await w.get("#history-points").setValue("HK.temp,HK.rate");
   await w.get("#history-reason").setValue("Recover telemetry");
@@ -114,18 +128,43 @@ test("native DTO rejects foreign context, malformed versions and forged result i
     ),
   ).toBeNull();
 });
+test("unconfirmed outcomes admit recovery hints but never a completed receipt", () => {
+  const p = fixture();
+  const op = completed({ request: { ...p.model.defaults }, binding_evidence: "b".repeat(64) }, p);
+  expect(admitHistoryOperation({ ...op, status: "unconfirmed" }, p)).toBeNull();
+  expect(admitHistoryOperation({ ...op, status: "unconfirmed", result: null }, p)).not.toBeNull();
+  expect(
+    admitHistoryOperation(
+      { ...op, status: "unconfirmed", result: { group_id: "group", operation_id: op.id } },
+      p,
+    ),
+  ).not.toBeNull();
+  expect(
+    admitHistoryOperation(
+      { ...op, status: "unconfirmed", result: { group_id: "group", operation_id: "foreign" } },
+      p,
+    ),
+  ).toBeNull();
+});
 test("lost response retains native drafts and refresh recovers the exact operation without resubmitting", async () => {
   const p = fixture();
-  let submitted: any,
+  let submitted: { sequence: number; payload: HistoryInputs["record-request"] } | undefined,
     guard: () => boolean = () => true;
-  const execute = vi.fn(async (_action, input) => {
-    submitted = input;
+  const execute = vi.fn(async (action: string, input: Record<string, unknown>) => {
+    const command = { action, input: input.payload };
+    if (
+      !isHistoryCommand(command) ||
+      command.action !== "record-request" ||
+      typeof input.sequence !== "number"
+    )
+      throw Error("Unexpected request command");
+    submitted = { sequence: input.sequence, payload: command.input };
     throw Error("lost");
   });
   const read = vi.fn(async () => ({
     ...p,
     sequence: 1,
-    operation: completed(submitted.payload, p),
+    operation: completed(required(submitted).payload, p),
   }));
   const w = mount(NativeHistoricalWorkflows, {
     props: {
@@ -133,7 +172,7 @@ test("lost response retains native drafts and refresh recovers the exact operati
       port: {
         execute,
         navigate: vi.fn(),
-        guardNavigation: (g) => {
+        guardNavigation: (g: () => boolean) => {
           guard = g;
           return () => {};
         },
@@ -147,7 +186,7 @@ test("lost response retains native drafts and refresh recovers the exact operati
   expect(execute).toHaveBeenCalledTimes(1);
   expect(w.find("#history-unconfirmed").exists()).toBe(true);
   expect(guard()).toBe(false);
-  expect(submitted.payload.request.source_from).toBe("2026-09-08T14:00:17Z");
+  expect(required(submitted).payload.request.source_from).toBe("2026-09-08T14:00:17Z");
   await w.get("#history-refresh").trigger("click");
   await flushPromises();
   expect(w.find("#history-unconfirmed").exists()).toBe(false);
@@ -179,18 +218,24 @@ test("binding paging retains the reviewed binding and unsaved request", async ()
   const p = fixture();
   p.model.bindings.total = 26;
   let operation: HistoryOperation;
-  const execute = vi.fn(
-    async (action, input) =>
-      (operation = {
-        id: "page-operation",
-        sequence: input.sequence,
-        action,
-        input: input.payload,
-        status: "completed",
-        result: { page_changed: true },
-        feedback: [],
-      }),
-  );
+  const execute = vi.fn(async (action: string, input: Record<string, unknown>) => {
+    const command = { action, input: input.payload };
+    if (
+      !isHistoryCommand(command) ||
+      command.action !== "read-page" ||
+      typeof input.sequence !== "number"
+    )
+      throw Error("Unexpected paging command");
+    operation = {
+      ...command,
+      id: "page-operation",
+      sequence: input.sequence,
+      status: "completed",
+      result: { page_changed: true },
+      feedback: [],
+    };
+    return operation;
+  });
   const read = vi.fn(async () => ({
     ...p,
     sequence: 1,
@@ -209,14 +254,27 @@ test("binding paging retains the reviewed binding and unsaved request", async ()
   await flushPromises();
   expect((w.get("#history-binding").element as HTMLSelectElement).value).toBe("binding");
   expect((w.get("#history-reason").element as HTMLTextAreaElement).value).toBe("Recover telemetry");
-  expect(execute.mock.calls[0][1].payload.query.bindings_page).toBe("2");
+  expect(required(execute.mock.calls[0])[1]).toMatchObject({
+    payload: { query: { bindings_page: "2" } },
+  });
   w.unmount();
 });
 test("producer supplied native history contribution", async () => {
   if (!process.env.CADENCE_HISTORY) return;
-  const supplied = JSON.parse(process.env.CADENCE_HISTORY),
-    snapshot = supplied.snapshot,
-    data = snapshot.data;
+  const supplied = jsonFixture(process.env.CADENCE_HISTORY),
+    snapshot = fixtureRecord(supplied.snapshot),
+    raw = fixtureRecord(snapshot.data),
+    model = fixtureRecord(raw.model),
+    context = fixtureRecord(model.context);
+  if (typeof context.organization_id !== "string" || typeof context.mission_id !== "string")
+    throw Error("Missing native context");
+  const data = required(
+    admitHistoryPage(
+      raw,
+      { organization_id: context.organization_id, mission_id: context.mission_id },
+      String(model.mode),
+    ),
+  );
   const registration =
     data.model.mode === "manage"
       ? historicalWorkflowsManageContribution
@@ -224,14 +282,14 @@ test("producer supplied native history contribution", async () => {
   const props = registration.read(data, {
     organizationId: data.model.context.organization_id,
     missionId: data.model.context.mission_id,
-  }) as { page: HistoryPage };
-  const calls: any[] = [];
+  });
+  const calls: [string, Record<string, unknown>][] = [];
   const w = mount(NativeHistoricalWorkflows, {
     props: {
       ...props,
       port: {
         navigate: vi.fn(),
-        execute: async (action, input) => {
+        execute: async (action: string, input: Record<string, unknown>) => {
           calls.push([action, input]);
           if (supplied.operation) return supplied.operation;
           throw Error("capture-only");
@@ -244,9 +302,10 @@ test("producer supplied native history contribution", async () => {
   window.confirm = vi.fn(() => true);
   if (supplied.stage) {
     await w.get("#history-transition-reason").setValue("界".repeat(600));
+    if (typeof supplied.stage !== "string") throw Error("Invalid stage fixture");
     await w.get("#history-" + supplied.stage).trigger("click");
   } else {
-    await w.get("#history-binding").setValue(data.model.bindings.entries[0].id);
+    await w.get("#history-binding").setValue(required(data.model.bindings.entries[0]).id);
     await w.get("#history-points").setValue("HK.temp,HK.rate");
     await w.get("#history-reason").setValue("界".repeat(600));
     await w.get("#history-confirmed").setValue(true);
@@ -255,9 +314,12 @@ test("producer supplied native history contribution", async () => {
   await flushPromises();
   window.confirm = originalConfirm;
   expect(calls).toHaveLength(1);
-  expect(calls[0][0]).toBe(supplied.stage ? "transition-group" : "record-request");
+  expect(required(calls[0])[0]).toBe(supplied.stage ? "transition-group" : "record-request");
   if (supplied.operation) {
-    expect(w.get("#history-operation").text()).toContain(supplied.operation.result.event_ids[0]);
+    const operation = required(admitHistoryOperation(supplied.operation, data));
+    if (!isHistoryEffect(operation) || operation.status !== "completed")
+      throw Error("Expected completed effect fixture");
+    expect(w.get("#history-operation").text()).toContain(required(operation.result.event_ids[0]));
     expect(w.find("#history-unconfirmed").exists()).toBe(false);
   }
   process.stdout.write("CADENCE_HISTORY_CALLS=" + JSON.stringify(calls) + "\n");

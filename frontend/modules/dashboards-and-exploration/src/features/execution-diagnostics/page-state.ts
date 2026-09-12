@@ -30,7 +30,8 @@ const enums: Record<string, string[]> = {
 function micros(value: string): bigint {
   const match =
     /^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})(?:[.,](\d{1,6}))?(Z|[+-]\d{2}:\d{2})$/.exec(value);
-  if (!match || value.length > 40) throw Error("Invalid diagnostics time");
+  if (!match || !match[1] || !match[3] || value.length > 40)
+    throw Error("Invalid diagnostics time");
   const date = match[1].replace(" ", "T");
   const calendar = Date.parse(date + "Z"),
     instant = Date.parse(date + match[3]);
@@ -50,7 +51,7 @@ export function readRuntimeQuery(value: unknown): Record<string, string> {
     if (
       typeof value !== "string" ||
       (!Object.hasOwn(enums, key) && !["from", "to"].includes(key)) ||
-      (Object.hasOwn(enums, key) && !enums[key].includes(value))
+      (Object.hasOwn(enums, key) && !enums[key]?.includes(value))
     )
       throw Error("Invalid runtime query");
   }

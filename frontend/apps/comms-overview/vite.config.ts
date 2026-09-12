@@ -69,6 +69,7 @@ function parseReleaseOutputArgument(argumentsList: string[]) {
 
   for (let index = 0; index < argumentsList.length; index += 1) {
     const argument = argumentsList[index];
+    if (argument === undefined) throw new Error("Missing release build argument.");
     let value: string | undefined;
 
     if (argument === "--outDir") {
@@ -92,11 +93,12 @@ function parseReleaseOutputArgument(argumentsList: string[]) {
     values.push(value);
   }
 
-  if (values.length !== 1) {
+  const [output] = values;
+  if (values.length !== 1 || output === undefined) {
     throw new Error("Release builds require exactly one --outDir with one value.");
   }
 
-  return values[0];
+  return output;
 }
 
 function canonicalPathWithMissingTail(path: string) {
@@ -177,11 +179,11 @@ function readJavaScriptLiteral(source: string, start: number) {
   if (quote !== "'" && quote !== '"' && quote !== "`") return null;
 
   for (let index = start + 1; index < source.length; index += 1) {
-    if (source[index] === "\\") {
+    if (source.charAt(index) === "\\") {
       index += 1;
       continue;
     }
-    if (source[index] === quote) {
+    if (source.charAt(index) === quote) {
       return {
         contentStart: start + 1,
         end: index + 1,
@@ -196,7 +198,7 @@ function readJavaScriptLiteral(source: string, start: number) {
 function skipJavaScriptTrivia(source: string, start: number) {
   let index = start;
   while (index < source.length) {
-    if (/\s/.test(source[index])) {
+    if (/\s/.test(source.charAt(index))) {
       index += 1;
       continue;
     }
@@ -218,7 +220,7 @@ function skipJavaScriptTrivia(source: string, start: number) {
 function generatedImportLiterals(source: string) {
   const literals = [];
   for (let index = 0; index < source.length; index += 1) {
-    const quote = source[index];
+    const quote = source.charAt(index);
     if (quote === "'" || quote === '"' || quote === "`") {
       const literal = readJavaScriptLiteral(source, index);
       if (!literal) return null;
@@ -292,7 +294,7 @@ function compactGeneratedHostInitializationSource(
 ) {
   let compacted = "";
   for (let index = 0; index < source.length; index += 1) {
-    const character = source[index];
+    const character = source.charAt(index);
     if (character === "'" || character === '"' || character === "`") {
       const literal = readJavaScriptLiteral(source, index);
       if (!literal) return null;
@@ -328,7 +330,7 @@ function normalizeGeneratedHostInitializationRuntime(source: string) {
   const runtimePairs = [
     ["),[])).init()", "),__VITE_PRELOAD__,import.meta.url)).init()"],
     ["}},[]),", "}},__VITE_PRELOAD__,import.meta.url),"],
-  ];
+  ] as const;
 
   let normalized = source;
   for (const [current, canonical] of runtimePairs) {
@@ -356,7 +358,7 @@ function canonicalHostInitializationSource(source: string) {
   let sharedCount = 0;
   for (const literal of generatedImportLiterals(source) ?? []) {
     const preloadMatch = preloadImport.exec(literal.value);
-    if (preloadMatch) {
+    if (preloadMatch?.[1]) {
       preloadCount += 1;
       edits.push({
         end: literal.contentStart + preloadMatch[1].length + "./vite-preload-helper-".length,
@@ -366,7 +368,7 @@ function canonicalHostInitializationSource(source: string) {
       continue;
     }
     const sharedMatch = sharedImport.exec(literal.value);
-    if (sharedMatch) {
+    if (sharedMatch?.[2]) {
       sharedCount += 1;
       const prefixLength = "./_virtual_mf-localSharedImportMap___mfe_internal__".length;
       const remoteStart = literal.contentStart + prefixLength;
@@ -496,7 +498,10 @@ function releaseOutputPlugin() {
         );
       }
 
-      const [[fileName, item]] = authoritativeHostInitialization;
+      const initialization = authoritativeHostInitialization[0];
+      if (!initialization)
+        throw new Error("release cleanup requires one authoritative host initialization chunk");
+      const [fileName, item] = initialization;
       if (
         Object.entries(bundle).some(
           ([owner, ownerItem]) =>
@@ -563,6 +568,7 @@ function releaseOutputPlugin() {
       }
       const [record] = matching;
       if (
+        !record ||
         record.type !== "chunk" ||
         record.isEntry !== false ||
         record.size !== new TextEncoder().encode(item.code).byteLength
@@ -642,11 +648,12 @@ export default defineConfig(({ command, mode }) => {
     test: {
       environment: "happy-dom",
     },
-    plugins: lazyPlugins(() => [
-      tailwindcss(),
-      vue(),
-      federation(releaseBuild ? releaseFederationConfig : federationConfig),
-      ...(releaseBuild ? [releaseOutputPlugin()] : []),
-    ]),
+    plugins:
+      lazyPlugins(() => [
+        tailwindcss(),
+        vue(),
+        federation(releaseBuild ? releaseFederationConfig : federationConfig),
+        ...(releaseBuild ? [releaseOutputPlugin()] : []),
+      ]) ?? [],
   };
 });

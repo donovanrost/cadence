@@ -2,9 +2,9 @@ import type { OpsPageContext } from "@cadence/plugin-sdk/ops-pages";
 import { readWorkspaceSnapshot } from "../../workspace";
 import type { SharedView, SharedViewKind } from "./contracts";
 
-const fail = (): never => {
+function fail(): never {
   throw Error("Invalid shared dashboard view");
-};
+}
 const record = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 function exact(v: unknown, keys: string[]): Record<string, unknown> {
@@ -19,6 +19,7 @@ function text(v: unknown, max: number, empty = false): string {
 }
 const id = (v: unknown) => {
   const s = text(v, 256);
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   if (/[\u0000-\u001f]/.test(s)) fail();
   return s;
 };
@@ -112,7 +113,7 @@ export function readSharedView(
   for (const [k, v] of Object.entries(m.runtime_context)) {
     if (!contextKeys.includes(k)) fail();
     text(v, 256);
-    if (Object.hasOwn(contextEnums, k) && !contextEnums[k].includes(v as string)) fail();
+    if (Object.hasOwn(contextEnums, k) && !contextEnums[k]?.includes(v as string)) fail();
     if (k === "from" || k === "to") timestamp(v);
   }
   if (m.data_semantics === "frozen_time_window") {
@@ -137,7 +138,7 @@ export function readSharedView(
     integer(d.version, 1, Number.MAX_SAFE_INTEGER - 1);
     integer(d.placements, 0, 1024);
     integer(d.sections, 0, 64);
-    const doc = JSON.parse(text(d.json, 524288));
+    const doc: unknown = JSON.parse(text(d.json, 524288));
     if (
       !record(doc) ||
       doc.organization_id !== m.organization_id ||
@@ -172,10 +173,11 @@ export function readSharedView(
       canvas.placements.some((p) => !authoredIds.includes(p.authored_id))
     )
       fail();
+    const definition = record(m.definition) ? m.definition : null;
     if (
-      !m.definition ||
-      canvas.document_version !== (m.definition as SharedView["definition"])!.version ||
-      canvas.name !== (m.definition as SharedView["definition"])!.name ||
+      !definition ||
+      canvas.document_version !== definition.version ||
+      canvas.name !== definition.name ||
       canvas.author ||
       canvas.document_mode !== (kind === "share" ? "published" : "snapshot")
     )

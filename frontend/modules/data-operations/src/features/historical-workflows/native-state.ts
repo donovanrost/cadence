@@ -2,6 +2,9 @@ import { computed, onBeforeUnmount, reactive, ref, shallowRef, watch } from "vue
 import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
 import {
   admitHistoryOperation,
+  isHistoryEffect,
+  type HistoryEffectAction,
+  type HistoryInputs,
   admitHistoryPage,
   same,
   type HistoryAction,
@@ -20,10 +23,8 @@ export function useHistoricalWorkflows(
     stale = ref(false),
     unknown = ref(false),
     notice = ref("");
-  const lastEffect = shallowRef<HistoryOperation | null>(
-    first.operation && !["read-page", "validate-request"].includes(first.operation.action)
-      ? first.operation
-      : null,
+  const lastEffect = shallowRef<HistoryOperation<HistoryEffectAction> | null>(
+    first.operation && isHistoryEffect(first.operation) ? first.operation : null,
   );
   const draft = reactive({ ...first.model.defaults });
   const reasons = reactive({ transition: "", retry: "", correction: "" });
@@ -71,8 +72,7 @@ export function useHistoricalWorkflows(
       return false;
     page.value = next;
     stale.value = false;
-    if (next.operation && !["read-page", "validate-request"].includes(next.operation.action))
-      lastEffect.value = next.operation;
+    if (next.operation && isHistoryEffect(next.operation)) lastEffect.value = next.operation;
     unknown.value = next.operation?.status === "unconfirmed";
     if (!unknown.value) awaiting = null;
     return true;
@@ -97,7 +97,7 @@ export function useHistoricalWorkflows(
       }
     }
   }
-  async function execute(action: HistoryAction, input: Record<string, unknown>) {
+  async function execute<A extends HistoryAction>(action: A, input: HistoryInputs[NoInfer<A>]) {
     if ((disabled.value && action !== "read-page") || pending.value || locked.value) return;
     pending.value = true;
     notice.value = "";
@@ -110,14 +110,14 @@ export function useHistoricalWorkflows(
       if (!op || op.sequence !== sequence || op.action !== action || !same(op.input, input))
         throw Error("unconfirmed");
       page.value = { ...page.value, sequence, operation: op };
-      if (!["read-page", "validate-request"].includes(action)) lastEffect.value = op;
+      if (isHistoryEffect(op)) lastEffect.value = op;
       unknown.value = op.status === "unconfirmed";
       if (!unknown.value) awaiting = null;
       await refresh();
       if (op.status === "rejected")
         notice.value =
           "The operation was not accepted. Review current evidence, permissions and input values before trying again.";
-      if (action === "validate-request" && op.result)
+      if (op.action === "validate-request" && op.status === "completed")
         notice.value = op.result.valid
           ? "The request is valid for the reviewed binding."
           : "The request is invalid or the binding has changed. Check the source, UTC range and input limits, then select the current binding.";

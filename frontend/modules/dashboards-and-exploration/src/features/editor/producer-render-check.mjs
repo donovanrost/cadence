@@ -1,3 +1,12 @@
+import {
+  fixtureRows,
+  fixtureString,
+  fixtureNumber,
+  fixtureContext,
+  fixtureRecord,
+} from "../../../../../test-support/json-fixture.ts";
+import { fixtureValue } from "../../../../../test-support/json-fixture.ts";
+import { required } from "../../../../../test-support/required.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,35 +25,42 @@ const server = await createServer({
   logLevel: "error",
 });
 try {
-  const { editorContribution } = await server.ssrLoadModule("/src/editor.ts");
-  const { default: RuntimeDefaultsFields } = await server.ssrLoadModule(
-    "/src/features/editor/RuntimeDefaultsFields.vue",
+  const { editorContribution } = /** @type {typeof import("../../editor.ts")} */ (
+    await server.ssrLoadModule("/src/editor.ts")
   );
-  const { readObservableChoices } = await server.ssrLoadModule(
-    "/src/features/editor/validation.ts",
-  );
-  for (const choices of JSON.parse(process.argv[3] || "[]")) {
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
+  const { default: RuntimeDefaultsFields } =
+    /** @type {typeof import("../../features/editor/RuntimeDefaultsFields.vue")} */ (
+      await server.ssrLoadModule("/src/features/editor/RuntimeDefaultsFields.vue")
+    );
+  const { readObservableChoices } =
+    /** @type {typeof import("../../features/editor/validation.ts")} */ (
+      await server.ssrLoadModule("/src/features/editor/validation.ts")
+    );
+  for (const choices of fixtureRows(process.argv[3] || "[]")) {
     const context = {
-      organizationId: choices.organization_id,
-      missionId: choices.mission_id,
-      resourceId: choices.dashboard_id,
+      organizationId: fixtureString(choices.organization_id),
+      missionId: fixtureString(choices.mission_id),
+      resourceId: fixtureString(choices.dashboard_id),
     };
     assert.equal(
       readObservableChoices(
         choices,
         context,
-        choices.document_version,
-        choices.query,
-        choices.staging_revision,
+        fixtureNumber(choices.document_version),
+        fixtureString(choices.query),
+        fixtureNumber(choices.staging_revision),
       ).options.length,
-      choices.options.length,
+      Array.isArray(choices.options) ? choices.options.length : -1,
     );
   }
-  for (const page of JSON.parse(process.argv[2])) {
+  for (const page of fixtureRows(process.argv[2])) {
     assert.equal(page.id, editorContribution.id);
     assert.equal(page.slot, editorContribution.slot);
     assert.equal(page.version, editorContribution.version);
-    const props = editorContribution.read(page.data, page.context);
+    const props = editorContribution.read(page.data, fixtureContext(page.context));
+    const model = props.state.model;
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks the SFC constructor at this registration or render boundary.
     const app = createSSRApp(editorContribution.component, {
       ...props,
       port: {
@@ -68,33 +84,34 @@ try {
       const doc = window.document;
       assert.ok(doc.getElementById("dashboard-editor-feature"));
       assert.equal(
-        doc.getElementById("editor-version").textContent,
-        `Draft v${page.data.model.document_version}`,
+        required(doc.getElementById("editor-version")).textContent,
+        `Draft v${model.document_version}`,
       );
-      assert.equal(doc.getElementById("editor-name").value, page.data.model.name);
+      assert.equal(fixtureValue(doc.getElementById("editor-name")), model.name);
+      assert.equal(doc.querySelectorAll("[data-editor-widget]").length, model.placements.length);
       assert.equal(
-        doc.querySelectorAll("[data-editor-widget]").length,
-        page.data.model.placements.length,
-      );
-      assert.equal(
-        doc.getElementById("editor-directory").getAttribute("href"),
-        `/missions/${encodeURIComponent(page.data.model.mission_id)}/ops/dashboards`,
+        required(doc.getElementById("editor-directory")).getAttribute("href"),
+        `/missions/${encodeURIComponent(model.mission_id)}/ops/dashboards`,
       );
       assert.ok(doc.getElementById("editor-runtime"));
       doc.body.innerHTML = await renderToString(
+        // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks the SFC constructor at this registration or render boundary.
         createSSRApp(RuntimeDefaultsFields, {
           modelValue: props.state.model.runtime_defaults_json,
         }),
       );
       assert.deepEqual(
-        JSON.parse(doc.getElementById("editor-runtime-json").value),
-        JSON.parse(page.data.model.runtime_defaults_json),
+        JSON.parse(fixtureValue(doc.getElementById("editor-runtime-json"))),
+        JSON.parse(model.runtime_defaults_json),
       );
-      const defaults = JSON.parse(page.data.model.runtime_defaults_json);
-      assert.equal(doc.getElementById("editor-runtime-time-mode").value, defaults.time?.mode ?? "");
+      const defaults = fixtureRecord(JSON.parse(model.runtime_defaults_json));
       assert.equal(
-        doc.getElementById("editor-runtime-data-realm").value,
-        defaults.data?.realm ?? "",
+        fixtureValue(doc.getElementById("editor-runtime-time-mode")),
+        defaults.time ? (fixtureRecord(defaults.time).mode ?? "") : "",
+      );
+      assert.equal(
+        fixtureValue(doc.getElementById("editor-runtime-data-realm")),
+        defaults.data ? (fixtureRecord(defaults.data).realm ?? "") : "",
       );
     } finally {
       await window.happyDOM.close();

@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { expect, test } from "vite-plus/test";
 import { mount } from "@vue/test-utils";
 import { listFixture } from "./provider-accounts.test-support";
@@ -22,31 +23,31 @@ test("directory rejects cross-account links, inconsistent counts, duplicate iden
       model.count = 9;
     },
     (model) => {
-      model.provider_accounts[0].href = "/provider-accounts/foreign";
+      required(model.provider_accounts[0]).href = "/provider-accounts/foreign";
     },
     (model) => {
-      model.provider_accounts[0].href = "javascript:alert(1)";
+      required(model.provider_accounts[0]).href = "javascript:alert(1)";
     },
     (model) => {
-      model.provider_accounts[0].href = "//foreign.test";
+      required(model.provider_accounts[0]).href = "//foreign.test";
     },
     (model) => {
-      model.provider_accounts[0].provider_account_id = "../escape";
+      required(model.provider_accounts[0]).provider_account_id = "../escape";
     },
     (model) => {
-      model.provider_accounts[0].__dom_id = "provider-accounts";
+      required(model.provider_accounts[0]).__dom_id = "provider-accounts";
     },
     (model) => {
-      model.provider_accounts[0].id = "different";
+      required(model.provider_accounts[0]).id = "different";
     },
     (model) => {
-      model.provider_accounts[0].config = "latest";
+      required(model.provider_accounts[0]).config = "latest";
     },
     (model) => {
-      model.provider_accounts[0].display_name = "";
+      required(model.provider_accounts[0]).display_name = "";
     },
     (model) => {
-      model.provider_accounts.push(model.provider_accounts[0]);
+      model.provider_accounts.push(required(model.provider_accounts[0]));
       model.count++;
     },
   ];
@@ -60,7 +61,7 @@ test("valid encoded account links remain bound to their identity", () => {
   const model = listFixture();
   const identity = "account?#";
   model.provider_accounts[0] = {
-    ...model.provider_accounts[0],
+    ...required(model.provider_accounts[0]),
     provider_account_id: identity,
     id: "provider-account-" + identity,
     __dom_id: "provider-account-" + identity,

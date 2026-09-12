@@ -1,16 +1,24 @@
+import {
+  fixtureRecord,
+  fixtureRecordAt,
+  fixtureString,
+  fixtureNumber,
+  fixtureArrayAt,
+} from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import DashboardSettings from "./DashboardSettings.vue";
 import SettingsLegacyRedirect from "./SettingsLegacyRedirect.vue";
 import { settingsContext, settingsFixture } from "./fixtures.test-support";
 
-const wrappers: ReturnType<typeof mount>[] = [];
+const wrappers: { unmount: () => void }[] = [];
 afterEach(() => {
   wrappers.splice(0).forEach((w) => w.unmount());
   vi.unstubAllGlobals();
 });
 function setup(
-  override?: (event: string, input: any) => Promise<unknown>,
+  override?: (event: string, input: unknown) => Promise<unknown>,
   initial = settingsFixture(),
 ) {
   let server = structuredClone(initial);
@@ -21,20 +29,34 @@ function setup(
   const dispose = vi.fn();
   const execute = vi.fn(
     override ||
-      (async (event: string, input: any) => {
+      (async (event: string, input: unknown) => {
         let receipt = null;
-        if (event === "page_settings") server.model.query = { ...input };
+        if (event === "page_settings")
+          server.model.query = {
+            after_share:
+              fixtureRecord(input).after_share === null
+                ? null
+                : fixtureString(fixtureRecord(input).after_share),
+            after_snapshot:
+              fixtureRecord(input).after_snapshot === null
+                ? null
+                : fixtureString(fixtureRecord(input).after_snapshot),
+            after_deployment:
+              fixtureRecord(input).after_deployment === null
+                ? null
+                : fixtureString(fixtureRecord(input).after_deployment),
+          };
         else {
-          server.sequence = input.sequence;
+          server.sequence = fixtureNumber(fixtureRecord(input).sequence);
           server.phase = event === "reload_settings" ? "ready" : "review";
           if (event !== "reload_settings") {
-            const command = input.command;
+            const command = fixtureRecordAt(input, "command");
             if (event === "save_settings") {
               Object.assign(server.model, {
-                name: command.name.trim(),
-                description: command.description.trim(),
-                tags: command.tags,
-                defaults_json: command.defaults_json,
+                name: fixtureString(command.name).trim(),
+                description: fixtureString(command.description).trim(),
+                tags: fixtureArrayAt(command, "tags").map(fixtureString),
+                defaults_json: fixtureString(command.defaults_json),
               });
               server.model.document_version++;
               server.model.revision++;
@@ -51,7 +73,7 @@ function setup(
               revision: server.model.revision,
               resource_id:
                 event === "revoke_share"
-                  ? command.share_id
+                  ? fixtureString(command.share_id)
                   : event === "create_share"
                     ? "created-share"
                     : event === "create_snapshot"
@@ -69,10 +91,10 @@ function setup(
       context: settingsContext,
       port: {
         execute,
-        navigate: (href) => {
+        navigate: (href: string) => {
           if (guard()) navigated.push(href);
         },
-        guardNavigation: (g) => {
+        guardNavigation: (g: () => boolean) => {
           guard = g;
           return dispose;
         },
@@ -82,7 +104,7 @@ function setup(
   wrappers.push(wrapper);
   return { wrapper, execute, confirm, navigated, canLeave: () => guard(), dispose };
 }
-async function edit(w: ReturnType<typeof mount>, value = "New Power") {
+async function edit(w: Pick<ReturnType<typeof mount>, "get">, value = "New Power") {
   await w.get("#settings-name").setValue(value);
 }
 
@@ -120,7 +142,7 @@ test("saves complete metadata with the observed version and remains consumed unt
 test("metadata pagination preserves a dirty form, native controls and the write sequence", async () => {
   const state = settingsFixture();
   state.model.shares.rows = Array.from({ length: 25 }, (_, i) => ({
-    ...state.model.shares.rows[0],
+    ...required(state.model.shares.rows[0]),
     id: "share-" + i,
   }));
   state.model.shares.next = "share-24";
@@ -138,7 +160,7 @@ test("metadata pagination preserves a dirty form, native controls and the write 
   expect((input as HTMLInputElement).value).toBe("New Power");
   await wrapper.get("#settings-form").trigger("submit");
   await flushPromises();
-  expect(execute.mock.calls[1][1].sequence).toBe(1);
+  expect(fixtureRecord(required(execute.mock.calls[1])[1]).sequence).toBe(1);
 });
 
 test("uncertain writes stay locked through ordinary refresh and rejected sequences can recover", async () => {
@@ -147,7 +169,11 @@ test("uncertain writes stay locked through ordinary refresh and rejected sequenc
     calls++;
     return calls === 1
       ? { status: "rejected", receipt: null, state: settingsFixture() }
-      : { status: "ok", receipt: null, state: { ...settingsFixture(), sequence: input.sequence } };
+      : {
+          status: "ok",
+          receipt: null,
+          state: { ...settingsFixture(), sequence: fixtureNumber(fixtureRecord(input).sequence) },
+        };
   });
   await edit(wrapper);
   await wrapper.get("#settings-form").trigger("submit");
@@ -211,7 +237,7 @@ test("shares use nullable or bounded expiration and snapshots use saved definiti
   await wrapper.get("#share-expiration").setValue("48");
   await wrapper.get("#share-form").trigger("submit");
   await flushPromises();
-  expect(execute.mock.calls[2][1].command.expires_in_hours).toBe(48);
+  expect(fixtureRecordAt(required(execute.mock.calls[2])[1], "command").expires_in_hours).toBe(48);
   await wrapper.get("#settings-reload").trigger("click");
   await flushPromises();
   await wrapper.get("#snapshot-form").trigger("submit");
@@ -235,13 +261,17 @@ test("shares use nullable or bounded expiration and snapshots use saved definiti
 test("failed pagination retains the local draft and does not consume a write sequence", async () => {
   const initial = settingsFixture();
   initial.model.shares.rows = Array.from({ length: 25 }, (_, i) => ({
-    ...initial.model.shares.rows[0],
+    ...required(initial.model.shares.rows[0]),
     id: "share-" + i,
   }));
   initial.model.shares.next = "share-24";
   const { wrapper, execute } = setup(async (event, input) => {
     if (event === "page_settings") throw Error("Transport unavailable");
-    return { status: "invalid", receipt: null, state: { ...initial, sequence: input.sequence } };
+    return {
+      status: "invalid",
+      receipt: null,
+      state: { ...initial, sequence: fixtureNumber(fixtureRecord(input).sequence) },
+    };
   }, initial);
   await edit(wrapper);
   const input = wrapper.get("#settings-name").element;
@@ -254,7 +284,7 @@ test("failed pagination retains the local draft and does not consume a write seq
   expect(wrapper.get("#settings-save").attributes("disabled")).toBeUndefined();
   await wrapper.get("#settings-form").trigger("submit");
   await flushPromises();
-  expect(execute.mock.calls[1][1].sequence).toBe(1);
+  expect(fixtureRecord(required(execute.mock.calls[1])[1]).sequence).toBe(1);
 });
 
 test("archive and revocation require confirmation and archive disables authoring", async () => {
@@ -266,7 +296,7 @@ test("archive and revocation require confirmation and archive disables authoring
   confirm.mockReturnValue(true);
   await wrapper.get('[data-revoke-share="share-1"]').trigger("click");
   await flushPromises();
-  expect(execute.mock.calls[0][1].command.share_id).toBe("share-1");
+  expect(fixtureRecordAt(required(execute.mock.calls[0])[1], "command").share_id).toBe("share-1");
   await wrapper.get("#settings-reload").trigger("click");
   await flushPromises();
   await wrapper.get("#settings-archive").trigger("click");
@@ -317,7 +347,11 @@ test("forged receipts cannot unlock the feature or mark local metadata saved", a
       revision: 4,
       resource_id: null,
     },
-    state: { ...settingsFixture(), sequence: input.sequence, phase: "review" },
+    state: {
+      ...settingsFixture(),
+      sequence: fixtureNumber(fixtureRecord(input).sequence),
+      phase: "review",
+    },
   }));
   await edit(wrapper);
   await wrapper.get("#settings-form").trigger("submit");

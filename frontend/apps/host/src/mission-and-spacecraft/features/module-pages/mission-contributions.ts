@@ -12,7 +12,7 @@ export function admitMissionPages(items: readonly MissionPageContribution<Compon
       entries.has(item.id) ||
       typeof item.read !== "function" ||
       (item.actions !== undefined &&
-        (!Array.isArray(item.actions) ||
+        (!isArray(item.actions) ||
           new Set(item.actions).size !== item.actions.length ||
           item.actions.some((action) => !/^[a-z][a-z0-9.-]*$/.test(action))))
     ) {
@@ -29,3 +29,8 @@ export function admitMissionPages(items: readonly MissionPageContribution<Compon
   return Object.freeze(Object.fromEntries(entries));
 }
 export const missionModulePages = admitMissionPages(communicationsMissionPages);
+
+// Inspect runtime input without widening the already declared readonly action type to any[].
+function isArray(value: unknown): boolean {
+  return Array.isArray(value);
+}

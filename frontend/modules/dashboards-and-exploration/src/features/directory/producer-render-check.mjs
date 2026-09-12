@@ -1,3 +1,4 @@
+import { fixtureRows, fixtureString } from "../../../../../test-support/json-fixture.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,12 +16,17 @@ const server = await createServer({
   logLevel: "error",
 });
 try {
-  const { directoryContribution } = await server.ssrLoadModule("/src/directory.ts");
-  for (const model of JSON.parse(process.argv[2])) {
+  // Vite loads the checked module dynamically; its exported type supplies the SSR interop contract.
+  const { directoryContribution } = /** @type {typeof import("../../directory.ts")} */ (
+    await server.ssrLoadModule("/src/directory.ts")
+  );
+  for (const raw of fixtureRows(process.argv[2])) {
     const props = directoryContribution.read(
-      { model, sequence: 0, phase: "editing" },
-      { organizationId: "producer-test", missionId: model.mission_id },
+      { model: raw, sequence: 0, phase: "editing" },
+      { organizationId: "producer-test", missionId: fixtureString(raw.mission_id) },
     );
+    const model = props.state.model;
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks the SFC constructor at this registration or render boundary.
     const app = createSSRApp(directoryContribution.component, {
       ...props,
       port: {

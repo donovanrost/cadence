@@ -1,10 +1,12 @@
+import { fixtureRecordAt } from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mount, flushPromises } from "@vue/test-utils";
 import ExecutionDiagnosticsPage from "./ExecutionDiagnosticsPage.vue";
 import { executionDiagnosticsContribution } from "./contribution";
 import { diagnosticsPageFixture, diagnosticContext } from "./fixtures.test-support";
 import { diagnosticsHref, readDiagnosticsPage, readRuntimeQuery } from "./page-state";
-const wrappers: ReturnType<typeof mount>[] = [];
+const wrappers: { unmount: () => void }[] = [];
 afterEach(() => {
   wrappers.splice(0).forEach((w) => w.unmount());
   vi.restoreAllMocks();
@@ -15,7 +17,7 @@ function setup(
     throw Error("Lost response");
   }),
 ) {
-  const navigate = vi.fn(),
+  const navigate = vi.fn((_: string) => {}),
     refresh = vi.fn(async () => {}),
     dispose = vi.fn();
   let guard = () => true;
@@ -27,7 +29,7 @@ function setup(
       port: {
         execute,
         navigate,
-        guardNavigation(fn) {
+        guardNavigation(fn: () => boolean) {
           guard = fn;
           return dispose;
         },
@@ -74,7 +76,7 @@ test("selection URLs preserve exact admitted time context without running an ins
   };
   const { wrapper, navigate, execute } = setup(state);
   await wrapper.get("#diagnostics-collection-frames").trigger("click");
-  const url = new URL(navigate.mock.calls[0][0], "http://cadence.test");
+  const url = new URL(required(navigate.mock.calls[0])[0], "http://cadence.test");
   expect(url.pathname).toBe("/missions/mission/ops/dashboards/dashboard/diagnostics");
   expect(Object.fromEntries(url.searchParams)).toEqual({
     ...state.runtime_query,
@@ -90,7 +92,7 @@ test("selection URLs preserve exact admitted time context without running an ins
   expect(wrapper.get("#diagnostics-collection-plan").attributes("aria-current")).toBe("true");
   expect(
     new URL(
-      wrapper.get("#diagnostics-viewer").attributes("href")!,
+      required(wrapper.get("#diagnostics-viewer").attributes("href")),
       "http://cadence.test",
     ).searchParams.get("from"),
   ).toBe(state.runtime_query.from);
@@ -128,12 +130,16 @@ test("explicit refresh is single flight, guards navigation and accepts only the 
 });
 test("mismatched or unavailable replies hide retained evidence", async () => {
   for (const mutate of [
-    (s: any) => s,
-    (s: any) => ({ ...s, sequence: 2 }),
-    (s: any) => ({ ...s, sequence: 1, publication_changed: true }),
-    (s: any) => ({ ...s, sequence: 1, selection: { ...s.selection, collection: "frames" } }),
-    (s: any) => ({ ...s, sequence: 1, runtime_query: { realm: "rehearsal" } }),
-    (s: any) => ({ ...s, sequence: 1, model: null }),
+    (s: unknown) => s,
+    (s: unknown) => ({ ...fixtureRecordAt(s), sequence: 2 }),
+    (s: unknown) => ({ ...fixtureRecordAt(s), sequence: 1, publication_changed: true }),
+    (s: unknown) => ({
+      ...fixtureRecordAt(s),
+      sequence: 1,
+      selection: { ...fixtureRecordAt(s, "selection"), collection: "frames" },
+    }),
+    (s: unknown) => ({ ...fixtureRecordAt(s), sequence: 1, runtime_query: { realm: "rehearsal" } }),
+    (s: unknown) => ({ ...fixtureRecordAt(s), sequence: 1, model: null }),
   ]) {
     const { wrapper } = setup(
       diagnosticsPageFixture(),

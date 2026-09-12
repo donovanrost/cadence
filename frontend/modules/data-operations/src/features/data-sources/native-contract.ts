@@ -1,3 +1,5 @@
+import type { Snapshot } from "@cadence/plugin-sdk/admission";
+import { oneOf, arrayOf, type Guard } from "@cadence/plugin-sdk/admission";
 export const sourceActions = [
   "read-page",
   "validate-registration",
@@ -38,9 +40,9 @@ export const pageKeys = [
 ] as const;
 export type PageKey = (typeof pageKeys)[number];
 export type Registration = Record<(typeof registrationFields)[number], string>;
-export type Context = { organization_id: string; mission_id: string };
-export type Page<T> = { entries: T[]; page: number; page_size: 25; has_next: boolean };
-export type Source = {
+export type Context = Snapshot<{ organization_id: string; mission_id: string }>;
+export type Page<T> = Snapshot<{ entries: T[]; page: number; page_size: 25; has_next: boolean }>;
+export type Source = Snapshot<{
   id: string;
   organization_id: string | null;
   mission_id: string | null;
@@ -56,8 +58,8 @@ export type Source = {
   backend: { status: string | null; operation: string | null };
   capabilities: { name: string; enabled: boolean }[];
   capabilities_more: boolean;
-};
-export type Binding = {
+}>;
+export type Binding = Snapshot<{
   id: string;
   source_id: string;
   logical_source: string;
@@ -71,21 +73,23 @@ export type Binding = {
   active_to: string | null;
   editable: boolean;
   evidence: string;
-};
-export type SourceEvent = {
+}>;
+export type SourceEvent = Snapshot<{
   id: string;
   source_id: string;
   type: string;
   status: string;
   actor_id: string | null;
   occurred_at: string;
-};
-export type BindingEvent = SourceEvent & {
-  binding_id: string;
-  previous_source_id: string | null;
-  version: number;
-};
-export type Observation = {
+}>;
+export type BindingEvent = Snapshot<
+  SourceEvent & {
+    binding_id: string;
+    previous_source_id: string | null;
+    version: number;
+  }
+>;
+export type Observation = Snapshot<{
   id: string;
   source_id: string;
   binding_id: string | null;
@@ -95,19 +99,23 @@ export type Observation = {
   replay_run_id: string | null;
   observed_at: string;
   reason: string | null;
-};
-export type HealthEvent = Observation & { state: string };
-export type Health = HealthEvent & { key: string; last_seen_at: string; transitions: number };
-export type Watermark = Observation & {
-  key: string;
-  complete_through: string | null;
-  latest_receipt_time: string | null;
-  retention_starts_at: string | null;
-  confidence: string;
-  sample_count: number;
-  last_seen_at: string;
-};
-export type Job = {
+}>;
+export type HealthEvent = Snapshot<Observation & { state: string }>;
+export type Health = Snapshot<
+  HealthEvent & { key: string; last_seen_at: string; transitions: number }
+>;
+export type Watermark = Snapshot<
+  Observation & {
+    key: string;
+    complete_through: string | null;
+    latest_receipt_time: string | null;
+    retention_starts_at: string | null;
+    confidence: string;
+    sample_count: number;
+    last_seen_at: string;
+  }
+>;
+export type Job = Snapshot<{
   id: string;
   run_id: string;
   type: string;
@@ -118,12 +126,14 @@ export type Job = {
   completed_at: string | null;
   failure_recorded: boolean;
   evidence: string;
-};
-export type Query = Record<PageKey, number> & {
-  data_source_id: string | null;
-  binding_id: string | null;
-};
-export type SourceModel = {
+}>;
+export type Query = Snapshot<
+  Record<PageKey, number> & {
+    data_source_id: string | null;
+    binding_id: string | null;
+  }
+>;
+export type SourceModel = Snapshot<{
   contract_version: 1;
   context: Context;
   mode: "reader" | "registration" | "settings";
@@ -143,24 +153,113 @@ export type SourceModel = {
   };
   adapters: string[];
   defaults: Registration;
+}>;
+type RegistrationInput = {
+  params: { source: Readonly<Registration> };
+  review: Record<string, never>;
+  confirmed: boolean;
 };
-export type SourceOperation = {
-  id: string;
-  sequence: number;
-  action: SourceAction;
-  input: Record<string, any>;
-  status: "completed" | "rejected" | "unconfirmed";
-  result: Record<string, any> | null;
-  feedback: string[];
+export type SourceDecisionAction =
+  | "disable-source"
+  | "enable-source"
+  | "reconcile-tsdb-backend"
+  | "deprovision-tsdb-backend"
+  | "provision-tsdb-backend"
+  | "probe-source";
+export type DeploymentAction = "retry-deployment-run" | "requeue-deployment-run";
+type SourceDecision = {
+  params: { "data-source-id": string };
+  review: { source: string };
+  confirmed: boolean;
 };
-export type SourcePage = {
+export type SourceInputs = {
+  "read-page": { query: Partial<Record<keyof Query, string | number | null>> };
+  "validate-registration": RegistrationInput;
+  "register-source": RegistrationInput;
+  "change-binding": {
+    params: { binding: { binding_id: string; data_source_id: string } };
+    review: { source: string; binding: string; target_source: string };
+    confirmed: boolean;
+  };
+  "rotate-source-credential": {
+    params: { "data-source-id": string; "credentials-ref": string };
+    review: { source: string };
+    confirmed: boolean;
+  };
+} & Record<SourceDecisionAction, SourceDecision> &
+  Record<
+    DeploymentAction,
+    { params: { "job-id": string }; review: { source: string; job: string }; confirmed: boolean }
+  >;
+export type SourceEffectAction = Exclude<SourceAction, "read-page" | "validate-registration">;
+type ScopedSource = {
+  dataSourceId: string;
+  organizationId: string;
+  missionId: string;
+  status: string;
+};
+type JobResult = { jobId: string; runId: string; missionId: string; status: string };
+type SourceEffectResult<A extends SourceEffectAction> = A extends "change-binding"
+  ? ScopedSource & { bindingId: string; bindingVersion: number }
+  : A extends DeploymentAction
+    ? JobResult
+    : A extends "rotate-source-credential"
+      ? {
+          reference: ScopedSource & { credentialsRef: string; credentialVersion: number };
+          eventId: string;
+        }
+      : A extends "probe-source"
+        ? {
+            status: { health: string | null; reason: string | null; observedAt: string | null };
+            event: "unchanged" | { dataSourceId: string; missionId: string; eventId: string };
+          }
+        : ScopedSource | { source: ScopedSource; job: JobResult };
+export type SourceReceipt<A extends SourceEffectAction> = {
+  readonly contract_version: 1;
+  readonly organization_id: string;
+  readonly mission_id: string;
+  readonly actor_id: string;
+  readonly operation_id: string;
+  readonly action: A;
+  readonly source_id: string;
+  readonly event_ids: readonly string[];
+  readonly result: Snapshot<SourceEffectResult<A>>;
+};
+type SourceResult<A extends SourceAction> = A extends "read-page"
+  ? { readonly page_changed: true }
+  : A extends "validate-registration"
+    ? { readonly valid: boolean; readonly feedback: readonly string[] }
+    : A extends SourceEffectAction
+      ? SourceReceipt<A>
+      : never;
+export type SourceCommand<A extends SourceAction = SourceAction> = A extends SourceAction
+  ? { readonly action: A; readonly input: Snapshot<SourceInputs[A]> }
+  : never;
+export type SourceOperation<A extends SourceAction = SourceAction> = A extends SourceAction
+  ? SourceCommand<A> & {
+      readonly id: string;
+      readonly sequence: number;
+      readonly feedback: readonly string[];
+    } & (
+        | { readonly status: "completed"; readonly result: SourceResult<A> }
+        | { readonly status: "rejected"; readonly result: null }
+        | {
+            readonly status: "unconfirmed";
+            readonly result: Readonly<{ source_id: string; operation_id: string }> | null;
+          }
+      )
+  : never;
+export function isSourceEffect(op: SourceOperation): op is SourceOperation<SourceEffectAction> {
+  return op.action !== "read-page" && op.action !== "validate-registration";
+}
+export type SourcePage = Snapshot<{
   model: SourceModel;
   actor_id: string;
   sequence: number;
   operation: SourceOperation | null;
   read_error: boolean;
-};
-const object = (v: any): v is Record<string, any> =>
+}>;
+const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 export const text = (v: unknown, max = 240): v is string =>
   typeof v === "string" && new TextEncoder().encode(v).length <= max;
@@ -170,10 +269,10 @@ const sequence = (v: unknown): v is number => count(v) && v <= 1000000;
 const hash = (v: unknown): v is string => typeof v === "string" && /^[a-f0-9]{64}$/.test(v);
 const instant = (v: unknown): v is string =>
   text(v) && /(?:Z|[+-]\d\d:\d\d)$/.test(v) && Number.isFinite(Date.parse(v));
-const optional = (v: unknown, admit: (v: any) => boolean) => v === null || admit(v);
-const keys = (v: Record<string, any>, expected: readonly string[]) =>
+const optional = <T>(v: unknown, admit: Guard<T>): v is T | null => v === null || admit(v);
+const keys = (v: Record<string, unknown>, expected: readonly string[]) =>
   Object.keys(v).length === expected.length && expected.every((k) => Object.hasOwn(v, k));
-export function same(a: any, b: any): boolean {
+export function same(a: unknown, b: unknown): boolean {
   return (
     a === b ||
     (object(a) &&
@@ -186,22 +285,21 @@ export function same(a: any, b: any): boolean {
       a.every((x, i) => same(x, b[i])))
   );
 }
-const page = (v: any, admit: (v: any) => boolean): boolean =>
+const page = <T extends { id: string }>(v: unknown, admit: Guard<T>): v is Page<T> =>
   object(v) &&
   sequence(v.page) &&
   v.page > 0 &&
   v.page_size === 25 &&
   typeof v.has_next === "boolean" &&
-  Array.isArray(v.entries) &&
+  arrayOf(v.entries, admit) &&
   v.entries.length <= 25 &&
   (!v.has_next || v.entries.length === 25) &&
-  v.entries.every(admit) &&
-  new Set(v.entries.map((x: any) => x.key ?? x.id)).size === v.entries.length;
-const source = (v: any, context: Context): boolean =>
+  new Set(v.entries.map((x) => ("key" in x ? x.key : x.id))).size === v.entries.length;
+const source = (v: unknown, context: Context): v is Source =>
   object(v) &&
   id(v.id) &&
-  [null, context.organization_id].includes(v.organization_id) &&
-  [null, context.mission_id].includes(v.mission_id) &&
+  oneOf([null, context.organization_id], v.organization_id) &&
+  oneOf([null, context.mission_id], v.mission_id) &&
   ["owner", "kind", "status", "isolation"].every((k) => id(v[k])) &&
   ["logical_source", "credential_reference", "event_id"].every((k) => optional(v[k], id)) &&
   v.editable ===
@@ -212,9 +310,9 @@ const source = (v: any, context: Context): boolean =>
   optional(v.backend.operation, text) &&
   Array.isArray(v.capabilities) &&
   v.capabilities.length <= 25 &&
-  v.capabilities.every((c: any) => object(c) && id(c.name) && typeof c.enabled === "boolean") &&
+  v.capabilities.every((c: unknown) => object(c) && id(c.name) && typeof c.enabled === "boolean") &&
   typeof v.capabilities_more === "boolean";
-const binding = (v: any): boolean =>
+const binding = (v: unknown): v is Binding =>
   object(v) &&
   ["id", "source_id", "logical_source", "realm", "status"].every((k) => id(v[k])) &&
   optional(v.dataset, text) &&
@@ -226,18 +324,19 @@ const binding = (v: any): boolean =>
   optional(v.active_to, instant) &&
   typeof v.editable === "boolean" &&
   hash(v.evidence);
-const sourceEvent = (v: any): boolean =>
+const sourceEvent = (v: unknown): v is SourceEvent & Record<string, unknown> =>
   object(v) &&
   ["id", "source_id", "type", "status"].every((k) => id(v[k])) &&
   optional(v.actor_id, id) &&
   instant(v.occurred_at);
-const bindingEvent = (v: any): boolean =>
+const bindingEvent = (v: unknown): v is BindingEvent =>
   sourceEvent(v) &&
+  object(v) &&
   id(v.binding_id) &&
   optional(v.previous_source_id, id) &&
   count(v.version) &&
   v.version > 0;
-const observation = (v: any): boolean =>
+const observation = (v: unknown): v is Observation & Record<string, unknown> =>
   object(v) &&
   id(v.id) &&
   id(v.source_id) &&
@@ -246,11 +345,13 @@ const observation = (v: any): boolean =>
     optional(v[k], text),
   ) &&
   instant(v.observed_at);
-const healthEvent = (v: any): boolean => observation(v) && id(v.state);
-const health = (v: any): boolean =>
-  healthEvent(v) && id(v.key) && instant(v.last_seen_at) && count(v.transitions);
-const watermark = (v: any): boolean =>
+const healthEvent = (v: unknown): v is HealthEvent & Record<string, unknown> =>
+  observation(v) && object(v) && id(v.state);
+const health = (v: unknown): v is Health =>
+  healthEvent(v) && object(v) && id(v.key) && instant(v.last_seen_at) && count(v.transitions);
+const watermark = (v: unknown): v is Watermark =>
   observation(v) &&
+  object(v) &&
   id(v.key) &&
   ["complete_through", "latest_receipt_time", "retention_starts_at"].every((k) =>
     optional(v[k], instant),
@@ -258,41 +359,41 @@ const watermark = (v: any): boolean =>
   id(v.confidence) &&
   count(v.sample_count) &&
   instant(v.last_seen_at);
-const job = (v: any): boolean =>
+const job = (v: unknown): v is Job =>
   object(v) &&
   id(v.id) &&
   id(v.run_id) &&
-  ["managed_questdb_provisioning", "tsdb_backend_lifecycle"].includes(v.type) &&
-  ["queued", "running", "completed", "failed"].includes(v.status) &&
+  oneOf(["managed_questdb_provisioning", "tsdb_backend_lifecycle"], v.type) &&
+  oneOf(["queued", "running", "completed", "failed"], v.status) &&
   count(v.attempts) &&
   optional(v.operation, text) &&
   optional(v.started_at, instant) &&
   optional(v.completed_at, instant) &&
   typeof v.failure_recorded === "boolean" &&
   hash(v.evidence);
-const registration = (v: any): boolean =>
+const registration = (v: unknown): v is Registration =>
   object(v) &&
   keys(v, registrationFields) &&
   registrationFields.every((k) => text(v[k], k === "endpoint_ref" ? 2048 : 240));
-const query = (v: any): boolean =>
+const query = (v: unknown): v is Query =>
   object(v) &&
   keys(v, [...pageKeys, "data_source_id", "binding_id"]) &&
   pageKeys.every((k) => sequence(v[k]) && v[k] > 0) &&
   optional(v.data_source_id, id) &&
   optional(v.binding_id, id);
-export function admitSourceModel(v: any, context: Context, mode: string): SourceModel | null {
+function validSourceModel(v: unknown, context: Context, mode: string): v is SourceModel {
   try {
     if (
       !object(v) ||
       v.contract_version !== 1 ||
       !same(v.context, context) ||
       v.mode !== mode ||
-      !["reader", "registration", "settings"].includes(mode) ||
+      !oneOf(["reader", "registration", "settings"], mode) ||
       !query(v.query) ||
       !object(v.permissions) ||
       typeof v.permissions.manage !== "boolean" ||
       (mode !== "reader" && !v.permissions.manage) ||
-      !page(v.sources, (x) => source(x, context)) ||
+      !page(v.sources, (x): x is Source => source(x, context)) ||
       !page(v.bindings, binding) ||
       !registration(v.defaults) ||
       !Array.isArray(v.adapters) ||
@@ -302,49 +403,66 @@ export function admitSourceModel(v: any, context: Context, mode: string): Source
       v.sources.page !== v.query.page ||
       v.bindings.page !== v.query.bindings_page
     )
-      return null;
+      return false;
     const s = v.selected;
     if (s === null)
-      return mode !== "settings" && v.query.data_source_id === null && v.query.binding_id === null
-        ? (v as SourceModel)
-        : null;
+      return mode !== "settings" && v.query.data_source_id === null && v.query.binding_id === null;
     if (
       mode === "registration" ||
       !object(s) ||
       !source(s.source, context) ||
       s.source.id !== v.query.data_source_id ||
-      !v.bindings.entries.every((b: Binding) => b.source_id === s.source.id) ||
       !(s.binding === null
         ? v.query.binding_id === null
         : binding(s.binding) &&
           s.binding.id === v.query.binding_id &&
           s.binding.source_id === s.source.id)
     )
-      return null;
-    const collections: [string, PageKey, (x: any) => boolean][] = [
-      ["events", "events_page", sourceEvent],
-      ["binding_events", "binding_events_page", bindingEvent],
-      ["health", "health_page", health],
-      ["health_events", "health_events_page", healthEvent],
-      ["watermarks", "watermarks_page", watermark],
-      ["jobs", "jobs_page", job],
-    ];
-    for (const [key, selector, admit] of collections) {
-      if (!page(s[key], admit) || s[key].page !== v.query[selector]) return null;
-      if (key === "binding_events") {
-        if (!s[key].entries.every((e: BindingEvent) => e.binding_id === s.binding?.id)) return null;
-      } else if (
-        key !== "jobs" &&
-        !s[key].entries.every((e: SourceEvent) => e.source_id === s.source.id)
-      )
-        return null;
-    }
-    return v as SourceModel;
+      return false;
+    const selectedSource = s.source,
+      selectedBinding = binding(s.binding) ? s.binding : null;
+    if (!v.bindings.entries.every((b) => b.source_id === selectedSource.id)) return false;
+    if (
+      !page(s.events, sourceEvent) ||
+      s.events.page !== v.query.events_page ||
+      !s.events.entries.every((e) => e.source_id === selectedSource.id)
+    )
+      return false;
+    if (
+      !page(s.binding_events, bindingEvent) ||
+      s.binding_events.page !== v.query.binding_events_page ||
+      !s.binding_events.entries.every((e) => e.binding_id === selectedBinding?.id)
+    )
+      return false;
+    if (
+      !page(s.health, health) ||
+      s.health.page !== v.query.health_page ||
+      !s.health.entries.every((e) => e.source_id === selectedSource.id)
+    )
+      return false;
+    if (
+      !page(s.health_events, healthEvent) ||
+      s.health_events.page !== v.query.health_events_page ||
+      !s.health_events.entries.every((e) => e.source_id === selectedSource.id)
+    )
+      return false;
+    if (
+      !page(s.watermarks, watermark) ||
+      s.watermarks.page !== v.query.watermarks_page ||
+      !s.watermarks.entries.every((e) => e.source_id === selectedSource.id)
+    )
+      return false;
+    if (!page(s.jobs, job) || s.jobs.page !== v.query.jobs_page) return false;
+    return true;
   } catch {
-    return null;
+    return false;
   }
 }
-export function validInput(v: any, action: SourceAction): boolean {
+export function admitSourceModel(v: unknown, context: Context, mode: string): SourceModel | null {
+  return validSourceModel(v, context, mode) ? v : null;
+}
+
+export function validInput(v: unknown, action: SourceAction): boolean {
   if (!object(v)) return false;
   if (action === "read-page")
     return (
@@ -352,7 +470,7 @@ export function validInput(v: any, action: SourceAction): boolean {
       object(v.query) &&
       Object.entries(v.query).every(
         ([k, x]) =>
-          [...pageKeys, "data_source_id", "binding_id"].includes(k) &&
+          oneOf([...pageKeys, "data_source_id", "binding_id"], k) &&
           (x === null || text(x) || sequence(x)),
       )
     );
@@ -363,7 +481,7 @@ export function validInput(v: any, action: SourceAction): boolean {
     typeof v.confirmed !== "boolean"
   )
     return false;
-  const reviewKeys = ["register-source", "validate-registration"].includes(action)
+  const reviewKeys = oneOf(["register-source", "validate-registration"], action)
     ? []
     : action === "change-binding"
       ? ["source", "binding", "target_source"]
@@ -371,17 +489,18 @@ export function validInput(v: any, action: SourceAction): boolean {
         ? ["source", "job"]
         : ["source"];
   if (!keys(v.review, reviewKeys) || !Object.values(v.review).every(hash)) return false;
-  if (["register-source", "validate-registration"].includes(action))
+  if (oneOf(["register-source", "validate-registration"], action))
     return (
       keys(v.params, ["source"]) &&
       registration(v.params.source) &&
       !!v.params.source.data_source_id.trim() &&
       !!v.params.source.logical_source.trim() &&
-      ["managed_tsdb", "byo_tsdb"].includes(v.params.source.kind) &&
-      ["shared", "org_isolated", "mission_isolated", "customer_owned"].includes(
+      oneOf(["managed_tsdb", "byo_tsdb"], v.params.source.kind) &&
+      oneOf(
+        ["shared", "org_isolated", "mission_isolated", "customer_owned"],
         v.params.source.isolation_level,
       ) &&
-      ["questdb", "postgres_projection"].includes(v.params.source.storage) &&
+      oneOf(["questdb", "postgres_projection"], v.params.source.storage) &&
       (v.params.source.kind === "byo_tsdb"
         ? !!v.params.source.credentials_ref.trim() && v.params.source.isolation_level !== "shared"
         : v.params.source.isolation_level !== "customer_owned")
@@ -400,7 +519,14 @@ export function validInput(v: any, action: SourceAction): boolean {
       : ["data-source-id"];
   return keys(v.params, expected) && Object.values(v.params).every(id);
 }
-function receipt(v: any, op: SourceOperation, p: Pick<SourcePage, "model" | "actor_id">): boolean {
+export function isSourceCommand(v: unknown): v is SourceCommand & Record<string, unknown> {
+  return object(v) && oneOf(sourceActions, v.action) && validInput(v.input, v.action);
+}
+function receipt(
+  v: unknown,
+  op: SourceCommand<SourceEffectAction> & { id: string },
+  p: Pick<SourcePage, "model" | "actor_id">,
+): boolean {
   if (
     !object(v) ||
     v.contract_version !== 1 ||
@@ -422,13 +548,13 @@ function receipt(v: any, op: SourceOperation, p: Pick<SourcePage, "model" | "act
       ? op.input.params.source.data_source_id.trim()
       : p.model.selected?.source.id;
   if (v.source_id !== expectedSource) return false;
-  const scoped = (x: any, sourceId = v.source_id) =>
+  const scoped = (x: unknown, sourceId = v.source_id) =>
     object(x) &&
     x.dataSourceId === sourceId &&
     x.organizationId === v.organization_id &&
     x.missionId === v.mission_id &&
     id(x.status);
-  const jobResult = (x: any) =>
+  const jobResult = (x: unknown) =>
     object(x) && id(x.jobId) && id(x.runId) && x.missionId === v.mission_id && id(x.status);
   const r = v.result;
   if (op.action === "change-binding")
@@ -441,10 +567,11 @@ function receipt(v: any, op: SourceOperation, p: Pick<SourcePage, "model" | "act
   if (op.action === "rotate-source-credential")
     return (
       scoped(r.reference) &&
+      object(r.reference) &&
       r.reference.credentialsRef === op.input.params["credentials-ref"] &&
       count(r.reference.credentialVersion) &&
       id(r.eventId) &&
-      v.event_ids.includes(r.eventId)
+      oneOf(v.event_ids, r.eventId)
     );
   if (op.action === "probe-source")
     return (
@@ -457,32 +584,31 @@ function receipt(v: any, op: SourceOperation, p: Pick<SourcePage, "model" | "act
           r.event.dataSourceId === v.source_id &&
           r.event.missionId === v.mission_id &&
           id(r.event.eventId) &&
-          v.event_ids.includes(r.event.eventId)))
+          oneOf(v.event_ids, r.event.eventId)))
     );
   if (object(r.job)) return scoped(r.source) && jobResult(r.job);
   return scoped(r);
 }
-export function admitSourceOperation(
-  v: any,
+function validSourceOperation(
+  v: unknown,
   p: Pick<SourcePage, "model" | "actor_id">,
-): SourceOperation | null {
+): v is SourceOperation {
   try {
     if (
-      !object(v) ||
+      !isSourceCommand(v) ||
       !id(v.id) ||
       !sequence(v.sequence) ||
       !v.sequence ||
-      !sourceActions.includes(v.action) ||
-      !validInput(v.input, v.action) ||
-      !["completed", "rejected", "unconfirmed"].includes(v.status) ||
+      !oneOf(["completed", "rejected", "unconfirmed"], v.status) ||
       !Array.isArray(v.feedback) ||
       v.feedback.length > 10 ||
-      !v.feedback.every((x: any) => text(x))
+      !v.feedback.every((x: unknown) => text(x))
     )
-      return null;
-    if (v.status === "rejected") return v.result === null ? (v as SourceOperation) : null;
+      return false;
+    if (v.status === "rejected") return v.result === null;
     if (v.status === "unconfirmed")
-      return v.result === null ||
+      return (
+        v.result === null ||
         (object(v.result) &&
           keys(v.result, ["source_id", "operation_id"]) &&
           id(v.result.source_id) &&
@@ -491,24 +617,28 @@ export function admitSourceOperation(
             (v.action === "register-source"
               ? v.input.params.source.data_source_id.trim()
               : p.model.selected?.source.id))
-        ? (v as SourceOperation)
-        : null;
-    if (v.action === "read-page")
-      return same(v.result, { page_changed: true }) ? (v as SourceOperation) : null;
+      );
+    if (v.action === "read-page") return same(v.result, { page_changed: true });
     if (v.action === "validate-registration")
-      return object(v.result) &&
+      return (
+        object(v.result) &&
         typeof v.result.valid === "boolean" &&
         Array.isArray(v.result.feedback) &&
         v.result.feedback.length <= 20 &&
-        v.result.feedback.every((x: any) => text(x))
-        ? (v as SourceOperation)
-        : null;
-    return receipt(v.result, v as SourceOperation, p) ? (v as SourceOperation) : null;
+        v.result.feedback.every((x: unknown) => text(x))
+      );
+    return receipt(v.result, { ...v, id: v.id }, p);
   } catch {
-    return null;
+    return false;
   }
 }
-export function admitSourcePage(v: any, context: Context, mode: string): SourcePage | null {
+export function admitSourceOperation(
+  v: unknown,
+  p: Pick<SourcePage, "model" | "actor_id">,
+): SourceOperation | null {
+  return validSourceOperation(v, p) ? v : null;
+}
+export function admitSourcePage(v: unknown, context: Context, mode: string): SourcePage | null {
   try {
     const model = object(v) && admitSourceModel(v.model, context, mode);
     if (!model || !id(v.actor_id) || !sequence(v.sequence) || typeof v.read_error !== "boolean")

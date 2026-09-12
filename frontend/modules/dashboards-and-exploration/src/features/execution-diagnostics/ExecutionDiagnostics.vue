@@ -18,9 +18,11 @@ const props = defineProps<{
 const emit = defineEmits<{ select: [selection: DiagnosticSelection] }>();
 const model = computed(() => readExecutionDiagnostics(props.model, props.context));
 const selection = computed(() => readSelection(props.selection));
-const collection = computed(() =>
-  model.value.collections.find((c) => c.id === selection.value.collection)!,
-);
+const collection = computed(() => {
+  const selected = model.value.collections.find((c) => c.id === selection.value.collection);
+  if (!selected) throw Error("The selected diagnostic collection is unavailable");
+  return selected;
+});
 const rows = computed(() => matchingRows(collection.value.rows, selection.value.filter));
 const selected = computed(() =>
   collection.value.rows.find((row) => row.id === selection.value.row),

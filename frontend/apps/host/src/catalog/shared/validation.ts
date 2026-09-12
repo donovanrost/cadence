@@ -37,7 +37,7 @@ const attributeChecks: Record<string, Check> = {
 export const attrs: Check = (value) =>
   record(value) &&
   Object.entries(value).every(
-    ([key, item]) => Object.hasOwn(attributeChecks, key) && attributeChecks[key]!(item),
+    ([key, item]) => Object.hasOwn(attributeChecks, key) && (attributeChecks[key]?.(item) ?? false),
   );
 export const element = shape({ attrs });
 export const label = shape({ attrs, text });

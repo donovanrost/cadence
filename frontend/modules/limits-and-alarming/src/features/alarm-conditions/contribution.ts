@@ -7,6 +7,7 @@ export const alarmConditionsContribution = {
   slot: "ops.page",
   version: 1,
   title: "Alarm conditions",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   component: AlarmConditionsPanel,
   navigation: true,
   query: true,

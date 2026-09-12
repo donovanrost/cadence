@@ -20,5 +20,6 @@ export function admitReadSurface(
   if (version !== 1 || !Object.hasOwn(readSurfaces, surfaceId))
     throw new Error("Unsupported Communications read surface.");
   const surface = readSurfaces[surfaceId as keyof typeof readSurfaces];
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   return { component: surface.component, props: surface.admit(payload, context) };
 }

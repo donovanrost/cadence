@@ -3,7 +3,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Exercise client compilation and native controls with actual producer props.
-const props = JSON.parse(process.argv[2]);
+const input = process.argv[2];
+if (input === undefined) throw Error("Missing native review fixture");
+/** @type {unknown} */
+const props = JSON.parse(input);
 process.stdout.write(
   execFileSync(
     "corepack",

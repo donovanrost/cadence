@@ -332,14 +332,16 @@ export function usePacketBindings(
   }
   async function save() {
     if (!canSave.value) return;
-    const config = page.value.configuration!;
+    const config = page.value.configuration,
+      endpoint = draft.value.endpoint;
+    if (!config || !endpoint) return;
     const input: SelectionInput = {
       expected_review: draft.value.review,
       expected_configuration_version: config.version,
       input_id: "telemetry-fields",
       input_version: 1,
       catalog_revision_id: config.catalog_revision_id,
-      source_endpoint_ref: draft.value.endpoint!.id,
+      source_endpoint_ref: endpoint.id,
       selected_packet_ids: [...draft.value.ids],
     };
     pending.value = { key: crypto.randomUUID(), input };

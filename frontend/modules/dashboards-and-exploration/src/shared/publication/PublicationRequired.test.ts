@@ -31,7 +31,7 @@ for (const contribution of [workspaceContribution, executionDiagnosticsContribut
     const wrapper = mount(contribution.component, {
       props: {
         ...contribution.read(requirement, context),
-        port: { execute, navigate: vi.fn() },
+        port: { execute, navigate: vi.fn((_: string) => {}) },
         refresh,
       },
     });

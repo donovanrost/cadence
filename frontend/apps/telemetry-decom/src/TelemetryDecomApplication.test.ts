@@ -1,3 +1,6 @@
+import { fixtureFeaturePort } from "../../../test-support/feature-port";
+import { required } from "../../../test-support/required";
+import type { PacketPort } from "@cadence/telemetry-decom/packet-bindings";
 import "./env.d.ts";
 
 import { flushPromises, mount } from "@vue/test-utils";
@@ -5,6 +8,9 @@ import {
   assertReleaseMatchesModule,
   type CatalogApplication,
   type HostBridge,
+  type HostQueryRequest,
+  type HostActionRequest,
+  type HostActionReceipt,
   type HostContext,
 } from "@cadence/plugin-sdk";
 import { describe, expect, it, vi } from "vite-plus/test";
@@ -53,7 +59,7 @@ function applicationFor(surfaceId: string): CatalogApplication {
     displayName: manifest.application.displayName,
     description: manifest.application.description,
     package: { packageId: manifest.package.packageId, version: manifest.package.version },
-    surface: manifest.surfaces.find((surface) => surface.surfaceId === surfaceId)!,
+    surface: required(manifest.surfaces.find((surface) => surface.surfaceId === surfaceId)),
     release: {
       federation: "module_federation",
       releaseId: "telemetry-decom-v1",
@@ -98,13 +104,13 @@ describe("Telemetry Decom federated application adapter", () => {
 
   it("mounts both published surfaces and uses each declared query", async () => {
     for (const surface of manifest.surfaces) {
-      const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
+      const query = vi.fn<(request: HostQueryRequest) => Promise<unknown>>().mockResolvedValue({});
       const wrapper = mount(TelemetryDecomApplication, {
         props: {
           application: applicationFor(surface.surfaceId),
           surface,
           context,
-          bridge: { query, execute: vi.fn(), subscribe: vi.fn() },
+          bridge: bridgeFor(query),
         },
         global: {
           stubs: {
@@ -127,11 +133,15 @@ describe("Telemetry Decom federated application adapter", () => {
   });
 
   it("passes the public packet feature a scoped read, navigation and idempotent action port", async () => {
-    const surface = manifest.surfaces.find((item) => item.surfaceId === "packet_bindings")!;
+    const surface = required(
+      manifest.surfaces.find((item) => item.surfaceId === "packet_bindings"),
+    );
     const receipt = { receiptId: "receipt-1", completedAt: "2026-09-04T00:00:00Z", result: {} };
-    const execute = vi.fn<HostBridge["execute"]>().mockResolvedValue(receipt);
+    const execute = vi
+      .fn<(request: HostActionRequest<unknown>) => Promise<HostActionReceipt<unknown>>>()
+      .mockResolvedValue(receipt);
     const query = vi
-      .fn<HostBridge["query"]>()
+      .fn<(request: HostQueryRequest) => Promise<unknown>>()
       .mockResolvedValue({ trusted_surface: { contract_version: 1 } });
     const navigate = vi.fn();
     const wrapper = mount(TelemetryDecomApplication, {
@@ -139,7 +149,7 @@ describe("Telemetry Decom federated application adapter", () => {
         application: applicationFor("packet_bindings"),
         surface,
         context,
-        bridge: { query, execute, navigate, subscribe: vi.fn() },
+        bridge: { ...bridgeFor(query, execute), navigate },
       },
       global: {
         stubs: {
@@ -155,8 +165,16 @@ describe("Telemetry Decom federated application adapter", () => {
     const feature = wrapper.findComponent({ name: "PacketBindingsSurface" });
     expect(feature.props("document")).toEqual({ contract_version: 1 });
     expect(feature.props("hostContext")).toEqual(context);
-    const port = feature.props("port");
-    const input = { selected_packet_ids: ["packet-1"] };
+    const port = fixtureFeaturePort(feature.props("port"));
+    const input: Parameters<PacketPort["save"]>[0] = {
+      expected_review: "review-1",
+      expected_configuration_version: 1,
+      input_id: "telemetry-fields",
+      input_version: 1,
+      catalog_revision_id: "catalog-1",
+      source_endpoint_ref: "endpoint-1",
+      selected_packet_ids: ["packet-1"],
+    };
     await expect(port.save(input, "stable-retry-key")).resolves.toEqual(receipt);
     expect(execute).toHaveBeenCalledWith({
       applicationKey: "telemetry_decom",
@@ -181,15 +199,17 @@ describe("Telemetry Decom federated application adapter", () => {
   });
 
   it("shows rejected actions without replacing the current surface", async () => {
-    const surface = manifest.surfaces.find((item) => item.surfaceId === "manage")!;
-    const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
-    const execute = vi.fn<HostBridge["execute"]>().mockRejectedValue(new Error("action denied"));
+    const surface = required(manifest.surfaces.find((item) => item.surfaceId === "manage"));
+    const query = vi.fn<(request: HostQueryRequest) => Promise<unknown>>().mockResolvedValue({});
+    const execute = vi
+      .fn<(request: HostActionRequest<unknown>) => Promise<HostActionReceipt<unknown>>>()
+      .mockRejectedValue(new Error("action denied"));
     const wrapper = mount(TelemetryDecomApplication, {
       props: {
         application: applicationFor("manage"),
         surface,
         context,
-        bridge: { query, execute, subscribe: vi.fn() },
+        bridge: bridgeFor(query, execute),
       },
       global: {
         stubs: {
@@ -210,12 +230,12 @@ describe("Telemetry Decom federated application adapter", () => {
   });
 
   it("keeps the newest overlapping action receipt and refresh authoritative state", async () => {
-    const surface = manifest.surfaces.find((item) => item.surfaceId === "manage")!;
-    const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
+    const surface = required(manifest.surfaces.find((item) => item.surfaceId === "manage"));
+    const query = vi.fn<(request: HostQueryRequest) => Promise<unknown>>().mockResolvedValue({});
     const first = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
     const second = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
     const execute = vi
-      .fn<HostBridge["execute"]>()
+      .fn<(request: HostActionRequest<unknown>) => Promise<HostActionReceipt<unknown>>>()
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
     const wrapper = mount(TelemetryDecomApplication, {
@@ -223,7 +243,7 @@ describe("Telemetry Decom federated application adapter", () => {
         application: applicationFor("manage"),
         surface,
         context,
-        bridge: { query, execute, subscribe: vi.fn() },
+        bridge: bridgeFor(query, execute),
       },
       global: {
         stubs: {
@@ -251,26 +271,41 @@ describe("Telemetry Decom federated application adapter", () => {
 });
 
 function deferred<TResult>() {
-  let resolve!: (value: TResult | PromiseLike<TResult>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<TResult>((resolvePromise, rejectPromise) => {
+  let resolve: ((value: TResult | PromiseLike<TResult>) => void) | undefined;
+  const promise = new Promise<TResult>((resolvePromise) => {
     resolve = resolvePromise;
-    reject = rejectPromise;
   });
-  return { promise, resolve, reject };
+  return { promise, resolve: required(resolve) };
+}
+
+// SDK interop: these mocks return unknown documents, which the feature adapter must admit.
+function bridgeFor(
+  query: (request: HostQueryRequest) => Promise<unknown>,
+  execute: (
+    request: HostActionRequest<unknown>,
+  ) => Promise<HostActionReceipt<unknown>> = async () => {
+    throw Error("Unexpected action");
+  },
+): HostBridge {
+  return {
+    query: async <TResult>(request: HostQueryRequest) => (await query(request)) as TResult,
+    execute: async <TInput, TResult>(request: HostActionRequest<TInput>) =>
+      (await execute(request)) as HostActionReceipt<TResult>,
+    subscribe: vi.fn(),
+  };
 }
 
 it.each(["unknown", "toString", "constructor", "__proto__"])(
   "rejects unsupported renderer %s before querying",
   async (surfaceId) => {
-    const valid = manifest.surfaces[0]!;
+    const valid = required(manifest.surfaces[0]);
     const query = vi.fn<() => Promise<never>>().mockRejectedValue(new Error("unexpected query"));
     const wrapper = mount(TelemetryDecomApplication, {
       props: {
         application: applicationFor(valid.surfaceId),
         surface: { ...valid, surfaceId },
         context,
-        bridge: { query, execute: vi.fn(), subscribe: vi.fn() },
+        bridge: bridgeFor(query),
       },
     });
     await flushPromises();

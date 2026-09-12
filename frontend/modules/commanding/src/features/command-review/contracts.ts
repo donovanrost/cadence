@@ -1,20 +1,33 @@
+import { oneOf, arrayOf, record, type Snapshot } from "@cadence/plugin-sdk/admission";
 import type { OpsPageContext } from "@cadence/plugin-sdk/ops-pages";
-export type Actor = { actor_kind?: string; user_id?: string; service_identity_id?: string };
-export type Request = {
+export type Actor = Snapshot<{
+  actor_kind?: string;
+  user_id?: string;
+  service_identity_id?: string;
+}>;
+export type Request = Snapshot<{
   command_request_id: string;
   source_endpoint_ref: string;
   mission_model_revision_id: string;
   command_id: string;
   command_name: string;
   command_display_name: string | null;
-  lifecycle_state: string;
-  verification_state: string | null;
+  lifecycle_state:
+    | "draft"
+    | "validated"
+    | "approval_pending"
+    | "approved"
+    | "rejected"
+    | "queued"
+    | "released"
+    | "canceled";
+  verification_state: "not_required" | "pending" | "satisfied" | "failed" | "timed_out" | null;
   priority: number;
   source_command_stage_id: string | null;
   source_staged_command_item_id: string | null;
   argument_values_json: string;
   resolved_argument_values_json: string;
-  significance: string | null;
+  significance: "routine" | "warning" | "critical" | "hazardous" | null;
   critical: boolean;
   hazardous: boolean;
   subsystem: string | null;
@@ -29,23 +42,24 @@ export type Request = {
   requested_at: string;
   not_before: string | null;
   expires_at: string | null;
-};
+}>;
 export type Decision = "approved" | "rejected";
-export type Receipt = {
+export type Receipt = Snapshot<{
   approval_id: string;
   request_id: string;
   decision: Decision;
   decided_at: string;
   actor_id: string;
-};
-export type Operation =
+}>;
+export type Operation = Snapshot<
   | { status: "unconfirmed" }
   | { status: "rejected"; feedback: string }
-  | { status: "completed"; receipt: Receipt };
-export type CommandReviewPage = {
+  | { status: "completed"; receipt: Receipt }
+>;
+export type CommandReviewPage = Snapshot<{
   review: {
     version: 1;
-    context: OpsPageContext;
+    context: OpsPageContext & { resourceId: string };
     mission_name: string;
     actor_id: string;
     observed_at: string;
@@ -66,14 +80,13 @@ export type CommandReviewPage = {
     };
   };
   operation: Operation | null;
-};
-const record = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
+}>;
 const id = (v: unknown): v is string =>
   typeof v === "string" && v.length <= 120 && /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(v);
 const text = (v: unknown, max = 2000): v is string =>
   typeof v === "string" &&
   new TextEncoder().encode(v).length <= max &&
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(v);
 const integer = (v: unknown): v is number => Number.isSafeInteger(v) && Number(v) >= 0;
 const time = (v: unknown): v is string =>
@@ -117,11 +130,28 @@ export function readOperation(value: unknown, request: string, reviewer: string)
     decision(r.decision) &&
     time(r.decided_at)
   )
-    return { status: "completed", receipt: r as Receipt };
+    return {
+      status: "completed",
+      receipt: {
+        approval_id: r.approval_id,
+        request_id: request,
+        actor_id: reviewer,
+        decision: r.decision,
+        decided_at: r.decided_at,
+      },
+    };
   return fail();
 }
 export function readCommandReviewPage(value: unknown, context: OpsPageContext): CommandReviewPage {
-  if (!record(value) || new TextEncoder().encode(JSON.stringify(value)).length > 140000)
+  if (!validReviewPage(value, context)) return fail();
+  return value;
+}
+function validReviewPage(value: unknown, context: OpsPageContext): value is CommandReviewPage {
+  if (
+    !id(context.resourceId) ||
+    !record(value) ||
+    new TextEncoder().encode(JSON.stringify(value)).length > 140000
+  )
     return fail();
   const v = value.review;
   if (!record(v) || v.version !== 1 || !record(v.context)) return fail();
@@ -145,28 +175,33 @@ export function readCommandReviewPage(value: unknown, context: OpsPageContext): 
   if (
     !text(r.command_name) ||
     !r.command_name ||
-    ![
-      "draft",
-      "validated",
-      "approval_pending",
-      "approved",
-      "rejected",
-      "queued",
-      "released",
-      "canceled",
-    ].includes(String(r.lifecycle_state))
+    !oneOf(
+      [
+        "draft",
+        "validated",
+        "approval_pending",
+        "approved",
+        "rejected",
+        "queued",
+        "released",
+        "canceled",
+      ],
+      r.lifecycle_state,
+    )
   )
     return fail();
   if (
     !(
       r.verification_state === null ||
-      ["not_required", "pending", "satisfied", "failed", "timed_out"].includes(
-        String(r.verification_state),
-      )
+      (typeof r.verification_state === "string" &&
+        ["not_required", "pending", "satisfied", "failed", "timed_out"].includes(
+          r.verification_state,
+        ))
     ) ||
     !(
       r.significance === null ||
-      ["routine", "warning", "critical", "hazardous"].includes(String(r.significance))
+      (typeof r.significance === "string" &&
+        ["routine", "warning", "critical", "hazardous"].includes(r.significance))
     )
   )
     return fail();
@@ -205,7 +240,7 @@ export function readCommandReviewPage(value: unknown, context: OpsPageContext): 
   if (
     !record(h) ||
     h.limit !== 25 ||
-    !Array.isArray(h.entries) ||
+    !arrayOf(h.entries, record) ||
     h.entries.length > 25 ||
     !(h.next_after === null || id(h.next_after))
   )
@@ -226,8 +261,8 @@ export function readCommandReviewPage(value: unknown, context: OpsPageContext): 
   }
   if (h.next_after !== null && (h.entries.length !== 25 || h.next_after !== previous))
     return fail();
-  if (value.operation !== null) readOperation(value.operation, context.resourceId!, v.actor_id);
-  return value as unknown as CommandReviewPage;
+  if (value.operation !== null) readOperation(value.operation, context.resourceId, v.actor_id);
+  return true;
 }
 export function decisionInput(decisionValue: unknown, reason: unknown, review: string) {
   if (!decision(decisionValue) || !text(reason)) return fail();

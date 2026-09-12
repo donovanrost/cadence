@@ -1,3 +1,5 @@
+import type { FleetDirectoryPort } from "../../../../../../modules/planning-and-contacts/src/features/fleet-planning/OpsFleetPlanning.contracts";
+import { required } from "../../../../../../test-support/required";
 import { defineComponent } from "vue";
 import { opsPages } from "./contributions";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -33,10 +35,10 @@ function harness() {
 test("captured read port updates evidence without reconnecting or granting effects", async () => {
   const h = harness();
   const next = snapshot();
-  next.data.runs.entries[0]!.id = "updated";
+  required(next.data.runs.entries[0]).id = "updated";
   h.query.mockResolvedValue(next);
   const root = wrapper.get("#ops-fleet-planning-page").element;
-  const port = wrapper.getComponent(OpsFleetPlanning).props("port")!;
+  const port: FleetDirectoryPort = required(wrapper.getComponent(OpsFleetPlanning).props("port"));
   expect(Object.hasOwn(port, "execute")).toBe(false);
   await wrapper.get("#refresh-fleet-planning").trigger("click");
   await flushPromises();
@@ -91,7 +93,7 @@ test("same-context host rerenders cannot rewind a captured read", async () => {
   await wrapper.get("#refresh-fleet-planning").trigger("click");
   await wrapper.setProps({ context: { ...context }, snapshot: structuredClone(h.initial) });
   const next = snapshot();
-  next.data.runs.entries[0]!.id = "fresh";
+  required(next.data.runs.entries[0]).id = "fresh";
   settle(next);
   await flushPromises();
   expect(wrapper.find("#fleet-run-fresh").exists()).toBe(true);
@@ -100,7 +102,7 @@ test("same-context host rerenders cannot rewind a captured read", async () => {
 });
 test("navigation and replaced tokens expire reads before and after transport", async () => {
   const h = harness();
-  const port = wrapper.getComponent(OpsFleetPlanning).props("port")!;
+  const port: FleetDirectoryPort = required(wrapper.getComponent(OpsFleetPlanning).props("port"));
   let settle!: (value: unknown) => void;
   h.query.mockImplementationOnce(
     () =>
@@ -130,7 +132,7 @@ test("unsupported initial contributions retain the host retry control", async ()
 });
 
 test("renderer failures stay inside the contribution and retry can remount the feature", async () => {
-  const registration = opsPages["planning.fleet-directory"]!;
+  const registration = required(opsPages["planning.fleet-directory"]);
   const h = harness();
   try {
     opsPages[registration.id] = {

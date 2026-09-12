@@ -1,3 +1,4 @@
+import { required } from "../../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import CatalogIndex from "./CatalogIndex.vue";
@@ -24,7 +25,7 @@ test("database directory renders revision/import navigation from a validated DTO
     "/missions/mission-a/catalog/new",
   );
   wrapper.unmount();
-  data.presentation.card.rows[0]!.latest_import.href = "javascript:alert(1)";
+  required(data.presentation.card.rows[0]).latest_import.href = "javascript:alert(1)";
   expect(() => assertDatabaseIndex(data)).toThrow();
 });
 test("new database preserves editable fields and the mission-scoped cancel link", async () => {

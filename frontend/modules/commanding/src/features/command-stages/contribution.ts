@@ -7,6 +7,7 @@ export const commandStagesContribution = {
   slot: "ops.page",
   version: 1,
   title: "Command stages",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks this SFC constructor.
   component: CommandStages,
   navigation: true,
   query: true,

@@ -84,10 +84,7 @@ export function bootstrapPhoenixHost(
   if (existing) return existing;
 
   const config = readPhoenixHostConfig(root);
-  const app = createApp(PhoenixHostApp, { ...config, ...options } as unknown as Record<
-    string,
-    unknown
-  >);
+  const app = createApp(PhoenixHostApp, { ...config, ...options });
   if (options.pageChrome) app.provide(pageChromeKey, options.pageChrome);
   app.mount(root);
 

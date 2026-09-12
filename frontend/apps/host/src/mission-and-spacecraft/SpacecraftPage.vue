@@ -44,10 +44,15 @@ const admitted = computed(() => {
     !record(snapshot.data)
   )
     return null;
-  const registration = spacecraftPages[props.page]!;
+  const registration = spacecraftPages[props.page];
+  if (!registration) return null;
   try {
     registration.validate(snapshot.data);
-    return { ...registration, data: snapshot.data };
+    return {
+      ...registration,
+      data: snapshot.data,
+      formToken: typeof snapshot.form_token === "string" ? snapshot.form_token : null,
+    };
   } catch {
     return null;
   }
@@ -68,13 +73,13 @@ const admitted = computed(() => {
     </div>
     <ProfileCreationPage
       v-else-if="page === 'profile_new' && execute"
-      :key="(snapshot as Record<string, string>).form_token"
+      :key="admitted.formToken ?? page"
       :data="admitted.data"
       :execute="execute"
     />
     <SpacecraftIdentityPage
       v-else-if="['spacecraft_new', 'spacecraft_edit'].includes(page) && execute"
-      :key="(snapshot as Record<string, string>).form_token"
+      :key="admitted.formToken ?? page"
       :data="admitted.data"
       :execute="execute"
     />

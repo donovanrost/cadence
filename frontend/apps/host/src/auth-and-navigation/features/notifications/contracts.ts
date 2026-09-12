@@ -27,6 +27,10 @@ const time = (v: unknown): v is string =>
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(v) &&
   Number.isFinite(Date.parse(v));
 export function readInbox(value: unknown, userId: unknown): Inbox {
+  assertInbox(value, userId);
+  return value;
+}
+function assertInbox(value: unknown, userId: unknown): asserts value is Inbox {
   if (
     !id(userId) ||
     !record(value) ||
@@ -71,7 +75,6 @@ export function readInbox(value: unknown, userId: unknown): Inbox {
       throw Error("Invalid notification");
     seen.add(row.id);
   }
-  return value as unknown as Inbox;
 }
 export function inboxHref(query: Partial<Inbox["query"]> = {}): string {
   const params = new URLSearchParams();

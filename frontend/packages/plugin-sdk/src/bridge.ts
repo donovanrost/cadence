@@ -184,7 +184,7 @@ export type HostActivityListener = (event: HostActivityEvent) => void;
 
 export interface HostBridge {
   /** Host-owned navigation, with native fallback for older hosts. */
-  navigate?(href: string): void;
+  navigate?(this: void, href: string): void;
   query<TResult>(request: HostQueryRequest): Promise<TResult>;
   execute<TInput, TResult>(request: HostActionRequest<TInput>): Promise<HostActionReceipt<TResult>>;
   subscribe(listener: HostActivityListener): () => void;
@@ -387,7 +387,7 @@ function visitQueryValue(
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
+  const prototype: unknown = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
 }
 

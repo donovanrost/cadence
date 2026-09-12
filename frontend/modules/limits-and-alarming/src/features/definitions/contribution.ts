@@ -5,5 +5,6 @@ export const definitionsContribution = {
   applicationKey: "limits",
   surfaceId: "manage",
   query: { id: "cadence.limits.manage", version: 1 },
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   component: DefinitionsSurface,
 } as const;

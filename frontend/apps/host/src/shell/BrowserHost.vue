@@ -1,10 +1,12 @@
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
+import type { RouteLocationNormalized } from "vue-router";
+import { readHostSnapshot, requireRecord, errorMessage, type HostSnapshot } from "./host-snapshot";
+import { record } from "./snapshot-readers";
 import { useLiveVue } from "live_vue";
 import HostPage from "./HostPage.vue";
 import ApplicationShell from "./ApplicationShell.vue";
 import InstallationManagementPage from "../capability-management/features/application-installations/InstallationManagementPage.vue";
-import RoutedFederationSurface from "./RoutedFederationSurface.vue";
 import AdministrationDiagnosticsPage from "../administration/features/diagnostics/AdministrationDiagnosticsPage.vue";
 import CatalogPage from "../catalog/CatalogPage.vue";
 import AdministrationPage from "../administration/AdministrationPage.vue";
@@ -27,50 +29,69 @@ import {
 } from "./host-navigation";
 import { hostBrowserHistory, ownBrowserHistory } from "./host-browser-history";
 
-const props = defineProps({ snapshot: { type: Object, required: true } });
+const props = defineProps<{ snapshot: unknown }>();
+const initialSnapshot = readHostSnapshot(props.snapshot);
 const live = useLiveVue();
 // A native Phoenix navigation can mount this host after the history module loaded.
-hostBrowserHistory.replace(props.snapshot.path + window.location.hash);
+hostBrowserHistory.replace(initialSnapshot.path + window.location.hash);
 const router = createHostRouter(hostBrowserHistory);
-const committed = shallowRef(null);
-const failure = shallowRef(null);
+type CommittedPage = {
+  route: RouteLocationNormalized;
+  snapshot: HostSnapshot;
+  params: Record<string, string>;
+};
+const committed = shallowRef<CommittedPage | null>(null);
+function currentPage(): CommittedPage {
+  if (!committed.value) throw new Error("The host page is unavailable.");
+  return committed.value;
+}
+function field(value: unknown, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (!record(value)) return undefined;
+    value = value[key];
+  }
+  return value;
+}
+const failure = shallowRef<string | null>(null);
 const pending = shallowRef(false);
 const refreshingDiagnostics = shallowRef(false);
 let generation = 0;
 let stopped = false;
-let removeLinks;
-let bootstrap = props.snapshot;
+let removeLinks: (() => void) | undefined;
+let bootstrap: HostSnapshot | null = initialSnapshot;
 
-const pendingRequests = new Set();
-function request(event, payload) {
+const pendingRequests = new Set<() => void>();
+function request(event: string, payload: Record<string, unknown>): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let settled = false;
-    const finish = (error, snapshot) => {
+    const finish = (
+      outcome: { status: "ok"; snapshot: unknown } | { status: "failed"; error: Error },
+    ) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       pendingRequests.delete(cancel);
-      error ? reject(error) : resolve(snapshot);
+      if (outcome.status === "failed") reject(outcome.error);
+      else resolve(outcome.snapshot);
     };
-    const cancel = () => finish(new Error("The host was closed."));
-    const timeout = setTimeout(
-      () => finish(new Error("The connection is unavailable. Try again.")),
-      10000,
-    );
+    const fail = (message: string) => finish({ status: "failed", error: new Error(message) });
+    const cancel = () => fail("The host was closed.");
+    const timeout = setTimeout(() => fail("The connection is unavailable. Try again."), 10000);
     pendingRequests.add(cancel);
     try {
-      live.pushEvent(event, payload, (reply) => {
+      live.pushEvent(event, payload, (reply: unknown) => {
         if (stopped) return cancel();
-        reply?.ok ? finish(null, reply.snapshot) : finish(new Error("This page is unavailable."));
+        if (record(reply) && reply.ok === true) finish({ status: "ok", snapshot: reply.snapshot });
+        else fail("This page is unavailable.");
       });
     } catch (error) {
-      finish(error);
+      fail(errorMessage(error));
     }
   });
 }
 
-let leaveGuard = null;
-function guardNavigation(guard) {
+let leaveGuard: (() => boolean) | null = null;
+function guardNavigation(guard: () => boolean) {
   leaveGuard = guard;
   return () => {
     if (leaveGuard === guard) leaveGuard = null;
@@ -87,14 +108,17 @@ router.beforeEach(async (to, from) => {
   pending.value = true;
   failure.value = null;
   try {
-    const path = to.fullPath.split("#")[0];
-    const snapshot = bootstrap?.path === path ? bootstrap : await request("host:context", { path });
+    const path = to.fullPath.replace(/#.*$/, "");
+    const snapshot =
+      bootstrap?.path === path
+        ? bootstrap
+        : readHostSnapshot(await request("host:context", { path }));
     bootstrap = null;
     if (stopped || currentGeneration !== generation) return false;
     to.meta.snapshot = snapshot;
     return true;
   } catch (error) {
-    if (currentGeneration === generation) failure.value = error.message;
+    if (currentGeneration === generation) failure.value = errorMessage(error);
     return false;
   } finally {
     if (currentGeneration === generation) pending.value = false;
@@ -102,7 +126,11 @@ router.beforeEach(async (to, from) => {
 });
 router.afterEach((to, _from, navigationFailure) => {
   if (stopped || navigationFailure) return;
-  committed.value = { route: to, snapshot: to.meta.snapshot };
+  if (!to.meta.host || !to.meta.snapshot) return;
+  const params: Record<string, string> = {};
+  for (const [key, value] of Object.entries(to.params))
+    if (typeof value === "string") params[key] = value;
+  committed.value = { route: to, snapshot: to.meta.snapshot, params };
   const title = to.meta.host.metadata.page_title;
   document.title = title ? `${title} · Cadence` : "Cadence";
 });
@@ -111,26 +139,59 @@ router.afterEach((to, _from, navigationFailure) => {
 // committed with their route, so rapid navigation cannot mix two mission contexts.
 watch(
   () => props.snapshot,
-  (snapshot) => {
-    if (committed.value?.snapshot.path === snapshot.path && !pending.value)
-      committed.value = { ...committed.value, snapshot };
+  (value) => {
+    try {
+      const snapshot = readHostSnapshot(value);
+      if (committed.value?.snapshot.path === snapshot.path && !pending.value)
+        committed.value = { ...currentPage(), snapshot };
+    } catch (error) {
+      failure.value = errorMessage(error);
+    }
   },
 );
 const route = computed(() => committed.value?.route.meta.host);
-const context = computed(() => ({
-  ...committed.value?.snapshot.context,
-  nav_context: route.value?.scope,
-  nav_item: null,
-  ops_nav_item: "dashboards",
-  active_dashboard_id: committed.value?.route.params.dashboard_id,
-  ...route.value?.metadata,
-}));
+const context = computed(() => {
+  const page = committed.value,
+    selected = page?.route.meta.host;
+  if (!page || !selected) return null;
+  return {
+    ...page.snapshot.context,
+    nav_context: selected.scope,
+    nav_item: null,
+    ops_nav_item: "dashboards",
+    active_dashboard_id: page.params.dashboard_id,
+    ...selected.metadata,
+  };
+});
+const organizationContext = computed(() => {
+  const organizationId = context.value?.organization?.organization_id;
+  const resourceId = committed.value?.params.provider_account_id;
+  return organizationId ? { organizationId, ...(resourceId ? { resourceId } : {}) } : null;
+});
+const missionContext = computed(() => {
+  const organizationId = context.value?.organization?.organization_id;
+  const missionId = committed.value?.params.mission_id;
+  const resourceId = route.value?.resourceParam
+    ? committed.value?.params[route.value.resourceParam]
+    : undefined;
+  return organizationId && missionId
+    ? { organizationId, missionId, ...(resourceId ? { resourceId } : {}) }
+    : null;
+});
+const spacecraftContext = computed(() => {
+  const mission = missionContext.value,
+    spacecraftId = committed.value?.params.spacecraft_id;
+  return mission && spacecraftId
+    ? { organizationId: mission.organizationId, missionId: mission.missionId, spacecraftId }
+    : null;
+});
 const pageTitle = computed(
-  () => route.value?.metadata.page_title || context.value.mission?.display_name || "Overview",
+  () => route.value?.metadata.page_title || context.value?.mission?.display_name || "Overview",
 );
 const pageBreadcrumbs = computed(() => {
-  const items = [];
+  const items: { label: string; href?: string }[] = [];
   const current = context.value;
+  if (!current) return items;
   if (route.value?.scope === "admin") items.push({ label: "Platform", href: "/admin" });
   else if (route.value?.scope === "user") items.push({ label: "Account" });
   else {
@@ -140,42 +201,20 @@ const pageBreadcrumbs = computed(() => {
         label: current.mission.display_name,
         href: `/missions/${encodeURIComponent(current.mission.mission_id)}`,
       });
-    if (current.spacecraft)
+    if (current.spacecraft && current.mission)
       items.push({
         label: current.spacecraft.display_name,
         href: `/missions/${encodeURIComponent(current.mission.mission_id)}/spacecraft/${encodeURIComponent(current.spacecraft.spacecraft_id)}`,
       });
   }
   const path = committed.value?.route.path;
-  if (items.at(-1)?.href === path) items[items.length - 1] = { label: items.at(-1).label };
+  const last = items.at(-1);
+  if (last && last.href === path) items[items.length - 1] = { label: last.label };
   else items.push({ label: pageTitle.value });
   return items;
 });
 const variant = computed(() => route.value && shellForRoute(route.value));
-const surfaceProps = computed(() => {
-  if (!route.value) return {};
-  const { params, query } = committed.value.route;
-  const selected = route.value;
-  const values = { ...query, ...params };
-  const queryParams = Object.fromEntries(
-    selected.queryKeys.flatMap((key) => {
-      const value = values[selected.queryAliases[key] || key];
-      return value === undefined ? [] : [[key, value]];
-    }),
-  );
-  return {
-    applicationKey: selected.application,
-    surfaceId: selected.surface,
-    hostScope: selected.scope,
-    organizationId:
-      selected.scope === "organization" ? context.value.organization?.organization_id : undefined,
-    userId: selected.scope === "user" ? context.value.user?.user_id : undefined,
-    missionId: params.mission_id,
-    spacecraftId: params.spacecraft_id,
-    queryParams,
-  };
-});
-function navigate(href, replace = false) {
+function navigate(href: string, replace = false) {
   const target = new URL(href, window.location.href);
   if (target.origin !== window.location.origin || !hostRoute(target)) {
     window.location.assign(target.href);
@@ -184,154 +223,159 @@ function navigate(href, replace = false) {
   const path = target.pathname + target.search + target.hash;
   void (replace ? router.replace(path) : router.push(path));
 }
-async function manage(event, payload) {
-  const path = committed.value.snapshot.path;
+async function manage(event: string, payload: Record<string, unknown>) {
+  const path = currentPage().snapshot.path;
   const requestGeneration = generation;
-  const snapshot = await request("host:manage", { ...payload, event, path });
-  if (!stopped && generation === requestGeneration && committed.value.snapshot.path === path)
-    committed.value = { ...committed.value, snapshot };
+  const snapshot = readHostSnapshot(await request("host:manage", { ...payload, event, path }));
+  if (!stopped && generation === requestGeneration && currentPage().snapshot.path === path)
+    committed.value = { ...currentPage(), snapshot };
 }
 async function reconnect() {
   if (!committed.value) return;
   const requestGeneration = generation;
-  const path = committed.value.snapshot.path;
+  const path = currentPage().snapshot.path;
   try {
-    const snapshot = await request("host:context", { path });
-    if (!stopped && generation === requestGeneration && committed.value.snapshot.path === path) {
+    const snapshot = readHostSnapshot(await request("host:context", { path }));
+    if (!stopped && generation === requestGeneration && currentPage().snapshot.path === path) {
       failure.value = null;
-      committed.value = { ...committed.value, snapshot };
+      committed.value = { ...currentPage(), snapshot };
     }
   } catch (error) {
-    if (!stopped && generation === requestGeneration && committed.value.snapshot.path === path)
-      failure.value = error.message;
+    if (!stopped && generation === requestGeneration && currentPage().snapshot.path === path)
+      failure.value = errorMessage(error);
   }
 }
-async function catalogAction(event) {
-  const path = committed.value.snapshot.path;
+async function catalogAction(event: "reimport") {
+  const path = currentPage().snapshot.path;
   const requestGeneration = generation;
-  const result = await request("host:catalog", { event, path });
-  if (!stopped && generation === requestGeneration && committed.value.snapshot.path === path)
+  const result = requireRecord(await request("host:catalog", { event, path }));
+  if (!stopped && generation === requestGeneration && currentPage().snapshot.path === path) {
+    if (typeof result.href !== "string") throw new Error("Invalid catalog destination.");
     navigate(result.href);
+  }
 }
-function cancelCatalogUpload(params) {
+function cancelCatalogUpload(params: Record<string, unknown>) {
   live.pushEvent("catalog:upload:cancel", params);
 }
-async function platformAdministrationAction(event, input) {
-  const path = committed.value.snapshot.path;
+async function platformAdministrationAction(event: string, input: Record<string, unknown>) {
+  const path = currentPage().snapshot.path;
   const requestGeneration = generation;
-  const userId = context.value.user?.user_id;
-  const token = committed.value.snapshot.platform_administration_page?.action_token;
-  const result = await request("host:platform-administration", { event, input, path, token });
+  const userId = context.value?.user?.user_id;
+  const token = currentPage().snapshot.platform_administration_page?.action_token;
+  const result = requireRecord(
+    await request("host:platform-administration", { event, input, path, token }),
+  );
   if (
     stopped ||
     generation !== requestGeneration ||
-    committed.value.snapshot.path !== path ||
-    context.value.user?.user_id !== userId ||
-    committed.value.snapshot.platform_administration_page?.action_token !== token
+    currentPage().snapshot.path !== path ||
+    context.value?.user?.user_id !== userId ||
+    currentPage().snapshot.platform_administration_page?.action_token !== token
   )
     throw new Error("The administration context changed.");
-  if (!result?.host || result.host.path !== path || result.host.context?.user?.user_id !== userId)
+  const host = readHostSnapshot(result.host);
+  if (host.path !== path || host.context.user?.user_id !== userId)
     throw new Error("Invalid administration context.");
-  committed.value = { ...committed.value, snapshot: result.host };
+  committed.value = { ...currentPage(), snapshot: host };
   return result;
 }
-async function notificationAction(event, input) {
-  const path = committed.value.snapshot.path;
+async function notificationAction(event: string, input: Record<string, unknown>) {
+  const path = currentPage().snapshot.path;
   const requestGeneration = generation;
-  const token = committed.value.snapshot.notifications_page?.action_token;
-  const result = await request("host:notifications", { event, input, path, token });
-  if (stopped || generation !== requestGeneration || committed.value.snapshot.path !== path)
+  const token = currentPage().snapshot.notifications_page?.action_token;
+  const result = requireRecord(await request("host:notifications", { event, input, path, token }));
+  if (stopped || generation !== requestGeneration || currentPage().snapshot.path !== path)
     throw new Error("The notification context changed.");
-  if (
-    !result?.host ||
-    result.host.path !== path ||
-    result.host.context?.user?.user_id !== context.value.user?.user_id
-  )
+  const host = readHostSnapshot(result.host);
+  if (host.path !== path || host.context.user?.user_id !== context.value?.user?.user_id)
     throw new Error("Invalid notification context.");
-  committed.value = { ...committed.value, snapshot: result.host };
-  if (result.status === "ok" && result.data?.status === "accepted") {
-    if (result.data.navigate !== "/") throw new Error("Invalid invitation destination.");
+  committed.value = { ...currentPage(), snapshot: host };
+  if (result.status === "ok" && field(result, "data", "status") === "accepted") {
+    if (field(result, "data", "navigate") !== "/")
+      throw new Error("Invalid invitation destination.");
     navigate("/");
   }
   return result;
 }
-async function missionAction(event, input) {
-  const path = committed.value.snapshot.path;
+async function missionAction(event: string, input: Record<string, unknown>) {
+  const path = currentPage().snapshot.path;
   const requestGeneration = generation;
-  const token = committed.value.snapshot.mission_page?.creation_token;
-  const result = await request("host:mission", { event, input, path, token });
+  const token = currentPage().snapshot.mission_page?.creation_token;
+  const result = requireRecord(await request("host:mission", { event, input, path, token }));
   if (
     !stopped &&
     generation === requestGeneration &&
-    committed.value.snapshot.path === path &&
+    currentPage().snapshot.path === path &&
     event === "save" &&
     result?.status === "ok"
   ) {
-    const href = result.data?.mission?.href;
+    const href = field(result, "data", "mission", "href");
     if (typeof href !== "string" || !/^\/missions\/[^/\\\s?#]+$/.test(href))
       throw new Error("Invalid mission destination.");
     navigate(href);
   }
   return result;
 }
-async function spacecraftAction(event, input) {
-  const path = committed.value.snapshot.path;
+async function spacecraftAction(event: string, input: Record<string, unknown>) {
+  const path = currentPage().snapshot.path;
   const requestGeneration = generation;
-  const token = committed.value.snapshot.spacecraft_page?.form_token;
-  const result = await request("host:spacecraft", { event, input, path, token });
+  const token = currentPage().snapshot.spacecraft_page?.form_token;
+  const result = requireRecord(await request("host:spacecraft", { event, input, path, token }));
   if (
     !stopped &&
     generation === requestGeneration &&
-    committed.value.snapshot.path === path &&
+    currentPage().snapshot.path === path &&
     event === "save" &&
     result?.status === "ok"
   ) {
-    const href = result.data?.href;
+    const href = field(result, "data", "href");
     const destination =
-      `/missions/${committed.value.route.params.mission_id}/spacecraft` +
-      (committed.value.snapshot.spacecraft_page?.page === "profile_new" ? "/profiles" : "");
-    if (href !== destination) throw new Error("Invalid spacecraft destination.");
+      `/missions/${currentPage().route.params.mission_id}/spacecraft` +
+      (currentPage().snapshot.spacecraft_page?.page === "profile_new" ? "/profiles" : "");
+    if (typeof href !== "string" || href !== destination)
+      throw new Error("Invalid spacecraft destination.");
     navigate(href);
   }
   return result;
 }
-async function activationDecision(input) {
-  const path = committed.value.snapshot.path;
+async function activationDecision(input: unknown) {
+  const path = currentPage().snapshot.path;
   const requestGeneration = generation;
-  const token = committed.value.snapshot.activation_approvals?.token;
-  const result = await request("host:activation", { path, token, input });
-  if (!stopped && generation === requestGeneration && committed.value.snapshot.path === path) {
-    if (result.page?.path !== path) throw new Error("Invalid activation response path.");
-    committed.value = { ...committed.value, snapshot: result.page };
+  const token = currentPage().snapshot.activation_approvals?.token;
+  const result = requireRecord(await request("host:activation", { path, token, input }));
+  if (!stopped && generation === requestGeneration && currentPage().snapshot.path === path) {
+    const page = readHostSnapshot(result.page);
+    if (page.path !== path) throw new Error("Invalid activation response path.");
+    committed.value = { ...currentPage(), snapshot: page };
   }
   return result.result;
 }
-async function organizationPageAction(payload) {
-  const path = committed.value.snapshot.path,
+async function organizationPageAction(payload: Record<string, unknown>) {
+  const path = currentPage().snapshot.path,
     requestGeneration = generation;
-  const page = committed.value.snapshot.organization_module_page;
+  const page = currentPage().snapshot.organization_module_page;
   if (pending.value || payload.id !== page?.id || payload.token !== page?.token)
     throw new Error("Inactive organization page.");
   const result = await request("host:organization-page", { ...payload, path });
-  if (stopped || generation !== requestGeneration || committed.value.snapshot.path !== path)
+  if (stopped || generation !== requestGeneration || currentPage().snapshot.path !== path)
     throw new Error("Inactive organization page response.");
   return result;
 }
-async function opsPageAction(payload) {
-  const path = committed.value.snapshot.path,
+async function opsPageAction(payload: Record<string, unknown>) {
+  const path = currentPage().snapshot.path,
     requestGeneration = generation;
-  const page = committed.value.snapshot.ops_page;
+  const page = currentPage().snapshot.ops_page;
   if (pending.value || payload.id !== page?.id || payload.token !== page?.token)
     throw new Error("Inactive Ops page.");
   const result = await request("host:ops-page", { ...payload, path });
-  if (stopped || generation !== requestGeneration || committed.value.snapshot.path !== path)
+  if (stopped || generation !== requestGeneration || currentPage().snapshot.path !== path)
     throw new Error("Inactive Ops page response.");
   return result;
 }
-async function opsPageRead(payload) {
-  const path = committed.value.snapshot.path,
+async function opsPageRead(payload: Record<string, unknown>) {
+  const path = currentPage().snapshot.path,
     requestGeneration = generation,
-    page = committed.value.snapshot.ops_page;
+    page = currentPage().snapshot.ops_page;
   if (
     pending.value ||
     route.value?.kind !== "ops_module" ||
@@ -343,20 +387,20 @@ async function opsPageRead(payload) {
   if (
     stopped ||
     generation !== requestGeneration ||
-    committed.value.snapshot.path !== path ||
-    committed.value.snapshot.ops_page?.token !== payload.token
+    currentPage().snapshot.path !== path ||
+    currentPage().snapshot.ops_page?.token !== payload.token
   )
     throw new Error("Inactive Ops page read response.");
   return result;
 }
-async function missionPageAction(payload) {
-  const path = committed.value.snapshot.path,
+async function missionPageAction(payload: Record<string, unknown>) {
+  const path = currentPage().snapshot.path,
     requestGeneration = generation;
-  const page = committed.value.snapshot.mission_module_page;
+  const page = currentPage().snapshot.mission_module_page;
   if (pending.value || payload.id !== page?.id || payload.token !== page?.token)
     throw new Error("Inactive mission page.");
   const result = await request("host:mission-page", { ...payload, path });
-  if (stopped || generation !== requestGeneration || committed.value.snapshot.path !== path)
+  if (stopped || generation !== requestGeneration || currentPage().snapshot.path !== path)
     throw new Error("Inactive mission page response.");
   return result;
 }
@@ -369,14 +413,14 @@ async function refreshDiagnostics() {
     refreshingDiagnostics.value = false;
   }
 }
-function updateDiagnosticsQuery(query) {
+function updateDiagnosticsQuery(query: Record<string, string>) {
   const search = new URLSearchParams(query).toString();
   navigate(`/admin/runtime${search ? `?${search}` : ""}`);
 }
 // Routing is private to this host; descendants navigate through the host bridge.
 // Installing a plugin here would redefine app-wide $route when this component remounts.
 void router.replace(hostBrowserHistory.location).catch((error) => {
-  if (!stopped) failure.value = error.message;
+  if (!stopped) failure.value = errorMessage(error);
 });
 onMounted(() => {
   ownBrowserHistory(true);
@@ -395,7 +439,12 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <ApplicationShell v-if="committed" :variant="variant" :context="context" managed-page>
+  <ApplicationShell
+    v-if="committed && route && variant && context"
+    :variant="variant"
+    :context="context"
+    managed-page
+  >
     <HostPage
       :key="
         route.kind === 'administration_diagnostics' || route.kind === 'spacecraft'
@@ -427,43 +476,34 @@ onBeforeUnmount(() => {
           @refresh="refreshDiagnostics"
         />
         <ActivationApprovalsPage
-          v-else-if="route.kind === 'activation_approvals'"
+          v-else-if="route.kind === 'activation_approvals' && missionContext"
           :id="route.mountId"
           :snapshot="committed.snapshot.activation_approvals"
           :context="{
-            organization_id: context.organization?.organization_id,
-            mission_id: committed.route.params.mission_id,
+            organization_id: missionContext.organizationId,
+            mission_id: missionContext.missionId,
           }"
           :execute="activationDecision"
           :refresh="reconnect"
           :navigating="pending"
         />
         <OrganizationModulePage
-          v-else-if="route.kind === 'organization_module'"
+          v-else-if="route.kind === 'organization_module' && organizationContext"
           :id="route.mountId"
           :contribution-id="route.contribution"
           :snapshot="committed.snapshot.organization_module_page"
-          :context="{
-            organizationId: context.organization?.organization_id,
-            resourceId: committed.route.params.provider_account_id,
-          }"
+          :context="organizationContext"
           :execute="organizationPageAction"
           :navigate="navigate"
           :refresh="reconnect"
           :refreshing="pending"
         />
         <OpsModulePage
-          v-else-if="route.kind === 'ops_module'"
+          v-else-if="route.kind === 'ops_module' && missionContext"
           :id="route.mountId"
           :contribution-id="route.contribution"
           :snapshot="committed.snapshot.ops_page"
-          :context="{
-            organizationId: context.organization?.organization_id,
-            missionId: committed.route.params.mission_id,
-            resourceId: route.resourceParam
-              ? committed.route.params[route.resourceParam]
-              : undefined,
-          }"
+          :context="missionContext"
           :execute="opsPageAction"
           :query="opsPageRead"
           :navigate="navigate"
@@ -472,32 +512,22 @@ onBeforeUnmount(() => {
           :refreshing="pending"
         />
         <MissionModulePage
-          v-else-if="route.kind === 'mission_module'"
+          v-else-if="route.kind === 'mission_module' && missionContext"
           :id="route.mountId"
           :contribution-id="route.contribution"
           :snapshot="committed.snapshot.mission_module_page"
           :execute="missionPageAction"
           :navigate="navigate"
-          :context="{
-            organizationId: context.organization?.organization_id,
-            missionId: committed.route.params.mission_id,
-            resourceId: route.resourceParam
-              ? committed.route.params[route.resourceParam]
-              : undefined,
-          }"
+          :context="missionContext"
           :refresh="reconnect"
           :refreshing="pending"
         />
         <SpacecraftModulePage
-          v-else-if="route.kind === 'spacecraft_module'"
+          v-else-if="route.kind === 'spacecraft_module' && spacecraftContext"
           :id="route.mountId"
           :contribution-id="route.contribution"
           :snapshot="committed.snapshot.spacecraft_module_page"
-          :context="{
-            organizationId: context.organization?.organization_id,
-            missionId: committed.route.params.mission_id,
-            spacecraftId: committed.route.params.spacecraft_id,
-          }"
+          :context="spacecraftContext"
           :refresh="reconnect"
           :refreshing="pending"
         />
@@ -514,25 +544,29 @@ onBeforeUnmount(() => {
         />
         <NotificationsPage
           v-else-if="route.kind === 'notifications'"
-          :key="context.user?.user_id"
+          :key="context.user?.user_id ?? 'anonymous'"
           :snapshot="committed.snapshot.notifications_page"
           :user-id="context.user?.user_id"
           :act="notificationAction"
           :refresh="reconnect"
         />
         <WorkspaceLanding
-          v-else-if="route.kind === 'ops_workspace' && route.workspacePage === 'landing'"
+          v-else-if="
+            route.kind === 'ops_workspace' && route.workspacePage === 'landing' && missionContext
+          "
           :id="route.mountId"
           :model="committed.snapshot.ops_landing_page"
-          :organization-id="context.organization?.organization_id"
-          :mission-id="committed.route.params.mission_id"
+          :organization-id="missionContext.organizationId"
+          :mission-id="missionContext.missionId"
         />
         <TimelinePage
-          v-else-if="route.kind === 'ops_workspace' && route.workspacePage === 'timeline'"
+          v-else-if="
+            route.kind === 'ops_workspace' && route.workspacePage === 'timeline' && missionContext
+          "
           :id="route.mountId"
           :snapshot="committed.snapshot.timeline_page"
-          :organization-id="context.organization?.organization_id"
-          :mission-id="committed.route.params.mission_id"
+          :organization-id="missionContext.organizationId"
+          :mission-id="missionContext.missionId"
           :navigate="navigate"
           :refresh="reconnect"
         />
@@ -543,7 +577,7 @@ onBeforeUnmount(() => {
           :page="route.administrationPage"
           :snapshot="committed.snapshot.platform_administration_page"
           :user-id="context.user?.user_id"
-          :organization-id="committed.route.params.org_id"
+          :organization-id="committed.params.org_id"
           :csrf-token="context.csrf_token"
           :act="platformAdministrationAction"
           :refresh="reconnect"
@@ -575,14 +609,7 @@ onBeforeUnmount(() => {
           :cancel-upload="cancelCatalogUpload"
           :navigate="navigate"
         />
-        <RoutedFederationSurface
-          v-else
-          :key="committed.route.fullPath"
-          :id="route.mountId"
-          :surface="surfaceProps"
-          :view-class="route.viewClass"
-          :navigate="navigate"
-        />
+        <p v-else id="host-route-unavailable" role="alert">This page is unavailable.</p>
       </div>
     </HostPage>
   </ApplicationShell>

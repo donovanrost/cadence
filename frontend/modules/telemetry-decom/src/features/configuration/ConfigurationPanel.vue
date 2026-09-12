@@ -132,8 +132,11 @@ const dispatchLifecycle = (action: LifecycleAction) => {
   if (action.event === "enable" && !canRequest.value) return;
   if (action.confirmation && !window.confirm(action.confirmation.prompt)) return;
 
-  if (action.event === "enable")
-    emit("enable", { "action-id": action.action_id, expected_review: missionToken.value! });
+  if (action.event === "enable") {
+    const token = missionToken.value;
+    if (!token) return;
+    emit("enable", { "action-id": action.action_id, expected_review: token });
+  }
   if (action.event === "disable")
     emit("disable", { "action-id": action.action_id, expected_review: configurationToken.value });
 };

@@ -11,7 +11,6 @@ const props = withDefaults(
   }>(),
   {
     disabled: false,
-    id: undefined,
     presentation: "control",
   },
 );

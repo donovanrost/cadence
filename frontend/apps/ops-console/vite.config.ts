@@ -5,10 +5,6 @@ import { isAbsolute, resolve } from "node:path";
 import { defineConfig, lazyPlugins } from "vite-plus";
 import federationConfig from "./module-federation.config";
 
-const publicationRoot = resolve(
-  import.meta.dirname,
-  "../../../apps/cadence_web/priv/static/assets/application-host/ops-console",
-);
 const releaseOutputEnvironmentName = "CADENCE_RELEASE_OUTPUT_DIR";
 const federatedEntry = resolve(import.meta.dirname, "src/federated-application.ts");
 
@@ -61,7 +57,7 @@ export default defineConfig(({ mode }) => {
     base: releaseBuild ? "./" : "/assets/application-host/ops-console/",
     build: {
       target: "chrome89",
-      ...(releaseBuild
+      ...(outputDirectory !== undefined
         ? {
             outDir: outputDirectory,
             emptyOutDir: true,
@@ -73,13 +69,14 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: "happy-dom",
     },
-    plugins: lazyPlugins(() => [
-      tailwindcss(),
-      vue(),
-      federation(
-        releaseBuild ? { ...releaseFederationConfig, publicPath: "auto" } : federationConfig,
-      ),
-      releaseOutputPlugin(),
-    ]),
+    plugins:
+      lazyPlugins(() => [
+        tailwindcss(),
+        vue(),
+        federation(
+          releaseBuild ? { ...releaseFederationConfig, publicPath: "auto" } : federationConfig,
+        ),
+        releaseOutputPlugin(),
+      ]) ?? [],
   };
 });

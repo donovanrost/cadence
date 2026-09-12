@@ -1,3 +1,9 @@
+import {
+  fixtureRows,
+  fixtureString,
+  fixtureRecord,
+} from "../../../../../test-support/json-fixture.ts";
+import { required } from "../../../../../test-support/required.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,17 +20,21 @@ const server = await createServer({
   logLevel: "error",
 });
 try {
-  const { executionDiagnosticsContribution: contribution } = await server.ssrLoadModule(
-    "/src/execution-diagnostics.ts",
-  );
-  for (const state of JSON.parse(process.argv[2])) {
+  const { executionDiagnosticsContribution: contribution } =
+    /** @type {typeof import("../../execution-diagnostics.ts")} */ (
+      await server.ssrLoadModule("/src/execution-diagnostics.ts")
+    );
+  for (const raw of fixtureRows(process.argv[2])) {
+    const rawModel = fixtureRecord(raw.model);
     const context = {
-      organizationId: state.model.organization_id,
-      missionId: state.model.mission_id,
-      resourceId: state.model.dashboard_id,
+      organizationId: fixtureString(rawModel.organization_id),
+      missionId: fixtureString(rawModel.mission_id),
+      resourceId: fixtureString(rawModel.dashboard_id),
     };
-    const props = contribution.read(state, context);
+    const props = contribution.read(raw, context);
+    const state = required(props.state);
     assert.throws(() => contribution.read(state, { ...context, resourceId: "foreign" }));
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks the SFC constructor at this registration or render boundary.
     const app = createSSRApp(contribution.component, {
       ...props,
       port: {
@@ -50,13 +60,13 @@ try {
       assert.ok(doc.getElementById("execution-diagnostics-page"));
       assert.ok(doc.getElementById("diagnostics-inspect"));
       assert.equal(
-        doc.getElementById("diagnostics-loaded-at").getAttribute("datetime"),
+        required(doc.getElementById("diagnostics-loaded-at")).getAttribute("datetime"),
         state.model.loaded_at,
       );
       assert.equal(
-        doc
-          .getElementById(`diagnostics-collection-${state.selection.collection}`)
-          .getAttribute("aria-current"),
+        required(
+          doc.getElementById(`diagnostics-collection-${state.selection.collection}`),
+        ).getAttribute("aria-current"),
         "true",
       );
       assert.equal(
@@ -64,7 +74,7 @@ try {
         state.publication_changed,
       );
       const viewer = new URL(
-        doc.getElementById("diagnostics-viewer").getAttribute("href"),
+        required(required(doc.getElementById("diagnostics-viewer")).getAttribute("href")),
         "http://cadence.test",
       );
       assert.equal(

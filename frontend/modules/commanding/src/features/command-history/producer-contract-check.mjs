@@ -1,3 +1,9 @@
+import {
+  fixtureRows,
+  fixtureString,
+  fixtureRecord,
+} from "../../../../../test-support/json-fixture.ts";
+import { required } from "../../../../../test-support/required.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,19 +21,23 @@ const server = await createServer({
 });
 try {
   const { commandHistoryContribution: contribution, readCommandHistory } =
-    await server.ssrLoadModule("/src/command-history.ts");
-  for (const model of JSON.parse(process.argv[2])) {
+    /** @type {typeof import("../../command-history.ts")} */ (
+      await server.ssrLoadModule("/src/command-history.ts")
+    );
+  for (const raw of fixtureRows(process.argv[2])) {
     const context = {
-      organizationId: model.organization_id,
-      missionId: model.mission_id,
-      resourceId: model.request.id,
+      organizationId: fixtureString(raw.organization_id),
+      missionId: fixtureString(raw.mission_id),
+      resourceId: fixtureString(fixtureRecord(raw.request).id),
     };
-    assert.deepEqual(readCommandHistory(model, context), model);
+    const model = readCommandHistory(raw, context);
+    assert.deepEqual(model, raw);
     for (const key of Object.keys(context))
       assert.throws(() => readCommandHistory(model, { ...context, [key]: "foreign" }));
     const forbidden = () => {
       throw Error("Rendering must not navigate or execute");
     };
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks this SFC constructor.
     const app = createSSRApp(contribution.component, {
       ...contribution.read(model, context),
       port: { navigate: forbidden },
@@ -44,7 +54,7 @@ try {
       assert.equal(doc.querySelector("main,form"), null);
       const ids = Array.from(doc.querySelectorAll("[id]"), (e) => e.id);
       assert.equal(new Set(ids).size, ids.length);
-      for (const kind of ["release", "verifier"]) {
+      for (const kind of /** @type {const} */ (["release", "verifier"])) {
         assert.deepEqual(
           Array.from(doc.querySelectorAll(`[data-history-${kind}]`), (e) =>
             e.getAttribute(`data-history-${kind}`),
@@ -59,16 +69,18 @@ try {
       }
       if (model.evidence.status === "ready") {
         assert.equal(
-          doc.querySelector("[data-command-evidence]").getAttribute("data-command-evidence"),
+          required(doc.querySelector("[data-command-evidence]")).getAttribute(
+            "data-command-evidence",
+          ),
           model.evidence.record.id,
         );
         if (model.evidence.record.kind === "telemetry_sample") {
           assert.equal(
-            doc.getElementById("command-history-raw-value").textContent,
+            required(doc.getElementById("command-history-raw-value")).textContent,
             model.evidence.record.raw_value_json,
           );
           assert.equal(
-            doc.getElementById("command-history-engineering-value").textContent,
+            required(doc.getElementById("command-history-engineering-value")).textContent,
             model.evidence.record.engineering_value_json,
           );
         }

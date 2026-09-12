@@ -1,3 +1,5 @@
+import { containing } from "../../../../../test-support/matchers";
+import { required } from "../../../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import ProviderAccountDetailPage from "./ProviderAccountDetailPage.vue";
@@ -48,7 +50,7 @@ test("effects advance a page-local sequence while refresh preserves draft and se
   await flushPromises();
   expect(execute.mock.calls[0]).toEqual([
     "validate-account",
-    expect.objectContaining({ sequence: 5, provider_account_id: "account-1" }),
+    containing({ sequence: 5, provider_account_id: "account-1" }),
   ]);
   await wrapper.setProps({ model: accountDetailFixture(), sequence: 5 });
   expect(wrapper.get("#grant-grant_reason").element).toHaveProperty("value", "Keep this draft");
@@ -57,7 +59,7 @@ test("effects advance a page-local sequence while refresh preserves draft and se
   expect(execute.mock.calls[1]).toEqual(["refresh", {}]);
   await wrapper.get("#validate-account").trigger("click");
   await flushPromises();
-  expect(execute.mock.calls[2][1].sequence).toBe(6);
+  expect(required(execute.mock.calls[2])[1].sequence).toBe(6);
   wrapper.unmount();
 });
 test("unknown effects remain locked across refresh and server-locked mounts permit only reads", async () => {

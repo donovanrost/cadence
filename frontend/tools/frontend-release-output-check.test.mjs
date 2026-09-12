@@ -1,3 +1,4 @@
+import { jsonFixture, fixtureRecord } from "../test-support/json-fixture.ts";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
@@ -123,14 +124,16 @@ async function makeFixture(baseDirectory = tmpdir()) {
   return root;
 }
 
+/** @param {string} root @param {string} id @param {string} [name] */
 async function setManifestIdentity(root, id, name = id) {
   const manifestPath = join(root, "mf-manifest.json");
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const manifest = jsonFixture(await readFile(manifestPath, "utf8"));
   manifest.id = id;
   manifest.name = name;
   await writeFile(manifestPath, JSON.stringify(manifest));
 }
 
+/** @template T @param {(root:string)=>Promise<T>} callback @param {string} [baseDirectory] @returns {Promise<T>} */
 async function withFixture(callback, baseDirectory = tmpdir()) {
   const root = await makeFixture(baseDirectory);
   try {
@@ -140,6 +143,7 @@ async function withFixture(callback, baseDirectory = tmpdir()) {
   }
 }
 
+/** @param {string} root @param {string} expectedRemoteName @param {RegExp} pattern @param {import("./frontend-release-output-check.mjs").OutputOptions} [options] */
 async function expectCheckFailure(root, expectedRemoteName, pattern, options = {}) {
   await assert.rejects(
     () => validateReleaseOutput(root, expectedRemoteName, repositoryRoot, options),
@@ -147,6 +151,7 @@ async function expectCheckFailure(root, expectedRemoteName, pattern, options = {
   );
 }
 
+/** @param {string} root @param {string} remoteName @param {string} source @param {{helperHash?:string,sharedImportHash?:string}} [options] */
 async function addHostInitializationFixture(
   root,
   remoteName,
@@ -161,21 +166,21 @@ async function addHostInitializationFixture(
   await writeFile(join(root, sharedImportMapPath), "export const usedShared = {};\n");
 
   const manifestPath = join(root, "mf-manifest.json");
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const manifest = jsonFixture(await readFile(manifestPath, "utf8"));
   manifest.id = remoteName;
   manifest.name = remoteName;
-  manifest.exposes[0].assets.js.async.push(helperPath, sharedImportMapPath);
+  assetImports(manifest).push(helperPath, sharedImportMapPath);
   await writeFile(manifestPath, JSON.stringify(manifest));
 
   const statsPath = join(root, "mf-stats.json");
-  const stats = JSON.parse(await readFile(statsPath, "utf8"));
+  const stats = jsonFixture(await readFile(statsPath, "utf8"));
   stats.id = remoteName;
   stats.name = remoteName;
   stats.metaData = {
     name: remoteName,
     remoteEntry: { name: "remoteEntry.js", path: "", type: "module" },
   };
-  stats.buildOutput.push(
+  outputRows(stats).push(
     {
       fileName: hostPath,
       type: "chunk",
@@ -372,6 +377,7 @@ void test("accepts statically bounded worker references", async () => {
 void test("only an explicitly authoritative host publication may contain runtime URLs", () => {
   const files = new Set(["host.js"]);
   const options = { authoritativeHostPublication: true };
+  /** @param {string} source */
   const assertAuthoritativeHostSource = (source) =>
     assert.doesNotThrow(() =>
       assertImportReferences(source, "host.js", files, repositoryRoot, new Set(), options),
@@ -512,16 +518,16 @@ void test("rejects a real CSS reference that is absent and any standalone HTML",
 void test("requires federation manifest and stats references to existing files", async () => {
   await withFixture(async (root) => {
     const manifestPath = join(root, "mf-manifest.json");
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-    manifest.exposes[0].assets.js.async = ["assets/missing.js"];
+    const manifest = jsonFixture(await readFile(manifestPath, "utf8"));
+    fixtureRecord(fixtureRecord(firstExpose(manifest).assets).js).async = ["assets/missing.js"];
     await writeFile(manifestPath, JSON.stringify(manifest));
     await expectCheckFailure(root, "fixture_remote", /points to missing/);
   });
 
   await withFixture(async (root) => {
     const statsPath = join(root, "mf-stats.json");
-    const stats = JSON.parse(await readFile(statsPath, "utf8"));
-    stats.buildOutput.push({ fileName: "assets/missing.js" });
+    const stats = jsonFixture(await readFile(statsPath, "utf8"));
+    outputRows(stats).push({ fileName: "assets/missing.js" });
     await writeFile(statsPath, JSON.stringify(stats));
     await expectCheckFailure(root, "fixture_remote", /points to missing/);
   });
@@ -530,12 +536,12 @@ void test("requires federation manifest and stats references to existing files",
 void test("distinguishes producer size metadata from explicit byte metadata", async () => {
   await withFixture(async (root) => {
     const manifestPath = join(root, "mf-manifest.json");
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-    manifest.metaData.remoteEntry.size = 2381;
+    const manifest = jsonFixture(await readFile(manifestPath, "utf8"));
+    fixtureRecord(fixtureRecord(manifest.metaData).remoteEntry).size = 2381;
     await writeFile(manifestPath, JSON.stringify(manifest));
     const statsPath = join(root, "mf-stats.json");
-    const stats = JSON.parse(await readFile(statsPath, "utf8"));
-    stats.buildOutput[0].size = 2381;
+    const stats = jsonFixture(await readFile(statsPath, "utf8"));
+    fixtureRecord(outputRows(stats)[0]).size = 2381;
     await writeFile(statsPath, JSON.stringify(stats));
     const result = await validateReleaseOutput(root, "fixture_remote", repositoryRoot);
     assert.equal(result.fileCount > 0, true);
@@ -543,8 +549,8 @@ void test("distinguishes producer size metadata from explicit byte metadata", as
 
   await withFixture(async (root) => {
     const statsPath = join(root, "mf-stats.json");
-    const stats = JSON.parse(await readFile(statsPath, "utf8"));
-    stats.buildOutput[0].byteLength = 2381;
+    const stats = jsonFixture(await readFile(statsPath, "utf8"));
+    fixtureRecord(outputRows(stats)[0]).byteLength = 2381;
     await writeFile(statsPath, JSON.stringify(stats));
     await expectCheckFailure(root, "fixture_remote", /byte length/);
   });
@@ -553,8 +559,8 @@ void test("distinguishes producer size metadata from explicit byte metadata", as
 void test("rejects stats-only artifacts and recursively nested absolute or invalid paths", async () => {
   await withFixture(async (root) => {
     const statsPath = join(root, "mf-stats.json");
-    const stats = JSON.parse(await readFile(statsPath, "utf8"));
-    stats.buildOutput.push({ fileName: "assets/stats-only.js" });
+    const stats = jsonFixture(await readFile(statsPath, "utf8"));
+    outputRows(stats).push({ fileName: "assets/stats-only.js" });
     await writeFile(join(root, "assets", "stats-only.js"), "export const statsOnly = true;\n");
     await writeFile(statsPath, JSON.stringify(stats));
     await expectCheckFailure(root, "fixture_remote", /missing from manifest closure/);
@@ -562,7 +568,7 @@ void test("rejects stats-only artifacts and recursively nested absolute or inval
 
   await withFixture(async (root) => {
     const statsPath = join(root, "mf-stats.json");
-    const stats = JSON.parse(await readFile(statsPath, "utf8"));
+    const stats = jsonFixture(await readFile(statsPath, "utf8"));
     stats.nested = { metadata: { path: join(repositoryRoot, "checkout-secret.js") } };
     await writeFile(statsPath, JSON.stringify(stats));
     await expectCheckFailure(root, "fixture_remote", /nested\.metadata\.path.*absolute local path/);
@@ -570,7 +576,7 @@ void test("rejects stats-only artifacts and recursively nested absolute or inval
 
   await withFixture(async (root) => {
     const statsPath = join(root, "mf-stats.json");
-    const stats = JSON.parse(await readFile(statsPath, "utf8"));
+    const stats = jsonFixture(await readFile(statsPath, "utf8"));
     stats.nested = { metadata: { fileName: "assets/invalid%ZZ.js" } };
     await writeFile(statsPath, JSON.stringify(stats));
     await expectCheckFailure(root, "fixture_remote", /invalid percent encoding/);
@@ -578,7 +584,7 @@ void test("rejects stats-only artifacts and recursively nested absolute or inval
 
   await withFixture(async (root) => {
     const statsPath = join(root, "mf-stats.json");
-    const stats = JSON.parse(await readFile(statsPath, "utf8"));
+    const stats = jsonFixture(await readFile(statsPath, "utf8"));
     const hostInitPath = "assets/hostInit-ABCDEFGH.js";
     const hostInitSource = "globalThis.hostInitPromise = true; export const initHost = true;\n";
     await writeFile(join(root, hostInitPath), hostInitSource);
@@ -588,7 +594,7 @@ void test("rejects stats-only artifacts and recursively nested absolute or inval
       name: "fixture_remote",
       remoteEntry: { name: "remoteEntry.js", path: "", type: "module" },
     };
-    stats.buildOutput.push({
+    outputRows(stats).push({
       fileName: hostInitPath,
       type: "chunk",
       isEntry: false,
@@ -623,7 +629,7 @@ void test("rejects near-miss generated host-init structural spoofs", async () =>
   for (const source of sources) {
     await withFixture(async (root) => {
       const statsPath = join(root, "mf-stats.json");
-      const stats = JSON.parse(await readFile(statsPath, "utf8"));
+      const stats = jsonFixture(await readFile(statsPath, "utf8"));
       await writeFile(join(root, hostInitPath), source);
       stats.id = "fixture_remote";
       stats.name = "fixture_remote";
@@ -631,7 +637,7 @@ void test("rejects near-miss generated host-init structural spoofs", async () =>
         name: "fixture_remote",
         remoteEntry: { name: "remoteEntry.js", path: "", type: "module" },
       };
-      stats.buildOutput.push({
+      outputRows(stats).push({
         fileName: hostInitPath,
         type: "chunk",
         isEntry: false,
@@ -748,18 +754,18 @@ void test("requires generated dynamic-import exceptions to have stats provenance
       "const loaded = ready ? fallback : import(target).then(done).catch(fail);\nvoid loaded;\n";
     await writeFile(join(root, generatedPath), generatedSource);
     const manifestPath = join(root, "mf-manifest.json");
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-    manifest.exposes[0].assets.js.async.push(generatedPath);
+    const manifest = jsonFixture(await readFile(manifestPath, "utf8"));
+    assetImports(manifest).push(generatedPath);
     await writeFile(manifestPath, JSON.stringify(manifest));
     const statsPath = join(root, "mf-stats.json");
-    const stats = JSON.parse(await readFile(statsPath, "utf8"));
+    const stats = jsonFixture(await readFile(statsPath, "utf8"));
     stats.id = "fixture_remote";
     stats.name = "fixture_remote";
     stats.metaData = {
       name: "fixture_remote",
       remoteEntry: { name: "remoteEntry.js", path: "", type: "module" },
     };
-    stats.buildOutput.push({
+    outputRows(stats).push({
       fileName: generatedPath,
       type: "chunk",
       isEntry: false,
@@ -798,6 +804,7 @@ void test("rejects forbidden names, renamed forbidden chunks, source maps, and s
 });
 
 void test("rejects forbidden publication references in admitted file contents", async () => {
+  /** @type {[string, RegExp][]} */
   const forbiddenReferences = [
     ['const probe = "contract-probe";\n', /forbidden contract probe/],
     ['const origin = "http://localhost:4174";\n', /forbidden development URL/],
@@ -823,8 +830,8 @@ void test("rejects forbidden publication references in admitted file contents", 
 
   await withFixture(async (root) => {
     const manifestPath = join(root, "mf-manifest.json");
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-    manifest.exposes[0].path = "./Failure";
+    const manifest = jsonFixture(await readFile(manifestPath, "utf8"));
+    firstExpose(manifest).path = "./Failure";
     await writeFile(manifestPath, JSON.stringify(manifest));
     await expectCheckFailure(root, "fixture_remote", /non-publication module/);
   });
@@ -957,8 +964,31 @@ void test("direct CLI invocation binds the expected remote identity independent 
     for (const argumentsList of invalidCliArguments) {
       await assert.rejects(
         () => execFileAsync(process.execPath, [checkerPath, ...argumentsList], { cwd: root }),
-        (error) => error.code === 1 && /remoteName/.test(error.stderr),
+        (error) =>
+          error instanceof Error &&
+          "code" in error &&
+          error.code === 1 &&
+          "stderr" in error &&
+          typeof error.stderr === "string" &&
+          /remoteName/.test(error.stderr),
       );
     }
   });
 });
+
+/** @param {Record<string, unknown>} manifest */
+function firstExpose(manifest) {
+  assert.ok(Array.isArray(manifest.exposes));
+  return fixtureRecord(manifest.exposes[0]);
+}
+/** @param {Record<string, unknown>} manifest @returns {unknown[]} */
+function assetImports(manifest) {
+  const value = fixtureRecord(fixtureRecord(firstExpose(manifest).assets).js).async;
+  assert.ok(Array.isArray(value));
+  return value;
+}
+/** @param {Record<string, unknown>} stats @returns {unknown[]} */
+function outputRows(stats) {
+  assert.ok(Array.isArray(stats.buildOutput));
+  return stats.buildOutput;
+}

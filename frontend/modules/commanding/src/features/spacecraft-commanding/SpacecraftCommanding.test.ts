@@ -1,3 +1,10 @@
+import {
+  fixtureContext,
+  fixtureRecord,
+  fixtureString,
+  jsonFixture,
+} from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import {
@@ -98,9 +105,14 @@ test("legacy entry has only the owner destination and rejects forged identities"
   wrapper.unmount();
 });
 test("actual producer document reaches the public component and exact endpoint monitor", () => {
-  const data = process.env.CADENCE_SPACECRAFT_COMMANDING_DOCUMENT
-    ? JSON.parse(process.env.CADENCE_SPACECRAFT_COMMANDING_DOCUMENT)
+  const raw = process.env.CADENCE_SPACECRAFT_COMMANDING_DOCUMENT
+    ? jsonFixture(process.env.CADENCE_SPACECRAFT_COMMANDING_DOCUMENT)
     : fixture();
+  const reviewedContext = fixtureRecord(raw.context);
+  const data = readSpacecraftCommanding(raw, {
+    ...fixtureContext(reviewedContext),
+    spacecraftId: fixtureString(reviewedContext.spacecraftId),
+  });
   const props = contribution.read(data, data.context);
   const wrapper = mount(contribution.component, { props });
   expect(wrapper.get("#spacecraft-commanding-page").text()).toContain(data.spacecraft_name);
@@ -112,13 +124,28 @@ test("actual producer document reaches the public component and exact endpoint m
       .find(
         (a) =>
           a.text() === "Open command monitor" &&
-          new URL(a.attributes("href")!, "https://cadence.test").searchParams.get("target") ===
-            endpoint.id,
+          new URL(required(a.attributes("href")), "https://cadence.test").searchParams.get(
+            "target",
+          ) === endpoint.id,
       );
     expect(link).toBeDefined();
-    expect(new URL(link!.attributes("href")!, "https://cadence.test").pathname).toBe(
-      `/missions/${encodeURIComponent(data.context.missionId)}/ops/commands`,
-    );
+    expect(
+      new URL(required(required(link).attributes("href")), "https://cadence.test").pathname,
+    ).toBe(`/missions/${encodeURIComponent(data.context.missionId)}/ops/commands`);
   }
   wrapper.unmount();
+});
+
+test("profile state admission requires the actual string state", () => {
+  const model = fixture();
+  fixtureRecord(model).profile = {
+    status: { toString: () => "unavailable" },
+    id: "profile-a",
+    version: 2,
+    name: null,
+    lifecycle: null,
+    uplink: null,
+    packet: null,
+  };
+  expect(() => readSpacecraftCommanding(model, context)).toThrow();
 });

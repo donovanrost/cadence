@@ -4,7 +4,8 @@ import type {
   GrantForm,
   PolicyValues,
   GrantValues,
-  StringPayload,
+  PolicyFields,
+  GrantFields,
   OpsFleetPlanningPolicyProps,
   OpsFleetPlanningPolicyEmits,
 } from "./OpsFleetPlanningPolicy.contracts";
@@ -95,8 +96,8 @@ const policyValuesFromForm = (form: PolicyForm | null): PolicyValues => {
 const stringValue = (value: string | number) => String(value ?? "");
 const checkboxValue = (value: boolean) => (value ? "true" : "false");
 
-const normalizedPolicy = (values: PolicyValues): StringPayload => {
-  const normalized: StringPayload = {
+const normalizedPolicy = (values: PolicyValues): PolicyFields => {
+  const normalized: PolicyFields = {
     max_horizon_duration: stringValue(values.max_horizon_duration),
     requirement_concurrency: stringValue(values.requirement_concurrency),
     provider_search_concurrency: stringValue(values.provider_search_concurrency),
@@ -179,18 +180,20 @@ watch(
 );
 
 const validatePolicy = () => {
-  if (!canSavePolicy.value) return;
+  const reference = editingReference.value;
+  if (!canSavePolicy.value || !reference) return;
   emit("validate-policy", {
     policy: normalizedPolicy(policy),
-    edit_reference: editingReference.value!,
+    edit_reference: reference,
   });
 };
 
 const savePolicy = () => {
-  if (!canSavePolicy.value) return;
+  const reference = editingReference.value;
+  if (!canSavePolicy.value || !reference) return;
   emit("save-policy", {
     policy: normalizedPolicy(policy),
-    edit_reference: editingReference.value!,
+    edit_reference: reference,
   });
 };
 
@@ -250,7 +253,7 @@ const grantValuesFromForm = (form: GrantForm | null): GrantValues => {
   };
 };
 
-const normalizedGrant = (values: GrantValues): StringPayload => ({
+const normalizedGrant = (values: GrantValues): GrantFields => ({
   service_identity_id: values.service_identity_id,
   maximum_horizon_duration: stringValue(values.maximum_horizon_duration),
   maximum_contacts: stringValue(values.maximum_contacts),

@@ -1,29 +1,22 @@
 #!/usr/bin/env node
 
-import {
-  constants as fsConstants,
-  createHash,
-  createPrivateKey,
-  randomUUID,
-  sign,
-} from "node:crypto";
-import {
-  lstat,
-  mkdir,
-  open,
-  readFile,
-  readdir,
-  realpath,
-  rename,
-  rm,
-  rmdir,
-} from "node:fs/promises";
+import { createHash, createPrivateKey, randomUUID, sign } from "node:crypto";
+import { constants as fsConstants, readFile as readDescriptor } from "node:fs";
+import { lstat, mkdir, open, readdir, realpath, rename, rm, rmdir } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   assertReleaseArtifactPath,
   validateReleaseOutput,
 } from "./frontend-release-output-check.mjs";
+
+/** @typedef {Record<string, unknown>} Metadata */
+/** @typedef {{path:string, sha256:string, size:number, mediaType:string, bytes:Buffer}} Artifact */
+/** @typedef {{root:string, artifacts:readonly Readonly<Artifact>[]}} Inventory */
+/** @typedef {{privateKeyFile?:string, privateKeyFd?:string|number, privateKeyEnv?:string}} KeySource */
+/** @typedef {{inputDirectory:string, metadata:unknown, artifactOrigin:string, keyId:string, privateKey:import("node:crypto").KeyObject, afterSnapshot?:((root:string)=>void|Promise<void>) | undefined}} BuildOptions */
+/** @typedef {BuildOptions & {outputDirectory:string}} PackageOptions */
+/** @typedef {{inputDirectory:string, metadataFile:string, artifactOrigin:string, keyId:string, outputDirectory:string} & KeySource} CliOptions */
 
 const TOOL_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = resolve(TOOL_DIRECTORY, "../..");
@@ -102,23 +95,32 @@ const MEDIA_TYPES = new Map([
 ]);
 
 class ReleasePackagerError extends Error {
+  /** @param {string} message */
   constructor(message) {
     super(message);
     this.name = "ReleasePackagerError";
   }
 }
 
+/** @param {string} message @returns {never} */
+
 function fail(message) {
   throw new ReleasePackagerError(message);
 }
+
+/** @param {string} left @param {string} right */
 
 function compareUtf8(left, right) {
   return Buffer.from(left, "utf8").compare(Buffer.from(right, "utf8"));
 }
 
+/** @param {unknown} value @returns {value is Metadata} */
+
 function isPlainRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
+
+/** @param {unknown} value @param {string[]} required @param {string} label @returns {asserts value is Metadata} */
 
 function exactFields(value, required, label) {
   if (!isPlainRecord(value)) fail(`${label} must be an object`);
@@ -128,6 +130,8 @@ function exactFields(value, required, label) {
     fail(`${label} has an unexpected or missing field`);
   }
 }
+
+/** @param {unknown} value @param {string} label @param {{maxBytes?:number,nonEmpty?:boolean}} [options] */
 
 function requireString(value, label, { maxBytes = MAX_STRING_BYTES, nonEmpty = false } = {}) {
   if (typeof value !== "string") fail(`${label} must be a string`);
@@ -144,18 +148,29 @@ function requireString(value, label, { maxBytes = MAX_STRING_BYTES, nonEmpty = f
   return value;
 }
 
-function requireIdentifier(value, label) {
-  requireString(value, label, { maxBytes: MAX_IDENTIFIER_BYTES, nonEmpty: true });
+/** @param {unknown} input @param {string} label */
+
+function requireIdentifier(input, label) {
+  const value = requireString(input, label, { maxBytes: MAX_IDENTIFIER_BYTES, nonEmpty: true });
   if (!/^[a-z][a-z0-9._-]{0,127}$/.test(value)) fail(`${label} is not a safe identifier`);
   return value;
 }
 
+/** @param {unknown} value @param {string} label */
+
 function requireVersion(value, label) {
-  if (!Number.isSafeInteger(value) || value < 1 || value > MAX_VERSION) {
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    value > MAX_VERSION
+  ) {
     fail(`${label} is not a valid version`);
   }
   return value;
 }
+
+/** @param {unknown} value @param {string} label */
 
 function requireIdentity(value, label) {
   exactFields(value, ["id", "version"], label);
@@ -165,8 +180,10 @@ function requireIdentity(value, label) {
   };
 }
 
-function requireTimestamp(value, label) {
-  requireString(value, label);
+/** @param {unknown} input @param {string} label */
+
+function requireTimestamp(input, label) {
+  const value = requireString(input, label);
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) {
     fail(`${label} is not a canonical UTC timestamp`);
   }
@@ -180,9 +197,12 @@ function requireTimestamp(value, label) {
   return value;
 }
 
-function strictHttpsUrl(value, label, { originOnly = false } = {}) {
-  requireString(value, label);
+/** @param {unknown} input @param {string} label @param {{originOnly?:boolean}} [options] */
+
+function strictHttpsUrl(input, label, { originOnly = false } = {}) {
+  const value = requireString(input, label);
   if (
+    // oxlint-disable-next-line typescript/no-misused-spread -- Inspect code points only to reject ASCII control and space characters.
     [...value].some((character) => character.charCodeAt(0) <= 0x20) ||
     value.includes("\\") ||
     value.includes("%") ||
@@ -214,8 +234,10 @@ function strictHttpsUrl(value, label, { originOnly = false } = {}) {
   return { origin: `https://${authority}`, path };
 }
 
-function validateRelativeArtifactPath(value, label = "artifact path") {
-  requireString(value, label, { maxBytes: MAX_ARTIFACT_PATH_BYTES, nonEmpty: true });
+/** @param {unknown} input @param {string} [label] */
+
+function validateRelativeArtifactPath(input, label = "artifact path") {
+  const value = requireString(input, label, { maxBytes: MAX_ARTIFACT_PATH_BYTES, nonEmpty: true });
   if (value.startsWith("/") || /^[A-Za-z]:/.test(value)) fail(`${label} must be relative`);
   if (value.includes("\\") || value.includes("\0")) fail(`${label} contains a forbidden separator`);
   const parts = value.split("/");
@@ -227,6 +249,8 @@ function validateRelativeArtifactPath(value, label = "artifact path") {
   return value;
 }
 
+/** @param {string} root @param {string} candidate */
+
 function isWithin(root, candidate) {
   const remainder = relative(root, candidate);
   return (
@@ -235,9 +259,13 @@ function isWithin(root, candidate) {
   );
 }
 
+/** @param {string} left @param {string} right */
+
 function pathsOverlap(left, right) {
   return isWithin(left, right) || isWithin(right, left);
 }
+
+/** @param {string} path */
 
 function mediaTypeForPath(path) {
   const extension = extname(path).toLowerCase();
@@ -252,6 +280,7 @@ function mediaTypeForPath(path) {
   return mediaType;
 }
 
+/** @type {(keyof import("node:fs").BigIntStats)[]} */
 const stableFileMetadata = [
   "dev",
   "ino",
@@ -268,15 +297,21 @@ const stableFileMetadata = [
   "birthtimeNs",
 ];
 
+/** @param {import("node:fs").BigIntStats} stats */
+
 function fileMetadata(stats) {
   return stableFileMetadata.map((key) => [key, stats[key]?.toString() ?? null]);
 }
+
+/** @param {import("node:fs").BigIntStats} expected @param {import("node:fs").BigIntStats} actual @param {string} label */
 
 function assertStableFileMetadata(expected, actual, label) {
   if (JSON.stringify(fileMetadata(expected)) !== JSON.stringify(fileMetadata(actual))) {
     fail(`${label} changed while it was read`);
   }
 }
+
+/** @param {string} filePath @param {string} label @param {import("node:fs").BigIntStats} expectedStats @param {number} [maxSize] */
 
 async function readRegularFile(filePath, label, expectedStats, maxSize = MAX_ARTIFACT_SIZE) {
   const noFollow = fsConstants.O_NOFOLLOW ?? 0;
@@ -300,6 +335,8 @@ async function readRegularFile(filePath, label, expectedStats, maxSize = MAX_ART
   }
 }
 
+/** @param {string} inputDirectory */
+
 async function enumerateArtifacts(inputDirectory) {
   const inputStats = await lstat(inputDirectory, { bigint: true }).catch(() =>
     fail("input directory does not exist"),
@@ -311,8 +348,11 @@ async function enumerateArtifacts(inputDirectory) {
   assertStableFileMetadata(inputStats, rootStats, "input directory");
   if (!rootStats.isDirectory()) fail("input path must be a directory");
 
+  /** @type {Artifact[]} */
   const artifacts = [];
   const paths = new Set();
+
+  /** @param {string} directory @returns {Promise<void>} */
 
   async function visit(directory) {
     let entries;
@@ -380,12 +420,16 @@ async function enumerateArtifacts(inputDirectory) {
   return { root, artifacts };
 }
 
+/** @param {Inventory} inventory */
+
 function freezeArtifactSnapshot(inventory) {
   const artifacts = inventory.artifacts.map((artifact) =>
     Object.freeze({ ...artifact, bytes: Buffer.from(artifact.bytes) }),
   );
   return Object.freeze({ root: inventory.root, artifacts: Object.freeze(artifacts) });
 }
+
+/** @param {unknown} metadata */
 
 function validateMetadata(metadata) {
   exactFields(metadata, METADATA_FIELDS, "release metadata");
@@ -443,17 +487,25 @@ function validateMetadata(metadata) {
     ["sourceRepository", "sourceRevision", "buildId", "builder", "workflow", "builtAt"],
     "provenance",
   );
-  strictHttpsUrl(metadata.provenance.sourceRepository, "provenance.sourceRepository");
-  requireString(metadata.provenance.sourceRevision, "provenance.sourceRevision", {
-    nonEmpty: true,
-  });
-  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(metadata.provenance.sourceRevision)) {
+  const sourceRepository = requireString(
+    metadata.provenance.sourceRepository,
+    "provenance.sourceRepository",
+  );
+  strictHttpsUrl(sourceRepository, "provenance.sourceRepository");
+  const sourceRevision = requireString(
+    metadata.provenance.sourceRevision,
+    "provenance.sourceRevision",
+    {
+      nonEmpty: true,
+    },
+  );
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(sourceRevision)) {
     fail("provenance.sourceRevision must be a lowercase Git revision");
   }
-  for (const key of ["buildId", "builder", "workflow"]) {
-    requireString(metadata.provenance[key], `provenance.${key}`);
-  }
-  requireTimestamp(metadata.provenance.builtAt, "provenance.builtAt");
+  const buildId = requireString(metadata.provenance.buildId, "provenance.buildId");
+  const builder = requireString(metadata.provenance.builder, "provenance.builder");
+  const workflow = requireString(metadata.provenance.workflow, "provenance.workflow");
+  const builtAt = requireTimestamp(metadata.provenance.builtAt, "provenance.builtAt");
   const releasedAt = requireTimestamp(metadata.releasedAt, "releasedAt");
 
   return {
@@ -475,19 +527,22 @@ function validateMetadata(metadata) {
       vueRange: VUE_RANGE,
     },
     provenance: {
-      sourceRepository: metadata.provenance.sourceRepository,
-      sourceRevision: metadata.provenance.sourceRevision,
-      buildId: metadata.provenance.buildId,
-      builder: metadata.provenance.builder,
-      workflow: metadata.provenance.workflow,
-      builtAt: metadata.provenance.builtAt,
+      sourceRepository,
+      sourceRevision,
+      buildId,
+      builder,
+      workflow,
+      builtAt,
     },
     releasedAt,
   };
 }
 
+/** @param {{inventory:unknown,metadata:unknown,artifactOrigin:unknown}} options */
+
 function buildReleasePayload({ inventory, metadata, artifactOrigin }) {
-  if (!inventory || !Array.isArray(inventory.artifacts)) fail("artifact inventory is required");
+  if (!isPlainRecord(inventory) || !Array.isArray(inventory.artifacts))
+    fail("artifact inventory is required");
   const normalizedMetadata = validateMetadata(metadata);
   const { origin } = strictHttpsUrl(artifactOrigin, "artifact origin", { originOnly: true });
   const paths = new Set();
@@ -500,13 +555,14 @@ function buildReleasePayload({ inventory, metadata, artifactOrigin }) {
       fail(`invalid digest for ${path}`);
     }
     if (
+      typeof artifact.size !== "number" ||
       !Number.isSafeInteger(artifact.size) ||
       artifact.size < 0 ||
       artifact.size > MAX_ARTIFACT_SIZE
     ) {
       fail(`invalid size for ${path}`);
     }
-    if (mediaTypeForPath(path) !== artifact.mediaType) {
+    if (typeof artifact.mediaType !== "string" || mediaTypeForPath(path) !== artifact.mediaType) {
       fail(`invalid media type for ${path}`);
     }
     if (!Buffer.isBuffer(artifact.bytes)) {
@@ -565,6 +621,8 @@ function buildReleasePayload({ inventory, metadata, artifactOrigin }) {
   };
 }
 
+/** @param {unknown} value @returns {string} */
+
 function canonicalJson(value) {
   if (value === null) return "null";
   if (typeof value === "string") return JSON.stringify(value);
@@ -588,13 +646,19 @@ function canonicalJson(value) {
   fail("canonical JSON received an unsupported value");
 }
 
+/** @param {Buffer} bytes */
+
 function sha256Digest(bytes) {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
+/** @param {Buffer} bytes */
+
 function base64Url(bytes) {
   return Buffer.from(bytes).toString("base64url");
 }
+
+/** @param {{payloadBytes:Buffer,keyId:string,privateKey:import("node:crypto").KeyObject}} options */
 
 function createSignedEnvelope({ payloadBytes, keyId, privateKey }) {
   requireIdentifier(keyId, "keyId");
@@ -620,6 +684,8 @@ function createSignedEnvelope({ payloadBytes, keyId, privateKey }) {
   return { envelope, documentBytes };
 }
 
+/** @param {string} text */
+
 function decodePrivateKeyText(text) {
   const trimmed = text.trim();
   if (trimmed.startsWith("-----BEGIN")) return Buffer.from(text, "utf8");
@@ -628,7 +694,10 @@ function decodePrivateKeyText(text) {
   fail("private key material has an unsupported encoding");
 }
 
+/** @param {Buffer} bytes */
+
 function privateKeyFromBytes(bytes) {
+  /** @type {import("node:crypto").PrivateKeyInput} */
   const keyInput =
     bytes.length === 32
       ? {
@@ -647,6 +716,8 @@ function privateKeyFromBytes(bytes) {
     fail("private key material is invalid");
   }
 }
+
+/** @param {KeySource} [options] */
 
 async function readPrivateKeySource({
   privateKeyFile,
@@ -682,7 +753,7 @@ async function readPrivateKeySource({
   if (privateKeyFd !== undefined) {
     if (!/^\d+$/.test(String(privateKeyFd)) || Number(privateKeyFd) > 1_000_000)
       fail("private key file descriptor is invalid");
-    const bytes = await readFile(Number(privateKeyFd)).catch(() =>
+    const bytes = await readKeyDescriptor(Number(privateKeyFd)).catch(() =>
       fail("private key file descriptor is unavailable"),
     );
     return privateKeyFromBytes(
@@ -690,11 +761,14 @@ async function readPrivateKeySource({
     );
   }
   const value = process.env[privateKeyEnv];
+  if (value === undefined) fail("private key environment value is unavailable");
   if (value.startsWith("hex:")) return privateKeyFromBytes(Buffer.from(value.slice(4), "hex"));
   if (value.startsWith("base64url:"))
     return privateKeyFromBytes(Buffer.from(value.slice("base64url:".length), "base64url"));
   return privateKeyFromBytes(decodePrivateKeyText(value));
 }
+
+/** @param {string} filePath @param {string} label @returns {Promise<unknown>} */
 
 async function readJsonFile(filePath, label) {
   const stats = await lstat(filePath, { bigint: true }).catch(() =>
@@ -721,6 +795,8 @@ async function readJsonFile(filePath, label) {
   }
 }
 
+/** @param {string} path */
+
 async function canonicalPathWithMissingTail(path) {
   const missingTail = [];
   let current = resolve(path);
@@ -729,7 +805,8 @@ async function canonicalPathWithMissingTail(path) {
       const canonical = await realpath(current);
       return join(canonical, ...missingTail.reverse());
     } catch (error) {
-      if (error?.code !== "ENOENT") fail("output destination cannot be resolved");
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
+        fail("output destination cannot be resolved");
       const parent = dirname(current);
       if (parent === current) fail("output destination cannot be resolved");
       missingTail.push(basename(current));
@@ -737,6 +814,8 @@ async function canonicalPathWithMissingTail(path) {
     }
   }
 }
+
+/** @param {string} candidate @param {string} repositoryRoot @param {string} inputRoot */
 
 function assertOutputDoesNotOverlap(candidate, repositoryRoot, inputRoot) {
   if (pathsOverlap(repositoryRoot, candidate)) {
@@ -747,6 +826,8 @@ function assertOutputDoesNotOverlap(candidate, repositoryRoot, inputRoot) {
   }
 }
 
+/** @param {string} outputDirectory */
+
 async function assertOutputDoesNotExist(outputDirectory) {
   try {
     const existing = await lstat(outputDirectory);
@@ -754,9 +835,12 @@ async function assertOutputDoesNotExist(outputDirectory) {
     fail("output directory already exists; choose a new immutable destination");
   } catch (error) {
     if (error instanceof ReleasePackagerError) throw error;
-    if (error?.code !== "ENOENT") fail("output destination cannot be inspected");
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
+      fail("output destination cannot be inspected");
   }
 }
+
+/** @param {string} directory */
 
 async function createMissingDirectories(directory) {
   const missing = [];
@@ -766,7 +850,8 @@ async function createMissingDirectories(directory) {
       await realpath(current);
       break;
     } catch (error) {
-      if (error?.code !== "ENOENT") fail("output parent is unavailable");
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
+        fail("output parent is unavailable");
       const parent = dirname(current);
       if (parent === current) fail("output parent is unavailable");
       missing.push(current);
@@ -781,7 +866,8 @@ async function createMissingDirectories(directory) {
         await mkdir(path, { recursive: false });
         created.push(path);
       } catch (error) {
-        if (error?.code !== "EEXIST") fail("output parent is unavailable");
+        if (!(error instanceof Error && "code" in error && error.code === "EEXIST"))
+          fail("output parent is unavailable");
         await realpath(path).catch(() => fail("output parent is unavailable"));
       }
     }
@@ -792,11 +878,15 @@ async function createMissingDirectories(directory) {
   return created;
 }
 
+/** @param {string[]} directories */
+
 async function removeCreatedDirectories(directories) {
   for (const directory of directories.slice().reverse()) {
     await rmdir(directory).catch(() => {});
   }
 }
+
+/** @param {string} outputDirectory @param {string} inputRoot */
 
 async function ensureOutputDestination(outputDirectory, inputRoot) {
   const resolvedOutput = resolve(outputDirectory);
@@ -807,6 +897,7 @@ async function ensureOutputDestination(outputDirectory, inputRoot) {
   assertOutputDoesNotOverlap(canonicalBefore, repositoryRoot, inputRoot);
   await assertOutputDoesNotExist(resolvedOutput);
 
+  /** @type {string[]} */
   let createdParentDirectories = [];
   try {
     createdParentDirectories = await createMissingDirectories(dirname(canonicalBefore));
@@ -819,6 +910,8 @@ async function ensureOutputDestination(outputDirectory, inputRoot) {
     throw error;
   }
 }
+
+/** @param {string} filePath @param {Buffer} bytes */
 
 async function writeAtomic(filePath, bytes) {
   const temporaryPath = `${filePath}.tmp-${process.pid}-${randomUUID()}`;
@@ -837,6 +930,8 @@ async function writeAtomic(filePath, bytes) {
     fail(`could not atomically write ${filePath}`);
   }
 }
+
+/** @param {string} outputDirectory @param {Buffer} envelopeBytes @param {readonly Readonly<Artifact>[]} artifacts */
 
 async function writePackage(outputDirectory, envelopeBytes, artifacts) {
   const parent = dirname(outputDirectory);
@@ -857,6 +952,8 @@ async function writePackage(outputDirectory, envelopeBytes, artifacts) {
     throw error;
   }
 }
+
+/** @param {BuildOptions} options */
 
 export async function buildRelease({
   inputDirectory,
@@ -888,6 +985,8 @@ export async function buildRelease({
     metadata: release.metadata,
   };
 }
+
+/** @param {PackageOptions} options */
 
 export async function packageRelease({
   inputDirectory,
@@ -932,7 +1031,10 @@ plus an artifacts/ tree with exact input bytes.
 `;
 }
 
+/** @param {string[]} argv @returns {{help:true} | ({help?:false} & CliOptions)} */
+
 function parseArgs(argv) {
+  /** @type {Record<string,string>} */
   const options = {};
   const aliases = new Map([
     ["--input", "inputDirectory"],
@@ -947,6 +1049,7 @@ function parseArgs(argv) {
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
+    if (argument === undefined) fail("argument list is sparse");
     if (argument === "--help" || argument === "-h") return { help: true };
     if (argument === "--") {
       if (index !== 0) fail("unexpected option separator");
@@ -972,7 +1075,16 @@ function parseArgs(argv) {
     if (options[key] === undefined)
       fail(`--${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)} is required`);
   }
-  return options;
+  const requiredOption = (/** @type {string} */ key) => options[key] ?? fail(`missing ${key}`);
+  return {
+    inputDirectory: requiredOption("inputDirectory"),
+    metadataFile: requiredOption("metadataFile"),
+    artifactOrigin: requiredOption("artifactOrigin"),
+    keyId: requiredOption("keyId"),
+    outputDirectory: requiredOption("outputDirectory"),
+    ...(options.privateKeyFile === undefined ? {} : { privateKeyFile: options.privateKeyFile }),
+    ...(options.privateKeyFd === undefined ? {} : { privateKeyFd: options.privateKeyFd }),
+  };
 }
 
 async function main() {
@@ -1021,3 +1133,11 @@ export {
   validateMetadata,
   validateRelativeArtifactPath,
 };
+
+// The callback API accepts a caller-owned descriptor; fs/promises.readFile accepts FileHandle instead.
+/** @param {number} descriptor @returns {Promise<Buffer>} */
+function readKeyDescriptor(descriptor) {
+  return new Promise((resolveKey, rejectKey) => {
+    readDescriptor(descriptor, (error, bytes) => (error ? rejectKey(error) : resolveKey(bytes)));
+  });
+}

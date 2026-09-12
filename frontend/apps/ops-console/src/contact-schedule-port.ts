@@ -1,16 +1,18 @@
+import { queryPresentation } from "./query-presentation";
 import type { FullPageSurfaceProps } from "@cadence/plugin-sdk";
 import type { ContactSchedulePort } from "@cadence/planning-and-contacts/contact-scheduling";
 const actions = ["search", "reserve", "cancel"];
 export function createContactSchedulePort(
   props: FullPageSurfaceProps,
   active: () => boolean,
-): ContactSchedulePort | undefined {
+): Extract<ContactSchedulePort, { protocol: "remote-query" }> | undefined {
   const { context, surface, application, bridge } = props;
   if (context.scope !== "mission" || surface.surfaceId !== "contact_schedule") return undefined;
   function admitted() {
     if (!active()) throw new Error("The contact scheduling view has departed.");
   }
   return {
+    protocol: "remote-query",
     context: { organization_id: context.organizationId, mission_id: context.missionId },
     async execute(action, input) {
       admitted();
@@ -30,19 +32,18 @@ export function createContactSchedulePort(
     },
     async refresh() {
       admitted();
-      const result: any = await bridge.query({
+      const result = await bridge.query({
         queryId: surface.dataContract.id,
         version: surface.dataContract.version,
         context,
       });
       admitted();
-      const candidate = result?.trusted_surface ?? result;
-      if (
-        candidate?.queryVersion !== 1 ||
-        candidate?.presentation?.component !== "OpsContactSchedule"
-      )
-        throw new Error("Unavailable contact scheduling view.");
-      return candidate.presentation.props?.schedule;
+      return queryPresentation(
+        result,
+        "OpsContactSchedule",
+        "schedule",
+        "Unavailable contact scheduling view.",
+      );
     },
   };
 }

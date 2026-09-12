@@ -299,7 +299,7 @@ const selectItem = (id: string) => ({
           <LibraryDefinitionForm
             :mode="mode"
             :selected="!!model.selected"
-            :latest="model.selected?.item.latest_version"
+            v-bind="model.selected ? { latest: model.selected.item.latest_version } : {}"
             :draft="draft"
             :disabled="disabled"
             :dirty="dirty"

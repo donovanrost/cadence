@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import CommsValidation from "./CommsValidation.vue";
@@ -52,6 +53,6 @@ test("inconsistent counts, hidden groups and unsafe finding actions cannot appea
   expect(() =>
     readValidation({ ...input, data: { ...input.data, finding_groups: [] } }, context),
   ).toThrow();
-  input.data.finding_groups[0].findings[0].action_href = "//evil.example";
+  required(required(input.data.finding_groups[0]).findings[0]).action_href = "//evil.example";
   expect(() => readValidation(input, context)).toThrow();
 });

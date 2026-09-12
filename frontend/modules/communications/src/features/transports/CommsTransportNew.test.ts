@@ -1,3 +1,4 @@
+import { containing } from "../../../../../test-support/matchers";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import CommsTransportNew from "./CommsTransportNew.vue";
@@ -55,11 +56,15 @@ test("configuration changes validate the currently visible fields, including new
     await wrapper.get("#framing_mode-input").setValue("fixed");
     expect(wrapper.find("#frame_size-input").exists()).toBe(true);
     expect(wrapper.emitted("validate")?.at(-1)).toEqual([
-      { transport: expect.objectContaining({ framing_mode: "fixed", frame_size: "64" }) },
+      { transport: containing({ framing_mode: "fixed", frame_size: "64" }) },
     ]);
     await wrapper.get("#framing_mode-input").setValue("raw");
     expect(
-      (wrapper.emitted("validate")?.at(-1)?.[0] as { transport: Record<string, string> }).transport,
+      (
+        wrapper.emitted("validate")?.at(-1)?.[0] as
+          | { transport: Record<string, string> }
+          | undefined
+      )?.transport,
     ).not.toHaveProperty("frame_size");
   } finally {
     wrapper.unmount();

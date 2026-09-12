@@ -1,21 +1,26 @@
+import { record, oneOf, arrayOf, type Guard } from "@cadence/plugin-sdk/admission";
 import type {
   ReservationAction,
   ReservationDetail,
   ReservationPort,
+  ChangeSummary,
+  ReviewedChange,
+  ReservationDecision,
+  ReservationReceipt,
+  ReservationStates,
 } from "./OpsContactDetail.contracts";
-const record = (v: unknown): v is Record<string, any> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
 const text = (v: unknown, max = 512): v is string =>
   typeof v === "string" && new TextEncoder().encode(v).length <= max;
+// oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
 const id = (v: unknown): v is string => text(v, 240) && !!v && !/[\x00-\x20\x7f]/.test(v);
 const version = (v: unknown): v is number =>
-  Number.isSafeInteger(v) && (v as number) > 0 && (v as number) <= 2147483647;
+  typeof v === "number" && Number.isSafeInteger(v) && v > 0 && v <= 2147483647;
 const hash = (v: unknown) => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
-const time = (v: unknown) =>
+const time = (v: unknown): v is string =>
   text(v, 40) &&
   /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?Z$/.test(v) &&
   Number.isFinite(Date.parse(v));
-const optional = (v: unknown, check: (v: any) => boolean) => v === null || check(v);
+const optional = <T>(v: unknown, check: Guard<T>): v is T | null => v === null || check(v);
 const states = [
   "observed",
   "pending_approval",
@@ -27,45 +32,87 @@ const states = [
   "configuration_failure",
   "superseded",
   "apply_failed",
-];
-const summary = (v: any) =>
+] as const;
+const summary = (v: unknown): v is ChangeSummary & Record<string, unknown> =>
   record(v) &&
   id(v.id) &&
   version(v.provider_revision) &&
   hash(v.proposal_hash) &&
-  states.includes(v.lifecycle_state) &&
-  [
-    "observation",
-    "policy_accept",
-    "approval_required",
-    "acknowledgment_required",
-    "configuration_failure",
-  ].includes(v.classification) &&
+  oneOf(states, v.lifecycle_state) &&
+  oneOf(
+    [
+      "observation",
+      "policy_accept",
+      "approval_required",
+      "acknowledgment_required",
+      "configuration_failure",
+    ],
+    v.classification,
+  ) &&
   time(v.recorded_at);
-const rows = (v: unknown, check: (v: any) => boolean, max = 25): v is any[] =>
-  Array.isArray(v) && v.length <= max && v.every(check);
-const unique = (v: any[]) => new Set(v.map((r) => r.id)).size === v.length;
+const rows = <T>(v: unknown, check: Guard<T>, max = 25): v is T[] =>
+  arrayOf(v, check) && v.length <= max;
+const unique = (v: readonly { readonly id: string }[]) =>
+  new Set(v.map((r) => r.id)).size === v.length;
+function reviewedChange(
+  s: unknown,
+  changeId: string | null,
+  providerRevision: number,
+): s is ReviewedChange {
+  if (
+    !summary(s) ||
+    s.id !== changeId ||
+    s.provider_revision > providerRevision ||
+    typeof s.from_provider_revision !== "number" ||
+    !Number.isSafeInteger(s.from_provider_revision) ||
+    s.from_provider_revision < 0 ||
+    s.from_provider_revision >= s.provider_revision ||
+    !version(s.policy_version) ||
+    ![s.actionable, s.already_effective, s.review_complete].every((v) => typeof v === "boolean") ||
+    !optional(s.deadline_at, time) ||
+    !optional(s.decided_at, time) ||
+    !rows(
+      s.fields,
+      (f): f is ReviewedChange["fields"][number] =>
+        record(f) &&
+        id(f.field) &&
+        text(f.before) &&
+        text(f.after) &&
+        typeof f.visible === "boolean",
+      32,
+    ) ||
+    s.review_complete !== s.fields.every((f) => f.visible)
+  )
+    return false;
+  return true;
+}
 export function admitReservation(
   value: unknown,
   context?: ReservationPort["context"],
 ): ReservationDetail | null {
+  return validReservation(value, context) ? value : null;
+}
+function validReservation(
+  value: unknown,
+  context?: ReservationPort["context"],
+): value is ReservationDetail {
   try {
     if (
       !record(value) ||
       new TextEncoder().encode(JSON.stringify(value)).length > 262144 ||
       value.contract_version !== 1
     )
-      return null;
+      return false;
     const { context: c, reservation: r, selected: s, query: q, changes, audit } = value;
     if (!record(c) || !id(c.organization_id) || !id(c.mission_id) || !record(r) || !id(r.id))
-      return null;
+      return false;
     if (
       context &&
       (c.organization_id !== context.organization_id ||
         c.mission_id !== context.mission_id ||
         (context.reservation_id !== undefined && r.id !== context.reservation_id))
     )
-      return null;
+      return false;
     if (
       !version(r.provider_revision) ||
       !id(r.provider_id) ||
@@ -77,29 +124,32 @@ export function admitReservation(
       Date.parse(r.starts_at) >= Date.parse(r.ends_at) ||
       !optional(r.last_reconciled_at, time)
     )
-      return null;
+      return false;
     if (
-      ![
-        "requesting",
-        "pending",
-        "confirmed",
-        "active",
-        "completed",
-        "unknown",
-        "rejected",
-        "canceling",
-        "canceled",
-        "failed",
-      ].includes(r.lifecycle_state)
+      !oneOf(
+        [
+          "requesting",
+          "pending",
+          "confirmed",
+          "active",
+          "completed",
+          "unknown",
+          "rejected",
+          "canceling",
+          "canceled",
+          "failed",
+        ],
+        r.lifecycle_state,
+      )
     )
-      return null;
+      return false;
     for (const key of ["transport", "plan", "requirement"])
       if (
         !optional(r[`${key}_id`], id) ||
         !optional(r[`${key}_version`], version) ||
         (r[`${key}_id`] === null) !== (r[`${key}_version`] === null)
       )
-        return null;
+        return false;
     if (
       !record(value.permissions) ||
       typeof value.permissions.decide !== "boolean" ||
@@ -109,71 +159,50 @@ export function admitReservation(
       !optional(q.before_revision, version) ||
       !optional(q.before_audit, id)
     )
-      return null;
+      return false;
     if (
       !rows(
         value.values,
-        (v) =>
+        (v): v is ReservationDetail["values"][number] =>
           record(v) && id(v.field) && text(v.requested) && text(v.confirmed) && text(v.accepted),
         32,
       ) ||
       new Set(value.values.map((v) => v.field)).size !== value.values.length
     )
-      return null;
-    if (
-      s !== null &&
-      (!summary(s) ||
-        s.id !== q.change_id ||
-        s.provider_revision > r.provider_revision ||
-        !Number.isSafeInteger(s.from_provider_revision) ||
-        s.from_provider_revision < 0 ||
-        s.from_provider_revision >= s.provider_revision ||
-        !version(s.policy_version) ||
-        ![s.actionable, s.already_effective, s.review_complete].every(
-          (v) => typeof v === "boolean",
-        ) ||
-        !optional(s.deadline_at, time) ||
-        !optional(s.decided_at, time) ||
-        !rows(
-          s.fields,
-          (f) =>
-            record(f) &&
-            id(f.field) &&
-            text(f.before) &&
-            text(f.after) &&
-            typeof f.visible === "boolean",
-          32,
-        ) ||
-        s.review_complete !== s.fields.every((f: any) => f.visible))
-    )
-      return null;
-    if (s === null && q.change_id !== null) return null;
+      return false;
+    if (s !== null && !reviewedChange(s, q.change_id, r.provider_revision)) return false;
+    if (s === null && q.change_id !== null) return false;
     if (
       !record(changes) ||
       !rows(changes.entries, summary) ||
       !unique(changes.entries) ||
       !optional(changes.next, version)
     )
-      return null;
+      return false;
+    const changeEntries = changes.entries,
+      beforeRevision = q.before_revision,
+      providerRevision = r.provider_revision;
     if (
-      changes.entries.some(
-        (v: any, i: number) =>
-          v.provider_revision > r.provider_revision ||
-          (q.before_revision !== null && v.provider_revision >= q.before_revision) ||
-          (i > 0 && changes.entries[i - 1].provider_revision <= v.provider_revision),
-      )
+      changeEntries.some((entry, index) => {
+        const previous = changeEntries[index - 1];
+        return (
+          entry.provider_revision > providerRevision ||
+          (beforeRevision !== null && entry.provider_revision >= beforeRevision) ||
+          (index > 0 && (!previous || previous.provider_revision <= entry.provider_revision))
+        );
+      })
     )
-      return null;
+      return false;
     if (
       changes.next !== null &&
-      (changes.entries.length !== 25 || changes.next !== changes.entries.at(-1).provider_revision)
+      (changes.entries.length !== 25 || changes.next !== changes.entries.at(-1)?.provider_revision)
     )
-      return null;
+      return false;
     if (
       !record(audit) ||
       !rows(
         audit.entries,
-        (v) =>
+        (v): v is ReservationDetail["audit"]["entries"][number] =>
           record(v) &&
           id(v.id) &&
           text(v.action, 120) &&
@@ -184,15 +213,15 @@ export function admitReservation(
       !unique(audit.entries) ||
       !optional(audit.next, id)
     )
-      return null;
+      return false;
     if (
       audit.next !== null &&
-      (audit.entries.length !== 25 || audit.next !== audit.entries.at(-1).id)
+      (audit.entries.length !== 25 || audit.next !== audit.entries.at(-1)?.id)
     )
-      return null;
-    return value as ReservationDetail;
+      return false;
+    return true;
   } catch {
-    return null;
+    return false;
   }
 }
 export const reviewIdentity = (d: ReservationDetail) =>
@@ -214,8 +243,9 @@ export function canDecide(d: ReservationDetail, action: ReservationAction, now =
     action === "reject-provider-change" || s.deadline_at === null || Date.parse(s.deadline_at) > now
   );
 }
-export function reservationDecision(d: ReservationDetail, reason: string) {
-  const s = d.selected!;
+export function reservationDecision(d: ReservationDetail, reason: string): ReservationDecision {
+  const s = d.selected;
+  if (!s) throw Error("Missing reviewed provider change");
   return {
     provider_reservation_id: d.reservation.id,
     reason: reason.trim(),
@@ -229,22 +259,28 @@ export function reservationDecision(d: ReservationDetail, reason: string) {
     },
   };
 }
-export const decisionState = (action: ReservationAction) =>
-  action === "approve-provider-change"
-    ? "approved"
-    : action === "reject-provider-change"
-      ? "rejected"
-      : "acknowledged";
-export function completedReceipt(receipt: any, d: ReservationDetail, action: ReservationAction) {
-  const v = receipt?.result;
+const decisionStates = {
+  "approve-provider-change": "approved",
+  "reject-provider-change": "rejected",
+  "acknowledge-provider-change": "acknowledged",
+} as const satisfies ReservationStates;
+export const decisionState = <A extends ReservationAction>(action: A): ReservationStates[A] =>
+  decisionStates[action];
+export function completedReceipt<A extends ReservationAction>(
+  receipt: unknown,
+  d: ReservationDetail,
+  action: A,
+): receipt is ReservationReceipt<A> {
+  if (!d.selected || !record(receipt) || !record(receipt.result)) return false;
+  const v = receipt.result;
   return (
-    id(receipt?.receiptId) &&
-    time(receipt?.completedAt) &&
-    v?.providerReservationId === d.reservation.id &&
-    v?.providerReservationChangeId === d.selected?.id &&
-    v?.providerRevision === d.selected?.provider_revision &&
-    v?.proposalHash === d.selected?.proposal_hash &&
-    v?.lifecycleState === decisionState(action)
+    id(receipt.receiptId) &&
+    time(receipt.completedAt) &&
+    v.providerReservationId === d.reservation.id &&
+    v.providerReservationChangeId === d.selected.id &&
+    v.providerRevision === d.selected.provider_revision &&
+    v.proposalHash === d.selected.proposal_hash &&
+    v.lifecycleState === decisionState(action)
   );
 }
 export function reservationHref(

@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 import { expect, test, vi } from "vite-plus/test";
 import type {
   FullPageSurfaceProps,
@@ -9,7 +10,7 @@ import { createContactSchedulePort } from "./contact-schedule-port";
 import { surfaceContracts } from "./federated-application";
 
 function harness() {
-  const surface = surfaceContracts.find((s) => s.surfaceId === "contact_schedule")!;
+  const surface = required(surfaceContracts.find((s) => s.surfaceId === "contact_schedule"));
   const query = vi.fn<(request: HostQueryRequest) => Promise<unknown>>();
   const execute = vi.fn<(request: HostActionRequest<unknown>) => Promise<unknown>>();
   const props: FullPageSurfaceProps = {
@@ -50,11 +51,8 @@ function harness() {
 
 test("the contact scheduling port captures host authority and only delegates declared scheduling actions", async () => {
   const { props, query, execute } = harness();
-  const port = createContactSchedulePort(props, () => true)!;
-  const input = {
-    provider_reservation_id: "plan-one",
-    change_evidence: { content_sha256: "a".repeat(64) },
-  };
+  const port = required(createContactSchedulePort(props, () => true));
+  const input = { token: "opaque-opportunity-token" };
   execute.mockResolvedValue({ receiptId: "completed" });
   await port.execute("reserve", input);
   expect(execute).toHaveBeenCalledExactlyOnceWith({
@@ -67,7 +65,8 @@ test("the contact scheduling port captures host authority and only delegates dec
     context: props.context,
   });
   expect(port.context).toEqual({ organization_id: "org-one", mission_id: "mission-one" });
-  await expect(port.execute("delete-plan" as never, {})).rejects.toThrow("Undeclared");
+  // @ts-expect-error Exercise admission of a malformed external action.
+  await expect(port.execute("delete-plan", {})).rejects.toThrow("Undeclared");
   expect(execute).toHaveBeenCalledTimes(1);
   query.mockResolvedValue({
     trusted_surface: {
@@ -96,13 +95,25 @@ test("departed authority refuses new operations and drops late responses", async
         resolve = done;
       }),
   );
-  const port = createContactSchedulePort(props, () => active)!;
-  const pending = port.execute("reserve", {});
+  const port = required(createContactSchedulePort(props, () => active));
+  const pending = port.execute("reserve", { token: "opaque-opportunity-token" });
   active = false;
   resolve({ receiptId: "late" });
   await expect(pending).rejects.toThrow("departed");
   await expect(port.refresh()).rejects.toThrow("departed");
-  await expect(port.execute("cancel", {})).rejects.toThrow("departed");
+  await expect(
+    port.execute("cancel", {
+      reservation_evidence: {
+        contract_version: 1,
+        organization_id: "org-one",
+        mission_id: "mission-one",
+        reservation_id: "reservation-one",
+        provider_revision: 2,
+        lifecycle_state: "confirmed",
+        provider_contact_ref: "provider-contact-one",
+      },
+    }),
+  ).rejects.toThrow("departed");
   expect(query).not.toHaveBeenCalled();
   expect(execute).toHaveBeenCalledTimes(1);
 });

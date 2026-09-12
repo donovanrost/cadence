@@ -1,7 +1,8 @@
+import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test } from "vite-plus/test";
 import { mount } from "@vue/test-utils";
 import ExplorationLegacyRedirect from "./ExplorationLegacyRedirect.vue";
-let app: ReturnType<typeof mount>;
+let app: Pick<ReturnType<typeof mount>, "find" | "get" | "setProps" | "unmount">;
 afterEach(() => app?.unmount());
 test("legacy entry preserves literal query identity and alias conflicts for host admission", () => {
   const query = {
@@ -14,7 +15,7 @@ test("legacy entry preserves literal query identity and alias conflicts for host
   };
   app = mount(ExplorationLegacyRedirect, { props: { mission_id: "mission/one", query } });
   const url = new URL(
-    app.get("#exploration-open-workspace").attributes("href")!,
+    required(app.get("#exploration-open-workspace").attributes("href")),
     "https://cadence.test",
   );
   expect(url.pathname).toBe("/missions/mission%2Fone/ops/explore");

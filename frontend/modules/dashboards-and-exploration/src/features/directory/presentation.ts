@@ -89,7 +89,7 @@ export function presentation(model: DirectoryModel, locked: boolean): DirectoryP
           "Lifecycle",
           ["active", "archived", "all"].map((value) => ({
             value,
-            label: value[0].toUpperCase() + value.slice(1),
+            label: value.charAt(0).toUpperCase() + value.slice(1),
           })),
         ),
         tag: select("tag", "Tag", [

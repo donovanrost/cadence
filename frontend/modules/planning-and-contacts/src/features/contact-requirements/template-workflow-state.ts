@@ -7,6 +7,11 @@ import {
   templateDefaults,
   templateFeedbackText,
   templatePure,
+  isTemplateCompletion,
+  type TemplateCompletion,
+  type TemplateCommand,
+  type TemplateRequest,
+  type TemplateLifecycleAction,
   type TemplatePage,
   type TemplateOperation,
   type TemplateAction,
@@ -14,7 +19,7 @@ import {
 import { requirementDataEqual as equal } from "./requirement-directory";
 import type { TemplateValues } from "./OpsContactRequirementTemplate.contracts";
 import type { SpacecraftChoices } from "./declaration";
-type Command = { action: TemplateAction; input: Record<string, any> };
+type Command = TemplateCommand;
 export function useTemplateWorkflow(
   input: () => TemplatePage,
   port: () => OpsPagePort,
@@ -38,10 +43,8 @@ export function useTemplateWorkflow(
     uncertain = ref(initial.operation?.status === "unconfirmed"),
     needsRead = ref(false),
     notice = ref(""),
-    confirmed = shallowRef<TemplateOperation | null>(
-      initial.operation?.status === "completed" && !templatePure(initial.operation.action)
-        ? initial.operation
-        : null,
+    confirmed = shallowRef<TemplateCompletion | null>(
+      initial.operation && isTemplateCompletion(initial.operation) ? initial.operation : null,
     );
   const locked = computed(() => uncertain.value || needsRead.value),
     disabled = computed(
@@ -52,12 +55,17 @@ export function useTemplateWorkflow(
   const feedback = computed(() => {
     if (inputNotice.value) return inputNotice.value;
     const op = operation.value;
-    if (!op || !equal(op.input.template, draft.value)) return "";
+    if (
+      !op ||
+      (op.action !== "validate-template" && op.action !== "create-template") ||
+      !equal(op.input.template, draft.value)
+    )
+      return "";
     return templateFeedbackText(
       op.status === "rejected"
         ? (op.feedback ?? [])
         : op.action === "validate-template" && op.status === "completed"
-          ? op.receipt!.result.feedback
+          ? op.receipt.result.feedback
           : [],
     );
   });
@@ -72,7 +80,7 @@ export function useTemplateWorkflow(
     operation.value = op;
     uncertain.value = op.status === "unconfirmed";
     if (op.status === "completed") {
-      if (!templatePure(op.action)) {
+      if (isTemplateCompletion(op)) {
         confirmed.value = op;
         notice.value = "The reviewed template action completed.";
         if (op.action === "create-template" && equal(draft.value, op.input.template)) {
@@ -82,7 +90,7 @@ export function useTemplateWorkflow(
       } else
         notice.value =
           op.action === "validate-template"
-            ? op.receipt!.result.valid
+            ? op.receipt.result.valid
               ? "Template validated."
               : "Review the template feedback."
             : "Template page updated. Your draft is retained.";
@@ -91,7 +99,8 @@ export function useTemplateWorkflow(
         op.status === "rejected"
           ? templateFeedbackText(op.feedback ?? [])
           : "No confirmed receipt is available. Refresh before another action.";
-      if (op.feedback?.includes("stale_evidence")) needsRead.value = true;
+      if (op.status === "rejected" && op.feedback.includes("stale_evidence"))
+        needsRead.value = true;
     }
   }
   function acceptPage(value: unknown) {
@@ -129,7 +138,7 @@ export function useTemplateWorkflow(
       }
     }
   }
-  function submit(action: TemplateAction, payload: Record<string, any>) {
+  function submit(...[action, payload]: TemplateRequest) {
     if (
       !active ||
       locked.value ||
@@ -138,7 +147,12 @@ export function useTemplateWorkflow(
     )
       return;
     if (!action.endsWith("-page") && !model.value.can_manage) return;
-    const command = { action, input: JSON.parse(JSON.stringify(payload)) };
+    const command: TemplateCommand =
+      action === "templates-page" || action === "spacecraft-page"
+        ? { action, input: { page: payload.page } }
+        : action === "validate-template" || action === "create-template"
+          ? { action, input: { template: { ...payload.template } } }
+          : { action, input: { reference: { ...payload.reference } } };
     if (action === "validate-template") validation = command;
     else {
       effect = command;
@@ -162,9 +176,10 @@ export function useTemplateWorkflow(
       return;
     }
     inputNotice.value = "";
-    submit(action, payload);
+    if (action === "create-template") submit("create-template", payload);
+    else submit("validate-template", payload);
   }
-  function lifecycle(action: TemplateAction, payload: { id: string }) {
+  function lifecycle(action: TemplateLifecycleAction, payload: { id: string }) {
     const row = model.value.templates.entries.find((e) => e.reference.template_id === payload.id);
     if (!row) return;
     const state = row.reference.lifecycle_state;
@@ -174,7 +189,17 @@ export function useTemplateWorkflow(
       (action === "close-template" && state === "closed")
     )
       return;
-    submit(action, { reference: { ...row.reference } });
+    switch (action) {
+      case "pause-template":
+        submit(action, { reference: row.reference });
+        break;
+      case "activate-template":
+        submit(action, { reference: row.reference });
+        break;
+      case "close-template":
+        submit(action, { reference: row.reference });
+        break;
+    }
   }
   async function drain() {
     if (!active || pending.value || locked.value) return;

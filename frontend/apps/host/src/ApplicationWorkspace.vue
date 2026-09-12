@@ -68,7 +68,7 @@ async function loadCatalog(): Promise<void> {
   try {
     const nextCatalog = await loadFrontendApplicationCatalog({
       release: requestedRelease,
-      scenario: requestedScenario,
+      ...(requestedScenario === undefined ? {} : { scenario: requestedScenario }),
     });
     if (generation !== catalogGeneration) return;
     catalog.value = nextCatalog;

@@ -61,13 +61,13 @@ const presentation = computed(() =>
       This mission has no spacecraft available for a contact need.
     </p>
     <div
-      v-if="created && operation"
+      v-if="created && operation?.action === 'save' && operation.status === 'completed'"
       id="requirement-declaration-receipt"
       class="mx-4 flex flex-wrap items-center gap-3 border border-success/40 p-3"
     >
       <p class="min-w-0 break-all text-sm">
-        Requirement {{ operation.receipt?.result.requirement_id }} · version
-        {{ operation.receipt?.result.requirement_version }}
+        Requirement {{ operation.receipt.result.requirement_id }} · version
+        {{ operation.receipt.result.requirement_version }}
       </p>
       <button
         id="requirement-declaration-open"

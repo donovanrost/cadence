@@ -1,12 +1,15 @@
+import { jsonFixture, fixtureContext } from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
+import { fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { mount, flushPromises } from "@vue/test-utils";
 import { test, expect, vi } from "vite-plus/test";
 import { writeFileSync } from "node:fs";
 import CommandReview from "./CommandReview.vue";
 import { commandReviewContribution } from "./contribution";
-import { commandReviewHref, readCommandReviewPage } from "./contracts";
+import { commandReviewHref, readCommandReviewPage, type CommandReviewPage } from "./contracts";
 import { completed, fixture } from "./fixtures.test-support";
 function setup(
-  page = fixture(),
+  page: CommandReviewPage = fixture(),
   executeFn: (action: string, input: Record<string, unknown>) => Promise<unknown> = async () =>
     completed(page),
 ) {
@@ -197,17 +200,19 @@ test("history navigation preserves durable resource and cursor; modifier clicks 
 test("contract rejects malformed, foreign, oversized and incoherent review evidence", () => {
   expect(commandReviewContribution.actions).toEqual(["decide"]);
   for (const mutate of [
-    (p: any) => (p.review.version = 2),
-    (p: any) => (p.review.context.resourceId = "foreign"),
-    (p: any) => (p.review.can_decide = "true"),
-    (p: any) => (p.review.request.requested_by.user_id = "reviewer"),
-    (p: any) => (p.review.request.resolved_argument_values_json = "[]"),
-    (p: any) =>
-      (p.review.request.argument_values_json = JSON.stringify({ payload: "x".repeat(140001) })),
-    (p: any) => (p.review.expected_review = "changed"),
-    (p: any) => (p.review.history.next_after = "missing"),
-    (p: any) => (p.review.request.priority = -1),
-    (p: any) => (p.review.request.requested_at = null),
+    (p: unknown) => (fixtureRecordAt(p, "review").version = 2),
+    (p: unknown) => (fixtureRecordAt(p, "review", "context").resourceId = "foreign"),
+    (p: unknown) => (fixtureRecordAt(p, "review").can_decide = "true"),
+    (p: unknown) => (fixtureRecordAt(p, "review", "request", "requested_by").user_id = "reviewer"),
+    (p: unknown) => (fixtureRecordAt(p, "review", "request").resolved_argument_values_json = "[]"),
+    (p: unknown) =>
+      (fixtureRecordAt(p, "review", "request").argument_values_json = JSON.stringify({
+        payload: "x".repeat(140001),
+      })),
+    (p: unknown) => (fixtureRecordAt(p, "review").expected_review = "changed"),
+    (p: unknown) => (fixtureRecordAt(p, "review", "history").next_after = "missing"),
+    (p: unknown) => (fixtureRecordAt(p, "review", "request").priority = -1),
+    (p: unknown) => (fixtureRecordAt(p, "review", "request").requested_at = null),
   ]) {
     const page = fixture();
     mutate(page);
@@ -218,8 +223,8 @@ test.skipIf(!process.env.CADENCE_COMMAND_REVIEW_DOCUMENT)(
   "actual producer review mounts the feature and captures its decision input",
   async () => {
     if (!process.env.CADENCE_COMMAND_REVIEW_DOCUMENT) return;
-    const document = JSON.parse(process.env.CADENCE_COMMAND_REVIEW_DOCUMENT);
-    const page = readCommandReviewPage(document.data, document.context);
+    const document = jsonFixture(process.env.CADENCE_COMMAND_REVIEW_DOCUMENT);
+    const page = readCommandReviewPage(document.data, fixtureContext(document.context));
     const { w, port } = setup(page);
     try {
       expect(w.get("#review-submitted-arguments").text()).toBe(
@@ -239,7 +244,7 @@ test.skipIf(!process.env.CADENCE_COMMAND_REVIEW_DOCUMENT)(
       if (!process.env.CADENCE_COMMAND_REVIEW_INPUT_FILE) throw Error("Missing output");
       writeFileSync(
         process.env.CADENCE_COMMAND_REVIEW_INPUT_FILE,
-        JSON.stringify(port.execute.mock.calls[0]![1]),
+        JSON.stringify(required(port.execute.mock.calls[0])[1]),
       );
     } finally {
       w.unmount();
@@ -264,7 +269,7 @@ test("refreshing changed semantics clears the earlier decision and confirmation"
     await flushPromises();
     expect(w.get<HTMLSelectElement>("#command-review-choice").element.value).toBe("");
     expect(w.get<HTMLInputElement>("#command-review-confirm").element.checked).toBe(false);
-    expect(JSON.parse(w.get("#review-resolved-arguments").text()).amount).toBe(9);
+    expect(jsonFixture(w.get("#review-resolved-arguments").text()).amount).toBe(9);
     expect(w.get("#command-review-feedback").text()).toContain("confirm again");
     await w.get("#command-review-form").trigger("submit");
     expect(port.execute).not.toHaveBeenCalled();
@@ -275,7 +280,7 @@ test("refreshing changed semantics clears the earlier decision and confirmation"
 test("pending decisions guard host navigation and release the guard on disposal", async () => {
   let guard!: () => boolean, reply!: (value: unknown) => void;
   const dispose = vi.fn(),
-    page = fixture(),
+    page: CommandReviewPage = fixture(),
     execute = vi.fn(
       () =>
         new Promise<unknown>((resolve) => {
@@ -288,7 +293,7 @@ test("pending decisions guard host navigation and release the guard on disposal"
       port: {
         execute,
         navigate: vi.fn(),
-        guardNavigation: (g) => {
+        guardNavigation: (g: () => boolean) => {
           guard = g;
           return dispose;
         },
@@ -327,4 +332,20 @@ test("review preserves exact integer evidence without numeric display conversion
   } finally {
     w.unmount();
   }
+});
+
+function rejectedReviewMutation(page: CommandReviewPage) {
+  // @ts-expect-error Admitted request evidence is readonly.
+  page.review.request.priority = 99;
+  // @ts-expect-error The reviewed context always identifies a command request.
+  page.review.context.resourceId = undefined;
+}
+void rejectedReviewMutation;
+
+test("review state admission rejects objects with a matching string conversion", () => {
+  const page = fixture();
+  fixtureRecordAt(page, "review", "request").lifecycle_state = {
+    toString: () => "approval_pending",
+  };
+  expect(() => readCommandReviewPage(page, page.review.context)).toThrow();
 });

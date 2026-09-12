@@ -458,12 +458,12 @@ export function admitConfiguration(
       : "ready";
   if (p.preflight.state !== overall || p.preflight.activation_ready !== (overall !== "blocked"))
     return null;
+  const revision = p.revision;
   if (
-    p.revision &&
-    (new Set(p.revision.field.options.map((o) => o.value)).size !==
-      p.revision.field.options.length ||
-      (p.revision.field.value !== "" &&
-        !p.revision.field.options.some((o) => o.value === p.revision!.field.value)))
+    revision &&
+    (new Set(revision.field.options.map((o) => o.value)).size !== revision.field.options.length ||
+      (revision.field.value !== "" &&
+        !revision.field.options.some((o) => o.value === revision.field.value)))
   )
     return null;
   if (

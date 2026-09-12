@@ -6,7 +6,7 @@ import {
   focusCurrentPopoverTrigger,
   preservesPopoverOpenState,
   subscribeToLegacyOverlayOpen,
-} from "./popover_compatibility.js";
+} from "./popover_compatibility";
 
 defineOptions({ inheritAttrs: false });
 

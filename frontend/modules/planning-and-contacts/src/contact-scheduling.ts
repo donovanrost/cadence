@@ -4,12 +4,16 @@ export type {
   ContactSchedulePort,
   ContactSchedule,
   ScheduleAction,
+  ScheduleInputs,
+  ScheduleRequest,
 } from "./features/contact-scheduling/OpsContactSchedule.contracts";
 export { default as OpsContactDetail } from "./features/contact-scheduling/OpsContactDetail.vue";
 export type {
   OpsContactDetailProps,
   ReservationDetail,
   ReservationAction,
+  ReservationDecision,
+  ReservationRequest,
   ReservationPort,
 } from "./features/contact-scheduling/OpsContactDetail.contracts";
 export { default as OpsContactRecord } from "./features/contact-scheduling/OpsContactRecord.vue";

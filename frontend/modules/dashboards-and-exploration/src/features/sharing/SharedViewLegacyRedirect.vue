@@ -2,17 +2,19 @@
 import { computed } from "vue";
 defineOptions({ inheritAttrs: false });
 const props = defineProps<{ mission_id?: string; share_id?: string; snapshot_id?: string }>();
-const valid = (v: unknown) =>
+const valid = (v: unknown): v is string =>
   typeof v === "string" && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}$/.test(v);
-const href = computed(() =>
-  valid(props.mission_id) && valid(props.share_id ?? props.snapshot_id)
+const href = computed(() => {
+  const missionId = props.mission_id;
+  const resourceId = props.share_id ?? props.snapshot_id;
+  return valid(missionId) && valid(resourceId)
     ? "/missions/" +
-      encodeURIComponent(props.mission_id!) +
-      "/ops/" +
-      (props.share_id ? "dashboard-shares/" : "dashboard-snapshots/") +
-      encodeURIComponent((props.share_id ?? props.snapshot_id)!)
-    : null,
-);
+        encodeURIComponent(missionId) +
+        "/ops/" +
+        (props.share_id ? "dashboard-shares/" : "dashboard-snapshots/") +
+        encodeURIComponent(resourceId)
+    : null;
+});
 </script>
 <template>
   <section class="p-6">

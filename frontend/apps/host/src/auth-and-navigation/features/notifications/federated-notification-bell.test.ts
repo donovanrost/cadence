@@ -1,3 +1,5 @@
+import { jsonFixture, fixtureRecord } from "../../../../../../test-support/json-fixture";
+import { required } from "../../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import { exposedComponents } from "../../../../../organization-admin/src/federated-application";
@@ -24,7 +26,7 @@ test("the remote bell delegates to the recipient owner and compiles inbox links"
   ]);
   await wrapper.get("a").trigger("click");
   expect(wrapper.emitted("mark-read")).toBeUndefined();
-  expect(context.notifications[0]!.read_at).toBeNull();
+  expect(required(context.notifications[0]).read_at).toBeNull();
   wrapper.unmount();
 });
 
@@ -57,7 +59,7 @@ test("a remote bell requires the exact host recipient and a valid summary", asyn
 
 test("actual native bell props mount through the exposed remote owner", async () => {
   const input = process.env.CADENCE_FEDERATED_BELL_DOCUMENT
-    ? JSON.parse(process.env.CADENCE_FEDERATED_BELL_DOCUMENT)
+    ? jsonFixture(process.env.CADENCE_FEDERATED_BELL_DOCUMENT)
     : { context: fixture(), expectedUserId: "recipient" };
   const wrapper = mount(exposedComponents.NotificationsBell, {
     props: input,
@@ -65,7 +67,9 @@ test("actual native bell props mount through the exposed remote owner", async ()
   });
   expect(wrapper.get("#notifications-bell-application").text()).toBe("6");
   await wrapper.get("#notifications-bell-application").trigger("click");
-  expect(wrapper.findAll("a")).toHaveLength(input.context.notifications.length + 1);
+  const notifications = fixtureRecord(input.context).notifications;
+  if (!Array.isArray(notifications)) throw Error("Missing notification fixture rows");
+  expect(wrapper.findAll("a")).toHaveLength(notifications.length + 1);
   for (const link of wrapper.findAll("a")) expect(link.attributes("href")).toBe("/notifications");
   wrapper.unmount();
 });

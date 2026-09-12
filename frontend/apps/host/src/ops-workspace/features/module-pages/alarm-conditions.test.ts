@@ -1,3 +1,4 @@
+import { required } from "../../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import OpsModulePage from "./OpsModulePage.vue";
@@ -40,7 +41,7 @@ test("host admits the public alarm owner with captured reads and navigation only
 test("same-context bootstrap rerenders cannot rewind a successful refresh", async () => {
   const h = start(),
     next = structuredClone(h.snapshot);
-  next.data.states.items[0].value = "47";
+  required(next.data.states.items[0]).value = "47";
   h.query.mockResolvedValueOnce(next);
   await w.get("#refresh-alarm-conditions").trigger("click");
   await flushPromises();

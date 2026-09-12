@@ -1,6 +1,7 @@
+import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
 import type { ContactRecord } from "./OpsContactRecord.contracts";
-export function contactRecordFixture(): ContactRecord {
-  const review = {
+export function contactRecordFixture(): MutableFixture<ContactRecord> {
+  const review: NonNullable<MutableFixture<ContactRecord>["review"]> = {
     id: "revision-one",
     revision: 1,
     created_at: "2026-09-08T12:00:00Z",

@@ -7,6 +7,7 @@ export const commandReviewContribution = {
   slot: "ops.page",
   version: 1,
   title: "Command review",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks this SFC constructor.
   component: CommandReview,
   query: true,
   actions: ["decide"],

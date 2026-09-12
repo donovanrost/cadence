@@ -1,3 +1,4 @@
+import { containing } from "../../../../../test-support/matchers";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import Form from "./CommsRoutingNew.vue";
@@ -16,7 +17,7 @@ test("admitted routing form retains exact selected transport version in save eve
   try {
     await wrapper.get("#routing-rule-form").trigger("submit");
     expect(wrapper.emitted("save")?.[0]).toEqual([
-      { routing_rule: expect.objectContaining({ transport_ref: "transport-1:7" }) },
+      { routing_rule: containing({ transport_ref: "transport-1:7" }) },
     ]);
   } finally {
     wrapper.unmount();

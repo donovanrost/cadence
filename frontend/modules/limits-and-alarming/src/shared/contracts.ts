@@ -217,7 +217,7 @@ export function selection(v: unknown, b: Base): v is Selection {
         d.id === c.id &&
         d.point_id === c.point_id &&
         d.version <= c.version &&
-        (i === 0 || a[i - 1].version > d.version),
+        (i === 0 || (a[i - 1]?.version ?? -1) > d.version),
     ) && new Set(v.activations.items.map((x) => x.id)).size === v.activations.items.length
   );
 }

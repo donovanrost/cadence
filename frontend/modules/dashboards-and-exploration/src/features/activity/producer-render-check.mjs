@@ -1,3 +1,5 @@
+import { required } from "../../../../../test-support/required.ts";
+import { fixtureRows, fixtureString } from "../../../../../test-support/json-fixture.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,16 +16,21 @@ const server = await createServer({
   logLevel: "error",
 });
 try {
-  const { activityContribution } = await server.ssrLoadModule("/src/activity.ts");
-  for (const model of JSON.parse(process.argv[2])) {
+  // Vite loads the checked module dynamically; its exported type supplies the SSR interop contract.
+  const { activityContribution } = /** @type {typeof import("../../activity.ts")} */ (
+    await server.ssrLoadModule("/src/activity.ts")
+  );
+  for (const raw of fixtureRows(process.argv[2])) {
     const props = activityContribution.read(
-      { model, sequence: 0, phase: "ready" },
+      { model: raw, sequence: 0, phase: "ready" },
       {
-        organizationId: model.organization_id,
-        missionId: model.mission_id,
-        resourceId: model.dashboard_id,
+        organizationId: fixtureString(raw.organization_id),
+        missionId: fixtureString(raw.mission_id),
+        resourceId: fixtureString(raw.dashboard_id),
       },
     );
+    const model = props.state.model;
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks the SFC constructor at this registration or render boundary.
     const app = createSSRApp(activityContribution.component, {
       ...props,
       port: {
@@ -43,7 +50,7 @@ try {
       const doc = window.document;
       assert.ok(doc.getElementById("dashboard-activity-feature"));
       assert.equal(
-        doc.getElementById("activity-selected-title").textContent.trim(),
+        required(doc.getElementById("activity-selected-title")).textContent.trim(),
         `Version ${model.selected.version}`,
       );
       assert.equal(doc.querySelectorAll("#activity-versions > li").length, model.versions.length);

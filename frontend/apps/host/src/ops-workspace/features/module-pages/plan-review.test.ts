@@ -1,3 +1,6 @@
+import { fixtureRecord } from "../../../../../../test-support/json-fixture";
+import type { OpsPageAction } from "@cadence/plugin-sdk/ops-pages";
+import { required } from "../../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import OpsModulePage from "./OpsModulePage.vue";
@@ -25,10 +28,13 @@ test("host captures the plan resource and token and recovers the native submissi
     refresh = vi.fn(),
     dispose = vi.fn();
   let guard = () => true;
-  const execute = vi.fn(async ({ event, input }) => {
+  const execute = vi.fn(async ({ event, input }: OpsPageAction) => {
+    if (event !== "submit-plan") throw Error("Unexpected host action");
+    if (typeof input.sequence !== "number") throw Error("Missing operation sequence");
+    const command = { sequence: input.sequence, payload: fixtureRecord(input.payload) };
     query.mockResolvedValue({
       ...initial,
-      data: completedReview(data, reviewOperation(data, event, input)),
+      data: completedReview(data, reviewOperation(data, event, command)),
     });
     throw Error("Lost response");
   });
@@ -52,7 +58,7 @@ test("host captures the plan resource and token and recovers the native submissi
     await w.get("#submission").trigger("submit");
     await flushPromises();
     expect(execute).toHaveBeenCalledOnce();
-    expect(execute.mock.calls[0]![0]).toMatchObject({
+    expect(required(execute.mock.calls[0])[0]).toMatchObject({
       id: initial.id,
       token: initial.token,
       event: "submit-plan",

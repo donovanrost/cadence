@@ -10,7 +10,10 @@ defineProps<ProfileDetail>();
   <div id="spacecraft-profile-show-surface" class="space-y-6">
     <CadencePageHeading
       :breadcrumbs="
-        navigation.breadcrumbs.map((item) => ({ label: item.label, href: item.href ?? undefined }))
+        navigation.breadcrumbs.map((item) => ({
+          label: item.label,
+          ...(item.href == null ? {} : { href: item.href }),
+        }))
       "
     >
       <template #title>{{ profile.display_name }} </template>

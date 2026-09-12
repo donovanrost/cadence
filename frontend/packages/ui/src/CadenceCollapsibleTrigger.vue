@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { CollapsibleTrigger } from "reka-ui";
 import { inject, type Ref } from "vue";
-import { CadencePrimitiveChild } from "./cadence_primitive_child.js";
+import { CadencePrimitiveChild } from "./cadence_primitive_child";
 
 defineOptions({ inheritAttrs: false });
 

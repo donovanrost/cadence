@@ -10,6 +10,7 @@ export const spacecraftRoutingContribution: SpacecraftPageContribution<Component
   slot: SPACECRAFT_PAGE_SLOT,
   version: 1,
   title: "Communications routing",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   component: SpacecraftRouting,
   read: readSpacecraftRouting,
 });

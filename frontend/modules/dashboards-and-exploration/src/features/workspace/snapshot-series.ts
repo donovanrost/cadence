@@ -27,7 +27,8 @@ export function snapshotSeries(frames: WorkspaceFrame[], placementId: string): S
       const base = start ? field.name.slice(0, -6) : field.name;
       const lower = numeric.find((f) => f.name === `${base}_min`);
       const upper = numeric.find((f) => f.name === `${base}_max`);
-      if (start && (!lower || !upper)) throw Error("Incomplete chart envelope");
+      const envelopeFields = start && end && lower && upper ? { end, lower, upper } : null;
+      if (start && !envelopeFields) throw Error("Incomplete chart envelope");
       const points: Series["points"] = [];
       const envelope: Array<[number, number, number]> = [];
       for (let row = 0; row < time.values.length; row++) {
@@ -36,10 +37,10 @@ export function snapshotSeries(frames: WorkspaceFrame[], placementId: string): S
         const value = field.values[row];
         if (value !== null && typeof value !== "number") throw Error("Invalid chart value");
         points.push([timestamp, value]);
-        if (start) {
-          const stop = end!.values[row],
-            min = lower!.values[row],
-            max = upper!.values[row];
+        if (envelopeFields) {
+          const stop = envelopeFields.end.values[row],
+            min = envelopeFields.lower.values[row],
+            max = envelopeFields.upper.values[row];
           if (typeof stop !== "number" || stop < timestamp) throw Error("Invalid chart bucket");
           // An absent envelope remains absent, rather than manufacturing a zero band.
           if (min === null && max === null) continue;

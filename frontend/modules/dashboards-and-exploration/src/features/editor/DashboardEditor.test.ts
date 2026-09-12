@@ -1,16 +1,26 @@
+import type { ComponentPublicInstance } from "vue";
+import type { OpsPagePort } from "@cadence/plugin-sdk/ops-pages";
+import type { Mock } from "vite-plus/test";
+import { containing } from "../../../../../test-support/matchers";
+import {
+  fixtureArrayAt,
+  fixtureRecordAt,
+  fixtureRecord,
+  jsonFixture,
+} from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import DashboardEditor from "./DashboardEditor.vue";
-import EditorLayoutCanvas from "./EditorLayoutCanvas.vue";
 import { editorContext, editorFixture } from "./fixtures.test-support";
 import { readEditor } from "./validation";
-const apps: ReturnType<typeof mount>[] = [];
+const apps: { unmount: () => void }[] = [];
 afterEach(() => {
   for (const app of apps.splice(0)) app.unmount();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-function render(execute = vi.fn()) {
+function render(execute: Mock<OpsPagePort["execute"]> = vi.fn<OpsPagePort["execute"]>()) {
   let guard: () => boolean = () => true;
   const removeGuard = vi.fn();
   const refresh = vi.fn(async () => {});
@@ -21,8 +31,8 @@ function render(execute = vi.fn()) {
       refresh,
       port: {
         execute,
-        navigate: vi.fn(),
-        guardNavigation(fn) {
+        navigate: vi.fn((_: string) => {}),
+        guardNavigation(fn: () => boolean) {
           guard = fn;
           return removeGuard;
         },
@@ -35,62 +45,62 @@ function render(execute = vi.fn()) {
 test("versioned editor DTOs reject foreign resources, duplicate IDs and unsupported shapes", () => {
   expect(readEditor(editorFixture(), editorContext)).toEqual(editorFixture());
   for (const mutate of [
-    (s: any) => {
-      s.version = 1;
+    (s: unknown) => {
+      fixtureRecordAt(s).version = 1;
     },
-    (s: any) => {
-      delete s.revision;
+    (s: unknown) => {
+      delete fixtureRecordAt(s).revision;
     },
-    (s: any) => {
-      s.revision = -1;
+    (s: unknown) => {
+      fixtureRecordAt(s).revision = -1;
     },
-    (s: any) => {
-      s.dirty = "false";
+    (s: unknown) => {
+      fixtureRecordAt(s).dirty = "false";
     },
-    (s: any) => {
-      s.model.dashboard_id = "other";
+    (s: unknown) => {
+      fixtureRecordAt(s, "model").dashboard_id = "other";
     },
-    (s: any) => {
-      s.model.version = 1;
+    (s: unknown) => {
+      fixtureRecordAt(s, "model").version = 1;
     },
-    (s: any) => {
-      s.model.version = 2;
+    (s: unknown) => {
+      fixtureRecordAt(s, "model").version = 2;
     },
-    (s: any) => {
-      delete s.model.runtime_defaults_json;
+    (s: unknown) => {
+      delete fixtureRecordAt(s, "model").runtime_defaults_json;
     },
-    (s: any) => {
-      s.model.runtime_defaults_json = "[]";
+    (s: unknown) => {
+      fixtureRecordAt(s, "model").runtime_defaults_json = "[]";
     },
-    (s: any) => {
-      s.model.placements.push(s.model.placements[0]);
+    (s: unknown) => {
+      fixtureArrayAt(s, "model", "placements").push(fixtureArrayAt(s, "model", "placements")[0]);
     },
-    (s: any) => {
-      s.model.sections = [];
+    (s: unknown) => {
+      fixtureRecordAt(s, "model").sections = [];
     },
-    (s: any) => {
-      s.model.defaults.line_width = "thick";
+    (s: unknown) => {
+      fixtureRecordAt(s, "model", "defaults").line_width = "thick";
     },
-    (s: any) => {
-      s.model.secret = "raw";
+    (s: unknown) => {
+      fixtureRecordAt(s, "model").secret = "raw";
     },
-    (s: any) => {
-      s.model.placements[0].fields.title = "wrong";
+    (s: unknown) => {
+      fixtureRecordAt(s, "model", "placements", 0, "fields").title = "wrong";
     },
-    (s: any) => {
-      s.sequence = -1;
+    (s: unknown) => {
+      fixtureRecordAt(s).sequence = -1;
     },
-    (s: any) => {
-      delete s.model.grid;
+    (s: unknown) => {
+      delete fixtureRecordAt(s, "model").grid;
     },
-    (s: any) => {
-      s.model.grid.columns = 0;
+    (s: unknown) => {
+      fixtureRecordAt(s, "model", "grid").columns = 0;
     },
-    (s: any) => {
-      s.model.placements[0].constraints.max_w = 10;
+    (s: unknown) => {
+      fixtureRecordAt(s, "model", "placements", 0, "constraints").max_w = 10;
     },
-    (s: any) => {
-      s.model.placements[0].constraints.min_h = 100;
+    (s: unknown) => {
+      fixtureRecordAt(s, "model", "placements", 0, "constraints").min_h = 100;
     },
   ]) {
     const s = editorFixture();
@@ -103,8 +113,8 @@ test("runtime quick controls preserve other defaults and use explicit revisioned
   next.sequence = 1;
   next.revision = 1;
   next.dirty = true;
-  const defaults = JSON.parse(next.model.runtime_defaults_json);
-  defaults.time.mode = "archive";
+  const defaults = jsonFixture(next.model.runtime_defaults_json);
+  fixtureRecord(defaults.time).mode = "archive";
   next.model.runtime_defaults_json = JSON.stringify(defaults);
   const { app, execute, guard } = render(
     vi.fn(async () => ({ status: "ok", code: null, state: next })),
@@ -155,7 +165,7 @@ test("invalid JSON is local, domain rejection preserves edits, and discard resto
   expect((app.get("#editor-runtime-time-mode").element as HTMLSelectElement).value).toBe("unknown");
   await app.get("#dashboard-editor-form").trigger("submit");
   await flushPromises();
-  expect(execute.mock.calls[0][1].sequence).toBe(1);
+  expect(fixtureRecord(required(execute.mock.calls[0])[1]).sequence).toBe(1);
   expect((app.get("#editor-runtime-json").element as HTMLTextAreaElement).value).toBe(unsupported);
   expect(app.get("fieldset").attributes("disabled")).toBeUndefined();
   await app.get("#editor-discard").trigger("click");
@@ -169,7 +179,7 @@ test("arranging is a guarded local draft and stages all changed positions at the
   next.sequence = 1;
   next.revision = 1;
   next.dirty = true;
-  next.model.placements[0].layout.x = 2;
+  required(next.model.placements[0]).layout.x = 2;
   const { app, execute, guard } = render(
     vi.fn(async () => ({ status: "ok", code: null, state: next })),
   );
@@ -181,7 +191,9 @@ test("arranging is a guarded local draft and stages all changed positions at the
   expect(execute).not.toHaveBeenCalled();
   expect(guard()).toBe(true);
   const layouts = [{ placement_id: "battery", x: 2, y: 0, w: 4, h: 2 }];
-  app.getComponent(EditorLayoutCanvas).vm.$emit("update:modelValue", layouts);
+  app
+    .getComponent<ComponentPublicInstance>({ name: "EditorLayoutCanvas" })
+    .vm.$emit("update:modelValue", layouts);
   await flushPromises();
   expect(guard()).toBe(false);
   await app.get("#editor-layout-save").trigger("click");
@@ -196,7 +208,9 @@ test("arranging is a guarded local draft and stages all changed positions at the
 test("a gesture blocks navigation and a newer saved draft locks an in-flight layout", async () => {
   const { app, execute, guard } = render();
   await app.get("#editor-arrange").trigger("click");
-  app.getComponent(EditorLayoutCanvas).vm.$emit("gesture", true);
+  app
+    .getComponent<ComponentPublicInstance>({ name: "EditorLayoutCanvas" })
+    .vm.$emit("gesture", true);
   await flushPromises();
   expect(guard()).toBe(false);
   const next = editorFixture();
@@ -236,9 +250,9 @@ test("catalog selection becomes a local draft and uses the normal observed-versi
   await flushPromises();
   expect(execute).toHaveBeenLastCalledWith(
     "add_widget",
-    expect.objectContaining({
+    containing({
       sequence: 1,
-      command: expect.objectContaining({ expected_version: 1, observables: ["HK.voltage"] }),
+      command: containing({ expected_version: 1, observables: ["HK.voltage"] }),
     }),
   );
 });
@@ -300,10 +314,10 @@ test("widget forms preserve numeric strings, multi-observable inputs and chart s
   await app.get("#editor-observables").setValue("voltage\ncurrent");
   await app.get("#dashboard-editor-form").trigger("submit");
   await flushPromises();
-  const [event, input] = execute.mock.calls[0];
+  const [event, input] = required(execute.mock.calls[0]);
   expect(event).toBe("add_widget");
-  expect(input.command.observables).toEqual(["voltage", "current"]);
-  expect(input.command.fields).toMatchObject({
+  expect(fixtureRecordAt(input, "command").observables).toEqual(["voltage", "current"]);
+  expect(fixtureRecordAt(input, "command").fields).toMatchObject({
     precision: "3",
     fill_opacity: "20",
     legend_mode: "hidden",
@@ -322,7 +336,7 @@ test("known validation failures keep the draft editable without rewinding the se
   expect((app.get("#editor-name").element as HTMLInputElement).value).toBe("Unchanged local draft");
   expect(app.get("fieldset").attributes("disabled")).toBeUndefined();
   await app.get("#dashboard-editor-form").trigger("submit");
-  expect(execute.mock.calls[1][1].sequence).toBe(2);
+  expect(fixtureRecord(required(execute.mock.calls[1])[1]).sequence).toBe(2);
 });
 test("pending and uncertain commands cannot be repeated or followed by publication", async () => {
   let reject!: (error: Error) => void;
@@ -364,7 +378,7 @@ test("explicit reload reconciles an uncertain sequence without resending the wri
   const next = editorFixture();
   next.sequence = 1;
   const execute = vi
-    .fn()
+    .fn<OpsPagePort["execute"]>()
     .mockRejectedValueOnce(Error("request may not have arrived"))
     .mockResolvedValueOnce({ status: "ok", code: null, state: next });
   const { app, refresh } = render(execute);
@@ -377,7 +391,7 @@ test("explicit reload reconciles an uncertain sequence without resending the wri
   await app.get("#editor-reload").trigger("click");
   await flushPromises();
   expect(execute.mock.calls.map((call) => call[0])).toEqual(["rename", "reload_editor"]);
-  expect(execute.mock.calls[1][1]).toEqual({ sequence: 1, command: {} });
+  expect(required(execute.mock.calls[1])[1]).toEqual({ sequence: 1, command: {} });
   expect((app.get("#editor-name").element as HTMLInputElement).value).toBe("Flight overview");
   expect(app.get("fieldset").attributes("disabled")).toBeUndefined();
 });
@@ -421,9 +435,9 @@ test("section and layout forms submit domain-specific shapes", async () => {
 test("library definitions retain their read-only boundary while layout remains available", async () => {
   const { app } = render();
   const state = editorFixture();
-  state.model.placements[0].editable = false;
-  state.model.placements[0].fields = null;
-  state.model.placements[0].observables = [];
+  required(state.model.placements[0]).editable = false;
+  required(state.model.placements[0]).fields = null;
+  required(state.model.placements[0]).observables = [];
   await app.setProps({ state });
   await app.get('[data-editor-widget="battery"]').trigger("click");
   expect(app.find("#editor-definition-readonly").exists()).toBe(true);
@@ -440,7 +454,7 @@ test("staged edits survive inspector changes and Save creates one durable versio
   Object.assign(saved, { sequence: 2, revision: 2, dirty: false });
   saved.model.document_version = 2;
   const execute = vi
-    .fn()
+    .fn<OpsPagePort["execute"]>()
     .mockResolvedValueOnce({ status: "ok", state: staged })
     .mockResolvedValueOnce({ status: "ok", state: saved });
   const { app, guard } = render(execute);
@@ -460,7 +474,7 @@ test("staged edits survive inspector changes and Save creates one durable versio
   await app.get("#editor-save-draft").trigger("click");
   await flushPromises();
   expect(execute.mock.calls.map(([event]) => event)).toEqual(["rename", "save_draft"]);
-  expect(execute.mock.calls[1][1]).toEqual({
+  expect(required(execute.mock.calls[1])[1]).toEqual({
     sequence: 2,
     command: { expected_version: 1, expected_revision: 1 },
   });
@@ -478,7 +492,7 @@ test("Save includes unapplied fields and Review navigates only after the saved a
   saved.model.document_version = 2;
   let acknowledge!: (value: unknown) => void;
   const execute = vi
-    .fn()
+    .fn<OpsPagePort["execute"]>()
     .mockResolvedValueOnce({ status: "ok", state: staged })
     .mockImplementationOnce(
       () =>
@@ -491,11 +505,11 @@ test("Save includes unapplied fields and Review navigates only after the saved a
   await app.get("#editor-review").trigger("click");
   await flushPromises();
   expect(execute.mock.calls.map(([event]) => event)).toEqual(["rename", "save_draft"]);
-  expect(app.props("port").navigate).not.toHaveBeenCalled();
+  expect(fixtureRecord(app.props("port")).navigate).not.toHaveBeenCalled();
   expect(guard()).toBe(false);
   acknowledge({ status: "ok", state: saved });
   await flushPromises();
-  expect(app.props("port").navigate).toHaveBeenCalledWith(
+  expect(fixtureRecord(app.props("port")).navigate).toHaveBeenCalledWith(
     "/missions/mission-1/ops/dashboards/dashboard-1/activity?version=2",
   );
   expect(guard()).toBe(true);
@@ -543,7 +557,7 @@ test("failed or stale Save replies retain unsaved work and cannot open publicati
     await app.setProps({ state: staged });
     await app.get("#editor-review").trigger("click");
     await flushPromises();
-    expect(app.props("port").navigate).not.toHaveBeenCalled();
+    expect(fixtureRecord(app.props("port")).navigate).not.toHaveBeenCalled();
     expect(app.get("#editor-save-state").text()).toBe("Review required");
     expect((app.get("#editor-name").element as HTMLInputElement).value).toBe("Candidate");
   }
@@ -564,8 +578,8 @@ test("a replacement host port retains the current dirty navigation guard", async
   await app.setProps({
     port: {
       execute: vi.fn(),
-      navigate: vi.fn(),
-      guardNavigation(fn) {
+      navigate: vi.fn((_: string) => {}),
+      guardNavigation(fn: () => boolean) {
         guard = fn;
         return dispose;
       },

@@ -1,5 +1,6 @@
+import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
 import type { RequirementDetail } from "./OpsContactRequirementShow.contracts";
-export function requirementDetailFixture(): RequirementDetail {
+export function requirementDetailFixture(): MutableFixture<RequirementDetail> {
   return {
     contract_version: 1,
     context: { organization_id: "org-1", mission_id: "mission-1", actor_id: "actor-1" },

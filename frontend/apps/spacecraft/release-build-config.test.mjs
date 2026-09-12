@@ -1,3 +1,4 @@
+import { fixtureRows, jsonFixture } from "../../test-support/json-fixture.ts";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { lstat, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
@@ -19,6 +20,7 @@ const identityEnvironmentNames = [
   "RELEASE_VERSION",
 ];
 
+/** @template T @param {(directory: string) => Promise<T>} callback @returns {Promise<T>} */
 async function withTemporaryDirectory(callback) {
   const directory = await mkdtemp(join(tmpdir(), "cadence-spacecraft-release-config-"));
   try {
@@ -28,6 +30,7 @@ async function withTemporaryDirectory(callback) {
   }
 }
 
+/** @param {string[]} argumentsList @param {NodeJS.ProcessEnv} [environment] @returns {Promise<{code: number | null, signal: NodeJS.Signals | null, stdout: string, stderr: string}>} */
 function runVite(argumentsList, environment = {}) {
   const childEnvironment = { ...process.env };
   for (const name of identityEnvironmentNames) delete childEnvironment[name];
@@ -43,11 +46,13 @@ function runVite(argumentsList, environment = {}) {
       env: childEnvironment,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    /** @type {Buffer[]} */
     const stdout = [];
+    /** @type {Buffer[]} */
     const stderr = [];
 
-    child.stdout.on("data", (chunk) => stdout.push(chunk));
-    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.stdout.on("data", (/** @type {Buffer} */ chunk) => stdout.push(chunk));
+    child.stderr.on("data", (/** @type {Buffer} */ chunk) => stderr.push(chunk));
     child.once("error", reject);
     child.once("close", (code, signal) =>
       resolveResult({
@@ -60,6 +65,7 @@ function runVite(argumentsList, environment = {}) {
   });
 }
 
+/** @param {...string} argumentsList */
 function releaseArguments(...argumentsList) {
   return [
     "build",
@@ -71,16 +77,23 @@ function releaseArguments(...argumentsList) {
   ];
 }
 
+/** @param {string} path */
 async function pathExists(path) {
   try {
     await lstat(path);
     return true;
   } catch (error) {
-    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return false;
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error.code === "ENOENT" || error.code === "ENOTDIR")
+    )
+      return false;
     throw error;
   }
 }
 
+/** @param {{ argumentsList: string[], environment?: NodeJS.ProcessEnv, absentPath: string, message: string }} options */
 async function assertRejectedProbe({ argumentsList, environment, absentPath, message }) {
   assert.equal(await pathExists(absentPath), false, `${message}: probe target already exists`);
   const result = await runVite(releaseArguments(...argumentsList), environment);
@@ -98,6 +111,7 @@ async function assertRejectedProbe({ argumentsList, environment, absentPath, mes
   return result;
 }
 
+/** @param {string} root @returns {Promise<string[]>} */
 async function outputFiles(root) {
   const entries = await readdir(root, { withFileTypes: true });
   const files = [];
@@ -126,12 +140,12 @@ void test("emits only the federation release graph into clean external directori
     for (const required of ["mf-manifest.json", "mf-stats.json", "remoteEntry.js"]) {
       assert.equal(await pathExists(join(canonicalOutput, required)), true, required);
     }
-    const manifest = JSON.parse(await readFile(join(canonicalOutput, "mf-manifest.json"), "utf8"));
+    const manifest = jsonFixture(await readFile(join(canonicalOutput, "mf-manifest.json"), "utf8"));
     assert.deepEqual(
-      manifest.exposes.map(({ path }) => path),
+      fixtureRows(JSON.stringify(manifest.exposes)).map(({ path }) => path),
       ["./Application"],
     );
-    const stats = JSON.parse(await readFile(join(canonicalOutput, "mf-stats.json"), "utf8"));
+    const stats = jsonFixture(await readFile(join(canonicalOutput, "mf-stats.json"), "utf8"));
     assert.equal(Object.hasOwn(stats, "assetAnalysis"), false);
     assert.equal(await pathExists(join(canonicalOutput, "index.html")), false);
     assert.equal(await pathExists(join(canonicalOutput, ".vite/manifest.json")), false);

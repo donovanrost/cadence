@@ -9,6 +9,7 @@ export const runtimeDiagnosticsContribution: DiagnosticsContribution<Component> 
   version: 1,
   title: "Dashboard runtime diagnostics",
   order: 100,
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   component: RuntimeDiagnosticsContribution,
   validate: assertRuntimeDiagnostics,
 });

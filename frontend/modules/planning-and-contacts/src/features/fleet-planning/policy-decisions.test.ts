@@ -1,49 +1,58 @@
+import { readNativePolicyScenario } from "./policy-native-fixture.test-support";
+import { required, emittedPolicy } from "./policy-test-helpers";
 import { describe, expect, test } from "vite-plus/test";
 import { mount } from "@vue/test-utils";
-import { OpsFleetPlanningPolicy } from "../../fleet-planning";
+import OpsFleetPlanningPolicy from "./OpsFleetPlanningPolicy.vue";
 import { admitPolicyEvidence } from "./policy-evidence";
 import { decisionFixture, evidenceFixture } from "./policy-decisions.test-support";
 
 test("producer-supplied decision emits through the client-compiled Vue form", async () => {
   const input = process.env.CADENCE_FLEET_DECISION_MODEL;
-  const {
-    props,
-    action,
-    values = {},
-  } = input ? JSON.parse(input) : { props: decisionFixture(), action: "approve-policy" };
-  expect(["approve-policy", "issue-grant", "save-policy"]).toContain(action);
+  const { props, action, values } = input
+    ? readNativePolicyScenario(JSON.parse(input))
+    : { props: decisionFixture(), action: "approve-policy" as const, values: {} };
   const warnings: string[] = [];
   const wrapper = mount(OpsFleetPlanningPolicy, {
     props,
     global: { config: { warnHandler: (message) => warnings.push(message) } },
   });
   try {
-    const grant = action === "issue-grant";
-    const form =
-      action === "save-policy" ? props.policy_form : grant ? props.grant_form : props.approval_form;
+    let formId: string;
     if (action === "save-policy") {
-      for (const key of ["max_horizon_duration", "repair_horizon_duration"]) {
+      const form = required(props.policy_form);
+      formId = form.id;
+      for (const key of ["max_horizon_duration", "repair_horizon_duration"] as const) {
         const input = wrapper.get("#" + form.fields[key].id).element as HTMLInputElement;
         expect(input.type).toBe("text");
         expect(input.value).toBe(form.fields[key].value);
       }
-      for (const [key, value] of Object.entries(values))
-        await wrapper.get("#" + form.fields[key].id).setValue(value);
-    } else {
-      if (grant) {
-        const duration = wrapper.get("#" + form.fields.maximum_horizon_duration.id)
-          .element as HTMLInputElement;
-        expect(duration.type).toBe("text");
-        expect(duration.value).toBe(form.fields.maximum_horizon_duration.value);
+      for (const [key, value] of Object.entries(values)) {
+        const field = required(Object.entries(form.fields).find(([name]) => name === key))[1];
+        await wrapper.get("#" + field.id).setValue(value);
       }
-      const reason = grant ? form.fields.approval_reason : form.reason;
-      await wrapper.get("#" + reason.id).setValue("Reviewed exact producer evidence");
+    } else if (action === "issue-grant") {
+      const form = required(props.grant_form);
+      formId = form.id;
+      const duration = wrapper.get("#" + form.fields.maximum_horizon_duration.id)
+        .element as HTMLInputElement;
+      expect(duration.type).toBe("text");
+      expect(duration.value).toBe(form.fields.maximum_horizon_duration.value);
+      await wrapper
+        .get("#" + form.fields.approval_reason.id)
+        .setValue("Reviewed exact producer evidence");
+    } else {
+      const form = required(props.approval_form);
+      formId = form.id;
+      await wrapper.get("#" + form.reason.id).setValue("Reviewed exact producer evidence");
     }
-    await wrapper.get("#" + form.id).trigger("submit");
+    await wrapper.get("#" + formId).trigger("submit");
     expect(warnings).toEqual([]);
     const events = wrapper.emitted(action);
     expect(events).toHaveLength(1);
-    if (input) process.stdout.write("DECISION_PAYLOAD=" + JSON.stringify(events![0][0]) + "\n");
+    if (input)
+      process.stdout.write(
+        "DECISION_PAYLOAD=" + JSON.stringify(required(required(events)[0])[0]) + "\n",
+      );
   } finally {
     wrapper.unmount();
   }
@@ -52,7 +61,7 @@ test("producer-supplied decision emits through the client-compiled Vue form", as
 describe("reviewed policy decisions", () => {
   test("grant duration controls preserve units and whole seconds through native input", async () => {
     const props = decisionFixture();
-    props.grant_form!.fields.maximum_horizon_duration.value = "1h 1s";
+    required(props.grant_form).fields.maximum_horizon_duration.value = "1h 1s";
     const wrapper = mount(OpsFleetPlanningPolicy, { props });
     const duration = wrapper.get("#grant-maximum_horizon_duration");
     expect((duration.element as HTMLInputElement).type).toBe("text");
@@ -62,9 +71,7 @@ describe("reviewed policy decisions", () => {
     await duration.setValue("1s");
     await wrapper.get("#grant-approval_reason").setValue("One second bound");
     await wrapper.get("#automation-grant-form").trigger("submit");
-    expect((wrapper.emitted("issue-grant")![0][0] as any).grant.maximum_horizon_duration).toBe(
-      "1s",
-    );
+    expect(emittedPolicy(wrapper, "issue-grant", 0).grant.maximum_horizon_duration).toBe("1s");
     wrapper.unmount();
   });
 
@@ -127,8 +134,11 @@ describe("reviewed policy decisions", () => {
 
   test("approval evidence must match the displayed policy and grants must match its scope", async () => {
     const props = decisionFixture(2, 1);
-    props.approval_form!.policy_evidence = evidenceFixture(1);
-    props.grant_form!.policy_evidence = { ...evidenceFixture(1), mission_id: "another-mission" };
+    required(props.approval_form).policy_evidence = evidenceFixture(1);
+    required(props.grant_form).policy_evidence = {
+      ...evidenceFixture(1),
+      mission_id: "another-mission",
+    };
     const wrapper = mount(OpsFleetPlanningPolicy, { props });
     expect(wrapper.get("#approve-fleet-policy").attributes("disabled")).toBeDefined();
     expect(wrapper.get("#issue-automation-grant").attributes("disabled")).toBeDefined();
@@ -142,9 +152,11 @@ describe("reviewed policy decisions", () => {
 
   test("legacy or malformed decision references never emit privileged actions", async () => {
     const props = decisionFixture();
-    (props.approval_form as unknown as Record<string, unknown>).policy_evidence = undefined;
-    (props.grant_form as unknown as Record<string, unknown>).policy_evidence = {
+    // @ts-expect-error Simulate a legacy producer omitting the required evidence.
+    required(props.approval_form).policy_evidence = undefined;
+    required(props.grant_form).policy_evidence = {
       ...evidenceFixture(),
+      // @ts-expect-error Simulate an incompatible evidence protocol.
       contract_version: 2,
     };
     const wrapper = mount(OpsFleetPlanningPolicy, { props });
@@ -171,9 +183,7 @@ describe("reviewed policy decisions", () => {
     expect(reason.value).toBe("");
     await wrapper.get("#grant-approval_reason").setValue("Authority under v2");
     await wrapper.get("#automation-grant-form").trigger("submit");
-    expect((wrapper.emitted("issue-grant")![0][0] as any).policy_evidence).toEqual(
-      evidenceFixture(2),
-    );
+    expect(emittedPolicy(wrapper, "issue-grant", 0).policy_evidence).toEqual(evidenceFixture(2));
     wrapper.unmount();
   });
 });

@@ -15,6 +15,7 @@ const text = (value: unknown, max = 512): string => {
 };
 const id = (value: unknown): string => {
   const result = text(value, 256);
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   if (!result || /[\u0000-\u001f]/.test(result)) throw Error("Invalid directory identity");
   return result;
 };

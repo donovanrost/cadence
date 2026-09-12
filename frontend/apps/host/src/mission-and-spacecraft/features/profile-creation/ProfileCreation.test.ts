@@ -1,3 +1,4 @@
+import { required } from "../../../../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import ProfileCreationPage from "./ProfileCreationPage.vue";
@@ -19,7 +20,7 @@ test("protocol controls adapt while preserving the draft and selected applicatio
   await wrapper.get("#app-telemetry").setValue(true);
   await wrapper.setProps(profileFixture());
   await wrapper.get("#spacecraft-profile-form").trigger("submit");
-  expect(wrapper.emitted("save")!.at(-1)).toMatchObject([
+  expect(required(wrapper.emitted("save")).at(-1)).toMatchObject([
     {
       spacecraft_type: {
         display_name: "Orbiter",
@@ -37,9 +38,9 @@ test("current field errors win over stale validation and failed saves preserve d
   const wrapper = mount(ProfileCreationPage, { props: { data: profileFixture(), execute } });
   await wrapper.get("#profile-display_name").setValue("Old");
   await wrapper.get("#profile-display_name").setValue("New");
-  replies[1]!({ status: "invalid", errors: { frame_size: ["Enter a frame size"] } });
+  required(replies[1])({ status: "invalid", errors: { frame_size: ["Enter a frame size"] } });
   await flushPromises();
-  replies[0]!({ status: "invalid", errors: { display_name: ["Old error"] } });
+  required(replies[0])({ status: "invalid", errors: { display_name: ["Old error"] } });
   await flushPromises();
   expect(wrapper.get("#profile-validation-errors").text()).toBe("Enter a frame size");
   expect(wrapper.get("#profile-frame_size").attributes("aria-describedby")).toBe(
@@ -49,7 +50,7 @@ test("current field errors win over stale validation and failed saves preserve d
   await wrapper.get("#spacecraft-profile-form").trigger("submit");
   expect(execute).toHaveBeenCalledTimes(3);
   expect(wrapper.get("#create-spacecraft-profile-button").attributes("disabled")).toBeDefined();
-  replies[2]!({ status: "unavailable", errors: {} });
+  required(replies[2])({ status: "unavailable", errors: {} });
   await flushPromises();
   expect(wrapper.find("#profile-creation-error").exists()).toBe(true);
   expect((wrapper.get("#profile-display_name").element as HTMLInputElement).value).toBe("New");
@@ -60,7 +61,7 @@ test("contracts reject malformed controls, protocol choices, applications and li
   unsafe.form.actions.cancel.href = "javascript:alert(1)";
   expect(() => assertProfileForm(unsafe)).toThrow();
   const choices = profileFixture();
-  choices.options.downlink_protocols[0]!.value = "unknown";
+  required(choices.options.downlink_protocols[0]).value = "unknown";
   expect(() => assertProfileForm(choices)).toThrow();
   const selected = profileFixture();
   selected.form.fields.applications.value = { unknown: "1" };

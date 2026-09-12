@@ -47,7 +47,13 @@ export function useFormWorkflow<T>(
   function validate(input: FormInput) {
     if (disposed || saving.value || saved) return;
     const identity = JSON.stringify(input);
-    latest = { revision: ++revision, input: JSON.parse(identity), identity };
+    latest = {
+      revision: ++revision,
+      input: Object.fromEntries(
+        Object.entries(input).map(([name, fields]) => [name, { ...fields }]),
+      ),
+      identity,
+    };
     accepted.value = false;
     outcome.value = null;
     message.value = null;
@@ -73,10 +79,11 @@ export function useFormWorkflow<T>(
         message.value = "The draft could not be validated. Check the values and try again.";
       }
     } finally {
-      if (running !== request.revision) return;
-      running = null;
-      if (!disposed && latest && revision !== request.revision) void drain();
-      else if (!disposed) validating.value = false;
+      if (running === request.revision) {
+        running = null;
+        if (!disposed && latest && revision !== request.revision) void drain();
+        else if (!disposed) validating.value = false;
+      }
     }
   }
   async function save(input: FormInput) {

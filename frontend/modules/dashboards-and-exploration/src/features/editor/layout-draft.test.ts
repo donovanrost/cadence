@@ -1,8 +1,9 @@
+import { required } from "../../../../../test-support/required";
 import { expect, test } from "vite-plus/test";
 import { layoutEdits, mergeLayoutEdits } from "./layout-draft";
 import { editorFixture } from "./fixtures.test-support";
 test("layout snapshots retain every authored placement including moved neighbors", () => {
-  const [first] = editorFixture().model.placements;
+  const first = required(editorFixture().model.placements[0]);
   const second = { ...first, id: "neighbor" };
   const nodes = [
     { id: first.id, x: 2, y: 0, w: 4, h: 2 },

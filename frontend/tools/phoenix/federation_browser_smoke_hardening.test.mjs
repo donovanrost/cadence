@@ -18,14 +18,18 @@ import {
   waitForExpression,
 } from "./federation_browser_smoke.mjs";
 
+import { fixtureRecord } from "../../test-support/json-fixture.ts";
+
 const node = process.execPath;
 const smokeScript = new URL("./federation_browser_smoke.mjs", import.meta.url);
 
-test("graceful and forced child-exit timeouts remove every exit and error waiter", async () => {
-  const child = new EventEmitter();
-  child.exitCode = null;
-  child.signalCode = null;
-  child.kill = () => true;
+void test("graceful and forced child-exit timeouts remove every exit and error waiter", async () => {
+  const child = Object.assign(new EventEmitter(), {
+    exitCode: null,
+    signalCode: null,
+    pid: undefined,
+    kill: () => true,
+  });
 
   await assert.rejects(
     terminateProcess(child, { gracefulTimeout: 5, forceTimeout: 5 }),
@@ -35,14 +39,16 @@ test("graceful and forced child-exit timeouts remove every exit and error waiter
   assert.equal(child.listenerCount("error"), 0, "child exit timeout left an error listener");
 });
 
-test("launchChrome removes owned output and child listeners when process death is unproven", async () => {
+void test("launchChrome removes owned output and child listeners when process death is unproven", async () => {
   const fake = await fixture("sleep 30");
-  const child = new EventEmitter();
-  child.exitCode = null;
-  child.signalCode = null;
-  child.stdout = new PassThrough();
-  child.stderr = new PassThrough();
-  child.kill = () => true;
+  const child = Object.assign(new EventEmitter(), {
+    exitCode: null,
+    signalCode: null,
+    pid: undefined,
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+    kill: () => true,
+  });
   let runtime;
 
   try {
@@ -77,6 +83,7 @@ test("launchChrome removes owned output and child listeners when process death i
   }
 });
 
+/** @param {import("node:stream").Readable} stream */
 function assertSecretStreamStopped(stream) {
   assert.equal(stream.listenerCount("data"), 0, "secret reader left a data listener active");
   assert.equal(stream.listenerCount("end"), 0, "secret reader left an end listener active");
@@ -88,6 +95,7 @@ async function profileNames() {
   return (await readdir(tmpdir())).filter((name) => name.startsWith("cadence-federation-chrome-"));
 }
 
+/** @param {string} script */
 async function fixture(script) {
   const directory = await mkdtemp(join(tmpdir(), "cadence-federation-fixture-"));
   const path = join(directory, "fake-chrome.sh");
@@ -96,6 +104,7 @@ async function fixture(script) {
   return { directory, path };
 }
 
+/** @param {string[]} args @param {{input?:string,env?:NodeJS.ProcessEnv}} [options] @returns {Promise<{code:number|null,signal:NodeJS.Signals|null,stdout:string,stderr:string}>} */
 function runNode(args, { input = "", env = {} } = {}) {
   return new Promise((resolveRun) => {
     const child = spawn(node, [smokeScript.pathname, ...args], {
@@ -116,39 +125,35 @@ function runNode(args, { input = "", env = {} } = {}) {
 }
 
 class FakeWebSocket {
+  target = new EventTarget();
   constructor() {
-    this.listeners = new Map();
-    queueMicrotask(() => this.dispatch("open"));
+    queueMicrotask(() => this.target.dispatchEvent(new Event("open")));
   }
-
-  addEventListener(type, listener) {
-    const listeners = this.listeners.get(type) || new Set();
-    listeners.add(listener);
-    this.listeners.set(type, listeners);
+  /** @template {keyof WebSocketEventMap} K @param {K} type @param {(event:WebSocketEventMap[K])=>void} listener @param {AddEventListenerOptions} [options] */
+  addEventListener(type, listener, options) {
+    // This fake emits the matching open/message/close events below.
+    this.target.addEventListener(
+      type,
+      (event) => listener(/** @type {WebSocketEventMap[K]} */ (event)),
+      options,
+    );
   }
-
-  removeEventListener(type, listener) {
-    this.listeners.get(type)?.delete(listener);
-  }
-
-  dispatch(type, event = {}) {
-    for (const listener of this.listeners.get(type) || []) listener(event);
-  }
-
+  /** @param {string} payload */
   send(payload) {
-    const { id, method } = JSON.parse(payload);
+    const { id, method } = fixtureRecord(JSON.parse(payload));
     queueMicrotask(() => {
       const result = method === "Runtime.evaluate" ? { result: { value: false } } : {};
-      this.dispatch("message", { data: JSON.stringify({ id, result }) });
+      this.target.dispatchEvent(
+        new MessageEvent("message", { data: JSON.stringify({ id, result }) }),
+      );
     });
   }
-
   close() {
-    this.dispatch("close");
+    this.target.dispatchEvent(new Event("close"));
   }
 }
 
-test("scenario timeout aborts polling and CDP event waiters before gate cleanup returns", async () => {
+void test("scenario timeout aborts polling and CDP event waiters before gate cleanup returns", async () => {
   const client = new CdpClient("ws://fake", { webSocketImpl: FakeWebSocket });
   const args = [
     "--comms-url",
@@ -157,6 +162,7 @@ test("scenario timeout aborts polling and CDP event waiters before gate cleanup 
   let activePollTimers = 0;
   let runtimeClosed = 0;
   const timerCountBefore = activeResourceNames().filter((name) => name === "Timeout").length;
+  /** @param {number} milliseconds @param {AbortSignal} [signal] */
   const trackedSleep = (milliseconds, signal) => {
     activePollTimers += 1;
     return sleep(milliseconds, signal).finally(() => {
@@ -184,8 +190,9 @@ test("scenario timeout aborts polling and CDP event waiters before gate cleanup 
       createPageImpl: async () => ({ webSocketDebuggerUrl: "ws://fake-page" }),
       createClientImpl: () => client,
       runScenarioImpl: async (scenarioClient, _diagnostics, _args, { signal }) => {
+        assert.ok(typeof scenarioClient.waitForEvent === "function");
         const eventWait = scenarioClient.waitForEvent(
-          "Page.neverFired",
+          "Page.loadEventFired",
           () => true,
           60_000,
           signal,
@@ -217,7 +224,7 @@ test("scenario timeout aborts polling and CDP event waiters before gate cleanup 
   );
 });
 
-test("structured secret cleanup pauses real streams on success, parse error, end, abort, and timeout", async () => {
+void test("structured secret cleanup pauses real streams on success, parse error, end, abort, and timeout", async () => {
   const successStream = new PassThrough();
   const success = readStructuredLoginSecret({ stream: successStream });
   successStream.end(JSON.stringify({ password: "test-secret" }));
@@ -249,7 +256,7 @@ test("structured secret cleanup pauses real streams on success, parse error, end
   assertSecretStreamStopped(timeoutStream);
 });
 
-test("an open child stdin pipe is unrefed after the one-shot secret read", async () => {
+void test("an open child stdin pipe is unrefed after the one-shot secret read", async () => {
   const source = [
     `import { readStructuredLoginSecret } from ${JSON.stringify(smokeScript.href)};`,
     `const secret = await readStructuredLoginSecret();`,
@@ -261,7 +268,8 @@ test("an open child stdin pipe is unrefed after the one-shot secret read", async
   let timer;
   try {
     child.stdin.write(`${JSON.stringify({ password: "test-secret" })}\n`);
-    const result = await new Promise((resolveChild, rejectChild) => {
+    /** @type {Promise<{code:number|null,signal:NodeJS.Signals|null}>} */
+    const completion = new Promise((resolveChild, rejectChild) => {
       timer = setTimeout(() => {
         child.kill("SIGKILL");
         rejectChild(new Error("spawned secret-reader process did not exit within 1s"));
@@ -269,6 +277,7 @@ test("an open child stdin pipe is unrefed after the one-shot secret read", async
       child.once("error", rejectChild);
       child.once("exit", (code, signal) => resolveChild({ code, signal }));
     });
+    const result = await completion;
     assert.equal(result.code, 0);
     assert.equal(result.signal, null);
   } finally {
@@ -278,7 +287,7 @@ test("an open child stdin pipe is unrefed after the one-shot secret read", async
   }
 });
 
-test("missing Chrome is rejected before profile allocation", async () => {
+void test("missing Chrome is rejected before profile allocation", async () => {
   const before = await profileNames();
   await assert.rejects(
     launchChrome({ binary: join(tmpdir(), "cadence-chrome-does-not-exist") }),
@@ -287,7 +296,7 @@ test("missing Chrome is rejected before profile allocation", async () => {
   assert.deepEqual(await profileNames(), before);
 });
 
-test("concurrent browser launches keep profiles and endpoints isolated", async () => {
+void test("concurrent browser launches keep profiles and endpoints isolated", async () => {
   const fake = await fixture(
     ["printf 'DevTools listening on ws://127.0.0.1:9/devtools/browser/fake\\n'", "sleep 30"].join(
       "\n",
@@ -305,8 +314,14 @@ test("concurrent browser launches keep profiles and endpoints isolated", async (
     runtimes = results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
     const rejected = results.find((result) => result.status === "rejected");
     if (rejected) throw rejected.reason;
-    assert.notEqual(runtimes[0].userDataDir, runtimes[1].userDataDir);
-    assert.notEqual(runtimes[0].child.pid, runtimes[1].child.pid);
+    assert.notEqual(
+      requiredFixture(runtimes[0]).userDataDir,
+      requiredFixture(runtimes[1]).userDataDir,
+    );
+    assert.notEqual(
+      requiredFixture(requiredFixture(runtimes[0]).child).pid,
+      requiredFixture(requiredFixture(runtimes[1]).child).pid,
+    );
     assert.notEqual(firstPort.port, secondPort.port);
   } finally {
     await Promise.all((runtimes || []).map((runtime) => runtime.close()));
@@ -319,7 +334,7 @@ test("concurrent browser launches keep profiles and endpoints isolated", async (
   assert.deepEqual(await profileNames(), before);
 });
 
-test("cancellation before spawn still removes the allocated profile", async () => {
+void test("cancellation before spawn still removes the allocated profile", async () => {
   const fake = await fixture("sleep 30");
   const controller = new AbortController();
   controller.abort(new Error("test cancellation"));
@@ -344,7 +359,7 @@ test("cancellation before spawn still removes the allocated profile", async () =
   assert.deepEqual(await profileNames(), before);
 });
 
-test("spawn failure and forced shutdown await exit before removing the profile", async () => {
+void test("spawn failure and forced shutdown await exit before removing the profile", async () => {
   const before = await profileNames();
   await assert.rejects(launchChrome({ binary: "/usr/bin/false" }), /exited before CDP startup/);
   assert.deepEqual(await profileNames(), before);
@@ -379,7 +394,7 @@ test("spawn failure and forced shutdown await exit before removing the profile",
           await readdir(profile);
           return true;
         } catch (error) {
-          return error.code !== "ENOENT";
+          return !(error instanceof Error && "code" in error && error.code === "ENOENT");
         }
       })(),
       false,
@@ -391,7 +406,7 @@ test("spawn failure and forced shutdown await exit before removing the profile",
   assert.deepEqual(await profileNames(), before);
 });
 
-test("SIGTERM cancellation cleans the Chrome profile and never leaks the login secret", async () => {
+void test("SIGTERM cancellation cleans the Chrome profile and never leaks the login secret", async () => {
   const fake = await fixture(["trap '' TERM", "sleep 30"].join("\n"));
   const before = await profileNames();
   const child = spawn(node, [smokeScript.pathname, "--scenario-timeout-ms", "1000"], {
@@ -400,6 +415,7 @@ test("SIGTERM cancellation cleans the Chrome profile and never leaks the login s
   });
   let stderr = "";
   let startupTimer;
+  /** @type {Promise<{code:number|null,signal:NodeJS.Signals|null}>} */
   const exited = new Promise((resolveExit) =>
     child.once("exit", (code, signal) => resolveExit({ code, signal })),
   );
@@ -410,7 +426,7 @@ test("SIGTERM cancellation cleans the Chrome profile and never leaks the login s
     );
     child.stderr.on("data", (chunk) => {
       stderr += chunk;
-      if (stderr.includes("launching bounded Chrome process")) resolveStarted();
+      if (stderr.includes("launching bounded Chrome process")) resolveStarted(undefined);
     });
     child.once("error", rejectStarted);
   });
@@ -430,7 +446,7 @@ test("SIGTERM cancellation cleans the Chrome profile and never leaks the login s
   }
 });
 
-test("credential failure output is redacted and the password has no argv or environment transport", async () => {
+void test("credential failure output is redacted and the password has no argv or environment transport", async () => {
   const fake = await fixture(
     ["printf 'DevTools listening on ws://127.0.0.1:9/devtools/browser/fake\\n'", "sleep 30"].join(
       "\n",
@@ -466,7 +482,7 @@ test("credential failure output is redacted and the password has no argv or envi
   }
 });
 
-test("forced termination remains bounded", async () => {
+void test("forced termination remains bounded", async () => {
   const fake = await fixture(
     [
       "trap '' TERM",
@@ -487,3 +503,9 @@ test("forced termination remains bounded", async () => {
     await rm(fake.directory, { recursive: true, force: true });
   }
 });
+
+/** @template T @param {T|null|undefined} value @returns {T} */
+function requiredFixture(value) {
+  assert.ok(value !== null && value !== undefined, "required fixture observation is missing");
+  return value;
+}

@@ -1,5 +1,10 @@
 {
-  "include": ["vite.config.*", "module-federation.config.ts", "../../tools/**/*.ts"],
+  "include": [
+    "vite*.config.*",
+    "module-federation.config.ts",
+    "../../tools/demo-host-service.ts",
+    "../../tools/publication-metadata.ts"
+  ],
   "compilerOptions": {
     "composite": true,
     "noEmit": true,
@@ -12,5 +17,6 @@
     "types": ["node"],
     "strict": true,
     "skipLibCheck": true
-  }
+  },
+  "extends": ["../../tsconfig.strict.json"]
 }

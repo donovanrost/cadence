@@ -1,8 +1,8 @@
-import type DashboardWidget from "./DashboardWidget.vue";
+import type { DashboardWidgetPresentation } from "./DashboardWidget.contracts";
 import type { WorkspacePlacement, WorkspaceSnapshot } from "./contracts";
 import { muted, snapshotWidgetBody } from "./snapshot-widgets.ts";
 
-type Header = InstanceType<typeof DashboardWidget>["$props"]["presentation"]["header"];
+type Header = DashboardWidgetPresentation["header"];
 // Length-framed UTF-8 hex keeps arbitrary domain IDs out of CSS selectors and
 // separates a section ID from an equal placement ID without lossy slugging.
 export function workspaceDomId(instance: string, ...parts: string[]): string {
@@ -185,7 +185,6 @@ export function snapshotPresentation(snapshot: WorkspaceSnapshot, instance: stri
         },
       };
     }),
-    comparison_inspector: null,
     empty_state: snapshot.placements.length
       ? null
       : {

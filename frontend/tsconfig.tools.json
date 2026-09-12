@@ -8,7 +8,10 @@
     "noEmit": true,
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
-    "types": ["node"]
+    "types": ["node"],
+    "allowJs": true,
+    "checkJs": true
   },
-  "include": ["tools/**/*.ts", "vite.config.ts"]
+  "include": ["tools/**/*.ts", "tools/**/*.mjs", "test-support/**/*.ts", "vite.config.ts"],
+  "extends": ["./tsconfig.strict.json"]
 }

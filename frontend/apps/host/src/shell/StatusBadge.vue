@@ -5,7 +5,7 @@ type Status = "info" | "ready" | "attention" | "blocked";
 
 const props = withDefaults(
   defineProps<{
-    status: Status;
+    status?: Status;
     label: string;
   }>(),
   { status: "info" },

@@ -12,6 +12,7 @@ async function workspaceFixture() {
   const root = await mkdtemp(join(tmpdir(), "cadence-first-party-workspace-"));
   const apps = join(root, "apps");
   await mkdir(apps, { recursive: true });
+  /** @type {[string, string, string, string][]} */
   const packages = [
     ["host", "@cadence/plugin-host", "cadence_host", "host"],
     ["sample-remote", "@cadence/sample-remote", "cadence_sample_remote", "sample-remote"],
@@ -23,11 +24,7 @@ async function workspaceFixture() {
       join(directory, "package.json"),
       JSON.stringify({ name: packageName, scripts: { "build:phoenix": "vp build" } }),
     );
-    await writeFile(join(directory, "module-federation.config.ts"), `name: "${remoteName}"`);
-    await writeFile(
-      join(directory, "vite.phoenix.config.ts"),
-      `outDir: "application-host/${bundle}"`,
-    );
+    await writeFile(join(directory, "publication.json"), JSON.stringify({ remoteName, bundle }));
   }
   return root;
 }
@@ -56,16 +53,16 @@ void test("discovers every Phoenix-buildable first-party remote with strict iden
   }
 });
 
-void test("rejects a publication app without a generated federation identity", async () => {
+void test("rejects malformed publication metadata before building", async () => {
   const root = await workspaceFixture();
   try {
     await writeFile(
-      join(root, "apps", "sample-remote", "module-federation.config.ts"),
-      "export default {};",
+      join(root, "apps", "sample-remote", "publication.json"),
+      JSON.stringify({ remoteName: "bad/name", bundle: "sample-remote" }),
     );
     await assert.rejects(
       () => discoverFirstPartyRemotes(root),
-      /Module Federation name is missing/,
+      /valid remoteName and bundle publication metadata/,
     );
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -85,4 +82,42 @@ void test("requires every named first-party remote in the real workspace", async
       (left, right) => left.bundle.localeCompare(right.bundle),
     ),
   );
+});
+
+void test("config movement and formatting cannot change discovered identities", async (t) => {
+  const root = await workspaceFixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const before = await discoverFirstPartyRemotes(root);
+  const directory = join(root, "apps", "sample-remote");
+  await writeFile(
+    join(directory, "module-federation.config.ts"),
+    'export { default } from "./build/federation";',
+  );
+  await writeFile(
+    join(directory, "vite.phoenix.config.ts"),
+    '// Formatting and unrelated source strings are not metadata.\nconst name = "misleading";',
+  );
+  assert.deepEqual(await discoverFirstPartyRemotes(root), before);
+});
+
+void test("publication metadata rejects missing, extra, malformed, and duplicate identities", async (t) => {
+  const root = await workspaceFixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const path = join(root, "apps", "sample-remote", "publication.json");
+  for (const descriptor of [
+    null,
+    {},
+    { remoteName: "cadence_sample", bundle: "../outside" },
+    { remoteName: "cadence_sample", bundle: "sample", extra: true },
+  ]) {
+    await writeFile(path, JSON.stringify(descriptor));
+    await assert.rejects(discoverFirstPartyRemotes(root), /valid remoteName and bundle/);
+  }
+  await writeFile(path, JSON.stringify({ remoteName: "cadence_host", bundle: "sample" }));
+  await assert.rejects(
+    discoverFirstPartyRemotes(root),
+    /Duplicate first-party publication identity/,
+  );
+  await rm(path);
+  await assert.rejects(discoverFirstPartyRemotes(root), /missing or unreadable/);
 });

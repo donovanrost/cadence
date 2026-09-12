@@ -5,6 +5,7 @@ export function navigation(
   mission: boolean,
 ) {
   const item = (key: string, label: string, href: string, icon?: string, id?: string) => ({
+    kind: "link" as const,
     key,
     label,
     href,
@@ -47,6 +48,7 @@ export function navigation(
     icon: string,
     children: ReturnType<typeof item>[],
   ) => ({
+    kind: "group" as const,
     key,
     label,
     icon,
@@ -65,13 +67,15 @@ export function navigation(
       "comms",
       "Comms",
       "hero-signal",
-      [
-        ["overview", "Overview", ""],
-        ["transports", "Transports", "/transports"],
-        ["ground_stations", "Ground Stations", "/ground-stations"],
-        ["routing", "Routing", "/routing"],
-        ["validation", "Validation", "/validation"],
-      ].map(([key, label, path]) => item(`comms_${key}`, label, `${root}/comms${path}`)),
+      (
+        [
+          ["overview", "Overview", ""],
+          ["transports", "Transports", "/transports"],
+          ["ground_stations", "Ground Stations", "/ground-stations"],
+          ["routing", "Routing", "/routing"],
+          ["validation", "Validation", "/validation"],
+        ] as const
+      ).map(([key, label, path]) => item(`comms_${key}`, label, `${root}/comms${path}`)),
     ),
   ];
 }

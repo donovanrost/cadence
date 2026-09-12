@@ -1,3 +1,4 @@
+import { oneOf } from "@cadence/plugin-sdk/admission";
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import {
   fields,
@@ -31,7 +32,7 @@ const empty = (): DefinitionInput => ({
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const scopeKeys = ["organization_id", "mission_id", "actor_id", "installation_id"] as const;
 const sameScope = (a: unknown, b: Context) => record(a) && scopeKeys.every((k) => a[k] === b[k]);
-const messages: Record<string, string> = {
+const messages = {
   review_conflict:
     "This definition or its activation changed. Refresh and review it before saving.",
   review_required: "Review the current point and limit set before saving.",
@@ -259,18 +260,22 @@ export function useDefinitions(initial: () => DefinitionsDocument, port: Definit
       if (!alive) return;
       const code = record(e) && typeof e.code === "string" ? e.code : "";
       if (
-        [
-          "review_conflict",
-          "review_required",
-          "invalid_number",
-          "invalid_threshold_order",
-          "threshold_required",
-          "required_field",
-          "invalid_field",
-          "invalid_definition",
-        ].includes(code) ||
+        oneOf(
+          [
+            "review_conflict",
+            "review_required",
+            "invalid_number",
+            "invalid_threshold_order",
+            "threshold_required",
+            "required_field",
+            "invalid_field",
+            "invalid_definition",
+          ],
+          code,
+        ) ||
         (!recovery &&
-          ["forbidden", "application_unavailable", "unsupported_action", "invalid_input"].includes(
+          oneOf(
+            ["forbidden", "application_unavailable", "unsupported_action", "invalid_input"],
             code,
           ))
       ) {

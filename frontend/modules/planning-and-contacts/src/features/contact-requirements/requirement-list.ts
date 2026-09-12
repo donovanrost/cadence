@@ -1,16 +1,20 @@
+import { record, oneOf, arrayOf } from "@cadence/plugin-sdk/admission";
 import type { OpsContactRequirementListProps } from "./OpsContactRequirementList.contracts";
 
 const states = ["all", "active", "closed", "canceled"] as const;
-const record = (value: unknown): value is Record<string, any> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
 const text = (value: unknown, max = 2048): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= max;
 const id = (value: unknown): value is string =>
   text(value, 256) &&
   new TextEncoder().encode(value).length <= 256 &&
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   !/[\u0000-\u0020\u007f]/.test(value);
-const domId = (value: unknown) => text(value, 400) && /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(value);
-const texts = (value: unknown, keys: string[]) =>
+const domId = (value: unknown): value is string =>
+  text(value, 400) && /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(value);
+const texts = <const K extends string>(
+  value: unknown,
+  keys: readonly K[],
+): value is Record<string, unknown> & Record<K, string> =>
   record(value) && keys.every((key) => text(value[key]));
 const segment = (value: string) =>
   encodeURIComponent(value).replace(
@@ -30,13 +34,15 @@ export function admitRequirementList(value: unknown): value is OpsContactRequire
       !id(value.context.organization_id) ||
       !id(value.context.mission_id) ||
       !record(value.query) ||
+      typeof value.query.page !== "number" ||
       !Number.isSafeInteger(value.query.page) ||
       value.query.page < 1 ||
       value.query.page > 1_000_000 ||
-      !states.includes(value.query.state) ||
+      !oneOf(states, value.query.state) ||
       new TextEncoder().encode(JSON.stringify(value)).length > 131_072
     )
       return false;
+    const query = { page: value.query.page, state: value.query.state };
     const base = "/missions/" + segment(value.context.mission_id) + "/ops/requirements";
     const page = value.page;
     if (
@@ -54,37 +60,37 @@ export function admitRequirementList(value: unknown): value is OpsContactRequire
       page.journey_steps.length > 4 ||
       !page.journey_steps.every(
         (step: unknown) =>
-          texts(step, ["number", "label", "detail"]) &&
-          typeof (step as Record<string, unknown>).active === "boolean",
+          texts(step, ["number", "label", "detail"]) && typeof step.active === "boolean",
       )
     )
       return false;
     if (
-      !Array.isArray(value.filters) ||
+      !arrayOf(value.filters, record) ||
       value.filters.length !== 4 ||
       !value.filters.every(
         (filter: unknown, index: number) =>
           record(filter) &&
+          states[index] !== undefined &&
           filter.id === "requirements-filter-" + states[index] &&
           text(filter.label) &&
-          filter.href === pageHref(base, 1, states[index]!) &&
-          filter.active === (states[index] === value.query.state),
+          filter.href === pageHref(base, 1, states[index]) &&
+          filter.active === (states[index] === query.state),
       )
     )
       return false;
     const pagination = value.pagination;
     if (
       !record(pagination) ||
-      pagination.label !== "Page " + value.query.page ||
+      pagination.label !== "Page " + query.page ||
       pagination.previous_href !==
-        (value.query.page > 1 ? pageHref(base, value.query.page - 1, value.query.state) : null) ||
+        (query.page > 1 ? pageHref(base, query.page - 1, query.state) : null) ||
       !(
         pagination.next_href === null ||
-        pagination.next_href === pageHref(base, value.query.page + 1, value.query.state)
+        pagination.next_href === pageHref(base, query.page + 1, query.state)
       )
     )
       return false;
-    if (!Array.isArray(value.requirements) || value.requirements.length > 25) return false;
+    if (!arrayOf(value.requirements, record) || value.requirements.length > 25) return false;
     const reservedIds = [
       page.id,
       page.list_id,
@@ -92,7 +98,7 @@ export function admitRequirementList(value: unknown): value is OpsContactRequire
       page.header.create_action.id,
       "requirements-previous-page",
       "requirements-next-page",
-      ...value.filters.map((filter: any) => filter.id),
+      ...states.map((state) => "requirements-filter-" + state),
     ];
     const identities = new Set<string>(),
       domIds = new Set<string>(reservedIds);

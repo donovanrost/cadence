@@ -40,7 +40,12 @@ const render = () => ({
       event.preventDefault();
       const form = event.target as HTMLFormElement;
       const data = new FormData(form);
-      submitted.value = `${data.get("_method")} ${form.getAttribute("action")} ${data.get("organization_id") ?? ""} ${data.get("_csrf_token")}`;
+      const text = (key: string) => {
+        const value = data.get(key);
+        if (typeof value !== "string" && value !== null) throw Error("Expected a text form field");
+        return value ?? "";
+      };
+      submitted.value = `${text("_method")} ${form.getAttribute("action")} ${text("organization_id")} ${text("_csrf_token")}`;
     }
     return { context, submitted, submit };
   },
@@ -109,11 +114,11 @@ export const AccountOpen: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Mission operator" }));
     const menu = canvas.getByRole("menu");
     await expect(within(menu).getByRole("menuitem", { name: "Sign out" })).toBeVisible();
-    await waitFor(() => {
+    await waitFor(async () => {
       const bounds = menu.getBoundingClientRect();
-      expect(bounds.right).toBeLessThanOrEqual(window.innerWidth);
-      expect(bounds.bottom).toBeLessThanOrEqual(window.innerHeight);
-      expect(bounds.top).toBeGreaterThanOrEqual(40);
+      await expect(bounds.right).toBeLessThanOrEqual(window.innerWidth);
+      await expect(bounds.bottom).toBeLessThanOrEqual(window.innerHeight);
+      await expect(bounds.top).toBeGreaterThanOrEqual(40);
     });
   },
 };

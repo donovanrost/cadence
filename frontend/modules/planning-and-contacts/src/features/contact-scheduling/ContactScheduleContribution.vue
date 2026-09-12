@@ -4,13 +4,16 @@ import type { ContactSchedulePort } from "./OpsContactSchedule.contracts";
 import type { ContactPage } from "./contact-workflow";
 import OpsContactSchedule from "./OpsContactSchedule.vue";
 defineOptions({ inheritAttrs: false });
-const props = defineProps<{ page: ContactPage; port: OpsPagePort; readPort: OpsPageReadPort }>();
+const props = defineProps<{
+  page: Extract<ContactPage, { kind: "schedule" }>;
+  port: OpsPagePort;
+  readPort: OpsPageReadPort;
+}>();
 const contactPort: ContactSchedulePort = {
   context: { ...props.page.model.context },
-  captured: {
-    actorId: props.page.actor_id,
-    guardNavigation: (guard) => props.port.guardNavigation?.(guard) ?? (() => {}),
-  },
+  protocol: "page-snapshot",
+  actorId: props.page.actor_id,
+  guardNavigation: (guard) => props.port.guardNavigation?.(guard) ?? (() => {}),
   execute: (action, input) => props.port.execute(action, input),
   refresh: () => props.readPort.read(),
 };

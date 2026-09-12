@@ -1,4 +1,14 @@
-import type { ContactKind, ContactPage, ContactOperation, ContactAction } from "./contact-workflow";
+import { mutableFixture, type MutableFixture } from "../../../../../test-support/mutable-fixture";
+import { required } from "../../../../../test-support/required";
+import { fixtureRecord } from "../../../../../test-support/json-fixture";
+import {
+  admitContactOperation,
+  isContactCommand,
+  type ContactKind,
+  type ContactPage,
+  type ContactCompletion,
+  type ContactAction,
+} from "./contact-workflow";
 import {
   scheduleFixture,
   searchFixture,
@@ -7,72 +17,93 @@ import {
 } from "./contact-schedule.test-support";
 import { reservationFixture } from "./reservation.test-support";
 import { contactRecordFixture } from "./contact-record.test-support";
-import type { ContactSchedule } from "./OpsContactSchedule.contracts";
-import type { ReservationDetail } from "./OpsContactDetail.contracts";
 import { decisionState } from "./reservation-detail";
-export function contactPage(kind: ContactKind = "schedule"): ContactPage {
-  return {
-    kind,
+export function contactPage(): MutableFixture<Extract<ContactPage, { kind: "schedule" }>>;
+export function contactPage<K extends ContactKind>(
+  kind: K,
+): MutableFixture<Extract<ContactPage, { kind: K }>>;
+export function contactPage(kind: ContactKind = "schedule"): MutableFixture<ContactPage> {
+  const common = {
     actor_id: "operator-one",
     sequence: 0,
     operation: null,
     search: null,
     consumed: [],
-    model:
-      kind === "schedule"
-        ? scheduleFixture()
-        : kind === "reservation"
-          ? reservationFixture()
-          : contactRecordFixture(),
   };
+  if (kind === "schedule") return { ...common, kind, model: scheduleFixture() };
+  if (kind === "reservation") return { ...common, kind, model: reservationFixture() };
+  return { ...common, kind, model: contactRecordFixture() };
 }
+export function contactOperation<A extends ContactAction>(
+  page: ContactPage,
+  action: A,
+  input: unknown,
+): MutableFixture<Extract<ContactCompletion, { action: A }>>;
 export function contactOperation(
   page: ContactPage,
   action: ContactAction,
-  input: any,
-): ContactOperation {
-  const selected = (page.model as ReservationDetail).selected;
-  const value =
-    action === "search"
-      ? searchFixture(page.model as ContactSchedule, input.payload.contact_search)
-      : action === "reserve" || action === "cancel"
-        ? receiptFixture(action === "cancel" ? "canceled" : "confirmed")
-        : {
-            providerReservationId: (page.model as ReservationDetail).reservation.id,
-            providerReservationChangeId: selected!.id,
-            providerRevision: selected!.provider_revision,
-            proposalHash: selected!.proposal_hash,
-            lifecycleState: decisionState(action),
-          };
-  return {
-    sequence: input.sequence,
-    action,
-    input: structuredClone(input.payload),
-    status: "completed",
-    receipt: completion({
-      contract_version: 1,
-      actor_id: page.actor_id,
-      ...page.model.context,
-      action,
-      source: "returned",
-      value,
-    }) as ContactOperation["receipt"],
-  };
+  input: unknown,
+): MutableFixture<ContactCompletion> {
+  const envelope = fixtureRecord(input);
+  const command = { sequence: envelope.sequence, action, input: envelope.payload };
+  if (!isContactCommand(command, page)) throw Error("Invalid fixture command");
+  let value: unknown;
+  if (command.action === "search") {
+    if (page.kind !== "schedule") throw Error("Missing fixture schedule");
+    value = searchFixture(page.model, command.input.contact_search);
+  } else if (command.action === "reserve" || command.action === "cancel") {
+    value = receiptFixture(command.action === "cancel" ? "canceled" : "confirmed");
+  } else {
+    if (page.kind !== "reservation") throw Error("Missing fixture reservation");
+    const selected = required(page.model.selected);
+    value = {
+      providerReservationId: page.model.reservation.id,
+      providerReservationChangeId: selected.id,
+      providerRevision: selected.provider_revision,
+      proposalHash: selected.proposal_hash,
+      lifecycleState: decisionState(command.action),
+    };
+  }
+  const operation = required(
+    admitContactOperation(
+      {
+        ...command,
+        status: "completed",
+        receipt: completion({
+          contract_version: 1,
+          actor_id: page.actor_id,
+          ...page.model.context,
+          action,
+          source: "returned",
+          value,
+        }),
+      },
+      page,
+    ),
+  );
+  if (operation.status !== "completed" || operation.action !== action)
+    throw Error("Invalid fixture completion");
+  return mutableFixture(operation);
 }
-export function completedContact(page: ContactPage, op: ContactOperation): ContactPage {
-  const next = structuredClone(page);
+export function completedContact(
+  page: ContactPage,
+  op: ContactCompletion,
+): MutableFixture<ContactPage> {
+  const next = mutableFixture(page);
   next.sequence = op.sequence;
-  next.operation = structuredClone(op);
+  next.operation = mutableFixture(op);
   if (op.action === "search") {
-    next.search = op.receipt!.result.value as any;
+    next.search = mutableFixture(op.receipt.result.value);
     next.consumed = [];
   } else if (op.action === "reserve" || op.action === "cancel") {
-    const r = (next.model as ContactSchedule).reservations.entries[0]!;
-    r.provider_revision = op.receipt!.result.value.providerRevision;
-    r.lifecycle_state = op.receipt!.result.value.lifecycleState;
+    if (next.kind !== "schedule") throw Error("Missing fixture schedule");
+    const r = required(next.model.reservations.entries[0]);
+    r.provider_revision = op.receipt.result.value.providerRevision;
+    r.lifecycle_state = op.receipt.result.value.lifecycleState;
     if (op.action === "reserve") next.consumed.push(op.input.token);
-  } else
-    (next.model as ReservationDetail).selected!.lifecycle_state =
-      op.receipt!.result.value.lifecycleState;
+  } else {
+    if (next.kind !== "reservation") throw Error("Missing fixture reservation");
+    required(next.model.selected).lifecycle_state = op.receipt.result.value.lifecycleState;
+  }
   return next;
 }

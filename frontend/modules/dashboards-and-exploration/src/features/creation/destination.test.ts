@@ -1,3 +1,9 @@
+import {
+  fixtureRows,
+  fixtureRecord,
+  fixtureString,
+} from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import CreationDestination from "./CreationDestination.vue";
@@ -23,7 +29,7 @@ test.each(["new", "clone", "import"])(
       source_dashboard_id: mode === "clone" ? "source /?&+" : null,
     };
     const wrapper = mount(CreationDestination, { props: props(model) });
-    const url = new URL(wrapper.get("a").attributes("href")!, "https://cadence.test");
+    const url = new URL(required(wrapper.get("a").attributes("href")), "https://cadence.test");
     expect(url.pathname).toBe("/missions/mission-1/ops/dashboards/new");
     expect(url.searchParams.get("mode") ?? "new").toBe(mode);
     expect(url.searchParams.get("source_dashboard_id")).toBe(model.source_dashboard_id);
@@ -67,24 +73,25 @@ test("a host identity change immediately removes the old destination", async () 
 
 test("actual producer models mount without accepting server supplied destinations", () => {
   const models = process.env.CADENCE_CREATION_DESTINATIONS
-    ? JSON.parse(process.env.CADENCE_CREATION_DESTINATIONS)
+    ? fixtureRows(process.env.CADENCE_CREATION_DESTINATIONS)
     : [fixture()];
   for (const model of models) {
+    const context = fixtureRecord(model.context);
+    const organizationId = fixtureString(context.organization_id);
+    const missionId = fixtureString(context.mission_id);
     const wrapper = mount(CreationDestination, {
       props: {
         model: { ...model, href: "https://foreign.test", query: { redirect: "//foreign.test" } },
-        organizationId: model.context.organization_id,
-        missionId: model.context.mission_id,
+        organizationId,
+        missionId,
       },
     });
     const url = new URL(
-      wrapper.get("#dashboard-creation-destination-open").attributes("href")!,
+      required(wrapper.get("#dashboard-creation-destination-open").attributes("href")),
       "https://cadence.test",
     );
     expect(url.origin).toBe("https://cadence.test");
-    expect(url.pathname).toBe(
-      `/missions/${encodeURIComponent(model.context.mission_id)}/ops/dashboards/new`,
-    );
+    expect(url.pathname).toBe(`/missions/${encodeURIComponent(missionId)}/ops/dashboards/new`);
     expect(url.searchParams.get("mode") ?? "new").toBe(model.mode);
     expect(url.searchParams.get("source_dashboard_id")).toBe(model.source_dashboard_id);
     expect(url.searchParams.has("redirect")).toBe(false);

@@ -1,3 +1,4 @@
+import { required } from "../../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import InstallationManagementPage from "./InstallationManagementPage.vue";
@@ -90,7 +91,9 @@ test("unsupported versions, wrong scopes and malformed nested actions are contai
   expect(admitSnapshot(snapshot, "spacecraft")).toBeNull();
   const bad = installationSnapshot();
   if (bad.scope !== "mission") throw new Error("fixture");
-  bad.data.applications_component.props.applications[0]!.disable_action!.action_id = "uninstall";
+  required(
+    required(bad.data.applications_component.props.applications[0]).disable_action,
+  ).action_id = "uninstall";
   expect(admitSnapshot(bad, "mission")).toBeNull();
   await wrapper.setProps({ snapshot });
   expect(wrapper.find("#mission-applications-list").exists()).toBe(true);
@@ -110,7 +113,7 @@ test("missing profiles retain the identity handoff and nullable facts render saf
       path: "/missions/mission-a/spacecraft/spacecraft-a/identity",
     },
   };
-  snapshot.data.applications[0]!.status.facts[0]!.value = null;
+  required(required(snapshot.data.applications[0]).status.facts[0]).value = null;
   wrapper = mount(InstallationManagementPage, {
     props: {
       scope: "spacecraft",

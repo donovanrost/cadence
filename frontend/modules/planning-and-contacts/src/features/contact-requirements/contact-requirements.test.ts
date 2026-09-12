@@ -1,3 +1,5 @@
+import { h, type Component } from "vue";
+import { required } from "../../../../../test-support/required";
 import { test } from "vite-plus/test";
 import { mount } from "@vue/test-utils";
 import { expect } from "vite-plus/test";
@@ -23,18 +25,24 @@ test("unsupported, duplicate, oversized and foreign-link DTOs are contained", ()
     { ...requirementListFixture(), pagination: null },
     {
       ...requirementListFixture(),
-      requirements: Array(26).fill(requirementListFixture().requirements[0]),
+      requirements: Array.from({ length: 26 }, () =>
+        required(requirementListFixture().requirements[0]),
+      ),
     },
   ];
   const foreign = requirementListFixture();
-  foreign.requirements[0]!.detail_href = "/missions/foreign/ops/requirements/requirement-1";
+  required(foreign.requirements[0]).detail_href =
+    "/missions/foreign/ops/requirements/requirement-1";
   const duplicate = requirementListFixture();
-  duplicate.requirements.push(duplicate.requirements[0]!);
+  duplicate.requirements.push(required(duplicate.requirements[0]));
   const colliding = requirementListFixture();
-  colliding.requirements[0]!.__dom_id = colliding.page.id;
+  required(colliding.requirements[0]).__dom_id = colliding.page.id;
   for (const props of [...malformed, foreign, duplicate, colliding]) {
     expect(admitRequirementList(props)).toBe(false);
-    const wrapper = mount(OpsContactRequirementList, { props: props as any });
+    // Exercise the component's unknown-data reader with deliberately malformed raw Vue props.
+    const renderRawProps = (component: Component) => h(component, props);
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks this imported SFC constructor; the lint type service cannot resolve it.
+    const wrapper = mount(() => renderRawProps(OpsContactRequirementList));
     expect(wrapper.find("#contact-requirements-unavailable").exists()).toBe(true);
     expect(wrapper.find("a").exists()).toBe(false);
     wrapper.unmount();
@@ -56,7 +64,7 @@ test("requirement identities and scoped links survive empty-to-populated updates
   const props = requirementListFixture(),
     wrapper = mount(OpsContactRequirementList, { props });
   expect(wrapper.get("#requirement-row-1").attributes("href")).toBe(
-    props.requirements[0]!.detail_href,
+    required(props.requirements[0]).detail_href,
   );
   expect(wrapper.get("#new-requirement").attributes("data-phx-link")).toBe("redirect");
   await wrapper.setProps({ requirements: [] });

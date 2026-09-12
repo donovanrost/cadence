@@ -1,3 +1,5 @@
+import { anyInstanceOf } from "../../../test-support/matchers";
+import { required } from "../../../test-support/required";
 import {
   APPLICATION_HOST_CONTRACT,
   type CatalogApplication,
@@ -97,17 +99,17 @@ describe("the generic federated application loader", () => {
         "http://127.0.0.1:4175/sha256:1111111111111111111111111111111111111111111111111111111111111111/mf-manifest.json",
     });
     expect(n).toEqual({
-      identity: expect.any(String),
+      identity: anyInstanceOf(String),
       entry:
         "http://127.0.0.1:4175/sha256:2222222222222222222222222222222222222222222222222222222222222222/mf-manifest.json",
     });
     expect(rolledBack).toEqual(nMinus1);
     expect(createClient).toHaveBeenCalledTimes(2);
     expect(new Set(createClient.mock.calls.map(([identity]) => identity)).size).toBe(2);
-    expect(clients[0].registerRemotes).toHaveBeenCalledTimes(1);
-    expect(clients[1].registerRemotes).toHaveBeenCalledTimes(1);
-    expect(clients[0].loadRemote).toHaveBeenCalledTimes(2);
-    expect(clients[1].loadRemote).toHaveBeenCalledTimes(1);
+    expect(required(clients[0]).registerRemotes).toHaveBeenCalledTimes(1);
+    expect(required(clients[1]).registerRemotes).toHaveBeenCalledTimes(1);
+    expect(required(clients[0]).loadRemote).toHaveBeenCalledTimes(2);
+    expect(required(clients[1]).loadRemote).toHaveBeenCalledTimes(1);
     expect(() => runtime.load(release("sha256:" + "3".repeat(64)))).toThrow(
       "current and fallback release already",
     );
@@ -120,7 +122,7 @@ describe("the generic federated application loader", () => {
 
     await loadFederatedApplication(application, runtime);
 
-    expect(load).toHaveBeenCalledWith(application, { signal: expect.any(AbortSignal) });
+    expect(load).toHaveBeenCalledWith(application, { signal: anyInstanceOf(AbortSignal) });
   });
 
   it("rejects a remote that claims a different application version", async () => {

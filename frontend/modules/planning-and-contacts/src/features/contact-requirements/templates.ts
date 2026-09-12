@@ -1,3 +1,4 @@
+import { arrayOf, oneOf, type Snapshot } from "@cadence/plugin-sdk/admission";
 import {
   natural,
   positive,
@@ -9,11 +10,12 @@ import {
 } from "./requirement-directory";
 import {
   admitSpacecraftChoices,
+  admitDeclarationContext,
   type SpacecraftChoices,
   type DeclarationContext,
 } from "./declaration";
 import type { TemplateValues } from "./OpsContactRequirementTemplate.contracts";
-export type TemplateReference = {
+export type TemplateReference = Snapshot<{
   organization_id: string;
   mission_id: string;
   template_id: string;
@@ -22,29 +24,26 @@ export type TemplateReference = {
   lifecycle_state: "active" | "paused" | "closed";
   lifecycle_changed_at: string;
   lifecycle_changed_by: string;
-};
-export type TemplateEntry = {
+}>;
+export type TemplateEntry = Snapshot<{
   reference: TemplateReference;
   spacecraft_id: string;
   contact_intent: string;
   schedule: {
-    type: "daily" | "fixed_interval";
     anchor_at: string;
     ends_at: string | null;
     window_offset_seconds: number;
     window_duration_seconds: number;
-    interval_seconds?: number;
-    time_utc?: string;
-  };
-};
-export type TemplateModel = {
+  } & ({ type: "fixed_interval"; interval_seconds: number } | { type: "daily"; time_utc: string });
+}>;
+export type TemplateModel = Snapshot<{
   contract_version: 1;
   context: DeclarationContext;
   defaults: { anchor_at: string; time_utc: string };
   can_manage: boolean;
   templates: { page: number; more: boolean; entries: TemplateEntry[] };
   spacecraft: SpacecraftChoices;
-};
+}>;
 export const templateActions = [
   "validate-template",
   "create-template",
@@ -55,19 +54,66 @@ export const templateActions = [
   "spacecraft-page",
 ] as const;
 export type TemplateAction = (typeof templateActions)[number];
-export type TemplateOperation = {
-  sequence: number;
-  action: TemplateAction;
-  input: Record<string, any>;
-  status: "completed" | "rejected" | "unconfirmed";
-  feedback?: string[];
-  receipt: null | { receiptId: string; completedAt: string; result: Record<string, any> };
+export type TemplateLifecycleAction = "pause-template" | "activate-template" | "close-template";
+export type TemplateEffectAction = TemplateLifecycleAction | "create-template";
+export type TemplateInputs = {
+  "validate-template": { template: TemplateValues };
+  "create-template": { template: TemplateValues };
+  "pause-template": { reference: TemplateReference };
+  "activate-template": { reference: TemplateReference };
+  "close-template": { reference: TemplateReference };
+  "templates-page": { page: number };
+  "spacecraft-page": { page: number };
 };
-export type TemplatePage = {
+type EffectResult<S extends TemplateReference["lifecycle_state"]> = {
+  contract_version: 1;
+  actor_id: string;
+  reference: TemplateReference & { lifecycle_state: S };
+};
+export type TemplateFeedback = keyof typeof templateFeedback;
+export type TemplateResults = {
+  "validate-template": { valid: boolean; feedback: TemplateFeedback[] };
+  "create-template": EffectResult<"active"> & { reference: { version: 1 } };
+  "pause-template": EffectResult<"paused">;
+  "activate-template": EffectResult<"active">;
+  "close-template": EffectResult<"closed">;
+  "templates-page": { page: number };
+  "spacecraft-page": { page: number };
+};
+export type TemplateCommand = {
+  [A in TemplateAction]: Snapshot<{ action: A; input: TemplateInputs[A] }>;
+}[TemplateAction];
+export type TemplateRequest = {
+  [A in TemplateAction]: [action: A, input: Snapshot<TemplateInputs[A]>];
+}[TemplateAction];
+export type TemplateOperation = {
+  [A in TemplateAction]: Snapshot<
+    {
+      sequence: number;
+      action: A;
+      input: TemplateInputs[A];
+    } & (
+      | {
+          status: "completed";
+          receipt: { receiptId: string; completedAt: string; result: TemplateResults[A] };
+        }
+      | { status: "rejected"; receipt: null; feedback: TemplateFeedback[] }
+      | { status: "unconfirmed"; receipt: null }
+    )
+  >;
+}[TemplateAction];
+export type TemplateCompletion = Extract<
+  TemplateOperation,
+  { action: TemplateEffectAction; status: "completed" }
+>;
+export function isTemplateCompletion(op: TemplateOperation): op is TemplateCompletion {
+  return op.status === "completed" && !templatePure(op.action);
+}
+export type TemplatePage = Snapshot<{
   model: TemplateModel;
   sequence: number;
   operation: TemplateOperation | null;
-};
+}>;
 export const templateFields = [
   "spacecraft_id",
   "schedule_type",
@@ -101,23 +147,24 @@ export const templateFeedback = {
   invalid_template:
     "Review the recurrence, outcome, approval and catch-up constraints. The template could not be accepted.",
 } as const;
-export const templateFeedbackText = (codes: string[]) =>
-  codes.map((c) => templateFeedback[c as keyof typeof templateFeedback]).join(" ");
-const feedback = (v: any): v is string[] =>
-  Array.isArray(v) &&
-  v.length <= 8 &&
-  v.every((c) => typeof c === "string" && Object.hasOwn(templateFeedback, c));
-const time = (v: any): v is string =>
+export const templateFeedbackText = (codes: readonly TemplateFeedback[]) =>
+  codes.map((c) => templateFeedback[c]).join(" ");
+const feedback = (v: unknown): v is TemplateFeedback[] =>
+  arrayOf(
+    v,
+    (c): c is TemplateFeedback => typeof c === "string" && Object.hasOwn(templateFeedback, c),
+  ) && v.length <= 8;
+const time = (v: unknown): v is string =>
   typeof v === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?$/.test(v);
 export const templatePure = (action: TemplateAction) =>
   action === "validate-template" || action.endsWith("-page");
-export function admitTemplateValues(v: any): v is TemplateValues {
+export function admitTemplateValues(v: unknown): v is TemplateValues {
   return (
     record(v) && Object.keys(v).length === 19 && templateFields.every((k) => safeText(v[k], 4096))
   );
 }
 export function admitTemplateReference(
-  v: any,
+  v: unknown,
   c: Pick<DeclarationContext, "organization_id" | "mission_id">,
 ): v is TemplateReference {
   return (
@@ -129,12 +176,12 @@ export function admitTemplateReference(
     positive(v.version) &&
     typeof v.content_sha256 === "string" &&
     /^[a-f0-9]{64}$/.test(v.content_sha256) &&
-    ["active", "paused", "closed"].includes(v.lifecycle_state) &&
+    oneOf(["active", "paused", "closed"], v.lifecycle_state) &&
     validTime(v.lifecycle_changed_at) &&
     safeId(v.lifecycle_changed_by)
   );
 }
-function entry(v: any, c: DeclarationContext): v is TemplateEntry {
+function entry(v: unknown, c: DeclarationContext): v is TemplateEntry {
   if (
     !record(v) ||
     !admitTemplateReference(v.reference, c) ||
@@ -156,16 +203,14 @@ function entry(v: any, c: DeclarationContext): v is TemplateEntry {
   );
 }
 export function admitTemplateModel(
-  v: any,
+  v: unknown,
   context?: Partial<DeclarationContext>,
   defaults?: TemplateModel["defaults"],
 ): v is TemplateModel {
+  if (!record(v) || v.contract_version !== 1 || !admitDeclarationContext(v.context, context))
+    return false;
+  const admittedContext = v.context;
   return (
-    record(v) &&
-    v.contract_version === 1 &&
-    record(v.context) &&
-    ["organization_id", "mission_id", "actor_id"].every((k) => safeId(v.context[k])) &&
-    (!context || Object.entries(context).every(([k, value]) => v.context[k] === value)) &&
     record(v.defaults) &&
     validTime(v.defaults.anchor_at) &&
     time(v.defaults.time_utc) &&
@@ -176,56 +221,68 @@ export function admitTemplateModel(
     positive(v.templates.page) &&
     v.templates.page <= 1000000 &&
     typeof v.templates.more === "boolean" &&
-    Array.isArray(v.templates.entries) &&
+    arrayOf(v.templates.entries, (e): e is TemplateEntry => entry(e, admittedContext)) &&
     v.templates.entries.length <= 25 &&
     (!v.templates.more || v.templates.entries.length === 25) &&
-    v.templates.entries.every((e: any) => entry(e, v.context)) &&
-    new Set(v.templates.entries.map((e: any) => e.reference.template_id)).size ===
+    new Set(v.templates.entries.map((e) => e.reference.template_id)).size ===
       v.templates.entries.length
   );
 }
-export function admitTemplateOperation(v: any, c: DeclarationContext): TemplateOperation | null {
+export function isTemplateCommand(
+  v: unknown,
+  c: DeclarationContext,
+): v is TemplateCommand & Record<string, unknown> {
+  if (
+    !record(v) ||
+    !oneOf(templateActions, v.action) ||
+    !record(v.input) ||
+    Object.keys(v.input).length !== 1
+  )
+    return false;
+  if (v.action === "templates-page" || v.action === "spacecraft-page")
+    return positive(v.input.page) && v.input.page <= 1000000;
+  if (v.action === "validate-template" || v.action === "create-template")
+    return admitTemplateValues(v.input.template);
+  return admitTemplateReference(v.input.reference, c);
+}
+export function admitTemplateOperation(
+  v: unknown,
+  c: DeclarationContext,
+): TemplateOperation | null {
+  return validTemplateOperation(v, c) ? v : null;
+}
+function validTemplateOperation(v: unknown, c: DeclarationContext): v is TemplateOperation {
   if (
     !record(v) ||
     !positive(v.sequence) ||
     v.sequence > 1000000 ||
-    !templateActions.includes(v.action) ||
-    !record(v.input) ||
-    Object.keys(v.input).length !== 1 ||
-    !["completed", "rejected", "unconfirmed"].includes(v.status)
+    !isTemplateCommand(v, c) ||
+    !oneOf(["completed", "rejected", "unconfirmed"], v.status)
   )
-    return null;
-  if (v.action.endsWith("-page")) {
-    if (!positive(v.input.page) || v.input.page > 1000000) return null;
-  } else if (v.action === "validate-template" || v.action === "create-template") {
-    if (!admitTemplateValues(v.input.template)) return null;
-  } else if (!admitTemplateReference(v.input.reference, c)) return null;
+    return false;
   if (v.status !== "completed")
-    return v.receipt === null && (v.status !== "rejected" || feedback(v.feedback))
-      ? (v as TemplateOperation)
-      : null;
+    return v.receipt === null && (v.status !== "rejected" || feedback(v.feedback));
   const r = v.receipt;
   if (!record(r) || !safeId(r.receiptId) || !validTime(r.completedAt) || !record(r.result))
-    return null;
+    return false;
   const result = r.result;
-  if (v.action.endsWith("-page"))
-    return result.page === v.input.page ? (v as TemplateOperation) : null;
+  if (v.action === "templates-page" || v.action === "spacecraft-page")
+    return result.page === v.input.page;
   if (v.action === "validate-template")
-    return typeof result.valid === "boolean" &&
+    return (
+      typeof result.valid === "boolean" &&
       feedback(result.feedback) &&
       (result.valid ? result.feedback.length === 0 : result.feedback.length > 0)
-      ? (v as TemplateOperation)
-      : null;
+    );
   if (
     result.contract_version !== 1 ||
     result.actor_id !== c.actor_id ||
     !admitTemplateReference(result.reference, c) ||
     result.reference.lifecycle_changed_by !== c.actor_id
   )
-    return null;
+    return false;
   const ref = result.reference;
-  if (v.action === "create-template")
-    return ref.version === 1 && ref.lifecycle_state === "active" ? (v as TemplateOperation) : null;
+  if (v.action === "create-template") return ref.version === 1 && ref.lifecycle_state === "active";
   const old = v.input.reference,
     state =
       v.action === "pause-template"
@@ -233,12 +290,12 @@ export function admitTemplateOperation(v: any, c: DeclarationContext): TemplateO
         : v.action === "activate-template"
           ? "active"
           : "closed";
-  return ref.template_id === old.template_id &&
+  return (
+    ref.template_id === old.template_id &&
     ref.version === old.version &&
     ref.content_sha256 === old.content_sha256 &&
     ref.lifecycle_state === state
-    ? (v as TemplateOperation)
-    : null;
+  );
 }
 export function admitTemplatePage(
   input: unknown,
@@ -248,7 +305,7 @@ export function admitTemplatePage(
   try {
     const s = JSON.stringify(input);
     if (new TextEncoder().encode(s).length > 131072) return null;
-    const v = JSON.parse(s);
+    const v: unknown = JSON.parse(s);
     if (
       !record(v) ||
       !admitTemplateModel(v.model, context, defaults) ||
@@ -256,12 +313,13 @@ export function admitTemplatePage(
       v.sequence > 1000000
     )
       return null;
-    if (v.operation === null) return v.sequence === 0 ? (v as TemplatePage) : null;
+    if (v.operation === null)
+      return v.sequence === 0 ? { model: v.model, sequence: 0, operation: null } : null;
     const op = admitTemplateOperation(v.operation, v.model.context);
     if (op?.status === "completed") {
-      if (op.action === "templates-page" && v.model.templates.page !== op.receipt!.result.page)
+      if (op.action === "templates-page" && v.model.templates.page !== op.receipt.result.page)
         return null;
-      if (op.action === "spacecraft-page" && v.model.spacecraft.page !== op.receipt!.result.page)
+      if (op.action === "spacecraft-page" && v.model.spacecraft.page !== op.receipt.result.page)
         return null;
     }
     return op && op.sequence === v.sequence

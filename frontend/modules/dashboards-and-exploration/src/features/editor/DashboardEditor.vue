@@ -66,20 +66,22 @@ onBeforeUnmount(() => {
   window.removeEventListener("beforeunload", beforeUnload);
 });
 function typeChanged() {
-  const type = draft.fields?.type;
-  if (!type || selection.value.kind !== "widget") return;
+  const current = draft.value;
+  if (current.kind !== "widget") return;
+  const type = current.fields.type;
   if (["event_timeline", "constellation_health"].includes(type)) {
-    draft.observables = "";
-    draft.fields.mode = "context";
-    draft.fields.binding_source = type === "event_timeline" ? "events" : "operational_observables";
+    current.observables = "";
+    current.fields.mode = "context";
+    current.fields.binding_source =
+      type === "event_timeline" ? "events" : "operational_observables";
   } else {
-    if (["events", "limits"].includes(draft.fields.binding_source) && type !== "state_timeline")
-      draft.fields.binding_source = "telemetry";
+    if (["events", "limits"].includes(current.fields.binding_source) && type !== "state_timeline")
+      current.fields.binding_source = "telemetry";
     if (
       !["time_series", "status_matrix", "data_table"].includes(type) &&
-      draft.fields.mode === "repeat"
+      current.fields.mode === "repeat"
     )
-      draft.fields.mode = "context";
+      current.fields.mode = "context";
   }
 }
 function remove() {
@@ -88,12 +90,17 @@ function remove() {
   const message = section
     ? "Remove this section? Its widgets will become unsectioned."
     : "Remove this widget from the draft?";
-  if (window.confirm(message))
-    void run(
-      section ? "remove_section" : "remove_widget",
-      section ? { section_id: selection.value.id } : { placement_id: selection.value.id },
-    );
+  if (!window.confirm(message)) return;
+  if (section) void run("remove_section", { section_id: selection.value.id });
+  else void run("remove_widget", { placement_id: selection.value.id });
 }
+
+const layoutFields = [
+  ["x", "Column"],
+  ["y", "Row"],
+  ["w", "Width"],
+  ["h", "Height"],
+] as const;
 </script>
 <template>
   <main id="dashboard-editor-feature" class="space-y-4 min-w-0" :aria-busy="pending">
@@ -183,7 +190,7 @@ function remove() {
     >
       {{ notice || "A previous operation needs review. Reload the saved draft before continuing." }}
     </p>
-    <section v-if="selection.kind === 'arrange'" class="space-y-4 min-w-0">
+    <section v-if="draft.kind === 'arrange'" class="space-y-4 min-w-0">
       <EditorLayoutCanvas
         v-model="draft.layouts"
         :model="model"
@@ -362,7 +369,7 @@ function remove() {
         </h2>
         <form id="dashboard-editor-form" class="p-4" @submit.prevent="applyChanges">
           <fieldset class="space-y-4 min-w-0" :disabled="disabled">
-            <template v-if="selection.kind === 'metadata'"
+            <template v-if="draft.kind === 'metadata'"
               ><label class="editor-field" for="editor-name"
                 >Name<input
                   id="editor-name"
@@ -380,10 +387,10 @@ function remove() {
                 /></label
             ></template>
             <RuntimeDefaultsFields
-              v-else-if="selection.kind === 'runtime'"
+              v-else-if="draft.kind === 'runtime'"
               v-model="draft.defaults_json"
             />
-            <template v-else-if="selection.kind === 'section'"
+            <template v-else-if="draft.kind === 'section'"
               ><label class="editor-field" for="editor-section-title"
                 >Section title<input
                   id="editor-section-title"
@@ -409,19 +416,14 @@ function remove() {
                 Collapsed by default</label
               ></template
             >
-            <template v-else-if="selection.kind === 'layout'"
+            <template v-else-if="draft.kind === 'layout'"
               ><p class="text-xs text-base-content/60">
                 Grid coordinates are zero-based. The server applies the dashboard's column count and
                 widget minimum sizes.
               </p>
               <div class="grid grid-cols-2 gap-3">
                 <label
-                  v-for="[key, label] in [
-                    ['x', 'Column'],
-                    ['y', 'Row'],
-                    ['w', 'Width'],
-                    ['h', 'Height'],
-                  ]"
+                  v-for="[key, label] in layoutFields"
                   :key="key"
                   class="editor-field"
                   :for="`editor-layout-${key}`"
@@ -436,7 +438,8 @@ function remove() {
                     class="input input-bordered input-sm w-full"
                 /></label></div
             ></template>
-            <template v-else-if="!selection.id || selectedPlacement?.editable"
+            <template
+              v-else-if="draft.kind === 'widget' && (!selection.id || selectedPlacement?.editable)"
               ><WidgetFields
                 v-model="draft.fields"
                 :sections="model.sections"

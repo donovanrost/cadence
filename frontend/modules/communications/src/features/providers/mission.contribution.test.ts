@@ -1,3 +1,4 @@
+import { containing } from "../../../../../test-support/matchers";
 import { mount, flushPromises } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import Creation from "./MissionProviderCreation.vue";
@@ -32,7 +33,7 @@ test("provider creation preserves its draft on host refresh and navigates after 
     await flushPromises();
     expect(port.execute).toHaveBeenCalledExactlyOnceWith("create-provider", {
       sequence: 1,
-      provider: expect.objectContaining({
+      provider: containing({
         display_name: "Host draft",
         provider_account_version: "3",
         provider_account_grant_version: "1",

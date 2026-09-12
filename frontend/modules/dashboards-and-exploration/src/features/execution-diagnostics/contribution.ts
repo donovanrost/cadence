@@ -8,6 +8,7 @@ export const executionDiagnosticsContribution = {
   slot: "ops.page",
   version: 1,
   title: "Execution diagnostics",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   component: PublishedDiagnosticsPage,
   actions: ["inspect"],
   read(value, context) {

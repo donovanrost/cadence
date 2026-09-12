@@ -1,3 +1,5 @@
+import { jsonFixture } from "../../../../../../test-support/json-fixture";
+import { required } from "../../../../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import { inboxHref, readInbox, type Inbox } from "./contracts";
@@ -42,8 +44,8 @@ test("reading an invitation does not claim acceptance or remove its pending acti
 test("terminal and unavailable invitations expose their actual state and only the read action", () => {
   for (const state of ["accepted", "expired", "revoked", "unavailable"] as const) {
     const model = fixture();
-    model.notifications[0]!.invitation_status = state;
-    model.notifications[0]!.read_at = null;
+    required(model.notifications[0]).invitation_status = state;
+    required(model.notifications[0]).read_at = null;
     const wrapper = mount(NotificationsPanel, { props: props(model) });
     expect(wrapper.get("#notification-state-notif-1").text().toLowerCase()).toContain(state);
     expect(wrapper.find("#notification-accept-notif-1").exists()).toBe(false);
@@ -60,7 +62,7 @@ test("one pending request and an uncertain outcome require fresh evidence before
       }),
   );
   const model = fixture();
-  model.notifications[0]!.read_at = null;
+  required(model.notifications[0]).read_at = null;
   const refresh = vi.fn().mockResolvedValue(undefined);
   const wrapper = mount(NotificationsPanel, { props: { model, act, refresh } });
   await wrapper.get("#notification-mark-read-notif-1").trigger("click");
@@ -87,7 +89,7 @@ test("one pending request and an uncertain outcome require fresh evidence before
 test("older navigation preserves unread filters and newest resets the cursor", () => {
   const model = fixture();
   model.query = { unread: "true", before_at: "2026-08-31T00:00:00Z", before_id: "notif-2" };
-  model.notifications[0]!.read_at = null;
+  required(model.notifications[0]).read_at = null;
   model.next_cursor = { at: "2026-08-30T00:00:00Z", id: "notif-0" };
   const wrapper = mount(NotificationsPanel, { props: props(model) });
   expect(wrapper.get("#notifications-newest").attributes("href")).toBe(
@@ -125,10 +127,10 @@ test("recipient, version and malformed status are rejected while host retry rema
       d.user_id = "other";
     },
     (d: Inbox) => {
-      d.notifications.push(d.notifications[0]!);
+      d.notifications.push(required(d.notifications[0]));
     },
     (d: Inbox) => {
-      d.notifications[0]!.invitation_status = "bogus" as never;
+      required(d.notifications[0]).invitation_status = "bogus" as never;
     },
     (d: Inbox) => {
       d.query.unread = "true";
@@ -142,11 +144,13 @@ test("recipient, version and malformed status are rejected while host retry rema
 test.skipIf(!process.env.CADENCE_NOTIFICATIONS_DOCUMENT)(
   "actual producer renders a read but pending invitation and sends the recipient notification ID",
   async () => {
-    const value = JSON.parse(process.env.CADENCE_NOTIFICATIONS_DOCUMENT!);
+    const value = jsonFixture(required(process.env.CADENCE_NOTIFICATIONS_DOCUMENT));
     const model = readInbox(value, value.user_id),
       input = props(model),
       wrapper = mount(NotificationsPanel, { props: input });
-    const invitation = model.notifications.find((row) => row.invitation_status === "pending")!;
+    const invitation = required(
+      model.notifications.find((row) => row.invitation_status === "pending"),
+    );
     expect(invitation.read_at).not.toBeNull();
     expect(wrapper.get(`#notification-state-${invitation.id}`).text()).toBe("Invitation pending");
     await wrapper.get(`#notification-accept-${invitation.id}`).trigger("click");

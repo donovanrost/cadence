@@ -1,10 +1,6 @@
 <script setup lang="ts">
 import { inject } from "vue";
-import {
-  PLAN_DETAIL_PORT,
-  type OpsContactPlanShowProps,
-  type PlanAction,
-} from "./OpsContactPlanShow.contracts";
+import { PLAN_DETAIL_PORT, type OpsContactPlanShowProps } from "./OpsContactPlanShow.contracts";
 import { usePlanDetail } from "./plan-detail-state";
 import { reviewHref } from "./plan-detail";
 import PlanReviewPagination from "./PlanReviewPagination.vue";
@@ -27,29 +23,29 @@ const {
 const forms = [
   {
     id: "submission",
-    action: "submit-plan" as PlanAction,
+    action: "submit-plan" as const,
     reason: "submission" as const,
     title: "Submit for review",
     label: "Submission reason",
   },
   {
     id: "approval",
-    action: "approve-plan" as PlanAction,
+    action: "approve-plan" as const,
     reason: "approval" as const,
     title: "Approve reviewed plan",
     label: "Approval reason",
   },
   {
     id: "rejection",
-    action: "reject-plan" as PlanAction,
+    action: "reject-plan" as const,
     reason: "rejection" as const,
     title: "Reject reviewed plan",
     label: "Rejection reason",
   },
 ];
 const label = (v: string) => v.replaceAll("_", " ");
-const requirementHref = (id: string, version: number) =>
-  `/missions/${encodeURIComponent(d.value!.context.mission_id)}/ops/requirements/${encodeURIComponent(id)}?version=${version}`;
+const requirementHref = (mission: string, id: string, version: number) =>
+  `/missions/${encodeURIComponent(mission)}/ops/requirements/${encodeURIComponent(id)}?version=${version}`;
 </script>
 <template>
   <CadenceOpsViewport v-if="d" id="ops-contact-plan-show-page">
@@ -233,7 +229,7 @@ const requirementHref = (id: string, version: number) =>
           {{ o.transport_id }} v{{ o.transport_version }}
         </p>
         <a
-          :href="requirementHref(o.requirement_id, o.requirement_version)"
+          :href="requirementHref(d.context.mission_id, o.requirement_id, o.requirement_version)"
           class="mt-2 inline-block text-sm text-primary underline"
           >Review requirement v{{ o.requirement_version }}</a
         >
@@ -259,7 +255,9 @@ const requirementHref = (id: string, version: number) =>
           :key="r.id + '@' + r.version"
           class="border-b border-base-300 py-3"
         >
-          <a :href="requirementHref(r.id, r.version)" class="break-all text-primary underline"
+          <a
+            :href="requirementHref(d.context.mission_id, r.id, r.version)"
+            class="break-all text-primary underline"
             >{{ r.id }} · v{{ r.version }}</a
           >
           <p class="mt-2 text-sm">
@@ -290,7 +288,9 @@ const requirementHref = (id: string, version: number) =>
           <p class="text-xs font-mono">{{ issue.code }}</p>
           <a
             v-if="issue.requirement_id && issue.requirement_version"
-            :href="requirementHref(issue.requirement_id, issue.requirement_version)"
+            :href="
+              requirementHref(d.context.mission_id, issue.requirement_id, issue.requirement_version)
+            "
             class="text-sm text-primary underline"
             >Review requirement</a
           >

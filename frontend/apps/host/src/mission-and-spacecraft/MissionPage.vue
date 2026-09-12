@@ -32,7 +32,8 @@ const admitted = computed(() => {
     !record(snapshot.data)
   )
     return null;
-  const registration = missionPages[props.page]!;
+  const registration = missionPages[props.page];
+  if (!registration) return null;
   try {
     registration.validate(snapshot.data);
     return { ...registration, data: snapshot.data };

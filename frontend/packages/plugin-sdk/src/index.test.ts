@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 import { describe, expect, it } from "vite-plus/test";
 import {
   APPLICATION_HOST_CONTRACT,
@@ -50,7 +51,7 @@ describe("first-party federated application manifests", () => {
   it("accepts collection surfaces used by server application definitions", () => {
     const collectionManifest = {
       ...manifest,
-      surfaces: [{ ...manifest.surfaces[0]!, purpose: "collection" as const }],
+      surfaces: [{ ...required(manifest.surfaces[0]), purpose: "collection" as const }],
     };
 
     expect(() => defineApplicationManifest(collectionManifest)).not.toThrow();

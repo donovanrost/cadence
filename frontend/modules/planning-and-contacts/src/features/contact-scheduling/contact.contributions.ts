@@ -29,7 +29,7 @@ function contribution(
       const page = admitContactPage(kind, value, {
         organization_id: context.organizationId,
         mission_id: context.missionId,
-        resource_id: context.resourceId,
+        ...(context.resourceId === undefined ? {} : { resource_id: context.resourceId }),
       });
       if (!page) throw Error("Unavailable contact evidence");
       return { page };
@@ -40,17 +40,20 @@ export const contactScheduleContribution = contribution(
   "schedule",
   "planning.contact-schedule",
   "Contact Schedule",
+  // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks this SFC constructor.
   ContactScheduleContribution,
 );
 export const contactRecordContribution = contribution(
   "record",
   "planning.contact-record",
   "Contact Record",
+  // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks this SFC constructor.
   ContactRecordContribution,
 );
 export const reservationContribution = contribution(
   "reservation",
   "planning.reservation-review",
   "Reservation Review",
+  // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks this SFC constructor.
   ReservationContribution,
 );

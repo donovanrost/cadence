@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mount, flushPromises } from "@vue/test-utils";
 import ExecutionDiagnostics from "./ExecutionDiagnostics.vue";
@@ -14,7 +15,7 @@ import {
   type DiagnosticSelection,
 } from "./selection";
 
-const wrappers: ReturnType<typeof mount>[] = [];
+const wrappers: { unmount: () => void }[] = [];
 afterEach(() => {
   wrappers.splice(0).forEach((wrapper) => wrapper.unmount());
   vi.restoreAllMocks();
@@ -60,14 +61,14 @@ test("collection and row controls emit view state without replacing loaded evide
   const frozen = JSON.stringify(model);
   const wrapper = setup(model);
   await wrapper.get(`#diagnostics-row-${"a".repeat(64)}`).trigger("click");
-  const selected = wrapper.emitted("select")![0][0] as DiagnosticSelection;
+  const selected = required(required(wrapper.emitted("select"))[0])[0] as DiagnosticSelection;
   expect(selected).toEqual({ ...initialSelection(), row: "a".repeat(64) });
   await wrapper.setProps({ selection: selected });
   expect(wrapper.get("#diagnostic-identity").element).toHaveProperty("value", "dashboard");
   expect(wrapper.get('[data-diagnostic-field="snapshot"]').text()).toBe("false");
   expect(wrapper.get('[data-diagnostic-field="warnings"]').text()).toBe("0");
   await wrapper.get("#diagnostics-collection-requests").trigger("click");
-  expect(wrapper.emitted("select")![1][0]).toEqual({
+  expect(required(required(wrapper.emitted("select"))[1])[0]).toEqual({
     collection: "requests",
     row: null,
     filter: "",
@@ -78,15 +79,19 @@ test("collection and row controls emit view state without replacing loaded evide
 test("plan warnings can be filtered, selected and copied without rerunning the inspection", async () => {
   const model = diagnosticFixture();
   const warning = diagnosticWarningFixture();
-  model.collections[0].rows.push(warning);
+  required(model.collections[0]).rows.push(warning);
   const before = JSON.stringify(model);
   const wrapper = setup(model);
   await wrapper.get("#diagnostics-filter").setValue("stale_data");
   await wrapper.get("#diagnostics-filter-form").trigger("submit");
-  await wrapper.setProps({ selection: wrapper.emitted("select")![0][0] as DiagnosticSelection });
+  await wrapper.setProps({
+    selection: required(required(wrapper.emitted("select"))[0])[0] as DiagnosticSelection,
+  });
   expect(wrapper.findAll("#diagnostics-rows li")).toHaveLength(1);
   await wrapper.get(`#diagnostics-row-${warning.id}`).trigger("click");
-  await wrapper.setProps({ selection: wrapper.emitted("select")![1][0] as DiagnosticSelection });
+  await wrapper.setProps({
+    selection: required(required(wrapper.emitted("select"))[1])[0] as DiagnosticSelection,
+  });
   expect(wrapper.get('[data-diagnostic-field="warning_code"]').text()).toBe("stale_data");
   expect(wrapper.get('[data-diagnostic-field="placement_id"]').text()).toBe("placement/1");
   expect(wrapper.get('[data-diagnostic-field="frame_id"]').text()).toBe("Not recorded");
@@ -101,13 +106,18 @@ test("filters only loaded rows and retains selected evidence outside the filter"
   const wrapper = setup(diagnosticFixture(), { ...initialSelection(), row: "a".repeat(64) });
   await wrapper.get("#diagnostics-filter").setValue("not-here");
   await wrapper.get("#diagnostics-filter-form").trigger("submit");
-  await wrapper.setProps({ selection: wrapper.emitted("select")![0][0] as DiagnosticSelection });
+  await wrapper.setProps({
+    selection: required(required(wrapper.emitted("select"))[0])[0] as DiagnosticSelection,
+  });
   expect(wrapper.findAll("#diagnostics-rows li")).toHaveLength(0);
   expect(wrapper.get("#diagnostics-empty").text()).toContain("No loaded rows match");
   expect(wrapper.find("#diagnostics-outside-filter").exists()).toBe(true);
   expect(wrapper.get("#diagnostic-identity").element).toHaveProperty("value", "dashboard");
   await wrapper.get("#diagnostics-clear-filter").trigger("click");
-  expect(wrapper.emitted("select")![1][0]).toEqual({ ...initialSelection(), row: "a".repeat(64) });
+  expect(required(required(wrapper.emitted("select"))[1])[0]).toEqual({
+    ...initialSelection(),
+    row: "a".repeat(64),
+  });
   await wrapper.setProps({ selection: initialSelection() });
   expect(wrapper.get("#diagnostics-filter").element).toHaveProperty("value", "");
 });
@@ -119,7 +129,7 @@ test("rejects oversized filter submissions and searches scalar zero and false", 
   expect(wrapper.get("#diagnostics-filter").attributes("aria-invalid")).toBe("true");
   expect(wrapper.find("#diagnostics-filter-error").exists()).toBe(true);
   for (const search of [" DASHBOARD ", "false", "0", "initial"])
-    expect(matchingRows(diagnosticFixture().collections[0].rows, search)).toHaveLength(1);
+    expect(matchingRows(required(diagnosticFixture().collections[0]).rows, search)).toHaveLength(1);
 });
 test("does not silently substitute a different row when a selection disappears", async () => {
   const wrapper = setup(diagnosticFixture(), { ...initialSelection(), row: "b".repeat(64) });
@@ -128,14 +138,14 @@ test("does not silently substitute a different row when a selection disappears",
   await wrapper.setProps({ selection: { ...initialSelection(), row: "a".repeat(64) } });
   expect(wrapper.find("#diagnostic-identity").exists()).toBe(true);
   const next = diagnosticFixture();
-  next.collections[0].rows = [];
+  required(next.collections[0]).rows = [];
   await wrapper.setProps({ model: next });
   expect(wrapper.find("#diagnostics-missing-selection").exists()).toBe(true);
   expect(wrapper.find("#diagnostic-copy-identity").exists()).toBe(false);
 });
 test("distinguishes unavailable, empty, limited and process-local evidence", async () => {
   const model = diagnosticFixture();
-  model.collections[0].limited = true;
+  required(model.collections[0]).limited = true;
   model.collections[1] = {
     id: "requests",
     state: "unavailable",
@@ -143,7 +153,7 @@ test("distinguishes unavailable, empty, limited and process-local evidence", asy
     limited: false,
     rows: [],
   };
-  model.collections[5].source = "process_local";
+  required(model.collections[5]).source = "process_local";
   const wrapper = setup(model);
   expect(wrapper.find("#diagnostics-limited").exists()).toBe(true);
   await wrapper.setProps({ selection: { collection: "requests", row: null, filter: "" } });
@@ -160,7 +170,7 @@ test("distinguishes unavailable, empty, limited and process-local evidence", asy
 test("escapes allowed text, preserves exact identity and keeps DOM IDs unique", () => {
   const model = diagnosticFixture();
   model.name = "<img src=x onerror=alert(1)>";
-  model.collections[0].rows[0].identity = "<script>alert(1)</script>";
+  required(required(model.collections[0]).rows[0]).identity = "<script>alert(1)</script>";
   const wrapper = setup(model, { ...initialSelection(), row: "a".repeat(64) });
   expect(wrapper.find("img, script").exists()).toBe(false);
   expect(wrapper.get("h1").text()).toBe(model.name);
@@ -168,7 +178,7 @@ test("escapes allowed text, preserves exact identity and keeps DOM IDs unique", 
   expect(new Set(ids).size).toBe(ids.length);
   expect(wrapper.get("#diagnostic-identity").element).toHaveProperty(
     "value",
-    model.collections[0].rows[0].identity,
+    required(required(model.collections[0]).rows[0]).identity,
   );
 });
 test("copies literal diagnostic identity, never a URL, and reports failure honestly", async () => {

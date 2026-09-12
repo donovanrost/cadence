@@ -18,6 +18,13 @@ Phoenix imports its styles and retains ownership of routes, authentication, and 
 The visual baseline is the current production application. The diagnostic federation styling and
 DaisyUI vendor have been removed.
 
+The [frontend code standard](docs/code-standard.md) defines the agreed TypeScript, runtime
+validation, Vue ownership, and enforcement rules. Its adoption section tracks the gaps between
+that standard and the current workspace checks.
+
+The [cleanup plan](docs/cleanup-plan.md) maps the selected quality findings to implementation
+batches, caller inventories, and validation gates.
+
 ## Toolchain
 
 - Vue 3 with TypeScript
@@ -51,8 +58,7 @@ Run these commands from the `frontend` directory:
 ```sh
 corepack pnpm install
 corepack pnpm dev
-corepack pnpm check
-corepack pnpm test
+corepack pnpm verify # formatting, lint, types, structural rules, and all frontend tests
 corepack pnpm build
 corepack pnpm preview
 corepack pnpm storybook
@@ -69,10 +75,10 @@ frontend/node_modules/.bin/vp -C frontend run dev
 
 `dev` runs the demo host on `127.0.0.1:5173`, Telemetry Decom on `127.0.0.1:4174`, Contract Probe
 on `127.0.0.1:4175`, and Communications Overview on `127.0.0.1:4176`. `build` emits independently
-deployable demo artifacts plus the Communications Overview publication artifact. The Phoenix host
-entry and mission remote can be built with `corepack pnpm build:publication`; they publish to
-`apps/cadence_web/priv/static/assets/application-host/host/host.js` and
-`apps/cadence_web/priv/static/assets/application-host/comms-overview/`, respectively.
+deployable demo artifacts. `corepack pnpm build:publication` builds the Phoenix host plus the
+six approved first-party remotes into
+`apps/cadence_web/priv/static/assets/application-host/`: `host`, `organization-admin`,
+`mission-catalog`, `spacecraft`, `telemetry-decom`, `comms`, and `ops-console`.
 `preview` serves those demo artifacts through a production-shaped
 server with no-store catalogs and manifests, immutable hashed assets, explicit remote CORS, and a
 restrictive host CSP. Run `build` before `preview`.

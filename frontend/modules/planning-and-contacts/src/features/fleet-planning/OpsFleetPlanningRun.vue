@@ -28,10 +28,14 @@ const planning = computed(() =>
   model.value ? `/missions/${encodeURIComponent(model.value.context.mission_id)}/ops/planning` : "",
 );
 const planHref = (id: string, version: number) =>
-  `/missions/${encodeURIComponent(model.value!.context.mission_id)}/ops/plans/${encodeURIComponent(id)}?version=${version}`;
+  model.value
+    ? `/missions/${encodeURIComponent(model.value.context.mission_id)}/ops/plans/${encodeURIComponent(id)}?version=${version}`
+    : undefined;
 const label = (v: string) => v.replaceAll("_", " ");
-const Pager = (p: { kind: keyof RunQuery; page: number; more: boolean; label: string }) =>
-  h(
+const Pager = (p: { kind: keyof RunQuery; page: number; more: boolean; label: string }) => {
+  const current = model.value;
+  if (!current) return null;
+  return h(
     "nav",
     {
       class: "flex items-center justify-between gap-4 border-t border-base-300 p-4 text-sm",
@@ -43,7 +47,7 @@ const Pager = (p: { kind: keyof RunQuery; page: number; more: boolean; label: st
             "a",
             {
               id: `fleet-run-${p.kind}-previous`,
-              href: fleetRunPage(model.value!, p.kind, p.page - 1),
+              href: fleetRunPage(current, p.kind, p.page - 1),
               class: "text-primary",
             },
             "Previous",
@@ -55,7 +59,7 @@ const Pager = (p: { kind: keyof RunQuery; page: number; more: boolean; label: st
             "a",
             {
               id: `fleet-run-${p.kind}-next`,
-              href: fleetRunPage(model.value!, p.kind, p.page + 1),
+              href: fleetRunPage(current, p.kind, p.page + 1),
               class: "text-primary",
             },
             "Next",
@@ -63,6 +67,7 @@ const Pager = (p: { kind: keyof RunQuery; page: number; more: boolean; label: st
         : h("span"),
     ],
   );
+};
 </script>
 <template>
   <main v-if="model" id="ops-fleet-planning-run-page" class="space-y-6 p-4 md:p-6">

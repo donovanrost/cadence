@@ -1,3 +1,4 @@
+import { fixtureArrayAt, fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { expect, test, vi } from "vite-plus/test";
 import { mount } from "@vue/test-utils";
 import { diagnosticsFixture } from "./fixtures.test-support";
@@ -23,26 +24,26 @@ test("renders the real feature and translates filters into host query navigation
 
 test("validates nested fields instead of admitting an arbitrary props map", () => {
   for (const mutate of [
-    (data: any) => {
-      delete data.filters.values;
+    (data: unknown) => {
+      delete fixtureRecordAt(data, "filters").values;
     },
-    (data: any) => {
-      data.filters.fields[0].key = "authorization";
+    (data: unknown) => {
+      fixtureRecordAt(data, "filters", "fields", 0).key = "authorization";
     },
-    (data: any) => {
-      data.decisions.push({ id: "incomplete" });
+    (data: unknown) => {
+      fixtureArrayAt(data, "decisions").push({ id: "incomplete" });
     },
-    (data: any) => {
-      data.summary.stats[0].value = "zero";
+    (data: unknown) => {
+      fixtureRecordAt(data, "summary", "stats", 0).value = "zero";
     },
-    (data: any) => {
-      data.selection.detail = {};
+    (data: unknown) => {
+      fixtureRecordAt(data, "selection").detail = {};
     },
-    (data: any) => {
-      data.filters.clear_href = "https://untrusted.invalid";
+    (data: unknown) => {
+      fixtureRecordAt(data, "filters").clear_href = "https://untrusted.invalid";
     },
-    (data: any) => {
-      data.selection.context_href = "javascript:alert(1)";
+    (data: unknown) => {
+      fixtureRecordAt(data, "selection").context_href = "javascript:alert(1)";
     },
   ]) {
     const data = diagnosticsFixture();

@@ -1,0 +1,17 @@
+{
+  "id": "no-double-assertion",
+  "language": "TypeScript",
+  "severity": "error",
+  "message": "Decode external data or repair the contract before asserting its type.",
+  "rule":
+    {
+      "any":
+        [
+          { "pattern": "$VALUE as unknown as $TYPE" },
+          { "pattern": "($VALUE as unknown) as $TYPE" },
+          { "pattern": "$VALUE as any as $TYPE" },
+          { "pattern": "($VALUE as any) as $TYPE" },
+        ],
+    },
+  "ignores": ["**/vendor/**", "ast-grep/fixtures/**"],
+}

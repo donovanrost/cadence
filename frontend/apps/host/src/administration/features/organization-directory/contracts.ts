@@ -33,18 +33,20 @@ export function readOrganizationDirectory(value: unknown, userId: unknown): Orga
     (value.next_cursor !== null && !cursor(value.next_cursor))
   )
     throw Error("Invalid organization directory");
+  const organizations: unknown[] = value.organizations;
   const seen = new Set<string>();
-  for (const item of value.organizations) {
+  for (const item of organizations) {
     organization(item);
     if (seen.has(item.id)) throw Error("Duplicate organization");
     seen.add(item.id);
   }
   if (value.next_cursor !== null) {
-    const last = value.organizations.at(-1);
+    const last = organizations.at(-1);
+    organization(last);
     if (
       value.organizations.length !== 50 ||
-      value.next_cursor.after_id !== last?.id ||
-      value.next_cursor.after_slug !== last?.slug
+      value.next_cursor.after_id !== last.id ||
+      value.next_cursor.after_slug !== last.slug
     )
       throw Error("Invalid directory continuation");
   }

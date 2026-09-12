@@ -156,3 +156,18 @@ export type Diagnostics = {
   title: string;
   columns: Detail[][];
 };
+
+export type ProviderAccountShowProps = {
+  page: Page;
+  actions: Actions;
+  stats: Stat[];
+  grant_form: GrantForm;
+  configuration: DetailCard;
+  ingestion: Ingestion;
+  guardrails: Guardrails;
+  diagnostics: Diagnostics;
+  account_grants: Grant[];
+  account_audit: AuditEntry[];
+  canGrant?: boolean;
+  actionsDisabled?: boolean;
+};

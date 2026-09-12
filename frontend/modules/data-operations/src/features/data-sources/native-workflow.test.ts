@@ -1,9 +1,15 @@
+import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
+import { required } from "../../../../../test-support/required";
+import { fixtureRecord, jsonFixture } from "../../../../../test-support/json-fixture";
 import { mount, flushPromises } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import NativeDataSources from "./NativeDataSources.vue";
 import { sourceContributions } from "./native-contribution";
 import {
   admitSourcePage,
+  admitSourceOperation,
+  isSourceCommand,
+  type SourceInputs,
   type SourcePage,
   type SourceOperation,
   type Source,
@@ -18,7 +24,7 @@ function stubConfirm(value: boolean) {
     },
   };
 }
-function fixture(): SourcePage {
+function fixture(): MutableFixture<SourcePage> {
   return {
     actor_id: "actor",
     sequence: 0,
@@ -60,11 +66,11 @@ function fixture(): SourcePage {
     },
   };
 }
-function settings(): SourcePage {
+function settings(): MutableFixture<SourcePage> {
   const p = fixture();
   p.model.mode = "settings";
   p.model.query.data_source_id = "source";
-  const s: Source = {
+  const s: MutableFixture<Source> = {
     id: "source",
     ...context,
     owner: "cadence",
@@ -94,7 +100,10 @@ function settings(): SourcePage {
   };
   return p;
 }
-function completed(input: Record<string, any>, p = fixture()): SourceOperation {
+function completed(
+  input: SourceInputs["register-source"],
+  p = fixture(),
+): Extract<SourceOperation<"register-source">, { status: "completed" }> {
   return {
     id: "operation",
     sequence: 1,
@@ -115,8 +124,6 @@ function completed(input: Record<string, any>, p = fixture()): SourceOperation {
         organizationId: context.organization_id,
         missionId: context.mission_id,
         status: "active",
-        kind: "managed_tsdb",
-        isolationLevel: "mission_isolated",
       },
     },
   };
@@ -125,13 +132,13 @@ test("semantic admission rejects substituted source, observation, paging, permis
   const p = settings();
   expect(admitSourcePage(p, context, "settings")).toEqual(p);
   for (const mutate of [
-    (x: any) => (x.model.contract_version = 2),
-    (x: any) => (x.model.permissions.manage = false),
-    (x: any) => (x.model.selected.source.mission_id = "foreign"),
-    (x: any) => (x.model.query.data_source_id = "other"),
-    (x: any) => (x.model.sources.has_next = true),
-    (x: any) =>
-      (x.model.selected.events.entries = [
+    (x: MutableFixture<SourcePage>) => Object.assign(x.model, { contract_version: 2 }),
+    (x: MutableFixture<SourcePage>) => (x.model.permissions.manage = false),
+    (x: MutableFixture<SourcePage>) => (required(x.model.selected).source.mission_id = "foreign"),
+    (x: MutableFixture<SourcePage>) => (x.model.query.data_source_id = "other"),
+    (x: MutableFixture<SourcePage>) => (x.model.sources.has_next = true),
+    (x: MutableFixture<SourcePage>) =>
+      (required(x.model.selected).events.entries = [
         {
           id: "event",
           source_id: "other",
@@ -167,15 +174,43 @@ test("semantic admission rejects substituted source, observation, paging, permis
     ),
   ).toBeNull();
 });
+test("unconfirmed source outcomes admit only matching recovery hints", () => {
+  const p = fixture();
+  const op = completed(
+    {
+      params: { source: { ...p.model.defaults, data_source_id: "new-source" } },
+      review: {},
+      confirmed: true,
+    },
+    p,
+  );
+  expect(admitSourceOperation({ ...op, status: "unconfirmed" }, p)).toBeNull();
+  expect(admitSourceOperation({ ...op, status: "unconfirmed", result: null }, p)).not.toBeNull();
+  expect(
+    admitSourceOperation(
+      { ...op, status: "unconfirmed", result: { source_id: "new-source", operation_id: op.id } },
+      p,
+    ),
+  ).not.toBeNull();
+  expect(
+    admitSourceOperation(
+      { ...op, status: "unconfirmed", result: { source_id: "foreign", operation_id: op.id } },
+      p,
+    ),
+  ).toBeNull();
+});
 test("lost registration response recovers without resubmitting and retains native values", async () => {
   const p = fixture();
-  let request: any,
+  let request: SourceInputs["register-source"] | undefined,
     guard = () => true;
-  const execute = vi.fn(async (_action, input) => {
-    request = input;
+  const execute = vi.fn(async (action: string, input: Record<string, unknown>) => {
+    const command = { action, input: input.payload };
+    if (!isSourceCommand(command) || command.action !== "register-source")
+      throw Error("Unexpected registration command");
+    request = command.input;
     throw Error("lost");
   });
-  const read = vi.fn(async () => ({ ...p, sequence: 1, operation: completed(request.payload) }));
+  const read = vi.fn(async () => ({ ...p, sequence: 1, operation: completed(required(request)) }));
   const confirm = stubConfirm(true);
   const w = mount(NativeDataSources, {
     props: {
@@ -183,7 +218,7 @@ test("lost registration response recovers without resubmitting and retains nativ
       port: {
         execute,
         navigate: vi.fn(),
-        guardNavigation(g) {
+        guardNavigation(g: () => boolean) {
           guard = g;
           return () => {};
         },
@@ -209,7 +244,7 @@ test("lost registration response recovers without resubmitting and retains nativ
 test("changed source evidence requires explicit review and cancel creates no action", async () => {
   const p = settings(),
     fresh = structuredClone(p);
-  fresh.model.selected!.source.evidence = "b".repeat(64);
+  required(fresh.model.selected).source.evidence = "b".repeat(64);
   const execute = vi.fn(),
     confirm = stubConfirm(false);
   const w = mount(NativeDataSources, {
@@ -259,9 +294,9 @@ test("reader and shared definitions expose no administrative controls", () => {
   for (const shared of [false, true]) {
     const p = settings();
     if (shared) {
-      p.model.selected!.source.organization_id = null;
-      p.model.selected!.source.mission_id = null;
-      p.model.selected!.source.editable = false;
+      required(p.model.selected).source.organization_id = null;
+      required(p.model.selected).source.mission_id = null;
+      required(p.model.selected).source.editable = false;
     } else {
       p.model.mode = "reader";
       p.model.permissions.manage = false;
@@ -281,22 +316,33 @@ test("reader and shared definitions expose no administrative controls", () => {
 });
 test("producer supplied native source contribution", async () => {
   if (!process.env.CADENCE_SOURCES) return;
-  const supplied = JSON.parse(process.env.CADENCE_SOURCES),
-    snapshot = supplied.snapshot,
-    data = snapshot.data;
-  const c = sourceContributions.find((c) => c.id === snapshot.id)!;
+  const supplied = jsonFixture(process.env.CADENCE_SOURCES),
+    snapshot = fixtureRecord(supplied.snapshot),
+    raw = fixtureRecord(snapshot.data),
+    model = fixtureRecord(raw.model),
+    context = fixtureRecord(model.context);
+  if (typeof context.organization_id !== "string" || typeof context.mission_id !== "string")
+    throw Error("Missing native context");
+  const data = required(
+    admitSourcePage(
+      raw,
+      { organization_id: context.organization_id, mission_id: context.mission_id },
+      String(model.mode),
+    ),
+  );
+  const c = required(sourceContributions.find((c) => c.id === snapshot.id));
   const props = c.read(data, {
     organizationId: data.model.context.organization_id,
     missionId: data.model.context.mission_id,
-  }) as { page: SourcePage };
-  const calls: any[] = [],
+  });
+  const calls: [string, Record<string, unknown>][] = [],
     confirm = stubConfirm(true);
   const w = mount(NativeDataSources, {
     props: {
       ...props,
       port: {
         navigate: vi.fn(),
-        execute: async (action, input) => {
+        execute: async (action: string, input: Record<string, unknown>) => {
           calls.push([action, input]);
           if (supplied.operation) return supplied.operation;
           throw Error("capture-only");
@@ -319,7 +365,9 @@ test("producer supplied native source contribution", async () => {
   await flushPromises();
   expect(calls).toHaveLength(1);
   if (supplied.operation) {
-    expect(w.get("#sources-operation").text()).toContain(supplied.operation.id);
+    expect(w.get("#sources-operation").text()).toContain(
+      String(fixtureRecord(supplied.operation).id),
+    );
     expect(w.find("#sources-unconfirmed").exists()).toBe(false);
   }
   process.stdout.write("CADENCE_SOURCES_CALLS=" + JSON.stringify(calls) + "\n");
@@ -329,7 +377,11 @@ test("producer supplied native source contribution", async () => {
 
 test("paging retains binding review and a changed destination requires explicit acceptance", async () => {
   const p = settings();
-  const target = { ...p.model.sources.entries[0], id: "target", evidence: "b".repeat(64) };
+  const target = {
+    ...required(p.model.sources.entries[0]),
+    id: "target",
+    evidence: "b".repeat(64),
+  };
   p.model.sources.entries.push(target);
   p.model.bindings.entries = [
     {
@@ -349,7 +401,7 @@ test("paging retains binding review and a changed destination requires explicit 
     },
   ];
   const fresh = structuredClone(p);
-  fresh.model.sources.entries[1].evidence = "d".repeat(64);
+  required(fresh.model.sources.entries[1]).evidence = "d".repeat(64);
   const w = mount(NativeDataSources, {
     props: {
       page: p,
@@ -363,7 +415,7 @@ test("paging retains binding review and a changed destination requires explicit 
   for (const [selector, value] of [
     ["#source-binding", "binding"],
     ["#source-target", "target"],
-  ]) {
+  ] as const) {
     await w.get(selector).setValue("");
     expect((w.get(selector).element as HTMLSelectElement).value).toBe("");
     expect(w.get("#source-change-binding").attributes("disabled")).toBeDefined();
@@ -373,7 +425,7 @@ test("paging retains binding review and a changed destination requires explicit 
     expect(w.get("#source-change-binding").attributes("disabled")).toBeDefined();
     await w.get(selector).setValue(value);
   }
-  fresh.model.sources.entries[1].evidence = "e".repeat(64);
+  required(fresh.model.sources.entries[1]).evidence = "e".repeat(64);
   await w.get("#sources-refresh").trigger("click");
   await flushPromises();
   expect((w.get("#source-binding").element as HTMLSelectElement).value).toBe("binding");
@@ -381,7 +433,7 @@ test("paging retains binding review and a changed destination requires explicit 
   expect(w.get("#source-change-binding").attributes("disabled")).toBeDefined();
   await w.get("#source-accept-target").trigger("click");
   expect(w.get("#source-change-binding").attributes("disabled")).toBeUndefined();
-  fresh.model.sources.entries = [fresh.model.sources.entries[0]];
+  fresh.model.sources.entries = [required(fresh.model.sources.entries[0])];
   fresh.model.sources.page = 2;
   fresh.model.query.page = 2;
   await w.get("#sources-refresh").trigger("click");
@@ -394,7 +446,7 @@ test("paging retains binding review and a changed destination requires explicit 
 test("observations retain microseconds and distinct binding context without rendering unadmitted fields", () => {
   const p = settings(),
     at = "2026-09-09T10:00:00.123456Z";
-  p.model.selected!.health.entries = ["one", "two"].map((binding, i) => ({
+  required(p.model.selected).health.entries = ["one", "two"].map((binding, i) => ({
     id: "health-" + i,
     key: "key-" + i,
     source_id: "source",
@@ -409,7 +461,9 @@ test("observations retain microseconds and distinct binding context without rend
     last_seen_at: at,
     transitions: 0,
   }));
-  Object.assign(p.model.selected!.health.entries[0], { private_payload: "MUST_NOT_RENDER" });
+  Object.assign(required(required(p.model.selected).health.entries[0]), {
+    private_payload: "MUST_NOT_RENDER",
+  });
   expect(admitSourcePage(p, context, "settings")).not.toBeNull();
   const w = mount(NativeDataSources, {
     props: { page: p, port: { execute: vi.fn(), navigate: vi.fn() }, readPort: { read: vi.fn() } },
@@ -423,7 +477,7 @@ test("observations retain microseconds and distinct binding context without rend
 
 test("job recovery matches failed versus running state and lifecycle controls require dedicated BYO", async () => {
   const p = settings();
-  p.model.selected!.jobs.entries = ["failed", "running"].map((status) => ({
+  required(p.model.selected).jobs.entries = ["failed", "running"].map((status) => ({
     id: status + "-job",
     run_id: status + "-run",
     type: "tsdb_backend_lifecycle",
@@ -459,7 +513,7 @@ test("job recovery matches failed versus running state and lifecycle controls re
   });
   w.unmount();
   confirm.mockRestore();
-  p.model.selected!.source.kind = "byo_tsdb";
+  required(p.model.selected).source.kind = "byo_tsdb";
   const byo = mount(NativeDataSources, {
     props: { page: p, port: { execute: vi.fn(), navigate: vi.fn() }, readPort: { read: vi.fn() } },
   });

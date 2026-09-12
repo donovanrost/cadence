@@ -1,10 +1,10 @@
-<script setup>
+<script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 
 const utcTime = ref("");
-let timerId;
+let timerId: ReturnType<typeof setInterval> | undefined;
 
-const pad = (value) => String(value).padStart(2, "0");
+const pad = (value: number) => String(value).padStart(2, "0");
 
 const updateUtcTime = () => {
   const now = new Date();

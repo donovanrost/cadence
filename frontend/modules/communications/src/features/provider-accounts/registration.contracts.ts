@@ -1,3 +1,16 @@
+export const fixedFieldKeys = [
+  "provider_account_id",
+  "credential_ref",
+  "display_name",
+  "provider_type",
+  "backend_type",
+  "backend_key",
+  "allowed_services",
+  "allowed_directions",
+  "allowed_stations",
+  "max_quota",
+] as const;
+export type FixedFieldKey = (typeof fixedFieldKeys)[number];
 export type Breadcrumb = {
   label: string;
   href: string | null;
@@ -58,7 +71,7 @@ export type Section = {
   id: string;
   number: string;
   title: string;
-  field_keys: string[];
+  field_keys: FixedFieldKey[];
 };
 
 export type ConfigurationSection = {
@@ -91,13 +104,13 @@ export type Connector = {
 
 export type ProviderAccountForm = {
   id: string;
-  hidden_field_keys: string[];
+  hidden_field_keys: FixedFieldKey[];
   sections: {
     network_identity: Section;
     credential_registry: Section;
     organization_guardrails: Section;
   };
-  fields: Record<string, Field>;
+  fields: Record<FixedFieldKey, Field>;
   connector: Connector;
   credential_note: { id: string; text: string };
   actions: {

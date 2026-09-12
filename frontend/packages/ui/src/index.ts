@@ -53,14 +53,14 @@ export { default as CadenceMenuItem } from "./CadenceMenuItem.vue";
 export { default as CadenceModalMenu } from "./CadenceModalMenu.vue";
 export { default as CadencePopover } from "./CadencePopover.vue";
 export { default as CadenceToggle } from "./CadenceToggle.vue";
-export { CadencePrimitiveChild } from "./cadence_primitive_child.js";
+export { CadencePrimitiveChild } from "./cadence_primitive_child";
 export {
   CADENCE_OVERLAY_OPENED_EVENT,
   announceCadencePopoverOpened,
   focusCurrentPopoverTrigger,
   preservesPopoverOpenState,
   subscribeToLegacyOverlayOpen,
-} from "./popover_compatibility.js";
+} from "./popover_compatibility";
 export type {
   Attrs,
   BreadcrumbItem,

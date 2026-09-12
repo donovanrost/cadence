@@ -1,3 +1,4 @@
+import { queryPresentation } from "./query-presentation";
 import type { FullPageSurfaceProps } from "@cadence/plugin-sdk";
 import type { FleetStartPort } from "@cadence/planning-and-contacts/fleet-planning";
 const actions = { preview: "validate-fleet-run", create: "create-fleet-run" } as const;
@@ -30,19 +31,18 @@ export function createFleetStartPort(
     },
     async refresh() {
       admitted();
-      const result: any = await bridge.query({
+      const result = await bridge.query({
         queryId: surface.dataContract.id,
         version: surface.dataContract.version,
         context,
       });
       admitted();
-      const candidate = result?.trusted_surface ?? result;
-      if (
-        candidate?.queryVersion !== 1 ||
-        candidate?.presentation?.component !== "OpsFleetPlanningNew"
-      )
-        throw new Error("Unavailable fleet start view.");
-      return candidate.presentation.props?.start;
+      return queryPresentation(
+        result,
+        "OpsFleetPlanningNew",
+        "start",
+        "Unavailable fleet start view.",
+      );
     },
   };
 }

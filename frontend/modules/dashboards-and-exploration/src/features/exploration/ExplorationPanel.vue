@@ -56,7 +56,9 @@ const advanced = [
   ["validity_state", "Validity state"],
   ["limit_mode", "Limit semantics"],
 ] as const;
-const bounded = computed(() => ["range", "archive", "replay_run"].includes(filters.time_mode));
+const bounded = computed(() =>
+  ["range", "archive", "replay_run"].includes(filters.time_mode ?? ""),
+);
 const messages: Record<string, string> = {
   point_required: "Enter a telemetry point ID to start an investigation.",
   empty: "The selected source returned no observations for this query.",

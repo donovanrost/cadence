@@ -1,3 +1,4 @@
+import { arrayOf, record } from "@cadence/plugin-sdk/admission";
 import type { OpsPageContext } from "@cadence/plugin-sdk/ops-pages";
 import { readWorkspaceSnapshot } from "../../workspace";
 import type { DirectoryState, Directory, Search, Presentation, Receipt } from "./contracts";
@@ -35,7 +36,7 @@ function query(value: unknown) {
 }
 function page(value: unknown, row: (v: unknown) => void) {
   const p = exact(value, ["rows", "next"]);
-  if (!Array.isArray(p.rows) || p.rows.length > 25) return fail();
+  if (!arrayOf(p.rows, record) || p.rows.length > 25) return fail();
   p.rows.forEach((value) => row(value));
   const ids = p.rows.map((r) => r.id);
   if (new Set(ids).size !== ids.length) fail();

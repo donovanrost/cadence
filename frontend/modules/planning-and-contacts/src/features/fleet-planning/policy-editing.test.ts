@@ -1,6 +1,7 @@
+import { required, emittedPolicy } from "./policy-test-helpers";
 import { expect, test } from "vite-plus/test";
 import { mount } from "@vue/test-utils";
-import { OpsFleetPlanningPolicy } from "../../fleet-planning";
+import OpsFleetPlanningPolicy from "./OpsFleetPlanningPolicy.vue";
 import { admitPolicyEditReference } from "./policy-evidence";
 import { editingFixture } from "./policy-editing.test-support";
 
@@ -12,8 +13,8 @@ test("edits emit explicit durations, optional ceilings, and the exact immutable 
   expect(repair.value).toBe("1h 1s");
   await wrapper.get("#policy-max_horizon_duration").setValue("1d 2h 3m 4s");
   await wrapper.get("#fleet-policy-form").trigger("submit");
-  const payload = wrapper.emitted("save-policy")![0][0] as any;
-  expect(payload.edit_reference).toEqual(props.policy_form!.edit_reference);
+  const payload = emittedPolicy(wrapper, "save-policy");
+  expect(payload.edit_reference).toEqual(required(props.policy_form).edit_reference);
   expect(payload.policy.max_horizon_duration).toBe("1d 2h 3m 4s");
   expect(payload.policy.repair_horizon_duration).toBe("1h 1s");
   expect(payload.policy.max_contacts).toBe("");
@@ -22,7 +23,7 @@ test("edits emit explicit durations, optional ceilings, and the exact immutable 
   expect(wrapper.get("#policy-max_horizon_duration").attributes("aria-describedby")).toBe(
     "fleet-policy-duration-help",
   );
-  expect(wrapper.emitted("validate-policy")![0][0]).toEqual(payload);
+  expect(emittedPolicy(wrapper, "validate-policy")).toEqual(payload);
   wrapper.unmount();
 });
 
@@ -43,19 +44,20 @@ test("refresh retains unsaved input and never silently rebases it onto a newer p
   expect(input.value).toBe("8");
   expect(wrapper.find("#fleet-policy-edit-unavailable").exists()).toBe(false);
   await wrapper.get("#fleet-policy-form").trigger("submit");
-  expect((wrapper.emitted("save-policy")![0][0] as any).edit_reference.base.policy_version).toBe(2);
+  expect(emittedPolicy(wrapper, "save-policy", 0).edit_reference.base?.policy_version).toBe(2);
   wrapper.unmount();
 });
 
 test("clean forms follow a new base and an explicit initial reference is distinct from missing evidence", async () => {
   const wrapper = mount(OpsFleetPlanningPolicy, { props: editingFixture(null) });
   await wrapper.get("#fleet-policy-form").trigger("submit");
-  expect((wrapper.emitted("save-policy")![0][0] as any).edit_reference.base).toBeNull();
+  expect(emittedPolicy(wrapper, "save-policy", 0).edit_reference.base).toBeNull();
   await wrapper.setProps(editingFixture(2));
   await wrapper.get("#fleet-policy-form").trigger("submit");
-  expect((wrapper.emitted("save-policy")![1][0] as any).edit_reference.base.policy_version).toBe(2);
+  expect(emittedPolicy(wrapper, "save-policy", 1).edit_reference.base?.policy_version).toBe(2);
   const bad = editingFixture(2);
-  (bad.policy_form as any).edit_reference = undefined;
+  // @ts-expect-error Simulate a legacy producer omitting the required evidence.
+  required(bad.policy_form).edit_reference = undefined;
   await wrapper.setProps(bad);
   await wrapper.get("#fleet-policy-form").trigger("submit");
   expect(wrapper.emitted("save-policy")).toHaveLength(2);
@@ -66,8 +68,8 @@ test("clean forms follow a new base and an explicit initial reference is distinc
 });
 
 test("unknown, malformed and cross-scope edit references are not admitted", () => {
-  const reference = editingFixture().policy_form!.edit_reference;
-  const admitted = admitPolicyEditReference(reference)!;
+  const reference = required(editingFixture().policy_form).edit_reference;
+  const admitted = required(admitPolicyEditReference(reference));
   expect(admitted).toEqual(reference);
   expect(admitted).not.toBe(reference);
   expect(Object.isFrozen(admitted)).toBe(true);

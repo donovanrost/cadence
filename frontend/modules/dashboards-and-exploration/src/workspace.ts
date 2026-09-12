@@ -11,9 +11,6 @@ export { default as WidgetQueryDiagnostics } from "./features/workspace/WidgetQu
 export { default as WidgetWarning } from "./features/workspace/WidgetWarning.vue";
 export { default as ChartDataManagementStrip } from "./features/workspace/ChartDataManagementStrip.vue";
 export { default as TelemetryChart } from "./features/workspace/TelemetryChart.vue";
-export { default as DashboardComparisonInspector } from "./features/workspace/DashboardComparisonInspector.vue";
-export { default as DashboardComparisonInspectorHeader } from "./features/workspace/DashboardComparisonInspectorHeader.vue";
-export { default as DashboardComparisonRollup } from "./features/workspace/DashboardComparisonRollup.vue";
 export { CHART_RUNTIME_PORT } from "./features/workspace/chart-runtime";
 export type { ChartRuntimePort, ChartAction, ChartTopic } from "./features/workspace/chart-runtime";
 export { readWorkspaceSnapshot } from "./features/workspace/validation";

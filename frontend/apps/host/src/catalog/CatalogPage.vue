@@ -40,7 +40,8 @@ const admitted = computed(() => {
     !record(snapshot.data)
   )
     return null;
-  const registration = catalogPages[props.page]!;
+  const registration = catalogPages[props.page];
+  if (!registration) return null;
   try {
     if (snapshot.upload_session !== undefined && !isCatalogUploadSession(snapshot.upload_session))
       return null;

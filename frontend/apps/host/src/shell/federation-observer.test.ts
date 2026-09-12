@@ -1,3 +1,4 @@
+import { required } from "../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { observeFederationRoots } from "./federation-observer";
 
@@ -9,8 +10,8 @@ afterEach(() => {
 
 test("in-place placement and filter changes refresh the host after the DOM update", async () => {
   document.body.innerHTML = '<div id="cadence-federation-root"></div>';
-  const root = document.querySelector<HTMLElement>("#cadence-federation-root")!;
-  const refresh = vi.fn(() => ({ ...root.dataset }));
+  const root = required(document.querySelector<HTMLElement>("#cadence-federation-root"));
+  const refresh = vi.fn(() => Object.fromEntries(Object.entries(root.dataset)));
   observer = observeFederationRoots(document.body, refresh);
 
   root.dataset.missionId = "mission-2";

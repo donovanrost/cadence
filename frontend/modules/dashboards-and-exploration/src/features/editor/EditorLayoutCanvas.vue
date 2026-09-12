@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { DashboardWidgetPresentation } from "../workspace/DashboardWidget.contracts";
 import { computed, provide } from "vue";
 import type { EditorModel } from "./contracts";
 import { mergeLayoutEdits, type LayoutEdit } from "./layout-draft";
@@ -29,7 +30,7 @@ const groups = computed(() =>
     .filter((g) => g.placements.length),
 );
 const previews = computed(() => {
-  const result = new Map<string, any>();
+  const result = new Map<string, DashboardWidgetPresentation>();
   if (props.model.preview) {
     const presentation = snapshotPresentation(props.model.preview, `${props.instanceId}-layout`);
     for (const group of presentation.groups)
@@ -70,13 +71,12 @@ const previews = computed(() => {
         @gesture="emit('gesture', $event)"
       >
         <template #default="{ placement }"
-          ><DashboardWidget
-            v-if="previews.has(placement.id)"
-            :presentation="previews.get(placement.id)"
-          />
-          <p v-else class="text-xs text-base-content/60 p-2">
-            {{ placement.title }}<br />Candidate widget preview unavailable
-          </p></template
+          ><template v-for="preview in [previews.get(placement.id)]" :key="placement.id"
+            ><DashboardWidget v-if="preview" :presentation="preview" />
+            <p v-else class="text-xs text-base-content/60 p-2">
+              {{ placement.title }}<br />Candidate widget preview unavailable
+            </p></template
+          ></template
         >
       </EditorLayoutGrid>
     </section>

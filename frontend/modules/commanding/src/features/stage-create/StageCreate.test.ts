@@ -1,3 +1,5 @@
+import { jsonFixture, fixtureContext } from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { readFileSync, writeFileSync } from "node:fs";
 import { mount, flushPromises } from "@vue/test-utils";
 import { test, expect, vi } from "vite-plus/test";
@@ -9,7 +11,7 @@ test("creation emits finite owner-free input and recovers a lost reply by readin
     operation = {
       status: "completed",
       event: "create",
-      write_token: page.write_token!,
+      write_token: required(page.write_token),
       receipt: {
         operation: "stage_created",
         stage_id: page.creation.stage_id,
@@ -49,9 +51,11 @@ test("creation emits finite owner-free input and recovers a lost reply by readin
 test("creation bounds Unicode and binds receipt actor and reserved stage", () => {
   const p = creationFixture();
   expect(
-    createInput(p.write_token!, "Flight", "é".repeat(2000), "private").description,
+    createInput(required(p.write_token), "Flight", "é".repeat(2000), "private").description,
   ).toHaveLength(2000);
-  expect(() => createInput(p.write_token!, "Flight", "é".repeat(2001), "private")).toThrow();
+  expect(() =>
+    createInput(required(p.write_token), "Flight", "é".repeat(2001), "private"),
+  ).toThrow();
   expect(() =>
     readCreationPage({ ...p, creation: { ...p.creation, actor_id: "../bad" } }, p.creation.context),
   ).toThrow();
@@ -83,8 +87,8 @@ test.runIf(!!process.env.CADENCE_COMMAND_STAGES_DOCUMENT)(
   async () => {
     const source = process.env.CADENCE_COMMAND_STAGES_DOCUMENT;
     if (!source) return;
-    const document = JSON.parse(readFileSync(source, "utf8")),
-      page = readCreationPage(document.data, document.context),
+    const document = jsonFixture(readFileSync(source, "utf8")),
+      page = readCreationPage(document.data, fixtureContext(document.context)),
       execute = vi.fn(async (_event: string, _input: Record<string, unknown>) => ({
         status: "rejected",
         feedback: "Probe only",
@@ -99,8 +103,11 @@ test.runIf(!!process.env.CADENCE_COMMAND_STAGES_DOCUMENT)(
       await flushPromises();
       expect(execute).toHaveBeenCalledOnce();
       writeFileSync(
-        process.env.CADENCE_COMMAND_STAGES_INPUT_FILE!,
-        JSON.stringify({ event: execute.mock.calls[0]![0], input: execute.mock.calls[0]![1] }),
+        required(process.env.CADENCE_COMMAND_STAGES_INPUT_FILE),
+        JSON.stringify({
+          event: required(execute.mock.calls[0])[0],
+          input: required(execute.mock.calls[0])[1],
+        }),
       );
     } finally {
       w.unmount();

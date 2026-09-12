@@ -1,3 +1,4 @@
+import { required } from "../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createApp, defineComponent, h, nextTick } from "vue";
 import { inApplicationShell } from "./page-portal";
@@ -16,7 +17,7 @@ test("destroying a page removes teleported content without another navigation ev
       }),
     ),
   );
-  const transport = document.querySelector("#transport")!;
+  const transport = required(document.querySelector("#transport"));
   app.mount(transport);
   await nextTick();
   expect(document.querySelector("#departed-page")).not.toBeNull();
@@ -46,9 +47,9 @@ test("document navigation preserves the native form until the browser submits it
       }),
     ),
   );
-  app.mount(document.querySelector("#transport")!);
+  app.mount(required(document.querySelector("#transport")));
   await nextTick();
-  const form = document.querySelector<HTMLFormElement>("#native-admin-form")!;
+  const form = required(document.querySelector<HTMLFormElement>("#native-admin-form"));
   const cleanup = vi.fn();
   const instance = { vue: { app }, liveSocket: { isUnloaded: () => true } };
   withImmediateVueUnmount({ destroyed: cleanup }).destroyed.call(instance);

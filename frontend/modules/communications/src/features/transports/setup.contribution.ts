@@ -9,6 +9,7 @@ export const setupPages = [
     slot: MISSION_PAGE_SLOT,
     version: 1,
     title: "New Transport",
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
     component: MissionTransportCreation,
     actions: ["validate", "save"],
     read(value, context) {

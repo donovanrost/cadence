@@ -1,3 +1,5 @@
+import { fixtureFeaturePort } from "../../../test-support/feature-port";
+import { required } from "../../../test-support/required";
 import "./env.d.ts";
 import { mount, flushPromises } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
@@ -25,7 +27,7 @@ test("the separate derived exposure matches admission and passes immutable actio
     displayName: manifest.application.displayName,
     description: manifest.application.description,
     package: { packageId: "cadence.telemetry-applications", version: 1 },
-    surface: manifest.surfaces[0],
+    surface: required(manifest.surfaces[0]),
     release: {
       federation: "module_federation",
       releaseId: "ops-console-v1",
@@ -35,6 +37,7 @@ test("the separate derived exposure matches admission and passes immutable actio
     },
   };
   expect(() =>
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
     assertReleaseMatchesModule(application, { manifest, default: DerivedTelemetryApplication }),
   ).not.toThrow();
   const query = vi
@@ -50,6 +53,7 @@ test("the separate derived exposure matches admission and passes immutable actio
       surface: application.surface,
       context,
       bridge: {
+        // Vitest erases generic call signatures; the feature still admits these unknown fixture responses.
         query: query as HostBridge["query"],
         execute: execute as HostBridge["execute"],
         navigate,
@@ -74,7 +78,7 @@ test("the separate derived exposure matches admission and passes immutable actio
     version: 1,
     context,
   });
-  const port = feature.props("port");
+  const port = fixtureFeaturePort(feature.props("port"));
   const input = {
     point_id: "DERIVED.power",
     point_name: "Power",

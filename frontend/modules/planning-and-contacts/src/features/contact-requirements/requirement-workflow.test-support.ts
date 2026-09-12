@@ -1,3 +1,10 @@
+import {
+  admitRequirementOperation,
+  isRequirementCommand,
+  requirementContext,
+} from "./requirement-workflow";
+import { mutableFixture, type MutableFixture } from "../../../../../test-support/mutable-fixture";
+import { record } from "@cadence/plugin-sdk/admission";
 import { requirementDetailFixture } from "./requirement-detail.test-support";
 import type { RequirementDirectory } from "./requirement-directory";
 import type {
@@ -6,7 +13,7 @@ import type {
   RequirementOperation,
 } from "./requirement-workflow";
 import { requirementSegment } from "./requirement-directory";
-export const requirementPageFixture = (): RequirementPage => ({
+export const requirementPageFixture = (): MutableFixture<RequirementPage> => ({
   detail: requirementDetailFixture(),
   sequence: 0,
   operation: null,
@@ -41,16 +48,28 @@ export function requirementDirectoryFixture(): RequirementDirectory {
     },
   };
 }
+type Completed<A extends RequirementAction = RequirementAction> = MutableFixture<
+  Extract<RequirementOperation, { action: A; status: "completed" }>
+>;
+export function requirementOperationFixture<A extends RequirementAction>(
+  page: RequirementPage,
+  action: A,
+  command: unknown,
+): Completed<A>;
 export function requirementOperationFixture(
   page: RequirementPage,
   action: RequirementAction,
-  command: any,
-): RequirementOperation {
-  const input = JSON.parse(JSON.stringify(command.payload)),
-    d = page.detail,
+  command: unknown,
+): Completed {
+  if (!record(command) || typeof command.sequence !== "number")
+    throw Error("Invalid command fixture");
+  const request = { action, input: command.payload };
+  if (!isRequirementCommand(request, requirementContext(page.detail)))
+    throw Error("Invalid requirement input fixture");
+  const d = page.detail,
     base = `/missions/${requirementSegment(d.context.mission_id)}/ops/`;
   const result =
-    action === "plan"
+    request.action === "plan"
       ? {
           contactRequirementId: d.requirement.id,
           planningRunId: "run-new",
@@ -67,19 +86,25 @@ export function requirementOperationFixture(
           version: 1,
           contentSha256: "f".repeat(64),
           actorId: d.context.actor_id,
-          requirementEvidence: input.requirement_evidence,
-          planningRunId: input.planning_run_id,
+          requirementEvidence: request.input.requirement_evidence,
+          planningRunId: request.input.planning_run_id,
           navigation: { href: base + "plans/plan-new" },
         };
-  return {
-    sequence: command.sequence,
-    action,
-    input,
-    status: "completed",
-    receipt: {
-      receiptId: "receipt-" + command.sequence,
-      completedAt: "2026-09-09T00:00:00Z",
-      result,
+  const operation = admitRequirementOperation(
+    {
+      sequence: command.sequence,
+      action: request.action,
+      input: request.input,
+      status: "completed",
+      receipt: {
+        receiptId: `receipt-${command.sequence}`,
+        completedAt: "2026-09-09T00:00:00Z",
+        result,
+      },
     },
-  };
+    requirementContext(page.detail),
+  );
+  if (!operation || operation.status !== "completed" || operation.action !== action)
+    throw Error("Invalid requirement operation fixture");
+  return mutableFixture(operation);
 }

@@ -39,14 +39,15 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: releaseBuild ? "./" : "/",
-    plugins: lazyPlugins(() => [
-      tailwindcss(),
-      vue(),
-      federation(
-        releaseBuild ? { ...releaseFederationConfig, publicPath: "auto" } : federationConfig,
-      ),
-      releaseOutputPlugin(),
-    ]),
+    plugins:
+      lazyPlugins(() => [
+        tailwindcss(),
+        vue(),
+        federation(
+          releaseBuild ? { ...releaseFederationConfig, publicPath: "auto" } : federationConfig,
+        ),
+        releaseOutputPlugin(),
+      ]) ?? [],
     server: {
       host: "127.0.0.1",
       port: 4177,

@@ -1,12 +1,12 @@
+import { fixtureRecord, fixtureString } from "../../test-support/json-fixture.ts";
 import assert from "node:assert/strict";
-import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
+import { chromium } from "playwright";
 import { writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
-const root = fileURLToPath(new URL("../../", import.meta.url));
-const { chromium } = createRequire(root + "/apps/storybook/package.json")("playwright");
 const [base, mission, user, out] = process.argv.slice(2);
+assert.ok(base && mission && user && out, "Expected endpoint, mission, user and output directory");
 const reader = createInterface({ input: process.stdin });
+/** @type {unknown} */
 const secret = await new Promise((resolve) =>
   reader.once("line", (line) => {
     reader.close();
@@ -15,9 +15,10 @@ const secret = await new Promise((resolve) =>
 );
 process.stdin.destroy();
 const browser = await chromium.launch({ channel: "chrome", headless: true });
-const page = await browser.newPage({ viewport: { width: 1366, height: 900 } }),
-  errors = [],
-  results = [];
+const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
+/** @type {string[]} */
+const errors = [];
+const results = [];
 page.setDefaultTimeout(12000);
 page.on("pageerror", (e) => errors.push(e.message));
 const prefix = base + "/missions/" + mission;
@@ -56,8 +57,11 @@ try {
   await page.goto(prefix + "/ops");
   await page.waitForURL(base + "/sign-in");
   await page.locator("#user_email").fill(user);
-  await page.locator("#user_password").fill(secret.password);
-  await page.locator("#sign-in-form").evaluate((f) => f.requestSubmit());
+  await page.locator("#user_password").fill(fixtureString(fixtureRecord(secret).password));
+  await page.locator("#sign-in-form").evaluate((f) => {
+    if (!(f instanceof HTMLFormElement)) throw Error("Expected sign-in form");
+    f.requestSubmit();
+  });
   await page.waitForURL((url) => url.pathname !== "/sign-in");
   for (const route of routes) {
     const start = errors.length;
@@ -104,9 +108,10 @@ try {
         "/missions/" + mission + "/ops/dashboards/draft-dashboard/edit",
       );
       await page.locator("#dashboard-publication-refresh").click();
-      await page.waitForFunction(
-        () => !document.querySelector("#dashboard-publication-refresh").disabled,
-      );
+      await page.waitForFunction(() => {
+        const button = document.querySelector("#dashboard-publication-refresh");
+        return button instanceof HTMLButtonElement && !button.disabled;
+      });
       assert.equal(await page.locator("#dashboard-publication-required").count(), 1);
       if (!route.endsWith("/diagnostics")) {
         await page.screenshot({ path: out + "/publication-desktop.png" });

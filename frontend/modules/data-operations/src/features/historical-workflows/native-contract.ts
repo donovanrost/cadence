@@ -1,3 +1,5 @@
+import type { Snapshot } from "@cadence/plugin-sdk/admission";
+import { oneOf, arrayOf, type Guard } from "@cadence/plugin-sdk/admission";
 export const historyActions = [
   "read-page",
   "validate-request",
@@ -20,24 +22,24 @@ export const requestFields = [
   "confirmed",
 ] as const;
 export type RequestValues = Record<(typeof requestFields)[number], string>;
-export type HistoryContext = { organization_id: string; mission_id: string };
-export type Page<T> = { entries: T[]; page: number; page_size: 25; total: number };
-export type Summary = { state: string; progress: string; [key: string]: number | string };
-export type Group = {
+export type HistoryContext = Snapshot<{ organization_id: string; mission_id: string }>;
+export type Page<T> = Snapshot<{ entries: T[]; page: number; page_size: 25; total: number }>;
+export type Summary = Snapshot<{ state: string; progress: string; [key: string]: number | string }>;
+export type Group = Snapshot<{
   id: string;
   event_count: number;
   last_event_at: string;
   workflow: string;
   summary: Summary | null;
-};
-export type Binding = {
+}>;
+export type Binding = Snapshot<{
   id: string;
   source_id: string;
   realm: string;
   version: number;
   evidence: string;
-};
-export type AuditEvent = {
+}>;
+export type AuditEvent = Snapshot<{
   id: string;
   run_id: string;
   event_type: string;
@@ -54,16 +56,16 @@ export type AuditEvent = {
   reason_truncated: boolean;
   operation_id: string | null;
   correction_available: boolean;
-};
-export type Job = {
+}>;
+export type Job = Snapshot<{
   id: string;
   run_id: string;
   status: string;
   attempts: number;
   started_at: string | null;
   completed_at: string | null;
-};
-export type Query = {
+}>;
+export type Query = Snapshot<{
   group: string | null;
   binding_q: string;
   page: number;
@@ -71,8 +73,8 @@ export type Query = {
   jobs_page: number;
   origins_page: number;
   bindings_page: number;
-};
-export type HistoryModel = {
+}>;
+export type HistoryModel = Snapshot<{
   contract_version: 1;
   context: HistoryContext;
   mode: "reader" | "manage";
@@ -89,27 +91,86 @@ export type HistoryModel = {
     audit: Page<AuditEvent>;
     jobs: Page<Job>;
     origins: Page<{ kind: "dashboard" | "comparison_review"; id: string }>;
-    transitions: { stage: string; eligible_count: number; blocked_count: number }[];
+    transitions: { stage: HistoryStage; eligible_count: number; blocked_count: number }[];
     retry: { eligible_count: number };
   };
+}>;
+export const historyStages = ["approved", "rejected", "started", "completed", "failed"] as const;
+export type HistoryStage = (typeof historyStages)[number];
+type GroupDecision = { group_id: string; evidence: string; reason: string; confirmed: true };
+type RequestInput = { request: Readonly<RequestValues>; binding_evidence: string };
+export type HistoryInputs = {
+  "read-page": { query: Partial<Record<keyof Query, string>> };
+  "validate-request": RequestInput;
+  "record-request": RequestInput;
+  "transition-group": GroupDecision & { stage: HistoryStage };
+  "retry-group": GroupDecision;
+  "request-correction": GroupDecision & { event_id: string };
 };
-export type HistoryOperation = {
-  id: string;
-  sequence: number;
-  action: HistoryAction;
-  input: Record<string, any>;
-  status: "completed" | "rejected" | "unconfirmed";
-  result: Record<string, any> | null;
-  feedback: string[];
-};
-export type HistoryPage = {
+export type HistoryEffectAction = Exclude<HistoryAction, "read-page" | "validate-request">;
+export type HistoryReceipt<A extends HistoryEffectAction = HistoryEffectAction> = {
+  readonly contract_version: 1;
+  readonly organization_id: string;
+  readonly mission_id: string;
+  readonly actor_id: string;
+  readonly operation_id: string;
+  readonly action: A;
+  readonly group_id: string;
+  readonly event_ids: readonly string[];
+  readonly event_count: number;
+  readonly event_ids_truncated: boolean;
+  readonly event_digest: string;
+  readonly job_ids: readonly string[];
+  readonly job_count: number;
+  readonly job_ids_truncated: boolean;
+} & (A extends "retry-group"
+  ? {
+      readonly retry_counts: Readonly<{
+        retried: number;
+        skipped: number;
+        nonretryable: number;
+        failed: number;
+      }>;
+    }
+  : {});
+type HistoryResult<A extends HistoryAction> = A extends "read-page"
+  ? { readonly page_changed: true }
+  : A extends "validate-request"
+    ? {
+        readonly valid: boolean;
+        readonly feedback: readonly { readonly field: string; readonly code: string }[];
+      }
+    : A extends HistoryEffectAction
+      ? HistoryReceipt<A>
+      : never;
+export type HistoryCommand<A extends HistoryAction = HistoryAction> = A extends HistoryAction
+  ? { readonly action: A; readonly input: Snapshot<HistoryInputs[A]> }
+  : never;
+export type HistoryOperation<A extends HistoryAction = HistoryAction> = A extends HistoryAction
+  ? HistoryCommand<A> & {
+      readonly id: string;
+      readonly sequence: number;
+      readonly feedback: readonly string[];
+    } & (
+        | { readonly status: "completed"; readonly result: HistoryResult<A> }
+        | { readonly status: "rejected"; readonly result: null }
+        | {
+            readonly status: "unconfirmed";
+            readonly result: Readonly<{ group_id: string; operation_id: string }> | null;
+          }
+      )
+  : never;
+export function isHistoryEffect(op: HistoryOperation): op is HistoryOperation<HistoryEffectAction> {
+  return op.action !== "read-page" && op.action !== "validate-request";
+}
+export type HistoryPage = Snapshot<{
   model: HistoryModel;
   actor_id: string;
   sequence: number;
   operation: HistoryOperation | null;
   read_error: boolean;
-};
-const object = (v: any): v is Record<string, any> =>
+}>;
+const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 export const text = (v: unknown, max = 240): v is string =>
   typeof v === "string" && new TextEncoder().encode(v).length <= max;
@@ -119,34 +180,33 @@ const sequence = (v: unknown): v is number => count(v) && v <= 1000000;
 const hash = (v: unknown): v is string => typeof v === "string" && /^[a-f0-9]{64}$/.test(v);
 const instant = (v: unknown): v is string =>
   text(v) && /(?:Z|[+-]\d\d:\d\d)$/.test(v) && Number.isFinite(Date.parse(v));
-const optional = (v: unknown, admit: (v: any) => boolean) => v === null || admit(v);
-const stages = ["approved", "rejected", "started", "completed", "failed"];
-const keys = (v: Record<string, any>, expected: readonly string[]) =>
+const optional = <T>(v: unknown, admit: Guard<T>): v is T | null => v === null || admit(v);
+const stages = historyStages;
+const keys = (v: Record<string, unknown>, expected: readonly string[]) =>
   Object.keys(v).length === expected.length && expected.every((k) => Object.hasOwn(v, k));
-const summary = (v: any): v is Summary =>
+const summary = (v: unknown): v is Summary =>
   object(v) &&
   text(v.state) &&
   text(v.progress) &&
-  Object.entries(v).every(([k, x]) => (["state", "progress"].includes(k) ? text(x) : count(x)));
-const page = <T>(v: any, admit: (v: any) => v is T): v is Page<T> =>
+  Object.entries(v).every(([k, x]) => (oneOf(["state", "progress"], k) ? text(x) : count(x)));
+const page = <T extends { id: string }>(v: unknown, admit: Guard<T>): v is Page<T> =>
   object(v) &&
   sequence(v.page) &&
   v.page > 0 &&
   v.page_size === 25 &&
   count(v.total) &&
-  Array.isArray(v.entries) &&
+  arrayOf(v.entries, admit) &&
   v.entries.length <= 25 &&
-  v.entries.every(admit) &&
-  new Set(v.entries.map((x: any) => (x.kind ? x.kind + ":" + x.id : x.id))).size ===
+  new Set(v.entries.map((x) => ("kind" in x ? String(x.kind) + ":" + x.id : x.id))).size ===
     v.entries.length;
-const group = (v: any): v is Group =>
+const group = (v: unknown): v is Group =>
   object(v) &&
   id(v.id) &&
   count(v.event_count) &&
   instant(v.last_event_at) &&
-  ["backfill", "import", "mixed", "unavailable"].includes(v.workflow) &&
+  oneOf(["backfill", "import", "mixed", "unavailable"], v.workflow) &&
   optional(v.summary, summary);
-const binding = (v: any): v is Binding =>
+const binding = (v: unknown): v is Binding =>
   object(v) &&
   id(v.id) &&
   id(v.source_id) &&
@@ -154,10 +214,12 @@ const binding = (v: any): v is Binding =>
   count(v.version) &&
   v.version > 0 &&
   hash(v.evidence);
-const audit = (v: any): v is AuditEvent =>
+const audit = (v: unknown): v is AuditEvent =>
   object(v) &&
   id(v.id) &&
   id(v.run_id) &&
+  text(v.event_type) &&
+  text(v.stage) &&
   /^(backfill|import)_(requested|approved|rejected|started|completed|failed|retried)$/.test(
     v.event_type,
   ) &&
@@ -174,17 +236,17 @@ const audit = (v: any): v is AuditEvent =>
   typeof v.reason_truncated === "boolean" &&
   optional(v.operation_id, id) &&
   typeof v.correction_available === "boolean";
-const job = (v: any): v is Job =>
+const job = (v: unknown): v is Job =>
   object(v) &&
   id(v.id) &&
   id(v.run_id) &&
-  ["queued", "running", "completed", "failed"].includes(v.status) &&
+  oneOf(["queued", "running", "completed", "failed"], v.status) &&
   count(v.attempts) &&
   optional(v.started_at, instant) &&
   optional(v.completed_at, instant);
-const origin = (v: any): v is { kind: "dashboard" | "comparison_review"; id: string } =>
-  object(v) && ["dashboard", "comparison_review"].includes(v.kind) && id(v.id);
-function query(v: any): v is Query {
+const origin = (v: unknown): v is { kind: "dashboard" | "comparison_review"; id: string } =>
+  object(v) && oneOf(["dashboard", "comparison_review"], v.kind) && id(v.id);
+function query(v: unknown): v is Query {
   return (
     object(v) &&
     keys(v, [
@@ -203,13 +265,9 @@ function query(v: any): v is Query {
     )
   );
 }
-const request = (v: any): v is RequestValues =>
+const request = (v: unknown): v is RequestValues =>
   object(v) && keys(v, requestFields) && Object.values(v).every((x) => text(x, 8192));
-export function admitHistoryModel(
-  v: any,
-  context: HistoryContext,
-  mode: string,
-): HistoryModel | null {
+function validHistoryModel(v: unknown, context: HistoryContext, mode: string): v is HistoryModel {
   try {
     if (
       !object(v) ||
@@ -218,6 +276,7 @@ export function admitHistoryModel(
       v.context.organization_id !== context.organization_id ||
       v.context.mission_id !== context.mission_id ||
       v.mode !== mode ||
+      !oneOf(["reader", "manage"], mode) ||
       !query(v.query) ||
       !object(v.permissions) ||
       typeof v.permissions.request !== "boolean" ||
@@ -226,14 +285,14 @@ export function admitHistoryModel(
       !page(v.bindings, binding) ||
       !request(v.defaults)
     )
-      return null;
+      return false;
     const s = v.selected;
     if (
       s !== null &&
       (!object(s) ||
         s.id !== v.query.group ||
         !id(s.id) ||
-        !["backfill", "import", "mixed"].includes(s.workflow) ||
+        !oneOf(["backfill", "import", "mixed"], s.workflow) ||
         !hash(s.evidence) ||
         !summary(s.summary) ||
         !page(s.audit, audit) ||
@@ -241,25 +300,33 @@ export function admitHistoryModel(
         !page(s.origins, origin) ||
         !Array.isArray(s.transitions) ||
         s.transitions.length !== 5 ||
-        new Set(s.transitions.map((x: any) => x.stage)).size !== 5 ||
+        new Set(s.transitions.map((x: unknown) => (object(x) ? x.stage : undefined))).size !== 5 ||
         !s.transitions.every(
-          (x: any) =>
+          (x: unknown) =>
             object(x) &&
-            stages.includes(x.stage) &&
+            oneOf(stages, x.stage) &&
             count(x.eligible_count) &&
             count(x.blocked_count),
         ) ||
         !object(s.retry) ||
         !count(s.retry.eligible_count))
     )
-      return null;
-    if (s === null && v.query.group !== null) return null;
-    return v as HistoryModel;
+      return false;
+    if (s === null && v.query.group !== null) return false;
+    return true;
   } catch {
-    return null;
+    return false;
   }
 }
-export function same(a: any, b: any): boolean {
+export function admitHistoryModel(
+  v: unknown,
+  context: HistoryContext,
+  mode: string,
+): HistoryModel | null {
+  return validHistoryModel(v, context, mode) ? v : null;
+}
+
+export function same(a: unknown, b: unknown): boolean {
   return (
     a === b ||
     (object(a) &&
@@ -272,7 +339,7 @@ export function same(a: any, b: any): boolean {
       a.every((x, i) => same(x, b[i])))
   );
 }
-function validInput(v: any, action: HistoryAction): boolean {
+function validInput(v: unknown, action: HistoryAction): boolean {
   if (!object(v)) return false;
   if (action === "read-page")
     return (
@@ -280,18 +347,21 @@ function validInput(v: any, action: HistoryAction): boolean {
       object(v.query) &&
       Object.entries(v.query).every(
         ([k, x]) =>
-          [
-            "group",
-            "binding_q",
-            "page",
-            "audit_page",
-            "jobs_page",
-            "origins_page",
-            "bindings_page",
-          ].includes(k) && text(x),
+          oneOf(
+            [
+              "group",
+              "binding_q",
+              "page",
+              "audit_page",
+              "jobs_page",
+              "origins_page",
+              "bindings_page",
+            ],
+            k,
+          ) && text(x),
       )
     );
-  if (["validate-request", "record-request"].includes(action))
+  if (oneOf(["validate-request", "record-request"], action))
     return (
       keys(v, ["request", "binding_evidence"]) && request(v.request) && text(v.binding_evidence, 64)
     );
@@ -313,16 +383,23 @@ function validInput(v: any, action: HistoryAction): boolean {
     text(v.reason, 4096) &&
     !!v.reason.trim() &&
     v.confirmed === true &&
-    (action !== "transition-group" || stages.includes(v.stage)) &&
+    (action !== "transition-group" || oneOf(stages, v.stage)) &&
     (action !== "request-correction" || id(v.event_id))
   );
 }
+export function isHistoryCommand(
+  value: unknown,
+): value is HistoryCommand & Record<string, unknown> {
+  return (
+    object(value) && oneOf(historyActions, value.action) && validInput(value.input, value.action)
+  );
+}
 function receipt(
-  v: any,
-  op: HistoryOperation,
+  v: unknown,
+  op: { readonly id: string; readonly action: HistoryAction },
   p: Pick<HistoryPage, "model" | "actor_id">,
 ): boolean {
-  const ids = (values: any, total: any, truncated: any) =>
+  const ids = (values: unknown, total: unknown, truncated: unknown) =>
     Array.isArray(values) &&
     values.length <= 25 &&
     values.every(id) &&
@@ -350,24 +427,28 @@ function receipt(
   );
 }
 export function admitHistoryOperation(
-  v: any,
+  v: unknown,
   p: Pick<HistoryPage, "model" | "actor_id">,
 ): HistoryOperation | null {
+  return validHistoryOperation(v, p) ? v : null;
+}
+function validHistoryOperation(
+  v: unknown,
+  p: Pick<HistoryPage, "model" | "actor_id">,
+): v is HistoryOperation {
   try {
     if (
-      !object(v) ||
+      !isHistoryCommand(v) ||
       !id(v.id) ||
       !sequence(v.sequence) ||
       !v.sequence ||
-      !historyActions.includes(v.action) ||
-      !validInput(v.input, v.action) ||
-      !["completed", "rejected", "unconfirmed"].includes(v.status) ||
+      !oneOf(["completed", "rejected", "unconfirmed"], v.status) ||
       !Array.isArray(v.feedback) ||
       v.feedback.length > 10 ||
-      !v.feedback.every((x: any) => text(x))
+      !v.feedback.every((x: unknown) => text(x))
     )
-      return null;
-    if (v.status === "rejected") return v.result === null ? (v as HistoryOperation) : null;
+      return false;
+    if (v.status === "rejected") return v.result === null;
     if (
       v.status === "unconfirmed" &&
       (v.result === null ||
@@ -376,24 +457,24 @@ export function admitHistoryOperation(
           id(v.result.group_id) &&
           v.result.operation_id === v.id))
     )
-      return v as HistoryOperation;
-    if (v.action === "read-page")
-      return same(v.result, { page_changed: true }) ? (v as HistoryOperation) : null;
+      return true;
+    if (v.status !== "completed") return false;
+    if (v.action === "read-page") return same(v.result, { page_changed: true });
     if (v.action === "validate-request")
-      return object(v.result) &&
+      return (
+        object(v.result) &&
         typeof v.result.valid === "boolean" &&
         Array.isArray(v.result.feedback) &&
         v.result.feedback.length <= 20 &&
-        v.result.feedback.every((x: any) => object(x) && text(x.field) && text(x.code))
-        ? (v as HistoryOperation)
-        : null;
-    return receipt(v.result, v as HistoryOperation, p) ? (v as HistoryOperation) : null;
+        v.result.feedback.every((x: unknown) => object(x) && text(x.field) && text(x.code))
+      );
+    return receipt(v.result, { id: v.id, action: v.action }, p);
   } catch {
-    return null;
+    return false;
   }
 }
 export function admitHistoryPage(
-  v: any,
+  v: unknown,
   context: HistoryContext,
   mode: string,
 ): HistoryPage | null {

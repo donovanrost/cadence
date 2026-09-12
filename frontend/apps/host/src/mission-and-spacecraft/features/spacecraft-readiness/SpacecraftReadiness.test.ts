@@ -1,3 +1,4 @@
+import { required } from "../../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import SpacecraftReadiness from "./SpacecraftReadiness.vue";
@@ -76,6 +77,6 @@ test("duplicate identities are both rejected and explicit unavailable results bl
 
 test("malformed core data is rejected rather than treated as a contribution failure", () => {
   const data = readinessFixture();
-  data.panels[0]!.action.href = "javascript:alert(1)";
+  required(data.panels[0]).action.href = "javascript:alert(1)";
   expect(() => assertSpacecraftReadiness(data)).toThrow();
 });

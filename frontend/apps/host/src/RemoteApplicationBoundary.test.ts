@@ -1,3 +1,4 @@
+import { anyInstanceOf, containing, matchingString } from "../../../test-support/matchers";
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
@@ -116,12 +117,12 @@ describe("RemoteApplicationBoundary", () => {
     expect(wrapper.find("#retry-remote").exists()).toBe(true);
     expect(wrapper.find("#remote-fallback").attributes("href")).toBe("/missions/mission-1/comms");
     expect(consoleError).toHaveBeenCalledWith(
-      expect.stringMatching(/^Cadence federation failure [0-9a-f-]{36}$/),
-      expect.objectContaining({
+      matchingString(/^Cadence federation failure [0-9a-f-]{36}$/),
+      containing({
         applicationKey: "comms_overview",
         releaseId: "2026.08.29.1",
         surfaceId: "overview",
-        reason: expect.any(Error),
+        reason: anyInstanceOf(Error),
       }),
     );
     expect(wrapper.find("#remote-loading").exists()).toBe(false);

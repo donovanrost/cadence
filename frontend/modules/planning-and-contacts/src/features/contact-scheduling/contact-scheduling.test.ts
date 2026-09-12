@@ -1,3 +1,5 @@
+import { fixtureRecord, jsonFixture } from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import { OpsContactSchedule } from "../../contact-scheduling";
@@ -5,6 +7,9 @@ import {
   admitContactSchedule,
   admitSearch,
   cancelEvidence,
+  cancellable,
+  validScheduleRoute,
+  validScheduleSearch,
   scheduleHref,
 } from "./contact-schedule";
 import {
@@ -19,7 +24,10 @@ function harness() {
     execute = vi.fn(),
     refresh = vi.fn().mockResolvedValue(model);
   const wrapper = mount(OpsContactSchedule, {
-    props: { schedule: model, port: { context: model.context, execute, refresh } },
+    props: {
+      schedule: model,
+      port: { protocol: "remote-query" as const, context: model.context, execute, refresh },
+    },
   });
   return { model, execute, refresh, wrapper };
 }
@@ -27,15 +35,20 @@ test("semantic admission binds scope, spacecraft, route evidence and independent
   const m = scheduleFixture();
   expect(admitContactSchedule(m, m.context)).toEqual(m);
   for (const change of [
-    (v: any) => (v.context.mission_id = "foreign"),
-    (v: any) => (v.routes.entries[0].spacecraft_id = "foreign"),
-    (v: any) => (v.routes.entries[0].evidence.provider_version = 0),
-    (v: any) => (v.routes.entries[0].evidence.extra = "unreviewed"),
-    (v: any) => (v.scheduled.more = true),
-    (v: any) => v.scheduled.entries.push(v.scheduled.entries[0]),
-    (v: any) => (v.query.scheduled_page = 2),
-    (v: any) => (v.reservations.entries[0].provider_revision = 0),
-    (v: any) => (v.query.spacecraft_q = "x".repeat(121)),
+    (v: ReturnType<typeof scheduleFixture>) => (v.context.mission_id = "foreign"),
+    (v: ReturnType<typeof scheduleFixture>) =>
+      (required(v.routes.entries[0]).spacecraft_id = "foreign"),
+    (v: ReturnType<typeof scheduleFixture>) =>
+      (required(v.routes.entries[0]).evidence.provider_version = 0),
+    (v: ReturnType<typeof scheduleFixture>) =>
+      (fixtureRecord(required(v.routes.entries[0]).evidence).extra = "unreviewed"),
+    (v: ReturnType<typeof scheduleFixture>) => (v.scheduled.more = true),
+    (v: ReturnType<typeof scheduleFixture>) =>
+      v.scheduled.entries.push(required(v.scheduled.entries[0])),
+    (v: ReturnType<typeof scheduleFixture>) => (v.query.scheduled_page = 2),
+    (v: ReturnType<typeof scheduleFixture>) =>
+      (required(v.reservations.entries[0]).provider_revision = 0),
+    (v: ReturnType<typeof scheduleFixture>) => (v.query.spacecraft_q = "x".repeat(121)),
   ]) {
     const bad = structuredClone(m);
     change(bad);
@@ -53,7 +66,7 @@ test("native search seals the reviewed route, reserve sends only its opaque toke
   await flushPromises();
   expect(execute).toHaveBeenNthCalledWith(1, "search", {
     contact_search: found.search,
-    route_evidence: model.routes.entries[0]!.evidence,
+    route_evidence: required(model.routes.entries[0]).evidence,
   });
   execute.mockResolvedValueOnce(completion(receiptFixture()));
   refresh.mockRejectedValueOnce(Error("private"));
@@ -71,15 +84,17 @@ test("cancellation requires native confirmation and sends the reviewed revision 
   await wrapper.get("#cancel-review-reservation-one").trigger("click");
   expect(execute).not.toHaveBeenCalled();
   const advanced = structuredClone(model);
-  advanced.reservations.entries[0]!.provider_revision = 5;
+  required(advanced.reservations.entries[0]).provider_revision = 5;
   refresh.mockResolvedValue(advanced);
   await wrapper.get("#contact-schedule-refresh").trigger("click");
   await flushPromises();
   execute.mockResolvedValue(completion(receiptFixture("canceled")));
   await wrapper.get("#contact-cancel-confirm").trigger("click");
   await flushPromises();
+  const reviewed = required(model.reservations.entries[0]);
+  if (!cancellable(reviewed)) throw Error("Expected cancellable fixture");
   expect(execute).toHaveBeenCalledExactlyOnceWith("cancel", {
-    reservation_evidence: cancelEvidence(model.context, model.reservations.entries[0]!),
+    reservation_evidence: cancelEvidence(model.context, reviewed),
   });
   expect(wrapper.find("#contact-cancellation-review").exists()).toBe(false);
   wrapper.unmount();
@@ -121,21 +136,23 @@ test("search rejects cross-scope, stale pins, repeated identities and windows ou
   const m = scheduleFixture(),
     found = searchFixture(m);
   for (const change of [
-    (v: any) => (v.context.mission_id = "other"),
-    (v: any) => v.route.evidence.transport_version++,
-    (v: any) => v.opportunities.push(v.opportunities[0]),
-    (v: any) => (v.opportunities[0].starts_at = "2099-09-09T11:00:00Z"),
-    (v: any) => (v.opportunities[0].token = "x".repeat(8193)),
+    (v: ReturnType<typeof searchFixture>) => (v.context.mission_id = "other"),
+    (v: ReturnType<typeof searchFixture>) => v.route.evidence.transport_version++,
+    (v: ReturnType<typeof searchFixture>) => v.opportunities.push(required(v.opportunities[0])),
+    (v: ReturnType<typeof searchFixture>) =>
+      (required(v.opportunities[0]).starts_at = "2099-09-09T11:00:00Z"),
+    (v: ReturnType<typeof searchFixture>) =>
+      (required(v.opportunities[0]).token = "x".repeat(8193)),
   ]) {
     const bad = structuredClone(found);
     change(bad);
-    expect(admitSearch(bad, m.context, found.search, m.routes.entries[0]!)).toBeNull();
+    expect(admitSearch(bad, m.context, found.search, required(m.routes.entries[0]))).toBeNull();
   }
 });
 test("expired and unavailable opportunities cannot be reserved", async () => {
   const { model, execute, wrapper } = harness(),
     found = searchFixture(model);
-  found.opportunities[0]!.expires_at = "2020-01-01T00:00:00Z";
+  required(found.opportunities[0]).expires_at = "2020-01-01T00:00:00Z";
   execute.mockResolvedValue(completion(found));
   await wrapper.get("#contact-search").trigger("submit");
   await flushPromises();
@@ -144,7 +161,7 @@ test("expired and unavailable opportunities cannot be reserved", async () => {
 });
 test("pending operations suppress duplicate submissions and departed results never refresh", async () => {
   const { execute, refresh, wrapper } = harness();
-  let done!: (v: unknown) => void;
+  let done: ((v: unknown) => void) | undefined;
   execute.mockImplementation(
     () =>
       new Promise((resolve) => {
@@ -156,7 +173,7 @@ test("pending operations suppress duplicate submissions and departed results nev
   await wrapper.get("#contact-cancel-confirm").trigger("click");
   expect(execute).toHaveBeenCalledTimes(1);
   wrapper.unmount();
-  done(completion(receiptFixture("canceled")));
+  required(done)(completion(receiptFixture("canceled")));
   await flushPromises();
   expect(refresh).not.toHaveBeenCalled();
 });
@@ -175,32 +192,50 @@ test("invalid producer data can recover through a read, and failed reads retain 
 });
 test("producer-supplied contact scheduling workflow", async () => {
   if (!process.env.CADENCE_SCHEDULE_MODEL) return;
-  const model = JSON.parse(process.env.CADENCE_SCHEDULE_MODEL),
+  const model = required(admitContactSchedule(jsonFixture(process.env.CADENCE_SCHEDULE_MODEL))),
     action = process.env.CADENCE_SCHEDULE_ACTION;
   expect(admitContactSchedule(model)).not.toBeNull();
   const execute = vi.fn().mockRejectedValue(Error("payload captured"));
   const wrapper = mount(OpsContactSchedule, {
-    props: { schedule: model, port: { context: model.context, execute, refresh: vi.fn() } },
+    props: {
+      schedule: model,
+      port: {
+        protocol: "remote-query" as const,
+        context: model.context,
+        execute,
+        refresh: vi.fn(),
+      },
+    },
   });
   if (action === "search") await wrapper.get("#contact-search").trigger("submit");
   if (action === "reserve") {
-    execute.mockResolvedValueOnce(completion(JSON.parse(process.env.CADENCE_SCHEDULE_RESULT!)));
+    execute.mockResolvedValueOnce(
+      completion(jsonFixture(required(process.env.CADENCE_SCHEDULE_RESULT))),
+    );
     await wrapper.get("#contact-search").trigger("submit");
     await flushPromises();
-    const found = JSON.parse(process.env.CADENCE_SCHEDULE_RESULT!);
+    const supplied = jsonFixture(required(process.env.CADENCE_SCHEDULE_RESULT));
+    if (
+      !validScheduleRoute(supplied.route) ||
+      !validScheduleSearch(supplied.search, supplied.route.evidence)
+    )
+      throw Error("Invalid search fixture");
+    const found = required(admitSearch(supplied, model.context, supplied.search, supplied.route));
     await wrapper
-      .get(`[id="reserve-${encodeURIComponent(found.opportunities[0].id)}"]`)
+      .get(`[id="reserve-${encodeURIComponent(required(found.opportunities[0]).id)}"]`)
       .trigger("click");
   }
   if (action === "cancel") {
     await wrapper
-      .get(`[id="cancel-review-${encodeURIComponent(model.reservations.entries[0].id)}"]`)
+      .get(`[id="cancel-review-${encodeURIComponent(required(model.reservations.entries[0]).id)}"]`)
       .trigger("click");
     await wrapper.get("#contact-cancel-confirm").trigger("click");
   }
   await flushPromises();
   expect(execute.mock.calls.at(-1)?.[0]).toBe(action);
-  process.stdout.write(`SCHEDULE_PAYLOAD=${JSON.stringify(execute.mock.calls.at(-1)![1])}\n`);
+  process.stdout.write(
+    `SCHEDULE_PAYLOAD=${JSON.stringify(required(execute.mock.calls.at(-1))[1])}\n`,
+  );
   wrapper.unmount();
 });
 test("policy-derived read-only access hides cancellation and disables search", () => {
@@ -209,10 +244,34 @@ test("policy-derived read-only access hides cancellation and disables search", (
   const wrapper = mount(OpsContactSchedule, {
     props: {
       schedule: model,
-      port: { context: model.context, execute: vi.fn(), refresh: vi.fn() },
+      port: {
+        protocol: "remote-query" as const,
+        context: model.context,
+        execute: vi.fn(),
+        refresh: vi.fn(),
+      },
     },
   });
   expect(wrapper.find("#cancel-review-reservation-one").exists()).toBe(false);
   expect(wrapper.get("#contact-search-submit").element.closest("fieldset")?.disabled).toBe(true);
   wrapper.unmount();
+});
+
+test("admission checks the serialized schedule and search values it returns", () => {
+  const model = scheduleFixture();
+  expect(
+    admitContactSchedule({ ...model, toJSON: () => ({ ...model, contract_version: 2 }) }),
+  ).toBeNull();
+  const result = searchFixture(model);
+  expect(
+    admitSearch(
+      { ...result, toJSON: () => ({ ...result, opportunities: [{ token: 42 }] }) },
+      model.context,
+      result.search,
+      result.route,
+    ),
+  ).toBeNull();
+  const admitted = admitContactSchedule(model);
+  expect(admitted).toEqual(model);
+  expect(admitted).not.toBe(model);
 });

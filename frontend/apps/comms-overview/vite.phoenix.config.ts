@@ -1,3 +1,8 @@
+import {
+  readPublication,
+  publicationOutputDirectory,
+  publicationBase,
+} from "../../tools/publication-metadata.ts";
 import { federation } from "@module-federation/vite";
 import vue from "@vitejs/plugin-vue";
 import { resolve } from "node:path";
@@ -17,10 +22,8 @@ const publicationFederationConfig = {
   },
   publicPath: "auto",
 };
-const publicationRoot = resolve(
-  __dirname,
-  "../../../apps/cadence_web/priv/static/assets/application-host/comms",
-);
+const publication = readPublication(import.meta.dirname);
+const publicationRoot = publicationOutputDirectory(publication);
 
 function publicationOutputPlugin() {
   return {
@@ -38,7 +41,7 @@ export default defineConfig({
   define: {
     "process.env.NODE_ENV": JSON.stringify("production"),
   },
-  base: "/assets/application-host/comms/",
+  base: publicationBase(publication),
   build: {
     target: "chrome89",
     outDir: publicationRoot,
@@ -46,9 +49,10 @@ export default defineConfig({
     manifest: false,
     rollupOptions: { input: federatedEntry },
   },
-  plugins: lazyPlugins(() => [
-    vue(),
-    federation(publicationFederationConfig),
-    publicationOutputPlugin(),
-  ]),
+  plugins:
+    lazyPlugins(() => [
+      vue(),
+      federation(publicationFederationConfig),
+      publicationOutputPlugin(),
+    ]) ?? [],
 });

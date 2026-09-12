@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import RoutingDirectory from "./RoutingDirectory.vue";
@@ -11,7 +12,7 @@ test("directory consumes numeric counts, preserves query pagination and exposes 
   try {
     expect(wrapper.get("#comms-routing-directory-count").text()).toBe("2 configured");
     const next = new URL(
-      wrapper.get("#comms-routing-directory-next").attributes("href")!,
+      required(wrapper.get("#comms-routing-directory-next").attributes("href")),
       "https://cadence.invalid",
     );
     expect(Object.fromEntries(next.searchParams)).toEqual({
@@ -54,7 +55,7 @@ test("malformed or wrong-scope collections and details fail closed", () => {
   const duplicate = directoryPayload();
   duplicate.data.page_size = 2;
   duplicate.data.page_count = 1;
-  duplicate.data.items.push(duplicate.data.items[0]);
+  duplicate.data.items.push(required(duplicate.data.items[0]));
   expect(() => readDirectory(duplicate, context)).toThrow();
   expect(() => readDirectory(directoryPayload(), { missionId: "other-mission" })).toThrow();
   const unsafe = detailPayload();

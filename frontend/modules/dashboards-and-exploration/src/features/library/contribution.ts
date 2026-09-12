@@ -8,6 +8,7 @@ export const libraryContribution = {
   slot: "ops.page",
   version: 1,
   title: "Dashboard library",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   component: DashboardLibrary,
   actions: libraryActions,
   read(value, context) {

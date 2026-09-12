@@ -1,3 +1,4 @@
+import { containing } from "../../../../../test-support/matchers";
 import { mount, flushPromises } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import ProviderCreation from "./ProviderCreation.vue";
@@ -34,7 +35,7 @@ test("creation updates the selected account summary, preserves typing and sends 
     await wrapper.get("#mission-provider-form").trigger("submit");
     expect(port.execute).toHaveBeenCalledTimes(1);
     expect(port.execute).toHaveBeenCalledWith("create_provider", {
-      provider: expect.objectContaining({
+      provider: containing({
         display_name: "Flight provider",
         provider_account_grant_id: "grant-2",
         provider_account_id: "account-2",

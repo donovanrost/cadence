@@ -1,3 +1,4 @@
+import { containing } from "../../../test-support/matchers";
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
@@ -406,7 +407,7 @@ describe("Comms Overview federated adapter", () => {
     expect(legacyModuleManifest).toBe(legacyManifest);
     expect(LegacyApplication).toBe(CommsOverviewApplication);
     expect(legacyManifest.surfaces).toEqual([
-      expect.objectContaining({
+      containing({
         surfaceId: "overview",
         purpose: "overview",
         scope: "mission",

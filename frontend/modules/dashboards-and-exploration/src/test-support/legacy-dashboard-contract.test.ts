@@ -1,3 +1,4 @@
+import { required } from "../../../../test-support/required";
 import { afterEach, expect, test } from "vite-plus/test";
 import { mount } from "@vue/test-utils";
 import type { Component } from "vue";
@@ -6,7 +7,7 @@ import Playlists from "../features/playlists/PlaylistsLegacyRedirect.vue";
 import Presentation from "../features/playlists/PlaylistPresentationLegacyRedirect.vue";
 import Activity from "../features/activity/ActivityLegacyRedirect.vue";
 
-let app: ReturnType<typeof mount>;
+let app: Pick<ReturnType<typeof mount>, "find" | "get" | "setProps" | "unmount">;
 afterEach(() => app?.unmount());
 
 const cases: [Component, Record<string, unknown>, string][] = [
@@ -32,7 +33,7 @@ test.each(cases)(
   (component, supplied, path) => {
     const props = { mission_id: "mission/a?+🌍", query: {}, ...supplied };
     app = mount(component, { props, attrs: { onclick: "untrusted", "data-raw": "raw" } });
-    const url = new URL(app.get("a").attributes("href")!, "https://cadence.test");
+    const url = new URL(required(app.get("a").attributes("href")), "https://cadence.test");
     expect(url.pathname).toBe(
       `/missions/${encodeURIComponent(props.mission_id)}/ops/dashboards/${path}`,
     );

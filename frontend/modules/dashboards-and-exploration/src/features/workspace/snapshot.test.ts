@@ -1,3 +1,5 @@
+import { fixtureRecordAt } from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { expect, test } from "vite-plus/test";
 import { readWorkspaceSnapshot } from "./validation";
 import type { WorkspaceSnapshot } from "./contracts";
@@ -72,13 +74,13 @@ test("admits versioned, resource-bound published data and all seven widget kinds
     "constellation_health",
   ] as const) {
     const model = fixture();
-    model.placements[0].widget!.type = type;
+    required(required(model.placements[0]).widget).type = type;
     expect(readWorkspaceSnapshot(model, context)).toBe(model);
   }
 });
 test("keeps unavailable placements explicit and admits temporal annotations", () => {
   const model = fixture();
-  model.placements[0].annotations.push({
+  required(model.placements[0]).annotations.push({
     id: "contact",
     title: "Contact",
     severity: "info",
@@ -101,14 +103,13 @@ test("keeps unavailable placements explicit and admits temporal annotations", ()
   expect(readWorkspaceSnapshot(model, context).placements).toHaveLength(2);
 });
 test("rejects context mismatch, draft authority, unknown versions and unknown metadata", () => {
-  for (const override of [
-    { organizationId: "foreign" },
-    { missionId: "foreign" },
-    { resourceId: "foreign" },
-    { resourceId: undefined },
-  ]) {
-    expect(() => readWorkspaceSnapshot(fixture(), { ...context, ...override })).toThrow();
-  }
+  for (const scope of [
+    { ...context, organizationId: "foreign" },
+    { ...context, missionId: "foreign" },
+    { ...context, resourceId: "foreign" },
+    { organizationId: context.organizationId, missionId: context.missionId },
+  ])
+    expect(() => readWorkspaceSnapshot(fixture(), scope)).toThrow();
   for (const override of [
     { version: 2 },
     { document_version: 0 },
@@ -124,34 +125,36 @@ test("rejects context mismatch, draft authority, unknown versions and unknown me
 });
 test("rejects duplicate identities, orphan sections, unaligned or mistyped frame data and unsafe numeric values", () => {
   const mutations: Array<(m: WorkspaceSnapshot) => void> = [
-    (m) => m.placements.push(m.placements[0]),
-    (m) => m.sections.push(m.sections[0]),
+    (m) => m.placements.push(required(m.placements[0])),
+    (m) => m.sections.push(required(m.sections[0])),
     (m) => {
-      m.placements[0].section_id = "absent";
+      required(m.placements[0]).section_id = "absent";
     },
     (m) => {
-      m.placements[0].frames[0].fields[1].values.push(29);
+      required(required(required(m.placements[0]).frames[0]).fields[1]).values.push(29);
     },
     (m) => {
-      m.placements[0].frames[0].fields[1].values = ["not numeric"];
+      required(required(required(m.placements[0]).frames[0]).fields[1]).values = ["not numeric"];
     },
     (m) => {
-      m.placements[0].frames[0].fields[1].values = [Infinity];
+      required(required(required(m.placements[0]).frames[0]).fields[1]).values = [Infinity];
     },
     (m) => {
-      m.placements[0].frames[0].fields[1].values = [Number.MAX_SAFE_INTEGER + 1];
+      required(required(required(m.placements[0]).frames[0]).fields[1]).values = [
+        Number.MAX_SAFE_INTEGER + 1,
+      ];
     },
     (m) => {
-      m.placements[0].frames[0].fields[1].name = "time";
+      required(required(required(m.placements[0]).frames[0]).fields[1]).name = "time";
     },
     (m) => {
-      m.placements[0].layout.w = 0;
+      required(m.placements[0]).layout.w = 0;
     },
     (m) => {
-      m.placements[0].status = "unavailable";
+      required(m.placements[0]).status = "unavailable";
     },
     (m) => {
-      (m.placements[0].frames[0] as any).metadata = { credentials: "secret" };
+      fixtureRecordAt(m, "placements", 0, "frames", 0).metadata = { credentials: "secret" };
     },
   ];
   for (const mutate of mutations) {

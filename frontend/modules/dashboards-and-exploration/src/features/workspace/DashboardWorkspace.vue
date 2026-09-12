@@ -67,7 +67,7 @@ function timestampMicros(value: string): bigint | null {
   const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:\d{2})$/.exec(
     value,
   );
-  if (!match) return null;
+  if (!match || !match[1] || !match[3]) return null;
   const calendar = Date.parse(`${match[1]}Z`),
     instant = Date.parse(match[1] + match[3]);
   if (
@@ -105,7 +105,7 @@ function applyContext() {
   }
   props.port.navigate(`${base.value}?${query}`);
 }
-async function refresh() {
+async function refreshPage() {
   if (refreshing.value || disposed) return;
   refreshing.value = true;
   error.value = "";
@@ -167,7 +167,7 @@ async function refresh() {
           type="button"
           class="btn btn-sm btn-outline"
           :disabled="refreshing"
-          @click="refresh"
+          @click="refreshPage"
         >
           {{ refreshing ? "Refreshing…" : "Refresh snapshot" }}
         </button>

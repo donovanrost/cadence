@@ -2,19 +2,21 @@
 import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
 import type { ReservationPort } from "./OpsContactDetail.contracts";
 import type { ContactPage } from "./contact-workflow";
-import type { ReservationDetail } from "./OpsContactDetail.contracts";
 import OpsContactDetail from "./OpsContactDetail.vue";
 defineOptions({ inheritAttrs: false });
-const props = defineProps<{ page: ContactPage; port: OpsPagePort; readPort: OpsPageReadPort }>();
+const props = defineProps<{
+  page: Extract<ContactPage, { kind: "reservation" }>;
+  port: OpsPagePort;
+  readPort: OpsPageReadPort;
+}>();
 const contactPort: ReservationPort = {
   context: {
     ...props.page.model.context,
-    reservation_id: (props.page.model as ReservationDetail).reservation.id,
+    reservation_id: props.page.model.reservation.id,
   },
-  captured: {
-    actorId: props.page.actor_id,
-    guardNavigation: (guard) => props.port.guardNavigation?.(guard) ?? (() => {}),
-  },
+  protocol: "page-snapshot",
+  actorId: props.page.actor_id,
+  guardNavigation: (guard) => props.port.guardNavigation?.(guard) ?? (() => {}),
   execute: (action, input) => props.port.execute(action, input),
   refresh: () => props.readPort.read(),
 };

@@ -1,8 +1,9 @@
-<script setup>
+<script setup lang="ts">
 import { onBeforeUnmount, onMounted, onUpdated, ref, watch } from "vue";
-import { GridStack } from "gridstack";
+import { GridStack, type GridItemHTMLElement } from "gridstack";
 import "../../workspace.css";
 import DashboardWidget from "./DashboardWidget.vue";
+import type { GridPresentation, GridOptions, LayoutChanged } from "./canvas-presentation";
 
 const LAYOUT_PUSH_DEBOUNCE_MS = 400;
 
@@ -25,8 +26,17 @@ const LAYOUT_PUSH_DEBOUNCE_MS = 400;
 //   patch that removes the placeholder from the DOM would make the node look
 //   removed — dropping it from the engine and silently disabling all future
 //   layout pushes (flushLayout reads engine.nodes).
-const DashboardGridController = {
-  mounted() {
+class DashboardGridController {
+  private grid: GridStack;
+  private pushTimer: ReturnType<typeof setTimeout> | undefined;
+  private sectionResizeFrame: number | undefined;
+  private disposed = false;
+  constructor(
+    private readonly el: HTMLElement,
+    private readonly editModeValue: () => boolean,
+    private readonly gridOptions: () => GridOptions,
+    private readonly emit: (payload: LayoutChanged) => void,
+  ) {
     this.grid = GridStack.init(
       {
         column: this.gridOptions().columns ?? 12,
@@ -51,37 +61,36 @@ const DashboardGridController = {
       },
       this.el,
     );
-    this.pushTimer = null;
-    this.sectionResizeFrame = null;
+    this.pushTimer = undefined;
+    this.sectionResizeFrame = undefined;
 
     this.grid.on("change", () => this.scheduleLayoutPush());
     this.grid.on("dragstop resizestop", () => this.updated());
     this.syncEditMode();
-  },
+  }
 
   updated() {
-    if (this.gestureActive()) return;
+    if (this.disposed || this.gestureActive()) return;
 
     this.reconcileItems();
     this.syncEditMode();
-  },
+  }
 
   destroyed() {
+    if (this.disposed) return;
+    this.disposed = true;
     clearTimeout(this.pushTimer);
     this.cancelSectionResize();
-    if (this.grid) {
-      this.grid.destroy(false);
-      this.grid = null;
-    }
-  },
+    this.grid.destroy(false);
+  }
 
   editMode() {
     return this.editModeValue();
-  },
+  }
 
   gestureActive() {
     return Boolean(this.el.querySelector(".ui-draggable-dragging, .ui-resizable-resizing"));
-  },
+  }
 
   syncEditMode() {
     const editing = this.editMode();
@@ -101,10 +110,12 @@ const DashboardGridController = {
     }
 
     this.el.classList.toggle("grid-stack-static", !editing);
-  },
+  }
 
   reconcileItems() {
-    const items = Array.from(this.el.querySelectorAll(":scope > .grid-stack-item"));
+    const items = Array.from(
+      this.el.querySelectorAll<GridItemHTMLElement>(":scope > .grid-stack-item"),
+    );
 
     items.forEach((el) => {
       if (!el.gridstackNode) {
@@ -115,80 +126,81 @@ const DashboardGridController = {
       }
     });
 
-    this.grid.engine.nodes
-      .filter(
-        (node) =>
-          node.el &&
-          !node.el.isConnected &&
-          // node.el is the placeholder mid-gesture; never treat it as a removal
-          !node.el.classList.contains("grid-stack-placeholder"),
-      )
-      .forEach((node) => this.grid.removeWidget(node.el, false, false));
-  },
+    // oxlint-disable-next-line unicorn/no-useless-spread -- removeWidget mutates engine.nodes during reconciliation.
+    for (const node of [...this.grid.engine.nodes]) {
+      const element = node.el;
+      // GridStack uses a temporary placeholder during gestures; retain it until the gesture ends.
+      if (element && !element.isConnected && !element.classList.contains("grid-stack-placeholder"))
+        this.grid.removeWidget(element, false, false);
+    }
+  }
 
   scheduleLayoutPush() {
     clearTimeout(this.pushTimer);
     this.pushTimer = setTimeout(() => this.flushLayout(), LAYOUT_PUSH_DEBOUNCE_MS);
-  },
+  }
 
   cancelSectionResize() {
-    if (this.sectionResizeFrame !== null) {
+    if (this.sectionResizeFrame !== undefined) {
       cancelAnimationFrame(this.sectionResizeFrame);
-      this.sectionResizeFrame = null;
+      this.sectionResizeFrame = undefined;
     }
-  },
+  }
 
   scheduleSectionResize() {
     this.cancelSectionResize();
 
     this.sectionResizeFrame = requestAnimationFrame(() => {
-      this.sectionResizeFrame = null;
-      this.grid.prevWidth = undefined;
+      this.sectionResizeFrame = undefined;
+      if (this.disposed) return;
+      // GridStack 10 caches the previous width without exposing a force-resize API.
+      // Disclosure changes need one fresh measurement even at the same width.
+      Reflect.deleteProperty(this.grid, "prevWidth");
       this.grid.onResize();
     });
-  },
+  }
 
   flushLayout() {
     if (this.pushTimer) {
       clearTimeout(this.pushTimer);
-      this.pushTimer = null;
+      this.pushTimer = undefined;
     }
-    if (!this.editMode()) return;
+    if (this.disposed || !this.editMode()) return;
 
-    const layouts = this.grid.engine.nodes
-      .filter((node) => node.el && node.el.isConnected)
-      .map((node) => ({
-        widget_id: node.el.getAttribute("gs-id"),
-        x: node.x,
-        y: node.y,
-        w: node.w,
-        h: node.h,
-      }));
+    const layouts: LayoutChanged["layouts"] = [];
+    for (const node of this.grid.engine.nodes) {
+      const element = node.el;
+      if (element?.isConnected)
+        layouts.push({
+          widget_id: element.getAttribute("gs-id"),
+          x: node.x,
+          y: node.y,
+          w: node.w,
+          h: node.h,
+        });
+    }
 
     if (layouts.length > 0) {
-      this.emit("layout_changed", { layouts });
+      this.emit({ layouts });
     }
-  },
-};
+  }
+}
 
-const props = defineProps({
-  presentation: { type: Object, required: true },
-  sectionOpen: { type: Boolean, default: true },
-});
-
-const emit = defineEmits(["layout_changed"]);
-const gridElement = ref(null);
-let controller = null;
-
+const props = withDefaults(
+  defineProps<{ presentation: GridPresentation; sectionOpen?: boolean }>(),
+  { sectionOpen: true },
+);
+const emit = defineEmits<{ layout_changed: [payload: LayoutChanged] }>();
+const gridElement = ref<HTMLElement | null>(null);
+let controller: DashboardGridController | null = null;
 onMounted(() => {
   if (!gridElement.value) return;
-
-  controller = Object.create(DashboardGridController);
-  controller.el = gridElement.value;
-  controller.editModeValue = () => props.presentation.controller.props.edit_mode;
-  controller.gridOptions = () => props.presentation.controller.props;
-  controller.emit = emit;
-  controller.mounted();
+  controller = new DashboardGridController(
+    gridElement.value,
+    () => props.presentation.controller.props.edit_mode,
+    () => props.presentation.controller.props,
+    (payload) => emit("layout_changed", payload),
+  );
 });
 
 onUpdated(() => controller?.updated());

@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 import { expect, test } from "vite-plus/test";
 import routes from "./routes.json";
 import { catalogPages } from "./catalog/pages";
@@ -9,9 +10,9 @@ import { opsPages } from "./ops-workspace/features/module-pages/contributions";
 import { organizationModulePages } from "./administration/features/module-pages/contributions";
 import { resolveHostComponent } from "./shell/registry";
 test("requirement review captures exact version, run and page queries", () => {
-  const route = routes.find(
-    (r) => r.path === "/missions/:mission_id/ops/requirements/:contact_requirement_id",
-  )!;
+  const route = required(
+    routes.find((r) => r.path === "/missions/:mission_id/ops/requirements/:contact_requirement_id"),
+  );
   expect(route).toMatchObject({
     kind: "ops_module",
     contribution: "planning.requirement-review",
@@ -29,7 +30,9 @@ test("requirement review captures exact version, run and page queries", () => {
   ]);
 });
 test("plan review retains the exact version and independently paged evidence", () => {
-  const route = routes.find((r) => r.path === "/missions/:mission_id/ops/plans/:contact_plan_id")!;
+  const route = required(
+    routes.find((r) => r.path === "/missions/:mission_id/ops/plans/:contact_plan_id"),
+  );
   expect(route).toMatchObject({
     kind: "ops_module",
     contribution: "planning.plan-review",
@@ -48,7 +51,7 @@ test("plan review retains the exact version and independently paged evidence", (
   ]);
 });
 test("requirements retain bounded page and lifecycle query parameters", () => {
-  const route = routes.find((r) => r.path === "/missions/:mission_id/ops/requirements")!;
+  const route = required(routes.find((r) => r.path === "/missions/:mission_id/ops/requirements"));
   expect(route).toMatchObject({
     kind: "ops_module",
     contribution: "planning.requirement-directory",
@@ -57,17 +60,17 @@ test("requirements retain bounded page and lifecycle query parameters", () => {
   expect(route.queryKeys).toEqual(["page", "state"]);
 });
 test("commands are a compiled read-only mission contribution with explicit navigation", () => {
-  const route = routes.find((r) => r.path === "/missions/:mission_id/ops/commands")!;
+  const route = required(routes.find((r) => r.path === "/missions/:mission_id/ops/commands"));
   expect(route).toMatchObject({ kind: "ops_module", contribution: "commanding.monitor" });
   expect(route).not.toHaveProperty("application");
   expect(route).not.toHaveProperty("surface");
   expect(route.resourceParam).toBeUndefined();
   expect(route.queryKeys).toEqual(["status", "target", "query", "focus_command_id", "page"]);
-  expect(opsPages["commanding.monitor"].navigation).toBe(true);
-  expect(opsPages["commanding.monitor"].actions).toBeUndefined();
+  expect(required(opsPages["commanding.monitor"]).navigation).toBe(true);
+  expect(required(opsPages["commanding.monitor"]).actions).toBeUndefined();
 });
 test("Explore is a compiled mission query page with navigation but no action authority", () => {
-  const route = routes.find((r) => r.path === "/missions/:mission_id/ops/explore")!;
+  const route = required(routes.find((r) => r.path === "/missions/:mission_id/ops/explore"));
   expect(route).toMatchObject({ kind: "ops_module", contribution: "dashboards.exploration" });
   expect(route).not.toHaveProperty("application");
   expect(route).not.toHaveProperty("surface");
@@ -98,20 +101,20 @@ test("Explore is a compiled mission query page with navigation but no action aut
     "data_view",
   ]);
   expect(route.queryAliases).toEqual({});
-  expect(opsPages["dashboards.exploration"].navigation).toBe(true);
-  expect(opsPages["dashboards.exploration"].actions).toBeUndefined();
+  expect(required(opsPages["dashboards.exploration"]).navigation).toBe(true);
+  expect(required(opsPages["dashboards.exploration"]).actions).toBeUndefined();
 });
 test("diagnostics is a compiled mission resource contribution with an explicit inspect action", () => {
-  const route = routes.find(
-    (r) => r.path === "/missions/:mission_id/ops/dashboards/:dashboard_id/diagnostics",
-  )!;
+  const route = required(
+    routes.find((r) => r.path === "/missions/:mission_id/ops/dashboards/:dashboard_id/diagnostics"),
+  );
   expect(route).toMatchObject({
     kind: "ops_module",
     contribution: "dashboards.execution-diagnostics",
     resourceParam: "dashboard_id",
   });
   expect(route).not.toHaveProperty("application");
-  expect(opsPages["dashboards.execution-diagnostics"].actions).toEqual(["inspect"]);
+  expect(required(opsPages["dashboards.execution-diagnostics"]).actions).toEqual(["inspect"]);
   expect(route.queryKeys).toEqual([
     "collection",
     "row",
@@ -129,7 +132,7 @@ test("shared viewers are compiled, read-only and derive identities only from the
   for (const [segment, key, contribution] of [
     ["dashboard-shares", "share_id", "dashboards.share"],
     ["dashboard-snapshots", "snapshot_id", "dashboards.snapshot"],
-  ]) {
+  ] as const) {
     const route = routes.find(
       (r) => r.path === "/missions/:mission_id/ops/" + segment + "/:" + key,
     );
@@ -141,14 +144,14 @@ test("shared viewers are compiled, read-only and derive identities only from the
     });
     expect(route).not.toHaveProperty("application");
     expect(route).not.toHaveProperty("surface");
-    expect(opsPages[contribution].actions).toEqual([]);
+    expect(required(opsPages[contribution]).actions).toEqual([]);
   }
 });
 
 test("settings is a resource-bound compiled contribution with finite actions and cursors", () => {
-  const route = routes.find(
-    (r) => r.path === "/missions/:mission_id/ops/dashboards/:dashboard_id/settings",
-  )!;
+  const route = required(
+    routes.find((r) => r.path === "/missions/:mission_id/ops/dashboards/:dashboard_id/settings"),
+  );
   expect(route).toMatchObject({
     kind: "ops_module",
     contribution: "dashboards.settings",
@@ -157,7 +160,7 @@ test("settings is a resource-bound compiled contribution with finite actions and
   });
   expect(route).not.toHaveProperty("application");
   expect(route).not.toHaveProperty("surface");
-  expect(opsPages["dashboards.settings"].actions).toEqual([
+  expect(required(opsPages["dashboards.settings"]).actions).toEqual([
     "save_settings",
     "create_share",
     "revoke_share",
@@ -168,12 +171,14 @@ test("settings is a resource-bound compiled contribution with finite actions and
   ]);
 });
 test("playlist composition binds its subject and bounded playback URL state", () => {
-  const directory = routes.find(
-    (r) => r.path === "/missions/:mission_id/ops/dashboards/playlists",
-  )!;
-  const present = routes.find(
-    (r) => r.path === "/missions/:mission_id/ops/dashboards/playlists/:playlist_id/present",
-  )!;
+  const directory = required(
+    routes.find((r) => r.path === "/missions/:mission_id/ops/dashboards/playlists"),
+  );
+  const present = required(
+    routes.find(
+      (r) => r.path === "/missions/:mission_id/ops/dashboards/playlists/:playlist_id/present",
+    ),
+  );
   expect(directory).toMatchObject({
     kind: "ops_module",
     contribution: "dashboards.playlists",
@@ -187,17 +192,17 @@ test("playlist composition binds its subject and bounded playback URL state", ()
   });
   expect(directory).not.toHaveProperty("application");
   expect(present).not.toHaveProperty("application");
-  expect(opsPages["dashboards.playlist-present"].actions).toEqual([]);
-  expect(opsPages["dashboards.playlists"].actions).toEqual([
+  expect(required(opsPages["dashboards.playlist-present"]).actions).toEqual([]);
+  expect(required(opsPages["dashboards.playlists"]).actions).toEqual([
     "create_playlist",
     "reload_playlists",
     "search_dashboards",
   ]);
 });
 test("dashboard library is a compiled mission feature with bounded independent query state", () => {
-  const route = routes.find(
-    (route) => route.path === "/missions/:mission_id/ops/dashboards/library",
-  )!;
+  const route = required(
+    routes.find((route) => route.path === "/missions/:mission_id/ops/dashboards/library"),
+  );
   expect(route).toMatchObject({
     kind: "ops_module",
     contribution: "dashboards.library",
@@ -215,7 +220,7 @@ test("dashboard library is a compiled mission feature with bounded independent q
   });
   expect(route).not.toHaveProperty("application");
   expect(route).not.toHaveProperty("surface");
-  expect(opsPages["dashboards.library"].actions).toEqual([
+  expect(required(opsPages["dashboards.library"]).actions).toEqual([
     "create_item",
     "add_version",
     "add_to_draft",
@@ -223,9 +228,11 @@ test("dashboard library is a compiled mission feature with bounded independent q
   ]);
 });
 test("dashboard history is a resource-bound compiled feature with independent bounded cursors", () => {
-  const route = routes.find(
-    (route) => route.path === "/missions/:mission_id/ops/dashboards/:dashboard_id/activity",
-  )!;
+  const route = required(
+    routes.find(
+      (route) => route.path === "/missions/:mission_id/ops/dashboards/:dashboard_id/activity",
+    ),
+  );
   expect(route).toMatchObject({
     kind: "ops_module",
     contribution: "dashboards.activity",
@@ -234,16 +241,18 @@ test("dashboard history is a resource-bound compiled feature with independent bo
   });
   expect(route).not.toHaveProperty("application");
   expect(route).not.toHaveProperty("surface");
-  expect(opsPages["dashboards.activity"].actions).toEqual([
+  expect(required(opsPages["dashboards.activity"]).actions).toEqual([
     "publish_version",
     "restore_version",
     "reload_activity",
   ]);
 });
 test("dashboard authoring is a resource-bound compiled feature without an installation lookup", () => {
-  const route = routes.find(
-    (route) => route.path === "/missions/:mission_id/ops/dashboards/:dashboard_id/edit",
-  )!;
+  const route = required(
+    routes.find(
+      (route) => route.path === "/missions/:mission_id/ops/dashboards/:dashboard_id/edit",
+    ),
+  );
   expect(route).toMatchObject({
     kind: "ops_module",
     contribution: "dashboards.editor",
@@ -253,9 +262,9 @@ test("dashboard authoring is a resource-bound compiled feature without an instal
   expect(route).not.toHaveProperty("surface");
 });
 test("the dashboard viewer is a resource-bound compiled Ops contribution, not an installed application", () => {
-  const route = routes.find(
-    (route) => route.path === "/missions/:mission_id/ops/dashboards/:dashboard_id",
-  )!;
+  const route = required(
+    routes.find((route) => route.path === "/missions/:mission_id/ops/dashboards/:dashboard_id"),
+  );
   expect(route).toMatchObject({
     kind: "ops_module",
     contribution: "dashboards.workspace",
@@ -268,7 +277,9 @@ test("Communications collections forward the bounded producer query keys", () =>
   const collections = routes.filter(
     (route) =>
       route.kind === "mission_module" &&
-      ["comms.transports", "comms.routing", "comms.ground-stations"].includes(route.contribution!),
+      ["comms.transports", "comms.routing", "comms.ground-stations"].includes(
+        required(route.contribution),
+      ),
   );
   expect(collections).toHaveLength(3);
   for (const route of collections)
@@ -278,28 +289,28 @@ test("each core host route resolves to its registered owner", () => {
   expect(new Set(routes.map((route) => route.path)).size).toBe(routes.length);
   for (const route of routes) {
     if (route.kind === "ops_module") {
-      expect(opsPages[route.contribution!], route.path).toBeDefined();
+      expect(opsPages[required(route.contribution)], route.path).toBeDefined();
       expect(route.scope).toBe("mission");
       expect(route).not.toHaveProperty("application");
       expect(route).not.toHaveProperty("surface");
       continue;
     }
     if (route.kind === "mission_module") {
-      expect(missionModulePages[route.contribution!], route.path).toBeDefined();
+      expect(missionModulePages[required(route.contribution)], route.path).toBeDefined();
       expect(route.scope).toBe("mission");
       expect(route).not.toHaveProperty("application");
       expect(route).not.toHaveProperty("surface");
       continue;
     }
     if (route.kind === "organization_module") {
-      expect(organizationModulePages[route.contribution!], route.path).toBeDefined();
+      expect(organizationModulePages[required(route.contribution)], route.path).toBeDefined();
       expect(route.scope).toBe("organization");
       expect(route).not.toHaveProperty("application");
       expect(route).not.toHaveProperty("surface");
       continue;
     }
     if (route.kind === "spacecraft_module") {
-      expect(spacecraftModulePages[route.contribution!], route.path).toBeDefined();
+      expect(spacecraftModulePages[required(route.contribution)], route.path).toBeDefined();
       expect(route.scope).toBe("spacecraft");
       expect(route).not.toHaveProperty("application");
       expect(route).not.toHaveProperty("surface");
@@ -312,19 +323,19 @@ test("each core host route resolves to its registered owner", () => {
       continue;
     }
     if (route.kind === "spacecraft") {
-      expect(spacecraftPages[route.spacecraftPage!], route.path).toBeDefined();
+      expect(spacecraftPages[required(route.spacecraftPage)], route.path).toBeDefined();
       expect(route).not.toHaveProperty("application");
       expect(route).not.toHaveProperty("surface");
       continue;
     }
     if (route.kind === "mission") {
-      expect(missionPages[route.missionPage!], route.path).toBeDefined();
+      expect(missionPages[required(route.missionPage)], route.path).toBeDefined();
       expect(route).not.toHaveProperty("application");
       expect(route).not.toHaveProperty("surface");
       continue;
     }
     if (route.kind === "catalog") {
-      expect(catalogPages[route.catalogPage!], route.path).toBeDefined();
+      expect(catalogPages[required(route.catalogPage)], route.path).toBeDefined();
       expect(route.scope).toBe("mission");
       expect(route).not.toHaveProperty("application");
       expect(route).not.toHaveProperty("surface");
@@ -402,7 +413,7 @@ test("each core host route resolves to its registered owner", () => {
       continue;
     }
     if (route.kind === "application_management") {
-      expect(resolveHostComponent(route.component!)).toBeDefined();
+      expect(resolveHostComponent(required(route.component))).toBeDefined();
       expect(route.queryKeys).toEqual([]);
       expect(["mission", "spacecraft"]).toContain(route.scope);
       continue;
@@ -412,7 +423,9 @@ test("each core host route resolves to its registered owner", () => {
 });
 
 test("reservation review forwards selected evidence and independent history cursors", () => {
-  const route = routes.find((route) => route.contribution === "planning.reservation-review")!;
+  const route = required(
+    routes.find((route) => route.contribution === "planning.reservation-review"),
+  );
   expect(route.path).toBe("/missions/:mission_id/ops/contacts/:provider_reservation_id");
   expect(route.queryKeys).toEqual([
     "provider_reservation_id",
@@ -423,7 +436,7 @@ test("reservation review forwards selected evidence and independent history curs
 });
 
 test("contact record routing forwards the reviewed revision and each evidence page", () => {
-  const route = routes.find((route) => route.contribution === "planning.contact-record")!;
+  const route = required(routes.find((route) => route.contribution === "planning.contact-record"));
   expect(route.path).toBe("/missions/:mission_id/ops/contacts/records/:contact_id");
   expect(route.queryKeys).toEqual([
     "contact_id",
@@ -437,7 +450,7 @@ test("contact record routing forwards the reviewed revision and each evidence pa
 });
 
 test("contact scheduling captures spacecraft selection and independent ledger pages", () => {
-  const route = routes.find((r) => r.contribution === "planning.contact-schedule")!;
+  const route = required(routes.find((r) => r.contribution === "planning.contact-schedule"));
   expect(route.scope).toBe("mission");
   expect(route.path).toBe("/missions/:mission_id/ops/contacts");
   expect(route.queryKeys).toEqual([

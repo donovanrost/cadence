@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 import type { Meta, StoryObj } from "@storybook/vue3-vite";
 import { expect, waitFor } from "storybook/test";
 import ApplicationShell from "../../host/src/shell/ApplicationShell.vue";
@@ -64,9 +65,9 @@ export const Mission: Story = {
     await expect(nav.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
     await expect(getComputedStyle(group).backgroundColor).toBe("rgba(0, 0, 0, 0)");
     await expect(getComputedStyle(child).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
-    await expect(child.querySelector("span")!.getBoundingClientRect().left).toBeGreaterThan(
-      group.querySelector(".sidebar-label")!.getBoundingClientRect().left,
-    );
+    await expect(
+      required(child.querySelector("span")).getBoundingClientRect().left,
+    ).toBeGreaterThan(required(group.querySelector(".sidebar-label")).getBoundingClientRect().left);
     await expect(
       Math.abs(child.getBoundingClientRect().right - group.getBoundingClientRect().right),
     ).toBeLessThan(2);
@@ -88,7 +89,7 @@ export const Collapsed: Story = {
   name: "Production collapsed mission rail",
   render: renderShell(),
   play: async ({ canvas, canvasElement, userEvent }) => {
-    const rail = canvasElement.querySelector<HTMLElement>("[data-sidebar-collapsible]")!;
+    const rail = required(canvasElement.querySelector<HTMLElement>("[data-sidebar-collapsible]"));
     await userEvent.click(canvas.getByRole("button", { name: "Toggle sidebar" }));
     await userEvent.click(canvas.getByRole("button", { name: "Page content" }));
     await waitFor(() => expect(rail.getBoundingClientRect().width).toBe(56));
@@ -135,6 +136,6 @@ export const Operations: Story = {
   render: renderShell("ops"),
   play: async ({ canvasElement, canvas, userEvent }) => {
     await userEvent.click(canvas.getByRole("button", { name: "Toggle navigation" }));
-    await expectIcons(canvasElement.querySelector("#ops-nav-rail")!);
+    await expectIcons(required(canvasElement.querySelector("#ops-nav-rail")));
   },
 };

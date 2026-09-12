@@ -18,23 +18,27 @@ export function lockDirectoryFor(root = appRoot) {
 
 const lockDirectory = lockDirectoryFor();
 
+/** @param {number} milliseconds @returns {Promise<void>} */
 function sleep(milliseconds) {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds));
 }
 
+/** @param {string} lockPath */
 function mutationDirectoryFor(lockPath) {
   return `${lockPath}.mutation`;
 }
 
+/** @param {number} pid */
 export function processIsAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    return error?.code === "EPERM";
+    return errorCode(error) === "EPERM";
   }
 }
 
+/** @param {string} value */
 function parseOwner(value) {
   const [pidText, token] = value.trim().split(":", 2);
   const pid = Number(pidText);
@@ -42,12 +46,13 @@ function parseOwner(value) {
   return { pid, token };
 }
 
+/** @param {string} lockPath */
 async function lockState(lockPath, { statFn = stat, readFileFn = readFile } = {}) {
   let lockStat;
   try {
     lockStat = await statFn(lockPath);
   } catch (error) {
-    if (error?.code === "ENOENT") return null;
+    if (errorCode(error) === "ENOENT") return null;
     throw error;
   }
 
@@ -55,12 +60,13 @@ async function lockState(lockPath, { statFn = stat, readFileFn = readFile } = {}
   try {
     owner = parseOwner(await readFileFn(join(lockPath, "owner"), "utf8"));
   } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
+    if (errorCode(error) !== "ENOENT") throw error;
   }
 
   return { mtimeMs: lockStat.mtimeMs, owner };
 }
 
+/** @param {string} lockPath */
 async function acquireMutation(
   lockPath,
   {
@@ -90,7 +96,7 @@ async function acquireMutation(
       return () => releaseMutation(mutationPath, token, { rmFn, statFn, readFileFn });
     } catch (error) {
       if (created) await rmFn(mutationPath, { recursive: true, force: true });
-      if (error?.code !== "EEXIST") throw error;
+      if (errorCode(error) !== "EEXIST") throw error;
 
       const state = await lockState(mutationPath, { statFn, readFileFn });
       if (state?.owner?.pid && !processAlive(state.owner.pid)) {
@@ -111,6 +117,7 @@ async function acquireMutation(
   throw new Error(`timed out waiting for publication lock mutation gate: ${mutationPath}`);
 }
 
+/** @param {string} mutationPath @param {string} token */
 async function releaseMutation(
   mutationPath,
   token,
@@ -122,6 +129,7 @@ async function releaseMutation(
   return true;
 }
 
+/** @param {string} lockPath */
 export async function isStaleLock(
   lockPath,
   {
@@ -141,6 +149,7 @@ export async function isStaleLock(
   return now() - state.mtimeMs > staleAfter;
 }
 
+/** @param {string} lockPath */
 export async function claimStaleLock(
   lockPath,
   {
@@ -184,7 +193,7 @@ export async function claimStaleLock(
       await renameFn(lockPath, claimPath);
       moved = true;
     } catch (error) {
-      if (["ENOENT", "EEXIST", "ENOTEMPTY"].includes(error?.code)) return false;
+      if (["ENOENT", "EEXIST", "ENOTEMPTY"].some((code) => code === errorCode(error))) return false;
       throw error;
     }
 
@@ -222,6 +231,7 @@ export async function claimStaleLock(
   }
 }
 
+/** @param {string} lockPath @param {string} token */
 export async function releaseLock(
   lockPath,
   token,
@@ -258,7 +268,7 @@ export async function releaseLock(
       await renameFn(lockPath, releasePath);
       moved = true;
     } catch (error) {
-      if (error?.code === "ENOENT") return false;
+      if (errorCode(error) === "ENOENT") return false;
       throw error;
     }
 
@@ -349,7 +359,7 @@ export async function acquireLock(
       } finally {
         await releaseMutationLock();
       }
-      if (error?.code !== "EEXIST") throw error;
+      if (errorCode(error) !== "EEXIST") throw error;
       if (
         await claimStaleLock(lockPath, {
           staleAfter,
@@ -375,6 +385,7 @@ export async function acquireLock(
   throw new Error(`timed out waiting for federation publication build lock: ${lockPath}`);
 }
 
+/** @param {string[]} taskArgs @returns {Promise<number>} */
 function runMixTask(taskArgs) {
   return new Promise((resolveRun, rejectRun) => {
     const child = spawn(process.env.MIX || "mix", taskArgs, {
@@ -382,6 +393,7 @@ function runMixTask(taskArgs) {
       env: process.env,
       stdio: "inherit",
     });
+    /** @param {NodeJS.Signals} signal */
     const onSignal = (signal) => child.kill(signal);
     process.once("SIGINT", onSignal);
     process.once("SIGTERM", onSignal);
@@ -406,4 +418,11 @@ if (isMain) {
   } finally {
     await release();
   }
+}
+
+/** @param {unknown} error */
+function errorCode(error) {
+  return error instanceof Error && "code" in error && typeof error.code === "string"
+    ? error.code
+    : undefined;
 }

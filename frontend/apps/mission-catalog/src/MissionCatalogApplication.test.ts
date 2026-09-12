@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 // @vitest-environment happy-dom
 import "./env.d.ts";
 
@@ -24,7 +25,7 @@ function applicationFor(surfaceId: string): CatalogApplication {
     displayName: manifest.application.displayName,
     description: manifest.application.description,
     package: { packageId: manifest.package.packageId, version: manifest.package.version },
-    surface: manifest.surfaces.find((surface) => surface.surfaceId === surfaceId)!,
+    surface: required(manifest.surfaces.find((surface) => surface.surfaceId === surfaceId)),
     release: {
       federation: "module_federation",
       releaseId: "mission-catalog-v1",
@@ -81,7 +82,9 @@ describe("Mission and catalog federated application adapter", () => {
   });
 
   it("forwards a mounted application mutation using the declared bridge action", async () => {
-    const surface = manifest.surfaces.find((item) => item.surfaceId === "mission_applications")!;
+    const surface = required(
+      manifest.surfaces.find((item) => item.surfaceId === "mission_applications"),
+    );
     const execute = vi.fn<HostBridge["execute"]>().mockResolvedValue({
       receiptId: "receipt-1",
       completedAt: "2026-09-04T00:00:00Z",
@@ -128,7 +131,9 @@ describe("Mission and catalog federated application adapter", () => {
   });
 
   it("shows rejected actions without replacing the current surface", async () => {
-    const surface = manifest.surfaces.find((item) => item.surfaceId === "mission_applications")!;
+    const surface = required(
+      manifest.surfaces.find((item) => item.surfaceId === "mission_applications"),
+    );
     const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
     const execute = vi.fn<HostBridge["execute"]>().mockRejectedValue(new Error("action denied"));
     const wrapper = mount(MissionCatalogApplication, {
@@ -158,7 +163,9 @@ describe("Mission and catalog federated application adapter", () => {
   });
 
   it("keeps the newest overlapping action receipt and refresh authoritative state", async () => {
-    const surface = manifest.surfaces.find((item) => item.surfaceId === "mission_applications")!;
+    const surface = required(
+      manifest.surfaces.find((item) => item.surfaceId === "mission_applications"),
+    );
     const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
     const first = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
     const second = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
@@ -198,7 +205,9 @@ describe("Mission and catalog federated application adapter", () => {
   });
 
   it("ignores a late action receipt after the remote unmounts", async () => {
-    const surface = manifest.surfaces.find((item) => item.surfaceId === "mission_applications")!;
+    const surface = required(
+      manifest.surfaces.find((item) => item.surfaceId === "mission_applications"),
+    );
     const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
     const action = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
     const execute = vi.fn<HostBridge["execute"]>().mockReturnValue(action.promise);
@@ -241,7 +250,7 @@ function deferred<TResult>() {
 it.each(["unknown", "toString", "constructor", "__proto__"])(
   "rejects unsupported renderer %s before querying",
   async (surfaceId) => {
-    const valid = manifest.surfaces[0]!;
+    const valid = required(manifest.surfaces[0]);
     const query = vi.fn<() => Promise<never>>().mockRejectedValue(new Error("unexpected query"));
     const wrapper = mount(MissionCatalogApplication, {
       props: {

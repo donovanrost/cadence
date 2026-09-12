@@ -1,3 +1,4 @@
+import { fixedFieldKeys } from "./registration.contracts";
 import { identifier, integer, invalid, record, text } from "../../shared/read-validation";
 import {
   array,
@@ -78,19 +79,14 @@ function dictionary<T>(value: unknown, read: (value: unknown) => T, limit = 64):
   if (entries.length > limit) invalid();
   return Object.fromEntries(entries.map(([name, item]) => [key(name), read(item)]));
 }
-const section = object({ id, number: string, title: string, field_keys: array(key, 64) });
-const fixedKeys = [
-  "provider_account_id",
-  "credential_ref",
-  "display_name",
-  "provider_type",
-  "backend_type",
-  "backend_key",
-  "allowed_services",
-  "allowed_directions",
-  "allowed_stations",
-  "max_quota",
-] as const;
+const section = object({
+  id,
+  number: string,
+  title: string,
+  field_keys: array(oneOf(fixedFieldKeys), 64),
+});
+const fixedKeys = fixedFieldKeys;
+const fixedFieldKey = oneOf(fixedFieldKeys);
 
 export function registrationFields(form: ProviderAccountForm) {
   return [
@@ -108,13 +104,28 @@ export function sameRegistrationValues(left: ProviderAccountValues, right: Provi
 export function readRegistrationForm(value: unknown): ProviderAccountForm {
   const form = object({
     id,
-    hidden_field_keys: array(key, 2),
+    hidden_field_keys: array(fixedFieldKey, 2),
     sections: object({
       network_identity: section,
       credential_registry: section,
       organization_guardrails: section,
     }),
-    fields: (value) => dictionary(value, readField, fixedKeys.length),
+    fields: (value) => {
+      const input = record(value);
+      if (Object.keys(input).length !== fixedKeys.length) invalid();
+      return object({
+        provider_account_id: readField,
+        credential_ref: readField,
+        display_name: readField,
+        provider_type: readField,
+        backend_type: readField,
+        backend_key: readField,
+        allowed_services: readField,
+        allowed_directions: readField,
+        allowed_stations: readField,
+        max_quota: readField,
+      })(input);
+    },
     connector: object({
       options: array(option),
       selected: object({
@@ -190,7 +201,7 @@ export function readRegistrationForm(value: unknown): ProviderAccountForm {
       !fields.some((candidate) => candidate.key === field.visible_when?.field)
     )
       invalid();
-    if ((field.type === "hidden") !== hidden.includes(field.key)) invalid();
+    if ((field.type === "hidden") !== hidden.some((name) => name === field.key)) invalid();
   }
   for (const name of fixedKeys) {
     const expected = hidden.includes(name)
@@ -209,7 +220,7 @@ export function readRegistrationForm(value: unknown): ProviderAccountForm {
   )
     invalid();
   unique(form.connector.options.map((option) => option.value));
-  for (const name of ["provider_type", "backend_type"]) {
+  for (const name of ["provider_type", "backend_type"] as const) {
     const field = form.fields[name];
     if (!field.options.some((option) => option.value === field.value && !option.disabled))
       invalid();

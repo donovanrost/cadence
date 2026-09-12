@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import SpacecraftRouting from "./SpacecraftRouting.vue";
@@ -28,12 +29,12 @@ test("rejects foreign resource navigation, duplicate rules and missing transport
       readSpacecraftRouting(spacecraftRoutingFixture(), { ...context, [field]: "other" }),
     ).toThrow();
   const wrong = spacecraftRoutingFixture();
-  wrong.page.rows[0].href = "https://outside.test";
+  required(wrong.page.rows[0]).href = "https://outside.test";
   expect(() => readSpacecraftRouting(wrong, context)).toThrow();
   const duplicate = spacecraftRoutingFixture();
-  duplicate.page.rows.push(duplicate.page.rows[0]);
+  duplicate.page.rows.push(required(duplicate.page.rows[0]));
   expect(() => readSpacecraftRouting(duplicate, context)).toThrow();
   const missing = spacecraftRoutingFixture();
-  missing.page.rows[0].transport_version = 0;
+  required(missing.page.rows[0]).transport_version = 0;
   expect(() => readSpacecraftRouting(missing, context)).toThrow();
 });

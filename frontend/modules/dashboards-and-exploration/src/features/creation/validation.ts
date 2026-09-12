@@ -10,6 +10,7 @@ export function text(value: unknown, max = 512): string {
 }
 export function identity(value: unknown): string {
   const id = text(value, 256);
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   if (!id || /[\u0000-\u001f]/.test(id)) throw Error("Invalid creation identity");
   return id;
 }

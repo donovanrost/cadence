@@ -14,7 +14,7 @@ const props = defineProps<{
 const model = props.model,
   organizationId = props.organizationId,
   transport = props.port;
-const port: RegistrationPort = {
+const featurePort: RegistrationPort = {
   async execute(action, input) {
     const result = await transport.execute(action, input);
     if (!result || typeof result !== "object" || !("status" in result))
@@ -29,6 +29,10 @@ const port: RegistrationPort = {
 </script>
 <template>
   <div class="max-w-3xl space-y-6">
-    <ProviderAccountRegistration :model="model" :organization-id="organizationId" :port="port" />
+    <ProviderAccountRegistration
+      :model="model"
+      :organization-id="organizationId"
+      :port="featurePort"
+    />
   </div>
 </template>

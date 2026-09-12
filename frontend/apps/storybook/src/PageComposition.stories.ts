@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 import type { Meta, StoryObj } from "@storybook/vue3-vite";
 import { expect, within } from "storybook/test";
 import { ref } from "vue";
@@ -32,7 +33,9 @@ export const ProductionList: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    const header = within(canvasElement.querySelector("#host-page-heading")! as HTMLElement);
+    const header = within(
+      required(canvasElement.querySelector("#host-page-heading")) as HTMLElement,
+    );
     await expect(header.getByRole("button", { name: "New spacecraft" })).toBeVisible();
     await expect(header.getByRole("navigation", { name: "Breadcrumb" })).toBeVisible();
   },

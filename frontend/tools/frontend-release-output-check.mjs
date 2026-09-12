@@ -1,3 +1,12 @@
+/** @typedef {Record<string, unknown>} Metadata */
+/** @typedef {{kind: "word" | "punctuation" | "regex" | "string" | "template", value: string, dynamic?: boolean, dangerousDynamic?: boolean}} Token */
+/** @typedef {(path: string) => Promise<number | null>} ByteLengthForPath */
+/** @typedef {{record: object, target: string, trail: string}} ByteBoundRecord */
+/** @typedef {{authoritativeHostInitialization?: boolean, generatedModuleFederation?: boolean, authoritativeGeneratedDynamicImport?: boolean, authoritativeHostPublication?: boolean}} ReferenceOptions */
+/** @typedef {{root: string, artifacts: readonly {path: string, bytes: Buffer}[]}} ArtifactSnapshot */
+/** @typedef {{repositoryRootInput?: string, requireExternal?: boolean, allowedDeploymentPath?: string, artifactSnapshot?: ArtifactSnapshot}} OutputOptions */
+/** @typedef {{paths: string[], files?: Set<string>, readBytes: (name:string) => Promise<Buffer|null>, readText: (name:string) => Promise<string|null>, byteLengthForPath: ByteLengthForPath}} OutputSnapshot */
+import { record as isRecord } from "../packages/plugin-sdk/src/admission.ts";
 import { createHash } from "node:crypto";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
@@ -35,9 +44,13 @@ const statsPathKeyPattern =
 const generatedModuleFederationPathPattern =
   /^assets\/(?:dist|federated-application|mf-entry-bootstrap|virtualExposes|virtual_mf|_virtual_mf|vite-preload-helper)-[A-Za-z0-9_.-]+\.js$/;
 
+/** @param {string} message @returns {never} */
+
 function fail(message) {
   throw new Error(`Release output check failed: ${message}`);
 }
+
+/** @param {string} path */
 
 export function assertReleaseArtifactPath(path) {
   assertPathSyntax(path, "release artifact path");
@@ -53,6 +66,8 @@ export function assertReleaseArtifactPath(path) {
   }
 }
 
+/** @param {string} value @param {string} label */
+
 function decodePathForPolicy(value, label) {
   if (!value.includes("%")) return value;
   let decoded;
@@ -67,6 +82,8 @@ function decodePathForPolicy(value, label) {
   return decoded;
 }
 
+/** @param {string} value */
+
 function isAbsoluteLocalPath(value) {
   return (
     isAbsolute(value) ||
@@ -77,6 +94,8 @@ function isAbsoluteLocalPath(value) {
   );
 }
 
+/** @param {string} value */
+
 function isExternalReference(value) {
   return (
     value.startsWith("//") ||
@@ -85,6 +104,8 @@ function isExternalReference(value) {
       !value.startsWith("file:"))
   );
 }
+
+/** @param {unknown} value @param {string} label @param {{allowTraversal?:boolean}} [options] @returns {asserts value is string} */
 
 function assertPathSyntax(value, label, { allowTraversal = false } = {}) {
   if (typeof value !== "string" || value.length === 0) fail(`${label} is not a path`);
@@ -105,6 +126,8 @@ function assertPathSyntax(value, label, { allowTraversal = false } = {}) {
   }
 }
 
+/** @param {string} value @param {string} label */
+
 function pathPolicyTokens(value, label) {
   const decoded = decodePathForPolicy(value, label).replaceAll("\\", "/");
   return decoded
@@ -113,11 +136,15 @@ function pathPolicyTokens(value, label) {
     .map((token) => token.toLowerCase());
 }
 
+/** @param {string[]} tokens @param {string[]} sequence */
+
 function hasSequence(tokens, sequence) {
   return tokens.some((_, index) =>
     sequence.every((token, offset) => tokens[index + offset] === token),
   );
 }
+
+/** @param {string} value @param {string} label */
 
 function assertNoForbiddenPathName(value, label) {
   const tokens = pathPolicyTokens(value, label);
@@ -126,7 +153,10 @@ function assertNoForbiddenPathName(value, label) {
   }
 }
 
+/** @param {string} source @param {string} origin */
+
 export function assertNoForbiddenPublicationReferences(source, origin) {
+  /** @type {[string, RegExp][]} */
   const forbiddenReferences = [
     ["demo-auth service", /\bdemo[-_]?auth(?:[-_]?service)?\b/i],
     [
@@ -164,11 +194,14 @@ export function assertNoForbiddenPublicationReferences(source, origin) {
   }
 }
 
+/** @param {string[]} argumentsList @returns {string} */
+
 export function parseOutputDirectoryArgument(argumentsList) {
   const values = [];
 
   for (let index = 0; index < argumentsList.length; index += 1) {
     const argument = argumentsList[index];
+    if (argument === undefined) fail("argument list is sparse");
     let value;
 
     if (argument === "--outDir") {
@@ -198,8 +231,10 @@ export function parseOutputDirectoryArgument(argumentsList) {
     fail("exactly one --outDir with one absolute, non-option value is required");
   }
 
-  return values[0];
+  return values[0] ?? fail("required argument is missing");
 }
+
+/** @param {unknown} value @param {string} label */
 
 function assertRemoteName(value, label) {
   if (typeof value !== "string" || !remoteNamePattern.test(value)) {
@@ -208,11 +243,14 @@ function assertRemoteName(value, label) {
   return value;
 }
 
+/** @param {string[]} argumentsList @returns {string} */
+
 export function parseRemoteNameArgument(argumentsList) {
   const values = [];
 
   for (let index = 0; index < argumentsList.length; index += 1) {
     const argument = argumentsList[index];
+    if (argument === undefined) fail("argument list is sparse");
     let value;
 
     if (argument === "--remoteName") {
@@ -239,8 +277,10 @@ export function parseRemoteNameArgument(argumentsList) {
     fail("exactly one --remoteName with one valid, non-option value is required");
   }
 
-  return values[0];
+  return values[0] ?? fail("required argument is missing");
 }
+
+/** @param {string} path */
 
 export function canonicalPathWithMissingTail(path) {
   const missingTail = [];
@@ -258,7 +298,8 @@ export function canonicalPathWithMissingTail(path) {
       try {
         existingEntry = lstatSync(current);
       } catch (lstatError) {
-        if (lstatError?.code !== "ENOENT") throw lstatError;
+        if (!(lstatError instanceof Error && "code" in lstatError && lstatError.code === "ENOENT"))
+          throw lstatError;
       }
 
       if (existingEntry) {
@@ -273,7 +314,10 @@ export function canonicalPathWithMissingTail(path) {
   }
 }
 
+/** @param {string} left @param {string} right */
+
 export function pathsOverlap(left, right) {
+  /** @param {string} parent @param {string} child */
   const contains = (parent, child) => {
     const childRelative = relative(parent, child);
     return (
@@ -287,15 +331,21 @@ export function pathsOverlap(left, right) {
   return contains(left, right) || contains(right, left);
 }
 
+/** @param {string} outputRoot @param {string} canonicalRepositoryRoot */
+
 export function assertOutputOutsideRepository(outputRoot, canonicalRepositoryRoot) {
   if (pathsOverlap(canonicalRepositoryRoot, outputRoot)) {
     fail("output directory must be outside the repository in both directions");
   }
 }
 
+/** @param {string} outputRoot @param {string} path */
+
 function relativePath(outputRoot, path) {
   return relative(outputRoot, path).split(sep).join("/");
 }
+
+/** @param {string} directory @param {string} outputRoot @returns {Promise<string[]>} */
 
 async function outputFiles(directory, outputRoot) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -319,6 +369,8 @@ async function outputFiles(directory, outputRoot) {
   return paths;
 }
 
+/** @param {string} reference @param {string} origin @param {Set<string>} files @param {string} label @param {string} outputRoot @param {ReferenceOptions} [options] */
+
 export function assertLocalReference(reference, origin, files, label, outputRoot, options = {}) {
   const value = reference.trim();
   if (value === "") return;
@@ -329,7 +381,7 @@ export function assertLocalReference(reference, origin, files, label, outputRoot
   if (isExternalReference(value)) return;
 
   const pathPart =
-    value.startsWith("?") || value.startsWith("#") ? origin : value.split(/[?#]/, 1)[0];
+    value.startsWith("?") || value.startsWith("#") ? origin : (value.split(/[?#]/, 1)[0] ?? "");
   if (pathPart === "") return;
 
   if (isAbsoluteLocalPath(pathPart)) {
@@ -353,6 +405,8 @@ export function assertLocalReference(reference, origin, files, label, outputRoot
   return targetRelative;
 }
 
+/** @param {unknown} value @param {Set<string>} files @param {string} label @param {string} outputRoot */
+
 function assertManifestPath(value, files, label, outputRoot) {
   if (typeof value !== "string" || value.trim() === "") fail(`${label} is not a path`);
   const target = assertLocalReference(value, "mf-manifest.json", files, label, outputRoot);
@@ -360,14 +414,16 @@ function assertManifestPath(value, files, label, outputRoot) {
   return target;
 }
 
+/** @param {unknown} value @param {Set<string>} files @param {string} label @param {string} outputRoot @param {Set<string>} [referencedFiles] */
+
 function assertAssetLists(value, files, label, outputRoot, referencedFiles) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     fail(`${label} is not an asset map`);
   }
 
   for (const kind of ["js", "css"]) {
     const assets = value[kind];
-    if (!assets || typeof assets !== "object" || Array.isArray(assets)) {
+    if (!isRecord(assets)) {
       fail(`${label}.${kind} is not an asset map`);
     }
     for (const phase of ["async", "sync"]) {
@@ -382,15 +438,18 @@ function assertAssetLists(value, files, label, outputRoot, referencedFiles) {
 
 const byteBoundMetadataFields = ["byteSize", "byteLength", "bytes"];
 
+/** @param {object} record @param {string} target @param {string} trail @param {ByteLengthForPath} byteLengthForPath */
+
 async function assertByteBoundMetadata(record, target, trail, byteLengthForPath) {
   for (const field of byteBoundMetadataFields) {
     if (!Object.hasOwn(record, field)) continue;
-    const declared = record[field];
-    if (!Number.isSafeInteger(declared) || declared < 0) {
+    /** @type {unknown} */
+    const declared = Reflect.get(record, field);
+    if (typeof declared !== "number" || !Number.isSafeInteger(declared) || declared < 0) {
       fail(`${trail}.${field} is not a non-negative byte length`);
     }
     const actual = await byteLengthForPath(target);
-    if (!Number.isSafeInteger(actual) || actual < 0) {
+    if (actual === null || !Number.isSafeInteger(actual) || actual < 0) {
       fail(`${trail}.${field} cannot read admitted bytes for ${JSON.stringify(target)}`);
     }
     if (declared !== actual) {
@@ -401,20 +460,29 @@ async function assertByteBoundMetadata(record, target, trail, byteLengthForPath)
   }
 }
 
+/** @param {object} value @param {string} trail @param {Set<string>} files @param {string} outputRoot @param {boolean} pathContext */
+
 function metadataByteBoundTarget(value, trail, files, outputRoot, pathContext) {
   for (const key of ["fileName", "filename", "assetPath"]) {
-    if (typeof value[key] === "string") {
-      return assertManifestPath(value[key], files, `${trail}.${key}`, outputRoot);
+    if (typeof Reflect.get(value, key) === "string") {
+      return assertManifestPath(Reflect.get(value, key), files, `${trail}.${key}`, outputRoot);
     }
   }
-  if (typeof value.path === "string" && value.path !== "" && pathContext) {
+  if ("path" in value && typeof value.path === "string" && value.path !== "" && pathContext) {
     return assertManifestPath(value.path, files, `${trail}.path`, outputRoot);
   }
-  if (trail.endsWith(".remoteEntry") && typeof value.name === "string" && value.name !== "") {
+  if (
+    trail.endsWith(".remoteEntry") &&
+    "name" in value &&
+    typeof value.name === "string" &&
+    value.name !== ""
+  ) {
     return assertManifestPath(value.name, files, `${trail}.name`, outputRoot);
   }
   return null;
 }
+
+/** @param {Metadata} manifest @param {string} expectedRemoteName @param {Set<string>} files @param {string} outputRoot @param {ByteLengthForPath} byteLengthForPath */
 
 async function assertGeneratedManifest(
   manifest,
@@ -428,12 +496,12 @@ async function assertGeneratedManifest(
   }
 
   const metadata = manifest.metaData;
-  if (!metadata || typeof metadata !== "object") fail("manifest metadata is missing");
+  if (!isRecord(metadata)) fail("manifest metadata is missing");
   if (metadata.publicPath !== "auto")
     fail(`manifest publicPath is ${JSON.stringify(metadata.publicPath)}`);
 
   const remoteEntry = metadata.remoteEntry;
-  if (!remoteEntry || remoteEntry.path !== "" || remoteEntry.name !== "remoteEntry.js") {
+  if (!isRecord(remoteEntry) || remoteEntry.path !== "" || remoteEntry.name !== "remoteEntry.js") {
     fail("manifest remoteEntry is not the relocatable remoteEntry.js");
   }
   const remoteEntryPath = assertManifestPath(
@@ -454,10 +522,11 @@ async function assertGeneratedManifest(
     fail("manifest shared assets are missing");
   }
   for (const shared of manifest.shared) {
+    if (!isRecord(shared)) fail("manifest shared entry is not an object");
     assertAssetLists(
       shared.assets,
       files,
-      `manifest shared ${shared.name}`,
+      `manifest shared ${String(shared.name)}`,
       outputRoot,
       referencedFiles,
     );
@@ -467,6 +536,7 @@ async function assertGeneratedManifest(
     fail("manifest exposes are missing");
   }
   for (const expose of manifest.exposes) {
+    if (!isRecord(expose)) fail("manifest expose entry is not an object");
     const exposedModule = expose.path ?? expose.name;
     if (
       typeof exposedModule !== "string" ||
@@ -478,7 +548,7 @@ async function assertGeneratedManifest(
     assertAssetLists(
       expose.assets,
       files,
-      `manifest expose ${expose.name}`,
+      `manifest expose ${String(expose.name)}`,
       outputRoot,
       referencedFiles,
     );
@@ -486,6 +556,8 @@ async function assertGeneratedManifest(
 
   return referencedFiles;
 }
+
+/** @param {unknown} value @param {Set<string>} files @param {string} outputRoot @param {string} trail @param {boolean} [pathContext] @param {Set<object>} [seen] @param {Set<string>} [referencedFiles] @param {ByteBoundRecord[]} [byteBoundRecords] */
 
 function assertStatsMetadata(
   value,
@@ -559,15 +631,16 @@ function assertStatsMetadata(
   seen.delete(value);
 }
 
+/** @param {Metadata} stats @param {string} expectedRemoteName */
+
 function hasFederationStatsProvenance(stats, expectedRemoteName) {
   const metadata = stats.metaData;
   return (
     stats.id === expectedRemoteName &&
     stats.name === expectedRemoteName &&
-    metadata &&
-    typeof metadata === "object" &&
+    isRecord(metadata) &&
     metadata.name === expectedRemoteName &&
-    metadata.remoteEntry &&
+    isRecord(metadata.remoteEntry) &&
     metadata.remoteEntry.path === "" &&
     metadata.remoteEntry.name === "remoteEntry.js" &&
     metadata.remoteEntry.type === "module"
@@ -595,6 +668,8 @@ const generatedFederationRuntimeSourceDigests = new Set([
   "d6ce1afd105de3fda34eb27703b530dfb32d963a887a5f5297e0e154a4fc22f2",
 ]);
 
+/** @param {string | null} source @param {string} expectedRemoteName */
+
 function canonicalHostInitializationSource(source, expectedRemoteName) {
   if (typeof source !== "string" || /(?:^|[^\\])\/(?:\/|\*)/.test(source)) return null;
   const escapedRemoteName = expectedRemoteName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -611,6 +686,8 @@ function canonicalHostInitializationSource(source, expectedRemoteName) {
     .replace(/\s+/g, "");
 }
 
+/** @param {string} name @param {string | null} source @param {Metadata} stats @param {string} expectedRemoteName */
+
 function isAuthoritativeGeneratedHostInitializationArtifact(
   name,
   source,
@@ -623,12 +700,17 @@ function isAuthoritativeGeneratedHostInitializationArtifact(
   ) {
     return false;
   }
-  const matchingRecords = stats.buildOutput.filter((output) => output?.fileName === name);
+  if (!Array.isArray(stats.buildOutput)) return false;
+  const matchingRecords = stats.buildOutput
+    .filter(isRecord)
+    .filter((output) => output.fileName === name);
   if (matchingRecords.length !== 1) return false;
   const [record] = matchingRecords;
   if (
+    !record ||
     record.type !== "chunk" ||
     record.isEntry !== false ||
+    typeof record.size !== "number" ||
     !Number.isSafeInteger(record.size) ||
     record.size < 0
   ) {
@@ -650,9 +732,13 @@ function isAuthoritativeGeneratedHostInitializationArtifact(
   );
 }
 
+/** @param {string} path */
+
 function isGeneratedModuleFederationArtifactPath(path) {
   return generatedModuleFederationPathPattern.test(path);
 }
+
+/** @param {string} name @param {string | null} source @param {Metadata} stats @param {string} expectedRemoteName */
 
 function isAuthoritativeGeneratedFederationRuntimeArtifact(
   name,
@@ -666,12 +752,17 @@ function isAuthoritativeGeneratedFederationRuntimeArtifact(
   ) {
     return false;
   }
-  const matchingRecords = stats.buildOutput.filter((output) => output?.fileName === name);
+  if (!Array.isArray(stats.buildOutput)) return false;
+  const matchingRecords = stats.buildOutput
+    .filter(isRecord)
+    .filter((output) => output.fileName === name);
   if (matchingRecords.length !== 1) return false;
   const [record] = matchingRecords;
   return (
+    record !== undefined &&
     record.type === "chunk" &&
     record.isEntry === false &&
+    typeof record.size === "number" &&
     Number.isSafeInteger(record.size) &&
     record.size >= 0 &&
     typeof source === "string" &&
@@ -683,6 +774,8 @@ function isAuthoritativeGeneratedFederationRuntimeArtifact(
   );
 }
 
+/** @param {Metadata} stats @param {string} expectedRemoteName @param {Set<string>} files @param {string} outputRoot @param {ByteLengthForPath} byteLengthForPath */
+
 async function assertStats(stats, expectedRemoteName, files, outputRoot, byteLengthForPath) {
   if (!Array.isArray(stats.buildOutput) || stats.buildOutput.length === 0) {
     fail("federation buildOutput is missing");
@@ -690,15 +783,20 @@ async function assertStats(stats, expectedRemoteName, files, outputRoot, byteLen
   if (
     (stats.id !== undefined && stats.id !== expectedRemoteName) ||
     (stats.name !== undefined && stats.name !== expectedRemoteName) ||
-    (stats.metaData?.name !== undefined && stats.metaData.name !== expectedRemoteName)
+    (isRecord(stats.metaData) &&
+      stats.metaData.name !== undefined &&
+      stats.metaData.name !== expectedRemoteName)
   ) {
     fail("federation stats identity is not the expected remote");
   }
+  /** @type {Set<string>} */
   const referencedFiles = new Set();
+  /** @type {Map<string, Metadata>} */
   const buildOutputByPath = new Map();
+  /** @type {ByteBoundRecord[]} */
   const byteBoundRecords = [];
   for (const output of stats.buildOutput) {
-    if (!output || typeof output !== "object" || Array.isArray(output)) {
+    if (!isRecord(output)) {
       fail("federation buildOutput entry is not an object");
     }
     const target = assertManifestPath(
@@ -726,6 +824,7 @@ async function assertStats(stats, expectedRemoteName, files, outputRoot, byteLen
   for (const { record, target, trail } of byteBoundRecords) {
     await assertByteBoundMetadata(record, target, trail, byteLengthForPath);
   }
+  /** @type {Set<string>} */
   const generatedModuleFederationFiles = new Set();
   if (hasFederationStatsProvenance(stats, expectedRemoteName)) {
     for (const [path, output] of buildOutputByPath) {
@@ -734,6 +833,7 @@ async function assertStats(stats, expectedRemoteName, files, outputRoot, byteLen
         output.type === "chunk" &&
         (output.isEntry === false ||
           /^assets\/federated-application-[A-Za-z0-9_.-]+\.js$/.test(path)) &&
+        typeof output.size === "number" &&
         Number.isSafeInteger(output.size) &&
         output.size >= 0
       ) {
@@ -747,18 +847,23 @@ async function assertStats(stats, expectedRemoteName, files, outputRoot, byteLen
   };
 }
 
+/** @param {unknown} manifest @param {Set<string>} files @param {string} outputRoot */
+
 export function assertViteManifest(manifest, files, outputRoot) {
-  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+  if (!isRecord(manifest)) {
     fail(".vite/manifest.json is not a manifest map");
   }
 
-  const manifestKeys = new Set(Object.keys(manifest));
+  const manifestRecord = manifest;
+  const manifestKeys = new Set(Object.keys(manifestRecord));
   const visited = new Set();
+
+  /** @param {string} key @param {string} trail */
 
   function visitManifestEntry(key, trail) {
     if (visited.has(key)) return;
-    const entry = manifest[key];
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    const entry = manifestRecord[key];
+    if (!isRecord(entry)) {
       fail(`${trail} is not a manifest entry`);
     }
 
@@ -788,17 +893,22 @@ export function assertViteManifest(manifest, files, outputRoot) {
   for (const key of manifestKeys) visitManifestEntry(key, `.vite/manifest.${key}`);
 }
 
+/** @param {string} source @param {string} [origin] */
+
 function javascriptTokens(source, origin = "JavaScript") {
   return scanJavascriptTokens(source, origin, 0, false).tokens;
 }
 
+/** @param {string} source @param {string} origin @param {number} start @param {boolean} templateExpression @returns {{tokens:Token[],next:number}} */
+
 function scanJavascriptTokens(source, origin, start, templateExpression) {
+  /** @type {Token[]} */
   const tokens = [];
   let index = start;
   let braceDepth = 0;
 
   while (index < source.length) {
-    const character = source[index];
+    const character = source.charAt(index);
     if (/\s/.test(character)) {
       index += 1;
       continue;
@@ -880,7 +990,7 @@ function scanJavascriptTokens(source, origin, start, templateExpression) {
     if (/[A-Za-z_$]/.test(character)) {
       const start = index;
       index += 1;
-      while (index < source.length && /[A-Za-z0-9_$]/.test(source[index])) index += 1;
+      while (index < source.length && /[A-Za-z0-9_$]/.test(source.charAt(index))) index += 1;
       tokens.push({ kind: "word", value: source.slice(start, index) });
       continue;
     }
@@ -898,15 +1008,21 @@ function scanJavascriptTokens(source, origin, start, templateExpression) {
   return { tokens, next: index };
 }
 
+/** @param {Token | undefined} token @returns {token is Token & {kind: "string" | "template"}} */
+
 function staticReferenceToken(token) {
   return token?.kind === "string" || (token?.kind === "template" && token.dynamic === false);
 }
+
+/** @param {Token[]} tokens @param {number} index */
 
 function isMemberProperty(tokens, index) {
   return tokens[index - 1]?.value === ".";
 }
 
 const regexControlStatementWords = new Set(["catch", "do", "else", "for", "if", "while"]);
+
+/** @param {Token[]} tokens */
 
 function isControlStatementClose(tokens) {
   let depth = 0;
@@ -916,12 +1032,14 @@ function isControlStatementClose(tokens) {
     } else if (tokens[index]?.value === "(") {
       depth -= 1;
       if (depth === 0) {
-        return regexControlStatementWords.has(tokens[index - 1]?.value);
+        return regexControlStatementWords.has(tokens[index - 1]?.value ?? "");
       }
     }
   }
   return false;
 }
+
+/** @param {Token[]} tokens */
 
 function canStartRegex(tokens) {
   const previous = tokens.at(-1);
@@ -954,10 +1072,13 @@ function canStartRegex(tokens) {
   );
 }
 
+/** @param {Token[]} tokens @param {number} index */
+
 function isGeneratedEmptyFederationCssUrl(tokens, index) {
   const argument = tokens[index + 3];
   if (argument?.kind !== "word") return false;
 
+  /** @type {[number, string][]} */
   const callbackShape = [
     [index - 1, "="],
     [index - 2, "word"],
@@ -980,7 +1101,7 @@ function isGeneratedEmptyFederationCssUrl(tokens, index) {
     return false;
   }
 
-  const mappedSource = tokens[index - 11].value;
+  const mappedSource = tokenAt(tokens, index - 11).value;
   for (let cursor = 0; cursor < index - 11; cursor += 1) {
     if (
       tokens[cursor]?.value === "let" &&
@@ -1011,8 +1132,11 @@ function isGeneratedEmptyFederationCssUrl(tokens, index) {
   return false;
 }
 
+/** @param {Token[]} tokens @param {number} index */
+
 function isGeneratedVitePreloadUrl(tokens, index) {
   const argument = tokens[index + 3];
+  /** @type {[number, string | undefined][]} */
   const expected = [
     [index - 1, ":"],
     [index - 2, ")"],
@@ -1044,6 +1168,8 @@ function isGeneratedVitePreloadUrl(tokens, index) {
   });
 }
 
+/** @param {Token[]} tokens @param {number} index */
+
 function isGeneratedVitePreloadHelperUrl(tokens, index) {
   return (
     tokens[index - 11]?.value === "var" &&
@@ -1069,8 +1195,11 @@ function isGeneratedVitePreloadHelperUrl(tokens, index) {
   );
 }
 
+/** @param {Token[]} tokens @param {number} index */
+
 function isGeneratedFederationRemoteImport(tokens, index) {
   const argument = tokens[index + 2];
+  /** @type {[number, string | undefined][]} */
   const expected = [
     [index - 1, ">"],
     [index - 2, "="],
@@ -1101,8 +1230,11 @@ function isGeneratedFederationRemoteImport(tokens, index) {
   });
 }
 
+/** @param {Token[]} tokens @param {number} index */
+
 function isGeneratedFederationRemoteImportWithoutImportMeta(tokens, index) {
   const argument = tokens[index + 2];
+  /** @type {[number, string | undefined][]} */
   const expected = [
     [index - 1, ">"],
     [index - 2, "="],
@@ -1133,8 +1265,11 @@ function isGeneratedFederationRemoteImportWithoutImportMeta(tokens, index) {
   });
 }
 
+/** @param {Token[]} tokens @param {number} index */
+
 function isGeneratedFederationExternalImport(tokens, index) {
   const argument = tokens[index + 2];
+  /** @type {[number, string | undefined][]} */
   const expected = [
     [index - 1, ":"],
     [index + 3, ")"],
@@ -1163,15 +1298,19 @@ function isGeneratedFederationExternalImport(tokens, index) {
 
 const workerConstructorNames = new Set(["Worker", "SharedWorker", "ServiceWorker"]);
 
+/** @param {Token[]} tokens @param {number} index */
+
 function isServiceWorkerExpressionEnd(tokens, index) {
   if (tokens[index]?.value === "serviceWorker") return true;
   return (
     tokens[index]?.value === "]" &&
     staticReferenceToken(tokens[index - 1]) &&
-    tokens[index - 1].value === "serviceWorker" &&
+    tokenAt(tokens, index - 1).value === "serviceWorker" &&
     tokens[index - 2]?.value === "["
   );
 }
+
+/** @param {Token[]} tokens @param {number} index */
 
 function workerCallAt(tokens, index) {
   const token = tokens[index];
@@ -1180,7 +1319,7 @@ function workerCallAt(tokens, index) {
   if (
     token?.kind === "word" &&
     token.value === "new" &&
-    workerConstructorNames.has(next?.value) &&
+    workerConstructorNames.has(next?.value ?? "") &&
     tokens[index + 2]?.value === "("
   ) {
     return { argument: index + 3 };
@@ -1188,9 +1327,9 @@ function workerCallAt(tokens, index) {
   if (
     token?.kind === "word" &&
     token.value === "new" &&
-    globalWorkerOwners.has(next?.value) &&
+    globalWorkerOwners.has(next?.value ?? "") &&
     tokens[index + 2]?.value === "." &&
-    workerConstructorNames.has(tokens[index + 3]?.value) &&
+    workerConstructorNames.has(tokens[index + 3]?.value ?? "") &&
     tokens[index + 4]?.value === "("
   ) {
     return { argument: index + 5 };
@@ -1199,7 +1338,7 @@ function workerCallAt(tokens, index) {
     token?.kind === "word" &&
     token.value === "new" &&
     tokens[index + 1]?.value === "(" &&
-    workerConstructorNames.has(tokens[index + 2]?.value) &&
+    workerConstructorNames.has(tokens[index + 2]?.value ?? "") &&
     tokens[index + 3]?.value === ")" &&
     tokens[index + 4]?.value === "("
   ) {
@@ -1209,7 +1348,7 @@ function workerCallAt(tokens, index) {
     token?.kind === "word" &&
     workerConstructorNames.has(token.value) &&
     next?.value === "(" &&
-    (tokens[index - 1]?.value !== "." || globalWorkerOwners.has(tokens[index - 2]?.value))
+    (tokens[index - 1]?.value !== "." || globalWorkerOwners.has(tokens[index - 2]?.value ?? ""))
   ) {
     return { argument: index + 2 };
   }
@@ -1245,6 +1384,8 @@ function workerCallAt(tokens, index) {
   return null;
 }
 
+/** @param {Token[]} tokens @param {number} index */
+
 function urlCallAt(tokens, index) {
   const token = tokens[index];
   const next = tokens[index + 1];
@@ -1254,7 +1395,7 @@ function urlCallAt(tokens, index) {
       return { start: index, argument: index + 3 };
     }
     if (
-      globalOwners.has(next?.value) &&
+      globalOwners.has(next?.value ?? "") &&
       tokens[index + 2]?.value === "." &&
       tokens[index + 3]?.value === "URL" &&
       tokens[index + 4]?.value === "("
@@ -1265,7 +1406,7 @@ function urlCallAt(tokens, index) {
       next?.kind === "word" &&
       tokens[index + 2]?.value === "[" &&
       staticReferenceToken(tokens[index + 3]) &&
-      tokens[index + 3].value === "URL" &&
+      tokenAt(tokens, index + 3).value === "URL" &&
       tokens[index + 4]?.value === "]" &&
       tokens[index + 5]?.value === "("
     ) {
@@ -1285,7 +1426,7 @@ function urlCallAt(tokens, index) {
     token?.kind === "word" &&
     token.value === "URL" &&
     next?.value === "(" &&
-    ![".", "new"].includes(tokens[index - 1]?.value)
+    ![".", "new"].includes(tokens[index - 1]?.value ?? "")
   ) {
     return { start: index, argument: index + 2 };
   }
@@ -1293,7 +1434,7 @@ function urlCallAt(tokens, index) {
     token?.kind === "word" &&
     next?.value === "[" &&
     staticReferenceToken(tokens[index + 2]) &&
-    tokens[index + 2].value === "URL" &&
+    tokenAt(tokens, index + 2).value === "URL" &&
     tokens[index + 3]?.value === "]" &&
     tokens[index + 4]?.value === "(" &&
     tokens[index - 1]?.value !== "new"
@@ -1302,6 +1443,8 @@ function urlCallAt(tokens, index) {
   }
   return null;
 }
+
+/** @param {Token[]} tokens @param {number} argumentIndex */
 
 function isStaticImportMetaUrlCall(tokens, argumentIndex) {
   return (
@@ -1315,6 +1458,8 @@ function isStaticImportMetaUrlCall(tokens, argumentIndex) {
     tokens[argumentIndex + 7]?.value === ")"
   );
 }
+
+/** @param {Token[]} tokens @param {number} index */
 
 function isGeneratedViteDynamicAssetUrl(tokens, index) {
   return (
@@ -1330,6 +1475,8 @@ function isGeneratedViteDynamicAssetUrl(tokens, index) {
     tokens[index + 12]?.value === ")"
   );
 }
+
+/** @param {Token[]} tokens @param {number} index */
 
 function isGeneratedRuntimeUrl(tokens, index) {
   const directEntry =
@@ -1355,6 +1502,8 @@ function isGeneratedRuntimeUrl(tokens, index) {
   return directEntry || memberEntry;
 }
 
+/** @param {Token | undefined} token @param {ReferenceOptions} [options] */
+
 function isGeneratedFederationDynamicTemplate(
   token,
   { authoritativeHostPublication = false } = {},
@@ -1372,6 +1521,8 @@ function isGeneratedFederationDynamicTemplate(
   );
 }
 
+/** @param {Token[]} tokens @param {number} index */
+
 function isBrowserLocationUrl(tokens, index) {
   return (
     tokens[index + 3]?.value === "window" &&
@@ -1382,7 +1533,10 @@ function isBrowserLocationUrl(tokens, index) {
   );
 }
 
+/** @param {Token[]} tokens @param {number} index */
+
 function isBrowserOriginUrl(tokens, index) {
+  /** @param {Token | undefined} token */
   const identifier = (token) =>
     token?.kind === "word" && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(token.value);
   let argumentEnd = index + 3;
@@ -1410,11 +1564,13 @@ function isBrowserOriginUrl(tokens, index) {
   );
 }
 
+/** @param {Token[]} tokens @param {number} index @param {string} variable */
+
 function isBrowserLocationVariable(tokens, index, variable) {
   for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
     if (tokens[cursor]?.value === variable && tokens[cursor + 1]?.value === "=") {
       return (
-        ["globalThis", "self", "window"].includes(tokens[cursor + 2]?.value) &&
+        ["globalThis", "self", "window"].includes(tokens[cursor + 2]?.value ?? "") &&
         tokens[cursor + 3]?.value === "." &&
         tokens[cursor + 4]?.value === "location"
       );
@@ -1423,12 +1579,15 @@ function isBrowserLocationVariable(tokens, index, variable) {
   return false;
 }
 
+/** @param {Token[]} tokens @param {number} index */
+
 function isGeneratedBrowserRelativeUrl(tokens, index) {
   const argument = tokens[index + 3];
   if (argument?.kind !== "word") return false;
 
+  /** @param {number} start */
   const browserLocationHref = (start) =>
-    ["globalThis", "self", "window"].includes(tokens[start]?.value) &&
+    ["globalThis", "self", "window"].includes(tokens[start]?.value ?? "") &&
     tokens[start + 1]?.value === "." &&
     tokens[start + 2]?.value === "location" &&
     tokens[start + 3]?.value === "." &&
@@ -1451,7 +1610,7 @@ function isGeneratedBrowserRelativeUrl(tokens, index) {
     tokens[index + 7]?.value === "href" &&
     tokens[index + 8]?.value === ")"
   ) {
-    return isBrowserLocationVariable(tokens, index, tokens[index + 5].value);
+    return isBrowserLocationVariable(tokens, index, tokenAt(tokens, index + 5).value);
   }
 
   return (
@@ -1461,6 +1620,8 @@ function isGeneratedBrowserRelativeUrl(tokens, index) {
     isBrowserLocationVariable(tokens, index, argument.value)
   );
 }
+
+/** @param {string} source @param {string} origin @param {Set<string>} files @param {string} outputRoot @param {Set<string>} [referencedFiles] @param {ReferenceOptions} [options] */
 
 export function assertImportReferences(
   source,
@@ -1488,7 +1649,7 @@ export function assertImportReferences(
     fail(`${origin} contains an unresolved dynamic template expression`);
   }
   for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
+    const token = tokenAt(tokens, index);
     const next = tokens[index + 1];
 
     if (
@@ -1525,7 +1686,7 @@ export function assertImportReferences(
       if (next?.value === "(") {
         if (staticReferenceToken(tokens[index + 2]) && tokens[index + 3]?.value === ")") {
           const target = assertLocalReference(
-            tokens[index + 2].value,
+            tokenAt(tokens, index + 2).value,
             origin,
             files,
             `${origin} import`,
@@ -1549,11 +1710,12 @@ export function assertImportReferences(
     }
 
     const workerCall = workerCallAt(tokens, index);
+    const workerUrl = workerCall ? urlCallAt(tokens, workerCall.argument) : null;
     if (workerCall) {
       const argument = tokens[workerCall.argument];
       if (
         staticReferenceToken(argument) &&
-        [")", ","].includes(tokens[workerCall.argument + 1]?.value)
+        [")", ","].includes(tokens[workerCall.argument + 1]?.value ?? "")
       ) {
         const target = assertLocalReference(
           argument.value,
@@ -1566,12 +1728,12 @@ export function assertImportReferences(
         if (target) referencedFiles.add(target);
       } else if (
         argument?.value === "new" &&
-        urlCallAt(tokens, workerCall.argument) &&
-        isStaticImportMetaUrlCall(tokens, urlCallAt(tokens, workerCall.argument).argument)
+        workerUrl &&
+        isStaticImportMetaUrlCall(tokens, workerUrl.argument)
       ) {
-        const urlCall = urlCallAt(tokens, workerCall.argument);
+        const urlCall = workerUrl;
         const target = assertLocalReference(
-          tokens[urlCall.argument].value,
+          tokenAt(tokens, urlCall.argument).value,
           origin,
           files,
           `${origin} worker URL`,
@@ -1588,7 +1750,7 @@ export function assertImportReferences(
     const urlCall = urlCallAt(tokens, index);
     if (urlCall && isStaticImportMetaUrlCall(tokens, urlCall.argument)) {
       const target = assertLocalReference(
-        tokens[urlCall.argument].value,
+        tokenAt(tokens, urlCall.argument).value,
         origin,
         files,
         `${origin} asset URL`,
@@ -1616,7 +1778,7 @@ export function assertImportReferences(
       }
       if (
         staticReferenceToken(tokens[urlCall.argument]) &&
-        isExternalReference(tokens[urlCall.argument].value)
+        isExternalReference(tokenAt(tokens, urlCall.argument).value)
       ) {
         continue;
       }
@@ -1626,10 +1788,12 @@ export function assertImportReferences(
   return referencedFiles;
 }
 
+/** @param {string} source @param {number} start @returns {number} */
+
 function skipCssTrivia(source, start) {
   let index = start;
   while (index < source.length) {
-    if (/\s/.test(source[index])) {
+    if (/\s/.test(source.charAt(index))) {
       index += 1;
       continue;
     }
@@ -1641,6 +1805,8 @@ function skipCssTrivia(source, start) {
   }
   return index;
 }
+
+/** @param {string} source @param {number} start */
 
 function readCssString(source, start) {
   const quote = source[start];
@@ -1659,12 +1825,16 @@ function readCssString(source, start) {
   return { value, next: source.length };
 }
 
+/** @param {string} source @param {number} start */
+
 function cssIdentifierAt(source, start) {
   if (!/[A-Za-z_-]/.test(source[start] ?? "")) return null;
   let index = start + 1;
-  while (index < source.length && /[A-Za-z0-9_-]/.test(source[index])) index += 1;
+  while (index < source.length && /[A-Za-z0-9_-]/.test(source.charAt(index))) index += 1;
   return { value: source.slice(start, index), next: index };
 }
+
+/** @param {string} source @param {number} start */
 
 function readCssUrlFunction(source, start) {
   const identifier = cssIdentifierAt(source, start);
@@ -1687,6 +1857,8 @@ function readCssUrlFunction(source, start) {
   if (source[index] !== ")") return null;
   return { value, next: index + 1 };
 }
+
+/** @param {string} source @param {string} origin @param {Set<string>} files @param {string} outputRoot @param {Set<string>} [referencedFiles] */
 
 export function assertCssReferences(
   source,
@@ -1759,10 +1931,12 @@ export function assertCssReferences(
   return referencedFiles;
 }
 
+/** @param {string} source @param {number} start */
+
 function findHtmlTagEnd(source, start) {
   let quote = null;
   for (let index = start + 1; index < source.length; index += 1) {
-    const character = source[index];
+    const character = source.charAt(index);
     if (quote) {
       if (character === quote) quote = null;
     } else if (character === "'" || character === '"') {
@@ -1773,6 +1947,8 @@ function findHtmlTagEnd(source, start) {
   }
   return source.length - 1;
 }
+
+/** @param {string} source @param {number} start @param {number} end */
 
 function parseHtmlTag(source, start, end) {
   let index = start + 1;
@@ -1786,7 +1962,7 @@ function parseHtmlTag(source, start, end) {
   index += tag[0].length;
 
   while (index <= end) {
-    while (index <= end && /\s/.test(source[index])) index += 1;
+    while (index <= end && /\s/.test(source.charAt(index))) index += 1;
     if (index > end || source[index] === ">" || source[index] === "/") break;
 
     const attribute = source.slice(index).match(/^[^\s=/>]+/);
@@ -1796,11 +1972,11 @@ function parseHtmlTag(source, start, end) {
     }
     const attributeName = attribute[0].toLowerCase();
     index += attribute[0].length;
-    while (index <= end && /\s/.test(source[index])) index += 1;
+    while (index <= end && /\s/.test(source.charAt(index))) index += 1;
 
     if (source[index] !== "=") continue;
     index += 1;
-    while (index <= end && /\s/.test(source[index])) index += 1;
+    while (index <= end && /\s/.test(source.charAt(index))) index += 1;
 
     let value = "";
     if (source[index] === "'" || source[index] === '"') {
@@ -1812,7 +1988,7 @@ function parseHtmlTag(source, start, end) {
       if (index <= end) index += 1;
     } else {
       const valueStart = index;
-      while (index <= end && !/[\s>]/.test(source[index])) index += 1;
+      while (index <= end && !/[\s>]/.test(source.charAt(index))) index += 1;
       value = source.slice(valueStart, index);
     }
 
@@ -1823,6 +1999,8 @@ function parseHtmlTag(source, start, end) {
 
   return { next: end + 1, tagName, closing: false };
 }
+
+/** @param {string} source @param {string} origin @param {Set<string>} files @param {string} outputRoot */
 
 export function assertHtmlReferences(source, origin, files, outputRoot) {
   const lowerSource = source.toLowerCase();
@@ -1858,37 +2036,50 @@ export function assertHtmlReferences(source, origin, files, outputRoot) {
   }
 }
 
+/** @param {string} outputArgument */
+
 async function assertOutputDirectory(outputArgument) {
   const stats = await lstat(outputArgument).catch(() => fail("output directory is unavailable"));
   if (stats.isSymbolicLink()) fail("output directory must not be a symlink");
   if (!stats.isDirectory()) fail("output path must be a directory");
 }
 
+/** @param {ArtifactSnapshot} snapshot @param {string} outputRoot */
+
 function snapshotOutputFiles(snapshot, outputRoot) {
   if (!snapshot || !Array.isArray(snapshot.artifacts)) {
     fail("artifact snapshot is invalid");
   }
+  /** @type {Map<string, {path: string, bytes: Buffer}>} */
   const byName = new Map();
   for (const artifact of snapshot.artifacts) {
-    if (!artifact || typeof artifact.path !== "string" || !Buffer.isBuffer(artifact.bytes)) {
+    if (
+      !isRecord(artifact) ||
+      typeof artifact.path !== "string" ||
+      !Buffer.isBuffer(artifact.bytes)
+    ) {
       fail("artifact snapshot entry is invalid");
     }
     assertReleaseArtifactPath(artifact.path);
     if (byName.has(artifact.path)) {
       fail(`artifact snapshot contains duplicate ${JSON.stringify(artifact.path)}`);
     }
-    byName.set(artifact.path, artifact);
+    byName.set(artifact.path, { path: artifact.path, bytes: artifact.bytes });
   }
   const names = [...byName.keys()].sort((left, right) => left.localeCompare(right));
   return {
     files: new Set(names),
     names,
     paths: names.map((name) => join(outputRoot, ...name.split("/"))),
-    readBytes: async (name) => byName.get(name)?.bytes ?? null,
-    byteLengthForPath: async (name) => byName.get(name)?.bytes.byteLength ?? null,
-    readText: async (name) => byName.get(name)?.bytes.toString("utf8") ?? null,
+    readBytes: async (/** @type {string} */ name) => byName.get(name)?.bytes ?? null,
+    byteLengthForPath: async (/** @type {string} */ name) =>
+      byName.get(name)?.bytes.byteLength ?? null,
+    readText: async (/** @type {string} */ name) =>
+      byName.get(name)?.bytes.toString("utf8") ?? null,
   };
 }
+
+/** @param {string} source @param {string} origin @param {string | undefined} allowedDeploymentPath */
 
 function assertDeploymentReferences(source, origin, allowedDeploymentPath) {
   const deploymentMarker = "/assets/application-host";
@@ -1920,10 +2111,18 @@ function assertDeploymentReferences(source, origin, allowedDeploymentPath) {
   }
 }
 
+/** @param {string} value */
+
 function decodeDeploymentPathEscapes(value) {
   return value.replace(
     /\\(?:u\{([0-9a-f]{1,6})\}|u([0-9a-f]{4})|x([0-9a-f]{2})|([/\\]))/gi,
-    (match, bracedCodePoint, unicodeCodePoint, hexCodePoint, escapedCharacter) => {
+    (
+      /** @type {string} */ match,
+      /** @type {string|undefined} */ bracedCodePoint,
+      /** @type {string|undefined} */ unicodeCodePoint,
+      /** @type {string|undefined} */ hexCodePoint,
+      /** @type {string|undefined} */ escapedCharacter,
+    ) => {
       const codePoint = bracedCodePoint
         ? Number.parseInt(bracedCodePoint, 16)
         : unicodeCodePoint
@@ -1941,6 +2140,8 @@ function decodeDeploymentPathEscapes(value) {
     },
   );
 }
+
+/** @param {string} outputArgument @param {string} expectedRemoteName @param {OutputOptions} [options] */
 
 export async function validateFederationOutput(
   outputArgument,
@@ -1966,6 +2167,7 @@ export async function validateFederationOutput(
     }
   }
 
+  /** @type {OutputSnapshot} */
   const snapshot = artifactSnapshot
     ? snapshotOutputFiles(artifactSnapshot, outputRoot)
     : {
@@ -1987,7 +2189,7 @@ export async function validateFederationOutput(
   for (const required of ["mf-manifest.json", "mf-stats.json", "remoteEntry.js"]) {
     if (!files.has(required)) fail(`missing required ${required}`);
   }
-  const manifest = JSON.parse(await snapshot.readText("mf-manifest.json"));
+  const manifest = readMetadata(await snapshot.readText("mf-manifest.json"), "mf-manifest.json");
   const manifestReferences = await assertGeneratedManifest(
     manifest,
     expectedRemoteName,
@@ -1996,7 +2198,7 @@ export async function validateFederationOutput(
     snapshot.byteLengthForPath,
   );
 
-  const stats = JSON.parse(await snapshot.readText("mf-stats.json"));
+  const stats = readMetadata(await snapshot.readText("mf-stats.json"), "mf-stats.json");
   const statsResult = await assertStats(
     stats,
     expectedRemoteName,
@@ -2012,10 +2214,12 @@ export async function validateFederationOutput(
   const visited = new Set();
   while (pending.length > 0) {
     const name = pending.pop();
+    if (name === undefined) fail("manifest closure is sparse");
     if (visited.has(name)) continue;
     visited.add(name);
     const source = await snapshot.readText(name);
     if (source === null) fail(`manifest closure cannot read ${JSON.stringify(name)}`);
+    /** @type {Set<string>} */
     const discovered = new Set();
     const generatedModuleFederation =
       generatedModuleFederationFiles.has(name) && manifestClosure.has(name);
@@ -2059,7 +2263,10 @@ export async function validateFederationOutput(
           `federation stats references ${JSON.stringify(reference)} missing from manifest closure`,
         );
       }
+      /** @type {Set<string>} */
       const discovered = new Set();
+      if (source === null)
+        fail(`cannot read generated host initialization ${JSON.stringify(reference)}`);
       assertImportReferences(source, reference, files, outputRoot, discovered, {
         authoritativeHostInitialization: true,
       });
@@ -2120,6 +2327,8 @@ export async function validateFederationOutput(
   return { outputRoot, fileCount: paths.length };
 }
 
+/** @param {string} outputArgument @param {string} expectedRemoteName @param {string} [repositoryRootInput] @param {OutputOptions} [options] */
+
 export async function validateReleaseOutput(
   outputArgument,
   expectedRemoteName,
@@ -2147,4 +2356,17 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;
   });
+}
+
+/** @param {string | null} source @param {string} label @returns {Metadata} */
+function readMetadata(source, label) {
+  if (source === null) fail(`${label} is unreadable`);
+  const value = /** @type {unknown} */ (JSON.parse(source));
+  if (!isRecord(value)) fail(`${label} is not an object`);
+  return value;
+}
+
+/** @param {Token[]} tokens @param {number} index @returns {Token} */
+function tokenAt(tokens, index) {
+  return tokens[index] ?? fail("structural token match is incomplete");
 }

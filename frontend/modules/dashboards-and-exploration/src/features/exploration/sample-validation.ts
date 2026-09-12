@@ -33,7 +33,7 @@ function instant(value: unknown): bigint | null {
     month < 1 ||
     month > 12 ||
     day < 1 ||
-    day > days[month - 1] ||
+    day > (days[month - 1] ?? 0) ||
     Number(h) > 23 ||
     Number(min) > 59 ||
     Number(sec) > 59
@@ -133,9 +133,10 @@ export function readInspection(input: unknown, query: ExplorationQuery): SampleI
     ) ||
     !(
       record.validity_state === null ||
-      ["canonical", "duplicate", "conflict", "superseded", "advisory"].includes(
-        String(record.validity_state),
-      )
+      (typeof record.validity_state === "string" &&
+        ["canonical", "duplicate", "conflict", "superseded", "advisory"].includes(
+          record.validity_state,
+        ))
     )
   )
     throw Error("Invalid physical sample");

@@ -1,3 +1,5 @@
+import type { ProfileDirectory } from "./contracts";
+import { required } from "../../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import SpacecraftTypeShow from "./SpacecraftTypeShow.vue";
@@ -20,7 +22,7 @@ test("profile detail consumes producer navigation, labels and immutable version 
 });
 test("profile directory renders empty and populated producer states", async () => {
   const element = { attrs: {} };
-  const data: any = {
+  const data: { presentation: ProfileDirectory } = {
     presentation: {
       root: element,
       header: {
@@ -69,9 +71,10 @@ test("profile directory renders empty and populated producer states", async () =
 });
 test("incomplete labels and unsafe profile navigation fail contract admission", () => {
   const data = profileDetailFixture();
-  delete (data.labels as any).downlink_protocol;
+  // @ts-expect-error Missing required producer labels must fail admission.
+  delete data.labels.downlink_protocol;
   expect(() => assertProfileDetail(data)).toThrow();
   const unsafe = profileDetailFixture();
-  unsafe.navigation.breadcrumbs[0]!.href = "//external.example";
+  required(unsafe.navigation.breadcrumbs[0]).href = "//external.example";
   expect(() => assertProfileDetail(unsafe)).toThrow();
 });

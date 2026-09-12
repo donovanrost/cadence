@@ -1,15 +1,17 @@
-export type RequirementDirectory = {
+import { arrayOf, oneOf, record, type Snapshot } from "@cadence/plugin-sdk/admission";
+export { record } from "@cadence/plugin-sdk/admission";
+export type RequirementDirectory = Snapshot<{
   contract_version: 1;
   context: { organization_id: string; mission_id: string };
   query: { page: number; state: "all" | "active" | "closed" | "canceled" };
   requirements: { page: number; more: boolean; entries: RequirementRow[] };
-};
-export type RequirementRow = {
+}>;
+export type RequirementRow = Snapshot<{
   id: string;
   version: number;
   state: "active" | "closed" | "canceled";
   priority: "routine" | "high" | "critical";
-  direction: string;
+  direction: "downlink" | "uplink" | "bidirectional" | "tracking";
   intent: string;
   earliest_start: string;
   latest_end: string;
@@ -18,10 +20,10 @@ export type RequirementRow = {
   minimum_data_volume_bytes: number | null;
   contact_count: number | null;
   minimum_separation_seconds: number | null;
-};
+}>;
 export const requirementDataEqual = (a: unknown, b: unknown) =>
   JSON.stringify(a, canonical) === JSON.stringify(b, canonical);
-function canonical(_key: string, value: any) {
+function canonical(_key: string, value: unknown) {
   return record(value)
     ? Object.fromEntries(
         Object.keys(value)
@@ -30,19 +32,20 @@ function canonical(_key: string, value: any) {
       )
     : value;
 }
-export const record = (v: any): v is Record<string, any> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
-export const safeText = (v: any, max = 512): v is string =>
+export const safeText = (v: unknown, max = 512): v is string =>
   typeof v === "string" &&
   new TextEncoder().encode(v).length <= max &&
   Array.from(v).every((c) => {
-    const n = c.codePointAt(0)!;
+    const n = c.codePointAt(0);
+    if (n === undefined) return false;
     return (n >= 32 || [9, 10, 13].includes(n)) && n !== 127 && !(n >= 0xd800 && n <= 0xdfff);
   });
-export const safeId = (v: any): v is string => safeText(v, 240) && v.length > 0 && !/\s/.test(v);
-export const natural = (v: any): v is number => Number.isSafeInteger(v) && v >= 0;
-export const positive = (v: any): v is number => natural(v) && v > 0;
-export const validTime = (v: any): v is string =>
+export const safeId = (v: unknown): v is string =>
+  safeText(v, 240) && v.length > 0 && !/\s/.test(v);
+export const natural = (v: unknown): v is number =>
+  typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+export const positive = (v: unknown): v is number => natural(v) && v > 0;
+export const validTime = (v: unknown): v is string =>
   typeof v === "string" &&
   /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?Z$/.test(v) &&
   Number.isFinite(Date.parse(v)) &&
@@ -58,19 +61,20 @@ export const requirementDirectoryHref = (
   state = d.query.state,
 ) =>
   `/missions/${requirementSegment(d.context.mission_id)}/ops/requirements?page=${page}&state=${state}`;
-function row(r: any) {
+function row(r: unknown): r is RequirementRow {
   return (
     record(r) &&
     safeId(r.id) &&
     positive(r.version) &&
-    ["active", "closed", "canceled"].includes(r.state) &&
-    ["routine", "high", "critical"].includes(r.priority) &&
-    ["downlink", "uplink", "bidirectional", "tracking"].includes(r.direction) &&
+    oneOf(["active", "closed", "canceled"], r.state) &&
+    oneOf(["routine", "high", "critical"], r.priority) &&
+    oneOf(["downlink", "uplink", "bidirectional", "tracking"], r.direction) &&
     safeText(r.intent) &&
     validTime(r.earliest_start) &&
     validTime(r.latest_end) &&
     Date.parse(r.earliest_start) < Date.parse(r.latest_end) &&
-    ["any_contact", "minimum_duration", "minimum_data_volume", "contact_count"].includes(
+    oneOf(
+      ["any_contact", "minimum_duration", "minimum_data_volume", "contact_count"],
       r.success_measure,
     ) &&
     [
@@ -93,37 +97,45 @@ export function admitRequirementDirectory(
   try {
     const serialized = JSON.stringify(value);
     if (new TextEncoder().encode(serialized).length > 131072) return null;
-    const v = JSON.parse(serialized);
-    if (
-      !record(v) ||
-      v.contract_version !== 1 ||
-      !record(v.context) ||
-      !safeId(v.context.organization_id) ||
-      !safeId(v.context.mission_id) ||
-      (context && !requirementDataEqual(context, v.context)) ||
-      !record(v.query) ||
-      Object.keys(v.query).length !== 2 ||
-      !positive(v.query.page) ||
-      v.query.page > 1000000 ||
-      !["all", "active", "closed", "canceled"].includes(v.query.state) ||
-      (query && !requirementDataEqual(query, v.query)) ||
-      !record(v.requirements)
-    )
-      return null;
-    const p = v.requirements;
-    if (
-      p.page !== v.query.page ||
-      typeof p.more !== "boolean" ||
-      !Array.isArray(p.entries) ||
-      p.entries.length > 25 ||
-      (p.more && p.entries.length !== 25) ||
-      !p.entries.every(row) ||
-      new Set(p.entries.map((r: RequirementRow) => r.id)).size !== p.entries.length ||
-      (v.query.state !== "all" && p.entries.some((r: RequirementRow) => r.state !== v.query.state))
-    )
-      return null;
-    return v as RequirementDirectory;
+    const v: unknown = JSON.parse(serialized);
+    return validDirectory(v, context, query) ? v : null;
   } catch {
     return null;
   }
+}
+
+function validDirectory(
+  v: unknown,
+  context?: RequirementDirectory["context"],
+  query?: RequirementDirectory["query"],
+): v is RequirementDirectory {
+  if (
+    !record(v) ||
+    v.contract_version !== 1 ||
+    !record(v.context) ||
+    !safeId(v.context.organization_id) ||
+    !safeId(v.context.mission_id) ||
+    (context && !requirementDataEqual(context, v.context)) ||
+    !record(v.query) ||
+    Object.keys(v.query).length !== 2 ||
+    !positive(v.query.page) ||
+    v.query.page > 1000000 ||
+    !oneOf(["all", "active", "closed", "canceled"], v.query.state) ||
+    (query && !requirementDataEqual(query, v.query)) ||
+    !record(v.requirements)
+  )
+    return false;
+  const p = v.requirements;
+  const state = v.query.state;
+  if (
+    p.page !== v.query.page ||
+    typeof p.more !== "boolean" ||
+    !arrayOf(p.entries, row) ||
+    p.entries.length > 25 ||
+    (p.more && p.entries.length !== 25) ||
+    new Set(p.entries.map((r) => r.id)).size !== p.entries.length ||
+    (v.query.state !== "all" && p.entries.some((r) => r.state !== state))
+  )
+    return false;
+  return true;
 }

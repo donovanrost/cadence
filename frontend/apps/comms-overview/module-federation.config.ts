@@ -1,7 +1,10 @@
+import { readPublication } from "../../tools/publication-metadata.ts";
 import { createModuleFederationConfig } from "@module-federation/vite";
 
+const publication = readPublication(import.meta.dirname);
+
 export default createModuleFederationConfig({
-  name: "cadence_comms",
+  name: publication.remoteName,
   filename: "remoteEntry.js",
   manifest: true,
   exposes: {

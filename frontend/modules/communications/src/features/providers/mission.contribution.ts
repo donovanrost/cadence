@@ -12,6 +12,7 @@ export const missionPages = [
     slot: MISSION_PAGE_SLOT,
     version: 1,
     title: "Providers",
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
     component: CommsProviderList,
     read(value, context) {
       if (context.resourceId !== undefined) throw new Error("Unexpected resource.");
@@ -23,6 +24,7 @@ export const missionPages = [
     slot: MISSION_PAGE_SLOT,
     version: 1,
     title: "New Provider",
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
     component: MissionProviderCreation,
     actions: ["create-provider"],
     read(value, context) {
@@ -41,6 +43,7 @@ export const missionPages = [
     slot: MISSION_PAGE_SLOT,
     version: 1,
     title: "Provider",
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
     component: MissionProviderDetail,
     actions: ["validate-provider", "sync-provider", "archive-provider", "refresh"],
     read(value, context) {

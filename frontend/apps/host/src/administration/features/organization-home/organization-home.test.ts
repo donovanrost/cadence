@@ -1,3 +1,5 @@
+import { jsonFixture, fixtureRecord } from "../../../../../../test-support/json-fixture";
+import { required } from "../../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import AdministrationPage from "../../AdministrationPage.vue";
@@ -60,16 +62,16 @@ test("invalid context, forged identities, overfull and duplicate rows cannot bec
       d.counts.missions = -1;
     },
     (d) => {
-      d.recent_missions[0]!.id = "../../foreign";
+      required(d.recent_missions[0]).id = "../../foreign";
     },
     (d) => {
       d.recent_missions.push(...d.recent_missions);
     },
     (d) => {
-      d.recent_missions[1]!.id = d.recent_missions[0]!.id;
+      required(d.recent_missions[1]).id = required(d.recent_missions[0]).id;
     },
     (d) => {
-      d.recent_missions[0]!.created_at = "not-a-date";
+      required(d.recent_missions[0]).created_at = "not-a-date";
     },
   ];
   for (const mutate of mutations) {
@@ -113,8 +115,8 @@ test("host contains unavailable or mismatched snapshots, retries and admits a re
 test("actual producer document reaches the core home feature", () => {
   const encoded = process.env.CADENCE_ORGANIZATION_HOME_DOCUMENT;
   if (!encoded) return;
-  const data = JSON.parse(encoded);
-  const model = readOrganizationHome(data, data.organization.id);
+  const data = jsonFixture(encoded);
+  const model = readOrganizationHome(data, fixtureRecord(data.organization).id);
   const wrapper = mount(OrganizationHomePanel, { props: { model } });
   expect(wrapper.findAll("li a").map((a) => a.attributes("href"))).toEqual(
     model.recent_missions.map((m) => `/missions/${encodeURIComponent(m.id)}`),

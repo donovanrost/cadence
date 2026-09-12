@@ -8,7 +8,7 @@ const directory = computed(
 );
 const pending = ref(false),
   feedback = ref("");
-async function refresh() {
+async function refreshPage() {
   if (pending.value) return;
   pending.value = true;
   feedback.value = "";
@@ -43,7 +43,7 @@ async function refresh() {
           type="button"
           class="btn btn-outline btn-sm"
           :disabled="pending"
-          @click="refresh"
+          @click="refreshPage"
         >
           {{ pending ? "Checking…" : "Refresh publication" }}
         </button>

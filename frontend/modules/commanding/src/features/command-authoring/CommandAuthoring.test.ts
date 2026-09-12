@@ -1,3 +1,11 @@
+import { containing } from "../../../../../test-support/matchers";
+import {
+  jsonFixture,
+  fixtureContext,
+  fixtureString,
+} from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
+import { fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { mount, flushPromises } from "@vue/test-utils";
 import { describe, expect, test, vi } from "vite-plus/test";
 import { writeFileSync } from "node:fs";
@@ -115,7 +123,7 @@ describe("command authoring", () => {
     );
     await c.wrapper.get('[data-argument-name="amount"]').setValue("2");
     await c.wrapper.get("#command-authoring-form").trigger("submit");
-    expect(c.guardNavigation.mock.calls[0]![0]()).toBe(false);
+    expect(required(c.guardNavigation.mock.calls[0])[0]()).toBe(false);
     await c.wrapper.get("#command-authoring-back").trigger("click");
     expect(c.navigate).not.toHaveBeenCalled();
     c.wrapper.unmount();
@@ -186,8 +194,8 @@ describe("command authoring", () => {
 test.skipIf(!process.env.CADENCE_COMMAND_AUTHORING_DOCUMENT)(
   "actual producer yields the feature-owned preview or create input",
   async () => {
-    const raw = JSON.parse(process.env.CADENCE_COMMAND_AUTHORING_DOCUMENT!);
-    const contribution = readAuthoringContribution(raw.data, raw.context);
+    const raw = jsonFixture(required(process.env.CADENCE_COMMAND_AUTHORING_DOCUMENT));
+    const contribution = readAuthoringContribution(raw.data, fixtureContext(raw.context));
     if (!("catalog" in contribution)) {
       const execute = vi.fn();
       const wrapper = mount(CommandAuthoringPage, {
@@ -202,13 +210,13 @@ test.skipIf(!process.env.CADENCE_COMMAND_AUTHORING_DOCUMENT)(
       expect(wrapper.find("#command-authoring-form").exists()).toBe(false);
       expect(execute).not.toHaveBeenCalled();
       writeFileSync(
-        process.env.CADENCE_COMMAND_AUTHORING_INPUT_FILE!,
+        required(process.env.CADENCE_COMMAND_AUTHORING_INPUT_FILE),
         JSON.stringify({ prerequisite: contribution.state }),
       );
       wrapper.unmount();
       return;
     }
-    const page = readAuthoringPage(raw.data, raw.context);
+    const page = readAuthoringPage(raw.data, fixtureContext(raw.context));
     const c = mountPage(page);
     let captured: unknown;
     c.execute.mockImplementation(async (_event, input) => {
@@ -224,10 +232,11 @@ test.skipIf(!process.env.CADENCE_COMMAND_AUTHORING_DOCUMENT)(
       await c.wrapper.get("#authoring-confirm").setValue(true);
       await c.wrapper.get("#command-authoring-create").trigger("click");
     } else {
-      const inputs: Record<string, string> = process.env.CADENCE_COMMAND_AUTHORING_EXACT_INPUT
-        ? JSON.parse(process.env.CADENCE_COMMAND_AUTHORING_EXACT_INPUT)
+      const inputs = process.env.CADENCE_COMMAND_AUTHORING_EXACT_INPUT
+        ? jsonFixture(process.env.CADENCE_COMMAND_AUTHORING_EXACT_INPUT)
         : { amount: "2" };
-      for (const [name, raw] of Object.entries(inputs)) {
+      for (const [name, value] of Object.entries(inputs)) {
+        const raw = fixtureString(value);
         const enabled = c.wrapper.get<HTMLInputElement>(`[data-argument-enabled="${name}"]`);
         if (!enabled.element.checked) await enabled.setValue(true);
         const enumType = c.wrapper.find(`select[aria-label="${name} value type"]`);
@@ -240,7 +249,10 @@ test.skipIf(!process.env.CADENCE_COMMAND_AUTHORING_DOCUMENT)(
     }
     await flushPromises();
     expect(captured).toBeDefined();
-    writeFileSync(process.env.CADENCE_COMMAND_AUTHORING_INPUT_FILE!, JSON.stringify(captured));
+    writeFileSync(
+      required(process.env.CADENCE_COMMAND_AUTHORING_INPUT_FILE),
+      JSON.stringify(captured),
+    );
     c.wrapper.unmount();
   },
 );
@@ -253,10 +265,7 @@ test("named priority selection sends its canonical rank into the command preview
     await select.setValue("1");
     expect(select.element.selectedOptions[0]?.textContent).toBe("High (rank 1)");
     await enterAndPreview(c);
-    expect(c.execute).toHaveBeenCalledExactlyOnceWith(
-      "preview",
-      expect.objectContaining({ priority: 1 }),
-    );
+    expect(c.execute).toHaveBeenCalledExactlyOnceWith("preview", containing({ priority: 1 }));
   } finally {
     c.wrapper.unmount();
   }
@@ -273,20 +282,20 @@ test("old and mixed argument contracts fail closed while exact wide preview text
     "18446744073709551615",
   );
   for (const mutate of [
-    (x: any) => {
-      x.catalog.version = 1;
+    (x: unknown) => {
+      fixtureRecordAt(x, "catalog").version = 1;
     },
-    (x: any) => {
-      x.catalog.selected_command.arguments[0].default_value = 2;
+    (x: unknown) => {
+      fixtureRecordAt(x, "catalog", "selected_command", "arguments", 0).default_value = 2;
     },
-    (x: any) => {
-      x.preview.argument_values = { amount: 2 };
+    (x: unknown) => {
+      fixtureRecordAt(x, "preview").argument_values = { amount: 2 };
     },
-    (x: any) => {
-      delete x.preview.argument_values_json;
+    (x: unknown) => {
+      delete fixtureRecordAt(x, "preview").argument_values_json;
     },
-    (x: any) => {
-      x.preview.argument_values_json = '{"amount":1,"amount":2}';
+    (x: unknown) => {
+      fixtureRecordAt(x, "preview").argument_values_json = '{"amount":1,"amount":2}';
     },
   ]) {
     const x = structuredClone(p);

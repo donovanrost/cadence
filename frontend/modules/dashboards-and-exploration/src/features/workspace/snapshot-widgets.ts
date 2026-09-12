@@ -1,6 +1,6 @@
-import type DashboardWidget from "./DashboardWidget.vue";
-import type WidgetPoint from "./WidgetPoint.vue";
-import type WidgetRows from "./WidgetRows.vue";
+import type { WidgetPointPresentation } from "./WidgetPoint.contracts";
+import type { WidgetRowsPresentation } from "./WidgetRows.contracts";
+import type { DashboardWidgetPresentation } from "./DashboardWidget.contracts";
 import type {
   WorkspaceField,
   WorkspaceFrame,
@@ -9,19 +9,35 @@ import type {
 } from "./contracts";
 import { snapshotSeries } from "./snapshot-series.ts";
 
-type Point = InstanceType<typeof WidgetPoint>["$props"]["presentation"];
-type Rows = InstanceType<typeof WidgetRows>["$props"]["presentation"];
-type Body = InstanceType<typeof DashboardWidget>["$props"]["presentation"]["body"];
+type Point = WidgetPointPresentation;
+type Rows = WidgetRowsPresentation;
+type Body = DashboardWidgetPresentation["body"];
 type Cell = WorkspaceField["values"][number];
 type Row = Record<string, Cell>;
 export const muted = "text-xs font-mono text-base-content/60";
-const tones: Record<string, string> = {
+const tones = {
   red: "bg-error/15 text-error",
   yellow: "bg-warning/15 text-warning",
   blue: "bg-info/15 text-info",
   green: "bg-success/15 text-success",
   no_data: "bg-base-300 text-base-content/60",
 };
+function healthState(row: Row): keyof typeof tones {
+  const state = row.worst_state === null ? "no_data" : row.worst_state;
+  if (
+    state === "red" ||
+    state === "yellow" ||
+    state === "blue" ||
+    state === "green" ||
+    state === "no_data"
+  )
+    return state;
+  throw Error("Unknown health state");
+}
+function placementWidget(placement: WorkspacePlacement) {
+  if (!placement.widget) throw Error("Missing widget definition");
+  return placement.widget;
+}
 export const label = (value: Cell | undefined): string =>
   value == null ? "No data" : String(value);
 export const timestamp = (value: Cell | undefined): string => {
@@ -31,10 +47,16 @@ export const timestamp = (value: Cell | undefined): string => {
 };
 export function frameRows(frame: WorkspaceFrame): Row[] {
   return Array.from({ length: frame.fields[0]?.values.length ?? 0 }, (_, index) =>
-    Object.fromEntries(frame.fields.map((field) => [field.name, field.values[index]])),
+    Object.fromEntries(
+      frame.fields.map((field) => {
+        const value = field.values[index];
+        if (value === undefined) throw Error("Incomplete frame row");
+        return [field.name, value];
+      }),
+    ),
   );
 }
-const format = (value: Cell, field: WorkspaceField, precision: number) =>
+const format = (value: Cell | undefined, field: WorkspaceField, precision: number) =>
   field.kind === "time"
     ? timestamp(value)
     : typeof value === "number"
@@ -47,7 +69,7 @@ function point(
   id: string,
   group: string,
 ): Point {
-  const widget = placement.widget!;
+  const widget = placementWidget(placement);
   const primary = placement.frames.filter((frame) => frame.role === "primary");
   if (widget.type === "time_series") {
     const plotted = placement.frames.filter((f) => f.role === "primary" || f.role === "compare");
@@ -72,21 +94,37 @@ function point(
           widget_id: placement.authored_id,
           placement_id: placement.id,
           correlation_group: group,
-          show_min_max_band: widget.options.show_min_max_band,
-          legend_mode: widget.options.legend_mode,
-          line_width: widget.options.line_width,
-          fill_opacity: widget.options.fill_opacity,
-          span_gaps: widget.options.span_gaps,
-          show_points: widget.options.show_points,
-          axis_mode: widget.options.axis_mode,
-          shared_tooltip: widget.options.shared_tooltip,
+          ...(widget.options.show_min_max_band === undefined
+            ? {}
+            : { show_min_max_band: widget.options.show_min_max_band }),
+          ...(widget.options.legend_mode === undefined
+            ? {}
+            : { legend_mode: widget.options.legend_mode }),
+          ...(widget.options.line_width === undefined
+            ? {}
+            : { line_width: widget.options.line_width }),
+          ...(widget.options.fill_opacity === undefined
+            ? {}
+            : { fill_opacity: widget.options.fill_opacity }),
+          ...(widget.options.span_gaps === undefined
+            ? {}
+            : { span_gaps: widget.options.span_gaps }),
+          ...(widget.options.show_points === undefined
+            ? {}
+            : { show_points: widget.options.show_points }),
+          ...(widget.options.axis_mode === undefined
+            ? {}
+            : { axis_mode: widget.options.axis_mode }),
+          ...(widget.options.shared_tooltip === undefined
+            ? {}
+            : { shared_tooltip: widget.options.shared_tooltip }),
           window_seconds: snapshot.context.window_seconds ?? widget.options.window_seconds,
           label: widget.title,
           backfill: { series },
           compare_backfill: { series: compare },
           time_mode:
             snapshot.context.time_mode === "live" ? "snapshot" : snapshot.context.time_mode,
-          time_axis: primary[0].time_axis ?? snapshot.context.time_axis,
+          time_axis: primary[0]?.time_axis ?? snapshot.context.time_axis,
           time_from: snapshot.context.from ?? "",
           time_to: snapshot.context.to ?? "",
           data_realm: snapshot.context.realm,
@@ -118,18 +156,15 @@ function point(
     const ids = entries.map((row) => row.spacecraft_id);
     if (ids.some((id) => typeof id !== "string" || !id) || new Set(ids).size !== ids.length)
       throw Error("Ambiguous spacecraft health");
-    const states = entries.map((row) =>
-      row.worst_state === null ? "no_data" : String(row.worst_state),
-    );
-    if (states.some((state) => !Object.hasOwn(tones, state))) throw Error("Unknown health state");
+    const states = entries.map(healthState);
     return {
       kind: "constellation_health",
       component_id: `${id}-point`,
       host: { class: "contents" },
       badges: {
         class: "flex flex-wrap gap-2 mb-3",
-        items: Object.keys(tones).map((state) => ({
-          class: `inline-flex items-center gap-1.5 rounded px-2 py-1 ${tones[state]}`,
+        items: Object.entries(tones).map(([state, tone]) => ({
+          class: `inline-flex items-center gap-1.5 rounded px-2 py-1 ${tone}`,
           dot_class: "hidden",
           count: states.filter((s) => s === state).length,
           count_class: "font-mono font-semibold",
@@ -140,13 +175,13 @@ function point(
       spacecraft: {
         class: "flex flex-wrap gap-2",
         attrs: {},
-        items: entries.map((row, index) => ({
+        items: entries.map((row) => ({
           key: String(row.spacecraft_id),
-          class: `inline-block h-5 w-5 rounded ${tones[states[index]]}`,
+          class: `inline-block h-5 w-5 rounded ${tones[healthState(row)]}`,
           attrs: {
             role: "img",
-            title: `${row.spacecraft_id}: ${states[index]}`,
-            "aria-label": `${row.spacecraft_id}: ${states[index]}`,
+            title: `${row.spacecraft_id}: ${healthState(row)}`,
+            "aria-label": `${row.spacecraft_id}: ${healthState(row)}`,
             "data-spacecraft-id": String(row.spacecraft_id),
           },
         })),
@@ -155,14 +190,16 @@ function point(
   }
   if (primary.length !== 1) throw Error("A value tile requires one resolved value");
   const frame = primary[0];
-  if (!["scalar", "matrix"].includes(frame.shape)) throw Error("Invalid value frame");
+  if (!frame || !["scalar", "matrix"].includes(frame.shape)) throw Error("Invalid value frame");
   const values =
     frame.shape === "matrix"
       ? frame.fields.filter((f) => f.name === "value")
       : frame.fields.filter((f) => f.kind !== "time");
-  if (values.length !== 1 || values[0].values.length !== 1) throw Error("Ambiguous value tile");
-  const field = values[0],
-    row = frameRows(frame)[0];
+  const field = values[0];
+  if (values.length !== 1 || !field || field.values.length !== 1)
+    throw Error("Ambiguous value tile");
+  const row = frameRows(frame)[0];
+  if (!row) throw Error("Missing value row");
   const unit = field.unit ?? (typeof row.unit === "string" ? row.unit : null);
   const time = frame.fields.find((f) => f.kind === "time");
   return {
@@ -182,6 +219,9 @@ function point(
 }
 
 function table(placement: WorkspacePlacement, id: string): Rows {
+  const widget = placementWidget(placement);
+  const kind = widget.type;
+  if (kind !== "data_table" && kind !== "status_matrix") throw Error("Invalid table widget");
   const primary = placement.frames.filter((f) => f.role === "primary");
   if (primary.some((f) => !["scalar", "matrix", "long"].includes(f.shape)))
     throw Error("Invalid table frame");
@@ -196,7 +236,7 @@ function table(placement: WorkspacePlacement, id: string): Rows {
     ).entries(),
   );
   return {
-    kind: placement.widget!.type as "data_table" | "status_matrix",
+    kind,
     component_id: `${id}-rows`,
     root: { class: "table table-xs w-full" },
     head: {
@@ -223,7 +263,7 @@ function table(placement: WorkspacePlacement, id: string): Rows {
           text: frame.fields.some(
             (f) => f.name === field.name && f.kind === field.kind && f.unit === field.unit,
           )
-            ? format(row[field.name], field, placement.widget!.options.precision)
+            ? format(row[field.name], field, placementWidget(placement).options.precision)
             : "—",
         })),
       })),
@@ -233,7 +273,7 @@ function table(placement: WorkspacePlacement, id: string): Rows {
 
 function timeline(placement: WorkspacePlacement, id: string): Rows {
   const primary = placement.frames.filter((f) => f.role === "primary");
-  if (placement.widget!.type === "event_timeline") {
+  if (placementWidget(placement).type === "event_timeline") {
     const rows = primary
       .flatMap((frame, frameIndex) => {
         if (!["events", "intervals"].includes(frame.shape)) throw Error("Invalid event frame");
@@ -311,7 +351,7 @@ function timeline(placement: WorkspacePlacement, id: string): Rows {
           label: {
             class: "text-xs font-medium",
             attrs: {},
-            text: `${placement.widget!.title} · ${frameIndex + 1}`,
+            text: `${placementWidget(placement).title} · ${frameIndex + 1}`,
           },
           metadata_class: `flex flex-wrap gap-x-3 gap-y-1 ${muted}`,
           metadata: [],

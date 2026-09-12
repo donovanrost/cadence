@@ -18,6 +18,7 @@ function text(v: unknown, max: number, empty = false): string {
 }
 function id(v: unknown): string {
   const s = text(v, 256);
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   return /[\u0000-\u001f]/.test(s) ? fail() : s;
 }
 function version(v: unknown, max = Number.MAX_SAFE_INTEGER - 1): number {

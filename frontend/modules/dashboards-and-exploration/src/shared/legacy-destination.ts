@@ -3,6 +3,7 @@ export function identity(value: unknown): value is string {
     typeof value === "string" &&
     value.length > 0 &&
     new TextEncoder().encode(value).length <= 256 &&
+    // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
     !/[\u0000-\u001f\u007f\ud800-\udfff]/u.test(value)
   );
 }

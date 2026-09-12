@@ -1,3 +1,4 @@
+import { containing } from "../../../test-support/matchers";
 import {
   providerNewSurface,
   providerDetailSurface,
@@ -94,11 +95,11 @@ describe("Comms canonical federated application", () => {
       expect(execute).not.toHaveBeenCalled();
       await wrapper.get("#mission-provider-form").trigger("submit");
       expect(execute).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({
+        containing({
           actionId: "create_provider",
           context,
           input: {
-            provider: expect.objectContaining({
+            provider: containing({
               provider_account_grant_id: "grant-2",
               provider_account_grant_version: "2",
               provider_account_version: "4",
@@ -228,9 +229,8 @@ describe("Comms canonical federated application", () => {
     await wrapper.get("#ground_station_display_name").setValue("Saved station");
     await flushPromises();
     await wrapper.get("#ground-station-form").trigger("submit");
-    expect(props.bridge.execute).toHaveBeenLastCalledWith(
-      expect.objectContaining({ actionId: "save" }),
-    );
+    // oxlint-disable-next-line typescript/unbound-method -- Compare the mock function identity; this expression does not invoke it.
+    expect(props.bridge.execute).toHaveBeenLastCalledWith(containing({ actionId: "save" }));
     if (mode === "unmount") wrapper.unmount();
     else
       await wrapper.setProps(

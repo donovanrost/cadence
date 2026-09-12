@@ -3,5 +3,5 @@ import vue from "@vitejs/plugin-vue";
 import { defineConfig, lazyPlugins } from "vite-plus";
 
 export default defineConfig({
-  plugins: lazyPlugins(() => [tailwindcss(), vue()]),
+  plugins: lazyPlugins(() => [tailwindcss(), vue()]) ?? [],
 });

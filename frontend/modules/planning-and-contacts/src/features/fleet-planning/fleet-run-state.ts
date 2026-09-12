@@ -1,5 +1,9 @@
 import { computed, onBeforeUnmount, reactive, ref, shallowRef, watch } from "vue";
-import type { FleetRunPort, FleetRunReceipt } from "./OpsFleetPlanningRun.contracts";
+import type {
+  FleetRunPort,
+  FleetRunReceipt,
+  FleetRunCommand,
+} from "./OpsFleetPlanningRun.contracts";
 import { admitFleetRun, fleetRunReceipt } from "./fleet-run";
 import { fleetCompletion, fleetWindow } from "./fleet-start";
 export function useFleetRun(input: () => unknown, port?: FleetRunPort) {
@@ -12,9 +16,10 @@ export function useFleetRun(input: () => unknown, port?: FleetRunPort) {
     notice = ref(""),
     uncertain = ref(false),
     receipt = shallowRef<FleetRunReceipt | null>(null);
+  const repairReview = computed(() => (model.value?.repair.evidence ? model.value.repair : null));
   const draft = reactive({
-    horizon_start: model.value?.repair.defaults?.horizon_start.slice(0, 19) ?? "",
-    horizon_end: model.value?.repair.defaults?.horizon_end.slice(0, 19) ?? "",
+    horizon_start: repairReview.value?.defaults?.horizon_start.slice(0, 19) ?? "",
+    horizon_end: repairReview.value?.defaults?.horizon_end.slice(0, 19) ?? "",
   });
   function accept(value: unknown) {
     const next = admitFleetRun(value, context, identity);
@@ -22,7 +27,7 @@ export function useFleetRun(input: () => unknown, port?: FleetRunPort) {
     context ??= next.context;
     identity ??= { id: next.id, query: next.query };
     model.value = next;
-    if (!draft.horizon_start && next.repair.defaults) {
+    if (!draft.horizon_start && next.repair.evidence) {
       draft.horizon_start = next.repair.defaults.horizon_start.slice(0, 19);
       draft.horizon_end = next.repair.defaults.horizon_end.slice(0, 19);
     }
@@ -44,16 +49,15 @@ export function useFleetRun(input: () => unknown, port?: FleetRunPort) {
       !!pending.value ||
       uncertain.value ||
       receipt.value?.outcome === "repair_created" ||
-      (!!receipt.value &&
-        model.value?.evidence.sha256 === (receipt.value.evidence as { sha256: string }).sha256),
+      (!!receipt.value && model.value?.evidence.sha256 === receipt.value.evidence.sha256),
   );
   const repairWindow = computed(() => fleetWindow({ ...draft, include_recurring: false }));
   const withinHorizon = computed(
     () =>
       !!repairWindow.value &&
-      !!model.value?.repair.policy &&
+      !!repairReview.value?.policy &&
       Date.parse(repairWindow.value.horizon_end) - Date.parse(repairWindow.value.horizon_start) <=
-        model.value.repair.policy.max_repair_horizon_seconds * 1000,
+        repairReview.value.policy.max_repair_horizon_seconds * 1000,
   );
   const canContinue = computed(() => !!port && !locked.value && model.value?.can_continue === true);
   const canRepair = computed(
@@ -77,21 +81,30 @@ export function useFleetRun(input: () => unknown, port?: FleetRunPort) {
   async function execute(action: "continue" | "repair") {
     if (!port || !model.value || (action === "continue" ? !canContinue.value : !canRepair.value))
       return;
-    const captured = model.value,
-      n = ++generation;
+    const captured = model.value;
+    let command: FleetRunCommand;
+    if (action === "continue")
+      command = [
+        action,
+        { fleet_planning_run_id: captured.id, evidence: { ...captured.evidence } },
+      ];
+    else {
+      const window = repairWindow.value;
+      if (!window || !captured.repair.evidence) return;
+      command = [
+        action,
+        {
+          fleet_planning_run_id: captured.id,
+          evidence: { ...captured.repair.evidence },
+          repair: { horizon_start: window.horizon_start, horizon_end: window.horizon_end },
+        },
+      ];
+    }
+    const n = ++generation;
     pending.value = action;
     notice.value = "";
-    const input: Record<string, unknown> = {
-      fleet_planning_run_id: captured.id,
-      evidence: { ...(action === "continue" ? captured.evidence : captured.repair.evidence) },
-    };
-    if (action === "repair")
-      input.repair = {
-        horizon_start: repairWindow.value!.horizon_start,
-        horizon_end: repairWindow.value!.horizon_end,
-      };
     try {
-      const result = fleetCompletion(await port.execute(action, input));
+      const result = fleetCompletion(await port.execute(...command));
       if (!current(n)) return;
       const confirmed = fleetRunReceipt(result, captured, action);
       if (!confirmed) throw Error("Unavailable receipt");

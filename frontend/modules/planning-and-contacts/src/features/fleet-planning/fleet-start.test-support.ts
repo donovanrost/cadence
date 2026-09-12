@@ -1,9 +1,11 @@
+import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
+import { required } from "../../../../../test-support/required";
 import type {
   FleetStartModel,
   FleetStartReview,
   FleetStartWindow,
 } from "./OpsFleetPlanningNew.contracts";
-export function startFixture(): FleetStartModel {
+export function startFixture(): MutableFixture<FleetStartModel> {
   return {
     contract_version: 1,
     context: { organization_id: "org-one", mission_id: "mission-one" },
@@ -31,18 +33,18 @@ export function startReviewFixture(
   requirements_page = 1,
   templates_page = 1,
   count = 1,
-): FleetStartReview {
+): MutableFixture<FleetStartReview> {
   return {
     contract_version: 1,
     context: model.context,
     window: { ...window },
-    policy: { ...model.policy! },
+    policy: { ...required(model.policy) },
     evidence: {
       contract_version: 1,
       ...model.context,
-      policy_id: model.policy!.id,
-      policy_version: model.policy!.version,
-      policy_sha256: model.policy!.content_sha256,
+      policy_id: required(model.policy).id,
+      policy_version: required(model.policy).version,
+      policy_sha256: required(model.policy).content_sha256,
       input_sha256: "b".repeat(64),
     },
     requirements: {

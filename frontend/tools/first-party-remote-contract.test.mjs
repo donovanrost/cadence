@@ -1,3 +1,5 @@
+import { jsonFixture, fixtureRecord } from "../test-support/json-fixture.ts";
+import { readPublication } from "./publication-metadata.ts";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -9,10 +11,10 @@ import {
 
 const frontendRoot = join(import.meta.dirname, "..");
 
-test("the approved first-party remotes expose source-derived manifest identities", async () => {
+void test("the approved first-party remotes expose explicit publication and manifest identities", async () => {
   for (const { directoryName, bundle, remoteName } of APPROVED_FIRST_PARTY_REMOTES) {
     const directory = join(frontendRoot, "apps", directoryName);
-    const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
+    const packageJson = jsonFixture(await readFile(join(directory, "package.json"), "utf8"));
     const federation = await readFile(join(directory, "module-federation.config.ts"), "utf8");
     const federatedApplication = await readFile(
       join(directory, "src", "federated-application.ts"),
@@ -21,8 +23,8 @@ test("the approved first-party remotes expose source-derived manifest identities
     const sourceIdentity = declaredIdentity(federatedApplication, directoryName);
 
     assert.equal(typeof packageJson.name, "string");
-    assert.equal(typeof packageJson.scripts?.["build:phoenix"], "string");
-    assert.match(federation, new RegExp(`name:\\s*["']${escapeRegExp(remoteName)}["']`));
+    assert.equal(typeof fixtureRecord(packageJson.scripts)["build:phoenix"], "string");
+    assert.equal(readPublication(directory).remoteName, remoteName);
     assert.match(federation, /exposes:\s*\{[\s\S]*["']\.\/Application["']\s*:/);
     assert.match(federatedApplication, /defineApplicationManifest/);
     assert.match(federatedApplication, /FEDERATED_APPLICATION_MANIFEST_SCHEMA/);
@@ -44,8 +46,7 @@ test("the approved first-party remotes expose source-derived manifest identities
       /(?:renderer:\s*(?:\{[\s\S]*exposedModule:|[A-Za-z_$][\w$]*)|\brenderer\s*,)/,
     );
 
-    const phoenixConfig = await readFile(join(directory, "vite.phoenix.config.ts"), "utf8");
-    assert.match(phoenixConfig, new RegExp(`application-host/${escapeRegExp(bundle)}`));
+    assert.equal(readPublication(directory).bundle, bundle);
   }
 
   const organizationAdmin = declaredIdentity(
@@ -58,7 +59,7 @@ test("the approved first-party remotes expose source-derived manifest identities
   assert.equal(organizationAdmin.packageId, "cadence.organization-admin");
 });
 
-test("real-workspace publication discovery admits exactly the approved remote identities", async () => {
+void test("real-workspace publication discovery admits exactly the approved remote identities", async () => {
   const { host, remotes } = await discoverFirstPartyRemotes(frontendRoot, {
     requireApproved: true,
   });
@@ -74,6 +75,7 @@ test("real-workspace publication discovery admits exactly the approved remote id
   );
 });
 
+/** @param {string} source @param {string} directoryName */
 function declaredIdentity(source, directoryName) {
   const applicationKey = source.match(/applicationKey:\s*["']([^"']+)["']/)?.[1];
   const packageId = source.match(/packageId:\s*["']([^"']+)["']/)?.[1];
@@ -83,6 +85,7 @@ function declaredIdentity(source, directoryName) {
   return { applicationKey, packageId };
 }
 
+/** @param {string} value */
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

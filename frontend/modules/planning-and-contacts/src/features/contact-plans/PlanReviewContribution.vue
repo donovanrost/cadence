@@ -7,10 +7,9 @@ defineOptions({ inheritAttrs: false });
 const props = defineProps<{ page: PlanReviewPage; port: OpsPagePort; readPort: OpsPageReadPort }>();
 const reviewPort: PlanDetailPort = {
   context: { ...props.page.detail.context, plan_id: props.page.detail.plan.id },
-  captured: {
-    actorId: props.page.actor_id,
-    guardNavigation: (guard) => props.port.guardNavigation?.(guard) ?? (() => {}),
-  },
+  protocol: "page-snapshot",
+  actorId: props.page.actor_id,
+  guardNavigation: (guard) => props.port.guardNavigation?.(guard) ?? (() => {}),
   execute: (action, input) => props.port.execute(action, input),
   refresh: () => props.readPort.read(),
 };

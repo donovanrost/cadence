@@ -17,5 +17,5 @@ export default defineConfig(({ command }) => ({
     target: "chrome89",
     outDir: "dist/current",
   },
-  plugins: lazyPlugins(() => [tailwindcss(), vue(), federation(federationConfig)]),
+  plugins: lazyPlugins(() => [tailwindcss(), vue(), federation(federationConfig)]) ?? [],
 }));

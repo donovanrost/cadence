@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from "vue";
 import CadenceCollapsible from "@cadence/ui/CadenceCollapsible.vue";
 import CadenceCollapsibleContent from "@cadence/ui/CadenceCollapsibleContent.vue";
@@ -6,10 +6,10 @@ import CadenceCollapsibleTrigger from "@cadence/ui/CadenceCollapsibleTrigger.vue
 import { navigation } from "./navigation";
 import { navigateAttrs } from "../../shared/navigation";
 import { readNavigationContext } from "./contracts";
-const props = defineProps({ context: { type: Object, required: true }, mission: Boolean });
+const props = defineProps<{ context: unknown; mission?: boolean }>();
 const collapsed = ref(false);
-const model = computed(() => readNavigationContext(props.context, props.mission));
-const items = computed(() => (model.value ? navigation(model.value, props.mission) : []));
+const model = computed(() => readNavigationContext(props.context, props.mission ?? false));
+const items = computed(() => (model.value ? navigation(model.value, props.mission ?? false) : []));
 </script>
 <template>
   <template v-if="model">
@@ -42,7 +42,7 @@ const items = computed(() => (model.value ? navigation(model.value, props.missio
         <ul class="cd-side-nav">
           <li v-for="item in items" :key="item.key">
             <CadenceCollapsible
-              v-if="item.children"
+              v-if="item.kind === 'group'"
               :open="item.active"
               :client-seeded="true"
               :content-id="`mission-sidebar-${item.key}-content`"

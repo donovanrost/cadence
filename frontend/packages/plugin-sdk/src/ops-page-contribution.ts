@@ -15,9 +15,9 @@ export type OpsPageSnapshot = {
   token?: string;
 };
 export type OpsPageNavigationPort = {
-  navigate(href: string): void;
+  navigate(this: void, href: string): void;
   /** Register a synchronous leave guard; dispose it with the feature instance. */
-  guardNavigation?(guard: () => boolean): () => void;
+  guardNavigation?(this: void, guard: () => boolean): () => void;
 };
 export type OpsPagePort = OpsPageNavigationPort & {
   execute(action: string, input: Record<string, unknown>): Promise<unknown>;

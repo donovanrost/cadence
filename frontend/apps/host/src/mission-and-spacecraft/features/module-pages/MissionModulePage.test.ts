@@ -1,3 +1,5 @@
+import type { MissionPagePort } from "@cadence/plugin-sdk/mission-pages";
+import { required } from "../../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import MissionModulePage from "./MissionModulePage.vue";
@@ -31,16 +33,17 @@ test("action contributions require a valid token and both host ports", () => {
     { execute: undefined },
     { navigate: undefined },
   ]) {
+    const { execute, navigate, ...pageProps } = {
+      contributionId: valid.id,
+      snapshot: valid,
+      context: valid.context,
+      refresh: vi.fn(),
+      execute: vi.fn(),
+      navigate: vi.fn(),
+      ...overrides,
+    };
     const wrapper = mount(MissionModulePage, {
-      props: {
-        contributionId: valid.id,
-        snapshot: valid,
-        context: valid.context,
-        refresh: vi.fn(),
-        execute: vi.fn(),
-        navigate: vi.fn(),
-        ...overrides,
-      },
+      props: { ...pageProps, ...(execute ? { execute } : {}), ...(navigate ? { navigate } : {}) },
     });
     expect(wrapper.find("#mission-module-unavailable").exists()).toBe(true);
     wrapper.unmount();
@@ -65,7 +68,7 @@ test("mission ports admit only declared actions and reject responses after insta
       navigate,
     },
   });
-  const port = wrapper.getComponent(MissionTransportCreation).props("port");
+  const port: MissionPagePort = wrapper.getComponent(MissionTransportCreation).props("port");
   try {
     await expect(port.execute("delete", {})).rejects.toThrow();
     expect(execute).not.toHaveBeenCalled();
@@ -108,7 +111,7 @@ test("refresh, route identity changes and unmount invalidate retained action por
         navigate,
       },
     });
-    const port = wrapper.getComponent(MissionTransportCreation).props("port");
+    const port: MissionPagePort = wrapper.getComponent(MissionTransportCreation).props("port");
     await wrapper.setProps(update);
     await expect(port.execute("validate", {})).rejects.toThrow();
     port.navigate("/missions/mission-1");
@@ -121,7 +124,7 @@ test("refresh, route identity changes and unmount invalidate retained action por
 
 test("all eight mission contributions render their existing feature components", () => {
   for (const snapshot of missionSnapshots()) {
-    const registration = missionModulePages[snapshot.id];
+    const registration = required(missionModulePages[snapshot.id]);
     const wrapper = mount(MissionModulePage, {
       props: {
         contributionId: snapshot.id,
@@ -168,7 +171,7 @@ test("admission binds identity, version, slot, mission and resource before rende
 test("detail features reject another resource even when the envelope claims the current resource", () => {
   for (const snapshot of missionSnapshots().filter((item) => item.context.resourceId)) {
     expect(() =>
-      missionModulePages[snapshot.id].read(snapshot.data, {
+      required(missionModulePages[snapshot.id]).read(snapshot.data, {
         ...snapshot.context,
         resourceId: "another-resource",
       }),
@@ -176,9 +179,9 @@ test("detail features reject another resource even when the envelope claims the 
   }
 });
 test("unavailable reads retry and renderer failures recover with a fresh snapshot", async () => {
-  const valid = missionSnapshots()[2];
+  const valid = required(missionSnapshots()[2]);
   const refresh = vi.fn().mockResolvedValue(undefined);
-  const component = missionModulePages[valid.id].component;
+  const component = required(missionModulePages[valid.id]).component;
   const setup = vi
     .spyOn(component as { setup: (...args: unknown[]) => unknown }, "setup")
     .mockImplementation(() => {
@@ -209,7 +212,7 @@ test("unavailable reads retry and renderer failures recover with a fresh snapsho
   }
 });
 test("registration admits only unique supported compiled contributions", () => {
-  const registration = missionModulePages["comms.transports"];
+  const registration = required(missionModulePages["comms.transports"]);
   expect(Object.keys(missionModulePages)).toHaveLength(15);
   expect(() => admitMissionPages([registration, registration])).toThrow();
   expect(() => admitMissionPages([{ ...registration, version: 2 } as never])).toThrow();

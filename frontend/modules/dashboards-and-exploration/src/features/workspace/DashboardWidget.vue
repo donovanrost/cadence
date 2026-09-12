@@ -1,55 +1,11 @@
 <script setup lang="ts">
+import type { DashboardWidgetPresentation } from "./DashboardWidget.contracts";
+
 import { computed } from "vue";
 
 import DashboardWidgetHeader from "./DashboardWidgetHeader.vue";
 import WidgetPoint from "./WidgetPoint.vue";
 import WidgetRows from "./WidgetRows.vue";
-
-type Classes = string | string[];
-type Attributes = Record<string, string>;
-type ButtonType = "button" | "submit" | "reset";
-
-type HeaderPresentation = InstanceType<typeof DashboardWidgetHeader>["$props"]["presentation"];
-type PointPresentation = InstanceType<typeof WidgetPoint>["$props"]["presentation"];
-type RowsPresentation = InstanceType<typeof WidgetRows>["$props"]["presentation"];
-
-type WidgetNoticePresentation = {
-  kind: "notice" | "lifecycle";
-  class: Classes;
-  attrs: Attributes;
-  text: string;
-  actions: Array<{
-    key: string;
-    type: ButtonType;
-    class: string;
-    attrs: Attributes;
-    icon: { name: string; class: string };
-    text: string;
-  }>;
-};
-
-type WidgetBodyPresentation = {
-  kind:
-    | "value_tile"
-    | "time_series"
-    | "status_matrix"
-    | "data_table"
-    | "state_timeline"
-    | "event_timeline"
-    | "constellation_health";
-  root: { class: Classes; attrs: Attributes };
-  notice: WidgetNoticePresentation | null;
-  content:
-    | { component: "WidgetPoint"; presentation: PointPresentation }
-    | { component: "WidgetRows"; presentation: RowsPresentation }
-    | null;
-};
-
-type DashboardWidgetPresentation = {
-  component_id: string;
-  header: HeaderPresentation;
-  body: WidgetBodyPresentation;
-};
 
 const props = defineProps<{ presentation: DashboardWidgetPresentation }>();
 

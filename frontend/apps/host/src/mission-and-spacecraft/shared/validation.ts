@@ -33,7 +33,7 @@ const allowedAttrs: Record<string, Check> = {
 export const attrs: Check = (value) =>
   record(value) &&
   Object.entries(value).every(
-    ([key, item]) => Object.hasOwn(allowedAttrs, key) && allowedAttrs[key]!(item),
+    ([key, item]) => Object.hasOwn(allowedAttrs, key) && (allowedAttrs[key]?.(item) ?? false),
   );
 export const tone = choice("info", "ready", "attention", "blocked");
 export const status = shape({ tone, label: text });

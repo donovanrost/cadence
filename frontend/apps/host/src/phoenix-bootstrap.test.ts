@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { createApp } from "vue";
+const vueMock = vi.hoisted(() => ({
+  createApp: vi.fn(() => ({ mount: vi.fn(), unmount: vi.fn() })),
+}));
 import {
   bootstrapPhoenixHost,
   parsePhoenixQueryParams,
@@ -10,12 +12,12 @@ vi.mock("vue", async () => {
   const actual = await vi.importActual<typeof import("vue")>("vue");
   return {
     ...actual,
-    createApp: vi.fn(() => ({ mount: vi.fn(), unmount: vi.fn() })),
+    createApp: vueMock.createApp,
   };
 });
 
 beforeEach(() => {
-  vi.mocked(createApp).mockClear();
+  vueMock.createApp.mockClear();
 });
 
 describe("Phoenix federation entry", () => {
@@ -153,14 +155,14 @@ describe("Phoenix federation entry", () => {
     const second = bootstrapPhoenixHost(root);
 
     expect(second).toBe(first);
-    expect(createApp).toHaveBeenCalledTimes(1);
+    expect(vueMock.createApp).toHaveBeenCalledTimes(1);
 
     first.unmount();
     first.unmount();
     const third = bootstrapPhoenixHost(root);
 
     expect(third).not.toBe(first);
-    expect(createApp).toHaveBeenCalledTimes(2);
+    expect(vueMock.createApp).toHaveBeenCalledTimes(2);
     third.unmount();
     root.remove();
   });
@@ -180,7 +182,10 @@ describe("Phoenix federation entry", () => {
 
     const firstMount = bootstrapPhoenixHost(firstRoot);
     const replacementMount = bootstrapPhoenixHost(replacementRoot);
-    const createdApps = vi.mocked(createApp).mock.results.map((result) => result.value);
+    const createdApps = vueMock.createApp.mock.results.map((result) => {
+      if (result.type !== "return") throw Error("Expected a mounted application");
+      return result.value;
+    });
 
     firstRoot.remove();
     firstMount.unmount();

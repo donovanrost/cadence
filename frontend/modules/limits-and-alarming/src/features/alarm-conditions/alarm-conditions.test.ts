@@ -1,14 +1,16 @@
+import { jsonFixture, fixtureString } from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import { alarmConditionsContribution, AlarmConditionsLegacyRedirect } from "../../alarm-conditions";
 import { admitAlarmDocument, alarmHref, type AlarmDocument } from "./contracts";
 import { alarmFixture } from "./testing";
-const mounted: ReturnType<typeof mount>[] = [];
+const mounted: { unmount: () => void }[] = [];
 afterEach(() => mounted.splice(0).forEach((w) => w.unmount()));
 function start(model = alarmFixture()) {
   const context = { organizationId: model.organization_id, missionId: model.mission_id },
     readPort = { read: vi.fn(async () => model) },
-    port = { navigate: vi.fn() };
+    port = { navigate: vi.fn<(href: string) => void>() };
   const w = mount(alarmConditionsContribution.component, {
     props: { ...alarmConditionsContribution.read(model, context), port, readPort },
   });
@@ -16,16 +18,26 @@ function start(model = alarmFixture()) {
   return { w, context, readPort, port };
 }
 test("the public alarm contribution renders producer conditions and follows exact evidence", async () => {
-  const doc: AlarmDocument = process.env.CADENCE_ALARM_DOCUMENT
-    ? JSON.parse(process.env.CADENCE_ALARM_DOCUMENT)
+  const raw = process.env.CADENCE_ALARM_DOCUMENT
+    ? jsonFixture(process.env.CADENCE_ALARM_DOCUMENT)
     : alarmFixture();
+  const doc: AlarmDocument = required(
+    admitAlarmDocument(raw, {
+      organizationId: fixtureString(raw.organization_id),
+      missionId: fixtureString(raw.mission_id),
+    }),
+  );
   const { w, port } = start(doc);
   expect(w.findAll("[data-limit-event]")).toHaveLength(doc.states.items.length);
   const row = doc.states.items[0];
-  await w.get(`[data-limit-event="${row.id}"] a[href="${row.evidence_href}"]`).trigger("click");
-  expect(port.navigate).toHaveBeenLastCalledWith(row.evidence_href);
-  await w.get(`[data-limit-event="${row.id}"] a[href="${row.definition_href}"]`).trigger("click");
-  expect(port.navigate).toHaveBeenLastCalledWith(row.definition_href);
+  await w
+    .get(`[data-limit-event="${required(row).id}"] a[href="${required(row).evidence_href}"]`)
+    .trigger("click");
+  expect(port.navigate).toHaveBeenLastCalledWith(required(row).evidence_href);
+  await w
+    .get(`[data-limit-event="${required(row).id}"] a[href="${required(row).definition_href}"]`)
+    .trigger("click");
+  expect(port.navigate).toHaveBeenLastCalledWith(required(row).definition_href);
   if (process.env.CADENCE_ALARM_DOCUMENT) process.stdout.write("CADENCE_ALARM_CONSUMER_OK\n");
 });
 test("paged conditions retain full counts and filter URLs preserve existing keys", async () => {
@@ -39,7 +51,9 @@ test("paged conditions retain full counts and filter URLs preserve existing keys
   await w.get("#alarm-state").setValue("active");
   await w.get("#alarm-query").setValue("voltage");
   await w.get("#alarm-filters").trigger("submit");
-  const q = new URLSearchParams(vi.mocked(port.navigate).mock.calls.at(-1)![0].split("?")[1]);
+  const q = new URLSearchParams(
+    required(vi.mocked(port.navigate).mock.calls.at(-1))[0].split("?")[1],
+  );
   expect(Object.fromEntries(q)).toMatchObject({
     severity: "critical",
     state: "active",
@@ -88,12 +102,11 @@ test("rejects foreign scope, contradictory counts, substituted evidence and wron
   for (const mutate of [
     (x: AlarmDocument) => x.counts.critical++,
     (x: AlarmDocument) =>
-      (x.states.items[0].evidence_href = x.states.items[0].evidence_href.replace(
-        "sample-25",
-        "sample-26",
-      )),
+      (required(x.states.items[0]).evidence_href = required(
+        x.states.items[0],
+      ).evidence_href.replace("sample-25", "sample-26")),
     (x: AlarmDocument) =>
-      (x.states.previous_href = x.states.previous_href!.replace(
+      (x.states.previous_href = required(x.states.previous_href).replace(
         "severity=all",
         "severity=warning",
       )),
@@ -140,9 +153,9 @@ test("legacy entry preserves the canonical Ops destination and rejects arbitrary
 test("condition severity and violation must match the canonical evaluated state", () => {
   const doc = alarmFixture(),
     context = { organizationId: doc.organization_id, missionId: doc.mission_id };
-  doc.states.items[0].violation = false;
+  required(doc.states.items[0]).violation = false;
   expect(admitAlarmDocument(doc, context)).toBeNull();
-  doc.states.items[0].violation = true;
-  doc.states.items[0].state = "unknown";
+  required(doc.states.items[0]).violation = true;
+  required(doc.states.items[0]).state = "unknown";
   expect(admitAlarmDocument(doc, context)).toBeNull();
 });

@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import type { Argument, AuthoringPage, Preview } from "./contracts";
 const argument = (
   name: string,
@@ -73,9 +74,9 @@ export function previewFixture(): Preview {
   return {
     token: "b".repeat(64),
     request_id: "request_one",
-    target: c.selected_target!,
+    target: required(c.selected_target),
     revision_id: c.basis.revision_id,
-    command_id: c.selected_command!.id,
+    command_id: required(c.selected_command).id,
     command_name: "SET_POWER",
     command_display_name: "Set power",
     actor_id: c.actor_id,

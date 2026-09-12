@@ -8,6 +8,7 @@ export const playlistsContribution = {
   slot: "ops.page",
   version: 1,
   title: "Dashboard playlists",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   component: PlaylistDirectory,
   actions: ["create_playlist", "reload_playlists", "search_dashboards"],
   read(value, context) {
@@ -19,6 +20,7 @@ export const playlistPresentationContribution = {
   slot: "ops.page",
   version: 1,
   title: "Dashboard playlist",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   component: PlaylistPresentation,
   actions: [],
   read(value, context) {

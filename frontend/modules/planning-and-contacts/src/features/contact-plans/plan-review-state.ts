@@ -1,40 +1,49 @@
+import { validReviewReason } from "../../shared/workflow-protocol";
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
-import type { PlanAction, PlanDetailPort } from "./OpsContactPlanShow.contracts";
-import { canAct, planDecision, reviewIdentity } from "./plan-detail";
+import type {
+  PlanAction,
+  PlanDetailPort,
+  PlanDetail,
+  PlanRequest,
+} from "./OpsContactPlanShow.contracts";
+import { canAct, planRequest, planPageRequest, reviewIdentity } from "./plan-detail";
 import {
   admitPlanReviewPage,
   admitReviewOperation,
   reviewFeedback,
   sameReviewData as equal,
   type ReviewOperation,
+  type ReviewCompletion,
 } from "./plan-review";
 
-export function useCapturedPlanReview(input: () => unknown, port: PlanDetailPort) {
-  const initial = admitPlanReviewPage(input(), port.context, port.captured!.actorId);
+export function usePlanPageWorkflow(
+  input: () => unknown,
+  port: Extract<PlanDetailPort, { protocol: "page-snapshot" }>,
+) {
+  const initial = admitPlanReviewPage(input(), port.context, port.actorId);
   const detail = shallowRef(initial?.detail ?? null);
   const reasons = ref({ submission: "", approval: "", rejection: "" });
   const pending = ref(false),
     locked = ref(initial?.operation?.status === "unconfirmed"),
     notice = ref("");
-  const confirmed = shallowRef<ReviewOperation | null>(
+  const confirmed = shallowRef<ReviewCompletion | null>(
     initial?.operation?.status === "completed" ? initial.operation : null,
   );
   let sequence = initial?.sequence ?? 0,
     operation = initial?.operation ?? null;
-  let attempted: { sequence: number; action: PlanAction; input: Record<string, unknown> } | null =
-    null;
+  let attempted: { sequence: number; request: PlanRequest } | null = null;
   let active = true,
     generation = 0,
     effectPending = false;
   const identity = initial ? reviewIdentity(initial.detail) : null;
-  const actor = port.captured!.actorId;
+  const actor = port.actorId;
 
   function settle(op: ReviewOperation) {
     if (
       !attempted ||
       op.sequence !== attempted.sequence ||
-      op.action !== attempted.action ||
-      !equal(op.input, attempted.input)
+      op.action !== attempted.request[0] ||
+      !equal(op.input, attempted.request[1])
     )
       throw Error("Different plan operation");
     operation = op;
@@ -50,8 +59,13 @@ export function useCapturedPlanReview(input: () => unknown, port: PlanDetailPort
             : op.action === "reject-plan"
               ? "rejection"
               : null;
-      const wrapper = op.action === "submit-plan" ? "submission" : "decision";
-      if (key && reasons.value[key].trim() === op.input[wrapper]?.reason) reasons.value[key] = "";
+      const reason =
+        op.action === "execute-plan"
+          ? undefined
+          : op.action === "submit-plan"
+            ? op.input.submission.reason
+            : op.input.decision.reason;
+      if (key && reasons.value[key].trim() === reason) reasons.value[key] = "";
       notice.value = "The reviewed decision completed. Refreshing its evidence…";
     } else
       notice.value =
@@ -59,8 +73,8 @@ export function useCapturedPlanReview(input: () => unknown, port: PlanDetailPort
           ? (op.feedback ?? []).map((k) => reviewFeedback[k]).join(" ")
           : "The outcome remains unconfirmed. Refresh before another decision.";
   }
-  function reconciled(op: ReviewOperation) {
-    const p = detail.value!.plan;
+  function reconciled(op: ReviewOperation, model: PlanDetail) {
+    const p = model.plan;
     if (op.status === "rejected") return true;
     if (op.status !== "completed") return false;
     if (op.action === "submit-plan")
@@ -88,7 +102,9 @@ export function useCapturedPlanReview(input: () => unknown, port: PlanDetailPort
     detail.value = next.detail;
     // A refresh without the attempted receipt cannot settle a lost response.
     locked.value =
-      attempted && sequence < attempted.sequence ? true : !!operation && !reconciled(operation);
+      attempted && sequence < attempted.sequence
+        ? true
+        : !!operation && !reconciled(operation, next.detail);
   }
   async function read(n: number) {
     const value = await port.refresh();
@@ -117,24 +133,18 @@ export function useCapturedPlanReview(input: () => unknown, port: PlanDetailPort
   async function execute(action: PlanAction, reason = "") {
     const d = detail.value;
     if (!d || !enabled(action)) return;
-    if (
-      action !== "execute-plan" &&
-      (!reason.trim() || new TextEncoder().encode(reason.trim()).length > 4096)
-    ) {
+    if (action !== "execute-plan" && !validReviewReason(reason)) {
       notice.value = "Enter a reason of at most 4096 bytes.";
       return;
     }
-    const current = { action, sequence: sequence + 1, input: planDecision(d, action, reason) },
+    const current = { sequence: sequence + 1, request: planRequest(d, action, reason) },
       n = ++generation;
     attempted = current;
     pending.value = true;
     effectPending = true;
     notice.value = "Sending the reviewed decision…";
     try {
-      const result = await port.execute(action, {
-        sequence: current.sequence,
-        payload: current.input,
-      });
+      const result = await port.execute(...planPageRequest(current.sequence, ...current.request));
       if (!active || generation !== n) return;
       const op = admitReviewOperation(result, d, actor);
       if (!op) throw Error("Unavailable plan receipt");
@@ -175,7 +185,7 @@ export function useCapturedPlanReview(input: () => unknown, port: PlanDetailPort
         "Updated review could not be admitted. Previous evidence and reasons are retained.";
     }
   });
-  const release = port.captured!.guardNavigation?.(() => !effectPending);
+  const release = port.guardNavigation?.(() => !effectPending);
   onBeforeUnmount(() => {
     active = false;
     generation++;

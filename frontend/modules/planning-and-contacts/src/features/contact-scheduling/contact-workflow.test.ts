@@ -1,3 +1,12 @@
+import { required } from "../../../../../test-support/required";
+import {
+  fixtureRecord,
+  fixtureString,
+  fixtureContext,
+  jsonFixture,
+} from "../../../../../test-support/json-fixture";
+import { oneOf } from "@cadence/plugin-sdk/admission";
+import { containing } from "../../../../../test-support/matchers";
 import OpsContactSchedule from "./OpsContactSchedule.vue";
 import { mount, flushPromises } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
@@ -12,9 +21,11 @@ import {
   admitContactOperation,
   type ContactPage,
   type ContactAction,
+  type ContactPageRequest,
+  type ContactOperation,
+  scheduleActions,
+  reservationActions,
 } from "./contact-workflow";
-import type { ContactSchedule } from "./OpsContactSchedule.contracts";
-import type { ReservationDetail } from "./OpsContactDetail.contracts";
 import { searchFixture } from "./contact-schedule.test-support";
 const contribution = (page: ContactPage) =>
   page.kind === "schedule"
@@ -43,7 +54,7 @@ function mountPage(page: ContactPage, execute = vi.fn(), read = vi.fn()) {
   return { w, guard: () => guard(), release };
 }
 async function submit(
-  w: ReturnType<typeof mount>,
+  w: Pick<ReturnType<typeof mount>, "get">,
   page: ContactPage,
   action: ContactAction,
   reason = "Reviewed actual provider evidence",
@@ -51,12 +62,15 @@ async function submit(
   if (action === "search") await w.get("#contact-search").trigger("submit");
   else if (action === "reserve")
     await w
-      .get(`[id="reserve-${encodeURIComponent(page.search!.opportunities[0]!.id)}"]`)
+      .get(
+        `[id="reserve-${encodeURIComponent(required(required(page.search).opportunities[0]).id)}"]`,
+      )
       .trigger("click");
   else if (action === "cancel") {
+    if (page.kind !== "schedule") throw Error("Missing fixture schedule");
     await w
       .get(
-        `[id="cancel-review-${encodeURIComponent((page.model as ContactSchedule).reservations.entries[0]!.id)}"]`,
+        `[id="cancel-review-${encodeURIComponent(required(page.model.reservations.entries[0]).id)}"]`,
       )
       .trigger("click");
     await w.get("#contact-cancel-confirm").trigger("click");
@@ -69,20 +83,23 @@ async function submit(
 
 test("search preserves UTC seconds and recovers a lost result without repeating provider traffic", async () => {
   const page = contactPage(),
-    model = page.model as ContactSchedule;
+    model = page.model;
   model.initial_window.starts_at = "2099-09-09T12:00:17Z";
   model.initial_window.ends_at = "2099-09-09T13:00:23Z";
   const read = vi.fn();
-  const execute = vi.fn(async (action, input) => {
-    read.mockResolvedValue(completedContact(page, contactOperation(page, action, input)));
-    throw Error("response lost");
-  });
+  const execute = vi.fn(
+    async (action: ContactAction, input: { sequence: number; payload: unknown }) => {
+      read.mockResolvedValue(completedContact(page, contactOperation(page, action, input)));
+      throw Error("response lost");
+    },
+  );
   const { w } = mountPage(page, execute, read);
   try {
     await submit(w, page, "search");
-    expect(execute.mock.calls[0]![1].payload.contact_search.starts_at).toBe(
-      model.initial_window.starts_at,
-    );
+    expect(
+      fixtureRecord(fixtureRecord(required(execute.mock.calls[0])[1].payload).contact_search)
+        .starts_at,
+    ).toBe(model.initial_window.starts_at);
     expect(w.get("#contact-search fieldset").attributes("disabled")).toBeDefined();
     await w.get("#contact-schedule-refresh").trigger("click");
     await flushPromises();
@@ -95,8 +112,8 @@ test("search preserves UTC seconds and recovers a lost result without repeating 
 
 test("pending decisions survive bootstrap copies, block navigation and recover only matching receipts", async () => {
   const page = contactPage("reservation");
-  let resolve!: (value: unknown) => void;
-  const execute = vi.fn(
+  let resolve: ((value: unknown) => void) | undefined;
+  const execute = vi.fn<(...request: ContactPageRequest) => Promise<unknown>>(
     () =>
       new Promise((r) => {
         resolve = r;
@@ -110,11 +127,11 @@ test("pending decisions survive bootstrap copies, block navigation and recover o
     expect(guard()).toBe(false);
     await w.setProps({ page: structuredClone(page) });
     expect(guard()).toBe(false);
-    const [action, input] = execute.mock.calls[0]! as any;
+    const [action, input] = required(execute.mock.calls[0]);
     const op = contactOperation(page, action, input);
     const fresh = completedContact(page, op);
     read.mockResolvedValue({ ...fresh, actor_id: "foreign" });
-    resolve(op);
+    required(resolve)(op);
     await flushPromises();
     expect(w.get("#reservation-receipt").text()).toContain("approved");
     expect(w.get("#reject-provider-change-reason").element).toHaveProperty(
@@ -153,21 +170,38 @@ test("record reads preserve pinned history and failed reads retain the previous 
 test("uncertain attempts render while their results cannot unlock reservation mutations", async () => {
   const page = contactPage();
   page.search = searchFixture();
-  const model = page.model as ContactSchedule;
-  const row = model.reservations.entries[0]!;
+  const model = page.model;
+  const row = required(model.reservations.entries[0]);
   row.provider_revision = 1;
   row.provider_contact_ref = null;
   row.lifecycle_state = "unknown";
   expect(admitContactPage("schedule", page)).not.toBeNull();
-  const input = { sequence: 1, payload: { token: page.search.opportunities[0]!.token } };
-  const op = contactOperation(page, "reserve", input);
-  op.status = "unconfirmed";
-  op.receipt!.result.source = "recorded";
-  op.receipt!.result.value.providerRevision = 1;
-  op.receipt!.result.value.lifecycleState = "unknown";
-  op.receipt!.result.value.scheduledContactId = null;
+  const input = { sequence: 1, payload: { token: required(page.search.opportunities[0]).token } };
+  const completed = contactOperation(page, "reserve", input);
+  const op: Extract<ContactOperation, { action: "reserve"; status: "unconfirmed" }> = {
+    ...completed,
+    status: "unconfirmed",
+    receipt: {
+      ...completed.receipt,
+      result: {
+        ...completed.receipt.result,
+        source: "recorded",
+        value: {
+          ...completed.receipt.result.value,
+          providerRevision: 1,
+          lifecycleState: "unknown",
+          scheduledContactId: null,
+        },
+      },
+    },
+  };
   expect(admitContactOperation(op, page)).not.toBeNull();
-  const fresh = { ...page, operation: op, sequence: 1, consumed: [input.payload.token] };
+  const fresh = {
+    ...page,
+    operation: op,
+    sequence: 1,
+    consumed: [fixtureString(fixtureRecord(input.payload).token)],
+  };
   const read = vi.fn().mockResolvedValue(fresh);
   const execute = vi.fn().mockResolvedValue(op);
   const { w } = mountPage(page, execute, read);
@@ -175,14 +209,24 @@ test("uncertain attempts render while their results cannot unlock reservation mu
     await submit(w, page, "reserve");
     expect(w.get("#contact-schedule-receipt").text()).toContain("unknown");
     expect(w.get("#contact-search fieldset").attributes("disabled")).toBeDefined();
-    const observed = structuredClone(op);
-    observed.status = "completed";
-    observed.receipt!.result.source = "observed";
-    observed.receipt!.result.value.providerRevision = 1;
-    observed.receipt!.result.value.lifecycleState = "confirmed";
-    const next = structuredClone(fresh);
-    next.operation = observed;
-    const nextRow = (next.model as ContactSchedule).reservations.entries[0]!;
+    const observed = {
+      ...completed,
+      receipt: {
+        ...completed.receipt,
+        result: {
+          ...completed.receipt.result,
+          source: "observed" as const,
+          value: {
+            ...completed.receipt.result.value,
+            providerRevision: 1,
+            lifecycleState: "confirmed" as const,
+            scheduledContactId: null,
+          },
+        },
+      },
+    };
+    const next = { ...structuredClone(fresh), operation: observed };
+    const nextRow = required(next.model.reservations.entries[0]);
     nextRow.provider_revision = 1;
     nextRow.provider_contact_ref = "provider-contact-one";
     nextRow.lifecycle_state = "confirmed";
@@ -199,7 +243,7 @@ test("uncertain attempts render while their results cannot unlock reservation mu
 
 test("foreign, malformed and changed review receipts fail admission", () => {
   const page = contactPage("reservation"),
-    d = page.model as ReservationDetail;
+    d = page.model;
   const input = {
     sequence: 1,
     payload: {
@@ -209,9 +253,9 @@ test("foreign, malformed and changed review receipts fail admission", () => {
         contract_version: 1,
         ...d.context,
         reservation_id: d.reservation.id,
-        change_id: d.selected!.id,
-        provider_revision: d.selected!.provider_revision,
-        proposal_hash: d.selected!.proposal_hash,
+        change_id: required(d.selected).id,
+        provider_revision: required(d.selected).provider_revision,
+        proposal_hash: required(d.selected).proposal_hash,
       },
     },
   };
@@ -219,7 +263,7 @@ test("foreign, malformed and changed review receipts fail admission", () => {
   expect(admitContactOperation(op, page)).not.toBeNull();
   for (const field of ["actor_id", "organization_id", "mission_id", "action"]) {
     const bad = structuredClone(op);
-    (bad.receipt!.result as any)[field] = "foreign";
+    fixtureRecord(bad.receipt.result)[field] = "foreign";
     expect(admitContactOperation(bad, page)).toBeNull();
   }
   expect(admitContactPage("reservation", { ...page, sequence: 1 })).toBeNull();
@@ -228,20 +272,22 @@ test("foreign, malformed and changed review receipts fail admission", () => {
 test("a changed route can reject search without losing the reviewed draft", async () => {
   const page = contactPage();
   const read = vi.fn();
-  const execute = vi.fn(async (action, input) => {
-    const op = {
-      ...contactOperation(page, action, input),
-      status: "rejected" as const,
-      receipt: null,
-      feedback: ["review_changed" as const],
-    };
-    const fresh = structuredClone(page);
-    fresh.sequence = 1;
-    fresh.operation = op;
-    (fresh.model as ContactSchedule).routes.entries = [];
-    read.mockResolvedValue(fresh);
-    return op;
-  });
+  const execute = vi.fn(
+    async (action: ContactAction, input: { sequence: number; payload: unknown }) => {
+      const op = {
+        ...contactOperation(page, action, input),
+        status: "rejected" as const,
+        receipt: null,
+        feedback: ["review_changed" as const],
+      };
+      const fresh = structuredClone(page);
+      fresh.sequence = 1;
+      fresh.operation = op;
+      fresh.model.routes.entries = [];
+      read.mockResolvedValue(fresh);
+      return op;
+    },
+  );
   const { w } = mountPage(page, execute, read);
   try {
     await submit(w, page, "search");
@@ -274,34 +320,36 @@ test("a lost reservation response cannot be unlocked by a read predating the att
 test("a returned booking can reconcile outside the current ledger page while a foreign reservation cannot", async () => {
   const page = contactPage();
   page.search = searchFixture();
-  const model = page.model as ContactSchedule;
+  const model = page.model;
   model.query.reservations_page = 2;
   model.reservations.page = 2;
   model.reservations.entries = [];
-  const outcome = contactPage("reservation").model as ReservationDetail;
+  const outcome = contactPage("reservation").model;
   outcome.reservation.provider_revision = 5;
   const read = vi.fn();
-  const execute = vi.fn(async (action, input) => {
-    const op = contactOperation(page, action, input);
-    const fresh = {
-      ...page,
-      sequence: 1,
-      operation: op,
-      consumed: [input.payload.token],
-      operation_reservation: outcome,
-    };
-    read.mockResolvedValue(fresh);
-    expect(
-      admitContactPage("schedule", {
-        ...fresh,
-        operation_reservation: {
-          ...outcome,
-          context: { ...outcome.context, mission_id: "foreign" },
-        },
-      }),
-    ).toBeNull();
-    return op;
-  });
+  const execute = vi.fn(
+    async (action: ContactAction, input: { sequence: number; payload: unknown }) => {
+      const op = contactOperation(page, action, input);
+      const fresh = {
+        ...page,
+        sequence: 1,
+        operation: op,
+        consumed: [fixtureString(fixtureRecord(input.payload).token)],
+        operation_reservation: outcome,
+      };
+      read.mockResolvedValue(fresh);
+      expect(
+        admitContactPage("schedule", {
+          ...fresh,
+          operation_reservation: {
+            ...outcome,
+            context: { ...outcome.context, mission_id: "foreign" },
+          },
+        }),
+      ).toBeNull();
+      return op;
+    },
+  );
   const { w } = mountPage(page, execute, read);
   try {
     await submit(w, page, "reserve");
@@ -314,22 +362,32 @@ test("a returned booking can reconcile outside the current ledger page while a f
   }
 });
 
-test("the legacy scheduling adapter accepts seconds from the shared native control", async () => {
+test("the remote scheduling adapter preserves initial UTC seconds through submission", async () => {
   const page = contactPage(),
-    model = page.model as ContactSchedule;
+    model = page.model;
+  model.initial_window.starts_at = "2099-09-09T12:00:17Z";
+  model.initial_window.ends_at = "2099-09-09T13:00:23Z";
   const execute = vi.fn().mockResolvedValue({});
   const w = mount(OpsContactSchedule, {
-    props: { schedule: model, port: { context: model.context, execute, refresh: vi.fn() } },
+    props: {
+      schedule: model,
+      port: {
+        protocol: "remote-query" as const,
+        context: model.context,
+        execute,
+        refresh: vi.fn(),
+      },
+    },
   });
   try {
-    await w.get("#search-start").setValue("2099-09-09T12:00:17");
-    await w.get("#search-end").setValue("2099-09-09T13:00:23");
+    expect(w.get<HTMLInputElement>("#search-start").element.value).toBe("2099-09-09T12:00:17");
+    expect(w.get<HTMLInputElement>("#search-end").element.value).toBe("2099-09-09T13:00:23");
     await w.get("#contact-search").trigger("submit");
     await flushPromises();
     expect(execute).toHaveBeenCalledExactlyOnceWith(
       "search",
-      expect.objectContaining({
-        contact_search: expect.objectContaining({
+      containing({
+        contact_search: containing({
           starts_at: "2099-09-09T12:00:17Z",
           ends_at: "2099-09-09T13:00:23Z",
         }),
@@ -342,20 +400,34 @@ test("the legacy scheduling adapter accepts seconds from the shared native contr
 
 test("producer supplied native contact contribution", async () => {
   if (!process.env.CADENCE_CONTACT_WORKFLOW) return;
-  const supplied = JSON.parse(process.env.CADENCE_CONTACT_WORKFLOW),
-    snapshot = supplied.snapshot;
-  const page = snapshot.data as ContactPage,
+  const supplied = jsonFixture(process.env.CADENCE_CONTACT_WORKFLOW),
+    snapshot = fixtureRecord(supplied.snapshot);
+  const raw = fixtureRecord(snapshot.data);
+  if (!oneOf(["schedule", "record", "reservation"], raw.kind))
+    throw Error("Invalid contact fixture kind");
+  const page = required(admitContactPage(raw.kind, raw)),
     c = contribution(page);
-  expect(c.read(page, snapshot.context)).toBeTruthy();
-  const read = vi.fn().mockResolvedValue(supplied.refreshed?.data ?? page);
+  expect(c.read(page, fixtureContext(snapshot.context))).toBeTruthy();
+  const read = vi
+    .fn()
+    .mockResolvedValue(supplied.refreshed ? fixtureRecord(supplied.refreshed).data : page);
   const execute = vi.fn().mockResolvedValue(supplied.operation ?? {});
   const { w } = mountPage(page, execute, read);
   try {
-    if (supplied.action) await submit(w, page, supplied.action, supplied.reason);
+    if (supplied.action) {
+      if (!oneOf([...scheduleActions, ...reservationActions], supplied.action))
+        throw Error("Invalid fixture action");
+      await submit(
+        w,
+        page,
+        supplied.action,
+        supplied.reason === undefined ? undefined : fixtureString(supplied.reason),
+      );
+    }
     if (supplied.reconciled) expect(w.get("#contact-schedule-notice").text()).toContain("verified");
     if (supplied.operation) {
       expect(admitContactOperation(supplied.operation, page)).not.toBeNull();
-      if (page.kind === "reservation" && supplied.operation.status === "completed")
+      if (page.kind === "reservation" && fixtureRecord(supplied.operation).status === "completed")
         expect(w.find("#reservation-receipt").exists()).toBe(true);
     }
     process.stdout.write("CONTACT_CONTRIBUTION_INPUT=" + JSON.stringify(execute.mock.calls) + "\n");

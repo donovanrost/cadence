@@ -1,20 +1,22 @@
 import { computed } from "vue";
-import type { ContactRecord } from "./OpsContactRecord.contracts";
 import { useContactWorkflow } from "./contact-workflow-state";
 import { onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import type { ContactRecordPort } from "./OpsContactRecord.contracts";
 import { admitContactRecord } from "./contact-record";
 export function useContactRecord(input: () => unknown, port?: ContactRecordPort) {
-  if (port?.captured) {
+  if (port?.protocol === "page-snapshot") {
     const state = useContactWorkflow(
       input,
       port,
       "record",
-      { ...port.context, resource_id: port.context.contact_id },
+      {
+        ...port.context,
+        ...(port.context.contact_id === undefined ? {} : { resource_id: port.context.contact_id }),
+      },
       {},
     );
     return {
-      record: computed(() => state.page.value?.model as ContactRecord | null),
+      record: computed(() => (state.page.value?.kind === "record" ? state.page.value.model : null)),
       pending: state.pending,
       notice: state.notice,
       refresh: state.refresh,

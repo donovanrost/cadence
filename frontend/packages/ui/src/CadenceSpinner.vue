@@ -5,7 +5,6 @@ withDefaults(
     size?: "sm" | "md";
   }>(),
   {
-    label: undefined,
     size: "md",
   },
 );

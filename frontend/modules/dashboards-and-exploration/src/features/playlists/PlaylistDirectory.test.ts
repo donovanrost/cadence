@@ -1,10 +1,16 @@
+import {
+  fixtureRecordAt,
+  fixtureRecord,
+  fixtureString,
+} from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import type { OpsPagePort } from "@cadence/plugin-sdk/ops-pages";
 import { afterEach, expect, test, vi, type Mock } from "vite-plus/test";
 import { mount, flushPromises } from "@vue/test-utils";
 import PlaylistDirectory from "./PlaylistDirectory.vue";
 import { directoryFixture, playlistContext } from "./fixtures.test-support";
 import { readState } from "./validation";
-const wrappers: ReturnType<typeof mount>[] = [];
+const wrappers: { unmount: () => void }[] = [];
 afterEach(() => {
   wrappers.splice(0).forEach((w) => w.unmount());
   vi.unstubAllGlobals();
@@ -29,7 +35,7 @@ function setup(
         port: {
           execute,
           navigate,
-          guardNavigation: (g) => {
+          guardNavigation: (g: () => boolean) => {
             guard = g;
             return dispose;
           },
@@ -39,7 +45,7 @@ function setup(
   wrappers.push(wrapper);
   return { wrapper, execute, navigate, canLeave: () => guard(), state };
 }
-async function draft(w: ReturnType<typeof mount>) {
+async function draft(w: Pick<ReturnType<typeof mount>, "get">) {
   await w.get('[data-add-dashboard="dashboard-1"]').trigger("click");
   await w.get("#playlist-name").setValue("Flight queue");
 }
@@ -54,15 +60,15 @@ const reply = (state = directoryFixture(), extra = {}) => ({
 test("directory rejects foreign identities, malformed pages and presentation state", () => {
   expect(readState(directoryFixture(), playlistContext)).toEqual(directoryFixture());
   const multi = directoryFixture();
-  multi.model.playlists.rows.push({ ...multi.model.playlists.rows[0], id: "second" });
+  multi.model.playlists.rows.push({ ...required(multi.model.playlists.rows[0]), id: "second" });
   expect(readState(multi, playlistContext)).toEqual(multi);
   for (const mutate of [
-    (s: any) => (s.model.organization_id = "foreign"),
-    (s: any) => (s.model.playlists.rows[0].count = 101),
-    (s: any) => (s.model.choices.rows[0].published_version = 0),
-    (s: any) => (s.model.playlists.next = "not-a-full-page"),
-    (s: any) => (s.phase = "unknown"),
-    (s: any) => (s.model.query.extra = true),
+    (s: unknown) => (fixtureRecordAt(s, "model").organization_id = "foreign"),
+    (s: unknown) => (fixtureRecordAt(s, "model", "playlists", "rows", 0).count = 101),
+    (s: unknown) => (fixtureRecordAt(s, "model", "choices", "rows", 0).published_version = 0),
+    (s: unknown) => (fixtureRecordAt(s, "model", "playlists").next = "not-a-full-page"),
+    (s: unknown) => (fixtureRecordAt(s).phase = "unknown"),
+    (s: unknown) => (fixtureRecordAt(s, "model", "query").extra = true),
   ]) {
     const state = directoryFixture();
     mutate(state);
@@ -113,7 +119,7 @@ test("reordering repeated entries retains the moved entry's native controls", as
   await wrapper.get('[aria-label="Move entry 2 up"]').trigger("click");
   expect(wrapper.get('[aria-label="Move entry 1 up"]').element).toBe(control);
   expect(document.activeElement).toBe(control.closest("li"));
-  expect(wrapper.findAll("#playlist-queue>li")[0].text()).toContain("Thermal");
+  expect(required(wrapper.findAll("#playlist-queue>li")[0]).text()).toContain("Thermal");
 });
 
 test("lookup preserves an ordered dirty queue and ignores stale search responses", async () => {
@@ -135,9 +141,9 @@ test("lookup preserves an ordered dirty queue and ignores stale search responses
       choices: { rows: [{ id, name: q, published_version: 1 }], next: null },
     },
   });
-  replies[1](result("second", "latest"));
+  required(replies[1])(result("second", "latest"));
   await flushPromises();
-  replies[0](result("first", "stale"));
+  required(replies[0])(result("first", "stale"));
   await flushPromises();
   expect(wrapper.find('[data-add-dashboard="latest"]').exists()).toBe(true);
   expect(wrapper.find('[data-add-dashboard="stale"]').exists()).toBe(false);
@@ -146,14 +152,17 @@ test("lookup preserves an ordered dirty queue and ignores stale search responses
   expect(execute.mock.calls.every((c) => c[0] === "search_dashboards")).toBe(true);
 });
 test("choice pagination stays bound to the applied search, not unsent text", async () => {
-  const execute = vi.fn(async (_event: string, input: any) => ({
+  const execute = vi.fn(async (_event: string, input: unknown) => ({
     status: "ok",
     data: {
       version: 1,
       organization_id: "org-1",
       mission_id: "mission-1",
-      query: { q: input.q, after: input.after || null },
-      choices: input.after
+      query: {
+        q: fixtureString(fixtureRecord(input).q),
+        after: fixtureRecord(input).after || null,
+      },
+      choices: fixtureRecord(input).after
         ? { rows: [], next: null }
         : {
             rows: Array.from({ length: 25 }, (_, i) => ({

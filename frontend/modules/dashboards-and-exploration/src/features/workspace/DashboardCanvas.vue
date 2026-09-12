@@ -1,36 +1,37 @@
-<script setup>
+<script setup lang="ts">
 import { reactive } from "vue";
+import type {
+  CanvasPresentation,
+  CanvasGroup,
+  CanvasSection,
+  LayoutChanged,
+} from "./canvas-presentation";
 
 import CadenceCollapsible from "@cadence/ui/CadenceCollapsible.vue";
 import CadenceCollapsibleContent from "@cadence/ui/CadenceCollapsibleContent.vue";
 import CadenceCollapsibleTrigger from "@cadence/ui/CadenceCollapsibleTrigger.vue";
-import DashboardComparisonInspector from "./DashboardComparisonInspector.vue";
 import DashboardGrid from "./DashboardGrid.vue";
 
-defineProps({
-  presentation: { type: Object, required: true },
-});
-
-const emit = defineEmits(["layout_changed"]);
-const forwardLayoutChanged = (payload) => emit("layout_changed", payload);
+defineProps<{ presentation: CanvasPresentation }>();
+const emit = defineEmits<{ layout_changed: [payload: LayoutChanged] }>();
+const forwardLayoutChanged = (payload: LayoutChanged) => emit("layout_changed", payload);
 
 // A section's disclosure state belongs to this client-rendered canvas. Keep
 // the browser's latest state across LiveVue prop updates while retaining the
 // server-presented open value for a section's first render.
-const sectionOpenByKey = reactive(new Map());
-const sectionOpen = (group) => {
-  if (!sectionOpenByKey.has(group.key)) {
-    sectionOpenByKey.set(group.key, Object.hasOwn(group.section.root.attrs, "open"));
-  }
-
-  return sectionOpenByKey.get(group.key);
-};
-const rememberSectionOpen = (group, open) => {
+const sectionOpenByKey = reactive(new Map<string, boolean>());
+const sectionOpen = (group: CanvasGroup): boolean => {
+  const existing = sectionOpenByKey.get(group.key);
+  if (existing !== undefined) return existing;
+  const open = group.section !== null && Object.hasOwn(group.section.root.attrs, "open");
   sectionOpenByKey.set(group.key, open);
+  return open;
 };
-const sectionContentId = (group) => `${group.section.root.attrs.id}-content`;
-const sectionRootAttrs = (group) => {
-  const { open: _serverOpen, ...attrs } = group.section.root.attrs;
+const rememberSectionOpen = (group: CanvasGroup, open: boolean) =>
+  sectionOpenByKey.set(group.key, open);
+const sectionContentId = (section: CanvasSection) => `${section.root.attrs.id}-content`;
+const sectionRootAttrs = (section: CanvasSection) => {
+  const { open: _serverOpen, ...attrs } = section.root.attrs;
   return attrs;
 };
 </script>
@@ -41,12 +42,12 @@ const sectionRootAttrs = (group) => {
       <section v-for="group in presentation.groups" :key="group.key" v-bind="group.root.attrs">
         <CadenceCollapsible
           v-if="group.section"
-          :content-id="sectionContentId(group)"
+          :content-id="sectionContentId(group.section)"
           :open="sectionOpen(group)"
           :unmount-on-hide="false"
           @request-change="rememberSectionOpen(group, $event)"
         >
-          <div v-bind="sectionRootAttrs(group)">
+          <div v-bind="sectionRootAttrs(group.section)">
             <CadenceCollapsibleTrigger>
               <button type="button" v-bind="group.section.summary.attrs">
                 <span v-bind="group.section.summary.icon.attrs"></span>
@@ -121,15 +122,6 @@ const sectionRootAttrs = (group) => {
           </div>
         </div>
       </div>
-    </div>
-
-    <div
-      v-if="presentation.comparison_inspector"
-      v-bind="presentation.comparison_inspector.host.attrs"
-    >
-      <DashboardComparisonInspector
-        :presentation="presentation.comparison_inspector.presentation"
-      />
     </div>
   </div>
 </template>

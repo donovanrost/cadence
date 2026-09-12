@@ -1,16 +1,21 @@
+import { required } from "../../../../../test-support/required";
+import {
+  jsonFixture,
+  fixtureRecord,
+  fixtureString,
+} from "../../../../../test-support/json-fixture";
+import type { FleetRunModel, FleetRunPort } from "./OpsFleetPlanningRun.contracts";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import { OpsFleetPlanningRun } from "../../fleet-planning";
 import { admitFleetRun } from "./fleet-run";
 import { runFixture, repairFixture, runReceipt } from "./fleet-run.test-support";
 import { startCompletion } from "./fleet-start.test-support";
-function harness(model = runFixture()) {
-  const execute = vi
-      .fn()
-      .mockImplementation(async (action: "continue" | "repair") =>
-        startCompletion(runReceipt(model, action)),
-      ),
-    refresh = vi.fn().mockResolvedValue(model);
+function harness(model: FleetRunModel = runFixture()) {
+  const execute = vi.fn<FleetRunPort["execute"]>(async (action, _input) =>
+      startCompletion(runReceipt(model, action)),
+    ),
+    refresh = vi.fn(async () => model);
   const wrapper = mount(OpsFleetPlanningRun, {
     props: { run: model, port: { context: model.context, execute, refresh } },
   });
@@ -90,7 +95,7 @@ test("paged native links preserve independent evidence selectors", () => {
   m.requirements.total = 11;
   m.requirements.more = true;
   m.requirements.entries = Array.from({ length: 10 }, (_, i) => ({
-    ...m.requirements.entries[0]!,
+    ...required(m.requirements.entries[0]),
     id: `ref-${i}`,
     requirement_id: `req-${i}`,
   }));
@@ -103,19 +108,21 @@ test("paged native links preserve independent evidence selectors", () => {
 test("foreign, inconsistent and malformed evidence fail admission", () => {
   const original = repairFixture();
   for (const change of [
-    (m: any) => (m.context.mission_id = "foreign"),
-    (m: any) => (m.evidence.sha256 = "short"),
-    (m: any) => m.repair.evidence.plan_version++,
-    (m: any) => (m.repair.evidence.run_sha256 = "a".repeat(64)),
-    (m: any) => (m.policy = null),
-    (m: any) => delete m.requirements.total,
-    (m: any) => delete m.resources.total,
-    (m: any) => delete m.repair.commitments.total,
-    (m: any) => (m.algorithm.key = "\ud800"),
-    (m: any) => (m.requirements.more = true),
-    (m: any) => (m.decisions.entries[0].disposition = "invented"),
-    (m: any) => (m.resources.entries[0].over_capacity = true),
-    (m: any) => (m.query.requirements_page = 0),
+    (m: ReturnType<typeof repairFixture>) => (m.context.mission_id = "foreign"),
+    (m: ReturnType<typeof repairFixture>) => (m.evidence.sha256 = "short"),
+    (m: ReturnType<typeof repairFixture>) => m.repair.evidence.plan_version++,
+    (m: ReturnType<typeof repairFixture>) => (m.repair.evidence.run_sha256 = "a".repeat(64)),
+    (m: ReturnType<typeof repairFixture>) => Object.assign(m, { policy: null }),
+    (m: ReturnType<typeof repairFixture>) => Reflect.deleteProperty(m.requirements, "total"),
+    (m: ReturnType<typeof repairFixture>) => Reflect.deleteProperty(m.resources, "total"),
+    (m: ReturnType<typeof repairFixture>) => Reflect.deleteProperty(m.repair.commitments, "total"),
+    (m: ReturnType<typeof repairFixture>) => (m.algorithm.key = "\ud800"),
+    (m: ReturnType<typeof repairFixture>) => (m.requirements.more = true),
+    (m: ReturnType<typeof repairFixture>) =>
+      (required(m.decisions.entries[0]).disposition = "invented"),
+    (m: ReturnType<typeof repairFixture>) =>
+      (required(m.resources.entries[0]).over_capacity = true),
+    (m: ReturnType<typeof repairFixture>) => (m.query.requirements_page = 0),
   ]) {
     const m = structuredClone(original);
     change(m);
@@ -124,7 +131,7 @@ test("foreign, inconsistent and malformed evidence fail admission", () => {
 });
 test("a policy allowing zero repairs remains a readable terminal review", () => {
   const model = repairFixture();
-  model.repair.policy!.max_attempts = 0;
+  model.repair.policy.max_attempts = 0;
   model.repair.available = false;
   expect(admitFleetRun(model)).not.toBeNull();
   const h = harness(model);
@@ -152,9 +159,9 @@ test("departed actions cannot apply a late receipt", async () => {
 });
 test("producer-supplied fleet run workflow", async () => {
   if (!process.env.CADENCE_FLEET_RUN) return;
-  const supplied = JSON.parse(process.env.CADENCE_FLEET_RUN);
+  const supplied = jsonFixture(process.env.CADENCE_FLEET_RUN);
   expect(admitFleetRun(supplied.model)).not.toBeNull();
-  const h = harness(supplied.model);
+  const h = harness(required(admitFleetRun(supplied.model)));
   if (supplied.action === "render") {
     expect(h.wrapper.find("#ops-fleet-planning-run-page").exists()).toBe(true);
     h.wrapper.unmount();
@@ -165,13 +172,17 @@ test("producer-supplied fleet run workflow", async () => {
   else {
     await h.wrapper
       .get("#fleet-run-repair-start")
-      .setValue(supplied.window.horizon_start.slice(0, 19));
-    await h.wrapper.get("#fleet-run-repair-end").setValue(supplied.window.horizon_end.slice(0, 19));
+      .setValue(fixtureString(fixtureRecord(supplied.window).horizon_start).slice(0, 19));
+    await h.wrapper
+      .get("#fleet-run-repair-end")
+      .setValue(fixtureString(fixtureRecord(supplied.window).horizon_end).slice(0, 19));
     await h.wrapper.get("#fleet-run-repair-form").trigger("submit");
   }
   await flushPromises();
   expect(h.execute.mock.calls[0]?.[0]).toBe(supplied.action);
-  process.stdout.write(`FLEET_RUN_PAYLOAD=${JSON.stringify(h.execute.mock.calls[0]![1])}\n`);
+  process.stdout.write(
+    `FLEET_RUN_PAYLOAD=${JSON.stringify(required(h.execute.mock.calls[0])[1])}\n`,
+  );
   h.wrapper.unmount();
 });
 
@@ -181,7 +192,7 @@ test("fresh evidence after continuation enables repair without unlocking a later
   await flushPromises();
   const next = repairFixture();
   next.evidence.sha256 = "f".repeat(64);
-  next.repair.evidence!.run_sha256 = next.evidence.sha256;
+  next.repair.evidence.run_sha256 = next.evidence.sha256;
   h.refresh.mockResolvedValue(next);
   await h.wrapper.get("#fleet-run-refresh").trigger("click");
   await flushPromises();
@@ -198,4 +209,11 @@ test("fresh evidence after continuation enables repair without unlocking a later
   );
   expect(h.wrapper.find("#fleet-run-uncertain").exists()).toBe(true);
   h.wrapper.unmount();
+});
+
+test("unavailable repairs require absent evidence rather than a malformed falsey value", () => {
+  const model = runFixture();
+  for (const evidence of [0, false, ""])
+    expect(admitFleetRun({ ...model, repair: { ...model.repair, evidence } })).toBeNull();
+  expect(admitFleetRun({ ...model, repair: { ...model.repair, evidence: null } })).not.toBeNull();
 });

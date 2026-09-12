@@ -1,3 +1,5 @@
+import { fixtureRecordAt } from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
 import { beforeEach, test, expect, vi } from "vite-plus/test";
 import DefinitionsSurface from "./DefinitionsSurface.vue";
@@ -65,7 +67,7 @@ function receipt(input: DefinitionInput) {
 function port(p: DefinitionsDocument): DefinitionsPort {
   return {
     read: vi.fn().mockResolvedValue(p),
-    save: vi.fn().mockImplementation(async (input) => receipt(input)),
+    save: vi.fn<DefinitionsPort["save"]>().mockImplementation(async (input) => receipt(input)),
     navigate: vi.fn(),
   };
 }
@@ -85,10 +87,10 @@ test("rejects foreign or malformed definition evidence", () => {
   const p = document();
   expect(admitDocument(p, context)).not.toBeNull();
   for (const change of [
-    (x: any) => (x.context.mission_id = "foreign"),
-    (x: any) => (x.definitions.total_count = 1),
-    (x: any) => (x.links.applications = "https://foreign"),
-    (x: any) => (x.query.page = -1),
+    (x: unknown) => (fixtureRecordAt(x, "context").mission_id = "foreign"),
+    (x: unknown) => (fixtureRecordAt(x, "definitions").total_count = 1),
+    (x: unknown) => (fixtureRecordAt(x, "links").applications = "https://foreign"),
+    (x: unknown) => (fixtureRecordAt(x, "query").page = -1),
   ]) {
     const broken = structuredClone(p);
     change(broken);
@@ -103,7 +105,7 @@ test("editing is local and an explicit save carries reviewed identity and return
   expect(bridge.save).not.toHaveBeenCalled();
   await w.get("#derived-definition-form").trigger("submit");
   await flushPromises();
-  const [input, key] = vi.mocked(bridge.save).mock.calls[0];
+  const [input, key] = required(vi.mocked(bridge.save).mock.calls[0]);
   expect(input).toEqual({
     point_id: "DERIVED.power",
     point_name: "Bus power",
@@ -202,7 +204,9 @@ test("producer supplied evidence mounts the public editor and yields the explici
   await flushPromises();
   expect(bridge.save).toHaveBeenCalledTimes(1);
   process.stdout.write(
-    "CADENCE_DERIVED_INPUT=" + JSON.stringify(vi.mocked(bridge.save).mock.calls[0][0]) + "\n",
+    "CADENCE_DERIVED_INPUT=" +
+      JSON.stringify(required(vi.mocked(bridge.save).mock.calls[0])[0]) +
+      "\n",
   );
   w.unmount();
 });
@@ -237,11 +241,13 @@ test("review evidence rejects mismatched version links, source counts and histor
   };
   expect(admitDocument(selected)).not.toBeNull();
   for (const change of [
-    (x: any) => (x.query.version = 1),
-    (x: any) => (x.selection.inspected.source_count = 2),
-    (x: any) => (x.selection.history.items[0].id = "foreign"),
-    (x: any) => (x.selection.history.items[0].href = base + "?definition=definition-1&version=1"),
-    (x: any) => (x.selection = null),
+    (x: unknown) => (fixtureRecordAt(x, "query").version = 1),
+    (x: unknown) => (fixtureRecordAt(x, "selection", "inspected").source_count = 2),
+    (x: unknown) => (fixtureRecordAt(x, "selection", "history", "items", 0).id = "foreign"),
+    (x: unknown) =>
+      (fixtureRecordAt(x, "selection", "history", "items", 0).href =
+        base + "?definition=definition-1&version=1"),
+    (x: unknown) => (fixtureRecordAt(x).selection = null),
   ]) {
     const broken = structuredClone(selected);
     change(broken);

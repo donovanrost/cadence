@@ -1,3 +1,5 @@
+import type { OpsPageAction } from "@cadence/plugin-sdk/ops-pages";
+import { anyInstanceOf, containing } from "../../../../../../test-support/matchers";
 import { mount, flushPromises } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import OpsModulePage from "./OpsModulePage.vue";
@@ -19,7 +21,8 @@ test("host captures the declaration token, guards pending save and recovers the 
     refresh = vi.fn(),
     dispose = vi.fn();
   let guard = () => true;
-  const execute = vi.fn(async ({ event, input }) => {
+  const execute = vi.fn(async ({ event, input }: OpsPageAction) => {
+    if (event !== "save") throw Error("Unexpected host action");
     const op = declarationOperation(initial.data, event, input);
     query.mockResolvedValue({
       ...initial,
@@ -46,13 +49,13 @@ test("host captures the declaration token, guards pending save and recovers the 
     await w.get("#contact-requirement-form").trigger("submit");
     await flushPromises();
     expect(execute).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
+      containing({
         id: initial.id,
         token: initial.token,
         event: "save",
         input: {
           sequence: 1,
-          payload: expect.objectContaining({ contact_requirement: expect.any(Object) }),
+          payload: containing({ contact_requirement: anyInstanceOf(Object) }),
         },
       }),
     );

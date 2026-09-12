@@ -1,3 +1,5 @@
+import { containing } from "../../../test-support/matchers";
+import { required } from "../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type {
@@ -22,11 +24,15 @@ import {
 import type { ProviderAccountPayload } from "../../../modules/communications/src/features/provider-accounts/registration.contracts";
 import { accountDetailFixture } from "../../../modules/communications/src/features/provider-accounts/detail.test-support";
 
-const context = {
+const context: HostContext = {
   scope: "organization",
+  missionId: null,
+  missionName: null,
+  spacecraftId: null,
+  spacecraftName: null,
   organizationId: "org-1",
   actor: { displayName: "Mara Vance", permissions: ["applications:view"] },
-} as unknown as HostContext;
+};
 
 function propsFor(
   surface: FullPageSurfaceProps["surface"],
@@ -102,13 +108,15 @@ const rendererStubs = Object.fromEntries(
   ]),
 );
 
-rendererStubs.FederatedNotificationBell = rendererStubs.NotificationsBell!;
+rendererStubs.FederatedNotificationBell = required(rendererStubs.NotificationsBell);
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("Organization Admin federated adapter", () => {
   it("legacy directory admits the feature DTO and contains a foreign organization", async () => {
-    const surface = manifest.surfaces.find(({ surfaceId }) => surfaceId === "provider_accounts")!;
+    const surface = required(
+      manifest.surfaces.find(({ surfaceId }) => surfaceId === "provider_accounts"),
+    );
     const { bridge: query, mock: queryMock } = queryBridgeMock();
     const wrapper = mount(OrganizationAdminApplication, { props: propsFor(surface, query) });
     await flushPromises();
@@ -126,10 +134,13 @@ describe("Organization Admin federated adapter", () => {
   it.each(["context", "version", "query"])(
     "rejects incompatible directory %s before querying",
     async (mismatch) => {
-      const surface = manifest.surfaces.find(({ surfaceId }) => surfaceId === "provider_accounts")!;
+      const surface = required(
+        manifest.surfaces.find(({ surfaceId }) => surfaceId === "provider_accounts"),
+      );
       const { bridge: query, mock: queryMock } = queryBridgeMock();
       const props = propsFor(surface, query);
-      if (mismatch === "context") props.context = { ...context, scope: "admin" } as HostContext;
+      if (mismatch === "context")
+        props.context = { ...context, scope: "admin", organizationId: null };
       if (mismatch === "version")
         props.surface = { ...surface, version: 2 } as FullPageSurfaceProps["surface"];
       if (mismatch === "query")
@@ -142,9 +153,9 @@ describe("Organization Admin federated adapter", () => {
     },
   );
   it("delegates detail actions with exact account pins and applies patches without remounting", async () => {
-    const surface = manifest.surfaces.find(
-      ({ surfaceId }) => surfaceId === "provider_account_show",
-    )!;
+    const surface = required(
+      manifest.surfaces.find(({ surfaceId }) => surfaceId === "provider_account_show"),
+    );
     const { bridge: query, mock: queryMock } = queryBridgeMock();
     const { bridge: execute, mock: executeMock } = actionBridgeMock();
     const next = accountDetailFixture();
@@ -182,9 +193,9 @@ describe("Organization Admin federated adapter", () => {
   it.each(["forbidden", "stale_provider_account", "unknown_failure"])(
     "detail adapter classifies %s without exposing diagnostics",
     async (code) => {
-      const surface = manifest.surfaces.find(
-        ({ surfaceId }) => surfaceId === "provider_account_show",
-      )!;
+      const surface = required(
+        manifest.surfaces.find(({ surfaceId }) => surfaceId === "provider_account_show"),
+      );
       const { bridge: query } = queryBridgeMock();
       const { bridge: execute, mock: executeMock } = actionBridgeMock();
       executeMock.mockRejectedValueOnce({
@@ -205,9 +216,9 @@ describe("Organization Admin federated adapter", () => {
   );
 
   it.each(["organization", "shape"])("contains detail DTOs with invalid %s", async (mismatch) => {
-    const surface = manifest.surfaces.find(
-      ({ surfaceId }) => surfaceId === "provider_account_show",
-    )!;
+    const surface = required(
+      manifest.surfaces.find(({ surfaceId }) => surfaceId === "provider_account_show"),
+    );
     const { bridge: query, mock: queryMock } = queryBridgeMock();
     const model = accountDetailFixture();
     model.account.organization_id = "org-foreign";
@@ -225,7 +236,9 @@ describe("Organization Admin federated adapter", () => {
   it.each(SURFACE_CONTRACTS)(
     "selects $surfaceId, queries its declared DTO, and mounts its legacy component",
     async (contract) => {
-      const surface = manifest.surfaces.find(({ surfaceId }) => surfaceId === contract.surfaceId)!;
+      const surface = required(
+        manifest.surfaces.find(({ surfaceId }) => surfaceId === contract.surfaceId),
+      );
       const { bridge: query, mock: queryMock } = queryBridgeMock();
       const wrapper = mount(OrganizationAdminApplication, {
         props: propsFor(surface, query),
@@ -265,7 +278,7 @@ describe("Organization Admin federated adapter", () => {
           admin_organization_show: ["organization-detail", "/admin/organizations"],
           admin_organization_invite: ["organization-invite", "/admin/organizations"],
         };
-        const [id, href] = destinations[contract.surfaceId]!;
+        const [id, href] = required(destinations[contract.surfaceId]);
         expect(wrapper.get(`#${id}-destination a`).attributes("href")).toBe(href);
         expect(wrapper.find("#org-form").exists()).toBe(false);
       } else {
@@ -278,9 +291,9 @@ describe("Organization Admin federated adapter", () => {
   );
 
   it("keeps registration mounted while applying validation patches and sends the exact save envelope", async () => {
-    const surface = manifest.surfaces.find(
-      ({ surfaceId }) => surfaceId === "provider_account_new",
-    )!;
+    const surface = required(
+      manifest.surfaces.find(({ surfaceId }) => surfaceId === "provider_account_new"),
+    );
     const { bridge: query, mock: queryMock } = queryBridgeMock();
     const { bridge: execute, mock: executeMock } = actionBridgeMock();
     executeMock.mockImplementation(async (request) =>
@@ -300,7 +313,7 @@ describe("Organization Admin federated adapter", () => {
     expect(wrapper.get("#account-display_name").element).toBe(input);
     expect(wrapper.get("#account-display_name").element).toHaveProperty("value", "Relay Two");
     expect(queryMock).toHaveBeenCalledTimes(1);
-    expect(executeMock.mock.calls[0][0]).toMatchObject({
+    expect(required(executeMock.mock.calls[0])[0]).toMatchObject({
       applicationKey: "organization_admin",
       applicationVersion: 1,
       surfaceId: "provider_account_new",
@@ -311,7 +324,7 @@ describe("Organization Admin federated adapter", () => {
     });
     await wrapper.get("#registration-form").trigger("submit");
     await flushPromises();
-    expect(executeMock.mock.calls[1][0]).toMatchObject({
+    expect(required(executeMock.mock.calls[1])[0]).toMatchObject({
       applicationKey: "organization_admin",
       applicationVersion: 1,
       surfaceId: "provider_account_new",
@@ -326,9 +339,9 @@ describe("Organization Admin federated adapter", () => {
   });
 
   it("contains malformed registration DTOs and does not display provider error details", async () => {
-    const surface = manifest.surfaces.find(
-      ({ surfaceId }) => surfaceId === "provider_account_new",
-    )!;
+    const surface = required(
+      manifest.surfaces.find(({ surfaceId }) => surfaceId === "provider_account_new"),
+    );
     const { bridge: query, mock: queryMock } = queryBridgeMock();
     queryMock.mockResolvedValueOnce({
       queryVersion: 1,
@@ -348,9 +361,9 @@ describe("Organization Admin federated adapter", () => {
   it.each(["invalid_input", "forbidden", "unknown_failure"])(
     "registration adapter classifies action failures conservatively: %s",
     async (code) => {
-      const surface = manifest.surfaces.find(
-        ({ surfaceId }) => surfaceId === "provider_account_new",
-      )!;
+      const surface = required(
+        manifest.surfaces.find(({ surfaceId }) => surfaceId === "provider_account_new"),
+      );
       const { bridge: query } = queryBridgeMock();
       const { bridge: execute, mock: executeMock } = actionBridgeMock();
       executeMock.mockImplementation(async (request) => {
@@ -378,12 +391,13 @@ describe("Organization Admin federated adapter", () => {
   it.each(["context", "version", "query"])(
     "rejects incompatible registration %s before querying",
     async (mismatch) => {
-      const surface = manifest.surfaces.find(
-        ({ surfaceId }) => surfaceId === "provider_account_new",
-      )!;
+      const surface = required(
+        manifest.surfaces.find(({ surfaceId }) => surfaceId === "provider_account_new"),
+      );
       const { bridge: query, mock: queryMock } = queryBridgeMock();
       const props = propsFor(surface, query);
-      if (mismatch === "context") props.context = { ...context, scope: "admin" } as HostContext;
+      if (mismatch === "context")
+        props.context = { ...context, scope: "admin", organizationId: null };
       if (mismatch === "version")
         props.surface = { ...surface, version: 2 } as FullPageSurfaceProps["surface"];
       if (mismatch === "query")
@@ -397,9 +411,9 @@ describe("Organization Admin federated adapter", () => {
   );
 
   it("rebinds generic action delivery when the adapter context changes", async () => {
-    const surface = manifest.surfaces.find(
-      ({ surfaceId }) => surfaceId === "admin_organization_invite",
-    )!;
+    const surface = required(
+      manifest.surfaces.find(({ surfaceId }) => surfaceId === "admin_organization_invite"),
+    );
     const { bridge: query } = queryBridgeMock();
     const { bridge: execute, mock: executeMock } = actionBridgeMock();
     const props = propsFor(surface, query);
@@ -416,21 +430,19 @@ describe("Organization Admin federated adapter", () => {
       },
     });
     await flushPromises();
-    const nextContext = { ...context, organizationId: "org-2" } as HostContext;
+    const nextContext = { ...context, organizationId: "org-2" };
     await wrapper.setProps({ context: nextContext });
     await flushPromises();
     await wrapper.get("#context-action").trigger("click");
     await flushPromises();
-    expect(executeMock).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ context: nextContext }),
-    );
+    expect(executeMock).toHaveBeenCalledExactlyOnceWith(containing({ context: nextContext }));
     wrapper.unmount();
   });
 
   it("honors same-origin navigation receipts without issuing a redundant query", async () => {
-    const surface = manifest.surfaces.find(
-      ({ surfaceId }) => surfaceId === "admin_organization_show",
-    )!;
+    const surface = required(
+      manifest.surfaces.find(({ surfaceId }) => surfaceId === "admin_organization_show"),
+    );
     const { bridge: query, mock: queryMock } = queryBridgeMock();
     const { bridge: execute, mock: executeMock } = actionBridgeMock();
     executeMock.mockResolvedValue({
@@ -461,7 +473,9 @@ describe("Organization Admin federated adapter", () => {
   });
 
   it("shows rejection and keeps the newest overlapping action state", async () => {
-    const surface = manifest.surfaces.find(({ surfaceId }) => surfaceId === "admin_runtime")!;
+    const surface = required(
+      manifest.surfaces.find(({ surfaceId }) => surfaceId === "admin_runtime"),
+    );
     const { bridge: query, mock: queryMock } = queryBridgeMock();
     const first = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
     const second = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
@@ -531,11 +545,13 @@ function deferred<TResult>() {
 }
 
 it("legacy notifications delegate to the canonical account inbox without a second renderer", async () => {
-  const surface = manifest.surfaces.find(({ surfaceId }) => surfaceId === "notifications")!;
+  const surface = required(
+    manifest.surfaces.find(({ surfaceId }) => surfaceId === "notifications"),
+  );
   const { bridge: query, mock: queryMock } = queryBridgeMock();
   queryMock.mockResolvedValueOnce({ queryVersion: 1, presentation: {} });
   const props = propsFor(surface, query);
-  props.context = { ...context, scope: "user", userId: "user-1" } as unknown as HostContext;
+  props.context = { ...context, scope: "user", organizationId: null, userId: "user-1" };
   const wrapper = mount(OrganizationAdminApplication, { props });
   await flushPromises();
   expect(wrapper.get("#notifications-destination").attributes("href")).toBe("/notifications");
@@ -545,7 +561,9 @@ it("legacy notifications delegate to the canonical account inbox without a secon
 });
 
 it("the legacy bell validates its host recipient and navigates without a duplicate read action", async () => {
-  const surface = manifest.surfaces.find(({ surfaceId }) => surfaceId === "notifications_bell")!;
+  const surface = required(
+    manifest.surfaces.find(({ surfaceId }) => surfaceId === "notifications_bell"),
+  );
   const { bridge: query, mock: queryMock } = queryBridgeMock();
   const model = {
     version: 1,

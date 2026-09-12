@@ -7,7 +7,8 @@ import {
   same,
   registrationFields,
   type SourcePage,
-  type SourceAction,
+  type SourceDecisionAction,
+  type DeploymentAction,
   type Job,
 } from "./native-contract";
 import { useDataSources } from "./native-state";
@@ -17,7 +18,7 @@ defineOptions({ inheritAttrs: false });
 const props = defineProps<{ page: SourcePage; port: OpsPagePort; readPort: OpsPageReadPort }>();
 const state = useDataSources(() => props.page, props.port, props.readPort);
 const {
-  page,
+  page: currentPage,
   draft,
   reviewedSource,
   targetSource,
@@ -28,8 +29,20 @@ const {
   disabled,
   notice,
 } = state;
-const model = computed(() => page.value.model),
+const model = computed(() => currentPage.value.model),
   selected = computed(() => model.value.selected);
+const receipt = computed(() =>
+  lastEffect.value?.status === "completed" ? lastEffect.value.result : null,
+);
+const recordedJob = computed(() => {
+  const result = receipt.value?.result;
+  if (!result) return null;
+  return "jobId" in result ? result : "job" in result ? result.job : null;
+});
+const recordedBinding = computed(() => {
+  const op = lastEffect.value;
+  return op?.action === "change-binding" && op.status === "completed" ? op.result.result : null;
+});
 const base = `/missions/${encodeURIComponent(props.page.model.context.mission_id)}/ops/data-sources`;
 const href = (id: string, settings = false) =>
   `${base}/${encodeURIComponent(id)}${settings ? "/settings" : ""}`;
@@ -82,7 +95,7 @@ const options: Record<string, string[]> = {
   isolation_level: ["shared", "org_isolated", "mission_isolated", "customer_owned"],
   storage: ["questdb", "postgres_projection"],
 };
-const actions: [SourceAction, string][] = [
+const actions: [SourceDecisionAction, string][] = [
   ["probe-source", "Probe source"],
   ["provision-tsdb-backend", "Provision backend"],
   ["reconcile-tsdb-backend", "Reconcile backend"],
@@ -109,7 +122,12 @@ function register(action: "register-source" | "validate-registration") {
     confirmed: action === "register-source",
   });
 }
-function decide(action: SourceAction, extra: Record<string, string> = {}) {
+function decide(
+  ...args:
+    | [action: SourceDecisionAction]
+    | [action: "rotate-source-credential", extra: { "credentials-ref": string }]
+) {
+  const [action] = args;
   const source = reviewedSource.value;
   if (
     !source ||
@@ -117,9 +135,16 @@ function decide(action: SourceAction, extra: Record<string, string> = {}) {
     !window.confirm(`Apply ${action.replaceAll("-", " ")} to source ${source.id}?`)
   )
     return;
-  return state.execute(action, {
-    params: { "data-source-id": source.id, ...extra },
-    review: { source: source.evidence },
+  const review = { source: source.evidence };
+  if (args[0] === "rotate-source-credential")
+    return state.execute(args[0], {
+      params: { "data-source-id": source.id, ...args[1] },
+      review,
+      confirmed: true,
+    });
+  return state.execute(args[0], {
+    params: { "data-source-id": source.id },
+    review,
     confirmed: true,
   });
 }
@@ -142,7 +167,7 @@ function changeBinding() {
     confirmed: true,
   });
 }
-function deployment(action: SourceAction, job: Job) {
+function deployment(action: DeploymentAction, job: Job) {
   const source = reviewedSource.value;
   if (
     !source ||
@@ -159,15 +184,15 @@ function deployment(action: SourceAction, job: Job) {
   });
 }
 function chooseBinding(event: Event) {
-  const b = model.value.bindings.entries.find(
-    (b) => b.id === (event.target as HTMLSelectElement).value,
-  );
+  if (!(event.currentTarget instanceof HTMLSelectElement)) return;
+  const value = event.currentTarget.value;
+  const b = model.value.bindings.entries.find((b) => b.id === value);
   state.selectBinding(b ?? null);
 }
 function chooseTarget(event: Event) {
-  const s = model.value.sources.entries.find(
-    (s) => s.id === (event.target as HTMLSelectElement).value,
-  );
+  if (!(event.currentTarget instanceof HTMLSelectElement)) return;
+  const value = event.currentTarget.value;
+  const s = model.value.sources.entries.find((s) => s.id === value);
   state.selectTarget(s ?? null);
 }
 </script>
@@ -247,21 +272,18 @@ function chooseTarget(event: Event) {
           >Inspect source {{ lastEffect.result.source_id }}</a
         >
         <ul aria-label="Recorded event identities" class="space-y-1 font-mono text-xs">
-          <li v-for="id in lastEffect.result.event_ids ?? []" :key="id" class="break-all">
+          <li v-for="id in receipt?.event_ids ?? []" :key="id" class="break-all">
             {{ id }}
           </li>
         </ul>
-        <p
-          v-if="lastEffect.result.result?.jobId || lastEffect.result.result?.job?.jobId"
-          class="break-all font-mono text-xs"
-        >
-          Job {{ lastEffect.result.result.jobId ?? lastEffect.result.result.job.jobId }} · run
-          {{ lastEffect.result.result.runId ?? lastEffect.result.result.job.runId }}
+        <p v-if="recordedJob" class="break-all font-mono text-xs">
+          Job {{ recordedJob.jobId }} · run
+          {{ recordedJob.runId }}
         </p>
-        <p v-if="lastEffect.result.result?.bindingId" class="break-all font-mono text-xs">
-          Binding {{ lastEffect.result.result.bindingId }} · version
-          {{ lastEffect.result.result.bindingVersion }} · destination
-          {{ lastEffect.result.result.dataSourceId }}
+        <p v-if="recordedBinding" class="break-all font-mono text-xs">
+          Binding {{ recordedBinding.bindingId }} · version {{ recordedBinding.bindingVersion }} ·
+          destination
+          {{ recordedBinding.dataSourceId }}
         </p>
       </template>
     </section>

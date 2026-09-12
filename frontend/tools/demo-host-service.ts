@@ -532,7 +532,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 async function requestBody(request: IncomingMessage): Promise<string> {
   const chunks: Uint8Array[] = [];
   for await (const chunk of request) {
-    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    if (typeof chunk === "string") chunks.push(Buffer.from(chunk));
+    else if (Buffer.isBuffer(chunk)) chunks.push(chunk);
+    else throw new Error("Unexpected request body chunk");
   }
   return Buffer.concat(chunks).toString("utf8");
 }

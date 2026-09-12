@@ -1,3 +1,6 @@
+import { fixtureValue } from "../../../../../test-support/json-fixture.ts";
+import { required } from "../../../../../test-support/required.ts";
+import { fixtureRows, fixtureString } from "../../../../../test-support/json-fixture.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,16 +18,21 @@ const server = await createServer({
   logLevel: "error",
 });
 try {
+  // Vite loads the checked module dynamically; its exported type supplies the SSR interop contract.
   const { readSettingsModel, settingsContribution } =
-    await server.ssrLoadModule("/src/settings.ts");
-  for (const model of JSON.parse(process.argv[2])) {
+    /** @type {typeof import("../../settings.ts")} */ (
+      await server.ssrLoadModule("/src/settings.ts")
+    );
+  for (const raw of fixtureRows(process.argv[2])) {
     const context = {
-      organizationId: model.organization_id,
-      missionId: model.mission_id,
-      resourceId: model.dashboard_id,
+      organizationId: fixtureString(raw.organization_id),
+      missionId: fixtureString(raw.mission_id),
+      resourceId: fixtureString(raw.dashboard_id),
     };
-    assert.deepEqual(readSettingsModel(model, context), model);
-    const props = settingsContribution.read({ sequence: 0, phase: "ready", model }, context);
+    assert.deepEqual(readSettingsModel(raw, context), raw);
+    const props = settingsContribution.read({ sequence: 0, phase: "ready", model: raw }, context);
+    const model = props.state.model;
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks the SFC constructor at this registration or render boundary.
     const app = createSSRApp(settingsContribution.component, {
       ...props,
       port: {
@@ -43,8 +51,8 @@ try {
       window.document.body.innerHTML = html;
       const doc = window.document;
       assert.ok(doc.getElementById("dashboard-settings-feature"));
-      assert.equal(doc.getElementById("settings-name").value, model.name);
-      assert.equal(doc.getElementById("settings-defaults").value, model.defaults_json);
+      assert.equal(fixtureValue(doc.getElementById("settings-name")), model.name);
+      assert.equal(fixtureValue(doc.getElementById("settings-defaults")), model.defaults_json);
       assert.equal(doc.querySelectorAll("#settings-shares>li").length, model.shares.rows.length);
       assert.equal(
         doc.querySelectorAll("#settings-snapshot-list>li").length,
@@ -56,7 +64,7 @@ try {
       );
       assert.equal(!!doc.getElementById("settings-archived"), model.lifecycle === "archived");
       assert.equal(
-        doc.getElementById("settings-export").getAttribute("href"),
+        required(doc.getElementById("settings-export")).getAttribute("href"),
         "/missions/" +
           encodeURIComponent(model.mission_id) +
           "/ops/dashboards/" +

@@ -7,6 +7,7 @@ export const fleetPolicyContribution = {
   slot: "ops.page",
   version: 1,
   title: "Fleet Policy & Automation",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks this SFC constructor; typed lint cannot resolve Vue imports.
   component: FleetPolicyContribution,
   query: true,
   actions: policyActions,

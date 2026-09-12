@@ -1,18 +1,20 @@
-<script setup>
+<script setup lang="ts">
 import { onBeforeUnmount, onMounted, onUpdated, ref } from "vue";
-import { createNavRailController } from "./nav_rail_controller.js";
+import type { opsNavigation } from "./navigation";
+import { createNavRailController } from "./nav_rail_controller";
 
-const props = defineProps({
-  groups: { type: Array, required: true },
-  dashboard_groups: { type: Array, required: true },
-  empty_state: { type: String, default: null },
-  new_dashboard: { type: Object, default: null },
-});
+const props = defineProps<{
+  groups: ReturnType<typeof opsNavigation>["groups"];
+  dashboard_groups: ReturnType<typeof opsNavigation>["dashboard_groups"];
+  empty_state: ReturnType<typeof opsNavigation>["empty_state"];
+  new_dashboard: ReturnType<typeof opsNavigation>["new_dashboard"];
+}>();
 
-const rail = ref(null);
-let controller;
+const rail = ref<HTMLElement | null>(null);
+let controller: ReturnType<typeof createNavRailController> | undefined;
 
 onMounted(() => {
+  if (!rail.value) return;
   controller = createNavRailController({ el: rail.value });
   controller.mount();
 });

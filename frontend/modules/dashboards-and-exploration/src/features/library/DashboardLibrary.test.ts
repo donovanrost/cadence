@@ -1,3 +1,5 @@
+import { required } from "../../../../../test-support/required";
+import { fixtureArrayAt, fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mount, flushPromises } from "@vue/test-utils";
 import DashboardLibrary from "./DashboardLibrary.vue";
@@ -6,7 +8,7 @@ import { parseWidgetJson, widgetExample } from "./widget-json";
 import { libraryContribution } from "./contribution";
 import { libraryContext, libraryFixture } from "./fixtures.test-support";
 import type { LibraryReceipt, LibraryState } from "./contracts";
-const wrappers: ReturnType<typeof mount>[] = [];
+const wrappers: { unmount: () => void }[] = [];
 afterEach(() => {
   wrappers.splice(0).forEach((w) => w.unmount());
   vi.unstubAllGlobals();
@@ -31,7 +33,7 @@ function setup(
       port: {
         execute,
         navigate,
-        guardNavigation: (g) => {
+        guardNavigation: (g: () => boolean) => {
           guard = g;
           return dispose;
         },
@@ -62,15 +64,20 @@ test("admits semantic library DTOs, scopes and finite pinned histories", () => {
   );
   expect(readLibrary(libraryFixture(false), libraryContext)).toEqual(libraryFixture(false));
   for (const mutate of [
-    (s: any) => (s.model.version = 2),
-    (s: any) => (s.model.mission_id = "foreign"),
-    (s: any) => (s.model.selected.item.id = "foreign"),
-    (s: any) => (s.model.target.version = null),
-    (s: any) => (s.model.selected.version = 2),
-    (s: any) => s.model.selected.versions.reverse(),
-    (s: any) => (s.model.items = Array(26).fill(s.model.items[0])),
-    (s: any) => (s.model.selected.consumers.rows[0].pins[0].version = 0),
-    (s: any) => (s.model.selected.consumers.rows[0].document = {}),
+    (s: unknown) => (fixtureRecordAt(s, "model").version = 2),
+    (s: unknown) => (fixtureRecordAt(s, "model").mission_id = "foreign"),
+    (s: unknown) => (fixtureRecordAt(s, "model", "selected", "item").id = "foreign"),
+    (s: unknown) => (fixtureRecordAt(s, "model", "target").version = null),
+    (s: unknown) => (fixtureRecordAt(s, "model", "selected").version = 2),
+    (s: unknown) => fixtureArrayAt(s, "model", "selected", "versions").reverse(),
+    (s: unknown) =>
+      (fixtureRecordAt(s, "model").items = Array.from(
+        { length: 26 },
+        () => fixtureArrayAt(s, "model", "items")[0],
+      )),
+    (s: unknown) =>
+      (fixtureRecordAt(s, "model", "selected", "consumers", "rows", 0, "pins", 0).version = 0),
+    (s: unknown) => (fixtureRecordAt(s, "model", "selected", "consumers", "rows", 0).document = {}),
   ]) {
     const bad = libraryFixture();
     mutate(bad);
@@ -126,7 +133,7 @@ test("widget JSON admits omitted defaults but rejects malformed explicit fields 
 test("new versions use the observed latest while existing consumers remain pinned", async () => {
   const next = libraryFixture();
   next.sequence = 1;
-  next.model.selected!.item.latest_version = 3;
+  required(next.model.selected).item.latest_version = 3;
   const { wrapper, execute, canLeave } = setup(
     libraryFixture(),
     vi.fn(async () => reply(next, receipt("add_version"))),
@@ -174,7 +181,7 @@ test("creation acknowledges an exact receipt without discarding unrelated form d
 test("pinning is confirmed, version-bound and does not clear an unsaved library definition", async () => {
   const next = libraryFixture();
   next.sequence = 1;
-  next.model.target!.version = 4;
+  required(next.model.target).version = 4;
   const { wrapper, execute } = setup(
     libraryFixture(),
     vi.fn(async () => reply(next, receipt("add_to_draft"))),
@@ -201,7 +208,7 @@ test("refresh preserves native draft identity and a changed library version requ
   await wrapper.setProps({ state: libraryFixture() });
   expect(wrapper.get("#library-widget-json").element).toBe(textarea);
   const changed = libraryFixture();
-  changed.model.selected!.item.latest_version = 3;
+  required(changed.model.selected).item.latest_version = 3;
   await wrapper.setProps({ state: changed });
   expect(wrapper.get("#library-definition-form fieldset").attributes("disabled")).toBeDefined();
   expect((wrapper.get("#library-summary").element as HTMLInputElement).value).toBe("Retained");

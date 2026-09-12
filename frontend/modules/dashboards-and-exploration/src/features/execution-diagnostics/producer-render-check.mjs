@@ -1,12 +1,21 @@
+import { fixtureValue, fixtureRecord } from "../../../../../test-support/json-fixture.ts";
+import { required } from "../../../../../test-support/required.ts";
 import assert from "node:assert/strict";
 import { createSSRApp } from "vue";
 import { renderToString } from "vue/server-renderer";
 import { Window } from "happy-dom";
 
-/** Called with actual persisted producer output, not renderer-shaped fixtures. */
+/** Called with admitted native producer output.
+ * @param {import("vite-plus").ViteDevServer} server
+ * @param {ReturnType<typeof import("./validation.ts").readExecutionDiagnostics>} model
+ * @param {import("@cadence/plugin-sdk/ops-pages").OpsPageContext} context */
 export async function checkRenderer(server, model, context) {
-  const { ExecutionDiagnosticsView: component } = await server.ssrLoadModule(
-    "/src/execution-diagnostics.ts",
+  const loaded = fixtureRecord(await server.ssrLoadModule("/src/execution-diagnostics.ts"));
+  const component = fixtureRecord(loaded.ExecutionDiagnosticsView);
+  assert.equal(
+    typeof component.ssrRender,
+    "function",
+    "Expected the compiled diagnostics renderer",
   );
   for (const collection of model.collections) {
     const selections = [
@@ -34,7 +43,7 @@ export async function checkRenderer(server, model, context) {
         assert.equal(doc.querySelector("main"), null);
         assert.equal(doc.querySelectorAll("nav button").length, 7);
         assert.equal(
-          doc.getElementById("diagnostics-loaded-at").getAttribute("datetime"),
+          required(doc.getElementById("diagnostics-loaded-at")).getAttribute("datetime"),
           model.loaded_at,
         );
         assert.equal(
@@ -50,14 +59,16 @@ export async function checkRenderer(server, model, context) {
         const ids = Array.from(doc.querySelectorAll("[id]"), (node) => node.id);
         assert.equal(new Set(ids).size, ids.length);
         if (selected) {
-          assert.equal(doc.getElementById("diagnostic-identity").value, selected.identity);
+          assert.equal(fixtureValue(doc.getElementById("diagnostic-identity")), selected.identity);
           assert.equal(
             doc.querySelectorAll("[data-diagnostic-field]").length,
             selected.details.length,
           );
           for (const detail of selected.details) {
             assert.equal(
-              doc.querySelector(`[data-diagnostic-field="${detail.key}"]`).textContent.trim(),
+              required(
+                doc.querySelector(`[data-diagnostic-field="${detail.key}"]`),
+              ).textContent.trim(),
               detail.value === null
                 ? "Not recorded"
                 : detail.value === ""

@@ -1,4 +1,11 @@
-import type { PlanAction, PlanDetail, PlanDetailPort } from "./OpsContactPlanShow.contracts";
+import { record, oneOf, type Snapshot } from "@cadence/plugin-sdk/admission";
+import type {
+  PlanAction,
+  PlanDetail,
+  PlanDetailPort,
+  PlanInputs,
+  PlanResults,
+} from "./OpsContactPlanShow.contracts";
 import { admitPlanDetail, completedReceipt, planDecision } from "./plan-detail";
 
 export const planReviewActions = [
@@ -10,15 +17,15 @@ export const planReviewActions = [
 export const sameReviewData = (a: unknown, b: unknown): boolean => {
   if (a === b) return true;
   if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
-  const ak = Object.keys(a),
-    bk = Object.keys(b);
+  const left: Record<string, unknown> = Object.fromEntries(Object.entries(a)),
+    right: Record<string, unknown> = Object.fromEntries(Object.entries(b));
+  const ak = Object.keys(left),
+    bk = Object.keys(right);
   return (
     ak.length === bk.length &&
-    ak.every((k) => Object.hasOwn(b, k) && sameReviewData((a as any)[k], (b as any)[k]))
+    ak.every((k) => Object.hasOwn(right, k) && sameReviewData(left[k], right[k]))
   );
 };
-const record = (v: any): v is Record<string, any> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
 const id = (v: unknown): v is string =>
   typeof v === "string" &&
   v.length > 0 &&
@@ -30,51 +37,79 @@ export const reviewFeedback = {
   invalid_input: "Review the decision input before continuing.",
 };
 export type ReviewOperation = {
-  sequence: number;
-  action: PlanAction;
-  input: Record<string, any>;
-  status: "completed" | "rejected" | "unconfirmed";
-  feedback?: (keyof typeof reviewFeedback)[];
-  receipt: null | { receiptId: string; completedAt: string; result: Record<string, any> };
-};
-export type PlanReviewPage = {
+  [A in PlanAction]: Snapshot<
+    {
+      sequence: number;
+      action: A;
+      input: PlanInputs[A];
+    } & (
+      | {
+          status: "completed";
+          receipt: {
+            receiptId: string;
+            completedAt: string;
+            result: PlanResults[A] & {
+              contract_version: 1;
+              actor_id: string;
+              organization_id: string;
+              mission_id: string;
+              action: A;
+              version: number;
+              contentSha256: string;
+            };
+          };
+        }
+      | { status: "rejected"; receipt: null; feedback: (keyof typeof reviewFeedback)[] }
+      | { status: "unconfirmed"; receipt: null }
+    )
+  >;
+}[PlanAction];
+export type ReviewCompletion = Extract<ReviewOperation, { status: "completed" }>;
+export type PlanReviewPage = Snapshot<{
   detail: PlanDetail;
   actor_id: string;
   sequence: number;
   operation: ReviewOperation | null;
-};
+}>;
 
 export function admitReviewOperation(
   value: unknown,
   d: PlanDetail,
   actor: string,
 ): ReviewOperation | null {
+  return validReviewOperation(value, d, actor) ? value : null;
+}
+function validReviewOperation(
+  value: unknown,
+  d: PlanDetail,
+  actor: string,
+): value is ReviewOperation {
   try {
     if (
       !record(value) ||
+      typeof value.sequence !== "number" ||
       !Number.isSafeInteger(value.sequence) ||
       value.sequence < 1 ||
       value.sequence > 1000000 ||
-      !planReviewActions.includes(value.action)
+      !oneOf(planReviewActions, value.action)
     )
-      return null;
-    const action = value.action as PlanAction,
+      return false;
+    const action = value.action,
       input = value.input;
-    if (!record(input)) return null;
-    const reason =
-      action === "execute-plan"
-        ? ""
-        : input[action === "submit-plan" ? "submission" : "decision"]?.reason;
+    if (!record(input)) return false;
+    const wrapper = input[action === "submit-plan" ? "submission" : "decision"];
+    const reason = action === "execute-plan" ? "" : record(wrapper) ? wrapper.reason : undefined;
     if (
       typeof reason !== "string" ||
       (action !== "execute-plan" &&
         (!reason.trim() || new TextEncoder().encode(reason).length > 4096))
     )
-      return null;
-    if (!sameReviewData(input, planDecision(d, action, reason))) return null;
+      return false;
+    if (!sameReviewData(input, planDecision(d, action, reason))) return false;
     if (value.status === "completed") {
-      if (!completedReceipt(value.receipt, d, action)) return null;
-      const r = value.receipt.result;
+      if (!completedReceipt(value.receipt, d, action)) return false;
+      const r: unknown = value.receipt.result;
+      if (!record(r)) return false;
       if (
         r.contract_version !== 1 ||
         r.actor_id !== actor ||
@@ -84,8 +119,8 @@ export function admitReviewOperation(
         r.version !== d.plan.version ||
         r.contentSha256 !== d.plan.content_sha256
       )
-        return null;
-    } else if (value.receipt !== null) return null;
+        return false;
+    } else if (value.receipt !== null) return false;
     else if (value.status === "rejected") {
       if (
         !Array.isArray(value.feedback) ||
@@ -95,11 +130,11 @@ export function admitReviewOperation(
           (v: unknown) => typeof v === "string" && Object.hasOwn(reviewFeedback, v),
         )
       )
-        return null;
-    } else if (value.status !== "unconfirmed") return null;
-    return value as ReviewOperation;
+        return false;
+    } else if (value.status !== "unconfirmed") return false;
+    return true;
   } catch {
-    return null;
+    return false;
   }
 }
 
@@ -111,11 +146,12 @@ export function admitPlanReviewPage(
   try {
     const encoded = JSON.stringify(value);
     if (new TextEncoder().encode(encoded).length > 280000) return null;
-    const v = JSON.parse(encoded);
+    const v: unknown = JSON.parse(encoded);
     if (
       !record(v) ||
       !id(v.actor_id) ||
       (actor !== undefined && actor !== v.actor_id) ||
+      typeof v.sequence !== "number" ||
       !Number.isSafeInteger(v.sequence) ||
       v.sequence < 0 ||
       v.sequence > 1000000
@@ -123,7 +159,10 @@ export function admitPlanReviewPage(
       return null;
     const detail = admitPlanDetail(v.detail, context);
     if (!detail) return null;
-    if (v.operation === null) return v.sequence === 0 ? ({ ...v, detail } as PlanReviewPage) : null;
+    if (v.operation === null)
+      return v.sequence === 0
+        ? { detail, actor_id: v.actor_id, sequence: 0, operation: null }
+        : null;
     const operation = admitReviewOperation(v.operation, detail, v.actor_id);
     return operation && operation.sequence === v.sequence
       ? { detail, actor_id: v.actor_id, sequence: v.sequence, operation }

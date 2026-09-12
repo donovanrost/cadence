@@ -21,6 +21,7 @@ const surfaceIds = [
   "admin_organization_invite",
 ];
 
+/** @param {string} directory @returns {Promise<string[]>} */
 async function sourceFiles(directory) {
   const files = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -69,12 +70,13 @@ void test("declares one app-level exposed renderer for every contributed surface
   assert.match(contribution, /scope: "admin"/);
 });
 
+/** @param {string} path */
 async function fileExists(path) {
   try {
     await readFile(path);
     return true;
   } catch (error) {
-    if (error?.code === "ENOENT") return false;
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
     throw error;
   }
 }

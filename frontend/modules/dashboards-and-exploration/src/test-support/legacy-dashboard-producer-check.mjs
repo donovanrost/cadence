@@ -1,3 +1,9 @@
+import {
+  fixtureRows,
+  fixtureString,
+  fixtureRecord,
+} from "../../../../test-support/json-fixture.ts";
+import { required } from "../../../../test-support/required.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,9 +22,17 @@ const server = await createServer({
   logLevel: "error",
 });
 try {
-  const { OPS_COMPONENTS } = await server.ssrLoadModule("/src/ops-components.ts");
-  for (const { presentation, path, query } of JSON.parse(process.argv[2])) {
-    const app = createSSRApp(OPS_COMPONENTS[presentation.component], presentation.props);
+  const { OPS_COMPONENTS } =
+    /** @type {typeof import("../../../../apps/ops-console/src/ops-components.ts")} */ (
+      await server.ssrLoadModule("/src/ops-components.ts")
+    );
+  for (const { presentation: rawPresentation, path, query } of fixtureRows(process.argv[2])) {
+    const presentation = fixtureRecord(rawPresentation);
+    const component = Object.entries(OPS_COMPONENTS).find(
+      ([name]) => name === fixtureString(presentation.component),
+    )?.[1];
+    assert.ok(component);
+    const app = createSSRApp(component, fixtureRecord(presentation.props));
     app.config.warnHandler = (message) => {
       throw Error(message);
     };
@@ -28,7 +42,7 @@ try {
       doc.body.innerHTML = await renderToString(app);
       const anchor = doc.querySelector("a");
       assert.ok(anchor);
-      const url = new URL(anchor.getAttribute("href"), "https://cadence.test");
+      const url = new URL(required(anchor.getAttribute("href")), "https://cadence.test");
       assert.equal(url.pathname, path);
       assert.deepEqual(Object.fromEntries(url.searchParams), query);
       assert.equal(doc.querySelector("form, button, iframe"), null);

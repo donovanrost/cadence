@@ -7,6 +7,7 @@ export const requirementDeclarationContribution = {
   slot: "ops.page",
   version: 1,
   title: "Declare Contact Need",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor; the lint type service cannot resolve Vue modules.
   component: DeclarationContribution,
   query: true,
   actions: ["validate", "save", "spacecraft-page"],

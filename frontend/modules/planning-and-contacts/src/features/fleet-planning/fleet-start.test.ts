@@ -1,3 +1,10 @@
+import { required } from "../../../../../test-support/required";
+import {
+  jsonFixture,
+  fixtureRecord,
+  fixtureString,
+} from "../../../../../test-support/json-fixture";
+import { admitFleetStart, windowValid } from "./fleet-start";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import { OpsFleetPlanningNew } from "../../fleet-planning";
@@ -11,12 +18,12 @@ import type { FleetStartPort } from "./OpsFleetPlanningNew.contracts";
 
 function harness() {
   const model = startFixture();
-  const execute = vi.fn<FleetStartPort["execute"]>(async (action, input) => {
+  const execute = vi.fn<FleetStartPort["execute"]>(async (...[action, input]) => {
     const review = startReviewFixture(
       model,
-      input.fleet_run as any,
-      (input.requirements_page as number) ?? 1,
-      (input.templates_page as number) ?? 1,
+      input.fleet_run,
+      action === "preview" ? input.requirements_page : 1,
+      action === "preview" ? input.templates_page : 1,
     );
     return startCompletion(action === "preview" ? { review } : startReceiptFixture(review));
   });
@@ -79,13 +86,13 @@ test("editing the form invalidates its review and policy horizon bounds prevent 
 
 test("review pages carry the captured horizon and are not automatic effects", async () => {
   const { model, execute, wrapper } = harness();
-  execute.mockImplementation(async (_, input) =>
+  execute.mockImplementation(async (...[action, input]) =>
     startCompletion({
       review: startReviewFixture(
         model,
-        input.fleet_run as any,
-        input.requirements_page as number,
-        input.templates_page as number,
+        input.fleet_run,
+        action === "preview" ? input.requirements_page : 1,
+        action === "preview" ? input.templates_page : 1,
         26,
       ),
     }),
@@ -107,12 +114,15 @@ test("review pages carry the captured horizon and are not automatic effects", as
 
 test("foreign, changed-policy, malformed and wrong-page reviews never enable creation", async () => {
   for (const mutate of [
-    (r: any) => (r.context = { ...r.context, mission_id: "foreign" }),
-    (r: any) => (r.policy = { ...r.policy, version: 3 }),
-    (r: any) => (r.requirements.page = 2),
-    (r: any) => (r.evidence.input_sha256 = "invalid"),
-    (r: any) => r.requirements.entries.push(r.requirements.entries[0]),
-    (r: any) => (r.window.horizon_end = "2026-09-09T10:00:00.000Z"),
+    (r: ReturnType<typeof startReviewFixture>) =>
+      (r.context = { ...r.context, mission_id: "foreign" }),
+    (r: ReturnType<typeof startReviewFixture>) => (r.policy = { ...r.policy, version: 3 }),
+    (r: ReturnType<typeof startReviewFixture>) => (r.requirements.page = 2),
+    (r: ReturnType<typeof startReviewFixture>) => (r.evidence.input_sha256 = "invalid"),
+    (r: ReturnType<typeof startReviewFixture>) =>
+      r.requirements.entries.push(required(r.requirements.entries[0])),
+    (r: ReturnType<typeof startReviewFixture>) =>
+      (r.window.horizon_end = "2026-09-09T10:00:00.000Z"),
   ]) {
     const { model, execute, wrapper } = harness();
     const review = startReviewFixture(model);
@@ -204,24 +214,25 @@ test("replacing props while creation is pending ignores the late receipt and ret
 
 test("producer-supplied fleet creation workflow", async () => {
   if (!process.env.CADENCE_FLEET_START) return;
-  const supplied = JSON.parse(process.env.CADENCE_FLEET_START);
+  const supplied = jsonFixture(process.env.CADENCE_FLEET_START);
+  const model = required(admitFleetStart(supplied.model)),
+    window = supplied.window;
+  if (!windowValid(window)) throw Error("Invalid native fleet window");
   const execute = vi.fn().mockRejectedValue(Error("Captured request"));
   const wrapper = mount(OpsFleetPlanningNew, {
     props: {
-      start: supplied.model,
+      start: model,
       port: {
-        context: supplied.model.context,
+        context: model.context,
         execute,
         refresh: vi.fn(),
       },
     },
   });
   expect(wrapper.find("#fleet-start-form").exists()).toBe(true);
-  await wrapper
-    .get("#fleet-start-horizon-start")
-    .setValue(supplied.window.horizon_start.slice(0, 19));
-  await wrapper.get("#fleet-start-horizon-end").setValue(supplied.window.horizon_end.slice(0, 19));
-  await wrapper.get("#fleet-start-recurring").setValue(supplied.window.include_recurring);
+  await wrapper.get("#fleet-start-horizon-start").setValue(window.horizon_start.slice(0, 19));
+  await wrapper.get("#fleet-start-horizon-end").setValue(window.horizon_end.slice(0, 19));
+  await wrapper.get("#fleet-start-recurring").setValue(window.include_recurring);
   if (supplied.review) execute.mockResolvedValueOnce(startCompletion({ review: supplied.review }));
   await wrapper.get("#fleet-start-form").trigger("submit");
   await flushPromises();
@@ -234,10 +245,12 @@ test("producer-supplied fleet creation workflow", async () => {
     action = "create";
     if (supplied.receipt)
       expect(wrapper.get("#fleet-start-open-run").attributes("href")).toContain(
-        encodeURIComponent(supplied.receipt.fleetPlanningRunId),
+        encodeURIComponent(fixtureString(fixtureRecord(supplied.receipt).fleetPlanningRunId)),
       );
   }
   expect(execute.mock.calls.at(-1)?.[0]).toBe(action);
-  process.stdout.write(`FLEET_START_PAYLOAD=${JSON.stringify(execute.mock.calls.at(-1)![1])}\n`);
+  process.stdout.write(
+    `FLEET_START_PAYLOAD=${JSON.stringify(required(execute.mock.calls.at(-1))[1])}\n`,
+  );
   wrapper.unmount();
 });

@@ -1,10 +1,11 @@
 import type {
   Field,
+  FixedFieldKey,
   ProviderAccountForm,
   Page as RegistrationPage,
 } from "./registration.contracts";
 import type { GrantValues, GrantField } from "./detail.contracts";
-import type ProviderAccountShow from "./ProviderAccountShow.vue";
+import type { ProviderAccountShowProps } from "./detail.contracts";
 
 export function registrationFixture(): { page: RegistrationPage; form: ProviderAccountForm } {
   const option = (value: string) => ({ value, label: value, disabled: false });
@@ -46,7 +47,7 @@ export function registrationFixture(): { page: RegistrationPage; form: ProviderA
     allowed_directions: field("allowed_directions"),
     allowed_stations: field("allowed_stations"),
   };
-  const section = (id: string, field_keys: string[]) => ({
+  const section = (id: string, field_keys: FixedFieldKey[]) => ({
     id,
     number: "01",
     title: id,
@@ -115,7 +116,7 @@ export function registrationFixture(): { page: RegistrationPage; form: ProviderA
   };
 }
 
-export function detailFixture(): InstanceType<typeof ProviderAccountShow>["$props"] {
+export function detailFixture(): ProviderAccountShowProps {
   const values: GrantValues = {
     mission_id: "mission-1",
     allowed_services: "telemetry",

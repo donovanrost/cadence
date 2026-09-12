@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { SourceModel, PageKey, Page, SourceAction, Job } from "./native-contract";
+import type { SourceModel, PageKey, Page, DeploymentAction, Job } from "./native-contract";
 import SourcePageControls from "./SourcePageControls.vue";
 const props = defineProps<{
   selected: NonNullable<SourceModel["selected"]>;
   disabled: boolean;
   manage: boolean;
 }>();
-defineEmits<{ page: [key: PageKey, page: number]; job: [action: SourceAction, job: Job] }>();
+defineEmits<{ page: [key: PageKey, page: number]; job: [action: DeploymentAction, job: Job] }>();
 const eventFields = ["id", "source_id", "type", "status", "actor_id", "occurred_at"];
 const observationFields = [
   "id",
@@ -20,50 +20,53 @@ const observationFields = [
   "observed_at",
   "reason",
 ];
-const sections = computed(
-  () =>
-    [
-      {
-        key: "events_page",
-        name: "Source history",
-        fields: eventFields,
-        rows: props.selected.events,
-      },
-      {
-        key: "binding_events_page",
-        name: "Selected binding history",
-        fields: [...eventFields, "binding_id", "previous_source_id", "version"],
-        rows: props.selected.binding_events,
-      },
-      {
-        key: "health_page",
-        name: "Observed health",
-        fields: [...observationFields, "state", "key", "last_seen_at", "transitions"],
-        rows: props.selected.health,
-      },
-      {
-        key: "health_events_page",
-        name: "Health history",
-        fields: [...observationFields, "state"],
-        rows: props.selected.health_events,
-      },
-      {
-        key: "watermarks_page",
-        name: "Watermarks",
-        fields: [
-          ...observationFields,
-          "key",
-          "complete_through",
-          "latest_receipt_time",
-          "retention_starts_at",
-          "confidence",
-          "sample_count",
-          "last_seen_at",
-        ],
-        rows: props.selected.watermarks,
-      },
-    ] as { key: PageKey; name: string; fields: string[]; rows: Page<Record<string, unknown>> }[],
-);
+type EvidenceSection = {
+  key: PageKey;
+  name: string;
+  fields: readonly string[];
+  rows: Page<Record<string, unknown>>;
+};
+const sections = computed<readonly EvidenceSection[]>(() => [
+  {
+    key: "events_page",
+    name: "Source history",
+    fields: eventFields,
+    rows: props.selected.events,
+  },
+  {
+    key: "binding_events_page",
+    name: "Selected binding history",
+    fields: [...eventFields, "binding_id", "previous_source_id", "version"],
+    rows: props.selected.binding_events,
+  },
+  {
+    key: "health_page",
+    name: "Observed health",
+    fields: [...observationFields, "state", "key", "last_seen_at", "transitions"],
+    rows: props.selected.health,
+  },
+  {
+    key: "health_events_page",
+    name: "Health history",
+    fields: [...observationFields, "state"],
+    rows: props.selected.health_events,
+  },
+  {
+    key: "watermarks_page",
+    name: "Watermarks",
+    fields: [
+      ...observationFields,
+      "key",
+      "complete_through",
+      "latest_receipt_time",
+      "retention_starts_at",
+      "confidence",
+      "sample_count",
+      "last_seen_at",
+    ],
+    rows: props.selected.watermarks,
+  },
+]);
 const labels: Record<string, string> = {
   id: "Event",
   source_id: "Source",

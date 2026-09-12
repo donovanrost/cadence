@@ -1,3 +1,4 @@
+import { arrayOf, oneOf, type Snapshot } from "@cadence/plugin-sdk/admission";
 import type { ContactRequirementValues } from "./OpsContactRequirementNew.contracts";
 import {
   natural,
@@ -9,33 +10,67 @@ import {
   requirementDataEqual,
   requirementSegment,
 } from "./requirement-directory";
-export type DeclarationContext = { organization_id: string; mission_id: string; actor_id: string };
-export type SpacecraftChoices = {
+export type DeclarationContext = Snapshot<{
+  organization_id: string;
+  mission_id: string;
+  actor_id: string;
+}>;
+export type SpacecraftChoices = Snapshot<{
   page: number;
   total: number;
   entries: { id: string; name: string }[];
-};
-export type DeclarationModel = {
+}>;
+export type DeclarationModel = Snapshot<{
   contract_version: 1;
   context: DeclarationContext;
   horizon: { earliest_start: string; latest_end: string };
   spacecraft: SpacecraftChoices;
   can_declare: boolean;
+}>;
+export type DeclarationInputs = {
+  validate: { contact_requirement: ContactRequirementValues };
+  save: { contact_requirement: ContactRequirementValues };
+  "spacecraft-page": { page: number };
 };
-export type DeclarationAction = "validate" | "save" | "spacecraft-page";
+export type DeclarationAction = keyof DeclarationInputs;
+export type DeclarationFeedback = keyof typeof declarationFeedback;
+export type DeclarationResults = {
+  validate: { valid: boolean; feedback: DeclarationFeedback[] };
+  save: DeclarationContext & {
+    contract_version: 1;
+    requirement_id: string;
+    requirement_version: 1;
+    content_sha256: string;
+  };
+  "spacecraft-page": { spacecraft: SpacecraftChoices };
+};
+export type DeclarationCommand = {
+  [A in DeclarationAction]: Snapshot<{ action: A; input: DeclarationInputs[A] }>;
+}[DeclarationAction];
+export type DeclarationRequest = {
+  [A in DeclarationAction]: [action: A, input: Snapshot<DeclarationInputs[A]>];
+}[DeclarationAction];
 export type DeclarationOperation = {
-  sequence: number;
-  action: DeclarationAction;
-  input: Record<string, any>;
-  status: "completed" | "rejected" | "unconfirmed";
-  feedback?: string[];
-  receipt: null | { receiptId: string; completedAt: string; result: Record<string, any> };
-};
-export type DeclarationPage = {
+  [A in DeclarationAction]: Snapshot<
+    {
+      sequence: number;
+      action: A;
+      input: DeclarationInputs[A];
+    } & (
+      | {
+          status: "completed";
+          receipt: { receiptId: string; completedAt: string; result: DeclarationResults[A] };
+        }
+      | { status: "rejected"; receipt: null; feedback: DeclarationFeedback[] }
+      | { status: "unconfirmed"; receipt: null }
+    )
+  >;
+}[DeclarationAction];
+export type DeclarationPage = Snapshot<{
   model: DeclarationModel;
   sequence: number;
   operation: DeclarationOperation | null;
-};
+}>;
 export const declarationFields = [
   "spacecraft_id",
   "contact_intent",
@@ -71,43 +106,45 @@ export const declarationFeedback = {
     "The declaration is invalid. Check its spacecraft, outcome, horizon and constraints.",
   invalid_page: "The spacecraft page could not be loaded.",
 } as const;
-export const declarationFeedbackText = (codes: string[]) =>
-  codes.map((c) => declarationFeedback[c as keyof typeof declarationFeedback]).join(" ");
-const feedback = (v: any): v is string[] =>
-  Array.isArray(v) &&
-  v.length <= 8 &&
-  v.every((c) => typeof c === "string" && Object.hasOwn(declarationFeedback, c));
-export function admitDeclarationValues(v: any): v is ContactRequirementValues {
+export const declarationFeedbackText = (codes: readonly DeclarationFeedback[]) =>
+  codes.map((c) => declarationFeedback[c]).join(" ");
+const feedback = (v: unknown): v is DeclarationFeedback[] =>
+  arrayOf(
+    v,
+    (c): c is DeclarationFeedback => typeof c === "string" && Object.hasOwn(declarationFeedback, c),
+  ) && v.length <= 8;
+export function admitDeclarationValues(v: unknown): v is ContactRequirementValues {
   return (
     record(v) &&
     Object.keys(v).length === declarationFields.length &&
     declarationFields.every((k) => safeText(v[k], 4096))
   );
 }
-export function admitSpacecraftChoices(v: any): v is SpacecraftChoices {
+export function admitSpacecraftChoices(v: unknown): v is SpacecraftChoices {
   return (
     record(v) &&
     positive(v.page) &&
     v.page <= 1000000 &&
     natural(v.total) &&
-    Array.isArray(v.entries) &&
+    arrayOf(
+      v.entries,
+      (e): e is SpacecraftChoices["entries"][number] =>
+        record(e) && safeId(e.id) && safeText(e.name),
+    ) &&
     v.entries.length <= 25 &&
     v.entries.length === Math.min(25, Math.max(0, v.total - (v.page - 1) * 25)) &&
-    v.entries.every((e: any) => record(e) && safeId(e.id) && safeText(e.name)) &&
-    new Set(v.entries.map((e: any) => e.id)).size === v.entries.length
+    new Set(v.entries.map((e) => e.id)).size === v.entries.length
   );
 }
 export function admitDeclarationModel(
-  v: any,
+  v: unknown,
   context?: Partial<DeclarationContext>,
   horizon?: DeclarationModel["horizon"],
 ): v is DeclarationModel {
   return (
     record(v) &&
     v.contract_version === 1 &&
-    record(v.context) &&
-    ["organization_id", "mission_id", "actor_id"].every((k) => safeId(v.context[k])) &&
-    (!context || Object.entries(context).every(([k, value]) => v.context[k] === value)) &&
+    admitDeclarationContext(v.context, context) &&
     record(v.horizon) &&
     validTime(v.horizon.earliest_start) &&
     validTime(v.horizon.latest_end) &&
@@ -117,31 +154,49 @@ export function admitDeclarationModel(
     v.can_declare === v.spacecraft.total > 0
   );
 }
+export function admitDeclarationContext(
+  v: unknown,
+  context?: Partial<DeclarationContext>,
+): v is DeclarationContext {
+  return (
+    record(v) &&
+    safeId(v.organization_id) &&
+    safeId(v.mission_id) &&
+    safeId(v.actor_id) &&
+    (!context || Object.entries(context).every(([k, value]) => v[k] === value))
+  );
+}
+export function isDeclarationCommand(
+  v: unknown,
+): v is DeclarationCommand & Record<string, unknown> {
+  if (
+    !record(v) ||
+    !oneOf(["validate", "save", "spacecraft-page"], v.action) ||
+    !record(v.input) ||
+    Object.keys(v.input).length !== 1
+  )
+    return false;
+  return v.action === "spacecraft-page"
+    ? positive(v.input.page) && v.input.page <= 1000000
+    : admitDeclarationValues(v.input.contact_requirement);
+}
 export function admitDeclarationOperation(
-  v: any,
+  v: unknown,
   c: DeclarationContext,
 ): DeclarationOperation | null {
+  return validDeclarationOperation(v, c) ? v : null;
+}
+function validDeclarationOperation(v: unknown, c: DeclarationContext): v is DeclarationOperation {
   if (
     !record(v) ||
     !positive(v.sequence) ||
     v.sequence > 1000000 ||
-    !["validate", "save", "spacecraft-page"].includes(v.action) ||
-    !record(v.input) ||
-    !["completed", "rejected", "unconfirmed"].includes(v.status)
+    !isDeclarationCommand(v) ||
+    !oneOf(["completed", "rejected", "unconfirmed"], v.status)
   )
-    return null;
-  if (v.action === "spacecraft-page") {
-    if (Object.keys(v.input).length !== 1 || !positive(v.input.page) || v.input.page > 1000000)
-      return null;
-  } else if (
-    Object.keys(v.input).length !== 1 ||
-    !admitDeclarationValues(v.input.contact_requirement)
-  )
-    return null;
+    return false;
   if (v.status !== "completed")
-    return v.receipt === null && (v.status !== "rejected" || feedback(v.feedback))
-      ? (v as DeclarationOperation)
-      : null;
+    return v.receipt === null && (v.status !== "rejected" || feedback(v.feedback));
   const receipt = v.receipt;
   if (
     !record(receipt) ||
@@ -149,26 +204,24 @@ export function admitDeclarationOperation(
     !validTime(receipt.completedAt) ||
     !record(receipt.result)
   )
-    return null;
+    return false;
   const r = receipt.result;
   if (v.action === "validate")
-    return typeof r.valid === "boolean" &&
+    return (
+      typeof r.valid === "boolean" &&
       feedback(r.feedback) &&
       (r.valid ? r.feedback.length === 0 : r.feedback.length > 0)
-      ? (v as DeclarationOperation)
-      : null;
+    );
   if (v.action === "spacecraft-page")
-    return admitSpacecraftChoices(r.spacecraft) && r.spacecraft.page === v.input.page
-      ? (v as DeclarationOperation)
-      : null;
-  return r.contract_version === 1 &&
+    return admitSpacecraftChoices(r.spacecraft) && r.spacecraft.page === v.input.page;
+  return (
+    r.contract_version === 1 &&
     Object.entries(c).every(([k, value]) => r[k] === value) &&
     safeId(r.requirement_id) &&
     r.requirement_version === 1 &&
     typeof r.content_sha256 === "string" &&
     /^[a-f0-9]{64}$/.test(r.content_sha256)
-    ? (v as DeclarationOperation)
-    : null;
+  );
 }
 export function admitDeclarationPage(
   input: unknown,
@@ -178,7 +231,7 @@ export function admitDeclarationPage(
   try {
     const s = JSON.stringify(input);
     if (new TextEncoder().encode(s).length > 131072) return null;
-    const v = JSON.parse(s);
+    const v: unknown = JSON.parse(s);
     if (
       !record(v) ||
       !admitDeclarationModel(v.model, context, horizon) ||
@@ -186,7 +239,8 @@ export function admitDeclarationPage(
       v.sequence > 1000000
     )
       return null;
-    if (v.operation === null) return v.sequence === 0 ? (v as DeclarationPage) : null;
+    if (v.operation === null)
+      return v.sequence === 0 ? { model: v.model, sequence: 0, operation: null } : null;
     const op = admitDeclarationOperation(v.operation, v.model.context);
     return op && op.sequence === v.sequence
       ? { model: v.model, sequence: v.sequence, operation: op }
@@ -215,5 +269,8 @@ export function declarationDefaults(m: DeclarationModel): ContactRequirementValu
     rationale: "",
   };
 }
-export const declarationResultHref = (m: DeclarationModel, op: DeclarationOperation) =>
-  `/missions/${requirementSegment(m.context.mission_id)}/ops/requirements/${requirementSegment(op.receipt!.result.requirement_id)}`;
+export const declarationResultHref = (
+  m: DeclarationModel,
+  op: Extract<DeclarationOperation, { action: "save"; status: "completed" }>,
+) =>
+  `/missions/${requirementSegment(m.context.mission_id)}/ops/requirements/${requirementSegment(op.receipt.result.requirement_id)}`;

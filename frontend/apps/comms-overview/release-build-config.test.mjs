@@ -1,3 +1,9 @@
+import {
+  fixtureRows,
+  jsonFixture,
+  fixtureArrayAt,
+  fixtureRecord,
+} from "../../test-support/json-fixture.ts";
 import assert from "node:assert/strict";
 import { createHash as nodeCreateHash } from "node:crypto";
 import { lstat, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -11,6 +17,7 @@ import { transformWithEsbuild } from "vite";
 const appRoot = resolve(import.meta.dirname);
 const vitePlusEntry = resolve(appRoot, "node_modules/vite-plus/bin/vp");
 
+/** @template T @param {(directory: string) => Promise<T>} callback @returns {Promise<T>} */
 async function withTemporaryDirectory(callback) {
   const directory = await mkdtemp(join(tmpdir(), "cadence-comms-release-config-"));
   try {
@@ -20,6 +27,7 @@ async function withTemporaryDirectory(callback) {
   }
 }
 
+/** @param {string[]} argumentsList @param {NodeJS.ProcessEnv} [environment] @returns {Promise<{code: number | null, signal: NodeJS.Signals | null, stdout: string, stderr: string}>} */
 function runVite(argumentsList, environment = {}) {
   return new Promise((resolveResult, reject) => {
     const child = spawn(process.execPath, [vitePlusEntry, ...argumentsList], {
@@ -31,10 +39,12 @@ function runVite(argumentsList, environment = {}) {
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
+    /** @type {Buffer[]} */
     const stdout = [];
+    /** @type {Buffer[]} */
     const stderr = [];
-    child.stdout.on("data", (chunk) => stdout.push(chunk));
-    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.stdout.on("data", (/** @type {Buffer} */ chunk) => stdout.push(chunk));
+    child.stderr.on("data", (/** @type {Buffer} */ chunk) => stderr.push(chunk));
     child.once("error", reject);
     child.once("close", (code, signal) =>
       resolveResult({
@@ -47,6 +57,7 @@ function runVite(argumentsList, environment = {}) {
   });
 }
 
+/** @param {string} root @returns {Promise<string[]>} */
 async function outputFiles(root) {
   const entries = await readdir(root, { withFileTypes: true });
   const files = [];
@@ -58,6 +69,7 @@ async function outputFiles(root) {
   return files;
 }
 
+/** @param {string} output */
 function releaseArguments(output) {
   return [
     "build",
@@ -70,6 +82,7 @@ function releaseArguments(output) {
   ];
 }
 
+/** @param {string} source @param {string} from @param {string} replacement */
 function replaceOnce(source, from, replacement) {
   const index = source.indexOf(from);
   assert.notEqual(index, -1, `fixture does not contain ${JSON.stringify(from)}`);
@@ -128,6 +141,8 @@ void test("pins the evidence-derived canonical host-init source to its real dige
   );
 });
 
+/** @typedef {{name:string,generateBundle(options:object,bundle:Record<string,unknown>):void}} ReleaseOutputPlugin */
+/** @type {Promise<ReleaseOutputPlugin>|undefined} */
 let releaseOutputPluginPromise;
 
 async function releaseOutputPlugin() {
@@ -151,9 +166,22 @@ async function releaseOutputPlugin() {
       federationConfig: { name: "cadence_comms" },
       posix,
     };
-    sandbox.globalThis = sandbox;
+    Object.assign(sandbox, { globalThis: sandbox });
     new Script(transformed.code).runInNewContext(sandbox);
-    return sandbox.__releaseOutputPlugin();
+    /** @type {unknown} */
+    const factory = Reflect.get(sandbox, "__releaseOutputPlugin");
+    assert.equal(typeof factory, "function");
+    assert.ok(typeof factory === "function");
+    const result = fixtureRecord(Reflect.apply(factory, undefined, []));
+    assert.ok(typeof result.name === "string");
+    const generateBundle = result.generateBundle;
+    assert.ok(typeof generateBundle === "function");
+    return {
+      name: result.name,
+      generateBundle(options, bundle) {
+        Reflect.apply(generateBundle, result, [options, bundle]);
+      },
+    };
   })();
   return releaseOutputPluginPromise;
 }
@@ -212,7 +240,7 @@ void test("emits only the federation graph in release mode", async () => {
     }
 
     const emittedPaths = (await outputFiles(output)).map((path) => path.slice(output.length + 1));
-    const stats = JSON.parse(await readFile(join(output, "mf-stats.json"), "utf8"));
+    const stats = jsonFixture(await readFile(join(output, "mf-stats.json"), "utf8"));
     assert.equal(Object.hasOwn(stats, "assetAnalysis"), false);
     const secondResult = await runVite(releaseArguments(secondOutput), {
       CADENCE_RELEASE_OUTPUT_DIR: secondOutput,
@@ -312,6 +340,7 @@ void test("keeps release host-init cleanup exact and provenance-bound", async ()
 
 void test("covers host-init cleanup adversarial authority cases", async () => {
   const source = await readFile(resolve(appRoot, "vite.config.ts"), "utf8");
+  /** @type {[string, RegExp][]} */
   const cases = [
     ["same-shape user chunk", /structuralHostInitializationLookalikes\.length !== 1/],
     ["omitted or forged facade", /item\.facadeModuleId !== exactHostInitializationFacadeId/],
@@ -337,11 +366,13 @@ void test("rejects a same-shape user-authored host-init chunk", async () => {
 
   const conflicting = hostInitializationBundle();
   const userPath = "assets/hostInit-ASDFGHJK.js";
-  conflicting[userPath] = {
-    ...conflicting[hostInitializationPath],
-    name: "hostInit-ASDFGHJK",
-    facadeModuleId: "/src/user.ts",
-  };
+  Object.assign(conflicting, {
+    [userPath]: {
+      ...conflicting[hostInitializationPath],
+      name: "hostInit-ASDFGHJK",
+      facadeModuleId: "/src/user.ts",
+    },
+  });
   assert.throws(
     () => plugin.generateBundle({}, conflicting),
     /conflicting structural host initialization lookalikes/,
@@ -351,7 +382,7 @@ void test("rejects a same-shape user-authored host-init chunk", async () => {
 void test("rejects omitted or forged host-init facade identity", async () => {
   const plugin = await releaseOutputPlugin();
   const omitted = hostInitializationBundle();
-  delete omitted[hostInitializationPath].facadeModuleId;
+  Reflect.deleteProperty(omitted[hostInitializationPath], "facadeModuleId");
   assert.throws(
     () => plugin.generateBundle({}, omitted),
     /one authoritative host initialization chunk/,
@@ -378,11 +409,11 @@ void test("rejects multiple authoritative host-init candidates", async () => {
   const plugin = await releaseOutputPlugin();
   const bundle = hostInitializationBundle();
   const secondPath = "assets/hostInit-QPONMLKJ.js";
-  bundle[secondPath] = { ...bundle[hostInitializationPath] };
+  Object.assign(bundle, { [secondPath]: { ...bundle[hostInitializationPath] } });
   bundle["mf-stats.json"].source = JSON.stringify({
     ...JSON.parse(bundle["mf-stats.json"].source),
     buildOutput: [
-      ...JSON.parse(bundle["mf-stats.json"].source).buildOutput,
+      ...fixtureArrayAt(jsonFixture(bundle["mf-stats.json"].source), "buildOutput"),
       {
         fileName: secondPath,
         type: "chunk",
@@ -441,14 +472,15 @@ void test("removes only the exact legitimate generated host-init entry", async (
   assert.doesNotThrow(() => plugin.generateBundle({}, bundle));
   assert.equal(Object.hasOwn(bundle, hostInitializationPath), false);
   assert.equal(Object.hasOwn(bundle, "remoteEntry.js"), true);
-  const stats = JSON.parse(bundle["mf-stats.json"].source);
-  assert.equal(stats.buildOutput.length, 1);
+  const stats = jsonFixture(bundle["mf-stats.json"].source);
+  const buildOutput = fixtureRows(JSON.stringify(stats.buildOutput));
+  assert.equal(buildOutput.length, 1);
   assert.equal(
-    stats.buildOutput.some((output) => output.fileName === hostInitializationPath),
+    buildOutput.some((output) => output.fileName === hostInitializationPath),
     false,
   );
   assert.equal(
-    stats.buildOutput.some((output) => output.fileName === "remoteEntry.js"),
+    buildOutput.some((output) => output.fileName === "remoteEntry.js"),
     true,
   );
 });

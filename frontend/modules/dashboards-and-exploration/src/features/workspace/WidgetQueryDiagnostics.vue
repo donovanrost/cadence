@@ -1,52 +1,8 @@
 <script setup lang="ts">
+import type { WidgetQueryDiagnosticsPresentation } from "./WidgetQueryDiagnostics.contracts";
+
 import { computed } from "vue";
 import CadencePopover from "@cadence/ui/CadencePopover.vue";
-
-type Attrs = Record<string, string>;
-type ButtonType = "button" | "submit" | "reset";
-
-type IconPresentation = {
-  name: string;
-  class: string;
-};
-
-type TextPresentation = {
-  class: string;
-  text: string;
-};
-
-type RowPresentation = {
-  key: string;
-  order: number;
-  label: TextPresentation & { attrs: Attrs };
-  value: TextPresentation & { attrs: Attrs };
-};
-
-type WidgetQueryDiagnosticsPresentation = {
-  component_id: string;
-  overlay: { id: string; class: string; attrs: Attrs };
-  trigger: {
-    id: string;
-    type: ButtonType;
-    class: string;
-    attrs: Attrs;
-    content: { class: string; attrs: Attrs; icon: IconPresentation };
-  };
-  panel: { id: string; class: string; hidden: boolean; attrs: Attrs };
-  body: {
-    class: string;
-    heading: TextPresentation;
-    rows_class: string;
-    rows: RowPresentation[];
-    evidence_button: {
-      type: ButtonType;
-      class: string;
-      attrs: Attrs;
-      icon: IconPresentation;
-      text: string;
-    };
-  };
-};
 
 const props = defineProps<{ presentation: WidgetQueryDiagnosticsPresentation }>();
 

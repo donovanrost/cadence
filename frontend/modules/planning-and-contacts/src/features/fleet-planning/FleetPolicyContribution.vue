@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
-import type { PolicyAction, PolicyPage } from "./fleet-policy";
-import { policyActions, policyHref } from "./fleet-policy";
+import type { PolicyPage } from "./fleet-policy";
+import { policyHref } from "./fleet-policy";
 import { policyPresentation } from "./policy-presentation";
 import { usePolicyWorkflow } from "./policy-workflow-state";
 import { useFleetBootstrap } from "./use-fleet-bootstrap";
+import type { OpsFleetPlanningPolicyEmits } from "./OpsFleetPlanningPolicy.contracts";
 import OpsFleetPlanningPolicy from "./OpsFleetPlanningPolicy.vue";
 defineOptions({ inheritAttrs: false });
 const props = defineProps<{ page: PolicyPage; port: OpsPagePort; readPort: OpsPageReadPort }>();
@@ -28,22 +29,14 @@ const {
   () => props.readPort,
 );
 const presentation = computed(() => policyPresentation(model.value));
-const listeners = Object.fromEntries(
-  policyActions.map((action) => [
-    action,
-    (input: Record<string, any>) => {
-      if (action === "revoke-grant") {
-        const grant = model.value.grants.entries.find(
-          (g) =>
-            g.reference.grant_id === input.revocation?.automation_grant_id && g.state === "active",
-        );
-        if (!grant) return;
-        input = { ...input, grant_evidence: { ...grant.reference } };
-      }
-      submit(action as PolicyAction, input);
-    },
-  ]),
-);
+function revokeGrant(input: OpsFleetPlanningPolicyEmits["revoke-grant"][0]) {
+  const grant = model.value.grants.entries.find(
+    (grant) =>
+      grant.reference.grant_id === input.revocation.automation_grant_id && grant.state === "active",
+  );
+  if (!grant) return;
+  submit({ action: "revoke-grant", input: { ...input, grant_evidence: { ...grant.reference } } });
+}
 </script>
 <template>
   <section id="fleet-policy-contribution" class="min-w-0 space-y-4">
@@ -74,7 +67,7 @@ const listeners = Object.fromEntries(
       id="fleet-policy-operation-receipt"
       class="mx-4 text-xs text-base-content/60"
     >
-      {{ operation.action }} · completed · {{ operation.receipt?.receiptId }}
+      {{ operation.action }} · completed · {{ operation.receipt.receiptId }}
     </p>
     <fieldset class="m-0 min-w-0 border-0 p-0" :disabled="disabled">
       <legend class="sr-only">Reviewed fleet policy administration</legend>
@@ -83,7 +76,12 @@ const listeners = Object.fromEntries(
         :confirmed-policy-evidence="confirmedPolicyEvidence"
         :confirmed-grant-evidence="confirmedGrantEvidence"
         :confirmed-grant-sequence="confirmedGrantSequence"
-        v-on="listeners"
+        @validate-policy="submit({ action: 'validate-policy', input: $event })"
+        @save-policy="submit({ action: 'save-policy', input: $event })"
+        @approve-policy="submit({ action: 'approve-policy', input: $event })"
+        @validate-grant="submit({ action: 'validate-grant', input: $event })"
+        @issue-grant="submit({ action: 'issue-grant', input: $event })"
+        @revoke-grant="revokeGrant"
       />
     </fieldset>
     <nav

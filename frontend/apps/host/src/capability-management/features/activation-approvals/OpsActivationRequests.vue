@@ -41,11 +41,10 @@ watch(
 watch(
   () => props.activation_requests,
   (requests) => {
+    const selected = selectedRequest.value;
     if (
-      selectedRequest.value &&
-      !requests.some(
-        (request) => request.activation_request_id === selectedRequest.value!.activation_request_id,
-      )
+      selected &&
+      !requests.some((request) => request.activation_request_id === selected.activation_request_id)
     ) {
       selectedRequest.value = null;
       rationale.value = "";

@@ -85,6 +85,7 @@ const keys = (v: Record<string, unknown>, names: readonly string[]) =>
 const text = (v: unknown, max = 2000): v is string =>
   typeof v === "string" &&
   new TextEncoder().encode(v).length <= max &&
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(v);
 const id = (v: unknown): v is string =>
   typeof v === "string" && v.length <= 120 && /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(v);
@@ -215,8 +216,8 @@ const preview = (v: unknown): v is Preview =>
 const sameRequest = (a: Request, b: Request) =>
   requestFields.every((k) =>
     k === "requested_by"
-      ? JSON.stringify(Object.entries(a.requested_by).sort()) ===
-        JSON.stringify(Object.entries(b.requested_by).sort())
+      ? JSON.stringify(Object.entries(a.requested_by).sort(([a], [b]) => a.localeCompare(b))) ===
+        JSON.stringify(Object.entries(b.requested_by).sort(([a], [b]) => a.localeCompare(b)))
       : a[k] === b[k],
   );
 const fail = (): never => {
@@ -335,10 +336,14 @@ export function readQueuePage(value: unknown, context: OpsPageContext): QueuePag
 export function queueInput(p: Preview): Record<string, unknown> {
   return { expected_queue: p.token };
 }
-export const monitorHref = (context: OpsPageContext) =>
-  `/missions/${encodeURIComponent(context.missionId)}/ops/commands?focus_command_id=${encodeURIComponent(context.resourceId!)}`;
-export const reviewHref = (context: OpsPageContext) =>
-  `/missions/${encodeURIComponent(context.missionId)}/ops/commands/requests/${encodeURIComponent(context.resourceId!)}`;
+export function monitorHref(context: OpsPageContext) {
+  if (!context.resourceId) return fail();
+  return `/missions/${encodeURIComponent(context.missionId)}/ops/commands?focus_command_id=${encodeURIComponent(context.resourceId)}`;
+}
+export function reviewHref(context: OpsPageContext) {
+  if (!context.resourceId) return fail();
+  return `/missions/${encodeURIComponent(context.missionId)}/ops/commands/requests/${encodeURIComponent(context.resourceId)}`;
+}
 
 export const queueSubmissionHref = (mission: string, request: string) =>
   `/missions/${encodeURIComponent(mission)}/ops/commands/requests/${encodeURIComponent(request)}/queue`;

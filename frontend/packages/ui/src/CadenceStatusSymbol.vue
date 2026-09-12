@@ -8,7 +8,6 @@ withDefaults(
     status: StatusSymbolRole;
   }>(),
   {
-    label: undefined,
     size: 20,
   },
 );

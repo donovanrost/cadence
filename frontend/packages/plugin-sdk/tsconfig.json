@@ -15,5 +15,6 @@
     "skipLibCheck": true,
     "types": ["vite-plus/test"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "extends": ["../../tsconfig.strict.json"]
 }

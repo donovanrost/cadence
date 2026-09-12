@@ -26,11 +26,10 @@ const {
 } = state;
 const packetSearch = ref(page.value.query.q),
   endpointSearch = ref(page.value.query.endpoint_q);
-const endpointOffPage = computed(
-  () =>
-    draft.value.endpoint &&
-    !page.value.endpoints.items.some((e) => e.id === draft.value.endpoint!.id),
-);
+const endpointOffPage = computed(() => {
+  const endpoint = draft.value.endpoint;
+  return endpoint && !page.value.endpoints.items.some((e) => e.id === endpoint.id);
+});
 const statusLabels = {
   unconfigured: "Configuration required",
   configured: "Saved configuration",

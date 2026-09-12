@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { expect, test } from "vite-plus/test";
 import { registrationFixture } from "./provider-accounts.test-support";
 import { registrationModel, receipt, validationReceipt } from "./registration.test-support";
@@ -29,9 +30,11 @@ test("rejects malformed, duplicate, unbound and unsafe configuration fields", ()
       value.form.fields.display_name.type = "hidden";
     },
     (value) => {
-      value.form.connector.configuration.sections[0].fields[0].key = "__proto__";
+      required(required(value.form.connector.configuration.sections[0]).fields[0]).key =
+        "__proto__";
     },
     (value) => {
+      // @ts-expect-error Producer sections may reference an unregistered field.
       value.form.sections.network_identity.field_keys.push("unknown");
     },
     (value) => {
@@ -44,16 +47,16 @@ test("rejects malformed, duplicate, unbound and unsafe configuration fields", ()
       value.form.actions.cancel.href = "//outside.test";
     },
     (value) => {
-      value.page.breadcrumbs[0].href = "/provider-accounts/foreign";
+      required(value.page.breadcrumbs[0]).href = "/provider-accounts/foreign";
     },
     (value) => {
-      value.form.connector.configuration.sections[0].fields[1].visible_when = {
+      required(required(value.form.connector.configuration.sections[0]).fields[1]).visible_when = {
         field: "unknown",
         equals: "yes",
       };
     },
     (value) => {
-      value.form.connector.options.push(value.form.connector.options[0]);
+      value.form.connector.options.push(required(value.form.connector.options[0]));
     },
     (value) => {
       value.form.fields.max_quota.min = Number.NaN;
@@ -62,6 +65,7 @@ test("rejects malformed, duplicate, unbound and unsafe configuration fields", ()
       value.form.fields.display_name.value = "x".repeat(4097);
     },
     (value) => {
+      // @ts-expect-error Required native hidden fields must be rejected when omitted.
       delete value.form.fields.credential_ref;
     },
   ];
@@ -73,7 +77,7 @@ test("rejects malformed, duplicate, unbound and unsafe configuration fields", ()
 });
 test("validation receipts cannot rotate the form identity or omit their receipt envelope", () => {
   const model = registrationModel();
-  for (const name of ["provider_account_id", "credential_ref"]) {
+  for (const name of ["provider_account_id", "credential_ref"] as const) {
     const modified = structuredClone(model.form);
     modified.fields[name].value = "other";
     expect(() =>

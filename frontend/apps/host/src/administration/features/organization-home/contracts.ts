@@ -22,6 +22,13 @@ export function readOrganizationHome(
   value: unknown,
   organizationId: unknown,
 ): OrganizationHomeModel {
+  assertOrganizationHome(value, organizationId);
+  return value;
+}
+function assertOrganizationHome(
+  value: unknown,
+  organizationId: unknown,
+): asserts value is OrganizationHomeModel {
   if (
     !identifier(organizationId) ||
     !record(value) ||
@@ -51,7 +58,6 @@ export function readOrganizationHome(
       throw Error("Invalid recent mission");
     seen.add(mission.id);
   }
-  return value as unknown as OrganizationHomeModel;
 }
 export const missionHref = (id: string) => {
   if (!identifier(id)) throw Error("Invalid mission identity");

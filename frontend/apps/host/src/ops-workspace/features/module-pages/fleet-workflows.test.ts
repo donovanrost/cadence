@@ -1,3 +1,6 @@
+import type { FleetStartPort } from "../../../../../../modules/planning-and-contacts/src/features/fleet-planning/OpsFleetPlanningNew.contracts";
+import type { FleetRunPort } from "../../../../../../modules/planning-and-contacts/src/features/fleet-planning/OpsFleetPlanningRun.contracts";
+import { required } from "../../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import {
@@ -18,8 +21,10 @@ import OpsModulePage from "./OpsModulePage.vue";
 const token = "11111111-1111-4111-8111-111111111111";
 let wrapper: ReturnType<typeof mount>;
 afterEach(() => wrapper?.unmount());
-function harness(model: any = startFixture()) {
-  const run = !!model.id;
+function harness(
+  model: ReturnType<typeof startFixture> | ReturnType<typeof runFixture> = startFixture(),
+) {
+  const run = "id" in model;
   const context = {
     organizationId: model.context.organization_id,
     missionId: model.context.mission_id,
@@ -60,13 +65,13 @@ test("host dispatches only declared start actions with captured token and exact 
   await flushPromises();
   await wrapper.get("#fleet-start-create").trigger("click");
   await flushPromises();
-  expect(h.execute.mock.calls[0]![0]).toEqual({
+  expect(required(h.execute.mock.calls[0])[0]).toEqual({
     id: h.initial.id,
     token,
     event: "validate-fleet-run",
     input: { fleet_run: review.window, requirements_page: 1, templates_page: 1 },
   });
-  expect(h.execute.mock.calls[1]![0]).toEqual({
+  expect(required(h.execute.mock.calls[1])[0]).toEqual({
     id: h.initial.id,
     token,
     event: "create-fleet-run",
@@ -75,8 +80,9 @@ test("host dispatches only declared start actions with captured token and exact 
   expect(wrapper.find("#fleet-start-open-run").exists()).toBe(true);
   expect(h.query).not.toHaveBeenCalled();
   expect(h.refresh).not.toHaveBeenCalled();
-  const port = wrapper.getComponent(OpsFleetPlanningNew).props("port")!;
-  expect(() => port.execute("repair" as any, {})).toThrow("Undeclared");
+  const port: FleetStartPort = required(wrapper.getComponent(OpsFleetPlanningNew).props("port"));
+  // @ts-expect-error The runtime port also rejects actions outside its declared union.
+  expect(() => port.execute("repair", {})).toThrow("Undeclared");
 });
 test("same-context bootstrap copies preserve an in-flight preview and a confirmed creation", async () => {
   const h = harness();
@@ -147,7 +153,7 @@ test("repair sends the displayed commitment evidence and an unconfirmed receipt 
 test("departed run actions reject delayed receipts and cannot execute on the replacement page", async () => {
   const model = runFixture(),
     h = harness(model);
-  const port = wrapper.getComponent(OpsFleetPlanningRun).props("port")!;
+  const port: FleetRunPort = required(wrapper.getComponent(OpsFleetPlanningRun).props("port"));
   let settle!: (value: unknown) => void;
   h.execute.mockImplementationOnce(
     () =>
@@ -165,7 +171,9 @@ test("departed run actions reject delayed receipts and cannot execute on the rep
   });
   settle(startCompletion({}));
   await rejected;
-  await expect(port.execute("continue", {})).rejects.toThrow("Inactive");
+  await expect(
+    port.execute("continue", { fleet_planning_run_id: model.id, evidence: model.evidence }),
+  ).rejects.toThrow("Inactive");
   expect(h.execute).toHaveBeenCalledOnce();
 });
 test("missing resources or capabilities fail inside the host page with retry available", async () => {

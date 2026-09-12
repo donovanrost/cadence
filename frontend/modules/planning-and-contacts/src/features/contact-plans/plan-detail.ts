@@ -1,66 +1,83 @@
+import { record, oneOf, arrayOf, type Guard } from "@cadence/plugin-sdk/admission";
 import {
   pageKeys,
   type PlanAction,
   type PlanDetail,
   type PlanDetailPort,
   type PageKey,
+  type Approval,
+  type Version,
+  type Opportunity,
+  type Execution,
+  type Requirement,
+  type Issue,
+  type ResultPage,
+  type PlanInputs,
+  type PlanRequest,
+  type PlanPageRequest,
+  type PlanReceipt,
 } from "./OpsContactPlanShow.contracts";
-const record = (v: unknown): v is Record<string, any> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
 const text = (v: unknown, max = 512): v is string =>
   typeof v === "string" && new TextEncoder().encode(v).length <= max;
+// oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
 const id = (v: unknown): v is string => text(v, 240) && v.length > 0 && !/[\x00-\x20\x7f]/.test(v);
 const number = (v: unknown, max = Number.MAX_SAFE_INTEGER): v is number =>
-  Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) <= max;
+  typeof v === "number" && Number.isSafeInteger(v) && v >= 0 && v <= max;
 const version = (v: unknown): v is number => number(v, 2147483647) && v > 0;
 const hash = (v: unknown) => typeof v === "string" && /^[a-f0-9]{64}$/.test(v);
-const time = (v: unknown) =>
+const time = (v: unknown): v is string =>
   text(v, 40) &&
   /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?Z$/.test(v) &&
   Number.isFinite(Date.parse(v));
-const optionalId = (v: unknown) => v === null || id(v);
-const optionalVersion = (v: unknown) => v === null || version(v);
-const approval = (v: any) =>
+const optionalId = (v: unknown): v is string | null => v === null || id(v);
+const optionalVersion = (v: unknown): v is number | null => v === null || version(v);
+const approval = (v: unknown): v is Approval =>
   record(v) &&
   id(v.id) &&
   version(v.version) &&
   hash(v.content_sha256) &&
-  ["approved", "rejected"].includes(v.decision) &&
+  oneOf(["approved", "rejected"], v.decision) &&
   text(v.reason, 8192) &&
   id(v.actor_id) &&
-  ["user", "service"].includes(v.actor_kind) &&
+  oneOf(["user", "service"], v.actor_kind) &&
   time(v.decided_at);
-const page = (v: any, check: (v: any) => boolean, identity = (v: any) => v.id) =>
+const page = <T extends { readonly id: string }>(
+  v: unknown,
+  check: Guard<T>,
+  identity: (v: T) => string = (v) => v.id,
+): v is ResultPage<T> =>
   record(v) &&
   number(v.page, 1000000) &&
   v.page > 0 &&
   typeof v.more === "boolean" &&
-  Array.isArray(v.entries) &&
+  arrayOf(v.entries, check) &&
   v.entries.length <= 25 &&
   (!v.more || v.entries.length === 25) &&
-  v.entries.every(check) &&
   new Set(v.entries.map(identity)).size === v.entries.length;
 export function admitPlanDetail(
   value: unknown,
   context?: PlanDetailPort["context"],
 ): PlanDetail | null {
+  return validPlanDetail(value, context) ? value : null;
+}
+function validPlanDetail(value: unknown, context?: PlanDetailPort["context"]): value is PlanDetail {
   try {
     if (
       !record(value) ||
       new TextEncoder().encode(JSON.stringify(value)).length > 262144 ||
       value.contract_version !== 1
     )
-      return null;
+      return false;
     const { plan: p, context: c, permissions, query: q } = value;
     if (!record(c) || !id(c.organization_id) || !id(c.mission_id) || !record(p) || !id(p.id))
-      return null;
+      return false;
     if (
       context &&
       (c.organization_id !== context.organization_id ||
         c.mission_id !== context.mission_id ||
         (context.plan_id !== undefined && p.id !== context.plan_id))
     )
-      return null;
+      return false;
     if (
       !version(p.version) ||
       !version(p.current_version) ||
@@ -69,68 +86,73 @@ export function admitPlanDetail(
       !time(p.created_at) ||
       !text(p.rationale, 8192)
     )
-      return null;
+      return false;
     if (
-      ![
-        "draft",
-        "pending_approval",
-        "approved",
-        "executing",
-        "partially_reserved",
-        "reserved",
-        "failed",
-        "canceled",
-        "superseded",
-      ].includes(p.lifecycle_state)
+      !oneOf(
+        [
+          "draft",
+          "pending_approval",
+          "approved",
+          "executing",
+          "partially_reserved",
+          "reserved",
+          "failed",
+          "canceled",
+          "superseded",
+        ],
+        p.lifecycle_state,
+      )
     )
-      return null;
+      return false;
     if (
       !optionalVersion(p.approved_version) ||
       (p.approved_version !== null && p.approved_version > p.current_version)
     )
-      return null;
+      return false;
     if (
       p.reviewed_decision !== null &&
       (!approval(p.reviewed_decision) ||
         p.reviewed_decision.version !== p.version ||
         p.reviewed_decision.content_sha256 !== p.content_sha256)
     )
-      return null;
-    if (![p.selected_count, p.locked_count, p.rejected_count].every((v) => number(v))) return null;
+      return false;
+    if (![p.selected_count, p.locked_count, p.rejected_count].every((v) => number(v))) return false;
     if (
       ![p.coverage_satisfied, p.conflicts_clear, p.unsatisfied_clear, p.manual_review].every(
         (v) => typeof v === "boolean",
       )
     )
-      return null;
+      return false;
     if (
       !record(permissions) ||
       typeof permissions.operate !== "boolean" ||
       typeof permissions.decide !== "boolean"
     )
-      return null;
-    if (!record(q) || q.contact_plan_id !== p.id || q.version !== p.version) return null;
+      return false;
+    if (!record(q) || q.contact_plan_id !== p.id || q.version !== p.version) return false;
+    const reviewedVersion = p.version;
     if (
       !page(
         value.versions,
-        (v) =>
+        (v): v is Version =>
           record(v) &&
           id(v.id) &&
           version(v.version) &&
-          v.version <= p.version &&
+          v.version <= reviewedVersion &&
           hash(v.content_sha256) &&
           time(v.created_at),
       )
     )
-      return null;
-    if (!page(value.approvals, (v) => approval(v) && v.version <= p.version)) return null;
+      return false;
+    if (!page(value.approvals, (v): v is Approval => approval(v) && v.version <= reviewedVersion))
+      return false;
     if (
       !page(
         value.opportunities,
-        (o) =>
+        (o): o is Opportunity =>
           record(o) &&
           id(o.id) &&
-          ["selected", "locked", "rejected"].includes(o.disposition) &&
+          oneOf(["selected", "locked", "rejected"], o.disposition) &&
           hash(o.content_sha256) &&
           id(o.requirement_id) &&
           version(o.requirement_version) &&
@@ -143,34 +165,35 @@ export function admitPlanDetail(
           Date.parse(o.starts_at) < Date.parse(o.ends_at) &&
           typeof o.eligible === "boolean" &&
           typeof o.synthetic === "boolean" &&
-          ["available", "limited", "unavailable"].includes(o.availability) &&
+          oneOf(["available", "limited", "unavailable"], o.availability) &&
           optionalId(o.provider_id) &&
           optionalVersion(o.provider_version) &&
           optionalId(o.transport_id) &&
           optionalVersion(o.transport_version),
       )
     )
-      return null;
+      return false;
     if (
       !page(
         value.execution,
-        (e) =>
+        (e): e is Execution =>
           record(e) &&
           id(e.id) &&
           e.version === p.version &&
           id(e.snapshot_id) &&
-          ["pending", "requesting", "reserved", "uncertain", "rejected", "failed"].includes(
+          oneOf(
+            ["pending", "requesting", "reserved", "uncertain", "rejected", "failed"],
             e.state,
           ) &&
           number(e.attempts) &&
           optionalId(e.reservation_id),
       )
     )
-      return null;
+      return false;
     if (
       !page(
         value.requirements,
-        (r) =>
+        (r): r is Requirement =>
           record(r) &&
           id(r.id) &&
           version(r.version) &&
@@ -182,30 +205,35 @@ export function admitPlanDetail(
         (r) => JSON.stringify([r.id, r.version]),
       )
     )
-      return null;
+      return false;
     if (
       !page(
         value.issues,
-        (r) =>
+        (r): r is Issue =>
           record(r) &&
           id(r.id) &&
           text(r.code, 120) &&
           optionalId(r.requirement_id) &&
           optionalVersion(r.requirement_version) &&
           text(r.message) &&
-          Array.isArray(r.snapshot_ids) &&
-          r.snapshot_ids.length <= 2 &&
-          r.snapshot_ids.every(id),
+          arrayOf(r.snapshot_ids, id) &&
+          r.snapshot_ids.length <= 2,
       )
     )
-      return null;
-    for (const key of pageKeys) {
-      const collection = key.slice(0, -5);
-      if (q[key] !== value[collection].page) return null;
+      return false;
+    for (const [key, collection] of Object.entries({
+      versions_page: value.versions,
+      approvals_page: value.approvals,
+      opportunities_page: value.opportunities,
+      execution_page: value.execution,
+      requirements_page: value.requirements,
+      issues_page: value.issues,
+    })) {
+      if (q[key] !== collection.page) return false;
     }
-    return value as PlanDetail;
+    return true;
   } catch {
-    return null;
+    return false;
   }
 }
 export function canAct(d: PlanDetail, action: PlanAction): boolean {
@@ -232,21 +260,26 @@ export function canAct(d: PlanDetail, action: PlanAction): boolean {
       );
     case "execute-plan":
       return (
-        ["approved", "executing", "partially_reserved", "failed"].includes(p.lifecycle_state) &&
+        oneOf(["approved", "executing", "partially_reserved", "failed"], p.lifecycle_state) &&
         p.approved_version === p.version &&
         p.reviewed_decision?.decision === "approved"
       );
   }
 }
+export function planDecision<A extends PlanAction>(
+  d: PlanDetail,
+  action: A,
+  reason: string,
+): PlanInputs[A];
 export function planDecision(
   d: PlanDetail,
   action: PlanAction,
   reason: string,
-): Record<string, unknown> {
-  const input: Record<string, unknown> = {
+): PlanInputs[PlanAction] {
+  const reference = {
     contact_plan_id: d.plan.id,
     plan_evidence: {
-      contract_version: 1,
+      contract_version: 1 as const,
       organization_id: d.context.organization_id,
       mission_id: d.context.mission_id,
       plan_id: d.plan.id,
@@ -254,9 +287,37 @@ export function planDecision(
       content_sha256: d.plan.content_sha256,
     },
   };
-  if (action !== "execute-plan")
-    input[action === "submit-plan" ? "submission" : "decision"] = { reason: reason.trim() };
-  return input;
+  if (action === "submit-plan") return { ...reference, submission: { reason: reason.trim() } };
+  if (action === "approve-plan" || action === "reject-plan")
+    return { ...reference, decision: { reason: reason.trim() } };
+  return reference;
+}
+export function planRequest(d: PlanDetail, action: PlanAction, reason: string): PlanRequest {
+  switch (action) {
+    case "submit-plan":
+      return [action, planDecision(d, action, reason)];
+    case "approve-plan":
+      return [action, planDecision(d, action, reason)];
+    case "reject-plan":
+      return [action, planDecision(d, action, reason)];
+    case "execute-plan":
+      return [action, planDecision(d, action, reason)];
+  }
+}
+export function planPageRequest(
+  sequence: number,
+  ...[action, payload]: PlanRequest
+): PlanPageRequest {
+  switch (action) {
+    case "submit-plan":
+      return [action, { sequence, payload }];
+    case "approve-plan":
+      return [action, { sequence, payload }];
+    case "reject-plan":
+      return [action, { sequence, payload }];
+    case "execute-plan":
+      return [action, { sequence, payload }];
+  }
 }
 export const reviewIdentity = (d: PlanDetail) =>
   JSON.stringify([
@@ -280,14 +341,19 @@ export function reviewHref(
   if (key && pageNumber) params.set(key, String(pageNumber));
   return planPath(d) + "?" + params;
 }
-export function completedReceipt(value: unknown, d: PlanDetail, action: PlanAction) {
+export function completedReceipt<A extends PlanAction>(
+  value: unknown,
+  d: PlanDetail,
+  action: A,
+): value is PlanReceipt<A> {
   if (!record(value) || !id(value.receiptId) || !time(value.completedAt) || !record(value.result))
     return false;
   const r = value.result;
   if (r.contactPlanId !== d.plan.id) return false;
   return action === "execute-plan"
     ? number(r.executionItemCount) &&
-        ["approved", "executing", "partially_reserved", "reserved", "failed"].includes(
+        oneOf(
+          ["approved", "executing", "partially_reserved", "reserved", "failed"],
           r.lifecycleState,
         )
     : r.version === d.plan.version && r.contentSha256 === d.plan.content_sha256;

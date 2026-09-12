@@ -13,7 +13,7 @@ test("legacy entries retain mission, selected group and management placement thr
   w.unmount();
 });
 test("legacy redirect rejects unavailable identity and unowned query fields", () => {
-  for (const props of [
+  const fixtures: HistoricalWorkflowProps[] = [
     { mission_id: "", mode: "reader", query: {} },
     {
       mission_id: "mission",
@@ -21,7 +21,8 @@ test("legacy redirect rejects unavailable identity and unowned query fields", ()
       query: { group: "group", organization_id: "foreign" },
     },
     { mission_id: "mission", mode: "reader", query: { group: 27 } },
-  ] as HistoricalWorkflowProps[]) {
+  ];
+  for (const props of fixtures) {
     const w = mount(OpsDataOperations, { props });
     expect(w.find("#history-open-workspace").exists()).toBe(false);
     w.unmount();

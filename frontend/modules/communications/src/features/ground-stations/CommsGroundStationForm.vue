@@ -215,7 +215,11 @@ const save = () => emit("save", { ground_station: values() });
           >{{ form.actions.cancel.label }}</a
         >
       </CadenceFormActions>
-      <FormFeedback :id="form.id + '-feedback'" :feedback="feedback" @retry="validate" />
+      <FormFeedback
+        :id="form.id + '-feedback'"
+        v-bind="feedback ? { feedback } : {}"
+        @retry="validate"
+      />
     </form>
   </CadenceFormPageFrame>
 </template>

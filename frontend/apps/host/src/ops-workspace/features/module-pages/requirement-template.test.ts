@@ -1,3 +1,6 @@
+import { admitTemplateReference } from "../../../../../../modules/planning-and-contacts/src/features/contact-requirements/templates";
+import type { OpsPageAction } from "@cadence/plugin-sdk/ops-pages";
+import { required } from "../../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import OpsModulePage from "./OpsModulePage.vue";
@@ -22,12 +25,16 @@ test("host captures the template token and recovers a lifecycle receipt through 
     refresh = vi.fn(),
     dispose = vi.fn();
   let guard = () => true;
-  const execute = vi.fn(async ({ event, input }) => {
+  const execute = vi.fn(async ({ event, input }: OpsPageAction) => {
+    if (event !== "pause-template") throw Error("Unexpected host action");
     const op = templateOperation(data, event, input),
       recovered = structuredClone(data);
     recovered.sequence = op.sequence;
     recovered.operation = op;
-    recovered.model.templates.entries[0]!.reference = op.receipt!.result.reference;
+    const reference: unknown = required(op.receipt).result.reference;
+    if (!admitTemplateReference(reference, data.model.context))
+      throw Error("Missing template receipt reference");
+    required(recovered.model.templates.entries[0]).reference = reference;
     query.mockResolvedValue({ ...initial, data: recovered });
     throw Error("Lost response");
   });
@@ -53,7 +60,10 @@ test("host captures the template token and recovers a lifecycle receipt through 
       id: initial.id,
       token: initial.token,
       event: "pause-template",
-      input: { sequence: 1, payload: { reference: data.model.templates.entries[0]!.reference } },
+      input: {
+        sequence: 1,
+        payload: { reference: required(data.model.templates.entries[0]).reference },
+      },
     });
     await w.get("#requirement-template-refresh").trigger("click");
     await flushPromises();

@@ -1,10 +1,11 @@
+import { fixtureArrayAt, fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import ObservablePicker from "./ObservablePicker.vue";
 import { widgetDefaults } from "./contracts";
 import { editorContext } from "./fixtures.test-support";
 import { readObservableChoices } from "./validation";
-const apps: ReturnType<typeof mount>[] = [];
+const apps: { unmount: () => void }[] = [];
 afterEach(() => {
   for (const app of apps.splice(0)) app.unmount();
 });
@@ -25,7 +26,9 @@ function choices(query = "", options = ["HK.voltage", "HK.current"]) {
     more: false,
   };
 }
-function render(execute = vi.fn(async () => ({ status: "ok", choices: choices() }))) {
+function render(
+  execute = vi.fn(async (): Promise<unknown> => ({ status: "ok", choices: choices() })),
+) {
   const app = mount(ObservablePicker, {
     props: {
       modelValue: "",
@@ -61,7 +64,7 @@ test("search is explicit, read only, resource/version bound and separate from se
 });
 test("late results cannot survive a new query, changed scope, disabled editor or unmount", async () => {
   for (const change of ["query", "scope", "revision", "disabled", "unmount"]) {
-    let resolve!: (value: any) => void;
+    let resolve!: (value: unknown) => void;
     const { app } = render(
       vi.fn(
         () =>
@@ -116,20 +119,24 @@ test("multi-select preserves order, blocks duplicates and respects the chart lim
 });
 test("malformed, foreign, stale, duplicate and over-limit DTOs are rejected", () => {
   for (const mutate of [
-    (v: any) => (v.organization_id = "other"),
-    (v: any) => (v.mission_id = "other"),
-    (v: any) => (v.dashboard_id = "other"),
-    (v: any) => (v.document_version = 2),
-    (v: any) => (v.version = 1),
-    (v: any) => (v.staging_revision = 1),
-    (v: any) => delete v.staging_revision,
-    (v: any) => (v.query = "other"),
-    (v: any) => v.options.push(v.options[0]),
-    (v: any) => (v.options = Array(51).fill(v.options[0])),
-    (v: any) => (v.options[0].expression = "private"),
-    (v: any) => (v.more = "false"),
-    (v: any) => (v.options[0].value = "bad\nID"),
-    (v: any) => (v.options[0].description = "x".repeat(4097)),
+    (v: unknown) => (fixtureRecordAt(v).organization_id = "other"),
+    (v: unknown) => (fixtureRecordAt(v).mission_id = "other"),
+    (v: unknown) => (fixtureRecordAt(v).dashboard_id = "other"),
+    (v: unknown) => (fixtureRecordAt(v).document_version = 2),
+    (v: unknown) => (fixtureRecordAt(v).version = 1),
+    (v: unknown) => (fixtureRecordAt(v).staging_revision = 1),
+    (v: unknown) => delete fixtureRecordAt(v).staging_revision,
+    (v: unknown) => (fixtureRecordAt(v).query = "other"),
+    (v: unknown) => fixtureArrayAt(v, "options").push(fixtureArrayAt(v, "options")[0]),
+    (v: unknown) =>
+      (fixtureRecordAt(v).options = Array.from(
+        { length: 51 },
+        () => fixtureArrayAt(v, "options")[0],
+      )),
+    (v: unknown) => (fixtureRecordAt(v, "options", 0).expression = "private"),
+    (v: unknown) => (fixtureRecordAt(v).more = "false"),
+    (v: unknown) => (fixtureRecordAt(v, "options", 0).value = "bad\nID"),
+    (v: unknown) => (fixtureRecordAt(v, "options", 0).description = "x".repeat(4097)),
   ]) {
     const value = choices();
     mutate(value);

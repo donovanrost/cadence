@@ -1,5 +1,11 @@
 {
-  "include": ["vite.config.*", "module-federation.config.ts"],
+  "include": [
+    "../../test-support/json-fixture.ts",
+    "vite*.config.*",
+    "module-federation.config.ts",
+    "../../tools/publication-metadata.ts",
+    "*.mjs"
+  ],
   "compilerOptions": {
     "composite": true,
     "noEmit": true,
@@ -10,6 +16,10 @@
     "moduleResolution": "Bundler",
     "types": ["node"],
     "strict": true,
-    "skipLibCheck": true
-  }
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "checkJs": true
+  },
+  "extends": ["../../tsconfig.strict.json"]
 }

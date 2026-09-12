@@ -16,7 +16,7 @@ application-host APIs. Cadence core registers and executes domain application qu
 
 ## Page composition
 
-`apps/host/src/routes.json` declares the 83 ordinary/inventory routes: application,
+`apps/host/src/routes.json` declares the ordinary/inventory routes: application,
 surface, scope, query allowlist, and layout metadata. `BrowserHost.vue` owns Vue Router,
 commits authorized context with the selected route, and renders `ApplicationShell` plus
 one page outlet. Layout selection, active links, document titles, query selection, and
@@ -47,12 +47,10 @@ Vue Router's history listener is registered before LiveSocket connects. While Br
 is mounted, it owns Back/Forward events and prevents LiveSocket from also interpreting
 them as LiveView navigation. Native Phoenix pages retain their history lifecycle.
 
-`RoutedFederationSurface` explicitly mounts and disposes its admitted federation runtime.
-Ordinary pages need neither separate LiveVue roots nor Teleport nor a document observer.
-The shared runtime module is loaded once. Placement changes invalidate the old bridge
-and mount the selected remote; the shell and sidebar state remain intact. Legacy generic
-application workspaces and controller screens still use their existing adapter/portal
-boundary and observer; they are outside the ordinary route catalog.
+The ordinary route catalog renders explicit host page components. Every catalog entry has
+mounted dispatch coverage; an unrecognized kind renders a contained unavailable-page alert.
+Legacy generic application workspaces and controller screens still use their existing
+federation adapter/portal boundary and observer outside this catalog.
 
 Mission and spacecraft application inventories render host-bundled recovery components,
 independent of remote release admission. Each management mutation includes its resource

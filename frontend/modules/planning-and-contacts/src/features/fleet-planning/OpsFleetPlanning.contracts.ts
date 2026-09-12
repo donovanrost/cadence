@@ -1,3 +1,4 @@
+import type { Snapshot } from "@cadence/plugin-sdk/admission";
 import type { InjectionKey } from "vue";
 export const fleetStates = [
   "queued",
@@ -8,7 +9,7 @@ export const fleetStates = [
   "canceled",
 ] as const;
 export type FleetState = (typeof fleetStates)[number];
-export type FleetDirectory = {
+export type FleetDirectory = Snapshot<{
   contract_version: 1;
   context: { organization_id: string; mission_id: string };
   query: { page: number; state: FleetState | null };
@@ -41,7 +42,7 @@ export type FleetDirectory = {
       candidate_plan: { id: string; version: number } | null;
     }>;
   };
-};
+}>;
 export interface FleetDirectoryPort {
   context: FleetDirectory["context"];
   refresh: () => Promise<unknown>;

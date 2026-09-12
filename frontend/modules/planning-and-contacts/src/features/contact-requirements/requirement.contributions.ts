@@ -9,6 +9,7 @@ export const requirementDirectoryContribution = {
   slot: "ops.page",
   version: 1,
   title: "Contact Requirements",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor; the lint type service cannot resolve Vue modules.
   component: RequirementDirectoryContribution,
   query: true,
   read(value, context) {
@@ -26,6 +27,7 @@ export const requirementReviewContribution = {
   slot: "ops.page",
   version: 1,
   title: "Requirement Review",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor; the lint type service cannot resolve Vue modules.
   component: RequirementReviewContribution,
   query: true,
   actions: ["plan", "create-plan"],

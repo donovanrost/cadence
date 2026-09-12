@@ -1,5 +1,6 @@
+import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
 import type { FleetDirectory } from "./OpsFleetPlanning.contracts";
-export function directoryFixture(count = 1): FleetDirectory {
+export function directoryFixture(count = 1): MutableFixture<FleetDirectory> {
   return {
     contract_version: 1,
     context: { organization_id: "org-one", mission_id: "mission-one" },

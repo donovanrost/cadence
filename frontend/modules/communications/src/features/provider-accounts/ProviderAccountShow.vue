@@ -11,35 +11,14 @@ import CadenceStatTile from "@cadence/ui/CadenceStatTile.vue";
 import StatusBadge from "../../shared/StatusBadge.vue";
 
 import type {
+  Grant,
   EmptyPayload,
-  Page,
-  Actions,
-  Stat,
   GrantValues,
   GrantInputValues,
-  GrantForm,
-  Grant,
-  AuditEntry,
-  DetailCard,
-  Ingestion,
-  Guardrails,
-  Diagnostics,
+  ProviderAccountShowProps,
 } from "./detail.contracts";
 
-const props = defineProps<{
-  page: Page;
-  actions: Actions;
-  stats: Stat[];
-  grant_form: GrantForm;
-  configuration: DetailCard;
-  ingestion: Ingestion;
-  guardrails: Guardrails;
-  diagnostics: Diagnostics;
-  account_grants: Grant[];
-  account_audit: AuditEntry[];
-  canGrant?: boolean;
-  actionsDisabled?: boolean;
-}>();
+const props = defineProps<ProviderAccountShowProps>();
 
 const emit = defineEmits<{
   "validate-account": [payload: EmptyPayload];

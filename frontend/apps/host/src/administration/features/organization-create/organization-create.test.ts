@@ -1,3 +1,5 @@
+import { required } from "../../../../../../test-support/required";
+import { jsonFixture, fixtureRecord } from "../../../../../../test-support/json-fixture";
 import { writeFileSync } from "node:fs";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
@@ -95,25 +97,29 @@ test("unknown transport retains the draft and blocks replay through refresh unti
 test("actual producer documents reach all three owner components and the submitted fields", async () => {
   const encoded = process.env.CADENCE_PLATFORM_DOCUMENT;
   if (!encoded) return;
-  const data = JSON.parse(encoded);
-  const userId = data.creation.user_id;
+  const data = jsonFixture(encoded);
+  const userId = fixtureRecord(data.creation).user_id;
+  const overviewModel = readPlatformOverview(data.overview, userId);
+  const directoryModel = readOrganizationDirectory(data.directory, userId);
   const overview = mount(PlatformOverviewPanel, {
-    props: { model: readPlatformOverview(data.overview, userId) },
+    props: { model: overviewModel },
   });
   expect(overview.get("#admin-home-organizations-card").text()).toContain(
-    String(data.overview.counts.organizations),
+    String(overviewModel.counts.organizations),
   );
   const directory = mount(OrganizationDirectoryPanel, {
-    props: { model: readOrganizationDirectory(data.directory, userId) },
+    props: { model: directoryModel },
   });
   expect(
     directory.findAll("#admin-organization-list-component li a").map((a) => a.attributes("href")),
   ).toEqual(
-    data.directory.organizations.map(
+    directoryModel.organizations.map(
       (org: { id: string }) => `/admin/organizations/${encodeURIComponent(org.id)}`,
     ),
   );
-  const act = vi.fn(async () => ({ status: "unavailable" }));
+  const act = vi.fn(async (_event: string, _input: Record<string, unknown>) => ({
+    status: "unavailable",
+  }));
   const form = mount(OrganizationCreatePanel, {
     props: { model: readOrganizationCreate(data.creation, userId), act, refresh: vi.fn() },
   });
@@ -125,7 +131,7 @@ test("actual producer documents reach all three owner components and the submitt
   if (!process.env.CADENCE_PLATFORM_INPUT_FILE) throw Error("Missing probe output file");
   writeFileSync(
     process.env.CADENCE_PLATFORM_INPUT_FILE,
-    JSON.stringify((act.mock.calls[0] as unknown as [string, unknown])[1]),
+    JSON.stringify(required(act.mock.calls[0])[1]),
   );
   overview.unmount();
   directory.unmount();

@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import type {
@@ -11,7 +12,7 @@ import { surfaceContracts } from "./federated-application";
 import OpsConsoleApplication from "./OpsConsoleApplication.vue";
 
 function harness() {
-  const surface = surfaceContracts.find((s) => s.surfaceId === "contact_record")!;
+  const surface = required(surfaceContracts.find((s) => s.surfaceId === "contact_record"));
   const query = vi.fn<(request: HostQueryRequest) => Promise<unknown>>();
   const execute = vi.fn<(request: HostActionRequest<unknown>) => Promise<unknown>>();
   const props: FullPageSurfaceProps = {
@@ -52,7 +53,7 @@ function harness() {
 
 test("the record port performs only the captured declared read", async () => {
   const { props, query, execute } = harness();
-  const port = createContactRecordPort(props, () => true)!;
+  const port = required(createContactRecordPort(props, () => true));
   query.mockResolvedValue({
     trusted_surface: {
       queryVersion: 1,
@@ -78,7 +79,7 @@ test("a departed record port refuses new reads and late responses", async () => 
         resolve = done;
       }),
   );
-  const port = createContactRecordPort(props, () => active)!;
+  const port = required(createContactRecordPort(props, () => active));
   const pending = port.refresh();
   active = false;
   resolve({});
@@ -88,7 +89,7 @@ test("a departed record port refuses new reads and late responses", async () => 
 });
 test("the port rejects other presentations and other surfaces", async () => {
   const { props, query } = harness();
-  const port = createContactRecordPort(props, () => true)!;
+  const port = required(createContactRecordPort(props, () => true));
   query.mockResolvedValue({
     queryVersion: 1,
     presentation: { component: "OpsContactDetail", props: { record: {} } },

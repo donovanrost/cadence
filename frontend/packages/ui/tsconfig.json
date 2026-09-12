@@ -1,13 +1,22 @@
 {
-  "extends": "@vue/tsconfig/tsconfig.dom.json",
-  "include": ["src/**/*.ts", "src/**/*.vue"],
+  "extends": ["@vue/tsconfig/tsconfig.dom.json", "../../tsconfig.strict.json"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "src/**/*.js",
+    "vite.config.ts",
+    "vendor/heroicons.cjs"
+  ],
   "compilerOptions": {
     "noEmit": true,
-    "types": ["vite/client", "vite-plus/test"],
+    "types": ["vite/client", "vite-plus/test", "node"],
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+    "allowJs": true,
+    "checkJs": true,
+    "resolveJsonModule": true
   }
 }

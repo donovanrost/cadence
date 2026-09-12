@@ -1,32 +1,46 @@
+import type { GridStackWidget, GridStackOptions } from "gridstack";
+import type { Mock } from "vite-plus/test";
+import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import EditorLayoutGrid from "./EditorLayoutGrid.vue";
 import { editorFixture } from "./fixtures.test-support";
-const state = vi.hoisted(() => ({ engine: null as any, handlers: {} as Record<string, Function> }));
+type TestNode = GridStackWidget & { x: number; y: number; el: Element };
+type TestGrid = {
+  engine: { nodes: TestNode[] };
+  setStatic: Mock<(disabled: boolean) => void>;
+  destroy: Mock<() => void>;
+  load: (nodes: GridStackWidget[]) => void;
+  update: (element: Element, changes: GridStackWidget) => void;
+  on: (events: string, callback: () => void) => void;
+};
+const state = vi.hoisted((): { engine: TestGrid | null; handlers: Record<string, () => void> } => ({
+  engine: null,
+  handlers: {},
+}));
 vi.mock("gridstack", () => ({
   GridStack: {
-    init(_options: any, element: HTMLElement) {
+    init(_options: GridStackOptions, element: HTMLElement) {
       state.handlers = {};
-      const engine = {
-        engine: { nodes: [] as any[] },
-        setStatic: vi.fn(),
-        destroy: vi.fn(),
-        load(nodes: any[]) {
-          engine.engine.nodes = nodes.map((n) => ({
-            ...n,
-            x: n.x ?? 0,
-            y: n.y ?? 0,
-            el: Array.from(element.children).find((e: any) => e.getAttribute("gs-id") === n.id),
+      const engine: TestGrid = {
+        engine: { nodes: [] },
+        setStatic: vi.fn<(disabled: boolean) => void>(),
+        destroy: vi.fn<() => void>(),
+        load(nodes) {
+          engine.engine.nodes = nodes.map((node) => ({
+            ...node,
+            x: node.x ?? 0,
+            y: node.y ?? 0,
+            el: required(
+              Array.from(element.children).find((child) => child.getAttribute("gs-id") === node.id),
+            ),
           }));
         },
-        update(el: any, changes: any) {
-          Object.assign(
-            engine.engine.nodes.find((n) => n.el === el),
-            changes,
-          );
+        update(element, changes) {
+          Object.assign(required(engine.engine.nodes.find((node) => node.el === element)), changes);
         },
-        on(events: string, fn: Function) {
-          for (const event of events.split(" ")) state.handlers[event] = fn;
+        on(events, callback) {
+          for (const event of events.split(" ")) state.handlers[event] = callback;
         },
       };
       state.engine = engine;
@@ -34,7 +48,7 @@ vi.mock("gridstack", () => ({
     },
   },
 }));
-const apps: ReturnType<typeof mount>[] = [];
+const apps: { unmount: () => void }[] = [];
 afterEach(() => {
   for (const app of apps.splice(0)) app.unmount();
 });
@@ -60,31 +74,31 @@ test("mounting is silent and keyboard movement produces a bounded local draft", 
 });
 test("drag stops read final neighbor positions and disabling invalidates a queued gesture", async () => {
   const app = render();
-  state.handlers.dragstart();
+  required(state.handlers.dragstart)();
   expect(app.emitted("gesture")?.at(-1)).toEqual([true]);
-  state.engine.engine.nodes[0].x = 3;
-  state.handlers.dragstop();
+  required(required(state.engine).engine.nodes[0]).x = 3;
+  required(state.handlers.dragstop)();
   await flushPromises();
   expect(app.emitted("change")?.[0]).toEqual([
     [{ placement_id: "battery", x: 3, y: 0, w: 4, h: 2 }],
   ]);
-  state.handlers.resizestart();
-  state.handlers.resizestop();
+  required(state.handlers.resizestart)();
+  required(state.handlers.resizestop)();
   await app.setProps({ disabled: true });
   await flushPromises();
   expect(app.emitted("change")).toHaveLength(1);
-  expect(state.engine.setStatic).toHaveBeenLastCalledWith(true);
+  expect(required(state.engine).setStatic).toHaveBeenLastCalledWith(true);
 });
 test("discard restores saved positions and unmount cancels late emissions", async () => {
   const app = render();
   await app.setProps({ edits: [{ placement_id: "battery", x: 3, y: 2, w: 4, h: 3 }] });
-  expect(state.engine.engine.nodes[0].x).toBe(3);
+  expect(required(required(state.engine).engine.nodes[0]).x).toBe(3);
   await app.setProps({ edits: [] });
-  expect(state.engine.engine.nodes[0].x).toBe(0);
-  state.handlers.dragstart();
-  state.handlers.dragstop();
+  expect(required(required(state.engine).engine.nodes[0]).x).toBe(0);
+  required(state.handlers.dragstart)();
+  required(state.handlers.dragstop)();
   app.unmount();
   await flushPromises();
   expect(app.emitted("change")).toBeUndefined();
-  expect(state.engine.destroy).toHaveBeenCalledOnce();
+  expect(required(state.engine).destroy).toHaveBeenCalledOnce();
 });

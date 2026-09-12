@@ -1,6 +1,7 @@
+import { oneOf, arrayOf, record, type Snapshot } from "@cadence/plugin-sdk/admission";
 import type { SpacecraftPageContext } from "@cadence/plugin-sdk/spacecraft-pages";
 
-export type ProfileEvidence = {
+export type ProfileEvidence = Snapshot<{
   status: "unbound" | "unavailable" | "ready";
   id: string | null;
   version: number | null;
@@ -8,8 +9,8 @@ export type ProfileEvidence = {
   lifecycle: "active" | "deleted" | null;
   uplink: "tc" | "uslp" | null;
   packet: "space_packet" | null;
-};
-export type SpacecraftCommandingModel = {
+}>;
+export type SpacecraftCommandingModel = Snapshot<{
   version: 1;
   context: SpacecraftPageContext;
   mission_name: string;
@@ -22,10 +23,8 @@ export type SpacecraftCommandingModel = {
     total_count: number;
     items: { id: string; name: string | null; scid: number | null }[];
   };
-};
+}>;
 export type SpacecraftCommandingProps = { mission_id?: string; spacecraft_id?: string };
-const record = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
 export const identifier = (v: unknown): v is string =>
   typeof v === "string" && v.length <= 120 && /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(v);
 const text = (v: unknown, max = 800): v is string =>
@@ -42,6 +41,13 @@ export function readSpacecraftCommanding(
   value: unknown,
   context: SpacecraftPageContext,
 ): SpacecraftCommandingModel {
+  if (!validSpacecraftCommanding(value, context)) throw Error("Invalid commanding document");
+  return value;
+}
+function validSpacecraftCommanding(
+  value: unknown,
+  context: SpacecraftPageContext,
+): value is SpacecraftCommandingModel {
   if (!record(value) || value.version !== 1 || !record(value.context))
     throw Error("Invalid commanding document");
   for (const key of ["organizationId", "missionId", "spacecraftId"] as const) {
@@ -59,7 +65,7 @@ export function readSpacecraftCommanding(
   const p = value.profile;
   if (
     !record(p) ||
-    !["unbound", "unavailable", "ready"].includes(String(p.status)) ||
+    !oneOf(["unbound", "unavailable", "ready"], p.status) ||
     !(p.id === null || identifier(p.id)) ||
     !(p.version === null || (integer(p.version) && p.version > 0))
   )
@@ -71,8 +77,8 @@ export function readSpacecraftCommanding(
       p.version < 1 ||
       !text(p.name) ||
       !p.name ||
-      !["active", "deleted"].includes(String(p.lifecycle)) ||
-      !["tc", "uslp"].includes(String(p.uplink)) ||
+      !oneOf(["active", "deleted"], p.lifecycle) ||
+      !oneOf(["tc", "uslp"], p.uplink) ||
       p.packet !== "space_packet"
     )
       throw Error("Invalid profile evidence");
@@ -94,7 +100,7 @@ export function readSpacecraftCommanding(
     !record(endpoints) ||
     endpoints.page !== q.page ||
     !integer(endpoints.total_count) ||
-    !Array.isArray(endpoints.items)
+    !arrayOf(endpoints.items, record)
   )
     throw Error("Invalid endpoint page");
   const last = Math.max(1, Math.ceil(endpoints.total_count / 25));
@@ -115,7 +121,7 @@ export function readSpacecraftCommanding(
       throw Error("Invalid source endpoint");
     seen.add(row.id);
   }
-  return value as unknown as SpacecraftCommandingModel;
+  return true;
 }
 export function endpointPageHref(model: SpacecraftCommandingModel, page: number): string {
   const query = new URLSearchParams();

@@ -1,6 +1,13 @@
-import type { PolicyAction, PolicyPage, PolicyOperation, PolicyGrant } from "./fleet-policy";
+import { admitPolicyCommand } from "./fleet-policy";
+import { required, type MutableFixture } from "./policy-test-helpers";
+import type {
+  PolicyPage,
+  PolicyOperation,
+  PolicyGrant,
+  CompletedPolicyOperation,
+} from "./fleet-policy";
 import { evidenceFixture } from "./policy-decisions.test-support";
-export function policyPageFixture(): PolicyPage {
+export function policyPageFixture(): MutableFixture<PolicyPage> {
   const values = {
     max_horizon_seconds: 86400,
     requirement_concurrency: 8,
@@ -34,7 +41,7 @@ export function policyPageFixture(): PolicyPage {
       more: false,
       entries: [{ id: "service-one", name: "Mission automation" }],
     },
-    grants: { page: 1, more: false, active_count: 1, entries: [] as PolicyGrant[] },
+    grants: { page: 1, more: false, active_count: 1, entries: [] as MutableFixture<PolicyGrant>[] },
   };
   model.grants.entries.push({
     reference: {
@@ -64,87 +71,140 @@ export function policyPageFixture(): PolicyPage {
 }
 export function policyOperationFixture(
   page: PolicyPage,
-  action: PolicyAction,
-  command: any,
-): PolicyOperation {
-  const input = JSON.parse(JSON.stringify(command.payload));
-  let result: any;
-  const reference = page.model.current?.reference;
-  if (action === "validate-policy" || action === "validate-grant")
-    result = { valid: true, errors: [], surfaceId: "fleet_planning_policy", actionId: action };
-  if (action === "save-policy")
-    result = {
-      fleetPlanningPolicyId: reference?.policy_id ?? "policy-1",
-      fleetPlanningPolicyVersion: (input.edit_reference.base?.policy_version ?? 0) + 1,
-      currentVersion: (input.edit_reference.base?.policy_version ?? 0) + 1,
-      activeVersion: page.model.active?.reference.policy_version ?? null,
-      lifecycleState: page.model.state === "unconfigured" ? "draft" : page.model.state,
-      contentSha256: "a".repeat(64),
-    };
-  if (action === "approve-policy")
-    result = {
-      fleetPlanningPolicyId: reference!.policy_id,
-      fleetPlanningPolicyVersion: reference!.policy_version,
-      currentVersion: reference!.policy_version,
-      activeVersion: reference!.policy_version,
-      lifecycleState: "active",
-      contentSha256: reference!.content_sha256,
-    };
-  if (action === "issue-grant")
-    result = {
-      automationGrantId: "grant-new",
-      serviceIdentityId: input.grant.service_identity_id,
-      lifecycleState: "active",
-      fleetPlanningPolicyVersion: input.policy_evidence.policy_version,
-    };
-  if (action === "revoke-grant")
-    result = { automationGrantId: input.grant_evidence.grant_id, lifecycleState: "revoked" };
-  return {
-    sequence: command.sequence,
-    action,
-    input,
-    status: "completed",
-    receipt: {
-      receiptId: `receipt-${command.sequence}`,
-      completedAt: "2026-09-09T04:00:00Z",
-      result,
-    },
-  };
+  action: unknown,
+  command: Record<string, unknown>,
+): CompletedPolicyOperation {
+  const request = required(admitPolicyCommand(action, command.payload, page.model.context));
+  const sequence = command.sequence;
+  if (typeof sequence !== "number") throw Error("Missing fixture sequence");
+  const completed = { sequence, status: "completed" as const };
+  const received = <const T>(result: T) => ({
+    receiptId: `receipt-${sequence}`,
+    completedAt: "2026-09-09T04:00:00Z",
+    result,
+  });
+  switch (request.action) {
+    case "validate-policy":
+      return {
+        ...request,
+        ...completed,
+        receipt: received({
+          valid: true,
+          errors: [],
+          surfaceId: "fleet_planning_policy",
+          actionId: "validate-policy",
+        }),
+      };
+    case "validate-grant":
+      return {
+        ...request,
+        ...completed,
+        receipt: received({
+          valid: true,
+          errors: [],
+          surfaceId: "fleet_planning_policy",
+          actionId: "validate-grant",
+        }),
+      };
+    case "save-policy": {
+      const base = request.input.edit_reference.base;
+      const version = (base?.policy_version ?? 0) + 1;
+      return {
+        ...request,
+        ...completed,
+        receipt: received({
+          fleetPlanningPolicyId: base?.policy_id ?? "policy-1",
+          fleetPlanningPolicyVersion: version,
+          currentVersion: version,
+          activeVersion: page.model.active?.reference.policy_version ?? null,
+          lifecycleState: page.model.state === "active" ? "active" : "draft",
+          contentSha256: "a".repeat(64),
+        }),
+      };
+    }
+    case "approve-policy": {
+      const reference = request.input.decision.policy_evidence;
+      return {
+        ...request,
+        ...completed,
+        receipt: received({
+          fleetPlanningPolicyId: reference.policy_id,
+          fleetPlanningPolicyVersion: reference.policy_version,
+          currentVersion: reference.policy_version,
+          activeVersion: reference.policy_version,
+          lifecycleState: "active",
+          contentSha256: reference.content_sha256,
+        }),
+      };
+    }
+    case "issue-grant":
+      return {
+        ...request,
+        ...completed,
+        receipt: received({
+          automationGrantId: "grant-new",
+          serviceIdentityId: request.input.grant.service_identity_id,
+          lifecycleState: "active",
+          fleetPlanningPolicyVersion: request.input.policy_evidence.policy_version,
+        }),
+      };
+    case "revoke-grant":
+      return {
+        ...request,
+        ...completed,
+        receipt: received({
+          automationGrantId: request.input.grant_evidence.grant_id,
+          lifecycleState: "revoked",
+        }),
+      };
+  }
 }
 export function policyAfterOperation(page: PolicyPage, op: PolicyOperation): PolicyPage {
-  const next: PolicyPage = JSON.parse(JSON.stringify(page));
-  next.sequence = op.sequence;
-  next.operation = op;
-  if (op.status !== "completed") return next;
-  const r = op.receipt!.result;
-  if (op.action === "save-policy") {
-    next.model.current = {
-      reference: {
-        ...next.model.context,
-        contract_version: 1,
-        policy_id: r.fleetPlanningPolicyId,
-        policy_version: r.fleetPlanningPolicyVersion,
-        content_sha256: r.contentSha256,
-      },
-      values: {
-        ...(next.model.current?.values ?? next.model.defaults),
-        requirement_concurrency: Number(op.input.policy.requirement_concurrency),
-      },
-    };
-    if (next.model.state === "unconfigured") next.model.state = "draft";
+  let model = page.model;
+  if (op.status === "completed") {
+    if (op.action === "save-policy") {
+      const r = op.receipt.result;
+      model = {
+        ...model,
+        state: model.state === "unconfigured" ? "draft" : model.state,
+        current: {
+          reference: {
+            ...model.context,
+            contract_version: 1,
+            policy_id: r.fleetPlanningPolicyId,
+            policy_version: r.fleetPlanningPolicyVersion,
+            content_sha256: r.contentSha256,
+          },
+          values: {
+            ...(model.current?.values ?? model.defaults),
+            requirement_concurrency: Number(op.input.policy.requirement_concurrency),
+          },
+        },
+      };
+    }
+    if (op.action === "approve-policy")
+      model = { ...model, active: model.current, state: "active" };
+    if (op.action === "revoke-grant") {
+      const grantId = op.receipt.result.automationGrantId;
+      required(model.grants.entries.find((grant) => grant.reference.grant_id === grantId));
+      model = {
+        ...model,
+        grants: {
+          ...model.grants,
+          active_count: model.grants.active_count - 1,
+          entries: model.grants.entries.map((grant) =>
+            grant.reference.grant_id === grantId
+              ? {
+                  ...grant,
+                  state: "revoked",
+                  revoked_at: op.receipt.completedAt,
+                  revocation_reason: op.input.revocation.reason,
+                }
+              : grant,
+          ),
+        },
+      };
+    }
   }
-  if (op.action === "approve-policy") {
-    next.model.active = next.model.current;
-    next.model.state = "active";
-  }
-  if (op.action === "revoke-grant") {
-    const grant = next.model.grants.entries.find(
-      (g) => g.reference.grant_id === r.automationGrantId,
-    )!;
-    grant.state = "revoked";
-    grant.revoked_at = op.receipt!.completedAt;
-    grant.revocation_reason = op.input.revocation.reason;
-    next.model.grants.active_count--;
-  }
-  return next;
+  return { model, sequence: op.sequence, operation: op };
 }

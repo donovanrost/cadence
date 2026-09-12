@@ -1,3 +1,4 @@
+import { jsonFixture, fixtureRecord } from "../../../../../../test-support/json-fixture";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import WorkspaceLanding from "./WorkspaceLanding.vue";
@@ -70,9 +71,11 @@ test("scope changes remove old mission links and valid replacement recovers", as
 });
 
 test("actual producer renders scoped navigation without accepting server supplied destinations", () => {
-  const model = process.env.CADENCE_WORKSPACE_LANDING_DOCUMENT
-    ? JSON.parse(process.env.CADENCE_WORKSPACE_LANDING_DOCUMENT)
+  const raw = process.env.CADENCE_WORKSPACE_LANDING_DOCUMENT
+    ? jsonFixture(process.env.CADENCE_WORKSPACE_LANDING_DOCUMENT)
     : fixture();
+  const context = fixtureRecord(raw.context);
+  const model = readWorkspaceLanding(raw, context.organization_id, context.mission_id);
   const input = {
     ...model,
     href: "https://foreign.test",

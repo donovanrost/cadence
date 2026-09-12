@@ -50,6 +50,7 @@ const admitted = computed(() => {
   const registration = organizationModulePages[props.contributionId],
     snapshot = props.snapshot;
   if (
+    !registration ||
     !record(snapshot) ||
     snapshot.id !== registration.id ||
     snapshot.slot !== registration.slot ||
@@ -72,7 +73,8 @@ const admitted = computed(() => {
   try {
     const featureProps = registration.read(snapshot.data, props.context);
     let port: OrganizationPagePort | undefined;
-    if (registration.actions) {
+    const actions = registration.actions;
+    if (actions) {
       const token = snapshot.token,
         organizationId = props.context.organizationId,
         resourceId = props.context.resourceId;
@@ -99,14 +101,15 @@ const admitted = computed(() => {
         props.context.organizationId === organizationId;
       port = {
         async execute(event, input) {
-          if (!current() || !registration.actions!.includes(event))
+          const execute = props.execute;
+          if (!current() || !execute || !actions.includes(event))
             throw new Error("Inactive organization page action.");
-          const result = await props.execute!({ id: registration.id, token, event, input });
+          const result = await execute({ id: registration.id, token, event, input });
           if (!current()) throw new Error("Inactive organization page response.");
           return result;
         },
         navigate(href) {
-          if (current()) props.navigate!(href);
+          if (current()) props.navigate?.(href);
         },
       };
     }

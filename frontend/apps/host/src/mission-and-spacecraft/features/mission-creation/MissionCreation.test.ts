@@ -1,3 +1,4 @@
+import { required } from "../../../../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import MissionCreationPage from "./MissionCreationPage.vue";
@@ -12,9 +13,9 @@ test("creation validates its DTO and retains edits while ignoring older validati
   const wrapper = mount(MissionCreationPage, { props: { data, execute } });
   await wrapper.get("#mission_display_name").setValue("First");
   await wrapper.get("#mission_display_name").setValue("Latest");
-  resolve[1]!({ status: "ok", errors: {} });
+  required(resolve[1])({ status: "ok", errors: {} });
   await flushPromises();
-  resolve[0]!({ status: "invalid", errors: { display_name: ["Stale error"] } });
+  required(resolve[0])({ status: "invalid", errors: { display_name: ["Stale error"] } });
   await flushPromises();
   expect(wrapper.find('[role="alert"]').exists()).toBe(false);
   expect(wrapper.get<HTMLInputElement>("#mission_display_name").element.value).toBe("Latest");

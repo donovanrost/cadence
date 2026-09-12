@@ -1,3 +1,4 @@
+import { containing } from "../../../test-support/matchers";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type { HostActionReceipt, HostContext } from "./bridge";
 import { createFederatedActionLifecycle } from "./bridge";
@@ -39,7 +40,7 @@ describe("federated action lifecycle receipt validation", () => {
 
     expect(onRejected).toHaveBeenCalledWith(
       "install",
-      expect.objectContaining({ message: "The host action returned an invalid receipt." }),
+      containing({ message: "The host action returned an invalid receipt." }),
     );
     expect(onCompleted).not.toHaveBeenCalled();
     expect(requery).not.toHaveBeenCalled();
@@ -88,10 +89,7 @@ describe("federated action lifecycle receipt validation", () => {
       context,
     });
     expect(onCompleted).toHaveBeenCalledTimes(1);
-    expect(onCompleted).toHaveBeenCalledWith(
-      "remove",
-      expect.objectContaining({ receiptId: "current" }),
-    );
+    expect(onCompleted).toHaveBeenCalledWith("remove", containing({ receiptId: "current" }));
     expect(onRejected).not.toHaveBeenCalled();
     expect(requery).toHaveBeenCalledTimes(1);
     expect(onFinished).toHaveBeenCalledTimes(1);

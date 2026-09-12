@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { DropdownMenuItem } from "reka-ui";
-import { CadencePrimitiveChild } from "./cadence_primitive_child.js";
+import { CadencePrimitiveChild } from "./cadence_primitive_child";
 
 defineOptions({ inheritAttrs: false });
 

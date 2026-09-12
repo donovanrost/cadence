@@ -13,6 +13,7 @@ export function directoryHref(
     filter: roster.filter,
   });
   for (const [key, value] of Object.entries(changes)) query.set(key, String(value));
+  // oxlint-disable-next-line unicorn/no-useless-spread -- Iterate a snapshot because the loop can mutate its source.
   for (const [key, value] of [...query]) if (!value) query.delete(key);
   return `${roster.href}?${query}`;
 }

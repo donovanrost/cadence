@@ -1,3 +1,9 @@
+import { fixtureRecord } from "../../../../../../test-support/json-fixture";
+import { containing } from "../../../../../../test-support/matchers";
+import type {
+  OrganizationPagePort,
+  OrganizationPageAction,
+} from "@cadence/plugin-sdk/organization-pages";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import OrganizationModulePage from "./OrganizationModulePage.vue";
@@ -80,10 +86,14 @@ test("action contribution requires a token and binds only declared actions to th
     token,
     data: registrationFixture(),
   };
-  const execute = vi.fn(async ({ input }) => ({
-    status: "ok",
-    data: validationReceipt(input.provider_account),
-  }));
+  const execute = vi.fn(async ({ input }: OrganizationPageAction) => {
+    const values: Record<string, string> = {};
+    for (const [key, value] of Object.entries(fixtureRecord(input.provider_account))) {
+      if (typeof value !== "string") throw Error("Expected native provider account field text");
+      values[key] = value;
+    }
+    return { status: "ok", data: validationReceipt(values) };
+  });
   const navigate = vi.fn();
   const wrapper = mount(OrganizationModulePage, {
     props: { ...props(), contributionId: page.id, snapshot: page, execute, navigate },
@@ -91,11 +101,9 @@ test("action contribution requires a token and binds only declared actions to th
   expect(wrapper.find("#registration-form").exists()).toBe(true);
   await wrapper.get("#account-display_name").setValue("Admitted");
   await flushPromises();
-  expect(execute).toHaveBeenCalledWith(
-    expect.objectContaining({ id: page.id, token, event: "validate" }),
-  );
+  expect(execute).toHaveBeenCalledWith(containing({ id: page.id, token, event: "validate" }));
   const feature = wrapper.findComponent(providerAccountRegistrationContribution.component);
-  const port = feature.props("port");
+  const port: OrganizationPagePort = feature.props("port");
   await expect(port.execute("delete", {})).rejects.toThrow();
   await wrapper.setProps({ snapshot: { ...page, token: "22222222-2222-4222-8222-222222222222" } });
   await expect(port.execute("save", {})).rejects.toThrow();

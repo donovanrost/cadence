@@ -28,7 +28,8 @@ export function declarationPresentation(
   });
   const choices = [...model.spacecraft.entries];
   if (selected && !choices.some((c) => c.id === selected.id)) choices.unshift(selected);
-  const options = (pairs: string[][]) => pairs.map(([value, label]) => ({ value, label }));
+  const options = (pairs: readonly (readonly [string, string])[]) =>
+    pairs.map(([value, label]) => ({ value, label }));
   const href = `/missions/${requirementSegment(model.context.mission_id)}/ops/requirements`;
   return {
     page: {

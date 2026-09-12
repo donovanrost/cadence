@@ -1,3 +1,5 @@
+import { fixtureRows, fixtureString } from "../../../../../test-support/json-fixture.ts";
+import { required } from "../../../../../test-support/required.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,10 +16,14 @@ const server = await createServer({
   logLevel: "error",
 });
 try {
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   const { readExploration, ExplorationPanel, ExplorationLegacyRedirect } =
-    await server.ssrLoadModule("/src/exploration.ts");
+    /** @type {typeof import("../../exploration.ts")} */ (
+      await server.ssrLoadModule("/src/exploration.ts")
+    );
   if (process.argv[3] === "legacy") {
-    for (const props of JSON.parse(process.argv[2])) {
+    for (const props of fixtureRows(process.argv[2])) {
+      // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks the SFC constructor at this registration or render boundary.
       const app = createSSRApp(ExplorationLegacyRedirect, props);
       app.config.warnHandler = (message) => {
         throw Error(message);
@@ -29,8 +35,11 @@ try {
         assert.equal(doc.querySelector("form"), null);
         const anchor = doc.getElementById("exploration-open-workspace");
         assert.ok(anchor);
-        const url = new URL(anchor.getAttribute("href"), "https://cadence.test");
-        assert.equal(url.pathname, `/missions/${encodeURIComponent(props.mission_id)}/ops/explore`);
+        const url = new URL(required(anchor.getAttribute("href")), "https://cadence.test");
+        assert.equal(
+          url.pathname,
+          `/missions/${encodeURIComponent(fixtureString(props.mission_id))}/ops/explore`,
+        );
         assert.deepEqual(Object.fromEntries(url.searchParams), props.query);
       } finally {
         await window.happyDOM.close();
@@ -38,13 +47,18 @@ try {
     }
     console.log("Legacy exploration producer/consumer contract passed.");
   } else {
-    for (const model of JSON.parse(process.argv[2])) {
-      const context = { organizationId: model.organization_id, missionId: model.mission_id };
+    for (const raw of fixtureRows(process.argv[2])) {
+      const context = {
+        organizationId: fixtureString(raw.organization_id),
+        missionId: fixtureString(raw.mission_id),
+      };
+      const model = readExploration(raw, context);
       assert.deepEqual(readExploration(model, context), model);
       assert.throws(() => readExploration(model, { ...context, missionId: "foreign" }));
       const noAction = () => {
         throw Error("Rendering must not execute or navigate");
       };
+      // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks the SFC constructor at this registration or render boundary.
       const app = createSSRApp(ExplorationPanel, {
         model,
         context,
@@ -70,9 +84,9 @@ try {
             `/missions/${encodeURIComponent(model.mission_id)}/ops/dashboards/${encodeURIComponent(model.origin.dashboard.id)}`,
           );
           assert.ok(
-            doc
-              .getElementById("exploration-origin")
-              .textContent.includes(model.origin.dashboard.name),
+            required(doc.getElementById("exploration-origin")).textContent.includes(
+              model.origin.dashboard.name,
+            ),
           );
         } else {
           assert.equal(origin, null);
@@ -86,7 +100,7 @@ try {
           model.rows.length,
         );
         assert.equal(
-          doc.getElementById("exploration-loaded-at").getAttribute("datetime"),
+          required(doc.getElementById("exploration-loaded-at")).getAttribute("datetime"),
           model.loaded_at,
         );
         const ids = Array.from(doc.querySelectorAll("[id]"), (node) => node.id);
@@ -96,26 +110,28 @@ try {
           const sample = model.inspection.sample;
           assert.ok(doc.getElementById("exploration-sample-details"));
           assert.equal(
-            doc.getElementById("exploration-sample-receipt").getAttribute("datetime"),
+            required(doc.getElementById("exploration-sample-receipt")).getAttribute("datetime"),
             sample.receipt_time,
           );
           if (sample.generation_time)
             assert.equal(
-              doc.getElementById("exploration-sample-generation").getAttribute("datetime"),
+              required(doc.getElementById("exploration-sample-generation")).getAttribute(
+                "datetime",
+              ),
               sample.generation_time,
             );
-          for (const key of ["raw_value", "engineering_value"])
+          for (const key of /** @type {const} */ (["raw_value", "engineering_value"]))
             if (sample[key].state === "ready")
               assert.equal(
-                doc.getElementById(`exploration-sample-${key}`).textContent,
+                required(doc.getElementById(`exploration-sample-${key}`)).textContent,
                 sample[key].text,
               );
           assert.equal(
-            doc.getElementById("exploration-sample-source").textContent,
+            required(doc.getElementById("exploration-sample-source")).textContent,
             sample.source.data_source_id,
           );
           assert.equal(
-            doc.getElementById("exploration-sample-binding").textContent,
+            required(doc.getElementById("exploration-sample-binding")).textContent,
             sample.source.source_binding_id,
           );
         } else {
@@ -126,9 +142,12 @@ try {
           const element = doc.querySelector(`[data-observation-key="${row.key}"]`);
           assert.ok(element);
           if (row.time)
-            assert.equal(element.querySelector("time").getAttribute("datetime"), row.time);
+            assert.equal(
+              required(element.querySelector("time")).getAttribute("datetime"),
+              row.time,
+            );
           if (row.sample_id)
-            assert.equal(element.querySelector("button").textContent, row.sample_id);
+            assert.equal(required(element.querySelector("button")).textContent, row.sample_id);
         }
       } finally {
         await window.happyDOM.close();

@@ -8,6 +8,7 @@ export const missionPages = [
     slot: MISSION_PAGE_SLOT,
     version: 1,
     title: "Ground Stations",
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
     component: readSurfaces.ground_stations.component,
     read(value, context) {
       const props = readSurfaces.ground_stations.admit(value, context);
@@ -20,6 +21,7 @@ export const missionPages = [
     slot: MISSION_PAGE_SLOT,
     version: 1,
     title: "Ground Station",
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
     component: readSurfaces.ground_station.component,
     read(value, context) {
       const props = readSurfaces.ground_station.admit(value, context);

@@ -1,3 +1,4 @@
+import { required } from "../../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
 import { test, expect, vi } from "vite-plus/test";
 import OpsModulePage from "./OpsModulePage.vue";
@@ -46,7 +47,7 @@ test("the compiled commanding owner receives only captured queue and receipt por
       token: snapshot.token,
       event: "submit",
       input: {
-        expected_queue: snapshot.data.preview!.token,
+        expected_queue: required(snapshot.data.preview).token,
       },
     });
     await w.get("#command-queue-refresh").trigger("click");

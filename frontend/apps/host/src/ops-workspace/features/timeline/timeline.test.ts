@@ -1,3 +1,5 @@
+import { jsonFixture, fixtureRecord } from "../../../../../../test-support/json-fixture";
+import { required } from "../../../../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import { readTimeline, timelineHref, type TimelineModel } from "./contracts";
@@ -6,20 +8,20 @@ import TimelinePanel from "./TimelinePanel.vue";
 import { fixture } from "./fixtures.test-support";
 const props = (model = fixture()) => ({
   model,
-  navigate: vi.fn(),
+  navigate: vi.fn<(href: string) => void>(),
   refresh: vi.fn().mockResolvedValue(undefined),
 });
 test("filters navigate with the applied draft and clear selection while event links retain applied filters", async () => {
   const input = props();
   const wrapper = mount(TimelinePanel, { props: input });
-  const link = wrapper.get("#mission-timeline-events a").attributes("href")!;
+  const link = required(wrapper.get("#mission-timeline-events a").attributes("href"));
   expect(new URL(link, "https://cadence.test").searchParams.get("category")).toBe("health");
   expect(new URL(link, "https://cadence.test").searchParams.get("event_id")).toBe(
     "mission_event:newer",
   );
   await wrapper.get("#timeline_severity").setValue("warning");
   await wrapper.get("#timeline-filter-form").trigger("submit");
-  const target = new URL(input.navigate.mock.calls[0]![0], "https://cadence.test");
+  const target = new URL(required(input.navigate.mock.calls[0])[0], "https://cadence.test");
   expect(target.pathname).toBe("/missions/mission-1/ops/timeline");
   expect(target.searchParams.get("severity")).toBe("warning");
   expect(target.searchParams.has("event_id")).toBe(false);
@@ -51,7 +53,7 @@ test("invalid filter values remain editable and do not render stale events as ma
   expect(wrapper.findAll("#mission-timeline-events li")).toHaveLength(0);
   await wrapper.get("#timeline_category").setValue("operations");
   await wrapper.get("#timeline-filter-form").trigger("submit");
-  expect(input.navigate.mock.calls[0]![0]).toBe(
+  expect(required(input.navigate.mock.calls[0])[0]).toBe(
     "/missions/mission-1/ops/timeline?category=operations",
   );
   wrapper.unmount();
@@ -75,7 +77,13 @@ test("unknown envelopes and cross-mission evidence fail in the core boundary and
   const refresh = vi.fn();
   const snapshot = { version: 1, page: "timeline", status: "ready", context: data.context, data };
   const wrapper = mount(TimelinePage, {
-    props: { snapshot, organizationId: "org-1", missionId: "foreign", navigate: vi.fn(), refresh },
+    props: {
+      snapshot,
+      organizationId: "org-1",
+      missionId: "foreign",
+      navigate: vi.fn<(href: string) => void>(),
+      refresh,
+    },
   });
   expect(wrapper.find("#core-timeline-error").exists()).toBe(true);
   expect(wrapper.find("#ops-timeline-page").exists()).toBe(false);
@@ -90,10 +98,10 @@ test("unknown envelopes and cross-mission evidence fail in the core boundary and
 test("malformed records and forged selection cannot be admitted", () => {
   for (const change of [
     (d: TimelineModel) => (d.context.organization_id = "foreign"),
-    (d: TimelineModel) => d.events.push(d.events[0]!),
-    (d: TimelineModel) => (d.selected!.id = "foreign"),
+    (d: TimelineModel) => d.events.push(required(d.events[0])),
+    (d: TimelineModel) => (required(d.selected).id = "foreign"),
     (d: TimelineModel) => (d.source_dashboard_id = "foreign"),
-    (d: TimelineModel) => (d.events[0]!.occurred_at = "invalid"),
+    (d: TimelineModel) => (required(d.events[0]).occurred_at = "invalid"),
   ]) {
     const value = fixture();
     change(value);
@@ -104,11 +112,11 @@ test("malformed records and forged selection cannot be admitted", () => {
 test.skipIf(!process.env.CADENCE_TIMELINE_DOCUMENT)(
   "actual producer document reaches filters and selected canonical evidence",
   () => {
-    const document = JSON.parse(process.env.CADENCE_TIMELINE_DOCUMENT!);
+    const document = jsonFixture(required(process.env.CADENCE_TIMELINE_DOCUMENT));
     const model = readTimeline(
       document,
-      document.context.organization_id,
-      document.context.mission_id,
+      fixtureRecord(document.context).organization_id,
+      fixtureRecord(document.context).mission_id,
     );
     const wrapper = mount(TimelinePanel, { props: props(model) });
     expect(wrapper.get("#timeline-selected-event-id").text()).toBe("mission_event:selected");
@@ -128,7 +136,7 @@ test("history links retain filters and applying a new filter returns to the newe
   const input = props(model);
   const wrapper = mount(TimelinePanel, { props: input });
   const older = new URL(
-    wrapper.get("#timeline-older-events").attributes("href")!,
+    required(wrapper.get("#timeline-older-events").attributes("href")),
     "https://cadence.test",
   );
   expect(older.searchParams.get("category")).toBe("health");
@@ -138,6 +146,8 @@ test("history links retain filters and applying a new filter returns to the newe
     "/missions/mission-1/ops/timeline?category=health",
   );
   await wrapper.get("#timeline-filter-form").trigger("submit");
-  expect(input.navigate.mock.calls[0]![0]).toBe("/missions/mission-1/ops/timeline?category=health");
+  expect(required(input.navigate.mock.calls[0])[0]).toBe(
+    "/missions/mission-1/ops/timeline?category=health",
+  );
   wrapper.unmount();
 });

@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import type {
@@ -11,7 +12,7 @@ import { surfaceContracts } from "./federated-application";
 import OpsConsoleApplication from "./OpsConsoleApplication.vue";
 
 function harness() {
-  const surface = surfaceContracts.find((s) => s.surfaceId === "fleet_planning")!;
+  const surface = required(surfaceContracts.find((s) => s.surfaceId === "fleet_planning"));
   const query = vi.fn<(request: HostQueryRequest) => Promise<unknown>>();
   const execute = vi.fn<(request: HostActionRequest<unknown>) => Promise<unknown>>();
   const props: FullPageSurfaceProps = {
@@ -52,7 +53,7 @@ function harness() {
 
 test("the directory port performs only the captured declared read", async () => {
   const { props, query, execute } = harness();
-  const port = createFleetDirectoryPort(props, () => true)!;
+  const port = required(createFleetDirectoryPort(props, () => true));
   query.mockResolvedValue({
     trusted_surface: {
       queryVersion: 1,
@@ -81,7 +82,7 @@ test("a departed directory port refuses new reads and late responses", async () 
         resolve = done;
       }),
   );
-  const port = createFleetDirectoryPort(props, () => active)!;
+  const port = required(createFleetDirectoryPort(props, () => active));
   const pending = port.refresh();
   active = false;
   resolve({});
@@ -91,7 +92,7 @@ test("a departed directory port refuses new reads and late responses", async () 
 });
 test("the port rejects other presentations and other surfaces", async () => {
   const { props, query } = harness();
-  const port = createFleetDirectoryPort(props, () => true)!;
+  const port = required(createFleetDirectoryPort(props, () => true));
   query.mockResolvedValue({
     queryVersion: 1,
     presentation: { component: "OpsContactDetail", props: { directory: {} } },

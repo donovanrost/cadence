@@ -12,7 +12,7 @@ const props = defineProps<DirectoryData & { navigate?: NavigateDirectory; naviga
       :breadcrumbs="
         props.presentation.breadcrumbs.items.map((item) => ({
           label: item.label,
-          href: item.href ?? undefined,
+          ...(item.href == null ? {} : { href: item.href }),
         }))
       "
     >
@@ -24,7 +24,7 @@ const props = defineProps<DirectoryData & { navigate?: NavigateDirectory; naviga
       :summary_tiles="props.presentation.summary_tiles"
       :roster="props.presentation.roster"
       :profiles="props.presentation.profiles"
-      :navigate="props.navigate"
+      v-bind="props.navigate ? { navigate: props.navigate } : {}"
       :navigating="props.navigating"
     />
   </div>

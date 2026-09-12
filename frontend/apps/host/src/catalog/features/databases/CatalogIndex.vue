@@ -59,7 +59,9 @@ const props = defineProps<{ presentation: Presentation }>();
       :breadcrumbs="[
         {
           label: props.presentation.header.breadcrumbs.mission.text,
-          href: props.presentation.header.breadcrumbs.mission.attrs.href,
+          ...(props.presentation.header.breadcrumbs.mission.attrs.href === undefined
+            ? {}
+            : { href: props.presentation.header.breadcrumbs.mission.attrs.href }),
         },
         { label: props.presentation.header.breadcrumbs.current.text },
       ]"

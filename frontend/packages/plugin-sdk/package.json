@@ -12,7 +12,8 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
-    }
+    },
+    "./admission": "./src/admission.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

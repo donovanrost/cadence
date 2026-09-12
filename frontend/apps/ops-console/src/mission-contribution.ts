@@ -80,7 +80,7 @@ export function useMissionContribution<Input>(
       const bridge = props.bridge;
       const query = bridge.query.bind(bridge);
       const execute = bridge.execute.bind(bridge);
-      const navigate = bridge.navigate?.bind(bridge);
+      const navigate = bridge.navigate;
       function assertCurrent() {
         if (!alive || current !== generation) throw Error("Contribution context retired");
       }

@@ -32,24 +32,44 @@ import {
   waitForResponse,
 } from "./federation_browser_smoke.mjs";
 
+/** @typedef {import("./cdp-contract.ts").CdpPort} CdpPort */
+/** @typedef {ReturnType<typeof installDiagnostics>} Diagnostics */
+/** @typedef {import("./browser-diagnostics.ts").RequestObservation} RequestObservation */
+/** @typedef {import("./browser-diagnostics.ts").GenerationSelection} GenerationSelection */
+/** @typedef {CdpPort & {emit(method:string,event:unknown):void;listenerCount():number}} DiagnosticClient */
+import { fixtureRecord } from "../../test-support/json-fixture.ts";
+
 const origin = "http://127.0.0.1:43721";
 
+/** Synthetic CDP fixtures intentionally omit irrelevant wire fields and can carry invalid data.
+ * The single adapter below supplies protocol correlation to consumers; emission stays unknown.
+ * @returns {DiagnosticClient}
+ */
 function makeDiagnosticClient() {
+  /** @type {Map<string,Set<(event:unknown)=>void>>} */
   const listeners = new Map();
-  return {
+  const transport = {
+    listenerCount() {
+      return [...listeners.values()].reduce((total, values) => total + values.size, 0);
+    },
+    /** @param {string} method @param {(event:unknown)=>void} listener */
     on(method, listener) {
       const methodListeners = listeners.get(method) || new Set();
       methodListeners.add(listener);
       listeners.set(method, methodListeners);
       return () => methodListeners.delete(listener);
     },
+    /** @param {string} method @param {unknown} event */
     emit(method, event) {
       for (const listener of listeners.get(method) || []) listener(event);
     },
+    /** @param {string} method @param {(event:unknown)=>boolean} [predicate] @param {number} [timeout] @returns {Promise<unknown>} */
     waitForEvent(method, predicate = () => true, timeout = 30_000) {
       return new Promise((resolveEvent, rejectEvent) => {
         let settled = false;
+        /** @type {(()=>unknown)|undefined} */
         let off;
+        /** @template T @param {(value:T)=>void} callback @param {T} value */
         const finish = (callback, value) => {
           if (settled) return;
           settled = true;
@@ -71,8 +91,10 @@ function makeDiagnosticClient() {
     },
     close() {},
   };
+  return /** @type {DiagnosticClient} */ (transport);
 }
 
+/** @param {Pick<DiagnosticClient,"emit">} client @param {string} url @param {string} [requestId] @param {number} [status] */
 function emitCanonicalNetworkResourceError(client, url, requestId = "expected-403", status = 403) {
   client.emit("Log.entryAdded", {
     entry: {
@@ -85,6 +107,7 @@ function emitCanonicalNetworkResourceError(client, url, requestId = "expected-40
   });
 }
 
+/** @param {Pick<DiagnosticClient,"emit">} client @param {string} requestId @param {string} url */
 function emitExpectedActionRequest(client, requestId, url) {
   client.emit("Network.requestWillBeSent", {
     requestId,
@@ -93,6 +116,7 @@ function emitExpectedActionRequest(client, requestId, url) {
   });
 }
 
+/** @param {Pick<DiagnosticClient,"emit">} client @param {string} requestId @param {string} url @param {number} status */
 function emitActionResponse(client, requestId, url, status) {
   client.emit("Network.responseReceived", {
     requestId,
@@ -101,6 +125,7 @@ function emitActionResponse(client, requestId, url, status) {
   });
 }
 
+/** @param {Pick<DiagnosticClient,"emit">} client @param {string} requestId @param {number} statusCode */
 function emitActionExtraInfo(client, requestId, statusCode) {
   client.emit("Network.responseReceivedExtraInfo", {
     requestId,
@@ -109,19 +134,24 @@ function emitActionExtraInfo(client, requestId, statusCode) {
   });
 }
 
+/** @param {Pick<DiagnosticClient,"emit">} client @param {string} requestId @param {string} errorText */
 function emitActionLoadingFailed(client, requestId, errorText) {
   client.emit("Network.loadingFailed", { requestId, errorText });
 }
 
+/** @param {Diagnostics} diagnostics @param {string} label */
 function assertDirty(diagnostics, label) {
+  /** @type {Error|undefined} */
   let failure;
   assert.throws(
     () => diagnostics.assertClean(label),
     (error) => {
+      assert.ok(error instanceof Error);
       failure = error;
       return /browser diagnostics failed/.test(error.message);
     },
   );
+  assert.ok(failure);
   return failure.message;
 }
 
@@ -158,6 +188,7 @@ function expectedFailureFixture({
   };
 }
 
+/** @param {ReturnType<typeof expectedFailureFixture>} fixture @param {Record<string,unknown>} [overrides] */
 function confirmationEvidence(fixture, overrides = {}) {
   return {
     requestId: fixture.requestId,
@@ -183,6 +214,7 @@ function syntheticGateDependencies() {
   };
 }
 
+/** @param {number} [timeout] */
 function syntheticGateArgs(timeout) {
   return [
     "--comms-url",
@@ -191,12 +223,15 @@ function syntheticGateArgs(timeout) {
   ];
 }
 
+/** @param {number} milliseconds @returns {Promise<void>} */
 function waitForMilliseconds(milliseconds) {
   return new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
 }
 
 function unhandledRejectionProbe() {
+  /** @type {unknown[]} */
   const unhandled = [];
+  /** @param {unknown} reason */
   const onUnhandled = (reason) => unhandled.push(reason);
   process.on("unhandledRejection", onUnhandled);
   return {
@@ -207,6 +242,7 @@ function unhandledRejectionProbe() {
   };
 }
 
+/** @param {{url?:string,method?:string,body?:unknown,status?:number,headers?:Record<string,string>,requestId?:string,startedAtMs?:number,sequence?:number,redirects?:readonly {status:number,url:string}[],resourceType?:string,responseHeaders?:Record<string,string>,fromDiskCache?:boolean,fromMemoryCache?:boolean,fromServiceWorker?:boolean,fromPrefetchCache?:boolean,servedFromCache?:boolean}} [options] */
 function record({
   url = `${origin}/api/query`,
   method = "POST",
@@ -238,6 +274,9 @@ function record({
     method,
     postData: body === undefined ? undefined : JSON.stringify(body),
     request: { headers },
+    statusEvidence: [],
+    dataUrl: false,
+    webSocket: false,
     response: {
       status,
       headers: responseHeaders,
@@ -266,15 +305,17 @@ function queryBody() {
   };
 }
 
-test("the browser URL contract uses an actual isolated HTTP endpoint", async () => {
-  const prebound = await new Promise((resolveListen) => {
-    const server = createServer();
-    server.once("error", (error) => {
-      if (error.code === "EADDRINUSE") resolveListen(null);
-      else throw error;
-    });
-    server.listen(4101, "127.0.0.1", () => resolveListen(server));
-  });
+void test("the browser URL contract uses an actual isolated HTTP endpoint", async () => {
+  const prebound = await /** @type {Promise<import("node:net").Server|null>} */ (
+    new Promise((resolveListen) => {
+      const server = createServer();
+      server.once("error", (error) => {
+        if ("code" in error && error.code === "EADDRINUSE") resolveListen(null);
+        else throw error;
+      });
+      server.listen(4101, "127.0.0.1", () => resolveListen(server));
+    })
+  );
 
   const first = await reserveLoopbackPort();
   const second = await reserveLoopbackPort();
@@ -303,11 +344,11 @@ test("the browser URL contract uses an actual isolated HTTP endpoint", async () 
       new Promise((resolveClose) => first.server.close(resolveClose)),
       new Promise((resolveClose) => second.server.close(resolveClose)),
     ]);
-    await new Promise((resolveClose) => prebound?.close(resolveClose) || resolveClose());
+    await new Promise((resolveClose) => prebound?.close(resolveClose) || resolveClose(undefined));
   }
 });
 
-test("HTTP bridge contracts require same-origin 200 responses, exact bodies, and security headers", () => {
+void test("HTTP bridge contracts require same-origin 200 responses, exact bodies, and security headers", () => {
   const expected = queryBody();
   const base = record({
     url: `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/query`,
@@ -326,7 +367,7 @@ test("HTTP bridge contracts require same-origin 200 responses, exact bodies, and
     },
   });
 
-  for (const invalid of [
+  for (const invalid of /** @type {const} */ ([
     { url: "https://evil.example/api/query" },
     { status: 302 },
     { status: 304 },
@@ -334,7 +375,7 @@ test("HTTP bridge contracts require same-origin 200 responses, exact bodies, and
     { body: { ...expected, surfaceVersion: 2 } },
     { method: "GET" },
     { headers: { "content-type": "application/json" } },
-  ]) {
+  ])) {
     assert.throws(
       () =>
         assertHttpRequestContract(
@@ -383,7 +424,7 @@ test("HTTP bridge contracts require same-origin 200 responses, exact bodies, and
   );
 });
 
-test("manifest validation separates declared candidates from required and observed assets", () => {
+void test("manifest validation separates declared candidates from required and observed assets", () => {
   const releaseId = `sha256:${"a".repeat(64)}`;
   const releasePrefix = releaseArtifactPrefix("telemetry_decom", releaseId);
   const manifestUrl = `${origin}${releasePrefix}mf-manifest.json`;
@@ -466,9 +507,9 @@ test("manifest validation separates declared candidates from required and observ
       manifest,
       manifestUrl,
       [
-        assets[0],
-        assets[1],
-        assets[3],
+        requiredFixture(assets[0]),
+        requiredFixture(assets[1]),
+        requiredFixture(assets[3]),
         record({
           url: `${origin}${releasePrefix}styles/Application.css`,
           method: "GET",
@@ -492,10 +533,15 @@ test("manifest validation separates declared candidates from required and observ
   );
   assert.throws(
     () =>
-      assertManifestAssetsRequested(manifest, manifestUrl, [assets[0], assets[1], assets[3]], {
-        ...releaseOptions,
-        label: "missing asset manifest",
-      }),
+      assertManifestAssetsRequested(
+        manifest,
+        manifestUrl,
+        [requiredFixture(assets[0]), requiredFixture(assets[1]), requiredFixture(assets[3])],
+        {
+          ...releaseOptions,
+          label: "missing asset manifest",
+        },
+      ),
     /was not successfully requested.*Application\.css/,
   );
   assert.throws(
@@ -504,9 +550,9 @@ test("manifest validation separates declared candidates from required and observ
         manifest,
         manifestUrl,
         [
-          assets[0],
-          assets[1],
-          assets[3],
+          requiredFixture(assets[0]),
+          requiredFixture(assets[1]),
+          requiredFixture(assets[3]),
           record({
             url: `${origin}${releasePrefix}styles/Application.css`,
             method: "GET",
@@ -518,14 +564,14 @@ test("manifest validation separates declared candidates from required and observ
       ),
     /was not successfully requested|HTTP 200/,
   );
-  for (const [label, responseHeaders, message] of [
+  for (const [label, responseHeaders, message] of /** @type {const} */ ([
     ["observed async cache", { etag: `"${releaseId}"` }, /immutable caching/],
     [
       "observed async digest",
       { "cache-control": "public, max-age=31536000, immutable", etag: '"sha256:bad"' },
       /strong digest ETag/,
     ],
-  ]) {
+  ])) {
     const immutableAssets = assets.map((asset) => ({
       ...asset,
       response: {
@@ -592,12 +638,12 @@ test("manifest validation separates declared candidates from required and observ
     /escaped the expected origin|escaped its expected release path/,
   );
 
-  for (const invalidUrl of [
+  for (const invalidUrl of /** @type {const} */ ([
     `${origin}/assets/application-host/telemetry-decom/mf-manifest.json`,
     `${origin}/releases/comms_overview/${releaseId}/artifacts/mf-manifest.json`,
     `${origin}/releases/telemetry_decom/sha256:${"b".repeat(64)}/artifacts/mf-manifest.json`,
     `${origin}${releasePrefix}remoteEntry.js`,
-  ]) {
+  ])) {
     assert.throws(
       () =>
         assertReleaseArtifactUrl(invalidUrl, origin, {
@@ -611,11 +657,11 @@ test("manifest validation separates declared candidates from required and observ
     );
   }
 
-  for (const invalidAsset of [
+  for (const invalidAsset of /** @type {const} */ ([
     `${origin}/assets/application-host/telemetry-decom/remoteEntry.js`,
     `${origin}/releases/comms_overview/${releaseId}/artifacts/remoteEntry.js`,
     `${origin}/releases/telemetry_decom/sha256:${"b".repeat(64)}/artifacts/remoteEntry.js`,
-  ]) {
+  ])) {
     assert.throws(
       () =>
         assertManifestAssetsRequested({ entry: new URL(invalidAsset).href }, manifestUrl, [], {
@@ -629,7 +675,7 @@ test("manifest validation separates declared candidates from required and observ
   }
 });
 
-test("immutable release artifacts advertise safe reuse and reject opaque cache sources", () => {
+void test("immutable release artifacts advertise safe reuse and reject opaque cache sources", () => {
   const releaseId = `sha256:${"a".repeat(64)}`;
   const artifact = record({
     url: `${origin}${releaseArtifactPrefix("telemetry_decom", releaseId)}mf-manifest.json`,
@@ -652,14 +698,14 @@ test("immutable release artifacts advertise safe reuse and reject opaque cache s
     1,
   );
 
-  for (const invalid of [
+  for (const invalid of /** @type {const} */ ([
     { responseHeaders: { "cache-control": "public, max-age=60" } },
     {
       responseHeaders: { "cache-control": "public, max-age=31536000, immutable", etag: 'W/"weak"' },
     },
     { fromServiceWorker: true },
     { fromPrefetchCache: true },
-  ]) {
+  ])) {
     const invalidRecord = {
       ...artifact,
       response: {
@@ -676,21 +722,8 @@ test("immutable release artifacts advertise safe reuse and reject opaque cache s
   }
 });
 
-test("conditional 304 cancellation is accepted only with exact ExtraInfo evidence", () => {
-  const diagnosticClient = () => {
-    const listeners = new Map();
-    return {
-      on(method, listener) {
-        const methodListeners = listeners.get(method) || new Set();
-        methodListeners.add(listener);
-        listeners.set(method, methodListeners);
-        return () => methodListeners.delete(listener);
-      },
-      emit(method, event) {
-        for (const listener of listeners.get(method) || []) listener(event);
-      },
-    };
-  };
+void test("conditional 304 cancellation is accepted only with exact ExtraInfo evidence", async () => {
+  const diagnosticClient = makeDiagnosticClient;
   const url = `${origin}/releases/telemetry_decom/${`sha256:${"a".repeat(64)}`}/artifacts/mf-manifest.json`;
   const etag = `"sha256:${"a".repeat(64)}"`;
   const client = diagnosticClient();
@@ -722,14 +755,17 @@ test("conditional 304 cancellation is accepted only with exact ExtraInfo evidenc
     canceled: true,
   });
 
-  const accepted = diagnostics.requests.get("conditional-304");
+  const accepted = requiredFixture(diagnostics.requests.get("conditional-304"));
   assert.equal(accepted.generation, generation.id);
   assert.equal(accepted.finished, false);
   assert.equal(accepted.failed, "net::ERR_ABORTED (canceled)");
-  assert.equal(accepted.requestExtra.headers["If-None-Match"], etag);
-  assert.equal(accepted.responseExtra.statusCode, 304);
+  assert.equal(
+    requiredFixture(requiredFixture(accepted.requestExtra).headers)["If-None-Match"],
+    etag,
+  );
+  assert.equal(requiredFixture(accepted.responseExtra).statusCode, 304);
   assert.doesNotThrow(() => diagnostics.assertClean("conditional 304"));
-  diagnostics.dispose();
+  await diagnostics.dispose();
 
   const rejectedClient = diagnosticClient();
   const rejectedDiagnostics = installDiagnostics(rejectedClient, { expectedOrigin: origin });
@@ -752,10 +788,10 @@ test("conditional 304 cancellation is accepted only with exact ExtraInfo evidenc
     () => rejectedDiagnostics.assertClean("non-304 cancellation"),
     /browser diagnostics failed/,
   );
-  rejectedDiagnostics.dispose();
+  await rejectedDiagnostics.dispose();
 });
 
-test("one canonical delayed Chrome network resource error is attributed to one exact expected 403", () => {
+void test("one canonical delayed Chrome network resource error is attributed to one exact expected 403", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -778,10 +814,10 @@ test("one canonical delayed Chrome network resource error is attributed to one e
   emitCanonicalNetworkResourceError(client, url);
   assert.doesNotThrow(() => diagnostics.assertClean("expected CSRF rejection"));
   removeAllowance();
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("public request failure observations cannot clear private diagnostic failures", () => {
+void test("public request failure observations cannot clear private diagnostic failures", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/failure`;
@@ -799,10 +835,10 @@ test("public request failure observations cannot clear private diagnostic failur
   assert.equal(diagnostics.requestFailures.length, 1);
   diagnostics.requestFailures.splice(0);
   assertDirty(diagnostics, "cleared public request failure");
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("orphan ExtraInfo metadata is not a request, but bound records must terminate", () => {
+void test("orphan ExtraInfo metadata is not a request, but bound records must terminate", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
 
@@ -844,10 +880,10 @@ test("orphan ExtraInfo metadata is not a request, but bound records must termina
   client.emit("Network.loadingFinished", { requestId: "late-bound-extra-info" });
   assert.doesNotThrow(() => diagnostics.assertClean("late-bound ExtraInfo completion"));
 
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("public log error observations cannot clear private diagnostic failures", () => {
+void test("public log error observations cannot clear private diagnostic failures", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   client.emit("Log.entryAdded", {
@@ -856,10 +892,10 @@ test("public log error observations cannot clear private diagnostic failures", (
   assert.equal(diagnostics.logErrors.length, 1);
   diagnostics.logErrors.splice(0);
   assertDirty(diagnostics, "cleared public log error");
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("replaced public observation methods cannot alter private verdicts", () => {
+void test("replaced public observation methods cannot alter private verdicts", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const requests = diagnostics.requests;
@@ -895,14 +931,14 @@ test("replaced public observation methods cannot alter private verdicts", () => 
   });
 
   assert.equal(
-    diagnostics.requestForGeneration(undefined, () => true).requestId,
+    requiredFixture(diagnostics.requestForGeneration(undefined, () => true)).requestId,
     "private-methods-500",
   );
   assertDirty(diagnostics, "replaced public observation methods");
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("generation queries ignore tampered public ids, request sets, and boundaries", () => {
+void test("generation queries ignore tampered public ids, request sets, and boundaries", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const oldGeneration = diagnostics.beginRequestGeneration("old generation");
@@ -910,22 +946,23 @@ test("generation queries ignore tampered public ids, request sets, and boundarie
   const nextGeneration = diagnostics.beginRequestGeneration("next generation");
   emitExpectedActionRequest(client, "next-generation-request", `${origin}/new`);
 
-  diagnostics.requests.get("old-generation-request").generation = nextGeneration.id;
-  diagnostics.requests.get("next-generation-request").generation = oldGeneration.id;
+  requiredFixture(diagnostics.requests.get("old-generation-request")).generation =
+    nextGeneration.id;
+  requiredFixture(diagnostics.requests.get("next-generation-request")).generation =
+    oldGeneration.id;
   nextGeneration.requestIds.delete("old-generation-request");
   nextGeneration.requestSequence = 0;
 
   assert.equal(
-    diagnostics.requestForGeneration(nextGeneration, () => true).requestId,
+    requiredFixture(diagnostics.requestForGeneration(nextGeneration, () => true)).requestId,
     "next-generation-request",
   );
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("confirmation detects in-place mutation of a consumed canonical snapshot member", () => {
+void test("confirmation detects in-place mutation of a consumed canonical snapshot member", async () => {
   const fixture = expectedFailureFixture({ requestId: "mutated-canonical-member" });
-  const canonicalEntry = fixture.diagnostics.requests.get(fixture.requestId)
-    .expectedFailureAllowance.consumedEntries[0];
+  const canonicalEntry = canonicalEntryFor(fixture);
   canonicalEntry.text = "forged canonical failure";
 
   assert.throws(
@@ -934,15 +971,13 @@ test("confirmation detects in-place mutation of a consumed canonical snapshot me
     /expected failure confirmation rejected.*observation.*changed/,
   );
   assert.equal(fixture.diagnostics.logErrors.length, 1);
-  fixture.diagnostics.dispose();
+  await fixture.diagnostics.dispose();
 });
 
-test("confirmation detects a consumed canonical snapshot being popped", () => {
+void test("confirmation detects a consumed canonical snapshot being popped", async () => {
   const fixture = expectedFailureFixture({ requestId: "popped-canonical-entry" });
-  const exposedAllowance = fixture.diagnostics.requests.get(
-    fixture.requestId,
-  ).expectedFailureAllowance;
-  exposedAllowance.consumedEntries.pop();
+  const exposedAllowance = allowanceFor(fixture);
+  Array.prototype.pop.call(requiredFixture(exposedAllowance.consumedEntries));
 
   assert.throws(
     () =>
@@ -950,13 +985,12 @@ test("confirmation detects a consumed canonical snapshot being popped", () => {
     /expected failure confirmation rejected.*observation.*changed/,
   );
   assert.equal(fixture.diagnostics.logErrors.length, 1);
-  fixture.diagnostics.dispose();
+  await fixture.diagnostics.dispose();
 });
 
-test("confirmation detects canonical snapshot accessors without invoking them", () => {
+void test("confirmation detects canonical snapshot accessors without invoking them", async () => {
   const fixture = expectedFailureFixture({ requestId: "accessor-canonical-member" });
-  const canonicalEntry = fixture.diagnostics.requests.get(fixture.requestId)
-    .expectedFailureAllowance.consumedEntries[0];
+  const canonicalEntry = canonicalEntryFor(fixture);
   let getterCalls = 0;
   Object.defineProperty(canonicalEntry, "text", {
     get: () => {
@@ -974,13 +1008,17 @@ test("confirmation detects canonical snapshot accessors without invoking them", 
   );
   assert.equal(getterCalls, 0);
   assert.equal(fixture.diagnostics.logErrors.length, 1);
-  fixture.diagnostics.dispose();
+  await fixture.diagnostics.dispose();
 });
 
-test("confirmation rejects a mutated detached canonical snapshot", () => {
+void test("confirmation rejects a mutated detached canonical snapshot", async () => {
   const fixture = expectedFailureFixture({ requestId: "detached-canonical-member" });
   const detached = fixture.diagnostics.requestForGeneration(fixture.generation, () => true);
-  const canonicalEntry = detached.expectedFailureAllowance.consumedEntries[0];
+  const canonicalEntry = requiredFixture(
+    requiredFixture(
+      requiredFixture(requiredFixture(detached).expectedFailureAllowance).consumedEntries,
+    )[0],
+  );
   canonicalEntry.text = "forged detached canonical failure";
 
   assert.throws(
@@ -992,14 +1030,15 @@ test("confirmation rejects a mutated detached canonical snapshot", () => {
     /expected failure confirmation rejected.*provided canonical evidence differs/,
   );
   assert.equal(fixture.diagnostics.logErrors.length, 1);
-  fixture.diagnostics.dispose();
+  await fixture.diagnostics.dispose();
 });
 
-test("LiveView websocket assertion ignores forged entries in exposed websocket evidence", () => {
+void test("LiveView websocket assertion ignores forged entries in exposed websocket evidence", async () => {
   const diagnostics = installDiagnostics(makeDiagnosticClient(), { expectedOrigin: origin });
   diagnostics.webSockets.set("forged-live-ws", {
     requestId: "forged-live-ws",
     generation: undefined,
+    observedGeneration: undefined,
     boundToRequest: true,
     observedSequence: 1,
     url: `${origin.replace("http:", "ws:")}/live/websocket?vsn=2.0.0`,
@@ -1011,7 +1050,7 @@ test("LiveView websocket assertion ignores forged entries in exposed websocket e
     () => assertLiveViewWebSocket(diagnostics, origin),
     /did not create a websocket transport/,
   );
-  diagnostics.dispose();
+  await diagnostics.dispose();
 
   const client = makeDiagnosticClient();
   const liveDiagnostics = installDiagnostics(client, { expectedOrigin: origin });
@@ -1031,19 +1070,22 @@ test("LiveView websocket assertion ignores forged entries in exposed websocket e
     requestId,
     response: { url: socketUrl, status: 101 },
   });
-  const exposedSocket = liveDiagnostics.webSockets.get(requestId);
+  const exposedSocket = requiredFixture(liveDiagnostics.webSockets.get(requestId));
   exposedSocket.url = "wss://evil.example/live/websocket";
   exposedSocket.boundToRequest = false;
-  exposedSocket.handshake.status = 403;
-  assert.equal(assertLiveViewWebSocket(liveDiagnostics, origin).requestId, requestId);
-  liveDiagnostics.dispose();
+  requiredFixture(exposedSocket.handshake).status = 403;
+  assert.equal(
+    fixtureRecord(assertLiveViewWebSocket(liveDiagnostics, origin)).requestId,
+    requestId,
+  );
+  await liveDiagnostics.dispose();
 });
 
-test("exposed response mutations cannot change private diagnostic status truth", () => {
+void test("exposed response mutations cannot change private diagnostic status truth", async () => {
   const fixture = expectedFailureFixture({ requestId: "private-response-status" });
-  const exposedRecord = fixture.diagnostics.requests.get(fixture.requestId);
-  exposedRecord.response.status = 500;
-  exposedRecord.response.headers = { "x-forged": "true" };
+  const exposedRecord = requiredFixture(fixture.diagnostics.requests.get(fixture.requestId));
+  requiredFixture(exposedRecord.response).status = 500;
+  requiredFixture(exposedRecord.response).headers = { "x-forged": "true" };
 
   assert.doesNotThrow(() => fixture.diagnostics.assertClean("detached response mutation"));
   assert.match(fixture.diagnostics.describe(), /"status": 403/);
@@ -1053,10 +1095,10 @@ test("exposed response mutations cannot change private diagnostic status truth",
       fixture.diagnostics.confirmExpectedFailure(fixture.cleanup, confirmationEvidence(fixture)),
     /expected failure confirmation rejected.*observation.*changed/,
   );
-  fixture.diagnostics.dispose();
+  await fixture.diagnostics.dispose();
 });
 
-test("confirmation finalizes one exact terminal 403 without replay or later suppression", () => {
+void test("confirmation finalizes one exact terminal 403 without replay or later suppression", async () => {
   const fixture = expectedFailureFixture();
   assert.doesNotThrow(() => fixture.diagnostics.assertClean("confirmation baseline"));
   assert.equal(
@@ -1077,16 +1119,20 @@ test("confirmation finalizes one exact terminal 403 without replay or later supp
   emitCanonicalNetworkResourceError(fixture.client, fixture.url, "unrelated-after-confirmation");
   assert.equal(fixture.diagnostics.logErrors.length, 1);
   assertDirty(fixture.diagnostics, "unrelated event after confirmation");
-  fixture.diagnostics.dispose();
-  fixture.diagnostics.dispose();
+  await fixture.diagnostics.dispose();
+  await fixture.diagnostics.dispose();
   fixture.cleanup();
   assert.equal(fixture.diagnostics.logErrors.length, 1);
 });
 
-test("confirmation requires exact canonical evidence and exact terminal record identity", () => {
+void test("confirmation requires exact canonical evidence and exact terminal record identity", async () => {
   const forgedEvidence = expectedFailureFixture({ requestId: "forged-canonical" });
-  const forgedRecord = forgedEvidence.diagnostics.requests.get(forgedEvidence.requestId);
-  const canonicalEntry = forgedRecord.expectedFailureAllowance.consumedEntries[0];
+  const forgedRecord = requiredFixture(
+    forgedEvidence.diagnostics.requests.get(forgedEvidence.requestId),
+  );
+  const canonicalEntry = requiredFixture(
+    requiredFixture(requiredFixture(forgedRecord.expectedFailureAllowance).consumedEntries)[0],
+  );
   assert.throws(
     () =>
       forgedEvidence.diagnostics.confirmExpectedFailure(
@@ -1097,10 +1143,10 @@ test("confirmation requires exact canonical evidence and exact terminal record i
   );
   assert.equal(forgedEvidence.diagnostics.logErrors.length, 1);
   forgedEvidence.cleanup();
-  forgedEvidence.diagnostics.dispose();
+  await forgedEvidence.diagnostics.dispose();
 
   const staleRecord = expectedFailureFixture({ requestId: "stale-terminal-record" });
-  const exactRecord = staleRecord.diagnostics.requests.get(staleRecord.requestId);
+  const exactRecord = requiredFixture(staleRecord.diagnostics.requests.get(staleRecord.requestId));
   const staleClone = { ...exactRecord };
   staleRecord.diagnostics.requests.set(staleRecord.requestId, staleClone);
   assert.throws(
@@ -1108,45 +1154,52 @@ test("confirmation requires exact canonical evidence and exact terminal record i
       staleRecord.diagnostics.confirmExpectedFailure(
         staleRecord.cleanup,
         confirmationEvidence(staleRecord, {
-          canonicalEvidence: exactRecord.expectedFailureAllowance.consumedEntries[0],
+          canonicalEvidence: requiredFixture(
+            requiredFixture(exactRecord.expectedFailureAllowance).consumedEntries,
+          )[0],
         }),
       ),
     /expected failure confirmation rejected.*identity/,
   );
   assert.equal(staleRecord.diagnostics.logErrors.length, 1);
   staleRecord.cleanup();
-  staleRecord.diagnostics.dispose();
+  await staleRecord.diagnostics.dispose();
 });
 
-test("finalized expected failures retain exact authority for contradictory late response and ExtraInfo status", () => {
-  for (const [label, emitContradiction] of [
+void test("finalized expected failures retain exact authority for contradictory late response and ExtraInfo status", async () => {
+  for (const [label, emitContradiction] of /** @type {const} */ ([
     [
       "response",
+      /** @param {ReturnType<typeof expectedFailureFixture>} fixture */
       (fixture) => emitActionResponse(fixture.client, fixture.requestId, fixture.url, 200),
     ],
-    ["ExtraInfo", (fixture) => emitActionExtraInfo(fixture.client, fixture.requestId, 200)],
-  ]) {
+    [
+      "ExtraInfo",
+      /** @param {ReturnType<typeof expectedFailureFixture>} fixture */ (fixture) =>
+        emitActionExtraInfo(fixture.client, fixture.requestId, 200),
+    ],
+  ])) {
     const fixture = expectedFailureFixture({ requestId: `late-${label}` });
-    const record = fixture.diagnostics.requests.get(fixture.requestId);
+    const record = requiredFixture(fixture.diagnostics.requests.get(fixture.requestId));
     assert.equal(
       fixture.diagnostics.confirmExpectedFailure(fixture.cleanup, confirmationEvidence(fixture)),
       true,
     );
-    assert.equal(record.expectedFailureAllowance.record, record);
+    assert.equal(requiredFixture(record.expectedFailureAllowance).record, record);
     assert.equal(record.finalizedExpectedFailure, record.expectedFailureAllowance);
     assert.doesNotThrow(() => fixture.diagnostics.assertClean(`${label} finalized baseline`));
 
     emitContradiction(fixture);
     assertDirty(fixture.diagnostics, `${label} status after finalization`);
-    fixture.diagnostics.dispose();
+    await fixture.diagnostics.dispose();
   }
 });
 
-test("expected failure confirmation fails closed on exposed consumed-entry replacements", () => {
+void test("expected failure confirmation fails closed on exposed consumed-entry replacements", async () => {
   const fixture = expectedFailureFixture({ requestId: "private-consumed-membership" });
-  const exposedRecord = fixture.diagnostics.requests.get(fixture.requestId);
-  const exposedAllowance = exposedRecord.expectedFailureAllowance;
-  const canonicalEntry = exposedAllowance.consumedEntries[0];
+  const exposedRecord = requiredFixture(fixture.diagnostics.requests.get(fixture.requestId));
+  const exposedAllowance = requiredFixture(exposedRecord.expectedFailureAllowance);
+  const canonicalEntry = requiredFixture(requiredFixture(exposedAllowance.consumedEntries)[0]);
   let iteratorCalls = 0;
   const arrayLikeReplacement = { 0: canonicalEntry, length: 1 };
   Object.defineProperty(arrayLikeReplacement, Symbol.iterator, {
@@ -1157,7 +1210,7 @@ test("expected failure confirmation fails closed on exposed consumed-entry repla
   });
 
   exposedAllowance.consumedEntries = [canonicalEntry];
-  exposedAllowance.consumedEntries = arrayLikeReplacement;
+  fixtureRecord(exposedAllowance).consumedEntries = arrayLikeReplacement;
   exposedAllowance.record = {};
   exposedRecord.expectedFailureAllowance = { consumedEntries: [canonicalEntry] };
 
@@ -1168,14 +1221,14 @@ test("expected failure confirmation fails closed on exposed consumed-entry repla
   );
   assert.equal(iteratorCalls, 0, "confirmation touched the replaced exposed iterator");
   assert.equal(fixture.diagnostics.logErrors.length, 1);
-  fixture.diagnostics.dispose();
+  await fixture.diagnostics.dispose();
 });
 
-test("expected failure confirmation ignores exposed POST-to-GET mutations", () => {
+void test("expected failure confirmation ignores exposed POST-to-GET mutations", async () => {
   const fixture = expectedFailureFixture({ requestId: "private-method-lineage" });
-  const exposedRecord = fixture.diagnostics.requests.get(fixture.requestId);
+  const exposedRecord = requiredFixture(fixture.diagnostics.requests.get(fixture.requestId));
   exposedRecord.method = "GET";
-  exposedRecord.expectedFailureAllowance.method = "GET";
+  requiredFixture(exposedRecord.expectedFailureAllowance).method = "GET";
 
   assert.throws(
     () =>
@@ -1186,12 +1239,12 @@ test("expected failure confirmation ignores exposed POST-to-GET mutations", () =
     /expected failure confirmation rejected.*request method changed/,
   );
   assert.equal(fixture.diagnostics.logErrors.length, 1);
-  fixture.diagnostics.dispose();
+  await fixture.diagnostics.dispose();
 });
 
-test("late contradictory status remains authoritative after exposed finalization evidence is erased", () => {
+void test("late contradictory status remains authoritative after exposed finalization evidence is erased", async () => {
   const fixture = expectedFailureFixture({ requestId: "private-finalization-authority" });
-  const exposedRecord = fixture.diagnostics.requests.get(fixture.requestId);
+  const exposedRecord = requiredFixture(fixture.diagnostics.requests.get(fixture.requestId));
   assert.equal(
     fixture.diagnostics.confirmExpectedFailure(fixture.cleanup, confirmationEvidence(fixture)),
     true,
@@ -1201,10 +1254,10 @@ test("late contradictory status remains authoritative after exposed finalization
   exposedRecord.statusEvidence = [];
   emitActionResponse(fixture.client, fixture.requestId, fixture.url, 200);
   assertDirty(fixture.diagnostics, "private finalized status authority");
-  fixture.diagnostics.dispose();
+  await fixture.diagnostics.dispose();
 });
 
-test("confirmation rejects hostile evidence accessors without reading them", () => {
+void test("confirmation rejects hostile evidence accessors without reading them", async () => {
   const fixture = expectedFailureFixture({ requestId: "hostile-confirmation-evidence" });
   let getterCalls = 0;
   const hostileEvidence = {};
@@ -1221,10 +1274,10 @@ test("confirmation rejects hostile evidence accessors without reading them", () 
     /expected failure confirmation rejected.*requestId was an accessor/,
   );
   assert.equal(getterCalls, 0);
-  fixture.diagnostics.dispose();
+  await fixture.diagnostics.dispose();
 });
 
-test("confirmation rejects proxy evidence without invoking any proxy traps", () => {
+void test("confirmation rejects proxy evidence without invoking any proxy traps", async () => {
   const fixture = expectedFailureFixture({ requestId: "proxy-confirmation-evidence" });
   let trapCalls = 0;
   const hostileEvidence = new Proxy(confirmationEvidence(fixture), {
@@ -1255,16 +1308,18 @@ test("confirmation rejects proxy evidence without invoking any proxy traps", () 
     /expected failure confirmation rejected.*proxy/,
   );
   assert.equal(trapCalls, 0);
-  fixture.diagnostics.dispose();
+  await fixture.diagnostics.dispose();
 });
 
-test("the browser gate confirms before returning and exposes only ordinary result data", async () => {
+void test("the browser gate confirms before returning and exposes only ordinary result data", async () => {
   const dependencies = syntheticGateDependencies();
+  /** @type {Diagnostics|undefined} */
   let diagnostics;
   let cleanupCalls = 0;
   const result = await runBrowserGate(syntheticGateArgs(), {
     ...dependencies,
-    runScenarioImpl: async (client, installedDiagnostics) => {
+    runScenarioImpl: async (scenarioClient, installedDiagnostics) => {
+      const client = diagnosticEmitter(scenarioClient);
       diagnostics = installedDiagnostics;
       const fixtureUrl = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
       const generation = diagnostics.beginRequestGeneration("synthetic browser gate");
@@ -1295,7 +1350,7 @@ test("the browser gate confirms before returning and exposes only ordinary resul
       Object.defineProperty(publicResult, "cleanupExpectedFailures", {
         value: () => cleanupCalls++,
       });
-      publicResult[Symbol("authority")] = cleanup;
+      Reflect.set(publicResult, Symbol("authority"), cleanup);
       return publicResult;
     },
   });
@@ -1308,20 +1363,30 @@ test("the browser gate confirms before returning and exposes only ordinary resul
     false,
   );
   assert.equal(cleanupCalls, 0);
-  assert.equal(diagnostics.logErrors.length, 0);
-  assert.equal(diagnostics.requestFailures.length, 0);
+  assert.equal(requiredFixture(diagnostics).logErrors.length, 0);
+  assert.equal(requiredFixture(diagnostics).requestFailures.length, 0);
 });
 
-test("the browser gate drains late finalized status events before disposing diagnostics", async () => {
-  for (const [label, emitLateStatus] of [
-    ["response", (client) => emitActionResponse(client, "gate-late-status", `${origin}/late`, 200)],
-    ["ExtraInfo", (client) => emitActionExtraInfo(client, "gate-late-status", 200)],
-  ]) {
+void test("the browser gate drains late finalized status events before disposing diagnostics", async () => {
+  for (const [label, emitLateStatus] of /** @type {const} */ ([
+    [
+      "response",
+      /** @param {Pick<DiagnosticClient,"emit">} client */ (client) =>
+        emitActionResponse(client, "gate-late-status", `${origin}/late`, 200),
+    ],
+    [
+      "ExtraInfo",
+      /** @param {Pick<DiagnosticClient,"emit">} client */ (client) =>
+        emitActionExtraInfo(client, "gate-late-status", 200),
+    ],
+  ])) {
+    /** @type {Diagnostics|undefined} */
     let diagnostics;
     await assert.rejects(
       runBrowserGate(syntheticGateArgs(), {
         ...syntheticGateDependencies(),
-        runScenarioImpl: async (client, installedDiagnostics) => {
+        runScenarioImpl: async (scenarioClient, installedDiagnostics) => {
+          const client = diagnosticEmitter(scenarioClient);
           diagnostics = installedDiagnostics;
           const fixtureUrl = `${origin}/late`;
           const generation = diagnostics.beginRequestGeneration(`late ${label}`);
@@ -1347,11 +1412,15 @@ test("the browser gate drains late finalized status events before disposing diag
       /browser diagnostics failed/,
       label,
     );
-    assert.equal(diagnostics.requestFailures.length, 1, `${label} late status was not attributed`);
+    assert.equal(
+      requiredFixture(diagnostics).requestFailures.length,
+      1,
+      `${label} late status was not attributed`,
+    );
   }
 });
 
-test("browser cleanup remains closure-owned when exposed diagnostics contain a hostile iterator", async () => {
+void test("browser cleanup remains closure-owned when exposed diagnostics contain a hostile iterator", async () => {
   const { server, port } = await reserveLoopbackPort();
   let pageClosed = false;
   let runtimeClosed = false;
@@ -1363,6 +1432,7 @@ test("browser cleanup remains closure-owned when exposed diagnostics contain a h
     });
   });
 
+  /** @type {Diagnostics|undefined} */
   let diagnostics;
   try {
     await assert.rejects(
@@ -1378,10 +1448,11 @@ test("browser cleanup remains closure-owned when exposed diagnostics contain a h
           webSocketDebuggerUrl: "ws://synthetic",
         }),
         createClientImpl: () => makeDiagnosticClient(),
-        runScenarioImpl: (client, installedDiagnostics) => {
+        runScenarioImpl: (scenarioClient, installedDiagnostics) => {
+          const client = diagnosticEmitter(scenarioClient);
           diagnostics = installedDiagnostics;
           const fixtureUrl = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
-          const cleanup = diagnostics.allowExpectedFailure(
+          diagnostics.allowExpectedFailure(
             (record) => record.method === "POST" && record.url === fixtureUrl,
             { status: 403 },
           );
@@ -1389,15 +1460,19 @@ test("browser cleanup remains closure-owned when exposed diagnostics contain a h
           emitActionResponse(client, "hostile-exposed-iterator", fixtureUrl, 403);
           emitCanonicalNetworkResourceError(client, fixtureUrl, "hostile-exposed-iterator");
           client.emit("Network.loadingFinished", { requestId: "hostile-exposed-iterator" });
-          const exposedRecord = diagnostics.requests.get("hostile-exposed-iterator");
+          const exposedRecord = requiredFixture(
+            diagnostics.requests.get("hostile-exposed-iterator"),
+          );
           const hostileIterator = {
             [Symbol.iterator]: () => {
               iteratorCalls += 1;
               throw new Error("hostile exposed iterator executed");
             },
           };
-          exposedRecord.expectedFailureAllowance.suppressedFailures = hostileIterator;
-          exposedRecord.statusEvidence = hostileIterator;
+          fixtureRecord(
+            requiredFixture(exposedRecord.expectedFailureAllowance),
+          ).suppressedFailures = hostileIterator;
+          fixtureRecord(exposedRecord).statusEvidence = hostileIterator;
           return { status: "unconfirmed" };
         },
       }),
@@ -1417,11 +1492,13 @@ test("browser cleanup remains closure-owned when exposed diagnostics contain a h
   assert.ok(diagnostics);
 });
 
-test("browser gate validates an injected thenable before assimilation and still closes the runtime", async () => {
+void test("browser gate validates an injected thenable before assimilation and still closes the runtime", async () => {
   const dependencies = syntheticGateDependencies();
   let runtimeClosed = false;
   let getterCalls = 0;
+  /** @type {unknown} */
   const hostileResult = Object.create(null);
+  // oxlint-disable-next-line unicorn/no-thenable -- Adversarial fixture verifies that an untrusted then getter is never invoked.
   Object.defineProperty(hostileResult, "then", {
     get: () => {
       getterCalls += 1;
@@ -1446,7 +1523,7 @@ test("browser gate validates an injected thenable before assimilation and still 
   assert.equal(runtimeClosed, true);
 });
 
-test("timeout and signal cleanup invoke each captured close handle exactly once", async () => {
+void test("timeout and signal cleanup invoke each captured close handle exactly once", async () => {
   const client = makeDiagnosticClient();
   let clientCloseCalls = 0;
   client.close = () => {
@@ -1471,7 +1548,7 @@ test("timeout and signal cleanup invoke each captured close handle exactly once"
   assert.equal(runtimeCloseCalls, 1);
 });
 
-test("a page target materialized after SIGTERM is closed exactly once", async () => {
+void test("a page target materialized after SIGTERM is closed exactly once", async () => {
   const runtime = {
     endpoint: "ws://synthetic-runtime",
     close: async () => {},
@@ -1518,7 +1595,7 @@ test("a page target materialized after SIGTERM is closed exactly once", async ()
   }
 });
 
-test("a runtime delivered asynchronously through onRuntime after SIGTERM is closed exactly once", async () => {
+void test("a runtime delivered asynchronously through onRuntime after SIGTERM is closed exactly once", async () => {
   let runtimeMaterialized = false;
   let runtimeCloseCalls = 0;
   const runtime = {
@@ -1536,7 +1613,7 @@ test("a runtime delivered asynchronously through onRuntime after SIGTERM is clos
             process.emit("SIGTERM");
             setTimeout(() => {
               runtimeMaterialized = true;
-              onRuntime(runtime);
+              requiredFixture(onRuntime)(runtime);
             }, 25);
           });
           return new Promise(() => {});
@@ -1559,7 +1636,7 @@ test("a runtime delivered asynchronously through onRuntime after SIGTERM is clos
   }
 });
 
-test("a runtime delivered by the launch promise after SIGTERM is closed exactly once", async () => {
+void test("a runtime delivered by the launch promise after SIGTERM is closed exactly once", async () => {
   let runtimeCloseCalls = 0;
   const runtime = {
     endpoint: "ws://synthetic-runtime",
@@ -1592,7 +1669,7 @@ test("a runtime delivered by the launch promise after SIGTERM is closed exactly 
   }
 });
 
-test("same-turn runtime callback and launch resolution share one cleanup authority", async () => {
+void test("same-turn runtime callback and launch resolution share one cleanup authority", async () => {
   let runtimeCloseCalls = 0;
   const runtime = {
     endpoint: "ws://synthetic-runtime",
@@ -1605,8 +1682,8 @@ test("same-turn runtime callback and launch resolution share one cleanup authori
     await assert.rejects(
       runBrowserGate(syntheticGateArgs(), {
         launchChromeImpl: ({ onRuntime }) => {
-          onRuntime(runtime);
-          onRuntime(runtime);
+          requiredFixture(onRuntime)(runtime);
+          requiredFixture(onRuntime)(runtime);
           process.emit("SIGTERM");
           return Promise.resolve(runtime);
         },
@@ -1627,10 +1704,11 @@ test("same-turn runtime callback and launch resolution share one cleanup authori
   }
 });
 
-test("late runtime close rejection and throw preserve the SIGTERM cause", async () => {
-  for (const [kind, closeRuntime] of [
+void test("late runtime close rejection and throw preserve the SIGTERM cause", async () => {
+  for (const [kind, closeRuntime] of /** @type {const} */ ([
     [
       "rejection",
+      /** @param {{value:number}} calls */
       (calls) => {
         calls.value += 1;
         return Promise.reject(new Error("late runtime close rejected"));
@@ -1638,12 +1716,13 @@ test("late runtime close rejection and throw preserve the SIGTERM cause", async 
     ],
     [
       "throw",
+      /** @param {{value:number}} calls */
       (calls) => {
         calls.value += 1;
         throw new Error("late runtime close threw");
       },
     ],
-  ]) {
+  ])) {
     const runtimeCloseCalls = { value: 0 };
     const probe = unhandledRejectionProbe();
     try {
@@ -1654,7 +1733,7 @@ test("late runtime close rejection and throw preserve the SIGTERM cause", async 
               process.emit("SIGTERM");
               setTimeout(
                 () =>
-                  onRuntime({
+                  requiredFixture(onRuntime)({
                     endpoint: "ws://synthetic-runtime",
                     close: () => closeRuntime(runtimeCloseCalls),
                   }),
@@ -1670,7 +1749,7 @@ test("late runtime close rejection and throw preserve the SIGTERM cause", async 
             throw new Error("scenario must not start");
           },
         }),
-        (error) => /browser gate received SIGTERM/.test(error.message),
+        (error) => error instanceof Error && /browser gate received SIGTERM/.test(error.message),
         `${kind} primary cause`,
       );
       await waitForMilliseconds(60);
@@ -1682,8 +1761,8 @@ test("late runtime close rejection and throw preserve the SIGTERM cause", async 
   }
 });
 
-test("late page close rejection and throw preserve the SIGTERM cause", async () => {
-  for (const [kind, closePage] of [
+void test("late page close rejection and throw preserve the SIGTERM cause", async () => {
+  for (const [kind, closePage] of /** @type {const} */ ([
     ["rejection", () => Promise.reject(new Error("late page close rejected"))],
     [
       "throw",
@@ -1691,7 +1770,7 @@ test("late page close rejection and throw preserve the SIGTERM cause", async () 
         throw new Error("late page close threw");
       },
     ],
-  ]) {
+  ])) {
     let pageCloseCalls = 0;
     const probe = unhandledRejectionProbe();
     try {
@@ -1721,7 +1800,7 @@ test("late page close rejection and throw preserve the SIGTERM cause", async () 
             throw new Error("scenario must not start");
           },
         }),
-        (error) => /browser gate received SIGTERM/.test(error.message),
+        (error) => error instanceof Error && /browser gate received SIGTERM/.test(error.message),
         `${kind} primary cause`,
       );
       await waitForMilliseconds(60);
@@ -1733,7 +1812,7 @@ test("late page close rejection and throw preserve the SIGTERM cause", async () 
   }
 });
 
-test("normal runtime, page, and client acquisition each close exactly once", async () => {
+void test("normal runtime, page, and client acquisition each close exactly once", async () => {
   const client = makeDiagnosticClient();
   let clientCloseCalls = 0;
   client.close = () => {
@@ -1766,7 +1845,7 @@ test("normal runtime, page, and client acquisition each close exactly once", asy
   assert.equal(runtimeCloseCalls, 1);
 });
 
-test("normal native client acquisition remains owned through final cleanup", async () => {
+void test("normal native client acquisition remains owned through final cleanup", async () => {
   const client = makeDiagnosticClient();
   let clientCloseCalls = 0;
   client.close = () => {
@@ -1797,7 +1876,7 @@ test("normal native client acquisition remains owned through final cleanup", asy
   }
 });
 
-test("a delayed native client is closed after SIGTERM wins acquisition", async () => {
+void test("a delayed native client is closed after SIGTERM wins acquisition", async () => {
   const client = makeDiagnosticClient();
   let clientCloseCalls = 0;
   client.close = () => {
@@ -1836,7 +1915,7 @@ test("a delayed native client is closed after SIGTERM wins acquisition", async (
   }
 });
 
-test("a delayed native client is closed after acquisition timeout", async () => {
+void test("a delayed native client is closed after acquisition timeout", async () => {
   const client = makeDiagnosticClient();
   let clientCloseCalls = 0;
   client.close = () => {
@@ -1874,7 +1953,7 @@ test("a delayed native client is closed after acquisition timeout", async () => 
   }
 });
 
-test("a delayed factory rejection is observed after SIGTERM without an unhandled rejection", async () => {
+void test("a delayed factory rejection is observed after SIGTERM without an unhandled rejection", async () => {
   let runtimeCloseCalls = 0;
   const probe = unhandledRejectionProbe();
   try {
@@ -1907,10 +1986,11 @@ test("a delayed factory rejection is observed after SIGTERM without an unhandled
   }
 });
 
-test("late client close rejection and throw preserve the SIGTERM cause", async () => {
-  for (const [kind, closeClient] of [
+void test("late client close rejection and throw preserve the SIGTERM cause", async () => {
+  for (const [kind, closeClient] of /** @type {const} */ ([
     [
       "rejection",
+      /** @param {{value:number}} calls */
       (calls) => {
         calls.value += 1;
         return Promise.reject(new Error("late client close rejected"));
@@ -1918,12 +1998,13 @@ test("late client close rejection and throw preserve the SIGTERM cause", async (
     ],
     [
       "throw",
+      /** @param {{value:number}} calls */
       (calls) => {
         calls.value += 1;
         throw new Error("late client close threw");
       },
     ],
-  ]) {
+  ])) {
     const client = makeDiagnosticClient();
     const clientCloseCalls = { value: 0 };
     client.close = () => closeClient(clientCloseCalls);
@@ -1949,7 +2030,7 @@ test("late client close rejection and throw preserve the SIGTERM cause", async (
             throw new Error("scenario must not start");
           },
         }),
-        (error) => /browser gate received SIGTERM/.test(error.message),
+        (error) => error instanceof Error && /browser gate received SIGTERM/.test(error.message),
         `${kind} primary cause`,
       );
       await waitForMilliseconds(60);
@@ -1962,7 +2043,7 @@ test("late client close rejection and throw preserve the SIGTERM cause", async (
   }
 });
 
-test("duplicate abort and final cleanup calls close a late client exactly once", async () => {
+void test("duplicate abort and final cleanup calls close a late client exactly once", async () => {
   const client = makeDiagnosticClient();
   let clientCloseCalls = 0;
   client.close = () => {
@@ -2003,7 +2084,7 @@ test("duplicate abort and final cleanup calls close a late client exactly once",
   }
 });
 
-test("a never-settling client factory does not delay abort cleanup", async () => {
+void test("a never-settling client factory does not delay abort cleanup", async () => {
   let runtimeCloseCalls = 0;
   const probe = unhandledRejectionProbe();
   const startedAt = Date.now();
@@ -2037,9 +2118,11 @@ test("a never-settling client factory does not delay abort cleanup", async () =>
   }
 });
 
-test("diagnostic disposal continues after one unsubscribe throws", async () => {
+void test("diagnostic disposal continues after one unsubscribe throws", async () => {
+  /** @type {string[]} */
   const unsubscribeOrder = [];
   const client = {
+    /** @param {string} method */
     on(method) {
       return () => {
         unsubscribeOrder.push(method);
@@ -2048,15 +2131,20 @@ test("diagnostic disposal continues after one unsubscribe throws", async () => {
     },
   };
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
-  await assert.rejects(diagnostics.dispose(), /diagnostic unsubscribe cleanup failed/);
+  await assert.rejects(
+    requiredFixture(diagnostics.dispose()),
+    /diagnostic unsubscribe cleanup failed/,
+  );
   assert.equal(unsubscribeOrder.length, 15);
   assert.equal(new Set(unsubscribeOrder).size, 15);
 });
 
-test("rejected client close is awaited, reported, and does not leak an unhandled rejection", async () => {
+void test("rejected client close is awaited, reported, and does not leak an unhandled rejection", async () => {
   const client = makeDiagnosticClient();
   client.close = () => Promise.reject(new Error("client close rejected"));
+  /** @type {unknown[]} */
   const unhandled = [];
+  /** @param {unknown} reason */
   const onUnhandled = (reason) => unhandled.push(reason);
   process.on("unhandledRejection", onUnhandled);
   try {
@@ -2076,7 +2164,7 @@ test("rejected client close is awaited, reported, and does not leak an unhandled
   assert.deepEqual(unhandled, []);
 });
 
-test("ordinary result conversion rejects hostile arrays before reading or iterating them", () => {
+void test("ordinary result conversion rejects hostile arrays before reading or iterating them", () => {
   let mapCalls = 0;
   const ownMap = ["safe"];
   Object.defineProperty(ownMap, "map", {
@@ -2087,6 +2175,7 @@ test("ordinary result conversion rejects hostile arrays before reading or iterat
   });
 
   let accessorCalls = 0;
+  /** @type {unknown[]} */
   const elementAccessor = [];
   Object.defineProperty(elementAccessor, "0", {
     get: () => {
@@ -2099,9 +2188,9 @@ test("ordinary result conversion rejects hostile arrays before reading or iterat
   let symbolCalls = 0;
   const ownSymbol = Symbol("authority");
   const symbolArray = ["safe"];
-  symbolArray[ownSymbol] = () => {
+  Reflect.set(symbolArray, ownSymbol, () => {
     symbolCalls += 1;
-  };
+  });
 
   let customPrototypeCalls = 0;
   const customPrototypeArray = ["safe"];
@@ -2117,9 +2206,10 @@ test("ordinary result conversion rejects hostile arrays before reading or iterat
       functionCalls += 1;
     },
   ];
+  // oxlint-disable-next-line unicorn/no-new-array -- Preserve array holes for descriptor-based admission and its rejection fixture.
   const hole = new Array(1);
   const extraKey = ["safe"];
-  extraKey.extra = "unexpected";
+  Reflect.set(extraKey, "extra", "unexpected");
   const serializationHook = ["safe"];
   Object.defineProperty(serializationHook, "toJSON", {
     value: () => {
@@ -2128,7 +2218,7 @@ test("ordinary result conversion rejects hostile arrays before reading or iterat
     enumerable: false,
   });
 
-  for (const [label, value, pattern] of [
+  for (const [label, value, pattern] of /** @type {const} */ ([
     ["own map capability", ownMap, /extra own key map/],
     ["element accessor", elementAccessor, /0 was an accessor/],
     ["own symbol", symbolArray, /contained an own symbol/],
@@ -2137,7 +2227,7 @@ test("ordinary result conversion rejects hostile arrays before reading or iterat
     ["hole", hole, /was a hole/],
     ["extra key", extraKey, /extra own key extra/],
     ["serialization hook", serializationHook, /extra own key toJSON/],
-  ]) {
+  ])) {
     assert.throws(() => toOrdinarySerializableResult(value), pattern, label);
   }
 
@@ -2148,12 +2238,12 @@ test("ordinary result conversion rejects hostile arrays before reading or iterat
   assert.equal(functionCalls, 0);
 });
 
-test("ordinary result conversion rejects proxy arrays before invoking proxy traps", () => {
+void test("ordinary result conversion rejects proxy arrays before invoking proxy traps", () => {
   let trapCalls = 0;
   const hostileArray = new Proxy(["safe"], {
     getPrototypeOf: () => {
       trapCalls += 1;
-      return Array.prototype;
+      return /** @type {object} */ (Array.prototype);
     },
     ownKeys: () => {
       trapCalls += 1;
@@ -2177,9 +2267,11 @@ test("ordinary result conversion rejects proxy arrays before invoking proxy trap
   assert.equal(trapCalls, 0);
 });
 
-test("race rejects synchronous thenables without invoking hooks and guards native Promise results", async () => {
+void test("race rejects synchronous thenables without invoking hooks and guards native Promise results", async () => {
   let thenCalls = 0;
+  /** @type {unknown} */
   const synchronousThenable = Object.create(null);
+  // oxlint-disable-next-line unicorn/no-thenable -- Adversarial fixture verifies that an untrusted then getter is never invoked.
   Object.defineProperty(synchronousThenable, "then", {
     get: () => {
       thenCalls += 1;
@@ -2211,7 +2303,8 @@ test("race rejects synchronous thenables without invoking hooks and guards nativ
 
   let overriddenThenCalls = 0;
   const hostilePromise = Promise.resolve({ status: "hostile-promise" });
-  Object.defineProperty(hostilePromise, "then", {
+  // oxlint-disable-next-line unicorn/no-thenable -- Adversarial fixture verifies that an untrusted then getter is never invoked.
+  void Object.defineProperty(hostilePromise, "then", {
     get: () => {
       overriddenThenCalls += 1;
       return () => {};
@@ -2243,18 +2336,12 @@ test("race rejects synchronous thenables without invoking hooks and guards nativ
   assert.equal(resultAccessorCalls, 0);
 });
 
-test("page navigation rejects a returned thenable before reading its then getter", async () => {
-  const listeners = new Map();
-  const client = {
-    on(method, listener) {
-      const methodListeners = listeners.get(method) || new Set();
-      methodListeners.add(listener);
-      listeners.set(method, methodListeners);
-      return () => methodListeners.delete(listener);
-    },
-  };
+void test("page navigation rejects a returned thenable before reading its then getter", async () => {
+  const client = makeDiagnosticClient();
   let getterCalls = 0;
+  /** @type {unknown} */
   const hostileResult = Object.create(null);
+  // oxlint-disable-next-line unicorn/no-thenable -- Adversarial fixture verifies that an untrusted then getter is never invoked.
   Object.defineProperty(hostileResult, "then", {
     get: () => {
       getterCalls += 1;
@@ -2269,16 +2356,18 @@ test("page navigation rejects a returned thenable before reading its then getter
   assert.equal(getterCalls, 0);
 });
 
-test("the browser gate rejects an unconfirmed allowance after fail-closed cleanup replay", async () => {
+void test("the browser gate rejects an unconfirmed allowance after fail-closed cleanup replay", async () => {
   const dependencies = syntheticGateDependencies();
+  /** @type {Diagnostics|undefined} */
   let diagnostics;
   await assert.rejects(
     runBrowserGate(syntheticGateArgs(), {
       ...dependencies,
-      runScenarioImpl: async (client, installedDiagnostics) => {
+      runScenarioImpl: async (scenarioClient, installedDiagnostics) => {
+        const client = diagnosticEmitter(scenarioClient);
         diagnostics = installedDiagnostics;
         const fixtureUrl = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
-        const cleanup = diagnostics.allowExpectedFailure(
+        diagnostics.allowExpectedFailure(
           (record) => record.method === "POST" && record.url === fixtureUrl,
           { status: 403 },
         );
@@ -2299,18 +2388,20 @@ test("the browser gate rejects an unconfirmed allowance after fail-closed cleanu
     }),
     /browser diagnostics failed.*Failed to load resource/s,
   );
-  assert.equal(diagnostics.logErrors.length, 1);
-  assert.equal(diagnostics.requestFailures.length, 0);
-  assertDirty(diagnostics, "unconfirmed gate final diagnostics");
+  assert.equal(requiredFixture(diagnostics).logErrors.length, 1);
+  assert.equal(requiredFixture(diagnostics).requestFailures.length, 0);
+  assertDirty(requiredFixture(diagnostics), "unconfirmed gate final diagnostics");
 });
 
-test("scenario exceptions revoke an allowance and replay canonical evidence exactly once", async () => {
+void test("scenario exceptions revoke an allowance and replay canonical evidence exactly once", async () => {
   const dependencies = syntheticGateDependencies();
+  /** @type {Diagnostics|undefined} */
   let diagnostics;
   await assert.rejects(
     runBrowserGate(syntheticGateArgs(), {
       ...dependencies,
-      runScenarioImpl: async (client, installedDiagnostics) => {
+      runScenarioImpl: async (scenarioClient, installedDiagnostics) => {
+        const client = diagnosticEmitter(scenarioClient);
         diagnostics = installedDiagnostics;
         const fixtureUrl = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
         diagnostics.allowExpectedFailure(
@@ -2334,18 +2425,20 @@ test("scenario exceptions revoke an allowance and replay canonical evidence exac
     }),
     /synthetic scenario exception/,
   );
-  assert.equal(diagnostics.logErrors.length, 1);
-  diagnostics.dispose();
-  assert.equal(diagnostics.logErrors.length, 1);
+  assert.equal(requiredFixture(diagnostics).logErrors.length, 1);
+  await requiredFixture(diagnostics).dispose();
+  assert.equal(requiredFixture(diagnostics).logErrors.length, 1);
 });
 
-test("scenario timeout aborts and replays an allowance exactly once", async () => {
+void test("scenario timeout aborts and replays an allowance exactly once", async () => {
   const dependencies = syntheticGateDependencies();
+  /** @type {Diagnostics|undefined} */
   let diagnostics;
   await assert.rejects(
     runBrowserGate(syntheticGateArgs(10), {
       ...dependencies,
-      runScenarioImpl: async (client, installedDiagnostics, _args, { signal }) => {
+      runScenarioImpl: async (scenarioClient, installedDiagnostics, _args, { signal }) => {
+        const client = diagnosticEmitter(scenarioClient);
         diagnostics = installedDiagnostics;
         const fixtureUrl = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
         diagnostics.allowExpectedFailure(
@@ -2371,18 +2464,20 @@ test("scenario timeout aborts and replays an allowance exactly once", async () =
     }),
     /timed out after 10ms/,
   );
-  assert.equal(diagnostics.logErrors.length, 1);
-  diagnostics.dispose();
-  assert.equal(diagnostics.logErrors.length, 1);
+  assert.equal(requiredFixture(diagnostics).logErrors.length, 1);
+  await requiredFixture(diagnostics).dispose();
+  assert.equal(requiredFixture(diagnostics).logErrors.length, 1);
 });
 
-test("shutdown abort revokes an allowance and replays canonical evidence exactly once", async () => {
+void test("shutdown abort revokes an allowance and replays canonical evidence exactly once", async () => {
   const dependencies = syntheticGateDependencies();
+  /** @type {Diagnostics|undefined} */
   let diagnostics;
   await assert.rejects(
     runBrowserGate(syntheticGateArgs(), {
       ...dependencies,
-      runScenarioImpl: async (client, installedDiagnostics, _args, { signal }) => {
+      runScenarioImpl: async (scenarioClient, installedDiagnostics, _args, { signal }) => {
+        const client = diagnosticEmitter(scenarioClient);
         diagnostics = installedDiagnostics;
         const fixtureUrl = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
         diagnostics.allowExpectedFailure(
@@ -2409,12 +2504,12 @@ test("shutdown abort revokes an allowance and replays canonical evidence exactly
     }),
     /browser gate received SIGTERM/,
   );
-  assert.equal(diagnostics.logErrors.length, 1);
-  diagnostics.dispose();
-  assert.equal(diagnostics.logErrors.length, 1);
+  assert.equal(requiredFixture(diagnostics).logErrors.length, 1);
+  await requiredFixture(diagnostics).dispose();
+  assert.equal(requiredFixture(diagnostics).logErrors.length, 1);
 });
 
-test("confirmation before terminal response replays consumed canonical evidence once", () => {
+void test("confirmation before terminal response replays consumed canonical evidence once", async () => {
   const fixture = expectedFailureFixture({ finish: false });
   assert.throws(
     () =>
@@ -2423,17 +2518,17 @@ test("confirmation before terminal response replays consumed canonical evidence 
   );
   assert.equal(fixture.diagnostics.logErrors.length, 1);
   fixture.cleanup();
-  fixture.diagnostics.dispose();
+  await fixture.diagnostics.dispose();
   assert.equal(fixture.diagnostics.logErrors.length, 1);
   assertDirty(fixture.diagnostics, "confirmation before terminal response");
 });
 
-test("confirmation rejects wrong request, generation, or status and replays exactly once", () => {
-  const cases = [
+void test("confirmation rejects wrong request, generation, or status and replays exactly once", async () => {
+  const cases = /** @type {const} */ ([
     ["wrong request", { requestId: "not-bound" }],
     ["wrong generation", { generation: { id: 99_999 } }],
     ["wrong status", { status: 500 }],
-  ];
+  ]);
 
   for (const [label, overrides] of cases) {
     const fixture = expectedFailureFixture({
@@ -2450,12 +2545,12 @@ test("confirmation rejects wrong request, generation, or status and replays exac
     );
     assert.equal(fixture.diagnostics.logErrors.length, 1, `${label} replay count`);
     fixture.cleanup();
-    fixture.diagnostics.dispose();
+    await fixture.diagnostics.dispose();
     assert.equal(fixture.diagnostics.logErrors.length, 1, `${label} repeated replay count`);
   }
 });
 
-test("confirmation rejects missing, pending, and noncanonical evidence without hiding it", () => {
+void test("confirmation rejects missing, pending, and noncanonical evidence without hiding it", async () => {
   const missingLog = expectedFailureFixture({ includeCanonical: false });
   assert.throws(
     () =>
@@ -2468,7 +2563,7 @@ test("confirmation rejects missing, pending, and noncanonical evidence without h
   emitCanonicalNetworkResourceError(missingLog.client, missingLog.url, missingLog.requestId);
   assert.equal(missingLog.diagnostics.logErrors.length, 1);
   missingLog.cleanup();
-  missingLog.diagnostics.dispose();
+  await missingLog.diagnostics.dispose();
 
   const pending = expectedFailureFixture({ includeResponse: false, finish: false });
   assert.throws(
@@ -2478,7 +2573,7 @@ test("confirmation rejects missing, pending, and noncanonical evidence without h
   );
   assert.equal(pending.diagnostics.logErrors.length, 1);
   pending.cleanup();
-  pending.diagnostics.dispose();
+  await pending.diagnostics.dispose();
   assert.equal(pending.diagnostics.logErrors.length, 1);
 
   const noncanonical = expectedFailureFixture({ includeCanonical: false });
@@ -2501,10 +2596,10 @@ test("confirmation rejects missing, pending, and noncanonical evidence without h
   );
   assert.equal(noncanonical.diagnostics.logErrors.length, 1);
   noncanonical.cleanup();
-  noncanonical.diagnostics.dispose();
+  await noncanonical.diagnostics.dispose();
 });
 
-test("confirmation rejects missing required loadingFailed evidence and replays both channels once", () => {
+void test("confirmation rejects missing required loadingFailed evidence and replays both channels once", async () => {
   const fixture = expectedFailureFixture();
   emitActionLoadingFailed(fixture.client, fixture.requestId, "net::ERR_REQUIRED_FAILURE");
   assert.throws(
@@ -2518,12 +2613,12 @@ test("confirmation rejects missing required loadingFailed evidence and replays b
   assert.equal(fixture.diagnostics.logErrors.length, 1);
   assert.equal(fixture.diagnostics.requestFailures.length, 1);
   fixture.cleanup();
-  fixture.diagnostics.dispose();
+  await fixture.diagnostics.dispose();
   assert.equal(fixture.diagnostics.logErrors.length, 1);
   assert.equal(fixture.diagnostics.requestFailures.length, 1);
 });
 
-test("status contradiction fails confirmation and cannot replay the canonical error twice", () => {
+void test("status contradiction fails confirmation and cannot replay the canonical error twice", async () => {
   const fixture = expectedFailureFixture();
   emitActionExtraInfo(fixture.client, fixture.requestId, 500);
   assert.equal(fixture.diagnostics.logErrors.length, 1);
@@ -2533,12 +2628,12 @@ test("status contradiction fails confirmation and cannot replay the canonical er
     /expected failure confirmation rejected/,
   );
   fixture.cleanup();
-  fixture.diagnostics.dispose();
+  await fixture.diagnostics.dispose();
   assert.equal(fixture.diagnostics.logErrors.length, 1);
   assertDirty(fixture.diagnostics, "confirmation status contradiction");
 });
 
-test("cleanup replays one consumed canonical log exactly once after a finished expected request", () => {
+void test("cleanup replays one consumed canonical log exactly once after a finished expected request", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2558,12 +2653,12 @@ test("cleanup replays one consumed canonical log exactly once after a finished e
   const failure = assertDirty(diagnostics, "cleanup replayed canonical log");
   assert.equal(diagnostics.logErrors.length, 1);
   assert.equal((failure.match(/Failed to load resource/g) || []).length, 1);
-  diagnostics.dispose();
-  diagnostics.dispose();
+  await diagnostics.dispose();
+  await diagnostics.dispose();
   assert.equal(diagnostics.logErrors.length, 1);
 });
 
-test("cleanup replays one suppressed loadingFailed evidence exactly once after a finished expected request", () => {
+void test("cleanup replays one suppressed loadingFailed evidence exactly once after a finished expected request", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2582,12 +2677,12 @@ test("cleanup replays one suppressed loadingFailed evidence exactly once after a
   assert.equal(diagnostics.requestFailures.length, 1);
   assert.match(failure, /ERR_EXPECTED_FAILURE/);
   removeAllowance();
-  diagnostics.dispose();
-  diagnostics.dispose();
+  await diagnostics.dispose();
+  await diagnostics.dispose();
   assert.equal(diagnostics.requestFailures.length, 1);
 });
 
-test("dispose replays consumed canonical log evidence exactly once", () => {
+void test("dispose replays consumed canonical log evidence exactly once", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2602,15 +2697,15 @@ test("dispose replays consumed canonical log evidence exactly once", () => {
   client.emit("Network.loadingFinished", { requestId: "dispose-consumed-log" });
   assert.doesNotThrow(() => diagnostics.assertClean("dispose consumed log baseline"));
 
-  diagnostics.dispose();
+  await diagnostics.dispose();
   const failure = assertDirty(diagnostics, "dispose replayed canonical log");
   assert.equal(diagnostics.logErrors.length, 1);
   assert.equal((failure.match(/Failed to load resource/g) || []).length, 1);
-  diagnostics.dispose();
+  await diagnostics.dispose();
   assert.equal(diagnostics.logErrors.length, 1);
 });
 
-test("dispose replays suppressed loadingFailed evidence exactly once", () => {
+void test("dispose replays suppressed loadingFailed evidence exactly once", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2628,15 +2723,15 @@ test("dispose replays suppressed loadingFailed evidence exactly once", () => {
   );
   assert.doesNotThrow(() => diagnostics.assertClean("dispose loading failure baseline"));
 
-  diagnostics.dispose();
+  await diagnostics.dispose();
   const failure = assertDirty(diagnostics, "dispose replayed loading failure");
   assert.equal(diagnostics.requestFailures.length, 1);
   assert.match(failure, /ERR_DISPOSED_EXPECTED_FAILURE/);
-  diagnostics.dispose();
+  await diagnostics.dispose();
   assert.equal(diagnostics.requestFailures.length, 1);
 });
 
-test("a waitForRequest timeout does not discard consumed evidence before cleanup", async () => {
+void test("a waitForRequest timeout does not discard consumed evidence before cleanup", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2660,10 +2755,10 @@ test("a waitForRequest timeout does not discard consumed evidence before cleanup
   const failure = assertDirty(diagnostics, "wait timeout cleanup replay");
   assert.equal(diagnostics.logErrors.length, 1);
   assert.equal((failure.match(/Failed to load resource/g) || []).length, 1);
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("repeated cleanup and dispose combinations replay consumed and suppressed evidence once", () => {
+void test("repeated cleanup and dispose combinations replay consumed and suppressed evidence once", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2679,9 +2774,9 @@ test("repeated cleanup and dispose combinations replay consumed and suppressed e
   assert.doesNotThrow(() => diagnostics.assertClean("repeated invalidation baseline"));
 
   removeAllowance();
-  diagnostics.dispose();
+  await diagnostics.dispose();
   removeAllowance();
-  diagnostics.dispose();
+  await diagnostics.dispose();
   const failure = assertDirty(diagnostics, "repeated invalidation replay");
   assert.equal(diagnostics.logErrors.length, 1);
   assert.equal(diagnostics.requestFailures.length, 1);
@@ -2689,7 +2784,7 @@ test("repeated cleanup and dispose combinations replay consumed and suppressed e
   assert.equal((failure.match(/ERR_REPEATED_INVALIDATION/g) || []).length, 1);
 });
 
-test("a canonical network resource error without networkRequestId remains visible", () => {
+void test("a canonical network resource error without networkRequestId remains visible", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2711,10 +2806,10 @@ test("a canonical network resource error without networkRequestId remains visibl
 
   assert.match(assertDirty(diagnostics, "missing network request ID"), /Failed to load resource/);
   removeAllowance();
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("unmatched canonical logs are visible immediately without pending retention", () => {
+void test("unmatched canonical logs are visible immediately without pending retention", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2730,10 +2825,10 @@ test("unmatched canonical logs are visible immediately without pending retention
   assert.equal(diagnostics.logErrors.length, 10_000);
   assert.equal(diagnostics.requests.size, 0);
   removeAllowance();
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("one exact active expected request holds at most one canonical log", () => {
+void test("one exact active expected request holds at most one canonical log", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2745,26 +2840,30 @@ test("one exact active expected request holds at most one canonical log", () => 
   emitExpectedActionRequest(client, "held-403", url);
   emitCanonicalNetworkResourceError(client, url, "held-403");
   assert.equal(
-    diagnostics.requests.get("held-403").pendingExpectedFailureLog.entry.networkRequestId,
+    requiredFixture(requiredFixture(diagnostics.requests.get("held-403")).pendingExpectedFailureLog)
+      .entry.networkRequestId,
     "held-403",
   );
   for (let index = 0; index < 9_999; index += 1) {
     emitCanonicalNetworkResourceError(client, url, "held-403");
   }
   assert.equal(diagnostics.logErrors.length, 9_999);
-  assert.ok(diagnostics.requests.get("held-403").pendingExpectedFailureLog);
+  assert.ok(requiredFixture(diagnostics.requests.get("held-403")).pendingExpectedFailureLog);
 
   emitActionResponse(client, "held-403", url, 403);
   client.emit("Network.loadingFinished", { requestId: "held-403" });
-  assert.equal(diagnostics.requests.get("held-403").pendingExpectedFailureLog, undefined);
+  assert.equal(
+    requiredFixture(diagnostics.requests.get("held-403")).pendingExpectedFailureLog,
+    undefined,
+  );
   assert.equal(diagnostics.logErrors.length, 9_999);
   const failure = assertDirty(diagnostics, "duplicate held canonical logs");
   assert.equal((failure.match(/Failed to load resource/g) || []).length, 9_999);
   removeAllowance();
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("a held canonical log surfaces when cleanup completes without a valid allowance", () => {
+void test("a held canonical log surfaces when cleanup completes without a valid allowance", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2776,14 +2875,17 @@ test("a held canonical log surfaces when cleanup completes without a valid allow
   emitExpectedActionRequest(client, "unfinished-403", url);
   emitCanonicalNetworkResourceError(client, url, "unfinished-403");
   assert.equal(diagnostics.logErrors.length, 0);
-  assert.ok(diagnostics.requests.get("unfinished-403").pendingExpectedFailureLog);
-  diagnostics.dispose();
+  assert.ok(requiredFixture(diagnostics.requests.get("unfinished-403")).pendingExpectedFailureLog);
+  await diagnostics.dispose();
   assert.equal(diagnostics.logErrors.length, 1);
-  assert.equal(diagnostics.requests.get("unfinished-403").pendingExpectedFailureLog, undefined);
+  assert.equal(
+    requiredFixture(diagnostics.requests.get("unfinished-403")).pendingExpectedFailureLog,
+    undefined,
+  );
   removeAllowance();
 });
 
-test("a held canonical log surfaces when request completion precedes valid evidence", () => {
+void test("a held canonical log surfaces when request completion precedes valid evidence", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2797,14 +2899,14 @@ test("a held canonical log surfaces when request completion precedes valid evide
   client.emit("Network.loadingFinished", { requestId: "completed-without-status" });
   assert.equal(diagnostics.logErrors.length, 1);
   assert.equal(
-    diagnostics.requests.get("completed-without-status").pendingExpectedFailureLog,
+    requiredFixture(diagnostics.requests.get("completed-without-status")).pendingExpectedFailureLog,
     undefined,
   );
   removeAllowance();
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("a consumed canonical log is restored exactly once after response status contradiction", () => {
+void test("a consumed canonical log is restored exactly once after response status contradiction", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2826,10 +2928,10 @@ test("a consumed canonical log is restored exactly once after response status co
   removeAllowance();
   const second = assertDirty(diagnostics, "repeated response status contradiction");
   assert.equal((second.match(/Failed to load resource/g) || []).length, 1);
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("a consumed canonical log is restored exactly once after ExtraInfo status contradiction", () => {
+void test("a consumed canonical log is restored exactly once after ExtraInfo status contradiction", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2847,10 +2949,10 @@ test("a consumed canonical log is restored exactly once after ExtraInfo status c
   const failure = assertDirty(diagnostics, "ExtraInfo status contradiction");
   assert.equal((failure.match(/Failed to load resource/g) || []).length, 1);
   removeAllowance();
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("contradiction after a consumed canonical log and loadingFailed restores both diagnostics", () => {
+void test("contradiction after a consumed canonical log and loadingFailed restores both diagnostics", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2871,10 +2973,10 @@ test("contradiction after a consumed canonical log and loadingFailed restores bo
   assert.equal((failure.match(/Failed to load resource/g) || []).length, 1);
   assert.equal((failure.match(/ERR_FAILED_BEFORE_DRIFT/g) || []).length, 1);
   removeAllowance();
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("response 403 then ExtraInfo 500 revokes the allowance and restores canonical logs", () => {
+void test("response 403 then ExtraInfo 500 revokes the allowance and restores canonical logs", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2893,10 +2995,10 @@ test("response 403 then ExtraInfo 500 revokes the allowance and restores canonic
   assert.equal((failure.match(/Failed to load resource/g) || []).length, 2);
   assert.match(failure, /response=403, ExtraInfo=500/);
   removeAllowance();
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("ExtraInfo 403 then response 500 revokes the allowance and restores canonical logs", () => {
+void test("ExtraInfo 403 then response 500 revokes the allowance and restores canonical logs", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2915,10 +3017,10 @@ test("ExtraInfo 403 then response 500 revokes the allowance and restores canonic
   assert.equal((failure.match(/Failed to load resource/g) || []).length, 2);
   assert.match(failure, /ExtraInfo=403, response=500/);
   removeAllowance();
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("loadingFailed before and after contradictory status evidence remains visible", () => {
+void test("loadingFailed before and after contradictory status evidence remains visible", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -2943,12 +3045,17 @@ test("loadingFailed before and after contradictory status evidence remains visib
   assert.match(failure, /ERR_FAILED_BEFORE_DRIFT/);
   assert.match(failure, /ERR_FAILED_AFTER_DRIFT/);
   removeAllowance();
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("cleanup and event-order permutations never hide a canonical error", () => {
+void test("cleanup and event-order permutations never hide a canonical error", async () => {
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
-  for (const order of ["response-first", "log-first", "request-first", "cleanup-first"]) {
+  for (const order of /** @type {const} */ ([
+    "response-first",
+    "log-first",
+    "request-first",
+    "cleanup-first",
+  ])) {
     const client = makeDiagnosticClient();
     const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
     const removeAllowance = diagnostics.allowExpectedFailure(
@@ -2977,11 +3084,11 @@ test("cleanup and event-order permutations never hide a canonical error", () => 
 
     assertDirty(diagnostics, `cleanup and ${order}`);
     removeAllowance();
-    diagnostics.dispose();
+    await diagnostics.dispose();
   }
 });
 
-test("a distinct same-URL browser error remains visible during an active expected failure", () => {
+void test("a distinct same-URL browser error remains visible during an active expected failure", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -3006,10 +3113,10 @@ test("a distinct same-URL browser error remains visible during an active expecte
     /browser diagnostics failed/,
   );
   removeAllowance();
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("a duplicate canonical error beyond one exact expected request remains visible", () => {
+void test("a duplicate canonical error beyond one exact expected request remains visible", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
@@ -3035,10 +3142,10 @@ test("a duplicate canonical error beyond one exact expected request remains visi
     /browser diagnostics failed/,
   );
   removeAllowance();
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("unrelated diagnostics stay visible with an active or removed expected-failure registration", () => {
+void test("unrelated diagnostics stay visible with an active or removed expected-failure registration", async () => {
   const url = `${origin}/api/cadence/application-host/v1/missions/mission-1/spacecraft/spacecraft-1/actions`;
   const activeClient = makeDiagnosticClient();
   const activeDiagnostics = installDiagnostics(activeClient, { expectedOrigin: origin });
@@ -3061,7 +3168,7 @@ test("unrelated diagnostics stay visible with an active or removed expected-fail
     /browser diagnostics failed/,
   );
   removeActiveAllowance();
-  activeDiagnostics.dispose();
+  await activeDiagnostics.dispose();
 
   const removedClient = makeDiagnosticClient();
   const removedDiagnostics = installDiagnostics(removedClient, { expectedOrigin: origin });
@@ -3085,15 +3192,15 @@ test("unrelated diagnostics stay visible with an active or removed expected-fail
     () => removedDiagnostics.assertClean("removed expected-failure registration"),
     /browser diagnostics failed/,
   );
-  removedDiagnostics.dispose();
+  await removedDiagnostics.dispose();
 });
 
-test("the cache-enabled federation browser gate never disables Chrome cache", async () => {
+void test("the cache-enabled federation browser gate never disables Chrome cache", async () => {
   const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
   assert.equal(source.includes("Network.setCacheDisabled"), false);
 });
 
-test("the Ops representative browser gate pins the predecessor directory page selector", async () => {
+void test("the Ops representative browser gate pins the predecessor directory page selector", async () => {
   const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
   const opsConfigStart = source.indexOf('applicationKey: "ops_console"');
   const opsConfigEnd = source.indexOf("catalogPath:", opsConfigStart);
@@ -3103,7 +3210,7 @@ test("the Ops representative browser gate pins the predecessor directory page se
   assert.equal(opsConfig.includes("#ops-dashboard-directory-page"), false);
 });
 
-test("the shared host body is read on the first load and reused by later 304 checks", async () => {
+void test("the shared host body is read on the first load and reused by later 304 checks", async () => {
   const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
   const organizationStart = source.indexOf('applicationKey: "organization_admin"');
   const missionStart = source.indexOf('applicationKey: "mission_catalog"', organizationStart);
@@ -3117,7 +3224,7 @@ test("the shared host body is read on the first load and reused by later 304 che
   assert.match(source, /\[200, 304\]\.includes\(hostRecord\.response\.status\)/);
 });
 
-test("canonical Comms query assertions follow the trusted surface response envelope", async () => {
+void test("canonical Comms query assertions follow the trusted surface response envelope", async () => {
   const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
   const commsStart = source.indexOf("const comms = await assertRemoteSurface");
   const commsEnd = source.indexOf(
@@ -3133,7 +3240,7 @@ test("canonical Comms query assertions follow the trusted surface response envel
   assert.doesNotMatch(commsAssertions, /comms\.query\.trusted_surface\.data\./);
 });
 
-test("refresh causality rejects a duplicate pre-action query and accepts only a new post-action query", () => {
+void test("refresh causality rejects a duplicate pre-action query and accepts only a new post-action query", () => {
   const pathname = "/api/query";
   const initial = record({ url: `${origin}${pathname}`, requestId: "query-1", startedAtMs: 10 });
   const duplicateBeforeAction = record({
@@ -3166,7 +3273,7 @@ test("refresh causality rejects a duplicate pre-action query and accepts only a 
   );
 });
 
-test("data URLs and favicon exclusion are explicit and narrowly scoped", () => {
+void test("data URLs and favicon exclusion are explicit and narrowly scoped", () => {
   assert.equal(isDataUrl("data:text/javascript,alert(1)"), true);
   assert.equal(isDataUrl(`${origin}/assets/app.js`), false);
   assert.equal(
@@ -3231,27 +3338,8 @@ test("data URLs and favicon exclusion are explicit and narrowly scoped", () => {
   );
 });
 
-test("favicon log errors are ignored only with the matching browser request contract", () => {
-  const diagnosticClient = () => {
-    const listeners = new Map();
-    return {
-      on(method, listener) {
-        const methodListeners = listeners.get(method) || new Set();
-        methodListeners.add(listener);
-        listeners.set(method, methodListeners);
-        return () => methodListeners.delete(listener);
-      },
-      emit(method, event) {
-        for (const listener of listeners.get(method) || []) listener(event);
-      },
-      listenerCount() {
-        return [...listeners.values()].reduce(
-          (count, methodListeners) => count + methodListeners.size,
-          0,
-        );
-      },
-    };
-  };
+void test("favicon log errors are ignored only with the matching browser request contract", async () => {
+  const diagnosticClient = makeDiagnosticClient;
   const client = diagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const favicon = `${origin}/favicon.ico`;
@@ -3272,7 +3360,7 @@ test("favicon log errors are ignored only with the matching browser request cont
   });
   assert.doesNotThrow(() => diagnostics.assertClean("favicon"));
   assert.ok(client.listenerCount() > 0);
-  diagnostics.dispose();
+  await diagnostics.dispose();
   assert.equal(client.listenerCount(), 0, "diagnostics did not unsubscribe all CDP listeners");
 
   const foreignClient = diagnosticClient();
@@ -3281,11 +3369,11 @@ test("favicon log errors are ignored only with the matching browser request cont
     entry: { level: "error", text: "favicon missing", url: `${origin}/favicon.ico?query=1` },
   });
   assert.throws(() => foreignLog.assertClean("foreign favicon"), /browser diagnostics failed/);
-  foreignLog.dispose();
+  await foreignLog.dispose();
   assert.equal(foreignClient.listenerCount(), 0);
 });
 
-test("LiveView requires a same-origin websocket handshake and rejects longpoll fallback", () => {
+void test("LiveView requires a same-origin websocket handshake and rejects longpoll fallback", () => {
   const connected = {
     requestId: "live-ws-1",
     generation: 2,
@@ -3310,7 +3398,15 @@ test("LiveView requires a same-origin websocket handshake and rejects longpoll f
   assert.equal(
     assertLiveViewWebSocket(diagnostics, origin, {
       beforeRequestIds: new Set(["live-ws-old"]),
-      generation: { id: 2, causalRequestId: "auth-request", causalRequestSequence: 1 },
+      generation: {
+        id: 2,
+        label: "detached handshake",
+        requestSequence: 0,
+        requestIds: new Set(),
+        startedAtMs: 0,
+        causalRequestId: "auth-request",
+        causalRequestSequence: 1,
+      },
     }),
     connected,
   );
@@ -3324,19 +3420,29 @@ test("LiveView requires a same-origin websocket handshake and rejects longpoll f
     assertLiveViewWebSocket(
       { ...diagnostics, webSockets: new Map([[secureConnected.requestId, secureConnected]]) },
       origin.replace("http:", "https:"),
-      { generation: { id: 2, causalRequestId: "auth-request", causalRequestSequence: 1 } },
+      {
+        generation: {
+          id: 2,
+          label: "detached handshake",
+          requestSequence: 0,
+          requestIds: new Set(),
+          startedAtMs: 0,
+          causalRequestId: "auth-request",
+          causalRequestSequence: 1,
+        },
+      },
     ),
     secureConnected,
   );
 
-  for (const invalid of [
+  for (const invalid of /** @type {const} */ ([
     { ...connected, url: "wss://evil.example/live/websocket?vsn=2.0.0" },
     { ...connected, url: `${origin}/live/websocket?vsn=2.0.0` },
     { ...connected, handshake: { status: 403 } },
     { ...connected, handshakeRequest: { headers: { Origin: "http://127.0.0.1:4101" } } },
     { ...connected, error: "WebSocket handshake failed" },
     { ...connected, closed: true },
-  ]) {
+  ])) {
     assert.throws(
       () =>
         assertLiveViewWebSocket(
@@ -3352,7 +3458,9 @@ test("LiveView requires a same-origin websocket handshake and rejects longpoll f
       assertLiveViewWebSocket(
         {
           ...diagnostics,
-          requests: new Map([["longpoll-1", { url: `${origin}/live/longpoll?vsn=2.0.0` }]]),
+          requests: new Map([
+            ["longpoll-1", { requestId: "longpoll-1", url: `${origin}/live/longpoll?vsn=2.0.0` }],
+          ]),
         },
         origin,
       ),
@@ -3365,19 +3473,8 @@ test("LiveView requires a same-origin websocket handshake and rejects longpoll f
   );
 });
 
-test("delayed websocket events without a request-boundary record fail closed", () => {
-  const listeners = new Map();
-  const client = {
-    on(method, listener) {
-      const methodListeners = listeners.get(method) || new Set();
-      methodListeners.add(listener);
-      listeners.set(method, methodListeners);
-      return () => methodListeners.delete(listener);
-    },
-    emit(method, event) {
-      for (const listener of listeners.get(method) || []) listener(event);
-    },
-  };
+void test("delayed websocket events without a request-boundary record fail closed", async () => {
+  const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const requestId = "delayed-live-ws";
   const url = `${origin.replace("http:", "ws:")}/live/websocket?vsn=2.0.0`;
@@ -3402,7 +3499,7 @@ test("delayed websocket events without a request-boundary record fail closed", (
     response: { url, status: 101 },
   });
 
-  assert.equal(diagnostics.webSockets.get(requestId).boundToRequest, false);
+  assert.equal(requiredFixture(diagnostics.webSockets.get(requestId)).boundToRequest, false);
   assert.throws(
     () => assertLiveViewWebSocket(diagnostics, origin, { generation }),
     /did not create a websocket transport/,
@@ -3413,7 +3510,7 @@ test("delayed websocket events without a request-boundary record fail closed", (
     request: { url, method: "GET", headers: {} },
     type: "WebSocket",
   });
-  assert.equal(diagnostics.webSockets.get(requestId).boundToRequest, false);
+  assert.equal(requiredFixture(diagnostics.webSockets.get(requestId)).boundToRequest, false);
   assert.throws(
     () => assertLiveViewWebSocket(diagnostics, origin, { generation }),
     /did not create a websocket transport/,
@@ -3423,7 +3520,10 @@ test("delayed websocket events without a request-boundary record fail closed", (
     request: { url, method: "GET", headers: {} },
     type: "WebSocket",
   });
-  assert.equal(diagnostics.webSockets.get(responseOnlySocketId).boundToRequest, false);
+  assert.equal(
+    requiredFixture(diagnostics.webSockets.get(responseOnlySocketId)).boundToRequest,
+    false,
+  );
 
   // A socket first observed after the generation boundary is also not enough:
   // it must follow the exact authenticated navigation request.
@@ -3437,7 +3537,7 @@ test("delayed websocket events without a request-boundary record fail closed", (
     requestId: observedOnlyId,
     response: { url, status: 101 },
   });
-  assert.equal(diagnostics.webSockets.get(observedOnlyId).boundToRequest, false);
+  assert.equal(requiredFixture(diagnostics.webSockets.get(observedOnlyId)).boundToRequest, false);
 
   client.emit("Network.requestWillBeSent", {
     requestId: "auth-request",
@@ -3446,10 +3546,10 @@ test("delayed websocket events without a request-boundary record fail closed", (
     frameId: "main-frame",
     loaderId: "auth-loader",
   });
-  const authRequest = diagnostics.requests.get("auth-request");
+  const authRequest = requiredFixture(diagnostics.requests.get("auth-request"));
   diagnostics.bindRequestGeneration(generation, authRequest);
-  assert.equal(diagnostics.webSockets.get(requestId).boundToRequest, false);
-  assert.equal(diagnostics.webSockets.get(observedOnlyId).boundToRequest, false);
+  assert.equal(requiredFixture(diagnostics.webSockets.get(requestId)).boundToRequest, false);
+  assert.equal(requiredFixture(diagnostics.webSockets.get(observedOnlyId)).boundToRequest, false);
 
   const boundRequestId = "causally-bound-live-ws";
   client.emit("Network.webSocketCreated", { requestId: boundRequestId, url });
@@ -3461,9 +3561,9 @@ test("delayed websocket events without a request-boundary record fail closed", (
     requestId: boundRequestId,
     response: { url, status: 101 },
   });
-  assert.equal(diagnostics.webSockets.get(boundRequestId).boundToRequest, true);
+  assert.equal(requiredFixture(diagnostics.webSockets.get(boundRequestId)).boundToRequest, true);
   assert.equal(
-    assertLiveViewWebSocket(diagnostics, origin, { generation }).requestId,
+    fixtureRecord(assertLiveViewWebSocket(diagnostics, origin, { generation })).requestId,
     boundRequestId,
   );
 
@@ -3479,10 +3579,11 @@ test("delayed websocket events without a request-boundary record fail closed", (
     [],
     "response without a causally bound request was admitted to the generation",
   );
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("authenticated navigation causality requires the exact sign-in pathname", () => {
+void test("authenticated navigation causality requires the exact sign-in pathname", () => {
+  const alternatePathOptions = { expectedOrigin: origin, pathname: "/sign-in-extra" };
   const base = {
     method: "POST",
     resourceType: "Document",
@@ -3490,14 +3591,14 @@ test("authenticated navigation causality requires the exact sign-in pathname", (
     loaderId: "auth-loader",
   };
 
-  for (const [pathname, expected] of [
+  for (const [pathname, expected] of /** @type {const} */ ([
     ["/sign-in", true],
     ["/sign-in?return_to=%2Fmissions#form", true],
     ["/sign-in/", false],
     ["/sign-in-extra", false],
     ["/sign-in/extra", false],
     ["/users/log_in", false],
-  ]) {
+  ])) {
     assert.equal(
       matchesSignInNavigationRequest(
         { ...base, url: `${origin}${pathname}` },
@@ -3521,36 +3622,36 @@ test("authenticated navigation causality requires the exact sign-in pathname", (
     "malformed request URLs must fail closed",
   );
   assert.equal(
-    matchesSignInNavigationRequest(
-      { ...base, url: `${origin}/sign-in` },
-      { expectedOrigin: origin, pathname: "/sign-in-extra" },
-    ),
+    matchesSignInNavigationRequest({ ...base, url: `${origin}/sign-in` }, alternatePathOptions),
     true,
     "a caller-supplied pathname cannot redefine the literal sign-in path",
   );
   assert.equal(
     matchesSignInNavigationRequest(
       { ...base, url: `${origin}/sign-in-extra` },
-      { expectedOrigin: origin, pathname: "/sign-in-extra" },
+      alternatePathOptions,
     ),
     false,
     "a caller-supplied alternate pathname cannot admit that request",
   );
 });
 
-test("sign-in URL validation allows only query/hash variation and runs before navigation", async () => {
-  for (const url of [`${origin}/sign-in`, `${origin}/sign-in?return_to=%2Fmissions#form`]) {
+void test("sign-in URL validation allows only query/hash variation and runs before navigation", async () => {
+  for (const url of /** @type {const} */ ([
+    `${origin}/sign-in`,
+    `${origin}/sign-in?return_to=%2Fmissions#form`,
+  ])) {
     assert.equal(assertSignInUrl(url, origin).pathname, "/sign-in");
   }
 
-  for (const url of [
+  for (const url of /** @type {const} */ ([
     `${origin}/sign-in/`,
     `${origin}/sign-in-extra`,
     `${origin}/sign-in/extra`,
     `${origin}/users/log_in`,
     "https://evil.example/sign-in",
     "not-a-url",
-  ]) {
+  ])) {
     assert.throws(
       () => assertSignInUrl(url, origin),
       /exact \/sign-in pathname|escaped the expected origin|Invalid URL/,
@@ -3559,19 +3660,16 @@ test("sign-in URL validation allows only query/hash variation and runs before na
   }
 
   let clientAccessed = false;
-  const client = new Proxy(
-    {},
-    {
-      get() {
-        clientAccessed = true;
-        throw new Error("browser navigation was reached before sign-in URL validation");
-      },
+  const client = new Proxy(makeDiagnosticClient(), {
+    get() {
+      clientAccessed = true;
+      throw new Error("browser navigation was reached before sign-in URL validation");
     },
-  );
+  });
   await assert.rejects(
     runScenario(
       client,
-      {},
+      installDiagnostics(makeDiagnosticClient()),
       [
         "--comms-url",
         `${origin}/missions/mission-1/applications/comms/federated`,
@@ -3599,7 +3697,7 @@ test("sign-in URL validation allows only query/hash variation and runs before na
   assert.equal(clientAccessed, false, "invalid sign-in URL reached browser navigation");
 });
 
-test("binary admission and diagnostics redact secrets without argv or environment transport", () => {
+void test("binary admission and diagnostics redact secrets without argv or environment transport", () => {
   assert.equal(
     resolveChromeBinary({
       env: { CHROME_BIN: "/missing" },
@@ -3608,26 +3706,31 @@ test("binary admission and diagnostics redact secrets without argv or environmen
     }),
     undefined,
   );
-  for (const args of [
+  for (const args of /** @type {const} */ ([
     ["--login-email", "operator@example.test", "--login-password", "secret"],
     ["--login-email", "operator@example.test", "--login-password=secret"],
     ["--login-password", "inline-secret-without-an-argv-leak"],
-  ]) {
+  ])) {
     assert.throws(
       () => assertNoPasswordArgument(args),
-      (error) => /structured stdin/.test(error.message) && !error.message.includes("secret"),
+      (error) =>
+        error instanceof Error &&
+        /structured stdin/.test(error.message) &&
+        !error.message.includes("secret"),
     );
   }
   const secret = "correct-horse-battery-staple";
   assert.equal(redactText(`argv=[] failure=${secret}`, [secret]).includes(secret), false);
 });
 
-test("waitForResponse selects the newest completed response in the requested generation", async () => {
-  const generation = { id: 9 };
+void test("waitForResponse selects the newest completed response in the requested generation", async () => {
+  const generation = 9;
   const stale = record({ requestId: "query-stale", sequence: 10 });
   const newest = record({ requestId: "query-newest", sequence: 11 });
+  /** @type {({generation?:GenerationSelection}|undefined)[]} */
   const seenOptions = [];
   const diagnostics = {
+    /** @param {(record:RequestObservation)=>boolean} predicate @param {{generation?:GenerationSelection}} [options] */
     completed(predicate, options) {
       seenOptions.push(options);
       return [stale, newest].filter(predicate);
@@ -3639,7 +3742,7 @@ test("waitForResponse selects the newest completed response in the requested gen
   assert.deepEqual(seenOptions, [{ generation }]);
 });
 
-test("latest terminal request waiting cannot be masked by an earlier same-URL completion", async () => {
+void test("latest terminal request waiting cannot be masked by an earlier same-URL completion", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const url = `${origin}/assets/application-host/host/host.js`;
@@ -3683,22 +3786,11 @@ test("latest terminal request waiting cannot be masked by an earlier same-URL co
     /host bundle request host-failed failed:/,
   );
 
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
 
-test("navigation completion discards queued prior-page events and requires the exact loader", async () => {
-  const listeners = new Map();
-  const client = {
-    on(method, listener) {
-      const methodListeners = listeners.get(method) || new Set();
-      methodListeners.add(listener);
-      listeners.set(method, methodListeners);
-      return () => methodListeners.delete(listener);
-    },
-    emit(method, event) {
-      for (const listener of listeners.get(method) || []) listener(event);
-    },
-  };
+void test("navigation completion discards queued prior-page events and requires the exact loader", async () => {
+  const client = makeDiagnosticClient();
   const oldFrame = { id: "frame-1", loaderId: "loader-old", url: `${origin}/old` };
   const currentFrame = { id: "frame-1", loaderId: "loader-new", url: `${origin}/current` };
 
@@ -3754,19 +3846,8 @@ test("navigation completion discards queued prior-page events and requires the e
   );
 });
 
-test("navigation ignores an equal-timestamp Page.loadEventFired until exact lifecycle proof", async () => {
-  const listeners = new Map();
-  const client = {
-    on(method, listener) {
-      const methodListeners = listeners.get(method) || new Set();
-      methodListeners.add(listener);
-      listeners.set(method, methodListeners);
-      return () => methodListeners.delete(listener);
-    },
-    emit(method, event) {
-      for (const listener of listeners.get(method) || []) listener(event);
-    },
-  };
+void test("navigation ignores an equal-timestamp Page.loadEventFired until exact lifecycle proof", async () => {
+  const client = makeDiagnosticClient();
   const currentFrame = { id: "main-frame", loaderId: "loader-current", url: `${origin}/current` };
   const lifecycleLoad = {
     frameId: currentFrame.id,
@@ -3816,7 +3897,7 @@ test("navigation ignores an equal-timestamp Page.loadEventFired until exact life
   );
 });
 
-test("raw CDP target creation is abortable and time-bounded", async () => {
+void test("raw CDP target creation is abortable and time-bounded", async () => {
   await assert.rejects(
     createPage("ws://127.0.0.1:9222/devtools/browser/test", "about:blank", {
       fetcher: () => new Promise(() => {}),
@@ -3835,7 +3916,7 @@ test("raw CDP target creation is abortable and time-bounded", async () => {
   await assert.rejects(pending, /test CDP cancellation/);
 });
 
-void test("remote failure confirmation consumes only one exact private diagnostic", () => {
+void test("remote failure confirmation consumes only one exact private diagnostic", async () => {
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const reference = "12345678-1234-1234-1234-123456789abc";
@@ -3854,5 +3935,38 @@ void test("remote failure confirmation consumes only one exact private diagnosti
     args: [{ value: "unrelated failure" }],
   });
   assert.throws(() => diagnostics.assertClean("unrelated failure"), /unrelated failure/);
-  diagnostics.dispose();
+  await diagnostics.dispose();
 });
+
+/** Required test observations fail at the lookup that establishes the fixture precondition.
+ * @template T @param {T|null|undefined} value @returns {T}
+ */
+function requiredFixture(value) {
+  assert.ok(value !== null && value !== undefined, "required fixture observation is missing");
+  return value;
+}
+
+/** Test-only event injection is a capability of the fake transport, admitted at this boundary.
+ * @param {unknown} client
+ */
+function diagnosticEmitter(client) {
+  const emit = fixtureRecord(client).emit;
+  assert.ok(typeof emit === "function", "fake CDP client has no emitter");
+  return {
+    /** @param {string} method @param {unknown} event */
+    emit(method, event) {
+      Reflect.apply(emit, client, [method, event]);
+    },
+  };
+}
+
+/** @param {ReturnType<typeof expectedFailureFixture>} fixture */
+function allowanceFor(fixture) {
+  return requiredFixture(
+    requiredFixture(fixture.diagnostics.requests.get(fixture.requestId)).expectedFailureAllowance,
+  );
+}
+/** @param {ReturnType<typeof expectedFailureFixture>} fixture */
+function canonicalEntryFor(fixture) {
+  return requiredFixture(requiredFixture(allowanceFor(fixture).consumedEntries)[0]);
+}

@@ -1,3 +1,5 @@
+import { jsonFixture } from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import { DefinitionsSurface } from "../../definitions";
@@ -9,7 +11,7 @@ import {
   type DefinitionsDocument,
   type DefinitionsPort,
 } from "./contracts";
-const mounted: ReturnType<typeof mount>[] = [];
+const mounted: { unmount: () => void }[] = [];
 beforeEach(() => {
   window.sessionStorage.clear();
   window.confirm = vi.fn(() => true);
@@ -24,14 +26,14 @@ function start(document = definitionsFixture(), overrides: Partial<DefinitionsPo
     save: vi.fn(async () => {
       throw Error("offline");
     }),
-    navigate: vi.fn(),
+    navigate: vi.fn<(href: string) => void>(),
     ...overrides,
   };
   const w = mount(DefinitionsSurface, { props: { document, port } });
   mounted.push(w);
   return { w, port };
 }
-async function edit(w: ReturnType<typeof mount>) {
+async function edit(w: Pick<ReturnType<typeof mount>, "get">) {
   await w.get("#edit-reviewed-limits").trigger("click");
   await w.get("#limits-yellow_high").setValue("31.5");
   await w.get("#limits-red_high").setValue("34");
@@ -51,14 +53,14 @@ function receipt(input: DefinitionInput) {
 }
 test("producer supplied document drives the public editor's reviewed save", async () => {
   const document: DefinitionsDocument = process.env.CADENCE_LIMITS_PAGE
-    ? JSON.parse(process.env.CADENCE_LIMITS_PAGE)
+    ? required(admitDocument(jsonFixture(process.env.CADENCE_LIMITS_PAGE)))
     : definitionsFixture();
   expect(admitDocument(document)).not.toBeNull();
   const { w, port } = start(document);
   await edit(w);
   await w.get("#limits-definition-form").trigger("submit");
   await flushPromises();
-  const [input, key] = vi.mocked(port.save).mock.calls[0];
+  const [input, key] = required(vi.mocked(port.save).mock.calls[0]);
   expect(input).toMatchObject({
     point_id: document.editor?.point_id,
     limit_set_name: document.editor?.limit_set_name,
@@ -76,7 +78,7 @@ test("rejects malformed counts, foreign links, and contradictory activation evid
   malformed.definitions.total_count = 1;
   expect(admitDocument(malformed)).toBeNull();
   const contradictory = definitionsFixture();
-  contradictory.editor!.review.activation_event_id = "fake-event";
+  required(contradictory.editor).review.activation_event_id = "fake-event";
   expect(admitDocument(contradictory)).toBeNull();
   const { w } = start({
     ...definitionsFixture(),
@@ -101,10 +103,12 @@ test("retains a draft across navigation and recovers exactly the pending save af
   await edit(first.w);
   await first.w.get("#limits-definition-form").trigger("submit");
   await flushPromises();
-  const original = vi.mocked(first.port.save).mock.calls[0];
+  const original = required(vi.mocked(first.port.save).mock.calls[0]);
   first.w.unmount();
   mounted.splice(mounted.indexOf(first.w), 1);
-  const next = start(definitionsFixture(), { save: vi.fn(async (input) => receipt(input)) });
+  const next = start(definitionsFixture(), {
+    save: vi.fn<DefinitionsPort["save"]>(async (input) => receipt(input)),
+  });
   expect(next.w.find("#limits-pending").exists()).toBe(true);
   expect(next.w.get("#limits-yellow_high").element).toHaveProperty("value", "31.5");
   await next.w.get("#recover-limits-save").trigger("click");
@@ -118,7 +122,7 @@ test("recovery permission failure leaves the original uncertain save pending", a
   await edit(first.w);
   await first.w.get("#limits-definition-form").trigger("submit");
   await flushPromises();
-  const intent = vi.mocked(first.port.save).mock.calls[0];
+  const intent = required(vi.mocked(first.port.save).mock.calls[0]);
   first.w.unmount();
   mounted.splice(mounted.indexOf(first.w), 1);
   const next = start(definitionsFixture(), {
@@ -151,19 +155,19 @@ test("changed activation evidence invalidates an existing draft and preserves it
   const { w, port } = start(doc);
   await edit(w);
   const fresh = structuredClone(doc);
-  fresh.editor!.current = {
+  required(fresh.editor).current = {
     id: "definition",
     point_id: "HK.voltage",
     limit_set_name: "FLIGHT",
     version: 1,
     thresholds: { yellow_high: 20 },
   };
-  fresh.editor!.review = {
+  required(fresh.editor).review = {
     definition_id: "definition",
     version: 1,
     activation_event_id: "event-1",
   };
-  fresh.editor!.active = {
+  required(fresh.editor).active = {
     definition_id: "definition",
     version: 1,
     event_id: "event-1",
@@ -180,21 +184,25 @@ test("changed activation evidence invalidates an existing draft and preserves it
 
 function reviewedFixture(): DefinitionsDocument {
   const d = definitionsFixture();
-  d.editor!.current = {
+  required(d.editor).current = {
     id: "definition",
     point_id: "HK.voltage",
     limit_set_name: "FLIGHT",
     version: 2,
     thresholds: { yellow_high: 20, red_high: 24 },
   };
-  d.editor!.active = {
+  required(d.editor).active = {
     definition_id: "definition",
     version: 2,
     event_id: "event-2",
     active_from: "2026-09-09T12:00:00Z",
     active_to: null,
   };
-  d.editor!.review = { definition_id: "definition", version: 2, activation_event_id: "event-2" };
+  required(d.editor).review = {
+    definition_id: "definition",
+    version: 2,
+    activation_event_id: "event-2",
+  };
   return d;
 }
 test("reactivating an older version invalidates review without changing the newest version", async () => {
@@ -202,9 +210,9 @@ test("reactivating an older version invalidates review without changing the newe
   const { w, port } = start(doc);
   await edit(w);
   const fresh = structuredClone(doc);
-  fresh.editor!.active!.version = 1;
-  fresh.editor!.active!.event_id = "reactivated-1";
-  fresh.editor!.review.activation_event_id = "reactivated-1";
+  required(required(fresh.editor).active).version = 1;
+  required(required(fresh.editor).active).event_id = "reactivated-1";
+  required(fresh.editor).review.activation_event_id = "reactivated-1";
   vi.mocked(port.read).mockResolvedValue(fresh);
   await w.get("#refresh-limits").trigger("click");
   await flushPromises();
@@ -220,22 +228,24 @@ test("historical thresholds produce a new version using the current review", asy
   doc.selection = {
     id: "definition",
     available: true,
-    current: doc.editor!.current!,
+    current: required(required(doc.editor).current),
     inspected: {
-      ...doc.editor!.current!,
+      ...required(required(doc.editor).current),
       version: 1,
       thresholds: { yellow_high: 10, red_high: 14 },
     },
-    active: doc.editor!.active,
+    active: required(doc.editor).active,
     history: emptyPage(),
     activations: emptyPage(),
   };
-  const { w, port } = start(doc, { save: vi.fn(async (input) => receipt(input)) });
+  const { w, port } = start(doc, {
+    save: vi.fn<DefinitionsPort["save"]>(async (input) => receipt(input)),
+  });
   await w.get("#reuse-limit-thresholds").trigger("click");
   expect(w.get("#limits-yellow_high").element).toHaveProperty("value", "10");
   await w.get("#limits-definition-form").trigger("submit");
   await flushPromises();
-  expect(vi.mocked(port.save).mock.calls[0][0]).toMatchObject({
+  expect(required(vi.mocked(port.save).mock.calls[0])[0]).toMatchObject({
     expected_version: 2,
     expected_activation_event_id: "event-2",
     yellow_high: "10",
@@ -251,10 +261,9 @@ test("point paging preserves the threshold draft and unfinished identity selecti
   await first.w.get("#limits-point").setValue("HK.temperature");
   await first.w.get("#limits-set").setValue("SURVIVAL");
   await first.w.get("#limits-point-search").setValue("temperature");
-  first.w
-    .get("#limits-point-search")
-    .element.closest("form")!
-    .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  required(first.w.get("#limits-point-search").element.closest("form")).dispatchEvent(
+    new Event("submit", { bubbles: true, cancelable: true }),
+  );
   expect(first.port.navigate).toHaveBeenCalled();
   first.w.unmount();
   mounted.splice(mounted.indexOf(first.w), 1);
@@ -266,7 +275,9 @@ test("point paging preserves the threshold draft and unfinished identity selecti
 });
 test("confirmed evidence remains distinct from a later draft and isolated by actor", async () => {
   const doc = definitionsFixture();
-  const first = start(doc, { save: vi.fn(async (input) => receipt(input)) });
+  const first = start(doc, {
+    save: vi.fn<DefinitionsPort["save"]>(async (input) => receipt(input)),
+  });
   await edit(first.w);
   await first.w.get("#limits-definition-form").trigger("submit");
   await flushPromises();

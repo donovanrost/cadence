@@ -1,3 +1,4 @@
+import type { CatalogUploadFormProps } from "./CatalogUploadForm.contracts";
 import { mount } from "@vue/test-utils";
 import { h, nextTick } from "vue";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -44,7 +45,7 @@ function setup(withEntry = false) {
   const change = vi.fn();
   form.addEventListener("submit", submit);
   form.addEventListener("change", change);
-  const data: InstanceType<typeof CatalogUploadForm>["$props"] = databaseUploadFixture();
+  const data: CatalogUploadFormProps = databaseUploadFixture();
   if (withEntry) {
     data.upload.entries.push({
       ref: "entry-one",

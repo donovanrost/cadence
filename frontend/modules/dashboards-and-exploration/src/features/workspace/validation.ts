@@ -142,6 +142,14 @@ function annotation(value: unknown): boolean {
   );
 }
 export function readWorkspaceSnapshot(value: unknown, context: OpsPageContext): WorkspaceSnapshot {
+  assertWorkspaceSnapshot(value, context);
+  return value;
+}
+
+function assertWorkspaceSnapshot(
+  value: unknown,
+  context: OpsPageContext,
+): asserts value is WorkspaceSnapshot {
   const invalid = () => {
     throw new Error("Invalid dashboard workspace snapshot.");
   };
@@ -287,5 +295,4 @@ export function readWorkspaceSnapshot(value: unknown, context: OpsPageContext): 
     placementIds.push(p.id);
   }
   if (!unique(placementIds)) return invalid();
-  return value as unknown as WorkspaceSnapshot;
 }

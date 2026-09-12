@@ -1,3 +1,9 @@
+import {
+  fixtureRows,
+  fixtureString,
+  fixtureRecord,
+} from "../../../../../test-support/json-fixture.ts";
+import { required } from "../../../../../test-support/required.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,19 +23,21 @@ const server = await createServer({
 });
 try {
   const { playlistsContribution, playlistPresentationContribution } =
-    await server.ssrLoadModule("/src/playlists.ts");
-  for (const model of JSON.parse(process.argv[2])) {
-    const present = Object.hasOwn(model, "playlist"),
+    /** @type {typeof import("../../playlists.ts")} */ (
+      await server.ssrLoadModule("/src/playlists.ts")
+    );
+  for (const raw of fixtureRows(process.argv[2])) {
+    const present = Object.hasOwn(raw, "playlist"),
       registration = present ? playlistPresentationContribution : playlistsContribution;
     const context = {
-      organizationId: model.organization_id,
-      missionId: model.mission_id,
-      ...(present ? { resourceId: model.playlist.id } : {}),
+      organizationId: fixtureString(raw.organization_id),
+      missionId: fixtureString(raw.mission_id),
+      ...(present ? { resourceId: fixtureString(fixtureRecord(raw.playlist).id) } : {}),
     };
-    const props = registration.read(
-      present ? model : { model, phase: "ready", sequence: 0 },
-      context,
-    );
+    const props = present
+      ? playlistPresentationContribution.read(raw, context)
+      : playlistsContribution.read({ model: raw, phase: "ready", sequence: 0 }, context);
+    // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks the SFC constructor at this registration or render boundary.
     const app = createSSRApp(registration.component, {
       ...props,
       refresh: async () => {},
@@ -53,21 +61,23 @@ try {
           present ? "playlist-presentation-feature" : "playlist-directory-feature",
         ),
       );
-      if (present) {
+      if ("model" in props) {
+        const model = props.model;
         assert.equal(
           !!doc.getElementById("playlist-current-unavailable"),
           model.current.snapshot === null,
         );
         assert.equal(
-          doc.getElementById("playlist-current-name").textContent.trim(),
+          required(doc.getElementById("playlist-current-name")).textContent.trim(),
           model.current.name || "Unavailable dashboard",
         );
         assert.ok(
-          doc
-            .getElementById("playlist-position")
-            .textContent.includes(`${model.index + 1} / ${model.total}`),
+          required(doc.getElementById("playlist-position")).textContent.includes(
+            `${model.index + 1} / ${model.total}`,
+          ),
         );
       } else {
+        const model = props.state.model;
         assert.equal(
           doc.querySelectorAll("#playlist-saved-list>li").length,
           model.playlists.rows.length,

@@ -10,6 +10,8 @@ export const fleetStartContribution = {
   slot: "ops.page",
   version: 1,
   title: "Plan Fleet Horizon",
+  // Oxlint cannot resolve the SFC constructor; vue-tsc checks the public component contract.
+  // oxlint-disable-next-line typescript/no-unsafe-assignment
   component: FleetStartContribution,
   query: true,
   actions: ["validate-fleet-run", "create-fleet-run"],
@@ -29,6 +31,8 @@ export const fleetRunContribution = {
   slot: "ops.page",
   version: 1,
   title: "Fleet Planning Run",
+  // Oxlint cannot resolve the SFC constructor; vue-tsc checks the public component contract.
+  // oxlint-disable-next-line typescript/no-unsafe-assignment
   component: FleetRunContribution,
   query: true,
   actions: ["refresh-fleet-run", "repair-fleet-run"],

@@ -141,11 +141,12 @@ export type GrantValues = {
   approval_reason: string;
 };
 
-export type StringPayload = Record<string, string>;
+export type PolicyFields = { [K in keyof PolicyValues]: string };
+export type GrantFields = { [K in keyof GrantValues]: string };
 
 export type OpsFleetPlanningPolicyProps = {
-  confirmedPolicyEvidence?: PolicyEvidence;
-  confirmedGrantEvidence?: PolicyEvidence;
+  confirmedPolicyEvidence?: PolicyEvidence | null;
+  confirmedGrantEvidence?: PolicyEvidence | null;
   confirmedGrantSequence?: number;
   page: {
     policy_evidence: PolicyEvidence | null;
@@ -207,10 +208,10 @@ export type OpsFleetPlanningPolicyProps = {
 };
 
 export type OpsFleetPlanningPolicyEmits = {
-  "validate-policy": [payload: { policy: StringPayload; edit_reference: PolicyEditReference }];
-  "save-policy": [payload: { policy: StringPayload; edit_reference: PolicyEditReference }];
+  "validate-policy": [payload: { policy: PolicyFields; edit_reference: PolicyEditReference }];
+  "save-policy": [payload: { policy: PolicyFields; edit_reference: PolicyEditReference }];
   "approve-policy": [payload: { decision: { reason: string; policy_evidence: PolicyEvidence } }];
-  "validate-grant": [payload: { grant: StringPayload }];
-  "issue-grant": [payload: { grant: StringPayload; policy_evidence: PolicyEvidence }];
+  "validate-grant": [payload: { grant: GrantFields }];
+  "issue-grant": [payload: { grant: GrantFields; policy_evidence: PolicyEvidence }];
   "revoke-grant": [payload: { revocation: { automation_grant_id: string; reason: string } }];
 };

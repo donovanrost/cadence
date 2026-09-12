@@ -1,11 +1,15 @@
+import type { PageSnapshotProtocol } from "../../shared/workflow-protocol";
 import { onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import {
   admitContactPage,
   admitContactOperation,
   equalContact as equal,
   contactFeedback,
-  type CapturedContact,
-  type ContactAction,
+  type ContactRequest,
+  type ContactPageRequest,
+  type ContactCompletion,
+  type ContactCommand,
+  contactPageRequest,
   type ContactContext,
   type ContactKind,
   type ContactOperation,
@@ -14,56 +18,59 @@ import {
 
 export function useContactWorkflow(
   input: () => unknown,
-  port: {
-    captured?: CapturedContact;
-    refresh(): Promise<unknown>;
+  port: PageSnapshotProtocol & {
+    refresh: () => Promise<unknown>;
   },
   kind: ContactKind,
   context: ContactContext,
   options: {
-    execute?: (action: ContactAction, input: Record<string, unknown>) => Promise<unknown>;
-    reconciled?: (op: ContactOperation, page: ContactPage) => boolean;
-    completed?: (op: ContactOperation) => void;
+    execute?: (...request: ContactPageRequest) => Promise<unknown>;
+    reconciled?: (op: ContactCompletion, page: ContactPage) => boolean;
+    completed?: (op: ContactCompletion) => void;
   },
 ) {
-  const actor = port.captured!.actorId;
+  const actor = port.actorId;
   const initial = admitContactPage(kind, input(), context, actor);
   const page = shallowRef(initial),
     pending = ref(false),
     locked = ref(!initial),
     notice = ref("");
-  const confirmed = shallowRef<ContactOperation | null>(
+  const confirmed = shallowRef<ContactCompletion | null>(
     initial?.operation?.status === "completed" ? initial.operation : null,
   );
   let sequence = initial?.sequence ?? 0,
     operation = initial?.operation ?? null;
-  let attempted: Pick<ContactOperation, "sequence" | "action" | "input"> | null = operation;
+  let attempted: ContactCommand | { sequence: number; request: ContactRequest } | null = operation;
   let active = true,
     generation = 0,
     effectPending = false;
   let pinnedQuery = initial?.model.query,
     pinnedSelection = selected(initial);
-  if (operation)
+  if (operation && initial)
     locked.value =
       operation.status !== "rejected" &&
-      !(operation.status === "completed" && options.reconciled?.(operation, initial!));
+      !(operation.status === "completed" && options.reconciled?.(operation, initial));
   function selected(p: ContactPage | null) {
     if (p?.kind !== "reservation") return null;
-    const s = (p.model as any).selected;
+    const s = p.model.selected;
     return s ? [s.id, s.proposal_hash, s.provider_revision] : null;
   }
   function matches(op: ContactOperation) {
     return (
       attempted &&
       op.sequence === attempted.sequence &&
-      op.action === attempted.action &&
-      equal(op.input, attempted.input)
+      op.action === ("request" in attempted ? attempted.request[0] : attempted.action) &&
+      equal(op.input, "request" in attempted ? attempted.request[1] : attempted.input)
     );
   }
   function settle(op: ContactOperation) {
     if (!matches(op)) throw Error("Different contact operation");
-    const priorReservation = operation?.receipt?.result.value.providerReservationId;
+    const priorReservation =
+      operation && (operation.action === "reserve" || operation.action === "cancel")
+        ? operation.receipt?.result.value.providerReservationId
+        : undefined;
     if (
+      (op.action === "reserve" || op.action === "cancel") &&
       op.receipt?.result.source === "observed" &&
       priorReservation &&
       op.receipt.result.value.providerReservationId !== priorReservation
@@ -82,16 +89,18 @@ export function useContactWorkflow(
     } else
       notice.value =
         op.status === "rejected"
-          ? (op.feedback ?? []).map((k) => contactFeedback[k]).join(" ")
+          ? op.feedback.map((k) => contactFeedback[k]).join(" ")
           : "The provider outcome remains unconfirmed. Refresh to check its recorded evidence.";
   }
   function accept(value: unknown) {
     const next = admitContactPage(kind, value, context, actor);
     if (!next || next.sequence < sequence) throw Error("Unavailable contact evidence");
-    const key = kind === "record" ? "revision" : kind === "reservation" ? "change_id" : null;
-    const q: any = { ...pinnedQuery };
-    if (key && q[key] === null) q[key] = (next.model.query as any)[key];
-    if (pinnedQuery && !equal(q, next.model.query)) throw Error("Different review query");
+    let query = pinnedQuery;
+    if (next.kind === "record" && query && "revision" in query && query.revision === null)
+      query = { ...query, revision: next.model.query.revision };
+    if (next.kind === "reservation" && query && "change_id" in query && query.change_id === null)
+      query = { ...query, change_id: next.model.query.change_id };
+    if (pinnedQuery && !equal(query, next.model.query)) throw Error("Different review query");
     if (pinnedSelection && !equal(pinnedSelection, selected(next)))
       throw Error("Different provider proposal");
     if (next.sequence === sequence && !equal(operation, next.operation)) {
@@ -139,19 +148,17 @@ export function useContactWorkflow(
       if (active && run === generation) pending.value = false;
     }
   }
-  async function execute(action: ContactAction, payload: Record<string, unknown>) {
+  async function execute(...request: ContactRequest) {
     if (!options.execute || !page.value || pending.value || locked.value) return;
     const run = ++generation;
-    attempted = { sequence: sequence + 1, action, input: JSON.parse(JSON.stringify(payload)) };
+    const attempt = { sequence: sequence + 1, request: structuredClone(request) };
+    attempted = attempt;
     pending.value = true;
     effectPending = true;
     locked.value = true;
     notice.value = "Sending the reviewed operation…";
     try {
-      const value = await options.execute(action, {
-        sequence: attempted.sequence,
-        payload: attempted.input,
-      });
+      const value = await options.execute(...contactPageRequest(attempt.request, attempt.sequence));
       if (!active || generation !== run) return;
       const op = admitContactOperation(value, page.value);
       if (!op) throw Error("Unverified operation result");
@@ -178,7 +185,7 @@ export function useContactWorkflow(
         "Updated evidence could not be admitted. Previous evidence and drafts are retained.";
     }
   });
-  const release = port.captured!.guardNavigation?.(() => !effectPending);
+  const release = port.guardNavigation?.(() => !effectPending);
   onBeforeUnmount(() => {
     active = false;
     generation++;

@@ -71,9 +71,9 @@ const presentation = computed(() => templatePresentation(model.value, draft.valu
       id="requirement-template-receipt"
       class="mx-4 min-w-0 break-all border border-success/40 p-3 text-sm"
     >
-      {{ confirmed.action }} · completed · {{ confirmed.receipt?.result.reference.template_id }} ·
-      v{{ confirmed.receipt?.result.reference.version }} ·
-      {{ confirmed.receipt?.result.reference.lifecycle_state }}
+      {{ confirmed.action }} · completed · {{ confirmed.receipt.result.reference.template_id }} ·
+      v{{ confirmed.receipt.result.reference.version }} ·
+      {{ confirmed.receipt.result.reference.lifecycle_state }}
     </p>
     <nav aria-label="Template ledger pages" class="mx-4 flex flex-wrap items-center gap-3 text-sm">
       <span>Templates · page {{ model.templates.page }}</span>

@@ -28,6 +28,7 @@ const admitted = computed(() => {
   const registration = spacecraftModulePages[props.contributionId],
     snapshot = props.snapshot;
   if (
+    !registration ||
     !record(snapshot) ||
     snapshot.id !== registration.id ||
     snapshot.slot !== registration.slot ||

@@ -1,3 +1,26 @@
+/** @typedef {import("./browser-diagnostics.ts").RequestState} RequestState */
+/** @typedef {import("./browser-diagnostics.ts").RequestObservation} RequestObservation */
+/** @typedef {import("./browser-diagnostics.ts").FailureRegistration} FailureRegistration */
+/** @typedef {import("./browser-diagnostics.ts").FailureAllowance} FailureAllowance */
+/** @typedef {import("./browser-diagnostics.ts").Generation} Generation */
+/** @typedef {import("./browser-diagnostics.ts").GenerationState} GenerationState */
+/** @typedef {import("./browser-diagnostics.ts").GenerationSelection} GenerationSelection */
+/** @typedef {import("./browser-diagnostics.ts").CanonicalEntry} CanonicalEntry */
+/** @typedef {import("./browser-diagnostics.ts").SocketObservation} SocketObservation */
+/** @typedef {import("./browser-diagnostics.ts").RequestIdentity} RequestIdentity */
+/** @typedef {import("./browser-diagnostics.ts").RequestEvidence} RequestEvidence */
+/** @typedef {ReturnType<typeof installDiagnostics>} Diagnostics */
+/** @typedef {SignalOptions & {timeout?:number,generation?:GenerationSelection}} RequestWaitOptions */
+/** @typedef {{beforeRequestIds?:Set<string>,generation?:GenerationSelection}} SocketOptions */
+import { record as isRecord } from "../../packages/plugin-sdk/src/admission.ts";
+/** @typedef {import("./cdp-contract.ts").CdpPort} CdpPort */
+/** @typedef {import("./cdp-contract.ts").ChromeChild} ChildProcess */
+/** @typedef {ReturnType<typeof setTimeout>} Timer */
+/** @typedef {{signal?:AbortSignal|undefined, milliseconds?:number|undefined, label?:string|undefined, onTimeout?:((error:Error)=>void)|undefined, onCancel?:((error:Error)=>void)|undefined}} RaceOptions */
+/** @typedef {{error:string,keys?:never,descriptors?:never}|{error?:never,keys:string[],descriptors:Map<string,{value:unknown}>}} DescriptorResult */
+/** @typedef {{error:string,entries?:never}|{error?:never,entries:unknown[]}} ArrayResult */
+/** @typedef {{signal?:AbortSignal|undefined}} SignalOptions */
+/** @typedef {{env?:NodeJS.ProcessEnv,platform?:NodeJS.Platform,candidates?:string[],fileExists?:(candidate:string)=>boolean}} ChromeOptions */
 import assert from "node:assert/strict";
 import { accessSync, constants, statSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -21,6 +44,7 @@ export const POLL_INTERVAL_MS = 100;
 let currentProgressStage = "initializing";
 let outputBroken = false;
 
+/** @param {string} stage */
 export function reportProgress(stage) {
   currentProgressStage = stage;
   if (outputBroken) return;
@@ -28,7 +52,7 @@ export function reportProgress(stage) {
   try {
     process.stderr.write(`[federation-smoke] ${stage}\n`);
   } catch (error) {
-    if (error?.code === "EPIPE") outputBroken = true;
+    if (errorCode(error) === "EPIPE") outputBroken = true;
   }
 }
 
@@ -38,24 +62,29 @@ export function activeResourceNames() {
     : [];
 }
 
+/** @param {string[]} args @param {string} name */
 export function argValue(args, name) {
   const index = args.indexOf(name);
   return index === -1 ? undefined : args[index + 1];
 }
 
+/** @param {string[]} args @param {string} name */
 export function requiredArg(args, name) {
   const value = argValue(args, name);
   if (!value) throw new Error(`missing required argument ${name}`);
   return value;
 }
 
+/** @param {number} milliseconds @param {AbortSignal} [signal] @returns {Promise<void>} */
 export function sleep(milliseconds, signal) {
   if (signal?.aborted) return Promise.reject(abortError(signal));
 
   return new Promise((resolveSleep, rejectSleep) => {
     let settled = false;
+    /** @type {Timer|undefined} */
     let timer;
     const onAbort = () => finish(rejectSleep, abortError(signal));
+    /** @template T @param {(value:T)=>void} callback @param {T} value */
     const finish = (callback, value) => {
       if (settled) return;
       settled = true;
@@ -66,16 +95,18 @@ export function sleep(milliseconds, signal) {
 
     signal?.addEventListener("abort", onAbort, { once: true });
     if (signal?.aborted) onAbort();
-    else timer = setTimeout(() => finish(resolveSleep), milliseconds);
+    else timer = setTimeout(() => finish(resolveSleep, undefined), milliseconds);
   });
 }
 
+/** @param {unknown} error @returns {Promise<never>} */
 function rejectedPromise(error) {
   const rejection = Promise.reject(error);
   rejection.catch(() => {});
   return rejection;
 }
 
+/** @param {unknown} value @returns {value is Promise<unknown>} */
 function allowedNativePromise(value) {
   if (value === null || typeof value !== "object") return false;
   if (nodeTypes.isProxy(value)) return false;
@@ -87,7 +118,7 @@ function allowedNativePromise(value) {
       () => undefined,
       () => undefined,
     );
-    Promise.prototype.then.call(brandCheck, undefined, () => {});
+    void Promise.prototype.then.call(brandCheck, undefined, () => {});
     for (const key of Reflect.ownKeys(value)) {
       if (typeof key === "string") return false;
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
@@ -105,12 +136,14 @@ function allowedNativePromise(value) {
   }
 }
 
+/** @param {unknown} value */
 function unsafeThenDescriptor(value) {
   if (value === null || (typeof value !== "object" && typeof value !== "function"))
     return undefined;
   if (nodeTypes.isProxy(value)) return "value was a proxy";
 
   const visited = new Set();
+  /** @type {unknown} */
   let prototype = value;
   try {
     while (prototype !== null) {
@@ -126,12 +159,13 @@ function unsafeThenDescriptor(value) {
       prototype = Object.getPrototypeOf(prototype);
     }
   } catch (error) {
-    return `thenability inspection failed: ${error.message}`;
+    return `thenability inspection failed: ${errorMessage(error)}`;
   }
 
   return undefined;
 }
 
+/** @param {unknown} value @param {string} label */
 function validateRaceValue(value, label) {
   if (typeof value === "function") {
     throw new TypeError(`${label} returned a callable value`);
@@ -146,13 +180,15 @@ function validateRaceValue(value, label) {
   if (unsafeThen) throw new TypeError(`${label} returned an arbitrary thenable: ${unsafeThen}`);
 }
 
+/** @param {unknown} operation @param {string} label @returns {unknown} */
 function invokeValidated(operation, label) {
   if (typeof operation !== "function" || nodeTypes.isProxy(operation)) {
     return rejectedPromise(new TypeError(`${label} was not a safe callable`));
   }
 
   try {
-    const value = operation();
+    /** @type {unknown} */
+    const value = Reflect.apply(operation, undefined, []);
     validateRaceValue(value, label);
     return value;
   } catch (error) {
@@ -160,12 +196,15 @@ function invokeValidated(operation, label) {
   }
 }
 
+/** @template T @param {unknown} value @param {(value:unknown)=>T} capture @returns {Promise<T>} */
 function acquisitionAuthority(value, capture) {
   if (allowedNativePromise(value)) {
     try {
-      return Promise.prototype.then.call(value, capture, (error) => {
-        throw error;
-      });
+      return /** @type {Promise<T>} */ (
+        Promise.prototype.then.call(value, capture, (error) => {
+          throw error;
+        })
+      );
     } catch (error) {
       return rejectedPromise(error);
     }
@@ -182,10 +221,12 @@ function acquisitionAuthority(value, capture) {
   });
 }
 
+/** @param {unknown} value @returns {DescriptorResult} */
 function safeDataDescriptors(value) {
   if (value === null || typeof value !== "object") return { error: "was not an object" };
   if (nodeTypes.isProxy(value)) return { error: "was a proxy" };
 
+  /** @type {unknown} */
   let prototype;
   try {
     prototype = Object.getPrototypeOf(value);
@@ -201,6 +242,7 @@ function safeDataDescriptors(value) {
   } catch {
     return { error: "own-key inspection failed" };
   }
+  /** @type {Map<string,{value:unknown}>} */
   const descriptors = new Map();
   for (const key of keys) {
     if (typeof key !== "string") return { error: "contained an own symbol" };
@@ -208,20 +250,22 @@ function safeDataDescriptors(value) {
     try {
       descriptor = Object.getOwnPropertyDescriptor(value, key);
     } catch {
-      return { error: `could not inspect ${key}` };
+      return { error: `could not inspect ${String(key)}` };
     }
-    if (!descriptor) return { error: `lost own descriptor for ${key}` };
+    if (!descriptor) return { error: `lost own descriptor for ${String(key)}` };
     if (!Object.hasOwn(descriptor, "value")) return { error: `${key} was an accessor` };
-    descriptors.set(key, descriptor);
+    descriptors.set(key, { value: descriptor.value });
   }
-  return { keys, descriptors };
+  return { keys: [...descriptors.keys()], descriptors };
 }
 
+/** @param {unknown} value @returns {ArrayResult} */
 function safeOrdinaryArrayEntries(value) {
   if (value === null || typeof value !== "object") return { error: "was not an array" };
   if (nodeTypes.isProxy(value) || !Array.isArray(value))
     return { error: "was not an ordinary array" };
 
+  /** @type {unknown} */
   let prototype;
   try {
     prototype = Object.getPrototypeOf(value);
@@ -236,6 +280,7 @@ function safeOrdinaryArrayEntries(value) {
   } catch {
     return { error: "own-key inspection failed" };
   }
+  /** @type {Map<PropertyKey, {value:unknown}>} */
   const descriptors = new Map();
   for (const key of keys) {
     let descriptor;
@@ -246,12 +291,13 @@ function safeOrdinaryArrayEntries(value) {
     }
     if (!descriptor || !Object.hasOwn(descriptor, "value"))
       return { error: "array contained an accessor" };
-    descriptors.set(key, descriptor);
+    descriptors.set(key, { value: descriptor.value });
   }
 
   const lengthDescriptor = descriptors.get("length");
   if (
     !lengthDescriptor ||
+    typeof lengthDescriptor.value !== "number" ||
     !Number.isSafeInteger(lengthDescriptor.value) ||
     lengthDescriptor.value < 0
   ) {
@@ -261,7 +307,7 @@ function safeOrdinaryArrayEntries(value) {
   for (const key of keys) {
     if (typeof key === "symbol") return { error: "array contained an own symbol" };
     if (key !== "length" && (!arrayIndexKey(key) || Number(key) >= length)) {
-      return { error: `array contained an extra own key ${key}` };
+      return { error: `array contained an extra own key ${String(key)}` };
     }
   }
   const entries = [];
@@ -273,6 +319,7 @@ function safeOrdinaryArrayEntries(value) {
   return { entries };
 }
 
+/** @param {unknown} value @param {{freeze?:boolean}} [options] @param {string} [path] @param {WeakMap<object,object>} [seen] @returns {unknown} */
 function copyDiagnosticValue(
   value,
   { freeze = false } = {},
@@ -286,6 +333,7 @@ function copyDiagnosticValue(
   if (nodeTypes.isProxy(value)) throw new TypeError(`${path} was a proxy`);
   if (seen.has(value)) throw new TypeError(`${path} was cyclic`);
 
+  /** @type {unknown} */
   let prototype;
   try {
     prototype = Object.getPrototypeOf(value);
@@ -306,7 +354,8 @@ function copyDiagnosticValue(
   } catch {
     throw new TypeError(`${path} own-key inspection failed`);
   }
-  const output = array ? [] : prototype === null ? Object.create(null) : {};
+  const output = array ? [] : {};
+  if (!array && prototype === null) Object.setPrototypeOf(output, null);
   seen.set(value, output);
 
   for (const key of keys) {
@@ -322,12 +371,12 @@ function copyDiagnosticValue(
     }
     if (array && key === "length") continue;
     if (array && (!arrayIndexKey(key) || Number(key) >= value.length)) {
-      throw new TypeError(`${path} contained an extra own key ${key}`);
+      throw new TypeError(`${path} contained an extra own key ${String(key)}`);
     }
     if (!array && !descriptor.enumerable) continue;
     Object.defineProperty(output, key, {
-      value: copyDiagnosticValue(descriptor.value, { freeze }, `${path}.${key}`, seen),
-      enumerable: descriptor.enumerable,
+      value: copyDiagnosticValue(descriptor.value, { freeze }, `${path}.${String(key)}`, seen),
+      enumerable: descriptor.enumerable ?? false,
       configurable: true,
       writable: true,
     });
@@ -345,6 +394,7 @@ function copyDiagnosticValue(
   return freeze ? Object.freeze(output) : output;
 }
 
+/** @param {unknown} value @param {string} [path] @param {WeakMap<object,number>} [seen] @param {{value:number}} [nextId] @returns {string|{error:string}} */
 function observationFingerprint(
   value,
   path = "observation",
@@ -367,6 +417,7 @@ function observationFingerprint(
   if (nodeTypes.isProxy(value)) return { error: `${path} was a proxy` };
   if (seen.has(value)) return `cycle:${seen.get(value)}`;
 
+  /** @type {unknown} */
   let prototype;
   try {
     prototype = Object.getPrototypeOf(value);
@@ -398,9 +449,9 @@ function observationFingerprint(
     if (!descriptor || !Object.hasOwn(descriptor, "value"))
       return { error: `${path}.${key} was an accessor` };
     if (array && key !== "length" && (!arrayIndexKey(key) || Number(key) >= value.length)) {
-      return { error: `${path} contained an extra own key ${key}` };
+      return { error: `${path} contained an extra own key ${String(key)}` };
     }
-    const nested = observationFingerprint(descriptor.value, `${path}.${key}`, seen, nextId);
+    const nested = observationFingerprint(descriptor.value, `${path}.${String(key)}`, seen, nextId);
     if (typeof nested !== "string") return nested;
     parts.push(
       `${key}[${descriptor.enumerable ? "e" : "n"}${descriptor.configurable ? "c" : "s"}${descriptor.writable ? "w" : "r"}]=${nested}`,
@@ -410,12 +461,14 @@ function observationFingerprint(
   return parts.join("|");
 }
 
+/** @param {unknown} value @param {string|undefined} expectedDigest @param {string} label */
 function checkObservationIntegrity(value, expectedDigest, label) {
   const digest = observationFingerprint(value, label);
   if (typeof digest !== "string") return digest.error;
   return digest === expectedDigest ? undefined : `${label} values changed`;
 }
 
+/** @param {unknown} value @param {string} key @param {string} label @returns {unknown} */
 function safeDataProperty(value, key, label) {
   if (value === null || (typeof value !== "object" && typeof value !== "function")) {
     throw new TypeError(`${label} was not an object`);
@@ -423,6 +476,7 @@ function safeDataProperty(value, key, label) {
   if (nodeTypes.isProxy(value)) throw new TypeError(`${label} was a proxy`);
 
   const visited = new Set();
+  /** @type {unknown} */
   let current = value;
   while (current !== null) {
     if (nodeTypes.isProxy(current)) throw new TypeError(`${label} prototype was a proxy`);
@@ -436,44 +490,50 @@ function safeDataProperty(value, key, label) {
     }
     current = Object.getPrototypeOf(current);
   }
-  throw new TypeError(`${label} did not expose ${key}`);
+  throw new TypeError(`${label} did not expose ${String(key)}`);
 }
 
+/** @param {unknown} value @param {string} key @param {string} label @returns {(...args:unknown[])=>unknown} */
 function safeCallableProperty(value, key, label) {
   const member = safeDataProperty(value, key, label);
   if (typeof member !== "function" || nodeTypes.isProxy(member)) {
     throw new TypeError(`${label} ${key} was not a safe callable`);
   }
-  return member;
+  return /** @type {(...args:unknown[])=>unknown} */ (member);
 }
 
+/** @param {unknown} value @param {string} key @param {string} label */
 function safeOptionalDataProperty(value, key, label) {
   try {
     return safeDataProperty(value, key, label);
   } catch (error) {
-    if (error instanceof TypeError && error.message === `${label} did not expose ${key}`)
+    if (error instanceof TypeError && error.message === `${label} did not expose ${String(key)}`)
       return undefined;
     throw error;
   }
 }
 
+/** @param {unknown} value @param {string} key @param {string} label */
 function safeOptionalCallableProperty(value, key, label) {
   try {
     return safeCallableProperty(value, key, label);
   } catch (error) {
-    if (error instanceof TypeError && error.message === `${label} did not expose ${key}`)
+    if (error instanceof TypeError && error.message === `${label} did not expose ${String(key)}`)
       return undefined;
     throw error;
   }
 }
 
+/** @template T @param {T|Promise<T>} promise @param {number} milliseconds @param {string} label @param {()=>void} [onTimeout] @returns {Promise<T>} */
 export function withTimeout(promise, milliseconds, label, onTimeout) {
   try {
     validateRaceValue(promise, label || "operation");
   } catch (error) {
     return rejectedPromise(error);
   }
+  /** @type {Timer|undefined} */
   let timer;
+  /** @type {Promise<never>} */
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(() => {
       onTimeout?.();
@@ -484,10 +544,12 @@ export function withTimeout(promise, milliseconds, label, onTimeout) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+/** @param {AbortSignal} [signal] @param {string} [fallback] */
 export function abortError(signal, fallback = "operation cancelled") {
   return signal?.reason instanceof Error ? signal.reason : new Error(fallback);
 }
 
+/** @template T @param {T|Promise<T>} operation @param {RaceOptions} [options] @returns {Promise<T>} */
 export function raceWithSignalAndTimeout(
   operation,
   { signal, milliseconds, label, onTimeout, onCancel } = {},
@@ -506,8 +568,10 @@ export function raceWithSignalAndTimeout(
 
   return new Promise((resolveRace, rejectRace) => {
     let settled = false;
+    /** @type {Timer|undefined} */
     let timer;
 
+    /** @template T @param {(value:T)=>void} callback @param {T} value */
     const finish = (callback, value) => {
       if (settled) return;
       settled = true;
@@ -522,6 +586,7 @@ export function raceWithSignalAndTimeout(
       finish(rejectRace, error);
     };
 
+    /** @param {T} value */
     const settleSuccess = (value) => {
       try {
         validateRaceValue(value, label || "operation");
@@ -546,18 +611,20 @@ export function raceWithSignalAndTimeout(
       const observedPromise = Promise.prototype.then.call(operation, settleSuccess, (error) =>
         finish(rejectRace, error),
       );
-      Promise.prototype.then.call(observedPromise, undefined, () => {});
+      void Promise.prototype.then.call(observedPromise, undefined, () => {});
     } else {
       queueMicrotask(() => settleSuccess(operation));
     }
   });
 }
 
+/** @param {unknown} value @param {unknown[]} [secrets] */
 export function redactText(value, secrets = []) {
   let text;
   if (value === null || value === undefined) text = "";
   else if (typeof value === "string") text = value;
-  else if (["boolean", "number", "bigint"].includes(typeof value)) text = String(value);
+  else if (typeof value === "boolean" || typeof value === "number" || typeof value === "bigint")
+    text = String(value);
   else text = "[unformattable value]";
 
   const secretEntries = Array.isArray(secrets)
@@ -571,6 +638,7 @@ export function redactText(value, secrets = []) {
   return text;
 }
 
+/** @param {unknown} error @param {unknown[]} [secrets] */
 export function redactError(error, secrets = []) {
   let candidate;
   for (const key of ["stack", "message"]) {
@@ -599,6 +667,7 @@ function defaultChromeCandidates(platform = process.platform) {
       ];
 }
 
+/** @param {ChromeOptions} [options] */
 export function resolveChromeBinary({
   env = process.env,
   platform = process.platform,
@@ -615,10 +684,15 @@ export function resolveChromeBinary({
 } = {}) {
   const explicit = env.CHROME_BIN;
   return [explicit, ...candidates]
-    .filter((candidate, index, all) => candidate && all.indexOf(candidate) === index)
+    .filter(
+      /** @returns {candidate is string} */ (candidate) =>
+        typeof candidate === "string" && candidate.length > 0,
+    )
+    .filter((candidate, index, all) => all.indexOf(candidate) === index)
     .find(fileExists);
 }
 
+/** @param {ChromeOptions} [options] */
 export function requireChromeBinary(options = {}) {
   const binary = resolveChromeBinary(options);
   if (!binary) {
@@ -629,6 +703,7 @@ export function requireChromeBinary(options = {}) {
   return binary;
 }
 
+/** @param {readonly unknown[]} args */
 export function assertNoPasswordArgument(args) {
   const forbiddenArgument = "--login-" + "password";
   assert.equal(
@@ -642,6 +717,7 @@ export function assertNoPasswordArgument(args) {
   );
 }
 
+/** @param {string} userDataDir @param {{timeout?:number}} [options] */
 export async function removeUserDataDir(
   userDataDir,
   { timeout = PROFILE_CLEANUP_TIMEOUT_MS } = {},
@@ -655,18 +731,22 @@ export async function removeUserDataDir(
       return;
     } catch (error) {
       lastError = error;
-      if (!["ENOTEMPTY", "EBUSY", "EPERM"].includes(error?.code)) throw error;
+      if (!["ENOTEMPTY", "EBUSY", "EPERM"].includes(errorCode(error) ?? "")) throw error;
       await sleep(Math.min(250, Math.max(25, deadline - Date.now())));
     }
   }
 
-  throw new Error(`Chrome profile cleanup timed out: ${lastError?.message || userDataDir}`);
+  throw new Error(
+    `Chrome profile cleanup timed out: ${lastError instanceof Error ? lastError.message : userDataDir}`,
+  );
 }
 
+/** @param {ChildProcess} child @param {unknown} spawnError */
 function childHasExited(child, spawnError) {
   return Boolean(spawnError || child.exitCode !== null || child.signalCode !== null);
 }
 
+/** @param {ChildProcess|null|undefined} child @param {NodeJS.Signals} signal */
 export function signalChild(child, signal) {
   if (!child || childHasExited(child, null)) return false;
 
@@ -675,36 +755,39 @@ export function signalChild(child, signal) {
       process.kill(-child.pid, signal);
       return true;
     } catch (error) {
-      if (error?.code !== "ESRCH") throw error;
+      if (errorCode(error) !== "ESRCH") throw error;
     }
   }
 
   try {
     return child.kill(signal);
   } catch (error) {
-    if (error?.code === "ESRCH") return false;
+    if (errorCode(error) === "ESRCH") return false;
     throw error;
   }
 }
 
+/** @param {ChildProcess} child @param {number} timeout @param {string} label @param {{value:unknown}} [spawnErrorRef] @returns {Promise<void>} */
 export function waitForChildExit(child, timeout, label, spawnErrorRef = { value: null }) {
   if (childHasExited(child, spawnErrorRef.value)) return Promise.resolve();
 
   return new Promise((resolveExit, rejectExit) => {
     let settled = false;
+    /** @type {Timer|undefined} */
     let timer;
     const cleanup = () => {
       child.removeListener("exit", done);
       child.removeListener("error", done);
       clearTimeout(timer);
     };
+    /** @template T @param {(value:T)=>void} callback @param {T} value */
     const finish = (callback, value) => {
       if (settled) return;
       settled = true;
       cleanup();
       callback(value);
     };
-    const done = () => finish(resolveExit);
+    const done = () => finish(resolveExit, undefined);
 
     child.once("exit", done);
     child.once("error", done);
@@ -716,6 +799,7 @@ export function waitForChildExit(child, timeout, label, spawnErrorRef = { value:
   });
 }
 
+/** @param {ChildProcess|null|undefined} child @param {{gracefulTimeout?:number,forceTimeout?:number,spawnErrorRef?:{value:unknown},diagnostics?:string|(()=>string)}} [options] */
 export async function terminateProcess(
   child,
   {
@@ -739,7 +823,7 @@ export async function terminateProcess(
     } catch (forceError) {
       const detail = typeof diagnostics === "function" ? diagnostics() : diagnostics;
       throw new Error(
-        `Chrome did not exit after graceful and forced shutdown: ${forceError.message}${detail ? `\n${detail}` : ""}`,
+        `Chrome did not exit after graceful and forced shutdown: ${errorMessage(forceError)}${detail ? `\n${detail}` : ""}`,
         { cause: gracefulError },
       );
     }
@@ -749,6 +833,7 @@ export async function terminateProcess(
 function boundedProcessOutput() {
   let output = "";
   return {
+    /** @param {Buffer|string} chunk */
     append(chunk) {
       if (output.length < 64 * 1024) output += chunk.toString().slice(0, 64 * 1024 - output.length);
     },
@@ -758,6 +843,7 @@ function boundedProcessOutput() {
   };
 }
 
+/** @param {import("./cdp-contract.ts").LaunchOptions} [options] */
 export async function launchChrome({
   binary,
   env = process.env,
@@ -773,16 +859,21 @@ export async function launchChrome({
   );
   const userDataDir = await mkdtemp(resolve(tmpdir(), "cadence-federation-chrome-"));
   const output = boundedProcessOutput();
+  /** @type {{value:unknown}} */
   const spawnErrorRef = { value: null };
-  let spawnReadyResolve;
-  const spawnReady = new Promise((resolveSpawn) => {
-    spawnReadyResolve = resolveSpawn;
-  });
+  const { promise: spawnReady, resolve: spawnReadyResolve } = deferredCompletion();
+  /** @type {ChildProcess|undefined} */
   let child;
+  /** @type {Promise<void>|undefined} */
   let closePromise;
-  let onSpawnError;
-  let onStdoutData;
-  let onStderrData;
+  /** @param {unknown} error */
+  const onSpawnError = (error) => {
+    spawnErrorRef.value = error;
+  };
+  /** @param {Buffer|string} chunk */
+  const onStdoutData = (chunk) => output.append(chunk);
+  /** @param {Buffer|string} chunk */
+  const onStderrData = (chunk) => output.append(chunk);
   let childListenersCleaned = false;
 
   const cleanupChildListeners = () => {
@@ -793,6 +884,7 @@ export async function launchChrome({
     child?.removeListener("error", onSpawnError);
   };
 
+  /** @type {import("./cdp-contract.ts").ChromeRuntime} */
   const runtime = {
     child: null,
     endpoint: null,
@@ -853,62 +945,60 @@ export async function launchChrome({
     } finally {
       spawnReadyResolve();
     }
-    onStdoutData = (chunk) => output.append(chunk);
-    onStderrData = (chunk) => output.append(chunk);
     child.stdout?.on("data", onStdoutData);
     child.stderr?.on("data", onStderrData);
-    onSpawnError = (error) => {
-      spawnErrorRef.value = error;
-    };
     child.once("error", onSpawnError);
 
+    /** @type {(error:unknown)=>void} */
     let cancelEndpointWait = () => {};
-    const endpoint = await raceWithSignalAndTimeout(
-      new Promise((resolveEndpoint, rejectEndpoint) => {
-        let settled = false;
-        let cleanup;
-        const finish = (callback, value) => {
-          if (settled) return;
-          settled = true;
-          cleanup();
-          callback(value);
-        };
-        const inspect = () => {
-          const match = output.value().match(/DevTools listening on (wss?:\/\/[^\s]+)/);
-          if (match) finish(resolveEndpoint, match[1]);
-        };
-        const onData = () => inspect();
-        const onError = (error) => {
-          finish(rejectEndpoint, new Error(`Chrome failed to start: ${error.message}`));
-        };
-        const onExit = (code, signalName) => {
-          finish(
-            rejectEndpoint,
-            new Error(
-              `Chrome exited before CDP startup (${code ?? signalName})\n${output.value()}`,
-            ),
-          );
-        };
-        cleanup = () => {
-          child.stdout?.removeListener("data", onData);
-          child.stderr?.removeListener("data", onData);
-          child.removeListener("error", onError);
-          child.removeListener("exit", onExit);
-        };
-        cancelEndpointWait = (error) => finish(rejectEndpoint, error);
-        child.stdout?.on("data", onData);
-        child.stderr?.on("data", onData);
-        child.once("error", onError);
-        child.once("exit", onExit);
-        inspect();
-      }),
-      {
-        signal,
-        milliseconds: CHROME_START_TIMEOUT_MS,
-        label: "Chrome CDP startup",
-        onCancel: cancelEndpointWait,
-      },
-    );
+    const spawnedChild = child;
+    /** @type {Promise<string>} */
+    const endpointPromise = new Promise((resolveEndpoint, rejectEndpoint) => {
+      let settled = false;
+      /** @type {()=>void} */
+      let cleanup;
+      /** @template T @param {(value:T)=>void} callback @param {T} value */
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        callback(value);
+      };
+      const inspect = () => {
+        const match = output.value().match(/DevTools listening on (wss?:\/\/[^\s]+)/);
+        if (match?.[1]) finish(resolveEndpoint, match[1]);
+      };
+      const onData = () => inspect();
+      /** @param {Error} error */
+      const onError = (error) => {
+        finish(rejectEndpoint, new Error(`Chrome failed to start: ${errorMessage(error)}`));
+      };
+      /** @param {number|null} code @param {NodeJS.Signals|null} signalName */
+      const onExit = (code, signalName) => {
+        finish(
+          rejectEndpoint,
+          new Error(`Chrome exited before CDP startup (${code ?? signalName})\n${output.value()}`),
+        );
+      };
+      cleanup = () => {
+        spawnedChild.stdout?.removeListener("data", onData);
+        spawnedChild.stderr?.removeListener("data", onData);
+        spawnedChild.removeListener("error", onError);
+        spawnedChild.removeListener("exit", onExit);
+      };
+      cancelEndpointWait = (error) => finish(rejectEndpoint, error);
+      spawnedChild.stdout?.on("data", onData);
+      spawnedChild.stderr?.on("data", onData);
+      spawnedChild.once("error", onError);
+      spawnedChild.once("exit", onExit);
+      inspect();
+    });
+    const endpoint = await raceWithSignalAndTimeout(endpointPromise, {
+      signal,
+      milliseconds: CHROME_START_TIMEOUT_MS,
+      label: "Chrome CDP startup",
+      onCancel: cancelEndpointWait,
+    });
 
     runtime.endpoint = endpoint;
     return runtime;
@@ -925,6 +1015,7 @@ export async function launchChrome({
   }
 }
 
+/** @param {string} endpoint */
 export function httpBaseFromWebSocket(endpoint) {
   const url = new URL(endpoint);
   assert.ok(
@@ -934,6 +1025,7 @@ export function httpBaseFromWebSocket(endpoint) {
   return `${url.protocol === "wss:" ? "https" : "http"}://${url.host}`;
 }
 
+/** @param {{port:number,missionId:string,spacecraftId:string,host?:string,scheme?:string}} options */
 export function browserUrls({
   port,
   missionId,
@@ -955,18 +1047,22 @@ export function browserUrls({
   };
 }
 
+/** @returns {Promise<{server:import("node:net").Server,port:number}>} */
 export async function reserveLoopbackPort() {
   const server = createServer();
-  await new Promise((resolveListen, rejectListen) => {
+  /** @type {Promise<void>} */
+  const listening = new Promise((resolveListen, rejectListen) => {
     server.once("error", rejectListen);
-    server.listen(0, "127.0.0.1", resolveListen);
+    server.listen(0, "127.0.0.1", () => resolveListen());
   });
+  await listening;
   const address = server.address();
-  assert.equal(typeof address, "object");
+  assert.ok(address !== null && typeof address === "object");
   assert.ok(address?.port, "loopback port reservation did not expose a port");
   return { server, port: address.port };
 }
 
+/** @param {string} endpoint @param {string} url @param {SignalOptions & {fetcher?:typeof fetch,timeout?:number}} [options] */
 export async function createPage(
   endpoint,
   url,
@@ -993,13 +1089,19 @@ export async function createPage(
     );
     assert.equal(response.status, 200, `CDP page creation failed with HTTP ${response.status}`);
     const text = await response.text();
+    /** @type {unknown} */
     let target;
     try {
       target = JSON.parse(text);
     } catch (error) {
-      throw new Error(`CDP page creation returned invalid JSON: ${error.message}`);
+      throw new Error(`CDP page creation returned invalid JSON: ${errorMessage(error)}`);
     }
-    assert.equal(typeof target.id, "string", "CDP page target did not expose an id");
+    assert.ok(isRecord(target), "CDP page target was not an object");
+    assert.ok(typeof target.id === "string", "CDP page target did not expose an id");
+    assert.ok(
+      typeof target.webSocketDebuggerUrl === "string",
+      "CDP page target URL was not a string",
+    );
     assert.match(
       target.webSocketDebuggerUrl,
       /^wss?:\/\//,
@@ -1011,6 +1113,7 @@ export async function createPage(
   }
 }
 
+/** @param {string|null|undefined} endpoint @param {string|null|undefined} targetId @param {{fetcher?:typeof fetch,timeout?:number}} [options] */
 export async function closePage(
   endpoint,
   targetId,
@@ -1041,15 +1144,20 @@ export async function closePage(
 }
 
 export class CdpClient {
+  /** @param {string} endpoint @param {{webSocketImpl?:new(endpoint:string)=>import("./cdp-contract.ts").CdpSocket}} [options] */
   constructor(endpoint, { webSocketImpl = WebSocket } = {}) {
     this.socket = new webSocketImpl(endpoint);
     this.nextCommandId = 0;
+    /** @type {Map<number, {resolve:(value:unknown)=>void,reject:(error:unknown)=>void}>} */
     this.pending = new Map();
+    /** @type {Map<string, Set<(value:unknown)=>void>>} */
     this.listeners = new Map();
+    /** @type {Set<{reject:(error:unknown)=>void}>} */
     this.eventWaiters = new Set();
     this.closed = false;
+    /** @type {Promise<void>} */
     this.ready = new Promise((resolveReady, rejectReady) => {
-      this.socket.addEventListener("open", resolveReady, { once: true });
+      this.socket.addEventListener("open", () => resolveReady(), { once: true });
       this.socket.addEventListener("error", rejectReady, { once: true });
       this.socket.addEventListener(
         "close",
@@ -1060,28 +1168,32 @@ export class CdpClient {
     this.ready.catch(() => {});
 
     this.socket.addEventListener("message", (event) => {
+      /** @type {Record<string, unknown>} */
       let message;
       try {
         const raw =
           typeof event.data === "string" ? event.data : Buffer.from(event.data).toString();
-        message = JSON.parse(raw);
+        const decoded = /** @type {unknown} */ (JSON.parse(raw));
+        if (!isRecord(decoded)) throw Error("CDP message was not an object");
+        message = decoded;
       } catch (error) {
-        this.rejectPending(new Error(`invalid CDP message: ${error.message}`));
+        this.rejectPending(new Error(`invalid CDP message: ${errorMessage(error)}`));
         return;
       }
 
-      if (message.id !== undefined) {
+      if (typeof message.id === "number") {
         const callback = this.pending.get(message.id);
         if (!callback) return;
         this.pending.delete(message.id);
-        if (message.error)
-          callback.reject(new Error(`${message.error.message} (CDP ${message.id})`));
+        if (isRecord(message.error))
+          callback.reject(new Error(`${String(message.error.message)} (CDP ${message.id})`));
         else callback.resolve(message.result);
         return;
       }
 
-      const listeners = this.listeners.get(message.method) || new Set();
-      for (const listener of listeners) listener(message.params || {});
+      const listeners =
+        typeof message.method === "string" ? this.listeners.get(message.method) : undefined;
+      for (const listener of listeners ?? []) listener(message.params || {});
     });
     this.socket.addEventListener("close", () => {
       const error = new Error("CDP WebSocket closed");
@@ -1090,16 +1202,20 @@ export class CdpClient {
     });
   }
 
+  /** @param {unknown} error */
   rejectPending(error) {
     for (const callback of this.pending.values()) callback.reject(error);
     this.pending.clear();
   }
 
+  /** @param {unknown} error */
   rejectEventWaiters(error) {
+    // oxlint-disable-next-line unicorn/no-useless-spread -- Iterate a snapshot because the loop can mutate its source.
     for (const waiter of [...this.eventWaiters]) waiter.reject(error);
   }
 
-  async send(method, params = {}, timeout = CDP_COMMAND_TIMEOUT_MS, signal) {
+  /** @template {import("./cdp-contract.ts").CommandName} K @param {K} method @param {import("./cdp-contract.ts").CommandInput<K>} [params] @param {number} [timeout] @param {AbortSignal} [signal] @returns {Promise<import("./cdp-contract.ts").CommandResult<K>>} */
+  async send(method, params, timeout = CDP_COMMAND_TIMEOUT_MS, signal) {
     assert.equal(this.closed, false, "CDP client is closed");
     await raceWithSignalAndTimeout(this.ready, {
       signal,
@@ -1107,53 +1223,68 @@ export class CdpClient {
       label: `CDP connection during ${method}`,
     });
     const id = ++this.nextCommandId;
+    /** @type {Promise<unknown>} */
     const result = new Promise((resolveResult, rejectResult) => {
       this.pending.set(id, { resolve: resolveResult, reject: rejectResult });
     });
 
     try {
-      this.socket.send(JSON.stringify({ id, method, params }));
+      this.socket.send(JSON.stringify({ id, method, params: params ?? {} }));
     } catch (error) {
       this.pending.delete(id);
       throw error;
     }
 
-    return raceWithSignalAndTimeout(result, {
-      signal,
-      milliseconds: timeout,
-      label: `CDP ${method} during ${currentProgressStage}`,
-    }).finally(() => this.pending.delete(id));
+    // CDP interop: command IDs correlate the reply to the checked protocol request.
+    return /** @type {Promise<import("./cdp-contract.ts").CommandResult<K>>} */ (
+      raceWithSignalAndTimeout(result, {
+        signal,
+        milliseconds: timeout,
+        label: `CDP ${method} during ${currentProgressStage}`,
+      }).finally(() => this.pending.delete(id))
+    );
   }
 
+  /** @template {import("./cdp-contract.ts").EventName} K @param {K} method @param {(event:import("./cdp-contract.ts").EventPayload<K>)=>void} listener */
   on(method, listener) {
     const listeners = this.listeners.get(method) || new Set();
-    listeners.add(listener);
+    // CDP interop: this subscription selects the corresponding wire event payload.
+    const consume = (/** @type {unknown} */ value) =>
+      listener(/** @type {import("./cdp-contract.ts").EventPayload<K>} */ (value));
+    listeners.add(consume);
     this.listeners.set(method, listeners);
-    return () => listeners.delete(listener);
+    return () => listeners.delete(consume);
   }
 
+  /** @template {import("./cdp-contract.ts").EventName} K @param {K} method @param {number} [timeout] @param {AbortSignal} [signal] */
   once(method, timeout = CDP_EVENT_TIMEOUT_MS, signal) {
     return this.waitForEvent(method, () => true, timeout, signal);
   }
 
+  /** @template {import("./cdp-contract.ts").EventName} K @param {K} method @param {(event:import("./cdp-contract.ts").EventPayload<K>)=>boolean} [predicate] @param {number} [timeout] @param {AbortSignal} [signal] */
   waitForEvent(method, predicate = () => true, timeout = CDP_EVENT_TIMEOUT_MS, signal) {
     if (signal?.aborted) return Promise.reject(abortError(signal));
 
+    /** @type {Promise<import("./cdp-contract.ts").EventPayload<K>>} */
     const eventPromise = new Promise((resolveEvent, rejectEvent) => {
+      /** @type {Timer|undefined} */
       let timer;
       let settled = false;
+      /** @type {(()=>unknown)|undefined} */
       let off;
+      /** @type {(()=>void)|undefined} */
       let onAbort;
       const waiter = {
-        reject: (error) => finish(rejectEvent, error),
+        reject: (/** @type {unknown} */ error) => finish(rejectEvent, error),
       };
+      /** @template T @param {(value:T)=>void} callback @param {T} value */
       const finish = (callback, value) => {
         if (settled) return;
         settled = true;
         this.eventWaiters.delete(waiter);
         off?.();
         clearTimeout(timer);
-        signal?.removeEventListener("abort", onAbort);
+        if (onAbort) signal?.removeEventListener("abort", onAbort);
         callback(value);
       };
       off = this.on(method, (params) => {
@@ -1191,7 +1322,9 @@ export class CdpClient {
   }
 }
 
+/** @param {unknown} exception */
 export function exceptionMessage(exception) {
+  /** @param {unknown} value @param {string} key */
   const read = (value, key) => {
     try {
       return safeDataProperty(value, key, "runtime exception");
@@ -1211,10 +1344,12 @@ export function exceptionMessage(exception) {
   return "runtime exception details unavailable";
 }
 
+/** @param {unknown} url */
 export function isDataUrl(url) {
   return typeof url === "string" && url.startsWith("data:");
 }
 
+/** @param {string} url @param {string} [expectedOrigin] @param {string} [label] */
 export function assertHttpUrl(url, expectedOrigin, label = "URL") {
   assert.equal(typeof url, "string", `${label} must be a string`);
   const parsed = new URL(url);
@@ -1227,6 +1362,13 @@ export function assertHttpUrl(url, expectedOrigin, label = "URL") {
   return parsed;
 }
 
+/** @param {unknown} value @param {string} key @returns {string|undefined} */
+function optionalStringProperty(value, key) {
+  const property = safeOptionalDataProperty(value, key, "optional CDP field");
+  return typeof property === "string" ? property : undefined;
+}
+
+/** @param {Partial<RequestObservation>|undefined} record @param {string|undefined} expectedOrigin */
 export function isIgnoredFavicon(record, expectedOrigin) {
   if (!record || record.method !== "GET" || typeof record.url !== "string") return false;
   if (isDataUrl(record.url)) return false;
@@ -1236,10 +1378,11 @@ export function isIgnoredFavicon(record, expectedOrigin) {
     url.pathname === "/favicon.ico" &&
     url.search === "" &&
     url.hash === "" &&
-    ["Image", "Other"].includes(record.resourceType)
+    ["Image", "Other"].includes(record.resourceType ?? "")
   );
 }
 
+/** @param {RequestIdentity|undefined} record @param {GenerationSelection} generation */
 function matchesRequestGeneration(record, generation) {
   if (generation === undefined || generation === null) return true;
   const expectedGeneration = typeof generation === "object" ? generation.id : generation;
@@ -1247,66 +1390,101 @@ function matchesRequestGeneration(record, generation) {
   if (typeof generation !== "object") return true;
   if (generation.requestIds?.has(record.requestId)) return false;
   return !(
+    typeof record.sequence === "number" &&
     Number.isFinite(record.sequence) &&
     Number.isFinite(generation.requestSequence) &&
     record.sequence <= generation.requestSequence
   );
 }
 
+/** @param {Pick<CdpPort,"on"|"waitForEvent">} client @param {{expectedOrigin?:string|undefined,secrets?:string[]}} [options] */
 export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}) {
+  /** @type {Map<string,RequestState>} */
   const records = new Map();
+  /** @type {Map<string,RequestObservation>} */
   const exposedRequests = new Map();
+  /** @type {WeakMap<object,RequestState>} */
   const requestStateBindings = new WeakMap();
+  /** @type {string[]} */
   const consoleErrors = [];
   const confirmedRemoteFailureDiagnostics = new Set();
+  /** @type {string[]} */
   const logErrors = [];
+  /** @type {string[]} */
   const runtimeExceptions = [];
+  /** @type {string[]} */
   const requestFailures = [];
+  /** @type {Map<string,SocketObservation>} */
   const webSockets = new Map();
+  /** @type {string[]} */
   const webSocketFailures = [];
+  /** @type {Set<string>} */
   const servedFromCacheRequestIds = new Set();
+  /** @type {string[]} */
   const exposedConsoleErrors = [];
+  /** @type {string[]} */
   const exposedLogErrors = [];
+  /** @type {string[]} */
   const exposedRuntimeExceptions = [];
+  /** @type {string[]} */
   const exposedRequestFailures = [];
+  /** @type {Map<string,SocketObservation>} */
   const exposedWebSockets = new Map();
+  /** @type {string[]} */
   const exposedWebSocketFailures = [];
+  /** @type {Set<string>} */
   const exposedServedFromCacheRequestIds = new Set();
+  /** @type {FailureRegistration[]} */
   const expectedFailureRegistrations = [];
+  /** @type {unknown[]} */
   const subscriptions = [];
   let sequence = 0;
   let nextGeneration = 0;
+  /** @type {number|undefined} */
   let activeGeneration;
   let disposed = false;
+  /** @type {Promise<void>|undefined} */
   let disposePromise;
+  /** @type {Map<number,GenerationState>} */
   const generations = new Map();
+  /** @type {WeakMap<object,GenerationState>} */
   const generationBindings = new WeakMap();
+  /** @type {WeakMap<object,FailureRegistration>} */
   const expectedFailureCleanups = new WeakMap();
+  /** @type {WeakMap<object,RequestState>} */
   const expectedFailureRecordBindings = new WeakMap();
+  /** @type {WeakMap<object,CanonicalEntry>} */
   const expectedFailureCanonicalBindings = new WeakMap();
+  /** @type {WeakMap<object,CanonicalEntry>} */
   const canonicalEntryBindings = new WeakMap();
+  /** @type {WeakMap<object,string>} */
   const canonicalEntryDigests = new WeakMap();
+  /** @type {WeakMap<object,string>} */
   const observationDigests = new WeakMap();
 
+  /** @param {string[]} privateValues @param {string[]} exposedValues @param {string} value */
   const appendDiagnostic = (privateValues, exposedValues, value) => {
     Array.prototype.push.call(privateValues, value);
     Array.prototype.push.call(exposedValues, value);
   };
 
+  /** @param {RequestState} record */
   const refreshObservationDigest = (record) => {
     const digest = observationFingerprint(record.view, "request observation");
     record.viewDigest = typeof digest === "string" ? digest : undefined;
-    if (record.viewDigest) observationDigests.set(record.view, record.viewDigest);
+    if (record.viewDigest && record.view) observationDigests.set(record.view, record.viewDigest);
   };
 
+  /** @template {object} T @param {T} value @param {string} label @param {Partial<T>} fallback @returns {Partial<T>} */
   const immutableCopy = (value, label, fallback) => {
     try {
-      return copyDiagnosticValue(value, { freeze: true }, label);
+      return /** @type {Partial<T>} */ (copyDiagnosticValue(value, { freeze: true }, label));
     } catch {
       return fallback;
     }
   };
 
+  /** @param {object} target @param {string} key @param {unknown} value */
   const writeObservation = (target, key, value) => {
     try {
       const descriptor = Object.getOwnPropertyDescriptor(target, key);
@@ -1321,6 +1499,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       // Exposed observations are untrusted and never affect private state.
     }
   };
+  /** @param {CanonicalEntry} entry */
   const snapshotCanonicalEntry = (entry) => {
     const snapshot = {
       source: entry.source,
@@ -1334,6 +1513,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     if (typeof digest === "string") canonicalEntryDigests.set(snapshot, digest);
     return snapshot;
   };
+  /** @param {FailureAllowance} allowance @param {object} recordView */
   const snapshotAllowanceView = (allowance, recordView) => ({
     requestId: allowance.requestId,
     url: allowance.url,
@@ -1348,6 +1528,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     replayed: allowance.replayed,
     record: recordView,
   });
+  /** @param {FailureAllowance} allowance */
   const syncAllowanceView = (allowance) => {
     if (allowance.record?.viewDigest) {
       const drift = checkObservationIntegrity(
@@ -1375,77 +1556,83 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     writeObservation(view, "record", allowance.record.view);
     if (allowance.record?.view) refreshObservationDigest(allowance.record);
   };
+  /** @param {RequestState} record @param {object} [view] @returns {RequestObservation} */
   const writeRecordView = (record, view) => {
-    writeObservation(view, "requestId", record.requestId);
-    writeObservation(view, "sequence", record.sequence);
-    writeObservation(view, "startedAtMs", record.startedAtMs);
-    writeObservation(view, "generation", record.generation);
-    writeObservation(view, "method", record.method);
-    writeObservation(view, "url", record.url);
-    writeObservation(view, "request", copyDiagnosticValue(record.request));
-    writeObservation(view, "postData", record.postData);
-    writeObservation(view, "frameId", record.frameId);
-    writeObservation(view, "loaderId", record.loaderId);
-    writeObservation(
-      view,
-      "response",
-      record.response === undefined ? undefined : copyDiagnosticValue(record.response),
+    // Private capture already admitted these values. Preserve their checked shapes through
+    // descriptor-safe cloning; exposed observations never supply the source of this copy.
+    const statusEvidenceView = /** @type {RequestObservation["statusEvidence"]} */ (
+      copyDiagnosticValue(record.statusEvidence)
     );
-    writeObservation(
-      view,
-      "responseExtra",
-      record.responseExtra === undefined ? undefined : copyDiagnosticValue(record.responseExtra),
-    );
-    writeObservation(
-      view,
-      "requestExtra",
-      record.requestExtra === undefined ? undefined : copyDiagnosticValue(record.requestExtra),
-    );
-    const statusEvidenceView = copyDiagnosticValue(record.statusEvidence);
-    if (view === record.view) record.statusEvidenceView = statusEvidenceView;
-    writeObservation(view, "statusEvidence", statusEvidenceView);
-    writeObservation(view, "statusDisagreement", record.statusDisagreement);
-    writeObservation(view, "statusDisagreementReported", record.statusDisagreementReported);
-    writeObservation(view, "servedFromCache", record.servedFromCache);
-    writeObservation(view, "resourceType", record.resourceType);
-    writeObservation(view, "redirects", copyDiagnosticValue(record.redirects));
-    writeObservation(view, "webSocket", record.webSocket);
-    writeObservation(view, "finished", record.finished);
-    writeObservation(view, "failed", record.failed);
-    writeObservation(view, "dataUrl", record.dataUrl);
+    if (view && view === record.view) record.statusEvidenceView = statusEvidenceView;
     const pendingExpectedFailureLogView = record.pendingExpectedFailureLog
       ? {
           entry: snapshotCanonicalEntry(record.pendingExpectedFailureLog.entry),
           status: record.pendingExpectedFailureLog.status,
         }
       : undefined;
-    if (view === record.view) record.pendingExpectedFailureLogView = pendingExpectedFailureLogView;
-    writeObservation(view, "pendingExpectedFailureLog", pendingExpectedFailureLogView);
+    if (view && view === record.view)
+      record.pendingExpectedFailureLogView = pendingExpectedFailureLogView;
     const allowanceView = record.expectedFailureAllowance
       ? view === record.view
         ? record.expectedFailureAllowance.view
-        : snapshotAllowanceView(record.expectedFailureAllowance, view)
+        : snapshotAllowanceView(record.expectedFailureAllowance, view ?? {})
       : undefined;
-    writeObservation(
-      view,
-      "expectedFailureRegistration",
-      record.expectedFailureRegistration
+    /** @type {RequestObservation} */
+    const snapshot = {
+      requestId: record.requestId,
+      sequence: record.sequence,
+      startedAtMs: record.startedAtMs,
+      generation: record.generation,
+      method: record.method,
+      url: record.url,
+      request: /** @type {RequestObservation["request"]} */ (copyDiagnosticValue(record.request)),
+      postData: record.postData,
+      frameId: record.frameId,
+      loaderId: record.loaderId,
+      response: /** @type {RequestObservation["response"]} */ (
+        record.response === undefined ? undefined : copyDiagnosticValue(record.response)
+      ),
+      responseExtra: /** @type {RequestObservation["responseExtra"]} */ (
+        record.responseExtra === undefined ? undefined : copyDiagnosticValue(record.responseExtra)
+      ),
+      requestExtra: /** @type {RequestObservation["requestExtra"]} */ (
+        record.requestExtra === undefined ? undefined : copyDiagnosticValue(record.requestExtra)
+      ),
+      statusEvidence: statusEvidenceView,
+      statusDisagreement: record.statusDisagreement,
+      statusDisagreementReported: record.statusDisagreementReported,
+      servedFromCache: record.servedFromCache,
+      resourceType: record.resourceType,
+      redirects: /** @type {RequestObservation["redirects"]} */ (
+        copyDiagnosticValue(record.redirects)
+      ),
+      webSocket: record.webSocket,
+      finished: record.finished,
+      failed: record.failed,
+      dataUrl: record.dataUrl,
+      pendingExpectedFailureLog: pendingExpectedFailureLogView,
+      expectedFailureRegistration: record.expectedFailureRegistration
         ? view === record.view
           ? record.expectedFailureRegistration.view
           : {}
         : undefined,
-    );
-    writeObservation(view, "expectedFailureAllowance", allowanceView);
-    writeObservation(
-      view,
-      "finalizedExpectedFailure",
-      record.finalizedExpectedFailure
+      expectedFailureAllowance: allowanceView,
+      finalizedExpectedFailure: record.finalizedExpectedFailure
         ? view === record.view
           ? record.finalizedExpectedFailure.view
-          : snapshotAllowanceView(record.finalizedExpectedFailure, view)
+          : snapshotAllowanceView(record.finalizedExpectedFailure, view ?? {})
         : undefined,
-    );
+    };
+    if (view)
+      for (const [key, value] of Object.entries(snapshot)) writeObservation(view, key, value);
+    // A detached allowance points back to this exact observation, including during replay.
+    if (!view) {
+      if (snapshot.expectedFailureAllowance) snapshot.expectedFailureAllowance.record = snapshot;
+      if (snapshot.finalizedExpectedFailure) snapshot.finalizedExpectedFailure.record = snapshot;
+    }
+    return snapshot;
   };
+  /** @param {RequestState} record */
   const syncRecordView = (record) => {
     if (record.viewDigest) {
       const drift = checkObservationIntegrity(
@@ -1458,17 +1645,18 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     writeRecordView(record, record.view);
     refreshObservationDigest(record);
   };
+  /** @param {RequestState} record */
   const snapshotRecord = (record) => {
-    const view = {};
-    writeRecordView(record, view);
+    const view = writeRecordView(record);
     requestStateBindings.set(view, record);
     const digest = observationFingerprint(view, "request observation");
     if (typeof digest === "string") observationDigests.set(view, digest);
     return view;
   };
+  /** @param {RequestState} record */
   const publishRecord = (record) => {
     if (!record.view) {
-      record.view = {};
+      record.view = writeRecordView(record);
     }
     requestStateBindings.set(record.view, record);
     syncRecordView(record);
@@ -1476,6 +1664,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       Map.prototype.set.call(exposedRequests, record.requestId, record.view);
     }
   };
+  /** @param {SocketObservation} socket */
   const socketSnapshot = (socket) => ({
     requestId: socket.requestId,
     url: socket.url,
@@ -1494,16 +1683,21 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     closed: socket.closed,
     error: socket.error,
   });
+  /** @param {SocketObservation} socket */
   const publishSocket = (socket) => {
     Map.prototype.set.call(exposedWebSockets, socket.requestId, socketSnapshot(socket));
   };
-  const stateForExposedRecord = (record) => requestStateBindings.get(record);
+  /** @param {unknown} record */
+  const stateForExposedRecord = (record) => weakValue(requestStateBindings, record);
+  /** @template {import("./cdp-contract.ts").EventName} K @param {K} method @param {(event:import("./cdp-contract.ts").EventPayload<K>)=>void} listener */
   const on = (method, listener) => subscriptions.push(client.on(method, listener));
+  /** @param {CanonicalEntry} entry */
   const logError = (entry) => {
     const text = typeof entry?.text === "string" && entry.text ? entry.text : "browser log error";
     const url = typeof entry?.url === "string" && entry.url ? entry.url : undefined;
     appendDiagnostic(logErrors, exposedLogErrors, `${text}${url ? ` (${url})` : ""}`);
   };
+  /** @param {RequestState|undefined} record */
   const observedResponseStatus = (record) => {
     const statuses = [record?.responseStatus, record?.responseExtraStatus].filter((status) =>
       Number.isInteger(status),
@@ -1511,6 +1705,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     if (!statuses.length || new Set(statuses).size !== 1) return undefined;
     return statuses[0];
   };
+  /** @param {RequestState} record */
   const reportStatusDisagreement = (record) => {
     if (!record.statusDisagreement || record.statusDisagreementReported || record.method === "?")
       return;
@@ -1521,15 +1716,17 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       `${record.method} ${record.url || record.requestId}: ${record.statusDisagreement}`,
     );
   };
+  /** @param {FailureAllowance} allowance */
   const replayInvalidatedAllowance = (allowance) => {
     if (allowance.replayed) return;
     allowance.replayed = true;
-    const canonicalEvidence = expectedFailureCanonicalBindings.get(allowance);
+    const canonicalEvidence = weakValue(expectedFailureCanonicalBindings, allowance);
     if (canonicalEvidence) logError(canonicalEvidence);
     for (const failure of allowance.suppressedFailures || []) {
       appendDiagnostic(requestFailures, exposedRequestFailures, failure);
     }
   };
+  /** @param {FailureRegistration|undefined} registration @param {string} reason @param {{finalized?:boolean}} [options] */
   const detachExpectedFailureRegistration = (registration, reason, { finalized = false } = {}) => {
     if (!registration || registration.invalidated || registration.finalized) return;
     registration.invalidated = !finalized;
@@ -1545,8 +1742,13 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     if (index >= 0) expectedFailureRegistrations.splice(index, 1);
     reconcilePendingNetworkLogs();
   };
+  /** @param {RequestState|FailureRegistration|undefined} target @param {string} reason @param {FailureAllowance} [boundAllowance] */
   const invalidateExpectedFailure = (target, reason, boundAllowance) => {
-    const allowance = boundAllowance || target?.expectedFailureAllowance;
+    const allowance =
+      boundAllowance ||
+      (target && "expectedFailureAllowance" in target
+        ? target.expectedFailureAllowance
+        : undefined);
     if (allowance) {
       if (allowance.revoked || allowance.finalized) return;
       allowance.revoked = true;
@@ -1556,17 +1758,26 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     }
 
     const registration = target;
-    if (!registration || registration.invalidated || registration.finalized) return;
+    if (
+      !registration ||
+      !("allowances" in registration) ||
+      registration.invalidated ||
+      registration.finalized
+    )
+      return;
     for (const registrationAllowance of registration.allowances || []) {
       invalidateExpectedFailure(registration, reason, registrationAllowance);
     }
     detachExpectedFailureRegistration(registration, reason);
   };
+  /** @param {string} reason */
   const revokeUnconfirmedExpectedFailures = (reason) => {
+    // oxlint-disable-next-line unicorn/no-useless-spread -- Iterate a snapshot because the loop can mutate its source.
     for (const registration of [...expectedFailureRegistrations]) {
       invalidateExpectedFailure(registration, reason);
     }
   };
+  /** @param {RequestState} record @param {string} source @param {number} status */
   const observeStatusEvidence = (record, source, status) => {
     if (!Number.isInteger(status)) return;
     record.statusEvidence = Object.freeze([
@@ -1609,6 +1820,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     }
     reportStatusDisagreement(record);
   };
+  /** @param {RequestState|undefined} record @param {FailureRegistration|undefined} registration */
   const matchesExpectedFailureRegistration = (record, registration) => {
     if (
       !record ||
@@ -1626,6 +1838,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       return false;
     }
   };
+  /** @param {RequestState} record */
   const reserveExpectedFailureRegistration = (record) => {
     const existing = record?.expectedFailureRegistration;
     if (matchesExpectedFailureRegistration(record, existing)) return existing;
@@ -1637,6 +1850,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     record.expectedFailureRegistration = registration;
     return registration;
   };
+  /** @param {RequestState} record */
   const expectedFailureRegistrationFor = (record) => {
     const status = observedResponseStatus(record);
     if (!Number.isInteger(status)) return undefined;
@@ -1655,11 +1869,12 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         !record.expectedFailureAllowance?.revoked,
     );
   };
+  /** @param {RequestState|undefined} record */
   const validExpectedFailureAllowance = (record) => {
     const allowance = record?.expectedFailureAllowance;
     if (!allowance || allowance.revoked || allowance.finalized || !allowance.registration.active)
       return undefined;
-    const boundRecord = expectedFailureRecordBindings.get(allowance);
+    const boundRecord = weakValue(expectedFailureRecordBindings, allowance);
     if (boundRecord !== record || allowance.record !== record) {
       invalidateExpectedFailure(
         boundRecord || record,
@@ -1678,6 +1893,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     }
     return allowance;
   };
+  /** @param {RequestState} record */
   const markExpectedFailure = (record) => {
     const existing = record?.expectedFailureAllowance;
     if (existing) return Boolean(validExpectedFailureAllowance(record));
@@ -1688,6 +1904,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     registration.requestId = record.requestId;
     delete registration.pendingRequestId;
     record.expectedFailureRegistration = registration;
+    /** @type {FailureAllowance} */
     const allowance = {
       registration,
       record,
@@ -1709,6 +1926,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     syncRecordView(record);
     return true;
   };
+  /** @param {CanonicalEntry|undefined} entry */
   const canonicalNetworkResourceStatus = (entry) => {
     if (
       entry?.source !== "network" ||
@@ -1723,8 +1941,10 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       );
     return match ? Number(match[1]) : undefined;
   };
+  /** @param {CanonicalEntry|undefined} entry @returns {entry is CanonicalEntry & {networkRequestId:string}} */
   const hasNonemptyNetworkRequestId = (entry) =>
     typeof entry?.networkRequestId === "string" && entry.networkRequestId.trim().length > 0;
+  /** @param {FailureRegistration|undefined} registration @param {FailureAllowance|undefined} allowance @param {string} reason @returns {never} */
   const expectedFailureConfirmationFailure = (registration, allowance, reason) => {
     if (allowance && !allowance.revoked && !allowance.finalized) {
       invalidateExpectedFailure(allowance.record, reason, allowance);
@@ -1734,6 +1954,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     }
     throw new Error(`expected failure confirmation rejected: ${reason}`);
   };
+  /** @param {CanonicalEntry|undefined} entry @param {FailureAllowance} allowance */
   const canonicalEvidenceMatches = (entry, allowance) =>
     entry?.source === "network" &&
     entry?.level === "error" &&
@@ -1741,18 +1962,22 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     entry.networkRequestId === allowance.requestId &&
     entry.url === allowance.url &&
     canonicalNetworkResourceStatus(entry) === allowance.status;
+  /** @param {unknown} left @param {CanonicalEntry|undefined} right */
   const canonicalEvidenceIsSame = (left, right) => {
     if (left === right) return true;
-    if (canonicalEntryBindings.get(left) !== right) return false;
-    const digest = canonicalEntryDigests.get(left);
+    if (weakValue(canonicalEntryBindings, left) !== right) return false;
+    const digest = weakValue(canonicalEntryDigests, left);
     return (
       typeof digest === "string" && !checkObservationIntegrity(left, digest, "canonical evidence")
     );
   };
+  /** @param {FailureAllowance} allowance */
   const finalizeExpectedFailure = (allowance) => {
     if (allowance.revoked || allowance.finalized) return false;
+    const record = weakValue(expectedFailureRecordBindings, allowance);
+    assert.ok(record, "expected failure record binding is missing");
     allowance.finalized = true;
-    expectedFailureRecordBindings.get(allowance).finalizedExpectedFailure = allowance;
+    record.finalizedExpectedFailure = allowance;
     syncAllowanceView(allowance);
     syncRecordView(allowance.record);
     detachExpectedFailureRegistration(allowance.registration, "expected failure confirmed", {
@@ -1763,11 +1988,13 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     // contradictory response and ExtraInfo status evidence.
     return true;
   };
+  /** @param {CanonicalEntry} entry @param {number} status @param {Set<FailureRegistration>} [registrations] */
   const consumeExpectedFailureLog = (entry, status, registrations) => {
     if (!hasNonemptyNetworkRequestId(entry)) return false;
     const record = records.get(entry.networkRequestId);
     const allowance = validExpectedFailureAllowance(record);
     if (
+      !record ||
       !allowance ||
       !allowance.registration.active ||
       (registrations && !registrations.has(allowance.registration)) ||
@@ -1786,6 +2013,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     syncAllowanceView(allowance);
     return true;
   };
+  /** @param {RequestState|undefined} record @param {number} status */
   const pendingExpectedFailureRegistrationFor = (record, status) => {
     if (
       !record ||
@@ -1809,6 +2037,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     if (Number.isInteger(observedStatus) && observedStatus !== status) return undefined;
     return registration;
   };
+  /** @param {CanonicalEntry} entry @param {number} status */
   const holdPendingExpectedFailureLog = (entry, status) => {
     if (!hasNonemptyNetworkRequestId(entry)) return false;
     const record = records.get(entry.networkRequestId);
@@ -1861,12 +2090,16 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       syncRecordView(record);
     }
   };
+  /** @param {unknown} generation */
   const generationStateFor = (generation) => {
     if (generation === undefined || generation === null) return undefined;
     return typeof generation === "object"
-      ? generationBindings.get(generation)
-      : generations.get(generation);
+      ? weakValue(generationBindings, generation)
+      : typeof generation === "number"
+        ? generations.get(generation)
+        : undefined;
   };
+  /** @param {RequestIdentity|undefined} record @param {GenerationSelection} generation */
   const matchesPrivateRequestGeneration = (record, generation) => {
     if (generation === undefined || generation === null) return true;
     const current = generationStateFor(generation);
@@ -1874,12 +2107,14 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     if (typeof generation !== "object") return true;
     if (current.requestIds.has(record.requestId)) return false;
     return !(
+      typeof record.sequence === "number" &&
       Number.isFinite(record.sequence) &&
       Number.isFinite(current.requestSequence) &&
       record.sequence <= current.requestSequence
     );
   };
   const beginRequestGeneration = (label = "request generation") => {
+    /** @type {Generation} */
     const generation = {
       id: ++nextGeneration,
       label,
@@ -1889,6 +2124,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       causalRequestId: undefined,
       causalRequestSequence: undefined,
     };
+    /** @type {GenerationState} */
     const generationState = {
       id: generation.id,
       label,
@@ -1905,11 +2141,12 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     return generation;
   };
 
+  /** @param {GenerationSelection} generation @param {unknown} request @param {{admitObservedSockets?:boolean}} [options] */
   const bindRequestGeneration = (generation, request, { admitObservedSockets = false } = {}) => {
     const current = generationStateFor(generation);
     assert.ok(current, "request generation is not owned by these diagnostics");
     const requestState = stateForExposedRecord(request);
-    const requestDigest = observationDigests.get(request);
+    const requestDigest = weakValue(observationDigests, request);
     assert.equal(
       requestState?.observationTampered,
       undefined,
@@ -1961,6 +2198,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
           ? [{ status: redirectResponse.status, url: redirectResponse.url }]
           : []),
       ];
+      /** @type {RequestState} */
       const record = {
         requestId,
         sequence: responseOnly ? prior.sequence : ++sequence,
@@ -2006,7 +2244,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         socket.generation = record.generation;
         socket.sequence = record.sequence;
         socket.boundToRequest = true;
-        socket.causalRequestId = generations.get(record.generation)?.causalRequestId;
+        socket.causalRequestId = generationStateFor(record.generation)?.causalRequestId;
         publishSocket(socket);
       }
     },
@@ -2014,6 +2252,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
 
   on("Network.responseReceived", ({ requestId, response, type, frameId, loaderId }) => {
     const requestRecord = records.get(requestId);
+    /** @type {RequestState} */
     const record = requestRecord || {
       requestId,
       sequence: ++sequence,
@@ -2078,7 +2317,8 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       return;
     }
 
-    records.set(requestId, {
+    /** @type {RequestState} */
+    const pendingRecord = {
       requestId,
       sequence: ++sequence,
       startedAtMs: Date.now(),
@@ -2100,8 +2340,9 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       responseStatus: undefined,
       responseExtraStatus: undefined,
       view: undefined,
-    });
-    publishRecord(records.get(requestId));
+    };
+    records.set(requestId, pendingRecord);
+    publishRecord(pendingRecord);
   });
 
   on("Network.responseReceivedExtraInfo", ({ requestId, statusCode, headers, blockedCookies }) => {
@@ -2120,7 +2361,8 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       return;
     }
 
-    records.set(requestId, {
+    /** @type {RequestState} */
+    const pendingRecord = {
       requestId,
       sequence: ++sequence,
       startedAtMs: Date.now(),
@@ -2142,10 +2384,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       responseStatus: undefined,
       responseExtraStatus: statusCode,
       view: undefined,
-    });
-    publishRecord(records.get(requestId));
-    observeStatusEvidence(records.get(requestId), "ExtraInfo", statusCode);
-    markExpectedFailure(records.get(requestId));
+    };
+    records.set(requestId, pendingRecord);
+    publishRecord(pendingRecord);
+    observeStatusEvidence(pendingRecord, "ExtraInfo", statusCode);
+    markExpectedFailure(pendingRecord);
     reconcilePendingNetworkLogs();
   });
 
@@ -2186,7 +2429,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       !expected
     ) {
       appendDiagnostic(requestFailures, exposedRequestFailures, failure);
-    } else if (expected) {
+    } else if (expected && allowance) {
       allowance.suppressedFailures = Object.freeze([
         ...(allowance.suppressedFailures || []),
         failure,
@@ -2205,8 +2448,9 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     const boundRequest =
       requestRecord?.method && requestRecord.method !== "?" ? requestRecord : undefined;
     const observedGeneration = boundRequest?.generation ?? activeGeneration;
-    const generation = generations.get(observedGeneration);
-    webSockets.set(requestId, {
+    const generation = generationStateFor(observedGeneration);
+    /** @type {SocketObservation} */
+    const socket = {
       requestId,
       url,
       generation: boundRequest?.generation,
@@ -2217,8 +2461,9 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       causalRequestId: generation?.causalRequestId,
       handshake: undefined,
       error: undefined,
-    });
-    publishSocket(webSockets.get(requestId));
+    };
+    webSockets.set(requestId, socket);
+    publishSocket(socket);
   });
 
   on("Network.webSocketWillSendHandshakeRequest", ({ requestId, request }) => {
@@ -2226,10 +2471,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     const boundRequest =
       requestRecord?.method && requestRecord.method !== "?" ? requestRecord : undefined;
     const observedGeneration = boundRequest?.generation ?? activeGeneration;
-    const generation = generations.get(observedGeneration);
+    const generation = generationStateFor(observedGeneration);
+    /** @type {SocketObservation} */
     const socket = webSockets.get(requestId) || {
       requestId,
-      url: request.url,
+      url: optionalStringProperty(request, "url"),
       generation: boundRequest?.generation,
       sequence: boundRequest?.sequence,
       boundToRequest: Boolean(boundRequest),
@@ -2247,6 +2493,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       socket.observedGeneration !== undefined &&
       socket.observedGeneration === activeGeneration &&
       generation?.causalRequestId !== undefined &&
+      typeof generation.causalRequestSequence === "number" &&
       socket.observedSequence >= generation.causalRequestSequence
     ) {
       // Chrome may omit Network.requestWillBeSent for a websocket. The
@@ -2267,10 +2514,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     const boundRequest =
       requestRecord?.method && requestRecord.method !== "?" ? requestRecord : undefined;
     const observedGeneration = boundRequest?.generation ?? activeGeneration;
-    const generation = generations.get(observedGeneration);
+    const generation = generationStateFor(observedGeneration);
+    /** @type {SocketObservation} */
     const socket = webSockets.get(requestId) || {
       requestId,
-      url: response.url,
+      url: optionalStringProperty(response, "url"),
       generation: boundRequest?.generation,
       sequence: boundRequest?.sequence,
       boundToRequest: Boolean(boundRequest),
@@ -2307,7 +2555,9 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
 
   on("Runtime.consoleAPICalled", ({ type, args, stackTrace }) => {
     if (!["error", "assert"].includes(type)) return;
-    const values = (args || []).map((arg) => arg.value ?? arg.description ?? arg.type).join(" ");
+    const values = (args || [])
+      .map(/** @returns {unknown} */ (arg) => arg.value ?? arg.description ?? arg.type)
+      .join(" ");
     appendDiagnostic(
       consoleErrors,
       exposedConsoleErrors,
@@ -2317,7 +2567,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
 
   on("Log.entryAdded", ({ entry }) => {
     const diagnosticEntry = immutableCopy(entry, "Log.entryAdded entry", Object.freeze({}));
-    if (["error", "assert"].includes(diagnosticEntry?.level)) {
+    if (["error", "assert"].includes(diagnosticEntry?.level ?? "")) {
       const matchingFavicon =
         diagnosticEntry.url &&
         [...records.values()].some(
@@ -2347,6 +2597,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     appendDiagnostic(runtimeExceptions, exposedRuntimeExceptions, exceptionMessage(exception));
   });
 
+  /** @param {string} stage */
   const describeFailures = (stage) => {
     const failures = [
       ...requestFailures.map((value) => `request failure: ${value}`),
@@ -2373,6 +2624,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     return failures.length ? `${stage} browser diagnostics failed:\n${failures.join("\n")}` : null;
   };
 
+  /** @param {GenerationSelection} generation @param {(record:RequestObservation)=>boolean} [predicate] */
   const requestForGeneration = (generation, predicate = () => true) => {
     const candidates = [...records.values()]
       .filter(
@@ -2384,6 +2636,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     return match ? snapshotRecord(match) : undefined;
   };
 
+  /** @param {string} expectedOriginValue @param {{beforeRequestIds?:Set<string>,generation?:GenerationSelection}} [options] */
   const assertPrivateLiveViewWebSocket = (
     expectedOriginValue,
     { beforeRequestIds = new Set(), generation } = {},
@@ -2422,6 +2675,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
             (currentGeneration &&
               causalRequestId !== undefined &&
               socket.causalRequestId === causalRequestId &&
+              typeof causalRequestSequence === "number" &&
               socket.observedSequence >= causalRequestSequence))
         );
       } catch {
@@ -2446,7 +2700,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     );
 
     const connected = liveViewSockets.find((socket) => {
-      const url = new URL(socket.url);
+      const url = new URL(socket.url ?? "");
       const originHeader = requestHeader({ request: socket.handshakeRequest }, "origin");
       const socketOrigin = `${url.protocol === "wss:" ? "https" : "http"}://${url.host}`;
       return (
@@ -2503,6 +2757,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   };
 
   const diagnostics = {
+    assertLiveViewWebSocket: assertPrivateLiveViewWebSocket,
     requests: exposedRequests,
     consoleErrors: exposedConsoleErrors,
     logErrors: exposedLogErrors,
@@ -2515,6 +2770,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     bindRequestGeneration,
     requestForGeneration,
     revokeUnconfirmedExpectedFailures,
+    /** @param {string} referenceId */
     confirmRemoteFailureDiagnostic(referenceId) {
       assert.match(referenceId, /^[0-9a-f-]{36}$/);
       const expected = `Cadence federation failure ${referenceId} Object`;
@@ -2524,9 +2780,11 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       assert.equal(matches.length, 1, "expected exactly one private remote failure diagnostic");
       confirmedRemoteFailureDiagnostics.add(matches[0]);
     },
+    /** @param {(record:RequestObservation)=>boolean} predicate @param {{status?:number}} [options] */
     allowExpectedFailure(predicate, { status = 403 } = {}) {
       assert.equal(typeof predicate, "function", "expected failure predicate must be a function");
       assert.equal(Number.isInteger(status), true, "expected failure status must be an integer");
+      /** @type {FailureRegistration} */
       const registration = {
         predicate,
         expectedStatus: status,
@@ -2543,8 +2801,9 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       expectedFailureCleanups.set(cleanup, registration);
       return cleanup;
     },
+    /** @param {unknown} cleanup @param {unknown} [evidence] */
     confirmExpectedFailure(cleanup, evidence = {}) {
-      const registration = expectedFailureCleanups.get(cleanup);
+      const registration = weakValue(expectedFailureCleanups, cleanup);
       if (!registration) {
         return expectedFailureConfirmationFailure(
           undefined,
@@ -2564,9 +2823,9 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         );
       }
 
-      const canonicalEntry = expectedFailureCanonicalBindings.get(allowance);
+      const canonicalEntry = weakValue(expectedFailureCanonicalBindings, allowance);
       const evidenceShape = safeDataDescriptors(evidence);
-      if (evidenceShape.error) {
+      if (evidenceShape.error !== undefined) {
         return expectedFailureConfirmationFailure(
           registration,
           allowance,
@@ -2591,19 +2850,24 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
           return expectedFailureConfirmationFailure(
             registration,
             allowance,
-            `confirmation evidence contained an unexpected field ${key}`,
+            `confirmation evidence contained an unexpected field ${String(key)}`,
           );
         }
       }
-      const evidenceValue = (key) => evidenceShape.descriptors.get(key)?.value;
+      /** @param {string|undefined} key */
+      const evidenceValue = (key) =>
+        key === undefined ? undefined : evidenceShape.descriptors.get(key)?.value;
+      /** @param {string} key */
       const hasEvidenceValue = (key) => evidenceShape.descriptors.has(key);
       const requestId = evidenceValue("requestId");
       const expectedGeneration = evidenceValue("generation");
       const record = typeof requestId === "string" ? records.get(requestId) : undefined;
+      /** @type {unknown} */
       const exposedRecord =
         typeof requestId === "string"
           ? Map.prototype.get.call(exposedRequests, requestId)
           : undefined;
+      /** @type {DescriptorResult} */
       const exposedRecordShape =
         record && exposedRecord === record.view
           ? safeDataDescriptors(exposedRecord)
@@ -2618,7 +2882,9 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       );
       const suppliedFailures = failureKeys.length === 1 ? evidenceValue(failureKeys[0]) : undefined;
 
+      /** @type {string[]} */
       const mismatches = [];
+      /** @param {unknown} condition @param {string} reason */
       const requireEvidence = (condition, reason) => {
         if (!condition) mismatches.push(reason);
       };
@@ -2631,26 +2897,29 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       requireEvidence(Boolean(record), "request record missing");
       if (record) {
         const exactRecord =
-          expectedFailureRecordBindings.get(allowance) === record &&
+          weakValue(expectedFailureRecordBindings, allowance) === record &&
           allowance.record === record &&
           exposedRecord === record.view &&
           !exposedRecordShape.error;
         requireEvidence(exactRecord, "request record identity changed");
-        if (exactRecord) {
+        if (exactRecord && exposedRecordShape.error === undefined) {
           const observationDrift =
             record.observationTampered ||
             checkObservationIntegrity(
               exposedRecord,
-              observationDigests.get(exposedRecord),
+              weakValue(observationDigests, exposedRecord),
               "request observation",
             );
           requireEvidence(!observationDrift, observationDrift || "request observation changed");
+          /** @param {string} key */
           const exposedRecordValue = (key) => exposedRecordShape.descriptors.get(key)?.value;
           const exposedAllowance = exposedRecordValue("expectedFailureAllowance");
+          /** @type {DescriptorResult} */
           const exposedAllowanceShape =
             exposedAllowance === allowance.view
               ? safeDataDescriptors(exposedAllowance)
               : { error: "was not the current allowance snapshot" };
+          /** @param {string} key */
           const exposedAllowanceValue = (key) => exposedAllowanceShape.descriptors?.get(key)?.value;
           requireEvidence(
             exposedRecordValue("requestId") === record.requestId &&
@@ -2728,7 +2997,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         "canonical evidence changed",
       );
       if (canonicalKeys.length === 1) {
-        const boundCanonicalEvidence = canonicalEntryBindings.get(canonicalEvidence);
+        const boundCanonicalEvidence = weakValue(canonicalEntryBindings, canonicalEvidence);
         requireEvidence(
           boundCanonicalEvidence === canonicalEntry || canonicalEvidence === canonicalEntry,
           "provided canonical evidence identity changed",
@@ -2739,6 +3008,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         );
       }
       if (failureKeys.length === 1 && suppliedFailures !== undefined) {
+        /** @type {ArrayResult} */
         const failureValues = Array.isArray(suppliedFailures)
           ? safeOrdinaryArrayEntries(suppliedFailures)
           : { entries: [suppliedFailures] };
@@ -2766,6 +3036,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       finalizeExpectedFailure(allowance);
       return true;
     },
+    /** @param {GenerationSelection} generation @param {(record:RequestObservation)=>boolean} predicate @param {string} label @param {SignalOptions & {timeout?:number}} [options] */
     async waitForRequest(
       generation,
       predicate,
@@ -2775,6 +3046,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       const existing = requestForGeneration(generation, predicate);
       if (existing) return existing;
 
+      if (!client.waitForEvent) throw new Error(`${label} requires a CDP event waiter`);
       const event = await client.waitForEvent(
         "Network.requestWillBeSent",
         ({ requestId }) => {
@@ -2792,6 +3064,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       if (!record) throw new Error(`${label} request was not recorded`);
       return snapshotRecord(record);
     },
+    /** @param {(record:RequestObservation)=>boolean} predicate @param {{generation?:GenerationSelection}} [options] */
     completed(predicate, { generation } = {}) {
       return [...records.values()]
         .filter(
@@ -2805,6 +3078,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         .sort((left, right) => left.sequence - right.sequence)
         .map((record) => snapshotRecord(record));
     },
+    /** @param {(record:RequestObservation)=>boolean} [predicate] @param {{generation?:GenerationSelection}} [options] */
     observed(predicate = () => true, { generation } = {}) {
       return [...records.values()]
         .filter(
@@ -2815,6 +3089,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
         .sort((left, right) => left.sequence - right.sequence)
         .map((record) => snapshotRecord(record));
     },
+    /** @param {number} [milliseconds] @param {AbortSignal} [signal] */
     async drainLateEvents(milliseconds = 250, signal) {
       await sleep(milliseconds, signal);
       reconcilePendingNetworkLogs();
@@ -2825,7 +3100,9 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       revokeUnconfirmedExpectedFailures("diagnostics disposed");
       reconcilePendingNetworkLogs();
       flushPendingNetworkLogs();
+      /** @type {unknown[]} */
       const cleanupErrors = [];
+      /** @type {Promise<unknown>[]} */
       const pending = [];
       while (subscriptions.length) {
         const unsubscribe = subscriptions.pop();
@@ -2833,6 +3110,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
           if (typeof unsubscribe !== "function" || nodeTypes.isProxy(unsubscribe)) {
             throw new TypeError("diagnostic unsubscribe was not a safe callable");
           }
+          /** @type {unknown} */
           const result = Reflect.apply(unsubscribe, undefined, []);
           validateRaceValue(result, "diagnostic unsubscribe");
           if (allowedNativePromise(result)) pending.push(result);
@@ -2862,6 +3140,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       disposePromise.catch(() => {});
       return disposePromise;
     },
+    /** @param {string} stage */
     assertClean(stage) {
       reconcilePendingNetworkLogs();
       flushPendingNetworkLogs();
@@ -2926,6 +3205,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
   return diagnostics;
 }
 
+/** @param {import("./browser-diagnostics.ts").DetachedDiagnostics} diagnostics @param {string} expectedOrigin @param {SocketOptions} [options] */
 function assertDetachedLiveViewWebSocket(
   { webSockets, webSocketFailures, requests, consoleErrors = [], logErrors = [] },
   expectedOrigin,
@@ -2954,6 +3234,7 @@ function assertDetachedLiveViewWebSocket(
         (!requiresCausalGeneration ||
           (causalRequestId !== undefined &&
             socket.causalRequestId === causalRequestId &&
+            typeof causalRequestSequence === "number" &&
             socket.observedSequence >= causalRequestSequence))
       );
     } catch {
@@ -2978,7 +3259,7 @@ function assertDetachedLiveViewWebSocket(
   );
 
   const connected = liveViewSockets.find((socket) => {
-    const url = new URL(socket.url);
+    const url = new URL(socket.url ?? "");
     const originHeader = requestHeader({ request: socket.handshakeRequest }, "origin");
     const socketOrigin = `${url.protocol === "wss:" ? "https" : "http"}://${url.host}`;
     return (
@@ -3035,17 +3316,22 @@ function assertDetachedLiveViewWebSocket(
   return connected;
 }
 
+/** @param {import("./browser-diagnostics.ts").DetachedDiagnostics} diagnostics @param {string} expectedOrigin @param {SocketOptions} [options] */
 export function assertLiveViewWebSocket(diagnostics, expectedOrigin, options = {}) {
+  /** @type {unknown} */
   const privateAssertion = Object.getOwnPropertyDescriptor(
     diagnostics,
     "assertLiveViewWebSocket",
   )?.value;
   if (typeof privateAssertion === "function" && !nodeTypes.isProxy(privateAssertion)) {
-    return Reflect.apply(privateAssertion, diagnostics, [expectedOrigin, options]);
+    /** @type {unknown} */
+    const result = Reflect.apply(privateAssertion, diagnostics, [expectedOrigin, options]);
+    return result;
   }
   return assertDetachedLiveViewWebSocket(diagnostics, expectedOrigin, options);
 }
 
+/** @param {CdpPort} client @param {string} expression @param {string} label @param {SignalOptions} [options] @returns {Promise<unknown>} */
 export async function evaluate(client, expression, label, { signal } = {}) {
   const result = await client.send(
     "Runtime.evaluate",
@@ -3061,6 +3347,7 @@ export async function evaluate(client, expression, label, { signal } = {}) {
   return result.result?.value;
 }
 
+/** @param {CdpPort} client @param {string} expression @param {string} label @param {SignalOptions & {timeout?:number,sleepFn?:typeof sleep}} [options] */
 export async function waitForExpression(
   client,
   expression,
@@ -3085,6 +3372,7 @@ export async function waitForExpression(
   throw new Error(`${label} timed out: ${JSON.stringify(state)}`);
 }
 
+/** @param {Pick<Diagnostics,"completed">} diagnostics @param {(record:RequestObservation)=>boolean} predicate @param {string} label @param {RequestWaitOptions} [options] */
 export async function waitForResponse(
   diagnostics,
   predicate,
@@ -3101,6 +3389,7 @@ export async function waitForResponse(
   throw new Error(`${label} response was not observed`);
 }
 
+/** @param {Pick<Diagnostics,"observed">} diagnostics @param {(record:RequestObservation)=>boolean} predicate @param {string} label @param {RequestWaitOptions} [options] */
 export async function waitForLatestRequestTerminal(
   diagnostics,
   predicate,
@@ -3145,9 +3434,10 @@ export async function waitForLatestRequestTerminal(
   throw new Error(`${label} request ${latest.requestId} did not become terminal`);
 }
 
+/** @param {unknown} result @param {string} label */
 export function parseResponseBody(result, label) {
-  assert.equal(typeof result, "object", `${label} response body was unavailable`);
-  assert.equal(typeof result.body, "string", `${label} response body was unavailable`);
+  assert.ok(isRecord(result), `${label} response body was unavailable`);
+  assert.ok(typeof result.body === "string", `${label} response body was unavailable`);
   const body = result.base64Encoded
     ? Buffer.from(result.body, "base64").toString("utf8")
     : result.body;
@@ -3155,6 +3445,7 @@ export function parseResponseBody(result, label) {
   return body;
 }
 
+/** @param {CdpPort} client @param {Pick<RequestObservation,"requestId">} record @param {string} label @param {SignalOptions} [options] @returns {Promise<unknown>} */
 export async function responseJson(client, record, label, { signal } = {}) {
   const result = await client.send(
     "Network.getResponseBody",
@@ -3166,10 +3457,11 @@ export async function responseJson(client, record, label, { signal } = {}) {
   try {
     return JSON.parse(body);
   } catch (error) {
-    throw new Error(`${label} returned invalid JSON: ${error.message}`);
+    throw new Error(`${label} returned invalid JSON: ${errorMessage(error)}`);
   }
 }
 
+/** @param {CdpPort} client @param {Diagnostics} diagnostics @param {GenerationSelection} generation @param {AbortSignal|undefined} signal */
 async function captureForbiddenQueryEvidence(client, diagnostics, generation, signal) {
   const records = diagnostics.completed(
     (record) => {
@@ -3195,18 +3487,14 @@ async function captureForbiddenQueryEvidence(client, diagnostics, generation, si
         body = { unavailable: true };
       }
 
-      const problem =
-        body && typeof body === "object" && body.error && typeof body.error === "object"
-          ? body.error
-          : body;
-      const code = problem && typeof problem.code === "string" ? problem.code : "unknown";
-      const sanitizedBody =
-        problem && typeof problem === "object"
-          ? JSON.stringify({
-              code,
-              message: typeof problem.message === "string" ? problem.message : undefined,
-            })
-          : JSON.stringify({ body: typeof problem === "string" ? problem : "unavailable" });
+      const problem = isRecord(body) && isRecord(body.error) ? body.error : body;
+      const code = isRecord(problem) && typeof problem.code === "string" ? problem.code : "unknown";
+      const sanitizedBody = isRecord(problem)
+        ? JSON.stringify({
+            code,
+            message: typeof problem.message === "string" ? problem.message : undefined,
+          })
+        : JSON.stringify({ body: typeof problem === "string" ? problem : "unavailable" });
 
       return {
         requestId: record.requestId,
@@ -3218,6 +3506,7 @@ async function captureForbiddenQueryEvidence(client, diagnostics, generation, si
   );
 }
 
+/** @param {CdpPort} client @param {Diagnostics} diagnostics @param {RequestEvidence} manifestRecord @param {string} manifestUrl @param {string} expectedOrigin @param {SignalOptions & {label?:string,generation?:GenerationSelection}} [options] */
 export async function assertConditionalEtagRevalidation(
   client,
   diagnostics,
@@ -3232,14 +3521,14 @@ export async function assertConditionalEtagRevalidation(
   const generation =
     requestGeneration || diagnostics.beginRequestGeneration(`${label} conditional revalidation`);
 
-  const browserResult = await evaluate(
+  const browserResult = await evaluateRecord(
     client,
     `fetch(${JSON.stringify(parsed.href)}, {cache: "no-cache", headers: {"Cache-Control": "no-cache", "If-None-Match": ${JSON.stringify(expectedEtag)}}}).then((response) => ({status: response.status, ok: response.ok}))`,
     `${label} conditional fetch`,
     { signal },
   );
   assert.ok(
-    [200, 304].includes(browserResult.status),
+    typeof browserResult.status === "number" && [200, 304].includes(browserResult.status),
     `${label} conditional fetch was not successful`,
   );
 
@@ -3270,7 +3559,7 @@ export async function assertConditionalEtagRevalidation(
     `${label} did not prove an HTTP 304 revalidation`,
   );
   assert.ok(
-    [200, 304].includes(record.response.status),
+    typeof record.response?.status === "number" && [200, 304].includes(record.response.status),
     `${label} returned an unexpected browser status`,
   );
   assert.ok(
@@ -3284,18 +3573,19 @@ export async function assertConditionalEtagRevalidation(
     `${label} changed its ETag during revalidation`,
   );
   assert.notEqual(
-    record.response.fromServiceWorker,
+    record.response?.fromServiceWorker,
     true,
     `${label} revalidation used a service worker`,
   );
   assert.notEqual(
-    record.response.fromPrefetchCache,
+    record.response?.fromPrefetchCache,
     true,
     `${label} revalidation used a prefetch cache`,
   );
   return { browserResult, record, generation };
 }
 
+/** @param {CdpPort} client @param {string} releaseId @param {string} label @param {SignalOptions} [options] */
 export async function assertMountedRelease(client, releaseId, label, { signal } = {}) {
   await waitForExpression(
     client,
@@ -3305,37 +3595,47 @@ export async function assertMountedRelease(client, releaseId, label, { signal } 
   );
 }
 
+/** @param {Partial<RequestObservation>} record @param {string} label @returns {unknown} */
 export function parseRequestBody(record, label) {
-  assert.equal(typeof record?.postData, "string", `${label} request body was unavailable`);
+  assert.ok(typeof record?.postData === "string", `${label} request body was unavailable`);
   try {
     return JSON.parse(record.postData);
   } catch (error) {
-    throw new Error(`${label} request body was not JSON: ${error.message}`);
+    throw new Error(`${label} request body was not JSON: ${errorMessage(error)}`);
   }
 }
 
+/** @param {import("./browser-diagnostics.ts").HeaderEvidence|undefined} record @param {string} name @returns {string|undefined} */
 function requestHeader(record, name) {
   const expected = name.toLowerCase();
   for (const headers of [record?.requestExtra?.headers, record?.request?.headers]) {
     const shape = safeDataDescriptors(headers);
-    if (shape.error) continue;
+    if (shape.error !== undefined) continue;
     const key = shape.keys.find((candidate) => candidate.toLowerCase() === expected);
-    if (key) return shape.descriptors.get(key)?.value;
+    if (key) {
+      const value = shape.descriptors.get(key)?.value;
+      return typeof value === "string" ? value : undefined;
+    }
   }
   return undefined;
 }
 
+/** @param {import("./browser-diagnostics.ts").HeaderEvidence|undefined} record @param {string} name @returns {string|undefined} */
 function responseHeader(record, name) {
   const expected = name.toLowerCase();
   for (const headers of [record?.responseExtra?.headers, record?.response?.headers]) {
     const shape = safeDataDescriptors(headers);
-    if (shape.error) continue;
+    if (shape.error !== undefined) continue;
     const key = shape.keys.find((candidate) => candidate.toLowerCase() === expected);
-    if (key) return shape.descriptors.get(key)?.value;
+    if (key) {
+      const value = shape.descriptors.get(key)?.value;
+      return typeof value === "string" ? value : undefined;
+    }
   }
   return undefined;
 }
 
+/** @param {RequestEvidence|undefined} record @param {string} [label] */
 export function assertImmutableArtifactResponse(record, label = "release artifact") {
   assert.ok(record, `${label} response was not observed`);
   assert.ok(record.response, `${label} response was not observed`);
@@ -3344,12 +3644,12 @@ export function assertImmutableArtifactResponse(record, label = "release artifac
   assert.equal(record.failed, undefined, `${label} request failed`);
   assert.deepEqual(record.redirects, [], `${label} redirected`);
   assert.notEqual(
-    record.response.fromServiceWorker,
+    record.response?.fromServiceWorker,
     true,
     `${label} used a service worker response`,
   );
   assert.notEqual(
-    record.response.fromPrefetchCache,
+    record.response?.fromPrefetchCache,
     true,
     `${label} used a prefetch cache response`,
   );
@@ -3366,6 +3666,7 @@ export function assertImmutableArtifactResponse(record, label = "release artifac
   return record;
 }
 
+/** @param {readonly RequestEvidence[]} records @param {readonly import("./browser-diagnostics.ts").ReleaseIdentity[]} releases @param {string} [label] */
 export function assertImmutableReleaseCacheReuse(records, releases, label = "release cache reuse") {
   const prefixes = releases.map(({ applicationKey, releaseId }) =>
     releaseArtifactPrefix(applicationKey, releaseId),
@@ -3388,14 +3689,15 @@ export function assertImmutableReleaseCacheReuse(records, releases, label = "rel
     candidates.some(
       (record) =>
         record.servedFromCache === true ||
-        record.response.fromDiskCache === true ||
-        record.response.fromMemoryCache === true,
+        record.response?.fromDiskCache === true ||
+        record.response?.fromMemoryCache === true,
     ),
-    `${label} did not observe Chrome cache reuse: ${JSON.stringify(candidates.map((record) => ({ url: record.url, servedFromCache: record.servedFromCache, fromDiskCache: record.response.fromDiskCache })))}`,
+    `${label} did not observe Chrome cache reuse: ${JSON.stringify(candidates.map((record) => ({ url: record.url, servedFromCache: record.servedFromCache, fromDiskCache: record.response?.fromDiskCache })))}`,
   );
   return candidates;
 }
 
+/** @param {readonly RequestEvidence[]} records @param {readonly import("./browser-diagnostics.ts").ReleaseIdentity[]} releases @param {string} [label] */
 export function assertNoReleaseArtifactRequests(records, releases, label = "release isolation") {
   const prefixes = releases.map(({ applicationKey, releaseId }) =>
     releaseArtifactPrefix(applicationKey, releaseId),
@@ -3414,6 +3716,7 @@ export function assertNoReleaseArtifactRequests(records, releases, label = "rele
   );
 }
 
+/** @param {RequestEvidence|undefined} record @param {import("./browser-diagnostics.ts").HttpExpectation} options */
 export function assertHttpRequestContract(
   record,
   {
@@ -3464,12 +3767,14 @@ export function assertHttpRequestContract(
   return record;
 }
 
+/** @param {Pick<RequestObservation,"url"> & Partial<RequestObservation> | undefined} record @param {string} method @param {string} pathname @param {string} origin */
 export function pathMatches(record, method, pathname, origin) {
   if (!record || record.method !== method || isDataUrl(record.url)) return false;
   const url = new URL(record.url);
   return url.origin === origin && url.pathname === pathname;
 }
 
+/** @param {string|undefined} applicationKey @param {string|undefined} releaseId */
 export function releaseArtifactPrefix(applicationKey, releaseId) {
   assert.match(
     applicationKey || "",
@@ -3480,6 +3785,7 @@ export function releaseArtifactPrefix(applicationKey, releaseId) {
   return `/releases/${applicationKey}/${releaseId}/artifacts/`;
 }
 
+/** @param {string} url @param {string|undefined} origin @param {import("./browser-diagnostics.ts").ReleaseLocation} [options] */
 export function assertReleaseArtifactUrl(
   url,
   origin,
@@ -3496,6 +3802,7 @@ export function assertReleaseArtifactUrl(
   return parsed;
 }
 
+/** @param {unknown} manifest @param {string} manifestUrl @param {readonly RequestEvidence[]} records @param {import("./browser-diagnostics.ts").ManifestExpectation} [options] */
 export function assertManifestAssetsRequested(
   manifest,
   manifestUrl,
@@ -3509,6 +3816,7 @@ export function assertManifestAssetsRequested(
     requireImmutableCache = false,
   } = {},
 ) {
+  assert.ok(isRecord(manifest), `${label} was not an object`);
   const manifestLocation = assertReleaseArtifactUrl(manifestUrl, origin, {
     applicationKey,
     releaseId,
@@ -3516,17 +3824,20 @@ export function assertManifestAssetsRequested(
     label,
   });
   const releasePrefix = releaseArtifactPrefix(applicationKey, releaseId);
+  /** @type {Set<string>} */
   const assetStrings = new Set();
+  /** @type {Set<string>} */
   const requiredAssetStrings = new Set();
 
   let selectedExpose;
   if (requiredExposedModule !== undefined) {
-    selectedExpose = (manifest.exposes || []).find(
+    selectedExpose = diagnosticRows(manifest.exposes || [], "manifest exposes").find(
       (candidate) => candidate.path === requiredExposedModule,
     );
     assert.ok(selectedExpose, `${label} does not declare exposed module ${requiredExposedModule}`);
   }
 
+  /** @param {unknown} value @param {string} [key] */
   const visit = (value, key) => {
     if (key === "ssrRemoteEntry") return;
     if (typeof value === "string" && /\.(?:m?js|css)(?:[?#]|$)/i.test(value)) {
@@ -3539,6 +3850,7 @@ export function assertManifestAssetsRequested(
   };
   visit(manifest);
 
+  /** @param {unknown} value @param {string} [key] */
   const visitSynchronousAssets = (value, key) => {
     if (key === "async") {
       return;
@@ -3554,10 +3866,14 @@ export function assertManifestAssetsRequested(
   };
 
   const runtimeEntry =
-    (typeof manifest.entry === "string" && manifest.entry) || manifest.metaData?.remoteEntry?.name;
-  if (runtimeEntry) requiredAssetStrings.add(runtimeEntry);
+    (typeof manifest.entry === "string" && manifest.entry) ||
+    (isRecord(manifest.metaData) && isRecord(manifest.metaData.remoteEntry)
+      ? manifest.metaData.remoteEntry.name
+      : undefined);
+  if (typeof runtimeEntry === "string" && runtimeEntry) requiredAssetStrings.add(runtimeEntry);
   if (selectedExpose) visitSynchronousAssets(selectedExpose.assets);
-  for (const shared of manifest.shared || []) visitSynchronousAssets(shared.assets || shared);
+  for (const shared of diagnosticRows(manifest.shared || [], "manifest shared"))
+    visitSynchronousAssets(shared.assets || shared);
 
   assert.ok(assetStrings.size > 0, `${label} declared no JavaScript or CSS assets`);
   const assets = [...assetStrings].map((asset) =>
@@ -3604,6 +3920,7 @@ export function assertManifestAssetsRequested(
   return assets.map((asset) => asset.href);
 }
 
+/** @param {readonly RequestObservation[]} records @param {{beforeRequestIds:Set<string>,beforeCount:number,actionStartedAtMs:number,pathname:string,origin:string,label?:string}} options */
 export function requirePostActionRefresh(
   records,
   { beforeRequestIds, beforeCount, actionStartedAtMs, pathname, origin, label = "action" },
@@ -3614,49 +3931,64 @@ export function requirePostActionRefresh(
     (record) => !beforeRequestIds.has(record.requestId) && record.startedAtMs >= actionStartedAtMs,
   );
   assert.ok(fresh.length > 0, `${label} did not produce a post-action query response`);
-  return fresh[fresh.length - 1];
+  const latest = fresh.at(-1);
+  assert.ok(latest, `${label} did not produce a post-action query response`);
+  return latest;
 }
 
+/** @param {Pick<CdpPort,"on">} client @param {unknown} operation @param {SignalOptions & {label?:string,timeout?:number}} [options] */
 export async function waitForPageNavigation(
   client,
   operation,
   { signal, label = "page navigation", timeout = CDP_EVENT_TIMEOUT_MS } = {},
 ) {
+  /** @type {(import("./browser-diagnostics.ts").FrameEvent|import("./browser-diagnostics.ts").LifecycleEvent)[]} */
   const events = [];
   let eventSequence = 0;
   let resultReady = false;
+  /** @type {import("./browser-diagnostics.ts").NavigationResult|undefined} */
   let result;
+  /** @type {(import("./browser-diagnostics.ts").FrameEvent & {frame:import("./cdp-contract.ts").EventPayload<"Page.frameNavigated">["frame"]})|undefined} */
   let exactFrame;
+  /** @type {import("./browser-diagnostics.ts").LifecycleEvent|undefined} */
   let exactLifecycleLoad;
+  /** @type {((value:import("./browser-diagnostics.ts").NavigationCompletion)=>void)|undefined} */
   let resolveCompletion;
+  /** @type {((error:unknown)=>void)|undefined} */
   let rejectCompletion;
   let settled = false;
+  /** @type {Promise<import("./browser-diagnostics.ts").NavigationCompletion>} */
   const completion = new Promise((resolve, reject) => {
     resolveCompletion = resolve;
     rejectCompletion = reject;
   });
   completion.catch(() => {});
 
+  /** @param {import("./browser-diagnostics.ts").NavigationCompletion} value */
   const finish = (value) => {
     if (settled) return;
     settled = true;
+    assert.ok(resolveCompletion, "navigation completion was not initialized");
     resolveCompletion(value);
   };
   const maybeFinish = () => {
-    if (!resultReady || !exactFrame || !exactLifecycleLoad) return;
+    if (!resultReady || !result || !exactFrame || !exactLifecycleLoad) return;
     finish({ result, frame: exactFrame.frame, load: exactLifecycleLoad.params });
   };
+  /** @param {import("./browser-diagnostics.ts").FrameEvent} event */
   const considerFrame = (event) => {
-    if (!resultReady || exactFrame || !event.params?.frame) return;
+    if (!resultReady || !result || exactFrame || !event.params?.frame) return;
     const frame = event.params.frame;
     if (frame.parentId || frame.id !== result.frameId || frame.loaderId !== result.loaderId) return;
     exactFrame = { ...event, frame };
     maybeFinish();
   };
+  /** @param {import("./browser-diagnostics.ts").LifecycleEvent} event */
   const considerLifecycle = (event) => {
     const params = event.params;
     if (
       !resultReady ||
+      !result ||
       exactLifecycleLoad ||
       !exactFrame ||
       event.sequence <= exactFrame.sequence ||
@@ -3668,12 +4000,16 @@ export async function waitForPageNavigation(
     exactLifecycleLoad = event;
     maybeFinish();
   };
+  /** @param {import("./cdp-contract.ts").EventPayload<"Page.frameNavigated">} params */
   const onFrameNavigated = (params) => {
+    /** @type {import("./browser-diagnostics.ts").FrameEvent} */
     const event = { kind: "frame", params, sequence: ++eventSequence };
     events.push(event);
     considerFrame(event);
   };
+  /** @param {import("./cdp-contract.ts").EventPayload<"Page.lifecycleEvent">} params */
   const onLifecycleEvent = (params) => {
+    /** @type {import("./browser-diagnostics.ts").LifecycleEvent} */
     const event = { kind: "lifecycle", params, sequence: ++eventSequence };
     events.push(event);
     considerLifecycle(event);
@@ -3684,16 +4020,22 @@ export async function waitForPageNavigation(
 
   try {
     const operationPromise = invokeValidated(operation, `${label} command`);
-    operationPromise.catch(() => {});
-    result = await raceWithSignalAndTimeout(operationPromise, {
+    if (allowedNativePromise(operationPromise)) operationPromise.catch(() => {});
+    const commandResult = await raceWithSignalAndTimeout(operationPromise, {
       signal,
       milliseconds: CDP_COMMAND_TIMEOUT_MS,
       label: `${label} command`,
     });
-    assert.ok(!result?.errorText, `${label} failed: ${result?.errorText || "unknown error"}`);
-    assert.equal(typeof result?.frameId, "string", `${label} did not return a frame id`);
-    assert.equal(typeof result?.loaderId, "string", `${label} did not return a loader id`);
+    assert.ok(isRecord(commandResult), `${label} returned no navigation result`);
+    assert.ok(
+      !commandResult.errorText,
+      `${label} failed: ${typeof commandResult.errorText === "string" ? commandResult.errorText : "unknown error"}`,
+    );
+    assert.ok(typeof commandResult.frameId === "string", `${label} did not return a frame id`);
+    assert.ok(typeof commandResult.loaderId === "string", `${label} did not return a loader id`);
+    result = { frameId: commandResult.frameId, loaderId: commandResult.loaderId };
     resultReady = true;
+    // oxlint-disable-next-line unicorn/no-useless-spread -- Iterate a snapshot because the loop can mutate its source.
     for (const event of [...events]) {
       if (event.kind === "frame") considerFrame(event);
       if (event.kind === "lifecycle") considerLifecycle(event);
@@ -3706,7 +4048,7 @@ export async function waitForPageNavigation(
     });
     return completed;
   } catch (error) {
-    rejectCompletion(error);
+    rejectCompletion?.(error);
     throw error;
   } finally {
     frameOff?.();
@@ -3714,6 +4056,7 @@ export async function waitForPageNavigation(
   }
 }
 
+/** @param {CdpPort} client @param {string} url @param {SignalOptions & {expectedOrigin?:string,expectedPath?:string,diagnostics?:Diagnostics}} [options] */
 export async function navigate(
   client,
   url,
@@ -3755,17 +4098,21 @@ export async function navigate(
         admitObservedSockets: true,
       });
     }
-    const documentState = await evaluate(
+    const documentState = await evaluateRecord(
       client,
       "({href: location.href, origin: location.origin, readyState: document.readyState, hasBody: document.body !== null})",
       `${target.href} document validation`,
       { signal: navigationSignal },
     );
-    assertHttpUrl(documentState.href, expectedOrigin, "resulting document URL");
+    assertHttpUrl(
+      diagnosticString(documentState.href, "document href"),
+      expectedOrigin,
+      "resulting document URL",
+    );
     assert.equal(documentState.origin, target.origin, "resulting document origin changed");
     if (expectedPath)
       assert.equal(
-        new URL(documentState.href).pathname,
+        new URL(diagnosticString(documentState.href, "document href")).pathname,
         expectedPath,
         "resulting document path changed",
       );
@@ -3779,6 +4126,7 @@ export async function navigate(
   }
 }
 
+/** @param {Pick<RequestObservation,"url"> & Partial<RequestObservation>|undefined} record @param {{expectedOrigin?:string}} [options] */
 export function matchesSignInNavigationRequest(record, { expectedOrigin } = {}) {
   if (
     record?.resourceType !== "Document" ||
@@ -3796,12 +4144,14 @@ export function matchesSignInNavigationRequest(record, { expectedOrigin } = {}) 
   }
 }
 
+/** @param {string} url @param {string|undefined} expectedOrigin @param {string} [label] */
 export function assertSignInUrl(url, expectedOrigin, label = "sign-in URL") {
   const parsed = assertHttpUrl(url, expectedOrigin, label);
   assert.equal(parsed.pathname, "/sign-in", `${label} must use the exact /sign-in pathname`);
   return parsed;
 }
 
+/** @param {CdpPort} client @param {Diagnostics} diagnostics @param {string} catalogUrl @param {string} expectedOrigin @param {AbortSignal|undefined} signal */
 async function assertUnauthenticatedCatalogContained(
   client,
   diagnostics,
@@ -3833,7 +4183,7 @@ async function assertUnauthenticatedCatalogContained(
   const catalogRedirect = catalogRecord.redirects?.find((redirect) => redirect.url === target.href);
   const catalogStatus = catalogRedirect?.status ?? catalogRecord.response?.status;
   assert.ok(
-    [302, 303, 401, 403].includes(catalogStatus),
+    typeof catalogStatus === "number" && [302, 303, 401, 403].includes(catalogStatus),
     `unauthenticated catalog escaped the auth boundary: ${catalogStatus}`,
   );
   assert.equal(
@@ -3861,6 +4211,7 @@ async function assertUnauthenticatedCatalogContained(
   return generation;
 }
 
+/** @param {CdpPort} client @param {AbortSignal|undefined} signal */
 async function armNextManifestFailure(client, signal) {
   const result = await client.send(
     "Page.addScriptToEvaluateOnNewDocument",
@@ -3887,6 +4238,7 @@ async function armNextManifestFailure(client, signal) {
   return result.identifier;
 }
 
+/** @param {CdpPort} client @param {string} identifier @param {AbortSignal|undefined} signal */
 async function removeNewDocumentScript(client, identifier, signal) {
   if (!identifier) return;
   await client.send(
@@ -3897,6 +4249,7 @@ async function removeNewDocumentScript(client, identifier, signal) {
   );
 }
 
+/** @param {{client:CdpPort,diagnostics:Diagnostics,signal:AbortSignal|undefined,url:string,expectedOrigin:string,expectedReleaseId:string,readyExpression:string}} options */
 async function assertContainedRemoteFailureAndRetry({
   client,
   diagnostics,
@@ -3926,7 +4279,7 @@ async function assertContainedRemoteFailureAndRetry({
     await removeNewDocumentScript(client, scriptId, signal);
   }
 
-  const errorState = await evaluate(
+  const errorState = await evaluateRecord(
     client,
     `(() => ({
       message: document.querySelector('#remote-error-message')?.textContent?.trim(),
@@ -3938,11 +4291,19 @@ async function assertContainedRemoteFailureAndRetry({
     { signal },
   );
   assert.equal(errorState.message, "The approved application release could not be loaded.");
-  assert.match(errorState.reference || "", /^Reference ID: [0-9a-f-]{36}$/);
-  assert.doesNotMatch(errorState.message || "", /FEDERATION_INTERNAL_MANIFEST_FAILURE/);
+  assert.match(
+    diagnosticString(errorState.reference, "failure reference"),
+    /^Reference ID: [0-9a-f-]{36}$/,
+  );
+  assert.doesNotMatch(
+    diagnosticString(errorState.message, "failure message"),
+    /FEDERATION_INTERNAL_MANIFEST_FAILURE/,
+  );
   assert.equal(errorState.release, null, "a failed remote must not report a mounted release");
   assert.equal(errorState.retry, true);
-  diagnostics.confirmRemoteFailureDiagnostic(errorState.reference.slice("Reference ID: ".length));
+  diagnostics.confirmRemoteFailureDiagnostic(
+    diagnosticString(errorState.reference, "failure reference").slice("Reference ID: ".length),
+  );
 
   const clicked = await evaluate(
     client,
@@ -3956,6 +4317,7 @@ async function assertContainedRemoteFailureAndRetry({
   return generation;
 }
 
+/** @param {CdpPort} client @param {AbortSignal|undefined} signal */
 async function armNextActionCsrfRejection(client, signal) {
   const result = await client.send(
     "Page.addScriptToEvaluateOnNewDocument",
@@ -3985,6 +4347,7 @@ async function armNextActionCsrfRejection(client, signal) {
   return result.identifier;
 }
 
+/** @param {CdpPort} client @param {string} loginUrl @param {string} email @param {string} password @param {string} expectedOrigin @param {Diagnostics} diagnostics @param {AbortSignal|undefined} signal */
 async function submitSignIn(
   client,
   loginUrl,
@@ -3995,7 +4358,7 @@ async function submitSignIn(
   signal,
 ) {
   const login = assertSignInUrl(loginUrl, expectedOrigin);
-  const loginGeneration = await navigate(client, login.href, {
+  await navigate(client, login.href, {
     expectedOrigin,
     expectedPath: "/sign-in",
     diagnostics,
@@ -4050,13 +4413,17 @@ async function submitSignIn(
     const authenticatedRequest = await navigationRequest;
     await navigation;
     diagnostics?.bindRequestGeneration(generation, authenticatedRequest);
-    const state = await evaluate(
+    const state = await evaluateRecord(
       client,
       "({href: location.href, origin: location.origin})",
       "authenticated redirect",
       { signal: submissionSignal },
     );
-    assertHttpUrl(state.href, expectedOrigin, "authenticated redirect URL");
+    assertHttpUrl(
+      diagnosticString(state.href, "redirect href"),
+      expectedOrigin,
+      "authenticated redirect URL",
+    );
     assert.equal(state.origin, expectedOrigin, "authenticated redirect changed origin");
     await waitForExpression(
       client,
@@ -4071,6 +4438,7 @@ async function submitSignIn(
   }
 }
 
+/** @param {ReturnType<typeof readBrowserCatalog>} catalog @param {string} applicationKey @param {string} surfaceId @param {string} expectedScope @param {string} expectedOrigin @param {string|undefined} expectedReleaseId */
 function assertCatalog(
   catalog,
   applicationKey,
@@ -4095,8 +4463,10 @@ function assertCatalog(
   );
   const expectedApplicationKeys = [applicationKey];
   assert.deepEqual(
-    catalog.applications.map((application) => application.applicationKey).sort(),
-    expectedApplicationKeys.sort(),
+    catalog.applications
+      .map((application) => application.applicationKey)
+      .sort((a, b) => String(a).localeCompare(String(b))),
+    expectedApplicationKeys.sort((a, b) => String(a).localeCompare(String(b))),
     `${expectedScope} catalog application set changed`,
   );
 
@@ -4130,6 +4500,7 @@ function assertCatalog(
   return application;
 }
 
+/** @param {ReturnType<typeof assertCatalog>} application @param {string} queryId @param {number} queryVersion @param {Omit<ReturnType<typeof readBrowserCatalog>["session"]["context"],"scope"> & {scope?:string}} scope */
 function queryBody(application, queryId, queryVersion, scope) {
   const queryScope =
     scope.scope === "organization"
@@ -4152,6 +4523,7 @@ function queryBody(application, queryId, queryVersion, scope) {
   };
 }
 
+/** @param {import("./browser-diagnostics.ts").SurfaceOptions} options */
 async function assertRemoteSurface({
   client,
   diagnostics,
@@ -4185,7 +4557,7 @@ async function assertRemoteSurface({
   try {
     await waitForExpression(client, readyExpression, `${applicationKey} REMOTE READY`, { signal });
   } catch (error) {
-    throw new Error(`${error.message}\n${diagnostics.describe()}`, { cause: error });
+    throw new Error(`${errorMessage(error)}\n${diagnostics.describe()}`, { cause: error });
   }
   reportProgress(`${applicationKey} REMOTE READY observed`);
   if (expectedReleaseId !== undefined) {
@@ -4207,9 +4579,11 @@ async function assertRemoteSurface({
     label: `${applicationKey} catalog`,
     responseHeaders: { "cache-control": "no-store" },
   });
-  const catalog = await responseJson(client, catalogRecord, `${applicationKey} catalog`, {
-    signal,
-  });
+  const catalog = readBrowserCatalog(
+    await responseJson(client, catalogRecord, `${applicationKey} catalog`, {
+      signal,
+    }),
+  );
   const application = assertCatalog(
     catalog,
     applicationKey,
@@ -4308,7 +4682,8 @@ async function assertRemoteSurface({
   assert.ok(hostRecord, "published Phoenix host bundle request was not observed");
   assert.ok(hostRecord.response, "published Phoenix host bundle response was not observed");
   assert.ok(
-    [200, 304].includes(hostRecord.response.status),
+    typeof hostRecord.response.status === "number" &&
+      [200, 304].includes(hostRecord.response.status),
     `published Phoenix host bundle response must be HTTP 200 or 304\n\n${hostRecord.response.status} !== 200 or 304`,
   );
   assert.equal(
@@ -4389,6 +4764,7 @@ async function assertRemoteSurface({
   };
 }
 
+/** @param {CdpPort} client @param {Diagnostics} diagnostics @param {string} missionId @param {string} origin @param {AbortSignal|undefined} signal */
 async function assertMissionEntryNavigation(client, diagnostics, missionId, origin, signal) {
   const root = `/missions/${encodeURIComponent(missionId)}`;
   await navigate(client, `${origin}/missions`, {
@@ -4442,6 +4818,7 @@ async function assertMissionEntryNavigation(client, diagnostics, missionId, orig
   reportProgress("core mission entry retains the host and updates its authorized sidebar");
 }
 
+/** @param {CdpPort} client @param {Diagnostics} diagnostics @param {string} missionId @param {AbortSignal|undefined} signal */
 async function assertPersistentHostNavigation(client, diagnostics, missionId, signal) {
   reportProgress("checking persistent shell navigation and browser history");
   const root = `/missions/${encodeURIComponent(missionId)}`;
@@ -4464,6 +4841,7 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
   );
 
   const seenQueries = new Set(diagnostics.completed(() => true).map((record) => record.requestId));
+  /** @param {string} path @param {string} application @param {string} surface @param {boolean} [sidebar] */
   const ready = async (path, application, surface, sidebar = true) => {
     try {
       const coreContent =
@@ -4523,13 +4901,13 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
             !new URL(record.url).pathname.endsWith("/query")
           )
             return false;
-          const body = JSON.parse(record.postData ?? "{}");
+          const body = diagnosticObject(JSON.parse(record.postData ?? "{}"), "navigation request");
           return body.applicationKey === application && body.surfaceId === surface;
         },
         `${application} ${surface} navigation query`,
         { signal },
       );
-      assert.equal(query.response.status, 200, "navigated screen query succeeds");
+      assert.equal(query.response?.status, 200, "navigated screen query succeeds");
       seenQueries.add(query.requestId);
       await waitForExpression(
         client,
@@ -4545,9 +4923,10 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
         { signal },
       );
     } catch (error) {
-      throw new Error(`${error.message}\n${diagnostics.describe()}`, { cause: error });
+      throw new Error(`${errorMessage(error)}\n${diagnostics.describe()}`, { cause: error });
     }
   };
+  /** @param {string} path */
   const click = async (path) => {
     assert.equal(
       await evaluate(
@@ -4565,6 +4944,7 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
       `host link ${path} exists`,
     );
   };
+  /** @param {string} group */
   const expand = async (group) => {
     await evaluate(
       client,
@@ -4643,6 +5023,7 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
   );
 }
 
+/** @param {import("./browser-diagnostics.ts").RepresentativeOptions} options */
 async function assertRepresentativeRemoteSurface({
   client,
   diagnostics,
@@ -4686,6 +5067,7 @@ async function assertRepresentativeRemoteSurface({
   });
 }
 
+/** @param {string} lifecycleUrl @param {"promote"|"rollback"} transition @param {Record<import("./browser-diagnostics.ts").ApplicationKey,string>} expectedReleaseIds */
 async function applyReleaseTransition(lifecycleUrl, transition, expectedReleaseIds) {
   const endpoint = assertHttpUrl(
     new URL(`/${transition}`, `${lifecycleUrl.replace(/\/$/, "")}/`).href,
@@ -4697,7 +5079,7 @@ async function applyReleaseTransition(lifecycleUrl, transition, expectedReleaseI
   const response = await fetch(endpoint.href, { method: "POST", cache: "no-store" });
   const bodyText = await response.text();
   assert.equal(response.status, 200, `${transition} coordinator response changed: ${bodyText}`);
-  const body = JSON.parse(bodyText);
+  const body = diagnosticObject(JSON.parse(bodyText), "release transition response");
   const expectedTransition = transition === "promote" ? "promotion" : transition;
   assert.equal(body.transition, expectedTransition, `${transition} coordinator transition changed`);
   assert.deepEqual(
@@ -4708,6 +5090,7 @@ async function applyReleaseTransition(lifecycleUrl, transition, expectedReleaseI
   return body;
 }
 
+/** @param {CdpPort} client @param {Diagnostics} diagnostics @param {string[]} args @param {{secret?:import("./browser-diagnostics.ts").LoginSecret|null,signal?:AbortSignal}} [options] */
 export async function runScenario(client, diagnostics, args, { secret, signal } = {}) {
   assertNoPasswordArgument(args);
   const commsUrl = requiredArg(args, "--comms-url");
@@ -4789,6 +5172,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   diagnostics.assertLiveViewWebSocket(origin, { generation: authenticatedGeneration });
   reportProgress("authenticated LiveView websocket asserted");
 
+  /** @type {import("./browser-diagnostics.ts").RepresentativeConfig[]} */
   const representativeConfigs = [
     {
       argName: "--organization-admin-url",
@@ -4879,6 +5263,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     queryVersion: 1,
     expectedReleaseId: releases.nMinus1.comms,
   });
+  assertCommsQuery(comms.query);
   assert.equal(
     comms.query.navigation.fallback_href,
     `/missions/${encodeURIComponent(missionId)}/comms`,
@@ -4942,16 +5327,33 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   );
   reportProgress("immutable manifest ETag revalidation observed");
 
-  assert.equal(telemetry.query.host.application_key, "telemetry_decom");
-  const packetDocument = telemetry.query.trusted_surface.data ?? telemetry.query.trusted_surface;
+  assert.equal(diagnosticField(telemetry.query, "host", "application_key"), "telemetry_decom");
+  const packetSurface = diagnosticObject(
+    diagnosticField(telemetry.query, "trusted_surface"),
+    "packet surface",
+  );
+  const packetDocument = diagnosticObject(packetSurface.data ?? packetSurface, "packet document");
   assert.equal(packetDocument.contract_version, 1);
-  assert.equal(packetDocument.configuration.catalog_revision_id, catalogRevisionId);
-  assert.match(packetDocument.review_token, /^[a-f0-9]{64}$/);
-  const packet = packetDocument.packets.items.find((item) => item.apid === expectedApid);
+  assert.equal(
+    diagnosticField(packetDocument, "configuration", "catalog_revision_id"),
+    catalogRevisionId,
+  );
+  assert.match(
+    diagnosticString(packetDocument.review_token, "packet review token"),
+    /^[a-f0-9]{64}$/,
+  );
+  const packet = diagnosticRows(
+    diagnosticField(packetDocument, "packets", "items"),
+    "packets",
+  ).find((item) => item.apid === expectedApid);
   assert.ok(packet, `telemetry query did not return APID ${expectedApid}`);
-  const packetId = packet.id;
-  assert.deepEqual(packetDocument.selection.ids, [packetId]);
-  assert.ok(packetDocument.endpoints.items.some((endpoint) => endpoint.id === sourceEndpointId));
+  const packetId = diagnosticString(packet.id, "packet ID");
+  assert.deepEqual(diagnosticField(packetDocument, "selection", "ids"), [packetId]);
+  assert.ok(
+    diagnosticRows(diagnosticField(packetDocument, "endpoints", "items"), "endpoints").some(
+      (endpoint) => endpoint.id === sourceEndpointId,
+    ),
+  );
   assert.equal(
     await evaluate(
       client,
@@ -5010,7 +5412,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       "Telemetry CSRF rejection action",
       { generation: telemetry.generation, signal },
     );
-    assert.equal(csrfRecord.response.status, 403, "CSRF rejection did not stop the action");
+    assert.equal(csrfRecord.response?.status, 403, "CSRF rejection did not stop the action");
     await removeNewDocumentScript(client, csrfScriptId, signal);
 
     const csrfActionRecords = diagnostics.completed(
@@ -5028,12 +5430,11 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       "bounded host rebootstrap catalog",
       { generation: telemetry.generation, signal },
     );
-    assert.equal(recoveryCatalogRecord.response.status, 200);
-    const recoveryCatalog = await responseJson(
-      client,
-      recoveryCatalogRecord,
-      "bounded host rebootstrap catalog",
-      { signal },
+    assert.equal(recoveryCatalogRecord.response?.status, 200);
+    const recoveryCatalog = readBrowserCatalog(
+      await responseJson(client, recoveryCatalogRecord, "bounded host rebootstrap catalog", {
+        signal,
+      }),
     );
     const recoveryApplication = assertCatalog(
       recoveryCatalog,
@@ -5067,15 +5468,24 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       "sanitized stopped-action result and recovered host",
       { signal },
     );
-    const stoppedAction = await evaluate(
+    const stoppedAction = await evaluateRecord(
       client,
       `(() => ({text: document.querySelector('#phoenix-host-action-stopped')?.textContent?.trim(), release: document.querySelector('[data-remote-state="ready"]')?.getAttribute('data-mounted-release') ?? null}))()`,
       "sanitized stopped-action state",
       { signal },
     );
-    assert.match(stoppedAction.text || "", /No automatic retry was attempted\./);
-    assert.match(stoppedAction.text || "", /Reference ID: [0-9a-f-]{36}/);
-    assert.doesNotMatch(stoppedAction.text || "", /invalid-csrf|SECRET|token was invalid/i);
+    assert.match(
+      diagnosticString(stoppedAction.text, "stopped action text"),
+      /No automatic retry was attempted\./,
+    );
+    assert.match(
+      diagnosticString(stoppedAction.text, "stopped action text"),
+      /Reference ID: [0-9a-f-]{36}/,
+    );
+    assert.doesNotMatch(
+      diagnosticString(stoppedAction.text, "stopped action text"),
+      /invalid-csrf|SECRET|token was invalid/i,
+    );
     assert.equal(stoppedAction.release, releases.nMinus1.telemetry_decom);
     await diagnostics.drainLateEvents(300, signal);
     assert.equal(
@@ -5148,8 +5558,12 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
         actionId: "save_packet_bindings",
         params: {
           catalog_revision_id: catalogRevisionId,
-          expected_review: packetDocument.review_token,
-          expected_configuration_version: packetDocument.configuration.version,
+          expected_review: diagnosticString(packetDocument.review_token, "packet review token"),
+          expected_configuration_version: diagnosticField(
+            packetDocument,
+            "configuration",
+            "version",
+          ),
           input_id: "telemetry-fields",
           input_version: 1,
           selected_packet_ids: [packetId],
@@ -5168,16 +5582,19 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       "explicit recovery changed the save identity",
     );
     assert.deepEqual(
-      parseRequestBody(actionRecord, "recovered save").params,
-      parseRequestBody(csrfRecord, "stopped save").params,
+      diagnosticField(parseRequestBody(actionRecord, "recovered save"), "params"),
+      diagnosticField(parseRequestBody(csrfRecord, "stopped save"), "params"),
       "recovery changed the reviewed intent",
     );
     const receipt = await responseJson(client, actionRecord, "Telemetry packet-bindings action", {
       signal,
     });
-    assert.match(receipt.receiptId, /^application-host-receipt-/);
-    assert.equal(receipt.result.applicationKey, "telemetry_decom");
-    assert.deepEqual(receipt.result.selectedPacketIds, [packetId]);
+    assert.match(
+      diagnosticString(diagnosticField(receipt, "receiptId"), "action receipt ID"),
+      /^application-host-receipt-/,
+    );
+    assert.equal(diagnosticField(receipt, "result", "applicationKey"), "telemetry_decom");
+    assert.deepEqual(diagnosticField(receipt, "result", "selectedPacketIds"), [packetId]);
 
     reportProgress("waiting for Telemetry canonical query refresh");
     const refreshedQueryRecord = await waitForResponse(
@@ -5226,11 +5643,22 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       "Telemetry refreshed query",
       { signal },
     );
-    const refreshedDocument = refreshedQuery.trusted_surface.data ?? refreshedQuery.trusted_surface;
-    assert.deepEqual(refreshedDocument.selection.ids, [packetId]);
-    assert.equal(refreshedDocument.selection.endpoint.id, sourceEndpointId);
-    assert.equal(refreshedDocument.configuration.version, receipt.result.configurationVersion);
-    assert.notEqual(refreshedDocument.review_token, packetDocument.review_token);
+    const refreshedDocument =
+      diagnosticField(refreshedQuery, "trusted_surface", "data") ??
+      diagnosticField(refreshedQuery, "trusted_surface");
+    assert.deepEqual(diagnosticField(refreshedDocument, "selection", "ids"), [packetId]);
+    assert.equal(
+      diagnosticField(refreshedDocument, "selection", "endpoint", "id"),
+      sourceEndpointId,
+    );
+    assert.equal(
+      diagnosticField(refreshedDocument, "configuration", "version"),
+      diagnosticField(receipt, "result", "configurationVersion"),
+    );
+    assert.notEqual(
+      diagnosticField(refreshedDocument, "review_token"),
+      diagnosticString(packetDocument.review_token, "packet review token"),
+    );
 
     await waitForExpression(
       client,
@@ -5403,7 +5831,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
         (record) => pathMatches(record, "POST", telemetryQueryPath, origin),
         { generation: telemetry.generation },
       ).length,
-      actionReceipt: receipt.receiptId,
+      actionReceipt: diagnosticField(receipt, "receiptId"),
       retainedPacketId: packetId,
     };
     return result;
@@ -5412,15 +5840,19 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   }
 }
 
+/** @param {SignalOptions & {stream?:import("node:stream").Readable & {unref?:()=>unknown},timeout?:number}} [options] */
 export async function readStructuredLoginSecret({
   stream = process.stdin,
   signal,
   timeout = 5_000,
 } = {}) {
+  /** @type {(error:unknown)=>void} */
   let cancelReader = () => {};
+  /** @type {Promise<import("./browser-diagnostics.ts").LoginSecret>} */
   const reader = new Promise((resolveSecret, rejectSecret) => {
     let buffer = "";
     let finished = false;
+    /** @template T @param {(value:T)=>void} callback @param {T} value */
     const finish = (callback, value) => {
       if (finished) return;
       finished = true;
@@ -5441,11 +5873,12 @@ export async function readStructuredLoginSecret({
     };
     cancelReader = (error) => finish(rejectSecret, error);
     const parse = () => {
-      const line = buffer.split("\n", 1)[0].trim();
+      const line = (buffer.split("\n", 1)[0] ?? "").trim();
       if (!line) return;
       try {
+        /** @type {unknown} */
         const value = JSON.parse(line);
-        if (!value || typeof value.password !== "string" || value.password.length === 0) {
+        if (!isRecord(value) || typeof value.password !== "string" || value.password.length === 0) {
           throw new Error("structured login secret must contain a non-empty password");
         }
         finish(resolveSecret, { password: value.password });
@@ -5453,6 +5886,7 @@ export async function readStructuredLoginSecret({
         finish(rejectSecret, error);
       }
     };
+    /** @param {string|Buffer} chunk */
     const onData = (chunk) => {
       buffer += chunk.toString();
       if (buffer.length > 64 * 1024)
@@ -5463,6 +5897,7 @@ export async function readStructuredLoginSecret({
       parse();
       if (!finished) finish(rejectSecret, new Error("structured login secret was not provided"));
     };
+    /** @param {unknown} error */
     const onError = (error) => finish(rejectSecret, error);
     stream.setEncoding?.("utf8");
     stream.on("data", onData);
@@ -5478,25 +5913,30 @@ export async function readStructuredLoginSecret({
   });
 }
 
+/** @param {{onAbort:(error:Error)=>void}} options */
 export function installShutdownGuards({ onAbort }) {
   const initialParentPid = process.ppid;
   let disposed = false;
   let aborting = false;
+  /** @type {number|undefined} */
   let exitCode;
 
+  /** @param {Error} reason @param {number} [code] */
   const abort = (reason, code = 1) => {
     if (disposed || aborting) return;
     aborting = true;
     exitCode = code;
     onAbort(reason);
   };
+  /** @param {"SIGINT"|"SIGTERM"|"SIGHUP"} signal */
   const onSignal = (signal) =>
     abort(
       new Error(`browser gate received ${signal}`),
       signal === "SIGINT" ? 130 : 128 + (signal === "SIGTERM" ? 15 : 1),
     );
+  /** @param {unknown} error */
   const onPipeError = (error) => {
-    if (error?.code === "EPIPE") {
+    if (errorCode(error) === "EPIPE") {
       outputBroken = true;
       abort(new Error("browser gate output pipe closed"));
     }
@@ -5532,35 +5972,39 @@ export function installShutdownGuards({ onAbort }) {
   };
 }
 
+/** @param {string} path @param {string} reason @returns {never} */
 function conversionFailure(path, reason) {
   throw new Error(`${path} ${reason}`);
 }
 
+/** @param {object} value @param {string} path */
 function descriptorsBeforeRead(value, path) {
   let keys;
   try {
     keys = Reflect.ownKeys(value);
   } catch (error) {
-    conversionFailure(path, `could not enumerate own keys: ${error.message}`);
+    conversionFailure(path, `could not enumerate own keys: ${errorMessage(error)}`);
   }
 
+  /** @type {Map<string|symbol,{value:unknown,enumerable:boolean|undefined}>} */
   const descriptors = new Map();
   for (const key of keys) {
     let descriptor;
     try {
       descriptor = Object.getOwnPropertyDescriptor(value, key);
     } catch (error) {
-      conversionFailure(path, `could not inspect ${String(key)}: ${error.message}`);
+      conversionFailure(path, `could not inspect ${String(key)}: ${errorMessage(error)}`);
     }
     if (!descriptor) conversionFailure(path, `lost own descriptor for ${String(key)}`);
     if (!Object.hasOwn(descriptor, "value")) {
       conversionFailure(path, `${String(key)} was an accessor`);
     }
-    descriptors.set(key, descriptor);
+    descriptors.set(key, { value: descriptor.value, enumerable: descriptor.enumerable });
   }
   return { keys, descriptors };
 }
 
+/** @param {string} key */
 function arrayIndexKey(key) {
   if (typeof key !== "string" || key === "") return false;
   if (key !== "0" && (key[0] === "0" || !/^\d+$/.test(key))) return false;
@@ -5568,6 +6012,7 @@ function arrayIndexKey(key) {
   return Number.isSafeInteger(index) && index >= 0 && index < 2 ** 32 - 1 && String(index) === key;
 }
 
+/** @param {unknown} value @param {string} [path] @returns {import("./browser-diagnostics.ts").SerializableResult} */
 export function toOrdinarySerializableResult(value, path = "result") {
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -5576,11 +6021,12 @@ export function toOrdinarySerializableResult(value, path = "result") {
   if (nodeTypes.isProxy(value)) conversionFailure(path, "was a proxy");
 
   if (Array.isArray(value)) {
+    /** @type {unknown} */
     let prototype;
     try {
       prototype = Object.getPrototypeOf(value);
     } catch (error) {
-      conversionFailure(path, `prototype inspection failed: ${error.message}`);
+      conversionFailure(path, `prototype inspection failed: ${errorMessage(error)}`);
     }
     if (prototype !== Array.prototype) conversionFailure(path, "was not an ordinary array");
     if (unsafeThenDescriptor(value))
@@ -5590,6 +6036,7 @@ export function toOrdinarySerializableResult(value, path = "result") {
     const lengthDescriptor = descriptors.get("length");
     if (
       !lengthDescriptor ||
+      typeof lengthDescriptor.value !== "number" ||
       !Number.isInteger(lengthDescriptor.value) ||
       lengthDescriptor.value < 0
     ) {
@@ -5599,16 +6046,19 @@ export function toOrdinarySerializableResult(value, path = "result") {
     for (const key of keys) {
       if (typeof key === "symbol") conversionFailure(path, "contained an own symbol");
       if (key !== "length" && (!arrayIndexKey(key) || Number(key) >= length)) {
-        conversionFailure(path, `contained an extra own key ${key}`);
+        conversionFailure(path, `contained an extra own key ${String(key)}`);
       }
     }
     for (let index = 0; index < length; index += 1) {
       if (!descriptors.has(String(index))) conversionFailure(`${path}[${index}]`, "was a hole");
     }
 
-    const ordinaryResult = new Array(length);
+    /** @type {import("./browser-diagnostics.ts").SerializableResult[]} */
+    const ordinaryResult = [];
+    ordinaryResult.length = length;
     for (let index = 0; index < length; index += 1) {
       const descriptor = descriptors.get(String(index));
+      if (!descriptor) conversionFailure(`${path}[${index}]`, "was a hole");
       const converted =
         descriptor.value === undefined
           ? null
@@ -5623,11 +6073,12 @@ export function toOrdinarySerializableResult(value, path = "result") {
     return ordinaryResult;
   }
 
+  /** @type {unknown} */
   let prototype;
   try {
     prototype = Object.getPrototypeOf(value);
   } catch (error) {
-    conversionFailure(path, `prototype inspection failed: ${error.message}`);
+    conversionFailure(path, `prototype inspection failed: ${errorMessage(error)}`);
   }
   if (prototype !== Object.prototype && prototype !== null) {
     conversionFailure(path, "was not an ordinary object");
@@ -5636,13 +6087,14 @@ export function toOrdinarySerializableResult(value, path = "result") {
     conversionFailure(path, "was thenable or exposed an unsafe then property");
 
   const { keys, descriptors } = descriptorsBeforeRead(value, path);
+  /** @type {{[key:string]:import("./browser-diagnostics.ts").SerializableResult}} */
   const ordinaryResult = {};
   for (const key of keys) {
-    if (typeof key !== "string" || !descriptors.get(key).enumerable) continue;
     const descriptor = descriptors.get(key);
+    if (typeof key !== "string" || !descriptor?.enumerable) continue;
     if (descriptor.value === undefined) continue;
     Object.defineProperty(ordinaryResult, key, {
-      value: toOrdinarySerializableResult(descriptor.value, `${path}.${key}`),
+      value: toOrdinarySerializableResult(descriptor.value, `${path}.${String(key)}`),
       enumerable: true,
       configurable: true,
       writable: true,
@@ -5651,6 +6103,7 @@ export function toOrdinarySerializableResult(value, path = "result") {
   return ordinaryResult;
 }
 
+/** @param {string[]} [args] @param {import("./browser-diagnostics.ts").GateOptions} [options] */
 export async function runBrowserGate(
   args = process.argv.slice(2),
   {
@@ -5666,6 +6119,7 @@ export async function runBrowserGate(
 ) {
   assertNoPasswordArgument(args);
   const controller = new AbortController();
+  /** @type {import("./browser-diagnostics.ts").BrowserOwnership} */
   const state = {
     runtime: null,
     runtimeClose: null,
@@ -5676,8 +6130,10 @@ export async function runBrowserGate(
     pageId: undefined,
     pageEndpoint: undefined,
   };
+  /** @type {Map<string,Promise<unknown>>} */
   const cleanupPromises = new Map();
   let cleanupStarted = false;
+  /** @param {string} key @param {unknown} operation @param {string} label @param {number} [timeout] */
   const runOwnedCleanup = (key, operation, label, timeout = CDP_COMMAND_TIMEOUT_MS) => {
     if (cleanupPromises.has(key)) return cleanupPromises.get(key);
     if (typeof operation !== "function") return undefined;
@@ -5689,6 +6145,7 @@ export async function runBrowserGate(
     promise.catch(() => {});
     return promise;
   };
+  /** @param {string} key @param {unknown} operation @param {string} label @param {number} timeout @param {(error:unknown)=>void} [onFailure] */
   const triggerOwnedCleanup = (
     key,
     operation,
@@ -5706,8 +6163,10 @@ export async function runBrowserGate(
       }
     });
   };
+  /** @type {string[]} */
   const secrets = [];
   const LATE_FAILURE_DIAGNOSTIC_LIMIT = 4096;
+  /** @param {unknown} error */
   const formatBoundedFailure = (error) => {
     let safeMessage;
     try {
@@ -5721,14 +6180,18 @@ export async function runBrowserGate(
         : safeMessage;
     return boundedMessage;
   };
+  /** @param {string} resource @param {string} kind @param {unknown} error */
   const reportLateFailure = (resource, kind, error) => {
     const boundedMessage = formatBoundedFailure(error);
     reportProgress(`late ${resource} ${kind} observed after gate failure: ${boundedMessage}`);
   };
+  /** @type {Map<unknown,string>} */
   const runtimeCleanupKeys = new Map();
+  /** @type {Map<unknown,string>} */
   const pageCleanupKeys = new Map();
   let runtimeCleanupSequence = 0;
   let pageCleanupSequence = 0;
+  /** @param {unknown} [runtime] @param {import("./browser-diagnostics.ts").SafeCallable|null} [close] @param {string} [key] @param {string} [kind] */
   const triggerRuntimeCleanup = (
     runtime = state.runtime,
     close = state.runtimeClose,
@@ -5744,6 +6207,7 @@ export async function runBrowserGate(
       (error) => reportLateFailure("Chrome runtime", kind, error),
     );
   };
+  /** @param {unknown} [endpoint] @param {unknown} [targetId] @param {string} [key] @param {string} [kind] */
   const triggerPageCleanup = (
     endpoint = state.pageEndpoint,
     targetId = state.pageId,
@@ -5753,13 +6217,22 @@ export async function runBrowserGate(
     if (!endpoint || !targetId) return;
     triggerOwnedCleanup(
       key,
-      () => closePageImpl(endpoint, targetId, { timeout: PAGE_CLOSE_CLEANUP_TIMEOUT_MS }),
+      () =>
+        closePageImpl(
+          diagnosticString(endpoint, "Chrome endpoint"),
+          diagnosticString(targetId, "browser page id"),
+          { timeout: PAGE_CLOSE_CLEANUP_TIMEOUT_MS },
+        ),
       "CDP page close",
       PAGE_CLOSE_CLEANUP_TIMEOUT_MS,
       (error) => reportLateFailure("browser page", kind, error),
     );
   };
+  /** @type {Diagnostics|undefined} */
   let diagnostics;
+  /** @type {CdpPort|undefined} */
+  let admittedClient;
+  /** @type {(()=>unknown)|undefined} */
   let diagnosticsDispose;
   const guards = installShutdownGuards({
     onAbort: (reason) => {
@@ -5767,20 +6240,23 @@ export async function runBrowserGate(
       if (state.pageEndpoint && state.pageId) {
         triggerPageCleanup(state.pageEndpoint, state.pageId, "page", "cleanup failure");
       }
-      if (state.clientClose) {
+      const closeClient = state.clientClose;
+      if (closeClient) {
         triggerOwnedCleanup(
           "client",
-          () => Reflect.apply(state.clientClose, state.client, []),
+          () => Reflect.apply(closeClient, state.client, []),
           "CDP client cleanup",
           CDP_COMMAND_TIMEOUT_MS,
           (error) => reportLateFailure("CDP client", "cleanup failure", error),
         );
       }
-      if (state.runtimeClose) {
+      const closeRuntime = state.runtimeClose;
+      if (closeRuntime) {
         triggerRuntimeCleanup(state.runtime, state.runtimeClose, "runtime", "cleanup failure");
       }
     },
   });
+  /** @type {(Error & {exitCode:number|undefined})|undefined} */
   let runError;
 
   try {
@@ -5790,6 +6266,7 @@ export async function runBrowserGate(
     if (secret) secrets.push(secret.password);
 
     reportProgress("launching bounded Chrome process");
+    /** @param {unknown} runtime */
     const closeDuplicateRuntime = (runtime) => {
       let close;
       try {
@@ -5806,6 +6283,7 @@ export async function runBrowserGate(
       triggerRuntimeCleanup(runtime, close, key, "duplicate cleanup failure");
       return state.runtime;
     };
+    /** @param {unknown} runtime */
     const captureRuntime = (runtime) => {
       validateRaceValue(runtime, "launchChrome implementation");
       if (state.runtime && runtime !== state.runtime) return closeDuplicateRuntime(runtime);
@@ -5820,11 +6298,13 @@ export async function runBrowserGate(
       }
       return state.runtime;
     };
+    /** @param {unknown} runtime */
     const captureRuntimeFromCallback = (runtime) => {
       try {
         return captureRuntime(runtime);
       } catch (error) {
-        if (state.runtimeClose) {
+        const closeRuntime = state.runtimeClose;
+        if (closeRuntime) {
           triggerRuntimeCleanup(state.runtime, state.runtimeClose, "runtime", "capture failure");
         }
         if (!controller.signal.aborted && !cleanupStarted) controller.abort(error);
@@ -5855,7 +6335,9 @@ export async function runBrowserGate(
       label: "launchChrome implementation",
     });
     reportProgress("creating browser target");
+    /** @type {unknown} */
     let pageWebSocketDebuggerUrl;
+    /** @param {unknown} target */
     const closeDuplicatePage = (target) => {
       let targetId;
       try {
@@ -5880,6 +6362,7 @@ export async function runBrowserGate(
       triggerPageCleanup(state.runtimeEndpoint, targetId, key, "duplicate cleanup failure");
       return state.page;
     };
+    /** @param {unknown} target */
     const capturePageTarget = (target) => {
       validateRaceValue(target, "createPage implementation");
       if (state.page && target !== state.page) return closeDuplicatePage(target);
@@ -5907,7 +6390,12 @@ export async function runBrowserGate(
     };
     const pageAuthority = acquisitionAuthority(
       invokeValidated(
-        () => createPageImpl(state.runtimeEndpoint, "about:blank", { signal: controller.signal }),
+        () =>
+          createPageImpl(
+            diagnosticString(state.runtimeEndpoint, "Chrome endpoint"),
+            "about:blank",
+            { signal: controller.signal },
+          ),
         "createPage implementation",
       ),
       capturePageTarget,
@@ -5924,8 +6412,11 @@ export async function runBrowserGate(
       onTimeout: (error) => controller.abort(error),
     });
 
+    /** @type {unknown} */
     let clientTarget;
+    /** @type {import("./browser-diagnostics.ts").SafeCallable|undefined} */
     let clientSend;
+    /** @param {unknown} target */
     const captureClientTarget = (target) => {
       validateRaceValue(target, "createClient implementation");
       const clientClose = safeCallableProperty(target, "close", "CDP client");
@@ -5934,9 +6425,10 @@ export async function runBrowserGate(
       state.clientClose = () => Reflect.apply(clientClose, target, []);
 
       if (controller.signal.aborted || cleanupStarted) {
+        const closeClient = state.clientClose;
         triggerOwnedCleanup(
           "client",
-          () => Reflect.apply(state.clientClose, state.client, []),
+          () => Reflect.apply(closeClient, state.client, []),
           "CDP client cleanup",
           CDP_COMMAND_TIMEOUT_MS,
           (error) => reportLateFailure("CDP client", "cleanup failure", error),
@@ -5945,17 +6437,19 @@ export async function runBrowserGate(
       }
 
       const clientOn = safeCallableProperty(target, "on", "CDP client");
-      clientSend = safeCallableProperty(target, "send", "CDP client");
+      const send = safeCallableProperty(target, "send", "CDP client");
+      clientSend = send;
       const clientWaitForEvent = safeOptionalCallableProperty(target, "waitForEvent", "CDP client");
       const clientEmit = safeOptionalCallableProperty(target, "emit", "CDP client");
+      /** @type {{on:(...parameters:unknown[])=>unknown,send:(...parameters:unknown[])=>unknown,close:(...parameters:unknown[])=>unknown,waitForEvent?:((...parameters:unknown[])=>unknown),emit?:((...parameters:unknown[])=>unknown)}} */
       const client = {
         on(...parameters) {
           return Reflect.apply(clientOn, target, parameters);
         },
         send(...parameters) {
           return invokeValidated(
-            () => Reflect.apply(clientSend, target, parameters),
-            `CDP ${parameters[0] || "client"}`,
+            () => Reflect.apply(send, target, parameters),
+            `CDP ${typeof parameters[0] === "string" ? parameters[0] : "client"}`,
           );
         },
         close(...parameters) {
@@ -5966,17 +6460,21 @@ export async function runBrowserGate(
         client.waitForEvent = (...parameters) =>
           invokeValidated(
             () => Reflect.apply(clientWaitForEvent, target, parameters),
-            `CDP ${parameters[0] || "event"}`,
+            `CDP ${typeof parameters[0] === "string" ? parameters[0] : "event"}`,
           );
       }
       if (clientEmit) {
         client.emit = (...parameters) => Reflect.apply(clientEmit, target, parameters);
       }
+      // CDP owns payload correlation. Factory methods were captured without invoking getters;
+      // unsubscribe and returned values retain their separate runtime admission below.
+      admittedClient = /** @type {CdpPort} */ (client);
       state.client = client;
       return target;
     };
     const clientCreation = invokeValidated(
-      () => createClientImpl(pageWebSocketDebuggerUrl),
+      () =>
+        createClientImpl(diagnosticString(pageWebSocketDebuggerUrl, "browser websocket endpoint")),
       "createClient implementation",
     );
     const clientCreationAuthority = acquisitionAuthority(clientCreation, captureClientTarget);
@@ -5991,11 +6489,14 @@ export async function runBrowserGate(
       label: "createClient implementation",
       onTimeout: (error) => controller.abort(error),
     });
+    const send = clientSend;
+    assert.ok(send, "CDP client did not expose send");
+    /** @template {import("./cdp-contract.ts").CommandName} K @param {K} method @param {import("./cdp-contract.ts").CommandInput<K>} parameters */
     const sendCommand = (method, parameters) =>
       raceWithSignalAndTimeout(
         invokeValidated(
           () =>
-            Reflect.apply(clientSend, clientTarget, [
+            Reflect.apply(send, clientTarget, [
               method,
               parameters,
               CDP_COMMAND_TIMEOUT_MS,
@@ -6022,18 +6523,24 @@ export async function runBrowserGate(
     });
 
     const diagnosticUrl = originUrl ?? requiredArg(args, "--comms-url");
-    diagnostics = installDiagnostics(state.client, {
+    const client = admittedClient;
+    assert.ok(client, "CDP client was not admitted");
+    const activeDiagnostics = installDiagnostics(client, {
       expectedOrigin: new URL(diagnosticUrl).origin,
       secrets,
     });
-    const diagnosticsRevoke = diagnostics.revokeUnconfirmedExpectedFailures;
+    diagnostics = activeDiagnostics;
+    const diagnosticsRevoke = activeDiagnostics.revokeUnconfirmedExpectedFailures;
+    // oxlint-disable-next-line typescript/unbound-method -- Capture the method; Reflect.apply below retains its receiver.
     const diagnosticsDrain = diagnostics.drainLateEvents;
+    // oxlint-disable-next-line typescript/unbound-method -- Capture the method; Reflect.apply below retains its receiver.
     const diagnosticsAssertClean = diagnostics.assertClean;
+    // oxlint-disable-next-line typescript/unbound-method -- Capture the method; Reflect.apply below retains its receiver.
     diagnosticsDispose = diagnostics.dispose;
     const timeout = Number(argValue(args, "--scenario-timeout-ms") || SCENARIO_TIMEOUT_MS);
     assert.ok(Number.isFinite(timeout) && timeout > 0, "--scenario-timeout-ms must be positive");
     const scenario = invokeValidated(
-      () => runScenarioImpl(state.client, diagnostics, args, { secret, signal: controller.signal }),
+      () => runScenarioImpl(client, activeDiagnostics, args, { secret, signal: controller.signal }),
       "runScenario implementation",
     );
     const result = await raceWithSignalAndTimeout(scenario, {
@@ -6069,14 +6576,14 @@ export async function runBrowserGate(
     } catch {
       safeMessage = "browser gate failed and its error could not be formatted";
     }
-    const safe = new Error(safeMessage);
-    safe.exitCode = guards.exitCode;
+    const safe = Object.assign(new Error(safeMessage), { exitCode: guards.exitCode });
     runError = safe;
     reportProgress("browser gate throwing after run failure");
     throw safe;
   } finally {
     cleanupStarted = true;
     reportProgress("cleaning up browser process and profile");
+    /** @type {unknown[]} */
     const cleanupErrors = [];
 
     try {
@@ -6085,10 +6592,11 @@ export async function runBrowserGate(
       cleanupErrors.push(error);
     }
     try {
-      if (diagnosticsDispose) {
+      const disposeDiagnostics = diagnosticsDispose;
+      if (disposeDiagnostics) {
         await runOwnedCleanup(
           "diagnostics",
-          () => Reflect.apply(diagnosticsDispose, diagnostics, []),
+          () => Reflect.apply(disposeDiagnostics, diagnostics, []),
           "diagnostics cleanup",
         );
       }
@@ -6100,9 +6608,13 @@ export async function runBrowserGate(
         await runOwnedCleanup(
           "page",
           () =>
-            closePageImpl(state.pageEndpoint, state.pageId, {
-              timeout: PAGE_CLOSE_CLEANUP_TIMEOUT_MS,
-            }),
+            closePageImpl(
+              diagnosticString(state.pageEndpoint, "Chrome endpoint"),
+              diagnosticString(state.pageId, "browser page id"),
+              {
+                timeout: PAGE_CLOSE_CLEANUP_TIMEOUT_MS,
+              },
+            ),
           "CDP page close",
           PAGE_CLOSE_CLEANUP_TIMEOUT_MS,
         );
@@ -6112,10 +6624,11 @@ export async function runBrowserGate(
       cleanupErrors.push(error);
     }
     try {
-      if (state.clientClose) {
+      const closeClient = state.clientClose;
+      if (closeClient) {
         await runOwnedCleanup(
           "client",
-          () => Reflect.apply(state.clientClose, state.client, []),
+          () => Reflect.apply(closeClient, state.client, []),
           "CDP client cleanup",
         );
       }
@@ -6123,10 +6636,11 @@ export async function runBrowserGate(
       cleanupErrors.push(error);
     }
     try {
-      if (state.runtimeClose) {
+      const closeRuntime = state.runtimeClose;
+      if (closeRuntime) {
         await runOwnedCleanup(
           "runtime",
-          () => Reflect.apply(state.runtimeClose, state.runtime, []),
+          () => Reflect.apply(closeRuntime, state.runtime, []),
           "Chrome runtime cleanup",
         );
       }
@@ -6151,11 +6665,14 @@ export async function runBrowserGate(
           primaryMessage = "browser gate failed and its error could not be formatted";
         }
       }
-      const combined = new Error(primaryMessage ? `${primaryMessage}\n${message}` : message);
-      combined.exitCode = runError?.exitCode;
+      const combined = Object.assign(
+        new Error(primaryMessage ? `${primaryMessage}\n${message}` : message),
+        { exitCode: runError?.exitCode },
+      );
       reportProgress(
         `browser gate cleanup finished with errors; active resources: ${JSON.stringify(activeResourceNames())}`,
       );
+      // oxlint-disable-next-line no-unsafe-finally -- Preserve the primary failure above and append failures from every cleanup owner.
       throw combined;
     }
     reportProgress(
@@ -6174,6 +6691,151 @@ if (isMain) {
     }
   } catch (error) {
     if (!outputBroken) console.error(redactError(error));
-    process.exitCode = error?.exitCode || 1;
+    process.exitCode =
+      error instanceof Error && "exitCode" in error && typeof error.exitCode === "number"
+        ? error.exitCode || 1
+        : 1;
   }
+}
+
+/** @param {unknown} error */
+function errorCode(error) {
+  return error instanceof Error && "code" in error && typeof error.code === "string"
+    ? error.code
+    : undefined;
+}
+/** @param {unknown} error */
+function errorMessage(error) {
+  return error instanceof Error ? error.message : "unknown error";
+}
+
+function deferredCompletion() {
+  /** @type {(()=>void)|undefined} */
+  let resolve;
+  /** @type {Promise<void>} */
+  const promise = new Promise((complete) => {
+    resolve = complete;
+  });
+  assert.ok(resolve);
+  return { promise, resolve };
+}
+
+/** @template T @param {WeakMap<object,T>} map @param {unknown} key @returns {T|undefined} */
+function weakValue(map, key) {
+  return key !== null && (typeof key === "object" || typeof key === "function")
+    ? map.get(key)
+    : undefined;
+}
+
+/** @param {CdpPort} client @param {string} expression @param {string} label @param {SignalOptions} [options] */
+export async function evaluateRecord(client, expression, label, options) {
+  const value = await evaluate(client, expression, label, options);
+  assert.ok(isRecord(value), `${label} did not return an object`);
+  return value;
+}
+/** @param {unknown} value @param {string} label */
+function diagnosticRows(value, label) {
+  assert.ok(Array.isArray(value), `${label} was not an array`);
+  return value.map((entry) => {
+    assert.ok(isRecord(entry), `${label} contained a non-object`);
+    return entry;
+  });
+}
+/** @param {unknown} value @param {string} label */
+function diagnosticString(value, label) {
+  assert.ok(typeof value === "string", `${label} was not a string`);
+  return value;
+}
+
+/** @param {unknown} value @param {string} label */
+function diagnosticObject(value, label) {
+  assert.ok(isRecord(value), `${label} was not an object`);
+  return value;
+}
+/** @param {unknown} value @param {...string} path @returns {unknown} */
+function diagnosticField(value, ...path) {
+  /** @type {unknown} */
+  let current = value;
+  for (const key of path) current = diagnosticObject(current, path.join("."))[key];
+  return current;
+}
+/** @param {unknown} value @param {string} label */
+function diagnosticNumber(value, label) {
+  assert.ok(
+    typeof value === "number" && Number.isFinite(value),
+    `${label} was not a finite number`,
+  );
+  return value;
+}
+/** @param {unknown} value @param {string} label */
+function nullableDiagnosticString(value, label) {
+  return value === null ? null : diagnosticString(value, label);
+}
+/** Admit the fields exercised by browser assertions; the host owns full catalog admission.
+ * @param {unknown} value
+ */
+function readBrowserCatalog(value) {
+  const catalog = diagnosticObject(value, "catalog");
+  const session = diagnosticObject(catalog.session, "catalog session");
+  const context = diagnosticObject(session.context, "catalog context");
+  return {
+    schema: diagnosticString(catalog.schema, "catalog schema"),
+    hostContract: diagnosticString(catalog.hostContract, "catalog host contract"),
+    generatedAt: diagnosticString(catalog.generatedAt, "catalog timestamp"),
+    session: {
+      sessionId: diagnosticString(session.sessionId, "session ID"),
+      csrfToken: diagnosticString(session.csrfToken, "session CSRF token"),
+      bridgeBaseUrl: diagnosticString(session.bridgeBaseUrl, "session bridge URL"),
+      context: {
+        scope: diagnosticString(context.scope, "context scope"),
+        organizationId: nullableDiagnosticString(context.organizationId, "organization ID"),
+        missionId: nullableDiagnosticString(context.missionId, "mission ID"),
+        spacecraftId: nullableDiagnosticString(context.spacecraftId, "spacecraft ID"),
+      },
+    },
+    applications: diagnosticRows(catalog.applications, "catalog applications").map(
+      (application) => {
+        const surface = diagnosticObject(application.surface, "application surface");
+        const renderer = diagnosticObject(surface.renderer, "surface renderer");
+        const release = diagnosticObject(application.release, "application release");
+        return {
+          applicationKey: diagnosticString(application.applicationKey, "application key"),
+          applicationVersion: diagnosticNumber(
+            application.applicationVersion,
+            "application version",
+          ),
+          surface: {
+            surfaceId: diagnosticString(surface.surfaceId, "surface ID"),
+            version: diagnosticNumber(surface.version, "surface version"),
+            renderer: {
+              exposedModule: diagnosticString(renderer.exposedModule, "renderer expose"),
+            },
+          },
+          release: {
+            federation: diagnosticString(release.federation, "release federation"),
+            exposedModule: diagnosticString(release.exposedModule, "release expose"),
+            releaseId: diagnosticString(release.releaseId, "release ID"),
+            manifestUrl: diagnosticString(release.manifestUrl, "release manifest URL"),
+          },
+        };
+      },
+    ),
+  };
+}
+
+/** @param {unknown} value @returns {asserts value is {navigation:{fallback_href:string},trusted_surface:{root:{attrs:{id:string}},overview:{transport:{id:string,count:number}}}}} */
+function assertCommsQuery(value) {
+  diagnosticString(diagnosticField(value, "navigation", "fallback_href"), "Comms fallback href");
+  diagnosticString(
+    diagnosticField(value, "trusted_surface", "root", "attrs", "id"),
+    "Comms root ID",
+  );
+  diagnosticString(
+    diagnosticField(value, "trusted_surface", "overview", "transport", "id"),
+    "Comms transport ID",
+  );
+  diagnosticNumber(
+    diagnosticField(value, "trusted_surface", "overview", "transport", "count"),
+    "Comms transport count",
+  );
 }

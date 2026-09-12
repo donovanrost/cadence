@@ -3,6 +3,7 @@ export function queryText(value: unknown): value is string {
   return (
     typeof value === "string" &&
     new TextEncoder().encode(value).length <= 256 &&
+    // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
     !/[\x00-\x1f\x7f]/.test(value)
   );
 }

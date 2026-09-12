@@ -1,7 +1,10 @@
+import { jsonFixture, fixtureRecord, fixtureString } from "../test-support/json-fixture.ts";
+import { required } from "../test-support/required.ts";
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, verify } from "node:crypto";
 import { spawn } from "node:child_process";
 import {
+  open,
   mkdtemp,
   mkdir,
   readFile,
@@ -59,6 +62,7 @@ const metadata = {
   releasedAt: "2026-08-30T17:00:00Z",
 };
 
+/** @type {string[]} */
 const temporaryDirectories = [];
 
 afterEach(async () => {
@@ -73,10 +77,12 @@ function keyPair() {
   return generateKeyPairSync("ed25519");
 }
 
+/** @param {import("node:crypto").KeyObject} privateKey */
 function privateKeyMaterial(privateKey) {
   return `base64url:${privateKey.export({ format: "der", type: "pkcs8" }).toString("base64url")}`;
 }
 
+/** @param {Buffer} bytes */
 function sha256(bytes) {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
@@ -134,6 +140,7 @@ function packageFixtureFiles() {
   );
 }
 
+/** @param {string[]} argumentsList @param {NodeJS.ProcessEnv} [environment] @returns {Promise<{code:number|null,signal:NodeJS.Signals|null,stdout:string,stderr:string}>} */
 async function runCli(argumentsList, environment = {}) {
   return new Promise((resolveResult) => {
     const child = spawn(NODE_PATH, [TOOL_PATH, ...argumentsList], {
@@ -141,10 +148,12 @@ async function runCli(argumentsList, environment = {}) {
       env: { ...process.env, ...environment },
       stdio: ["ignore", "pipe", "pipe"],
     });
+    /** @type {Buffer[]} */
     const stdout = [];
+    /** @type {Buffer[]} */
     const stderr = [];
-    child.stdout.on("data", (chunk) => stdout.push(chunk));
-    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.stdout.on("data", (/** @type {Buffer} */ chunk) => stdout.push(chunk));
+    child.stderr.on("data", (/** @type {Buffer} */ chunk) => stderr.push(chunk));
     child.on("close", (code, signal) =>
       resolveResult({
         code,
@@ -207,8 +216,8 @@ void describe("frontend release packager", () => {
     );
 
     const logical = { ...first.release };
-    delete logical.releaseId;
-    delete logical.artifactBaseUrl;
+    Reflect.deleteProperty(logical, "releaseId");
+    Reflect.deleteProperty(logical, "artifactBaseUrl");
     assert.equal(first.releaseId, sha256(Buffer.from(canonicalJson(logical), "utf8")));
     assert.equal(
       first.release.artifactBaseUrl,
@@ -257,17 +266,18 @@ void describe("frontend release packager", () => {
   });
 
   void it("matches the repository's canonical JSON and release-ID fixture rules exactly", async () => {
-    const corpus = JSON.parse(
+    const corpus = jsonFixture(
       await readFile(
         new URL("../../test/fixtures/frontend_release_catalog_v1.json", import.meta.url),
         "utf8",
       ),
     );
-    const payload = JSON.parse(corpus.release.payload);
-    assert.equal(canonicalJson(payload), corpus.release.payload);
+    const releasePayload = fixtureString(fixtureRecord(corpus.release).payload);
+    const payload = jsonFixture(releasePayload);
+    assert.equal(canonicalJson(payload), releasePayload);
     const logical = { ...payload };
-    delete logical.releaseId;
-    delete logical.artifactBaseUrl;
+    Reflect.deleteProperty(logical, "releaseId");
+    Reflect.deleteProperty(logical, "artifactBaseUrl");
     assert.equal(sha256(Buffer.from(canonicalJson(logical), "utf8")), payload.releaseId);
   });
 
@@ -301,9 +311,9 @@ void describe("frontend release packager", () => {
     assert.equal(result.stderr, "");
     assert.ok(!result.stdout.includes(privateKeyMaterial(keys.privateKey)));
     assert.ok(!result.stdout.includes("PRIVATE KEY"));
-    assert.equal(JSON.parse(result.stdout).releaseId.startsWith("sha256:"), true);
+    assert.equal(fixtureString(jsonFixture(result.stdout).releaseId).startsWith("sha256:"), true);
     assert.deepEqual(
-      JSON.parse(await readFile(join(output, "release.json"), "utf8")).keyId,
+      jsonFixture(await readFile(join(output, "release.json"), "utf8")).keyId,
       "fixture-release-key",
     );
   });
@@ -478,7 +488,7 @@ void describe("frontend release packager", () => {
   void it("rejects artifact bytes whose size or digest does not match the inventory", async () => {
     const input = await builtRemoteTree();
     const inventory = await enumerateArtifacts(input);
-    const original = inventory.artifacts.find(({ path }) => path === "assets/app.js");
+    const original = required(inventory.artifacts.find(({ path }) => path === "assets/app.js"));
     const changedBytes = Buffer.from("export const release = 'phase-d';\n", "utf8");
     assert.equal(changedBytes.byteLength, original.bytes.byteLength);
 
@@ -540,7 +550,7 @@ void describe("frontend release packager", () => {
 
     assert.deepEqual(await readFile(join(output, "artifacts", "assets", "app.js")), originalBytes);
     assert.deepEqual(
-      result.artifacts.find(({ path }) => path === "assets/app.js").bytes,
+      required(result.artifacts.find(({ path }) => path === "assets/app.js")).bytes,
       originalBytes,
     );
     assert.deepEqual(await readFile(appPath), swappedBytes);
@@ -578,7 +588,7 @@ void describe("frontend release packager", () => {
       /outside the repository/,
     );
     const incomplete = { ...metadata };
-    delete incomplete.releasedAt;
+    Reflect.deleteProperty(incomplete, "releasedAt");
     await assert.rejects(
       buildRelease({
         inputDirectory: input,
@@ -615,4 +625,25 @@ void describe("frontend release packager", () => {
       "keep this destination immutable\n",
     );
   });
+});
+
+void it("reads a caller-owned private-key descriptor without closing it", async () => {
+  const directory = await temporaryDirectory();
+  const path = join(directory, "signing-key.pem");
+  const { privateKey } = keyPair();
+  await writeFile(path, privateKey.export({ format: "pem", type: "pkcs8" }), { mode: 0o600 });
+  const handle = await open(path, "r");
+  try {
+    const loaded = await readPrivateKeySource({
+      privateKeyFd: handle.fd,
+      privateKeyEnv: "CADENCE_UNUSED_DESCRIPTOR_TEST_KEY",
+    });
+    assert.deepEqual(
+      loaded.export({ format: "der", type: "pkcs8" }),
+      privateKey.export({ format: "der", type: "pkcs8" }),
+    );
+    assert.equal((await handle.stat()).isFile(), true);
+  } finally {
+    await handle.close();
+  }
 });

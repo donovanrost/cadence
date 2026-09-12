@@ -1,11 +1,10 @@
+import { readPublication, publicationOutputDirectory } from "../../tools/publication-metadata.ts";
 import vue from "@vitejs/plugin-vue";
 import { resolve } from "node:path";
 import { defineConfig, lazyPlugins } from "vite-plus";
 
-const publicationRoot = resolve(
-  __dirname,
-  "../../../apps/cadence_web/priv/static/assets/application-host/host",
-);
+const publication = readPublication(import.meta.dirname);
+const publicationRoot = publicationOutputDirectory(publication);
 
 export default defineConfig({
   define: {
@@ -26,21 +25,22 @@ export default defineConfig({
       },
     },
   },
-  plugins: lazyPlugins(() => [
-    vue(),
-    {
-      name: "cadence-remove-node-origin-fallback",
-      enforce: "post",
-      transform(code, id) {
-        if (!id.endsWith("/phoenix-catalog-client.ts")) return null;
-        const next = code.replace(
-          /return typeof window === "undefined" \? "http:\/\/localhost\/" : window\.location\.origin;/,
-          "return window.location.origin;",
-        );
-        if (next === code)
-          throw new Error("Phoenix production build could not remove its Node origin fallback.");
-        return { code: next, map: null };
+  plugins:
+    lazyPlugins(() => [
+      vue(),
+      {
+        name: "cadence-remove-node-origin-fallback",
+        enforce: "post",
+        transform(code, id) {
+          if (!id.endsWith("/phoenix-catalog-client.ts")) return null;
+          const next = code.replace(
+            /return typeof window === "undefined" \? "http:\/\/localhost\/" : window\.location\.origin;/,
+            "return window.location.origin;",
+          );
+          if (next === code)
+            throw new Error("Phoenix production build could not remove its Node origin fallback.");
+          return { code: next, map: null };
+        },
       },
-    },
-  ]),
+    ]) ?? [],
 });

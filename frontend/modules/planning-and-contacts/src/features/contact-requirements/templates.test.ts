@@ -1,43 +1,55 @@
+import {
+  fixtureRecord,
+  fixtureString,
+  jsonFixture,
+  fixtureContext,
+} from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { requirementTemplateContribution as contribution } from "./template.contribution";
 import { templateFixture, templateEntry, templateOperation } from "./templates.test-support";
-import {
-  admitTemplatePage,
-  admitTemplateOperation,
-  type TemplatePage,
-  type TemplateAction,
-} from "./templates";
+import { admitTemplatePage, admitTemplateOperation, type TemplateAction } from "./templates";
 import { requirementSegment } from "./requirement-directory";
-const wrappers: ReturnType<typeof mount>[] = [];
+const wrappers: { unmount(): void }[] = [];
 afterEach(() => wrappers.splice(0).forEach((w) => w.unmount()));
 function harness(initial = templateFixture()) {
   let server = structuredClone(initial),
     guard = () => true;
-  const execute = vi.fn(async (action: TemplateAction, input: any) => {
-      const op = templateOperation(server, action, input);
-      server = { ...server, sequence: op.sequence, operation: op };
-      if (action === "create-template")
-        server.model.templates.entries.push({
-          ...templateEntry(server),
-          reference: op.receipt!.result.reference,
-        });
-      else if (action === "templates-page")
-        server.model.templates = { page: input.payload.page, more: false, entries: [] };
-      else if (action === "spacecraft-page")
-        server.model.spacecraft = {
-          page: input.payload.page,
-          total: 26,
-          entries: [{ id: "craft-26", name: "Last spacecraft" }],
-        };
-      else if (action !== "validate-template") {
-        const row = server.model.templates.entries.find(
-          (e) => e.reference.template_id === input.payload.reference.template_id,
-        );
-        if (row) row.reference = op.receipt!.result.reference;
-      }
-      return op;
-    }),
+  const execute = vi.fn(
+      async (
+        action: TemplateAction,
+        input: { sequence: number; payload: unknown },
+      ): Promise<unknown> => {
+        const op = templateOperation(server, action, input);
+        server = { ...server, sequence: op.sequence, operation: op };
+        if (op.action === "create-template")
+          server.model.templates.entries.push({
+            ...templateEntry(server),
+            reference: op.receipt.result.reference,
+          });
+        else if (op.action === "templates-page")
+          server.model.templates = { page: op.input.page, more: false, entries: [] };
+        else if (op.action === "spacecraft-page")
+          server.model.spacecraft = {
+            page: op.input.page,
+            total: 26,
+            entries: [{ id: "craft-26", name: "Last spacecraft" }],
+          };
+        else if (
+          op.action === "pause-template" ||
+          op.action === "activate-template" ||
+          op.action === "close-template"
+        ) {
+          const reference = op.input.reference;
+          const row = server.model.templates.entries.find(
+            (e) => e.reference.template_id === reference.template_id,
+          );
+          if (row) row.reference = op.receipt.result.reference;
+        }
+        return op;
+      },
+    ),
     read = vi.fn(async () => structuredClone(server)),
     dispose = vi.fn();
   const wrapper = mount(contribution.component, {
@@ -68,7 +80,7 @@ function harness(initial = templateFixture()) {
 }
 test("native creation queues behind validation, preserves UTC seconds and resets only the confirmed draft", async () => {
   const h = harness();
-  let finish!: (v: any) => void;
+  let finish: ((v: unknown) => void) | undefined;
   await h.wrapper.get("#template-spacecraft").setValue("craft-1");
   await flushPromises();
   h.execute.mockImplementationOnce(
@@ -82,12 +94,14 @@ test("native creation queues behind validation, preserves UTC seconds and resets
   await h.wrapper.get("#requirement-template-form").trigger("submit");
   expect(h.canLeave()).toBe(false);
   expect(h.execute).toHaveBeenCalledTimes(2);
-  finish(templateOperation(h.server, "validate-template", h.execute.mock.calls[1]![1]));
+  required(finish)(
+    templateOperation(h.server, "validate-template", required(h.execute.mock.calls[1])[1]),
+  );
   await flushPromises();
   expect(h.execute).toHaveBeenCalledTimes(3);
-  const [event, input] = h.execute.mock.calls[2]!;
+  const [event, input] = required(h.execute.mock.calls[2]);
   expect(event).toBe("create-template");
-  expect(input.payload.template).toMatchObject({
+  expect(fixtureRecord(input.payload).template).toMatchObject({
     rationale: "Reviewed latest draft",
     anchor_at: "2027-01-01T01:00:37",
   });
@@ -106,7 +120,7 @@ test("lifecycle actions carry the displayed version, hash and lifecycle evidence
   await flushPromises();
   expect(h.execute.mock.calls[1]).toEqual([
     "pause-template",
-    { sequence: 2, payload: { reference: initial.model.templates.entries[0]!.reference } },
+    { sequence: 2, payload: { reference: required(initial.model.templates.entries[0]).reference } },
   ]);
   expect(h.wrapper.find("#activate-template-template-1").exists()).toBe(true);
   expect((h.wrapper.get("#template-rationale").element as HTMLTextAreaElement).value).toBe(
@@ -128,7 +142,8 @@ test("lost lifecycle response recovers the matching receipt without replaying th
     const recovered = structuredClone(h.server);
     recovered.sequence = op.sequence;
     recovered.operation = op;
-    recovered.model.templates.entries[0]!.reference = op.receipt!.result.reference;
+    if (op.action !== "pause-template") throw Error("Expected the pause receipt");
+    required(recovered.model.templates.entries[0]).reference = op.receipt.result.reference;
     h.read.mockResolvedValueOnce(recovered);
     throw Error("Lost response");
   });
@@ -152,7 +167,7 @@ test("stale lifecycle rejection requires a fresh ledger while failed reads retai
       ...templateOperation(h.server, action, input),
       status: "rejected" as const,
       receipt: null,
-      feedback: ["stale_evidence"],
+      feedback: ["stale_evidence" as const],
     };
     h.read.mockResolvedValueOnce({ ...h.server, sequence: op.sequence, operation: op });
     return op;
@@ -231,22 +246,30 @@ test("contracts reject foreign receipts, changed defaults and malformed ledgers"
     sequence: 1,
     payload: { reference: templateEntry(initial).reference },
   });
-  op.receipt!.result.reference.version = 2;
+  op.receipt.result.reference.version = 2;
   expect(admitTemplateOperation(op, initial.model.context)).toBeNull();
 });
 test("producer supplied native template contribution", async () => {
   if (!process.env.CADENCE_TEMPLATE_WORKFLOW) return;
-  const supplied = JSON.parse(process.env.CADENCE_TEMPLATE_WORKFLOW),
-    snapshot = supplied.snapshot,
-    props = contribution.read(snapshot.data, snapshot.context),
-    page = props.page as TemplatePage;
-  let last: any = null;
-  const execute = vi.fn(async (action: TemplateAction, input: any) => {
-    last =
-      supplied.operations?.find((o: any) => o.sequence === input.sequence) ??
-      templateOperation(page, action, input);
-    return last;
-  });
+  const supplied = jsonFixture(process.env.CADENCE_TEMPLATE_WORKFLOW),
+    snapshot = fixtureRecord(supplied.snapshot),
+    props = contribution.read(snapshot.data, fixtureContext(snapshot.context)),
+    page = required(admitTemplatePage(props.page));
+  const operations = supplied.operations;
+  if (operations !== undefined && !Array.isArray(operations))
+    throw Error("Invalid producer operations");
+  let last: Record<string, unknown> | null = null;
+  const execute = vi.fn(
+    async (
+      action: TemplateAction,
+      input: { sequence: number; payload: unknown },
+    ): Promise<unknown> => {
+      last =
+        operations?.map(fixtureRecord).find((o) => o.sequence === input.sequence) ??
+        templateOperation(page, action, input);
+      return last;
+    },
+  );
   const w = mount(contribution.component, {
     props: {
       ...props,
@@ -260,15 +283,20 @@ test("producer supplied native template contribution", async () => {
   });
   wrappers.push(w);
   if (supplied.action === "create-template") {
-    await w.get("#template-spacecraft").setValue(page.model.spacecraft.entries[0]!.id);
+    await w.get("#template-spacecraft").setValue(required(page.model.spacecraft.entries[0]).id);
     await flushPromises();
     await w.get("#template-rationale").setValue("Native recurring requirement");
     await flushPromises();
     await w.get("#requirement-template-form").trigger("submit");
     await flushPromises();
   } else if (supplied.action) {
-    const id = supplied.id ?? page.model.templates.entries[0]!.reference.template_id;
-    await w.get(`[id="${supplied.action}-${requirementSegment(id)}"]`).trigger("click");
+    const id =
+      supplied.id === undefined
+        ? required(page.model.templates.entries[0]).reference.template_id
+        : fixtureString(supplied.id);
+    await w
+      .get(`[id="${fixtureString(supplied.action)}-${requirementSegment(id)}"]`)
+      .trigger("click");
     await flushPromises();
   }
   if (supplied.operations) {

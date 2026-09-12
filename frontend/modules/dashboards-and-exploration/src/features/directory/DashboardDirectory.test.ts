@@ -1,23 +1,25 @@
+import { fixtureRecordAt } from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mount, flushPromises } from "@vue/test-utils";
 import DashboardDirectory from "./DashboardDirectory.vue";
 import { directoryContribution } from "./contribution";
 import { directoryFixture } from "./fixtures.test-support";
-let wrapper: ReturnType<typeof mount> | undefined;
+let wrapper: Pick<ReturnType<typeof mount>, "unmount" | "get" | "find" | "setProps"> | undefined;
 afterEach(() => {
   wrapper?.unmount();
   vi.useRealTimers();
   document.body.innerHTML = "";
 });
 function render(
-  execute = vi.fn(async () => ({
+  execute = vi.fn(async (): Promise<unknown> => ({
     status: "ok",
     sequence: 1,
     data: { dashboard_id: "dashboard-1", starred: false },
   })),
 ) {
   const state = directoryFixture(),
-    navigate = vi.fn(),
+    navigate = vi.fn((_: string) => {}),
     refresh = vi.fn(async () => {});
   wrapper = mount(DashboardDirectory, {
     attachTo: document.body,
@@ -29,29 +31,29 @@ test("validates context, lifecycle, pagination, row identities and supported DTO
   const context = { organizationId: "org-1", missionId: "mission-1" };
   expect(directoryContribution.read(directoryFixture(), context)).toHaveProperty("state");
   for (const change of [
-    (s: any) => {
-      s.model.version = 2;
+    (s: unknown) => {
+      fixtureRecordAt(s, "model").version = 2;
     },
-    (s: any) => {
-      s.model.mission_id = "foreign";
+    (s: unknown) => {
+      fixtureRecordAt(s, "model").mission_id = "foreign";
     },
-    (s: any) => {
-      s.model.rows[1].id = s.model.rows[0].id;
+    (s: unknown) => {
+      fixtureRecordAt(s, "model", "rows", 1).id = fixtureRecordAt(s, "model", "rows", 0).id;
     },
-    (s: any) => {
-      s.model.rows[0].lifecycle = "arbitrary";
+    (s: unknown) => {
+      fixtureRecordAt(s, "model", "rows", 0).lifecycle = "arbitrary";
     },
-    (s: any) => {
-      s.model.total = 51;
+    (s: unknown) => {
+      fixtureRecordAt(s, "model").total = 51;
     },
-    (s: any) => {
-      s.model.rows[0].version = 1.5;
+    (s: unknown) => {
+      fixtureRecordAt(s, "model", "rows", 0).version = 1.5;
     },
-    (s: any) => {
-      s.sequence = -1;
+    (s: unknown) => {
+      fixtureRecordAt(s).sequence = -1;
     },
-    (s: any) => {
-      s.phase = "complete";
+    (s: unknown) => {
+      fixtureRecordAt(s).phase = "complete";
     },
   ]) {
     const state = directoryFixture();
@@ -71,7 +73,7 @@ test("keeps real dashboard links, personal stars, author controls and URL filter
   await app.get("#directory_query").setValue("thermal & flight");
   await vi.advanceTimersByTimeAsync(250);
   expect(navigate).toHaveBeenCalledOnce();
-  const url = new URL(navigate.mock.calls[0][0], "http://localhost");
+  const url = new URL(required(navigate.mock.calls[0])[0], "http://localhost");
   expect(url.searchParams.get("query")).toBe("thermal & flight");
   expect(url.searchParams.get("page")).toBe("1");
 });
@@ -94,8 +96,8 @@ test("sends observed version and ordered effects, then refreshes without replaci
   expect(app.get("#star-dashboard-1").attributes("disabled")).toBeUndefined();
 });
 test("uncertain effects stay locked across a host refresh and read-only recovery", async () => {
-  const execute = vi.fn(async () => ({ status: "unknown", sequence: 1 }));
-  const { app, refresh, state } = render(execute as any);
+  const execute = vi.fn(async (): Promise<unknown> => ({ status: "unknown", sequence: 1 }));
+  const { app, refresh, state } = render(execute);
   await app.get("#restore-dashboard-2").trigger("click");
   await flushPromises();
   expect(execute).toHaveBeenCalledWith("restore", {
@@ -112,12 +114,12 @@ test("uncertain effects stay locked across a host refresh and read-only recovery
   expect(execute).toHaveBeenCalledOnce();
 });
 test("pagination links preserve filters and malformed confirmations cannot unlock actions", async () => {
-  const execute = vi.fn(async () => ({
+  const execute = vi.fn(async (): Promise<unknown> => ({
     status: "ok",
     sequence: 1,
     data: { dashboard_id: "dashboard-1", starred: true },
   }));
-  const { app, state } = render(execute as any);
+  const { app, state } = render(execute);
   await app.get("#star-dashboard-1").trigger("click");
   await flushPromises();
   expect(app.get("#star-dashboard-1").attributes("disabled")).toBeDefined();
@@ -126,10 +128,10 @@ test("pagination links preserve filters and malformed confirmations cannot unloc
   paged.model.pages = 2;
   paged.model.filters.page = 2;
   paged.model.filters.query = "flight";
-  paged.model.rows = [state.model.rows[0]];
+  paged.model.rows = [required(state.model.rows[0])];
   await app.setProps({ state: paged });
   const previous = new URL(
-    app.get("#dashboard-directory-previous").attributes("href")!,
+    required(app.get("#dashboard-directory-previous").attributes("href")),
     "http://localhost",
   );
   expect(previous.searchParams.get("page")).toBe("1");
@@ -137,8 +139,8 @@ test("pagination links preserve filters and malformed confirmations cannot unloc
   expect(app.find("#dashboard-directory-next").exists()).toBe(false);
 });
 test("known rejection permits correction and uses the server sequence", async () => {
-  const execute = vi.fn(async () => ({ status: "rejected", sequence: 0 }));
-  const { app } = render(execute as any);
+  const execute = vi.fn(async (): Promise<unknown> => ({ status: "rejected", sequence: 0 }));
+  const { app } = render(execute);
   await app.get("#star-dashboard-1").trigger("click");
   await flushPromises();
   await app.get("#star-dashboard-1").trigger("click");
@@ -152,7 +154,7 @@ test("known rejection permits correction and uses the server sequence", async ()
 test("authors open unpublished drafts in the editor and publication restores the viewer link", async () => {
   const { app, state } = render();
   const draft = structuredClone(state);
-  draft.model.rows[0].published_version = null;
+  required(draft.model.rows[0]).published_version = null;
   await app.setProps({ state: draft });
   expect(app.get("#open-dashboard-1").attributes("href")).toBe(
     "/missions/mission-1/ops/dashboards/dashboard-1/edit",

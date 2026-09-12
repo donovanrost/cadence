@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import { sharedViewFixture, sharedViewContext } from "./fixtures.test-support";
@@ -5,7 +6,7 @@ import { shareContribution, snapshotContribution } from "./contribution";
 import SharedDashboardView from "./SharedDashboardView.vue";
 import SharedViewLegacyRedirect from "./SharedViewLegacyRedirect.vue";
 import { readSharedView } from "./validation";
-const wrappers: ReturnType<typeof mount>[] = [];
+const wrappers: { unmount: () => void }[] = [];
 afterEach(() => wrappers.splice(0).forEach((w) => w.unmount()));
 function setup(kind: "share" | "snapshot" = "snapshot", dataOnly = false) {
   const model = sharedViewFixture(kind);
@@ -13,7 +14,7 @@ function setup(kind: "share" | "snapshot" = "snapshot", dataOnly = false) {
     model.data_visibility = "definition_only";
     model.canvas = null;
   }
-  const navigate = vi.fn(),
+  const navigate = vi.fn((_: string) => {}),
     refresh = vi.fn(async () => {});
   const wrapper = mount(SharedDashboardView, {
     props: {
@@ -86,19 +87,19 @@ test("contribution contracts reject identity, version, visibility and renderer a
     { version: 2 },
     { component: "Arbitrary" },
     { data_visibility: "definition_only" },
-    { canvas: { ...fixture.canvas!, author: true } },
-    { canvas: { ...fixture.canvas!, document_mode: "published" } },
-    { canvas: { ...fixture.canvas!, document_version: 99 } },
+    { canvas: { ...required(fixture.canvas), author: true } },
+    { canvas: { ...required(fixture.canvas), document_mode: "published" } },
+    { canvas: { ...required(fixture.canvas), document_version: 99 } },
     {
       canvas: {
-        ...fixture.canvas!,
-        placements: [{ ...fixture.canvas!.placements[0], authored_id: "foreign" }],
+        ...required(fixture.canvas),
+        placements: [{ ...required(fixture.canvas).placements[0], authored_id: "foreign" }],
       },
     },
     {
       definition: {
-        ...fixture.definition!,
-        json: fixture.definition!.json.replace('"mission"', '"foreign"'),
+        ...required(fixture.definition),
+        json: required(fixture.definition).json.replace('"mission"', '"foreign"'),
       },
     },
     { runtime_context: { javascript: "arbitrary" } },
@@ -117,6 +118,7 @@ test("legacy entries link only to canonical scoped host viewers", async () => {
   expect(wrapper.get("#shared-view-open-workspace").attributes("href")).toBe(
     "/missions/mission/ops/dashboard-shares/share-1",
   );
+  // @ts-expect-error Vue runtime reconciliation removes the optional share ID before switching viewers.
   await wrapper.setProps({ share_id: undefined, snapshot_id: "snapshot-1" });
   expect(wrapper.get("#shared-view-open-workspace").attributes("href")).toBe(
     "/missions/mission/ops/dashboard-snapshots/snapshot-1",

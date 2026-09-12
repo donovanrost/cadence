@@ -1,3 +1,4 @@
+import { required } from "../../../../../../test-support/required";
 import { expect, test } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h } from "vue";
@@ -77,9 +78,9 @@ test("contains a renderer failure and retries on a fresh snapshot without losing
   expect(wrapper.find("#healthy-panel").exists()).toBe(true);
   expect(wrapper.get('[role="alert"]').text()).not.toContain("sensitive");
   fail = false;
-  const child = wrapper.findAllComponents(DiagnosticsContributionBoundary)[1]!;
+  const child = required(wrapper.findAllComponents(DiagnosticsContributionBoundary)[1]);
   // Refresh arrives as a new server snapshot, clearing only this boundary's failure.
-  (child.vm as any).$parent.$forceUpdate();
+  required(child.vm.$parent).$forceUpdate();
   await flushPromises();
   expect(wrapper.find("#recovered").exists()).toBe(true);
   wrapper.unmount();
@@ -92,5 +93,6 @@ test("registrations are explicit, ordered and unique", () => {
     ),
   ).toEqual(["test.diagnostics", "test.later"]);
   expect(() => admitDiagnostics([contribution, contribution])).toThrow();
-  expect(() => admitDiagnostics([{ ...contribution, slot: "ops.anywhere" as any }])).toThrow();
+  // @ts-expect-error Deliberately register a slot outside the supported diagnostics contract.
+  expect(() => admitDiagnostics([{ ...contribution, slot: "ops.anywhere" }])).toThrow();
 });

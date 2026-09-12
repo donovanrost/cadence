@@ -12,6 +12,7 @@ export const providerAccountDirectoryContribution: OrganizationPageContribution<
     slot: ORGANIZATION_PAGE_SLOT,
     version: 1,
     title: "Provider accounts",
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
     component: ProviderAccountListPage,
     read: (value, context) => readAccountDirectory(value, context.organizationId),
   });

@@ -3,6 +3,7 @@ export const record = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 export const bytes = (v: string) => new TextEncoder().encode(v).length;
 export const text = (v: unknown, max = 4000): v is string =>
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   typeof v === "string" && bytes(v) <= max && !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(v);
 export const id = (v: unknown): v is string =>
   typeof v === "string" && v.length <= 120 && /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(v);

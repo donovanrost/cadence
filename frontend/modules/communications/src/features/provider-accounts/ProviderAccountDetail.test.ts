@@ -1,3 +1,5 @@
+import { containing } from "../../../../../test-support/matchers";
+import { required } from "../../../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import ProviderAccountDetail from "./ProviderAccountDetail.vue";
@@ -47,7 +49,7 @@ test("rotation freezes actions, deduplicates clicks and consumes the updated cre
   execute.mockResolvedValueOnce(receipt({ patch: updated }));
   await wrapper.get("#validate-account").trigger("click");
   await flushPromises();
-  expect(execute.mock.calls[1][1].expected_credential_version).toBe(3);
+  expect(required(execute.mock.calls[1])[1].expected_credential_version).toBe(3);
   expect(wrapper.find("#provider-account-return").exists()).toBe(false);
   wrapper.unmount();
 });
@@ -57,7 +59,7 @@ test("grant creation submits normalized scope and clears only a confirmed succes
   await wrapper.get("#grant-max_quota").setValue("0");
   const next = accountDetailFixture();
   next.account_grants.push({
-    ...next.account_grants[0],
+    ...required(next.account_grants[0]),
     id: "grant-2",
     __dom_id: "grant-row-2",
     provider_account_grant_id: "grant-2",
@@ -71,10 +73,10 @@ test("grant creation submits normalized scope and clears only a confirmed succes
   await flushPromises();
   expect(execute.mock.calls[0]).toEqual([
     "grant-mission",
-    expect.objectContaining({
+    containing({
       expected_account_version: 3,
       provider_account_id: "account-1",
-      grant: expect.objectContaining({
+      grant: containing({
         mission_id: "mission-2",
         max_quota: "0",
         grant_reason: "Commissioning",
@@ -94,7 +96,7 @@ test("revocation requires confirmation and sends the exact grant version and acc
   confirm.mockReturnValue(true);
   const next = accountDetailFixture();
   next.account_grants[0] = {
-    ...model.account_grants[0],
+    ...required(model.account_grants[0]),
     version: 3,
     version_label: "grant v3 · account v3",
     lifecycle: { status: "blocked", label: "Revoked" },
@@ -105,7 +107,7 @@ test("revocation requires confirmation and sends the exact grant version and acc
   await flushPromises();
   expect(execute).toHaveBeenCalledExactlyOnceWith(
     "revoke-grant",
-    expect.objectContaining({
+    containing({
       "grant-id": "grant-1",
       expected_grant_version: 2,
       provider_account_id: "account-1",

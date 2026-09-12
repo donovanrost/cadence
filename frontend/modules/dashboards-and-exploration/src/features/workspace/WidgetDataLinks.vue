@@ -1,51 +1,8 @@
 <script setup lang="ts">
+import type { WidgetDataLinksPresentation } from "./WidgetDataLinks.contracts";
+
 import { computed } from "vue";
 import CadencePopover from "@cadence/ui/CadencePopover.vue";
-
-type Attrs = Record<string, string | null>;
-type ButtonType = "button" | "submit" | "reset";
-
-type IconPresentation = {
-  name: string;
-  class: string;
-};
-
-type ItemPresentation = {
-  key: string;
-  kind: "data_link" | "evidence";
-  type: ButtonType;
-  class: string;
-  attrs: Attrs;
-  label: { text: string; class: string | null };
-  secondary: { text: string; class: string } | null;
-  icon: IconPresentation | null;
-};
-
-type WidgetDataLinksPresentation = {
-  kind:
-    | "widget"
-    | "status_matrix_row"
-    | "data_table_row"
-    | "state_timeline_row"
-    | "event_timeline_row";
-  component_id: string;
-  overlay: { id: string; class: string; attrs: Attrs };
-  trigger: {
-    id: string;
-    type: ButtonType;
-    class: string;
-    attrs: Attrs;
-    content: {
-      class: string;
-      title: string;
-      attrs: Attrs;
-      icon: IconPresentation;
-    };
-  };
-  panel: { id: string; class: string; hidden: boolean; attrs: Attrs };
-  body: { class: string };
-  items: ItemPresentation[];
-};
 
 const props = defineProps<{ presentation: WidgetDataLinksPresentation }>();
 

@@ -1,3 +1,4 @@
+import { required } from "../../../../test-support/required";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import { createApp, defineComponent, h, inject, ref, type App } from "vue";
@@ -15,7 +16,7 @@ function host() {
   let chrome!: PageChrome;
   const Capture = defineComponent({
     setup() {
-      chrome = inject(pageChromeKey)!;
+      chrome = required(inject(pageChromeKey));
       return () => h("div", { id: "remote-root" });
     },
   });
@@ -32,7 +33,7 @@ function host() {
 }
 function remote(app: App, chrome: PageChrome) {
   app.provide(pageChromeKey, chrome);
-  app.mount(document.querySelector("#remote-root")!);
+  app.mount(required(document.querySelector("#remote-root")));
   cleanups.push(() => app.unmount());
 }
 describe("host page composition", () => {
@@ -94,7 +95,7 @@ describe("host page composition", () => {
     const app = createApp({
       render: () => h(CadencePageHeading, {}, { title: () => "Remote title" }),
     });
-    app.provide(pageChromeKey, chrome).mount(document.querySelector("#remote-root")!);
+    app.provide(pageChromeKey, chrome).mount(required(document.querySelector("#remote-root")));
     await flushPromises();
     app.unmount();
     await flushPromises();

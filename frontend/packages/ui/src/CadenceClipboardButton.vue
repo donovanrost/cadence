@@ -1,20 +1,32 @@
-<script setup>
+<script setup lang="ts">
 import { computed, onUnmounted, ref } from "vue";
 
-const props = defineProps({
-  button_id: { type: String, required: true },
-  clipboard_text: { type: String, default: "" },
-  button_class: { type: String, default: "" },
-  icon: { type: String, required: true },
-  icon_class: { type: String, default: "" },
-  label: { type: String, default: "" },
-  title: { type: String, default: "" },
-  aria_label: { type: String, default: "" },
-  data_attrs: { type: Object, default: () => ({}) },
-});
+const props = withDefaults(
+  defineProps<{
+    button_id: string;
+    clipboard_text?: string;
+    button_class?: string;
+    icon: string;
+    icon_class?: string;
+    label?: string;
+    title?: string;
+    aria_label?: string;
+    data_attrs?: Record<string, unknown>;
+  }>(),
+  {
+    clipboard_text: "",
+    button_class: "",
+    icon_class: "",
+    label: "",
+    title: "",
+    aria_label: "",
+    data_attrs: () => ({}),
+  },
+);
 
-const feedback = ref("");
-let clearFeedbackTimer;
+const feedback = ref<"" | "copied" | "failed">("");
+let clearFeedbackTimer: ReturnType<typeof setTimeout> | undefined;
+let active = true;
 
 const feedbackMessage = computed(() => {
   if (feedback.value === "copied") return "Copied to clipboard";
@@ -27,7 +39,7 @@ const absoluteText = () => {
   return new URL(value, window.location.origin).toString();
 };
 
-const copyWithFallback = (text) => {
+const copyWithFallback = (text: string) => {
   const textarea = document.createElement("textarea");
   textarea.value = text;
   textarea.setAttribute("readonly", "readonly");
@@ -43,7 +55,8 @@ const copyWithFallback = (text) => {
   }
 };
 
-const markFeedback = (state) => {
+const markFeedback = (state: "copied" | "failed") => {
+  if (!active) return;
   feedback.value = state;
   if (clearFeedbackTimer !== undefined) clearTimeout(clearFeedbackTimer);
 
@@ -76,6 +89,7 @@ const copy = async () => {
 };
 
 onUnmounted(() => {
+  active = false;
   if (clearFeedbackTimer !== undefined) clearTimeout(clearFeedbackTimer);
 });
 </script>

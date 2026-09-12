@@ -1,3 +1,4 @@
+import { required } from "../../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import OrganizationDirectoryPanel from "./OrganizationDirectoryPanel.vue";
@@ -38,7 +39,7 @@ test("directory owns canonical links and encodes continuation without arbitrary 
     props: { model: readOrganizationDirectory(page, "admin") },
   });
   const href = paged.get("#admin-organizations-next").attributes("href");
-  expect(Object.fromEntries(new URL(href!, "http://localhost").searchParams)).toEqual(
+  expect(Object.fromEntries(new URL(required(href), "http://localhost").searchParams)).toEqual(
     page.next_cursor,
   );
   paged.unmount();

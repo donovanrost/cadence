@@ -34,7 +34,7 @@ function harness(execute: FormPort["execute"]) {
 test("validation is serial, coalesces newer drafts and ignores the obsolete result", async () => {
   let finish!: (value: unknown) => void;
   const execute = vi
-    .fn()
+    .fn<FormPort["execute"]>()
     .mockReturnValueOnce(
       new Promise((resolve) => {
         finish = resolve;
@@ -58,7 +58,7 @@ test("validation is serial, coalesces newer drafts and ignores the obsolete resu
 });
 test("invalid or failed validation stays recoverable without authorizing a save", async () => {
   const execute = vi
-    .fn()
+    .fn<FormPort["execute"]>()
     .mockRejectedValueOnce(new Error("private failure"))
     .mockResolvedValueOnce({ result: { valid: false } })
     .mockResolvedValue(valid);
@@ -96,7 +96,7 @@ test("save requires the exact accepted snapshot and never queues an implicit sav
 test("an in-flight save disables edits and duplicate submission, then navigates once", async () => {
   let finish!: (value: unknown) => void;
   const execute = vi
-    .fn()
+    .fn<FormPort["execute"]>()
     .mockResolvedValueOnce(valid)
     .mockReturnValue(
       new Promise((resolve) => {
@@ -129,7 +129,7 @@ test.each(["validate", "save"] as const)(
       finish = resolve;
     });
     const execute = vi
-      .fn()
+      .fn<FormPort["execute"]>()
       .mockImplementation((kind) => (kind === action ? pending : Promise.resolve(valid)));
     const h = harness(execute);
     h.api.validate(input());
@@ -147,7 +147,7 @@ test.each(["validate", "save"] as const)(
 test("known rejections preserve retry, while unknown save outcomes prevent duplicate creation", async () => {
   for (const outcome of ["rejected", "unknown"] as const) {
     const execute = vi
-      .fn()
+      .fn<FormPort["execute"]>()
       .mockResolvedValueOnce(valid)
       .mockRejectedValue(new FormActionFailure(outcome));
     const h = harness(execute);

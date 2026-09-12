@@ -1,3 +1,11 @@
+import { containing } from "../../../../../test-support/matchers";
+import {
+  jsonFixture,
+  fixtureContext,
+  fixtureString,
+} from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
+import { fixtureArrayAt, fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { readFileSync, writeFileSync } from "node:fs";
 import { mount, flushPromises } from "@vue/test-utils";
 import { test, expect, vi } from "vite-plus/test";
@@ -21,7 +29,7 @@ function setup(page = workbenchFixture(), execute = vi.fn(), read = vi.fn()) {
 }
 test("an unsupported command definition leaves draft inspection available without offering a preview", () => {
   const page = workbenchFixture();
-  page.catalog!.selected_command!.supported = false;
+  required(required(page.catalog).selected_command).supported = false;
   const c = setup(page);
   try {
     expect(c.wrapper.find("#stage-command-unsupported").exists()).toBe(true);
@@ -49,7 +57,7 @@ test("draft controls preserve optional false, defaults and fixed values in finit
       expected_stage: page.workbench.stage.expected_stage,
       expected_item: null,
       command: {
-        expected_basis: page.catalog!.basis.token,
+        expected_basis: required(page.catalog).basis.token,
         source_endpoint_ref: "target_one",
         command_id: "command_one",
         argument_values_json: JSON.stringify({ amount: 2, enabled: false }),
@@ -70,7 +78,7 @@ test("unknown draft save is consumed and its exact item receipt is recovered by 
   const result = {
     status: "completed",
     event: "save_item",
-    write_token: page.write_token!,
+    write_token: required(page.write_token),
     receipt: {
       operation: "item_created",
       actor_id: "user_one",
@@ -104,14 +112,16 @@ test("notes and order remain editable without a current model and advance the wr
   page.catalog = null;
   const next = structuredClone(page);
   next.write_token = "1".repeat(64);
-  next.workbench.selected_item!.notes = "Keep for later";
-  next.workbench.selected_item!.order = 7;
-  next.workbench.selected_item!.expected_item = "2".repeat(64);
-  next.workbench.items.entries = [{ ...next.workbench.selected_item!, argument_values_json: null }];
+  required(next.workbench.selected_item).notes = "Keep for later";
+  required(next.workbench.selected_item).order = 7;
+  required(next.workbench.selected_item).expected_item = "2".repeat(64);
+  next.workbench.items.entries = [
+    { ...required(next.workbench.selected_item), argument_values_json: null },
+  ];
   const operation = {
     status: "completed" as const,
     event: "edit_details",
-    write_token: page.write_token!,
+    write_token: required(page.write_token),
     receipt: {
       operation: "item_updated",
       actor_id: "user_one",
@@ -135,17 +145,17 @@ test("notes and order remain editable without a current model and advance the wr
     expect(c.execute).toHaveBeenCalledWith("edit_details", {
       expected_write: page.write_token,
       expected_stage: page.workbench.stage.expected_stage,
-      expected_item: page.workbench.selected_item!.expected_item,
+      expected_item: required(page.workbench.selected_item).expected_item,
       notes: "Keep for later",
       order: 7,
     });
     await c.wrapper.get("#stage-item-cancel-confirm").setValue(true);
     await c.wrapper.get("#stage-item-cancel").trigger("click");
     await flushPromises();
-    expect(c.execute.mock.calls[1]![1]).toEqual({
+    expect(required(c.execute.mock.calls[1])[1]).toEqual({
       expected_write: next.write_token,
       expected_stage: next.workbench.stage.expected_stage,
-      expected_item: next.workbench.selected_item!.expected_item,
+      expected_item: required(next.workbench.selected_item).expected_item,
     });
   } finally {
     c.wrapper.unmount();
@@ -157,7 +167,7 @@ test("batch submission requires explicit selection and reviewed confirmation, th
   const completed = {
     status: "completed" as const,
     event: "submit",
-    write_token: page.write_token!,
+    write_token: required(page.write_token),
     receipt: {
       operation: "requests_created",
       stage_id: "stage_one",
@@ -176,8 +186,8 @@ test("batch submission requires explicit selection and reviewed confirmation, th
   next.workbench.stage.state = "submitted";
   next.workbench.stage.can_edit_items = false;
   next.workbench.stage.can_edit_stage = false;
-  next.workbench.items.entries[0]!.state = "submitted";
-  next.workbench.items.entries[0]!.request_id = "request_one";
+  required(next.workbench.items.entries[0]).state = "submitted";
+  required(next.workbench.items.entries[0]).request_id = "request_one";
   const execute = vi
       .fn()
       .mockResolvedValueOnce({ status: "previewed", preview })
@@ -240,7 +250,7 @@ test("selection edits invalidate the reviewed batch and late previews cannot rea
   );
   await pending.wrapper.get('[data-argument-name="amount"]').setValue("2");
   await pending.wrapper.get("#stage-command-form").trigger("submit");
-  expect(pending.guardNavigation.mock.calls[0]![0]()).toBe(false);
+  expect(required(pending.guardNavigation.mock.calls[0])[0]()).toBe(false);
   pending.wrapper.unmount();
   resolve({ status: "previewed", preview: itemPreviewFixture() });
   await flushPromises();
@@ -250,15 +260,20 @@ test("foreign contexts, privacy claims, cursor ties, forged receipts and malform
   const p = workbenchFixture(true);
   expect(readWorkbenchPage(p, p.workbench.context)).toEqual(p);
   for (const change of [
-    (x: any) => (x.workbench.context.missionId = "other"),
-    (x: any) => (x.workbench.stage.owner_id = "other"),
-    (x: any) => x.workbench.items.entries.push(x.workbench.items.entries[0]),
-    (x: any) => (x.workbench.query.after_order = "1"),
-    (x: any) => (x.workbench.selected_item.id = "other"),
-    (x: any) => (x.workbench.selected_item.argument_values_json = '{"amount":null}'),
-    (x: any) => (x.workbench.version = 1),
-    (x: any) => (x.workbench.selected_item.argument_values = { amount: 2 }),
-    (x: any) => (x.catalog.actor_id = "other"),
+    (x: unknown) => (fixtureRecordAt(x, "workbench", "context").missionId = "other"),
+    (x: unknown) => (fixtureRecordAt(x, "workbench", "stage").owner_id = "other"),
+    (x: unknown) =>
+      fixtureArrayAt(x, "workbench", "items", "entries").push(
+        fixtureArrayAt(x, "workbench", "items", "entries")[0],
+      ),
+    (x: unknown) => (fixtureRecordAt(x, "workbench", "query").after_order = "1"),
+    (x: unknown) => (fixtureRecordAt(x, "workbench", "selected_item").id = "other"),
+    (x: unknown) =>
+      (fixtureRecordAt(x, "workbench", "selected_item").argument_values_json = '{"amount":null}'),
+    (x: unknown) => (fixtureRecordAt(x, "workbench").version = 1),
+    (x: unknown) =>
+      (fixtureRecordAt(x, "workbench", "selected_item").argument_values = { amount: 2 }),
+    (x: unknown) => (fixtureRecordAt(x, "catalog").actor_id = "other"),
   ]) {
     const next = structuredClone(p);
     change(next);
@@ -270,8 +285,8 @@ test.runIf(!!process.env.CADENCE_COMMAND_STAGES_DOCUMENT)(
   async () => {
     const source = process.env.CADENCE_COMMAND_STAGES_DOCUMENT;
     if (!source) return;
-    const document = JSON.parse(readFileSync(source, "utf8")),
-      page = readWorkbenchPage(document.data, document.context),
+    const document = jsonFixture(readFileSync(source, "utf8")),
+      page = readWorkbenchPage(document.data, fixtureContext(document.context)),
       execute = vi.fn(async (_event: string, _input: Record<string, unknown>) => ({
         status: "rejected",
         feedback: "Probe only",
@@ -293,10 +308,11 @@ test.runIf(!!process.env.CADENCE_COMMAND_STAGES_DOCUMENT)(
         await c.wrapper.get("#stage-item-order").setValue("9");
         await c.wrapper.get("#stage-item-details-form").trigger("submit");
       } else {
-        const inputs: Record<string, string> = process.env.CADENCE_COMMAND_STAGES_EXACT_INPUT
-          ? JSON.parse(process.env.CADENCE_COMMAND_STAGES_EXACT_INPUT)
+        const inputs = process.env.CADENCE_COMMAND_STAGES_EXACT_INPUT
+          ? jsonFixture(process.env.CADENCE_COMMAND_STAGES_EXACT_INPUT)
           : { amount: "2" };
-        for (const [name, raw] of Object.entries(inputs)) {
+        for (const [name, value] of Object.entries(inputs)) {
+          const raw = fixtureString(value);
           const enabled = c.wrapper.get<HTMLInputElement>(`[data-argument-enabled="${name}"]`);
           if (!enabled.element.checked) await enabled.setValue(true);
           await c.wrapper.get(`[data-argument-name="${name}"]`).setValue(raw);
@@ -306,8 +322,11 @@ test.runIf(!!process.env.CADENCE_COMMAND_STAGES_DOCUMENT)(
       await flushPromises();
       expect(execute).toHaveBeenCalledOnce();
       writeFileSync(
-        process.env.CADENCE_COMMAND_STAGES_INPUT_FILE!,
-        JSON.stringify({ event: execute.mock.calls[0]![0], input: execute.mock.calls[0]![1] }),
+        required(process.env.CADENCE_COMMAND_STAGES_INPUT_FILE),
+        JSON.stringify({
+          event: required(execute.mock.calls[0])[0],
+          input: required(execute.mock.calls[0])[1],
+        }),
       );
     } finally {
       c.wrapper.unmount();
@@ -317,8 +336,8 @@ test.runIf(!!process.env.CADENCE_COMMAND_STAGES_DOCUMENT)(
 
 test("named draft priorities preserve an existing custom rank when editing", async () => {
   const page = workbenchFixture(true);
-  page.workbench.selected_item!.priority = 17;
-  page.workbench.items.entries[0]!.priority = 17;
+  required(page.workbench.selected_item).priority = 17;
+  required(page.workbench.items.entries[0]).priority = 17;
   const c = setup(page);
   try {
     const select = c.wrapper.get<HTMLSelectElement>("#stage-command-priority");
@@ -330,8 +349,8 @@ test("named draft priorities preserve an existing custom rank when editing", asy
     await flushPromises();
     expect(c.execute).toHaveBeenCalledExactlyOnceWith(
       "preview_item",
-      expect.objectContaining({
-        command: expect.objectContaining({ priority: 17 }),
+      containing({
+        command: containing({ priority: 17 }),
       }),
     );
   } finally {

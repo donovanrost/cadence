@@ -1,10 +1,11 @@
+import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
 import type { SpacecraftCommandingModel } from "./contracts";
 export const context = {
   organizationId: "org-a",
   missionId: "mission-a",
   spacecraftId: "spacecraft-a",
 };
-export function spacecraftCommandingFixture(): SpacecraftCommandingModel {
+export function spacecraftCommandingFixture(): MutableFixture<SpacecraftCommandingModel> {
   return {
     version: 1,
     context,

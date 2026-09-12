@@ -1,5 +1,8 @@
+import { admitTemplateOperation, isTemplateCommand } from "./templates";
+import { mutableFixture, type MutableFixture } from "../../../../../test-support/mutable-fixture";
+import { record } from "@cadence/plugin-sdk/admission";
 import type { TemplatePage, TemplateAction, TemplateOperation, TemplateEntry } from "./templates";
-export function templateFixture(): TemplatePage {
+export function templateFixture(): MutableFixture<TemplatePage> {
   return {
     model: {
       contract_version: 1,
@@ -13,7 +16,10 @@ export function templateFixture(): TemplatePage {
     operation: null,
   };
 }
-export function templateEntry(page = templateFixture(), id = "template-1"): TemplateEntry {
+export function templateEntry(
+  page: TemplatePage = templateFixture(),
+  id = "template-1",
+): MutableFixture<TemplateEntry> {
   return {
     reference: {
       organization_id: page.model.context.organization_id,
@@ -37,43 +43,62 @@ export function templateEntry(page = templateFixture(), id = "template-1"): Temp
     },
   };
 }
+type Completed<A extends TemplateAction = TemplateAction> = MutableFixture<
+  Extract<TemplateOperation, { action: A; status: "completed" }>
+>;
+export function templateOperation<A extends TemplateAction>(
+  page: TemplatePage,
+  action: A,
+  command: unknown,
+): Completed<A>;
 export function templateOperation(
   page: TemplatePage,
   action: TemplateAction,
-  command: any,
-): TemplateOperation {
+  command: unknown,
+): Completed {
+  if (!record(command) || typeof command.sequence !== "number")
+    throw Error("Invalid command fixture");
+  const request = { action, input: command.payload };
+  if (!isTemplateCommand(request, page.model.context))
+    throw Error("Invalid template input fixture");
   const result =
-    action === "validate-template"
+    request.action === "validate-template"
       ? { valid: true, feedback: [] }
-      : action.endsWith("-page")
-        ? { page: command.payload.page }
+      : request.action === "spacecraft-page" || request.action === "templates-page"
+        ? { page: request.input.page }
         : {
             contract_version: 1,
             actor_id: page.model.context.actor_id,
             reference:
-              action === "create-template"
+              request.action === "create-template"
                 ? templateEntry(page, "template-created").reference
                 : {
-                    ...command.payload.reference,
+                    ...request.input.reference,
                     lifecycle_state:
-                      action === "pause-template"
+                      request.action === "pause-template"
                         ? "paused"
-                        : action === "activate-template"
+                        : request.action === "activate-template"
                           ? "active"
                           : "closed",
                     lifecycle_changed_at: "2027-01-01T02:00:00Z",
                     lifecycle_changed_by: page.model.context.actor_id,
                   },
           };
-  return {
-    sequence: command.sequence,
-    action,
-    input: structuredClone(command.payload),
-    status: "completed",
-    receipt: {
-      receiptId: `receipt-${command.sequence}`,
-      completedAt: "2027-01-01T02:00:00Z",
-      result,
+  const operation = admitTemplateOperation(
+    {
+      sequence: command.sequence,
+      action: request.action,
+      input: request.input,
+      status: "completed",
+      receipt: {
+        receiptId: `receipt-${command.sequence}`,
+        completedAt: "2027-01-01T02:00:00Z",
+        result,
+      },
     },
-  };
+    page.model.context,
+  );
+  if (!operation || operation.status !== "completed" || operation.action !== action)
+    throw Error("Invalid template operation fixture");
+  return mutableFixture(operation);
 }

@@ -1,3 +1,4 @@
+import { fixtureRecord } from "../../../../../test-support/json-fixture";
 import { expect, test } from "vite-plus/test";
 import { formatRuntimeDefaults, parseRuntimeDefaults, setRuntimeDefault } from "./runtime-defaults";
 
@@ -56,5 +57,5 @@ test("a malformed context cannot be silently replaced by a quick field", () => {
       setRuntimeDefault('{"__proto__":{"private":true}}', "time", "mode", "live"),
     ),
   ).toEqual(JSON.parse('{"__proto__":{"private":true},"time":{"mode":"live"}}'));
-  expect(({} as any).private).toBeUndefined();
+  expect(fixtureRecord({}).private).toBeUndefined();
 });

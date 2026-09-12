@@ -1,3 +1,9 @@
+import {
+  fixtureRows,
+  fixtureRecord,
+  fixtureString,
+} from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import DirectoryDestination from "./DirectoryDestination.vue";
@@ -21,7 +27,7 @@ const props = (model: unknown = fixture()) => ({
 
 test("all filters survive encoded navigation to the canonical directory", () => {
   const wrapper = mount(DirectoryDestination, { props: props() });
-  const url = new URL(wrapper.get("a").attributes("href")!, "https://cadence.test");
+  const url = new URL(required(wrapper.get("a").attributes("href")), "https://cadence.test");
   expect(url.pathname).toBe("/missions/mission-1/ops/dashboards");
   expect(Object.fromEntries(url.searchParams)).toEqual({ ...fixture().filters, page: "2" });
   expect(wrapper.findAll("form,button")).toHaveLength(0);
@@ -68,24 +74,25 @@ test("host context changes remove the previous destination immediately", async (
 
 test("actual producer models mount without accepting injected destinations", () => {
   const models = process.env.CADENCE_DIRECTORY_DESTINATIONS
-    ? JSON.parse(process.env.CADENCE_DIRECTORY_DESTINATIONS)
+    ? fixtureRows(process.env.CADENCE_DIRECTORY_DESTINATIONS)
     : [fixture()];
   for (const model of models) {
+    const context = fixtureRecord(model.context);
+    const organizationId = fixtureString(context.organization_id);
+    const missionId = fixtureString(context.mission_id);
     const wrapper = mount(DirectoryDestination, {
       props: {
         model: { ...model, href: "https://foreign.test" },
-        organizationId: model.context.organization_id,
-        missionId: model.context.mission_id,
+        organizationId,
+        missionId,
       },
     });
-    const url = new URL(wrapper.get("a").attributes("href")!, "https://cadence.test");
+    const url = new URL(required(wrapper.get("a").attributes("href")), "https://cadence.test");
     expect(url.origin).toBe("https://cadence.test");
-    expect(url.pathname).toBe(
-      `/missions/${encodeURIComponent(model.context.mission_id)}/ops/dashboards`,
-    );
+    expect(url.pathname).toBe(`/missions/${encodeURIComponent(missionId)}/ops/dashboards`);
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      ...model.filters,
-      page: String(model.filters.page),
+      ...fixtureRecord(model.filters),
+      page: String(fixtureRecord(model.filters).page),
     });
     wrapper.unmount();
   }

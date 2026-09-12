@@ -1,3 +1,6 @@
+import type { WidgetPointPresentation } from "./WidgetPoint.contracts";
+import type { DashboardWidgetPresentation } from "./DashboardWidget.contracts";
+import type { GridPresentation } from "./canvas-presentation";
 export function workspaceFixture() {
   const header = {
     component_id: "widget-header",
@@ -54,7 +57,7 @@ export function workspaceFixture() {
         },
       },
     },
-  };
+  } satisfies DashboardWidgetPresentation["header"];
   const point = {
     kind: "value_tile",
     component_id: "widget-value",
@@ -68,7 +71,7 @@ export function workspaceFixture() {
     },
     timestamp: { text: "Observed just now", class: "" },
     comparison: null,
-  };
+  } satisfies WidgetPointPresentation;
   const widget = {
     key: "battery",
     shell: {
@@ -94,7 +97,7 @@ export function workspaceFixture() {
         content: { component: "WidgetPoint", presentation: point },
       },
     },
-  };
+  } satisfies GridPresentation["widgets"][number];
   const grid = {
     root: { attrs: { id: "workspace-grid", class: "grid-stack" } },
     widgets: [widget],
@@ -122,7 +125,6 @@ export function workspaceFixture() {
         grid,
       },
     ],
-    comparison_inspector: null,
     empty_state: null,
   };
 }

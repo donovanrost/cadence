@@ -1,5 +1,6 @@
+import { required } from "../../../../test-support/required";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import type { Window as HappyWindow } from "happy-dom";
+import { fixtureRecord } from "../../../../test-support/json-fixture";
 import { createMemoryHistory } from "vue-router";
 import {
   createHostRouter,
@@ -8,7 +9,9 @@ import {
   shellForRoute,
 } from "./host-navigation";
 
-const navigationSettings = (window as unknown as HappyWindow).happyDOM.settings.navigation;
+const navigationSettings = fixtureRecord(
+  fixtureRecord(fixtureRecord(fixtureRecord(window).happyDOM).settings).navigation,
+);
 const originalNavigationSettings = { ...navigationSettings };
 beforeEach(() => {
   Object.assign(navigationSettings, {
@@ -28,6 +31,7 @@ afterEach(() => {
 test("a host releases only its own history subscriptions", async () => {
   const history = createMemoryHistory();
   const remove = vi.fn();
+  // oxlint-disable-next-line typescript/unbound-method -- Compare the mock function identity; this expression does not invoke it.
   const originalListen = history.listen;
   const listen = vi.spyOn(history, "listen").mockImplementation((callback) => {
     const unsubscribe = originalListen(callback);
@@ -75,7 +79,7 @@ function clickLink(
   const navigate = vi.fn();
   cleanups.push(installHostNavigation(document, { href: current } as Location, navigate));
   document.body.innerHTML = `<a href="${href}" ${attrs}><span>Open</span></a>`;
-  const link = document.querySelector("a")!;
+  const link = required(document.querySelector("a"));
   // The browser resolves the anchor against the same origin as the current page.
   link.href = new URL(href, current).href;
   const event = new MouseEvent("click", { bubbles: true, cancelable: true, ...options });
@@ -83,7 +87,7 @@ function clickLink(
   const preventNative = (event: Event) => event.preventDefault();
   window.addEventListener("click", preventNative);
   cleanups.push(() => window.removeEventListener("click", preventNative));
-  link.querySelector("span")!.dispatchEvent(event);
+  required(link.querySelector("span")).dispatchEvent(event);
   return { link, preventedByNavigation: event.defaultPrevented, navigate };
 }
 
@@ -155,5 +159,5 @@ test("remote component handlers can cancel navigation before the host processes 
 test("the mission Ops entry resolves to the operational shell", () => {
   const route = hostRoute(new URL("https://cadence.test/missions/mission-1/ops"));
   expect(route?.workspacePage).toBe("landing");
-  expect(shellForRoute(route!)).toBe("ops");
+  expect(shellForRoute(required(route))).toBe("ops");
 });

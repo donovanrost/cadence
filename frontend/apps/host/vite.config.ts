@@ -24,15 +24,16 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
   },
-  plugins: lazyPlugins(() => [
-    tailwindcss(),
-    tidewave(),
-    {
-      name: "cadence-demo-host-api",
-      configureServer(server) {
-        server.middlewares.use(demoHostMiddleware);
+  plugins:
+    lazyPlugins(() => [
+      tailwindcss(),
+      tidewave(),
+      {
+        name: "cadence-demo-host-api",
+        configureServer(server) {
+          server.middlewares.use(demoHostMiddleware);
+        },
       },
-    },
-    vue(),
-  ]),
+      vue(),
+    ]) ?? [],
 });

@@ -1,8 +1,10 @@
+import { required } from "../../../test-support/required";
 import type { Meta, StoryObj } from "@storybook/vue3-vite";
 import { expect, userEvent, within } from "storybook/test";
 import { ref } from "vue";
 import {
   ExplorationPanel,
+  readExploration,
   type ExplorationModel,
 } from "@cadence/dashboards-and-exploration/exploration";
 
@@ -93,7 +95,12 @@ const meta = {
   render: (args) => ({
     components: { ExplorationPanel },
     setup() {
-      const current = ref<ExplorationModel>(JSON.parse(JSON.stringify(args.model)));
+      const current = ref<ExplorationModel>(
+        readExploration(JSON.parse(JSON.stringify(args.model)), {
+          organizationId: model.organization_id,
+          missionId: model.mission_id,
+        }),
+      );
       const destination = ref("");
       const port = {
         navigate(href: string) {
@@ -110,7 +117,9 @@ const meta = {
         },
       };
       async function refresh() {
-        await args.refresh();
+        const action: unknown = args.refresh;
+        if (typeof action !== "function") throw Error("Expected the story refresh action");
+        await Reflect.apply(action, undefined, []);
         current.value = { ...current.value, loaded_at: "2026-09-07T12:01:00.123456Z" };
       }
       return { args, current, destination, port, refresh };
@@ -129,7 +138,7 @@ export const Observations: Story = {
     await expect(canvas.getByRole("table")).toHaveTextContent("28.42");
     await userEvent.click(canvas.getByRole("button", { name: "sample/one" }));
     const selected = new URL(
-      canvas.getByLabelText("Requested destination").textContent!,
+      required(canvas.getByLabelText("Requested destination").textContent),
       "https://cadence.test",
     );
     await expect(selected.searchParams.get("selected_time")).toBe("2026-09-07T11:59:59.654321Z");

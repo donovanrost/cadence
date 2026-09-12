@@ -1,3 +1,4 @@
+import { jsonFixture, fixtureRecord } from "../../../../../../test-support/json-fixture";
 import { writeFileSync } from "node:fs";
 import OrganizationInvitePanel from "../organization-invite/OrganizationInvitePanel.vue";
 import { readOrganizationInvite } from "../organization-invite/contracts";
@@ -193,23 +194,24 @@ test("uncertain issuance survives refresh without replay and curated duplicate e
 test("actual producer documents drive organization facts and reviewed submissions", async () => {
   const encoded = process.env.CADENCE_PLATFORM_DETAIL_DOCUMENT;
   if (!encoded) return;
-  const data = JSON.parse(encoded);
-  const userId = data.detail.user_id;
-  const organizationId = data.detail.organization.id;
+  const data = jsonFixture(encoded);
+  const userId = fixtureRecord(data.detail).user_id;
+  const organizationId = fixtureRecord(fixtureRecord(data.detail).organization).id;
   const calls: { event: string; input: Record<string, unknown> }[] = [];
   const act = vi.fn(async (event: string, input: Record<string, unknown>) => {
     calls.push({ event, input });
     return { status: "unavailable" };
   });
+  const detailModel = readOrganizationDetail(data.detail, userId, organizationId);
   const detail = mount(OrganizationDetailPanel, {
     props: {
-      model: readOrganizationDetail(data.detail, userId, organizationId),
+      model: detailModel,
       csrfToken: "probe-csrf",
       act,
       refresh: vi.fn(),
     },
   });
-  for (const row of data.detail.members.entries)
+  for (const row of detailModel.members.entries)
     expect(detail.get(`#organization-member-${row.id}`).text()).toContain(row.email);
   expect(detail.get('#open-organization-form [name="organization_id"]').attributes("value")).toBe(
     organizationId,

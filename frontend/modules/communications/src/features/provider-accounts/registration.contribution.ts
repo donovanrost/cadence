@@ -9,6 +9,7 @@ export const providerAccountRegistrationContribution: OrganizationPageContributi
   slot: "organization.page",
   version: 1,
   title: "Register provider account",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   component: ProviderAccountRegistrationPage,
   actions: ["validate", "save"],
   read: (value, context) => ({

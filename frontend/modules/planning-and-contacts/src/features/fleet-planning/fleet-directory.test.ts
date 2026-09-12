@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import { OpsFleetPlanning } from "../../fleet-planning";
@@ -6,7 +7,7 @@ import { admitFleetDirectory } from "./fleet-directory";
 
 test("real run links and native filters preserve the mission and pinned candidate version", () => {
   const directory = directoryFixture();
-  directory.runs.entries[0]!.candidate_plan = { id: "plan-one", version: 3 };
+  required(directory.runs.entries[0]).candidate_plan = { id: "plan-one", version: 3 };
   const wrapper = mount(OpsFleetPlanning, { props: { directory } });
   expect(wrapper.get("#fleet-run-run-1 a").attributes("href")).toBe(
     "/missions/mission-one/ops/planning/runs/run-1",
@@ -50,20 +51,22 @@ test("paging retains the lifecycle filter, and an empty later page keeps a way b
 });
 
 test("rejects malformed versions, scope, duplicate IDs, bounds, and inconsistent filters", () => {
-  const values: any[] = [null, {}, { ...directoryFixture(), contract_version: 2 }];
-  const mutate = (change: (v: any) => void) => {
+  const values: unknown[] = [null, {}, { ...directoryFixture(), contract_version: 2 }];
+  const mutate = (change: (v: ReturnType<typeof directoryFixture>) => void) => {
     const v = directoryFixture();
     change(v);
     values.push(v);
   };
-  mutate((v) => v.runs.entries.push(v.runs.entries[0]));
+  mutate((v) => v.runs.entries.push(required(v.runs.entries[0])));
   mutate((v) => (v.runs.more = true));
   mutate((v) => (v.query.state = "failed"));
   mutate((v) => (v.runs.page = 2));
-  mutate((v) => (v.runs.entries[0].requirement_count = 10001));
-  mutate((v) => (v.runs.entries[0].horizon_end = v.runs.entries[0].horizon_start));
-  mutate((v) => (v.runs.entries[0].candidate_plan = { id: "plan-one", version: 0 }));
-  mutate((v) => (v.active_policy.content_sha256 = "wrong"));
+  mutate((v) => (required(v.runs.entries[0]).requirement_count = 10001));
+  mutate(
+    (v) => (required(v.runs.entries[0]).horizon_end = required(v.runs.entries[0]).horizon_start),
+  );
+  mutate((v) => (required(v.runs.entries[0]).candidate_plan = { id: "plan-one", version: 0 }));
+  mutate((v) => (required(v.active_policy).content_sha256 = "wrong"));
   mutate((v) => (v.context.mission_id = "foreign"));
   for (const directory of values) {
     const wrapper = mount(OpsFleetPlanning, {
@@ -123,7 +126,7 @@ test("retry can recover invalid initial evidence and a late response cannot repl
   expect(wrapper.find("#fleet-run-run-1").exists()).toBe(true);
   await wrapper.get("#refresh-fleet-planning").trigger("click");
   const next = directoryFixture();
-  next.runs.entries[0]!.id = "new-run";
+  required(next.runs.entries[0]).id = "new-run";
   await wrapper.setProps({ directory: next });
   resolve(directory);
   await flushPromises();

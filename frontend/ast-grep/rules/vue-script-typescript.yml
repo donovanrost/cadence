@@ -1,0 +1,25 @@
+{
+  "id": "vue-script-typescript",
+  "language": "Html",
+  "severity": "error",
+  "message": "Authored Vue scripts must declare TypeScript.",
+  "rule":
+    {
+      "kind": "start_tag",
+      "inside": { "kind": "script_element" },
+      "not":
+        {
+          "has":
+            {
+              "kind": "attribute",
+              "all":
+                [
+                  { "has": { "kind": "attribute_name", "regex": "^lang$" } },
+                  { "has": { "kind": "attribute_value", "regex": "^(ts|tsx)$", "stopBy": "end" } },
+                ],
+            },
+        },
+    },
+  "files": ["**/*.vue"],
+  "ignores": ["**/vendor/**", "ast-grep/fixtures/**"],
+}

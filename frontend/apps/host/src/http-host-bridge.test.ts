@@ -1,3 +1,7 @@
+import { containingString } from "../../../test-support/matchers";
+import { anyInstanceOf, matchingString } from "../../../test-support/matchers";
+import { jsonFixture } from "../../../test-support/json-fixture";
+import { required } from "../../../test-support/required";
 import {
   assertFrontendApplicationCatalog,
   type CatalogApplication,
@@ -115,7 +119,7 @@ describe("the HTTP host bridge", () => {
     const request = fetcher.mock.calls[0]?.[1];
     const serializedBody = request?.body;
     if (typeof serializedBody !== "string") throw new Error("Expected a serialized request body.");
-    const body = JSON.parse(serializedBody) as Record<string, unknown>;
+    const body = jsonFixture(serializedBody) as Record<string, unknown>;
     expect(body).toEqual({
       applicationKey: "telemetry_decom",
       applicationVersion: 1,
@@ -158,7 +162,7 @@ describe("the HTTP host bridge", () => {
     const request = fetcher.mock.calls[0]?.[1];
     const serializedBody = request?.body;
     if (typeof serializedBody !== "string") throw new Error("Expected a serialized request body.");
-    expect(JSON.parse(serializedBody).params).toEqual({
+    expect(jsonFixture(serializedBody).params).toEqual({
       mission_id: "mission-1",
       spacecraft_id: "spacecraft-1",
     });
@@ -199,7 +203,7 @@ describe("the HTTP host bridge", () => {
   });
 
   it("rejects an action identity or declaration mismatch before sending it", async () => {
-    const fetcher = vi.fn(async () =>
+    const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json({
         receiptId: "receipt-1",
         completedAt: "2026-08-22T20:00:00.000Z",
@@ -232,7 +236,7 @@ describe("the HTTP host bridge", () => {
   });
 
   it("rejects a caller-supplied surface identity that differs from the selected application", async () => {
-    const fetcher = vi.fn(async () =>
+    const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json({
         receiptId: "receipt-1",
         completedAt: "2026-08-22T20:00:00.000Z",
@@ -282,7 +286,7 @@ describe("the HTTP host bridge", () => {
     const request = fetcher.mock.calls[0]?.[1];
     const serializedBody = request?.body;
     if (typeof serializedBody !== "string") throw new Error("Expected a serialized request body.");
-    expect(JSON.parse(serializedBody)).toEqual({
+    expect(jsonFixture(serializedBody)).toEqual({
       applicationKey: "telemetry_decom",
       applicationVersion: 1,
       surfaceId: "packet_bindings",
@@ -299,9 +303,7 @@ describe("the HTTP host bridge", () => {
     expect(headers.get("x-cadence-poc-session")).toBe("session-1");
     expect(headers.get("x-csrf-token")).toBe("csrf-1");
     expect(headers.get("idempotency-key")).toBe("logical-action-retry-1");
-    const secondRequest = (
-      fetcher.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>
-    )[1]?.[1];
+    const secondRequest = fetcher.mock.calls[1]?.[1];
     expect(new Headers(secondRequest?.headers).get("idempotency-key")).toBe(
       "logical-action-retry-1",
     );
@@ -309,7 +311,7 @@ describe("the HTTP host bridge", () => {
   });
 
   it("explains blocked preflight without exposing server text or replaying the action", async () => {
-    const fetcher = vi.fn(async () =>
+    const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json(
         {
           schema: "cadence.application-host-problem.v1",
@@ -327,7 +329,7 @@ describe("the HTTP host bridge", () => {
     await expect(bridge.execute(actionRequest("blocked-preflight"))).rejects.toMatchObject({
       status: 422,
       code: "preflight_blocked",
-      message: expect.stringMatching(
+      message: matchingString(
         /^Resolve the blocking activation checks, then refresh and review before requesting mission changes\. Reference ID: [^.]+\.$/,
       ),
     });
@@ -396,7 +398,7 @@ describe("the HTTP host bridge", () => {
   });
 
   it("rejects a successful action response that is not a typed receipt", async () => {
-    const fetcher = vi.fn(async () =>
+    const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json({ result: { accepted: true } }, { status: 200 }),
     );
     const bridge = createHttpHostBridge(session, telemetryApplication, {
@@ -433,7 +435,7 @@ describe("the HTTP host bridge", () => {
   });
 
   it("stops a rejected action without replaying it and reports a sanitized reference", async () => {
-    const fetcher = vi.fn(async () =>
+    const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json(
         {
           schema: "cadence.application-host-problem.v1",
@@ -461,16 +463,12 @@ describe("the HTTP host bridge", () => {
     await expect(bridge.execute(action)).rejects.toMatchObject({
       status: 403,
       code: "invalid_csrf",
-      message: expect.stringContaining(
-        "The action was stopped because its security token was rejected.",
-      ),
+      message: containingString("The action was stopped because its security token was rejected."),
     });
     expect(fetcher).toHaveBeenCalledTimes(1);
-    const sentRequest = (
-      fetcher.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>
-    )[0]?.[1];
+    const sentRequest = fetcher.mock.calls[0]?.[1];
     expect(JSON.stringify(sentRequest)).not.toContain("SECRET-RAW-CSRF-DETAIL");
-    expect(onSessionFailure).toHaveBeenCalledWith("action", expect.any(HostBridgeError));
+    expect(onSessionFailure).toHaveBeenCalledWith("action", anyInstanceOf(HostBridgeError));
 
     bridge.invalidate();
     await expect(bridge.execute(action)).rejects.toMatchObject({ code: "stale_context" });
@@ -480,7 +478,7 @@ describe("the HTTP host bridge", () => {
   it("maps invalidation before fetch resolution to stale context and suppresses late events", async () => {
     const fetchResult = deferred<Response>();
     let requestSignal: AbortSignal | undefined;
-    const fetcher = vi.fn((_input: RequestInfo | URL, request?: RequestInit) => {
+    const fetcher = vi.fn<typeof fetch>(async (_input, request) => {
       requestSignal = request?.signal ?? undefined;
       return fetchResult.promise;
     });
@@ -513,11 +511,12 @@ describe("the HTTP host bridge", () => {
   it("maps invalidation during JSON decoding to stale context", async () => {
     const jsonResult = deferred<unknown>();
     const json = vi.fn(() => jsonResult.promise);
-    const response = { ok: true, status: 200, json } as unknown as Response;
-    const fetcher = vi.fn(() => response);
+    const response = new Response(null, { status: 200 });
+    response.json = json;
+    const fetcher = vi.fn<typeof fetch>(async () => response);
     const activity: HostActivityEvent[] = [];
     const bridge = createHttpHostBridge(session, telemetryApplication, {
-      fetch: fetcher as unknown as typeof fetch,
+      fetch: fetcher,
     });
     bridge.subscribe((event) => activity.push(event));
 
@@ -568,7 +567,7 @@ describe("the HTTP host bridge", () => {
     try {
       const fetchResult = deferred<Response>();
       let requestSignal: AbortSignal | undefined;
-      const fetcher = vi.fn((_input: RequestInfo | URL, request?: RequestInit) => {
+      const fetcher = vi.fn<typeof fetch>(async (_input, request) => {
         requestSignal = request?.signal ?? undefined;
         return fetchResult.promise;
       });
@@ -603,9 +602,10 @@ describe("the HTTP host bridge", () => {
     try {
       const jsonResult = deferred<unknown>();
       const json = vi.fn(() => jsonResult.promise);
-      const response = { ok: true, status: 200, json } as unknown as Response;
+      const response = new Response(null, { status: 200 });
+      response.json = json;
       const bridge = createHttpHostBridge(session, telemetryApplication, {
-        fetch: vi.fn(() => response) as unknown as typeof fetch,
+        fetch: vi.fn<typeof fetch>(async () => response),
         requestTimeoutMs: 25,
       });
 
@@ -630,7 +630,7 @@ describe("the HTTP host bridge", () => {
     const fetchResults = [deferred<Response>(), deferred<Response>()];
     const requestSignals: AbortSignal[] = [];
     let requestIndex = 0;
-    const fetcher = vi.fn((_input: RequestInfo | URL, request?: RequestInit) => {
+    const fetcher = vi.fn<typeof fetch>(async (_input, request) => {
       const signal = request?.signal;
       if (!signal) throw new Error("Expected a request abort signal.");
       requestSignals.push(signal);
@@ -689,7 +689,7 @@ describe("the HTTP host bridge", () => {
     vi.useFakeTimers();
     try {
       const requestInits: RequestInit[] = [];
-      const fetcher = vi.fn((_input: RequestInfo | URL, request?: RequestInit) => {
+      const fetcher = vi.fn<typeof fetch>(async (_input, request) => {
         if (!request) throw new Error("Expected request options.");
         requestInits.push(request);
         return requestInits.length === 1
@@ -701,7 +701,7 @@ describe("the HTTP host bridge", () => {
             });
       });
       const bridge = createHttpHostBridge(session, telemetryApplication, {
-        fetch: fetcher as unknown as typeof fetch,
+        fetch: fetcher,
         requestTimeoutMs: 100,
       });
 
@@ -721,7 +721,7 @@ describe("the HTTP host bridge", () => {
   });
 
   it("recovers once from a query 401 without replaying the query", async () => {
-    const fetcher = vi.fn(async () =>
+    const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json(
         {
           schema: "cadence.application-host-problem.v1",
@@ -743,11 +743,11 @@ describe("the HTTP host bridge", () => {
     } satisfies Partial<HostBridgeError>);
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(onSessionFailure).toHaveBeenCalledTimes(1);
-    expect(onSessionFailure).toHaveBeenCalledWith("query", expect.any(HostBridgeError));
+    expect(onSessionFailure).toHaveBeenCalledWith("query", anyInstanceOf(HostBridgeError));
   });
 
   it("recovers once from an action 401 without replaying the action", async () => {
-    const fetcher = vi.fn(async () =>
+    const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json(
         {
           schema: "cadence.application-host-problem.v1",
@@ -769,7 +769,7 @@ describe("the HTTP host bridge", () => {
     } satisfies Partial<HostBridgeError>);
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(onSessionFailure).toHaveBeenCalledTimes(1);
-    expect(onSessionFailure).toHaveBeenCalledWith("action", expect.any(HostBridgeError));
+    expect(onSessionFailure).toHaveBeenCalledWith("action", anyInstanceOf(HostBridgeError));
   });
 });
 
@@ -880,11 +880,11 @@ it("delegates navigation to the owning host and rejects stale or external naviga
   const navigate = vi.fn();
   const bridge = createHttpHostBridge(session, telemetryApplication, { navigate });
   const href = new URL("/missions/mission-1", globalThis.location.href).href;
-  bridge.navigate!(href);
+  required(bridge.navigate)(href);
   expect(navigate).toHaveBeenCalledWith(href);
-  expect(() => bridge.navigate!("https://other.test/missions")).toThrow("same-origin");
-  expect(() => bridge.navigate!("javascript:alert(1)")).toThrow("same-origin");
+  expect(() => required(bridge.navigate)("https://other.test/missions")).toThrow("same-origin");
+  expect(() => required(bridge.navigate)("javascript:alert(1)")).toThrow("same-origin");
   bridge.invalidate();
-  expect(() => bridge.navigate!(href)).toThrow();
+  expect(() => required(bridge.navigate)(href)).toThrow();
   expect(navigate).toHaveBeenCalledTimes(1);
 });

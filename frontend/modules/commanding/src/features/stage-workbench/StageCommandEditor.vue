@@ -237,7 +237,7 @@ function save() {
         <CommandArguments
           ref="controls"
           :arguments="catalog.selected_command?.arguments ?? []"
-          :supplied="supplied"
+          v-bind="supplied === undefined ? {} : { supplied }"
           id-prefix="stage-command"
           @edited="edited"
         />

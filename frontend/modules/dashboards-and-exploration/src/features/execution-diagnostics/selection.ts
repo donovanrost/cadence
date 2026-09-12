@@ -22,6 +22,7 @@ export function readSelection(value: unknown): DiagnosticSelection {
         /^[a-f0-9]{64}$/.test(selection.row))
     ) ||
     typeof selection.filter !== "string" ||
+    // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
     /[\u0000-\u001f\u007f]/.test(selection.filter) ||
     new TextEncoder().encode(selection.filter).length > 256
   )

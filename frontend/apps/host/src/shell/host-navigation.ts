@@ -1,7 +1,77 @@
 import routes from "../routes.json";
 import { createRouter, type RouterHistory } from "vue-router";
 
-export type HostRoute = (typeof routes)[number];
+type CatalogRoute = (typeof routes)[number];
+function normalizeHostRoute(route: CatalogRoute) {
+  switch (route.kind) {
+    case "application_management":
+      if (route.scope === "mission" || route.scope === "spacecraft")
+        return { ...route, kind: "application_management" as const, scope: route.scope };
+      break;
+    case "mission":
+      if (route.missionPage)
+        return { ...route, kind: "mission" as const, missionPage: route.missionPage };
+      break;
+    case "spacecraft":
+      if (route.spacecraftPage)
+        return { ...route, kind: "spacecraft" as const, spacecraftPage: route.spacecraftPage };
+      break;
+    case "catalog":
+      if (route.catalogPage)
+        return { ...route, kind: "catalog" as const, catalogPage: route.catalogPage };
+      break;
+    case "administration":
+      if (route.administrationPage)
+        return {
+          ...route,
+          kind: "administration" as const,
+          administrationPage: route.administrationPage,
+        };
+      break;
+    case "platform_administration":
+      if (route.administrationPage)
+        return {
+          ...route,
+          kind: "platform_administration" as const,
+          administrationPage: route.administrationPage,
+        };
+      break;
+    case "organization_module":
+      if (route.contribution)
+        return { ...route, kind: "organization_module" as const, contribution: route.contribution };
+      break;
+    case "mission_module":
+      if (route.contribution)
+        return { ...route, kind: "mission_module" as const, contribution: route.contribution };
+      break;
+    case "spacecraft_module":
+      if (route.contribution)
+        return { ...route, kind: "spacecraft_module" as const, contribution: route.contribution };
+      break;
+    case "ops_module":
+      if (route.contribution)
+        return { ...route, kind: "ops_module" as const, contribution: route.contribution };
+      break;
+    case "ops_workspace":
+      if (route.workspacePage === "landing" || route.workspacePage === "timeline")
+        return { ...route, kind: "ops_workspace" as const, workspacePage: route.workspacePage };
+      break;
+    case "notifications":
+      return { ...route, kind: "notifications" as const };
+    case "activation_approvals":
+      return { ...route, kind: "activation_approvals" as const };
+    case "administration_diagnostics":
+      return { ...route, kind: "administration_diagnostics" as const };
+  }
+  return { ...route, kind: "unavailable" as const };
+}
+export type HostRoute = ReturnType<typeof normalizeHostRoute>;
+declare module "vue-router" {
+  interface RouteMeta {
+    host?: HostRoute;
+    snapshot?: import("./host-snapshot").HostSnapshot;
+  }
+}
 const matchers = routes.map((route) => ({
   route,
   pattern: new RegExp(
@@ -13,7 +83,8 @@ const matchers = routes.map((route) => ({
 }));
 
 export function hostRoute(url: URL) {
-  return matchers.find(({ pattern }) => pattern.test(url.pathname))?.route;
+  const match = matchers.find(({ pattern }) => pattern.test(url.pathname));
+  return match ? normalizeHostRoute(match.route) : undefined;
 }
 
 export function createHostRouter(history: RouterHistory) {
@@ -50,12 +121,12 @@ export function createHostRouter(history: RouterHistory) {
       path: route.path,
       name: route.path,
       component: {},
-      meta: { host: route },
+      meta: { host: normalizeHostRoute(route) },
     })),
   });
 }
 
-export function shellForRoute(route: HostRoute) {
+export function shellForRoute(route: Pick<HostRoute, "path" | "scope">) {
   if (route.path === "/missions/:mission_id/ops" || route.path.includes("/ops/")) return "ops";
   if (route.scope === "user") return "user_shell";
   if (route.scope === "mission" || route.scope === "spacecraft") return "mission_sidebar";
@@ -78,7 +149,8 @@ export function installHostNavigation(
       event.altKey
     )
       return;
-    const anchor = (event.target as Element | null)?.closest<HTMLAnchorElement>("a[href]");
+    const anchor =
+      event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
     if (
       !anchor ||
       anchor.hasAttribute("download") ||

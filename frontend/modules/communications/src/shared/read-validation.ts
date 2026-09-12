@@ -13,6 +13,7 @@ export function text(value: unknown, empty = false, max = 4096): string {
 }
 export function identifier(value: unknown): string {
   const id = text(value, false, 255);
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   if (id === "." || id === ".." || /[\\/\u0000-\u001f]/.test(id)) return invalid();
   return id;
 }
@@ -34,9 +35,10 @@ export function missionPath(context: ReadContext): string {
 }
 export function href(value: unknown, context: ReadContext): string {
   const path = text(value);
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   if (!path.startsWith("/") || path.startsWith("//") || /[\\\u0000-\u0020]/.test(path))
     return invalid();
-  const pathname = path.split(/[?#]/, 1)[0];
+  const pathname = path.split(/[?#]/, 1)[0] ?? "";
   for (const segment of pathname.split("/")) {
     let decoded: string;
     try {
@@ -44,6 +46,7 @@ export function href(value: unknown, context: ReadContext): string {
     } catch {
       return invalid();
     }
+    // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
     if (decoded === "." || decoded === ".." || /[\\/\u0000-\u001f]/.test(decoded)) return invalid();
   }
   const base = missionPath(context);

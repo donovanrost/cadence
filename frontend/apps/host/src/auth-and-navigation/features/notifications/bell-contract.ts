@@ -13,6 +13,7 @@ function summary(value: unknown): value is NotificationSummary {
     (value.body === null ||
       (typeof value.body === "string" &&
         value.body.length <= 16384 &&
+        // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
         !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value.body))) &&
     (value.read_at === null || (text(value.read_at) && Number.isFinite(Date.parse(value.read_at))))
   );

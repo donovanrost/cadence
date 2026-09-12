@@ -2,10 +2,12 @@
 export type ScalarJsonText = string;
 const byteLength = (s: string) => new TextEncoder().encode(s).length;
 const clean = (s: string) =>
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   !/[\uD800-\uDFFF]/u.test(s) && !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(s);
 const bad = (): never => {
   throw Error("Invalid exact command arguments");
 };
+// oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
 const jsonString = /^"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"/;
 const jsonScalar = /^(?:true|false|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)/;
 
@@ -42,8 +44,15 @@ export function parseArgumentValues(
   whitespace();
   if (value[index] !== "}")
     while (true) {
-      const name: string = JSON.parse(stringToken());
-      if (!name || byteLength(name) > 240 || !clean(name) || names.has(name) || names.size >= 64)
+      const name: unknown = JSON.parse(stringToken());
+      if (
+        typeof name !== "string" ||
+        !name ||
+        byteLength(name) > 240 ||
+        !clean(name) ||
+        names.has(name) ||
+        names.size >= 64
+      )
         return bad();
       names.add(name);
       take(":");
@@ -51,7 +60,8 @@ export function parseArgumentValues(
       let token: string;
       if (value[index] === '"') {
         token = stringToken();
-        if (!clean(JSON.parse(token))) return bad();
+        const decoded: unknown = JSON.parse(token);
+        if (typeof decoded !== "string" || !clean(decoded)) return bad();
       } else {
         const match = value.slice(index).match(jsonScalar)?.[0];
         if (!match) return bad();
@@ -91,8 +101,11 @@ export function argumentValuesJson(values: Record<string, ScalarJsonText>): stri
 export function scalarInputText(value: ScalarJsonText): string {
   if (typeof value !== "string") return bad();
   const values = parseArgumentValues(`{"value":${value}}`);
-  const raw = values.value!;
-  return raw.startsWith('"') ? (JSON.parse(raw) as string) : raw;
+  const raw = values.value;
+  if (raw === undefined) return bad();
+  if (!raw.startsWith('"')) return raw;
+  const decoded: unknown = JSON.parse(raw);
+  return typeof decoded === "string" ? decoded : bad();
 }
 
 /** Preserve the existing decimal/scientific integer input syntax using digit arithmetic. */

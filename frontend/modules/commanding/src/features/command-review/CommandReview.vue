@@ -44,7 +44,7 @@ const context = { ...props.page.review.context },
 const allowed = computed(
   () => review.value.can_decide && !operation.value && !busy.value && !reading.value,
 );
-const monitor = `/missions/${encodeURIComponent(context.missionId)}/ops/commands?focus_command_id=${encodeURIComponent(context.resourceId!)}`;
+const monitor = `/missions/${encodeURIComponent(context.missionId)}/ops/commands?focus_command_id=${encodeURIComponent(context.resourceId)}`;
 const format = (v: unknown) =>
   v === null ? "Not recorded" : typeof v === "object" ? JSON.stringify(v, null, 2) : String(v);
 const actor = (v: Actor) => v.user_id ?? v.service_identity_id ?? "Not recorded";
@@ -62,7 +62,7 @@ async function submit() {
   operation.value = { status: "unconfirmed" };
   try {
     const result = await props.port.execute("decide", input);
-    if (!disposed) operation.value = readOperation(result, context.resourceId!, reviewer);
+    if (!disposed) operation.value = readOperation(result, context.resourceId, reviewer);
   } catch {
     /* Keep the consumed submission unconfirmed until a successful read. */
   } finally {
@@ -122,9 +122,9 @@ function follow(event: MouseEvent, href: string) {
     </CadencePageHeading>
     <a
       id="command-review-queue"
-      :href="queueSubmissionHref(context.missionId, context.resourceId!)"
+      :href="queueSubmissionHref(context.missionId, context.resourceId)"
       class="btn btn-primary btn-sm self-start"
-      @click="follow($event, queueSubmissionHref(context.missionId, context.resourceId!))"
+      @click="follow($event, queueSubmissionHref(context.missionId, context.resourceId))"
       >{{
         ["validated", "approved"].includes(request.lifecycle_state) ||
         (operation?.status === "completed" && operation.receipt.decision === "approved")
@@ -342,15 +342,15 @@ function follow(event: MouseEvent, href: string) {
           <a
             v-if="review.query.after"
             id="review-history-first"
-            :href="commandReviewHref(context.missionId, context.resourceId!)"
+            :href="commandReviewHref(context.missionId, context.resourceId)"
             class="btn btn-ghost btn-sm"
-            @click="follow($event, commandReviewHref(context.missionId, context.resourceId!))"
+            @click="follow($event, commandReviewHref(context.missionId, context.resourceId))"
             >First decisions</a
           ><a
             v-if="review.history.next_after"
             id="review-history-next"
             :href="
-              commandReviewHref(context.missionId, context.resourceId!, review.history.next_after)
+              commandReviewHref(context.missionId, context.resourceId, review.history.next_after)
             "
             class="btn btn-ghost btn-sm"
             @click="
@@ -358,7 +358,7 @@ function follow(event: MouseEvent, href: string) {
                 $event,
                 commandReviewHref(
                   context.missionId,
-                  context.resourceId!,
+                  context.resourceId,
                   review.history.next_after!,
                 ),
               )

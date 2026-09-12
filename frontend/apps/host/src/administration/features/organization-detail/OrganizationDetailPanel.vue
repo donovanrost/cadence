@@ -287,7 +287,7 @@ async function issue() {
             label="Display name"
             required
             :disabled="disabled"
-            :error="errors.display_name"
+            :error="errors.display_name ?? ''"
           /><CadenceTextField
             id="service_identity_id"
             v-model="form.service_identity_id"
@@ -295,7 +295,7 @@ async function issue() {
             label="Custom identity"
             hint="Optional. Leave blank to generate an identity."
             :disabled="disabled"
-            :error="errors.service_identity_id"
+            :error="errors.service_identity_id ?? ''"
           />
         </div>
         <p v-if="errors.form" role="alert">{{ errors.form }}</p>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { definedProperties } from "./defined-properties";
 import type {
   CatalogApplication,
   FrontendApplicationCatalog,
@@ -25,16 +26,13 @@ type HostFailure = {
   referenceId: string;
 };
 
-const props = withDefaults(
-  defineProps<
-    PhoenixHostConfig & {
-      navigate?: (href: string) => void;
-      fetcher?: typeof globalThis.fetch;
-      catalogTimeoutMs?: number;
-    }
-  >(),
-  { fetcher: undefined, catalogTimeoutMs: undefined },
-);
+const props = defineProps<
+  PhoenixHostConfig & {
+    navigate?: (href: string) => void;
+    fetcher?: typeof globalThis.fetch;
+    catalogTimeoutMs?: number;
+  }
+>();
 
 const catalog = shallowRef<FrontendApplicationCatalog>();
 const application = shallowRef<CatalogApplication>();
@@ -78,7 +76,7 @@ async function loadCatalog({ automaticRecovery = false } = {}): Promise<void> {
       throw new Error("The Phoenix application host cannot fetch its catalog.");
     }
 
-    const nextCatalog = await loadPhoenixApplicationCatalog(props, {
+    const nextCatalog = await loadPhoenixApplicationCatalog(definedProperties(props), {
       fetch: (input, init) =>
         boundedCatalogFetch(
           fetcher,
@@ -88,15 +86,14 @@ async function loadCatalog({ automaticRecovery = false } = {}): Promise<void> {
           props.catalogTimeoutMs ?? DEFAULT_CATALOG_TIMEOUT_MS,
         ),
     });
-    const nextApplication = selectPhoenixApplication(nextCatalog, props);
+    const nextApplication = selectPhoenixApplication(nextCatalog, definedProperties(props));
     if (generation !== loadGeneration || controller.signal.aborted) return;
 
     catalog.value = nextCatalog;
     application.value = nextApplication;
     context.value = nextCatalog.session.context;
     const nextBridge = createHttpHostBridge(nextCatalog.session, nextApplication, {
-      queryParams: props.queryParams,
-      navigate: props.navigate,
+      ...definedProperties({ queryParams: props.queryParams, navigate: props.navigate }),
       onSessionFailure: handleBridgeSessionFailure,
     });
     if (generation !== loadGeneration || controller.signal.aborted) {

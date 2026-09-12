@@ -14,7 +14,7 @@ const props = defineProps<{
 }>();
 const refreshing = ref(false);
 const feedback = ref("");
-async function refresh() {
+async function refreshPage() {
   if (refreshing.value) return;
   refreshing.value = true;
   feedback.value = "";
@@ -46,7 +46,7 @@ async function refresh() {
           type="button"
           class="btn btn-primary btn-sm"
           :disabled="refreshing"
-          @click="refresh"
+          @click="refreshPage"
         >
           {{ refreshing ? "Checking…" : "Refresh command model" }}
         </button>

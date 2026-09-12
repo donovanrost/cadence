@@ -7,6 +7,7 @@ export const spacecraftCommandingContribution = {
   slot: "spacecraft.page",
   version: 1,
   title: "Command interpretation",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks this SFC constructor.
   component: SpacecraftCommandingPanel,
   read(value, context) {
     return { model: readSpacecraftCommanding(value, context) };

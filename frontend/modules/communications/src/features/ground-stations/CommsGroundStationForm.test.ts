@@ -1,3 +1,4 @@
+import { containing } from "../../../../../test-support/matchers";
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
 import CommsGroundStationForm from "./CommsGroundStationForm.vue";
@@ -44,7 +45,7 @@ test("editing retains the immutable station identifier and accepts authoritative
     await wrapper.get("#ground-station-form").trigger("submit");
     expect(wrapper.emitted("save")?.[0]).toEqual([
       {
-        ground_station: expect.objectContaining({
+        ground_station: containing({
           ground_station_id: "station-1",
           display_name: "Updated station",
         }),

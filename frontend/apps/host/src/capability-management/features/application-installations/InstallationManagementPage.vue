@@ -29,7 +29,7 @@ onErrorCaptured(() => {
   return false;
 });
 const admitted = computed(() => admitSnapshot(props.snapshot, props.scope));
-async function execute(event: LifecycleEvent, payload: ApplicationEvent) {
+async function executeAction(event: LifecycleEvent, payload: ApplicationEvent) {
   if (pending.value || disposed || !admitted.value || crashed.value) return;
   pending.value = true;
   error.value = undefined;
@@ -73,17 +73,17 @@ async function execute(event: LifecycleEvent, payload: ApplicationEvent) {
         v-if="admitted.scope === 'mission'"
         :presentation="admitted.data"
         :disabled="pending"
-        @install="execute('install', $event)"
-        @disable="execute('disable', $event)"
-        @uninstall="execute('uninstall', $event)"
+        @install="executeAction('install', $event)"
+        @disable="executeAction('disable', $event)"
+        @uninstall="executeAction('uninstall', $event)"
       />
       <SpacecraftApplicationsPage
         v-else
         :presentation="admitted.data"
         :disabled="pending"
-        @install="execute('install', $event)"
-        @disable="execute('disable', $event)"
-        @uninstall="execute('uninstall', $event)"
+        @install="executeAction('install', $event)"
+        @disable="executeAction('disable', $event)"
+        @uninstall="executeAction('uninstall', $event)"
       />
     </template>
   </section>

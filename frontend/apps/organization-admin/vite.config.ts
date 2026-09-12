@@ -70,6 +70,7 @@ function parseReleaseOutputArgument(argumentsList: string[]) {
   const values: string[] = [];
   for (let index = 0; index < argumentsList.length; index += 1) {
     const argument = argumentsList[index];
+    if (argument === undefined) throw new Error("Missing release build argument.");
     let value: string | undefined;
 
     if (argument === "--outDir") {
@@ -89,10 +90,11 @@ function parseReleaseOutputArgument(argumentsList: string[]) {
     }
   }
 
-  if (values.length !== 1) {
+  const [output] = values;
+  if (values.length !== 1 || output === undefined) {
     throw new Error("Release builds require exactly one --outDir with one value.");
   }
-  return values[0];
+  return output;
 }
 
 function canonicalPathWithMissingTail(path: string) {
@@ -181,11 +183,12 @@ export default defineConfig(({ command, mode }) => {
         : {}),
     },
     test: { environment: "happy-dom" },
-    plugins: lazyPlugins(() => [
-      tailwindcss(),
-      vue(),
-      federation(releaseBuild ? releaseFederationConfig : federationConfig),
-      ...(releaseBuild ? [releaseOutputPlugin()] : []),
-    ]),
+    plugins:
+      lazyPlugins(() => [
+        tailwindcss(),
+        vue(),
+        federation(releaseBuild ? releaseFederationConfig : federationConfig),
+        ...(releaseBuild ? [releaseOutputPlugin()] : []),
+      ]) ?? [],
   };
 });

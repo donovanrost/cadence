@@ -15,8 +15,9 @@ async function temporaryLock() {
   return { directory, lockPath: join(directory, "publication.lock") };
 }
 
-test("atomic stale claims serialize two contenders without deleting the replacement lock", async () => {
+void test("atomic stale claims serialize two contenders without deleting the replacement lock", async () => {
   const { directory, lockPath } = await temporaryLock();
+  /** @param {number} pid */
   const processAlive = (pid) => pid === process.pid;
   try {
     await mkdir(lockPath);
@@ -37,7 +38,7 @@ test("atomic stale claims serialize two contenders without deleting the replacem
   }
 });
 
-test("an old lock owned by a live PID is never stale and cannot be released by another token", async () => {
+void test("an old lock owned by a live PID is never stale and cannot be released by another token", async () => {
   const { directory, lockPath } = await temporaryLock();
   try {
     await mkdir(lockPath);
@@ -57,7 +58,7 @@ test("an old lock owned by a live PID is never stale and cannot be released by a
   }
 });
 
-test("a dead owner is atomically claimed and only the claimant can release the new lock", async () => {
+void test("a dead owner is atomically claimed and only the claimant can release the new lock", async () => {
   const { directory, lockPath } = await temporaryLock();
   try {
     await mkdir(lockPath);
@@ -78,17 +79,12 @@ test("a dead owner is atomically claimed and only the claimant can release the n
   }
 });
 
-test("a delayed stale rename keeps replacement generations behind the mutation gate", async () => {
+void test("a delayed stale rename keeps replacement generations behind the mutation gate", async () => {
   const { directory, lockPath } = await temporaryLock();
+  /** @param {number} pid */
   const processAlive = (pid) => pid === process.pid;
-  let renameStarted;
-  let continueRename;
-  const renameStartedPromise = new Promise((resolveRenameStarted) => {
-    renameStarted = resolveRenameStarted;
-  });
-  const continueRenamePromise = new Promise((resolveContinueRename) => {
-    continueRename = resolveContinueRename;
-  });
+  const { promise: renameStartedPromise, resolve: renameStarted } = deferred();
+  const { promise: continueRenamePromise, resolve: continueRename } = deferred();
   let delayed = false;
 
   try {
@@ -103,7 +99,7 @@ test("a delayed stale rename keeps replacement generations behind the mutation g
       timeout: 1_000,
       renameFn: async (source, destination) => {
         await rename(source, destination);
-        if (!delayed && source === lockPath && destination.includes(".stale-")) {
+        if (!delayed && source === lockPath && String(destination).includes(".stale-")) {
           delayed = true;
           renameStarted();
           await continueRenamePromise;
@@ -129,3 +125,14 @@ test("a delayed stale rename keeps replacement generations behind the mutation g
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+function deferred() {
+  /** @type {(() => void) | undefined} */
+  let resolve;
+  /** @type {Promise<void>} */
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+  assert.ok(resolve);
+  return { promise, resolve };
+}

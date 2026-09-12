@@ -21,7 +21,7 @@ function unwrap(value: unknown) {
   if (value.status !== "ok" || !("data" in value)) throw new AccountActionFailure("unknown");
   return value.data;
 }
-const port: AccountDetailPort = {
+const featurePort: AccountDetailPort = {
   async execute(action, input) {
     return unwrap(await transport.execute(action, { ...input, sequence: ++sequence }));
   },
@@ -31,5 +31,5 @@ const port: AccountDetailPort = {
 };
 </script>
 <template>
-  <ProviderAccountDetail :model="model" :port="port" :initially-locked="locked" />
+  <ProviderAccountDetail :model="model" :port="featurePort" :initially-locked="locked" />
 </template>

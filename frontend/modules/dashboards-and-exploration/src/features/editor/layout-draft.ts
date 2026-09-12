@@ -1,17 +1,25 @@
+import { record } from "@cadence/plugin-sdk/admission";
 import type { EditorPlacement } from "./contracts";
 export type LayoutEdit = { placement_id: string; x: number; y: number; w: number; h: number };
 /** Only admitted authored placements and bounded integer coordinates can become drafts. */
-export function layoutEdits(nodes: any[], placements: EditorPlacement[]): LayoutEdit[] {
+export function layoutEdits(
+  nodes: readonly unknown[],
+  placements: readonly EditorPlacement[],
+): LayoutEdit[] {
   if (nodes.length !== placements.length) throw Error("Incomplete layout");
   const seen = new Set<string>();
   return nodes.map((node) => {
+    if (!record(node) || typeof node.id !== "string") throw Error("Unknown layout identity");
     const placement = placements.find((p) => p.id === node.id);
     if (!placement || seen.has(node.id)) throw Error("Unknown layout identity");
     seen.add(node.id);
     const { min_w, min_h, max_w, max_h, max_y } = placement.constraints;
     const { x, y, w, h } = node;
     if (
-      ![x, y, w, h].every(Number.isSafeInteger) ||
+      !coordinate(x) ||
+      !coordinate(y) ||
+      !coordinate(w) ||
+      !coordinate(h) ||
       x < 0 ||
       y < 0 ||
       y > max_y ||
@@ -29,4 +37,8 @@ export function mergeLayoutEdits(current: LayoutEdit[], next: LayoutEdit[]): Lay
   const edits = new Map(current.map((item) => [item.placement_id, item]));
   for (const item of next) edits.set(item.placement_id, item);
   return [...edits.values()].sort((a, b) => a.placement_id.localeCompare(b.placement_id));
+}
+
+function coordinate(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value);
 }

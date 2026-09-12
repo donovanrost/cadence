@@ -1,3 +1,4 @@
+import { jsonFixture } from "../../../../../../test-support/json-fixture";
 import BrowserHost from "../../../shell/BrowserHost.vue";
 vi.mock("live_vue", () => ({ useLiveVue: () => ({ pushEvent: vi.fn() }) }));
 vi.mock("../../../shell/host-browser-history", async () => {
@@ -17,7 +18,9 @@ import {
 
 test("actual producer documents submit native fields through their feature owners", async () => {
   if (!process.env.CADENCE_AUTH_DOCUMENT) return;
-  const data = JSON.parse(process.env.CADENCE_AUTH_DOCUMENT);
+  const data = jsonFixture(process.env.CADENCE_AUTH_DOCUMENT);
+  if (typeof data.other_organization_id !== "string")
+    throw Error("Missing organization fixture identity");
   const inputs: Record<string, unknown> = {};
   const signin = mount(SignInPanel, { props: { page: data.sign_in } });
   await signin.get("#user_email").setValue(data.email);
@@ -41,6 +44,7 @@ test("actual producer documents submit native fields through their feature owner
   await flushPromises();
   const account = host.getComponent(AccountMenu);
   const accountId = account.props("id");
+  if (typeof accountId !== "string") throw Error("Missing account menu identity");
   await account.get(`#${accountId}-user`).trigger("click");
   inputs.switch_organization = submit(
     account.get(`#${accountId}-switch-${data.other_organization_id}`).element,
@@ -54,7 +58,8 @@ test("actual producer documents submit native fields through their feature owner
   for (const wrapper of [signin, mode, access, invite, host]) wrapper.unmount();
 });
 function submit(element: Element) {
-  const form = element as HTMLFormElement;
+  if (!(element instanceof HTMLFormElement)) throw Error("Expected a native form");
+  const form = element;
   const event = new Event("submit", { bubbles: true, cancelable: true });
   form.dispatchEvent(event);
   expect(event.defaultPrevented).toBe(false);

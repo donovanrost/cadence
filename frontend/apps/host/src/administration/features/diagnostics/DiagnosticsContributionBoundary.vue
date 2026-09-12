@@ -8,7 +8,7 @@ import type {
 
 const props = defineProps<{
   contribution: DiagnosticsContribution<Component>;
-  snapshots: DiagnosticsSnapshot[];
+  snapshots: readonly DiagnosticsSnapshot[];
   interactions: DiagnosticsPanelInteractions;
 }>();
 const crashed = ref(false);

@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 import "./env.d.ts";
 
 import { flushPromises, mount } from "@vue/test-utils";
@@ -62,7 +63,7 @@ function applicationFor(surfaceId: string): CatalogApplication {
     displayName: manifest.application.displayName,
     description: manifest.application.description,
     package: { packageId: manifest.package.packageId, version: manifest.package.version },
-    surface: manifest.surfaces.find((surface) => surface.surfaceId === surfaceId)!,
+    surface: required(manifest.surfaces.find((surface) => surface.surfaceId === surfaceId)),
     release: {
       federation: "module_federation",
       releaseId: "spacecraft-v1",
@@ -105,7 +106,7 @@ function bridgeFor(query: HostBridge["query"], execute: HostBridge["execute"]) {
 describe("Spacecraft federated application adapter", () => {
   it("publishes one app-level renderer for every surface and queries its declared contract", async () => {
     for (const surfaceId of surfaceIds) {
-      const surface = manifest.surfaces.find((item) => item.surfaceId === surfaceId)!;
+      const surface = required(manifest.surfaces.find((item) => item.surfaceId === surfaceId));
       const { bridge: query, mock: queryMock } = queryBridgeMock();
       const wrapper = mount(SpacecraftApplication, {
         props: {
@@ -132,7 +133,7 @@ describe("Spacecraft federated application adapter", () => {
   });
 
   it("forwards a mounted mutation through the selected surface action contract", async () => {
-    const surface = manifest.surfaces.find((item) => item.surfaceId === "applications")!;
+    const surface = required(manifest.surfaces.find((item) => item.surfaceId === "applications"));
     const { bridge: query, mock: queryMock } = queryBridgeMock();
     const { bridge: execute, mock: executeMock } = actionBridgeMock();
     executeMock.mockResolvedValue({
@@ -173,7 +174,7 @@ describe("Spacecraft federated application adapter", () => {
   });
 
   it("shows rejected actions without replacing the current surface", async () => {
-    const surface = manifest.surfaces.find((item) => item.surfaceId === "applications")!;
+    const surface = required(manifest.surfaces.find((item) => item.surfaceId === "applications"));
     const { bridge: query, mock: queryMock } = queryBridgeMock();
     const { bridge: execute, mock: executeMock } = actionBridgeMock();
     executeMock.mockRejectedValue(new Error("action denied"));
@@ -202,7 +203,7 @@ describe("Spacecraft federated application adapter", () => {
   });
 
   it("keeps the newest overlapping action receipt and refresh authoritative state", async () => {
-    const surface = manifest.surfaces.find((item) => item.surfaceId === "applications")!;
+    const surface = required(manifest.surfaces.find((item) => item.surfaceId === "applications"));
     const { bridge: query, mock: queryMock } = queryBridgeMock();
     const first = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
     const second = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
@@ -249,7 +250,7 @@ function deferred<TResult>() {
 it.each(["unknown", "toString", "constructor", "__proto__"])(
   "rejects unsupported renderer %s before querying",
   async (surfaceId) => {
-    const valid = manifest.surfaces[0]!;
+    const valid = required(manifest.surfaces[0]);
     const query = vi.fn<() => Promise<never>>().mockRejectedValue(new Error("unexpected query"));
     const wrapper = mount(SpacecraftApplication, {
       props: {

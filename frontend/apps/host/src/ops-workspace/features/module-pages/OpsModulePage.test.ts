@@ -1,3 +1,5 @@
+import type { OpsPagePort, OpsPageNavigationPort } from "@cadence/plugin-sdk/ops-pages";
+import { required } from "../../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mount, flushPromises } from "@vue/test-utils";
 import OpsModulePage from "./OpsModulePage.vue";
@@ -59,7 +61,7 @@ test("editor guards span host transitions while commands remain disabled", async
         refresh: vi.fn(),
         execute,
         navigate: vi.fn(),
-        guardNavigation(fn) {
+        guardNavigation(fn: () => boolean) {
           guard = fn;
           return remove;
         },
@@ -69,13 +71,13 @@ test("editor guards span host transitions while commands remain disabled", async
     await flushPromises();
     expect(app.find("#ops-module-unavailable").exists()).toBe(false);
     expect(guard()).toBe(false);
-    const port = app.getComponent(DashboardEditor).props("port");
+    const port: OpsPagePort = app.getComponent(DashboardEditor).props("port");
     await expect(port.execute("save_draft", {})).rejects.toThrow("Inactive");
     expect(execute).not.toHaveBeenCalled();
     await app.setProps({ refreshing: false, snapshot: { ...editor, status: "unavailable" } });
     expect(app.find("#ops-module-unavailable").exists()).toBe(true);
     expect(guard()).toBe(true);
-    expect(() => port.guardNavigation!(() => false)).toThrow("Inactive");
+    expect(() => required(port.guardNavigation)(() => false)).toThrow("Inactive");
     expect(remove).toHaveBeenCalled();
   } finally {
     vi.unstubAllGlobals();
@@ -105,7 +107,7 @@ test("read-only navigation has no execute capability and expires with its admitt
       guardNavigation,
     },
   });
-  const port = app.getComponent(ExplorationPanel).props("port");
+  const port: OpsPageNavigationPort = app.getComponent(ExplorationPanel).props("port");
   expect(Object.hasOwn(port, "execute")).toBe(false);
   port.navigate("/missions/mission/ops/explore");
   expect(navigation).toHaveBeenCalledOnce();
@@ -121,11 +123,11 @@ test("read-only navigation has no execute capability and expires with its admitt
     refreshing: false,
     snapshot: { ...exploration, data: explorationFixture() },
   });
-  const replacement = app.getComponent(ExplorationPanel).props("port");
+  const replacement: OpsPageNavigationPort = app.getComponent(ExplorationPanel).props("port");
   expect(dispose).toHaveBeenCalledOnce();
   expect(guardNavigation).toHaveBeenCalledTimes(2);
   port.navigate("/missions/mission/ops/explore");
-  expect(() => port.guardNavigation!(() => false)).toThrow("Inactive");
+  expect(() => required(port.guardNavigation)(() => false)).toThrow("Inactive");
   expect(navigation).toHaveBeenCalledOnce();
   replacement.navigate("/missions/mission/ops/explore?point_id=other");
   expect(navigation).toHaveBeenCalledTimes(2);
@@ -158,7 +160,7 @@ test("workspace identity is bound at both envelopes and stale viewer ports canno
       navigate,
     },
   });
-  const port = app.getComponent(DashboardWorkspace).props("port");
+  const port: OpsPagePort = app.getComponent(DashboardWorkspace).props("port");
   await expect(port.execute("create", {})).rejects.toThrow();
   expect(execute).not.toHaveBeenCalled();
   await app.setProps({ refreshing: true });

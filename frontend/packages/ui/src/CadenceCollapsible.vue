@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { CollapsibleRoot } from "reka-ui";
 import { computed, provide, ref, toRef, watch } from "vue";
-import { CadencePrimitiveChild } from "./cadence_primitive_child.js";
+import { CadencePrimitiveChild } from "./cadence_primitive_child";
 
 defineOptions({ inheritAttrs: false });
 

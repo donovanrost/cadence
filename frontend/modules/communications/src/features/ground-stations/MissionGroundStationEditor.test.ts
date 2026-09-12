@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import Adapter from "./MissionGroundStationEditor.vue";
@@ -23,7 +24,7 @@ test("same-instance refresh preserves the mounted draft, validation, and action 
   const registration = setupPages[0];
   const port = { execute: vi.fn().mockResolvedValue(validation()), navigate: vi.fn() };
   const wrapper = mount(Adapter, {
-    props: { ...registration.read(envelope(), context), port } as never,
+    props: { ...required(registration).read(envelope(), context), port } as never,
   });
   try {
     const input = wrapper.get("#ground_station_display_name").element as HTMLInputElement;
@@ -31,7 +32,7 @@ test("same-instance refresh preserves the mounted draft, validation, and action 
     await flushPromises();
     const replacementPort = { execute: vi.fn(), navigate: vi.fn() };
     await wrapper.setProps({
-      ...registration.read(envelope(), context),
+      ...required(registration).read(envelope(), context),
       port: replacementPort,
     } as never);
     expect(wrapper.get("#ground_station_display_name").element).toBe(input);
@@ -60,7 +61,7 @@ test("uncertain saves remain locked across refresh, and confirmed refresh hides 
     navigate: vi.fn(),
   };
   const wrapper = mount(Adapter, {
-    props: { ...registration.read(envelope(), context), port } as never,
+    props: { ...required(registration).read(envelope(), context), port } as never,
   });
   try {
     await wrapper.get("#ground_station_display_name").setValue("Uncertain draft");
@@ -68,7 +69,7 @@ test("uncertain saves remain locked across refresh, and confirmed refresh hides 
     await wrapper.get("#ground-station-form").trigger("submit");
     await flushPromises();
     await wrapper.setProps({
-      ...registration.read({ ...envelope(), phase: "submitted" }, context),
+      ...required(registration).read({ ...envelope(), phase: "submitted" }, context),
     } as never);
     expect((wrapper.get("#ground_station_display_name").element as HTMLInputElement).value).toBe(
       "Uncertain draft",
@@ -80,7 +81,7 @@ test("uncertain saves remain locked across refresh, and confirmed refresh hides 
     expect(port.execute).toHaveBeenCalledTimes(2);
     expect(port.navigate).not.toHaveBeenCalled();
     await wrapper.setProps({
-      ...registration.read({ ...envelope(), phase: "completed" }, context),
+      ...required(registration).read({ ...envelope(), phase: "completed" }, context),
     } as never);
     expect(wrapper.find("#ground-station-form").exists()).toBe(false);
     expect(wrapper.get("#comms-setup-review-records").attributes("href")).toContain(
@@ -91,8 +92,10 @@ test("uncertain saves remain locked across refresh, and confirmed refresh hides 
   }
 });
 test("setup contribution rejects malformed phases and foreign creation resources", () => {
-  expect(() => setupPages[0].read({ ...envelope(), phase: "retry" }, context)).toThrow();
-  expect(() => setupPages[0].read(envelope(), { ...context, resourceId: "foreign" })).toThrow();
+  expect(() => required(setupPages[0]).read({ ...envelope(), phase: "retry" }, context)).toThrow();
+  expect(() =>
+    required(setupPages[0]).read(envelope(), { ...context, resourceId: "foreign" }),
+  ).toThrow();
 });
 test("edit contribution binds the station resource and preserves its disabled identity", () => {
   const data = {
@@ -107,11 +110,13 @@ test("edit contribution binds the station resource and preserves its disabled id
   };
   const editContext = { ...context, resourceId: "station-1" };
   const registration = setupPages[1];
-  expect(() => registration.read(data, context)).toThrow();
-  expect(() => registration.read(data, { ...editContext, resourceId: "foreign" })).toThrow();
+  expect(() => required(registration).read(data, context)).toThrow();
+  expect(() =>
+    required(registration).read(data, { ...editContext, resourceId: "foreign" }),
+  ).toThrow();
   const wrapper = mount(Adapter, {
     props: {
-      ...registration.read(data, editContext),
+      ...required(registration).read(data, editContext),
       port: { execute: vi.fn(), navigate: vi.fn() },
     } as never,
   });

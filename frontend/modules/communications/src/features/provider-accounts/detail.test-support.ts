@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { detailFixture } from "./provider-accounts.test-support";
 import { readAccountDetail } from "./detail.validation";
 export function accountDetailFixture() {
@@ -13,22 +14,26 @@ export function accountDetailFixture() {
       credential_status: "active",
     },
     page: {
-      ...original.page!,
-      header: { ...original.page!.header, subtitle: "account-1", config_label: "config v3" },
+      ...required(original.page),
+      header: {
+        ...required(original.page).header,
+        subtitle: "account-1",
+        config_label: "config v3",
+      },
     },
     grant_form: {
-      ...original.grant_form!,
-      values: { ...original.grant_form!.values, mission_id: "mission-2" },
+      ...required(original.grant_form),
+      values: { ...required(original.grant_form).values, mission_id: "mission-2" },
       fields: {
-        ...original.grant_form!.fields,
+        ...required(original.grant_form).fields,
         mission_id: {
-          ...original.grant_form!.fields.mission_id,
+          ...required(original.grant_form).fields.mission_id,
           value: "mission-2",
           options: [{ value: "mission-2", label: "Mission Two", disabled: false }],
         },
       },
     },
-    account_grants: original.account_grants!.map((grant) => ({
+    account_grants: required(original.account_grants).map((grant) => ({
       ...grant,
       mission_id: "mission-1",
       version: 2,

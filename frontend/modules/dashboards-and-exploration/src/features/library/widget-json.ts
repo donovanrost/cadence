@@ -33,6 +33,7 @@ export function parseWidgetJson(json: unknown): Record<string, unknown> {
     typeof value.widget_type_id !== "string" ||
     !value.widget_type_id ||
     bytes(value.widget_type_id) > 256 ||
+    // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
     /[\u0000-\u001f]/u.test(value.widget_type_id) ||
     (value.title !== undefined && value.title !== null && typeof value.title !== "string") ||
     (value.widget_type_version !== undefined &&

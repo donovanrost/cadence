@@ -5,6 +5,9 @@ import {
   admitSourcePage,
   same,
   type SourceAction,
+  type SourceInputs,
+  type SourceEffectAction,
+  isSourceEffect,
   type SourceOperation,
   type SourcePage,
   type Binding,
@@ -22,10 +25,8 @@ export function useDataSources(
     stale = ref(false),
     unknown = ref(false),
     notice = ref("");
-  const lastEffect = shallowRef<SourceOperation | null>(
-    first.operation && !["read-page", "validate-registration"].includes(first.operation.action)
-      ? first.operation
-      : null,
+  const lastEffect = shallowRef<SourceOperation<SourceEffectAction> | null>(
+    first.operation && isSourceEffect(first.operation) ? first.operation : null,
   );
   const draft = reactive({ ...first.model.defaults });
   const reviewedSource = shallowRef<Source | null>(first.model.selected?.source ?? null);
@@ -75,8 +76,7 @@ export function useDataSources(
       return false;
     page.value = next;
     stale.value = false;
-    if (next.operation && !["read-page", "validate-registration"].includes(next.operation.action))
-      lastEffect.value = next.operation;
+    if (next.operation && isSourceEffect(next.operation)) lastEffect.value = next.operation;
     unknown.value = next.operation?.status === "unconfirmed";
     if (!unknown.value) awaiting = null;
     return true;
@@ -101,7 +101,7 @@ export function useDataSources(
       }
     }
   }
-  async function execute(action: SourceAction, input: Record<string, unknown>) {
+  async function execute<A extends SourceAction>(action: A, input: SourceInputs[NoInfer<A>]) {
     if ((disabled.value && action !== "read-page") || pending.value || locked.value) return;
     if (!validInput(input, action)) {
       notice.value = "Check the required fields and input lengths before continuing.";
@@ -119,14 +119,14 @@ export function useDataSources(
       if (!op || op.sequence !== sequence || op.action !== action || !same(op.input, input))
         throw Error("unconfirmed");
       page.value = { ...page.value, sequence, operation: op };
-      if (!["read-page", "validate-registration"].includes(action)) lastEffect.value = op;
+      if (isSourceEffect(op)) lastEffect.value = op;
       unknown.value = op.status === "unconfirmed";
       if (!unknown.value) awaiting = null;
       await refresh();
       if (op.status === "rejected")
         notice.value =
           "The operation was not accepted. Review current evidence, permissions and input values before trying again.";
-      if (action === "validate-registration" && op.result)
+      if (op.action === "validate-registration" && op.status === "completed")
         notice.value = op.result.valid
           ? "The source configuration is valid for registration."
           : "The source configuration or credential reference is unavailable. Check the identity and configuration.";

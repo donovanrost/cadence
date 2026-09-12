@@ -19,7 +19,7 @@ export function admitOrganizationPages(items: readonly OrganizationPageContribut
       entries.has(item.id) ||
       typeof item.read !== "function" ||
       (item.actions !== undefined &&
-        (!Array.isArray(item.actions) ||
+        (!isArray(item.actions) ||
           new Set(item.actions).size !== item.actions.length ||
           item.actions.some((action) => !/^[a-z][a-z0-9.-]*$/.test(action))))
     ) {
@@ -40,3 +40,8 @@ export const organizationModulePages = admitOrganizationPages([
   providerAccountRegistrationContribution,
   providerAccountDetailContribution,
 ]);
+
+// Inspect runtime input without widening the already declared readonly action type to any[].
+function isArray(value: unknown): boolean {
+  return Array.isArray(value);
+}

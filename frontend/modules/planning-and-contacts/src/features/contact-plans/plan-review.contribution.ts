@@ -7,6 +7,7 @@ export const planReviewContribution = {
   slot: "ops.page",
   version: 1,
   title: "Contact Plan Review",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks this SFC constructor; typed lint cannot resolve Vue imports.
   component: PlanReviewContribution,
   query: true,
   actions: planReviewActions,

@@ -4,6 +4,7 @@ export const identity = (v: unknown): v is string =>
   v.length > 0 &&
   new TextEncoder().encode(v).length <= 256 &&
   !/[\uD800-\uDFFF]/u.test(v) &&
+  // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
   !/[\x00-\x1f\x7f]/.test(v);
 const keys = ["release", "release_after", "verifier_after", "verifier"] as const;
 export function readHistoryQuery(value: unknown): HistoryQuery {

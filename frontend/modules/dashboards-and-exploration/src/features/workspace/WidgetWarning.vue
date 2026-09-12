@@ -1,74 +1,8 @@
 <script setup lang="ts">
+import type { WidgetWarningPresentation } from "./WidgetWarning.contracts";
+
 import { computed } from "vue";
 import CadencePopover from "@cadence/ui/CadencePopover.vue";
-
-type Attrs = Record<string, string>;
-type ButtonType = "button" | "submit" | "reset";
-
-type TextPresentation = {
-  class: string;
-  text: string;
-};
-
-type FieldPresentation = {
-  key: string;
-  label: TextPresentation;
-  value: TextPresentation;
-};
-
-type WidgetWarningPresentation = {
-  component_id: string;
-  overlay: { id: string; class: string; attrs: Attrs };
-  trigger: {
-    id: string;
-    type: ButtonType;
-    class: string;
-    attrs: Attrs;
-    badge: { class: string; attrs: Attrs; text: string };
-  };
-  panel: { id: string; class: string; hidden: boolean; attrs: Attrs };
-  body: {
-    class: string;
-    heading: TextPresentation;
-    message: TextPresentation;
-    evidence_button: {
-      type: ButtonType;
-      class: string;
-      attrs: Attrs;
-      icon: { name: string; class: string };
-      text: string;
-    };
-    details: {
-      visible: boolean;
-      class: string;
-      rows: Array<{
-        key: string;
-        label: TextPresentation;
-        value: TextPresentation & { attrs: Attrs };
-      }>;
-    };
-    evidence: {
-      visible: boolean;
-      class: string;
-      attrs: Attrs;
-      heading: TextPresentation;
-      rows: Array<{ key: string; class: string; attrs: Attrs; fields: FieldPresentation[] }>;
-    };
-    links: {
-      visible: boolean;
-      class: string;
-      attrs: Attrs;
-      heading: TextPresentation;
-      rows: Array<{
-        key: string;
-        type: ButtonType;
-        class: string;
-        attrs: Attrs;
-        fields: FieldPresentation[];
-      }>;
-    };
-  };
-};
 
 const props = defineProps<{ presentation: WidgetWarningPresentation }>();
 

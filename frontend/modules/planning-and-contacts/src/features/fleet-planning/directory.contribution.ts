@@ -7,6 +7,8 @@ export const fleetDirectoryContribution = {
   slot: "ops.page",
   version: 1,
   title: "Fleet Planning",
+  // Oxlint cannot resolve the SFC constructor; vue-tsc checks the public component contract.
+  // oxlint-disable-next-line typescript/no-unsafe-assignment
   component: FleetDirectoryContribution,
   query: true,
   read(value, context) {

@@ -41,7 +41,7 @@ const allowedAttrs: Record<string, Check> = {
 const attrs: Check = (value) =>
   record(value) &&
   Object.entries(value).every(
-    ([key, item]) => Object.hasOwn(allowedAttrs, key) && allowedAttrs[key]!(item),
+    ([key, item]) => Object.hasOwn(allowedAttrs, key) && (allowedAttrs[key]?.(item) ?? false),
   );
 const element = shape({ attrs });
 const label = shape({ attrs, text });

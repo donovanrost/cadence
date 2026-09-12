@@ -1,3 +1,4 @@
+import { required } from "../../../test-support/required";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,7 +42,7 @@ test("domain source owns contracts and has no delivery or sibling-feature intern
       source = readFileSync(absolute, "utf8"),
       feature = file.split(sep)[0] === "features" ? file.split(sep)[1] : undefined;
     for (const match of source.matchAll(/(?:from\s*|import\s*\()["']([^"']+)["']/g)) {
-      const specifier = match[1]!;
+      const specifier = required(match[1]);
       expect(specifier, file).not.toMatch(/@cadence\/(?:plugin-host|.*-plugin)(?:\/|$)/);
       if (!specifier.startsWith(".")) continue;
       const target = relative(directory, resolve(dirname(absolute), specifier));

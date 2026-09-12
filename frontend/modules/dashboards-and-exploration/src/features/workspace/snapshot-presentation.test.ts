@@ -1,3 +1,6 @@
+import { GridStack } from "gridstack";
+import { required } from "../../../../../test-support/required";
+import { normalizePoints, normalizeEnvelope } from "./chart-points";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, onMounted } from "vue";
@@ -11,13 +14,15 @@ import { readWorkspaceSnapshot } from "./validation";
 import { field, frame, snapshotContext, snapshotFixture } from "./snapshot-fixture.test-support";
 import type { WorkspaceWidget } from "./contracts";
 
-const apps: ReturnType<typeof mount>[] = [];
+const apps: { unmount: () => void }[] = [];
 afterEach(() => {
   for (const app of apps.splice(0)) app.unmount();
   vi.restoreAllMocks();
 });
 const body = (type: WorkspaceWidget["type"]) =>
-  snapshotPresentation(snapshotFixture(type), "viewer").groups[0].grid.widgets[0].presentation.body;
+  required(
+    required(snapshotPresentation(snapshotFixture(type), "viewer").groups[0]).grid.widgets[0],
+  ).presentation.body;
 function render(model = snapshotFixture(), instanceId = "viewer") {
   const app = mount(WorkspaceSnapshotCanvas, {
     props: { snapshot: model, context: snapshotContext, instanceId },
@@ -44,7 +49,7 @@ test("all seven widget kinds receive domain-shaped content, not a generic fallba
 });
 test("authored chart style enums reach the real chart markup without invented aliases", async () => {
   const model = snapshotFixture("time_series");
-  Object.assign(model.placements[0].widget!.options, {
+  Object.assign(required(required(model.placements[0]).widget).options, {
     legend_mode: "hidden",
     line_width: "bold",
     fill_opacity: 30,
@@ -60,12 +65,12 @@ test("authored chart style enums reach the real chart markup without invented al
   fragment.innerHTML = html;
   const chart = fragment.content.querySelector("[data-legend-mode]");
   expect(chart).not.toBeNull();
-  expect(chart!.getAttribute("data-legend-mode")).toBe("hidden");
-  expect(chart!.getAttribute("data-line-width")).toBe("bold");
-  expect(chart!.getAttribute("data-fill-opacity")).toBe("30");
+  expect(required(chart).getAttribute("data-legend-mode")).toBe("hidden");
+  expect(required(chart).getAttribute("data-line-width")).toBe("bold");
+  expect(required(chart).getAttribute("data-fill-opacity")).toBe("30");
   for (const options of [{ legend_mode: "never" }, { line_width: "thick" }]) {
     const invalid = structuredClone(model);
-    Object.assign(invalid.placements[0].widget!.options, options);
+    Object.assign(required(required(invalid.placements[0]).widget).options, options);
     expect(() => readWorkspaceSnapshot(invalid, snapshotContext)).toThrow();
   }
 });
@@ -78,7 +83,7 @@ test("real snapshot canvas preserves native grid and disclosure identity on data
   await flushPromises();
   expect(trigger.attributes("aria-expanded")).toBe("false");
   const next = snapshotFixture();
-  next.placements[0].frames[0].fields[1].values = [29.1];
+  required(required(required(next.placements[0]).frames[0]).fields[1]).values = [29.1];
   await app.setProps({ snapshot: next });
   expect(app.get('[data-workspace-value="battery"]').text()).toBe("29.10");
   expect(app.get(".grid-stack").element).toBe(grid);
@@ -90,7 +95,9 @@ test("snapshot grid geometry is honored, and a geometry or context switch resets
   const model = snapshotFixture();
   model.grid = { columns: 6, row_height_px: 64, gap_px: 4 };
   const app = render(model);
-  const grid = app.get(".grid-stack").element as HTMLElement & { gridstack: any };
+  const grid = app.get(".grid-stack").element;
+  if (!("gridstack" in grid) || !(grid.gridstack instanceof GridStack))
+    throw Error("Expected a mounted grid");
   expect(grid.gridstack.opts.column).toBe(6);
   expect(grid.gridstack.opts.cellHeight).toBe(64);
   expect(grid.gridstack.opts.margin).toBe(4);
@@ -103,18 +110,25 @@ test("snapshot grid geometry is honored, and a geometry or context switch resets
 test("unavailable, empty and malformed widget frames remain visible without hiding neighboring data", () => {
   const model = snapshotFixture();
   model.placements.push({
-    ...structuredClone(model.placements[0]),
+    ...structuredClone(required(model.placements[0])),
     id: "missing",
     status: "unavailable",
     reason: "unsupported_widget",
     widget: null,
     frames: [],
   });
-  model.placements.push({ ...structuredClone(model.placements[0]), id: "empty", frames: [] });
   model.placements.push({
-    ...structuredClone(model.placements[0]),
+    ...structuredClone(required(model.placements[0])),
+    id: "empty",
+    frames: [],
+  });
+  model.placements.push({
+    ...structuredClone(required(model.placements[0])),
     id: "ambiguous",
-    frames: [model.placements[0].frames[0], model.placements[0].frames[0]],
+    frames: [
+      required(required(model.placements[0]).frames[0]),
+      required(required(model.placements[0]).frames[0]),
+    ],
   });
   const app = render(model);
   expect(app.findAll(".grid-stack-item")).toHaveLength(4);
@@ -127,7 +141,7 @@ test("unavailable, empty and malformed widget frames remain visible without hidi
 });
 test("null scalar values and absent spacecraft states never become zero or healthy", () => {
   const model = snapshotFixture();
-  model.placements[0].frames[0].fields[1].values = [null];
+  required(required(required(model.placements[0]).frames[0]).fields[1]).values = [null];
   expect(render(model).get('[data-workspace-value="battery"]').text()).toBe("No data");
   const app = render(snapshotFixture("constellation_health"), "health");
   expect(app.get('[data-spacecraft-id="sc-1"]').attributes("aria-label")).toBe("sc-1: red");
@@ -144,20 +158,20 @@ test("series projection keeps gaps, sorts time, preserves units and separates en
   ]);
   const series = snapshotSeries([f], "battery");
   expect(series).toHaveLength(1);
-  expect(series[0].unit).toBe("V");
-  expect(series[0].points).toEqual([
+  expect(required(series[0]).unit).toBe("V");
+  expect(required(series[0]).points).toEqual([
     [1000, 28.4],
     [2000, null],
   ]);
-  expect(series[0].envelope?.points).toEqual([
+  expect(required(series[0]).envelope?.points).toEqual([
     [1000, 26, 29],
     [2000, 27, 30],
   ]);
   const missing = structuredClone(f);
-  missing.fields[0].values[0] = null;
+  required(missing.fields[0]).values[0] = null;
   expect(() => snapshotSeries([missing], "battery")).toThrow();
   const duplicate = structuredClone(f);
-  duplicate.fields[0].values = [1000, 1000];
+  required(duplicate.fields[0]).values = [1000, 1000];
   expect(() => snapshotSeries([duplicate], "battery")).toThrow();
 });
 test("table types, state observations and event interval endpoints reach real components", () => {
@@ -176,20 +190,30 @@ test("DOM and chart synchronization identities are instance-specific and collisi
   expect(workspaceDomId("viewer", "a", "b")).not.toBe(workspaceDomId("viewer", "a-b"));
   const a = snapshotPresentation(snapshotFixture("time_series"), "first");
   const b = snapshotPresentation(snapshotFixture("time_series"), "second");
-  const chart = (p: typeof a) =>
-    (p.groups[0].grid.widgets[0].presentation.body.content!.presentation as any).chart.props;
+  const chart = (p: typeof a) => {
+    const content = required(
+      required(required(p.groups[0]).grid.widgets[0]).presentation.body.content,
+    );
+    if (content.component !== "WidgetPoint" || content.presentation.kind !== "time_series")
+      throw Error("Expected a time-series widget");
+    return content.presentation.chart.props;
+  };
   expect(chart(a).correlation_group).not.toBe(chart(b).correlation_group);
   expect(() => snapshotPresentation(snapshotFixture(), "bad id")).toThrow();
   const mixed = snapshotFixture();
-  mixed.sections[0].id = "ungrouped";
-  mixed.placements[0].section_id = "ungrouped";
-  mixed.placements.push({ ...structuredClone(mixed.placements[0]), id: "loose", section_id: null });
+  required(mixed.sections[0]).id = "ungrouped";
+  required(mixed.placements[0]).section_id = "ungrouped";
+  mixed.placements.push({
+    ...structuredClone(required(mixed.placements[0])),
+    id: "loose",
+    section_id: null,
+  });
   const groups = snapshotPresentation(mixed, "mixed").groups;
-  expect(groups[0].root.attrs.id).not.toBe(groups[1].root.attrs.id);
+  expect(required(groups[0]).root.attrs.id).not.toBe(required(groups[1]).root.attrs.id);
 });
 test("snapshot composition refuses foreign resources, never turns domain text into executable markup and hides no warnings", () => {
   const model = snapshotFixture();
-  model.placements[0].widget!.title = '<img src=x onerror="alert(1)">';
+  required(required(model.placements[0]).widget).title = '<img src=x onerror="alert(1)">';
   model.warnings = [{ code: "source_unavailable", severity: "error" }];
   const app = render(model);
   expect(app.find("img").exists()).toBe(false);
@@ -238,32 +262,28 @@ test("a static snapshot never advances a live clock or silently combines differe
   const model = snapshotFixture("time_series");
   model.context.time_mode = "live";
   model.context.window_seconds = 600;
-  const adapted = snapshotPresentation(model, "static").groups[0].grid.widgets[0].presentation.body;
+  const adapted = required(
+    required(snapshotPresentation(model, "static").groups[0]).grid.widgets[0],
+  ).presentation.body;
   if (adapted.content?.presentation.kind !== "time_series") throw Error("Missing time series");
   expect(adapted.content.presentation.chart.props.time_mode).toBe("snapshot");
   expect(adapted.content.presentation.chart.props.window_seconds).toBe(600);
   expect(adapted.content.presentation.chart.props).not.toHaveProperty("precision");
-  model.placements[0].frames.push({
-    ...structuredClone(model.placements[0].frames[0]),
+  required(model.placements[0]).frames.push({
+    ...structuredClone(required(required(model.placements[0]).frames[0])),
     role: "compare",
     time_axis: "receipt_time",
   });
-  const invalid = snapshotPresentation(model, "static").groups[0].grid.widgets[0].presentation.body;
+  const invalid = required(
+    required(snapshotPresentation(model, "static").groups[0]).grid.widgets[0],
+  ).presentation.body;
   expect(invalid.content).toBeNull();
   expect(invalid.notice?.text).toContain("cannot be displayed");
 });
 
-// Real chart normalization (extracted only for direct deterministic unit coverage).
-// Mounted/production browser coverage separately exercises its uPlot consumer.
-test("chart's normalizers preserve explicit gaps and reject null envelope coordinates", async () => {
-  const source = await import("./TelemetryChart.vue?raw");
-  const block = source.default.slice(
-    source.default.indexOf("  normalizePoints(points) {"),
-    source.default.indexOf("  appendSeriesPayload(payload) {"),
-  );
-  const normalizers = new Function(`return ({${block}})`)();
+test("chart's normalizers preserve explicit gaps and reject null envelope coordinates", () => {
   expect(
-    normalizers.normalizePoints([
+    normalizePoints([
       [1000, null],
       [2000, 28.4],
       [null, 5],
@@ -274,7 +294,7 @@ test("chart's normalizers preserve explicit gaps and reject null envelope coordi
     [2000, 28.4, {}],
   ]);
   expect(
-    normalizers.normalizeEnvelope({
+    normalizeEnvelope({
       points: [
         [1000, null, 5],
         [2000, 3, 2],

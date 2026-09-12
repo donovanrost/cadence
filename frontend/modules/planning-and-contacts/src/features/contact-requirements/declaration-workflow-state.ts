@@ -7,13 +7,15 @@ import {
   declarationDefaults,
   declarationFeedbackText,
   type DeclarationAction,
+  type DeclarationCommand,
+  type DeclarationRequest,
   type DeclarationOperation,
   type DeclarationPage,
   type SpacecraftChoices,
 } from "./declaration";
 import type { ContactRequirementPayload } from "./OpsContactRequirementNew.contracts";
 import { requirementDataEqual as equal } from "./requirement-directory";
-type Command = { action: DeclarationAction; input: Record<string, any> };
+type Command = DeclarationCommand;
 export function useDeclarationWorkflow(
   input: () => DeclarationPage,
   port: () => OpsPagePort,
@@ -54,12 +56,13 @@ export function useDeclarationWorkflow(
   const feedback = computed(() => {
     if (inputNotice.value) return inputNotice.value;
     const op = operation.value;
-    if (!op || !equal(op.input.contact_requirement, draft.value)) return "";
+    if (!op || op.action === "spacecraft-page" || !equal(op.input.contact_requirement, draft.value))
+      return "";
     return declarationFeedbackText(
       op.status === "rejected"
         ? (op.feedback ?? [])
         : op.action === "validate" && op.status === "completed"
-          ? op.receipt!.result.feedback
+          ? op.receipt.result.feedback
           : [],
     );
   });
@@ -77,15 +80,15 @@ export function useDeclarationWorkflow(
       if (op.action === "spacecraft-page")
         model.value = {
           ...model.value,
-          spacecraft: op.receipt!.result.spacecraft,
-          can_declare: op.receipt!.result.spacecraft.total > 0,
+          spacecraft: op.receipt.result.spacecraft,
+          can_declare: op.receipt.result.spacecraft.total > 0,
         };
       notice.value =
         op.action === "save"
           ? "Contact need declared. Open the requirement to review it and start planning."
           : op.action === "spacecraft-page"
             ? "Spacecraft choices updated. Your declaration is retained."
-            : op.receipt!.result.valid
+            : op.receipt.result.valid
               ? "Declaration validated."
               : "Review the declaration feedback.";
     } else
@@ -125,10 +128,13 @@ export function useDeclarationWorkflow(
       }
     }
   }
-  function submit(action: DeclarationAction, payload: Record<string, any>) {
+  function submit(...[action, payload]: DeclarationRequest) {
     if (!active || uncertain.value || created.value || queuedSave.value || pending.value === "save")
       return;
-    const command = { action, input: JSON.parse(JSON.stringify(payload)) };
+    const command: DeclarationCommand =
+      action === "spacecraft-page"
+        ? { action, input: { page: payload.page } }
+        : { action, input: { contact_requirement: { ...payload.contact_requirement } } };
     if (action === "save") {
       save = command;
       queuedSave.value = true;
@@ -150,7 +156,8 @@ export function useDeclarationWorkflow(
       return;
     }
     inputNotice.value = "";
-    submit(action, payload);
+    if (action === "save") submit("save", payload);
+    else submit("validate", payload);
   }
   async function drain() {
     if (!active || pending.value || uncertain.value || created.value) return;

@@ -73,7 +73,7 @@ async function effect(event: "star" | "restore", payload: StarPayload | RestoreP
     pending.value = false;
   }
 }
-async function refresh() {
+async function refreshPage() {
   if (pending.value) return;
   pending.value = true;
   try {
@@ -103,7 +103,7 @@ async function refresh() {
         type="button"
         class="btn btn-sm ml-3"
         :disabled="pending"
-        @click="refresh"
+        @click="refreshPage"
       >
         Refresh directory
       </button>

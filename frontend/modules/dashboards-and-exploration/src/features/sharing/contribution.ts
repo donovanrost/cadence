@@ -7,6 +7,7 @@ export const shareContribution = {
   slot: "ops.page",
   version: 1,
   title: "Mission share",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   component: SharedDashboardView,
   actions: [],
   read(value, context) {
@@ -18,6 +19,7 @@ export const snapshotContribution = {
   slot: "ops.page",
   version: 1,
   title: "Definition snapshot",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   component: SharedDashboardView,
   actions: [],
   read(value, context) {

@@ -9,6 +9,7 @@ function text(value: unknown): value is string {
   return (
     typeof value === "string" &&
     new TextEncoder().encode(value).length <= 512 &&
+    // oxlint-disable-next-line no-control-regex -- Reject control characters at this input boundary.
     !/[\u0000-\u001f\u007f\ud800-\udfff]/u.test(value)
   );
 }

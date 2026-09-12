@@ -1,7 +1,15 @@
+import { fixtureRecord } from "../../../test-support/json-fixture";
+import { fixtureFeaturePort } from "../../../test-support/feature-port";
+import { required } from "../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import type { Component } from "vue";
-import type { FullPageSurfaceProps, HostBridge, HostContext } from "@cadence/plugin-sdk";
+import type {
+  FullPageSurfaceProps,
+  HostBridge,
+  HostContext,
+  HostActionReceipt,
+} from "@cadence/plugin-sdk";
 import Derived from "./DerivedTelemetryApplication.vue";
 import Limits from "./LimitsApplication.vue";
 import { manifest as derivedManifest } from "./derived-telemetry";
@@ -18,22 +26,29 @@ const context: HostContext = {
 };
 const variants = [
   {
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
     Component: Derived,
     manifest: derivedManifest,
     feature: "DefinitionsSurface",
     error: "derived-load-error",
   },
   {
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
     Component: Limits,
     manifest: limitsManifest,
     feature: "LimitsDefinitionsSurface",
     error: "limits-load-error",
   },
 ] as const;
-function setup(variant: (typeof variants)[number], surface = variant.manifest.surfaces[0]!) {
-  const query = vi.fn().mockResolvedValue({ trusted_surface: { tag: "current" } });
+function setup(
+  variant: (typeof variants)[number],
+  surface = required(variant.manifest.surfaces[0]),
+) {
+  const query = vi
+    .fn<HostBridge["query"]>()
+    .mockResolvedValue({ trusted_surface: { tag: "current" } });
   const execute = vi
-    .fn()
+    .fn<HostBridge["execute"]>()
     .mockResolvedValue({ receiptId: "receipt", completedAt: "2026-09-10T00:00:00Z", result: {} });
   const navigate = vi.fn();
   const props: FullPageSurfaceProps = {
@@ -55,6 +70,7 @@ function setup(variant: (typeof variants)[number], surface = variant.manifest.su
       },
     },
     bridge: {
+      // Vitest erases generic call signatures; the feature still admits these unknown fixture responses.
       query: query as HostBridge["query"],
       execute: execute as HostBridge["execute"],
       navigate,
@@ -75,10 +91,10 @@ const global = {
     LimitsPostureSurface: stub("LimitsPostureSurface"),
   },
 };
-function deferred() {
-  let resolve!: (value: unknown) => void;
+function deferred<T = unknown>() {
+  let resolve!: (value: T) => void;
   let reject!: (reason: unknown) => void;
-  const promise = new Promise((yes, no) => {
+  const promise = new Promise<T>((yes, no) => {
     resolve = yes;
     reject = no;
   });
@@ -126,10 +142,10 @@ for (const variant of variants) {
         p.surface = { ...p.surface, actions: [] };
       },
       (p) => {
-        p.context = { ...context, missionId: "" } as HostContext;
+        p.context = { ...context, missionId: "" };
       },
       (p) => {
-        p.context = { ...context, scope: "organization" } as unknown as HostContext;
+        p.context = { ...context, scope: "organization", missionId: null, missionName: null };
       },
     ];
     for (const change of changes) {
@@ -148,7 +164,9 @@ for (const variant of variants) {
       late = deferred();
     const wrapper = mount(variant.Component as Component, { props: c.props, global });
     await flushPromises();
-    const oldPort = wrapper.findComponent({ name: variant.feature }).props("port");
+    const oldPort = fixtureFeaturePort(
+      wrapper.findComponent({ name: variant.feature }).props("port"),
+    );
     c.query.mockReturnValueOnce(late.promise);
     const oldRead = oldPort.read();
     const rejected = expect(oldRead).rejects.toThrow("retired");
@@ -156,9 +174,9 @@ for (const variant of variants) {
     await wrapper.setProps({ context: changed });
     await flushPromises();
     const next = wrapper.findComponent({ name: variant.feature });
-    expect(next.props("hostContext").missionId).toBe("mission-b");
+    expect(fixtureRecord(next.props("hostContext")).missionId).toBe("mission-b");
     expect(next.props("port")).not.toBe(oldPort);
-    expect(c.query.mock.calls.at(-1)![0].context.missionId).toBe("mission-b");
+    expect(required(c.query.mock.calls.at(-1))[0].context.missionId).toBe("mission-b");
     await expect(oldPort.save({}, "old-key")).rejects.toThrow("retired");
     expect(() => oldPort.navigate("/old")).toThrow("retired");
     expect(c.execute).not.toHaveBeenCalled();
@@ -167,9 +185,9 @@ for (const variant of variants) {
     await rejected;
     await flushPromises();
     expect(next.props("document")).toEqual({ tag: "current" });
-    const port = next.props("port");
+    const port = fixtureFeaturePort(next.props("port"));
     await port.save({}, "same-key");
-    expect(c.execute.mock.calls[0]![0]).toMatchObject({
+    expect(required(c.execute.mock.calls[0])[0]).toMatchObject({
       context: { missionId: "mission-b" },
       idempotencyKey: "same-key",
     });
@@ -206,13 +224,13 @@ for (const variant of variants) {
     expect(wrapper.find(`#${variant.error}`).exists()).toBe(true);
     await wrapper.get(`#${variant.error} button`).trigger("click");
     await flushPromises();
-    const port = wrapper.findComponent({ name: variant.feature }).props("port");
-    const completion = deferred();
+    const port = fixtureFeaturePort(wrapper.findComponent({ name: variant.feature }).props("port"));
+    const completion = deferred<HostActionReceipt<unknown>>();
     c.execute.mockReturnValueOnce(completion.promise);
     const input = { reviewed: "mission-a" };
     const saving = port.save(input, "exact-save-key");
     const retired = expect(saving).rejects.toThrow("retired");
-    expect(c.execute.mock.calls[0]![0]).toMatchObject({
+    expect(required(c.execute.mock.calls[0])[0]).toMatchObject({
       input,
       idempotencyKey: "exact-save-key",
       context: { missionId: "mission-a" },
@@ -228,9 +246,10 @@ for (const variant of variants) {
     });
     await retired;
     await flushPromises();
-    expect(wrapper.findComponent({ name: variant.feature }).props("hostContext").missionId).toBe(
-      "mission-b",
-    );
+    expect(
+      fixtureRecord(wrapper.findComponent({ name: variant.feature }).props("hostContext"))
+        .missionId,
+    ).toBe("mission-b");
     expect(c.execute).toHaveBeenCalledTimes(1);
     expect(c.query).toHaveBeenCalledTimes(3);
     wrapper.unmount();
@@ -242,16 +261,20 @@ test("Limits changes contributions and does not expose a posture save effect", a
     c = setup(variant);
   const wrapper = mount(Limits, { props: c.props, global });
   await flushPromises();
-  const oldPort = wrapper.findComponent({ name: "LimitsDefinitionsSurface" }).props("port");
-  const surface = limitsManifest.surfaces[1]!;
+  const oldPort = fixtureFeaturePort(
+    wrapper.findComponent({ name: "LimitsDefinitionsSurface" }).props("port"),
+  );
+  const surface = required(limitsManifest.surfaces[1]);
   await wrapper.setProps({ surface, application: { ...c.props.application, surface } });
   await flushPromises();
   expect(wrapper.findComponent({ name: "LimitsDefinitionsSurface" }).exists()).toBe(false);
   const feature = wrapper.findComponent({ name: "LimitsPostureSurface" });
   expect(feature.exists()).toBe(true);
-  expect(c.query.mock.calls.at(-1)![0].queryId).toBe("cadence.limits.activity");
+  expect(required(c.query.mock.calls.at(-1))[0].queryId).toBe("cadence.limits.activity");
   await expect(oldPort.save({}, "old")).rejects.toThrow("retired");
-  await expect(feature.props("port").save({}, "posture")).rejects.toThrow("no save action");
+  await expect(fixtureFeaturePort(feature.props("port")).save({}, "posture")).rejects.toThrow(
+    "no save action",
+  );
   expect(c.execute).not.toHaveBeenCalled();
   wrapper.unmount();
 });

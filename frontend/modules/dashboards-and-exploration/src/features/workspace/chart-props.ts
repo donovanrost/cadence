@@ -1,4 +1,4 @@
-/** Typed call boundary for the existing JavaScript uPlot component. */
+/** Chart input boundary. External data is admitted by the chart model. */
 export interface TelemetryChartProps {
   chart_id: string;
   widget_id: string;

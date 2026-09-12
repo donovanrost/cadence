@@ -1,34 +1,40 @@
+import type { Snapshot } from "@cadence/plugin-sdk/admission";
 import type { InjectionKey } from "vue";
 import type { FleetStartPolicy } from "./OpsFleetPlanningNew.contracts";
-export type RunContext = { organization_id: string; mission_id: string };
-export type RunQuery = {
+export type RunContext = Snapshot<{ organization_id: string; mission_id: string }>;
+export type RunQuery = Snapshot<{
   requirements_page: number;
   decisions_page: number;
   resources_page: number;
   automation_page: number;
   commitments_page: number;
-};
-export type RunEvidence = RunContext & {
-  contract_version: 1;
-  run_id: string;
-  lifecycle_state: string;
-  phase: string;
-  sha256: string;
-};
-export type RepairEvidence = RunContext & {
-  contract_version: 1;
-  run_id: string;
-  run_sha256: string;
-  plan_id: string;
-  plan_version: number;
-  plan_sha256: string;
-  policy_id: string;
-  policy_version: number;
-  policy_sha256: string;
-  sha256: string;
-};
-export type RunPage<T> = { page: number; more: boolean; total?: number; entries: T[] };
-export type RunRequirement = {
+}>;
+export type RunEvidence = Snapshot<
+  RunContext & {
+    contract_version: 1;
+    run_id: string;
+    lifecycle_state: string;
+    phase: string;
+    sha256: string;
+  }
+>;
+export type RepairEvidence = Snapshot<
+  RunContext & {
+    contract_version: 1;
+    run_id: string;
+    run_sha256: string;
+    plan_id: string;
+    plan_version: number;
+    plan_sha256: string;
+    policy_id: string;
+    policy_version: number;
+    policy_sha256: string;
+    sha256: string;
+  }
+>;
+export type RunPage<T> = Snapshot<{ page: number; more: boolean; total?: number; entries: T[] }>;
+export type CountedRunPage<T> = RunPage<T> & { readonly total: number };
+export type RunRequirement = Snapshot<{
   id: string;
   requirement_id: string;
   version: number;
@@ -40,8 +46,8 @@ export type RunRequirement = {
   result_state: string;
   planning_run_id: string | null;
   priority: string;
-};
-export type RunDecision = {
+}>;
+export type RunDecision = Snapshot<{
   id: string;
   snapshot_id: string;
   spacecraft_id: string;
@@ -54,15 +60,15 @@ export type RunDecision = {
   rationale: string | null;
   constraints_satisfied: boolean;
   failures: Array<string | null>;
-};
-export type RunResource = {
+}>;
+export type RunResource = Snapshot<{
   key: string;
   peak_parallel: number;
   capacity: number;
   selected_count: number;
   over_capacity: boolean;
-};
-export type RunAutomation = {
+}>;
+export type RunAutomation = Snapshot<{
   id: string;
   action: string;
   lifecycle_state: string;
@@ -73,25 +79,28 @@ export type RunAutomation = {
   plan_version: number | null;
   started_at: string;
   completed_at: string | null;
-};
-export type RunCommitment = {
+}>;
+export type RunCommitment = Snapshot<{
   id: string;
   content_sha256: string;
   spacecraft_id: string;
   starts_at: string;
   ends_at: string;
-};
-export type RunRepair = {
+}>;
+export type RepairReview = Snapshot<{
   available: boolean;
   reason: string | null;
-  evidence?: RepairEvidence;
-  policy?: FleetStartPolicy & { max_repair_horizon_seconds: number; max_attempts: number };
-  attempt?: number;
-  plan?: { id: string; version: number; lifecycle_state: string };
-  defaults?: { horizon_start: string; horizon_end: string };
-  commitments?: RunPage<RunCommitment>;
-};
-export type FleetRunModel = {
+  evidence: RepairEvidence;
+  policy: FleetStartPolicy & { max_repair_horizon_seconds: number; max_attempts: number };
+  attempt: number;
+  plan: { id: string; version: number; lifecycle_state: string };
+  defaults: { horizon_start: string; horizon_end: string };
+  commitments: CountedRunPage<RunCommitment>;
+}>;
+export type RunRepair = Snapshot<
+  { available: false; reason: string; evidence?: null } | RepairReview
+>;
+export type FleetRunModel = Snapshot<{
   contract_version: 1;
   context: RunContext;
   query: RunQuery;
@@ -116,27 +125,51 @@ export type FleetRunModel = {
     current_version: number;
   } | null;
   source: { run_id: string; plan_id: string; plan_version: number } | null;
-  requirements: RunPage<RunRequirement>;
+  requirements: CountedRunPage<RunRequirement>;
   decisions: RunPage<RunDecision>;
-  resources: RunPage<RunResource>;
+  resources: CountedRunPage<RunResource>;
   automation: RunPage<RunAutomation>;
   repair: RunRepair;
   failure: { code: string | null } | null;
-};
-export type FleetRunReceipt = {
+}>;
+type ReceiptContext = {
   contract_version: 1;
   organization_id: string;
   mission_id: string;
   fleetPlanningRunId: string;
-  lifecycleState: string;
-  phase: string;
-  outcome: "continued" | "repair_created";
-  evidence: RunEvidence | RepairEvidence;
 };
+export type FleetRunReceipt = Snapshot<
+  ReceiptContext &
+    (
+      | {
+          outcome: "continued";
+          lifecycleState: "completed" | "partial" | "failed" | "canceled";
+          phase: "finished";
+          evidence: RunEvidence;
+        }
+      | {
+          outcome: "repair_created";
+          lifecycleState: "queued";
+          phase: "queued";
+          evidence: RepairEvidence;
+        }
+    )
+>;
+export type FleetRunInputs = {
+  continue: { fleet_planning_run_id: string; evidence: RunEvidence };
+  repair: {
+    fleet_planning_run_id: string;
+    evidence: RepairEvidence;
+    repair: { horizon_start: string; horizon_end: string };
+  };
+};
+export type FleetRunCommand = {
+  [A in keyof FleetRunInputs]: [action: A, input: FleetRunInputs[A]];
+}[keyof FleetRunInputs];
 export type FleetRunPort = {
   context: RunContext;
   refresh(): Promise<unknown>;
-  execute(action: "continue" | "repair", input: Record<string, unknown>): Promise<unknown>;
+  execute(...command: FleetRunCommand): Promise<unknown>;
 };
 export const FLEET_RUN_PORT: InjectionKey<FleetRunPort> = Symbol("cadence.fleet-run");
 export type OpsFleetPlanningRunProps = { run: unknown; port?: FleetRunPort };

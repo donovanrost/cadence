@@ -18,7 +18,7 @@ const state = (mode: "new" | "clone" | "import" = "new"): CreationState => ({
         : null,
   },
 });
-const wrappers: ReturnType<typeof mount>[] = [];
+const wrappers: { unmount: () => void }[] = [];
 afterEach(() => {
   for (const w of wrappers.splice(0)) w.unmount();
 });
@@ -26,7 +26,7 @@ function setup(
   s = state(),
   execute: OpsPagePort["execute"] = vi.fn(async () => ({ status: "unknown", sequence: 1 })),
 ) {
-  const navigate = vi.fn(),
+  const navigate = vi.fn((_: string) => {}),
     refresh = vi.fn(async () => {});
   const wrapper = mount(DashboardCreation, {
     props: { state: s, port: { execute, navigate }, refresh },

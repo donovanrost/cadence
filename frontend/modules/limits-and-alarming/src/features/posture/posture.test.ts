@@ -1,9 +1,11 @@
+import { jsonFixture } from "../../../../../test-support/json-fixture";
+import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import { PostureSurface } from "../../posture";
 import { postureFixture } from "../../shared/testing";
 import { admitDocument, type PostureDocument } from "./contracts";
-const mounted: ReturnType<typeof mount>[] = [];
+const mounted: { unmount: () => void }[] = [];
 afterEach(() => mounted.splice(0).forEach((w) => w.unmount()));
 function populated() {
   const d = postureFixture(),
@@ -40,14 +42,14 @@ function populated() {
   return d;
 }
 function start(d = populated()) {
-  const port = { read: vi.fn(async () => d), navigate: vi.fn() };
+  const port = { read: vi.fn(async () => d), navigate: vi.fn<(href: string) => void>() };
   const w = mount(PostureSurface, { props: { document: d, port } });
   mounted.push(w);
   return { w, port };
 }
 test("producer supplied posture renders scoped states and exact producing-version links", () => {
   const d: PostureDocument = process.env.CADENCE_LIMITS_POSTURE
-    ? JSON.parse(process.env.CADENCE_LIMITS_POSTURE)
+    ? required(admitDocument(jsonFixture(process.env.CADENCE_LIMITS_POSTURE)))
     : populated();
   expect(admitDocument(d)).not.toBeNull();
   const { w } = start(d);
@@ -62,13 +64,16 @@ test("retains actual timestamps and producing-version identity while changing sc
   await w.get("#posture-severity").setValue("yellow");
   await w.get("#posture-spacecraft").setValue("mission");
   await w.get("#limit-posture-filters").trigger("submit");
-  const target = vi.mocked(port.navigate).mock.calls[0][0];
+  const target = required(vi.mocked(port.navigate).mock.calls[0])[0];
   expect(target).toContain("severity=yellow");
   expect(target).toContain("spacecraft=mission");
 });
 test("rejects substituted sample links, inconsistent counts and foreign spacecraft rows", () => {
   const a = populated();
-  a.states.items[0].evidence_href = a.states.items[0].evidence_href.replace("sample-1", "sample-2");
+  required(a.states.items[0]).evidence_href = required(a.states.items[0]).evidence_href.replace(
+    "sample-1",
+    "sample-2",
+  );
   expect(admitDocument(a)).toBeNull();
   const b = populated();
   b.counts.red = 2;

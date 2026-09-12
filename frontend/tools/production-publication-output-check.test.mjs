@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import { validateProductionPublication } from "./production-publication-output-check.mjs";
 
+/** @param {string} root @param {string} remoteName */
 async function writeRemote(root, remoteName) {
   await mkdir(join(root, "assets"), { recursive: true });
   await writeFile(join(root, "assets", "application.js"), "export const application = true;\n");
@@ -53,14 +54,14 @@ async function publicationFixture() {
   const root = await mkdtemp(join(tmpdir(), "cadence-production-publication-check-"));
   await mkdir(join(root, "host"), { recursive: true });
   await writeFile(join(root, "host", "host.js"), "export const host = true;\n");
-  for (const [bundle, remoteName] of [
+  for (const [bundle, remoteName] of /** @type {const} */ ([
     ["organization-admin", "cadence_organization_admin"],
     ["mission-catalog", "cadence_mission_catalog"],
     ["spacecraft", "cadence_spacecraft"],
     ["telemetry-decom", "cadence_telemetry_decom"],
     ["comms", "cadence_comms"],
     ["ops-console", "cadence_ops_console"],
-  ]) {
+  ])) {
     await mkdir(join(root, bundle));
     await writeRemote(join(root, bundle), remoteName);
   }

@@ -16,12 +16,7 @@ const props = withDefaults(
     type?: "email" | "password" | "text";
   }>(),
   {
-    autocomplete: undefined,
     disabled: false,
-    error: undefined,
-    hint: undefined,
-    name: undefined,
-    placeholder: undefined,
     required: false,
     type: "text",
   },

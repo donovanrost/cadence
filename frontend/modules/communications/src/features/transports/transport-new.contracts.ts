@@ -146,7 +146,15 @@ export type TransportForm = {
     provider_capability: Section;
     review: Section;
   };
-  fields: Record<string, Field>;
+  fields: Record<
+    | "display_name"
+    | "origin"
+    | "transport_kind"
+    | "mission_provider_id"
+    | "service_profile_id"
+    | "delivery_profile_id",
+    Field
+  >;
   origin_cards: { value: string; label: string; description: string }[];
   direct_configuration: DirectConfiguration;
   provider: Provider;

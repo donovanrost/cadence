@@ -8,6 +8,7 @@ import { join, resolve } from "node:path";
 const appRoot = resolve(import.meta.dirname);
 const vitePlusEntry = resolve(appRoot, "node_modules/vite-plus/bin/vp");
 
+/** @param {(directory: string) => Promise<void>} callback */
 async function withTemporaryDirectory(callback) {
   const directory = await mkdtemp(join(tmpdir(), "cadence-host-build-config-"));
   try {
@@ -17,6 +18,9 @@ async function withTemporaryDirectory(callback) {
   }
 }
 
+/** @param {string[]} argumentsList
+ * @returns {Promise<{code: number | null, signal: NodeJS.Signals | null, stdout: string, stderr: string}>}
+ */
 function runVite(argumentsList) {
   return new Promise((resolveResult, reject) => {
     const child = spawn(process.execPath, [vitePlusEntry, ...argumentsList], {
@@ -24,10 +28,12 @@ function runVite(argumentsList) {
       env: { ...process.env, PATH: `${resolve(process.execPath, "..")}:${process.env.PATH ?? ""}` },
       stdio: ["ignore", "pipe", "pipe"],
     });
+    /** @type {Buffer[]} */
     const stdout = [];
+    /** @type {Buffer[]} */
     const stderr = [];
-    child.stdout.on("data", (chunk) => stdout.push(chunk));
-    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.stdout.on("data", (/** @type {Buffer} */ chunk) => stdout.push(chunk));
+    child.stderr.on("data", (/** @type {Buffer} */ chunk) => stderr.push(chunk));
     child.once("error", reject);
     child.once("close", (code, signal) =>
       resolveResult({

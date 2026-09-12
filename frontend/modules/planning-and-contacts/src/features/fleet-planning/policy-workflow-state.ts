@@ -1,16 +1,18 @@
+import { createPolicyActionPort } from "./policy-action-port";
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
 import {
   admitPolicyPage,
-  admitPolicyOperation,
+  admitPolicyCommand,
   equalPolicyData,
   policyValidation,
   type PolicyPage,
   type PolicyAction,
   type PolicyOperation,
+  type PolicyCommand,
 } from "./fleet-policy";
 import type { PolicyEvidence } from "./policy-evidence";
-type Command = { action: PolicyAction; input: Record<string, unknown> };
+type Command = PolicyCommand;
 export function usePolicyWorkflow(
   input: () => PolicyPage,
   port: () => OpsPagePort,
@@ -32,8 +34,8 @@ export function usePolicyWorkflow(
     uncertain = ref(initial.operation?.status === "unconfirmed"),
     needsRead = ref(false),
     notice = ref("");
-  const confirmedPolicyEvidence = shallowRef<PolicyEvidence>(),
-    confirmedGrantEvidence = shallowRef<PolicyEvidence>(),
+  const confirmedPolicyEvidence = shallowRef<PolicyEvidence | null>(null),
+    confirmedGrantEvidence = shallowRef<PolicyEvidence | null>(null),
     confirmedGrantSequence = ref(0);
   const locked = computed(() => uncertain.value || needsRead.value);
   const disabled = computed(
@@ -57,8 +59,8 @@ export function usePolicyWorkflow(
       notice.value = policyValidation(next.action)
         ? "Draft validation completed."
         : "The reviewed action completed. Refreshing policy evidence.";
-      const r = next.receipt!.result;
-      if (next.action === "save-policy")
+      if (next.action === "save-policy") {
+        const r = next.receipt.result;
         confirmedPolicyEvidence.value = {
           ...context,
           contract_version: 1,
@@ -66,6 +68,7 @@ export function usePolicyWorkflow(
           policy_version: r.fleetPlanningPolicyVersion,
           content_sha256: r.contentSha256,
         };
+      }
       if (next.action === "issue-grant") {
         confirmedGrantEvidence.value = next.input.policy_evidence;
         confirmedGrantSequence.value = next.sequence;
@@ -112,9 +115,12 @@ export function usePolicyWorkflow(
       }
     }
   }
-  function submit(action: PolicyAction, payload: Record<string, unknown>) {
+  function submit(request: PolicyCommand) {
     if (!active || locked.value) return;
-    const command = { action, input: JSON.parse(JSON.stringify(payload)) };
+    const { action } = request;
+    const payload: unknown = JSON.parse(JSON.stringify(request.input));
+    const command = admitPolicyCommand(action, payload, context);
+    if (!command) return;
     if (policyValidation(action)) {
       if (
         queuedEffect ||
@@ -148,13 +154,8 @@ export function usePolicyWorkflow(
     pending.value = command.action;
     notice.value = "";
     try {
-      const result = await port().execute(command.action, {
-        sequence: current.sequence,
-        payload: command.input,
-      });
+      const op = await createPolicyActionPort(port(), context).execute(current);
       if (!active || generation !== n) return;
-      const op = admitPolicyOperation(result, context);
-      if (!op) throw Error("Unavailable policy receipt");
       settle(op, current);
       if (!policyValidation(command.action) && op.status === "completed") {
         needsRead.value = true;

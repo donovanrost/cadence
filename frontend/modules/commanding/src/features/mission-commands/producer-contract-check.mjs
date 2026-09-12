@@ -1,3 +1,5 @@
+import { fixtureRows, fixtureString } from "../../../../../test-support/json-fixture.ts";
+import { required } from "../../../../../test-support/required.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,21 +16,24 @@ const server = await createServer({
   logLevel: "error",
 });
 try {
-  const { CommandMonitor, readCommandMonitor, OpsCommands } = await server.ssrLoadModule(
-    "/src/mission-commands.ts",
-  );
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC exports loaded by Vite.
+  const { CommandMonitor, readCommandMonitor, OpsCommands } =
+    /** @type {typeof import("../../mission-commands.ts")} */ (
+      await server.ssrLoadModule("/src/mission-commands.ts")
+    );
   if (process.argv[3] === "legacy") {
-    for (const props of JSON.parse(process.argv[2])) {
+    for (const props of fixtureRows(process.argv[2])) {
       const window = new Window();
       try {
         const doc = window.document;
+        // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks this SFC constructor.
         doc.body.innerHTML = await renderToString(createSSRApp(OpsCommands, props));
         const anchor = doc.getElementById("commands-open-workspace");
         assert.ok(anchor);
-        const url = new URL(anchor.getAttribute("href"), "https://cadence.test");
+        const url = new URL(required(anchor.getAttribute("href")), "https://cadence.test");
         assert.equal(
           url.pathname,
-          `/missions/${encodeURIComponent(props.mission_id)}/ops/commands`,
+          `/missions/${encodeURIComponent(fixtureString(props.mission_id))}/ops/commands`,
         );
         assert.deepEqual(Object.fromEntries(url.searchParams), props.query);
         assert.equal(doc.querySelector("form,button,[data-command-request]"), null);
@@ -38,13 +43,18 @@ try {
     }
     console.log("Legacy command monitor producer/consumer contract passed.");
   } else
-    for (const model of JSON.parse(process.argv[2])) {
-      const context = { organizationId: model.organization_id, missionId: model.mission_id };
-      assert.deepEqual(readCommandMonitor(model, context), model);
+    for (const raw of fixtureRows(process.argv[2])) {
+      const context = {
+        organizationId: fixtureString(raw.organization_id),
+        missionId: fixtureString(raw.mission_id),
+      };
+      const model = readCommandMonitor(raw, context);
+      assert.deepEqual(model, raw);
       assert.throws(() => readCommandMonitor(model, { ...context, missionId: "foreign" }));
       const forbidden = () => {
         throw Error("Read-only rendering must not navigate or execute");
       };
+      // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks this SFC constructor.
       const app = createSSRApp(CommandMonitor, {
         model,
         context,
@@ -66,7 +76,7 @@ try {
         );
         assert.equal(!!doc.getElementById("command-monitor-empty"), model.status === "empty");
         assert.equal(
-          doc.getElementById("command-monitor-observed").getAttribute("datetime"),
+          required(doc.getElementById("command-monitor-observed")).getAttribute("datetime"),
           model.observed_at,
         );
         const ids = Array.from(doc.querySelectorAll("[id]"), (e) => e.id);
@@ -74,11 +84,13 @@ try {
         for (const row of model.rows) {
           const node = doc.getElementById(`command-request-${encodeURIComponent(row.id)}`);
           assert.ok(node);
-          for (const [attribute, records] of [
+          /** @type {[string, readonly {id: string}[]][]} */
+          const groups = [
             ["data-command-queue", row.queue ? [row.queue] : []],
             ["data-command-release", row.release ? [row.release] : []],
             ["data-command-verifier", row.verifiers],
-          ]) {
+          ];
+          for (const [attribute, records] of groups) {
             assert.deepEqual(
               Array.from(node.querySelectorAll(`[${attribute}]`), (e) => e.getAttribute(attribute)),
               records.map((r) => r.id),

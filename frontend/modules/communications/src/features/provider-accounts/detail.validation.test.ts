@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { expect, test } from "vite-plus/test";
 import { accountDetailFixture } from "./detail.test-support";
 import {
@@ -24,10 +25,10 @@ test("admits known account data and exact observed identity, dropping undeclared
 test("rejects malformed grant bindings, duplicate IDs, unsafe links and inconsistent credential actions", () => {
   const mutations: Array<(model: ReturnType<typeof accountDetailFixture>) => void> = [
     (model) => {
-      model.account_grants[0].revoke!.payload["grant-id"] = "foreign";
+      required(required(model.account_grants[0]).revoke).payload["grant-id"] = "foreign";
     },
     (model) => {
-      model.account_grants.push(model.account_grants[0]);
+      model.account_grants.push(required(model.account_grants[0]));
     },
     (model) => {
       model.grant_form.fields.max_quota.name = "grant[mission_id]";
@@ -42,16 +43,16 @@ test("rejects malformed grant bindings, duplicate IDs, unsafe links and inconsis
       model.page.header.config_label = "config v999";
     },
     (model) => {
-      model.account_grants[0].version_label = "grant v999";
+      required(model.account_grants[0]).version_label = "grant v999";
     },
     (model) => {
-      model.page.header.breadcrumbs[0].href = "//outside.test" as "/provider-accounts";
+      required(model.page.header.breadcrumbs[0]).href = "//outside.test" as "/provider-accounts";
     },
     (model) => {
       model.actions.validate.icon = "arbitrary-class";
     },
     (model) => {
-      model.account_audit[0].id = "different";
+      required(model.account_audit[0]).id = "different";
     },
   ];
   for (const mutate of mutations) {
@@ -76,14 +77,14 @@ test("refresh and action patches cannot regress versioned records", () => {
       model.actions.revoke = null;
     },
     (model: typeof previous) => {
-      model.account_grants[0].mission_id = "other";
+      required(model.account_grants[0]).mission_id = "other";
     },
     (model: typeof previous) => {
       model.account_grants = [];
     },
     (model: typeof previous) => {
-      model.account_grants[0].version = 1;
-      model.account_grants[0].version_label = "grant v1 · account v3";
+      required(model.account_grants[0]).version = 1;
+      required(model.account_grants[0]).version_label = "grant v1 · account v3";
     },
   ]) {
     const model = accountDetailFixture();

@@ -1,3 +1,4 @@
+import { required } from "../../../../../test-support/required";
 import { expect, test } from "vite-plus/test";
 import { readList, readDetail } from "./read-validation";
 import { readForm } from "./form-validation";
@@ -25,7 +26,7 @@ test("provider presentation cannot supply event handlers or unsafe navigation", 
   Object.assign(unsafe.data.presentation.root.attrs, { onclick: "private()" });
   expect(() => readList(unsafe, context)).toThrow();
   const row = providerListSurface();
-  row.data.presentation.card.rows[0].href = "javascript:bad()";
+  required(row.data.presentation.card.rows[0]).href = "javascript:bad()";
   expect(() => readList(row, context)).toThrow();
 });
 test("provider detail identity, emptiness, versions and diagnostic shape must agree", () => {
@@ -44,7 +45,7 @@ test("provider detail identity, emptiness, versions and diagnostic shape must ag
 });
 test("creation binds allowed grants to their exact summaries and validates field references", () => {
   const wrong = providerNewSurface();
-  wrong.data.accounts.selected = wrong.data.accounts.bindings[1].summary;
+  wrong.data.accounts.selected = required(wrong.data.accounts.bindings[1]).summary;
   expect(() => readForm(wrong, context)).toThrow();
   const field = providerNewSurface();
   field.data.form.fields.display_name.name = "provider[credential]";
@@ -56,6 +57,6 @@ test("creation binds allowed grants to their exact summaries and validates field
   number.data.form.fields.minimum_retained_duration_seconds.type = "text";
   expect(() => readForm(number, context)).toThrow();
   const policy = providerNewSurface();
-  policy.data.form.fields.policy_mode.options[0].value = "automatic_without_limits";
+  required(policy.data.form.fields.policy_mode.options[0]).value = "automatic_without_limits";
   expect(() => readForm(policy, context)).toThrow();
 });
