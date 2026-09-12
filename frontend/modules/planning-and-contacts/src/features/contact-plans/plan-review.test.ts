@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { required } from "../../../../../test-support/required";
 import { mutableFixture, type MutableFixture } from "../../../../../test-support/mutable-fixture";
 import { fixtureRecord, jsonFixture } from "../../../../../test-support/json-fixture";
@@ -228,9 +229,9 @@ test("public contribution rejects foreign context and forged actual-result ident
   ).toThrow();
   expect(admitPlanReviewPage({ ...p, sequence: 1 })).toBeNull();
 });
-test("producer supplied native plan review contribution", async () => {
-  if (!process.env.CADENCE_PLAN_WORKFLOW) return;
-  const supplied = jsonFixture(process.env.CADENCE_PLAN_WORKFLOW),
+const producer = producerFixture("CADENCE_PLAN_WORKFLOW", import.meta.url);
+test.skipIf(!producer.available)("producer supplied native plan review contribution", async () => {
+  const supplied = jsonFixture(producer.read()),
     h = harness(
       mutableFixture(required(admitPlanReviewPage(fixtureRecord(supplied.snapshot).data))),
     );

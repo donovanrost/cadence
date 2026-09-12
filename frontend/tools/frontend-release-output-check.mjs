@@ -1,3 +1,14 @@
+import {
+  parseOutputDirectoryArgument,
+  canonicalPathWithMissingTail,
+  assertOutputOutsideRepository,
+} from "./frontend-release-paths.mjs";
+export {
+  parseOutputDirectoryArgument,
+  canonicalPathWithMissingTail,
+  pathsOverlap,
+  assertOutputOutsideRepository,
+} from "./frontend-release-paths.mjs";
 /** @typedef {Record<string, unknown>} Metadata */
 /** @typedef {{kind: "word" | "punctuation" | "regex" | "string" | "template", value: string, dynamic?: boolean, dangerousDynamic?: boolean}} Token */
 /** @typedef {(path: string) => Promise<number | null>} ByteLengthForPath */
@@ -8,19 +19,8 @@
 /** @typedef {{paths: string[], files?: Set<string>, readBytes: (name:string) => Promise<Buffer|null>, readText: (name:string) => Promise<string|null>, byteLengthForPath: ByteLengthForPath}} OutputSnapshot */
 import { record as isRecord } from "../packages/plugin-sdk/src/admission.ts";
 import { createHash } from "node:crypto";
-import { lstatSync, realpathSync, statSync } from "node:fs";
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
-import {
-  basename,
-  dirname,
-  extname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-  sep,
-  win32,
-} from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
@@ -194,46 +194,6 @@ export function assertNoForbiddenPublicationReferences(source, origin) {
   }
 }
 
-/** @param {string[]} argumentsList @returns {string} */
-
-export function parseOutputDirectoryArgument(argumentsList) {
-  const values = [];
-
-  for (let index = 0; index < argumentsList.length; index += 1) {
-    const argument = argumentsList[index];
-    if (argument === undefined) fail("argument list is sparse");
-    let value;
-
-    if (argument === "--outDir") {
-      value = argumentsList[index + 1];
-      index += 1;
-      if (!value || value.startsWith("-")) {
-        fail("--outDir requires one absolute, non-option value");
-      }
-    } else if (argument.startsWith("--outDir=")) {
-      value = argument.slice("--outDir=".length);
-      if (!value || value.startsWith("-")) {
-        fail("--outDir requires one absolute, non-option value");
-      }
-    } else if (argument.startsWith("--outDir")) {
-      fail("--outDir option is malformed");
-    } else {
-      continue;
-    }
-
-    if (!isAbsolute(value)) {
-      fail("--outDir requires one absolute, non-option value");
-    }
-    values.push(value);
-  }
-
-  if (values.length !== 1) {
-    fail("exactly one --outDir with one absolute, non-option value is required");
-  }
-
-  return values[0] ?? fail("required argument is missing");
-}
-
 /** @param {unknown} value @param {string} label */
 
 function assertRemoteName(value, label) {
@@ -278,65 +238,6 @@ export function parseRemoteNameArgument(argumentsList) {
   }
 
   return values[0] ?? fail("required argument is missing");
-}
-
-/** @param {string} path */
-
-export function canonicalPathWithMissingTail(path) {
-  const missingTail = [];
-  let current = resolve(path);
-
-  while (true) {
-    try {
-      const canonicalExisting = realpathSync(current);
-      if (missingTail.length > 0 && !statSync(canonicalExisting).isDirectory()) {
-        fail("a missing output path component has a non-directory parent");
-      }
-      return resolve(canonicalExisting, ...missingTail.reverse());
-    } catch {
-      let existingEntry;
-      try {
-        existingEntry = lstatSync(current);
-      } catch (lstatError) {
-        if (!(lstatError instanceof Error && "code" in lstatError && lstatError.code === "ENOENT"))
-          throw lstatError;
-      }
-
-      if (existingEntry) {
-        fail(`cannot resolve output path component ${JSON.stringify(current)}`);
-      }
-
-      const parent = dirname(current);
-      if (parent === current) fail("output path cannot be resolved");
-      missingTail.push(basename(current));
-      current = parent;
-    }
-  }
-}
-
-/** @param {string} left @param {string} right */
-
-export function pathsOverlap(left, right) {
-  /** @param {string} parent @param {string} child */
-  const contains = (parent, child) => {
-    const childRelative = relative(parent, child);
-    return (
-      childRelative === "" ||
-      (childRelative !== ".." &&
-        !childRelative.startsWith(`..${sep}`) &&
-        !isAbsolute(childRelative))
-    );
-  };
-
-  return contains(left, right) || contains(right, left);
-}
-
-/** @param {string} outputRoot @param {string} canonicalRepositoryRoot */
-
-export function assertOutputOutsideRepository(outputRoot, canonicalRepositoryRoot) {
-  if (pathsOverlap(canonicalRepositoryRoot, outputRoot)) {
-    fail("output directory must be outside the repository in both directions");
-  }
 }
 
 /** @param {string} outputRoot @param {string} path */

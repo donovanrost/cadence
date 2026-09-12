@@ -638,7 +638,9 @@ defmodule Cadence.Commanding do
            ReleaseStore.claim(
              release_context.queue_entry_row,
              release_context.request_row,
-             pending_attempt, attempted_at: release_context.attempted_at) do
+             pending_attempt,
+             attempted_at: release_context.attempted_at
+           ) do
       dispatch_release_attempt(%{release_context | queue_entry_row: claimed}, persisted)
     end
   end

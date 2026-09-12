@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../../test-support/producer-fixture";
 import { jsonFixture, fixtureRecord } from "../../../../../../test-support/json-fixture";
 import { required } from "../../../../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -109,10 +110,11 @@ test("malformed records and forged selection cannot be admitted", () => {
   }
   expect(() => timelineHref("../foreign", {})).toThrow();
 });
-test.skipIf(!process.env.CADENCE_TIMELINE_DOCUMENT)(
+const producer = producerFixture("CADENCE_TIMELINE_DOCUMENT", import.meta.url);
+test.skipIf(!producer.available)(
   "actual producer document reaches filters and selected canonical evidence",
   () => {
-    const document = jsonFixture(required(process.env.CADENCE_TIMELINE_DOCUMENT));
+    const document = jsonFixture(required(producer.read()));
     const model = readTimeline(
       document,
       fixtureRecord(document.context).organization_id,

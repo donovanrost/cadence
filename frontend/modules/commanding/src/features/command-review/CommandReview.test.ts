@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { jsonFixture, fixtureContext } from "../../../../../test-support/json-fixture";
 import { required } from "../../../../../test-support/required";
 import { fixtureRecordAt } from "../../../../../test-support/json-fixture";
@@ -219,11 +220,11 @@ test("contract rejects malformed, foreign, oversized and incoherent review evide
     expect(() => readCommandReviewPage(page, fixture().review.context)).toThrow();
   }
 });
-test.skipIf(!process.env.CADENCE_COMMAND_REVIEW_DOCUMENT)(
+const producer = producerFixture("CADENCE_COMMAND_REVIEW_DOCUMENT", import.meta.url);
+test.skipIf(!producer.available)(
   "actual producer review mounts the feature and captures its decision input",
   async () => {
-    if (!process.env.CADENCE_COMMAND_REVIEW_DOCUMENT) return;
-    const document = jsonFixture(process.env.CADENCE_COMMAND_REVIEW_DOCUMENT);
+    const document = jsonFixture(producer.read());
     const page = readCommandReviewPage(document.data, fixtureContext(document.context));
     const { w, port } = setup(page);
     try {

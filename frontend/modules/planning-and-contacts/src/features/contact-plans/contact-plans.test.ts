@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { required } from "../../../../../test-support/required";
 import { jsonFixture } from "../../../../../test-support/json-fixture";
 import { oneOf } from "@cadence/plugin-sdk/admission";
@@ -171,37 +172,40 @@ test("page links retain reviewed version and independent evidence pages", () => 
   );
   expect(reviewHref(detail, 2)).toBe("/missions/mission-plan/ops/plans/plan-one?version=2");
 });
-test("producer-supplied plan review emits native decision evidence", async () => {
-  if (!process.env.CADENCE_PLAN_REVIEW_MODEL) return;
-  const props = jsonFixture(process.env.CADENCE_PLAN_REVIEW_MODEL),
-    action = process.env.CADENCE_PLAN_REVIEW_ACTION ?? "submit-plan";
-  if (!oneOf(planReviewActions, action)) throw Error("Unknown producer action");
-  const detail = required(admitPlanDetail(props.detail));
-  expect(detail).not.toBeNull();
-  const port: PlanDetailPort = {
-    protocol: "remote-query" as const,
-    context: { ...required(detail).context, plan_id: required(detail).plan.id },
-    refresh: vi.fn(),
-    execute: vi.fn(() => new Promise(() => {})),
-  };
-  const wrapper = mount(OpsContactPlanShow, { props: { detail, port } });
-  if (action === "execute-plan") await wrapper.get("#execute-plan").trigger("click");
-  else {
-    const form =
-      action === "submit-plan"
-        ? "submission"
-        : action === "approve-plan"
-          ? "approval"
-          : "rejection";
-    await wrapper.get("#" + form + "-reason").setValue("Reviewed actual producer evidence");
-    await wrapper.get("#" + form).trigger("submit");
-  }
-  expect(port.execute).toHaveBeenCalledTimes(1);
-  process.stdout.write(
-    "PLAN_PAYLOAD=" + JSON.stringify(required(vi.mocked(port.execute).mock.calls[0])[1]) + "\n",
-  );
-  wrapper.unmount();
-});
+const producer = producerFixture("CADENCE_PLAN_REVIEW_MODEL", import.meta.url);
+test.skipIf(!producer.available)(
+  "producer-supplied plan review emits native decision evidence",
+  async () => {
+    const props = jsonFixture(producer.read()),
+      action = process.env.CADENCE_PLAN_REVIEW_ACTION ?? "submit-plan";
+    if (!oneOf(planReviewActions, action)) throw Error("Unknown producer action");
+    const detail = required(admitPlanDetail(props.detail));
+    expect(detail).not.toBeNull();
+    const port: PlanDetailPort = {
+      protocol: "remote-query" as const,
+      context: { ...required(detail).context, plan_id: required(detail).plan.id },
+      refresh: vi.fn(),
+      execute: vi.fn(() => new Promise(() => {})),
+    };
+    const wrapper = mount(OpsContactPlanShow, { props: { detail, port } });
+    if (action === "execute-plan") await wrapper.get("#execute-plan").trigger("click");
+    else {
+      const form =
+        action === "submit-plan"
+          ? "submission"
+          : action === "approve-plan"
+            ? "approval"
+            : "rejection";
+      await wrapper.get("#" + form + "-reason").setValue("Reviewed actual producer evidence");
+      await wrapper.get("#" + form).trigger("submit");
+    }
+    expect(port.execute).toHaveBeenCalledTimes(1);
+    process.stdout.write(
+      "PLAN_PAYLOAD=" + JSON.stringify(required(vi.mocked(port.execute).mock.calls[0])[1]) + "\n",
+    );
+    wrapper.unmount();
+  },
+);
 
 test("a prior confirmed submission cannot unlock a later uncertain approval", async () => {
   const { props, port, wrapper } = harness();

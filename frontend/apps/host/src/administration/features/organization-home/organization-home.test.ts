@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../../test-support/producer-fixture";
 import { jsonFixture, fixtureRecord } from "../../../../../../test-support/json-fixture";
 import { required } from "../../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
@@ -112,9 +113,9 @@ test("host contains unavailable or mismatched snapshots, retries and admits a re
   wrapper.unmount();
 });
 
-test("actual producer document reaches the core home feature", () => {
-  const encoded = process.env.CADENCE_ORGANIZATION_HOME_DOCUMENT;
-  if (!encoded) return;
+const producer = producerFixture("CADENCE_ORGANIZATION_HOME_DOCUMENT", import.meta.url);
+test.skipIf(!producer.available)("actual producer document reaches the core home feature", () => {
+  const encoded = producer.read();
   const data = jsonFixture(encoded);
   const model = readOrganizationHome(data, fixtureRecord(data.organization).id);
   const wrapper = mount(OrganizationHomePanel, { props: { model } });

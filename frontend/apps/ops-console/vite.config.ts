@@ -1,11 +1,12 @@
+import { developmentServer, developmentPreview } from "../../tools/dev-services.ts";
+import { releaseBuildOutput, releaseOutputGuard } from "../../tools/release-build-output.mjs";
 import tailwindcss from "@tailwindcss/vite";
 import { federation } from "@module-federation/vite";
 import vue from "@vitejs/plugin-vue";
-import { isAbsolute, resolve } from "node:path";
+import { resolve } from "node:path";
 import { defineConfig, lazyPlugins } from "vite-plus";
 import federationConfig from "./module-federation.config";
 
-const releaseOutputEnvironmentName = "CADENCE_RELEASE_OUTPUT_DIR";
 const federatedEntry = resolve(import.meta.dirname, "src/federated-application.ts");
 
 const releaseFederationConfig = {
@@ -22,16 +23,6 @@ const releaseFederationConfig = {
   },
 };
 
-function releaseOutputDirectory(): string {
-  const output = process.env[releaseOutputEnvironmentName];
-  if (!output || !isAbsolute(output)) {
-    throw new Error(
-      `${releaseOutputEnvironmentName} must be an absolute output directory for release builds.`,
-    );
-  }
-  return output;
-}
-
 function releaseOutputPlugin() {
   return {
     name: "cadence-ops-console-release-output",
@@ -46,15 +37,17 @@ function releaseOutputPlugin() {
   };
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const releaseBuild = mode === "release";
-  const outputDirectory = releaseBuild ? releaseOutputDirectory() : undefined;
+  const outputDirectory = releaseBuildOutput({ command, mode });
 
   return {
     define: {
       "process.env.NODE_ENV": JSON.stringify("production"),
     },
     base: releaseBuild ? "./" : "/assets/application-host/ops-console/",
+    preview: developmentPreview("ops-console"),
+    server: developmentServer("ops-console"),
     build: {
       target: "chrome89",
       ...(outputDirectory !== undefined
@@ -71,6 +64,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins:
       lazyPlugins(() => [
+        ...(outputDirectory ? [releaseOutputGuard(outputDirectory)] : []),
         tailwindcss(),
         vue(),
         federation(

@@ -1,3 +1,4 @@
+import { developmentOrigin } from "./dev-services.ts";
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -186,7 +187,7 @@ export class DemoHostService {
   }
 
   handle(request: DemoRequest): DemoResponse | undefined {
-    const url = new URL(request.url, "http://127.0.0.1:5173");
+    const url = new URL(request.url, developmentOrigin("host"));
 
     if (request.method === "GET" && url.pathname === `${bridgeBaseUrl}/catalog`) {
       return this.#catalogResponse(url);
@@ -395,8 +396,8 @@ function catalogApplications(
   const production = mode === "production";
   const telemetryReleaseId = release === "previous" ? "2026.08.22.1" : "2026.08.22.2";
   const telemetryManifest = production
-    ? `http://127.0.0.1:4174/releases/${release}/mf-manifest.json`
-    : "http://127.0.0.1:4174/mf-manifest.json";
+    ? `${developmentOrigin("telemetry-decom")}/releases/${release}/mf-manifest.json`
+    : `${developmentOrigin("telemetry-decom")}/mf-manifest.json`;
   const exposedModule = scenario === "throw" ? "./Failure" : "./Application";
 
   return [
@@ -448,8 +449,8 @@ function catalogApplications(
         releaseId: "2026.08.22.1",
         remoteName: "contract_probe_current_2026_08_22_1",
         manifestUrl: production
-          ? "http://127.0.0.1:4175/releases/current/mf-manifest.json"
-          : "http://127.0.0.1:4175/mf-manifest.json",
+          ? `${developmentOrigin("contract-probe")}/releases/current/mf-manifest.json`
+          : `${developmentOrigin("contract-probe")}/mf-manifest.json`,
         exposedModule: "./Application",
       },
     },

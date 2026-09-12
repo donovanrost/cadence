@@ -3,6 +3,7 @@ defmodule CadenceWeb.OpsFleetPolicyPage do
   alias Cadence.Applications.JSONBoundary
   alias Cadence.Applications.OpsConsole.Actions.FleetPolicyWorkflow, as: Workflow
   alias Cadence.Reads.ApplicationSurfaces.Planning.FleetPolicyModel
+  alias CadenceWeb.OpsFleetPolicyRecovery, as: Recovery
   alias Phoenix.Component
   @route "/missions/:mission_id/ops/planning/policy"
   @id "planning.fleet-policy"
@@ -21,9 +22,7 @@ defmodule CadenceWeb.OpsFleetPolicyPage do
             identity: identity,
             token: Ecto.UUID.generate(),
             params: Map.delete(params, "mission_id"),
-            model: nil,
-            sequence: 0,
-            operation: nil
+            model: nil
           }
       end
 
@@ -69,11 +68,8 @@ defmodule CadenceWeb.OpsFleetPolicyPage do
              is_map(input) do
     session = socket.assigns.ops_fleet_policy_session
 
-    with true <- sequence == session.sequence + 1,
-         true <- is_nil(session.operation) or session.operation.status != "unconfirmed",
-         {:ok, input} <- JSONBoundary.safe(input) do
-      perform(socket, session, event, sequence, input)
-    else
+    case JSONBoundary.safe(input) do
+      {:ok, input} -> perform(socket, session, event, sequence, input)
       _ -> {%{status: "rejected"}, socket}
     end
   end
@@ -89,10 +85,18 @@ defmodule CadenceWeb.OpsFleetPolicyPage do
       receipt: nil
     }
 
-    admitted = Workflow.admitted?(session.model, event, input)
-    session = %{session | sequence: sequence, operation: operation}
-    socket = Component.assign(socket, :ops_fleet_policy_session, session)
     {_, _, mission, _} = session.identity
+    scope = socket.assigns.current_scope
+
+    case Recovery.reserve(scope, mission, operation) do
+      {:ok, :reserved} -> perform_reserved(socket, session, mission, operation)
+      _ -> {%{status: "rejected"}, socket}
+    end
+  end
+
+  defp perform_reserved(socket, session, mission, operation) do
+    %{action: event, input: input} = operation
+    admitted = Workflow.admitted?(session.model, event, input)
 
     result =
       if admitted,
@@ -100,8 +104,14 @@ defmodule CadenceWeb.OpsFleetPolicyPage do
         else: {:rejected, :unavailable_review}
 
     operation = complete(operation, result)
-    session = %{session | operation: operation}
-    {operation, Component.assign(socket, :ops_fleet_policy_session, session)}
+
+    case Recovery.complete(socket.assigns.current_scope, mission, operation) do
+      {:ok, operation} ->
+        {operation, socket}
+
+      _ ->
+        {%{status: "unconfirmed"}, socket}
+    end
   end
 
   defp effect(scope, mission, event, input) do
@@ -124,7 +134,12 @@ defmodule CadenceWeb.OpsFleetPolicyPage do
     }
 
   defp complete(operation, {:rejected, _}), do: %{operation | status: "rejected"}
-  defp complete(operation, _), do: operation
+
+  defp complete(operation, _) do
+    if Workflow.validation?(operation.action),
+      do: %{operation | status: "rejected"},
+      else: operation
+  end
 
   defp snapshot(scope, session) do
     {org, _, mission, _} = session.identity
@@ -139,8 +154,12 @@ defmodule CadenceWeb.OpsFleetPolicyPage do
 
     with {:ok, model} <- FleetPolicyModel.load(scope, mission, session.params),
          {:ok, model} <- JSONBoundary.safe(model) do
-      data = %{model: model, sequence: session.sequence, operation: session.operation}
-      {Map.merge(page, %{status: "ready", data: data}), %{session | model: model}}
+      recovery = Recovery.read(scope, mission)
+      data = Map.put(recovery, :model, model)
+
+      session = %{session | model: model}
+
+      {Map.merge(page, %{status: "ready", data: data}), session}
     else
       _ -> {Map.put(page, :status, "unavailable"), %{session | model: nil}}
     end

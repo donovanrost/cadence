@@ -305,6 +305,107 @@ defmodule CadenceWeb.OpsFleetPolicyPageTest do
     assert_redirect(view, "/sign-in")
   end
 
+  test "receipts survive pagination, leaving the page and a new LiveView without reusing page tokens",
+       c do
+    {:ok, view, _} = live(c.conn, c.path)
+    original = page(view)
+
+    input = %{
+      "sequence" => 1,
+      "payload" => %{
+        "decision" => %{
+          "reason" => "Reviewed persistent receipt",
+          "policy_evidence" => original["data"]["model"]["current"]["reference"]
+        }
+      }
+    }
+
+    operation = action(view, c.path, original, "approve-policy", input)["snapshot"]
+    assert operation["status"] == "completed"
+
+    for path <- [c.path <> "?grants_page=2", "/missions", c.path] do
+      render_hook(view, "host:context", %{"path" => path})
+      assert_reply(view, %{ok: true})
+    end
+
+    returned = page(view)
+    refute returned["token"] == original["token"]
+    assert returned["data"]["operation"] == operation
+    assert returned["data"]["sequence"] == 1
+    assert read(view, c.path, original)["ok"] == false
+
+    {:ok, reconnected, _} = live(c.conn, c.path)
+    fresh = page(reconnected)
+    assert fresh["data"]["operation"] == operation
+
+    assert action(reconnected, c.path, fresh, "approve-policy", input)["snapshot"]["status"] ==
+             "rejected"
+
+    other_mission = TestFixtures.persist_mission!(c.org)
+
+    assert CadenceWeb.OpsFleetPolicyRecovery.read(c.scope, other_mission.mission_id) == %{
+             sequence: 0,
+             operation: nil
+           }
+
+    other_user = TestFixtures.persist_user!()
+    other_scope = %{c.scope | user: other_user}
+
+    assert CadenceWeb.OpsFleetPolicyRecovery.read(other_scope, c.mission.mission_id) == %{
+             sequence: 0,
+             operation: nil
+           }
+  end
+
+  test "a reserved effect remains unresolved after transport loss and refuses another mutation",
+       c do
+    {:ok, view, _} = live(c.conn, c.path)
+    original = page(view)
+
+    input = %{
+      "decision" => %{
+        "reason" => "Reviewed",
+        "policy_evidence" => original["data"]["model"]["current"]["reference"]
+      }
+    }
+
+    operation = %{
+      sequence: 1,
+      action: "approve-policy",
+      input: input,
+      status: "unconfirmed",
+      receipt: nil
+    }
+
+    assert {:ok, :reserved} =
+             CadenceWeb.OpsFleetPolicyRecovery.reserve(c.scope, c.mission.mission_id, operation)
+
+    {:ok, reconnected, _} = live(c.conn, c.path)
+    fresh = page(reconnected)
+    assert fresh["data"]["operation"]["status"] == "unconfirmed"
+    assert fresh["data"]["sequence"] == 1
+
+    assert action(reconnected, c.path, fresh, "approve-policy", %{
+             "sequence" => 2,
+             "payload" => input
+           })["snapshot"]["status"] == "rejected"
+
+    assert {:error, :changed_operation} =
+             CadenceWeb.OpsFleetPolicyRecovery.complete(c.scope, c.mission.mission_id, %{
+               operation
+               | action: "save-policy",
+                 status: "rejected"
+             })
+
+    assert read(reconnected, c.path, fresh)["snapshot"]["data"]["operation"]["status"] ==
+             "unconfirmed"
+
+    {:ok, _, active} =
+      FleetPlanningPolicies.fetch_active(c.org.organization_id, c.mission.mission_id)
+
+    assert active.version == 1
+  end
+
   defp assert_effect(c, "save-policy", op) do
     {:ok, _, v} = FleetPlanningPolicies.fetch(c.org.organization_id, c.mission.mission_id)
     assert v.version == 3

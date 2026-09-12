@@ -212,12 +212,15 @@ Tailwind's CommonJS export, and generic test mocks.
 
 `corepack pnpm verify` runs formatting/lint, compiler coverage and Vue checking, structural
 rules, package/browser stories, root tools, and transport tests. Each shared test suite has
-one aggregate owner. CI/provider integration and a production Phoenix/federation browser
-journey are separate from these local checks. `mix precommit` does not run the complete
-frontend gates, and Elixir tests remain outside frontend-only acceptance.
+one aggregate owner. [CI](../../.github/workflows/frontend.yml) runs this command independently
+of the real Phoenix producer and federation browser job. The ordinary suite explicitly skips
+29 producer-dependent tests; `corepack pnpm test:producers` requires their native fixtures and
+checks that all consumers executed. `mix precommit` does not run the complete frontend gates,
+and Elixir tests remain outside frontend-only acceptance.
 
-The cleanup plan records verification and completion for findings 6–12. Findings 1–5 remain
-deferred; stricter types and passing frontend checks do not close those behavior findings.
+The cleanup plan records verification and completion for its findings 6–12. The
+[Vue quality follow-up](vue-quality-followup.md) implements the deferred behavior findings and
+records their separate validation; stricter types alone do not close behavior findings.
 
 Compiler and framework references:
 

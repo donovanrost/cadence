@@ -3,7 +3,8 @@
     "vite*.config.*",
     "module-federation.config.ts",
     "../../tools/demo-host-service.ts",
-    "../../tools/publication-metadata.ts"
+    "../../tools/publication-metadata.ts",
+    "../../tools/dev-services.ts"
   ],
   "compilerOptions": {
     "composite": true,

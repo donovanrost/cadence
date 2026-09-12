@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed, onErrorCaptured, ref, watch } from "vue";
+import { computed } from "vue";
+import { useLazyPage } from "../../../shell/module-pages/lazy-pages";
 import type { SpacecraftPageContext } from "@cadence/plugin-sdk/spacecraft-pages";
 import { spacecraftModulePages } from "./contributions";
+import { capturePage } from "../../../shell/module-pages/page-admission";
+import { usePageBoundary } from "../../../shell/module-pages/use-page-boundary";
 
 const props = defineProps<{
   contributionId: string;
@@ -10,70 +13,64 @@ const props = defineProps<{
   refresh: () => Promise<void>;
   refreshing?: boolean;
 }>();
-const crashed = ref(false);
-watch(
-  () => [props.snapshot, props.context, props.contributionId],
-  () => {
-    crashed.value = false;
-  },
+const boundary = usePageBoundary(props, "spacecraft.page");
+const { crashed, retrying, diagnosticId } = boundary;
+const loaded = useLazyPage(
+  () => props.contributionId,
+  spacecraftModulePages,
+  (cause) => boundary.report("load", cause),
 );
-onErrorCaptured(() => {
-  crashed.value = true;
-  return false;
-});
-const record = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === "object" && !Array.isArray(v);
+const loading = computed(() => loaded.state.value.kind === "loading");
+async function retry() {
+  await boundary.retry();
+  loaded.reload();
+}
 const admitted = computed(() => {
-  if (!Object.hasOwn(spacecraftModulePages, props.contributionId)) return null;
-  const registration = spacecraftModulePages[props.contributionId],
-    snapshot = props.snapshot;
-  if (
-    !registration ||
-    !record(snapshot) ||
-    snapshot.id !== registration.id ||
-    snapshot.slot !== registration.slot ||
-    snapshot.version !== registration.version ||
-    snapshot.status !== "ready" ||
-    !record(snapshot.context)
-  )
-    return null;
-  for (const key of ["organizationId", "missionId", "spacecraftId"] as const) {
-    if (
-      typeof props.context[key] !== "string" ||
-      !props.context[key] ||
-      snapshot.context[key] !== props.context[key]
-    )
-      return null;
-  }
   try {
+    const state = loaded.state.value;
+    if (state.kind !== "ready") return null;
+    const registration = state.value;
+    const captured = capturePage(
+      props,
+      registration,
+      ["organizationId", "missionId", "spacecraftId"],
+      boundary.alive,
+    );
+    const featureProps = registration.read(captured.data, props.context);
     return {
       component: registration.component,
-      props: registration.read(snapshot.data, props.context),
+      key: typeof captured.token === "string" ? captured.token : registration.id,
+      props: { ...featureProps },
     };
-  } catch {
+  } catch (cause) {
+    boundary.report("admission", cause);
     return null;
   }
 });
 </script>
 <template>
   <section id="spacecraft-module-page">
+    <div v-if="loading" id="spacecraft-module-loading" role="status" class="p-6">
+      Loading feature…
+    </div>
     <div
-      v-if="crashed || !admitted"
+      v-else-if="crashed || !admitted"
       id="spacecraft-module-unavailable"
       role="alert"
       class="card border border-warning/40 bg-base-200 p-6"
     >
       <p>This spacecraft feature is unavailable. The current Cadence page remains available.</p>
+      <p v-if="diagnosticId" class="mt-2 text-xs">Reference: {{ diagnosticId }}</p>
       <button
         id="spacecraft-module-retry"
         type="button"
         class="btn btn-sm mt-4"
-        :disabled="refreshing"
-        @click="refresh"
+        :disabled="refreshing || retrying"
+        @click="retry"
       >
         Retry
       </button>
     </div>
-    <component v-else :is="admitted.component" v-bind="admitted.props" />
+    <component v-else :is="admitted.component" :key="admitted.key" v-bind="admitted.props" />
   </section>
 </template>

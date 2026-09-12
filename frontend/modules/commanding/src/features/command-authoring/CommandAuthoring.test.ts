@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { containing } from "../../../../../test-support/matchers";
 import {
   jsonFixture,
@@ -191,10 +192,11 @@ describe("command authoring", () => {
     ).toThrow();
   });
 });
-test.skipIf(!process.env.CADENCE_COMMAND_AUTHORING_DOCUMENT)(
+const producer = producerFixture("CADENCE_COMMAND_AUTHORING_DOCUMENT", import.meta.url);
+test.skipIf(!producer.available)(
   "actual producer yields the feature-owned preview or create input",
   async () => {
-    const raw = jsonFixture(required(process.env.CADENCE_COMMAND_AUTHORING_DOCUMENT));
+    const raw = jsonFixture(required(producer.read()));
     const contribution = readAuthoringContribution(raw.data, fixtureContext(raw.context));
     if (!("catalog" in contribution)) {
       const execute = vi.fn();

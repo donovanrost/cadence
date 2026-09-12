@@ -2,7 +2,8 @@
 
 Status: complete. Batches A–G and findings 6–12 pass the frontend acceptance and publication gates.
 All authored frontend owners use the shared strict compiler and unsafe-flow lint rules.
-No structural migration exclusions remain. Findings 1–5 remain deferred.
+No structural migration exclusions remain. Findings 1–5 were deferred by this earlier cleanup;
+their implementation and current validation are tracked in the [Vue quality follow-up](vue-quality-followup.md).
 
 The source baseline is `a38ad3005a0fdb723167258340f21ec26c4c7cea` on
 `poc/federated-application-registry`. The existing README, frontend instructions, and code
@@ -20,9 +21,9 @@ standard edits are retained. The inventory preserves the preparation snapshot; e
 | 11      | Replace publication discovery's source-text parsing with shared explicit metadata. |
 | 12      | Remove confirmed leftovers, stale documentation, and duplicate test execution.     |
 
-Findings 1–5 remain deferred: release-output safety, fleet-policy navigation recovery, eager
-bundling, duplicate page composition, and error-boundary diagnostics. Keep those visible when
-working in adjacent files; type cleanup alone does not close a behavior finding.
+Findings 1–5 were outside this cleanup: release-output safety, fleet-policy navigation recovery,
+eager bundling, duplicate page composition, and error-boundary diagnostics. The follow-up
+addresses those behaviors separately; the evidence below describes this earlier baseline.
 
 The [preparation inventory](cleanup-inventory.json) records exact file paths and scan methods:
 

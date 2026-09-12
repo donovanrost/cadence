@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, onUpdated, ref } from "vue";
+import { onBeforeUnmount, onMounted, onUpdated, ref, watch } from "vue";
 import { useChartRuntime } from "./chart-runtime";
 import { TelemetryChartController } from "./chart-controller";
 import type { TelemetryChartProps } from "./chart-props";
@@ -49,7 +49,12 @@ onMounted(() => {
       live.pushEvent(event, payload),
     );
 });
-onUpdated(() => controller?.updated(props.selected_ref));
+onUpdated(() => controller?.updateSnapshot(props));
+watch(
+  () => props.selected_ref,
+  (selection) => controller?.updated(selection),
+  { deep: true, flush: "post" },
+);
 onBeforeUnmount(() => {
   controller?.destroyed();
   controller = null;

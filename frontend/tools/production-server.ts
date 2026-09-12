@@ -1,3 +1,4 @@
+import { developmentOrigin, developmentPorts } from "./dev-services.ts";
 import { createReadStream } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import { createServer, type ServerResponse } from "node:http";
@@ -19,17 +20,17 @@ await Promise.all([
 
 const host = createServer((request, response) => {
   void hostMiddleware(request, response, () => {
-    const pathname = new URL(request.url ?? "/", "http://127.0.0.1:5173").pathname;
+    const pathname = new URL(request.url ?? "/", developmentOrigin("host")).pathname;
     const requestedPath = pathname === "/" ? "/index.html" : pathname;
     void serveStatic(response, hostRoot, requestedPath, {
       fallback: "/index.html",
       headers: {
         "content-security-policy": [
           "default-src 'self'",
-          "script-src 'self' http://127.0.0.1:4174 http://127.0.0.1:4175 http://127.0.0.1:4199",
-          "style-src 'self' 'unsafe-inline' http://127.0.0.1:4174 http://127.0.0.1:4175",
+          `script-src 'self' ${developmentOrigin("telemetry-decom")} ${developmentOrigin("contract-probe")} http://127.0.0.1:4199`,
+          `style-src 'self' 'unsafe-inline' ${developmentOrigin("telemetry-decom")} ${developmentOrigin("contract-probe")}`,
           "font-src 'self' data:",
-          "connect-src 'self' http://127.0.0.1:4174 http://127.0.0.1:4175 http://127.0.0.1:4199",
+          `connect-src 'self' ${developmentOrigin("telemetry-decom")} ${developmentOrigin("contract-probe")} http://127.0.0.1:4199`,
           "img-src 'self' data:",
           "object-src 'none'",
           "base-uri 'self'",
@@ -42,7 +43,7 @@ const host = createServer((request, response) => {
 });
 
 const telemetry = createServer((request, response) => {
-  const pathname = new URL(request.url ?? "/", "http://127.0.0.1:4174").pathname;
+  const pathname = new URL(request.url ?? "/", developmentOrigin("telemetry-decom")).pathname;
   const releasePath = releaseStaticPath(pathname);
   if (!releasePath) {
     notFound(response);
@@ -55,7 +56,7 @@ const telemetry = createServer((request, response) => {
 });
 
 const probe = createServer((request, response) => {
-  const pathname = new URL(request.url ?? "/", "http://127.0.0.1:4175").pathname;
+  const pathname = new URL(request.url ?? "/", developmentOrigin("contract-probe")).pathname;
   const releasePath = releaseStaticPath(pathname);
   if (!releasePath) {
     notFound(response);
@@ -68,9 +69,9 @@ const probe = createServer((request, response) => {
 });
 
 await Promise.all([
-  listen(host, 5173, "Cadence host"),
-  listen(telemetry, 4174, "Telemetry Decom releases"),
-  listen(probe, 4175, "Contract Probe release"),
+  listen(host, developmentPorts["host"], "Cadence host"),
+  listen(telemetry, developmentPorts["telemetry-decom"], "Telemetry Decom releases"),
+  listen(probe, developmentPorts["contract-probe"], "Contract Probe release"),
 ]);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -157,7 +158,7 @@ function contentType(path: string): string {
 
 function remoteHeaders(): Readonly<Record<string, string>> {
   return {
-    "access-control-allow-origin": "http://127.0.0.1:5173",
+    "access-control-allow-origin": developmentOrigin("host"),
     "cross-origin-resource-policy": "cross-origin",
     "x-content-type-options": "nosniff",
   };

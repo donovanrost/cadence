@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { required } from "../../../../../test-support/required";
 import {
   fixtureRecord,
@@ -398,9 +399,9 @@ test("the remote scheduling adapter preserves initial UTC seconds through submis
   }
 });
 
-test("producer supplied native contact contribution", async () => {
-  if (!process.env.CADENCE_CONTACT_WORKFLOW) return;
-  const supplied = jsonFixture(process.env.CADENCE_CONTACT_WORKFLOW),
+const producer = producerFixture("CADENCE_CONTACT_WORKFLOW", import.meta.url);
+test.skipIf(!producer.available)("producer supplied native contact contribution", async () => {
+  const supplied = jsonFixture(producer.read()),
     snapshot = fixtureRecord(supplied.snapshot);
   const raw = fixtureRecord(snapshot.data);
   if (!oneOf(["schedule", "record", "reservation"], raw.kind))

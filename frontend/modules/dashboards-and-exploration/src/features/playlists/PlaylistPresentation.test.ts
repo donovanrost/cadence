@@ -1,6 +1,7 @@
 import { fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mount } from "@vue/test-utils";
+import type { SettledOpsPageNavigationPort } from "@cadence/plugin-sdk/ops-pages";
 import PlaylistPresentation from "./PlaylistPresentation.vue";
 import { presentationFixture, playlistContext } from "./fixtures.test-support";
 import { readPresentation } from "./validation";
@@ -11,17 +12,17 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
-function setup(playing = false) {
+function setup(playing = false, total = 2) {
   vi.useFakeTimers();
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
-  const model = { ...presentationFixture(), playing };
-  const navigate = vi.fn((_: string) => {}),
+  const model = { ...presentationFixture(), playing, total };
+  const navigate = vi.fn<SettledOpsPageNavigationPort["navigate"]>().mockResolvedValue("completed"),
     refresh = vi.fn(async () => {}),
     wrapper = mount(PlaylistPresentation, {
       props: {
         model,
         context: { ...playlistContext, resourceId: "playlist-1" },
-        port: { navigate, execute: vi.fn() },
+        port: { navigate },
         refresh,
       },
     });
@@ -63,8 +64,9 @@ test("unavailable entries keep their position and manual stepping preserves paus
   await vi.advanceTimersByTimeAsync(60000);
   expect(navigate).toHaveBeenCalledTimes(1);
 });
-test("automatic rotation issues one navigation and refresh can recover a failed transition", async () => {
+test("automatic rotation waits for navigation and a fresh model resets advancement", async () => {
   const { wrapper, navigate, model } = setup(true);
+  navigate.mockImplementationOnce(() => new Promise(() => {}));
   await vi.advanceTimersByTimeAsync(29999);
   expect(navigate).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(1);
@@ -79,6 +81,40 @@ test("automatic rotation issues one navigation and refresh can recover a failed 
   await wrapper.get("#playlist-play-pause").trigger("click");
   await vi.advanceTimersByTimeAsync(60000);
   expect(navigate).toHaveBeenCalledTimes(1);
+});
+test("a single-entry playlist keeps playing without redundant navigation or locked controls", async () => {
+  const { wrapper, navigate } = setup(true, 1);
+  await vi.advanceTimersByTimeAsync(90_000);
+  expect(navigate).not.toHaveBeenCalled();
+  expect(wrapper.find("#playlist-advancing").exists()).toBe(false);
+  expect(wrapper.get("#playlist-play-pause").attributes("disabled")).toBeUndefined();
+  expect(wrapper.get("#playlist-play-pause").text()).toBe("Pause");
+  expect(vi.getTimerCount()).toBe(1);
+  await wrapper.get("#playlist-play-pause").trigger("click");
+  expect(vi.getTimerCount()).toBe(0);
+});
+test.each(["unchanged", "cancelled", "failed"] as const)(
+  "%s navigation releases controls and pauses for a deliberate retry",
+  async (result) => {
+    const { wrapper, navigate } = setup(true);
+    navigate.mockResolvedValueOnce(result);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(wrapper.find("#playlist-advancing").exists()).toBe(false);
+    expect(wrapper.get("#playlist-next").attributes("disabled")).toBeUndefined();
+    expect(wrapper.get("#playlist-play-pause").text()).toBe("Play");
+    expect(wrapper.find("#playlist-navigation-notice").exists()).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    await wrapper.get("#playlist-next").trigger("click");
+    expect(navigate).toHaveBeenCalledTimes(2);
+  },
+);
+test("a rejected navigation promise releases controls without an unhandled rejection", async () => {
+  const { wrapper, navigate } = setup(true);
+  navigate.mockRejectedValueOnce(Error("Unavailable transport"));
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(wrapper.find("#playlist-advancing").exists()).toBe(false);
+  expect(wrapper.get("#playlist-next").attributes("disabled")).toBeUndefined();
+  expect(wrapper.get("#playlist-play-pause").text()).toBe("Play");
 });
 test("hidden and unmounted presenters stop automatic navigation", async () => {
   const { wrapper, navigate } = setup(true);

@@ -17,6 +17,8 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const hostFiles = new Set(["host.js"]);
 // Explicitly reviewed producer outputs; never derive this allowlist from the artifact being checked.
 const authoritativeHostJavascriptDigests = new Set([
+  // Reviewed shared bounded diagnostics and remote correlation references; two identical pinned builds.
+  "6b138c303964a2da533b9089df51045995af4d860e4e586fcb4781d5b3ca5a04",
   // Reviewed optional-prop forwarding and typed frontend readers; two identical pinned Phoenix builds.
   "6516c6c54a7f191ef86bbb8e4872bb1a8653149907d9245e424121c2a8adef9a",
   // Reviewed fixed preflight guidance in the host bridge; two identical pinned builds.

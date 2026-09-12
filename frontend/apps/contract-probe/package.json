@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vp dev --host 127.0.0.1 --port 4175 --strictPort",
+    "dev": "vp dev",
     "build": "vue-tsc -b && vp build",
-    "preview": "vp preview --host 127.0.0.1 --port 4175 --strictPort",
+    "preview": "vp preview",
     "test": "vp test --run"
   },
   "dependencies": {

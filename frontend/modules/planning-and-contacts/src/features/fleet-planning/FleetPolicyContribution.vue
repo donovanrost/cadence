@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
+import type { GuardedOpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
 import type { PolicyPage } from "./fleet-policy";
 import { policyHref } from "./fleet-policy";
 import { policyPresentation } from "./policy-presentation";
@@ -9,7 +9,11 @@ import { useFleetBootstrap } from "./use-fleet-bootstrap";
 import type { OpsFleetPlanningPolicyEmits } from "./OpsFleetPlanningPolicy.contracts";
 import OpsFleetPlanningPolicy from "./OpsFleetPlanningPolicy.vue";
 defineOptions({ inheritAttrs: false });
-const props = defineProps<{ page: PolicyPage; port: OpsPagePort; readPort: OpsPageReadPort }>();
+const props = defineProps<{
+  page: PolicyPage;
+  port: GuardedOpsPagePort;
+  readPort: OpsPageReadPort;
+}>();
 const page = useFleetBootstrap(() => props.page);
 const {
   model,

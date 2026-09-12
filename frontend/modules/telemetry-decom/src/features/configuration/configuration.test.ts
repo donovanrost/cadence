@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import {
   jsonFixture,
   fixtureRecord,
@@ -172,20 +173,23 @@ test("refresh retains a revision draft and requires explicit review when the sav
   w.unmount();
 });
 
-test("producer supplied configuration mounts the public feature and emits the selected revision", async () => {
-  if (!process.env.CADENCE_DECOM) return;
-  const supplied = jsonFixture(process.env.CADENCE_DECOM);
-  expect(admitConfiguration(supplied.page)).not.toBeNull();
-  const w = mount(ConfigurationSurface, { attrs: fixtureRecord(supplied.page) });
-  await w.get("#telemetry-decom-revision-select").setValue(fixtureString(supplied.revision_id));
-  expect(w.emitted("save_catalog_revision")).toBeUndefined();
-  await w.get("#telemetry-decom-revision-form").trigger("submit");
-  await flushPromises();
-  const events = required(w.emitted("save_catalog_revision"));
-  expect(events).toHaveLength(1);
-  process.stdout.write("CADENCE_DECOM_INPUT=" + JSON.stringify(required(events[0])[0]) + "\n");
-  w.unmount();
-});
+const producer = producerFixture("CADENCE_DECOM", import.meta.url);
+test.skipIf(!producer.available)(
+  "producer supplied configuration mounts the public feature and emits the selected revision",
+  async () => {
+    const supplied = jsonFixture(producer.read());
+    expect(admitConfiguration(supplied.page)).not.toBeNull();
+    const w = mount(ConfigurationSurface, { attrs: fixtureRecord(supplied.page) });
+    await w.get("#telemetry-decom-revision-select").setValue(fixtureString(supplied.revision_id));
+    expect(w.emitted("save_catalog_revision")).toBeUndefined();
+    await w.get("#telemetry-decom-revision-form").trigger("submit");
+    await flushPromises();
+    const events = required(w.emitted("save_catalog_revision"));
+    expect(events).toHaveLength(1);
+    process.stdout.write("CADENCE_DECOM_INPUT=" + JSON.stringify(required(events[0])[0]) + "\n");
+    w.unmount();
+  },
+);
 
 test("same-revision configuration changes retain the draft and reject save until review", async () => {
   const p = page();

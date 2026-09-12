@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../../test-support/producer-fixture";
 import { jsonFixture } from "../../../../../../test-support/json-fixture";
 import { required } from "../../../../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -141,10 +142,11 @@ test("recipient, version and malformed status are rejected while host retry rema
     expect(() => readInbox(doc, "user-1")).toThrow();
   }
 });
-test.skipIf(!process.env.CADENCE_NOTIFICATIONS_DOCUMENT)(
+const producer = producerFixture("CADENCE_NOTIFICATIONS_DOCUMENT", import.meta.url);
+test.skipIf(!producer.available)(
   "actual producer renders a read but pending invitation and sends the recipient notification ID",
   async () => {
-    const value = jsonFixture(required(process.env.CADENCE_NOTIFICATIONS_DOCUMENT));
+    const value = jsonFixture(required(producer.read()));
     const model = readInbox(value, value.user_id),
       input = props(model),
       wrapper = mount(NotificationsPanel, { props: input });

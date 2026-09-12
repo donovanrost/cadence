@@ -14,7 +14,10 @@ import { readSelection } from "./chart-input";
 
 /** Owns the mounted lifetime. Data and renderers never install global observers themselves. */
 export class TelemetryChartController {
-  private readonly model: ChartModel;
+  private get model() {
+    return this.surface.model;
+  }
+  private snapshotSignature: string;
   private readonly surface: ChartSurface;
   private readonly plot: ChartPlot;
   private readonly legend: ChartLegend;
@@ -32,8 +35,10 @@ export class TelemetryChartController {
     input: TelemetryChartProps,
     pushEvent: (action: ChartAction, payload: Record<string, unknown>) => void,
   ) {
-    this.model = new ChartModel(input);
-    this.surface = new ChartSurface(el, this.model, pushEvent, () => this.rebuild());
+    this.snapshotSignature = snapshotSignature(input);
+    this.surface = new ChartSurface(el, new ChartModel({ ...input }), pushEvent, () =>
+      this.rebuild(),
+    );
     this.legend = new ChartLegend(this.surface);
     this.annotations = new ChartAnnotations(this.surface);
     this.events = new ChartEvents(this.surface);
@@ -97,6 +102,32 @@ export class TelemetryChartController {
   handleSelection(payload: Record<string, unknown>) {
     this.updated(payload.selection);
   }
+  updateSnapshot(input: TelemetryChartProps) {
+    if (this.disposed) return;
+    const signature = snapshotSignature(input);
+    // Equal server projections must not discard samples received through the append channel.
+    if (signature === this.snapshotSignature) return;
+    const previous = this.model;
+    const next = new ChartModel({ ...input });
+    if (chartIdentity(previous.input) === chartIdentity(input)) {
+      next.hiddenSeriesIds = new Set(
+        next.seriesList
+          .filter((series) => previous.hiddenSeriesIds.has(series.id))
+          .map((series) => series.id),
+      );
+      next.selectedRef = previous.selectedRef;
+      if (previous.input.axis_mode === input.axis_mode) next.axisMode = previous.axisMode;
+    }
+    const rebuild = plotSignature(previous) !== plotSignature(next);
+    this.snapshotSignature = signature;
+    this.surface.model = next;
+    this.live.reset();
+    if (rebuild) this.rebuild();
+    else {
+      this.surface.chart.setData(next.plotData());
+      this.render();
+    }
+  }
   updated(selection: unknown) {
     if (this.disposed) return;
     this.model.selectedRef = readSelection(selection);
@@ -123,6 +154,9 @@ export class TelemetryChartController {
     if (model.liveWindowEnd !== null) {
       el.dataset.liveWindowStartMs = `${Math.round((model.liveWindowEnd - model.windowSeconds) * 1000)}`;
       el.dataset.liveWindowEndMs = `${Math.round(model.liveWindowEnd * 1000)}`;
+    } else {
+      delete el.dataset.liveWindowStartMs;
+      delete el.dataset.liveWindowEndMs;
     }
     this.events.renderEventMarkers();
     this.annotations.renderAnnotations();
@@ -157,4 +191,46 @@ export class TelemetryChartController {
     ])
       layer.remove();
   }
+}
+
+function snapshotSignature(input: TelemetryChartProps) {
+  const snapshot = { ...input };
+  delete snapshot.selected_ref;
+  return JSON.stringify(snapshot);
+}
+
+function chartIdentity(input: Readonly<TelemetryChartProps>) {
+  return JSON.stringify([
+    input.widget_id,
+    input.placement_id,
+    input.data_realm,
+    input.data_view,
+    input.time_axis,
+    input.replay_run_id,
+    input.data_source_id,
+    input.source_binding_id,
+  ]);
+}
+
+function plotSignature(model: ChartModel) {
+  const options = { ...model.input };
+  delete options.backfill;
+  delete options.compare_backfill;
+  delete options.limit_markers;
+  delete options.event_markers;
+  delete options.annotations;
+  delete options.selected_ref;
+  return JSON.stringify({
+    options,
+    axisMode: model.axisMode,
+    hidden: [...model.hiddenSeriesIds],
+    series: model.seriesList.map(({ id, label, unit, role, compare_of }) => ({
+      id,
+      label,
+      unit,
+      role,
+      compare_of,
+    })),
+    plots: model.plotSeries.map(({ kind, seriesIndex }) => ({ kind, seriesIndex })),
+  });
 }

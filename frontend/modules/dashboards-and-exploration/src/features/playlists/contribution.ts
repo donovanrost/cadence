@@ -22,7 +22,7 @@ export const playlistPresentationContribution = {
   title: "Dashboard playlist",
   // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
   component: PlaylistPresentation,
-  actions: [],
+  navigation: "settled",
   read(value, context) {
     return { model: readPresentation(value, context), context };
   },

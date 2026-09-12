@@ -1,3 +1,4 @@
+import "../../../module-pages.test-support";
 import type { OpsPageAction } from "@cadence/plugin-sdk/ops-pages";
 import { required } from "../../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
@@ -34,6 +35,7 @@ function harness() {
       query,
       refresh,
       navigate: vi.fn(),
+      guardNavigation: vi.fn(() => vi.fn()),
     },
   });
   return { initial, execute, query, refresh };

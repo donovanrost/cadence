@@ -73,15 +73,44 @@ The equivalent commands can be run from the worktree root with `vp -C frontend`,
 frontend/node_modules/.bin/vp -C frontend run dev
 ```
 
-`dev` runs the demo host on `127.0.0.1:5173`, Telemetry Decom on `127.0.0.1:4174`, Contract Probe
-on `127.0.0.1:4175`, and Communications Overview on `127.0.0.1:4176`. `build` emits independently
-deployable demo artifacts. `corepack pnpm build:publication` builds the Phoenix host plus the
+`dev` starts all eight services with fixed ports from [the shared service map](tools/dev-services.ts).
+Each service fails if its port is occupied, so catalog URLs cannot silently drift.
+
+| Service                 | Port |
+| ----------------------- | ---- |
+| Host                    | 5173 |
+| Telemetry Decom         | 4174 |
+| Contract Probe          | 4175 |
+| Communications Overview | 4176 |
+| Mission Catalog         | 4177 |
+| Organization Admin      | 4178 |
+| Spacecraft              | 4179 |
+| Ops Console             | 4180 |
+
+`build` emits independently deployable demo artifacts. `corepack pnpm build:publication` builds the Phoenix host plus the
 six approved first-party remotes into
 `apps/cadence_web/priv/static/assets/application-host/`: `host`, `organization-admin`,
 `mission-catalog`, `spacecraft`, `telemetry-decom`, `comms`, and `ops-console`.
-`preview` serves those demo artifacts through a production-shaped
-server with no-store catalogs and manifests, immutable hashed assets, explicit remote CORS, and a
+`preview` serves the host, Telemetry Decom current/previous releases, and Contract Probe demo
+artifacts through a production-shaped server with no-store catalogs and manifests, immutable hashed assets, explicit remote CORS, and a
 restrictive host CSP. Run `build` before `preview`.
+
+## Continuous integration and producer fixtures
+
+[The frontend workflow](../.github/workflows/frontend.yml) runs `verify` independently of the
+Phoenix producer and federation browser job on every pull request. The jobs use the pinned
+Node/pnpm toolchain, locked dependencies, PostgreSQL, and an installed Chromium browser.
+Action usage follows [checkout](https://github.com/actions/checkout),
+[setup-node](https://github.com/actions/setup-node), and
+[setup-beam](https://github.com/erlef/setup-beam); action revisions are pinned in the workflow.
+GitHub branch protection must select those status checks if merges should require them.
+
+The ordinary frontend suite explicitly skips 29 tests whose real Phoenix fixtures are absent.
+Run `corepack pnpm test:producers` with the Elixir workspace and test PostgreSQL available to
+execute their [producer/consumer inventory](tools/producer-contracts.json). The gate requires
+every fixture and records each consumer's execution; missing fixtures, failed producer tests,
+and filtered-out consumers fail the command. No environment-dependent test counts as a pass
+without executing its assertions.
 
 ## Design-system workflow
 

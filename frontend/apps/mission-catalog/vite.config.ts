@@ -1,3 +1,5 @@
+import { developmentServer, developmentPreview } from "../../tools/dev-services.ts";
+import { releaseBuildOutput, releaseOutputGuard } from "../../tools/release-build-output.mjs";
 import tailwindcss from "@tailwindcss/vite";
 import { federation } from "@module-federation/vite";
 import vue from "@vitejs/plugin-vue";
@@ -34,13 +36,15 @@ function releaseOutputPlugin() {
   };
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const releaseBuild = mode === "release";
+  const outputDirectory = releaseBuildOutput({ command, mode });
 
   return {
     base: releaseBuild ? "./" : "/",
     plugins:
       lazyPlugins(() => [
+        ...(outputDirectory ? [releaseOutputGuard(outputDirectory)] : []),
         tailwindcss(),
         vue(),
         federation(
@@ -48,15 +52,13 @@ export default defineConfig(({ mode }) => {
         ),
         releaseOutputPlugin(),
       ]) ?? [],
-    server: {
-      host: "127.0.0.1",
-      port: 4177,
-      strictPort: true,
-    },
+    server: { ...developmentServer("mission-catalog") },
+    preview: developmentPreview("mission-catalog"),
     build: {
       target: "chrome89",
-      ...(releaseBuild
+      ...(outputDirectory !== undefined
         ? {
+            outDir: outputDirectory,
             emptyOutDir: true,
             manifest: false,
             rollupOptions: { input: federatedEntry },

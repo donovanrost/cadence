@@ -1,8 +1,4 @@
-import {
-  providerAccountDirectoryContribution,
-  providerAccountRegistrationContribution,
-  providerAccountDetailContribution,
-} from "@cadence/communications/provider-accounts";
+import { createPageRegistry } from "../../../shell/module-pages/lazy-pages";
 import {
   ORGANIZATION_PAGE_SLOT,
   type OrganizationPageContribution,
@@ -35,11 +31,24 @@ export function admitOrganizationPages(items: readonly OrganizationPageContribut
   }
   return Object.freeze(Object.fromEntries(entries));
 }
-export const organizationModulePages = admitOrganizationPages([
-  providerAccountDirectoryContribution,
-  providerAccountRegistrationContribution,
-  providerAccountDetailContribution,
-]);
+export const organizationModulePages = createPageRegistry<OrganizationPageContribution<Component>>(
+  "organization.page",
+  {
+    "comms.provider-account-directory": () =>
+      import("@cadence/communications/provider-accounts").then(
+        (module) => module.providerAccountDirectoryContribution,
+      ),
+    "comms.provider-account-registration": () =>
+      import("@cadence/communications/provider-accounts").then(
+        (module) => module.providerAccountRegistrationContribution,
+      ),
+    "comms.provider-account-detail": () =>
+      import("@cadence/communications/provider-accounts").then(
+        (module) => module.providerAccountDetailContribution,
+      ),
+  },
+  admitOrganizationPages,
+);
 
 // Inspect runtime input without widening the already declared readonly action type to any[].
 function isArray(value: unknown): boolean {

@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import {
   jsonFixture,
   fixtureRecord,
@@ -30,9 +31,9 @@ test("public contribution owns admission and uses the existing fleet workflow", 
   ).toThrow();
   wrapper.unmount();
 });
-test("producer-supplied directory contribution", async () => {
-  if (!process.env.CADENCE_FLEET_CONTRIBUTION) return;
-  const snapshot = jsonFixture(process.env.CADENCE_FLEET_CONTRIBUTION),
+const producer = producerFixture("CADENCE_FLEET_CONTRIBUTION", import.meta.url);
+test.skipIf(!producer.available)("producer-supplied directory contribution", async () => {
+  const snapshot = jsonFixture(producer.read()),
     rawContext = fixtureRecord(snapshot.context);
   const context = {
     organizationId: fixtureString(rawContext.organizationId),

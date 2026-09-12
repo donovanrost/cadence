@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { containing } from "../../../../../test-support/matchers";
 import {
   fixtureRecord,
@@ -211,9 +212,9 @@ test("receipt admission rejects other actors, inconsistent choices and malformed
     contribution.read(page, { organizationId: "foreign", missionId: "mission-1" }),
   ).toThrow();
 });
-test("producer supplied native declaration contribution", async () => {
-  if (!process.env.CADENCE_DECLARATION) return;
-  const supplied = jsonFixture(process.env.CADENCE_DECLARATION),
+const producer = producerFixture("CADENCE_DECLARATION", import.meta.url);
+test.skipIf(!producer.available)("producer supplied native declaration contribution", async () => {
+  const supplied = jsonFixture(producer.read()),
     snapshot = fixtureRecord(supplied.snapshot),
     props = contribution.read(snapshot.data, fixtureContext(snapshot.context)),
     page = required(admitDeclarationPage(props.page));

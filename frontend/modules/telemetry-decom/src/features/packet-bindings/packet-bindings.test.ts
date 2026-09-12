@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { fixtureArrayAt, fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { required } from "../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
@@ -330,28 +331,31 @@ test("unavailable tab storage prevents an effect whose response could not be rec
   w.unmount();
 });
 
-test("producer supplied packet configuration reaches the public feature and yields its explicit save input", async () => {
-  if (!process.env.CADENCE_PACKET_PAGE) return;
-  const p = JSON.parse(process.env.CADENCE_PACKET_PAGE) as PacketDocument;
-  expect(admitPacketDocument(p)).not.toBeNull();
-  const bridge = port(p);
-  vi.mocked(bridge.save).mockRejectedValue(new Error("capture only"));
-  const w = mount(PacketBindingsSurface, { props: { document: p, port: bridge } });
-  const first = required(p.packets.items.find((p) => p.selectable));
-  await required(
-    w.findAll("[data-packet-id]").find((row) => row.attributes("data-packet-id") === first.id),
-  )
-    .get("input[type=checkbox]")
-    .setValue(true);
-  if (!p.selection.endpoint)
-    await w.get("#packet-source-endpoint").setValue(required(p.endpoints.items[0]).id);
-  await w.get("#save-packet-bindings").trigger("click");
-  await flushPromises();
-  expect(bridge.save).toHaveBeenCalledTimes(1);
-  process.stdout.write(
-    "CADENCE_PACKET_INPUT=" +
-      JSON.stringify(required(vi.mocked(bridge.save).mock.calls[0])[0]) +
-      "\n",
-  );
-  w.unmount();
-});
+const producer = producerFixture("CADENCE_PACKET_PAGE", import.meta.url);
+test.skipIf(!producer.available)(
+  "producer supplied packet configuration reaches the public feature and yields its explicit save input",
+  async () => {
+    const p = JSON.parse(producer.read()) as PacketDocument;
+    expect(admitPacketDocument(p)).not.toBeNull();
+    const bridge = port(p);
+    vi.mocked(bridge.save).mockRejectedValue(new Error("capture only"));
+    const w = mount(PacketBindingsSurface, { props: { document: p, port: bridge } });
+    const first = required(p.packets.items.find((p) => p.selectable));
+    await required(
+      w.findAll("[data-packet-id]").find((row) => row.attributes("data-packet-id") === first.id),
+    )
+      .get("input[type=checkbox]")
+      .setValue(true);
+    if (!p.selection.endpoint)
+      await w.get("#packet-source-endpoint").setValue(required(p.endpoints.items[0]).id);
+    await w.get("#save-packet-bindings").trigger("click");
+    await flushPromises();
+    expect(bridge.save).toHaveBeenCalledTimes(1);
+    process.stdout.write(
+      "CADENCE_PACKET_INPUT=" +
+        JSON.stringify(required(vi.mocked(bridge.save).mock.calls[0])[0]) +
+        "\n",
+    );
+    w.unmount();
+  },
+);

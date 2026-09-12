@@ -10,6 +10,7 @@ export const fleetPolicyContribution = {
   // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks this SFC constructor; typed lint cannot resolve Vue imports.
   component: FleetPolicyContribution,
   query: true,
+  guardNavigation: true,
   actions: policyActions,
   read(value, context) {
     if (context.resourceId !== undefined) throw Error("Unexpected policy resource");

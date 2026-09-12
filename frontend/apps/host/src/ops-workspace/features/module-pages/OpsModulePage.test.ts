@@ -1,3 +1,4 @@
+import "../../../module-pages.test-support";
 import type { OpsPagePort, OpsPageNavigationPort } from "@cadence/plugin-sdk/ops-pages";
 import { required } from "../../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";

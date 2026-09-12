@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { fixtureRecord, jsonFixture } from "../../../../../test-support/json-fixture";
 import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -190,9 +191,9 @@ test("invalid producer data can recover through a read, and failed reads retain 
   expect(wrapper.find("#contact-scheduled-ledger").exists()).toBe(true);
   wrapper.unmount();
 });
-test("producer-supplied contact scheduling workflow", async () => {
-  if (!process.env.CADENCE_SCHEDULE_MODEL) return;
-  const model = required(admitContactSchedule(jsonFixture(process.env.CADENCE_SCHEDULE_MODEL))),
+const producer = producerFixture("CADENCE_SCHEDULE_MODEL", import.meta.url);
+test.skipIf(!producer.available)("producer-supplied contact scheduling workflow", async () => {
+  const model = required(admitContactSchedule(jsonFixture(producer.read()))),
     action = process.env.CADENCE_SCHEDULE_ACTION;
   expect(admitContactSchedule(model)).not.toBeNull();
   const execute = vi.fn().mockRejectedValue(Error("payload captured"));

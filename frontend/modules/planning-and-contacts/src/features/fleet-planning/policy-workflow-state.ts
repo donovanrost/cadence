@@ -1,6 +1,6 @@
 import { createPolicyActionPort } from "./policy-action-port";
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
-import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
+import type { GuardedOpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
 import {
   admitPolicyPage,
   admitPolicyCommand,
@@ -13,9 +13,10 @@ import {
 } from "./fleet-policy";
 import type { PolicyEvidence } from "./policy-evidence";
 type Command = PolicyCommand;
+type Attempt = Pick<PolicyOperation, "sequence" | "action" | "input">;
 export function usePolicyWorkflow(
   input: () => PolicyPage,
-  port: () => OpsPagePort,
+  port: () => GuardedOpsPagePort,
   readPort: () => OpsPageReadPort,
 ) {
   const initial = input(),
@@ -28,10 +29,13 @@ export function usePolicyWorkflow(
     generation = 0;
   let queuedValidation: Command | null = null,
     queuedEffect: Command | null = null;
-  let attempted: (Command & { sequence: number }) | null = null;
+  let attempted: Attempt | null =
+    initial.operation?.status === "unconfirmed" ? initial.operation : null;
   const pending = ref<PolicyAction | "read" | null>(null),
     queued = ref(false),
-    uncertain = ref(initial.operation?.status === "unconfirmed"),
+    uncertain = ref(
+      initial.operation?.status === "unconfirmed" && !policyValidation(initial.operation.action),
+    ),
     needsRead = ref(false),
     notice = ref("");
   const confirmedPolicyEvidence = shallowRef<PolicyEvidence | null>(null),
@@ -45,7 +49,17 @@ export function usePolicyWorkflow(
       pending.value === "read" ||
       (!!pending.value && !policyValidation(pending.value)),
   );
-  function settle(next: PolicyOperation, command: Command & { sequence: number }) {
+  const stopGuard = port().guardNavigation(() => {
+    if (
+      queued.value ||
+      (pending.value && pending.value !== "read" && !policyValidation(pending.value))
+    ) {
+      notice.value = "Wait for the submitted action before leaving this page.";
+      return false;
+    }
+    return true;
+  });
+  function settle(next: PolicyOperation, command: Attempt) {
     if (
       next.sequence !== command.sequence ||
       next.action !== command.action ||
@@ -54,7 +68,7 @@ export function usePolicyWorkflow(
       throw Error("Different policy operation");
     sequence = next.sequence;
     operation.value = next;
-    uncertain.value = next.status === "unconfirmed";
+    uncertain.value = next.status === "unconfirmed" && !policyValidation(next.action);
     if (next.status === "completed") {
       notice.value = policyValidation(next.action)
         ? "Draft validation completed."
@@ -82,11 +96,11 @@ export function usePolicyWorkflow(
   function acceptPage(value: unknown) {
     const next = admitPolicyPage(value, context, query);
     if (!next) throw Error("Unavailable policy read");
-    if (attempted && uncertain.value) {
+    if (next.sequence < sequence) throw Error("Older policy sequence");
+    if (attempted) {
       const op = next.operation;
       if (op && op.sequence === attempted.sequence) settle(op, attempted);
     }
-    if (next.sequence < sequence) throw Error("Older policy sequence");
     model.value = next.model;
     sequence = next.sequence;
     operation.value = next.operation;
@@ -171,12 +185,24 @@ export function usePolicyWorkflow(
       }
     } catch {
       if (active && generation === n) {
-        uncertain.value = true;
+        // A live projection may already have delivered this exact receipt while the reply was lost.
+        const known = operation.value;
+        if (
+          known &&
+          known.status !== "unconfirmed" &&
+          known.sequence === current.sequence &&
+          known.action === current.action &&
+          equalPolicyData(known.input, current.input)
+        )
+          return;
+        uncertain.value = !policyValidation(command.action);
+        needsRead.value = policyValidation(command.action);
         queuedEffect = null;
         queuedValidation = null;
         queued.value = false;
-        notice.value =
-          "No confirmed response was received. Refresh to recover the page receipt before another action.";
+        notice.value = policyValidation(command.action)
+          ? "Validation could not be confirmed. Refresh before validating the draft again."
+          : "No confirmed response was received. Refresh to recover the page receipt before another action.";
       }
     } finally {
       if (active && generation === n) {
@@ -187,13 +213,13 @@ export function usePolicyWorkflow(
   }
   watch(input, (next) => {
     if (equalPolicyData(next, initial)) return;
-    if (pending.value) {
-      uncertain.value = true;
+    if (pending.value === "read") {
       generation++;
       pending.value = null;
     }
     try {
       acceptPage(next);
+      void drain();
     } catch {
       needsRead.value = true;
       notice.value =
@@ -201,6 +227,7 @@ export function usePolicyWorkflow(
     }
   });
   onBeforeUnmount(() => {
+    stopGuard();
     active = false;
     generation++;
     queuedEffect = null;

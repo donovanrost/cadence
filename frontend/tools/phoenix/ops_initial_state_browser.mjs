@@ -1,10 +1,20 @@
 import { fixtureRecord, fixtureString } from "../../test-support/json-fixture.ts";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 const [base, mission, user, out] = process.argv.slice(2);
 assert.ok(base && mission && user && out, "Expected endpoint, mission, user and output directory");
+const manifest = fixtureRecord(
+  JSON.parse(
+    await readFile(
+      new URL("../../../apps/cadence_web/priv/static/cache_manifest.json", import.meta.url),
+      "utf8",
+    ),
+  ),
+);
+const digestedEntry = fixtureString(fixtureRecord(manifest.latest)["assets/app.js"]);
+assert.match(digestedEntry, /^assets\/app-[a-f0-9]{32}\.js$/);
 const reader = createInterface({ input: process.stdin });
 /** @type {unknown} */
 const secret = await new Promise((resolve) =>
@@ -21,6 +31,13 @@ const errors = [];
 const results = [];
 page.setDefaultTimeout(12000);
 page.on("pageerror", (e) => errors.push(e.message));
+page.on("response", (response) => {
+  if (
+    response.status() >= 400 &&
+    ["script", "stylesheet"].includes(response.request().resourceType())
+  )
+    errors.push(`Asset failed (${response.status()}): ${new URL(response.url()).pathname}`);
+});
 const prefix = base + "/missions/" + mission;
 const routes = [
   "/ops",
@@ -63,6 +80,25 @@ try {
     f.requestSubmit();
   });
   await page.waitForURL((url) => url.pathname !== "/sign-in");
+  await page.waitForFunction(() => document.querySelector("[data-phx-main].phx-connected"));
+  // Loading the Phoenix-digested entry must reuse the same hashed runtime and connection.
+  const connection = await page.evaluateHandle(() =>
+    "liveSocket" in window ? window.liveSocket : undefined,
+  );
+  try {
+    await page.addScriptTag({ type: "module", url: base + "/" + digestedEntry });
+    assert.equal(
+      await page.evaluate(
+        (previous) => "liveSocket" in window && window.liveSocket === previous,
+        connection,
+      ),
+      true,
+      "The digested entry must not initialize LiveView a second time",
+    );
+  } finally {
+    await connection.dispose();
+  }
+  if (errors.length) throw Error(`Sign-in and digested startup errors: ${errors.join("; ")}`);
   for (const route of routes) {
     const start = errors.length;
     let failure = null;
@@ -71,11 +107,15 @@ try {
       await page.waitForFunction(() => document.querySelector("[data-phx-main].phx-connected"));
       await page.locator("main h1").first().waitFor();
       await page.locator("#host-page-content > *").first().waitFor();
+      await page.waitForFunction(
+        () => !document.querySelector("[data-host-page-loading], #ops-module-loading"),
+      );
     } catch (e) {
       failure = String(e);
     }
     const text = await page.locator("body").innerText();
-    const generic = (await page.locator("#ops-module-unavailable").count()) > 0;
+    const generic =
+      (await page.locator("#ops-module-unavailable, [data-host-page-load-failed]").count()) > 0;
     const item = {
       route,
       url: page.url(),

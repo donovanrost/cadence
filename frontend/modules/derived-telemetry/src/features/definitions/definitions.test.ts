@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { required } from "../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
@@ -191,25 +192,28 @@ test("newer saved evidence retains the draft and requires explicit version revie
   );
   w.unmount();
 });
-test("producer supplied evidence mounts the public editor and yields the explicit action input", async () => {
-  if (!process.env.CADENCE_DERIVED_PAGE) return;
-  const p = JSON.parse(process.env.CADENCE_DERIVED_PAGE) as DefinitionsDocument;
-  expect(admitDocument(p)).not.toBeNull();
-  const bridge = port(p);
-  vi.mocked(bridge.save).mockRejectedValue(Error("capture only"));
-  const w = mount(DefinitionsSurface, { props: { document: p, port: bridge } });
-  await fill(w);
-  await w.get("#derived-expression").setValue("HK.voltage" + " + 1".repeat(100));
-  await w.get("#derived-definition-form").trigger("submit");
-  await flushPromises();
-  expect(bridge.save).toHaveBeenCalledTimes(1);
-  process.stdout.write(
-    "CADENCE_DERIVED_INPUT=" +
-      JSON.stringify(required(vi.mocked(bridge.save).mock.calls[0])[0]) +
-      "\n",
-  );
-  w.unmount();
-});
+const producer = producerFixture("CADENCE_DERIVED_PAGE", import.meta.url);
+test.skipIf(!producer.available)(
+  "producer supplied evidence mounts the public editor and yields the explicit action input",
+  async () => {
+    const p = JSON.parse(producer.read()) as DefinitionsDocument;
+    expect(admitDocument(p)).not.toBeNull();
+    const bridge = port(p);
+    vi.mocked(bridge.save).mockRejectedValue(Error("capture only"));
+    const w = mount(DefinitionsSurface, { props: { document: p, port: bridge } });
+    await fill(w);
+    await w.get("#derived-expression").setValue("HK.voltage" + " + 1".repeat(100));
+    await w.get("#derived-definition-form").trigger("submit");
+    await flushPromises();
+    expect(bridge.save).toHaveBeenCalledTimes(1);
+    process.stdout.write(
+      "CADENCE_DERIVED_INPUT=" +
+        JSON.stringify(required(vi.mocked(bridge.save).mock.calls[0])[0]) +
+        "\n",
+    );
+    w.unmount();
+  },
+);
 
 test("review evidence rejects mismatched version links, source counts and history identities", () => {
   const p = document();

@@ -11,6 +11,7 @@ import FullPageSurface from "./FullPageSurface.vue";
 import { createHostContributionBootstrap } from "./first-party-composition";
 import { loadFederatedApplication } from "./remote-loader";
 import { fullPageSurfaceProps } from "@cadence/plugin-sdk";
+import { reportFrontendFailure, type FrontendFailureKind } from "./shell/frontend-diagnostics";
 
 const props = defineProps<{
   application: CatalogApplication;
@@ -41,7 +42,7 @@ onErrorCaptured((reason) => {
   loadGeneration += 1;
   loadController?.abort(new Error("Remote application mount failed."));
   component.value = undefined;
-  error.value = failureFor("The approved application failed after mounting.", reason);
+  error.value = failureFor("The approved application failed after mounting.", reason, "render");
   return false;
 });
 
@@ -63,21 +64,31 @@ async function loadApplication(): Promise<void> {
     emit("ready", contribution.manifest);
   } catch (reason) {
     if (generation !== loadGeneration || controller.signal.aborted) return;
-    error.value = failureFor("The approved application release could not be loaded.", reason);
+    error.value = failureFor(
+      "The approved application release could not be loaded.",
+      reason,
+      "load",
+    );
   } finally {
     if (loadController === controller) loadController = undefined;
   }
 }
 
-function failureFor(message: string, reason: unknown): { message: string; referenceId: string } {
-  const referenceId = crypto.randomUUID();
-  console.error(`Cadence federation failure ${referenceId}`, {
-    applicationKey: props.application.applicationKey,
-    releaseId: props.application.release.releaseId,
-    surfaceId: props.application.surface.surfaceId,
+function failureFor(
+  message: string,
+  reason: unknown,
+  kind: FrontendFailureKind,
+): { message: string; referenceId: string } {
+  const diagnostic = reportFrontendFailure(
+    {
+      boundary: "federation",
+      contributionId: `${props.application.applicationKey}.${props.application.surface.surfaceId}`,
+      releaseId: props.application.release.releaseId,
+    },
+    kind,
     reason,
-  });
-  return { message, referenceId };
+  );
+  return { message, referenceId: diagnostic.id };
 }
 </script>
 

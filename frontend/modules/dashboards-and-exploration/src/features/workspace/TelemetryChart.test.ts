@@ -2,6 +2,8 @@ import type uPlot from "uplot";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { mount } from "@vue/test-utils";
 import TelemetryChart from "./TelemetryChart.vue";
+import WorkspaceSnapshotCanvas from "./WorkspaceSnapshotCanvas.vue";
+import { snapshotContext, snapshotFixture } from "./snapshot-fixture.test-support";
 import { CHART_RUNTIME_PORT, type ChartRuntimePort, type ChartTopic } from "./chart-runtime";
 import { required } from "../../../../../test-support/required";
 
@@ -113,7 +115,7 @@ function start() {
       };
     },
   };
-  app = mount(TelemetryChart, {
+  const mounted = mount(TelemetryChart, {
     props: {
       chart_id: "chart",
       widget_id: "battery",
@@ -129,8 +131,92 @@ function start() {
     global: { provide: { [CHART_RUNTIME_PORT as symbol]: port } },
     attachTo: document.body,
   });
-  return { app, listeners, execute, stop };
+  app = mounted;
+  return { app: mounted, listeners, execute, stop };
 }
+test("snapshot refresh replaces plotted samples while retaining grid and widget identity", async () => {
+  const mounted = mount(WorkspaceSnapshotCanvas, {
+    props: {
+      snapshot: snapshotFixture("time_series"),
+      context: snapshotContext,
+      instanceId: "chart-refresh",
+    },
+    attachTo: document.body,
+  });
+  app = mounted;
+  const grid = mounted.get(".grid-stack").element;
+  const widget = mounted.get('[gs-id="battery"]').element;
+  const plot = required(probes.plots.at(-1));
+  expect(plot.data[1]).toEqual([28.4, null, 28.7]);
+  const snapshot = snapshotFixture("time_series");
+  required(required(required(snapshot.placements[0]).frames[0]).fields[1]).values = [
+    29.1,
+    null,
+    29.4,
+  ];
+  await mounted.setProps({ snapshot });
+  expect(required(probes.plots.at(-1))).toBe(plot);
+  expect(plot.data[1]).toEqual([29.1, null, 29.4]);
+  expect(mounted.get(".grid-stack").element).toBe(grid);
+  expect(mounted.get('[gs-id="battery"]').element).toBe(widget);
+});
+
+test("snapshot replacement preserves visibility and selection, and changed series settings rebuild the plot", async () => {
+  const { app } = start();
+  await app.setProps({
+    legend_mode: "always",
+    compare_backfill: [[100_000, 7]],
+    selected_ref: {
+      placement_id: "p",
+      target: "telemetry_sample",
+      link_id: "sample-link",
+      target_id: "sample",
+      timestamp_ms: 100_000,
+    },
+  });
+  await app.get('[data-chart-legend-item="battery"]').trigger("click");
+  const plot = required(probes.plots.at(-1));
+  await app.setProps({ backfill: [[100_000, 9, { link_id: "sample-link", sample_id: "sample" }]] });
+  expect(required(probes.plots.at(-1))).toBe(plot);
+  expect(plot.data).toEqual([[100], [9], [7]]);
+  expect(app.get('[data-chart-legend-item="battery"]').attributes("aria-pressed")).toBe("false");
+  await app.get('[data-chart-legend-item="battery"]').trigger("click");
+  expect(app.find('[data-chart-selection-target="telemetry sample"]').exists()).toBe(true);
+  const previous = required(probes.plots.at(-1));
+  await app.setProps({
+    line_width: "bold",
+    compare_backfill: [[100_000, 8]],
+    time_mode: "snapshot",
+    window_seconds: 30,
+  });
+  expect(previous.destroy).toHaveBeenCalledOnce();
+  expect(required(probes.plots.at(-1)).data).toEqual([[100], [9], [8]]);
+  expect(app.attributes("data-live-window-end-ms")).toBeUndefined();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("selection and equal projections do not replace streamed samples", async () => {
+  const { app, listeners } = start();
+  required(listeners.get("append"))({
+    series: { battery: [[120_000, 3]] },
+    window_end_ms: 120_000,
+  });
+  const plot = required(probes.plots.at(-1));
+  await app.setProps({
+    selected_ref: { placement_id: "p", target: "telemetry_sample", timestamp_ms: 120_000 },
+  });
+  await app.setProps({
+    backfill: [
+      [50_000, 1],
+      [100_000, 2, { link_id: "sample-link", sample_id: "sample" }],
+    ],
+  });
+  expect(required(probes.plots.at(-1))).toBe(plot);
+  expect(plot.data).toEqual([
+    [100, 120],
+    [2, 3],
+  ]);
+});
 test("mounted chart appends, trims, updates markers and follows selected evidence", () => {
   const { app, listeners } = start();
   required(listeners.get("append"))({

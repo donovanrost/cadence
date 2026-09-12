@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { required } from "../../../../../test-support/required";
 import {
   jsonFixture,
@@ -212,9 +213,9 @@ test("replacing props while creation is pending ignores the late receipt and ret
   wrapper.unmount();
 });
 
-test("producer-supplied fleet creation workflow", async () => {
-  if (!process.env.CADENCE_FLEET_START) return;
-  const supplied = jsonFixture(process.env.CADENCE_FLEET_START);
+const producer = producerFixture("CADENCE_FLEET_START", import.meta.url);
+test.skipIf(!producer.available)("producer-supplied fleet creation workflow", async () => {
+  const supplied = jsonFixture(producer.read());
   const model = required(admitFleetStart(supplied.model)),
     window = supplied.window;
   if (!windowValid(window)) throw Error("Invalid native fleet window");

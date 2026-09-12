@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { computed, onErrorCaptured, ref, watch, type Component } from "vue";
+import {
+  reportFrontendFailure,
+  type FrontendFailureKind,
+} from "../../../shell/frontend-diagnostics";
 import type {
   DiagnosticsContribution,
   DiagnosticsPanelInteractions,
@@ -12,14 +16,32 @@ const props = defineProps<{
   interactions: DiagnosticsPanelInteractions;
 }>();
 const crashed = ref(false);
+const diagnosticId = ref<string>();
+const reported = new Set<FrontendFailureKind>();
+function report(kind: FrontendFailureKind, cause: unknown) {
+  if (reported.has(kind)) return;
+  reported.add(kind);
+  diagnosticId.value = reportFrontendFailure(
+    {
+      boundary: "administration.diagnostics",
+      contributionId: props.contribution.id,
+      version: props.contribution.version,
+    },
+    kind,
+    cause,
+  ).id;
+}
 watch(
   () => props.snapshots,
   () => {
     crashed.value = false;
+    reported.clear();
+    diagnosticId.value = undefined;
   },
 );
-onErrorCaptured(() => {
+onErrorCaptured((cause) => {
   crashed.value = true;
+  report("render", cause);
   return false;
 });
 const admitted = computed(() => {
@@ -36,7 +58,8 @@ const admitted = computed(() => {
   try {
     props.contribution.validate(snapshot.data);
     return snapshot;
-  } catch {
+  } catch (cause) {
+    report("admission", cause);
     return null;
   }
 });
@@ -45,6 +68,7 @@ const admitted = computed(() => {
   <section :id="`diagnostics-${contribution.id}`" :aria-label="contribution.title">
     <p v-if="crashed || !admitted" role="alert" class="border border-warning/40 bg-base-200 p-4">
       {{ contribution.title }} is unavailable. Refresh to try again.
+      <span v-if="diagnosticId" class="block text-xs">Reference: {{ diagnosticId }}</span>
     </p>
     <component
       v-else

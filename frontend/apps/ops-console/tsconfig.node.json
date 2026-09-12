@@ -3,7 +3,10 @@
     "vite*.config.*",
     "module-federation.config.ts",
     "../../tools/publication-metadata.ts",
-    "*.mjs"
+    "*.mjs",
+    "../../tools/release-build-output.mjs",
+    "../../tools/frontend-release-paths.mjs",
+    "../../tools/dev-services.ts"
   ],
   "compilerOptions": {
     "composite": true,

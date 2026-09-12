@@ -1,3 +1,7 @@
+import BrowserHost from "./BrowserHost.vue";
+import ApplicationShell from "./ApplicationShell.vue";
+import HostPage from "./HostPage.vue";
+import { lazyHostPage } from "./lazy-host-page";
 import type { Component } from "vue";
 import { inApplicationShell } from "./page-portal";
 import { FederatedFullPageSurface } from "./federated_full_page_surface";
@@ -10,9 +14,35 @@ import {
   InvitationAcceptancePanel,
 } from "../auth-and-navigation";
 
-const modules = import.meta.glob<{ default: Component }>("./**/*.vue", { eager: true });
-const pageNames = new Set(["FederatedFullPageSurface", "ApplicationHost"]);
 const components = new Map<string, Component>([
+  ["BrowserHost", BrowserHost],
+  ["ApplicationShell", ApplicationShell],
+  ["HostPage", HostPage],
+  [
+    "ApplicationHost",
+    inApplicationShell(lazyHostPage("ApplicationHost", () => import("./ApplicationHost.vue"))),
+  ],
+  ["StatusBadge", lazyHostPage("StatusBadge", () => import("./StatusBadge.vue"))],
+  ["UtcClock", lazyHostPage("UtcClock", () => import("./UtcClock.vue"))],
+  ["AuthLayoutBrand", lazyHostPage("AuthLayoutBrand", () => import("./AuthLayoutBrand.vue"))],
+  [
+    "ApplicationStats",
+    lazyHostPage("ApplicationStats", () => import("./application_host/ApplicationStats.vue")),
+  ],
+  [
+    "ApplicationNavigation",
+    lazyHostPage(
+      "ApplicationNavigation",
+      () => import("./application_host/ApplicationNavigation.vue"),
+    ),
+  ],
+  [
+    "ApplicationDiagnostics",
+    lazyHostPage(
+      "ApplicationDiagnostics",
+      () => import("./application_host/ApplicationDiagnostics.vue"),
+    ),
+  ],
   ["UserSession", inApplicationShell(SignInPanel)],
   ["AdminModePage", inApplicationShell(AdminModePanel)],
   ["NoOrganizationPage", inApplicationShell(OrganizationAccessPanel)],
@@ -22,13 +52,6 @@ const components = new Map<string, Component>([
   ["MissionApplicationManagement", inApplicationShell(MissionApplicationsPage)],
   ["SpacecraftApplicationManagement", inApplicationShell(SpacecraftApplicationsPage)],
 ]);
-for (const [path, module] of Object.entries(modules)) {
-  const filename = path.split("/").at(-1);
-  if (!filename) throw new Error(`Invalid host component path: ${path}`);
-  const name = filename.replace(/\.vue$/, "");
-  if (components.has(name)) throw new Error(`Duplicate host component: ${name}`);
-  components.set(name, pageNames.has(name) ? inApplicationShell(module.default) : module.default);
-}
 export function resolveHostComponent(name: string): Component {
   const component = components.get(name);
   if (!component) throw new Error(`Unknown host component: ${name}`);

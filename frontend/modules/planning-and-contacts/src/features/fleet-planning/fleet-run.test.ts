@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { required } from "../../../../../test-support/required";
 import {
   jsonFixture,
@@ -157,9 +158,9 @@ test("departed actions cannot apply a late receipt", async () => {
   expect(h.wrapper.find("#fleet-run-uncertain").exists()).toBe(true);
   h.wrapper.unmount();
 });
-test("producer-supplied fleet run workflow", async () => {
-  if (!process.env.CADENCE_FLEET_RUN) return;
-  const supplied = jsonFixture(process.env.CADENCE_FLEET_RUN);
+const producer = producerFixture("CADENCE_FLEET_RUN", import.meta.url);
+test.skipIf(!producer.available)("producer-supplied fleet run workflow", async () => {
+  const supplied = jsonFixture(producer.read());
   expect(admitFleetRun(supplied.model)).not.toBeNull();
   const h = harness(required(admitFleetRun(supplied.model)));
   if (supplied.action === "render") {

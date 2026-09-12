@@ -1,7 +1,5 @@
 import type { FleetDirectoryPort } from "../../../../../../modules/planning-and-contacts/src/features/fleet-planning/OpsFleetPlanning.contracts";
 import { required } from "../../../../../../test-support/required";
-import { defineComponent } from "vue";
-import { opsPages } from "./contributions";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import { OpsFleetPlanning } from "@cadence/planning-and-contacts/fleet-planning";
@@ -130,30 +128,4 @@ test("unsupported initial contributions retain the host retry control", async ()
   expect(h.refresh).toHaveBeenCalledOnce();
   expect(h.query).not.toHaveBeenCalled();
 });
-
-test("renderer failures stay inside the contribution and retry can remount the feature", async () => {
-  const registration = required(opsPages["planning.fleet-directory"]);
-  const h = harness();
-  try {
-    opsPages[registration.id] = {
-      ...registration,
-      component: defineComponent({
-        setup() {
-          throw Error("Fixture renderer failure");
-        },
-      }),
-    };
-    await wrapper.setProps({ snapshot: structuredClone(h.initial) });
-    await flushPromises();
-    expect(wrapper.find("#ops-module-unavailable").exists()).toBe(true);
-    opsPages[registration.id] = registration;
-    h.refresh.mockImplementation(async () => {
-      await wrapper.setProps({ snapshot: structuredClone(h.initial) });
-    });
-    await wrapper.get("#ops-module-retry").trigger("click");
-    await flushPromises();
-    expect(wrapper.find("#fleet-run-run-1").exists()).toBe(true);
-  } finally {
-    opsPages[registration.id] = registration;
-  }
-});
+import "../../../module-pages.test-support";

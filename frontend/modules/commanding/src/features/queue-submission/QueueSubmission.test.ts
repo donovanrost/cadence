@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { jsonFixture, fixtureContext } from "../../../../../test-support/json-fixture";
 import { required } from "../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
@@ -123,10 +124,11 @@ test("pending approval has no queue control", () => {
     c.wrapper.unmount();
   }
 });
-test.skipIf(!process.env.CADENCE_COMMAND_QUEUE_DOCUMENT)(
+const producer = producerFixture("CADENCE_COMMAND_QUEUE_DOCUMENT", import.meta.url);
+test.skipIf(!producer.available)(
   "actual producer yields the feature-owned queue action or receipt",
   async () => {
-    const raw = jsonFixture(required(process.env.CADENCE_COMMAND_QUEUE_DOCUMENT));
+    const raw = jsonFixture(required(producer.read()));
     const page = readQueuePage(raw.data, fixtureContext(raw.context)),
       c = mountPage(page);
     let captured: unknown;

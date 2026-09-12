@@ -4,10 +4,10 @@ import routes from "./routes.json";
 import { catalogPages } from "./catalog/pages";
 import { missionPages } from "./mission-and-spacecraft/pages";
 import { spacecraftPages } from "./mission-and-spacecraft/spacecraft-pages";
-import { spacecraftModulePages } from "./mission-and-spacecraft/features/module-pages/contributions";
-import { missionModulePages } from "./mission-and-spacecraft/features/module-pages/mission-contributions";
-import { opsPages } from "./ops-workspace/features/module-pages/contributions";
-import { organizationModulePages } from "./administration/features/module-pages/contributions";
+import { loadedSpacecraftPages as spacecraftModulePages } from "./module-pages.test-support";
+import { loadedMissionPages as missionModulePages } from "./module-pages.test-support";
+import { loadedOpsPages as opsPages } from "./module-pages.test-support";
+import { loadedOrganizationPages as organizationModulePages } from "./module-pages.test-support";
 import { resolveHostComponent } from "./shell/registry";
 test("requirement review captures exact version, run and page queries", () => {
   const route = required(
@@ -192,7 +192,8 @@ test("playlist composition binds its subject and bounded playback URL state", ()
   });
   expect(directory).not.toHaveProperty("application");
   expect(present).not.toHaveProperty("application");
-  expect(required(opsPages["dashboards.playlist-present"]).actions).toEqual([]);
+  expect(required(opsPages["dashboards.playlist-present"]).navigation).toBe("settled");
+  expect(required(opsPages["dashboards.playlist-present"]).actions).toBeUndefined();
   expect(required(opsPages["dashboards.playlists"]).actions).toEqual([
     "create_playlist",
     "reload_playlists",

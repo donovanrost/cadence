@@ -1,5 +1,4 @@
-import { spacecraftCommandingContribution } from "@cadence/commanding/spacecraft-commanding";
-import { spacecraftRoutingContribution } from "@cadence/communications/spacecraft-routing";
+import { createPageRegistry } from "../../../shell/module-pages/lazy-pages";
 import {
   SPACECRAFT_PAGE_SLOT,
   type SpacecraftPageContribution,
@@ -22,7 +21,17 @@ export function admitSpacecraftPages(items: readonly SpacecraftPageContribution<
   }
   return Object.freeze(Object.fromEntries(entries));
 }
-export const spacecraftModulePages = admitSpacecraftPages([
-  spacecraftRoutingContribution,
-  spacecraftCommandingContribution,
-]);
+export const spacecraftModulePages = createPageRegistry<SpacecraftPageContribution<Component>>(
+  "spacecraft.page",
+  {
+    "comms.spacecraft-routing": () =>
+      import("@cadence/communications/spacecraft-routing").then(
+        (module) => module.spacecraftRoutingContribution,
+      ),
+    "commanding.spacecraft": () =>
+      import("@cadence/commanding/spacecraft-commanding").then(
+        (module) => module.spacecraftCommandingContribution,
+      ),
+  },
+  admitSpacecraftPages,
+);

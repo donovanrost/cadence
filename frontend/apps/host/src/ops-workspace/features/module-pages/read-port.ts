@@ -3,8 +3,7 @@ import type {
   OpsPageReadPort,
   OpsPageReadRequest,
 } from "@cadence/plugin-sdk/ops-pages";
-const record = (value: unknown): value is Record<string, unknown> =>
-  !!value && typeof value === "object" && !Array.isArray(value);
+import { readPageEnvelope, validPageToken } from "../../../shell/module-pages/page-admission";
 
 /** The host admits the envelope only. Each feature interprets its own data. */
 export function createOpsReadPort(
@@ -14,32 +13,23 @@ export function createOpsReadPort(
   active: () => boolean,
   query?: (request: OpsPageReadRequest) => Promise<unknown>,
 ): OpsPageReadPort | undefined {
-  if (
-    !query ||
-    typeof token !== "string" ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(token)
-  )
-    return;
+  if (!query || !validPageToken(token)) return;
   const captured = { ...context };
   return {
     async read() {
       if (!active()) throw Error("Inactive Ops page read.");
       const result = await query({ id, token });
       if (!active()) throw Error("Inactive Ops page response.");
-      if (
-        !record(result) ||
-        result.id !== id ||
-        result.slot !== "ops.page" ||
-        result.version !== 1 ||
-        result.status !== "ready" ||
-        result.token !== token ||
-        !record(result.context) ||
-        result.context.organizationId !== captured.organizationId ||
-        result.context.missionId !== captured.missionId ||
-        result.context.resourceId !== captured.resourceId
-      )
+      try {
+        const envelope = readPageEnvelope(result, { id, slot: "ops.page", version: 1 }, captured, [
+          "organizationId",
+          "missionId",
+        ]);
+        if (envelope.token !== token) throw Error("Changed page token");
+        return envelope.data;
+      } catch {
         throw Error("Unavailable Ops page read.");
-      return result.data;
+      }
     },
   };
 }

@@ -1,3 +1,4 @@
+import "../../../module-pages.test-support";
 import type { FleetStartPort } from "../../../../../../modules/planning-and-contacts/src/features/fleet-planning/OpsFleetPlanningNew.contracts";
 import type { FleetRunPort } from "../../../../../../modules/planning-and-contacts/src/features/fleet-planning/OpsFleetPlanningRun.contracts";
 import { required } from "../../../../../../test-support/required";

@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { record } from "./policy-native-fixture.test-support";
 import { required, deferred } from "./policy-test-helpers";
 import { mount, flushPromises } from "@vue/test-utils";
@@ -13,6 +14,12 @@ const wrappers: { unmount(): void }[] = [];
 afterEach(() => wrappers.splice(0).forEach((w) => w.unmount()));
 function harness(page: PolicyPage = policyPageFixture()) {
   let server = structuredClone(page);
+  let leave = () => true;
+  const disposeGuard = vi.fn();
+  const guardNavigation = vi.fn((guard: () => boolean) => {
+    leave = guard;
+    return disposeGuard;
+  });
   const execute = vi.fn(
     async (action: string, input: Record<string, unknown>): Promise<unknown> => {
       const op = policyOperationFixture(server, action, input);
@@ -22,18 +29,85 @@ function harness(page: PolicyPage = policyPageFixture()) {
   );
   const read = vi.fn(async () => structuredClone(server));
   const wrapper = mount(fleetPolicyContribution.component, {
-    props: { page, port: { execute, navigate: vi.fn() }, readPort: { read } },
+    props: { page, port: { execute, navigate: vi.fn(), guardNavigation }, readPort: { read } },
   });
   wrappers.push(wrapper);
   return {
     wrapper,
     execute,
     read,
+    canLeave: () => leave(),
+    disposeGuard,
     get server() {
       return server;
     },
   };
 }
+test("a refreshed projection cancels an older read without inventing an unresolved mutation", async () => {
+  const h = harness();
+  const pending = deferred<PolicyPage>();
+  h.read.mockImplementationOnce(() => pending.promise);
+  await h.wrapper.get("#fleet-policy-refresh").trigger("click");
+  const next = {
+    ...h.server,
+    model: {
+      ...h.server.model,
+      identities: {
+        ...h.server.model.identities,
+        entries: h.server.model.identities.entries.map((identity) => ({
+          ...identity,
+          name: "Renamed identity",
+        })),
+      },
+    },
+  };
+  await h.wrapper.setProps({ page: next });
+  pending.resolve(h.server);
+  await flushPromises();
+  expect(h.wrapper.find("#fleet-policy-unconfirmed").exists()).toBe(false);
+  expect(h.wrapper.get("fieldset").attributes("disabled")).toBeUndefined();
+  expect(h.execute).not.toHaveBeenCalled();
+  expect(h.canLeave()).toBe(true);
+});
+
+test("an unresolved operation supplied on remount recovers its exact receipt without resubmission", async () => {
+  const initial = policyPageFixture();
+  const completed = policyOperationFixture(initial, "approve-policy", {
+    sequence: 1,
+    payload: {
+      decision: { reason: "Reviewed", policy_evidence: required(initial.model.current).reference },
+    },
+  });
+  const h = harness(
+    policyAfterOperation(initial, { ...completed, status: "unconfirmed", receipt: null }),
+  );
+  h.read.mockResolvedValueOnce(policyAfterOperation(initial, completed));
+  await h.wrapper.get("#fleet-policy-refresh").trigger("click");
+  await flushPromises();
+  expect(h.wrapper.find("#fleet-policy-unconfirmed").exists()).toBe(false);
+  expect(h.wrapper.find("#fleet-policy-operation-receipt").exists()).toBe(true);
+  expect(h.wrapper.get("fieldset").attributes("disabled")).toBeUndefined();
+  expect(h.execute).not.toHaveBeenCalled();
+});
+
+test("navigation waits for a submitted mutation while live projections can recover a lost reply", async () => {
+  const h = harness();
+  const pending = deferred<unknown>();
+  h.execute.mockImplementationOnce(() => pending.promise);
+  await h.wrapper.get("#fleet-policy-approval-reason").setValue("Exact draft");
+  await h.wrapper.get("#fleet-policy-approval-form").trigger("submit");
+  expect(h.canLeave()).toBe(false);
+  const [action, input] = required(h.execute.mock.calls[0]);
+  const completed = policyOperationFixture(h.server, action, input);
+  await h.wrapper.setProps({ page: policyAfterOperation(h.server, completed) });
+  pending.reject(Error("Lost reply"));
+  await flushPromises();
+  expect(h.wrapper.find("#fleet-policy-unconfirmed").exists()).toBe(false);
+  expect(h.wrapper.find("#fleet-policy-operation-receipt").exists()).toBe(true);
+  expect(h.canLeave()).toBe(true);
+  h.wrapper.unmount();
+  expect(h.disposeGuard).toHaveBeenCalledOnce();
+});
 test("semantic policy admission rejects impossible dates and unsafe identity text", () => {
   const page = policyPageFixture();
   const invalidDate = structuredClone(page);
@@ -158,48 +232,51 @@ test("policy and grant receipt admission rejects a substituted outcome", () => {
     }),
   ).toThrow();
 });
-test("producer-supplied policy contribution sends native payloads and admits completed receipts", async () => {
-  if (!process.env.CADENCE_POLICY_WORKFLOW) return;
-  const supplied = record(JSON.parse(process.env.CADENCE_POLICY_WORKFLOW));
-  const snapshot = record(supplied.snapshot);
-  const page = required(admitPolicyPage(snapshot.data));
-  const context = record(snapshot.context);
-  if (
-    typeof context.organizationId !== "string" ||
-    typeof context.missionId !== "string" ||
-    context.resourceId !== undefined
-  )
-    throw Error("Invalid producer context");
-  expect(
-    fleetPolicyContribution.read(page, {
-      organizationId: context.organizationId,
-      missionId: context.missionId,
-    }),
-  ).toHaveProperty("page");
-  if (typeof supplied.action !== "string") throw Error("Missing producer action");
-  const h = harness(page);
-  h.execute.mockImplementation(async (action, input) => {
-    if (action.startsWith("validate-")) return policyOperationFixture(page, action, input);
-    if (supplied.operation) return supplied.operation;
-    throw Error("Captured payload");
-  });
-  const selectors: Record<string, [string, string]> = {
-    "save-policy": ["#policy-requirement-concurrency", "#fleet-policy-form"],
-    "approve-policy": ["#fleet-policy-approval-reason", "#fleet-policy-approval-form"],
-    "issue-grant": ["#grant-approval-reason", "#automation-grant-form"],
-    "revoke-grant": ["#revoke-automation-grant-reason", "#automation-grant-revocation-form"],
-  };
-  const [field, form] = required(selectors[supplied.action]);
-  await h.wrapper
-    .get(field)
-    .setValue(supplied.action === "save-policy" ? "5" : "Reviewed exact producer evidence");
-  await flushPromises();
-  await h.wrapper.get(form).trigger("submit");
-  await flushPromises();
-  const call = h.execute.mock.calls.find((c) => c[0] === supplied.action);
-  expect(call).toBeDefined();
-  if (supplied.operation)
-    expect(h.wrapper.find("#fleet-policy-operation-receipt").exists()).toBe(true);
-  process.stdout.write(`POLICY_CONTRIBUTION_COMMANDS=${JSON.stringify(h.execute.mock.calls)}\n`);
-  process.stdout.write(`POLICY_CONTRIBUTION_INPUT=${JSON.stringify(required(call)[1])}\n`);
-});
+const producer = producerFixture("CADENCE_POLICY_WORKFLOW", import.meta.url);
+test.skipIf(!producer.available)(
+  "producer-supplied policy contribution sends native payloads and admits completed receipts",
+  async () => {
+    const supplied = record(JSON.parse(producer.read()));
+    const snapshot = record(supplied.snapshot);
+    const page = required(admitPolicyPage(snapshot.data));
+    const context = record(snapshot.context);
+    if (
+      typeof context.organizationId !== "string" ||
+      typeof context.missionId !== "string" ||
+      context.resourceId !== undefined
+    )
+      throw Error("Invalid producer context");
+    expect(
+      fleetPolicyContribution.read(page, {
+        organizationId: context.organizationId,
+        missionId: context.missionId,
+      }),
+    ).toHaveProperty("page");
+    if (typeof supplied.action !== "string") throw Error("Missing producer action");
+    const h = harness(page);
+    h.execute.mockImplementation(async (action, input) => {
+      if (action.startsWith("validate-")) return policyOperationFixture(page, action, input);
+      if (supplied.operation) return supplied.operation;
+      throw Error("Captured payload");
+    });
+    const selectors: Record<string, [string, string]> = {
+      "save-policy": ["#policy-requirement-concurrency", "#fleet-policy-form"],
+      "approve-policy": ["#fleet-policy-approval-reason", "#fleet-policy-approval-form"],
+      "issue-grant": ["#grant-approval-reason", "#automation-grant-form"],
+      "revoke-grant": ["#revoke-automation-grant-reason", "#automation-grant-revocation-form"],
+    };
+    const [field, form] = required(selectors[supplied.action]);
+    await h.wrapper
+      .get(field)
+      .setValue(supplied.action === "save-policy" ? "5" : "Reviewed exact producer evidence");
+    await flushPromises();
+    await h.wrapper.get(form).trigger("submit");
+    await flushPromises();
+    const call = h.execute.mock.calls.find((c) => c[0] === supplied.action);
+    expect(call).toBeDefined();
+    if (supplied.operation)
+      expect(h.wrapper.find("#fleet-policy-operation-receipt").exists()).toBe(true);
+    process.stdout.write(`POLICY_CONTRIBUTION_COMMANDS=${JSON.stringify(h.execute.mock.calls)}\n`);
+    process.stdout.write(`POLICY_CONTRIBUTION_INPUT=${JSON.stringify(required(call)[1])}\n`);
+  },
+);

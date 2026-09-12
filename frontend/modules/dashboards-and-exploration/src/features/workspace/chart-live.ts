@@ -28,9 +28,25 @@ export class ChartLive {
     this.liveEdge = this.buildLiveEdge();
   }
   destroy() {
+    this.reset();
+    this.liveEdge.remove();
+  }
+  reset() {
     clearTimeout(this.liveHeartbeatTimer);
     clearTimeout(this.liveArrivalTimer);
-    this.liveEdge.remove();
+    this.liveHeartbeatObserved = false;
+    this.liveHeartbeatCurrent = false;
+    this.liveReceivingSamples = false;
+    this.liveArrivalSequence = 0;
+    this.liveEdge.classList.remove("is-receiving");
+    for (const key of [
+      "liveHeartbeatAtMs",
+      "liveRefreshIntervalMs",
+      "liveArrivalCount",
+      "liveArrivalSequence",
+      "liveLastSampleAtMs",
+    ])
+      delete this.surface.el.dataset[key];
   }
   buildLiveEdge() {
     const edge = document.createElement("div");

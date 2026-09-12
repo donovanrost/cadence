@@ -323,6 +323,9 @@ defmodule Cadence.CommandingVerifierSchedulerTest do
 
   defp release_scheduler_bootstrap(scheduler_pid) do
     send(scheduler_pid, :release_scheduler_bootstrap)
+    # Bootstrap queries the database before emitting telemetry. Wait for its continuation
+    # to finish so the event assertion measures delivery after initialization is ready.
+    assert %{} = VerifierScheduler.snapshot(scheduler_pid)
   end
 
   defp attach_scheduler_telemetry do

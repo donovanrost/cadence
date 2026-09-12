@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { required } from "../../../../../test-support/required";
 import {
   jsonFixture,
@@ -77,9 +78,9 @@ test("the start adapter preserves reviewed native payloads and successful receip
   wrapper.unmount();
 });
 
-test("producer-supplied host fleet workflow", async () => {
-  if (!process.env.CADENCE_FLEET_WORKFLOW) return;
-  const supplied = jsonFixture(process.env.CADENCE_FLEET_WORKFLOW);
+const producer = producerFixture("CADENCE_FLEET_WORKFLOW", import.meta.url);
+test.skipIf(!producer.available)("producer-supplied host fleet workflow", async () => {
+  const supplied = jsonFixture(producer.read());
   const snapshot = fixtureRecord(supplied.snapshot),
     rawContext = fixtureRecord(snapshot.context);
   const context = {

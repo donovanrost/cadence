@@ -2773,7 +2773,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     /** @param {string} referenceId */
     confirmRemoteFailureDiagnostic(referenceId) {
       assert.match(referenceId, /^[0-9a-f-]{36}$/);
-      const expected = `Cadence federation failure ${referenceId} Object`;
+      const expected = `[Cadence frontend failure] ${referenceId} Object`;
       const matches = consoleErrors.flatMap((value, index) =>
         value === expected && !confirmedRemoteFailureDiagnostics.has(index) ? [index] : [],
       );
@@ -5207,8 +5207,15 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       applicationKey: "ops_console",
       surfaceId: "dashboard_directory",
       expectedScope: "mission",
-      readyExpression:
-        "Boolean(document.querySelector('#ops-console-application[data-ops-console-surface=\"dashboard_directory\"]') && document.querySelector('#ops-dashboards-page') && !document.querySelector('#ops-console-error') && !document.querySelector('#remote-error'))",
+      readyExpression: `(() => {
+        const link = document.querySelector('#dashboard-directory-destination-open');
+        if (!(link instanceof HTMLAnchorElement)) return false;
+        const destination = new URL(link.href);
+        return Boolean(document.querySelector('#ops-console-application[data-ops-console-surface="dashboard_directory"]') &&
+          destination.origin === location.origin &&
+          destination.pathname === ${JSON.stringify(`/missions/${encodeURIComponent(missionId)}/ops/dashboards`)} &&
+          !document.querySelector('#ops-console-error') && !document.querySelector('#remote-error'));
+      })()`,
       catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
       queryPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`,
       queryId: "cadence.ops.dashboard_directory",

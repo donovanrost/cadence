@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import {
   fixtureRecord,
   fixtureString,
@@ -249,9 +250,9 @@ test("contracts reject foreign receipts, changed defaults and malformed ledgers"
   op.receipt.result.reference.version = 2;
   expect(admitTemplateOperation(op, initial.model.context)).toBeNull();
 });
-test("producer supplied native template contribution", async () => {
-  if (!process.env.CADENCE_TEMPLATE_WORKFLOW) return;
-  const supplied = jsonFixture(process.env.CADENCE_TEMPLATE_WORKFLOW),
+const producer = producerFixture("CADENCE_TEMPLATE_WORKFLOW", import.meta.url);
+test.skipIf(!producer.available)("producer supplied native template contribution", async () => {
+  const supplied = jsonFixture(producer.read()),
     snapshot = fixtureRecord(supplied.snapshot),
     props = contribution.read(snapshot.data, fixtureContext(snapshot.context)),
     page = required(admitTemplatePage(props.page));

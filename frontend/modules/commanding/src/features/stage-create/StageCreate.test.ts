@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { jsonFixture, fixtureContext } from "../../../../../test-support/json-fixture";
 import { required } from "../../../../../test-support/required";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -82,11 +83,11 @@ test("creation bounds Unicode and binds receipt actor and reserved stage", () =>
     ),
   ).toThrow();
 });
-test.runIf(!!process.env.CADENCE_COMMAND_STAGES_DOCUMENT)(
+const producer = producerFixture("CADENCE_COMMAND_STAGES_DOCUMENT", import.meta.url);
+test.skipIf(!producer.available)(
   "actual producer stage creation controls yield the Phoenix input",
   async () => {
-    const source = process.env.CADENCE_COMMAND_STAGES_DOCUMENT;
-    if (!source) return;
+    const source = producer.read();
     const document = jsonFixture(readFileSync(source, "utf8")),
       page = readCreationPage(document.data, fixtureContext(document.context)),
       execute = vi.fn(async (_event: string, _input: Record<string, unknown>) => ({

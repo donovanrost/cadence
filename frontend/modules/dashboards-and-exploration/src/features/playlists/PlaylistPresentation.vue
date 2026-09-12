@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { OpsPageContext, OpsPagePort } from "@cadence/plugin-sdk/ops-pages";
+import type { OpsPageContext, SettledOpsPageNavigationPort } from "@cadence/plugin-sdk/ops-pages";
 import { WorkspaceSnapshotCanvas } from "../../workspace";
 import type { Presentation } from "./contracts";
 import { usePlaylistPlayback } from "./usePlaylistPlayback";
@@ -8,10 +8,10 @@ defineOptions({ inheritAttrs: false });
 const props = defineProps<{
   model: Presentation;
   context: OpsPageContext;
-  port: OpsPagePort;
+  port: SettledOpsPageNavigationPort;
   refresh: () => Promise<void>;
 }>();
-const { playing, advancing, base, step, toggle, navigate } = usePlaylistPlayback(props);
+const { playing, advancing, notice, base, step, toggle, navigate } = usePlaylistPlayback(props);
 const dashboardContext = computed(() => ({ ...props.context, resourceId: props.model.current.id }));
 </script>
 <template>
@@ -62,7 +62,10 @@ const dashboardContext = computed(() => ({ ...props.context, resourceId: props.m
       >
     </div>
     <p v-if="advancing" id="playlist-advancing" role="status" class="text-sm text-warning">
-      Loading the next entry. If navigation fails, refresh to retry.
+      Loading the next entry.
+    </p>
+    <p v-if="notice" id="playlist-navigation-notice" role="status" class="text-sm text-warning">
+      {{ notice }}
     </p>
     <WorkspaceSnapshotCanvas
       v-if="model.current.snapshot"

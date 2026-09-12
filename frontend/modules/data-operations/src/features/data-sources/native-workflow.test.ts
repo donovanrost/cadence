@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
 import { required } from "../../../../../test-support/required";
 import { fixtureRecord, jsonFixture } from "../../../../../test-support/json-fixture";
@@ -314,9 +315,9 @@ test("reader and shared definitions expose no administrative controls", () => {
     w.unmount();
   }
 });
-test("producer supplied native source contribution", async () => {
-  if (!process.env.CADENCE_SOURCES) return;
-  const supplied = jsonFixture(process.env.CADENCE_SOURCES),
+const producer = producerFixture("CADENCE_SOURCES", import.meta.url);
+test.skipIf(!producer.available)("producer supplied native source contribution", async () => {
+  const supplied = jsonFixture(producer.read()),
     snapshot = fixtureRecord(supplied.snapshot),
     raw = fixtureRecord(snapshot.data),
     model = fixtureRecord(raw.model),

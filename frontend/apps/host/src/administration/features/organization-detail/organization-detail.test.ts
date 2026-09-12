@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../../test-support/producer-fixture";
 import { jsonFixture, fixtureRecord } from "../../../../../../test-support/json-fixture";
 import { writeFileSync } from "node:fs";
 import OrganizationInvitePanel from "../organization-invite/OrganizationInvitePanel.vue";
@@ -191,50 +192,53 @@ test("uncertain issuance survives refresh without replay and curated duplicate e
   wrapper.unmount();
 });
 
-test("actual producer documents drive organization facts and reviewed submissions", async () => {
-  const encoded = process.env.CADENCE_PLATFORM_DETAIL_DOCUMENT;
-  if (!encoded) return;
-  const data = jsonFixture(encoded);
-  const userId = fixtureRecord(data.detail).user_id;
-  const organizationId = fixtureRecord(fixtureRecord(data.detail).organization).id;
-  const calls: { event: string; input: Record<string, unknown> }[] = [];
-  const act = vi.fn(async (event: string, input: Record<string, unknown>) => {
-    calls.push({ event, input });
-    return { status: "unavailable" };
-  });
-  const detailModel = readOrganizationDetail(data.detail, userId, organizationId);
-  const detail = mount(OrganizationDetailPanel, {
-    props: {
-      model: detailModel,
-      csrfToken: "probe-csrf",
-      act,
-      refresh: vi.fn(),
-    },
-  });
-  for (const row of detailModel.members.entries)
-    expect(detail.get(`#organization-member-${row.id}`).text()).toContain(row.email);
-  expect(detail.get('#open-organization-form [name="organization_id"]').attributes("value")).toBe(
-    organizationId,
-  );
-  await detail.get("#service_identity_display_name").setValue("Issued through the real form");
-  await detail.get("#service_identity_id").setValue("producer-vue-service");
-  await detail.get("#service-identity-form").trigger("submit");
-  const invitation = mount(OrganizationInvitePanel, {
-    props: {
-      model: readOrganizationInvite(data.invite, userId, organizationId),
-      act,
-      refresh: vi.fn(),
-    },
-  });
-  await invitation.get("#invite_email").setValue(data.recipient_email);
-  await invitation.get("#invite_display_name").setValue("Reviewed operator");
-  await invitation.get("#invite_membership_role").setValue("organization_admin");
-  await invitation.get("#invite_grant_platform_admin").setValue(true);
-  await invitation.get("#invite-form").trigger("submit");
-  await flushPromises();
-  expect(calls.map((call) => call.event)).toEqual(["issue_service_identity", "invite"]);
-  if (!process.env.CADENCE_PLATFORM_INPUT_FILE) throw Error("Missing probe output file");
-  writeFileSync(process.env.CADENCE_PLATFORM_INPUT_FILE, JSON.stringify(calls));
-  detail.unmount();
-  invitation.unmount();
-});
+const producer = producerFixture("CADENCE_PLATFORM_DETAIL_DOCUMENT", import.meta.url);
+test.skipIf(!producer.available)(
+  "actual producer documents drive organization facts and reviewed submissions",
+  async () => {
+    const encoded = producer.read();
+    const data = jsonFixture(encoded);
+    const userId = fixtureRecord(data.detail).user_id;
+    const organizationId = fixtureRecord(fixtureRecord(data.detail).organization).id;
+    const calls: { event: string; input: Record<string, unknown> }[] = [];
+    const act = vi.fn(async (event: string, input: Record<string, unknown>) => {
+      calls.push({ event, input });
+      return { status: "unavailable" };
+    });
+    const detailModel = readOrganizationDetail(data.detail, userId, organizationId);
+    const detail = mount(OrganizationDetailPanel, {
+      props: {
+        model: detailModel,
+        csrfToken: "probe-csrf",
+        act,
+        refresh: vi.fn(),
+      },
+    });
+    for (const row of detailModel.members.entries)
+      expect(detail.get(`#organization-member-${row.id}`).text()).toContain(row.email);
+    expect(detail.get('#open-organization-form [name="organization_id"]').attributes("value")).toBe(
+      organizationId,
+    );
+    await detail.get("#service_identity_display_name").setValue("Issued through the real form");
+    await detail.get("#service_identity_id").setValue("producer-vue-service");
+    await detail.get("#service-identity-form").trigger("submit");
+    const invitation = mount(OrganizationInvitePanel, {
+      props: {
+        model: readOrganizationInvite(data.invite, userId, organizationId),
+        act,
+        refresh: vi.fn(),
+      },
+    });
+    await invitation.get("#invite_email").setValue(data.recipient_email);
+    await invitation.get("#invite_display_name").setValue("Reviewed operator");
+    await invitation.get("#invite_membership_role").setValue("organization_admin");
+    await invitation.get("#invite_grant_platform_admin").setValue(true);
+    await invitation.get("#invite-form").trigger("submit");
+    await flushPromises();
+    expect(calls.map((call) => call.event)).toEqual(["issue_service_identity", "invite"]);
+    if (!process.env.CADENCE_PLATFORM_INPUT_FILE) throw Error("Missing probe output file");
+    writeFileSync(process.env.CADENCE_PLATFORM_INPUT_FILE, JSON.stringify(calls));
+    detail.unmount();
+    invitation.unmount();
+  },
+);

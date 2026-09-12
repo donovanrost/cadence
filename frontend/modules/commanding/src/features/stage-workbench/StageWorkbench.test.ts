@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { containing } from "../../../../../test-support/matchers";
 import {
   jsonFixture,
@@ -280,11 +281,11 @@ test("foreign contexts, privacy claims, cursor ties, forged receipts and malform
     expect(() => readWorkbenchPage(next, p.workbench.context)).toThrow();
   }
 });
-test.runIf(!!process.env.CADENCE_COMMAND_STAGES_DOCUMENT)(
+const producer = producerFixture("CADENCE_COMMAND_STAGES_DOCUMENT", import.meta.url);
+test.skipIf(!producer.available)(
   "actual producer stage workbench controls yield finite Phoenix actions",
   async () => {
-    const source = process.env.CADENCE_COMMAND_STAGES_DOCUMENT;
-    if (!source) return;
+    const source = producer.read();
     const document = jsonFixture(readFileSync(source, "utf8")),
       page = readWorkbenchPage(document.data, fixtureContext(document.context)),
       execute = vi.fn(async (_event: string, _input: Record<string, unknown>) => ({

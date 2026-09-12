@@ -131,7 +131,7 @@ await runBrowserGate(["--login-email", email, "--scenario-timeout-ms", "60000"],
       "admin shell",
     );
     await waitFor(
-      "!!document.querySelector('[data-mounted-surface=admin_home]') && document.querySelector('#host-page-heading')?.dataset.pageHeadingSource === 'application'",
+      "!!document.querySelector('#host-page-content #admin-home') && !!document.querySelector('#admin-home-organizations-link[href=\"/admin/organizations\"]') && document.querySelector('#host-page-heading')?.dataset.pageHeadingSource === 'application'",
       "admin dashboard",
     );
 

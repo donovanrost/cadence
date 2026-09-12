@@ -1,4 +1,5 @@
-import { anyInstanceOf, containing, matchingString } from "../../../test-support/matchers";
+import { containing } from "../../../test-support/matchers";
+import { readFrontendDiagnostic } from "./shell/frontend-diagnostics";
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
@@ -116,15 +117,18 @@ describe("RemoteApplicationBoundary", () => {
     expect(wrapper.find("#remote-error-reference").text()).toMatch(/^Reference ID: [0-9a-f-]{36}$/);
     expect(wrapper.find("#retry-remote").exists()).toBe(true);
     expect(wrapper.find("#remote-fallback").attributes("href")).toBe("/missions/mission-1/comms");
+    const reference = wrapper.get("#remote-error-reference").text().replace("Reference ID: ", "");
     expect(consoleError).toHaveBeenCalledWith(
-      matchingString(/^Cadence federation failure [0-9a-f-]{36}$/),
+      `[Cadence frontend failure] ${reference}`,
       containing({
-        applicationKey: "comms_overview",
+        contributionId: "comms_overview.overview",
         releaseId: "2026.08.29.1",
-        surfaceId: "overview",
-        reason: anyInstanceOf(Error),
+        kind: "load",
+        errorType: "Error",
       }),
     );
+    expect(readFrontendDiagnostic(reference)?.cause).toBeInstanceOf(Error);
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("internal");
     expect(wrapper.find("#remote-loading").exists()).toBe(false);
     await wrapper.find("#retry-remote").trigger("click");
     expect(wrapper.emitted("retry")).toHaveLength(1);

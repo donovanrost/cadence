@@ -1,3 +1,4 @@
+import "../module-pages.test-support";
 import { containing } from "../../../../test-support/matchers";
 import { registrationValues } from "../../../../modules/communications/src/features/provider-accounts/registration.validation";
 import { nativeElement, required } from "../../../../test-support/mounted-contract";
@@ -172,6 +173,16 @@ function diagnosticsSnapshot(path: string) {
 }
 let wrapper: VueWrapper | undefined;
 const view = () => required(wrapper);
+async function flushHostUpdates() {
+  await flushPromises();
+  if (wrapper)
+    await vi.waitFor(
+      () => {
+        expect(view().find("[data-host-page-loading]").exists()).toBe(false);
+      },
+      { timeout: 5_000 },
+    );
+}
 test("compiled command focus and filters retain Ops rails and restore through history", async () => {
   await start();
   const base = "/missions/mission-1/ops/commands";
@@ -198,7 +209,7 @@ test("compiled command focus and filters retain Ops rails and restore through hi
   const rail = view().get("#ops-nav-rail").element;
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   await view().get('[data-command-follow="request-a"]').trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   const focused = base + "?focus_command_id=request-a";
   expect(transport.requests[1]).toMatchObject({
     event: "host:context",
@@ -210,13 +221,13 @@ test("compiled command focus and filters retain Ops rails and restore through hi
   );
   await view().get("#command-monitor-query").setValue("NOOP");
   await view().get("#command-monitor-filters").trigger("submit");
-  await flushPromises();
+  await flushHostUpdates();
   const filtered = base + "?query=NOOP&focus_command_id=request-a";
   expect(requestedPath(2)).toBe(filtered);
   await reply(2, stateAt(filtered));
   expect(view().get("#ops-nav-rail").element).toBe(rail);
   hostBrowserHistory.go(-1);
-  await flushPromises();
+  await flushHostUpdates();
   expect(requestedPath(3)).toBe(focused);
   await reply(3, stateAt(focused));
   expect(
@@ -243,7 +254,7 @@ test("unavailable command refresh hides stale evidence and permits a read-only r
   await reply(0, { ...snapshot(path, "mission-1"), ops_page: page });
   const rail = view().get("#ops-nav-rail").element;
   await view().get("#command-monitor-refresh").trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   await reply(1, {
     ...snapshot(path, "mission-1"),
     ops_page: { ...page, status: "unavailable", data: undefined },
@@ -251,7 +262,7 @@ test("unavailable command refresh hides stale evidence and permits a read-only r
   expect(view().find("[data-command-request]").exists()).toBe(false);
   expect(view().find("#ops-module-unavailable").exists()).toBe(true);
   await view().get("#ops-module-retry").trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   expect(transport.requests[2]).toMatchObject({ event: "host:context", payload: { path } });
   await reply(2, { ...snapshot(path, "mission-1"), ops_page: page });
   expect(view().find('[data-command-request="request-a"]').exists()).toBe(true);
@@ -278,7 +289,7 @@ test("Explore opens its admitted origin through host navigation and restores the
   const rail = view().get("#ops-nav-rail").element;
   const origin = "/missions/mission-1/ops/dashboards/origin";
   await view().get("#exploration-open-origin").trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   expect(transport.requests[1]).toMatchObject({ event: "host:context", payload: { path: origin } });
   await reply(1, {
     ...snapshot(origin, "mission-1"),
@@ -300,7 +311,7 @@ test("Explore opens its admitted origin through host navigation and restores the
   expect(view().get('[data-workspace-value="battery"]').text()).toBe("28.40");
   expect(view().get("#ops-nav-rail").element).toBe(rail);
   hostBrowserHistory.go(-1);
-  await flushPromises();
+  await flushHostUpdates();
   expect(requestedPath(2)).toBe(path);
   await reply(2, state);
   expect(view().get("#exploration-open-origin").attributes("href")).toBe(origin);
@@ -334,7 +345,7 @@ test("compiled Explore navigates real query and sample identities through host h
   expect(view().find("#ops-module-unavailable").exists()).toBe(false);
   const rail = view().get("#ops-nav-rail").element;
   await view().get("#exploration-results button").trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   const selected = requestedPath(1);
   const query = new URL(selected, "https://cadence.test").searchParams;
   expect(query.get("sample_id")).toBe("sample/one");
@@ -350,14 +361,14 @@ test("compiled Explore navigates real query and sample identities through host h
   expect(view().get("#exploration-sample-raw_value").text()).toBe('{"adc":1234}');
   expect(view().get("#exploration-sample-receipt").text()).toBe("2026-09-07T11:59:59.654321Z");
   hostBrowserHistory.go(-1);
-  await flushPromises();
+  await flushHostUpdates();
   expect(requestedPath(2)).toBe(base);
   await reply(2, stateAt(base));
   expect(view().find("#exploration-selection").exists()).toBe(false);
   expect(view().find("#exploration-sample-details").exists()).toBe(false);
   await view().get("#exploration-source_binding_id").setValue("binding+b");
   await view().get("#exploration-query").trigger("submit");
-  await flushPromises();
+  await flushHostUpdates();
   const changed = requestedPath(3);
   expect(new URL(changed, "https://cadence.test").searchParams.get("source_binding_id")).toBe(
     "binding+b",
@@ -368,7 +379,7 @@ test("compiled Explore navigates real query and sample identities through host h
   expect(view().find("#ops-module-unavailable").exists()).toBe(true);
   expect(view().find("#exploration-results").exists()).toBe(false);
   await view().get("#ops-module-retry").trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   expect(requestedPath(4)).toBe(changed);
   await reply(4, stateAt(changed));
   expect(
@@ -377,18 +388,18 @@ test("compiled Explore navigates real query and sample identities through host h
   ).toBe("binding+b");
   expect(view().get("#ops-nav-rail").element).toBe(rail);
   await view().get("#exploration-reload").trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   expect(transport.requests).toHaveLength(6);
   await click("/missions/mission-1/ops/dashboards");
   hostBrowserHistory.go(-1);
-  await flushPromises();
+  await flushHostUpdates();
   expect(transport.requests).toHaveLength(6);
   required(required(transport.requests[5]).reply)({ ok: false });
-  await flushPromises();
+  await flushHostUpdates();
   expect(view().find("#exploration-refresh-failed").exists()).toBe(true);
   expect(view().find("#exploration-results").exists()).toBe(false);
   await view().get("#exploration-reload").trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   const revoked = stateAt(changed);
   revoked.ops_page = { ...revoked.ops_page, status: "unavailable" };
   // @ts-expect-error The malformed producer omits the required page payload.
@@ -427,7 +438,7 @@ test("compiled diagnostics selects through host URLs, restores history and keeps
   await view()
     .get(`#diagnostics-row-${"a".repeat(64)}`)
     .trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   const selectedPath = requestedPath(1);
   const selection = { ...data.selection, row: "a".repeat(64) };
   expect(new URL(selectedPath, "http://cadence.test").searchParams.get("row")).toBe(selection.row);
@@ -436,12 +447,12 @@ test("compiled diagnostics selects through host URLs, restores history and keeps
     view().get<HTMLInputElement | HTMLSelectElement>("#diagnostic-identity").element.value,
   ).toBe("dashboard");
   await view().get("#diagnostics-collection-frames").trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   const framesPath = requestedPath(2);
   await reply(2, stateAt(framesPath, { collection: "frames", row: null, filter: "" }));
   expect(view().get("#diagnostics-collection-frames").attributes("aria-current")).toBe("true");
   hostBrowserHistory.go(-1);
-  await flushPromises();
+  await flushHostUpdates();
   expect(requestedPath(3)).toBe(selectedPath);
   await reply(3, stateAt(selectedPath, selection));
   expect(
@@ -477,7 +488,7 @@ test("the compiled editor guards host navigation and back without losing its dra
     expect(confirm).toHaveBeenCalledOnce();
     expect(transport.requests).toHaveLength(1);
     hostBrowserHistory.go(-1);
-    await flushPromises();
+    await flushHostUpdates();
     expect(confirm).toHaveBeenCalledTimes(2);
     expect(transport.requests).toHaveLength(1);
     expect(view().get<HTMLInputElement | HTMLSelectElement>("#editor-name").element.value).toBe(
@@ -548,7 +559,7 @@ test("the compiled editor stages, retains dirty guards after host refresh, and o
     await view().setProps({
       snapshot: { ...state, ops_page: { ...state.ops_page, data: staged } },
     });
-    await flushPromises();
+    await flushHostUpdates();
     await view().get("#editor-runtime").trigger("click");
     expect(confirm).not.toHaveBeenCalled();
     await click("/missions/mission-1/ops/dashboards");
@@ -592,7 +603,7 @@ test("the compiled editor stages, retains dirty guards after host refresh, and o
     expect(view().find("#ops-module-unavailable").exists()).toBe(false);
     expect(view().find("#dashboard-editor-form").exists()).toBe(false);
     hostBrowserHistory.go(-1);
-    await flushPromises();
+    await flushHostUpdates();
     expect(transport.requests[4]).toMatchObject({ event: "host:context", payload: { path } });
     const reopened = structuredClone(saved);
     Object.assign(reopened, { sequence: 0, revision: 0 });
@@ -652,7 +663,7 @@ test("dashboard directory uses the Ops port and preserves the workspace through 
   wrapper = mount(BrowserHost, {
     props: { snapshot: state },
   });
-  await flushPromises();
+  await flushHostUpdates();
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   const rail = view().get("#ops-nav-rail").element;
   await view().get("#restore-dashboard-2").trigger("click");
@@ -706,7 +717,7 @@ test("the compiled dashboard viewer binds the path resource and keeps the Ops fr
   wrapper = mount(BrowserHost, {
     props: { snapshot: state },
   });
-  await flushPromises();
+  await flushHostUpdates();
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   expect(view().get('[data-workspace-value="battery"]').text()).toBe("28.40");
   const rail = view().get("#ops-nav-rail").element,
@@ -718,12 +729,12 @@ test("the compiled dashboard viewer binds the path resource and keeps the Ops fr
   expect(view().get(".grid-stack").element).toBe(grid);
   await view().get("#dashboard-viewer-mode").setValue("live");
   await view().get("#dashboard-viewer-realm").setValue("rehearsal");
-  await flushPromises();
+  await flushHostUpdates();
   expect(
     view().get<HTMLInputElement | HTMLSelectElement>("#dashboard-viewer-realm").element.value,
   ).toBe("rehearsal");
   await view().get("#dashboard-viewer-context-form").trigger("submit");
-  await flushPromises();
+  await flushHostUpdates();
   expect(requestedPath(1)).toContain("time_mode=live");
   expect(requestedPath(1)).toContain("realm=rehearsal");
   const nextPath = requestedPath(1);
@@ -756,7 +767,7 @@ test("dashboard creation uses the token-bound Ops port and retains its lock on h
   wrapper = mount(BrowserHost, {
     props: { snapshot: state },
   });
-  await flushPromises();
+  await flushHostUpdates();
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   const rail = view().get("#ops-nav-rail").element;
   const name = view().get<HTMLInputElement>("#dashboard-name").element;
@@ -806,7 +817,7 @@ test("provider creation and detail share the mission host port without loading a
   wrapper = mount(BrowserHost, {
     props: { snapshot: state },
   });
-  await flushPromises();
+  await flushHostUpdates();
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   await view().get("#mission-provider-form").trigger("submit");
   expect(transport.requests[0]).toEqual(
@@ -854,7 +865,7 @@ test("mission setup uses page-bound host actions and only confirmed saves naviga
   wrapper = mount(BrowserHost, {
     props: { snapshot: state },
   });
-  await flushPromises();
+  await flushHostUpdates();
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   await view().get("#ground_station_display_name").setValue("Host station");
   expect(transport.requests[0]).toEqual(
@@ -888,7 +899,7 @@ test("mission setup uses page-bound host actions and only confirmed saves naviga
 test("pending navigation rejects old mission actions and late save replies cannot navigate", async () => {
   const state = setupSnapshot();
   wrapper = mount(BrowserHost, { attachTo: document.body, props: { snapshot: state } });
-  await flushPromises();
+  await flushHostUpdates();
   const hostAction = required(view().getComponent(MissionModulePage).props("execute"));
   const payload = {
     id: state.mission_module_page.id,
@@ -926,7 +937,7 @@ test("organization directory composes Communications and recovers without a fede
   wrapper = mount(BrowserHost, {
     props: { snapshot: state },
   });
-  await flushPromises();
+  await flushHostUpdates();
   expect(view().find("#organization-module-unavailable").exists()).toBe(true);
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   await view().get("#organization-module-retry").trigger("click");
@@ -953,7 +964,7 @@ test("registration uses page-bound host actions and navigates only after a confi
   wrapper = mount(BrowserHost, {
     props: { snapshot: state },
   });
-  await flushPromises();
+  await flushHostUpdates();
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   await view().get("#account-display_name").setValue("Host draft");
   const validation = required(transport.requests[0]);
@@ -1009,7 +1020,7 @@ test("account detail binds refresh and effect sequence to its route and contains
   wrapper = mount(BrowserHost, {
     props: { snapshot: state },
   });
-  await flushPromises();
+  await flushHostUpdates();
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   await view().get("#grant-grant_reason").setValue("Preserved");
   await view().get("#refresh-provider-account").trigger("click");
@@ -1045,7 +1056,7 @@ test("account detail binds refresh and effect sequence to its route and contains
       },
     },
   });
-  await flushPromises();
+  await flushHostUpdates();
   expect(view().find("#organization-module-unavailable").exists()).toBe(true);
 });
 test("spacecraft routing composes Communications without mounting a federated surface", async () => {
@@ -1061,7 +1072,7 @@ test("spacecraft routing composes Communications without mounting a federated su
   wrapper = mount(BrowserHost, {
     props: { snapshot: state },
   });
-  await flushPromises();
+  await flushHostUpdates();
   expect(view().find("#spacecraft-routing-rule-rule-1").exists()).toBe(true);
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   expect(transport.pushEvent).not.toHaveBeenCalled();
@@ -1084,7 +1095,7 @@ async function start() {
     attachTo: document.body,
     props: { snapshot: snapshot("/missions") },
   });
-  await flushPromises();
+  await flushHostUpdates();
   return view();
 }
 async function click(href: string) {
@@ -1093,11 +1104,11 @@ async function click(href: string) {
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
-  await flushPromises();
+  await flushHostUpdates();
 }
 async function reply(index: number, value: unknown) {
   required(required(transport.requests[index]).reply)({ ok: true, snapshot: value });
-  await flushPromises();
+  await flushHostUpdates();
 }
 
 test("activation decisions bind path and token and cannot replace a later visit to the same inbox", async () => {
@@ -1150,12 +1161,12 @@ test("host remounts within the same Vue app and ignores the previous instance's 
       }),
       { attachTo: document.body },
     );
-    await flushPromises();
+    await flushHostUpdates();
     expect(view().find("#mission-list-table").exists()).toBe(true);
     await click("/missions/old-mission");
     expect(transport.requests).toHaveLength(1);
     await view().setData({ revision: 1 });
-    await flushPromises();
+    await flushHostUpdates();
     expect(view().find("#mission-list-table").exists()).toBe(true);
     await reply(0, snapshot("/missions/old-mission", "old-mission"));
     expect(view().find("#mission-list-table").exists()).toBe(true);
@@ -1164,7 +1175,7 @@ test("host remounts within the same Vue app and ignores the previous instance's 
     await reply(1, snapshot("/missions/current-mission", "current-mission"));
     expect(view().getComponent(MissionPage).props("page")).toBe("mission_overview");
     hostBrowserHistory.go(-1);
-    await flushPromises();
+    await flushHostUpdates();
     expect(transport.requests).toHaveLength(3);
     await reply(2, snapshot("/missions"));
     expect(view().find("#mission-list-table").exists()).toBe(true);
@@ -1247,7 +1258,7 @@ test("a failed installation action stays contained in the feature and releases i
   const sidebar = app.get("[data-sidebar-collapsible]").element;
   await app.get("#limits-install").trigger("click");
   required(required(transport.requests[1]).reply)({ ok: false });
-  await flushPromises();
+  await flushHostUpdates();
   expect(app.find("#application-installation-action-error").exists()).toBe(true);
   expect(app.get("#limits-install").attributes("disabled")).toBeUndefined();
   expect(app.get("[data-sidebar-collapsible]").element).toBe(sidebar);
@@ -1390,7 +1401,7 @@ test("spacecraft query navigation preserves the search node and late replies can
   search.element.focus();
   const shell = required(nativeElement(app.element));
   await app.get("#spacecraft-sort-name").trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   const sortedPath = requestedPath(1);
   const sorted = snapshot(sortedPath, "mission-a");
   required(sorted.spacecraft_page).data.presentation.roster.sort_by = "display_name";
@@ -1399,10 +1410,10 @@ test("spacecraft query navigation preserves the search node and late replies can
   expect(document.activeElement).toBe(search.element);
   expect(app.find("#host-route-unavailable").exists()).toBe(false);
   await app.get("#spacecraft-next-page").trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   const oldPath = requestedPath(2);
   await app.get("#spacecraft-tile-missing-scid").trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   const filteredPath = requestedPath(3);
   const filtered = snapshot(filteredPath, "mission-a");
   required(filtered.spacecraft_page).data.presentation.roster.search = "Latest query";
@@ -1464,7 +1475,7 @@ test("administration diagnostics is host-owned and filters/refresh use authorize
   const filter = app.get<HTMLInputElement>("#runtime_decision_filters_dashboard_id");
   filter.element.focus();
   await filter.setValue("dashboard-a");
-  await flushPromises();
+  await flushHostUpdates();
   expect(new URL(requestedPath(2), "https://cadence.test").searchParams.get("dashboard_id")).toBe(
     "dashboard-a",
   );
@@ -1483,7 +1494,7 @@ test("a late diagnostics refresh cannot replace a newer navigation or report its
   await click("/missions");
   await reply(2, snapshot("/missions"));
   required(required(transport.requests[1]).reply)({ ok: false });
-  await flushPromises();
+  await flushHostUpdates();
   expect(app.find("#administration-diagnostics-page").exists()).toBe(false);
   expect(app.find("#host-navigation-error").exists()).toBe(false);
   expect(app.getComponent(MissionPage).props("page")).toBe("mission_list");
@@ -1509,7 +1520,7 @@ test("compiled contact navigation use the same host guard and query parameters c
   required(app.getComponent(OpsModulePage).props("navigate"))(
     "/missions/mission-a/ops/contacts/records/contact-1?mission_id=forged&contact_id=forged&application_key=forged",
   );
-  await flushPromises();
+  await flushHostUpdates();
   const path = requestedPath(1);
   await reply(1, snapshot(path, "mission-a"));
   expect(app.getComponent(OpsModulePage).props("contributionId")).toBe("planning.contact-record");
@@ -1546,7 +1557,7 @@ test("denied context preserves the displayed page and reports a recoverable fail
   const app = await start();
   await click("/missions/missing");
   required(required(transport.requests[0]).reply)({ ok: false });
-  await flushPromises();
+  await flushHostUpdates();
   expect(app.getComponent(MissionPage).props("page")).toBe("mission_list");
   expect(app.get("#host-navigation-error").attributes("role")).toBe("alert");
 });
@@ -1557,11 +1568,11 @@ test("Back and Forward reenter the guard without replacing the Vue shell", async
   await click("/missions/mission-a/spacecraft");
   await reply(0, snapshot("/missions/mission-a/spacecraft", "mission-a"));
   hostBrowserHistory.go(-1);
-  await flushPromises();
+  await flushHostUpdates();
   expect(requestedPath(1)).toBe("/missions");
   await reply(1, snapshot("/missions"));
   hostBrowserHistory.go(1);
-  await flushPromises();
+  await flushHostUpdates();
   await reply(2, snapshot("/missions/mission-a/spacecraft", "mission-a"));
   expect(app.element).toBe(shell);
   expect(app.getComponent(SpacecraftPage).props("page")).toBe("spacecraft_list");
@@ -1592,7 +1603,7 @@ test("reconnection refreshes the displayed resource rather than the initial tran
   // A LiveView reconnect can resend its original bootstrap snapshot.
   await app.setProps({ snapshot: snapshot("/missions") });
   window.dispatchEvent(new Event("cadence:transport-reconnected"));
-  await flushPromises();
+  await flushHostUpdates();
   expect(requestedPath(1)).toBe("/missions/mission-a");
   const refreshed = snapshot("/missions/mission-a", "mission-a");
   required(refreshed.context.mission).display_name = "Renamed Mission";
@@ -1742,7 +1753,7 @@ test("organization home composes core facts, refreshes and leaves through the pe
     attachTo: document.body,
     props: { snapshot: state },
   });
-  await flushPromises();
+  await flushHostUpdates();
   expect(view().find("#core-administration-error").exists()).toBe(true);
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   await view().get("#core-administration-retry").trigger("click");
@@ -1799,7 +1810,7 @@ test("core timeline filters, selected evidence and older pages restore through p
   const rail = view().get("#ops-nav-rail").element;
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   await view().get("#mission-timeline-events a").trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   const selectedPath = requestedPath(1);
   expect(new URL(selectedPath, "https://cadence.test").searchParams.get("event_id")).toBe(
     "mission_event:newer",
@@ -1808,12 +1819,12 @@ test("core timeline filters, selected evidence and older pages restore through p
   expect(view().get("#timeline-selected-event-id").text()).toBe("mission_event:newer");
   await view().get("#timeline_severity").setValue("warning");
   await view().get("#timeline-filter-form").trigger("submit");
-  await flushPromises();
+  await flushHostUpdates();
   const filteredPath = requestedPath(2);
   expect(filteredPath).toBe(base + "?severity=warning");
   await reply(2, stateAt(filteredPath));
   await view().get("#timeline-older-events").trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   const olderPath = requestedPath(3);
   expect(new URL(olderPath, "https://cadence.test").searchParams.get("before_id")).toBe(
     "mission_event:newer",
@@ -1824,7 +1835,7 @@ test("core timeline filters, selected evidence and older pages restore through p
     "mission_event:older",
   );
   hostBrowserHistory.go(-1);
-  await flushPromises();
+  await flushHostUpdates();
   expect(requestedPath(4)).toBe(filteredPath);
   await reply(4, stateAt(filteredPath));
   expect(view().get<HTMLInputElement | HTMLSelectElement>("#timeline_severity").element.value).toBe(
@@ -1893,11 +1904,11 @@ test("core notifications pin actions to the current user visit and update the in
   expect(view().get("#notification-notif-1").attributes("data-unread")).toBe("false");
   expect(view().get("#notification-state-notif-1").text()).toBe("Invitation pending");
   await view().get("#notifications-unread").trigger("click");
-  await flushPromises();
+  await flushHostUpdates();
   await reply(2, notificationSnapshot("/notifications?unread=true", false));
   expect(view().find("#notifications-empty-state").exists()).toBe(true);
   hostBrowserHistory.go(-1);
-  await flushPromises();
+  await flushHostUpdates();
   await reply(3, notificationSnapshot("/notifications", false));
   expect(view().get("#notification-state-notif-1").text()).toBe("Invitation pending");
 });
@@ -1930,7 +1941,7 @@ test("an inbox recipient change cannot admit the previous recipient action respo
   next.notifications_page.data.user_id = "u-2";
   required(next.notifications_page.data.notifications[0]).id = "notif-2";
   await view().setProps({ snapshot: next });
-  await flushPromises();
+  await flushHostUpdates();
   await reply(1, {
     status: "ok",
     data: { status: "accepted", navigate: "/" },
@@ -1964,7 +1975,7 @@ async function submitPlatformOrganization() {
   await view().get("#organization_display_name").setValue("Flight");
   await view().get("#organization_slug").setValue("flight");
   await view().get("#org-form").trigger("submit");
-  await flushPromises();
+  await flushHostUpdates();
 }
 test("core administration creation uses a scoped visit and displays a successful organization", async () => {
   await start();
@@ -2013,7 +2024,7 @@ test("late organization creation cannot replace a later page or another administ
   await reply(3, platformCreationSnapshot());
   await submitPlatformOrganization();
   await view().setProps({ snapshot: platformCreationSnapshot("u-2") });
-  await flushPromises();
+  await flushHostUpdates();
   await reply(4, {
     status: "created",
     organization,
@@ -2034,7 +2045,7 @@ test("a refreshed administration visit token rejects an older same-user creation
   const refreshed = platformCreationSnapshot();
   refreshed.platform_administration_page.action_token = "replacement-visit";
   await view().setProps({ snapshot: refreshed });
-  await flushPromises();
+  await flushHostUpdates();
   const organization = { id: "old-org", name: "Old result", slug: "old-result" };
   await reply(1, {
     status: "created",
@@ -2103,7 +2114,7 @@ for (const page of ["organization_detail", "organization_invite"] as const) {
       await view()
         .get(issue ? "#service-identity-form" : "#invite-form")
         .trigger("submit");
-      await flushPromises();
+      await flushHostUpdates();
       expect(transport.requests[1]).toMatchObject({
         event: "host:platform-administration",
         payload: {
@@ -2123,7 +2134,7 @@ for (const page of ["organization_detail", "organization_invite"] as const) {
             "replacement-visit",
           ),
         });
-        await flushPromises();
+        await flushHostUpdates();
       }
       const result = issue
         ? {
@@ -2196,7 +2207,7 @@ test.each(routes)("the host handles $path ($kind)", async (entry) => {
     props: { snapshot: snapshot(path, path.includes("/missions/") ? "mission_id-test" : null) },
     global: { stubs: routeStubs },
   });
-  await flushPromises();
+  await flushHostUpdates();
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   expect(view().get("[data-route-component]").attributes("data-route-component")).toBe(expected);
 });
@@ -2210,7 +2221,7 @@ test("an unrecognized catalog kind is contained by the host", async () => {
       props: { snapshot: snapshot("/missions") },
       global: { stubs: routeStubs },
     });
-    await flushPromises();
+    await flushHostUpdates();
     expect(view().get("#host-route-unavailable").attributes("role")).toBe("alert");
     expect(view().find("[data-route-component]").exists()).toBe(false);
   } finally {

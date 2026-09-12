@@ -11,7 +11,7 @@ export class ChartSurface {
   rangeSelectionInFlight = false;
   constructor(
     readonly el: HTMLElement,
-    readonly model: ChartModel,
+    public model: ChartModel,
     readonly pushEvent: (action: ChartAction, payload: Record<string, unknown>) => void,
     readonly rebuild: () => void,
   ) {}

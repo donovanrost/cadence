@@ -1,3 +1,4 @@
+import "../../../module-pages.test-support";
 import { mount } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
 import SpacecraftModulePage from "./SpacecraftModulePage.vue";

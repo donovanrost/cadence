@@ -1,3 +1,4 @@
+import "../../../module-pages.test-support";
 import { admitTemplateReference } from "../../../../../../modules/planning-and-contacts/src/features/contact-requirements/templates";
 import type { OpsPageAction } from "@cadence/plugin-sdk/ops-pages";
 import { required } from "../../../../../../test-support/required";

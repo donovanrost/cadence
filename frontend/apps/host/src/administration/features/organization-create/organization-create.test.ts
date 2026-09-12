@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../../test-support/producer-fixture";
 import { required } from "../../../../../../test-support/required";
 import { jsonFixture, fixtureRecord } from "../../../../../../test-support/json-fixture";
 import { writeFileSync } from "node:fs";
@@ -94,46 +95,49 @@ test("unknown transport retains the draft and blocks replay through refresh unti
   expect(wrapper.find("#admin-organization-created").exists()).toBe(true);
   wrapper.unmount();
 });
-test("actual producer documents reach all three owner components and the submitted fields", async () => {
-  const encoded = process.env.CADENCE_PLATFORM_DOCUMENT;
-  if (!encoded) return;
-  const data = jsonFixture(encoded);
-  const userId = fixtureRecord(data.creation).user_id;
-  const overviewModel = readPlatformOverview(data.overview, userId);
-  const directoryModel = readOrganizationDirectory(data.directory, userId);
-  const overview = mount(PlatformOverviewPanel, {
-    props: { model: overviewModel },
-  });
-  expect(overview.get("#admin-home-organizations-card").text()).toContain(
-    String(overviewModel.counts.organizations),
-  );
-  const directory = mount(OrganizationDirectoryPanel, {
-    props: { model: directoryModel },
-  });
-  expect(
-    directory.findAll("#admin-organization-list-component li a").map((a) => a.attributes("href")),
-  ).toEqual(
-    directoryModel.organizations.map(
-      (org: { id: string }) => `/admin/organizations/${encodeURIComponent(org.id)}`,
-    ),
-  );
-  const act = vi.fn(async (_event: string, _input: Record<string, unknown>) => ({
-    status: "unavailable",
-  }));
-  const form = mount(OrganizationCreatePanel, {
-    props: { model: readOrganizationCreate(data.creation, userId), act, refresh: vi.fn() },
-  });
-  await form.get("#organization_display_name").setValue("Created through the real form");
-  await form.get("#organization_slug").setValue("created-through-vue");
-  await form.get("#org-form").trigger("submit");
-  await flushPromises();
-  expect(act).toHaveBeenCalledOnce();
-  if (!process.env.CADENCE_PLATFORM_INPUT_FILE) throw Error("Missing probe output file");
-  writeFileSync(
-    process.env.CADENCE_PLATFORM_INPUT_FILE,
-    JSON.stringify(required(act.mock.calls[0])[1]),
-  );
-  overview.unmount();
-  directory.unmount();
-  form.unmount();
-});
+const producer = producerFixture("CADENCE_PLATFORM_DOCUMENT", import.meta.url);
+test.skipIf(!producer.available)(
+  "actual producer documents reach all three owner components and the submitted fields",
+  async () => {
+    const encoded = producer.read();
+    const data = jsonFixture(encoded);
+    const userId = fixtureRecord(data.creation).user_id;
+    const overviewModel = readPlatformOverview(data.overview, userId);
+    const directoryModel = readOrganizationDirectory(data.directory, userId);
+    const overview = mount(PlatformOverviewPanel, {
+      props: { model: overviewModel },
+    });
+    expect(overview.get("#admin-home-organizations-card").text()).toContain(
+      String(overviewModel.counts.organizations),
+    );
+    const directory = mount(OrganizationDirectoryPanel, {
+      props: { model: directoryModel },
+    });
+    expect(
+      directory.findAll("#admin-organization-list-component li a").map((a) => a.attributes("href")),
+    ).toEqual(
+      directoryModel.organizations.map(
+        (org: { id: string }) => `/admin/organizations/${encodeURIComponent(org.id)}`,
+      ),
+    );
+    const act = vi.fn(async (_event: string, _input: Record<string, unknown>) => ({
+      status: "unavailable",
+    }));
+    const form = mount(OrganizationCreatePanel, {
+      props: { model: readOrganizationCreate(data.creation, userId), act, refresh: vi.fn() },
+    });
+    await form.get("#organization_display_name").setValue("Created through the real form");
+    await form.get("#organization_slug").setValue("created-through-vue");
+    await form.get("#org-form").trigger("submit");
+    await flushPromises();
+    expect(act).toHaveBeenCalledOnce();
+    if (!process.env.CADENCE_PLATFORM_INPUT_FILE) throw Error("Missing probe output file");
+    writeFileSync(
+      process.env.CADENCE_PLATFORM_INPUT_FILE,
+      JSON.stringify(required(act.mock.calls[0])[1]),
+    );
+    overview.unmount();
+    directory.unmount();
+    form.unmount();
+  },
+);

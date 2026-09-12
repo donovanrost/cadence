@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import {
   fixtureRecord,
   fixtureString,
@@ -174,9 +175,9 @@ test("semantic directory data owns native links and captured read recovery", asy
     }),
   ).toBeNull();
 });
-test("producer supplied native requirement contribution", async () => {
-  if (!process.env.CADENCE_REQUIREMENT_WORKFLOW) return;
-  const supplied = jsonFixture(process.env.CADENCE_REQUIREMENT_WORKFLOW),
+const producer = producerFixture("CADENCE_REQUIREMENT_WORKFLOW", import.meta.url);
+test.skipIf(!producer.available)("producer supplied native requirement contribution", async () => {
+  const supplied = jsonFixture(producer.read()),
     snapshot = fixtureRecord(supplied.snapshot),
     context = fixtureContext(snapshot.context);
   if (snapshot.id === requirementDirectoryContribution.id) {

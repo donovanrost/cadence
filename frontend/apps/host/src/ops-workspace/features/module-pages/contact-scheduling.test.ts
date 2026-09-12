@@ -1,3 +1,4 @@
+import "../../../module-pages.test-support";
 import type { OpsPageAction } from "@cadence/plugin-sdk/ops-pages";
 import { required } from "../../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";

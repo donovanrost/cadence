@@ -1,3 +1,4 @@
+import "../../../module-pages.test-support";
 import { mount, flushPromises } from "@vue/test-utils";
 import { test, expect, vi } from "vite-plus/test";
 import OpsModulePage from "./OpsModulePage.vue";

@@ -1,3 +1,4 @@
+import "../../../module-pages.test-support";
 import { fixtureRecord } from "../../../../../../test-support/json-fixture";
 import { containing } from "../../../../../../test-support/matchers";
 import type {

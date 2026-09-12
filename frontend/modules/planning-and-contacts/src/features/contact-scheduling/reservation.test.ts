@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { jsonFixture } from "../../../../../test-support/json-fixture";
 import { oneOf } from "@cadence/plugin-sdk/admission";
 import { reservationActions } from "./contact-workflow";
@@ -155,9 +156,9 @@ test("history links preserve the reviewed change and the independent audit curso
     "/missions/mission-one/ops/contacts/reservation-one?change_id=change-2&before_revision=5&before_audit=audit-20",
   );
 });
-test("producer-supplied reservation review", async () => {
-  if (!process.env.CADENCE_RESERVATION_REVIEW_MODEL) return;
-  const props = jsonFixture(process.env.CADENCE_RESERVATION_REVIEW_MODEL);
+const producer = producerFixture("CADENCE_RESERVATION_REVIEW_MODEL", import.meta.url);
+test.skipIf(!producer.available)("producer-supplied reservation review", async () => {
+  const props = jsonFixture(producer.read());
   const detail = admitReservation(props.detail);
   expect(detail).not.toBeNull();
   const execute = vi

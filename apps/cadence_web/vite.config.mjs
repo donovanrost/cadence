@@ -4,8 +4,9 @@ import vue from "@vitejs/plugin-vue"
 import liveVuePlugin from "live_vue/vitePlugin"
 import {defineConfig} from "vite"
 
-export default defineConfig({
+export default defineConfig(({command}) => ({
   root: "assets",
+  base: command === "build" ? "/assets/" : "/",
   resolve: {
     alias: {"@cadence/ui": fileURLToPath(new URL("../../frontend/packages/ui/src", import.meta.url))},
     dedupe: ["vue", "reka-ui"]
@@ -25,6 +26,9 @@ export default defineConfig({
     manifest: true,
     rollupOptions: {
       input: "assets/js/app.js",
+      // Phoenix may digest the entry URL. A shared hashed runtime keeps lazy chunks
+      // on the same module instance and LiveView connection as the initial entry.
+      preserveEntrySignatures: "strict",
       output: {
         entryFileNames: "app.js",
         chunkFileNames: "chunks/[name]-[hash].js",
@@ -38,4 +42,4 @@ export default defineConfig({
   optimizeDeps: {
     include: ["live_vue", "phoenix", "phoenix_html", "phoenix_live_view"]
   }
-})
+}))

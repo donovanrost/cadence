@@ -11,10 +11,12 @@ export function required<T>(value: T | null | undefined): T {
 
 export function deferred<T>() {
   let settle: ((value: T) => void) | undefined;
-  const promise = new Promise<T>((resolve) => {
+  let fail: ((reason: unknown) => void) | undefined;
+  const promise = new Promise<T>((resolve, reject) => {
     settle = resolve;
+    fail = reject;
   });
-  return { promise, resolve: required(settle) };
+  return { promise, resolve: required(settle), reject: required(fail) };
 }
 
 export function emittedPolicy<A extends keyof OpsFleetPlanningPolicyEmits>(

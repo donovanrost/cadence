@@ -3200,14 +3200,22 @@ void test("the cache-enabled federation browser gate never disables Chrome cache
   assert.equal(source.includes("Network.setCacheDisabled"), false);
 });
 
-void test("the Ops representative browser gate pins the predecessor directory page selector", async () => {
+void test("the Ops representative browser gate pins the scoped compatibility destination", async () => {
   const source = await readFile(new URL("./federation_browser_smoke.mjs", import.meta.url), "utf8");
   const opsConfigStart = source.indexOf('applicationKey: "ops_console"');
   const opsConfigEnd = source.indexOf("catalogPath:", opsConfigStart);
   assert.ok(opsConfigStart >= 0 && opsConfigEnd > opsConfigStart);
   const opsConfig = source.slice(opsConfigStart, opsConfigEnd);
-  assert.equal(opsConfig.includes("document.querySelector('#ops-dashboards-page')"), true);
-  assert.equal(opsConfig.includes("#ops-dashboard-directory-page"), false);
+  assert.equal(
+    opsConfig.includes("document.querySelector('#dashboard-directory-destination-open')"),
+    true,
+  );
+  assert.equal(opsConfig.includes("destination.origin === location.origin"), true);
+  assert.equal(
+    opsConfig.includes("/missions/${encodeURIComponent(missionId)}/ops/dashboards"),
+    true,
+  );
+  assert.equal(opsConfig.includes("#ops-dashboards-page"), false);
 });
 
 void test("the shared host body is read on the first load and reused by later 304 checks", async () => {
@@ -3920,12 +3928,12 @@ void test("remote failure confirmation consumes only one exact private diagnosti
   const client = makeDiagnosticClient();
   const diagnostics = installDiagnostics(client, { expectedOrigin: origin });
   const reference = "12345678-1234-1234-1234-123456789abc";
-  const message = `Cadence federation failure ${reference} Object`;
+  const message = `[Cadence frontend failure] ${reference} Object`;
   diagnostics.consoleErrors.push(message);
   assert.throws(() => diagnostics.confirmRemoteFailureDiagnostic(reference), /exactly one private/);
   client.emit("Runtime.consoleAPICalled", {
     type: "error",
-    args: [{ value: `Cadence federation failure ${reference}` }, { description: "Object" }],
+    args: [{ value: `[Cadence frontend failure] ${reference}` }, { description: "Object" }],
   });
   diagnostics.confirmRemoteFailureDiagnostic(reference);
   diagnostics.assertClean("confirmed expected failure");

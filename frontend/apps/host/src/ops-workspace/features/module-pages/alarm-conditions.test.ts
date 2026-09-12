@@ -1,3 +1,4 @@
+import "../../../module-pages.test-support";
 import { required } from "../../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";

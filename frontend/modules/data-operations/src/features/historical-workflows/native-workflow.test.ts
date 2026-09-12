@@ -1,3 +1,4 @@
+import { producerFixture } from "../../../../../test-support/producer-fixture";
 import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
 import { required } from "../../../../../test-support/required";
 import { fixtureRecord, jsonFixture } from "../../../../../test-support/json-fixture";
@@ -259,9 +260,9 @@ test("binding paging retains the reviewed binding and unsaved request", async ()
   });
   w.unmount();
 });
-test("producer supplied native history contribution", async () => {
-  if (!process.env.CADENCE_HISTORY) return;
-  const supplied = jsonFixture(process.env.CADENCE_HISTORY),
+const producer = producerFixture("CADENCE_HISTORY", import.meta.url);
+test.skipIf(!producer.available)("producer supplied native history contribution", async () => {
+  const supplied = jsonFixture(producer.read()),
     snapshot = fixtureRecord(supplied.snapshot),
     raw = fixtureRecord(snapshot.data),
     model = fixtureRecord(raw.model),

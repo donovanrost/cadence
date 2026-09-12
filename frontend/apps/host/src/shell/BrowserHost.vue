@@ -1,26 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
 import type { RouteLocationNormalized } from "vue-router";
+import { isNavigationFailure, NavigationFailureType } from "vue-router";
+import type { OpsPageNavigationResult } from "@cadence/plugin-sdk/ops-pages";
 import { readHostSnapshot, requireRecord, errorMessage, type HostSnapshot } from "./host-snapshot";
 import { record } from "./snapshot-readers";
 import { useLiveVue } from "live_vue";
 import HostPage from "./HostPage.vue";
+import { lazyHostPage } from "./lazy-host-page";
 import ApplicationShell from "./ApplicationShell.vue";
-import InstallationManagementPage from "../capability-management/features/application-installations/InstallationManagementPage.vue";
-import AdministrationDiagnosticsPage from "../administration/features/diagnostics/AdministrationDiagnosticsPage.vue";
-import CatalogPage from "../catalog/CatalogPage.vue";
-import AdministrationPage from "../administration/AdministrationPage.vue";
-import PlatformAdministrationPage from "../administration/PlatformAdministrationPage.vue";
-import NotificationsPage from "../auth-and-navigation/features/notifications/NotificationsPage.vue";
-import WorkspaceLanding from "../ops-workspace/features/landing/WorkspaceLanding.vue";
-import TimelinePage from "../ops-workspace/features/timeline/TimelinePage.vue";
-import MissionPage from "../mission-and-spacecraft/MissionPage.vue";
-import SpacecraftPage from "../mission-and-spacecraft/SpacecraftPage.vue";
-import SpacecraftModulePage from "../mission-and-spacecraft/features/module-pages/SpacecraftModulePage.vue";
-import MissionModulePage from "../mission-and-spacecraft/features/module-pages/MissionModulePage.vue";
-import OpsModulePage from "../ops-workspace/features/module-pages/OpsModulePage.vue";
-import OrganizationModulePage from "../administration/features/module-pages/OrganizationModulePage.vue";
-import ActivationApprovalsPage from "../capability-management/features/activation-approvals/ActivationApprovalsPage.vue";
 import {
   createHostRouter,
   hostRoute,
@@ -28,6 +16,66 @@ import {
   shellForRoute,
 } from "./host-navigation";
 import { hostBrowserHistory, ownBrowserHistory } from "./host-browser-history";
+
+const InstallationManagementPage = lazyHostPage(
+  "InstallationManagementPage",
+  () =>
+    import("../capability-management/features/application-installations/InstallationManagementPage.vue"),
+);
+const AdministrationDiagnosticsPage = lazyHostPage(
+  "AdministrationDiagnosticsPage",
+  () => import("../administration/features/diagnostics/AdministrationDiagnosticsPage.vue"),
+);
+const CatalogPage = lazyHostPage("CatalogPage", () => import("../catalog/CatalogPage.vue"));
+const AdministrationPage = lazyHostPage(
+  "AdministrationPage",
+  () => import("../administration/AdministrationPage.vue"),
+);
+const PlatformAdministrationPage = lazyHostPage(
+  "PlatformAdministrationPage",
+  () => import("../administration/PlatformAdministrationPage.vue"),
+);
+const NotificationsPage = lazyHostPage(
+  "NotificationsPage",
+  () => import("../auth-and-navigation/features/notifications/NotificationsPage.vue"),
+);
+const WorkspaceLanding = lazyHostPage(
+  "WorkspaceLanding",
+  () => import("../ops-workspace/features/landing/WorkspaceLanding.vue"),
+);
+const TimelinePage = lazyHostPage(
+  "TimelinePage",
+  () => import("../ops-workspace/features/timeline/TimelinePage.vue"),
+);
+const MissionPage = lazyHostPage(
+  "MissionPage",
+  () => import("../mission-and-spacecraft/MissionPage.vue"),
+);
+const SpacecraftPage = lazyHostPage(
+  "SpacecraftPage",
+  () => import("../mission-and-spacecraft/SpacecraftPage.vue"),
+);
+const SpacecraftModulePage = lazyHostPage(
+  "SpacecraftModulePage",
+  () => import("../mission-and-spacecraft/features/module-pages/SpacecraftModulePage.vue"),
+);
+const MissionModulePage = lazyHostPage(
+  "MissionModulePage",
+  () => import("../mission-and-spacecraft/features/module-pages/MissionModulePage.vue"),
+);
+const OpsModulePage = lazyHostPage(
+  "OpsModulePage",
+  () => import("../ops-workspace/features/module-pages/OpsModulePage.vue"),
+);
+const OrganizationModulePage = lazyHostPage(
+  "OrganizationModulePage",
+  () => import("../administration/features/module-pages/OrganizationModulePage.vue"),
+);
+const ActivationApprovalsPage = lazyHostPage(
+  "ActivationApprovalsPage",
+  () =>
+    import("../capability-management/features/activation-approvals/ActivationApprovalsPage.vue"),
+);
 
 const props = defineProps<{ snapshot: unknown }>();
 const initialSnapshot = readHostSnapshot(props.snapshot);
@@ -96,6 +144,9 @@ function guardNavigation(guard: () => boolean) {
   return () => {
     if (leaveGuard === guard) leaveGuard = null;
   };
+}
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (leaveGuard && !leaveGuard()) event.preventDefault();
 }
 router.beforeEach(async (to, from) => {
   if (stopped) return false;
@@ -217,11 +268,24 @@ const variant = computed(() => route.value && shellForRoute(route.value));
 function navigate(href: string, replace = false) {
   const target = new URL(href, window.location.href);
   if (target.origin !== window.location.origin || !hostRoute(target)) {
+    if (leaveGuard && !leaveGuard()) return;
     window.location.assign(target.href);
     return;
   }
-  const path = target.pathname + target.search + target.hash;
-  void (replace ? router.replace(path) : router.push(path));
+  void navigateSettled(target.href, replace);
+}
+async function navigateSettled(href: string, replace = false): Promise<OpsPageNavigationResult> {
+  try {
+    const target = new URL(href, window.location.href);
+    if (stopped || target.origin !== window.location.origin || !hostRoute(target)) return "failed";
+    const path = target.pathname + target.search + target.hash;
+    const result = await (replace ? router.replace(path) : router.push(path));
+    if (isNavigationFailure(result, NavigationFailureType.duplicated)) return "unchanged";
+    return result ? "cancelled" : "completed";
+  } catch (error) {
+    if (!stopped) failure.value = errorMessage(error);
+    return "failed";
+  }
 }
 async function manage(event: string, payload: Record<string, unknown>) {
   const path = currentPage().snapshot.path;
@@ -423,11 +487,13 @@ void router.replace(hostBrowserHistory.location).catch((error) => {
   if (!stopped) failure.value = errorMessage(error);
 });
 onMounted(() => {
+  window.addEventListener("beforeunload", beforeUnload);
   ownBrowserHistory(true);
   removeLinks = installHostNavigation(document, window.location, navigate);
   window.addEventListener("cadence:transport-reconnected", reconnect);
 });
 onBeforeUnmount(() => {
+  window.removeEventListener("beforeunload", beforeUnload);
   stopped = true;
   generation++;
   for (const cancel of pendingRequests) cancel();
@@ -507,6 +573,7 @@ onBeforeUnmount(() => {
           :execute="opsPageAction"
           :query="opsPageRead"
           :navigate="navigate"
+          :navigate-settled="navigateSettled"
           :guard-navigation="guardNavigation"
           :refresh="reconnect"
           :refreshing="pending"
