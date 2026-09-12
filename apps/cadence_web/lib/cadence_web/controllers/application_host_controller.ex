@@ -9,6 +9,7 @@ defmodule CadenceWeb.ApplicationHostController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.Applications.ActionFailure
   alias Cadence.Applications.HostContext
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Missions.Mission
@@ -284,25 +285,54 @@ defmodule CadenceWeb.ApplicationHostController do
         _invalid -> {:error, :invalid_application_request}
       end
 
-    case fallback_result do
-      {:ok, fallback_href} ->
-        render(conn, :federated,
-          flash: conn.assigns.flash,
-          current_scope: current_scope,
-          organization_id: route_context.host_context.organization_id,
-          user_id: route_context.host_context.user_id,
-          mission_id: route_context.host_context.mission_id,
-          spacecraft_id: route_context.host_context.spacecraft_id,
-          host_scope: Atom.to_string(route_context.host_context.placement),
-          application_key: application_key,
-          surface_id: surface_id,
-          catalog_url: catalog_url(route_context, application_key, surface_id),
-          fallback_href: fallback_href
-        )
-
+    with {:ok, fallback_href} <- fallback_result,
+         {:ok, query_params_json} <- shell_query_params(conn) do
+      render(conn, :federated,
+        flash: conn.assigns.flash,
+        current_scope: current_scope,
+        organization_id: route_context.host_context.organization_id,
+        user_id: route_context.host_context.user_id,
+        mission_id: route_context.host_context.mission_id,
+        spacecraft_id: route_context.host_context.spacecraft_id,
+        host_scope: Atom.to_string(route_context.host_context.placement),
+        application_key: application_key,
+        surface_id: surface_id,
+        catalog_url: catalog_url(route_context, application_key, surface_id),
+        query_params_json: query_params_json,
+        fallback_href: fallback_href
+      )
+    else
       {:error, :invalid_application_request} ->
         not_found_html(conn)
     end
+  end
+
+  # The generic shell transports URL selectors; native readers still admit their
+  # surface-specific meaning. Never drop an invalid selector into an empty query.
+  defp shell_query_params(conn) do
+    params = conn.query_params
+
+    with true <- byte_size(conn.query_string) <= 65_536,
+         entries = conn.query_string |> URI.query_decoder() |> Enum.take(65),
+         true <- length(entries) <= 64 and length(entries) == map_size(Map.new(entries)),
+         true <- is_map(params) and map_size(params) <= 64,
+         true <- Enum.all?(params, &shell_query_entry?/1),
+         {:ok, encoded} <- Jason.encode(params),
+         true <- byte_size(encoded) <= 16_384 do
+      {:ok, encoded}
+    else
+      _ -> {:error, :invalid_application_request}
+    end
+  rescue
+    _ -> {:error, :invalid_application_request}
+  end
+
+  defp shell_query_entry?({key, value}) do
+    key not in ["__proto__", "constructor", "prototype"] and
+      Enum.all?([key, value], fn text ->
+        is_binary(text) and byte_size(text) <= 256 and String.valid?(text) and
+          not Regex.match?(~r/[\x00-\x1f\x7f]/u, text)
+      end)
   end
 
   defp build_catalog(conn, current_scope, route_context, params, now) do
@@ -708,6 +738,19 @@ defmodule CadenceWeb.ApplicationHostController do
       "configuration_version_conflict",
       "The application configuration changed. Reload the surface and try again."
     )
+  end
+
+  defp bridge_problem(conn, {:application_preflight_blocked, _application_key}) do
+    problem(
+      conn,
+      :unprocessable_entity,
+      "preflight_blocked",
+      "Resolve the blocking activation checks, then refresh and review before requesting mission changes."
+    )
+  end
+
+  defp bridge_problem(conn, %ActionFailure{code: code, message: message}) do
+    problem(conn, :unprocessable_entity, code, message)
   end
 
   defp bridge_problem(conn, %Ecto.Changeset{}) do

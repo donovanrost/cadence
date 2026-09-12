@@ -13,8 +13,12 @@
     "test": "node --test release-build-config.test.mjs && vp test --run --exclude release-build-config.test.mjs"
   },
   "dependencies": {
+    "@cadence/commanding": "workspace:*",
+    "@cadence/communications": "workspace:*",
     "@cadence/design-tokens": "workspace:*",
+    "@cadence/plugin-host": "workspace:*",
     "@cadence/plugin-sdk": "workspace:*",
+    "@cadence/telemetry-decom": "workspace:*",
     "@cadence/ui": "workspace:*",
     "reka-ui": "catalog:",
     "vue": "catalog:"

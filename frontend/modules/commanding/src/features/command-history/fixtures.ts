@@ -1,0 +1,68 @@
+import type { HistoryModel } from "./types";
+export function fixture(): HistoryModel {
+  const release = {
+    id: "release-a",
+    request_id: "request-a",
+    queue_entry_id: "queue-a",
+    contact_id: "contact-a",
+    path_id: "path-a",
+    binding_id: null,
+    state: "released" as const,
+    verification_state: "pending" as const,
+    attempted_at: "2026-09-10T08:00:00.000000Z",
+    released_at: "2026-09-10T08:00:01.000000Z",
+    encoded_size_bytes: null,
+  };
+  const verifier = {
+    id: "verifier-a",
+    request_id: "request-a",
+    release_attempt_id: "release-a",
+    name: "Execution confirmation",
+    phase: "completion" as const,
+    severity: "error" as const,
+    state: "satisfied" as const,
+    failure_code: null,
+    matched_at: "2026-09-10T08:00:02.000000Z",
+    timeout_at: null,
+    matched_record_kind: "telemetry_sample" as const,
+    matched_record_id: "sample-a",
+  };
+  return {
+    version: 1,
+    organization_id: "org-a",
+    mission_id: "mission-a",
+    observed_at: "2026-09-10T09:00:00.000000Z",
+    request: {
+      id: "request-a",
+      command_id: "command-a",
+      name: "Set power",
+      target: "endpoint-a",
+      model_revision_id: "revision-a",
+      state: "released",
+      verification_state: "satisfied",
+    },
+    query: { release: "release-a", release_after: "", verifier_after: "", verifier: "verifier-a" },
+    releases: { entries: [release], limit: 25, next_after: null },
+    verifiers: { entries: [verifier], limit: 25, next_after: null },
+    selection: { release, verifier },
+    evidence: {
+      status: "ready",
+      record: {
+        kind: "telemetry_sample",
+        id: "sample-a",
+        organization_id: "org-a",
+        mission_id: "mission-a",
+        point_id: "point-a",
+        point_name: "Power",
+        packet_id: "packet-a",
+        evidence_id: "evidence-a",
+        spacecraft_id: "spacecraft-a",
+        quality_state: "good",
+        generation_time: null,
+        receipt_time: "2026-09-10T08:00:02.000000Z",
+        raw_value_json: "18446744073709551615",
+        engineering_value_json: '{"counter":18446744073709551615}',
+      },
+    },
+  };
+}

@@ -10,6 +10,7 @@ defmodule Cadence.Telemetry.HistoryStore.QuestDB do
 
   alias Cadence.Telemetry.Storage
   alias Cadence.Telemetry.Storage.QuestDB.ObservationReader
+  alias Cadence.Telemetry.Storage.QuestDB.PhysicalSampleReader
 
   @impl true
   def child_spec(_opts), do: nil
@@ -43,6 +44,9 @@ defmodule Cadence.Telemetry.HistoryStore.QuestDB do
   def sample_watermark_result(mission_id, point_id, opts) do
     ObservationReader.sample_watermark_result(mission_id, point_id, opts)
   end
+
+  @impl true
+  def fetch_sample(query, opts), do: PhysicalSampleReader.fetch(query, opts)
 
   @impl true
   def reset, do: :ok

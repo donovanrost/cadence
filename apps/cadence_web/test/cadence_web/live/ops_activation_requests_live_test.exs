@@ -11,7 +11,7 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "organization administrators mount the activation federated surface" do
+  test "organization administrators mount the host-owned activation inbox" do
     {conn, mission} = signed_in(:organization_admin)
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/activations")
@@ -34,10 +34,9 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
     {TestFixtures.member_conn(user), mission}
   end
 
-  defp assert_surface(view, _id, surface_id, mission, query_params) do
+  defp assert_surface(view, _id, _surface_id, mission, query_params) do
     HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
-      "surface_id" => surface_id,
+      "kind" => "activation_approvals",
       "host_scope" => "mission",
       "mission_id" => mission.mission_id,
       "query_params" => query_params

@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./ops-pages": "./src/ops-page-contribution.ts",
+    "./mission-pages": "./src/mission-page-contribution.ts",
+    "./organization-pages": "./src/organization-page-contribution.ts",
+    "./spacecraft-pages": "./src/spacecraft-page-contribution.ts",
+    "./readiness": "./src/readiness-contribution.ts",
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"

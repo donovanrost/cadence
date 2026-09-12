@@ -47,8 +47,8 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
     )
   end
 
-  test "authenticated spacecraft routing mounts its spacecraft-scoped surface" do
-    {conn, _organization, mission} = signed_in_org_and_mission()
+  test "authenticated spacecraft routing composes the Communications feature in the host" do
+    {conn, organization, mission} = signed_in_org_and_mission()
     spacecraft = TestFixtures.persist_spacecraft!(mission)
 
     {:ok, view, _html} =
@@ -57,14 +57,28 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
         ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/routing"
       )
 
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "spacecraft",
-      "surface_id" => "routing",
-      "host_scope" => "spacecraft",
-      "mission_id" => mission.mission_id,
-      "spacecraft_id" => spacecraft.spacecraft_id,
-      "query_params" => %{}
-    })
+    snapshot =
+      HostTransportTestSupport.assert_context(view, %{
+        "kind" => "spacecraft_module",
+        "host_scope" => "spacecraft",
+        "mission_id" => mission.mission_id,
+        "spacecraft_id" => spacecraft.spacecraft_id,
+        "query_params" => %{}
+      })
+
+    contribution = snapshot["spacecraft_module_page"]
+    assert contribution["id"] == "comms.spacecraft-routing"
+    assert contribution["slot"] == "spacecraft.page"
+    assert contribution["version"] == 1
+    assert contribution["status"] == "ready"
+
+    assert contribution["context"] == %{
+             "organizationId" => organization.organization_id,
+             "missionId" => mission.mission_id,
+             "spacecraftId" => spacecraft.spacecraft_id
+           }
+
+    assert contribution["data"]["page"]["rows"] == []
   end
 
   test "routing routes redirect unauthenticated users to sign in", %{conn: conn} do
@@ -74,8 +88,10 @@ defmodule CadenceWeb.CommsRoutingLiveTest do
 
   defp assert_surface(view, _id, surface_id, mission, query_params, _opts \\ []) do
     HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "comms",
-      "surface_id" => surface_id,
+      "application_key" => nil,
+      "surface_id" => nil,
+      "kind" => "mission_module",
+      "contribution" => "comms." <> String.replace(surface_id, "_", "-"),
       "host_scope" => "mission",
       "mission_id" => mission.mission_id,
       "query_params" => query_params

@@ -3,7 +3,7 @@ title: Cadence Context Dependency Policy
 tags: [developer, architecture, boundaries, xref]
 status: active
 created: 2026-07-18
-updated: 2026-08-02
+updated: 2026-09-10
 owner: Cadence core architecture
 review_by: 2026-10-18
 ---
@@ -42,7 +42,7 @@ should use the callee context's public application service or value types.
 | Contact lifecycle | committed schedules, provider reservations, realized contacts, runtime handoff | Identity and tenancy; Comms configuration; Ground-network provider integration; Contact planning; Mission runtime and capabilities; Platform |
 | Commanding | staging, approvals, release queues, dispatch, verification | Identity and tenancy; Catalog and activation; Comms configuration; Mission runtime and capabilities; Telemetry, history, and projections; Platform |
 | Mission runtime and capabilities | runtime partitions, workload ownership, capability descriptors and execution | Identity and tenancy; Catalog and activation; Comms configuration; Telemetry, history, and projections; Platform |
-| Telemetry and history | ingress, decom, current values, history, archives, replay inputs, and limits | Identity and tenancy; Catalog and activation; Comms configuration; Platform |
+| Telemetry and history | ingress, decom, current values, history, archives, replay inputs, and limits | Identity and tenancy; Catalog and activation; Comms configuration; Data Sources through public observation APIs; Platform |
 | Data Sources | physical source definitions, logical bindings, non-secret credential references, health/watermark projections, probes, and provisioning | Identity and tenancy; Platform |
 | Dashboards | documents, lifecycle, source requests, data links, execution, and visualization contracts | Data Sources and Read models for IO; other contexts only through public value types and pure domain services; Platform |
 | Read models | cross-plane mission events, status, health, and query projections | All domain contexts through public facts, services, and value types; Platform |
@@ -96,7 +96,16 @@ Run the policy check from the Workspace root:
 mix cadence.architecture.check
 ```
 
-The ratchet now enforces the complete plane and bounded-context axes:
+The check compiles `apps/cadence_web` and its domain dependency in the selected
+Mix environment, then reads both compiler manifests from that child's actual
+build path. One module index includes cross-project references. Both `lib/**/*.ex`
+inventories must be nonempty and exactly match the compiled sources, and each
+source must match its compiler content digest. Test helpers are outside this
+production graph. Missing, stale, incomplete, or duplicate source/module
+ownership fails closed. A supplied `--xref-json` must equal that complete current
+graph, including reference labels and edges; it cannot remove dependencies.
+
+The ratchet enforces the complete plane and bounded-context axes:
 
 1. every core production module has an explicit plane and context
    classification; every `cadence_web` module is explicitly an adapter;
@@ -128,9 +137,104 @@ The live debt is recorded in
 xref edge, not permission for new code. The check fails when an edge is added,
 when a removed edge is left in the baseline, or when the baseline review date
 expires. Removing an edge and its baseline entry in the same change makes the
-policy ratchet toward the target. As of 2026-08-02, root-facade, horizontal
-persistence-schema, cross-context row, web catch-all, unclassified-module,
-reverse context/plane direction, and cross-plane internal debt are all zero.
+policy ratchet toward the target. The former zero-debt claim did not establish
+production coverage: the workspace-root `mix xref graph` could return an empty
+graph. The September 2026 recovery rejects that condition and exposes outstanding
+production findings. An empty baseline does not establish that the current graph
+passes. Remaining findings must be resolved and the actual command must pass
+before the migration can claim completion.
+
+## Reviewed source ownership
+
+`PlaneBoundary` maintains an exact `@host_adapter_paths` ledger for the reviewed
+Ops action cohorts and first-party application action/query providers, including
+organization-admin compatibility providers. These modules admit host request
+identities and scope, translate bounded input, and delegate to domain owners.
+They are adapters on both architectural axes. Neighboring `Applications` modules
+retain their own classification; adding a module under an action directory does
+not grant adapter authority. Root-facade and cross-context row guards also apply
+to adapters.
+
+Packet binding declarations and surface DTOs are shared values. Configuration
+locking, packet-binding persistence and mission binding preparation belong to
+Management. Data Sources health/watermark observation journals and their live status rows
+belong to Data in the Data Sources context, despite their historical
+`Projections.DataSources` namespace. Their two public owner APIs record observed
+source facts; operator/dashboard composition remains read-side. The exact file
+ledger does not permit Data to call general projections or Management. Reads access domain events and
+credential references through the public owning APIs; persistence rows remain
+inside their stores. Notification recipient authorization and invitation actions
+belong to Identity in Management, while generic notification persistence remains
+Platform.
+
+The four subsystem supervisors and `Platform.RootComposition` are composition.
+`Control.ProcessNamespace` and `Runtime.ProcessNamespace` are the two explicit
+public process-address contracts. They construct validated existing-atom
+addresses and `:via` tuples, including default module-named process addresses;
+they do not start, stop or call supervised processes. Domain callers may consume
+these address contracts. This does not grant access to the supervisors or other
+composition modules. Cadence core architecture owns these contracts; review of
+changes to either constructor must preserve that value-only boundary.
+
+The exact public composition value ledger also names the compiled application
+and extension catalogs and the metadata-only application contributors: Comms,
+DerivedTelemetry, Limits, MissionCatalog, OpsConsole, Spacecraft,
+LegacyCommsOverview and OrganizationAdmin. Their public APIs assemble typed
+contribution declarations, provider identities and validated catalog values.
+Callers consume these declarations without obtaining workflow authority. The
+mixed `TelemetryDecom` module remains Management and delegates its surface-query
+declarations to `TelemetryDecomCatalogContribution`, alongside that module's
+existing catalog/release declarations. The internal extension
+package registry remains private composition. The action contract ledger and
+provider dispatch registries are host adapters. Cadence core architecture owns
+this explicit metadata contract; effectful configuration and runtime functions
+must remain outside it.
+
+The deterministic semantic evaluator, expression/monitoring plans, state/result
+values and Mission Model plan decoder are shared Catalog services used by both
+qualification and live execution. Their exact file ledger excludes the semantic
+runtime store and commit row, which remain Runtime-owned Data persistence.
+Reuse of the pure evaluator does not grant a
+qualification workflow access to active partitions or runtime persistence.
+
+`Control.Missions` is explicit cross-context mission lifecycle assembly while
+retaining Control-plane authority. It settles the public Contact owner before
+shutdown or reconfiguration; it no longer calls the contact scheduler directly.
+Job availability is a producer-owned fact delivered through the platform event
+bus. The job store does not reference the dispatcher; a subscribing dispatcher
+claims durable queued rows and retains its safety scan for missed notifications.
+
+`ContactPlanning.FleetRunActions` and `FleetRunRepairs` belong to Contact lifecycle
+in Control, alongside `FleetPlanner` and `FleetRepairs`: they continue persisted
+execution and claim exact execution/commitment evidence before creating repair
+successors. Requirement, template, policy and proposed-run declarations retain
+Management ownership.
+
+`Reads.MissionModels.ActiveBasis` is the exact read-only adapter between Control's
+active-generation records and Management's command qualification/authoring.
+Its API returns a current revision identity, an immutable runtime basis, or a
+bounded command-catalog snapshot under the Control owner's held read transaction.
+It exposes no activation mutation, runtime process operation, or persistence row.
+Management callers retain their plane and cannot call Control services directly.
+The command evidence digest is a shared value contract; extracting the adapter
+preserves its existing deterministic bytes and lock duration. General read-model
+modules do not inherit this adapter classification. Cadence core architecture
+owns this specific read contract and its native scope/concurrency checks.
+
+Telemetry ingestion may synchronously record observed source progress through
+Data Sources' public observation APIs. This is a forward dependency: Data Sources
+does not call Telemetry. The journal write result remains part of the ingestion
+result; replacing it with fire-and-forget notification would weaken failure
+semantics. Cross-context rows and Management/Control writes remain forbidden.
+
+The public mission lifecycle ingress has two exact additional orchestration
+contracts: `Contacts.Scheduler -> Control.Missions` ensures its mission owner
+exists, and `Control.MissionRecovery -> Control.Missions` restores approved active
+missions after restart. Both retain Control-plane authority; other contexts do
+not receive a general composition dependency. Owner: Cadence core architecture.
+Review by: 2026-10-18. Remove each exact entry when its caller is removed or moved
+into the mission composition owner. Events cannot replace these calls because
+the caller needs the concrete startup result before continuing.
 
 ## Dependency exceptions
 

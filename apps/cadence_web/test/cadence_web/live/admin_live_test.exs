@@ -27,54 +27,37 @@ defmodule CadenceWeb.AdminLiveTest do
 
   describe "federated surfaces" do
     test "platform admins can mount the admin routes", %{admin_conn: conn} do
-      assert_admin_surface(
-        conn,
-        ~p"/admin",
-        "admin-home-component",
-        "admin_home",
-        page_id: "admin-home-page"
-      )
+      for {path, page} <- [
+            {"/admin", "platform_overview"},
+            {"/admin/organizations", "organization_directory"},
+            {"/admin/organizations/new", "organization_create"}
+          ] do
+        {:ok, view, _} = live(conn, path)
+        snapshot = HostTransportTestSupport.assert_context(view, %{"host_scope" => "admin"})
+        assert snapshot["platform_administration_page"]["page"] == page
+        assert snapshot["platform_administration_page"]["status"] == "ready"
+      end
 
-      assert_admin_surface(
-        conn,
-        ~p"/admin/runtime",
-        "admin-runtime-component",
-        "admin_runtime",
-        class: "contents"
-      )
+      {:ok, diagnostics_view, _html} = live(conn, ~p"/admin/runtime")
 
-      assert_admin_surface(
-        conn,
-        ~p"/admin/organizations",
-        "admin-organization-list-page-component",
-        "admin_organizations"
-      )
+      snapshot =
+        HostTransportTestSupport.assert_context(diagnostics_view, %{"host_scope" => "admin"})
 
-      assert_admin_surface(
-        conn,
-        ~p"/admin/organizations/new",
-        "admin-organization-new-component",
-        "admin_organization_new"
-      )
+      assert [%{"id" => "dashboards.runtime-diagnostics", "version" => 1, "status" => "ready"}] =
+               snapshot["diagnostics"]
 
       organization_id = "organization-admin-test"
 
-      assert_admin_surface(
-        conn,
-        ~p"/admin/organizations/#{organization_id}",
-        "admin-organization-show-component",
-        "admin_organization_show",
-        page_id: "admin-organization-show-page",
-        query_params: %{"organization_id" => organization_id}
-      )
-
-      assert_admin_surface(
-        conn,
-        ~p"/admin/organizations/#{organization_id}/invite",
-        "admin-organization-invite-component",
-        "admin_organization_invite",
-        query_params: %{"organization_id" => organization_id}
-      )
+      for {path, page} <- [
+            {"/admin/organizations/#{organization_id}", "organization_detail"},
+            {"/admin/organizations/#{organization_id}/invite", "organization_invite"}
+          ] do
+        {:ok, view, _} = live(conn, path)
+        snapshot = HostTransportTestSupport.assert_context(view, %{"host_scope" => "admin"})
+        assert snapshot["platform_administration_page"]["page"] == page
+        assert snapshot["platform_administration_page"]["organization_id"] == organization_id
+        assert snapshot["platform_administration_page"]["status"] == "unavailable"
+      end
     end
   end
 
@@ -110,23 +93,6 @@ defmodule CadenceWeb.AdminLiveTest do
       assert {:error, {:redirect, %{to: "/admin-mode"}}} = live(conn, ~p"/admin")
     end
   end
-
-  defp assert_admin_surface(conn, path, _id, surface_id, opts \\ []) do
-    {:ok, view, _html} = live(conn, path)
-
-    expected_props = %{
-      "application_key" => "organization_admin",
-      "surface_id" => surface_id,
-      "host_scope" => "admin"
-    }
-
-    HostTransportTestSupport.assert_context(
-      view,
-      Map.merge(expected_props, query_props(Keyword.get(opts, :query_params, %{})))
-    )
-  end
-
-  defp query_props(query_params), do: %{"query_params" => query_params}
 
   defp issue_platform_admin_session! do
     user =

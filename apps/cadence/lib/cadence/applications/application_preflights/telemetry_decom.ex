@@ -7,6 +7,7 @@ defmodule Cadence.Applications.ApplicationPreflights.TelemetryDecom do
   alias Cadence.Applications.TelemetryDecom, as: TelemetryDecomApplication
   alias Cadence.Applications.TelemetryDecom.Config
   alias Cadence.Auth.Scope
+  alias Cadence.{Catalog, MissionModels}
 
   @impl true
   def checks(
@@ -29,6 +30,7 @@ defmodule Cadence.Applications.ApplicationPreflights.TelemetryDecom do
      [
        configuration_check(config),
        resource_check(config),
+       mission_model_check(organization_id, mission_id, config),
        compilation_check(organization_id, mission_id, config)
      ]}
   end
@@ -117,6 +119,78 @@ defmodule Cadence.Applications.ApplicationPreflights.TelemetryDecom do
       "Shared packet input ready",
       "Every selected APID resolves packet-model input for this application; other applications may read the same packet.",
       "#{count} #{pluralize(count, "APID", "APIDs")}"
+    )
+  end
+
+  defp mission_model_check(_organization_id, _mission_id, nil) do
+    mission_model_result(:unavailable)
+  end
+
+  defp mission_model_check(organization_id, mission_id, config) do
+    enabled =
+      organization_id
+      |> TelemetryDecomApplication.list_configs(mission_id)
+      |> Enum.filter(& &1.enabled)
+
+    configs = if enabled == [], do: [config], else: enabled
+
+    configs
+    |> Enum.map(& &1.catalog_revision_id)
+    |> Enum.uniq()
+    |> Enum.reduce_while({:ok, []}, fn id, {:ok, models} ->
+      with {:ok, revision} <- Catalog.fetch_revision(organization_id, mission_id, id),
+           {:ok, model} <-
+             MissionModels.fetch_revision(
+               organization_id,
+               mission_id,
+               revision.mission_model_revision_id
+             ) do
+        {:cont, {:ok, [{model.revision_id, model.status} | models]}}
+      else
+        _ -> {:halt, :unavailable}
+      end
+    end)
+    |> mission_model_result()
+  end
+
+  defp mission_model_result({:ok, models}) do
+    case Enum.uniq(models) do
+      [{_id, :approved}] ->
+        check(
+          "mission-model-approval",
+          :configuration,
+          :ready,
+          "Mission model approved",
+          "The mission configuration basis uses one approved mission model revision."
+        )
+
+      [{_id, _status}] ->
+        check(
+          "mission-model-approval",
+          :configuration,
+          :blocked,
+          "Mission model approval required",
+          "Approve the mission model revision in Catalog before requesting mission changes."
+        )
+
+      _ ->
+        check(
+          "mission-model-approval",
+          :configuration,
+          :blocked,
+          "Mission model revisions differ",
+          "Enabled configurations must use one mission model revision before requesting mission changes."
+        )
+    end
+  end
+
+  defp mission_model_result(:unavailable) do
+    check(
+      "mission-model-approval",
+      :configuration,
+      :blocked,
+      "Mission model review unavailable",
+      "Save a configuration with an available mission model revision before requesting mission changes."
     )
   end
 

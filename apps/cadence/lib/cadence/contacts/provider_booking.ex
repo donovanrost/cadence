@@ -89,7 +89,8 @@ defmodule Cadence.Contacts.ProviderBooking do
            ProviderReservations.mark_canceling(
              organization_id,
              mission_id,
-             provider_reservation_id
+             provider_reservation_id,
+             Keyword.take(opts, [:expected_cancel_evidence])
            ),
          {:ok, provider} <-
            GroundNetworks.fetch_provider_version(

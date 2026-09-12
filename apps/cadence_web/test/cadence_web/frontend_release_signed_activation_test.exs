@@ -764,14 +764,12 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
              "application_key" => "telemetry_decom",
              "application_version" => 1,
              "dom_id" => "spacecraft-application-host",
-             "renderer" => "declarative",
+             "renderer" => "trusted",
              "surface_id" => "packet_bindings"
            }
 
-    assert query["declarative_surface"]["packet_bindings"]["action"]["action_id"] ==
-             "save_packet_bindings"
-
-    assert [%{"packet_id" => packet_id}] = query["application_surface_packet_groups"]
+    assert query["trusted_surface"]["contract_version"] == 1
+    assert [%{"id" => packet_id}] = query["trusted_surface"]["packets"]["items"]
     refute Map.has_key?(query, "releaseId")
 
     action_response =
@@ -780,7 +778,15 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
       |> put_req_header("idempotency-key", "phase-d-action")
       |> post(
         actions_path(context),
-        Jason.encode!(action_body(context, revision, endpoint, packet_id))
+        Jason.encode!(
+          action_body(
+            context,
+            revision,
+            endpoint,
+            packet_id,
+            query["trusted_surface"]["review_token"]
+          )
+        )
       )
 
     action = json_response(action_response, 200)
@@ -1327,7 +1333,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
     }
   end
 
-  defp action_body(context, revision, endpoint, packet_id) do
+  defp action_body(context, revision, endpoint, packet_id, review) do
     %{
       "applicationKey" => "telemetry_decom",
       "applicationVersion" => 1,
@@ -1336,6 +1342,8 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
       "actionId" => "save_packet_bindings",
       "scope" => scope_document(context),
       "input" => %{
+        "expected_review" => review,
+        "expected_configuration_version" => 0,
         "input_id" => "telemetry-fields",
         "input_version" => 1,
         "catalog_revision_id" => revision.catalog_revision_id,

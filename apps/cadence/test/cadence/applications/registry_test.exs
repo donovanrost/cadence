@@ -83,7 +83,7 @@ defmodule Cadence.Applications.RegistryTest do
              Registry.fetch_default_surface(definition, :spacecraft)
 
     assert surface.surface_id == "packet_bindings"
-    assert surface.renderer == {:declarative, "cadence.host.surface.v1"}
+    assert surface.renderer == {:trusted, "cadence.telemetry_decom.packet_bindings"}
     assert "save_packet_bindings" in surface.actions
     assert surface.references == %{}
 

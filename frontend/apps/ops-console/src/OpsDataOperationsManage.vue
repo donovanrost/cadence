@@ -1,9 +1,4 @@
-<script setup>
-import OpsDataOperations from "./OpsDataOperations.vue";
-
-defineOptions({ inheritAttrs: false });
+<script lang="ts">
+import { OpsDataOperations } from "@cadence/data-operations/historical-workflows";
+export default OpsDataOperations;
 </script>
-
-<template>
-  <OpsDataOperations v-bind="$attrs" />
-</template>

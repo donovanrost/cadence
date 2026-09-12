@@ -63,6 +63,7 @@ defmodule Cadence.Dashboards.DocumentStore do
            put_path_scope(document, organization_id, mission_id, dashboard_id),
          :ok <- validate_document(scoped_document),
          :ok <- check_expected_version(row, expected_version),
+         :ok <- check_expected_revision(row, Keyword.get(opts, :expected_revision)),
          versioned_document <- put_next_version(scoped_document, row),
          {:ok, document} <-
            update_document_with_version(
@@ -261,7 +262,8 @@ defmodule Cadence.Dashboards.DocumentStore do
     event_type = lifecycle_event_type(lifecycle_state)
     occurred_at = event_time(opts)
 
-    with :ok <- check_expected_version(row, Keyword.get(opts, :expected_version)) do
+    with :ok <- check_expected_version(row, Keyword.get(opts, :expected_version)),
+         :ok <- check_expected_revision(row, Keyword.get(opts, :expected_revision)) do
       row
       |> update_lifecycle_state_with_event(lifecycle_state, event_type, occurred_at, opts)
       |> handle_lifecycle_update_result(event_type)
@@ -363,6 +365,7 @@ defmodule Cadence.Dashboards.DocumentStore do
              is_integer(version) and version > 0 do
     with %OpsDashboardRow{} = row <- get_row(organization_id, mission_id, dashboard_id),
          :ok <- reject_archived(row),
+         :ok <- check_expected_revision(row, Keyword.get(opts, :expected_revision)),
          :ok <- check_expected_version(row, Keyword.get(opts, :expected_version)),
          {:ok, %Version{} = snapshot} <-
            fetch_version(organization_id, mission_id, dashboard_id, version),
@@ -392,6 +395,7 @@ defmodule Cadence.Dashboards.DocumentStore do
              is_integer(version) and version > 0 do
     with %OpsDashboardRow{} = row <- get_row(organization_id, mission_id, dashboard_id),
          :ok <- reject_archived(row),
+         :ok <- check_expected_revision(row, Keyword.get(opts, :expected_revision)),
          :ok <- check_expected_version(row, Keyword.get(opts, :expected_version)),
          {:ok, %Version{} = source_version} <-
            fetch_version(organization_id, mission_id, dashboard_id, version),
@@ -688,6 +692,10 @@ defmodule Cadence.Dashboards.DocumentStore do
   defp revert_change_summary(%Version{} = source_version, opts) do
     Keyword.get(opts, :change_summary, "Restored version #{source_version.version} as draft")
   end
+
+  defp check_expected_revision(_row, nil), do: :ok
+  defp check_expected_revision(%OpsDashboardRow{lock_version: revision}, revision), do: :ok
+  defp check_expected_revision(_row, _revision), do: {:error, :dashboard_revision_conflict}
 
   defp check_expected_version(_row, nil), do: :ok
 

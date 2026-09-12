@@ -17,8 +17,7 @@ defmodule CadenceWeb.NotificationsLiveTest do
     {:ok, view, _html} = live(TestFixtures.member_conn(user), ~p"/notifications")
 
     HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "organization_admin",
-      "surface_id" => "notifications",
+      "kind" => "notifications",
       "host_scope" => "user",
       "query_params" => %{},
       "user_id" => user.user_id

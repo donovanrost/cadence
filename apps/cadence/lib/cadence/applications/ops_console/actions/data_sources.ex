@@ -15,7 +15,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   alias Cadence.Jobs
   alias Cadence.Jobs.Job
   alias Cadence.Management.DataSources
-  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
 
   @surface_ids ["data_sources", "data_source_registration", "data_source_settings"]
   @surface_version 1
@@ -167,6 +166,19 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   end
 
   def result(_value), do: nil
+
+  @doc "Validates the exact action payload without performing a source operation."
+  def validate_input(action_id, params) do
+    with :ok <- validate_json_params(params) do
+      normalize_params(action_id, params)
+    end
+  end
+
+  def validate_registration(organization_id, mission_id, params) do
+    with {:ok, %{source: attrs}} <- validate_input("register-source", params) do
+      attrs |> data_source(organization_id, mission_id) |> DataSource.validate_configuration()
+    end
+  end
 
   defp validate_request(
          surface_id,
@@ -504,7 +516,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
        do: :ok
 
   defp maybe_register_credentials(attrs, organization_id, mission_id, payload, scope) do
-    case SourceCredentials.fetch_reference(attrs.credentials_ref) do
+    case DataSources.fetch_credential_reference(attrs.credentials_ref) do
       {:ok, _reference} ->
         :ok
 
@@ -528,7 +540,9 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
           payload: payload
         }
 
-        case SourceCredentials.register_reference(credential_attrs, actor_id: actor_id(scope)) do
+        case DataSources.register_credential_reference(credential_attrs,
+               actor_id: actor_id(scope)
+             ) do
           {:ok, _reference, _event} -> :ok
           {:error, reason} -> {:error, reason}
         end
@@ -661,7 +675,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     with {:ok, source} <- scoped_source(scope.organization_id, mission_id, data_source_id),
          :ok <- credential_belongs_to_source?(source, credentials_ref),
          {:ok, reference, event} <-
-           SourceCredentials.rotate_reference(
+           DataSources.rotate_credential_reference(
              credentials_ref,
              %{
                data_source_id: data_source_id,

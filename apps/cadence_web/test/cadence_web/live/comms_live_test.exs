@@ -54,8 +54,10 @@ defmodule CadenceWeb.CommsLiveTest do
 
   defp assert_surface(view, _id, surface_id, mission, query_params) do
     HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "comms",
-      "surface_id" => surface_id,
+      "application_key" => nil,
+      "surface_id" => nil,
+      "kind" => "mission_module",
+      "contribution" => "comms." <> String.replace(surface_id, "_", "-"),
       "host_scope" => "mission",
       "mission_id" => mission.mission_id,
       "query_params" => query_params

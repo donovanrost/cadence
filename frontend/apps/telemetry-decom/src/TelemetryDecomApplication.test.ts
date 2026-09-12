@@ -109,7 +109,7 @@ describe("Telemetry Decom federated application adapter", () => {
         global: {
           stubs: {
             TelemetryDecomManage: { template: "<span />" },
-            ApplicationHost: { template: "<span />" },
+            PacketBindingsSurface: { template: "<span />" },
           },
         },
       });
@@ -126,65 +126,75 @@ describe("Telemetry Decom federated application adapter", () => {
     }
   });
 
-  it("maps the packet bindings action event to the declared bridge action", async () => {
+  it("passes the public packet feature a scoped read, navigation and idempotent action port", async () => {
     const surface = manifest.surfaces.find((item) => item.surfaceId === "packet_bindings")!;
-    const execute = vi.fn<HostBridge["execute"]>().mockResolvedValue({
-      receiptId: "receipt-1",
-      completedAt: "2026-09-04T00:00:00Z",
-      result: {},
-    });
-    const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
+    const receipt = { receiptId: "receipt-1", completedAt: "2026-09-04T00:00:00Z", result: {} };
+    const execute = vi.fn<HostBridge["execute"]>().mockResolvedValue(receipt);
+    const query = vi
+      .fn<HostBridge["query"]>()
+      .mockResolvedValue({ trusted_surface: { contract_version: 1 } });
+    const navigate = vi.fn();
     const wrapper = mount(TelemetryDecomApplication, {
       props: {
         application: applicationFor("packet_bindings"),
         surface,
         context,
-        bridge: { query, execute, subscribe: vi.fn() },
+        bridge: { query, execute, navigate, subscribe: vi.fn() },
       },
       global: {
         stubs: {
-          ApplicationHost: {
-            template: `<button id="save" @click="$emit('application_action', { application_action: { selected_packet_ids: ['packet-1'] } })" />`,
+          PacketBindingsSurface: {
+            name: "PacketBindingsSurface",
+            props: ["document", "port", "hostContext"],
+            template: "<span />",
           },
         },
       },
     });
-
     await flushPromises();
-    await wrapper.get("#save").trigger("click");
-    await flushPromises();
-
+    const feature = wrapper.findComponent({ name: "PacketBindingsSurface" });
+    expect(feature.props("document")).toEqual({ contract_version: 1 });
+    expect(feature.props("hostContext")).toEqual(context);
+    const port = feature.props("port");
+    const input = { selected_packet_ids: ["packet-1"] };
+    await expect(port.save(input, "stable-retry-key")).resolves.toEqual(receipt);
     expect(execute).toHaveBeenCalledWith({
       applicationKey: "telemetry_decom",
       applicationVersion: 1,
       surfaceId: "packet_bindings",
       surfaceVersion: 1,
       actionId: "save_packet_bindings",
-      input: { selected_packet_ids: ["packet-1"] },
+      input,
+      idempotencyKey: "stable-retry-key",
+      context,
+    });
+    await expect(port.read()).resolves.toEqual({ contract_version: 1 });
+    expect(query).toHaveBeenLastCalledWith({
+      queryId: "cadence.packet_bindings.manage",
+      version: 1,
       context,
     });
     expect(query).toHaveBeenCalledTimes(2);
-    expect(wrapper.find("#telemetry-decom-action-notice").attributes("data-receipt-id")).toBe(
-      "receipt-1",
-    );
+    port.navigate("/scoped-packet-page");
+    expect(navigate).toHaveBeenCalledWith("/scoped-packet-page");
     wrapper.unmount();
   });
 
   it("shows rejected actions without replacing the current surface", async () => {
-    const surface = manifest.surfaces.find((item) => item.surfaceId === "packet_bindings")!;
+    const surface = manifest.surfaces.find((item) => item.surfaceId === "manage")!;
     const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
     const execute = vi.fn<HostBridge["execute"]>().mockRejectedValue(new Error("action denied"));
     const wrapper = mount(TelemetryDecomApplication, {
       props: {
-        application: applicationFor("packet_bindings"),
+        application: applicationFor("manage"),
         surface,
         context,
         bridge: { query, execute, subscribe: vi.fn() },
       },
       global: {
         stubs: {
-          ApplicationHost: {
-            template: `<button id="save" @click="$emit('application_action', { application_action: { selected_packet_ids: ['packet-1'] } })" />`,
+          TelemetryDecomManage: {
+            template: `<button id="save" @click="$emit('save_catalog_revision', { catalog_revision_id: 'revision-1' })" />`,
           },
         },
       },
@@ -200,7 +210,7 @@ describe("Telemetry Decom federated application adapter", () => {
   });
 
   it("keeps the newest overlapping action receipt and refresh authoritative state", async () => {
-    const surface = manifest.surfaces.find((item) => item.surfaceId === "packet_bindings")!;
+    const surface = manifest.surfaces.find((item) => item.surfaceId === "manage")!;
     const query = vi.fn<HostBridge["query"]>().mockResolvedValue({});
     const first = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
     const second = deferred<Awaited<ReturnType<HostBridge["execute"]>>>();
@@ -210,15 +220,15 @@ describe("Telemetry Decom federated application adapter", () => {
       .mockReturnValueOnce(second.promise);
     const wrapper = mount(TelemetryDecomApplication, {
       props: {
-        application: applicationFor("packet_bindings"),
+        application: applicationFor("manage"),
         surface,
         context,
         bridge: { query, execute, subscribe: vi.fn() },
       },
       global: {
         stubs: {
-          ApplicationHost: {
-            template: `<button id="save" @click="$emit('application_action', { application_action: { selected_packet_ids: ['packet-1'] } })" />`,
+          TelemetryDecomManage: {
+            template: `<button id="save" @click="$emit('save_catalog_revision', { catalog_revision_id: 'revision-1' })" />`,
           },
         },
       },
@@ -249,3 +259,23 @@ function deferred<TResult>() {
   });
   return { promise, resolve, reject };
 }
+
+it.each(["unknown", "toString", "constructor", "__proto__"])(
+  "rejects unsupported renderer %s before querying",
+  async (surfaceId) => {
+    const valid = manifest.surfaces[0]!;
+    const query = vi.fn<() => Promise<never>>().mockRejectedValue(new Error("unexpected query"));
+    const wrapper = mount(TelemetryDecomApplication, {
+      props: {
+        application: applicationFor(valid.surfaceId),
+        surface: { ...valid, surfaceId },
+        context,
+        bridge: { query, execute: vi.fn(), subscribe: vi.fn() },
+      },
+    });
+    await flushPromises();
+    expect(query).not.toHaveBeenCalled();
+    expect(wrapper.find("#telemetry-decom-error").exists()).toBe(true);
+    wrapper.unmount();
+  },
+);

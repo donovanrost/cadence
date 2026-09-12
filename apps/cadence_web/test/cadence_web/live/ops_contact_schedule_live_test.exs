@@ -11,12 +11,34 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "contacts mount the mission-scoped federated surface" do
+  test "contacts mount the mission-scoped compiled contribution" do
     {conn, mission} = signed_in()
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/contacts")
 
     assert_surface(view, "ops-contact-schedule-component", "contact_schedule", mission, %{})
+  end
+
+  test "captures independent ledger pages without allowing a query to replace host authority" do
+    {conn, mission} = signed_in()
+
+    query = %{
+      "scheduled_page" => "2",
+      "reservations_page" => "3",
+      "spacecraft_q" => "orbiter",
+      "mission_id" => "foreign",
+      "untrusted" => "ignored"
+    }
+
+    {:ok, view, _} = live(conn, ~p"/missions/#{mission.mission_id}/ops/contacts?#{query}")
+
+    assert_surface(
+      view,
+      "ops-contact-schedule-component",
+      "contact_schedule",
+      mission,
+      Map.take(query, ~w(scheduled_page reservations_page spacecraft_q))
+    )
   end
 
   test "contacts remain authentication scoped" do
@@ -39,10 +61,12 @@ defmodule CadenceWeb.OpsContactScheduleLiveTest do
     {TestFixtures.member_conn(user), user, organization, mission}
   end
 
-  defp assert_surface(view, _id, surface_id, mission, query_params) do
+  defp assert_surface(view, _id, _surface_id, mission, query_params) do
     HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
-      "surface_id" => surface_id,
+      "kind" => "ops_module",
+      "contribution" => "planning.contact-schedule",
+      "application_key" => nil,
+      "surface_id" => nil,
       "host_scope" => "mission",
       "mission_id" => mission.mission_id,
       "query_params" => query_params

@@ -179,6 +179,73 @@ defmodule Cadence.Accounts do
     end)
   end
 
+  @doc "Bounded member facts for the platform organization detail; excludes credential columns."
+  def page_organization_members(organization_id, after_id) do
+    OrganizationMembershipRow
+    |> join(:inner, [m], u in UserRow, on: m.user_id == u.user_id)
+    |> where([m, _u], m.organization_id == ^organization_id and m.lifecycle_state == "active")
+    |> select([m, u], %{
+      id: m.organization_membership_id,
+      user_id: u.user_id,
+      name: u.display_name,
+      email: u.email,
+      role: m.role,
+      user_state: u.lifecycle_state
+    })
+    |> organization_fact_page(:organization_membership_id, after_id)
+  end
+
+  @doc "Bounded pending unexpired invitations without invitation credentials or metadata."
+  def page_pending_organization_invitations(organization_id, after_id) do
+    now = DateTime.utc_now()
+
+    OrganizationInvitationRow
+    |> where(
+      [r],
+      r.organization_id == ^organization_id and r.status == "pending" and r.expires_at > ^now
+    )
+    |> select([r], %{
+      id: r.organization_invitation_id,
+      email: r.email,
+      role: r.membership_role,
+      grant_platform_admin: r.grant_platform_admin,
+      expires_at: r.expires_at
+    })
+    |> organization_fact_page(:organization_invitation_id, after_id)
+  end
+
+  defp organization_fact_page(query, identity_field, after_id) do
+    query =
+      query
+      |> order_by([r], asc: fragment(~s(? COLLATE "C"), field(r, ^identity_field)))
+      |> limit(26)
+
+    query =
+      if after_id,
+        do:
+          where(
+            query,
+            [r],
+            fragment(~s(? COLLATE "C" > ? COLLATE "C"), field(r, ^identity_field), ^after_id)
+          ),
+        else: query
+
+    rows = Repo.all(query)
+    entries = Enum.take(rows, 25)
+    %{entries: entries, next_after: if(length(rows) > 25, do: List.last(entries).id, else: nil)}
+  end
+
+  @doc "Counts active organization memberships using the same user join as the member directory."
+  def count_organization_members(organization_id) when is_binary(organization_id) do
+    OrganizationMembershipRow
+    |> join(:inner, [membership], user in UserRow, on: membership.user_id == user.user_id)
+    |> where(
+      [membership, _user],
+      membership.organization_id == ^organization_id and membership.lifecycle_state == "active"
+    )
+    |> Repo.aggregate(:count)
+  end
+
   @spec list_pending_invitations(binary()) :: [OrganizationInvitation.t()]
   def list_pending_invitations(organization_id) when is_binary(organization_id) do
     now = DateTime.utc_now()
@@ -442,6 +509,8 @@ defmodule Cadence.Accounts do
              {:ok, invitation_row, invitation} <-
                lock_pending_invitation_by_id(Repo, organization_invitation_id),
              :ok <- validate_email_match(user, invitation),
+             {:ok, user} <-
+               grant_platform_admin_if_requested(Repo, user, invitation.grant_platform_admin),
              {:ok, membership} <-
                upsert_membership(
                  Repo,
@@ -904,4 +973,46 @@ defmodule Cadence.Accounts do
   end
 
   defp present_string(_other), do: nil
+
+  @doc "Counts pending unexpired invitations for the active persisted recipient independently of notification state."
+  def count_pending_invitations_for_user(user_id) when is_binary(user_id) do
+    now = DateTime.utc_now()
+
+    OrganizationInvitationRow
+    |> join(:inner, [i], u in UserRow, on: u.email == i.email)
+    |> where(
+      [i, u],
+      u.user_id == ^user_id and u.lifecycle_state == "active" and i.status == "pending" and
+        i.expires_at > ^now
+    )
+    |> Repo.aggregate(:count, :organization_invitation_id)
+  end
+
+  @doc "Reads invitation status for the current email or the durable accepting recipient."
+  def invitation_statuses_for_user(%User{} = user, ids) when is_list(ids) do
+    ids
+    |> Enum.filter(&is_binary/1)
+    |> Enum.uniq()
+    |> Enum.chunk_every(500)
+    |> Enum.flat_map(fn chunk ->
+      OrganizationInvitationRow
+      |> where(
+        [i],
+        i.organization_invitation_id in ^chunk and
+          (i.email == ^user.email or
+             (i.status == "accepted" and i.accepted_by_user_id == ^user.user_id))
+      )
+      |> select(
+        [i],
+        {i.organization_invitation_id,
+         %{
+           status: i.status,
+           expires_at: i.expires_at,
+           accepted_by_user_id: i.accepted_by_user_id
+         }}
+      )
+      |> Repo.all()
+    end)
+    |> Map.new()
+  end
 end

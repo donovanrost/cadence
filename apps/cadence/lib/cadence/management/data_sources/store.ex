@@ -40,6 +40,21 @@ defmodule Cadence.Management.DataSources.Store do
   @default_operational_observables_binding_id "default_flight_operational_observables"
   @default_events_binding_id "default_flight_events"
 
+  @doc "Fetches one exact event in the mission, including organization-neutral events."
+  def fetch_data_binding_event(organization_id, mission_id, event_id) do
+    DataBindingEventRow
+    |> where(
+      [row],
+      (is_nil(row.organization_id) or row.organization_id == ^organization_id) and
+        row.mission_id == ^mission_id and row.data_binding_event_id == ^event_id
+    )
+    |> Repo.one()
+    |> case do
+      nil -> {:error, :data_binding_event_not_found}
+      row -> {:ok, DataBindingEventRow.to_domain(row)}
+    end
+  end
+
   @spec default_managed_data_source() :: DataSource.t()
   def default_managed_data_source do
     %DataSource{

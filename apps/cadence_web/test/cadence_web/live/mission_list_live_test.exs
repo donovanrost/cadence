@@ -11,18 +11,24 @@ defmodule CadenceWeb.MissionListLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "authenticated organization members mount the mission list surface" do
+  test "authenticated organization members mount the core mission directory" do
     {conn, organization} = signed_in_org()
 
     {:ok, view, _html} = live(conn, ~p"/missions")
 
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "mission_catalog",
-      "surface_id" => "mission_list",
-      "host_scope" => "organization",
-      "organization_id" => organization.organization_id,
-      "query_params" => %{}
-    })
+    snapshot =
+      HostTransportTestSupport.assert_context(view, %{
+        "application_key" => nil,
+        "surface_id" => nil,
+        "kind" => "mission",
+        "mission_page" => "mission_list",
+        "host_scope" => "organization",
+        "organization_id" => organization.organization_id,
+        "query_params" => %{}
+      })
+
+    assert %{"page" => "mission_list", "version" => 1, "status" => "ready"} =
+             snapshot["mission_page"]
   end
 
   test "unauthenticated requests redirect to sign in", %{conn: conn} do

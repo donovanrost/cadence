@@ -11,6 +11,7 @@ defmodule CadenceWeb.HostContext do
       })
 
     %{
+      version: 1,
       user: fields(scope.user, [:user_id, :display_name, :email]),
       organization: fields(scope.organization, [:organization_id, :display_name]),
       mission: fields(assigns[:current_mission], [:mission_id, :display_name, :slug]),

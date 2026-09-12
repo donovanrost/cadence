@@ -38,6 +38,7 @@ defmodule Cadence.Applications.OpsConsole do
       purpose: :collection,
       label: "Contact Requirements",
       path: "/missions/:mission_id/ops/requirements",
+      query_params: ["page", "state"],
       actions: []
     },
     %{
@@ -52,6 +53,8 @@ defmodule Cadence.Applications.OpsConsole do
       purpose: :subject_detail,
       label: "Contact Requirement",
       path: "/missions/:mission_id/ops/requirements/:contact_requirement_id",
+      query_params:
+        ~w(version planning_run_id versions_page runs_page searches_page opportunities_page),
       actions: ["plan", "create-plan"]
     },
     %{
@@ -104,6 +107,7 @@ defmodule Cadence.Applications.OpsConsole do
       purpose: :collection,
       label: "Dashboards",
       path: "/missions/:mission_id/ops/dashboards",
+      query_params: ~w(query lifecycle tag sort page),
       actions: ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"]
     },
     %{
@@ -189,6 +193,7 @@ defmodule Cadence.Applications.OpsConsole do
       purpose: :configuration,
       label: "New Dashboard",
       path: "/missions/:mission_id/ops/dashboards/new",
+      query_params: ["mode", "source_dashboard_id"],
       actions: ["validate", "save"]
     },
     %{
@@ -210,6 +215,8 @@ defmodule Cadence.Applications.OpsConsole do
       purpose: :operations,
       label: "Present Playlist",
       path: "/missions/:mission_id/ops/dashboards/playlists/:playlist_id/present",
+      subject_param: "playlist_id",
+      query_params: ["playlist_id", "index"],
       actions: ["next-dashboard"]
     },
     %{
@@ -252,6 +259,7 @@ defmodule Cadence.Applications.OpsConsole do
       purpose: :operations,
       label: "Fleet Planning",
       path: "/missions/:mission_id/ops/planning",
+      query_params: ["page", "state"],
       actions: ["refresh-planning"]
     },
     %{
@@ -280,6 +288,13 @@ defmodule Cadence.Applications.OpsConsole do
       purpose: :subject_detail,
       label: "Fleet Planning Run",
       path: "/missions/:mission_id/ops/planning/runs/:fleet_planning_run_id",
+      query_params: [
+        "requirements_page",
+        "decisions_page",
+        "resources_page",
+        "automation_page",
+        "commitments_page"
+      ],
       actions: ["refresh-fleet-run", "repair-fleet-run"]
     },
     %{

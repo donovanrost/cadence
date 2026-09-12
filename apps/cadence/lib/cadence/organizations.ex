@@ -32,6 +32,53 @@ defmodule Cadence.Organizations do
     end
   end
 
+  @doc "Inserts a newly generated organization without suppressing a conflicting identity."
+  def create_organization(%Organization{} = organization) do
+    case Repo.insert(OrganizationRow.changeset(organization)) do
+      {:ok, row} -> {:ok, OrganizationRow.to_domain(row)}
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  @doc "A maximum of 50 organizations in binary slug and identity order."
+  def page_organizations(cursor \\ nil) do
+    query =
+      OrganizationRow
+      |> order_by([row],
+        asc: fragment(~s(? COLLATE "C"), row.slug),
+        asc: fragment(~s(? COLLATE "C"), row.organization_id)
+      )
+      |> limit(51)
+
+    query =
+      case cursor do
+        nil ->
+          query
+
+        %{slug: slug, id: id} ->
+          where(
+            query,
+            [row],
+            fragment(~s(? COLLATE "C" > ? COLLATE "C"), row.slug, ^slug) or
+              (row.slug == ^slug and
+                 fragment(~s(? COLLATE "C" > ? COLLATE "C"), row.organization_id, ^id))
+          )
+      end
+
+    rows = Repo.all(query)
+    entries = Enum.take(rows, 50)
+    last = List.last(entries)
+
+    %{
+      entries: Enum.map(entries, &OrganizationRow.to_domain/1),
+      next_cursor:
+        if(length(rows) > 50,
+          do: %{"after_slug" => last.slug, "after_id" => last.organization_id},
+          else: nil
+        )
+    }
+  end
+
   @spec list_organizations() :: [Organization.t()]
   def list_organizations do
     OrganizationRow

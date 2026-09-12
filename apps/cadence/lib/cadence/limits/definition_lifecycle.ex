@@ -12,6 +12,7 @@ defmodule Cadence.Limits.DefinitionLifecycle do
     ActiveLimitDefinitionRow,
     Definition,
     DefinitionLifecycleEvent,
+    DefinitionLock,
     Facts,
     GovernedLimitDefinitionRow,
     LimitDefinitionLifecycleEventRow
@@ -27,6 +28,28 @@ defmodule Cadence.Limits.DefinitionLifecycle do
           {:ok, DefinitionLifecycleEvent.t(), ActiveDefinition.t()}
           | {:ok, :unchanged, ActiveDefinition.t()}
           | {:error, term()}
+
+  def history_page(org, mission, point, set, requested) do
+    query =
+      from(row in LimitDefinitionLifecycleEventRow,
+        where:
+          row.organization_id == ^org and row.mission_id == ^mission and
+            row.point_id == ^point and row.limit_set_name == ^set
+      )
+
+    total = Repo.aggregate(query, :count)
+    page = max(1, min(requested, max(1, ceil(total / 25))))
+
+    items =
+      query
+      |> order_by([row], desc: row.observed_at, desc: row.limit_definition_lifecycle_event_id)
+      |> limit(25)
+      |> offset(^((page - 1) * 25))
+      |> Repo.all()
+      |> Enum.map(&LimitDefinitionLifecycleEventRow.to_domain/1)
+
+    %{items: items, total_count: total, page: page}
+  end
 
   @spec record_definition_activation(Definition.t(), map() | struct(), keyword()) ::
           record_result()
@@ -45,16 +68,22 @@ defmodule Cadence.Limits.DefinitionLifecycle do
 
     seed = DefinitionLifecycleEvent.new(attrs)
 
-    Repo.transaction(fn ->
-      current_row = Repo.get(ActiveLimitDefinitionRow, seed.definition_activation_key)
-      current_status = current_row && ActiveLimitDefinitionRow.to_domain(current_row)
+    DefinitionLock.run(
+      seed.organization_id,
+      seed.mission_id,
+      seed.point_id,
+      seed.limit_set_name,
+      fn ->
+        current_row = Repo.get(ActiveLimitDefinitionRow, seed.definition_activation_key)
+        current_status = current_row && ActiveLimitDefinitionRow.to_domain(current_row)
 
-      if same_definition?(current_status, seed) do
-        touch_status!(current_row, seed)
-      else
-        record_transition!(attrs, seed, current_status)
+        if same_definition?(current_status, seed) do
+          touch_status!(current_row, seed)
+        else
+          record_transition!(attrs, seed, current_status)
+        end
       end
-    end)
+    )
     |> case do
       {:ok, {:changed, event, status}} ->
         maybe_publish_limit_definition(event, opts)

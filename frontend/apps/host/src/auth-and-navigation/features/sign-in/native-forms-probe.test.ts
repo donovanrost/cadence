@@ -1,0 +1,66 @@
+import BrowserHost from "../../../shell/BrowserHost.vue";
+vi.mock("live_vue", () => ({ useLiveVue: () => ({ pushEvent: vi.fn() }) }));
+vi.mock("../../../shell/host-browser-history", async () => {
+  const { createMemoryHistory } = await import("vue-router");
+  return { hostBrowserHistory: createMemoryHistory(), ownBrowserHistory: vi.fn() };
+});
+import { writeFileSync } from "node:fs";
+import { mount, flushPromises } from "@vue/test-utils";
+import { test, expect, vi } from "vite-plus/test";
+import {
+  SignInPanel,
+  AdminModePanel,
+  OrganizationAccessPanel,
+  InvitationAcceptancePanel,
+  AccountMenu,
+} from "../../index";
+
+test("actual producer documents submit native fields through their feature owners", async () => {
+  if (!process.env.CADENCE_AUTH_DOCUMENT) return;
+  const data = JSON.parse(process.env.CADENCE_AUTH_DOCUMENT);
+  const inputs: Record<string, unknown> = {};
+  const signin = mount(SignInPanel, { props: { page: data.sign_in } });
+  await signin.get("#user_email").setValue(data.email);
+  await signin.get("#user_password").setValue(data.password);
+  inputs.sign_in = submit(signin.get("#sign-in-form").element);
+  const mode = mount(AdminModePanel, { props: { page: data.admin_mode } });
+  await mode.get("#admin_mode_password").setValue(data.password);
+  inputs.admin_mode = submit(mode.get("#admin-mode-form").element);
+  const access = mount(OrganizationAccessPanel, { props: { page: data.organization_access } });
+  inputs.organization_access = submit(access.get("#no-organization-sign-out").element);
+  const invite = mount(InvitationAcceptancePanel, { props: { page: data.invitation } });
+  await invite
+    .get("#organization_invitation_acceptance_display_name")
+    .setValue("Accepted through the native form");
+  await invite.get("#organization_invitation_acceptance_password").setValue(data.password);
+  await invite
+    .get("#organization_invitation_acceptance_password_confirmation")
+    .setValue(data.password);
+  inputs.invitation = submit(invite.get("#organization-invitation-acceptance-form").element);
+  const host = mount(BrowserHost, { attachTo: document.body, props: { snapshot: data.snapshot } });
+  await flushPromises();
+  const account = host.getComponent(AccountMenu);
+  const accountId = account.props("id");
+  await account.get(`#${accountId}-user`).trigger("click");
+  inputs.switch_organization = submit(
+    account.get(`#${accountId}-switch-${data.other_organization_id}`).element,
+  );
+  inputs.sign_out = submit(account.get(`#${accountId}-sign-out`).element);
+  expect(host.get('nav[aria-label="Primary navigation"] a[href="/missions"]').text()).toContain(
+    "Missions",
+  );
+  if (!process.env.CADENCE_AUTH_INPUT_FILE) throw Error("Missing output file");
+  writeFileSync(process.env.CADENCE_AUTH_INPUT_FILE, JSON.stringify(inputs));
+  for (const wrapper of [signin, mode, access, invite, host]) wrapper.unmount();
+});
+function submit(element: Element) {
+  const form = element as HTMLFormElement;
+  const event = new Event("submit", { bubbles: true, cancelable: true });
+  form.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(false);
+  return {
+    action: form.getAttribute("action"),
+    method: form.getAttribute("method"),
+    fields: Object.fromEntries(new FormData(form)),
+  };
+}

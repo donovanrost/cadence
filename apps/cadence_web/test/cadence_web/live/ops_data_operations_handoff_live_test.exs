@@ -9,7 +9,6 @@ defmodule CadenceWeb.OpsDataOperationsHandoffLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias Cadence.Applications.OpsConsole
-  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
   test "reader route ignores unowned dashboard context" do
@@ -21,7 +20,7 @@ defmodule CadenceWeb.OpsDataOperationsHandoffLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/data-operations?dashboard_id=dashboard-1&point_id=HK.temp"
       )
 
-    assert_surface(view, "ops-data-operations-component", "data_operations", mission, %{})
+    assert_native(view, "data-operations.history", mission, "ready")
   end
 
   test "management route forwards only the selected group" do
@@ -33,9 +32,7 @@ defmodule CadenceWeb.OpsDataOperationsHandoffLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/data-operations/manage?group=group-alpha&point_id=ignored"
       )
 
-    assert_surface(view, "ops-data-operations-component", "data_operations_manage", mission, %{
-      "group" => "group-alpha"
-    })
+    assert_native(view, "data-operations.history-manage", mission, "unavailable")
   end
 
   test "management route remains administrator scoped" do
@@ -61,13 +58,10 @@ defmodule CadenceWeb.OpsDataOperationsHandoffLiveTest do
     {TestFixtures.member_conn(user), mission}
   end
 
-  defp assert_surface(view, _id, surface_id, mission, query_params) do
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
-      "surface_id" => surface_id,
-      "host_scope" => "mission",
-      "mission_id" => mission.mission_id,
-      "query_params" => query_params
-    })
+  defp assert_native(view, id, mission, status) do
+    page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["id"] == id
+    assert page["status"] == status
+    assert page["context"]["missionId"] == mission.mission_id
   end
 end

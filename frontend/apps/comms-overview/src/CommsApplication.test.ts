@@ -1,3 +1,8 @@
+import {
+  providerNewSurface,
+  providerDetailSurface,
+  providerListSurface,
+} from "../../../modules/communications/src/features/providers/surface-fixtures.test-support";
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
@@ -8,6 +13,7 @@ import type {
   MissionHostContext,
 } from "@cadence/plugin-sdk";
 import CommsApplication from "./CommsApplication.vue";
+import CommsGroundStationForm from "./CommsGroundStationForm.vue";
 import { canonicalManifest } from "./federated-application";
 
 const context: MissionHostContext = {
@@ -39,6 +45,205 @@ const surfaceIds = [
 ] as const;
 
 describe("Comms canonical federated application", () => {
+  it.each(["provider_list", "provider_new", "provider_show"] as const)(
+    "contains malformed %s before mounting and recovers through the feature entry",
+    async (surface) => {
+      const query = vi
+        .fn<TestQuery>()
+        .mockResolvedValueOnce({ ...surfacePayload(surface), data: {} })
+        .mockResolvedValue(surfacePayload(surface));
+      const wrapper = mount(CommsApplication, { props: propsFor(surface, query) });
+      await flushPromises();
+      expect(wrapper.find("#comms-application-error").exists()).toBe(true);
+      await wrapper.get("#retry-comms-application").trigger("click");
+      await flushPromises();
+      expect(wrapper.find("#comms-application-error").exists()).toBe(false);
+      expect(wrapper.find("[data-surface-id='" + surface + "']").exists()).toBe(true);
+      wrapper.unmount();
+    },
+  );
+  it("does not expose private query failures", async () => {
+    const wrapper = mount(CommsApplication, {
+      props: propsFor(
+        "provider_show",
+        vi.fn<TestQuery>().mockRejectedValue(new Error("private upstream diagnostics")),
+      ),
+    });
+    await flushPromises();
+    expect(wrapper.find("#comms-application-error").exists()).toBe(true);
+    expect(wrapper.text()).not.toContain("private upstream diagnostics");
+    wrapper.unmount();
+  });
+  it.each(["navigation", "completion"])(
+    "keeps provider creation scoped through %s",
+    async (mode) => {
+      let finish!: (value: unknown) => void;
+      const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload("provider_new"));
+      const props = propsFor("provider_new", query);
+      const execute = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      props.bridge.execute = execute as HostBridge["execute"];
+      props.bridge.navigate = vi.fn();
+      const wrapper = mount(CommsApplication, { props });
+      await flushPromises();
+      await wrapper.get("#provider_provider_account_grant_id").setValue("grant-2");
+      expect(execute).not.toHaveBeenCalled();
+      await wrapper.get("#mission-provider-form").trigger("submit");
+      expect(execute).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          actionId: "create_provider",
+          context,
+          input: {
+            provider: expect.objectContaining({
+              provider_account_grant_id: "grant-2",
+              provider_account_grant_version: "2",
+              provider_account_version: "4",
+            }),
+          },
+        }),
+      );
+      if (mode === "navigation")
+        await wrapper.setProps(
+          propsFor(
+            "provider_list",
+            vi.fn<TestQuery>().mockResolvedValue(surfacePayload("provider_list")),
+          ),
+        );
+      finish({
+        result: { provider_id: "saved-provider", version: 1, display_name: "Saved provider" },
+      });
+      await flushPromises();
+      if (mode === "navigation") expect(props.bridge.navigate).not.toHaveBeenCalled();
+      else
+        expect(props.bridge.navigate).toHaveBeenCalledExactlyOnceWith(
+          "/missions/mission-1/comms/providers/saved-provider",
+        );
+      wrapper.unmount();
+    },
+  );
+  it.each(["transport_new", "routing_new", "ground_station_new", "ground_station_edit"] as const)(
+    "rejects malformed %s form props before mount and recovers on retry",
+    async (surfaceId) => {
+      const query = vi
+        .fn<TestQuery>()
+        .mockResolvedValueOnce({ ...surfacePayload(surfaceId), data: { form: {} } })
+        .mockResolvedValueOnce(surfacePayload(surfaceId));
+      const wrapper = mount(CommsApplication, { props: propsFor(surfaceId, query) });
+      await flushPromises();
+      expect(wrapper.find("#comms-application-error").exists()).toBe(true);
+      expect(wrapper.find("form").exists()).toBe(false);
+      await wrapper.get("#retry-comms-application").trigger("click");
+      await flushPromises();
+      expect(wrapper.find("#comms-application-error").exists()).toBe(false);
+      expect(wrapper.find("form").exists()).toBe(true);
+      wrapper.unmount();
+    },
+  );
+
+  it("contains a form renderer exception without exposing its private message", async () => {
+    const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload("ground_station_new"));
+    const setup = vi.spyOn(CommsGroundStationForm, "setup").mockImplementation(() => {
+      throw new Error("private form failure");
+    });
+    const wrapper = mount(CommsApplication, { props: propsFor("ground_station_new", query) });
+    try {
+      await flushPromises();
+      expect(setup).toHaveBeenCalled();
+      expect(wrapper.find("#comms-application-error").exists()).toBe(true);
+      expect(wrapper.text()).not.toContain("private form failure");
+    } finally {
+      wrapper.unmount();
+      setup.mockRestore();
+    }
+  });
+
+  it("rejects unsupported form versions before presenting a save control", async () => {
+    const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload("routing_new"));
+    const props = propsFor("routing_new", query);
+    props.surface = {
+      ...props.surface,
+      dataContract: { ...props.surface.dataContract, version: 2 },
+    };
+    const wrapper = mount(CommsApplication, { props });
+    await flushPromises();
+    expect(wrapper.find("#comms-application-error").exists()).toBe(true);
+    expect(wrapper.find("#create-routing-rule-button").exists()).toBe(false);
+    wrapper.unmount();
+  });
+  it("contains malformed feature DTOs and retries without claiming a rendered page", async () => {
+    const query = vi
+      .fn<TestQuery>()
+      .mockResolvedValueOnce({
+        navigation: { fallback_href: "/missions/mission-1/comms/transports", breadcrumbs: [] },
+        data: { title: "Transports", items: [] },
+      })
+      .mockResolvedValueOnce(surfacePayload("transports"));
+    const wrapper = mount(CommsApplication, { props: propsFor("transports", query) });
+    await flushPromises();
+    expect(wrapper.find("#comms-read-unavailable").exists()).toBe(true);
+    await wrapper.get("#retry-comms-read").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("#comms-transports-directory").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("discards a query from an older surface after navigation", async () => {
+    let finish!: (value: unknown) => void;
+    const pending = new Promise<unknown>((resolve) => {
+      finish = resolve;
+    });
+    const query = vi
+      .fn<TestQuery>()
+      .mockReturnValueOnce(pending)
+      .mockResolvedValue(surfacePayload("ground_stations"));
+    const wrapper = mount(CommsApplication, { props: propsFor("transports", query) });
+    await wrapper.setProps(propsFor("ground_stations", query));
+    await flushPromises();
+    finish(surfacePayload("transports"));
+    await flushPromises();
+    expect(wrapper.find("#comms-ground-stations-directory").exists()).toBe(true);
+    expect(wrapper.find("#comms-transports-directory").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it.each(["navigation", "unmount"])("ignores a save receipt after %s", async (mode) => {
+    let finish!: (value: unknown) => void;
+    const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload("ground_station_new"));
+    const props = propsFor("ground_station_new", query);
+    props.bridge.execute = vi
+      .fn()
+      .mockResolvedValueOnce({ result: { valid: true } })
+      .mockReturnValue(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      ) as HostBridge["execute"];
+    props.bridge.navigate = vi.fn();
+    const wrapper = mount(CommsApplication, { props });
+    await flushPromises();
+    await wrapper.get("#ground_station_display_name").setValue("Saved station");
+    await flushPromises();
+    await wrapper.get("#ground-station-form").trigger("submit");
+    expect(props.bridge.execute).toHaveBeenLastCalledWith(
+      expect.objectContaining({ actionId: "save" }),
+    );
+    if (mode === "unmount") wrapper.unmount();
+    else
+      await wrapper.setProps(
+        propsFor("transports", vi.fn<TestQuery>().mockResolvedValue(surfacePayload("transports"))),
+      );
+    finish({ result: { navigation: { href: "/missions/mission-1/comms/ground-stations/old" } } });
+    await flushPromises();
+    expect(props.bridge.navigate).not.toHaveBeenCalled();
+    if (mode === "navigation") {
+      expect(wrapper.find("#comms-transports-directory").exists()).toBe(true);
+      wrapper.unmount();
+    }
+  });
   it.each(surfaceIds)("queries and renders the %s surface through Phoenix", async (surfaceId) => {
     const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload(surfaceId));
     const props = propsFor(surfaceId, query);
@@ -61,6 +266,7 @@ describe("Comms canonical federated application", () => {
       context,
     });
     expect(wrapper.find("#comms-application-error").exists()).toBe(false);
+    expect(wrapper.find("#comms-read-unavailable").exists()).toBe(false);
     expect(wrapper.find(`[data-surface-id="${surfaceId}"]`).exists()).toBe(true);
     wrapper.unmount();
   });
@@ -145,17 +351,22 @@ describe("Comms canonical federated application", () => {
   it("uses a save receipt navigation outcome without requerying", async () => {
     const query = vi.fn<TestQuery>().mockResolvedValue(surfacePayload("ground_station_new"));
     const props = propsFor("ground_station_new", query);
-    const execute = vi.fn().mockResolvedValue({
-      receiptId: "receipt-2",
-      completedAt: "2026-09-04T00:00:00Z",
-      result: {
-        navigation: { kind: "navigate", href: "/missions/mission-1/comms/ground-stations/gs-1" },
-      },
-    });
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce({ result: { valid: true } })
+      .mockResolvedValue({
+        receiptId: "receipt-2",
+        completedAt: "2026-09-04T00:00:00Z",
+        result: {
+          navigation: { kind: "navigate", href: "/missions/mission-1/comms/ground-stations/gs-1" },
+        },
+      });
     props.bridge.execute = execute as HostBridge["execute"];
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
     const wrapper = mount(CommsApplication, { props });
 
+    await flushPromises();
+    await wrapper.get("#ground_station_display_name").setValue("Saved station");
     await flushPromises();
     await wrapper.get("#ground-station-form").trigger("submit");
     await flushPromises();
@@ -167,7 +378,7 @@ describe("Comms canonical federated application", () => {
       input: {
         ground_station: {
           ground_station_id: "",
-          display_name: "",
+          display_name: "Saved station",
           provider: "",
           region: "",
           metadata_json: "{}",
@@ -213,8 +424,14 @@ function propsFor(surfaceId: (typeof surfaceIds)[number], query: TestQuery): Ful
 }
 
 function formNavigation(label: string) {
+  const paths: Record<string, string> = {
+    "New Transport": "transports/new",
+    "New Routing Rule": "routing/new",
+    "New Ground Station": "ground-stations/new",
+    "Edit Ground Station": "ground-stations/station-1/edit",
+  };
   return {
-    fallback_href: `/missions/mission-1/comms/${label.toLowerCase().replaceAll(" ", "-")}`,
+    fallback_href: `/missions/mission-1/comms/${paths[label]}`,
     breadcrumbs: [
       { label: "Firebird", href: "/missions/mission-1" },
       { label: "Comms", href: "/missions/mission-1/comms" },
@@ -272,6 +489,7 @@ function transportFormPayload() {
       },
       provider: {
         active: false,
+        versions: [],
         profile_fields_id: "profiles",
         ready_count: 0,
         selected: null,
@@ -357,7 +575,12 @@ function groundStationFormPayload(mode: "new" | "edit") {
     required: false,
     disabled: mode === "edit" && key === "ground_station_id",
     placeholder: null,
-    value: key === "metadata_json" ? "{}" : "",
+    value:
+      key === "metadata_json"
+        ? "{}"
+        : mode === "edit" && key === "ground_station_id"
+          ? "station-1"
+          : "",
   });
   return {
     page: {
@@ -389,7 +612,7 @@ function groundStationFormPayload(mode: "new" | "edit") {
         cancel: {
           id: "cancel",
           label: "Cancel",
-          href: "/missions/mission-1/comms/ground-stations",
+          href: "/missions/mission-1/comms/ground-stations" + (mode === "edit" ? "/station-1" : ""),
         },
       },
     },
@@ -407,132 +630,9 @@ function bridgeFor(query: TestQuery): HostBridge {
 function surfacePayload(surfaceId: (typeof surfaceIds)[number]) {
   if (surfaceId === "overview") return overviewPayload();
 
-  if (surfaceId === "provider_list") {
-    return {
-      navigation: providerNavigation("providers"),
-      trusted_surface: {
-        presentation: {
-          root: { attrs: { id: "comms-providers-page", class: "space-y-6" } },
-          header: {
-            attrs: {},
-            body: { attrs: {} },
-            content: { attrs: {} },
-            breadcrumbs: { attrs: {}, items: [] },
-            title: { attrs: {}, text: "Providers", suffix: { attrs: {}, text: "0 configured" } },
-            subtitle: { attrs: {}, text: "Providers" },
-            actions: { attrs: {}, new_provider: { attrs: {}, icon: { attrs: {} }, text: "New" } },
-          },
-          empty_state: null,
-          card: null,
-        },
-      },
-    };
-  }
-
-  if (surfaceId === "provider_new") {
-    return {
-      navigation: providerNavigation("New Provider"),
-      trusted_surface: {
-        page: {
-          id: "comms-provider-new-page",
-          title: "New Mission Provider",
-          subtitle: "Provider setup.",
-          breadcrumbs: [{ label: "New", href: null }],
-        },
-        accounts: {
-          empty: true,
-          options: [],
-          selected: null,
-          empty_state: {
-            id: "mission-provider-no-grants",
-            heading: "No grants",
-            message: "Grant an account.",
-            action: {
-              id: "open-provider-accounts-link",
-              label: "Open",
-              href: "/provider-accounts",
-            },
-          },
-        },
-        notes: {
-          secret_boundary: { id: "secret", text: "Secret boundary." },
-          resource_boundary: { id: "resource", text: "Resource boundary." },
-        },
-        form: providerFormPayload(),
-      },
-    };
-  }
-
-  if (surfaceId === "provider_show") {
-    return {
-      navigation: providerNavigation("Provider"),
-      trusted_surface: {
-        navigation: providerNavigation("Provider"),
-        provider: {
-          page_id: "comms-provider-show-page",
-          display_name: "Simulator",
-          provider_id: "provider-1",
-          simulated_badge: { id: "simulated-provider-badge", label: "Simulated" },
-          version: "v1",
-          summary_tiles: [],
-        },
-        actions: {
-          validate: { id: "validate-provider-button", label: "Validate", disabled: false },
-          sync: { id: "sync-provider-button", label: "Sync", disabled: false },
-          archive: {
-            id: "archive-provider-button",
-            label: "Archive",
-            confirm: "Archive?",
-            disabled: false,
-          },
-        },
-        profiles: {
-          service: {
-            id: "service",
-            heading: "Service",
-            subtitle: "",
-            empty: true,
-            empty_copy: "",
-            table_id: "service-table",
-            table_body_id: "service-body",
-            columns: [],
-          },
-          delivery: {
-            id: "delivery",
-            heading: "Delivery",
-            subtitle: "",
-            empty: true,
-            empty_copy: "",
-            table_id: "delivery-table",
-            table_body_id: "delivery-body",
-            columns: [],
-          },
-        },
-        details: {
-          configuration: { id: "configuration", title: "Configuration", rows: [] },
-          delivery_policy: { id: "policy", title: "Policy", rows: [] },
-          capabilities: {
-            id: "capabilities",
-            title: "Capabilities",
-            empty: true,
-            empty_copy: "",
-            items: [],
-          },
-          version_history: { id: "history", title: "History", stream_id: "history" },
-        },
-        diagnostics: {
-          id: "diagnostics",
-          label: "Diagnostics",
-          json_id: "diagnostics-json",
-          rows: [],
-          json: "{}",
-        },
-        service_profiles: [],
-        delivery_profiles: [],
-        provider_versions: [],
-      },
-    };
-  }
+  if (surfaceId === "provider_list") return providerListSurface();
+  if (surfaceId === "provider_new") return providerNewSurface();
+  if (surfaceId === "provider_show") return providerDetailSurface();
 
   if (surfaceId === "transport_new") {
     return {
@@ -557,110 +657,78 @@ function surfacePayload(surfaceId: (typeof surfaceIds)[number]) {
     };
   }
 
+  const detailFixtures: Record<string, Record<string, unknown>> = {
+    transport: {
+      id: "transports-1",
+      display_name: "Saved Transport",
+      href: "/missions/mission-1/comms/transports/transports-1",
+      list_href: "/missions/mission-1/comms/transports",
+      version: 1,
+      lifecycle_state: "active",
+      origin: "direct",
+      transport_kind: "tcp_socket",
+      direction_capability: "inbound",
+      provider_managed: false,
+    },
+    routing_detail: {
+      id: "routing-1",
+      display_name: "Saved Routing",
+      href: "/missions/mission-1/comms/routing/routing-1",
+      list_href: "/missions/mission-1/comms/routing",
+      enabled: true,
+      lifecycle_state: "active",
+      spacecraft_id: "spacecraft-1",
+      spacecraft_name: "Firebird",
+      purpose_label: "Telemetry",
+      direction: "inbound",
+      transport_id: "transport-1",
+      transport_name: "Lab TCP",
+      transport_version: 1,
+      role: "primary",
+    },
+    ground_station: {
+      id: "ground-stations-1",
+      display_name: "Saved GroundStation",
+      href: "/missions/mission-1/comms/ground-stations/ground-stations-1",
+      list_href: "/missions/mission-1/comms/ground-stations",
+      lifecycle_state: "active",
+      provider: "DSN",
+      region: "Goldstone",
+      edit_href: "/missions/mission-1/comms/ground-stations/ground-stations-1/edit",
+    },
+  };
+  const detail = detailFixtures[surfaceId];
+  const section = surfaceId === "ground_stations" ? "ground-stations" : surfaceId;
+  const path = detail ? String(detail.href) : "/missions/mission-1/comms/" + section;
   return {
     navigation: {
-      fallback_href: `/missions/mission-1/comms/${surfaceId}`,
-      breadcrumbs: [
-        { label: "Firebird", href: "/missions/mission-1" },
-        { label: "Comms", href: "/missions/mission-1/comms" },
-        { label: surfaceId, href: null },
-      ],
+      fallback_href: path,
+      breadcrumbs: [{ label: "Firebird", href: "/missions/mission-1" }],
     },
-    trusted_surface: {
-      id: `comms-${surfaceId.replaceAll("_", "-")}-surface`,
-      title: surfaceId,
-      empty: true,
-      items: [],
-      findings: [],
-      finding_groups: [],
-      status: "ready",
-    },
-  };
-}
-
-function providerFormPayload() {
-  const keys = [
-    "display_name",
-    "provider_account_grant_id",
-    "permitted_resource_refs",
-    "policy_mode",
-    "maximum_earlier_start_shift_seconds",
-    "maximum_later_start_shift_seconds",
-    "maximum_earlier_end_shift_seconds",
-    "maximum_later_end_shift_seconds",
-    "minimum_retained_duration_seconds",
-    "approved_station_substitutions",
-    "deadline_behavior",
-  ];
-  const fields = Object.fromEntries(
-    keys.map((key) => [
-      key,
-      {
-        key,
-        id: `provider_${key}`,
-        name: `provider[${key}]`,
-        type: "text",
-        label: key,
-        required: false,
-        placeholder: null,
-        min: null,
-        options: [],
-        value: "",
-      },
-    ]),
-  );
-  return {
-    id: "mission-provider-form",
-    sections: {
-      binding: {
-        id: "binding",
-        number: "01",
-        title: "Binding",
-        field_keys: ["display_name", "provider_account_grant_id"],
-      },
-      resource_scope: {
-        id: "resource",
-        number: "02",
-        title: "Resource",
-        field_keys: ["permitted_resource_refs"],
-      },
-      delivery_policy: {
-        id: "policy",
-        number: "03",
-        title: "Policy",
-        field_keys: ["policy_mode", "deadline_behavior"],
-      },
-    },
-    fields,
-    conditional: {
-      approval_guidance: {
-        id: "approval",
-        active: false,
-        visible_when: { field: "policy_mode", equals: "approval_required" },
-        text: "",
-      },
-      bounded_policy: {
-        id: "bounded",
-        active: false,
-        visible_when: { field: "policy_mode", equals: "bounded_automatic" },
-        field_keys: [],
-      },
-    },
-    actions: {
-      submit: { id: "submit", label: "Create" },
-      cancel: { id: "cancel", label: "Cancel", href: "/comms/providers" },
-    },
-  };
-}
-
-function providerNavigation(label: string) {
-  return {
-    fallback_href: "/missions/mission-1/comms/providers",
-    breadcrumbs: [
-      { label: "Firebird", href: "/missions/mission-1" },
-      { label: "Comms", href: "/missions/mission-1/comms" },
-      { label, href: null },
-    ],
+    trusted_surface:
+      detail ??
+      (surfaceId === "validation"
+        ? {
+            id: "comms-validation-page",
+            title: "Validation",
+            finding_count: 0,
+            empty: true,
+            href: path,
+            findings: [],
+            finding_groups: [],
+            status: "ready",
+          }
+        : {
+            title: section,
+            items: [],
+            page: 1,
+            page_size: 50,
+            page_count: 1,
+            total_count: 0,
+            query: "",
+            sort: "display_name",
+            dir: "asc",
+          }),
   };
 }
 
@@ -722,3 +790,18 @@ function overviewPayload() {
     },
   };
 }
+
+it.each(["unknown", "toString", "constructor", "__proto__"])(
+  "rejects unsupported renderer %s before querying",
+  async (surfaceId) => {
+    const query = vi.fn<TestQuery>().mockRejectedValue(new Error("unexpected query"));
+    const props = propsFor("overview", query);
+    const wrapper = mount(CommsApplication, {
+      props: { ...props, surface: { ...props.surface, surfaceId } },
+    });
+    await flushPromises();
+    expect(query).not.toHaveBeenCalled();
+    expect(wrapper.find("#comms-application-error").exists()).toBe(true);
+    wrapper.unmount();
+  },
+);

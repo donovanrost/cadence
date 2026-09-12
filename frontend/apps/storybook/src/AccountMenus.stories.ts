@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/vue3-vite";
 import { expect, waitFor, within } from "storybook/test";
 import { ref } from "vue";
-import ShellAccount from "../../host/src/shell/ShellAccount.vue";
+import { AccountMenu as ShellAccount } from "../../host/src/auth-and-navigation";
 
 const meta = {
   title: "Patterns/Account Menus",
@@ -11,7 +11,8 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const context = {
-  user: { display_name: "Mission operator", email: "operator@example.test" },
+  version: 1,
+  user: { user_id: "story-user", display_name: "Mission operator", email: "operator@example.test" },
   organization: { organization_id: "flight", display_name: "Flight Operations" },
   organizations: [
     { organization_id: "flight", display_name: "Flight Operations" },

@@ -6,6 +6,7 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
   alias Cadence.Applications.ActionContractLedger
 
   alias Cadence.Applications.{
+    ActionFailure,
     ActionRequest,
     ApplicationInstallations,
     ConfigurationReference,
@@ -14,7 +15,7 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
     TelemetryDecom
   }
 
-  alias Cadence.Applications.TelemetryDecom.Config
+  alias Cadence.Applications.TelemetryDecom.{Config, Review}
   alias Cadence.Auth.Scope
 
   @surface_action_bindings [
@@ -57,9 +58,68 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
   @impl true
   def execute(%Scope{} = scope, %HostContext{} = host_context, %ActionRequest{} = request) do
     with :ok <- ensure_surface_binding(request) do
-      execute_action(scope, host_context, request)
+      scope |> execute_reviewed(host_context, request) |> review_result()
     end
   end
+
+  defp review_result({:error, :telemetry_decom_review_conflict}) do
+    {:error,
+     %ActionFailure{
+       code: "review_conflict",
+       message:
+         "Telemetry configuration or packet inputs changed. Refresh this page, review the current evidence, and submit again."
+     }}
+  end
+
+  defp review_result({:error, :telemetry_decom_review_required}) do
+    {:error,
+     %ActionFailure{
+       code: "review_required",
+       message:
+         "Refresh this page and review the current telemetry configuration before submitting."
+     }}
+  end
+
+  defp review_result({:error, :mission_model_revision_not_approved}) do
+    {:error,
+     %ActionFailure{
+       code: "mission_model_approval_required",
+       message: "Approve the mission model revision in Catalog before requesting mission changes."
+     }}
+  end
+
+  defp review_result({:error, {:telemetry_decom_requires_one_mission_model_revision, _ids}}) do
+    {:error,
+     %ActionFailure{
+       code: "mission_model_revision_mismatch",
+       message:
+         "Enabled configurations must use one mission model revision before requesting mission changes."
+     }}
+  end
+
+  defp review_result(result), do: result
+
+  defp execute_reviewed(
+         %Scope{organization_id: organization_id} = scope,
+         %HostContext{
+           placement: :spacecraft,
+           mission_id: mission_id,
+           spacecraft_id: spacecraft_id
+         } = host,
+         %ActionRequest{action_id: action, params: params} = request
+       )
+       when action in [
+              "save_configuration",
+              "request_activation",
+              "disable",
+              "save_packet_bindings"
+            ] do
+    Review.run(organization_id, mission_id, spacecraft_id, action, params, fn ->
+      execute_action(scope, host, request)
+    end)
+  end
+
+  defp execute_reviewed(scope, host, request), do: execute_action(scope, host, request)
 
   defp execute_action(
          %Scope{organization_id: organization_id},
@@ -78,7 +138,8 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
          %HostContext{placement: :spacecraft} = host_context,
          %ActionRequest{action_id: "save_packet_bindings", params: params}
        ) do
-    with {:ok, installation} <-
+    with :ok <- packet_catalog_matches(current_scope, host_context, params),
+         {:ok, installation} <-
            ApplicationInstallations.fetch_installed(
              current_scope,
              host_context,
@@ -100,9 +161,12 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
            mission_id: mission_id,
            spacecraft_id: spacecraft_id
          },
-         %ActionRequest{action_id: "request_activation"}
+         %ActionRequest{action_id: "request_activation", params: params}
        ) do
-    TelemetryDecom.request_mission_apply(current_scope, mission_id, spacecraft_id)
+    TelemetryDecom.request_mission_apply(current_scope, mission_id, spacecraft_id,
+      reviewed_configuration_basis:
+        Map.get(params, "expected_review", Map.get(params, :expected_review))
+    )
   end
 
   defp execute_action(
@@ -132,6 +196,24 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
 
   defp execute_action(%Scope{}, %HostContext{}, %ActionRequest{}),
     do: {:error, :application_action_scope_required}
+
+  defp packet_catalog_matches(scope, host, params) do
+    with {:ok, config} <-
+           TelemetryDecom.fetch_config(scope.organization_id, host.mission_id, host.spacecraft_id),
+         true <-
+           config.catalog_revision_id ==
+             Map.get(params, "catalog_revision_id", Map.get(params, :catalog_revision_id)) do
+      :ok
+    else
+      _ ->
+        {:error,
+         %ActionFailure{
+           code: "review_conflict",
+           message:
+             "The configured catalog revision changed or is unavailable. Open Manage and review the current configuration before saving packet inputs."
+         }}
+    end
+  end
 
   defp ensure_surface_binding(%ActionRequest{} = request),
     do: ActionContractLedger.admit(request, __MODULE__)
@@ -171,6 +253,17 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
       "configurationVersion" => configuration.configuration_version,
       "enabled" => configuration.enabled,
       "selectedApids" => configuration.handled_apids
+    }
+  end
+
+  def result(%{config: %Config{} = config, activation_request: request}) do
+    %{
+      "configurationId" => "telemetry_decom:#{config.spacecraft_id}",
+      "configurationVersion" => config.configuration_version,
+      "activationRequestId" => request.activation_request_id,
+      "activationState" => to_string(request.state),
+      "bindingSetId" => request.binding_set_id,
+      "bindingSetVersion" => request.binding_set_version
     }
   end
 

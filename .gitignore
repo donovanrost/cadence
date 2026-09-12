@@ -45,3 +45,6 @@ npm-debug.log
 
 # Transient state for the superpowers brainstorming visual companion.
 .superpowers/
+
+# TypeScript incremental compiler metadata
+*.tsbuildinfo

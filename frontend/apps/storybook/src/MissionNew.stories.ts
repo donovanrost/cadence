@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/vue3-vite";
 import { expect, fn } from "storybook/test";
-import MissionNew from "../../mission-catalog/src/MissionNew.vue";
+import { MissionNew } from "@cadence/plugin-host/missions";
 
 const args = {
   page: {

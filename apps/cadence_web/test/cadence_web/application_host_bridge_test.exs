@@ -7,14 +7,90 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
     ApplicationDefinition,
     ApplicationInstallations,
     HostContext,
+    JSONBoundary,
     Spacecraft,
     SurfaceDefinition
   }
 
   alias Cadence.Auth.Scope
-  alias CadenceWeb.{ApplicationHostBridge, TestFixtures}
+  alias CadenceWeb.{ApplicationActionIdempotency, ApplicationHostBridge, TestFixtures}
 
   @now "2026-09-03T12:00:00Z"
+
+  test "derived expression admission is bounded to the exact save contract and canonical replay input" do
+    alias CadenceWeb.ApplicationActionInput
+
+    input = %{
+      "point_id" => "DERIVED.power",
+      "point_name" => "Power",
+      "expression" => String.duplicate("x", 8192),
+      "expected_version" => 0,
+      "expected_definition_id" => nil
+    }
+
+    request = %{
+      "applicationKey" => "derived_telemetry",
+      "applicationVersion" => 1,
+      "surfaceId" => "manage",
+      "surfaceVersion" => 1,
+      "actionId" => "save_definition",
+      "input" => input
+    }
+
+    assert {:ok, ^request} = ApplicationActionInput.safe(request)
+    assert {:ok, _} = ApplicationActionInput.safe(Map.put(request, "params", input))
+
+    canonical =
+      request
+      |> Map.drop(["actionId", "input"])
+      |> Map.merge(%{
+        "operation" => "save_definition",
+        "operationVersion" => 1,
+        "params" => input
+      })
+
+    # Generic idempotency admission validates JSON bounds, not domain-required fields.
+    assert {:ok, _} =
+             ApplicationActionIdempotency.request_digest(
+               Map.put(canonical, "params", %{"value" => "bounded"})
+             )
+
+    assert {:ok, digest} = ApplicationActionIdempotency.request_digest(canonical)
+    assert is_binary(digest)
+
+    for {key, value} <- [
+          {"applicationKey", "other"},
+          {"applicationVersion", 2},
+          {"surfaceId", "other"},
+          {"surfaceVersion", 2},
+          {"actionId", "other"},
+          {"actionVersion", 2},
+          {"version", 2}
+        ] do
+      assert {:error, :application_surface_bounds_exceeded} =
+               ApplicationActionInput.safe(Map.put(request, key, value))
+    end
+
+    for bad_input <- [
+          Map.put(input, "expression", String.duplicate("x", 8193)),
+          Map.put(input, "point_name", String.duplicate("x", 241)),
+          Map.put(input, "extra", %{}),
+          Map.put(input, "expression", <<255>>)
+        ] do
+      assert {:error, :application_surface_bounds_exceeded} =
+               ApplicationActionInput.safe(Map.put(request, "input", bad_input))
+    end
+
+    assert {:error, :application_surface_bounds_exceeded} =
+             ApplicationActionInput.safe(
+               Map.put(request, "params", Map.put(input, "expression", "different"))
+             )
+
+    assert {:error, :invalid_application_request} =
+             ApplicationActionIdempotency.request_digest(
+               Map.put(canonical, "operationVersion", 2)
+             )
+  end
 
   test "rejects recursively oversized query input before provider dispatch" do
     params = %{"params" => Enum.to_list(1..101)}
@@ -154,6 +230,58 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
                route_context,
                params,
                "bridge-legacy-surface",
+               now: @now
+             )
+  end
+
+  test "host admission and idempotency preserve the bounded opaque reserve token" do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    membership = TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+
+    scope =
+      Scope.new(%{
+        user: user,
+        organization: organization,
+        organization_id: organization.organization_id,
+        organization_membership: membership
+      })
+
+    route = %{
+      host_context: HostContext.mission(mission.mission_id),
+      mission: mission,
+      spacecraft: nil
+    }
+
+    token = String.duplicate("opaque", 400)
+
+    params = %{
+      "applicationKey" => "ops_console",
+      "applicationVersion" => 1,
+      "surfaceId" => "contact_schedule",
+      "surfaceVersion" => 1,
+      "actionId" => "reserve",
+      "input" => %{"token" => token}
+    }
+
+    assert {:error, :string} = JSONBoundary.safe(params)
+
+    assert {:ok, prepared} =
+             ApplicationHostBridge.prepare_action(scope, route, params, "opaque-reserve-test",
+               now: @now
+             )
+
+    assert prepared.dispatch_request.params == %{"token" => token}
+    assert {:ok, _} = ApplicationActionIdempotency.request_digest(prepared.request_document)
+    assert {:error, _} = ApplicationHostBridge.execute_action(scope, route, prepared, now: @now)
+
+    assert {:error, _} =
+             ApplicationHostBridge.prepare_action(
+               %{scope | organization_membership: nil},
+               route,
+               params,
+               "revoked-test",
                now: @now
              )
   end

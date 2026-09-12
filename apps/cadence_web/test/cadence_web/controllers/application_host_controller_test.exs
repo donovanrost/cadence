@@ -12,6 +12,60 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
   @catalog_suffix "/api/cadence/application-host/v1/missions"
 
+  test "generic federation shells preserve literal URL selectors in the bounded host payload" do
+    {conn, _org, mission, _scope} = signed_in_scope_and_mission()
+
+    query = %{
+      "dashboard_id" => "dashboard/a?+🌍",
+      "version" => "9007199254740990",
+      "selected_publish_issue" => "issue/\"<tag>&+"
+    }
+
+    html =
+      conn
+      |> get(
+        "/missions/#{mission.mission_id}/applications/ops_console/dashboard_activity/federated?" <>
+          URI.encode_query(query)
+      )
+      |> html_response(200)
+
+    root = html |> LazyHTML.from_fragment() |> LazyHTML.query("#cadence-federation-root")
+    assert [encoded] = LazyHTML.attribute(root, "data-query-params")
+    assert Jason.decode!(encoded) == query
+  end
+
+  test "generic federation shells reject ambiguous or unbounded selectors without mounting a broader page" do
+    {conn, _org, mission, _scope} = signed_in_scope_and_mission()
+
+    path =
+      "/missions/#{mission.mission_id}/applications/ops_console/dashboard_activity/federated?"
+
+    for query <- [
+          "dashboard_id=one&dashboard_id=two",
+          "dashboard_id=one&dashboard%5Fid=two",
+          "dashboard_id[]=one",
+          "dashboard_id=" <> String.duplicate("x", 257),
+          "__proto__=one",
+          "dashboard_id=bad%0A",
+          URI.encode_query(Map.new(1..65, &{"key#{&1}", "v"})),
+          URI.encode_query(
+            Map.new(
+              1..64,
+              &{String.duplicate("k", 240) <> to_string(&1), String.duplicate("v", 256)}
+            )
+          )
+        ] do
+      response = get(conn, path <> query)
+      assert redirected_to(response) == "/missions"
+      html = response.resp_body
+
+      assert html
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("#cadence-federation-root")
+             |> LazyHTML.attribute("id") == []
+    end
+  end
+
   test "the generic compatibility shell is protected and the Comms LiveView remains the fallback",
        %{
          conn: conn
@@ -174,11 +228,9 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
         }
       })
 
-    assert %{
-             "trusted_surface" => %{
-               "presentation" => %{"recent_missions" => _}
-             }
-           } = json_response(response, 200)
+    assert json_response(response, 200)["trusted_surface"] == %{
+             "organization_id" => organization.organization_id
+           }
   end
 
   test "organization members cannot query the privileged provider-account surface" do

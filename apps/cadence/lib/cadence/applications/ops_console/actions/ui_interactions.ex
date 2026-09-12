@@ -229,8 +229,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.UiInteractions do
          "selectedEventId" => nil,
          "events" => Enum.map(events, &timeline_event/1),
          "props" => %{
-           "presentation" => %{"filters" => %{"values" => filters}},
-           "timeline_events" => Enum.map(events, &presentation_timeline_event/1)
+           "mission_id" => mission_id,
+           "query" => filters
          }
        }}
     end
@@ -341,21 +341,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.UiInteractions do
       "summary" => event.summary,
       "subject" => event.subject_id || event.source_record_id,
       "spacecraftId" => event.spacecraft_id
-    }
-  end
-
-  defp presentation_timeline_event(event) do
-    %{
-      "__dom_id" => "timeline-event-#{event.mission_event_id}",
-      "mission_event_id" => event.mission_event_id,
-      "attrs" => %{"data-event-id" => event.mission_event_id},
-      "occurred" => %{"attrs" => %{}, "text" => iso(event.occurred_at)},
-      "category" => %{"attrs" => %{}, "text" => to_string(event.category)},
-      "event" => %{
-        "title" => %{"attrs" => %{}, "text" => event.title},
-        "summary" => %{"attrs" => %{}, "text" => event.summary}
-      },
-      "subject" => %{"attrs" => %{}, "text" => event.subject_id || event.source_record_id}
     }
   end
 

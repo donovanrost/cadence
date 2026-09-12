@@ -50,11 +50,13 @@ defmodule Cadence.Reads.ApplicationSurfaces.SpacecraftTest do
                "cadence.spacecraft.readiness",
                "cadence.spacecraft.routing",
                "cadence.spacecraft.show",
-               "cadence.spacecraft.commanding",
-               "cadence.telemetry_decom.manage"
+               "cadence.spacecraft.commanding"
              ],
              &Map.has_key?(context.providers, {"spacecraft", &1})
            )
+
+    assert Map.has_key?(context.providers, {"telemetry_decom", "cadence.telemetry_decom.manage"})
+    refute Map.has_key?(context.providers, {"spacecraft", "cadence.telemetry_decom.manage"})
 
     assert {:ok, %{"data" => %{"page" => %{"id" => "spacecraft-new-page"}}}} =
              dispatch(context, HostContext.mission(@mission_id), "new", "cadence.spacecraft.new")

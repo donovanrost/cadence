@@ -33,6 +33,33 @@ defmodule CadenceWeb.ApplicationHostLive do
   defp installation_id(nil), do: nil
   defp installation_id(installation), do: installation.application_installation_id
 
+  defp surface_query_params(
+         %SurfaceDefinition{renderer: {:trusted, "cadence.telemetry_decom.packet_bindings"}},
+         params
+       ) do
+    Map.take(params, ~w(page endpoint_page resource_page q endpoint_q packet))
+  end
+
+  defp surface_query_params(
+         %SurfaceDefinition{renderer: {:trusted, "cadence.derived_telemetry.definitions"}},
+         params
+       ),
+       do:
+         Map.take(
+           params,
+           ~w(page history_page values_page sources_page spacecraft_page q values_q definition version spacecraft spacecraft_q)
+         )
+
+  defp surface_query_params(
+         %SurfaceDefinition{renderer: {:trusted, "cadence.limits.feature"}},
+         params
+       ),
+       do:
+         Map.take(
+           params,
+           ~w(page history_page activation_page points_page spacecraft_page q points_q spacecraft_q spacecraft definition point set severity version limit_definition_id limit_definition_version point_id)
+         )
+
   defp surface_query_params(%SurfaceDefinition{renderer: {:trusted, _}}, params) do
     if Map.has_key?(params, "page"), do: TableEvents.query_params(params), else: %{}
   end

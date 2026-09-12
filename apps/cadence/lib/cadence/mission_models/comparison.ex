@@ -3,13 +3,13 @@ defmodule Cadence.MissionModels.Comparison do
 
   import Ecto.Query
 
-  alias Cadence.Activations
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Catalog.MissionModel.{Declaration, Revision, RuntimePlan}
   alias Cadence.MissionModels
   alias Cadence.MissionModels.{ComparisonReportRow, QualificationCaseRow}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Platform.ContentHash
+  alias Cadence.Reads.MissionModels.ActiveBasis
   alias Cadence.Repo
   alias Cadence.SemanticRuntime
   alias Cadence.SemanticRuntime.{PlanDecoder, Result, State, Update}
@@ -124,7 +124,7 @@ defmodule Cadence.MissionModels.Comparison do
   end
 
   defp baseline(organization_id, mission_id, candidate) do
-    baseline_revision_id = active_revision_id(organization_id, mission_id)
+    baseline_revision_id = ActiveBasis.active_revision_id(organization_id, mission_id)
 
     with {:ok, baseline} <-
            baseline_revision(organization_id, mission_id, candidate, baseline_revision_id) do
@@ -153,13 +153,6 @@ defmodule Cadence.MissionModels.Comparison do
          ) do
       {:ok, plans} -> {:ok, baseline, plans}
       {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp active_revision_id(organization_id, mission_id) do
-    case Activations.fetch_active_activation(organization_id, mission_id) do
-      {:ok, activation} -> get_in(activation.metadata, ["mission_model", "revision_id"])
-      {:error, :no_active_binding_set} -> nil
     end
   end
 

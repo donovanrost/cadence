@@ -17,8 +17,35 @@ export function hostRoute(url: URL) {
 }
 
 export function createHostRouter(history: RouterHistory) {
+  // Each host owns its subscriptions, not the document's shared history. A
+  // component remount must release its listeners without disabling its successor.
+  const subscriptions = new Set<() => void>();
+  let disposed = false;
+  const ownedHistory: RouterHistory = {
+    ...history,
+    get location() {
+      return history.location;
+    },
+    get state() {
+      return history.state;
+    },
+    listen(callback) {
+      if (disposed) return () => {};
+      const unsubscribe = history.listen(callback);
+      const remove = () => {
+        unsubscribe();
+        subscriptions.delete(remove);
+      };
+      subscriptions.add(remove);
+      return remove;
+    },
+    destroy() {
+      disposed = true;
+      for (const remove of subscriptions) remove();
+    },
+  };
   return createRouter({
-    history,
+    history: ownedHistory,
     routes: routes.map((route) => ({
       path: route.path,
       name: route.path,
@@ -29,7 +56,7 @@ export function createHostRouter(history: RouterHistory) {
 }
 
 export function shellForRoute(route: HostRoute) {
-  if (route.path.includes("/ops/")) return "ops";
+  if (route.path === "/missions/:mission_id/ops" || route.path.includes("/ops/")) return "ops";
   if (route.scope === "user") return "user_shell";
   if (route.scope === "mission" || route.scope === "spacecraft") return "mission_sidebar";
   return "sidebar";

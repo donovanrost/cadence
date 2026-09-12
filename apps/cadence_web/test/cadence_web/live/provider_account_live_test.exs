@@ -62,13 +62,19 @@ defmodule CadenceWeb.ProviderAccountLiveTest do
     query_params = Keyword.fetch!(opts, :query_params)
     organization_id = Keyword.fetch!(opts, :organization_id)
 
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "organization_admin",
-      "surface_id" => surface_id,
-      "host_scope" => "organization",
-      "organization_id" => organization_id,
-      "query_params" => query_params
-    })
+    ownership =
+      if surface_id in ["provider_accounts", "provider_account_new", "provider_account_show"],
+        do: %{"kind" => "organization_module"},
+        else: %{"application_key" => "organization_admin", "surface_id" => surface_id}
+
+    HostTransportTestSupport.assert_context(
+      view,
+      Map.merge(ownership, %{
+        "host_scope" => "organization",
+        "organization_id" => organization_id,
+        "query_params" => query_params
+      })
+    )
   end
 
   defp signed_in_organization_admin do

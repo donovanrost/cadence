@@ -8,10 +8,9 @@ defmodule CadenceWeb.OpsDashboardActivityLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "activity forwards only its bounded dashboard query" do
+  test "missing dashboard history is contained without a release lookup" do
     {conn, mission} = signed_in()
     dashboard_id = "dashboard-1"
 
@@ -21,11 +20,11 @@ defmodule CadenceWeb.OpsDashboardActivityLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard_id}/activity?version=2&selected_publish_issue=issue-1&stale=ignored"
       )
 
-    assert_surface(view, "ops-dashboard-activity-surface", "dashboard_activity", mission, %{
-      "dashboard_id" => dashboard_id,
-      "version" => "2",
-      "selected_publish_issue" => "issue-1"
-    })
+    page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["id"] == "dashboards.activity"
+    assert page["status"] == "unavailable"
+    assert page["context"]["missionId"] == mission.mission_id
+    assert page["context"]["resourceId"] == dashboard_id
   end
 
   defp signed_in do
@@ -34,15 +33,5 @@ defmodule CadenceWeb.OpsDashboardActivityLiveTest do
     TestFixtures.grant_membership!(user, organization)
     mission = TestFixtures.persist_mission!(organization)
     {TestFixtures.member_conn(user), mission}
-  end
-
-  defp assert_surface(view, _id, surface_id, mission, query_params) do
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
-      "surface_id" => surface_id,
-      "host_scope" => "mission",
-      "mission_id" => mission.mission_id,
-      "query_params" => query_params
-    })
   end
 end

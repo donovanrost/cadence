@@ -10,7 +10,6 @@ defmodule Cadence.MissionModels do
 
   alias Cadence.Auth.Scope
   alias Cadence.Catalog.MissionModel.{Compiler, CompilerResult, Layer, Revision, RuntimePlan}
-  alias Cadence.Control.MissionModelPromotion
   alias Cadence.Management.Activations, as: ManagementActivations
 
   alias Cadence.MissionModels.{
@@ -23,6 +22,28 @@ defmodule Cadence.MissionModels do
   }
 
   alias Cadence.Repo
+
+  @doc "Builds the exact revision and compiled-plan identity manifest for activation requests."
+  def manifest(revision, plans) do
+    %{
+      "revision_id" => revision.revision_id,
+      "content_sha256" => revision.content_sha256,
+      "plans" =>
+        Map.new(plans, fn {target, plan} ->
+          {Atom.to_string(target),
+           %{
+             "plan_id" => plan.plan_id,
+             "content_sha256" => plan.content_sha256,
+             "target_contract_version" => plan.target_contract_version
+           }}
+        end)
+    }
+  end
+
+  @doc "Reads only admitted command artifacts within the caller's active-generation transaction."
+  defdelegate command_authoring_basis(organization_id, mission_id, manifest),
+    to: Cadence.MissionModels.CommandAuthoringBasis,
+    as: :load
 
   @spec compile_layers([Layer.t()], keyword()) ::
           {:ok, CompilerResult.t()} | {:error, term()}
@@ -167,7 +188,7 @@ defmodule Cadence.MissionModels do
       metadata =
         opts
         |> Keyword.get(:metadata, %{})
-        |> Map.put("mission_model", MissionModelPromotion.manifest(revision, plans))
+        |> Map.put("mission_model", manifest(revision, plans))
         |> Map.put("mission_model_comparison", %{
           "comparison_report_id" => comparison["comparison_report_id"],
           "report_sha256" => comparison["report_sha256"]

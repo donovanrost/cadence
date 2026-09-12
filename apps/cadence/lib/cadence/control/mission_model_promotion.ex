@@ -137,21 +137,16 @@ defmodule Cadence.Control.MissionModelPromotion do
   end
 
   @doc false
-  def manifest(revision, plans) do
-    %{
-      "revision_id" => revision.revision_id,
-      "content_sha256" => revision.content_sha256,
-      "plans" =>
-        Map.new(plans, fn {target, plan} ->
-          {Atom.to_string(target),
-           %{
-             "plan_id" => plan.plan_id,
-             "content_sha256" => plan.content_sha256,
-             "target_contract_version" => plan.target_contract_version
-           }}
-        end)
-    }
+  def command_authoring_basis(%BindingSetActivation{} = activation) do
+    MissionModels.command_authoring_basis(
+      activation.organization_id,
+      activation.mission_id,
+      value(activation.metadata, :mission_model)
+    )
   end
+
+  @doc false
+  defdelegate manifest(revision, plans), to: MissionModels
 
   defp exact_plan_manifest(plans, expected) do
     if Enum.all?(@targets, &exact_plan?(&1, plans, expected)) do

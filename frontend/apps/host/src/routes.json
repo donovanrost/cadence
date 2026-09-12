@@ -1,8 +1,6 @@
 [
   {
     "path": "/",
-    "application": "organization_admin",
-    "surface": "organization_home",
     "scope": "organization",
     "mountId": "organization-home-component",
     "queryKeys": [],
@@ -10,12 +8,12 @@
     "viewClass": "",
     "metadata": {
       "nav_item": "organization_home"
-    }
+    },
+    "kind": "administration",
+    "administrationPage": "organization_home"
   },
   {
     "path": "/missions",
-    "application": "mission_catalog",
-    "surface": "mission_list",
     "scope": "organization",
     "mountId": "mission-list-component",
     "queryKeys": [],
@@ -24,12 +22,12 @@
     "metadata": {
       "page_title": "Missions",
       "nav_item": "missions"
-    }
+    },
+    "kind": "mission",
+    "missionPage": "mission_list"
   },
   {
     "path": "/missions/new",
-    "application": "mission_catalog",
-    "surface": "mission_new",
     "scope": "organization",
     "mountId": "mission-new-component",
     "queryKeys": [],
@@ -38,12 +36,14 @@
     "metadata": {
       "page_title": "New Mission",
       "nav_item": "missions"
-    }
+    },
+    "kind": "mission",
+    "missionPage": "mission_new"
   },
   {
     "path": "/provider-accounts",
-    "application": "organization_admin",
-    "surface": "provider_accounts",
+    "kind": "organization_module",
+    "contribution": "comms.provider-account-directory",
     "scope": "organization",
     "mountId": "provider-account-list-page-component",
     "queryKeys": [],
@@ -55,8 +55,8 @@
   },
   {
     "path": "/provider-accounts/new",
-    "application": "organization_admin",
-    "surface": "provider_account_new",
+    "kind": "organization_module",
+    "contribution": "comms.provider-account-registration",
     "scope": "organization",
     "mountId": "provider-account-new-component",
     "queryKeys": [],
@@ -68,8 +68,8 @@
   },
   {
     "path": "/provider-accounts/:provider_account_id",
-    "application": "organization_admin",
-    "surface": "provider_account_show",
+    "kind": "organization_module",
+    "contribution": "comms.provider-account-detail",
     "scope": "organization",
     "mountId": "provider-account-show-component",
     "queryKeys": ["provider_account_id"],
@@ -81,8 +81,6 @@
   },
   {
     "path": "/missions/:mission_id",
-    "application": "mission_catalog",
-    "surface": "mission_overview",
     "scope": "mission",
     "mountId": "mission-overview-component",
     "queryKeys": [],
@@ -90,12 +88,14 @@
     "viewClass": "space-y-6",
     "metadata": {
       "nav_item": "mission_overview"
-    }
+    },
+    "kind": "mission",
+    "missionPage": "mission_overview"
   },
   {
     "path": "/missions/:mission_id/spacecraft",
-    "application": "spacecraft",
-    "surface": "list",
+    "kind": "spacecraft",
+    "spacecraftPage": "spacecraft_list",
     "scope": "mission",
     "mountId": "spacecraft-list-component",
     "queryKeys": ["q", "sort", "dir", "page", "pageSize", "filter"],
@@ -108,8 +108,8 @@
   },
   {
     "path": "/missions/:mission_id/spacecraft/new",
-    "application": "spacecraft",
-    "surface": "new",
+    "kind": "spacecraft",
+    "spacecraftPage": "spacecraft_new",
     "scope": "mission",
     "mountId": "spacecraft-new-component",
     "queryKeys": [],
@@ -122,8 +122,8 @@
   },
   {
     "path": "/missions/:mission_id/spacecraft/profiles",
-    "application": "spacecraft",
-    "surface": "profile_list",
+    "kind": "spacecraft",
+    "spacecraftPage": "profile_list",
     "scope": "mission",
     "mountId": "spacecraft-type-list-page-component",
     "queryKeys": [],
@@ -136,8 +136,6 @@
   },
   {
     "path": "/missions/:mission_id/spacecraft/profiles/new",
-    "application": "spacecraft",
-    "surface": "profile_new",
     "scope": "mission",
     "mountId": "spacecraft-profile-new-component",
     "queryKeys": [],
@@ -146,12 +144,14 @@
     "metadata": {
       "page_title": "New Spacecraft Profile",
       "nav_item": "spacecraft"
-    }
+    },
+    "kind": "spacecraft",
+    "spacecraftPage": "profile_new"
   },
   {
     "path": "/missions/:mission_id/spacecraft/profiles/:profile_id",
-    "application": "spacecraft",
-    "surface": "profile_show",
+    "kind": "spacecraft",
+    "spacecraftPage": "profile_show",
     "scope": "mission",
     "mountId": "spacecraft-profile-show-component",
     "queryKeys": ["profile_id"],
@@ -164,8 +164,6 @@
   },
   {
     "path": "/missions/:mission_id/spacecraft/:spacecraft_id",
-    "application": "spacecraft",
-    "surface": "show",
     "scope": "spacecraft",
     "mountId": "spacecraft-show-component",
     "queryKeys": [],
@@ -173,12 +171,14 @@
     "viewClass": "",
     "metadata": {
       "nav_item": "spacecraft"
-    }
+    },
+    "kind": "spacecraft",
+    "spacecraftPage": "spacecraft_show"
   },
   {
     "path": "/missions/:mission_id/spacecraft/:spacecraft_id/identity",
-    "application": "spacecraft",
-    "surface": "edit",
+    "kind": "spacecraft",
+    "spacecraftPage": "spacecraft_edit",
     "scope": "spacecraft",
     "mountId": "spacecraft-edit-component",
     "queryKeys": [],
@@ -191,8 +191,8 @@
   },
   {
     "path": "/missions/:mission_id/spacecraft/:spacecraft_id/edit",
-    "application": "spacecraft",
-    "surface": "edit",
+    "kind": "spacecraft",
+    "spacecraftPage": "spacecraft_edit",
     "scope": "spacecraft",
     "mountId": "spacecraft-edit-component",
     "queryKeys": [],
@@ -205,8 +205,6 @@
   },
   {
     "path": "/missions/:mission_id/spacecraft/:spacecraft_id/readiness",
-    "application": "spacecraft",
-    "surface": "readiness",
     "scope": "spacecraft",
     "mountId": "spacecraft-readiness-component",
     "queryKeys": [],
@@ -215,12 +213,14 @@
     "metadata": {
       "page_title": "#{spacecraft.display_name} Readiness",
       "nav_item": "spacecraft"
-    }
+    },
+    "kind": "spacecraft",
+    "spacecraftPage": "spacecraft_readiness"
   },
   {
     "path": "/missions/:mission_id/spacecraft/:spacecraft_id/routing",
-    "application": "spacecraft",
-    "surface": "routing",
+    "kind": "spacecraft_module",
+    "contribution": "comms.spacecraft-routing",
     "scope": "spacecraft",
     "mountId": "spacecraft-routing-page",
     "queryKeys": [],
@@ -233,22 +233,22 @@
   },
   {
     "path": "/missions/:mission_id/spacecraft/:spacecraft_id/commanding",
-    "application": "spacecraft",
-    "surface": "commanding",
     "scope": "spacecraft",
     "mountId": "spacecraft-commanding-component",
-    "queryKeys": [],
+    "queryKeys": ["page", "query"],
     "queryAliases": {},
     "viewClass": "",
     "metadata": {
-      "page_title": "#{spacecraft.display_name} Command Interpretation",
+      "page_title": "Command interpretation",
       "nav_item": "spacecraft"
-    }
+    },
+    "kind": "spacecraft_module",
+    "contribution": "commanding.spacecraft"
   },
   {
     "path": "/missions/:mission_id/catalog",
-    "application": "mission_catalog",
-    "surface": "catalog_index",
+    "kind": "catalog",
+    "catalogPage": "catalog_index",
     "scope": "mission",
     "mountId": "catalog-index-component",
     "queryKeys": [],
@@ -261,8 +261,8 @@
   },
   {
     "path": "/missions/:mission_id/catalog/new",
-    "application": "mission_catalog",
-    "surface": "catalog_database_new",
+    "kind": "catalog",
+    "catalogPage": "catalog_database_new",
     "scope": "mission",
     "mountId": "catalog-database-new-component",
     "queryKeys": [],
@@ -275,8 +275,8 @@
   },
   {
     "path": "/missions/:mission_id/catalog/databases/:catalog_database_id",
-    "application": "mission_catalog",
-    "surface": "catalog_database_show",
+    "kind": "catalog",
+    "catalogPage": "catalog_database_show",
     "scope": "mission",
     "mountId": "catalog-database-show-component",
     "queryKeys": ["catalog_database_id"],
@@ -289,8 +289,8 @@
   },
   {
     "path": "/missions/:mission_id/catalog/revisions/:catalog_revision_id",
-    "application": "mission_catalog",
-    "surface": "catalog_revision_show",
+    "kind": "catalog",
+    "catalogPage": "catalog_revision_show",
     "scope": "mission",
     "mountId": "catalog-revision-show-component",
     "queryKeys": ["catalog_revision_id"],
@@ -303,8 +303,8 @@
   },
   {
     "path": "/missions/:mission_id/catalog/artifacts/:artifact_id",
-    "application": "mission_catalog",
-    "surface": "catalog_artifact_show",
+    "kind": "catalog",
+    "catalogPage": "catalog_artifact_show",
     "scope": "mission",
     "mountId": "catalog-artifact-show-page-component",
     "queryKeys": ["artifact_id"],
@@ -317,8 +317,8 @@
   },
   {
     "path": "/missions/:mission_id/catalog/imports/:import_run_id",
-    "application": "mission_catalog",
-    "surface": "catalog_import_run_show",
+    "kind": "catalog",
+    "catalogPage": "catalog_import_run_show",
     "scope": "mission",
     "mountId": "catalog-import-run-show-component",
     "queryKeys": ["import_run_id"],
@@ -331,8 +331,8 @@
   },
   {
     "path": "/missions/:mission_id/comms",
-    "application": "comms",
-    "surface": "overview",
+    "kind": "mission_module",
+    "contribution": "comms.overview",
     "scope": "mission",
     "mountId": "comms-overview-component",
     "queryKeys": [],
@@ -345,11 +345,11 @@
   },
   {
     "path": "/missions/:mission_id/comms/transports",
-    "application": "comms",
-    "surface": "transports",
+    "kind": "mission_module",
+    "contribution": "comms.transports",
     "scope": "mission",
     "mountId": "comms-transport-list-page-component",
-    "queryKeys": [],
+    "queryKeys": ["q", "page", "pageSize", "sort", "dir"],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -359,8 +359,8 @@
   },
   {
     "path": "/missions/:mission_id/comms/transports/new",
-    "application": "comms",
-    "surface": "transport_new",
+    "kind": "mission_module",
+    "contribution": "comms.transport-new",
     "scope": "mission",
     "mountId": "comms-transport-new-component",
     "queryKeys": [],
@@ -373,8 +373,9 @@
   },
   {
     "path": "/missions/:mission_id/comms/transports/:transport_id",
-    "application": "comms",
-    "surface": "transport",
+    "kind": "mission_module",
+    "contribution": "comms.transport",
+    "resourceParam": "transport_id",
     "scope": "mission",
     "mountId": "comms-transport-show-component",
     "queryKeys": ["transport_id"],
@@ -387,11 +388,11 @@
   },
   {
     "path": "/missions/:mission_id/comms/ground-stations",
-    "application": "comms",
-    "surface": "ground_stations",
+    "kind": "mission_module",
+    "contribution": "comms.ground-stations",
     "scope": "mission",
     "mountId": "comms-ground-station-list-page-component",
-    "queryKeys": [],
+    "queryKeys": ["q", "page", "pageSize", "sort", "dir"],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -401,8 +402,8 @@
   },
   {
     "path": "/missions/:mission_id/comms/ground-stations/new",
-    "application": "comms",
-    "surface": "ground_station_new",
+    "kind": "mission_module",
+    "contribution": "comms.ground-station-new",
     "scope": "mission",
     "mountId": "comms-ground-station-form-component",
     "queryKeys": [],
@@ -415,8 +416,9 @@
   },
   {
     "path": "/missions/:mission_id/comms/ground-stations/:ground_station_id/edit",
-    "application": "comms",
-    "surface": "ground_station_edit",
+    "kind": "mission_module",
+    "contribution": "comms.ground-station-edit",
+    "resourceParam": "ground_station_id",
     "scope": "mission",
     "mountId": "comms-ground-station-form-component",
     "queryKeys": ["ground_station_id"],
@@ -429,8 +431,9 @@
   },
   {
     "path": "/missions/:mission_id/comms/ground-stations/:ground_station_id",
-    "application": "comms",
-    "surface": "ground_station",
+    "kind": "mission_module",
+    "contribution": "comms.ground-station",
+    "resourceParam": "ground_station_id",
     "scope": "mission",
     "mountId": "comms-ground-station-show-component",
     "queryKeys": ["ground_station_id"],
@@ -443,11 +446,11 @@
   },
   {
     "path": "/missions/:mission_id/comms/routing",
-    "application": "comms",
-    "surface": "routing",
+    "kind": "mission_module",
+    "contribution": "comms.routing",
     "scope": "mission",
     "mountId": "comms-routing-list-page-component",
-    "queryKeys": [],
+    "queryKeys": ["q", "page", "pageSize", "sort", "dir"],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -457,11 +460,11 @@
   },
   {
     "path": "/missions/:mission_id/comms/routing/new",
-    "application": "comms",
-    "surface": "routing_new",
+    "kind": "mission_module",
+    "contribution": "comms.routing-new",
     "scope": "mission",
     "mountId": "comms-routing-new-component",
-    "queryKeys": [],
+    "queryKeys": ["spacecraft_id"],
     "queryAliases": {},
     "viewClass": "space-y-6 max-w-2xl",
     "metadata": {
@@ -471,8 +474,9 @@
   },
   {
     "path": "/missions/:mission_id/comms/routing/:routing_rule_id",
-    "application": "comms",
-    "surface": "routing_detail",
+    "kind": "mission_module",
+    "contribution": "comms.routing-detail",
+    "resourceParam": "routing_rule_id",
     "scope": "mission",
     "mountId": "comms-routing-show-component",
     "queryKeys": ["routing_rule_id"],
@@ -485,8 +489,8 @@
   },
   {
     "path": "/missions/:mission_id/comms/validation",
-    "application": "comms",
-    "surface": "validation",
+    "kind": "mission_module",
+    "contribution": "comms.validation",
     "scope": "mission",
     "mountId": "comms-validation-component",
     "queryKeys": [],
@@ -499,8 +503,6 @@
   },
   {
     "path": "/missions/:mission_id/comms/providers",
-    "application": "comms",
-    "surface": "provider_list",
     "scope": "mission",
     "mountId": "comms-provider-list-component",
     "queryKeys": [],
@@ -509,26 +511,26 @@
     "metadata": {
       "page_title": "Ground Network Providers",
       "nav_item": "comms_providers"
-    }
+    },
+    "kind": "mission_module",
+    "contribution": "comms.provider-list"
   },
   {
     "path": "/missions/:mission_id/comms/providers/new",
-    "application": "comms",
-    "surface": "provider_new",
     "scope": "mission",
     "mountId": "comms-provider-new-component",
-    "queryKeys": [],
+    "queryKeys": ["provider_account_id", "provider_account_grant_id"],
     "queryAliases": {},
     "viewClass": "max-w-3xl space-y-6",
     "metadata": {
       "page_title": "New Ground Network Provider",
       "nav_item": "comms_providers"
-    }
+    },
+    "kind": "mission_module",
+    "contribution": "comms.provider-new"
   },
   {
     "path": "/missions/:mission_id/comms/providers/:provider_id",
-    "application": "comms",
-    "surface": "provider_show",
     "scope": "mission",
     "mountId": "comms-provider-show-component",
     "queryKeys": ["provider_id"],
@@ -537,15 +539,29 @@
     "metadata": {
       "page_title": "Ground Network Provider",
       "nav_item": "comms_providers"
-    }
+    },
+    "kind": "mission_module",
+    "contribution": "comms.provider-show",
+    "resourceParam": "provider_id"
+  },
+  {
+    "path": "/missions/:mission_id/ops",
+    "kind": "ops_workspace",
+    "workspacePage": "landing",
+    "scope": "mission",
+    "mountId": "ops-workspace-landing-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": { "page_title": "Mission Operations", "ops_nav_item": "workspace" }
   },
   {
     "path": "/missions/:mission_id/ops/dashboards/new",
-    "application": "ops_console",
-    "surface": "dashboard_new",
+    "kind": "ops_module",
+    "contribution": "dashboards.creation",
     "scope": "mission",
     "mountId": "ops-dashboard-new-component",
-    "queryKeys": [],
+    "queryKeys": ["mode", "source_dashboard_id"],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -555,11 +571,21 @@
   },
   {
     "path": "/missions/:mission_id/ops/dashboards/library",
-    "application": "ops_console",
-    "surface": "dashboard_library",
+    "kind": "ops_module",
+    "contribution": "dashboards.library",
     "scope": "mission",
     "mountId": "dashboard-library-component",
-    "queryKeys": [],
+    "queryKeys": [
+      "q",
+      "after",
+      "item_id",
+      "version",
+      "before_version",
+      "consumer_after",
+      "dashboard_query",
+      "dashboard_after",
+      "target_id"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -569,11 +595,11 @@
   },
   {
     "path": "/missions/:mission_id/ops/dashboards/playlists",
-    "application": "ops_console",
-    "surface": "dashboard_playlists",
+    "kind": "ops_module",
+    "contribution": "dashboards.playlists",
     "scope": "mission",
     "mountId": "dashboard-playlists-component",
-    "queryKeys": [],
+    "queryKeys": ["q", "after"],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -583,22 +609,24 @@
   },
   {
     "path": "/missions/:mission_id/ops/dashboards/:dashboard_id/edit",
-    "application": "ops_console",
-    "surface": "dashboard_editor",
+    "kind": "ops_module",
+    "contribution": "dashboards.editor",
+    "resourceParam": "dashboard_id",
     "scope": "mission",
     "mountId": "ops-dashboard-editor-surface",
-    "queryKeys": ["dashboard_id"],
+    "queryKeys": [],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {}
   },
   {
     "path": "/missions/:mission_id/ops/dashboards/:dashboard_id/settings",
-    "application": "ops_console",
-    "surface": "dashboard_settings",
+    "kind": "ops_module",
+    "contribution": "dashboards.settings",
+    "resourceParam": "dashboard_id",
     "scope": "mission",
     "mountId": "ops-dashboard-settings-component",
-    "queryKeys": ["dashboard_id"],
+    "queryKeys": ["after_share", "after_snapshot", "after_deployment"],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -608,27 +636,28 @@
   },
   {
     "path": "/missions/:mission_id/ops/dashboards",
-    "application": "ops_console",
-    "surface": "dashboard_directory",
     "scope": "mission",
     "mountId": "ops-dashboard-directory-component",
-    "queryKeys": [],
+    "queryKeys": ["query", "lifecycle", "tag", "sort", "page"],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
       "page_title": "Dashboards",
       "ops_nav_item": "dashboards"
-    }
+    },
+    "kind": "ops_module",
+    "contribution": "dashboards.directory"
   },
   {
     "path": "/missions/:mission_id/ops/dashboard-shares/:share_id",
-    "application": "ops_console",
-    "surface": "dashboard_share",
+    "kind": "ops_module",
+    "contribution": "dashboards.share",
+    "resourceParam": "share_id",
     "scope": "mission",
     "mountId": "ops-dashboard-share-component",
-    "queryKeys": ["share_id"],
+    "queryKeys": [],
     "queryAliases": {},
-    "viewClass": "h-full",
+    "viewClass": "contents",
     "metadata": {
       "page_title": "Shared Dashboard",
       "ops_nav_item": "dashboards"
@@ -636,13 +665,14 @@
   },
   {
     "path": "/missions/:mission_id/ops/dashboard-snapshots/:snapshot_id",
-    "application": "ops_console",
-    "surface": "dashboard_snapshot",
+    "kind": "ops_module",
+    "contribution": "dashboards.snapshot",
+    "resourceParam": "snapshot_id",
     "scope": "mission",
     "mountId": "ops-dashboard-snapshot-component",
-    "queryKeys": ["snapshot_id"],
+    "queryKeys": [],
     "queryAliases": {},
-    "viewClass": "h-full",
+    "viewClass": "contents",
     "metadata": {
       "page_title": "Dashboard Snapshot",
       "ops_nav_item": "dashboards"
@@ -650,11 +680,12 @@
   },
   {
     "path": "/missions/:mission_id/ops/dashboards/playlists/:playlist_id/present",
-    "application": "ops_console",
-    "surface": "dashboard_playlist_present",
+    "kind": "ops_module",
+    "contribution": "dashboards.playlist-present",
+    "resourceParam": "playlist_id",
     "scope": "mission",
     "mountId": "dashboard-playlist-present-component",
-    "queryKeys": ["playlist_id"],
+    "queryKeys": ["index", "playing"],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -664,25 +695,33 @@
   },
   {
     "path": "/missions/:mission_id/ops/data-operations",
-    "application": "ops_console",
-    "surface": "data_operations",
     "scope": "mission",
     "mountId": "ops-data-operations-component",
-    "queryKeys": ["group"],
+    "queryKeys": [
+      "group",
+      "page",
+      "audit_page",
+      "jobs_page",
+      "origins_page",
+      "bindings_page",
+      "binding_q"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
       "page_title": "Data Operations",
       "ops_nav_item": "data_operations"
-    }
+    },
+    "kind": "ops_module",
+    "contribution": "data-operations.history"
   },
   {
     "path": "/missions/:mission_id/ops/planning",
-    "application": "ops_console",
-    "surface": "fleet_planning",
+    "kind": "ops_module",
+    "contribution": "planning.fleet-directory",
     "scope": "mission",
     "mountId": "ops-fleet-planning-component",
-    "queryKeys": [],
+    "queryKeys": ["page", "state"],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -692,8 +731,8 @@
   },
   {
     "path": "/missions/:mission_id/ops/planning/new",
-    "application": "ops_console",
-    "surface": "fleet_planning_new",
+    "kind": "ops_module",
+    "contribution": "planning.fleet-start",
     "scope": "mission",
     "mountId": "ops-fleet-planning-new-component",
     "queryKeys": [],
@@ -706,11 +745,11 @@
   },
   {
     "path": "/missions/:mission_id/ops/planning/policy",
-    "application": "ops_console",
-    "surface": "fleet_planning_policy",
+    "kind": "ops_module",
+    "contribution": "planning.fleet-policy",
     "scope": "mission",
     "mountId": "ops-fleet-planning-policy-component",
-    "queryKeys": [],
+    "queryKeys": ["grants_page", "identities_page"],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -720,11 +759,19 @@
   },
   {
     "path": "/missions/:mission_id/ops/planning/runs/:fleet_planning_run_id",
-    "application": "ops_console",
-    "surface": "fleet_planning_run",
+    "kind": "ops_module",
+    "contribution": "planning.fleet-run",
+    "resourceParam": "fleet_planning_run_id",
     "scope": "mission",
     "mountId": "ops-fleet-planning-run-component",
-    "queryKeys": ["fleet_planning_run_id"],
+    "queryKeys": [
+      "fleet_planning_run_id",
+      "requirements_page",
+      "decisions_page",
+      "resources_page",
+      "automation_page",
+      "commitments_page"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -734,8 +781,6 @@
   },
   {
     "path": "/missions/:mission_id/ops/requirement-templates",
-    "application": "ops_console",
-    "surface": "contact_requirement_template",
     "scope": "mission",
     "mountId": "ops-contact-requirement-template-component",
     "queryKeys": [],
@@ -744,26 +789,26 @@
     "metadata": {
       "page_title": "Requirement Templates",
       "ops_nav_item": "planning"
-    }
+    },
+    "kind": "ops_module",
+    "contribution": "planning.requirement-templates"
   },
   {
     "path": "/missions/:mission_id/ops/requirements",
-    "application": "ops_console",
-    "surface": "contact_requirement_list",
     "scope": "mission",
     "mountId": "ops-contact-requirements-component",
-    "queryKeys": [],
+    "queryKeys": ["page", "state"],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
       "page_title": "Contact Requirements",
       "ops_nav_item": "requirements"
-    }
+    },
+    "kind": "ops_module",
+    "contribution": "planning.requirement-directory"
   },
   {
     "path": "/missions/:mission_id/ops/requirements/new",
-    "application": "ops_console",
-    "surface": "contact_requirement_new",
     "scope": "mission",
     "mountId": "ops-contact-requirement-new-component",
     "queryKeys": [],
@@ -772,29 +817,50 @@
     "metadata": {
       "page_title": "Declare Contact Need",
       "ops_nav_item": "requirements"
-    }
+    },
+    "kind": "ops_module",
+    "contribution": "planning.requirement-declaration"
   },
   {
     "path": "/missions/:mission_id/ops/requirements/:contact_requirement_id",
-    "application": "ops_console",
-    "surface": "contact_requirement_show",
     "scope": "mission",
     "mountId": "ops-contact-requirement-show-component",
-    "queryKeys": ["contact_requirement_id"],
+    "queryKeys": [
+      "contact_requirement_id",
+      "version",
+      "planning_run_id",
+      "versions_page",
+      "runs_page",
+      "searches_page",
+      "opportunities_page"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
       "page_title": "Contact Requirement",
       "ops_nav_item": "requirements"
-    }
+    },
+    "kind": "ops_module",
+    "contribution": "planning.requirement-review",
+    "resourceParam": "contact_requirement_id"
   },
   {
     "path": "/missions/:mission_id/ops/plans/:contact_plan_id",
-    "application": "ops_console",
-    "surface": "contact_plan_show",
+    "kind": "ops_module",
+    "contribution": "planning.plan-review",
+    "resourceParam": "contact_plan_id",
     "scope": "mission",
     "mountId": "ops-contact-plan-show-component",
-    "queryKeys": ["contact_plan_id"],
+    "queryKeys": [
+      "contact_plan_id",
+      "version",
+      "versions_page",
+      "approvals_page",
+      "opportunities_page",
+      "execution_page",
+      "requirements_page",
+      "issues_page"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -804,11 +870,20 @@
   },
   {
     "path": "/missions/:mission_id/ops/contacts",
-    "application": "ops_console",
-    "surface": "contact_schedule",
+    "kind": "ops_module",
+    "contribution": "planning.contact-schedule",
     "scope": "mission",
     "mountId": "ops-contact-schedule-component",
-    "queryKeys": [],
+    "queryKeys": [
+      "spacecraft_id",
+      "spacecraft_q",
+      "spacecraft_page",
+      "routes_page",
+      "findings_page",
+      "scheduled_page",
+      "realized_page",
+      "reservations_page"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -818,11 +893,20 @@
   },
   {
     "path": "/missions/:mission_id/ops/contacts/records/:contact_id",
-    "application": "ops_console",
-    "surface": "contact_record",
+    "kind": "ops_module",
+    "contribution": "planning.contact-record",
+    "resourceParam": "contact_id",
     "scope": "mission",
     "mountId": "ops-contact-record-component",
-    "queryKeys": ["contact_id"],
+    "queryKeys": [
+      "contact_id",
+      "revision",
+      "before_revision",
+      "scheduled_paths_page",
+      "realized_paths_page",
+      "sources_page",
+      "intents_page"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -832,53 +916,192 @@
   },
   {
     "path": "/missions/:mission_id/ops/contacts/:provider_reservation_id",
-    "application": "ops_console",
-    "surface": "contact_detail",
+    "kind": "ops_module",
+    "contribution": "planning.reservation-review",
+    "resourceParam": "provider_reservation_id",
     "scope": "mission",
     "mountId": "ops-contact-detail-component",
-    "queryKeys": ["provider_reservation_id"],
+    "queryKeys": ["provider_reservation_id", "change_id", "before_revision", "before_audit"],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
-      "page_title": "Provider reservation #{reservation_id}",
+      "page_title": "Reservation Review",
       "ops_nav_item": "contacts"
     }
   },
   {
     "path": "/missions/:mission_id/ops/alarms",
-    "application": "ops_console",
-    "surface": "alarms",
     "scope": "mission",
     "mountId": "ops-alarms-component",
-    "queryKeys": ["severity", "state", "spacecraft_id", "query"],
+    "queryKeys": [
+      "severity",
+      "state",
+      "spacecraft_id",
+      "query",
+      "page",
+      "spacecraft_page",
+      "spacecraft_query"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
       "page_title": "Alarms",
       "ops_nav_item": "alarms"
-    }
+    },
+    "kind": "ops_module",
+    "contribution": "limits.alarm-conditions"
   },
   {
     "path": "/missions/:mission_id/ops/timeline",
-    "application": "ops_console",
-    "surface": "timeline",
     "scope": "mission",
     "mountId": "ops-timeline-page-component",
-    "queryKeys": [],
+    "queryKeys": [
+      "category",
+      "kind",
+      "severity",
+      "spacecraft_id",
+      "from",
+      "to",
+      "event_id",
+      "source_dashboard_id",
+      "before_at",
+      "before_id"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
       "page_title": "Mission Timeline",
       "ops_nav_item": "timeline"
+    },
+    "kind": "ops_workspace",
+    "workspacePage": "timeline"
+  },
+  {
+    "path": "/missions/:mission_id/ops/commands/stages",
+    "kind": "ops_module",
+    "contribution": "commanding.stages",
+    "scope": "mission",
+    "mountId": "ops-command-stages-component",
+    "queryKeys": ["after", "state", "query"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Command stages",
+      "ops_nav_item": "commands"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/commands/stages/new",
+    "kind": "ops_module",
+    "contribution": "commanding.stage-create",
+    "scope": "mission",
+    "mountId": "ops-command-stage-create-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Create command stage",
+      "ops_nav_item": "commands"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/commands/stages/:command_stage_id",
+    "kind": "ops_module",
+    "contribution": "commanding.stage-workbench",
+    "scope": "mission",
+    "mountId": "ops-command-stage-workbench-component",
+    "queryKeys": [
+      "after",
+      "after_order",
+      "item",
+      "state",
+      "command",
+      "target",
+      "command_after",
+      "target_after",
+      "command_query",
+      "target_query"
+    ],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Command stage",
+      "ops_nav_item": "commands"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/commands/new",
+    "kind": "ops_module",
+    "contribution": "commanding.authoring",
+    "scope": "mission",
+    "mountId": "ops-command-authoring-component",
+    "queryKeys": [
+      "command",
+      "target",
+      "command_after",
+      "target_after",
+      "command_query",
+      "target_query"
+    ],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Create command request",
+      "ops_nav_item": "commands"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/commands/requests/:command_request_id/history",
+    "kind": "ops_module",
+    "contribution": "commanding.history",
+    "resourceParam": "command_request_id",
+    "scope": "mission",
+    "mountId": "ops-command-history-component",
+    "queryKeys": ["release", "release_after", "verifier_after", "verifier"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Command history",
+      "ops_nav_item": "commands"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/commands/requests/:command_request_id/queue",
+    "kind": "ops_module",
+    "contribution": "commanding.queue-submission",
+    "resourceParam": "command_request_id",
+    "scope": "mission",
+    "mountId": "ops-command-queue-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Queue command",
+      "ops_nav_item": "commands"
+    }
+  },
+  {
+    "path": "/missions/:mission_id/ops/commands/requests/:command_request_id",
+    "kind": "ops_module",
+    "contribution": "commanding.review",
+    "resourceParam": "command_request_id",
+    "scope": "mission",
+    "mountId": "ops-command-review-component",
+    "queryKeys": ["after"],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Command review",
+      "ops_nav_item": "commands"
     }
   },
   {
     "path": "/missions/:mission_id/ops/commands",
-    "application": "ops_console",
-    "surface": "commands",
+    "kind": "ops_module",
+    "contribution": "commanding.monitor",
     "scope": "mission",
     "mountId": "ops-commands-component",
-    "queryKeys": ["status", "target", "query", "focus_command_id"],
+    "queryKeys": ["status", "target", "query", "focus_command_id", "page"],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -888,22 +1111,35 @@
   },
   {
     "path": "/missions/:mission_id/ops/dashboards/:dashboard_id/activity",
-    "application": "ops_console",
-    "surface": "dashboard_activity",
+    "kind": "ops_module",
+    "contribution": "dashboards.activity",
+    "resourceParam": "dashboard_id",
     "scope": "mission",
     "mountId": "ops-dashboard-activity-surface",
-    "queryKeys": ["dashboard_id", "version", "selected_publish_issue"],
+    "queryKeys": ["version", "before_version", "before_event", "selected_publish_issue"],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {}
   },
   {
     "path": "/missions/:mission_id/ops/dashboards/:dashboard_id/diagnostics",
-    "application": "ops_console",
-    "surface": "dashboard_diagnostics",
+    "kind": "ops_module",
+    "contribution": "dashboards.execution-diagnostics",
+    "resourceParam": "dashboard_id",
     "scope": "mission",
     "mountId": "ops-dashboard-diagnostics-page-component",
-    "queryKeys": ["dashboard_id"],
+    "queryKeys": [
+      "collection",
+      "row",
+      "filter",
+      "time_mode",
+      "time_axis",
+      "from",
+      "to",
+      "realm",
+      "selection_view",
+      "limit_mode"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
@@ -913,8 +1149,9 @@
   },
   {
     "path": "/missions/:mission_id/ops/dashboards/:dashboard_id",
-    "application": "ops_console",
-    "surface": "dashboard_show",
+    "kind": "ops_module",
+    "contribution": "dashboards.workspace",
+    "resourceParam": "dashboard_id",
     "scope": "mission",
     "mountId": "ops-dashboard-show-surface",
     "queryKeys": [
@@ -955,8 +1192,7 @@
   },
   {
     "path": "/missions/:mission_id/ops/activations",
-    "application": "ops_console",
-    "surface": "activation_requests",
+    "kind": "activation_approvals",
     "scope": "mission",
     "mountId": "activation-requests-component",
     "queryKeys": [],
@@ -969,143 +1205,176 @@
   },
   {
     "path": "/missions/:mission_id/ops/data-operations/manage",
-    "application": "ops_console",
-    "surface": "data_operations_manage",
     "scope": "mission",
     "mountId": "ops-data-operations-component",
-    "queryKeys": ["group"],
+    "queryKeys": [
+      "group",
+      "page",
+      "audit_page",
+      "jobs_page",
+      "origins_page",
+      "bindings_page",
+      "binding_q"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
       "page_title": "Data Operations",
       "ops_nav_item": "data_operations"
-    }
+    },
+    "kind": "ops_module",
+    "contribution": "data-operations.history-manage"
   },
   {
     "path": "/notifications",
-    "application": "organization_admin",
-    "surface": "notifications",
     "scope": "user",
     "mountId": "notifications-page-component",
-    "queryKeys": [],
+    "queryKeys": ["unread", "before_at", "before_id"],
     "queryAliases": {},
     "viewClass": "contents",
-    "metadata": {}
+    "metadata": {
+      "page_title": "Notifications"
+    },
+    "kind": "notifications"
   },
   {
     "path": "/admin",
-    "application": "organization_admin",
-    "surface": "admin_home",
     "scope": "admin",
     "mountId": "admin-home-component",
     "queryKeys": [],
     "queryAliases": {},
     "viewClass": "",
     "metadata": {
-      "nav_item": "admin_dashboard"
-    }
+      "nav_item": "admin_dashboard",
+      "page_title": "Platform Administration"
+    },
+    "kind": "platform_administration",
+    "administrationPage": "platform_overview"
   },
   {
     "path": "/admin/runtime",
-    "application": "organization_admin",
-    "surface": "admin_runtime",
+    "kind": "administration_diagnostics",
+    "component": "AdministrationDiagnosticsPage",
     "scope": "admin",
     "mountId": "admin-runtime-component",
     "queryKeys": [],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
-      "nav_item": "admin_runtime"
+      "nav_item": "admin_runtime",
+      "page_title": "Runtime Diagnostics"
     }
   },
   {
     "path": "/admin/organizations",
-    "application": "organization_admin",
-    "surface": "admin_organizations",
     "scope": "admin",
     "mountId": "admin-organization-list-page-component",
-    "queryKeys": [],
+    "queryKeys": ["after_slug", "after_id"],
     "queryAliases": {},
     "viewClass": "",
     "metadata": {
-      "nav_item": "admin_organizations"
-    }
+      "nav_item": "admin_organizations",
+      "page_title": "Organizations"
+    },
+    "kind": "platform_administration",
+    "administrationPage": "organization_directory"
   },
   {
     "path": "/admin/organizations/new",
-    "application": "organization_admin",
-    "surface": "admin_organization_new",
     "scope": "admin",
     "mountId": "admin-organization-new-component",
     "queryKeys": [],
     "queryAliases": {},
     "viewClass": "",
     "metadata": {
-      "nav_item": "admin_organizations"
-    }
+      "nav_item": "admin_organizations",
+      "page_title": "Create Organization"
+    },
+    "kind": "platform_administration",
+    "administrationPage": "organization_create"
   },
   {
     "path": "/admin/organizations/:org_id",
-    "application": "organization_admin",
-    "surface": "admin_organization_show",
     "scope": "admin",
     "mountId": "admin-organization-show-component",
-    "queryKeys": ["organization_id"],
-    "queryAliases": {
-      "organization_id": "org_id"
-    },
+    "queryKeys": ["members_after", "invitations_after", "services_after"],
+    "queryAliases": {},
     "viewClass": "",
     "metadata": {
-      "nav_item": "admin_organizations"
-    }
+      "nav_item": "admin_organizations",
+      "page_title": "Organization"
+    },
+    "kind": "platform_administration",
+    "administrationPage": "organization_detail"
   },
   {
     "path": "/admin/organizations/:org_id/invite",
-    "application": "organization_admin",
-    "surface": "admin_organization_invite",
     "scope": "admin",
     "mountId": "admin-organization-invite-component",
-    "queryKeys": ["organization_id"],
-    "queryAliases": {
-      "organization_id": "org_id"
-    },
+    "queryKeys": [],
+    "queryAliases": {},
     "viewClass": "",
     "metadata": {
-      "nav_item": "admin_organizations"
-    }
+      "nav_item": "admin_organizations",
+      "page_title": "Invite User"
+    },
+    "kind": "platform_administration",
+    "administrationPage": "organization_invite"
   },
   {
     "path": "/missions/:mission_id/ops/data-sources",
-    "application": "ops_console",
-    "surface": "data_sources",
     "scope": "mission",
     "mountId": "ops-data-sources-component",
-    "queryKeys": ["data_source_id"],
+    "queryKeys": [
+      "data_source_id",
+      "binding_id",
+      "page",
+      "bindings_page",
+      "events_page",
+      "binding_events_page",
+      "health_page",
+      "health_events_page",
+      "watermarks_page",
+      "jobs_page"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
       "page_title": "Data Sources",
       "ops_nav_item": "data_sources"
-    }
+    },
+    "kind": "ops_module",
+    "contribution": "data-operations.sources"
   },
   {
     "path": "/missions/:mission_id/ops/data-sources/:data_source_id",
-    "application": "ops_console",
-    "surface": "data_sources",
     "scope": "mission",
     "mountId": "ops-data-sources-component",
-    "queryKeys": ["data_source_id"],
+    "queryKeys": [
+      "data_source_id",
+      "binding_id",
+      "page",
+      "bindings_page",
+      "events_page",
+      "binding_events_page",
+      "health_page",
+      "health_events_page",
+      "watermarks_page",
+      "jobs_page"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
       "page_title": "Data Sources",
       "ops_nav_item": "data_sources"
-    }
+    },
+    "kind": "ops_module",
+    "contribution": "data-operations.source"
   },
   {
     "path": "/missions/:mission_id/ops/explore",
-    "application": "ops_console",
-    "surface": "telemetry_explore",
+    "kind": "ops_module",
+    "contribution": "dashboards.exploration",
     "scope": "mission",
     "mountId": "ops-telemetry-explore-component",
     "queryKeys": [
@@ -1130,7 +1399,8 @@
       "sample_id",
       "selected_time",
       "question",
-      "limit_mode"
+      "limit_mode",
+      "data_view"
     ],
     "queryAliases": {},
     "viewClass": "contents",
@@ -1141,31 +1411,53 @@
   },
   {
     "path": "/missions/:mission_id/ops/data-sources/registration/new",
-    "application": "ops_console",
-    "surface": "data_source_registration",
     "scope": "mission",
     "mountId": "ops-data-sources-component",
-    "queryKeys": ["data_source_id"],
+    "queryKeys": [
+      "data_source_id",
+      "binding_id",
+      "page",
+      "bindings_page",
+      "events_page",
+      "binding_events_page",
+      "health_page",
+      "health_events_page",
+      "watermarks_page",
+      "jobs_page"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
       "page_title": "Data Sources",
       "ops_nav_item": "data_sources"
-    }
+    },
+    "kind": "ops_module",
+    "contribution": "data-operations.source-registration"
   },
   {
     "path": "/missions/:mission_id/ops/data-sources/:data_source_id/settings",
-    "application": "ops_console",
-    "surface": "data_source_settings",
     "scope": "mission",
     "mountId": "ops-data-sources-component",
-    "queryKeys": ["data_source_id"],
+    "queryKeys": [
+      "data_source_id",
+      "binding_id",
+      "page",
+      "bindings_page",
+      "events_page",
+      "binding_events_page",
+      "health_page",
+      "health_events_page",
+      "watermarks_page",
+      "jobs_page"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
       "page_title": "Data Sources",
       "ops_nav_item": "data_sources"
-    }
+    },
+    "kind": "ops_module",
+    "contribution": "data-operations.source-settings"
   },
   {
     "path": "/missions/:mission_id/applications",

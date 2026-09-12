@@ -60,6 +60,114 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleEvents do
     end
   end
 
+  @doc "Lists request groups, with pagination applied to groups rather than their events."
+  @spec list_groups(binary(), keyword()) :: map()
+  def list_groups(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
+    page = positive_integer(Keyword.get(opts, :page), 1)
+    page_size = min(positive_integer(Keyword.get(opts, :page_size), 25), 50)
+
+    groups =
+      group_query(mission_id, opts)
+      |> group_by(
+        [row],
+        fragment("COALESCE(?->'value', ?) ->> 'request_group_id'", row.payload, row.payload)
+      )
+      |> select([row], %{
+        id: fragment("COALESCE(?->'value', ?) ->> 'request_group_id'", row.payload, row.payload),
+        event_count: count(row.backfill_lifecycle_event_id),
+        occurred_at: max(row.occurred_at)
+      })
+
+    total = Repo.aggregate(subquery(groups), :count)
+
+    entries =
+      from(group in subquery(groups),
+        order_by: [desc: group.occurred_at, asc: group.id],
+        limit: ^page_size,
+        offset: ^((page - 1) * page_size)
+      )
+      |> Repo.all()
+
+    %{entries: entries, page: page, page_size: page_size, total: total}
+  end
+
+  @doc "Reads all events for one scoped group. Ledger pagination never limits action evidence."
+  @spec fetch_group_events(binary(), binary(), keyword()) ::
+          {:ok, [BackfillLifecycleEvent.t()]} | {:error, term()}
+  def fetch_group_events(mission_id, group_id, opts \\ [])
+      when is_binary(mission_id) and is_binary(group_id) and is_list(opts) do
+    group_query(mission_id, opts)
+    |> where(
+      [row],
+      fragment("COALESCE(?->'value', ?) ->> 'request_group_id'", row.payload, row.payload) ==
+        ^group_id
+    )
+    |> order_by([row], asc: row.occurred_at, asc: row.backfill_lifecycle_event_id)
+    |> Repo.all()
+    |> Enum.map(&TelemetryBackfillLifecycleEventRow.to_domain/1)
+    |> case do
+      [] -> {:error, {:request_group_not_found, group_id}}
+      events -> {:ok, events}
+    end
+  end
+
+  @doc "Checks exact scoped correction evidence without a mission-event window."
+  def corrected?(event_id, opts) when is_binary(event_id) and is_list(opts) do
+    scoped_query(Keyword.get(opts, :mission_id), opts)
+    |> where(
+      [row],
+      fragment(
+        "jsonb_typeof(COALESCE(?->'value', ?) -> 'corrects_event_id') = 'string'",
+        row.payload,
+        row.payload
+      )
+    )
+    |> where(
+      [row],
+      fragment("COALESCE(?->'value', ?) ->> 'corrects_event_id'", row.payload, row.payload) ==
+        ^event_id
+    )
+    |> where(
+      [row],
+      fragment("COALESCE(?->'value', ?) ->> 'stage'", row.payload, row.payload) == "completed"
+    )
+    |> Repo.exists?()
+  end
+
+  defp group_query(mission_id, opts) do
+    scoped_query(mission_id, opts)
+    |> where(
+      [row],
+      fragment(
+        "jsonb_typeof(COALESCE(?->'value', ?) -> 'request_group_id') = 'string'",
+        row.payload,
+        row.payload
+      )
+    )
+    |> where(
+      [row],
+      fragment("COALESCE(?->'value', ?) ->> 'request_group_id'", row.payload, row.payload) != ""
+    )
+  end
+
+  defp scoped_query(mission_id, opts) do
+    if required_context?(Keyword.put(opts, :mission_id, mission_id)) do
+      organization_id = Keyword.fetch!(opts, :organization_id)
+
+      from(row in TelemetryBackfillLifecycleEventRow,
+        where: row.organization_id == ^organization_id and row.mission_id == ^mission_id
+      )
+    else
+      from(row in TelemetryBackfillLifecycleEventRow, where: false)
+    end
+  end
+
+  defp positive_integer(value, _default)
+       when is_integer(value) and value > 0 and value <= 1_000_000,
+       do: value
+
+  defp positive_integer(_value, default), do: default
+
   @spec fetch_event(binary(), keyword()) :: BackfillLifecycleEvent.t() | nil
   def fetch_event(backfill_lifecycle_event_id, opts \\ [])
       when is_binary(backfill_lifecycle_event_id) and is_list(opts) do

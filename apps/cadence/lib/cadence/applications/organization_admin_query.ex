@@ -115,7 +115,7 @@ defmodule Cadence.Applications.OrganizationAdminQuery do
 
   defp surface_data(scope, %HostContext{placement: :organization}, "organization_home", _params) do
     with {:ok, organization} <- Cadence.Organizations.fetch_organization(scope.organization_id) do
-      {:ok, %{presentation: Providers.OrganizationHome.presentation(organization)}}
+      {:ok, %{organization_id: organization.organization_id}}
     end
   end
 
@@ -142,30 +142,10 @@ defmodule Cadence.Applications.OrganizationAdminQuery do
   end
 
   defp surface_data(scope, %HostContext{placement: :user}, "notifications", _params),
-    do: {:ok, %{presentation: Providers.Notifications.presentation(scope)}}
+    do: {:ok, Providers.Notifications.props(scope)}
 
-  defp surface_data(
-         %Scope{user: %{user_id: user_id}},
-         %HostContext{placement: :user},
-         "notifications_bell",
-         _params
-       ) do
-    notifications = Cadence.Notifications.list_notifications(user_id, limit: 5)
-
-    {:ok,
-     %{
-       count: Cadence.Notifications.count_unread_notifications(user_id),
-       notifications:
-         Enum.map(notifications, fn notification ->
-           %{
-             notification_id: notification.notification_id,
-             title: notification.title,
-             body: notification.body,
-             unread: is_nil(notification.read_at)
-           }
-         end)
-     }}
-  end
+  defp surface_data(scope, %HostContext{placement: :user}, "notifications_bell", _params),
+    do: {:ok, Providers.Notifications.bell_props(scope)}
 
   defp surface_data(_scope, %HostContext{placement: :admin}, "admin_home", _params),
     do: {:ok, Providers.AdminHome.props()}

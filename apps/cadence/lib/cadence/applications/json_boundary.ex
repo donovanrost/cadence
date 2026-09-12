@@ -47,18 +47,21 @@ defmodule Cadence.Applications.JSONBoundary do
   def safe_trusted_output(value),
     do: safe_value(value, @max_trusted_output_depth, @max_trusted_output_string_bytes)
 
-  defp safe_value(value, max_depth, max_string_bytes) do
-    safe_value_result(value, max_depth, max_string_bytes)
+  @doc "Normalizes typed Phoenix workflow output; feature contracts still admit each model and receipt."
+  def safe_workflow_output(value), do: safe_value(value, 16, 8_192, 1_048_576)
+
+  defp safe_value(value, max_depth, max_string_bytes, max_document_bytes \\ @max_document_bytes) do
+    safe_value_result(value, max_depth, max_string_bytes, max_document_bytes)
   rescue
     _exception -> {:error, :unsupported}
   catch
     _kind, _value -> {:error, :unsupported}
   end
 
-  defp safe_value_result(value, max_depth, max_string_bytes) do
+  defp safe_value_result(value, max_depth, max_string_bytes, max_document_bytes) do
     with {:ok, safe} <- normalize(value, 0, max_depth, max_string_bytes),
          {:ok, encoded} <- Jason.encode(safe),
-         true <- byte_size(encoded) <= @max_document_bytes do
+         true <- byte_size(encoded) <= max_document_bytes do
       {:ok, safe}
     else
       false -> {:error, :document_bytes}

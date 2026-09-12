@@ -13,6 +13,7 @@
     "test": "node --test ../../tools/frontend-release-output-check.test.mjs release-build-config.test.mjs && vp test --run --exclude ../../tools/frontend-release-output-check.test.mjs --exclude release-build-config.test.mjs"
   },
   "dependencies": {
+    "@cadence/communications": "workspace:*",
     "@cadence/design-tokens": "workspace:*",
     "@cadence/plugin-sdk": "workspace:*",
     "@cadence/ui": "workspace:*",

@@ -29,7 +29,12 @@ export function unwrapOpsConsoleResponse(
   }
 
   const { component, props } = candidate.presentation;
-  if (typeof component !== "string" || !components[component] || !isRecord(props)) {
+  if (
+    typeof component !== "string" ||
+    !Object.hasOwn(components, component) ||
+    !components[component] ||
+    !isRecord(props)
+  ) {
     throw new Error("The Ops Console presentation component is invalid.");
   }
 

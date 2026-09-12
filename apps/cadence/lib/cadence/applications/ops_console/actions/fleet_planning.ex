@@ -2,16 +2,16 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
   @moduledoc "Host actions for the mission-scoped Fleet Planning surfaces."
 
   alias Cadence.Applications.{ActionRequest, HostContext, JSONBoundary}
+  alias Cadence.Applications.OpsConsole.Actions.{FleetPlanningFormDuration, FleetPolicyEditing}
   alias Cadence.Auth.{Policy, Scope}
 
   alias Cadence.ContactPlanning.{
     AutomationGrants,
-    ContactPlans,
     ContactRequirementTemplates,
-    FleetPlanner,
     FleetPlanningPolicies,
     FleetPlanningRuns,
-    FleetRepairs
+    FleetPlanningStarts,
+    FleetRunActions
   }
 
   alias Cadence.Missions
@@ -33,16 +33,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
     {"fleet_planning_run", "repair-fleet-run"}
   ]
 
-  @policy_fields ~w(
-    max_horizon_hours requirement_concurrency provider_search_concurrency
-    reuse_freshness_seconds max_contacts max_estimated_cost_micros currency
-    critical_contact_reserve automation_mode execution_concurrency max_repair_attempts
-    repair_horizon_hours automatic_submission distinct_provider_required
-    distinct_station_required distinct_service_pool_required
-  )
-
   @grant_fields ~w(
-    service_identity_id maximum_horizon_hours maximum_contacts
+    service_identity_id maximum_horizon_duration maximum_contacts
     maximum_execution_concurrency valid_days approval_reason
   )
 
@@ -157,55 +149,29 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
   defp validate_input("fleet_planning", "refresh-planning", params),
     do: exact_map(params, [])
 
-  defp validate_input("fleet_planning_new", "create-fleet-run", params) do
-    with {:ok, fleet_run} <- nested_map(params, "fleet_run"),
-         :ok <- exact_nested_map(fleet_run, ~w(horizon_start horizon_end include_recurring)),
-         {:ok, _start} <-
-           parse_datetime(fleet_run["horizon_start"], :fleet_planning_horizon_invalid),
-         {:ok, _end} <- parse_datetime(fleet_run["horizon_end"], :fleet_planning_horizon_invalid),
-         {:ok, _include_recurring} <- json_boolean(fleet_run["include_recurring"]) do
-      :ok
-    end
-  end
+  defp validate_input("fleet_planning_new", "create-fleet-run", params),
+    do: FleetPlanningStarts.validate_input(params, :create)
 
-  defp validate_input("fleet_planning_new", "validate-fleet-run", params) do
-    with {:ok, fleet_run} <- nested_map(params, "fleet_run"),
-         :ok <- exact_nested_map(fleet_run, ~w(horizon_start horizon_end include_recurring)),
-         {:ok, _start} <-
-           parse_datetime(fleet_run["horizon_start"], :fleet_planning_horizon_invalid),
-         {:ok, _end} <-
-           parse_datetime(fleet_run["horizon_end"], :fleet_planning_horizon_invalid),
-         {:ok, _include_recurring} <- json_boolean(fleet_run["include_recurring"]) do
-      :ok
-    end
-  end
+  defp validate_input("fleet_planning_new", "validate-fleet-run", params),
+    do: FleetPlanningStarts.validate_input(params, :preview)
 
-  defp validate_input("fleet_planning_policy", "save-policy", params) do
-    with {:ok, policy} <- nested_map(params, "policy"),
-         :ok <- exact_nested_map(policy, @policy_fields),
-         {:ok, _attrs} <- policy_attributes(policy) do
-      :ok
-    end
-  end
-
-  defp validate_input("fleet_planning_policy", "validate-policy", params) do
-    with {:ok, policy} <- nested_map(params, "policy"),
-         :ok <- exact_nested_map(policy, @policy_fields),
-         {:ok, _attrs} <- policy_attributes(policy) do
-      :ok
-    end
-  end
+  defp validate_input("fleet_planning_policy", action, params)
+       when action in ["save-policy", "validate-policy"],
+       do: FleetPolicyEditing.validate_input(params)
 
   defp validate_input("fleet_planning_policy", "approve-policy", params) do
-    with {:ok, decision} <- nested_map(params, "decision"),
-         :ok <- exact_nested_map(decision, ["reason"]),
+    with :ok <- exact_map(params, ["decision"]),
+         {:ok, decision} <- nested_map(params, "decision"),
+         :ok <- exact_nested_map(decision, ["reason", "policy_evidence"]),
          {:ok, _reason} <- required_text(decision["reason"]) do
-      :ok
+      validate_policy_evidence(decision["policy_evidence"])
     end
   end
 
   defp validate_input("fleet_planning_policy", "issue-grant", params) do
-    with {:ok, grant} <- nested_map(params, "grant"),
+    with :ok <- exact_map(params, ["grant", "policy_evidence"]),
+         :ok <- validate_policy_evidence(params["policy_evidence"]),
+         {:ok, grant} <- nested_map(params, "grant"),
          :ok <- exact_nested_map(grant, @grant_fields),
          {:ok, _attrs} <- grant_form_values(grant) do
       :ok
@@ -229,23 +195,11 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
     end
   end
 
-  defp validate_input("fleet_planning_run", "refresh-fleet-run", params) do
-    with :ok <- exact_map(params, ["fleet_planning_run_id"]),
-         {:ok, _run_id} <- required_text(params["fleet_planning_run_id"]) do
-      :ok
-    end
-  end
+  defp validate_input("fleet_planning_run", "refresh-fleet-run", params),
+    do: FleetRunActions.validate(:continue, params)
 
-  defp validate_input("fleet_planning_run", "repair-fleet-run", params) do
-    with :ok <- exact_map(params, ["fleet_planning_run_id", "repair"]),
-         {:ok, _run_id} <- required_text(params["fleet_planning_run_id"]),
-         {:ok, repair} <- nested_map(params, "repair"),
-         :ok <- exact_nested_map(repair, ~w(horizon_start horizon_end)),
-         {:ok, _start} <- parse_datetime(repair["horizon_start"], :fleet_repair_horizon_invalid),
-         {:ok, _end} <- parse_datetime(repair["horizon_end"], :fleet_repair_horizon_invalid) do
-      :ok
-    end
-  end
+  defp validate_input("fleet_planning_run", "repair-fleet-run", params),
+    do: FleetRunActions.validate(:repair, params)
 
   defp validate_input(_surface_id, _action_id, _params),
     do: {:error, :unsupported_application_action}
@@ -341,54 +295,34 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
   end
 
   defp dispatch(scope, mission_id, "fleet_planning_new", "create-fleet-run", params) do
-    with {:ok, fleet_run} <- nested_map(params, "fleet_run"),
-         {:ok, horizon_start} <-
-           parse_datetime(fleet_run["horizon_start"], :fleet_planning_horizon_invalid),
-         {:ok, horizon_end} <-
-           parse_datetime(fleet_run["horizon_end"], :fleet_planning_horizon_invalid),
-         {:ok, include_recurring} <- json_boolean(fleet_run["include_recurring"]),
-         {:ok, run, refs} <-
-           FleetPlanner.start(
-             scope,
-             mission_id,
-             %{
-               horizon_start: horizon_start,
-               horizon_end: horizon_end,
-               trigger_kind: :manual
-             },
-             materialize_templates: include_recurring
-           ) do
+    with {:ok, run, refs} <- FleetPlanningStarts.create(scope, mission_id, params) do
       {:ok,
        %{
+         "contract_version" => 1,
+         "organization_id" => scope.organization_id,
+         "mission_id" => mission_id,
          "fleetPlanningRunId" => run.fleet_planning_run_id,
          "lifecycleState" => Atom.to_string(run.lifecycle_state),
          "phase" => Atom.to_string(run.phase),
-         "requirementCount" => length(refs)
+         "requirementCount" => length(refs),
+         "evidence" => run.input_document["creation_review"]
        }}
     end
   end
 
-  defp dispatch(_scope, _mission_id, "fleet_planning_new", "validate-fleet-run", params) do
-    with {:ok, fleet_run} <- nested_map(params, "fleet_run"),
-         {:ok, _start} <-
-           parse_datetime(fleet_run["horizon_start"], :fleet_planning_horizon_invalid),
-         {:ok, _end} <- parse_datetime(fleet_run["horizon_end"], :fleet_planning_horizon_invalid),
-         {:ok, _include_recurring} <- json_boolean(fleet_run["include_recurring"]) do
-      {:ok, validation_result("fleet_planning_new", "validate-fleet-run")}
-    end
+  defp dispatch(scope, mission_id, "fleet_planning_new", "validate-fleet-run", params) do
+    with {:ok, review} <- FleetPlanningStarts.preview(scope, mission_id, params),
+         do: {:ok, %{"review" => review}}
   end
 
   defp dispatch(scope, mission_id, "fleet_planning_policy", "save-policy", params) do
-    with {:ok, policy_params} <- nested_map(params, "policy"),
-         {:ok, attrs} <- policy_attributes(policy_params),
-         {:ok, policy, version} <- save_policy(scope, mission_id, attrs) do
+    with {:ok, policy, version} <- FleetPolicyEditing.save(scope, mission_id, params) do
       {:ok, policy_result(policy, version)}
     end
   end
 
-  defp dispatch(_scope, _mission_id, "fleet_planning_policy", "validate-policy", params) do
-    with {:ok, policy} <- nested_map(params, "policy"),
-         {:ok, _attrs} <- policy_attributes(policy) do
+  defp dispatch(scope, mission_id, "fleet_planning_policy", "validate-policy", params) do
+    with {:ok, _base, _attrs} <- FleetPolicyEditing.prepare(scope, mission_id, params) do
       {:ok, validation_result("fleet_planning_policy", "validate-policy")}
     end
   end
@@ -396,14 +330,14 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
   defp dispatch(scope, mission_id, "fleet_planning_policy", "approve-policy", params) do
     with {:ok, decision} <- nested_map(params, "decision"),
          {:ok, reason} <- required_text(decision["reason"]),
-         {:ok, policy, version} <- FleetPlanningPolicies.fetch(scope.organization_id, mission_id),
+         {:ok, evidence} <- policy_evidence(scope, mission_id, decision["policy_evidence"]),
          {:ok, approved_policy, approved_version, _approval} <-
            FleetPlanningPolicies.approve(
              scope,
              mission_id,
-             policy.fleet_planning_policy_id,
-             version.version,
-             version.content_sha256,
+             evidence.policy_id,
+             evidence.version,
+             evidence.content_sha256,
              reason
            ) do
       {:ok, policy_result(approved_policy, approved_version)}
@@ -412,10 +346,13 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
 
   defp dispatch(scope, mission_id, "fleet_planning_policy", "issue-grant", params) do
     with {:ok, grant_params} <- nested_map(params, "grant"),
+         {:ok, evidence} <- policy_evidence(scope, mission_id, params["policy_evidence"]),
          {:ok, _policy, policy_version} <-
            FleetPlanningPolicies.fetch_active(scope.organization_id, mission_id),
+         :ok <- exact_policy_evidence(policy_version, evidence),
          {:ok, attrs} <- grant_attributes(grant_params, policy_version),
-         {:ok, grant} <- AutomationGrants.issue(scope, mission_id, attrs) do
+         {:ok, grant} <-
+           AutomationGrants.issue(scope, mission_id, attrs, expected_policy: evidence) do
       {:ok,
        %{
          "automationGrantId" => grant.automation_grant_id,
@@ -454,42 +391,11 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
     end
   end
 
-  defp dispatch(scope, mission_id, "fleet_planning_run", "refresh-fleet-run", params) do
-    with {:ok, run_id} <- required_text(params["fleet_planning_run_id"]),
-         {:ok, run} <- FleetPlanningRuns.fetch(scope.organization_id, mission_id, run_id),
-         {:ok, result} <- resume_run(scope, mission_id, run) do
-      {:ok, run_result(result.run)}
-    end
-  end
+  defp dispatch(scope, mission_id, "fleet_planning_run", "refresh-fleet-run", params),
+    do: FleetRunActions.execute(scope, mission_id, :continue, params)
 
-  defp dispatch(scope, mission_id, "fleet_planning_run", "repair-fleet-run", params) do
-    with {:ok, run_id} <- required_text(params["fleet_planning_run_id"]),
-         {:ok, repair} <- nested_map(params, "repair"),
-         {:ok, horizon_start} <-
-           parse_datetime(repair["horizon_start"], :fleet_repair_horizon_invalid),
-         {:ok, horizon_end} <-
-           parse_datetime(repair["horizon_end"], :fleet_repair_horizon_invalid),
-         {:ok, run} <- FleetPlanningRuns.fetch(scope.organization_id, mission_id, run_id),
-         plan_id when is_binary(plan_id) and plan_id != "" <- run.candidate_contact_plan_id,
-         version when is_integer(version) and version > 0 <- run.candidate_contact_plan_version,
-         {:ok, plan, _current_version} <-
-           ContactPlans.fetch(scope.organization_id, mission_id, plan_id),
-         {:ok, repair_run, _refs} <-
-           FleetRepairs.start(
-             scope,
-             mission_id,
-             run.fleet_planning_run_id,
-             plan.contact_plan_id,
-             version,
-             %{horizon_start: horizon_start, horizon_end: horizon_end}
-           ) do
-      {:ok, run_result(repair_run)}
-    else
-      {:error, _reason} = error -> error
-      nil -> {:error, :fleet_repair_plan_missing}
-      _invalid_source -> {:error, :fleet_repair_plan_missing}
-    end
-  end
+  defp dispatch(scope, mission_id, "fleet_planning_run", "repair-fleet-run", params),
+    do: FleetRunActions.execute(scope, mission_id, :repair, params)
 
   defp dispatch(_scope, _mission_id, _surface_id, _action_id, _params),
     do: {:error, :unsupported_application_action}
@@ -510,32 +416,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
     {:ok, AutomationGrants.list(organization_id, mission_id, lifecycle_state: :active)}
   end
 
-  defp save_policy(scope, mission_id, attrs) do
-    case FleetPlanningPolicies.fetch(scope.organization_id, mission_id) do
-      {:ok, policy, _current_version} ->
-        FleetPlanningPolicies.version(
-          scope,
-          mission_id,
-          policy.fleet_planning_policy_id,
-          policy.current_version,
-          attrs
-        )
-
-      {:error, :fleet_planning_policy_not_found} ->
-        FleetPlanningPolicies.create(scope, mission_id, attrs)
-
-      {:error, _reason} = error ->
-        error
-    end
-  end
-
-  defp resume_run(_scope, _mission_id, %{phase: :finished} = run),
-    do: {:ok, %{run: run}}
-
-  defp resume_run(scope, mission_id, run) do
-    FleetPlanner.run(scope, mission_id, run.fleet_planning_run_id)
-  end
-
   defp policy_result(policy, version) do
     %{
       "fleetPlanningPolicyId" => policy.fleet_planning_policy_id,
@@ -544,14 +424,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
       "activeVersion" => policy.active_version,
       "fleetPlanningPolicyVersion" => version.version,
       "contentSha256" => version.content_sha256
-    }
-  end
-
-  defp run_result(run) do
-    %{
-      "fleetPlanningRunId" => run.fleet_planning_run_id,
-      "lifecycleState" => Atom.to_string(run.lifecycle_state),
-      "phase" => Atom.to_string(run.phase)
     }
   end
 
@@ -564,64 +436,57 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
     }
   end
 
-  defp policy_attributes(params) do
-    with {:ok, max_horizon_hours} <- positive_integer(params["max_horizon_hours"]),
-         {:ok, requirement_concurrency} <- positive_integer(params["requirement_concurrency"]),
-         {:ok, provider_concurrency} <- positive_integer(params["provider_search_concurrency"]),
-         {:ok, reuse_seconds} <- non_negative_integer(params["reuse_freshness_seconds"]),
-         {:ok, max_contacts} <- positive_integer(params["max_contacts"]),
-         {:ok, max_cost} <- optional_non_negative_integer(params["max_estimated_cost_micros"]),
-         {:ok, currency} <- optional_currency(params["currency"]),
-         {:ok, critical_reserve} <- non_negative_integer(params["critical_contact_reserve"]),
-         {:ok, mode} <- required_string(params["automation_mode"]),
-         {:ok, execution_concurrency} <- positive_integer(params["execution_concurrency"]),
-         {:ok, repair_attempts} <- non_negative_integer(params["max_repair_attempts"]),
-         {:ok, repair_horizon_hours} <- positive_integer(params["repair_horizon_hours"]),
-         {:ok, automatic_submission} <- json_boolean(params["automatic_submission"]),
-         {:ok, distinct_provider} <- json_boolean(params["distinct_provider_required"]),
-         {:ok, distinct_station} <- json_boolean(params["distinct_station_required"]),
-         {:ok, distinct_service_pool} <- json_boolean(params["distinct_service_pool_required"]) do
-      automatic_submission = mode != "advisory" and automatic_submission
+  defp validate_policy_evidence(evidence) when is_map(evidence) do
+    keys = ~w(contract_version organization_id mission_id policy_id policy_version content_sha256)
 
+    with :ok <- exact_nested_map(evidence, keys),
+         true <- evidence["contract_version"] === 1,
+         true <- Enum.all?(~w(organization_id mission_id policy_id), &evidence_id?(evidence[&1])),
+         version when is_integer(version) and version > 0 and version <= 9_007_199_254_740_991 <-
+           evidence["policy_version"],
+         hash when is_binary(hash) <- evidence["content_sha256"],
+         true <- Regex.match?(~r/\A[0-9a-f]{64}\z/, hash) do
+      :ok
+    else
+      _ -> {:error, :invalid_fleet_planning_policy_evidence}
+    end
+  end
+
+  defp validate_policy_evidence(_), do: {:error, :invalid_fleet_planning_policy_evidence}
+
+  defp evidence_id?(value) when is_binary(value),
+    do: byte_size(value) in 1..256 and not Regex.match?(~r/[\x00-\x20\x7f]/, value)
+
+  defp evidence_id?(_), do: false
+
+  defp policy_evidence(scope, mission_id, evidence) do
+    if evidence["organization_id"] == scope.organization_id and
+         evidence["mission_id"] == mission_id do
       {:ok,
        %{
-         horizon_document: %{
-           "max_horizon_seconds" => max_horizon_hours * 3_600,
-           "requirement_concurrency" => requirement_concurrency,
-           "provider_search_concurrency" => provider_concurrency,
-           "reuse_freshness_seconds" => reuse_seconds
-         },
-         scoring_document: %{},
-         resource_policy_document: %{},
-         budget_quota_document: %{
-           "max_contacts" => max_contacts,
-           "max_estimated_cost_micros" => max_cost,
-           "currency" => if(max_cost, do: currency || "USD", else: nil),
-           "per_provider" => %{},
-           "critical_contact_reserve" => critical_reserve,
-           "critical_cost_reserve_micros" => 0
-         },
-         redundancy_document: %{
-           "distinct_provider_required" => distinct_provider,
-           "distinct_station_required" => distinct_station,
-           "distinct_service_pool_required" => distinct_service_pool
-         },
-         automation_repair_document: %{
-           "mode" => mode,
-           "execution_concurrency" => execution_concurrency,
-           "max_repair_attempts" => repair_attempts,
-           "repair_horizon_seconds" => repair_horizon_hours * 3_600,
-           "automatic_submission" => automatic_submission
-         }
+         policy_id: evidence["policy_id"],
+         version: evidence["policy_version"],
+         content_sha256: evidence["content_sha256"]
        }}
     else
-      _invalid -> {:error, :invalid_fleet_policy_form}
+      {:error, :scope_mismatch}
     end
+  end
+
+  defp exact_policy_evidence(version, evidence) do
+    if evidence == %{
+         policy_id: version.fleet_planning_policy_id,
+         version: version.version,
+         content_sha256: version.content_sha256
+       },
+       do: :ok,
+       else: {:error, :stale_fleet_planning_policy_evidence}
   end
 
   defp grant_form_values(params) do
     with {:ok, service_identity_id} <- required_text(params["service_identity_id"]),
-         {:ok, maximum_horizon_hours} <- positive_integer(params["maximum_horizon_hours"]),
+         {:ok, maximum_horizon_seconds} <-
+           FleetPlanningFormDuration.parse(params["maximum_horizon_duration"]),
          {:ok, maximum_contacts} <- positive_integer(params["maximum_contacts"]),
          {:ok, maximum_execution_concurrency} <-
            positive_integer(params["maximum_execution_concurrency"]),
@@ -630,7 +495,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
       {:ok,
        %{
          service_identity_id: service_identity_id,
-         maximum_horizon_hours: maximum_horizon_hours,
+         maximum_horizon_seconds: maximum_horizon_seconds,
          maximum_contacts: maximum_contacts,
          maximum_execution_concurrency: maximum_execution_concurrency,
          valid_days: valid_days,
@@ -650,7 +515,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
        %{
          service_identity_id: values.service_identity_id,
          allowed_actions: allowed_actions(policy),
-         maximum_horizon_seconds: values.maximum_horizon_hours * 3_600,
+         maximum_horizon_seconds: values.maximum_horizon_seconds,
          maximum_contacts: values.maximum_contacts,
          maximum_estimated_cost_micros: budget["max_estimated_cost_micros"],
          currency: budget["currency"],
@@ -676,21 +541,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
     Enum.uniq(base)
   end
 
-  defp parse_datetime(value, error) when is_binary(value) do
-    case NaiveDateTime.from_iso8601(value) do
-      {:ok, naive} ->
-        case DateTime.from_naive(naive, "Etc/UTC") do
-          {:ok, datetime} -> {:ok, datetime}
-          _other -> {:error, error}
-        end
-
-      {:error, _reason} ->
-        {:error, error}
-    end
-  end
-
-  defp parse_datetime(_value, error), do: {:error, error}
-
   defp required_text(value) when is_binary(value) do
     value = String.trim(value)
 
@@ -699,32 +549,12 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
 
   defp required_text(_value), do: {:error, :invalid_text}
 
-  defp required_string(value) when is_binary(value), do: {:ok, value}
-  defp required_string(_value), do: {:error, :invalid_text}
-
-  defp optional_currency(value) when value in [nil, ""], do: {:ok, nil}
-
-  defp optional_currency(value) when is_binary(value),
-    do: {:ok, value |> String.trim() |> String.upcase()}
-
-  defp optional_currency(_value), do: {:error, :invalid_text}
-
   defp positive_integer(value) do
     case integer_value(value) do
       {:ok, integer} when integer > 0 -> {:ok, integer}
       _other -> {:error, :invalid_positive_integer}
     end
   end
-
-  defp non_negative_integer(value) do
-    case integer_value(value) do
-      {:ok, integer} when integer >= 0 -> {:ok, integer}
-      _other -> {:error, :invalid_non_negative_integer}
-    end
-  end
-
-  defp optional_non_negative_integer(value) when value in [nil, ""], do: {:ok, nil}
-  defp optional_non_negative_integer(value), do: non_negative_integer(value)
 
   defp integer_value(value) when is_integer(value), do: {:ok, value}
 
@@ -736,9 +566,4 @@ defmodule Cadence.Applications.OpsConsole.Actions.FleetPlanning do
   end
 
   defp integer_value(_value), do: {:error, :invalid_integer}
-
-  defp json_boolean(value) when is_boolean(value), do: {:ok, value}
-  defp json_boolean(value) when value in ["true", "on", "1"], do: {:ok, true}
-  defp json_boolean(value) when value in ["false", "off", "0"], do: {:ok, false}
-  defp json_boolean(_value), do: {:error, :invalid_boolean}
 end

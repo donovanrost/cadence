@@ -6,10 +6,9 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
   alias Cadence.Applications.ActionContractLedger
   alias Cadence.Applications.{ActionRequest, ApplicationInstallations, HostContext}
   alias Cadence.Auth.Scope
-  alias Cadence.Catalog
+  alias Cadence.Catalog.Reimport
   alias Cadence.Ids
-  alias Cadence.Missions
-  alias Cadence.Missions.Mission
+  alias Cadence.Missions.Creation
 
   @application_key "mission_catalog"
   @surface_action_bindings [
@@ -101,46 +100,23 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
   defp ensure_surface_binding(%ActionRequest{} = request),
     do: ActionContractLedger.admit(request, __MODULE__)
 
-  defp validate_mission(%{"mission" => params}) when is_map(params) do
-    with {:ok, display_name} <- required_text(params, "display_name"),
-         {:ok, slug} <- required_text(params, "slug"),
-         {:ok, slug} <- valid_slug(slug) do
-      {:ok, %{"mission" => %{"display_name" => display_name, "slug" => slug}}}
-    end
-  end
-
-  defp validate_mission(_params), do: {:error, :invalid_application_action_request}
+  defp validate_mission(params), do: creation_result(Creation.validate(params))
 
   defp save_mission(
-         %Scope{organization_id: organization_id},
+         %Scope{organization_id: organization_id} = scope,
          %HostContext{placement: :organization, organization_id: organization_id},
-         %{"mission" => params}
+         params
        )
-       when is_map(params) and is_binary(organization_id) do
-    with {:ok, display_name} <- required_text(params, "display_name"),
-         {:ok, slug} <- required_text(params, "slug"),
-         {:ok, slug} <- valid_slug(slug),
-         {:ok, mission} <-
-           Missions.persist_mission(%Mission{
-             mission_id: Ids.new("mission"),
-             organization_id: organization_id,
-             display_name: display_name,
-             slug: slug
-           }) do
-      {:ok,
-       %{
-         "mission" => %{
-           "id" => mission.mission_id,
-           "display_name" => mission.display_name,
-           "slug" => mission.slug,
-           "href" => "/missions/#{mission.mission_id}"
-         }
-       }}
-    end
-  end
+       when is_binary(organization_id),
+       do: creation_result(Creation.create(scope, params))
 
   defp save_mission(_scope, _host_context, _params),
     do: {:error, :unsupported_application_host_context}
+
+  defp creation_result({:error, errors}) when is_map(errors) and not is_struct(errors),
+    do: {:error, :invalid_application_action_request}
+
+  defp creation_result(result), do: result
 
   defp lifecycle(scope, host_context, "install", %{"key" => application_key}) do
     with {:ok, application_key} <- application_key(application_key),
@@ -172,21 +148,8 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
   defp reimport(scope, %HostContext{placement: :mission, mission_id: mission_id}, %{
          "artifact_id" => artifact_id
        }) do
-    with {:ok, artifact_id} <- application_key(artifact_id),
-         {:ok, artifact} <- Catalog.fetch_artifact(scope.organization_id, mission_id, artifact_id),
-         {:ok, run} <-
-           Catalog.start_import_run(
-             scope.organization_id,
-             mission_id,
-             artifact.artifact_id,
-             artifact.format_key,
-             requested_by: actor(scope)
-           ) do
-      {:ok,
-       %{
-         "import_run_id" => run.import_run_id,
-         "href" => "/missions/#{mission_id}/catalog/imports/#{run.import_run_id}"
-       }}
+    with {:ok, artifact_id} <- application_key(artifact_id) do
+      Reimport.execute(scope, mission_id, artifact_id)
     end
   end
 
@@ -201,9 +164,6 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
     }
   end
 
-  defp actor(%Scope{user: %{id: id, email: email}}), do: %{user_id: id, email: email}
-  defp actor(%Scope{}), do: %{}
-
   defp application_key(value) when is_binary(value) do
     case Ids.path_segment(value) do
       {:ok, value} -> {:ok, value}
@@ -212,17 +172,4 @@ defmodule Cadence.Applications.MissionCatalog.ActionProvider do
   end
 
   defp application_key(_value), do: {:error, :invalid_application_action_request}
-
-  defp required_text(params, key) do
-    case Map.get(params, key) do
-      value when is_binary(value) and value != "" -> {:ok, String.trim(value)}
-      _invalid -> {:error, :invalid_application_action_request}
-    end
-  end
-
-  defp valid_slug(slug) do
-    if Regex.match?(~r/^[a-z0-9][a-z0-9-]*$/, slug),
-      do: {:ok, slug},
-      else: {:error, :invalid_application_action_request}
-  end
 end

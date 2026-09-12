@@ -79,6 +79,7 @@ defmodule Cadence.Comms.GroundStationStore do
   def list_ground_stations_page(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
     %{page: page, page_size: page_size, offset: offset} = Listing.page_opts(opts)
+    direction = if Keyword.get(opts, :direction) == :desc, do: :desc, else: :asc
 
     filtered =
       GroundStationRow
@@ -91,7 +92,7 @@ defmodule Cadence.Comms.GroundStationStore do
 
     items =
       filtered
-      |> order_by([row], asc: row.display_name, asc: row.ground_station_id)
+      |> order_by(^[{direction, :display_name}, {:asc, :ground_station_id}])
       |> limit(^page_size)
       |> offset(^offset)
       |> Repo.all()

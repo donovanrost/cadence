@@ -13,6 +13,8 @@ defmodule Cadence.Reads.Limits do
 
   @mission_scope_key "__mission__"
 
+  defdelegate latest_states_page(org, mission, opts), to: Store
+
   @spec latest_state(binary(), binary(), keyword()) :: Event.t() | nil
   def latest_state(mission_id, point_id, opts \\ [])
       when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do

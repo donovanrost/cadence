@@ -10,6 +10,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const context = {
+  version: 1,
   user: { user_id: "operator", display_name: "Mission operator", email: "operator@example.test" },
   organization: { organization_id: "flight", display_name: "Flight Operations" },
   organizations: [],

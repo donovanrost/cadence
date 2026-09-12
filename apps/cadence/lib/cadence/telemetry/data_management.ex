@@ -242,17 +242,28 @@ defmodule Cadence.Telemetry.DataManagement do
   end
 
   defp require_historical_data_workflow_stage_transition_policy(stage, source_event) do
-    decision =
-      source_event
-      |> historical_data_workflow_stage_transition_policy_context()
-      |> historical_data_workflow_stage_action_policy(stage)
+    with :ok <- transition_job_scope(source_event) do
+      decision =
+        source_event
+        |> historical_data_workflow_stage_transition_policy_context()
+        |> historical_data_workflow_stage_action_policy(stage)
 
-    if decision.eligible? do
-      :ok
-    else
-      {:error,
-       {:historical_workflow_stage_transition_blocked, source_event.backfill_lifecycle_event_id,
-        decision.reason}}
+      if decision.eligible?,
+        do: :ok,
+        else:
+          {:error,
+           {:historical_workflow_stage_transition_blocked,
+            source_event.backfill_lifecycle_event_id, decision.reason}}
+    end
+  end
+
+  defp transition_job_scope(source_event) do
+    case Jobs.fetch_job_for_run(:telemetry_historical_data_workflow, source_event.backfill_run_id) do
+      {:ok, %{mission_id: mission}} when mission != source_event.mission_id ->
+        {:error, :historical_workflow_job_scope_mismatch}
+
+      _ ->
+        :ok
     end
   end
 
@@ -288,50 +299,87 @@ defmodule Cadence.Telemetry.DataManagement do
         opts \\ []
       )
       when is_map(attrs) and is_list(opts) do
-    with {:ok, workflow} <- WorkflowEvents.normalize_workflow(workflow),
-         {:ok, stage} <- WorkflowEvents.normalize_stage(stage),
-         {:ok, group_events} <- historical_data_workflow_group_events(group_events, attrs),
-         {:ok, transition_sources} <-
-           Storage.BackfillLifecycleGroup.transition_sources(
-             group_events,
-             Atom.to_string(stage)
-           ) do
-      transition_sources
-      |> Enum.reduce_while({:ok, [], []}, fn transition_source, acc ->
+    with {:ok, review} <-
+           historical_data_workflow_group_transition_review(workflow, stage, group_events, attrs),
+         [_ | _] <- review.sources do
+      review.sources
+      |> Enum.reduce_while({:ok, [], []}, fn source, acc ->
         record_historical_data_workflow_group_transition_event(
-          transition_source,
+          source,
           acc,
-          workflow,
-          stage,
+          review.workflow,
+          review.stage,
           attrs,
           opts
         )
       end)
       |> historical_data_workflow_group_transition_result()
+    else
+      [] -> {:error, {:no_eligible_items, stage}}
+      {:error, _} = error -> error
     end
   end
 
-  defp historical_data_workflow_group_events(group_events, _attrs) when is_list(group_events),
-    do: {:ok, group_events}
+  @doc "Reviews complete group stage candidates with the same per-item policy used for effects."
+  def historical_data_workflow_group_transition_review(workflow, stage, group_events, attrs)
+      when is_map(attrs) do
+    with {:ok, workflow} <- WorkflowEvents.normalize_workflow(workflow),
+         {:ok, stage} <- WorkflowEvents.normalize_stage(stage),
+         {:ok, events} <- historical_data_workflow_group_events(group_events, attrs),
+         {:ok, sources} <-
+           Storage.BackfillLifecycleGroup.transition_sources(events, Atom.to_string(stage)) do
+      {eligible, blocked} =
+        Enum.split_with(sources, fn source ->
+          group_source_policy(workflow, stage, source) == :ok
+        end)
+
+      {:ok,
+       %{
+         workflow: workflow,
+         stage: stage,
+         sources: eligible,
+         blocked: Enum.map(blocked, & &1.backfill_lifecycle_event_id)
+       }}
+    end
+  end
+
+  defp group_source_policy(workflow, stage, source) do
+    with :ok <- require_historical_data_workflow_transition_source(workflow, stage, source),
+         :ok <- require_historical_data_workflow_stage_transition_policy(stage, source) do
+      if WorkflowEventEvidence.correction?(source) do
+        WorkflowCorrections.review_transition(workflow, stage, source, %{
+          organization_id: source.organization_id,
+          mission_id: source.mission_id
+        })
+      else
+        :ok
+      end
+    end
+  end
+
+  defp historical_data_workflow_group_events(events, attrs) when is_list(events) do
+    with {:ok, org} <- required_attr(attrs, :organization_id),
+         {:ok, mission} <- required_attr(attrs, :mission_id),
+         true <-
+           Enum.all?(events, fn
+             %Storage.BackfillLifecycleEvent{organization_id: ^org, mission_id: ^mission} -> true
+             _ -> false
+           end) do
+      {:ok, events}
+    else
+      false -> {:error, :historical_workflow_group_scope_mismatch}
+      {:error, _} = error -> error
+    end
+  end
 
   defp historical_data_workflow_group_events(request_group_id, attrs)
        when is_binary(request_group_id) do
     with {:ok, request_group_id} <- normalize_request_group_id(request_group_id),
-         {:ok, organization_id} <- required_attr(attrs, :organization_id),
-         {:ok, mission_id} <- required_attr(attrs, :mission_id) do
-      mission_id
-      |> Storage.list_backfill_lifecycle_events(
-        organization_id: organization_id,
-        limit: 1_000
+         {:ok, org} <- required_attr(attrs, :organization_id),
+         {:ok, mission} <- required_attr(attrs, :mission_id) do
+      Storage.fetch_backfill_lifecycle_group_events(mission, request_group_id,
+        organization_id: org
       )
-      |> Enum.filter(
-        &(Storage.BackfillLifecycleGroup.payload_value(&1, :request_group_id) ==
-            request_group_id)
-      )
-      |> case do
-        [_event | _events] = group_events -> {:ok, group_events}
-        [] -> {:error, {:request_group_not_found, request_group_id}}
-      end
     end
   end
 
@@ -436,6 +484,32 @@ defmodule Cadence.Telemetry.DataManagement do
        ) do
     event_attrs = historical_data_workflow_group_transition_attrs(requested_event, attrs)
 
+    case group_source_policy(workflow, stage, requested_event) do
+      :ok ->
+        record_group_transition_effect(
+          workflow,
+          stage,
+          requested_event,
+          event_attrs,
+          events,
+          jobs,
+          opts
+        )
+
+      {:error, reason} ->
+        {:halt, {:error, reason}}
+    end
+  end
+
+  defp record_group_transition_effect(
+         workflow,
+         stage,
+         requested_event,
+         event_attrs,
+         events,
+         jobs,
+         opts
+       ) do
     case record_historical_data_workflow_transition_event(
            workflow,
            stage,
@@ -508,7 +582,7 @@ defmodule Cadence.Telemetry.DataManagement do
     |> put_compact_attr(:point_id, get_attr(attrs, :point_id) || event.point_id)
     |> put_compact_attr(:source_from, get_attr(attrs, :source_from) || event.source_from)
     |> put_compact_attr(:source_to, get_attr(attrs, :source_to) || event.source_to)
-    |> put_compact_attr(:payload, historical_data_workflow_stage_transition_payload(event))
+    |> put_compact_attr(:payload, historical_data_workflow_stage_transition_payload(event, attrs))
     |> compact_attrs()
   end
 
@@ -535,6 +609,7 @@ defmodule Cadence.Telemetry.DataManagement do
       "dashboard_context",
       "comparison_review_origin"
     ])
+    |> Map.merge(Map.take(attrs_payload, ["host_operation_id"]))
     |> Map.put("group_transition_source", "dashboard_group_action")
     |> put_compact_attr(
       "group_transition_scope",
@@ -543,7 +618,7 @@ defmodule Cadence.Telemetry.DataManagement do
     |> Map.put_new("requested_event_id", event.backfill_lifecycle_event_id)
   end
 
-  defp historical_data_workflow_stage_transition_payload(event) do
+  defp historical_data_workflow_stage_transition_payload(event, attrs) do
     event.payload
     |> Map.take([
       "request_source",
@@ -561,6 +636,12 @@ defmodule Cadence.Telemetry.DataManagement do
       "dashboard_context",
       "comparison_review_origin"
     ])
+    |> Map.merge(
+      attrs
+      |> get_attr(:payload, %{})
+      |> ensure_map()
+      |> Map.take(["host_operation_id"])
+    )
     |> Map.put("stage_transition_source", "dashboard_stage_action")
     |> Map.put("source_event_id", event.backfill_lifecycle_event_id)
     |> Map.put("source_event_type", Atom.to_string(event.event_type))

@@ -22,6 +22,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
     management: [
       "lib/cadence/accounts.ex",
       "lib/cadence/accounts/",
+      "lib/cadence/administration/",
       "lib/cadence/auth.ex",
       "lib/cadence/auth/",
       "lib/cadence/catalog.ex",
@@ -39,6 +40,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
       "lib/cadence/source_endpoints.ex",
       "lib/cadence/source_endpoints/",
       "lib/cadence/spacecraft.ex",
+      "lib/cadence/spacecraft/",
       "lib/cadence/spacecraft_store.ex",
       "lib/cadence/spacecraft_store/",
       "lib/cadence/spacecraft_type.ex",
@@ -106,7 +108,131 @@ defmodule Cadence.Architecture.PlaneBoundary do
     ]
   ]
 
+  # Reviewed Phoenix host request adapters. This is an exact ownership ledger,
+  # not an Applications prefix exemption; byte-runtime modules remain data plane.
+  @host_adapter_paths MapSet.new([
+                        "lib/cadence/applications/action_contract_ledger.ex",
+                        "lib/cadence/applications/action_provider_registry.ex",
+                        "lib/cadence/applications/host_query_registry.ex",
+                        "lib/cadence/applications/comms/action_provider.ex",
+                        "lib/cadence/applications/spacecraft/action_provider.ex",
+                        "lib/cadence/applications/mission_catalog/action_provider.ex",
+                        "lib/cadence/applications/telemetry_decom/action_provider.ex",
+                        "lib/cadence/applications/organization_admin_action.ex",
+                        "lib/cadence/applications/organization_admin_query.ex",
+                        "lib/cadence/applications/legacy_comms_overview/query_provider.ex",
+                        "lib/cadence/applications/organization_admin_providers/provider_account_list.ex",
+                        "lib/cadence/applications/organization_admin_providers/provider_account_show.ex",
+                        "lib/cadence/applications/organization_admin_providers/admin_home.ex",
+                        "lib/cadence/applications/organization_admin_providers/provider_account_new.ex",
+                        "lib/cadence/applications/organization_admin_providers/admin_organization_invite.ex",
+                        "lib/cadence/applications/organization_admin_providers/admin_organization_show.ex",
+                        "lib/cadence/applications/organization_admin_providers/admin_organization_list.ex",
+                        "lib/cadence/applications/organization_admin_providers/admin_runtime.ex",
+                        "lib/cadence/applications/organization_admin_providers/admin_organization_new.ex",
+                        "lib/cadence/applications/organization_admin_providers/notifications.ex",
+                        "lib/cadence/applications/ops_console/action_provider.ex",
+                        "lib/cadence/applications/ops_console/actions/contact_planning.ex",
+                        "lib/cadence/applications/ops_console/actions/contact_workflow.ex",
+                        "lib/cadence/applications/ops_console/actions/dashboard_deep_actions.ex",
+                        "lib/cadence/applications/ops_console/actions/dashboard_workflows.ex",
+                        "lib/cadence/applications/ops_console/actions/data_sources.ex",
+                        "lib/cadence/applications/ops_console/actions/fleet_planning.ex",
+                        "lib/cadence/applications/ops_console/actions/fleet_policy_editing.ex",
+                        "lib/cadence/applications/ops_console/actions/fleet_policy_workflow.ex",
+                        "lib/cadence/applications/ops_console/actions/historical_workflow_actions.ex",
+                        "lib/cadence/applications/ops_console/actions/historical_workflow_request.ex",
+                        "lib/cadence/applications/ops_console/actions/mission_operations.ex",
+                        "lib/cadence/applications/ops_console/actions/plan_decisions.ex",
+                        "lib/cadence/applications/ops_console/actions/plan_review_workflow.ex",
+                        "lib/cadence/applications/ops_console/actions/provider_change_decisions.ex",
+                        "lib/cadence/applications/ops_console/actions/requirement_decisions.ex",
+                        "lib/cadence/applications/ops_console/actions/requirement_declaration_workflow.ex",
+                        "lib/cadence/applications/ops_console/actions/requirement_template_workflow.ex",
+                        "lib/cadence/applications/ops_console/actions/schedule_cancellations.ex",
+                        "lib/cadence/applications/ops_console/actions/source_inventory_actions.ex",
+                        "lib/cadence/applications/ops_console/actions/telemetry_explore.ex",
+                        "lib/cadence/applications/ops_console/actions/ui_interactions.ex"
+                      ])
+
+  @public_composition_values MapSet.new([
+                               "lib/cadence/applications/telemetry_decom_catalog_contribution.ex",
+                               "lib/cadence/applications/comms.ex",
+                               "lib/cadence/applications/derived_telemetry.ex",
+                               "lib/cadence/applications/limits.ex",
+                               "lib/cadence/applications/mission_catalog.ex",
+                               "lib/cadence/applications/ops_console.ex",
+                               "lib/cadence/applications/spacecraft.ex",
+                               "lib/cadence/applications/legacy_comms_overview.ex",
+                               "lib/cadence/applications/organization_admin.ex",
+                               "lib/cadence/applications/registry.ex",
+                               "lib/cadence/extension_catalog.ex",
+                               "lib/cadence/control/process_namespace.ex",
+                               "lib/cadence/runtime/process_namespace.ex"
+                             ])
+
   @plane_file_overrides %{
+    "lib/cadence/commanding/authoring_identity.ex" => :shared,
+    "lib/cadence/reads/mission_models/active_basis.ex" => :adapter,
+    "lib/cadence/projections/data_sources/health.ex" => :data,
+    "lib/cadence/projections/data_sources/health/event_row.ex" => :data,
+    "lib/cadence/projections/data_sources/health/status_row.ex" => :data,
+    "lib/cadence/projections/data_sources/watermarks.ex" => :data,
+    "lib/cadence/projections/data_sources/watermarks/event_row.ex" => :data,
+    "lib/cadence/projections/data_sources/watermarks/status_row.ex" => :data,
+    "lib/cadence/contact_planning/fleet_run_actions.ex" => :control,
+    "lib/cadence/contact_planning/fleet_run_repairs.ex" => :control,
+    "lib/cadence/applications/telemetry_decom_catalog_contribution.ex" => :composition,
+    "lib/cadence/semantic_runtime.ex" => :shared,
+    "lib/cadence/semantic_runtime/algorithm_plan.ex" => :shared,
+    "lib/cadence/semantic_runtime/expression_evaluator.ex" => :shared,
+    "lib/cadence/semantic_runtime/monitoring_evaluator.ex" => :shared,
+    "lib/cadence/semantic_runtime/monitoring_plan.ex" => :shared,
+    "lib/cadence/semantic_runtime/monitoring_result.ex" => :shared,
+    "lib/cadence/semantic_runtime/plan_decoder.ex" => :shared,
+    "lib/cadence/semantic_runtime/registered_implementation.ex" => :shared,
+    "lib/cadence/semantic_runtime/registered_registry.ex" => :shared,
+    "lib/cadence/semantic_runtime/result.ex" => :shared,
+    "lib/cadence/semantic_runtime/scope.ex" => :shared,
+    "lib/cadence/semantic_runtime/state.ex" => :shared,
+    "lib/cadence/semantic_runtime/update.ex" => :shared,
+    "lib/cadence/runtime/mission_model_plan_decoder.ex" => :shared,
+    "lib/cadence/applications/telemetry_decom/review.ex" => :management,
+    "lib/cadence/applications/ops_dock.ex" => :projections,
+    "lib/cadence/extensions/registry.ex" => :composition,
+    "lib/cadence/applications/organization_admin.ex" => :composition,
+    "lib/cadence/applications/legacy_comms_overview.ex" => :composition,
+    "lib/cadence/applications/spacecraft.ex" => :composition,
+    "lib/cadence/applications/ops_console.ex" => :composition,
+    "lib/cadence/applications/mission_catalog.ex" => :composition,
+    "lib/cadence/applications/limits.ex" => :composition,
+    "lib/cadence/applications/derived_telemetry.ex" => :composition,
+    "lib/cadence/applications/comms.ex" => :composition,
+    "lib/cadence/control/process_namespace.ex" => :composition,
+    "lib/cadence/runtime/process_namespace.ex" => :composition,
+    "lib/cadence/applications/mission_binding_contribution.ex" => :shared,
+    "lib/cadence/applications/surface_query_contribution.ex" => :shared,
+    "lib/cadence/applications/packet_binding_configuration.ex" => :shared,
+    "lib/cadence/applications/packet_binding.ex" => :shared,
+    "lib/cadence/applications/packet_binding_resource.ex" => :shared,
+    "lib/cadence/applications/surface_elements/packet_bindings.ex" => :shared,
+    "lib/cadence/applications/surface_elements/packet_binding_group.ex" => :shared,
+    "lib/cadence/applications/surface_elements/packet_binding_resource.ex" => :shared,
+    "lib/cadence/applications/configuration_lock.ex" => :management,
+    "lib/cadence/applications/packet_bindings.ex" => :management,
+    "lib/cadence/applications/mission_binding_composer.ex" => :management,
+    "lib/cadence/applications/packet_bindings/binding_row.ex" => :management,
+    "lib/cadence/applications/packet_bindings/configuration_row.ex" => :management,
+    "lib/cadence/applications/packet_bindings/resource_row.ex" => :management,
+    "lib/cadence/notifications/actions.ex" => :management,
+    "lib/cadence/notifications/recipient.ex" => :management,
+    "lib/cadence/platform/supervisor.ex" => :composition,
+    "lib/cadence/control/supervisor.ex" => :composition,
+    "lib/cadence/runtime/supervisor.ex" => :composition,
+    "lib/cadence/projections/supervisor.ex" => :composition,
+    "lib/cadence/platform/root_composition.ex" => :composition,
+    "lib/cadence/applications/json_boundary.ex" => :shared,
+    "lib/cadence/applications/packet_input_definition.ex" => :shared,
     "lib/cadence/application.ex" => :composition,
     "lib/cadence/extension_catalog.ex" => :composition,
     "lib/cadence/persistence/organization_scope.ex" => :adapter,
@@ -142,7 +268,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/applications/lifecycle_contract.ex" => :shared,
     "lib/cadence/applications/preflight_check.ex" => :shared,
     "lib/cadence/applications/preflight_report.ex" => :shared,
-    "lib/cadence/applications/registry.ex" => :shared,
+    "lib/cadence/applications/registry.ex" => :composition,
     "lib/cadence/applications/resource_claim_definition.ex" => :shared,
     "lib/cadence/applications/resource_contract.ex" => :shared,
     "lib/cadence/applications/status.ex" => :shared,
@@ -158,7 +284,6 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/applications/surface_elements/stat.ex" => :shared,
     "lib/cadence/applications/surface_elements/table.ex" => :shared,
     "lib/cadence/applications/telemetry_decom.ex" => :management,
-    "lib/cadence/applications/telemetry_decom/action_provider.ex" => :management,
     "lib/cadence/applications/telemetry_decom/apid_selection.ex" => :management,
     "lib/cadence/applications/telemetry_decom/config.ex" => :management,
     "lib/cadence/application_dispatch/binding_rule.ex" => :shared,
@@ -360,6 +485,12 @@ defmodule Cadence.Architecture.PlaneBoundary do
                               "lib/cadence/management/activations.ex",
                               "lib/cadence/management/commanding/approved_command.ex",
                               "lib/cadence/management/commanding.ex",
+                              "lib/cadence/management/commanding/request_review.ex",
+                              "lib/cadence/management/commanding/request_authoring.ex",
+                              "lib/cadence/management/commanding/stage_catalog.ex",
+                              "lib/cadence/management/commanding/stage_drafts.ex",
+                              "lib/cadence/management/commanding/stage_item_authoring.ex",
+                              "lib/cadence/management/commanding/stage_submission.ex",
                               "lib/cadence/commanding/command_request.ex",
                               "lib/cadence/management/contacts.ex",
                               "lib/cadence/management/contacts/approved_contact_plan.ex",
@@ -379,6 +510,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
                               "lib/cadence/management/data_sources.ex",
                               "lib/cadence/control/managed_resources.ex",
                               "lib/cadence/projections/data_sources/health.ex",
+                              "lib/cadence/projections/data_sources/watermarks.ex",
                               "lib/cadence/projections/data_source_bindings.ex",
                               "lib/cadence/platform/content_hash.ex",
                               "lib/cadence/runtime/generation_applied.ex",
@@ -442,6 +574,12 @@ defmodule Cadence.Architecture.PlaneBoundary do
   end
 
   @spec classify(String.t()) :: plane() | nil
+  @doc false
+  def host_adapter?(path), do: MapSet.member?(@host_adapter_paths, path)
+
+  @doc false
+  def public_composition_value?(path), do: MapSet.member?(@public_composition_values, path)
+
   def classify(path) when is_binary(path) do
     cond do
       path == "lib/cadence.ex" ->
@@ -451,6 +589,9 @@ defmodule Cadence.Architecture.PlaneBoundary do
         :adapter
 
       String.starts_with?(path, "lib/cadence/observability/") ->
+        :adapter
+
+      host_adapter?(path) ->
         :adapter
 
       true ->
@@ -465,11 +606,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
     direction = {source_plane, sink_plane}
 
     cond do
-      source_plane in [:adapter, :composition, :compatibility] or
-          sink_plane == :compatibility ->
-        []
-
-      sink_plane == :adapter ->
+      outer_boundary?(source_plane, sink_plane, sink) ->
         []
 
       not MapSet.member?(@allowed_directions, direction) ->
@@ -484,6 +621,11 @@ defmodule Cadence.Architecture.PlaneBoundary do
       true ->
         []
     end
+  end
+
+  defp outer_boundary?(source_plane, sink_plane, sink) do
+    source_plane in [:adapter, :composition, :compatibility] or
+      sink_plane in [:adapter, :compatibility] or public_composition_value?(sink)
   end
 
   defp finding(kind, source, source_plane, sink, sink_plane, label) do

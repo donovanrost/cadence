@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@cadence/design-tokens": "workspace:*",
+    "@cadence/plugin-host": "workspace:*",
     "@cadence/plugin-sdk": "workspace:*",
     "@cadence/ui": "workspace:*",
     "reka-ui": "catalog:",

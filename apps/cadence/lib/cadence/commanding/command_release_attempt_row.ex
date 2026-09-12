@@ -68,6 +68,7 @@ defmodule Cadence.Commanding.CommandReleaseAttemptRow do
     |> unique_constraint([:mission_id, :command_release_attempt_id],
       name: :command_release_attempts_scope_idx
     )
+    |> unique_constraint(:command_release_attempt_id, name: :command_release_attempts_pkey)
   end
 
   @spec update_changeset(struct(), CommandReleaseAttempt.t()) :: Ecto.Changeset.t()

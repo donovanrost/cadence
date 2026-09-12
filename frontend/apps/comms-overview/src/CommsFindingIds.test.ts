@@ -64,9 +64,16 @@ const renderers = {
     mount(CommsCanonicalSurface, {
       props: {
         surfaceId: "validation",
+        version: 1,
+        context: { missionId: "mission-1" },
         payload: {
-          navigation: { fallback_href: "/comms/validation", breadcrumbs: [] },
-          data: { ...validation, findings: groups.flatMap((group) => group.findings) },
+          navigation: { fallback_href: "/missions/mission-1/comms/validation", breadcrumbs: [] },
+          data: {
+            ...validation,
+            status: "attention",
+            finding_count: 4,
+            findings: groups.flatMap((group) => group.findings),
+          },
         },
       },
     }),

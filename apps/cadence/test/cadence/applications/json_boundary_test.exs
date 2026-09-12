@@ -48,6 +48,47 @@ defmodule Cadence.Applications.JSONBoundaryTest do
     assert {:error, :string} = JSONBoundary.safe_trusted_output(trusted_diagnostics <> "d")
   end
 
+  test "workflow output bounds do not widen generic input or legacy output" do
+    long = String.duplicate("界", 2_730)
+    assert {:ok, ^long} = JSONBoundary.safe_workflow_output(long)
+    assert {:error, :string} = JSONBoundary.safe(long)
+    assert {:error, :string} = JSONBoundary.safe_trusted_output(long)
+    assert {:error, :string} = JSONBoundary.safe_workflow_output(long <> "界")
+    assert {:ok, _} = JSONBoundary.safe_workflow_output(nested_map(16))
+    assert {:error, :depth} = JSONBoundary.safe_workflow_output(nested_map(17))
+    assert {:error, :unsupported} = JSONBoundary.safe_workflow_output(self())
+    assert {:error, :list_items} = JSONBoundary.safe_workflow_output(Enum.to_list(1..101))
+    oversized = Map.new(1..2, &{to_string(&1), List.duplicate(String.duplicate("x", 8_192), 100)})
+    assert {:error, :document_bytes} = JSONBoundary.safe_workflow_output(oversized)
+  end
+
+  test "native planning input declares exact text wrappers and retains strict evidence bounds" do
+    alias Cadence.Applications.OpsConsole.Actions.NativePlanningInput
+    token = String.duplicate("t", 8_192)
+    assert {:ok, %{"token" => ^token}} = NativePlanningInput.admit(%{"token" => token})
+    assert {:error, _} = NativePlanningInput.admit(%{"token" => token <> "t"})
+    assert {:error, _} = NativePlanningInput.admit(%{"token" => token, "extra" => true})
+    reason = String.duplicate("界", 1_365)
+
+    input = %{
+      "contact_plan_id" => "plan",
+      "plan_evidence" => %{"id" => "review"},
+      "decision" => %{"reason" => reason}
+    }
+
+    assert {:ok, ^input} = NativePlanningInput.admit(input)
+
+    assert {:error, _} =
+             NativePlanningInput.admit(put_in(input, ["decision", "reason"], reason <> "界"))
+
+    assert {:error, _} =
+             NativePlanningInput.admit(
+               put_in(input, ["plan_evidence", "id"], String.duplicate("x", 241))
+             )
+
+    assert {:error, _} = NativePlanningInput.admit(%{"untyped" => reason})
+  end
+
   defp nested_map(0), do: %{}
   defp nested_map(depth), do: %{"next" => nested_map(depth - 1)}
 end

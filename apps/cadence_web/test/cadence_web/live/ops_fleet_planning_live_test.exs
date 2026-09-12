@@ -22,44 +22,53 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
     conn = TestFixtures.member_conn(user)
 
     {:ok, planning, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/planning")
-    assert_surface(planning, "ops-fleet-planning-component", "fleet_planning", mission, %{})
+    assert_directory(planning, mission, %{})
+
+    {:ok, paged, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/planning?page=2&state=failed")
+
+    assert_directory(paged, mission, %{
+      "page" => "2",
+      "state" => "failed"
+    })
 
     {:ok, new_run, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/planning/new")
 
-    assert_surface(
-      new_run,
-      "ops-fleet-planning-new-component",
-      "fleet_planning_new",
-      mission,
-      %{}
-    )
+    assert_workflow(new_run, "planning.fleet-start", mission, %{})
 
     {:ok, policy, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/planning/policy")
 
-    assert_surface(
-      policy,
-      "ops-fleet-planning-policy-component",
-      "fleet_planning_policy",
-      mission,
-      %{}
-    )
+    assert_workflow(policy, "planning.fleet-policy", mission, %{})
 
     {:ok, templates, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/requirement-templates")
 
-    assert_surface(
-      templates,
-      "ops-contact-requirement-template-component",
-      "contact_requirement_template",
-      mission,
-      %{}
-    )
+    assert_workflow(templates, "planning.requirement-templates", mission, %{})
+    page = LiveVue.Test.get_vue(templates, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["status"] == "ready"
+    assert page["data"]["model"]["can_manage"]
+    assert page["data"]["model"]["templates"]["entries"] == []
 
     {:ok, run, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/planning/runs/run-1")
 
-    assert_surface(run, "ops-fleet-planning-run-component", "fleet_planning_run", mission, %{
+    assert_workflow(run, "planning.fleet-run", mission, %{
       "fleet_planning_run_id" => "run-1"
+    })
+
+    {:ok, evidence, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/planning/runs/run-1?requirements_page=2&decisions_page=3&resources_page=2&automation_page=4&commitments_page=2"
+      )
+
+    assert_workflow(evidence, "planning.fleet-run", mission, %{
+      "fleet_planning_run_id" => "run-1",
+      "requirements_page" => "2",
+      "decisions_page" => "3",
+      "resources_page" => "2",
+      "automation_page" => "4",
+      "commitments_page" => "2"
     })
   end
 
@@ -85,20 +94,40 @@ defmodule CadenceWeb.OpsFleetPlanningLiveTest do
   end
 
   test "fleet planning query descriptors preserve subject and query contracts" do
-    assert {:ok, %{subject_param: nil, query_params: []}} =
+    assert {:ok, %{subject_param: nil, query_params: ["page", "state"]}} =
              OpsConsole.surface_query_contract("fleet_planning")
 
-    assert {:ok, %{subject_param: nil, query_params: []}} =
+    assert {:ok,
+            %{
+              subject_param: nil,
+              query_params: [
+                "requirements_page",
+                "decisions_page",
+                "resources_page",
+                "automation_page",
+                "commitments_page"
+              ]
+            }} =
              OpsConsole.surface_query_contract("fleet_planning_run")
   end
 
-  defp assert_surface(view, _id, surface_id, mission, query_params) do
+  defp assert_directory(view, mission, query) do
     HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
+      "kind" => "ops_module",
+      "contribution" => "planning.fleet-directory",
       "host_scope" => "mission",
       "mission_id" => mission.mission_id,
-      "query_params" => query_params,
-      "surface_id" => surface_id
+      "query_params" => query
+    })
+  end
+
+  defp assert_workflow(view, contribution, mission, query) do
+    HostTransportTestSupport.assert_context(view, %{
+      "kind" => "ops_module",
+      "contribution" => contribution,
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => query
     })
   end
 

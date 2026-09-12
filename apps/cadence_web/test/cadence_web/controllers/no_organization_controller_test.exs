@@ -1,80 +1,85 @@
 defmodule CadenceWeb.NoOrganizationControllerTest do
   use CadenceWeb.ConnCase, async: true
-
   import Phoenix.LiveViewTest
-
+  alias Cadence.Accounts
+  alias Cadence.Accounts.OrganizationInvitationRow
   alias Cadence.Notifications
   alias Cadence.Notifications.Notification
+  alias Cadence.Repo
   alias CadenceWeb.TestFixtures
   alias LiveVue.Test
 
-  test "renders for authenticated user with no membership and no invitations" do
+  test "an authenticated recipient without invitations gets the versioned empty page" do
     user = TestFixtures.persist_user!()
-    conn = TestFixtures.member_conn(user)
-
-    vue = no_organization_vue(conn)
-    assert vue.props["page"]["pending_invitations_count"] == 0
-    assert is_binary(vue.props["page"]["csrf_token"])
-    assert vue.props["page"]["csrf_token"] != ""
+    page = no_organization_page(TestFixtures.member_conn(user))
+    assert page["version"] == 1
+    assert page["pending_invitations_count"] == 0
+    assert is_binary(page["csrf_token"]) and page["csrf_token"] != ""
   end
 
-  test "renders pending-invitations block when the user has unread invitation notifications" do
+  test "reading an invitation notification does not hide a pending invitation" do
     user = TestFixtures.persist_user!()
+    invitation!(user)
+    assert [notification] = Notifications.list_notifications(user.user_id)
 
-    {:ok, _n} =
-      Notifications.persist_notification(
-        Notification.new(%{
-          user_id: user.user_id,
-          kind: :organization_invitation,
-          title: "Invitation to join Demo",
-          metadata: %{"organization_invitation_id" => "orginv_x"}
-        })
-      )
+    assert {:ok, _} =
+             Notifications.mark_notification_read(notification.notification_id, user.user_id)
 
-    conn = TestFixtures.member_conn(user)
-
-    pending = no_organization_vue(conn).props["page"]["pending_invitations_count"]
-
-    assert pending == 1
+    assert no_organization_page(TestFixtures.member_conn(user))["pending_invitations_count"] == 1
   end
 
-  test "uses plural copy for multiple invitations" do
+  test "notification badges do not substitute for usable invitations" do
     user = TestFixtures.persist_user!()
+    expired = invitation!(user)
+    revoked = invitation!(user)
 
-    Enum.each(1..2, fn _ ->
-      {:ok, _} =
-        Notifications.persist_notification(
-          Notification.new(%{
-            user_id: user.user_id,
-            kind: :organization_invitation,
-            title: "Invite",
-            metadata: %{}
-          })
-        )
-    end)
+    Repo.get!(OrganizationInvitationRow, expired.organization_invitation_id)
+    |> Ecto.Changeset.change(expires_at: DateTime.add(DateTime.utc_now(), -60))
+    |> Repo.update!()
 
-    conn = TestFixtures.member_conn(user)
+    Repo.get!(OrganizationInvitationRow, revoked.organization_invitation_id)
+    |> Ecto.Changeset.change(status: "revoked")
+    |> Repo.update!()
 
-    pending = no_organization_vue(conn).props["page"]["pending_invitations_count"]
+    assert {:ok, _} =
+             Notifications.persist_notification(
+               Notification.new(%{
+                 user_id: user.user_id,
+                 kind: :organization_invitation,
+                 title: "Old invitation",
+                 metadata: %{}
+               })
+             )
 
-    assert pending == 2
+    assert no_organization_page(TestFixtures.member_conn(user))["pending_invitations_count"] == 0
+    invitation!(user)
+    invitation!(user)
+    assert no_organization_page(TestFixtures.member_conn(user))["pending_invitations_count"] == 2
   end
 
-  test "redirects to /sign-in when unauthenticated", %{conn: conn} do
-    conn = get(conn, "/no-organization")
-    assert redirected_to(conn) == "/sign-in"
+  test "unauthenticated requests require sign-in", %{conn: conn} do
+    assert redirected_to(get(conn, "/no-organization")) == "/sign-in"
   end
 
-  defp no_organization_vue(conn) do
-    {:ok, view, _html} = live(conn, "/no-organization")
+  defp invitation!(user) do
+    org = TestFixtures.persist_org!()
+    admin = TestFixtures.persist_user!()
+
+    assert {:ok, %{invitation: invitation}} =
+             Accounts.establish_organization_access(user.email, org.organization_id,
+               force_invitation: true,
+               invited_by_user_id: admin.user_id
+             )
+
+    invitation
+  end
+
+  defp no_organization_page(conn) do
+    {:ok, view, _} = live(conn, "/no-organization")
     vue = Test.get_vue(view, id: "no-organization-page-component")
-
     assert vue.component == "NoOrganizationPage"
     assert vue.ssr == false
-    assert vue.props == Jason.decode!(Jason.encode!(vue.props))
-    assert vue.props |> Map.keys() |> Enum.sort() == ["page"]
     assert vue.handlers == %{}
-
-    vue
+    vue.props["page"]
   end
 end

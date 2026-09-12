@@ -42,7 +42,6 @@ const actionBindings: Record<string, Record<string, string>> = {
   edit: { validate: "validate", save: "save" },
   applications: { install: "install", disable: "disable", uninstall: "uninstall" },
   telemetry_decom: {
-    change_revision: "save_configuration",
     save_catalog_revision: "save_configuration",
     enable: "request_activation",
     disable: "disable",
@@ -58,7 +57,11 @@ const actionNotice = ref<string>();
 const actionReceipt = shallowRef<HostActionReceipt<unknown>>();
 let loadGeneration = 0;
 
-const selectedComponent = computed(() => surfaceComponents[props.surface.surfaceId]);
+const selectedComponent = computed(() =>
+  Object.hasOwn(surfaceComponents, props.surface.surfaceId)
+    ? surfaceComponents[props.surface.surfaceId]
+    : undefined,
+);
 const selectedBindings = computed(() => actionBindings[props.surface.surfaceId] ?? {});
 
 const actionLifecycle = createFederatedActionLifecycle({
@@ -229,7 +232,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
         {{ actionNotice }} Receipt {{ actionReceipt.receiptId }} completed at
         {{ actionReceipt.completedAt }}.
       </aside>
-      <component :is="selectedComponent" v-bind="pageProps" v-on="listeners" />
+      <component
+        :is="selectedComponent"
+        v-bind="{
+          ...pageProps,
+          ...(props.surface.surfaceId === 'telemetry_decom'
+            ? { hostContext: props.context, busy: actionPending }
+            : {}),
+        }"
+        v-on="listeners"
+      />
     </div>
   </div>
 </template>

@@ -11,7 +11,7 @@ defmodule CadenceWeb.SpacecraftCommandingLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "authenticated command route mounts the federated spacecraft surface" do
+  test "authenticated command route mounts the commanding spacecraft contribution" do
     {conn, mission, spacecraft} = signed_in_spacecraft()
 
     {:ok, view, _html} = live(conn, commanding_path(mission, spacecraft))
@@ -34,8 +34,8 @@ defmodule CadenceWeb.SpacecraftCommandingLiveTest do
 
   defp assert_surface(view, mission, spacecraft) do
     HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "spacecraft",
-      "surface_id" => "commanding",
+      "kind" => "spacecraft_module",
+      "contribution" => "commanding.spacecraft",
       "host_scope" => "spacecraft",
       "mission_id" => mission.mission_id,
       "spacecraft_id" => spacecraft.spacecraft_id,

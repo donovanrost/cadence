@@ -6,24 +6,47 @@ import {
 } from "@cadence/plugin-sdk";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import type { Component } from "vue";
-import ApplicationHost from "./ApplicationHost.vue";
-import TelemetryDecomManage from "./TelemetryDecomManage.vue";
+import {
+  packetBindingsContribution,
+  type PacketPort,
+} from "@cadence/telemetry-decom/packet-bindings";
+const PacketBindingsSurface = packetBindingsContribution.component;
+import { configurationContribution } from "@cadence/telemetry-decom/configuration";
+const TelemetryDecomManage = configurationContribution.component;
 
 const props = defineProps<FullPageSurfaceProps>();
 
 const surfaceComponents: Record<string, Component> = {
   manage: TelemetryDecomManage,
-  packet_bindings: ApplicationHost,
+  packet_bindings: PacketBindingsSurface,
 };
 
 const actionBindings: Record<string, Record<string, string>> = {
-  manage: {
-    change_revision: "save_configuration",
-    save_catalog_revision: "save_configuration",
-    enable: "request_activation",
-    disable: "disable",
-  },
-  packet_bindings: { application_action: "save_packet_bindings" },
+  manage: configurationContribution.actions,
+  packet_bindings: {},
+};
+
+const packetPort: PacketPort = {
+  read: async () =>
+    pagePropsFor(
+      await props.bridge.query({
+        queryId: packetBindingsContribution.query.id,
+        version: packetBindingsContribution.query.version,
+        context: props.context,
+      }),
+    ),
+  save: (input, idempotencyKey) =>
+    props.bridge.execute({
+      applicationKey: "telemetry_decom",
+      applicationVersion: 1,
+      surfaceId: packetBindingsContribution.surfaceId,
+      surfaceVersion: 1,
+      actionId: packetBindingsContribution.actionId,
+      input,
+      idempotencyKey,
+      context: props.context,
+    }),
+  navigate: (href) => (props.bridge.navigate ?? ((target) => window.location.assign(target)))(href),
 };
 
 const pageProps = shallowRef<Record<string, unknown>>();
@@ -35,7 +58,11 @@ const actionNotice = ref<string>();
 const actionReceipt = shallowRef<HostActionReceipt<unknown>>();
 let loadGeneration = 0;
 
-const selectedComponent = computed(() => surfaceComponents[props.surface.surfaceId]);
+const selectedComponent = computed(() =>
+  Object.hasOwn(surfaceComponents, props.surface.surfaceId)
+    ? surfaceComponents[props.surface.surfaceId]
+    : undefined,
+);
 const selectedBindings = computed(() => actionBindings[props.surface.surfaceId] ?? {});
 
 const actionLifecycle = createFederatedActionLifecycle({
@@ -114,7 +141,6 @@ function actionInput(event: string, input: unknown): unknown {
 
 function pagePropsFor(value: unknown): Record<string, unknown> {
   if (!isRecord(value)) return {};
-  if (props.surface.surfaceId === "packet_bindings") return value;
   if (isRecord(value.trusted_surface)) {
     return isRecord(value.trusted_surface.data)
       ? value.trusted_surface.data
@@ -216,7 +242,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
         {{ actionNotice }} Receipt {{ actionReceipt.receiptId }} completed at
         {{ actionReceipt.completedAt }}.
       </aside>
-      <component :is="selectedComponent" v-bind="pageProps" v-on="listeners" />
+      <component
+        :is="selectedComponent"
+        v-bind="pageProps"
+        :document="pageProps"
+        :port="packetPort"
+        v-on="listeners"
+        :host-context="props.context"
+        :busy="actionPending"
+      />
     </div>
   </div>
 </template>

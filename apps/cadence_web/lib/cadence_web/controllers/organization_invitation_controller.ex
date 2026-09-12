@@ -95,6 +95,7 @@ defmodule CadenceWeb.OrganizationInvitationController do
 
   defp invitation_page(assigns, error_message) do
     %{
+      version: 1,
       csrf_token: Plug.CSRFProtection.get_csrf_token(),
       token: assigns.invitation_token,
       available: assigns.invitation_available?,

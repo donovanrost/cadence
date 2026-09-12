@@ -11,21 +11,40 @@ defmodule CadenceWeb.OpsDashboardAuthoringEntryLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "dashboard directory and new routes mount their federated surfaces" do
+  test "dashboard directory and creation mount their host contributions" do
     {conn, mission} = signed_in()
 
     {:ok, directory, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards")
 
-    assert_surface(
-      directory,
-      "ops-dashboard-directory-component",
-      "dashboard_directory",
-      mission,
-      %{}
-    )
+    HostTransportTestSupport.assert_context(directory, %{
+      "application_key" => nil,
+      "surface_id" => nil,
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => %{}
+    })
+
+    page = LiveVue.Test.get_vue(directory, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["id"] == "dashboards.directory"
+    assert page["slot"] == "ops.page"
+    assert page["status"] == "ready"
 
     {:ok, new_view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/new")
-    assert_surface(new_view, "ops-dashboard-new-component", "dashboard_new", mission, %{})
+
+    HostTransportTestSupport.assert_context(new_view, %{
+      "application_key" => nil,
+      "surface_id" => nil,
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => %{}
+    })
+
+    creation =
+      LiveVue.Test.get_vue(new_view, id: "application-shell").props["snapshot"]["ops_page"]
+
+    assert creation["id"] == "dashboards.creation"
+    assert creation["slot"] == "ops.page"
+    assert creation["status"] == "ready"
   end
 
   defp signed_in do
@@ -34,15 +53,5 @@ defmodule CadenceWeb.OpsDashboardAuthoringEntryLiveTest do
     TestFixtures.grant_membership!(user, organization)
     mission = TestFixtures.persist_mission!(organization)
     {TestFixtures.member_conn(user), mission}
-  end
-
-  defp assert_surface(view, _id, surface_id, mission, query_params) do
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
-      "surface_id" => surface_id,
-      "host_scope" => "mission",
-      "mission_id" => mission.mission_id,
-      "query_params" => query_params
-    })
   end
 end

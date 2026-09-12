@@ -13,6 +13,7 @@ defmodule Cadence.Control.Activations do
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Auth.Scope
   alias Cadence.Control.Activations.{ActivationExecution, ActivationExecutionRow}
+  alias Cadence.Control.Activations.Review
   alias Cadence.Control.MissionModelPromotion
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.Missions, as: ControlMissions
@@ -37,6 +38,9 @@ defmodule Cadence.Control.Activations do
       end
     end
   end
+
+  @doc "Reviews one mission-bound activation request through the host's human approval workflow."
+  def review(%Scope{} = scope, mission_id, input), do: Review.decide(scope, mission_id, input)
 
   @spec approve_and_execute(Scope.t(), binary(), binary(), keyword()) ::
           {:ok, ActivationExecution.t()} | {:error, term()}

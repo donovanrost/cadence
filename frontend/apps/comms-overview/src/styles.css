@@ -1,3 +1,4 @@
 @import "@cadence/ui/styles.css";
 @source "./";
+@source "../../../modules/communications/src";
 @import "@cadence/ui/dashboard.css";

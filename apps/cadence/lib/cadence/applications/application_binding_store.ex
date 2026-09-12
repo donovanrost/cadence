@@ -5,7 +5,7 @@ defmodule Cadence.Applications.ApplicationBindingStore do
 
   import Ecto.Query
 
-  alias Cadence.Applications.ApplicationBinding
+  alias Cadence.Applications.{ApplicationBinding, ConfigurationLock}
   alias Cadence.Applications.ApplicationBindingStore.BindingRow
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
@@ -19,10 +19,9 @@ defmodule Cadence.Applications.ApplicationBindingStore do
   def upsert(%ApplicationBinding{} = binding, opts \\ []) when is_list(opts) do
     versioning = Keyword.get(opts, :versioning, :configuration)
 
-    case Repo.transaction(fn -> locked_upsert(binding, versioning) end) do
-      {:ok, %ApplicationBinding{} = persisted} -> {:ok, persisted}
-      {:error, reason} -> {:error, reason}
-    end
+    ConfigurationLock.run(binding.organization_id, binding.mission_id, fn ->
+      {:ok, locked_upsert(binding, versioning)}
+    end)
   end
 
   @spec fetch(binary(), binary(), binary(), app_key()) ::

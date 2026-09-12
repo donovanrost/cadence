@@ -4,7 +4,8 @@ defmodule Cadence.Jobs.Dispatcher do
   use GenServer
 
   alias Cadence.Jobs
-  alias Cadence.Jobs.Worker
+  alias Cadence.Jobs.{Available, Worker}
+  alias Cadence.Platform.EventBus
 
   @default_safety_poll_interval_ms 60_000
   @default_max_concurrency 4
@@ -40,6 +41,8 @@ defmodule Cadence.Jobs.Dispatcher do
 
   @impl true
   def init(opts) do
+    :ok = Available.subscribe(Keyword.get(opts, :event_bus, EventBus))
+
     state = %{
       safety_poll_interval_ms:
         Keyword.get(opts, :safety_poll_interval_ms, @default_safety_poll_interval_ms),
@@ -62,6 +65,11 @@ defmodule Cadence.Jobs.Dispatcher do
   end
 
   @impl true
+  def handle_call({:cadence_fact, {:cadence, :jobs, :available}, %Available{}}, _from, state) do
+    {:noreply, state} = handle_cast(:dispatch_available, state)
+    {:reply, :ok, state}
+  end
+
   def handle_call(:quiesce, _from, %{lifecycle_status: :quiesced} = state) do
     {:reply, {:ok, quiescence_settlement(state)}, state}
   end
@@ -81,6 +89,10 @@ defmodule Cadence.Jobs.Dispatcher do
   end
 
   @impl true
+  def handle_cast({:cadence_fact, {:cadence, :jobs, :available}, %Available{}}, state) do
+    handle_cast(:dispatch_available, state)
+  end
+
   def handle_cast(:dispatch_available, %{lifecycle_status: :active} = state) do
     emit(:notification, state, %{count: 1}, %{})
 

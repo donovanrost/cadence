@@ -56,8 +56,7 @@ defmodule Cadence.Applications.SpacecraftContractTest do
                "cadence.spacecraft.readiness",
                "cadence.spacecraft.routing",
                "cadence.spacecraft.commanding",
-               "cadence.spacecraft.applications",
-               "cadence.telemetry_decom.manage"
+               "cadence.spacecraft.applications"
              ]
              |> Enum.sort()
 

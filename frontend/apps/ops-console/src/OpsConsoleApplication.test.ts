@@ -26,7 +26,14 @@ const response = {
   queryVersion: 1,
   presentation: {
     component: "OpsConsoleLanding",
-    props: { missionId: "mission-1", missionName: "Firebird", componentCount: 90 },
+    props: {
+      model: {
+        version: 1,
+        context: { organization_id: "org-1", mission_id: "mission-1" },
+        mission_name: "Firebird",
+        can_administer: false,
+      },
+    },
   },
 };
 
@@ -35,102 +42,11 @@ const dashboardResponse = {
   presentation: {
     component: "OpsDashboardDirectory",
     props: {
-      page: {
-        id: "ops-dashboards-page",
-        header: {
-          eyebrow: "Observe / Dashboards",
-          heading: "Dashboard Directory",
-          copy: "Find mission telemetry workspaces without crowding the navigation rail. Stars and recents are personal; dashboard definitions and tags remain mission shared.",
-          count: { id: "dashboard-directory-count", value: 1, suffix: "matching" },
-          author_actions: [
-            {
-              id: "dashboard-directory-new",
-              label: "New Dashboard",
-              icon: "hero-plus",
-              icon_class: "h-4 w-4",
-              href: "/missions/mission-1/ops/dashboards/new",
-              class: "btn btn-primary btn-sm",
-            },
-          ],
-        },
-        list: {
-          id: "dashboard-directory-list",
-          empty: {
-            id: "dashboard-directory-empty",
-            icon: "hero-magnifying-glass",
-            heading: "No matching dashboards",
-            copy: "Change the search, tag, or lifecycle filter. The filter state is preserved in the URL.",
-          },
-        },
+      model: {
+        version: 1,
+        context: { organization_id: "org-1", mission_id: "mission-1" },
+        filters: { query: "Flight", lifecycle: "archived", tag: "all", sort: "name", page: 2 },
       },
-      filters: {
-        id: "dashboard-directory-filter-form",
-        values: { query: "", lifecycle: "active", tag: "all", sort: "updated" },
-        fields: {
-          query: {
-            id: "directory_query",
-            name: "directory[query]",
-            type: "search",
-            label: "Search",
-            placeholder: "Name, description, or tag",
-            debounce_ms: 250,
-          },
-          lifecycle: {
-            id: "directory_lifecycle",
-            name: "directory[lifecycle]",
-            type: "select",
-            label: "Lifecycle",
-            options: [
-              { label: "Active", value: "active" },
-              { label: "Archived", value: "archived" },
-              { label: "All", value: "all" },
-            ],
-          },
-          tag: {
-            id: "directory_tag",
-            name: "directory[tag]",
-            type: "select",
-            label: "Tag",
-            options: [{ label: "All tags", value: "all" }],
-          },
-          sort: {
-            id: "directory_sort",
-            name: "directory[sort]",
-            type: "select",
-            label: "Sort",
-            options: [
-              { label: "Recently updated", value: "updated" },
-              { label: "Name", value: "name" },
-              { label: "Widget count", value: "widgets" },
-            ],
-          },
-        },
-      },
-      dashboard_directory: [
-        {
-          id: "dashboard-1",
-          __dom_id: "dashboard-dashboard-1",
-          dashboard_id: "dashboard-1",
-          name: "Firebird overview",
-          description: "Mission overview dashboard",
-          tags: ["flight"],
-          lifecycle: { state: "active", class: "badge-success" },
-          starred: false,
-          open: { id: "dashboard-directory-open-dashboard-1", href: "#" },
-          star: {
-            id: "dashboard-directory-star-dashboard-1",
-            payload: { "dashboard-id": "dashboard-1", starred: "true" },
-            aria_label: "Star Firebird overview",
-            aria_pressed: "false",
-            disabled: false,
-            title: null,
-            icon: "hero-star",
-          },
-          widget_version_label: "2 widgets · v1",
-          clone: null,
-          restore: null,
-        },
-      ],
     },
   },
 };
@@ -607,8 +523,8 @@ const expectedSurfaceTable = [
 type TestQuery = (request: HostQueryRequest) => Promise<unknown>;
 type TestExecute = (request: HostActionRequest<unknown>) => Promise<HostActionReceipt<unknown>>;
 
-function propsFor(query: TestQuery, execute: TestExecute = vi.fn()) {
-  const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "fleet_planning")!;
+function propsFor(query: TestQuery, execute: TestExecute = vi.fn(), surfaceId = "fleet_planning") {
+  const surface = surfaceContracts.find((candidate) => candidate.surfaceId === surfaceId)!;
   return {
     application: {
       applicationKey: "ops_console",
@@ -638,7 +554,7 @@ function propsFor(query: TestQuery, execute: TestExecute = vi.fn()) {
 
 describe("Ops Console federated application", () => {
   it("queries the preserved Ops workspace surface and renders its Phoenix DTO", async () => {
-    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "fleet_planning")!;
+    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "workspace")!;
     const query = vi.fn<TestQuery>().mockResolvedValue(response);
     const baseProps = propsFor(query);
     const wrapper = mount(OpsConsoleApplication, {
@@ -658,28 +574,154 @@ describe("Ops Console federated application", () => {
     wrapper.unmount();
   });
 
-  it("renders the backend-shaped dashboard directory DTO without optional props", async () => {
-    const query = vi.fn<TestQuery>().mockResolvedValue(dashboardResponse);
-    const surface = surfaceContracts.find(
-      (candidate) => candidate.surfaceId === "dashboard_directory",
-    )!;
+  it("binds legacy landing responses to host identity and removes links after context changes", async () => {
+    const query = vi.fn<TestQuery>().mockResolvedValue(response);
     const baseProps = propsFor(query);
+    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "workspace")!;
     const wrapper = mount(OpsConsoleApplication, {
       props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
     });
-
     await flushPromises();
-
-    expect(wrapper.find("#ops-dashboards-page").exists()).toBe(true);
-    expect(wrapper.find("#dashboard-directory-count").text()).toContain("1 matching");
-    expect(wrapper.find("#dashboard-directory-new").exists()).toBe(true);
-    expect(wrapper.find("#dashboard-dashboard-1").exists()).toBe(true);
-    expect(wrapper.find("[data-dashboard-directory-id='dashboard-1']").exists()).toBe(true);
+    expect(wrapper.get("#ops-entry-dashboards").attributes("href")).toBe(
+      "/missions/mission-1/ops/dashboards",
+    );
+    await wrapper.setProps({ context: { ...context, missionId: "mission-2" } });
+    expect(wrapper.find("#ops-workspace-landing-unavailable").exists()).toBe(true);
+    expect(wrapper.find("#ops-entry-dashboards").exists()).toBe(false);
     wrapper.unmount();
   });
 
-  it("mounts the Phoenix telemetry contract without containment", async () => {
-    const query = vi.fn<TestQuery>().mockResolvedValue(telemetryResponse);
+  it("ignores response-supplied host identity when a workspace model belongs to another mission", async () => {
+    const query = vi.fn<TestQuery>().mockResolvedValue({
+      ...response,
+      presentation: {
+        ...response.presentation,
+        props: {
+          organizationId: "org-foreign",
+          missionId: "mission-foreign",
+          model: {
+            ...response.presentation.props.model,
+            context: { organization_id: "org-foreign", mission_id: "mission-foreign" },
+          },
+        },
+      },
+    });
+    const baseProps = propsFor(query);
+    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "workspace")!;
+    const wrapper = mount(OpsConsoleApplication, {
+      props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
+    });
+    await flushPromises();
+    expect(wrapper.find("#ops-workspace-landing-unavailable").exists()).toBe(true);
+    expect(wrapper.findAll("#ops-workspace-landing a")).toHaveLength(0);
+    wrapper.unmount();
+  });
+
+  it("binds creation destinations to the host identity and drops them when the context changes", async () => {
+    const model = {
+      version: 1,
+      context: { organization_id: "org-1", mission_id: "mission-1" },
+      mode: "clone",
+      source_dashboard_id: "source-1",
+    };
+    const query = vi.fn<TestQuery>().mockResolvedValue({
+      queryVersion: 1,
+      presentation: { component: "OpsDashboardNew", props: { model } },
+    });
+    const baseProps = propsFor(query);
+    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "dashboard_new")!;
+    const wrapper = mount(OpsConsoleApplication, {
+      props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
+    });
+    await flushPromises();
+    expect(wrapper.get("#dashboard-creation-destination-open").attributes("href")).toBe(
+      "/missions/mission-1/ops/dashboards/new?mode=clone&source_dashboard_id=source-1",
+    );
+    await wrapper.setProps({ context: { ...context, missionId: "mission-2" } });
+    expect(wrapper.find("#dashboard-creation-destination-open").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("does not accept response-supplied context for a foreign creation destination", async () => {
+    const query = vi.fn<TestQuery>().mockResolvedValue({
+      queryVersion: 1,
+      presentation: {
+        component: "OpsDashboardNew",
+        props: {
+          organizationId: "foreign",
+          missionId: "foreign",
+          model: {
+            version: 1,
+            context: { organization_id: "foreign", mission_id: "foreign" },
+            mode: "new",
+            source_dashboard_id: null,
+          },
+        },
+      },
+    });
+    const baseProps = propsFor(query);
+    const surface = surfaceContracts.find((candidate) => candidate.surfaceId === "dashboard_new")!;
+    const wrapper = mount(OpsConsoleApplication, {
+      props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
+    });
+    await flushPromises();
+    expect(wrapper.find("#dashboard-creation-destination-open").exists()).toBe(false);
+    expect(wrapper.find("#dashboard-creation-destination [role=status]").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("preserves directory filters through the owner and removes destinations on host context change", async () => {
+    const query = vi.fn<TestQuery>().mockResolvedValue(dashboardResponse);
+    const baseProps = propsFor(query);
+    const surface = surfaceContracts.find(
+      (candidate) => candidate.surfaceId === "dashboard_directory",
+    )!;
+    const wrapper = mount(OpsConsoleApplication, {
+      props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
+    });
+    await flushPromises();
+    expect(wrapper.get("#dashboard-directory-destination-open").attributes("href")).toBe(
+      "/missions/mission-1/ops/dashboards?query=Flight&lifecycle=archived&tag=all&sort=name&page=2",
+    );
+    expect(wrapper.findAll("form")).toHaveLength(0);
+    await wrapper.setProps({ context: { ...context, missionId: "mission-2" } });
+    expect(wrapper.find("#dashboard-directory-destination-open").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("does not let a directory response override the actual host context", async () => {
+    const model = {
+      ...dashboardResponse.presentation.props.model,
+      context: { organization_id: "foreign", mission_id: "foreign" },
+    };
+    const query = vi.fn<TestQuery>().mockResolvedValue({
+      ...dashboardResponse,
+      presentation: {
+        component: "OpsDashboardDirectory",
+        props: { model, organizationId: "foreign", missionId: "foreign" },
+      },
+    });
+    const baseProps = propsFor(query);
+    const surface = surfaceContracts.find(
+      (candidate) => candidate.surfaceId === "dashboard_directory",
+    )!;
+    const wrapper = mount(OpsConsoleApplication, {
+      props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
+    });
+    await flushPromises();
+    expect(wrapper.find("#dashboard-directory-destination-open").exists()).toBe(false);
+    expect(wrapper.find("#dashboard-directory-destination [role=status]").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("links the legacy telemetry contract to the canonical host page without containment", async () => {
+    const query = vi.fn<TestQuery>().mockResolvedValue({
+      ...telemetryResponse,
+      presentation: {
+        component: "OpsTelemetryExplore",
+        props: { mission_id: "mission-a", query: { point_id: "HK.temp" } },
+      },
+    });
     const surface = surfaceContracts.find(
       (candidate) => candidate.surfaceId === "telemetry_explore",
     )!;
@@ -690,8 +732,31 @@ describe("Ops Console federated application", () => {
 
     await flushPromises();
 
-    expect(wrapper.find("#ops-telemetry-explore-page").exists()).toBe(true);
-    expect(wrapper.find("#telemetry-explore-filter-form").exists()).toBe(true);
+    expect(wrapper.get("#exploration-open-workspace").attributes("href")).toBe(
+      "/missions/mission-a/ops/explore?point_id=HK.temp",
+    );
+    expect(wrapper.find("#telemetry-explore-filter-form").exists()).toBe(false);
+    expect(wrapper.find("#ops-console-error").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("delegates the legacy timeline entry to the core owner with its event link", async () => {
+    const query = vi.fn<TestQuery>().mockResolvedValue({
+      queryVersion: 1,
+      presentation: {
+        component: "OpsTimeline",
+        props: {
+          mission_id: "mission-a",
+          query: { event_id: "mission_event:one", severity: "warning" },
+        },
+      },
+    });
+    const wrapper = mount(OpsConsoleApplication, { props: propsFor(query, vi.fn(), "timeline") });
+    await flushPromises();
+    expect(wrapper.get("#timeline-destination a").attributes("href")).toBe(
+      "/missions/mission-a/ops/timeline?severity=warning&event_id=mission_event%3Aone",
+    );
+    expect(wrapper.find("#timeline-filter-form").exists()).toBe(false);
     expect(wrapper.find("#ops-console-error").exists()).toBe(false);
     wrapper.unmount();
   });
@@ -738,12 +803,14 @@ describe("Ops Console federated application", () => {
       completedAt: "2026-09-04T00:00:00.000Z",
       result: {},
     });
-    const wrapper = mount(OpsConsoleApplication, { props: propsFor(query, execute) });
+    const wrapper = mount(OpsConsoleApplication, {
+      props: propsFor(query, execute, "dashboard_directory"),
+    });
     await flushPromises();
 
     window.dispatchEvent(
       new CustomEvent("cadence:ops-event", {
-        detail: { eventName: "refresh-planning", payload: { reason: "operator" } },
+        detail: { eventName: "toggle_dashboard_star", payload: { dashboard_id: "dashboard-1" } },
       }),
     );
     await flushPromises();
@@ -751,10 +818,10 @@ describe("Ops Console federated application", () => {
     expect(execute).toHaveBeenCalledWith({
       applicationKey: "ops_console",
       applicationVersion: 1,
-      surfaceId: "fleet_planning",
+      surfaceId: "dashboard_directory",
       surfaceVersion: 1,
-      actionId: "refresh-planning",
-      input: { reason: "operator" },
+      actionId: "toggle_dashboard_star",
+      input: { dashboard_id: "dashboard-1" },
       context,
     });
     expect(wrapper.find("#ops-console-action-notice").exists()).toBe(true);
@@ -768,12 +835,14 @@ describe("Ops Console federated application", () => {
       completedAt: "2026-09-04T00:00:00.000Z",
       result: { status: "completed" },
     });
-    const wrapper = mount(OpsConsoleApplication, { props: propsFor(query, execute) });
+    const wrapper = mount(OpsConsoleApplication, {
+      props: propsFor(query, execute, "dashboard_directory"),
+    });
     await flushPromises();
 
     window.dispatchEvent(
       new CustomEvent("cadence:ops-event", {
-        detail: { eventName: "refresh-planning", payload: {} },
+        detail: { eventName: "toggle_dashboard_star", payload: { dashboard_id: "dashboard-1" } },
       }),
     );
     await flushPromises();
@@ -790,12 +859,14 @@ describe("Ops Console federated application", () => {
       completedAt: "2026-09-04T00:00:00.000Z",
       result: { status: "completed" },
     });
-    const wrapper = mount(OpsConsoleApplication, { props: propsFor(query, execute) });
+    const wrapper = mount(OpsConsoleApplication, {
+      props: propsFor(query, execute, "dashboard_directory"),
+    });
     await flushPromises();
 
     window.dispatchEvent(
       new CustomEvent("cadence:ops-event", {
-        detail: { eventName: "refresh-planning", payload: {} },
+        detail: { eventName: "toggle_dashboard_star", payload: { dashboard_id: "dashboard-1" } },
       }),
     );
     await flushPromises();
@@ -805,32 +876,65 @@ describe("Ops Console federated application", () => {
     wrapper.unmount();
   });
 
-  it("keeps the complete frozen Ops family in the remote component registry", () => {
+  it("admits native route roots and excludes obsolete widgets and inherited object names", () => {
     const required = [
       "OpsActivationRequests",
       "OpsAlarms",
       "OpsCommands",
+      "OpsConsoleLanding",
+      "OpsContactDetail",
+      "OpsContactPlanShow",
+      "OpsContactRecord",
+      "OpsContactRequirementList",
+      "OpsContactRequirementNew",
+      "OpsContactRequirementShow",
+      "OpsContactRequirementTemplate",
+      "OpsContactSchedule",
+      "OpsDashboardActivitySurface",
+      "OpsDashboardDiagnostics",
       "OpsDashboardDirectory",
+      "OpsDashboardLibrary",
       "OpsDashboardNew",
+      "OpsDashboardPlaylistPresent",
+      "OpsDashboardPlaylists",
+      "OpsDashboardSettings",
+      "OpsDashboardShare",
+      "OpsDashboardShow",
+      "OpsDashboardSnapshot",
       "OpsDataOperations",
+      "OpsDataOperationsManage",
+      "OpsDataSourceRegistration",
+      "OpsDataSourceSettings",
       "OpsDataSources",
       "OpsFleetPlanning",
+      "OpsFleetPlanningNew",
+      "OpsFleetPlanningPolicy",
+      "OpsFleetPlanningRun",
       "OpsTelemetryExplore",
-      "DashboardCanvas",
-      "DashboardWidget",
-      "HistoricalWorkflowControls",
-      "RuntimeDiagnosticsPanel",
-      "SourceHealth",
-      "SelectedActivityActions",
-      "ActivityTimeline",
-      "ComparisonReviewActivityDetails",
-      "EvidenceInspectorPanel",
-      "WidgetForm",
-      "TelemetryChart",
+      "OpsTimeline",
     ];
-
-    expect(required.every((name) => Boolean(OPS_COMPONENTS[name]))).toBe(true);
-    expect(OPS_COMPONENT_NAMES).toContain("OpsConsoleLanding");
+    expect(OPS_COMPONENT_NAMES).toEqual(required);
+    for (const component of [
+      "OpsDashboardActivity",
+      "DashboardCanvas",
+      "WidgetForm",
+      "HistoricalWorkflowControls",
+      "unknown",
+      "toString",
+      "constructor",
+      "__proto__",
+    ]) {
+      expect(() =>
+        unwrapOpsConsoleResponse(
+          { queryVersion: 1, presentation: { component, props: {} } },
+          OPS_COMPONENTS,
+        ),
+      ).toThrow("presentation component is invalid");
+    }
+    expect(routeQueryContracts.dashboard_playlist_present).toEqual({
+      subjectParam: "playlist_id",
+      queryParams: ["playlist_id", "index"],
+    });
   });
 
   it("publishes the exact first-party mission identity", () => {
@@ -854,13 +958,23 @@ describe("Ops Console federated application", () => {
         const componentName =
           surface.surfaceId === "dashboard_editor"
             ? "OpsDashboardShow"
-            : `Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_, _prefix, letter) => letter.toUpperCase())}`;
+            : surface.surfaceId === "dashboard_activity"
+              ? "OpsDashboardActivitySurface"
+              : `Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_, _prefix, letter) => letter.toUpperCase())}`;
         return Boolean(OPS_COMPONENTS[componentName]);
       }),
     ).toBe(true);
   });
 
   it("publishes exact deep-route subject and query contracts", () => {
+    expect(routeQueryContracts.dashboard_directory.queryParams).toEqual([
+      "query",
+      "lifecycle",
+      "tag",
+      "sort",
+      "page",
+    ]);
+    expect(routeQueryContracts.dashboard_new.queryParams).toEqual(["mode", "source_dashboard_id"]);
     expect(routeQueryContracts.dashboard_show.subjectParam).toBe("dashboard_id");
     expect(routeQueryContracts.dashboard_editor.queryParams).toEqual(["dashboard_id"]);
     expect(routeQueryContracts.dashboard_activity.queryParams).toEqual([

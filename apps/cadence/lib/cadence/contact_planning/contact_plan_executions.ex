@@ -21,6 +21,10 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
 
   alias Cadence.Repo
 
+  defguardp review_page?(version, page)
+            when is_integer(version) and version in 1..2_147_483_647 and
+                   is_integer(page) and page in 1..1_000_000
+
   @processable_states ~w(pending requesting)
 
   @doc false
@@ -95,6 +99,52 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
     |> Repo.all()
     |> Enum.map(&ContactPlanExecutionItemRow.to_domain/1)
   end
+
+  @doc "Keeps execution claims stable through a short reviewed repair transaction."
+  def list_locked(org, mission, plan_id, version) do
+    if Repo.in_transaction?() do
+      items =
+        ContactPlanExecutionItemRow
+        |> where(
+          [i],
+          i.organization_id == ^org and i.mission_id == ^mission and i.contact_plan_id == ^plan_id and
+            i.contact_plan_version == ^version
+        )
+        |> order_by([i], asc: i.contact_plan_execution_item_id)
+        |> lock("FOR SHARE")
+        |> Repo.all()
+        |> Enum.map(&ContactPlanExecutionItemRow.to_domain/1)
+
+      {:ok, items}
+    else
+      {:error, :contact_plan_execution_transaction_required}
+    end
+  end
+
+  @doc "Bounded live execution evidence for exactly one immutable plan version."
+  def list_page(organization_id, mission_id, plan_id, plan_version, page)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(plan_id) and
+             review_page?(plan_version, page) do
+    rows =
+      ContactPlanExecutionItemRow
+      |> where(
+        [item],
+        item.organization_id == ^organization_id and item.mission_id == ^mission_id and
+          item.contact_plan_id == ^plan_id and item.contact_plan_version == ^plan_version
+      )
+      |> order_by([item], asc: item.inserted_at, asc: item.contact_plan_execution_item_id)
+      |> offset(^((page - 1) * 25))
+      |> limit(26)
+      |> Repo.all()
+
+    {:ok,
+     %{
+       entries: rows |> Enum.take(25) |> Enum.map(&ContactPlanExecutionItemRow.to_domain/1),
+       more?: length(rows) > 25
+     }}
+  end
+
+  def list_page(_, _, _, _, _), do: {:error, :invalid_contact_plan_review_page}
 
   defp begin_execution(organization_id, mission_id, plan_id, opts) do
     ManagementContacts.start_execution_projection(organization_id, mission_id, plan_id, now(opts))

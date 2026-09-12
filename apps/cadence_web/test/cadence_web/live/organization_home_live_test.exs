@@ -11,20 +11,26 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "authenticated organization members mount the organization surface" do
+  test "authenticated organization members mount the host-owned organization home" do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()
     _membership = TestFixtures.grant_membership!(user, organization)
 
     {:ok, view, _html} = live(TestFixtures.member_conn(user), ~p"/")
 
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "organization_admin",
-      "surface_id" => "organization_home",
-      "host_scope" => "organization",
-      "organization_id" => organization.organization_id,
-      "query_params" => %{}
-    })
+    snapshot =
+      HostTransportTestSupport.assert_context(view, %{
+        "kind" => "administration",
+        "host_scope" => "organization",
+        "organization_id" => organization.organization_id,
+        "query_params" => %{}
+      })
+
+    assert snapshot["administration_page"]["page"] == "organization_home"
+    assert snapshot["administration_page"]["status"] == "ready"
+
+    assert snapshot["administration_page"]["data"]["organization"]["id"] ==
+             organization.organization_id
   end
 
   test "active admin mode redirects to /admin even from /" do

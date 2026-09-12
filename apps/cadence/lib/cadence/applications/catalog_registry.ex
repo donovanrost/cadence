@@ -5,8 +5,10 @@ defmodule Cadence.Applications.CatalogRegistry do
     ApplicationDefinition,
     CatalogContribution,
     Comms,
+    DerivedTelemetry,
     JSONBoundary,
     LegacyCommsOverview,
+    Limits,
     MissionCatalog,
     OpsConsole,
     Spacecraft,
@@ -17,10 +19,12 @@ defmodule Cadence.Applications.CatalogRegistry do
   @contributors [
     Comms,
     LegacyCommsOverview,
+    Limits,
     MissionCatalog,
     Spacecraft,
     TelemetryDecomCatalogContribution,
-    OpsConsole
+    OpsConsole,
+    DerivedTelemetry
   ]
   @additional_contributors [Cadence.Applications.OrganizationAdmin]
 

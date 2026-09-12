@@ -5,8 +5,8 @@ defmodule Cadence.Applications.OrganizationAdminAction do
   alias Cadence.Applications.{ActionFailure, ActionRequest, HostContext}
   alias Cadence.Applications.OrganizationAdminProviders, as: Providers
   alias Cadence.Auth.Scope
-  alias Cadence.Control.Providers, as: ControlProviders
-  alias Cadence.GroundNetworks.{ProviderAccountGrants, ProviderAccounts, ProviderCredentials}
+  alias Cadence.GroundNetworks.ProviderAccountOperations
+  alias Cadence.Notifications.Actions, as: NotificationActions
 
   @action_contracts [
     %{
@@ -208,29 +208,21 @@ defmodule Cadence.Applications.OrganizationAdminAction do
     end
   end
 
-  defp execute_action(scope, _host_context, %ActionRequest{
-         action_id: "validate_provider_account",
-         params: params
-       }) do
-    with {:ok, provider_account_id} <- required_param(params, "provider_account_id"),
-         {:ok, _account} <-
-           ProviderAccounts.validate(scope, provider_account_id),
-         {:ok, props} <- Providers.ProviderAccountShow.props(scope, provider_account_id) do
+  defp execute_action(scope, _host_context, %ActionRequest{action_id: action, params: params})
+       when action in ~w(validate_provider_account rotate_provider_credential revoke_provider_credential grant_provider_account_mission revoke_provider_account_mission) do
+    with {:ok, account_id} <- required_param(params, "provider_account_id"),
+         {:ok, _result} <- ProviderAccountOperations.execute(scope, action, params),
+         {:ok, props} <- Providers.ProviderAccountShow.props(scope, account_id) do
       {:ok, %{patch: props}}
-    end
-  end
+    else
+      {:error, :stale_provider_account} ->
+        {:error, failure("stale_provider_account", "Refresh the account before this action.")}
 
-  defp execute_action(scope, _host_context, %ActionRequest{action_id: action_id, params: params})
-       when action_id in [
-              "rotate_provider_credential",
-              "revoke_provider_credential",
-              "grant_provider_account_mission",
-              "revoke_provider_account_mission"
-            ] do
-    with {:ok, provider_account_id} <- required_param(params, "provider_account_id"),
-         {:ok, _result} <- provider_account_action(scope, action_id, provider_account_id, params),
-         {:ok, props} <- Providers.ProviderAccountShow.props(scope, provider_account_id) do
-      {:ok, %{patch: props}}
+      {:error, :invalid_input} ->
+        {:error, failure("invalid_input", "The action input is invalid.")}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -238,40 +230,31 @@ defmodule Cadence.Applications.OrganizationAdminAction do
          action_id: "accept_invitation",
          params: params
        }) do
-    with {:ok, notification_id} <- required_param(params, "notification_id"),
-         {:ok, notification} <- Cadence.Notifications.fetch_notification(notification_id),
-         true <- notification.user_id == scope.user.user_id,
-         :organization_invitation <- notification.kind,
-         {:ok, invitation_id} <-
-           required_map_param(notification.metadata, "organization_invitation_id"),
-         {:ok, _result} <-
-           Cadence.Accounts.accept_invitation_as_user(scope.user.user_id, invitation_id) do
+    with {:ok, id} <- required_param(params, "notification_id"),
+         {:ok, _} <-
+           NotificationActions.execute(scope, "accept_invitation", %{
+             "notification_id" => id
+           }) do
       {:ok, %{navigate: "/"}}
-    else
-      false ->
-        {:error, failure("forbidden", "That notification is not available to this user.")}
-
-      {:error, reason} ->
-        {:error, reason}
-
-      _other ->
-        {:error, failure("invalid_invitation", "That invitation is no longer available.")}
     end
   end
 
   defp execute_action(scope, _host_context, %ActionRequest{
          action_id: "mark_notification_read",
+         surface_id: surface,
          params: params
        }) do
-    with {:ok, notification_id} <- required_param(params, "notification_id"),
-         {:ok, notification} <- Cadence.Notifications.fetch_notification(notification_id),
-         true <- notification.user_id == scope.user.user_id,
-         {:ok, _updated} <-
-           Cadence.Notifications.mark_notification_read(notification_id, scope.user.user_id) do
-      {:ok, %{patch: %{presentation: Providers.Notifications.presentation(scope)}}}
-    else
-      false -> {:error, failure("forbidden", "That notification is not available to this user.")}
-      {:error, reason} -> {:error, reason}
+    with {:ok, id} <- required_param(params, "notification_id"),
+         {:ok, _} <-
+           NotificationActions.execute(scope, "mark_notification_read", %{
+             "notification_id" => id
+           }) do
+      props =
+        if surface == "notifications_bell",
+          do: Providers.Notifications.bell_props(scope),
+          else: Providers.Notifications.props(scope)
+
+      {:ok, %{patch: props}}
     end
   end
 
@@ -303,7 +286,7 @@ defmodule Cadence.Applications.OrganizationAdminAction do
             }
           }}
 
-  defp execute_action(_scope, _host_context, %ActionRequest{
+  defp execute_action(scope, _host_context, %ActionRequest{
          action_id: "create_organization",
          params: params
        }) do
@@ -312,7 +295,7 @@ defmodule Cadence.Applications.OrganizationAdminAction do
     slug = normalize_text(value(values, "slug"))
 
     if is_binary(display_name) and is_binary(slug) do
-      case Providers.AdminOrganizationNew.create(%{
+      case Providers.AdminOrganizationNew.create(scope, %{
              "display_name" => display_name,
              "slug" => slug
            }) do
@@ -324,13 +307,14 @@ defmodule Cadence.Applications.OrganizationAdminAction do
     end
   end
 
-  defp execute_action(_scope, _host_context, %ActionRequest{
+  defp execute_action(scope, _host_context, %ActionRequest{
          action_id: "issue_service_identity",
          params: params
        }) do
     with {:ok, organization_id} <- required_param(params, "organization_id"),
          {:ok, result} <-
            Providers.AdminOrganizationShow.issue_service_identity(
+             scope,
              organization_id,
              input_map(params, "service_identity")
            ) do
@@ -365,60 +349,6 @@ defmodule Cadence.Applications.OrganizationAdminAction do
 
   defp ensure_surface_binding(%ActionRequest{} = request),
     do: ActionContractLedger.admit(request, __MODULE__)
-
-  defp provider_account_action(scope, "rotate_provider_credential", account_id, _params) do
-    with {:ok, _account, version} <-
-           ProviderAccounts.fetch(scope, account_id),
-         {:ok, _result} <-
-           ProviderCredentials.rotate(
-             scope,
-             account_id,
-             version.credential_ref,
-             provider_account_opts()
-           ) do
-      {:ok, %{completed: true}}
-    end
-  end
-
-  defp provider_account_action(scope, "revoke_provider_credential", account_id, _params) do
-    with {:ok, _account, version} <-
-           ProviderAccounts.fetch(scope, account_id),
-         {:ok, _result} <-
-           ProviderCredentials.revoke(
-             scope,
-             account_id,
-             version.credential_ref,
-             provider_account_opts()
-           ) do
-      {:ok, %{completed: true}}
-    end
-  end
-
-  defp provider_account_action(scope, "grant_provider_account_mission", account_id, params) do
-    grant = input_map(params, "grant")
-
-    with {:ok, mission_id} <- required_param(grant, "mission_id") do
-      ProviderAccountGrants.grant(
-        scope,
-        mission_id,
-        account_id,
-        %{
-          restrictions: grant_restrictions(grant),
-          grant_reason: optional_text(value(grant, "grant_reason"))
-        }
-      )
-    end
-  end
-
-  defp provider_account_action(scope, "revoke_provider_account_mission", _account_id, params) do
-    with {:ok, grant_id} <- required_param(params, "grant-id") do
-      ControlProviders.revoke_account_grant(
-        scope,
-        grant_id,
-        "Revoked by organization administrator"
-      )
-    end
-  end
 
   defp ensure_action_context(
          %Scope{organization_id: organization_id},
@@ -475,47 +405,6 @@ defmodule Cadence.Applications.OrganizationAdminAction do
     ]
   end
 
-  defp provider_account_opts,
-    do: Application.get_env(:cadence_web, :provider_account_live_opts, [])
-
-  defp grant_restrictions(params) do
-    %{
-      "allowed_services" => comma_list(value(params, "allowed_services")),
-      "allowed_stations" => comma_list(value(params, "allowed_stations")),
-      "max_quota" => nonnegative_integer(value(params, "max_quota"))
-    }
-    |> Map.reject(fn {_key, value} -> value in [nil, []] end)
-  end
-
-  defp comma_list(value) do
-    case optional_text(value) do
-      nil -> []
-      text -> text |> String.split(",") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
-    end
-  end
-
-  defp nonnegative_integer(value) do
-    case optional_text(value) do
-      nil ->
-        nil
-
-      text ->
-        case Integer.parse(text) do
-          {number, ""} when number >= 0 -> number
-          _other -> -1
-        end
-    end
-  end
-
-  defp optional_text(value) when is_binary(value) do
-    case String.trim(value) do
-      "" -> nil
-      text -> text
-    end
-  end
-
-  defp optional_text(_value), do: nil
-
   defp required_input_map(params, key) do
     value = input_map(params, key)
 
@@ -540,14 +429,16 @@ defmodule Cadence.Applications.OrganizationAdminAction do
     end
   end
 
-  defp required_map_param(params, key), do: required_param(params, key)
-
   defp value(params, key) when is_map(params) and is_binary(key) do
     Map.get(params, key) || Map.get(params, atom_key(key))
   end
 
   defp atom_key("provider_account"), do: :provider_account
   defp atom_key("provider_account_id"), do: :provider_account_id
+  defp atom_key("expected_account_version"), do: :expected_account_version
+  defp atom_key("expected_credential_version"), do: :expected_credential_version
+  defp atom_key("expected_grant_version"), do: :expected_grant_version
+  defp atom_key("credential_ref"), do: :credential_ref
   defp atom_key("grant"), do: :grant
   defp atom_key("grant-id"), do: :grant_id
   defp atom_key("notification_id"), do: :notification_id

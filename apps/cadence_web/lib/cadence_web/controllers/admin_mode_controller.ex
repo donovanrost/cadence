@@ -11,7 +11,8 @@ defmodule CadenceWeb.AdminModeController do
       conn
       |> put_layout(false)
       |> live_render(CadenceWeb.AdminModeLive,
-        session: live_session(conn, %{csrf_token: Plug.CSRFProtection.get_csrf_token()}),
+        session:
+          live_session(conn, %{version: 1, csrf_token: Plug.CSRFProtection.get_csrf_token()}),
         container: {:div, class: "contents"}
       )
     else

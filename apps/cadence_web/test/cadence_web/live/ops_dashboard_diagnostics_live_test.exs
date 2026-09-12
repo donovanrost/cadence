@@ -8,25 +8,21 @@ defmodule CadenceWeb.OpsDashboardDiagnosticsLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "diagnostics forwards the current dashboard subject" do
+  test "diagnostics binds the dashboard subject and contains an unavailable publication" do
     {conn, mission} = signed_in()
     dashboard_id = "dashboard-1"
 
     {:ok, view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard_id}/diagnostics")
 
-    assert_surface(
-      view,
-      "ops-dashboard-diagnostics-page-component",
-      "dashboard_diagnostics",
-      mission,
-      %{
-        "dashboard_id" => dashboard_id
-      }
-    )
+    page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["id"] == "dashboards.execution-diagnostics"
+    assert page["context"]["missionId"] == mission.mission_id
+    assert page["context"]["resourceId"] == dashboard_id
+    assert page["status"] == "unavailable"
+    refute Map.has_key?(page, "data")
   end
 
   defp signed_in do
@@ -35,15 +31,5 @@ defmodule CadenceWeb.OpsDashboardDiagnosticsLiveTest do
     TestFixtures.grant_membership!(user, organization)
     mission = TestFixtures.persist_mission!(organization)
     {TestFixtures.member_conn(user), mission}
-  end
-
-  defp assert_surface(view, _id, surface_id, mission, query_params) do
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
-      "surface_id" => surface_id,
-      "host_scope" => "mission",
-      "mission_id" => mission.mission_id,
-      "query_params" => query_params
-    })
   end
 end

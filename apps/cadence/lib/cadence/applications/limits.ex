@@ -1,7 +1,12 @@
 defmodule Cadence.Applications.Limits do
   @moduledoc "Application-owned contribution metadata for mission limits."
 
-  alias Cadence.Applications.SurfaceQueryContribution
+  alias Cadence.Applications.{
+    CatalogContribution,
+    Registry,
+    ReleaseContribution,
+    SurfaceQueryContribution
+  }
 
   @application_key "limits"
 
@@ -29,5 +34,33 @@ defmodule Cadence.Applications.Limits do
         provider: Cadence.Reads.ApplicationSurfaces.Limits
       }
     ]
+  end
+
+  def catalog_contributions do
+    {:ok, definition} = Registry.fetch("limits", 1)
+
+    [
+      %CatalogContribution{
+        definition: definition,
+        package_id: "cadence.mission-assurance",
+        package_version: 1
+      }
+    ]
+  end
+
+  def release_contributions do
+    for surface <- ["manage", "activity"] do
+      %ReleaseContribution{
+        application_key: "limits",
+        application_version: 1,
+        surface_id: surface,
+        surface_version: 1,
+        federation: :module_federation,
+        release_id: "ops-console-v1",
+        remote_name: "cadence_ops_console",
+        manifest_path: "/assets/application-host/ops-console/mf-manifest.json",
+        exposed_module: "./Limits"
+      }
+    end
   end
 end

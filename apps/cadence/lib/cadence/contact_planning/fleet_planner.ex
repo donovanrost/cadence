@@ -15,6 +15,7 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
     FleetPlanningPolicies,
     FleetPlanningRuns,
     FleetRepairInputs,
+    FleetRunLock,
     Planner
   }
 
@@ -56,9 +57,11 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
           {:ok, result()} | {:error, term()}
   def run(%Scope{} = scope, mission_id, run_id, opts \\ [])
       when is_binary(mission_id) and is_binary(run_id) and is_list(opts) do
-    with {:ok, run} <- FleetPlanningRuns.fetch(scope.organization_id, mission_id, run_id) do
-      continue(scope, mission_id, run, opts)
-    end
+    FleetRunLock.with_run(scope.organization_id, mission_id, run_id, fn ->
+      with {:ok, run} <- FleetPlanningRuns.fetch(scope.organization_id, mission_id, run_id) do
+        continue(scope, mission_id, run, opts)
+      end
+    end)
   end
 
   defp continue(scope, mission_id, %{phase: :queued} = run, opts) do
@@ -550,6 +553,9 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
       version.selected_snapshot_ids == selected_ids and
       version.locked_snapshot_ids == locked_ids
   end
+
+  @doc "Checks pinned requirements and the active policy before an explicit operator continuation."
+  def check_current_inputs(run), do: ensure_current_inputs(run)
 
   defp ensure_current_inputs(run) do
     with {:ok, policy} <- exact_policy(run),

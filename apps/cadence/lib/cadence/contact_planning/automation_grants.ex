@@ -21,9 +21,24 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
     now = now(opts)
 
     with :ok <- authorize_admin(scope),
-         {:ok, actor_id} <- admin_actor_id(scope),
-         {:ok, _policy, policy_version} <-
-           FleetPlanningPolicies.fetch_active(scope.organization_id, mission_id),
+         {:ok, actor_id} <- admin_actor_id(scope) do
+      Repo.transaction(fn ->
+        issue_or_rollback(scope, mission_id, attrs, actor_id, now, opts)
+      end)
+    end
+  end
+
+  defp issue_or_rollback(scope, mission_id, attrs, actor_id, now, opts) do
+    case issue_locked(scope, mission_id, attrs, actor_id, now, opts) do
+      {:ok, grant} -> grant
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
+  defp issue_locked(scope, mission_id, attrs, actor_id, now, opts) do
+    with {:ok, _policy, policy_version} <-
+           FleetPlanningPolicies.fetch_active_locked(scope.organization_id, mission_id),
+         :ok <- expected_policy(policy_version, Keyword.fetch(opts, :expected_policy)),
          {:ok, service_identity} <-
            Auth.fetch_service_identity(
              scope.organization_id,
@@ -50,6 +65,20 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
         {:error, reason} -> {:error, reason}
       end
     end
+  end
+
+  # Trusted domain callers may issue against the active policy without a prior
+  # browser review. The host action always supplies an exact expected reference.
+  defp expected_policy(_version, :error), do: :ok
+
+  defp expected_policy(version, {:ok, expected}) do
+    reference = %{
+      policy_id: version.fleet_planning_policy_id,
+      version: version.version,
+      content_sha256: version.content_sha256
+    }
+
+    if expected == reference, do: :ok, else: {:error, :stale_fleet_planning_policy_evidence}
   end
 
   @spec revoke(Scope.t(), binary(), binary(), binary(), binary(), keyword()) ::
@@ -99,6 +128,42 @@ defmodule Cadence.ContactPlanning.AutomationGrants do
     |> order_by([grant], desc: grant.inserted_at, asc: grant.automation_grant_id)
     |> Repo.all()
     |> Enum.map(&AutomationGrantRow.to_domain/1)
+  end
+
+  @doc "Authorized live grant ledger, bounded to 25 rows plus a lookahead."
+  def list_page(%Scope{} = scope, mission_id, page)
+      when is_integer(page) and page in 1..1_000_000 do
+    with true <- is_nil(scope.mission_id) or scope.mission_id == mission_id,
+         :ok <-
+           Policy.authorize(scope, :operate_mission, %{
+             organization_id: scope.organization_id,
+             mission_id: mission_id
+           }) do
+      query =
+        from(r in AutomationGrantRow,
+          where: r.organization_id == ^scope.organization_id and r.mission_id == ^mission_id
+        )
+
+      rows =
+        query
+        |> order_by([r], desc: r.inserted_at, asc: r.automation_grant_id)
+        |> offset(^((page - 1) * 25))
+        |> limit(26)
+        |> Repo.all()
+
+      active_count = query |> where([r], r.lifecycle_state == "active") |> Repo.aggregate(:count)
+
+      {:ok,
+       %{
+         page: page,
+         more: length(rows) > 25,
+         active_count: active_count,
+         entries: rows |> Enum.take(25) |> Enum.map(&AutomationGrantRow.to_domain/1)
+       }}
+    else
+      false -> {:error, :scope_mismatch}
+      error -> error
+    end
   end
 
   @spec authorize(Scope.t(), binary(), binary(), AutomationGrant.action(), map(), keyword()) ::

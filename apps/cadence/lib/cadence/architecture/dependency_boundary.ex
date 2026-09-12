@@ -51,6 +51,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
     "lib/cadence/contact_planning/contact_requirements.ex",
     "lib/cadence/contact_planning/fleet_planning_policies.ex",
     "lib/cadence/contact_planning/fleet_planning_runs.ex",
+    "lib/cadence/contact_planning/fleet_start_inputs.ex",
     "lib/cadence/contact_planning/planner.ex"
   ]
   @control_contacts_context @contacts_context ++

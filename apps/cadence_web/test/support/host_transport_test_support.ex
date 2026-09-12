@@ -46,6 +46,10 @@ defmodule CadenceWeb.HostTransportTestSupport do
     for {key, field} <- [
           {"application_key", "application"},
           {"surface_id", "surface"},
+          {"kind", "kind"},
+          {"contribution", "contribution"},
+          {"mission_page", "missionPage"},
+          {"spacecraft_page", "spacecraftPage"},
           {"host_scope", "scope"}
         ],
         Map.has_key?(expected, key) do

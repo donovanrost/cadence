@@ -510,6 +510,9 @@ function stableProblemMessage(status: number, code: string): string {
   if (code === "stale_configuration") {
     return "The action was stopped because the application data changed.";
   }
+  if (code === "preflight_blocked") {
+    return "Resolve the blocking activation checks, then refresh and review before requesting mission changes.";
+  }
   return "The host request failed.";
 }
 

@@ -7,7 +7,7 @@ defmodule Cadence.Dashboards.SourceResult do
   metadata that callers can surface without coupling widgets to backend details.
   """
 
-  alias Cadence.Dashboards.{Annotation, Frame, ResolveWarning}
+  alias Cadence.Dashboards.{Annotation, Frame, ResolvedSourceBinding, ResolveWarning}
   alias Cadence.Platform.ContractNormalization
 
   alias Cadence.DataSources.SourceWatermark
@@ -18,6 +18,7 @@ defmodule Cadence.Dashboards.SourceResult do
           annotations: [Annotation.t()],
           warnings: [ResolveWarning.t()],
           watermarks: [SourceWatermark.t()],
+          resolved_bindings: [ResolvedSourceBinding.t()],
           meta: map()
         }
 
@@ -27,6 +28,8 @@ defmodule Cadence.Dashboards.SourceResult do
     annotations: [],
     warnings: [],
     watermarks: [],
+    # Server-only execution evidence. Never include in frame/browser metadata.
+    resolved_bindings: [],
     meta: %{}
   ]
 
@@ -35,6 +38,8 @@ defmodule Cadence.Dashboards.SourceResult do
 
   @spec normalize(map() | t()) :: t() | nil
   def normalize(%__MODULE__{} = result) do
+    result = Map.put_new(result, :resolved_bindings, [])
+
     %__MODULE__{
       result
       | frames: normalize_frames(result.frames),
@@ -64,6 +69,7 @@ defmodule Cadence.Dashboards.SourceResult do
         result
         |> ContractNormalization.attr(:watermarks, [])
         |> normalize_watermarks(),
+      resolved_bindings: ContractNormalization.attr(result, :resolved_bindings, []),
       meta:
         result
         |> ContractNormalization.attr(:meta, %{})

@@ -41,6 +41,7 @@ defmodule Cadence.Commanding.CommandStageRow do
     |> cast(domain_attrs(command_stage), all_fields())
     |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
+    |> unique_constraint(:command_stage_id, name: :command_stages_pkey)
     |> unique_constraint([:mission_id, :command_stage_id], name: :command_stages_scope_idx)
   end
 

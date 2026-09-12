@@ -60,7 +60,20 @@ defmodule Cadence.Applications.LimitsApplicationTest do
 
     revised_request = %ActionRequest{
       request
-      | params: Map.put(request.params, "yellow_high", "30.5")
+      | params:
+          request.params
+          |> Map.put("yellow_high", "30.5")
+          |> Map.put("expected_definition_id", first_definition.limit_definition_id)
+          |> Map.put("expected_version", 1)
+          |> Map.put(
+            "expected_activation_event_id",
+            Limits.limit_definition_review(
+              @organization_id,
+              @mission_id,
+              "HK.bus_voltage",
+              "FLIGHT"
+            ).activation_event_id
+          )
     }
 
     assert {:ok, revised_definition} =
@@ -106,13 +119,13 @@ defmodule Cadence.Applications.LimitsApplicationTest do
     assert Limits.list_limit_definitions(@mission_id) == []
   end
 
-  test "registers a mission declarative surface and host-standard status", _context do
+  test "registers a mission trusted surface and host-standard status", _context do
     assert {:ok, definition} = Registry.fetch_available("limits")
     assert definition.installable_scopes == [:mission]
     assert definition.status_query_id == "cadence.limits.status"
 
     assert {:ok, surface} = Registry.fetch_default_surface(definition, :mission)
-    assert surface.renderer == {:declarative, "cadence.host.surface.v1"}
+    assert surface.renderer == {:trusted, "cadence.limits.feature"}
     assert surface.actions == ["save_limit_definition"]
   end
 
@@ -120,8 +133,18 @@ defmodule Cadence.Applications.LimitsApplicationTest do
     %ActionRequest{
       application_key: "limits",
       application_version: 1,
+      surface_id: "manage",
+      surface_version: 1,
       action_id: "save_limit_definition",
-      params: params
+      params:
+        Map.merge(
+          %{
+            "expected_definition_id" => nil,
+            "expected_version" => 0,
+            "expected_activation_event_id" => nil
+          },
+          params
+        )
     }
   end
 end

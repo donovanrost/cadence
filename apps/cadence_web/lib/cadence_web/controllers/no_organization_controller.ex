@@ -11,6 +11,7 @@ defmodule CadenceWeb.NoOrganizationController do
     |> live_render(CadenceWeb.NoOrganizationLive,
       session:
         live_session(conn, %{
+          version: 1,
           pending_invitations_count: pending_invitations_count,
           csrf_token: Plug.CSRFProtection.get_csrf_token()
         }),
@@ -20,9 +21,7 @@ defmodule CadenceWeb.NoOrganizationController do
 
   defp count_pending_invitations(%Cadence.Auth.Scope{user: %{user_id: user_id}})
        when is_binary(user_id) do
-    user_id
-    |> Cadence.Notifications.list_notifications(only_unread: true)
-    |> Enum.count(&(&1.kind == :organization_invitation))
+    Cadence.Accounts.count_pending_invitations_for_user(user_id)
   end
 
   defp count_pending_invitations(_other), do: 0

@@ -20,6 +20,7 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
   alias Cadence.Applications.Registry
   alias Cadence.Auth.Scope
   alias Cadence.GroundNetworks.{ProviderAccounts, ProviderCredentials}
+  alias Cadence.Notifications.Notification
   alias Cadence.Reads.ApplicationSurfaces
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry, as: SurfaceProviderRegistry
   alias CadenceWeb.TestFixtures
@@ -122,19 +123,21 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
                )
              )
 
-    assert {:ok, %{"data" => %{count: 0, notifications: []}}} =
+    assert {:ok, %{"data" => %{context: %{version: 1, unread_count: 0, notifications: []}}}} =
              OrganizationAdminQuery.load(
                user_scope,
                HostContext.user(user_scope.user.user_id),
                query_request("notifications_bell", "cadence.organization.notifications_bell")
              )
 
-    assert {:ok, %{"data" => %{presentation: _presentation}}} =
+    assert {:ok, %{"data" => data}} =
              OrganizationAdminQuery.load(
                admin_scope,
                HostContext.admin(),
                query_request("admin_home", "cadence.platform_admin.home")
              )
+
+    assert data == %{}
   end
 
   test "executes every organization-admin query family through non-LiveView providers", %{
@@ -191,7 +194,14 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
       assert is_map(data)
     end
 
-    assert is_map(Providers.OrganizationHome.presentation(organization))
+    assert {:ok, %{"data" => %{organization_id: organization_id}}} =
+             OrganizationAdminQuery.load(
+               organization_scope,
+               HostContext.organization(organization.organization_id),
+               query_request("organization_home", "cadence.organization.home")
+             )
+
+    assert organization_id == organization.organization_id
 
     assert {:ok, %{provider_accounts: [_row]}} =
              Providers.ProviderAccountList.props(organization_scope)
@@ -201,17 +211,138 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
     assert {:ok, %{page: _page, account_grants: _grants}} =
              Providers.ProviderAccountShow.props(organization_scope, account.provider_account_id)
 
-    assert is_map(Providers.Notifications.presentation(user_scope))
+    assert is_map(Providers.Notifications.props(user_scope))
     assert is_map(Providers.AdminHome.props())
     assert is_map(Providers.AdminRuntime.props())
     assert is_map(Providers.AdminOrganizationList.props())
     assert is_map(Providers.AdminOrganizationNew.props())
 
-    assert {:ok, %{organization: _organization}} =
+    assert {:ok, %{organization_id: ^organization_id}} =
              Providers.AdminOrganizationShow.props(organization.organization_id)
 
-    assert {:ok, %{page: _page}} =
+    assert {:ok, %{organization_id: ^organization_id}} =
              Providers.AdminOrganizationInvite.props(organization.organization_id)
+  end
+
+  test "Communications renders real provider account DTOs without legacy Vue implementations", %{
+    organization: organization,
+    organization_scope: scope
+  } do
+    assert {:ok, empty} = Providers.ProviderAccountList.props(scope)
+    registration = Providers.ProviderAccountNew.props()
+    {account, _version, _credential} = persist_provider_account!(organization)
+    assert {:ok, populated} = Providers.ProviderAccountList.props(scope)
+    assert {:ok, detail} = Providers.ProviderAccountShow.props(scope, account.provider_account_id)
+
+    corrected = %{
+      registration
+      | form:
+          Providers.ProviderAccountNew.form(%{
+            "provider_type" => "simulator",
+            "backend_type" => "env",
+            "provider_account_id" => "contract-account",
+            "credential_ref" => "contract-reference"
+          })
+    }
+
+    samples =
+      Enum.map([empty, populated], fn data ->
+        %{
+          component: "ProviderAccountListPage",
+          organization_id: scope.organization_id,
+          props: data,
+          ids: Enum.map(data.provider_accounts, & &1.__dom_id)
+        }
+      end) ++
+        Enum.map([registration, corrected], fn data ->
+          %{
+            component: "ProviderAccountNew",
+            props: data,
+            ids: [data.page.id, data.form.id, data.form.actions.submit.id]
+          }
+        end) ++
+        [
+          %{
+            component: "ProviderAccountShow",
+            organization_id: scope.organization_id,
+            props: detail,
+            ids: [detail.page.id, detail.grant_form.id, detail.configuration.id]
+          }
+        ]
+
+    checker =
+      Path.expand(
+        "../../../../../frontend/modules/communications/src/features/provider-accounts/producer-render-check.mjs",
+        __DIR__
+      )
+
+    node =
+      System.find_executable("node") || flunk("Node is required for the Vue producer contract")
+
+    {output, status} = System.cmd(node, [checker, Jason.encode!(samples)], stderr_to_stdout: true)
+    assert status == 0, output
+  end
+
+  test "registration validation retains identity and saves a zero quota as a governed value", %{
+    organization: organization,
+    organization_scope: scope
+  } do
+    previous = Application.fetch_env(:cadence_web, :provider_account_live_opts)
+
+    Application.put_env(:cadence_web, :provider_account_live_opts,
+      manage_backend?: false,
+      validate_credential?: false
+    )
+
+    on_exit(fn ->
+      case previous do
+        {:ok, value} -> Application.put_env(:cadence_web, :provider_account_live_opts, value)
+        :error -> Application.delete_env(:cadence_web, :provider_account_live_opts)
+      end
+    end)
+
+    model = Providers.ProviderAccountNew.props()
+
+    fields =
+      Map.values(model.form.fields) ++
+        Enum.flat_map(model.form.connector.configuration.sections, & &1.fields)
+
+    values =
+      fields
+      |> Map.new(&{&1.key, &1.value})
+      |> Map.merge(%{
+        "display_name" => "Zero quota contract account",
+        "max_quota" => "0",
+        "base_url" => "https://provider.example.test",
+        "environment_ref" => "contract"
+      })
+
+    host = HostContext.organization(organization.organization_id)
+
+    assert {:ok, %{patch: %{form: form}}} =
+             execute_action(
+               scope,
+               host,
+               "provider_account_new",
+               "validate_provider_account_form",
+               %{
+                 "provider_account" => values
+               }
+             )
+
+    assert form.fields.provider_account_id.value == values["provider_account_id"]
+    assert form.fields.credential_ref.value == values["credential_ref"]
+    assert form.fields.max_quota.value == "0"
+
+    assert {:ok, %{navigate: path}} =
+             execute_action(scope, host, "provider_account_new", "register_provider_account", %{
+               "provider_account" => values
+             })
+
+    assert path == "/provider-accounts/#{values["provider_account_id"]}"
+    assert {:ok, account, version} = ProviderAccounts.fetch(scope, values["provider_account_id"])
+    assert account.organization_id == organization.organization_id
+    assert version.guardrails["max_quota"] == 0
   end
 
   test "keeps action permissions and effects specific to their operations" do
@@ -619,6 +750,42 @@ defmodule Cadence.Applications.OrganizationAdminProviderTest do
 
     assert is_map(form)
     assert form.connector.selected.provider_type == "simulator"
+  end
+
+  test "notification compatibility delegates inbox placement and retains the bell read result", %{
+    user_scope: scope
+  } do
+    {:ok, n} =
+      Cadence.Notifications.persist_notification(
+        Notification.new(%{
+          user_id: scope.user.user_id,
+          kind: :organization_access_granted,
+          title: "Access notice"
+        })
+      )
+
+    assert {:ok,
+            %{patch: %{context: %{version: 1, user: user, unread_count: 0, notifications: [row]}}}} =
+             execute_action(
+               scope,
+               HostContext.user(scope.user.user_id),
+               "notifications_bell",
+               "mark_notification_read",
+               %{"notification_id" => n.notification_id}
+             )
+
+    assert row.notification_id == n.notification_id
+    assert user.user_id == scope.user.user_id
+    assert {:ok, _, 0} = DateTime.from_iso8601(row.read_at)
+
+    assert {:ok, %{"data" => destination}} =
+             OrganizationAdminQuery.load(
+               scope,
+               HostContext.user(scope.user.user_id),
+               query_request("notifications", "cadence.organization.notifications")
+             )
+
+    assert destination == %{}
   end
 
   defp query_request(surface_id, query_id, params \\ %{}) do

@@ -88,7 +88,7 @@ defmodule Cadence.Dashboards.RuntimeInvalidationTest do
 
   test "emits telemetry for runtime invalidation boundary calls" do
     cache = start_supervised!({RuntimeCache, name: nil})
-    attach_runtime_invalidation_telemetry(self())
+    attach_runtime_invalidation_telemetry(self(), cache)
 
     source_key =
       source_result_key(:telemetry,
@@ -232,17 +232,21 @@ defmodule Cadence.Dashboards.RuntimeInvalidationTest do
   end
 
   test "dashboard version invalidation retains lifecycle action diagnostics" do
-    attach_runtime_invalidation_telemetry(self())
+    cache = start_supervised!({RuntimeCache, name: nil})
+    attach_runtime_invalidation_telemetry(self(), cache)
 
     assert %{plans: 0, source_results: 0, frames: 0} =
-             RuntimeInvalidation.dashboard_version_changed(%{
-               organization_id: "org-runtime",
-               mission_id: "mission-runtime",
-               dashboard_id: "dashboard-runtime",
-               document_version: 3,
-               lifecycle_action: :reverted,
-               source_version: 1
-             })
+             RuntimeInvalidation.dashboard_version_changed(
+               %{
+                 organization_id: "org-runtime",
+                 mission_id: "mission-runtime",
+                 dashboard_id: "dashboard-runtime",
+                 document_version: 3,
+                 lifecycle_action: :reverted,
+                 source_version: 1
+               },
+               runtime_cache: cache
+             )
 
     assert_receive {:runtime_invalidation_telemetry, event_name, _measurements, metadata}
     assert event_name == RuntimeInvalidation.telemetry_event()
@@ -570,7 +574,7 @@ defmodule Cadence.Dashboards.RuntimeInvalidationTest do
 
   test "historical data changes can target one replay run snapshot" do
     cache = start_supervised!({RuntimeCache, name: nil})
-    attach_runtime_invalidation_telemetry(self())
+    attach_runtime_invalidation_telemetry(self(), cache)
     first_context = replay_time_context("replay-run-1")
     second_context = replay_time_context("replay-run-2")
 
@@ -668,7 +672,7 @@ defmodule Cadence.Dashboards.RuntimeInvalidationTest do
 
   test "source watermark changes invalidate only matching replay run live artifacts" do
     cache = start_supervised!({RuntimeCache, name: nil})
-    attach_runtime_invalidation_telemetry(self())
+    attach_runtime_invalidation_telemetry(self(), cache)
     first_context = replay_time_context("replay-run-1")
     second_context = replay_time_context("replay-run-2")
 
@@ -943,7 +947,7 @@ defmodule Cadence.Dashboards.RuntimeInvalidationTest do
 
   test "source health changes invalidate only matching replay run live artifacts" do
     cache = start_supervised!({RuntimeCache, name: nil})
-    attach_runtime_invalidation_telemetry(self())
+    attach_runtime_invalidation_telemetry(self(), cache)
     first_context = replay_time_context("replay-run-health-1")
     second_context = replay_time_context("replay-run-health-2")
 
@@ -1101,7 +1105,26 @@ defmodule Cadence.Dashboards.RuntimeInvalidationTest do
     }
   end
 
-  defp attach_runtime_invalidation_telemetry(test_pid) do
+  test "telemetry assertions ignore invalidations from another cache" do
+    cache = start_supervised!({RuntimeCache, name: nil})
+    attach_runtime_invalidation_telemetry(self(), cache)
+
+    :telemetry.execute(RuntimeInvalidation.telemetry_event(), %{total: 0}, %{
+      runtime_cache: :another_test_cache,
+      filters: %{mission_id: "another-test"}
+    })
+
+    refute_receive {:runtime_invalidation_telemetry, _, _, _}
+
+    RuntimeInvalidation.source_watermark_changed(%{replay_run_id: "owned-run"},
+      runtime_cache: cache
+    )
+
+    assert_receive {:runtime_invalidation_telemetry, _, _, %{runtime_cache: ^cache} = metadata}
+    assert metadata.filters.replay_run_id == "owned-run"
+  end
+
+  defp attach_runtime_invalidation_telemetry(test_pid, cache) do
     handler_id = "dashboard-runtime-invalidation-test-#{System.unique_integer([:positive])}"
 
     :ok =
@@ -1109,7 +1132,9 @@ defmodule Cadence.Dashboards.RuntimeInvalidationTest do
         handler_id,
         [RuntimeInvalidation.telemetry_event()],
         fn event, measurements, metadata, _config ->
-          send(test_pid, {:runtime_invalidation_telemetry, event, measurements, metadata})
+          if metadata.runtime_cache == cache do
+            send(test_pid, {:runtime_invalidation_telemetry, event, measurements, metadata})
+          end
         end,
         nil
       )

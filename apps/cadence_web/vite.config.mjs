@@ -21,13 +21,17 @@ export default defineConfig({
   build: {
     outDir: "../priv/static/assets",
     emptyOutDir: false,
+    cssCodeSplit: false,
     manifest: true,
     rollupOptions: {
       input: "assets/js/app.js",
       output: {
         entryFileNames: "app.js",
         chunkFileNames: "chunks/[name]-[hash].js",
-        assetFileNames: "[name][extname]"
+        // Tailwind owns app.css; preserve the separate component stylesheet.
+        assetFileNames: asset => asset.names.some(name => name.endsWith(".css"))
+          ? "components.css"
+          : "[name][extname]"
       }
     }
   },

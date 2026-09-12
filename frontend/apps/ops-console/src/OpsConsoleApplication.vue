@@ -1,10 +1,27 @@
 <script setup lang="ts">
 import type { FullPageSurfaceProps, HostActionReceipt } from "@cadence/plugin-sdk";
 import { computed, onBeforeUnmount, onMounted, provide, ref, shallowRef } from "vue";
+import { FLEET_DIRECTORY_PORT } from "@cadence/planning-and-contacts/fleet-planning";
+import { createFleetDirectoryPort } from "./fleet-directory-port";
+import { FLEET_START_PORT } from "@cadence/planning-and-contacts/fleet-planning";
+import { createFleetRunPort } from "./fleet-run-port";
+import { FLEET_RUN_PORT } from "@cadence/planning-and-contacts/fleet-planning";
+import { createFleetStartPort } from "./fleet-start-port";
+import { PLAN_DETAIL_PORT } from "@cadence/planning-and-contacts/contact-plans";
+import {
+  CONTACT_SCHEDULE_PORT,
+  CONTACT_RECORD_PORT,
+} from "@cadence/planning-and-contacts/contact-scheduling";
+import { createContactSchedulePort } from "./contact-schedule-port";
+import { createContactRecordPort } from "./contact-record-port";
+import { RESERVATION_PORT } from "@cadence/planning-and-contacts/contact-scheduling";
+import { createReservationPort } from "./reservation-port";
+import { createPlanDetailPort } from "./plan-detail-port";
 import { OPS_COMPONENTS } from "./ops-components";
 import { OPS_EVENT_BRIDGE, type OpsEventPayload } from "./ops-events";
 import { unwrapOpsConsoleResponse, type OpsConsolePresentation } from "./ops-console";
 import { reconcileOpsActionResult } from "./ops-action-results";
+import { CHART_RUNTIME_PORT } from "@cadence/dashboards-and-exploration/workspace";
 
 const props = defineProps<FullPageSurfaceProps>();
 const presentation = shallowRef<OpsConsolePresentation>();
@@ -14,6 +31,46 @@ const actionPending = ref(false);
 const actionNotice = ref<string>();
 let loadGeneration = 0;
 let actionGeneration = 0;
+let planPortActive = true;
+const capturedContext = props.context;
+const capturedSurface = props.surface;
+const planPort = createPlanDetailPort(
+  props,
+  () => planPortActive && props.context === capturedContext && props.surface === capturedSurface,
+);
+if (planPort) provide(PLAN_DETAIL_PORT, planPort);
+const reservationPort = createReservationPort(
+  props,
+  () => planPortActive && props.context === capturedContext && props.surface === capturedSurface,
+);
+if (reservationPort) provide(RESERVATION_PORT, reservationPort);
+const recordPort = createContactRecordPort(
+  props,
+  () => planPortActive && props.context === capturedContext && props.surface === capturedSurface,
+);
+if (recordPort) provide(CONTACT_RECORD_PORT, recordPort);
+const schedulePort = createContactSchedulePort(
+  props,
+  () => planPortActive && props.context === capturedContext && props.surface === capturedSurface,
+);
+if (schedulePort) provide(CONTACT_SCHEDULE_PORT, schedulePort);
+
+const fleetDirectoryPort = createFleetDirectoryPort(
+  props,
+  () => planPortActive && props.context === capturedContext && props.surface === capturedSurface,
+);
+if (fleetDirectoryPort) provide(FLEET_DIRECTORY_PORT, fleetDirectoryPort);
+
+const fleetStartPort = createFleetStartPort(
+  props,
+  () => planPortActive && props.context === capturedContext && props.surface === capturedSurface,
+);
+if (fleetStartPort) provide(FLEET_START_PORT, fleetStartPort);
+const fleetRunPort = createFleetRunPort(
+  props,
+  () => planPortActive && props.context === capturedContext && props.surface === capturedSurface,
+);
+if (fleetRunPort) provide(FLEET_RUN_PORT, fleetRunPort);
 
 const draftPreservingActions = new Set([
   "validate",
@@ -33,14 +90,37 @@ const draftPreservingActions = new Set([
 
 const actionListeners = computed(() =>
   Object.fromEntries(
-    props.surface.actions.map((actionId) => [
-      actionId,
-      (input: unknown) => void executeAction(actionId, input),
-    ]),
+    (planPort ||
+    reservationPort ||
+    recordPort ||
+    schedulePort ||
+    fleetDirectoryPort ||
+    fleetStartPort ||
+    fleetRunPort
+      ? []
+      : props.surface.actions
+    ).map((actionId) => [actionId, (input: unknown) => void executeAction(actionId, input)]),
   ),
 );
 
 provide(OPS_EVENT_BRIDGE, props.bridge);
+// Compatibility transport only. Module-owned charts never discover the Ops
+// application's browser event bus or inherit its unrestricted action bridge.
+provide(CHART_RUNTIME_PORT, {
+  version: 1,
+  execute(action, payload) {
+    if (!props.surface.actions.includes(action)) return;
+    return executeAction(action, payload);
+  },
+  subscribe(topic, listener) {
+    const name = topic === "append" ? "tlm:append" : "tlm:select";
+    const receive = (event: Event) => {
+      if (event instanceof CustomEvent) listener(event.detail);
+    };
+    window.addEventListener(name, receive);
+    return () => window.removeEventListener(name, receive);
+  },
+});
 
 onMounted(() => {
   window.addEventListener("cadence:ops-event", onOpsEvent);
@@ -48,6 +128,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  planPortActive = false;
   window.removeEventListener("cadence:ops-event", onOpsEvent);
   loadGeneration += 1;
   actionGeneration += 1;
@@ -76,7 +157,17 @@ async function loadSurface(): Promise<void> {
 }
 
 async function onOpsEvent(event: Event): Promise<void> {
-  if (!(event instanceof CustomEvent)) return;
+  if (
+    planPort ||
+    reservationPort ||
+    recordPort ||
+    schedulePort ||
+    fleetDirectoryPort ||
+    fleetStartPort ||
+    fleetRunPort ||
+    !(event instanceof CustomEvent)
+  )
+    return;
 
   const detail = event.detail as { eventName?: string; payload?: OpsEventPayload };
   const actionId = detail.eventName;
@@ -289,7 +380,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
       </aside>
       <component
         :is="OPS_COMPONENTS[presentation.component]"
-        v-bind="presentation.props"
+        v-bind="
+          ['OpsConsoleLanding', 'OpsDashboardNew', 'OpsDashboardDirectory'].includes(
+            presentation.component,
+          )
+            ? {
+                ...presentation.props,
+                organizationId: context.organizationId,
+                missionId: context.missionId,
+              }
+            : presentation.props
+        "
         v-on="actionListeners"
       />
     </template>

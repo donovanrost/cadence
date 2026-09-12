@@ -147,6 +147,8 @@ export interface HostQueryRequest {
 }
 
 export interface HostActionRequest<TInput = unknown> {
+  /** Reuse the exact key and input to recover a canonical HTTP action response. */
+  idempotencyKey?: string;
   applicationKey: string;
   applicationVersion: number;
   /** Optional for compatibility with older host bridge implementations. */

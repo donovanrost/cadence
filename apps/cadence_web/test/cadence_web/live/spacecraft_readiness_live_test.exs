@@ -11,7 +11,7 @@ defmodule CadenceWeb.SpacecraftReadinessLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "authenticated readiness route mounts the federated spacecraft surface" do
+  test "authenticated readiness route mounts the core spacecraft feature" do
     {conn, mission, spacecraft} = signed_in_spacecraft()
 
     {:ok, view, _html} = live(conn, readiness_path(mission, spacecraft.spacecraft_id))
@@ -34,8 +34,8 @@ defmodule CadenceWeb.SpacecraftReadinessLiveTest do
 
   defp assert_surface(view, mission, spacecraft) do
     HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "spacecraft",
-      "surface_id" => "readiness",
+      "kind" => "spacecraft",
+      "spacecraft_page" => "spacecraft_readiness",
       "host_scope" => "spacecraft",
       "mission_id" => mission.mission_id,
       "spacecraft_id" => spacecraft.spacecraft_id,

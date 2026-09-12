@@ -191,6 +191,8 @@ defmodule Cadence.Comms.RoutingRuleStore do
   def list_routing_rules_page(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
     %{page: page, page_size: page_size, offset: offset} = Listing.page_opts(opts)
+    direction = if Keyword.get(opts, :direction) == :desc, do: :desc, else: :asc
+    sort = if Keyword.get(opts, :sort) == :display_name, do: :display_name, else: :purpose_label
 
     filtered =
       RoutingRuleRow
@@ -203,7 +205,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
 
     items =
       filtered
-      |> order_by([row], asc: row.purpose_label, asc: row.routing_rule_id)
+      |> order_by(^[{direction, sort}, {:asc, :routing_rule_id}])
       |> limit(^page_size)
       |> offset(^offset)
       |> Repo.all()

@@ -7,7 +7,6 @@ defmodule Cadence.Commanding.RequestStore do
   import Ecto.Query
 
   alias Ecto.Changeset
-  alias Ecto.Multi
 
   alias Cadence.Commanding.{
     CommandApproval,
@@ -18,6 +17,7 @@ defmodule Cadence.Commanding.RequestStore do
     RequestValidation
   }
 
+  alias Cadence.Management.Commanding.ReviewPrecondition
   alias Cadence.Repo
 
   @spec persist_request(binary(), CommandRequest.t()) ::
@@ -27,16 +27,41 @@ defmodule Cadence.Commanding.RequestStore do
     with {:ok, scoped_request} <- put_organization_scope(command_request, organization_id),
          {:ok, validated_request} <- RequestValidation.validate_and_enrich(scoped_request),
          {:ok, %CommandRequestRow{} = row} <-
-           Repo.insert(CommandRequestRow.changeset(validated_request),
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :command_request_id]
-           ) do
+           Repo.insert(CommandRequestRow.changeset(validated_request)) do
       {:ok, CommandRequestRow.to_domain(row)}
     else
       {:error, %Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
     end
   end
+
+  @doc "Strictly inserts the exact preview after revalidation under model and target locks."
+  def persist_reviewed_request(
+        organization_id,
+        request,
+        expected_basis,
+        expected_target,
+        before_insert
+      ) do
+    with {:ok, scoped} <- put_organization_scope(request, organization_id) do
+      RequestValidation.with_authoring_request(
+        scoped,
+        expected_basis,
+        expected_target,
+        fn enriched, _ -> insert_reviewed(enriched, scoped, before_insert) end
+      )
+    end
+  end
+
+  defp insert_reviewed(request, request, before_insert) do
+    with :ok <- before_insert.(),
+         :ok <- LifecyclePolicy.ensure_request_not_expired(request),
+         {:ok, row} <- Repo.insert(CommandRequestRow.changeset(request)) do
+      {:ok, CommandRequestRow.to_domain(row)}
+    end
+  end
+
+  defp insert_reviewed(_, _, _), do: {:error, :command_authoring_preview_changed}
 
   @spec fetch_request(binary(), binary(), binary()) ::
           {:ok, CommandRequest.t()} | {:error, term()}
@@ -76,51 +101,51 @@ defmodule Cadence.Commanding.RequestStore do
         opts
       )
       when decision in [:approved, :rejected] do
-    with {:ok, %CommandRequestRow{} = request_row} <-
-           fetch_request_row(organization_id, mission_id, command_request_id),
-         :ok <- LifecyclePolicy.ensure_request_pending_approval(request_row),
-         :ok <- LifecyclePolicy.ensure_human_approval_actor(decided_by, command_request_id),
-         :ok <- LifecyclePolicy.ensure_not_self_approval(request_row, decided_by) do
-      approval =
-        CommandApproval.new(%{
-          organization_id: organization_id,
-          mission_id: mission_id,
-          command_request_id: command_request_id,
-          decision: decision,
-          decided_by: decided_by,
-          decided_at: Keyword.get(opts, :decided_at, DateTime.utc_now()),
-          reason: Keyword.get(opts, :reason),
-          metadata: Keyword.get(opts, :metadata, %{})
-        })
-
-      request_lifecycle_state =
-        case decision do
-          :approved -> :approved
-          :rejected -> :rejected
-        end
-
-      multi =
-        Multi.new()
-        |> Multi.insert(:approval, CommandApprovalRow.changeset(approval))
-        |> Multi.update(
-          :command_request,
-          CommandRequestRow.lifecycle_changeset(request_row, request_lifecycle_state)
-        )
-
-      case Repo.transaction(multi) do
-        {:ok, %{approval: approval_row, command_request: updated_request_row}} ->
-          {:ok,
-           %{
-             approval: CommandApprovalRow.to_domain(approval_row),
-             command_request: CommandRequestRow.to_domain(updated_request_row)
-           }}
-
-        {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
-          {:error, changeset}
-
-        {:error, _operation, reason, _changes_so_far} ->
-          {:error, reason}
+    Repo.transaction(fn ->
+      with {:ok, %CommandRequestRow{} = request_row} <-
+             lock_request_row(organization_id, mission_id, command_request_id),
+           :ok <- ReviewPrecondition.check(request_row, opts),
+           :ok <- LifecyclePolicy.ensure_request_pending_approval(request_row),
+           :ok <- LifecyclePolicy.ensure_human_approval_actor(decided_by, command_request_id),
+           :ok <- LifecyclePolicy.ensure_not_self_approval(request_row, decided_by),
+           approval =
+             CommandApproval.new(%{
+               organization_id: organization_id,
+               mission_id: mission_id,
+               command_request_id: command_request_id,
+               decision: decision,
+               decided_by: decided_by,
+               decided_at: Keyword.get(opts, :decided_at, DateTime.utc_now()),
+               reason: Keyword.get(opts, :reason),
+               metadata: Keyword.get(opts, :metadata, %{})
+             }),
+           {:ok, approval_row} <- Repo.insert(CommandApprovalRow.changeset(approval)),
+           {:ok, updated_request_row} <-
+             Repo.update(CommandRequestRow.lifecycle_changeset(request_row, decision)) do
+        %{
+          approval: CommandApprovalRow.to_domain(approval_row),
+          command_request: CommandRequestRow.to_domain(updated_request_row)
+        }
+      else
+        {:error, reason} -> Repo.rollback(reason)
       end
+    end)
+  end
+
+  defp lock_request_row(organization_id, mission_id, command_request_id) do
+    row =
+      CommandRequestRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.command_request_id == ^command_request_id
+      )
+      |> lock("FOR UPDATE")
+      |> Repo.one()
+
+    case row do
+      nil -> {:error, :command_request_not_found}
+      %CommandRequestRow{} = row -> {:ok, row}
     end
   end
 

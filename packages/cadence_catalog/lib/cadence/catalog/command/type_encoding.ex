@@ -1,15 +1,19 @@
 defmodule Cadence.Catalog.Command.TypeEncoding do
   @moduledoc """
   Canonical binary encoding information for a command argument type.
+
+  Unknown encoding names retain an `:unsupported` marker instead of being
+  reinterpreted as the default wire format.
   """
 
   alias Cadence.Catalog.Command.Normalize
 
-  @type encoding_type :: :integer | :float | :string | :binary | :boolean | :time
-  @type byte_order :: :big_endian | :little_endian
-  @type integer_encoding :: :unsigned | :twos_complement | :sign_magnitude | :ones_complement
-  @type float_encoding :: :ieee754 | :mil_std_1750a
-  @type string_termination :: :null | :fixed_length | :length_prefixed
+  @type encoding_type :: :integer | :float | :string | :binary | :boolean | :time | :unsupported
+  @type byte_order :: :big_endian | :little_endian | :unsupported
+  @type integer_encoding ::
+          :unsigned | :twos_complement | :sign_magnitude | :ones_complement | :unsupported
+  @type float_encoding :: :ieee754 | :mil_std_1750a | :unsupported
+  @type string_termination :: :null | :fixed_length | :length_prefixed | :unsupported
 
   @type t :: %__MODULE__{
           encoding_type: encoding_type() | nil,
@@ -58,6 +62,17 @@ defmodule Cadence.Catalog.Command.TypeEncoding do
     }
   end
 
+  @doc "Checks integer wire bounds without constructing a potentially huge power of two."
+  def integer_fits?(value, size_bits, signed)
+      when is_integer(value) and is_integer(size_bits) and size_bits > 0 and
+             is_boolean(signed) do
+    if signed,
+      do: :erlang.bsr(value, size_bits - 1) in [-1, 0],
+      else: value >= 0 and :erlang.bsr(value, size_bits) == 0
+  end
+
+  def integer_fits?(_, _, _), do: false
+
   defp normalize_encoding_type(nil), do: nil
   defp normalize_encoding_type(:integer), do: :integer
   defp normalize_encoding_type("integer"), do: :integer
@@ -71,13 +86,14 @@ defmodule Cadence.Catalog.Command.TypeEncoding do
   defp normalize_encoding_type("boolean"), do: :boolean
   defp normalize_encoding_type(:time), do: :time
   defp normalize_encoding_type("time"), do: :time
-  defp normalize_encoding_type(_other), do: nil
+  defp normalize_encoding_type(_other), do: :unsupported
 
   defp normalize_byte_order(:big_endian), do: :big_endian
   defp normalize_byte_order("big_endian"), do: :big_endian
   defp normalize_byte_order(:little_endian), do: :little_endian
   defp normalize_byte_order("little_endian"), do: :little_endian
-  defp normalize_byte_order(_other), do: :big_endian
+  defp normalize_byte_order(nil), do: :big_endian
+  defp normalize_byte_order(_other), do: :unsupported
 
   defp normalize_integer_encoding(:unsigned), do: :unsigned
   defp normalize_integer_encoding("unsigned"), do: :unsigned
@@ -87,14 +103,15 @@ defmodule Cadence.Catalog.Command.TypeEncoding do
   defp normalize_integer_encoding("sign_magnitude"), do: :sign_magnitude
   defp normalize_integer_encoding(:ones_complement), do: :ones_complement
   defp normalize_integer_encoding("ones_complement"), do: :ones_complement
-  defp normalize_integer_encoding(_other), do: :unsigned
+  defp normalize_integer_encoding(nil), do: :unsigned
+  defp normalize_integer_encoding(_other), do: :unsupported
 
   defp normalize_float_encoding(nil), do: nil
   defp normalize_float_encoding(:ieee754), do: :ieee754
   defp normalize_float_encoding("ieee754"), do: :ieee754
   defp normalize_float_encoding(:mil_std_1750a), do: :mil_std_1750a
   defp normalize_float_encoding("mil_std_1750a"), do: :mil_std_1750a
-  defp normalize_float_encoding(_other), do: nil
+  defp normalize_float_encoding(_other), do: :unsupported
 
   defp normalize_string_termination(nil), do: nil
   defp normalize_string_termination(:null), do: :null
@@ -103,5 +120,5 @@ defmodule Cadence.Catalog.Command.TypeEncoding do
   defp normalize_string_termination("fixed_length"), do: :fixed_length
   defp normalize_string_termination(:length_prefixed), do: :length_prefixed
   defp normalize_string_termination("length_prefixed"), do: :length_prefixed
-  defp normalize_string_termination(_other), do: nil
+  defp normalize_string_termination(_other), do: :unsupported
 end

@@ -1,5 +1,4 @@
 import { defineComponent, h } from "vue";
-import routes from "../routes.json";
 
 const genericCatalogUrl = "/api/cadence/application-host/v1/catalog";
 
@@ -95,12 +94,7 @@ export const FederatedFullPageSurface = defineComponent({
       const queryParams = props.queryParams ?? props.query_params;
       const queryParamsJson = serializeQueryParams(queryParams);
       const safeAttrs = {
-        class:
-          typeof attrs.class === "string"
-            ? attrs.class
-            : routes.find(
-                (route) => route.application === applicationKey && route.surface === surfaceId,
-              )?.viewClass,
+        class: typeof attrs.class === "string" ? attrs.class : undefined,
         ...(typeof attrs.style === "string" ? { style: attrs.style } : {}),
       };
 

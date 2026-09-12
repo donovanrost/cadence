@@ -60,4 +60,23 @@ defmodule Cadence.Missions do
     |> Repo.all()
     |> Enum.map(&MissionRow.to_domain/1)
   end
+
+  @doc "Counts an organization's missions and reads its three most recently created records."
+  def organization_summary(organization_id) when is_binary(organization_id) do
+    query = where(MissionRow, [row], row.organization_id == ^organization_id)
+
+    recent =
+      query
+      |> order_by([row], desc: row.inserted_at, asc: row.mission_id)
+      |> limit(3)
+      |> select([row], %{
+        mission_id: row.mission_id,
+        display_name: row.display_name,
+        slug: row.slug,
+        created_at: row.inserted_at
+      })
+      |> Repo.all()
+
+    %{total_count: Repo.aggregate(query, :count, :mission_id), recent: recent}
+  end
 end

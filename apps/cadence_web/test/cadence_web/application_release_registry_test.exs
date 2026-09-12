@@ -139,6 +139,8 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
              ApplicationReleaseRegistry.snapshot(now: @now)
   end
 
+  # The fixture builds and validates six production remotes before packaging both generations.
+  @tag timeout: 120_000
   test "fails closed for an expired active catalog without changing accepted state" do
     previous_config =
       Application.get_env(:cadence_web, :frontend_release_publication, :not_configured)

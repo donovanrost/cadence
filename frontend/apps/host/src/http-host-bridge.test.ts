@@ -308,6 +308,33 @@ describe("the HTTP host bridge", () => {
     expect(request?.credentials).toBe("same-origin");
   });
 
+  it("explains blocked preflight without exposing server text or replaying the action", async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json(
+        {
+          schema: "cadence.application-host-problem.v1",
+          code: "preflight_blocked",
+          message: "PRIVATE-SERVER-DETAILS",
+        },
+        { status: 422 },
+      ),
+    );
+    const onSessionFailure = vi.fn();
+    const bridge = createHttpHostBridge(session, telemetryApplication, {
+      fetch: fetcher as typeof fetch,
+      onSessionFailure,
+    });
+    await expect(bridge.execute(actionRequest("blocked-preflight"))).rejects.toMatchObject({
+      status: 422,
+      code: "preflight_blocked",
+      message: expect.stringMatching(
+        /^Resolve the blocking activation checks, then refresh and review before requesting mission changes\. Reference ID: [^.]+\.$/,
+      ),
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(onSessionFailure).not.toHaveBeenCalled();
+  });
+
   it("preserves structured host failures", async () => {
     const fetcher = vi.fn(async (_input: RequestInfo | URL, _request?: RequestInit) =>
       Response.json(

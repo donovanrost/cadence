@@ -319,6 +319,45 @@ void test("does not confuse division followed by a regex literal containing impo
   });
 });
 
+void test("nested templates preserve string boundaries and later real import checks", () => {
+  const prefix =
+    "const label = `Review ${active ? `group ${group.join(`, `)}` : `\\`${run}\\``}`; const fields = [{label:`active from`,key:`active_from_text`}];";
+  const files = new Set(["assets/feature.js", "assets/valid.js"]);
+  const references = new Set();
+  assertImportReferences(
+    prefix + 'import "./valid.js";',
+    "assets/feature.js",
+    files,
+    repositoryRoot,
+    references,
+  );
+  assert.deepEqual([...references], ["assets/valid.js"]);
+  assert.throws(
+    () =>
+      assertImportReferences(
+        prefix + 'import "./missing.js";',
+        "assets/feature.js",
+        files,
+        repositoryRoot,
+      ),
+    /points to missing/,
+  );
+});
+
+void test("nested template expressions cannot hide unresolved imports", () => {
+  const files = new Set(["assets/feature.js"]);
+  for (const source of [
+    "const label = `outer ${`inner ${import(target)}`}`;",
+    "const label = `outer ${ {value: `inner ${import(target)}`} }`;",
+    "const label = `outer ${`unfinished`;",
+  ]) {
+    assert.throws(
+      () => assertImportReferences(source, "assets/feature.js", files, repositoryRoot),
+      /dynamic template|unterminated/,
+    );
+  }
+});
+
 void test("accepts statically bounded worker references", async () => {
   await withFixture(async (root) => {
     await writeFile(

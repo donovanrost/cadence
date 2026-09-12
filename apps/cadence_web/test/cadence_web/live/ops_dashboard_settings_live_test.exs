@@ -8,7 +8,6 @@ defmodule CadenceWeb.OpsDashboardSettingsLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
   test "dashboard settings forwards the current dashboard subject" do
@@ -18,9 +17,11 @@ defmodule CadenceWeb.OpsDashboardSettingsLiveTest do
     {:ok, view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard_id}/settings")
 
-    assert_surface(view, "ops-dashboard-settings-component", "dashboard_settings", mission, %{
-      "dashboard_id" => dashboard_id
-    })
+    page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["id"] == "dashboards.settings"
+    assert page["status"] == "unavailable"
+    assert page["context"]["missionId"] == mission.mission_id
+    assert page["context"]["resourceId"] == dashboard_id
   end
 
   defp signed_in do
@@ -29,15 +30,5 @@ defmodule CadenceWeb.OpsDashboardSettingsLiveTest do
     TestFixtures.grant_membership!(user, organization)
     mission = TestFixtures.persist_mission!(organization)
     {TestFixtures.member_conn(user), mission}
-  end
-
-  defp assert_surface(view, _id, surface_id, mission, query_params) do
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
-      "surface_id" => surface_id,
-      "host_scope" => "mission",
-      "mission_id" => mission.mission_id,
-      "query_params" => query_params
-    })
   end
 end

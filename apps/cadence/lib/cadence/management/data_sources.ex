@@ -6,7 +6,41 @@ defmodule Cadence.Management.DataSources do
   durable lifecycle state that control-plane workers reconcile.
   """
 
+  alias Cadence.Management.DataSources.Credentials
   alias Cadence.Management.DataSources.Store
+
+  alias Cadence.Management.DataSources.Inventory
+
+  defdelegate source_inventory_page(organization_id, mission_id, page, source_id \\ nil),
+    to: Inventory,
+    as: :sources
+
+  defdelegate binding_inventory_page(organization_id, mission_id, page, source_id \\ nil),
+    to: Inventory,
+    as: :bindings
+
+  defdelegate source_event_page(organization_id, mission_id, page, source_id),
+    to: Inventory,
+    as: :source_events
+
+  defdelegate binding_event_page(organization_id, mission_id, page, binding_id),
+    to: Inventory,
+    as: :binding_events
+
+  defdelegate fetch_credential_reference(credentials_ref), to: Credentials, as: :fetch_reference
+  defdelegate register_credential_reference(attrs, opts), to: Credentials, as: :register_reference
+
+  defdelegate rotate_credential_reference(credentials_ref, attrs, opts),
+    to: Credentials,
+    as: :rotate_reference
+
+  defdelegate resolve_credential(credentials_ref, opts), to: Credentials, as: :resolve
+
+  defdelegate resolve_credential_material(credentials_ref, opts),
+    to: Credentials,
+    as: :resolve_material
+
+  defdelegate fetch_data_binding_event(organization_id, mission_id, event_id), to: Store
 
   defdelegate default_managed_data_source(), to: Store
   defdelegate default_limits_data_source(), to: Store

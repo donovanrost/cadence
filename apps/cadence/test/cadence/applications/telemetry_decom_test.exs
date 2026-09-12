@@ -15,7 +15,9 @@ defmodule Cadence.Applications.TelemetryDecomTest do
   }
 
   alias Cadence.Applications.TelemetryDecom
+  alias Cadence.Applications.TelemetryDecom.Review
   alias Cadence.Applications.TelemetryDecomFixtures
+  alias Cadence.MissionModels
 
   @organization_id "org-decom-data"
   @mission_id "mission-decom-data"
@@ -276,7 +278,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
   end
 
   describe "activation preflight" do
-    test "blocks an unconfigured installation and becomes ready after compilation" do
+    test "requires mission model approval as well as configuration and compilation" do
       {spacecraft, revision, endpoint} = setup_imported_mission!()
       scope = user_scope("preflight-ready")
       host_context = HostContext.spacecraft(@mission_id, spacecraft.spacecraft_id)
@@ -293,6 +295,7 @@ defmodule Cadence.Applications.TelemetryDecomTest do
       assert Enum.map(blocked.checks, & &1.id) == [
                "configuration",
                "packet-apid-binding",
+               "mission-model-approval",
                "runtime-compilation"
              ]
 
@@ -306,10 +309,75 @@ defmodule Cadence.Applications.TelemetryDecomTest do
                  source_endpoint_id: endpoint.source_endpoint_id
                )
 
+      assert {:ok, unapproved} = ApplicationPreflight.load(scope, host_context, definition)
+      refute PreflightReport.ready?(unapproved)
+
+      assert %{state: :blocked, title: "Mission model approval required"} =
+               Enum.find(unapproved.checks, &(&1.id == "mission-model-approval"))
+
+      assert {:ok, _} =
+               MissionModels.approve_revision(
+                 @organization_id,
+                 @mission_id,
+                 revision.mission_model_revision_id,
+                 %{"kind" => "user", "id" => scope.user.user_id}
+               )
+
       assert {:ok, ready} = ApplicationPreflight.load(scope, host_context, definition)
       assert PreflightReport.ready?(ready)
       assert ready.state == :ready
       assert Enum.all?(ready.checks, &(&1.state == :ready))
+    end
+
+    test "mission preflight includes other enabled configurations and rejects mixed models" do
+      {spacecraft, revision, endpoint} = setup_qualified_mission!()
+      scope = user_scope("mission-model-basis")
+      host = HostContext.spacecraft(@mission_id, spacecraft.spacecraft_id)
+      {:ok, _} = ApplicationInstallations.install(scope, host, "telemetry_decom")
+
+      {:ok, _} =
+        TelemetryDecom.configure(@organization_id, @mission_id, spacecraft.spacecraft_id,
+          catalog_revision_id: revision.catalog_revision_id,
+          handled_apids: [42],
+          source_endpoint_id: endpoint.source_endpoint_id
+        )
+
+      other = persist_spacecraft!(@mission_id, display_name: "Other model")
+
+      other_endpoint =
+        persist_source_endpoint!(@mission_id, other.spacecraft_id, display_name: "Other source")
+
+      other_revision =
+        persist_imported_revision!(@mission_id,
+          yaml: """
+          packets:
+            - name: OTHER
+              apid: 43
+              items:
+                - name: state
+                  data_type: uint
+                  bit_offset: 0
+                  bit_size: 8
+          commands: []
+          """
+        )
+
+      {:ok, _} =
+        TelemetryDecom.configure(@organization_id, @mission_id, other.spacecraft_id,
+          catalog_revision_id: other_revision.catalog_revision_id,
+          handled_apids: [43],
+          source_endpoint_id: other_endpoint.source_endpoint_id
+        )
+
+      {:ok, definition} = Registry.fetch_available("telemetry_decom")
+      assert {:ok, mixed} = ApplicationPreflight.load(scope, host, definition)
+
+      assert %{state: :blocked, title: "Mission model revisions differ"} =
+               Enum.find(mixed.checks, &(&1.id == "mission-model-approval"))
+
+      {:ok, _} = TelemetryDecom.disable(@organization_id, @mission_id, other.spacecraft_id)
+      assert {:ok, ready} = ApplicationPreflight.load(scope, host, definition)
+      assert PreflightReport.ready?(ready)
     end
 
     test "allows another application to read the same APID" do
@@ -353,6 +421,14 @@ defmodule Cadence.Applications.TelemetryDecomTest do
         application_key: "telemetry_decom",
         application_version: 1,
         action_id: "request_activation",
+        params: %{
+          "expected_review" =>
+            Review.snapshot(
+              @organization_id,
+              @mission_id,
+              spacecraft.spacecraft_id
+            )["mission_token"]
+        },
         surface_id: "manage",
         surface_version: 1
       }

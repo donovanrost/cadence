@@ -1,6 +1,8 @@
 defmodule Cadence.Projections.DataSources.Health do
   @moduledoc """
-  Durable source-health transition log and latest-status projection.
+  Data-plane source-health observation journal and live source-status store.
+
+  The historical Projections namespace is retained as the public API.
 
   It records the concrete source identity used by readers and publishes
   committed health facts without knowing which products consume them.
@@ -42,6 +44,21 @@ defmodule Cadence.Projections.DataSources.Health do
         }
 
   @default_max_age_ms 86_400_000
+
+  @doc "Fetches one exact event in the mission, including organization-neutral events."
+  def fetch_source_health_event(organization_id, mission_id, event_id) do
+    EventRow
+    |> where(
+      [row],
+      (is_nil(row.organization_id) or row.organization_id == ^organization_id) and
+        row.mission_id == ^mission_id and row.source_health_event_id == ^event_id
+    )
+    |> Repo.one()
+    |> case do
+      nil -> {:error, :source_health_event_not_found}
+      row -> {:ok, EventRow.to_domain(row)}
+    end
+  end
 
   @spec record_source_health(map(), keyword()) :: record_result()
   def record_source_health(attrs, opts \\ []) when is_map(attrs) and is_list(opts) do
@@ -105,6 +122,7 @@ defmodule Cadence.Projections.DataSources.Health do
     |> maybe_to_observed_at(Keyword.get(opts, :to_observed_at))
     |> order_source_health_events(Keyword.get(opts, :order, :desc))
     |> limit(^limit)
+    |> offset(^Keyword.get(opts, :offset, 0))
     |> Repo.all()
     |> Enum.map(&EventRow.to_domain/1)
   end
@@ -123,7 +141,14 @@ defmodule Cadence.Projections.DataSources.Health do
     |> maybe_filter(:replay_run_id, Keyword.get(opts, :replay_run_id))
     |> maybe_filter(:dataset, Keyword.get(opts, :dataset))
     |> maybe_filter(:source_health, Keyword.get(opts, :source_health))
-    |> order_by([row], asc: row.logical_source, asc: row.data_source_id, asc: row.realm)
+    |> order_by([row],
+      asc: row.logical_source,
+      asc: row.data_source_id,
+      asc: row.realm,
+      asc: row.source_health_key
+    )
+    |> inventory_limit(Keyword.get(opts, :limit))
+    |> offset(^Keyword.get(opts, :offset, 0))
     |> Repo.all()
     |> Enum.map(&StatusRow.to_domain/1)
   end
@@ -317,11 +342,19 @@ defmodule Cadence.Projections.DataSources.Health do
   end
 
   defp order_source_health_events(query, order) when order in [:asc, "asc"] do
-    order_by(query, [row], asc: row.observed_at, asc: row.inserted_at)
+    order_by(query, [row],
+      asc: row.observed_at,
+      asc: row.inserted_at,
+      asc: row.source_health_event_id
+    )
   end
 
   defp order_source_health_events(query, _order) do
-    order_by(query, [row], desc: row.observed_at, desc: row.inserted_at)
+    order_by(query, [row],
+      desc: row.observed_at,
+      desc: row.inserted_at,
+      desc: row.source_health_event_id
+    )
   end
 
   defp enum_string(value) when is_atom(value), do: Atom.to_string(value)
@@ -415,4 +448,8 @@ defmodule Cadence.Projections.DataSources.Health do
   end
 
   defp normalize_policy_key(_value), do: nil
+  defp inventory_limit(query, nil), do: query
+
+  defp inventory_limit(query, count) when is_integer(count) and count > 0,
+    do: limit(query, ^count)
 end

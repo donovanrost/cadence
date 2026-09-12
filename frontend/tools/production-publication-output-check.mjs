@@ -17,6 +17,8 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const hostFiles = new Set(["host.js"]);
 // Explicitly reviewed producer outputs; never derive this allowlist from the artifact being checked.
 const authoritativeHostJavascriptDigests = new Set([
+  // Reviewed fixed preflight guidance in the host bridge; two identical pinned builds.
+  "67e88fede201e7c1b264707229b3b530baea77c2ed5dcc6e33c30f68053cbbd5",
   // Reviewed route-scoped page chrome injection and heading level; two identical pinned builds.
   "d25c815d2df0a75d51affb35484ad820843056584e8f32c09f520a1651338667",
   // Reviewed host navigation callback and stale-bridge enforcement; two identical pinned builds.

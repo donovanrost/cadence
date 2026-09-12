@@ -27,6 +27,23 @@ defmodule Cadence.Reads.MissionEvents do
     end
   end
 
+  @doc "Fetches canonical overrides for a bounded set of candidate event identities."
+  def fetch_many_for_mission(organization_id, mission_id, ids) when is_list(ids) do
+    ids
+    |> Enum.uniq()
+    |> Enum.chunk_every(500)
+    |> Enum.flat_map(fn chunk ->
+      MissionEventRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.mission_event_id in ^chunk
+      )
+      |> Repo.all()
+      |> Enum.map(&MissionEventRow.to_domain/1)
+    end)
+  end
+
   @spec list_for_mission(binary(), keyword()) :: [Entry.t()]
   def list_for_mission(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
     limit = Keyword.get(opts, :limit, 100)
@@ -88,7 +105,8 @@ defmodule Cadence.Reads.MissionEvents do
       query,
       [row],
       row.occurred_at < ^occurred_at or
-        (row.occurred_at == ^occurred_at and row.mission_event_id < ^event_id)
+        (row.occurred_at == ^occurred_at and
+           fragment("? COLLATE \"C\"", row.mission_event_id) < ^event_id)
     )
   end
 
@@ -134,13 +152,19 @@ defmodule Cadence.Reads.MissionEvents do
   end
 
   defp order_by_direction(query, :asc) do
-    order_by(query, [row], asc: row.occurred_at, asc: row.mission_event_id)
+    order_by(query, [row],
+      asc: row.occurred_at,
+      asc: fragment("? COLLATE \"C\"", row.mission_event_id)
+    )
   end
 
   defp order_by_direction(query, "asc"), do: order_by_direction(query, :asc)
 
   defp order_by_direction(query, _order) do
-    order_by(query, [row], desc: row.occurred_at, desc: row.mission_event_id)
+    order_by(query, [row],
+      desc: row.occurred_at,
+      desc: fragment("? COLLATE \"C\"", row.mission_event_id)
+    )
   end
 
   defp normalize_filter_value(value) when is_atom(value), do: Atom.to_string(value)

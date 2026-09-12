@@ -1,0 +1,37 @@
+{
+  "name": "@cadence/communications",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./mission-pages": "./src/mission-pages.ts",
+    "./provider-accounts": "./src/provider-accounts.ts",
+    "./spacecraft-routing": "./src/spacecraft-routing.ts",
+    "./providers": "./src/providers.ts",
+    "./form-surfaces": "./src/form-surfaces.ts",
+    "./read-surfaces": "./src/read-surfaces.ts",
+    ".": "./src/index.ts",
+    "./overview": "./src/overview.ts",
+    "./presentation": "./src/presentation.ts"
+  },
+  "scripts": {
+    "typecheck": "vue-tsc -b",
+    "test": "vp test --run"
+  },
+  "dependencies": {
+    "@cadence/plugin-sdk": "workspace:*",
+    "@cadence/ui": "workspace:*",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vue/test-utils": "catalog:",
+    "@vue/tsconfig": "catalog:",
+    "happy-dom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

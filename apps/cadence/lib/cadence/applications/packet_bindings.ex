@@ -14,6 +14,7 @@ defmodule Cadence.Applications.PacketBindings do
     ApplicationDefinition,
     ApplicationInstallation,
     ApplicationInstallations,
+    ConfigurationLock,
     HostContext,
     PacketBinding,
     PacketBindingConfiguration,
@@ -103,10 +104,12 @@ defmodule Cadence.Applications.PacketBindings do
         attrs
       )
       when is_binary(application_installation_id) and is_map(attrs) do
-    with {:ok, %{configuration: desired}} <-
-           preview(current_scope, host_context, application_installation_id, attrs) do
-      persist_replacement(desired, attrs)
-    end
+    ConfigurationLock.run(current_scope.organization_id, host_context.mission_id, fn ->
+      with {:ok, %{configuration: desired}} <-
+             preview(current_scope, host_context, application_installation_id, attrs) do
+        persist_replacement(desired, attrs)
+      end
+    end)
   end
 
   @spec disable(Scope.t(), HostContext.t(), binary()) ::
@@ -117,12 +120,14 @@ defmodule Cadence.Applications.PacketBindings do
         application_installation_id
       )
       when is_binary(application_installation_id) do
-    with {:ok, %ApplicationInstallation{} = installation} <-
-           fetch_scoped_installation(current_scope, host_context, application_installation_id) do
-      installation
-      |> disable_installation_bindings_transaction()
-      |> normalize_configuration_transaction()
-    end
+    ConfigurationLock.run(current_scope.organization_id, host_context.mission_id, fn ->
+      with {:ok, %ApplicationInstallation{} = installation} <-
+             fetch_scoped_installation(current_scope, host_context, application_installation_id) do
+        installation
+        |> disable_installation_bindings_transaction()
+        |> normalize_configuration_transaction()
+      end
+    end)
   end
 
   @doc false
@@ -155,14 +160,16 @@ defmodule Cadence.Applications.PacketBindings do
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(binding_set_id) and is_integer(binding_set_version) and
              binding_set_version > 0 and is_list(opts) do
-    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+    ConfigurationLock.run(organization_id, mission_id, fn ->
+      now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
-    application_key = Keyword.get(opts, :application_key)
+      application_key = Keyword.get(opts, :application_key)
 
-    organization_id
-    |> applied_rows_query(mission_id, application_key)
-    |> stamp_applied_transaction(binding_set_id, binding_set_version, now)
-    |> normalize_stamp_transaction()
+      organization_id
+      |> applied_rows_query(mission_id, application_key)
+      |> stamp_applied_transaction(binding_set_id, binding_set_version, now)
+      |> normalize_stamp_transaction()
+    end)
   end
 
   defp applied_rows_query(organization_id, mission_id, application_key) do

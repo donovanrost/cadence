@@ -11,20 +11,43 @@ defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "dashboard directory ignores unowned URL filters and mounts its descriptor" do
+  test "dashboard directory owns URL filters and mounts its host contribution" do
     {conn, mission} = signed_in()
 
     {:ok, view, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards?query=thermal&tag=flight")
 
-    assert_surface(view, "ops-dashboard-directory-component", "dashboard_directory", mission, %{})
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => nil,
+      "surface_id" => nil,
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => %{"query" => "thermal", "tag" => "flight"}
+    })
+
+    page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["id"] == "dashboards.directory"
+    assert page["status"] == "ready"
 
     {:ok, viewer, _html} =
       live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/dashboard-1")
 
-    assert_surface(viewer, "ops-dashboard-show-surface", "dashboard_show", mission, %{
-      "dashboard_id" => "dashboard-1"
+    HostTransportTestSupport.assert_context(viewer, %{
+      "application_key" => nil,
+      "surface_id" => nil,
+      "kind" => "ops_module",
+      "contribution" => "dashboards.workspace",
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => %{"dashboard_id" => "dashboard-1"}
     })
+
+    viewer_page =
+      LiveVue.Test.get_vue(viewer, id: "application-shell").props["snapshot"]["ops_page"]
+
+    assert viewer_page["id"] == "dashboards.workspace"
+    assert viewer_page["context"]["resourceId"] == "dashboard-1"
+    assert viewer_page["status"] == "unavailable"
   end
 
   test "dashboard directory remains authentication scoped" do
@@ -45,15 +68,5 @@ defmodule CadenceWeb.OpsDashboardDirectoryLiveTest do
     TestFixtures.grant_membership!(user, organization)
     mission = TestFixtures.persist_mission!(organization)
     {TestFixtures.member_conn(user), user, organization, mission}
-  end
-
-  defp assert_surface(view, _id, surface_id, mission, query_params) do
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
-      "surface_id" => surface_id,
-      "host_scope" => "mission",
-      "mission_id" => mission.mission_id,
-      "query_params" => query_params
-    })
   end
 end

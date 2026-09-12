@@ -11,7 +11,7 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "dashboard editor forwards only the dashboard subject" do
+  test "dashboard editor binds its path subject without a remote application" do
     {conn, mission} = signed_in()
     dashboard_id = "dashboard-1"
 
@@ -21,9 +21,18 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/dashboards/#{dashboard_id}/edit?stale=ignored"
       )
 
-    assert_surface(view, "ops-dashboard-editor-surface", "dashboard_editor", mission, %{
-      "dashboard_id" => dashboard_id
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => nil,
+      "surface_id" => nil,
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => %{}
     })
+
+    page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["id"] == "dashboards.editor"
+    assert page["context"]["resourceId"] == dashboard_id
+    assert page["status"] == "unavailable"
   end
 
   test "dashboard editor remains authentication scoped" do
@@ -47,15 +56,5 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     TestFixtures.grant_membership!(user, organization)
     mission = TestFixtures.persist_mission!(organization)
     {TestFixtures.member_conn(user), user, organization, mission}
-  end
-
-  defp assert_surface(view, _id, surface_id, mission, query_params) do
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
-      "surface_id" => surface_id,
-      "host_scope" => "mission",
-      "mission_id" => mission.mission_id,
-      "query_params" => query_params
-    })
   end
 end

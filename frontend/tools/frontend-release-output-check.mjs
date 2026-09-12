@@ -789,8 +789,13 @@ export function assertViteManifest(manifest, files, outputRoot) {
 }
 
 function javascriptTokens(source, origin = "JavaScript") {
+  return scanJavascriptTokens(source, origin, 0, false).tokens;
+}
+
+function scanJavascriptTokens(source, origin, start, templateExpression) {
   const tokens = [];
-  let index = 0;
+  let index = start;
+  let braceDepth = 0;
 
   while (index < source.length) {
     const character = source[index];
@@ -847,7 +852,13 @@ function javascriptTokens(source, origin = "JavaScript") {
           index += 2;
           continue;
         }
-        if (template && current === "$" && source[index + 1] === "{") dynamic = true;
+        if (template && current === "$" && source[index + 1] === "{") {
+          dynamic = true;
+          const expression = scanJavascriptTokens(source, origin, index + 2, true);
+          value += source.slice(index, expression.next);
+          index = expression.next;
+          continue;
+        }
         if (current === quote) {
           index += 1;
           closed = true;
@@ -873,11 +884,18 @@ function javascriptTokens(source, origin = "JavaScript") {
       tokens.push({ kind: "word", value: source.slice(start, index) });
       continue;
     }
+    if (templateExpression && character === "}") {
+      if (braceDepth === 0) return { tokens, next: index + 1 };
+      braceDepth -= 1;
+    } else if (character === "{") {
+      braceDepth += 1;
+    }
     tokens.push({ kind: "punctuation", value: character });
     index += 1;
   }
 
-  return tokens;
+  if (templateExpression) fail(`${origin} contains an unterminated template expression`);
+  return { tokens, next: index };
 }
 
 function staticReferenceToken(token) {

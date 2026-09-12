@@ -1,0 +1,143 @@
+import type { InjectionKey } from "vue";
+import type { FleetStartPolicy } from "./OpsFleetPlanningNew.contracts";
+export type RunContext = { organization_id: string; mission_id: string };
+export type RunQuery = {
+  requirements_page: number;
+  decisions_page: number;
+  resources_page: number;
+  automation_page: number;
+  commitments_page: number;
+};
+export type RunEvidence = RunContext & {
+  contract_version: 1;
+  run_id: string;
+  lifecycle_state: string;
+  phase: string;
+  sha256: string;
+};
+export type RepairEvidence = RunContext & {
+  contract_version: 1;
+  run_id: string;
+  run_sha256: string;
+  plan_id: string;
+  plan_version: number;
+  plan_sha256: string;
+  policy_id: string;
+  policy_version: number;
+  policy_sha256: string;
+  sha256: string;
+};
+export type RunPage<T> = { page: number; more: boolean; total?: number; entries: T[] };
+export type RunRequirement = {
+  id: string;
+  requirement_id: string;
+  version: number;
+  content_sha256: string;
+  spacecraft_id: string;
+  earliest_start: string;
+  latest_end: string;
+  input_state: string;
+  result_state: string;
+  planning_run_id: string | null;
+  priority: string;
+};
+export type RunDecision = {
+  id: string;
+  snapshot_id: string;
+  spacecraft_id: string;
+  starts_at: string;
+  ends_at: string;
+  disposition: string;
+  score: number;
+  rank: number | null;
+  code: string | null;
+  rationale: string | null;
+  constraints_satisfied: boolean;
+  failures: Array<string | null>;
+};
+export type RunResource = {
+  key: string;
+  peak_parallel: number;
+  capacity: number;
+  selected_count: number;
+  over_capacity: boolean;
+};
+export type RunAutomation = {
+  id: string;
+  action: string;
+  lifecycle_state: string;
+  attempt_count: number;
+  grant_id: string;
+  service_identity_id: string;
+  plan_id: string | null;
+  plan_version: number | null;
+  started_at: string;
+  completed_at: string | null;
+};
+export type RunCommitment = {
+  id: string;
+  content_sha256: string;
+  spacecraft_id: string;
+  starts_at: string;
+  ends_at: string;
+};
+export type RunRepair = {
+  available: boolean;
+  reason: string | null;
+  evidence?: RepairEvidence;
+  policy?: FleetStartPolicy & { max_repair_horizon_seconds: number; max_attempts: number };
+  attempt?: number;
+  plan?: { id: string; version: number; lifecycle_state: string };
+  defaults?: { horizon_start: string; horizon_end: string };
+  commitments?: RunPage<RunCommitment>;
+};
+export type FleetRunModel = {
+  contract_version: 1;
+  context: RunContext;
+  query: RunQuery;
+  id: string;
+  lifecycle_state: string;
+  phase: string;
+  trigger_kind: string;
+  algorithm: { key: string; version: number };
+  horizon_start: string;
+  horizon_end: string;
+  inserted_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  policy: FleetStartPolicy;
+  evidence: RunEvidence;
+  can_continue: boolean;
+  candidate: {
+    id: string;
+    version: number;
+    content_sha256: string;
+    lifecycle_state: string;
+    current_version: number;
+  } | null;
+  source: { run_id: string; plan_id: string; plan_version: number } | null;
+  requirements: RunPage<RunRequirement>;
+  decisions: RunPage<RunDecision>;
+  resources: RunPage<RunResource>;
+  automation: RunPage<RunAutomation>;
+  repair: RunRepair;
+  failure: { code: string | null } | null;
+};
+export type FleetRunReceipt = {
+  contract_version: 1;
+  organization_id: string;
+  mission_id: string;
+  fleetPlanningRunId: string;
+  lifecycleState: string;
+  phase: string;
+  outcome: "continued" | "repair_created";
+  evidence: RunEvidence | RepairEvidence;
+};
+export type FleetRunPort = {
+  context: RunContext;
+  refresh(): Promise<unknown>;
+  execute(action: "continue" | "repair", input: Record<string, unknown>): Promise<unknown>;
+};
+export const FLEET_RUN_PORT: InjectionKey<FleetRunPort> = Symbol("cadence.fleet-run");
+export type OpsFleetPlanningRunProps = { run: unknown; port?: FleetRunPort };
+export type OpsFleetPlanningRunEmits = Record<string, never>;

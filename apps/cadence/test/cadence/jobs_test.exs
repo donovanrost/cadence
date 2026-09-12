@@ -3,7 +3,7 @@ defmodule Cadence.JobsTest do
 
   alias Cadence.Jobs.Runner, as: JobRunner
 
-  alias Cadence.Jobs.{BackgroundJobRow, Dispatcher, Job}
+  alias Cadence.Jobs.{BackgroundJobRow, Job}
 
   @dispatcher_event_prefix [:cadence, :jobs, :dispatcher]
   @dispatcher_events [
@@ -141,12 +141,11 @@ defmodule Cadence.JobsTest do
              Cadence.Jobs.requeue_running_job(queued_job.job_id)
   end
 
-  test "enqueue notification wakes dispatcher without waiting for safety scan" do
+  test "availability fact wakes a nondefault dispatcher without waiting for safety scan" do
     attach_dispatcher_telemetry(self())
 
     runtime =
       start_job_runtime(
-        dispatcher_name: Dispatcher.default_name(),
         safety_poll_interval_ms: :timer.hours(1),
         max_concurrency: 1
       )

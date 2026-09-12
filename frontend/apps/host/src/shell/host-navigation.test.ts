@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import type { Window as HappyWindow } from "happy-dom";
-import { installHostNavigation } from "./host-navigation";
+import { createMemoryHistory } from "vue-router";
+import {
+  createHostRouter,
+  hostRoute,
+  installHostNavigation,
+  shellForRoute,
+} from "./host-navigation";
 
 const navigationSettings = (window as unknown as HappyWindow).happyDOM.settings.navigation;
 const originalNavigationSettings = { ...navigationSettings };
@@ -17,6 +23,47 @@ afterEach(() => {
   Object.assign(navigationSettings, originalNavigationSettings);
   cleanups.splice(0).forEach((cleanup) => cleanup());
   document.body.innerHTML = "";
+});
+
+test("a host releases only its own history subscriptions", async () => {
+  const history = createMemoryHistory();
+  const remove = vi.fn();
+  const originalListen = history.listen;
+  const listen = vi.spyOn(history, "listen").mockImplementation((callback) => {
+    const unsubscribe = originalListen(callback);
+    return () => {
+      remove();
+      unsubscribe();
+    };
+  });
+  const destroy = vi.spyOn(history, "destroy");
+  const first = createHostRouter(history);
+  await first.replace("/missions");
+  expect(listen).toHaveBeenCalledTimes(1);
+  first.listening = false;
+  first.options.history.destroy();
+  first.options.history.destroy();
+  expect(remove).toHaveBeenCalledTimes(1);
+  expect(destroy).not.toHaveBeenCalled();
+  const second = createHostRouter(history);
+  await second.replace("/missions/new");
+  expect(second.options.history.location).toBe(history.location);
+  expect(second.options.history.state).toBe(history.state);
+  expect(listen).toHaveBeenCalledTimes(2);
+  second.listening = false;
+  second.options.history.destroy();
+  expect(remove).toHaveBeenCalledTimes(2);
+});
+
+test("a host disposed before initial navigation finishes cannot retain a late history listener", async () => {
+  const history = createMemoryHistory();
+  const listen = vi.spyOn(history, "listen");
+  const router = createHostRouter(history);
+  const navigation = router.replace("/missions");
+  router.listening = false;
+  router.options.history.destroy();
+  await navigation;
+  expect(listen).not.toHaveBeenCalled();
 });
 
 function clickLink(
@@ -103,4 +150,10 @@ test("remote component handlers can cancel navigation before the host processes 
   document.body.append(link);
   link.click();
   expect(navigate).not.toHaveBeenCalled();
+});
+
+test("the mission Ops entry resolves to the operational shell", () => {
+  const route = hostRoute(new URL("https://cadence.test/missions/mission-1/ops"));
+  expect(route?.workspacePage).toBe("landing");
+  expect(shellForRoute(route!)).toBe("ops");
 });

@@ -6,7 +6,10 @@ defmodule CadenceWeb.UserSessionLive do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:csrf_token, Plug.CSRFProtection.get_csrf_token_for(~p"/sign-in"))
+     |> assign(:page, %{
+       version: 1,
+       csrf_token: Plug.CSRFProtection.get_csrf_token_for(~p"/sign-in")
+     })
      |> assign(:page_title, "Sign in")}
   end
 
@@ -17,7 +20,7 @@ defmodule CadenceWeb.UserSessionLive do
       <.vue
         id="user-session-component"
         v-component="UserSession"
-        csrf-token={@csrf_token}
+        page={@page}
         v-ssr={false}
       />
     </Layouts.app>

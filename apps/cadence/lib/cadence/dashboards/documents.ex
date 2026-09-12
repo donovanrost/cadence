@@ -75,6 +75,11 @@ defmodule Cadence.Dashboards.Documents do
     as: :delete_document
 
   defdelegate list_versions(organization_id, mission_id, dashboard_id), to: DocumentStore
+
+  defdelegate history(organization_id, mission_id, dashboard_id, query),
+    to: Cadence.Dashboards.DocumentStore.History,
+    as: :load
+
   defdelegate fetch_version(organization_id, mission_id, dashboard_id, version), to: DocumentStore
 
   defdelegate publish(organization_id, mission_id, dashboard_id, version, opts),

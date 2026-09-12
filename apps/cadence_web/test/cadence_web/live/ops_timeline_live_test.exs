@@ -11,10 +11,9 @@ defmodule CadenceWeb.OpsTimelineLiveTest do
   alias Cadence.Applications.{HostContext, SurfaceQueryRequest}
   alias Cadence.Auth.Scope
   alias Cadence.Reads.ApplicationSurfaces.OpsConsole
-  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "authenticated mission members mount the descriptor-only timeline" do
+  test "authenticated mission members mount the core workspace timeline" do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()
     TestFixtures.grant_membership!(user, organization)
@@ -26,7 +25,10 @@ defmodule CadenceWeb.OpsTimelineLiveTest do
         ~p"/missions/#{mission.mission_id}/ops/timeline?event_id=event-1&source_dashboard_id=dashboard-1"
       )
 
-    assert_surface(view, "ops-timeline-page-component", "timeline", mission, %{})
+    snapshot = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]
+    assert snapshot["timeline_page"]["context"]["mission_id"] == mission.mission_id
+    assert snapshot["timeline_page"]["data"]["selected_status"] == "unavailable"
+    assert snapshot["timeline_page"]["data"]["query"]["event_id"] == "event-1"
 
     assert LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["context"][
              "ops_context"
@@ -48,16 +50,6 @@ defmodule CadenceWeb.OpsTimelineLiveTest do
                HostContext.mission("mission-1"),
                request("timeline", %{"mission_id" => "mission-2"})
              )
-  end
-
-  defp assert_surface(view, _id, surface_id, mission, query_params) do
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
-      "host_scope" => "mission",
-      "mission_id" => mission.mission_id,
-      "query_params" => query_params,
-      "surface_id" => surface_id
-    })
   end
 
   defp request(surface_id, params) do

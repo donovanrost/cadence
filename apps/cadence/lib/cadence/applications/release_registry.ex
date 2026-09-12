@@ -3,7 +3,9 @@ defmodule Cadence.Applications.ReleaseRegistry do
 
   alias Cadence.Applications.{
     Comms,
+    DerivedTelemetry,
     LegacyCommsOverview,
+    Limits,
     MissionCatalog,
     OpsConsole,
     ReleaseContribution,
@@ -15,10 +17,12 @@ defmodule Cadence.Applications.ReleaseRegistry do
   @contributors [
     Comms,
     LegacyCommsOverview,
+    Limits,
     MissionCatalog,
     Spacecraft,
     TelemetryDecomCatalogContribution,
-    OpsConsole
+    OpsConsole,
+    DerivedTelemetry
   ]
   @additional_contributors [Cadence.Applications.OrganizationAdmin]
 

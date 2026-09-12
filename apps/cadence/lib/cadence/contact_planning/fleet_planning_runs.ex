@@ -74,6 +74,18 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     end
   end
 
+  @doc "Locks a scoped run for a short database-only reviewed decision."
+  def fetch_locked(organization_id, mission_id, run_id) do
+    if Repo.in_transaction?() do
+      case lock_run(organization_id, mission_id, run_id) do
+        {:ok, row} -> {:ok, FleetPlanningRunRow.to_domain(row)}
+        {:error, _} = error -> error
+      end
+    else
+      {:error, :fleet_run_transaction_required}
+    end
+  end
+
   @spec list(binary(), binary(), keyword()) :: [FleetPlanningRun.t()]
   def list(organization_id, mission_id, opts \\ []) do
     FleetPlanningRunRow
@@ -87,6 +99,31 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     |> Repo.all()
     |> Enum.map(&FleetPlanningRunRow.to_domain/1)
   end
+
+  @doc "A bounded, mission-scoped run directory with one row of next-page evidence."
+  def list_page(organization_id, mission_id, page, state \\ nil)
+
+  def list_page(organization_id, mission_id, page, state)
+      when is_integer(page) and page in 1..1_000_000 and
+             state in [nil, "queued", "running", "completed", "partial", "failed", "canceled"] do
+    rows =
+      FleetPlanningRunRow
+      |> where([run], run.organization_id == ^organization_id and run.mission_id == ^mission_id)
+      |> maybe_filter_state(state)
+      |> order_by([run], desc: run.inserted_at, desc: run.fleet_planning_run_id)
+      |> offset(^((page - 1) * 25))
+      |> limit(26)
+      |> Repo.all()
+
+    {:ok,
+     %{
+       page: page,
+       more: length(rows) > 25,
+       entries: rows |> Enum.take(25) |> Enum.map(&FleetPlanningRunRow.to_domain/1)
+     }}
+  end
+
+  def list_page(_, _, _, _), do: {:error, :invalid_fleet_planning_page}
 
   @spec list_requirement_refs(binary(), binary(), binary()) ::
           [FleetPlanningRunRequirementRef.t()]
@@ -117,6 +154,34 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     )
     |> Repo.all()
     |> Enum.map(&FleetPlanningDecisionRow.to_domain/1)
+  end
+
+  @doc "Bounded optimizer decisions in rank, score and snapshot identity order."
+  def decisions_page(org, mission, run_id, page) when is_integer(page) and page in 1..1_000_000 do
+    query =
+      FleetPlanningDecisionRow
+      |> where(
+        [d],
+        d.organization_id == ^org and d.mission_id == ^mission and
+          d.fleet_planning_run_id == ^run_id
+      )
+
+    rows =
+      query
+      |> order_by([d],
+        asc_nulls_last: d.rank,
+        desc: d.score,
+        asc: d.contact_opportunity_snapshot_id
+      )
+      |> offset(^((page - 1) * 10))
+      |> limit(11)
+      |> Repo.all()
+
+    %{
+      page: page,
+      more: length(rows) > 10,
+      entries: rows |> Enum.take(10) |> Enum.map(&FleetPlanningDecisionRow.to_domain/1)
+    }
   end
 
   @spec advance_phase(
@@ -321,13 +386,17 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
         source_fleet_planning_run_id: value(attrs, :source_fleet_planning_run_id, nil),
         source_contact_plan_id: value(attrs, :source_contact_plan_id, nil),
         source_contact_plan_version: value(attrs, :source_contact_plan_version, nil),
-        input_document: %{
-          "requirements" => refs,
-          "requirement_count" => length(refs),
-          "policy_content_sha256" => policy.content_sha256,
-          "template_materialization" => value(attrs, :template_materialization_document, %{}),
-          "repair" => value(attrs, :repair_input_document, %{})
-        },
+        input_document:
+          creation_input_document(
+            %{
+              "requirements" => refs,
+              "requirement_count" => length(refs),
+              "policy_content_sha256" => policy.content_sha256,
+              "template_materialization" => value(attrs, :template_materialization_document, %{}),
+              "repair" => value(attrs, :repair_input_document, %{})
+            },
+            attrs
+          ),
         progress_document: initial_progress(length(refs)),
         result_summary_document: %{},
         failure_document: %{},
@@ -342,6 +411,13 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
       else: {:error, :fleet_planning_run_input_too_large}
   rescue
     error in ArgumentError -> {:error, {:invalid_fleet_planning_run, error.message}}
+  end
+
+  defp creation_input_document(document, attrs) do
+    case value(attrs, :creation_review_document, nil) do
+      nil -> document
+      review when is_map(review) -> Map.put(document, "creation_review", review)
+    end
   end
 
   defp select_requirements(organization_id, mission_id, horizon_start, horizon_end, attrs) do
@@ -701,6 +777,10 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
   defp maybe_filter_state(query, state)
        when state in [:queued, :running, :completed, :partial, :failed, :canceled],
        do: where(query, [run], run.lifecycle_state == ^Atom.to_string(state))
+
+  defp maybe_filter_state(query, state)
+       when state in ~w(queued running completed partial failed canceled),
+       do: where(query, [run], run.lifecycle_state == ^state)
 
   defp require_reason(""), do: {:error, :fleet_planning_run_cancel_reason_required}
   defp require_reason(_reason), do: :ok

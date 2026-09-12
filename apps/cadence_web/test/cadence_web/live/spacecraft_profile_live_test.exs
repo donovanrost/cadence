@@ -11,7 +11,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "authenticated profile list mounts the federated mission surface" do
+  test "authenticated profile list mounts the host profile directory" do
     {conn, mission} = signed_in_mission()
 
     {:ok, view, _html} =
@@ -20,7 +20,7 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
     assert_surface(view, "spacecraft-type-list-page-component", "profile_list", mission, %{})
   end
 
-  test "authenticated profile new mounts the federated mission surface" do
+  test "authenticated profile new mounts the host profile creation slice" do
     {conn, mission} = signed_in_mission()
 
     {:ok, view, _html} =
@@ -47,13 +47,16 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
   end
 
   defp assert_surface(view, _id, surface_id, mission, query_params) do
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "spacecraft",
-      "surface_id" => surface_id,
-      "host_scope" => "mission",
-      "mission_id" => mission.mission_id,
-      "query_params" => query_params
-    })
+    ownership = %{"kind" => "spacecraft", "spacecraft_page" => surface_id}
+
+    HostTransportTestSupport.assert_context(
+      view,
+      Map.merge(ownership, %{
+        "host_scope" => "mission",
+        "mission_id" => mission.mission_id,
+        "query_params" => query_params
+      })
+    )
   end
 
   defp signed_in_mission do

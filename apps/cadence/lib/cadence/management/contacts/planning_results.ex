@@ -83,6 +83,67 @@ defmodule Cadence.Management.Contacts.PlanningResults do
     |> Enum.map(&ContactOpportunitySnapshotRow.to_domain/1)
   end
 
+  @doc "A bounded live run ledger; the selected run must be fetched by its exact identity."
+  def list_runs_page(organization_id, mission_id, requirement_id, page)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(requirement_id) and
+             is_integer(page) and page in 1..1_000_000 do
+    ContactPlanningRunRow
+    |> where(
+      [run],
+      run.organization_id == ^organization_id and run.mission_id == ^mission_id and
+        run.contact_requirement_id == ^requirement_id
+    )
+    |> order_by([run], desc: run.started_at, desc: run.contact_planning_run_id)
+    |> result_page(page, &ContactPlanningRunRow.to_domain/1)
+  end
+
+  def list_runs_page(_, _, _, _), do: {:error, :invalid_planning_result_page}
+
+  @doc "A bounded page of search evidence for one explicitly identified run."
+  def list_searches_page(organization_id, mission_id, run_id, page)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(run_id) and
+             is_integer(page) and page in 1..1_000_000 do
+    ContactPlanningSearchRow
+    |> where(
+      [search],
+      search.organization_id == ^organization_id and search.mission_id == ^mission_id and
+        search.contact_planning_run_id == ^run_id
+    )
+    |> order_by([search],
+      asc: search.route_order,
+      asc: search.route_key,
+      asc: search.contact_planning_search_id
+    )
+    |> result_page(page, &ContactPlanningSearchRow.to_domain/1)
+  end
+
+  def list_searches_page(_, _, _, _), do: {:error, :invalid_planning_result_page}
+
+  @doc "A bounded page of immutable opportunities, including ineligible evidence."
+  def list_snapshots_page(organization_id, mission_id, run_id, page)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(run_id) and
+             is_integer(page) and page in 1..1_000_000 do
+    ContactOpportunitySnapshotRow
+    |> where(
+      [snapshot],
+      snapshot.organization_id == ^organization_id and snapshot.mission_id == ^mission_id and
+        snapshot.contact_planning_run_id == ^run_id
+    )
+    |> order_by([snapshot],
+      asc: snapshot.starts_at,
+      asc: snapshot.provider_opportunity_ref,
+      asc: snapshot.contact_opportunity_snapshot_id
+    )
+    |> result_page(page, &ContactOpportunitySnapshotRow.to_domain/1)
+  end
+
+  def list_snapshots_page(_, _, _, _), do: {:error, :invalid_planning_result_page}
+
+  defp result_page(query, page, to_domain) do
+    rows = query |> offset(^((page - 1) * 25)) |> limit(26) |> Repo.all()
+    {:ok, %{entries: rows |> Enum.take(25) |> Enum.map(to_domain), more?: length(rows) > 25}}
+  end
+
   @spec complete_run(
           ContactPlanningRun.t(),
           [ContactPlanningSearch.t()],

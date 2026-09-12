@@ -117,6 +117,24 @@ defmodule Cadence.Dashboards.SourceRequestPlanning do
     }
     |> maybe_put_sampling_products(frame_spec)
     |> maybe_put_sampling_families(frame_spec)
+    |> Map.merge(source_query_limits(request))
+  end
+
+  # An admitted ad-hoc read may reduce the ordinary raw-history bound and select
+  # source query ordering. Both values remain part of plan/source cache identity.
+  defp source_query_limits(%DashboardResolveRequest{interaction_context: context}) do
+    case Map.get(context, :source_query) do
+      nil ->
+        %{}
+
+      %{max_raw_points: limit, order: order} = query
+      when map_size(query) == 2 and is_integer(limit) and limit in 1..1000 and
+             order in [:asc, :desc] ->
+        query
+
+      _ ->
+        raise ArgumentError, "invalid bounded source query"
+    end
   end
 
   @spec overlay_samplings(

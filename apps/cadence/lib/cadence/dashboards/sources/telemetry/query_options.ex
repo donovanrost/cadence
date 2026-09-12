@@ -31,7 +31,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry.QueryOptions do
         spacecraft_id: spacecraft_id(request.scope_context),
         source_endpoint_ids: source_endpoint_ids(request, source_opts),
         limit: raw_point_limit(request),
-        order: :asc
+        order: history_order(request)
       ]
       |> Kernel.++(time_opts)
       |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
@@ -53,6 +53,13 @@ defmodule Cadence.Dashboards.Sources.Telemetry.QueryOptions do
       |> Enum.reject(fn {_key, value} -> is_nil(value) end)
 
     {opts ++ decimation_opts, time_warnings}
+  end
+
+  defp history_order(%PlannedSourceRequest{sampling: sampling}) do
+    case Map.get(sampling, :order, :asc) do
+      order when order in [:asc, :desc] -> order
+      _ -> raise ArgumentError, "invalid telemetry history order"
+    end
   end
 
   @spec latest(PlannedSourceRequest.t(), map() | nil, keyword()) :: keyword()

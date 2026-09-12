@@ -24,14 +24,23 @@ state. These frontend boundaries do not change those responsibilities.
 ## Stylesheet ownership
 
 The document host imports `@cadence/ui/styles.css` exactly once. Phoenix's `assets/css/app.css`
-imports that source and adds its LiveView directives, template sources, and chart/grid vendor CSS.
+imports that source and adds its LiveView directives, template sources, and the dashboard module's
+public `workspace.css` entry.
 Standalone apps and Storybook use the same entry through the pinned Tailwind Vite compiler.
 Each build declares its own source directories explicitly. Phoenix includes first-party remote
 sources so server-authored and remote-authored utility classes both exist in its stylesheet.
 
 Federated module entrypoints must not import a global reset or theme. They inherit document tokens
-and the shared CSS contract. Their scoped component styles travel with their release. Load the
-`dashboard.css` pattern entry after GridStack's vendor CSS where grid layout is used.
+and the shared CSS contract. Their scoped component styles travel with their release.
+`@cadence/dashboards-and-exploration/workspace.css` loads the installed GridStack and uPlot
+styles before Cadence's `dashboard.css` overrides; its focused `charts.css` entry omits GridStack.
+Components import these module-owned styles too, so standalone and federated bundles include
+their required library CSS without importing a document reset or theme.
+
+GridStack and uPlot are pinned package dependencies of the dashboard module, not vendored
+source or federation-shared singletons. Consumers import Cadence components and stylesheet
+entries, not re-exported library implementations. Dependency upgrades are separate from
+ownership changes.
 
 The CSS classes `btn`, `input`, `select`, `textarea`, `card`, `table`, and related variants are now
 Cadence-owned recipes in `packages/ui/src/styles/controls.css`. They are also the styling API for

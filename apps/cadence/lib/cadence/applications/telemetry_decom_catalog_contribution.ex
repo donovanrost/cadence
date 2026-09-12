@@ -1,10 +1,35 @@
 defmodule Cadence.Applications.TelemetryDecomCatalogContribution do
   @moduledoc "Application-owned frontend release contributions for Telemetry Decom."
 
-  alias Cadence.Applications.{CatalogContribution, Registry, ReleaseContribution}
+  alias Cadence.Applications.{
+    CatalogContribution,
+    Registry,
+    ReleaseContribution,
+    SurfaceQueryContribution
+  }
 
   @package_id "cadence.telemetry-decom"
   @package_version 1
+
+  @spec surface_query_contributions() :: [SurfaceQueryContribution.t()]
+  def surface_query_contributions do
+    [
+      %SurfaceQueryContribution{
+        application_key: "telemetry_decom",
+        application_version: 1,
+        query_id: "cadence.telemetry_decom.manage",
+        query_version: 1,
+        provider: Cadence.Reads.ApplicationSurfaces.TelemetryDecom.Configuration
+      },
+      %SurfaceQueryContribution{
+        application_key: "telemetry_decom",
+        application_version: 1,
+        query_id: "cadence.packet_bindings.manage",
+        query_version: 1,
+        provider: Cadence.Reads.ApplicationSurfaces.PacketBindings
+      }
+    ]
+  end
 
   @spec catalog_contributions() :: [CatalogContribution.t()]
   def catalog_contributions do

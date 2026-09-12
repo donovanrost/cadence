@@ -15,6 +15,7 @@
   "dependencies": {
     "@cadence/design-tokens": "workspace:*",
     "@cadence/plugin-sdk": "workspace:*",
+    "@cadence/telemetry-decom": "workspace:*",
     "@cadence/ui": "workspace:*",
     "vue": "catalog:"
   },

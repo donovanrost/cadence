@@ -109,3 +109,6 @@ body {
     display: grid;
   }
 }
+@source "../../host/src/catalog";
+@source "../../host/src/mission-and-spacecraft";
+@source "../../host/src/capability-management";

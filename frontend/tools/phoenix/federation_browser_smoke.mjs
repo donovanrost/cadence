@@ -4389,79 +4389,57 @@ async function assertRemoteSurface({
   };
 }
 
-async function assertMissionEntryNavigation(client, diagnostics, missionId, generation, signal) {
+async function assertMissionEntryNavigation(client, diagnostics, missionId, origin, signal) {
   const root = `/missions/${encodeURIComponent(missionId)}`;
-  const catalogPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`;
-  const expectedCatalog = (record) => {
-    const url = new URL(record.url);
-    return (
-      record.method === "GET" &&
-      url.pathname === catalogPath &&
-      url.searchParams.get("application_key") === "mission_catalog" &&
-      url.searchParams.get("surface_id") === "mission_overview"
-    );
-  };
-  // This fixture publishes mission_list only. Even an unavailable remote must
-  // leave the authorized mission shell usable; admit exactly that catalog 404.
-  const cleanup = diagnostics.allowExpectedFailure(expectedCatalog, { status: 404 });
-  let confirmed = false;
-  try {
-    assert.equal(
-      await evaluate(
-        client,
-        `(() => {
-      const shell = document.querySelector('#application-shell');
-      if (shell?.dataset.useDiff !== 'true') return false;
-      const link = [...document.querySelectorAll('#mission-list-table a')]
-        .find(link => new URL(link.href).pathname === ${JSON.stringify(root)});
-      if (!link) return false;
-      window.__missionEntryShell = shell;
-      link.click(); return true;
-    })()`,
-        "click mission from organization mission list with incremental props",
-        { signal },
-      ),
-      true,
-    );
-    await waitForExpression(
+  await navigate(client, `${origin}/missions`, {
+    expectedOrigin: origin,
+    expectedPath: "/missions",
+    diagnostics,
+    signal,
+  });
+  await waitForExpression(
+    client,
+    "Boolean(document.querySelector('#mission-list-table') && window.liveSocket?.isConnected())",
+    "core mission directory",
+    { signal },
+  );
+  assert.equal(
+    await evaluate(
       client,
       `(() => {
-      const shell = document.querySelector('#application-shell');
-      const nav = shell?.querySelector('[aria-label="Primary navigation"]');
-      return location.pathname === ${JSON.stringify(root)} && window.__missionEntryShell === shell &&
-        nav?.querySelector('a[href="${root}"][aria-current="page"]') &&
-        nav.querySelector('a[href="${root}/spacecraft"]') &&
-        nav.querySelector('a[href="${root}/applications"]') &&
-        !nav.querySelector('a[href="/missions"]') && document.querySelector('#phoenix-host-error');
-    })()`,
-      "organization sidebar changes to authorized mission navigation",
+    const shell = document.querySelector('#application-shell');
+    if (shell?.dataset.useDiff !== 'true') return false;
+    const link = [...document.querySelectorAll('#mission-list-table a')]
+      .find(link => new URL(link.href).pathname === ${JSON.stringify(root)});
+    if (!link) return false;
+    window.__missionEntryShell = shell;
+    link.click(); return true;
+  })()`,
+      "click mission from core directory with incremental props",
       { signal },
-    );
-    const record = await waitForResponse(
-      diagnostics,
-      expectedCatalog,
-      "unpublished mission overview catalog",
-      { generation, signal },
-    );
-    assert.equal(record.response.status, 404);
-    const problem = await responseJson(client, record, "unpublished mission overview", { signal });
-    assert.equal(problem.code, "application_unavailable");
-    await diagnostics.drainLateEvents(300, signal);
-    diagnostics.confirmExpectedFailure(cleanup, {
-      requestId: record.requestId,
-      method: "GET",
-      url: record.url,
-      generation,
-      status: 404,
-    });
-    confirmed = true;
-    diagnostics.assertClean("mission entry navigation with production incremental props");
-    reportProgress(
-      "organization mission link updates the persistent sidebar with incremental props",
-    );
-  } finally {
-    if (!confirmed) cleanup();
-  }
+    ),
+    true,
+    "core directory must expose its authorized mission link and incremental host",
+  );
+  await waitForExpression(
+    client,
+    `(() => {
+    const shell = document.querySelector('#application-shell');
+    const nav = shell?.querySelector('[aria-label="Primary navigation"]');
+    return location.pathname === ${JSON.stringify(root)} && window.__missionEntryShell === shell &&
+      nav?.querySelector('a[href="${root}"][aria-current="page"]') &&
+      nav.querySelector('a[href="${root}/spacecraft"]') &&
+      nav.querySelector('a[href="${root}/applications"]') &&
+      !nav.querySelector('a[href="/missions"]') &&
+      document.querySelector('#spacecraft-readiness-section') &&
+      document.querySelectorAll('#cadence-federation-root').length === 0 &&
+      !document.querySelector('#core-mission-error');
+  })()`,
+    "core mission overview and authorized mission navigation",
+    { signal },
+  );
+  diagnostics.assertClean("mission entry navigation with production incremental props");
+  reportProgress("core mission entry retains the host and updates its authorized sidebar");
 }
 
 async function assertPersistentHostNavigation(client, diagnostics, missionId, signal) {
@@ -4488,6 +4466,37 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
   const seenQueries = new Set(diagnostics.completed(() => true).map((record) => record.requestId));
   const ready = async (path, application, surface, sidebar = true) => {
     try {
+      const coreContent =
+        path === "/"
+          ? "#organization-home-page"
+          : path === `${root}/spacecraft`
+            ? "#spacecraft-list-content"
+            : path === `${root}/comms`
+              ? "#comms-overview-content"
+              : path === `${root}/ops/dashboards`
+                ? "#dashboard-directory-feature"
+                : null;
+      if (coreContent) {
+        await waitForExpression(
+          client,
+          `(() => {
+          const probe = window.__cadenceNavigationProbe;
+          const shell = document.querySelector('#application-shell');
+          const header = document.querySelector('#host-page-heading');
+          const title = header?.querySelector('h1');
+          return location.pathname === ${JSON.stringify(path)} && probe?.shell === shell &&
+            probe.phoenixNavigations === 0 && probe.liveRoot === shell?.closest('[data-phx-main]') &&
+            ${sidebar ? "probe.sidebar === shell?.querySelector('[data-sidebar-collapsible]') &&" : ""}
+            shell.querySelectorAll(${JSON.stringify(coreContent)}).length === 1 &&
+            document.querySelectorAll('#cadence-federation-root').length === 0 &&
+            header?.dataset.pageHeadingSource === 'application' && title?.textContent.trim() &&
+            document.querySelectorAll('h1').length === 1 && getComputedStyle(title).fontSize === '24px';
+        })()`,
+          `persistent core host navigation to ${path}`,
+          { signal },
+        );
+        return;
+      }
       await waitForExpression(
         client,
         `(() => {
@@ -4783,23 +4792,21 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   const representativeConfigs = [
     {
       argName: "--organization-admin-url",
-      expectedPath: "/",
+      expectedPath: "/applications/organization_admin/organization_home/federated",
       applicationKey: "organization_admin",
       surfaceId: "organization_home",
       expectedScope: "organization",
       readyExpression:
-        "Boolean(document.querySelector('#organization-admin-application') && document.querySelector('#organization-recent-missions') && !document.querySelector('#organization-admin-error') && !document.querySelector('#remote-error'))",
+        "Boolean(document.querySelector('#organization-admin-application') && document.querySelector('#organization-home-destination') && !document.querySelector('#organization-admin-error') && !document.querySelector('#remote-error'))",
       catalogPath: "/api/cadence/application-host/v1/catalog",
       queryPath: "/api/cadence/application-host/v1/query",
       queryId: "cadence.organization.home",
       expectedReleaseId: releases.nMinus1.organization_admin,
       readPublishedHostBody: true,
-      navigateSurface: false,
-      existingGeneration: authenticatedGeneration,
     },
     {
       argName: "--mission-catalog-url",
-      expectedPath: "/missions",
+      expectedPath: "/applications/mission_catalog/mission_list/federated",
       applicationKey: "mission_catalog",
       surfaceId: "mission_list",
       expectedScope: "organization",
@@ -4812,7 +4819,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     },
     {
       argName: "--ops-url",
-      expectedPath: `/missions/${encodeURIComponent(missionId)}/ops/dashboards`,
+      expectedPath: `/missions/${encodeURIComponent(missionId)}/applications/ops_console/dashboard_directory/federated`,
       applicationKey: "ops_console",
       surfaceId: "dashboard_directory",
       expectedScope: "mission",
@@ -4825,7 +4832,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     },
     {
       argName: "--spacecraft-url",
-      expectedPath: `/missions/${encodeURIComponent(missionId)}/spacecraft`,
+      expectedPath: `/missions/${encodeURIComponent(missionId)}/applications/spacecraft/list/federated`,
       applicationKey: "spacecraft",
       surfaceId: "list",
       expectedScope: "mission",
@@ -4850,17 +4857,9 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
         expectedOrigin: origin,
       }),
     );
-    if (config.applicationKey === "mission_catalog") {
-      await assertMissionEntryNavigation(
-        client,
-        diagnostics,
-        missionId,
-        representatives.at(-1).generation,
-        signal,
-      );
-    }
   }
   reportProgress("representative mission, ops, organization, and spacecraft remotes mounted");
+  await assertMissionEntryNavigation(client, diagnostics, missionId, origin, signal);
   await assertPersistentHostNavigation(client, diagnostics, missionId, signal);
 
   const comms = await assertRemoteSurface({
@@ -4925,7 +4924,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     surfaceId: "packet_bindings",
     expectedScope: "spacecraft",
     readyExpression:
-      "Boolean(document.querySelector('[data-remote-state=\"ready\"]') && document.querySelector('#telemetry-decom-application') && document.querySelector('#packet-bindings-surface') && document.querySelector('#packet-bindings-form') && document.querySelector('#packet-bindings-submit') && !document.querySelector('#remote-error') && !document.querySelector('#telemetry-decom-error'))",
+      "Boolean(document.querySelector('[data-remote-state=\"ready\"]') && document.querySelector('#telemetry-decom-application') && document.querySelector('#telemetry-packet-bindings-page') && document.querySelector('#packet-source-endpoint') && document.querySelector('#save-packet-bindings') && !document.querySelector('#remote-error') && !document.querySelector('#telemetry-decom-error'))",
     queryPath: telemetryQueryPath,
     queryId: "cadence.packet_bindings.manage",
     queryVersion: 1,
@@ -4944,21 +4943,41 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   reportProgress("immutable manifest ETag revalidation observed");
 
   assert.equal(telemetry.query.host.application_key, "telemetry_decom");
+  const packetDocument = telemetry.query.trusted_surface.data ?? telemetry.query.trusted_surface;
+  assert.equal(packetDocument.contract_version, 1);
+  assert.equal(packetDocument.configuration.catalog_revision_id, catalogRevisionId);
+  assert.match(packetDocument.review_token, /^[a-f0-9]{64}$/);
+  const packet = packetDocument.packets.items.find((item) => item.apid === expectedApid);
+  assert.ok(packet, `telemetry query did not return APID ${expectedApid}`);
+  const packetId = packet.id;
+  assert.deepEqual(packetDocument.selection.ids, [packetId]);
+  assert.ok(packetDocument.endpoints.items.some((endpoint) => endpoint.id === sourceEndpointId));
   assert.equal(
-    telemetry.query.declarative_surface.packet_bindings.action.action_id,
-    "save_packet_bindings",
+    await evaluate(
+      client,
+      `(() => {
+      const select = document.querySelector('#packet-source-endpoint');
+      if (!select || select.disabled) return false;
+      select.value = ${JSON.stringify(sourceEndpointId)};
+      select.dispatchEvent(new Event('change', {bubbles: true}));
+      return select.value === ${JSON.stringify(sourceEndpointId)};
+    })()`,
+      "Telemetry source endpoint selection",
+      { signal },
+    ),
+    true,
   );
-  const packetGroup = telemetry.query.application_surface_packet_groups.find(
-    (group) => group.apid === expectedApid,
+  await waitForExpression(
+    client,
+    "document.querySelector('#save-packet-bindings')?.disabled === false",
+    "reviewed packet selection ready to save",
+    { signal },
   );
-  assert.ok(packetGroup, `telemetry query did not return APID ${expectedApid}`);
-  assert.equal(packetGroup.selected, true);
-  const packetId = packetGroup.packet_id;
 
   const telemetryState = await evaluate(
     client,
     `(() => {
-      const group = document.querySelector('[data-apid="${expectedApid}"]');
+      const group = document.querySelector('[data-packet-id="${packetId}"]');
       const checkbox = group?.querySelector('input[type="checkbox"]');
       return {group: Boolean(group), checked: checkbox?.checked === true};
     })()`,
@@ -4977,7 +4996,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     reportProgress("submitting Telemetry action with a rejected CSRF token");
     const csrfClicked = await evaluate(
       client,
-      "(() => { const button = document.querySelector('#packet-bindings-submit'); if (!button) return false; button.click(); return true; })()",
+      "(() => { const button = document.querySelector('#save-packet-bindings'); if (!button || button.disabled) return false; button.click(); return true; })()",
       "Telemetry CSRF rejection submit",
       { signal },
     );
@@ -5044,7 +5063,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     telemetry.application = recoveryApplication;
     await waitForExpression(
       client,
-      "Boolean(document.querySelector('#phoenix-host-action-stopped') && document.querySelector('#phoenix-host-action-stopped').textContent.includes('No automatic retry was attempted.') && document.querySelector('#telemetry-decom-application') && document.querySelector('#packet-bindings-surface'))",
+      "Boolean(document.querySelector('#phoenix-host-action-stopped') && document.querySelector('#phoenix-host-action-stopped').textContent.includes('No automatic retry was attempted.') && document.querySelector('#telemetry-decom-application') && document.querySelector('#telemetry-packet-bindings-page'))",
       "sanitized stopped-action result and recovered host",
       { signal },
     );
@@ -5085,10 +5104,16 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     const beforeCount = queryRecordsBeforeAction.length;
     const actionStartedAtMs = Date.now();
 
-    reportProgress("submitting Telemetry packet-bindings action");
+    await waitForExpression(
+      client,
+      "Boolean(document.querySelector('#packet-bindings-pending') && document.querySelector('#recover-packet-save')?.disabled === false && document.querySelector('#save-packet-bindings')?.disabled === true)",
+      "unconfirmed save retained for explicit recovery",
+      { signal },
+    );
+    reportProgress("explicitly recovering the same Telemetry packet-bindings save");
     const clicked = await evaluate(
       client,
-      "(() => { const button = document.querySelector('#packet-bindings-submit'); if (!button) return false; button.click(); return true; })()",
+      "(() => { const button = document.querySelector('#recover-packet-save'); if (!button || button.disabled) return false; button.click(); return true; })()",
       "Telemetry packet-bindings submit",
       { signal },
     );
@@ -5123,9 +5148,10 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
         actionId: "save_packet_bindings",
         params: {
           catalog_revision_id: catalogRevisionId,
-          expected_configuration_version: "",
+          expected_review: packetDocument.review_token,
+          expected_configuration_version: packetDocument.configuration.version,
           input_id: "telemetry-fields",
-          input_version: "1",
+          input_version: 1,
           selected_packet_ids: [packetId],
           source_endpoint_ref: sourceEndpointId,
         },
@@ -5136,6 +5162,16 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
         },
       },
     });
+    assert.equal(
+      requestHeader(actionRecord, "idempotency-key"),
+      requestHeader(csrfRecord, "idempotency-key"),
+      "explicit recovery changed the save identity",
+    );
+    assert.deepEqual(
+      parseRequestBody(actionRecord, "recovered save").params,
+      parseRequestBody(csrfRecord, "stopped save").params,
+      "recovery changed the reviewed intent",
+    );
     const receipt = await responseJson(client, actionRecord, "Telemetry packet-bindings action", {
       signal,
     });
@@ -5190,15 +5226,15 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       "Telemetry refreshed query",
       { signal },
     );
-    const refreshedGroup = refreshedQuery.application_surface_packet_groups.find(
-      (group) => group.packet_id === packetId,
-    );
-    assert.ok(refreshedGroup, "refreshed telemetry query dropped the selected packet group");
-    assert.equal(refreshedGroup.selected, true);
+    const refreshedDocument = refreshedQuery.trusted_surface.data ?? refreshedQuery.trusted_surface;
+    assert.deepEqual(refreshedDocument.selection.ids, [packetId]);
+    assert.equal(refreshedDocument.selection.endpoint.id, sourceEndpointId);
+    assert.equal(refreshedDocument.configuration.version, receipt.result.configurationVersion);
+    assert.notEqual(refreshedDocument.review_token, packetDocument.review_token);
 
     await waitForExpression(
       client,
-      "Boolean(document.querySelector('#telemetry-decom-action-notice') && document.querySelector('#telemetry-decom-action-notice').textContent.includes('Phoenix completed save_packet_bindings.'))",
+      "Boolean(document.querySelector('#packet-save-receipt') && !document.querySelector('#packet-bindings-pending'))",
       "Telemetry canonical refresh notice",
       { signal },
     );
@@ -5206,7 +5242,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     assert.equal(
       await evaluate(
         client,
-        `document.querySelector('[data-apid="${expectedApid}"] input[type="checkbox"]')?.checked === true`,
+        `document.querySelector('[data-packet-id="${packetId}"] input[type="checkbox"]')?.checked === true`,
         "Telemetry retained selection",
         { signal },
       ),
@@ -5243,7 +5279,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       surfaceId: "packet_bindings",
       expectedScope: "spacecraft",
       readyExpression:
-        "Boolean(document.querySelector('[data-remote-state=\"ready\"]') && document.querySelector('#telemetry-decom-application') && document.querySelector('#packet-bindings-surface') && document.querySelector('#packet-bindings-form') && document.querySelector('#packet-bindings-submit') && !document.querySelector('#remote-error') && !document.querySelector('#telemetry-decom-error'))",
+        "Boolean(document.querySelector('[data-remote-state=\"ready\"]') && document.querySelector('#telemetry-decom-application') && document.querySelector('#telemetry-packet-bindings-page') && document.querySelector('#packet-source-endpoint') && document.querySelector('#save-packet-bindings') && !document.querySelector('#remote-error') && !document.querySelector('#telemetry-decom-error'))",
       queryPath: telemetryQueryPath,
       queryId: "cadence.packet_bindings.manage",
       queryVersion: 1,
@@ -5305,7 +5341,7 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       surfaceId: "packet_bindings",
       expectedScope: "spacecraft",
       readyExpression:
-        "Boolean(document.querySelector('[data-remote-state=\"ready\"]') && document.querySelector('#telemetry-decom-application') && document.querySelector('#packet-bindings-surface') && document.querySelector('#packet-bindings-form') && document.querySelector('#packet-bindings-submit') && !document.querySelector('#remote-error') && !document.querySelector('#telemetry-decom-error'))",
+        "Boolean(document.querySelector('[data-remote-state=\"ready\"]') && document.querySelector('#telemetry-decom-application') && document.querySelector('#telemetry-packet-bindings-page') && document.querySelector('#packet-source-endpoint') && document.querySelector('#save-packet-bindings') && !document.querySelector('#remote-error') && !document.querySelector('#telemetry-decom-error'))",
       queryPath: telemetryQueryPath,
       queryId: "cadence.packet_bindings.manage",
       queryVersion: 1,

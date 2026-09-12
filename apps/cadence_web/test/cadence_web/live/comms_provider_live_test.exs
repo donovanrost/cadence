@@ -11,7 +11,7 @@ defmodule CadenceWeb.CommsProviderLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "authenticated provider list mounts the federated mission surface" do
+  test "authenticated provider list mounts its module contribution" do
     {conn, _organization, mission} = signed_in_org_and_mission()
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/providers")
@@ -21,7 +21,7 @@ defmodule CadenceWeb.CommsProviderLiveTest do
     )
   end
 
-  test "authenticated provider new mounts the federated mission surface" do
+  test "authenticated provider new mounts its module contribution" do
     {conn, _organization, mission} = signed_in_org_and_mission()
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/comms/providers/new")
@@ -55,8 +55,10 @@ defmodule CadenceWeb.CommsProviderLiveTest do
 
   defp assert_surface(view, _id, surface_id, mission, query_params, _opts) do
     HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "comms",
-      "surface_id" => surface_id,
+      "application_key" => nil,
+      "surface_id" => nil,
+      "kind" => "mission_module",
+      "contribution" => "comms." <> String.replace(surface_id, "_", "-"),
       "host_scope" => "mission",
       "mission_id" => mission.mission_id,
       "query_params" => query_params

@@ -79,6 +79,11 @@ defmodule Cadence.Applications.OpsConsole.ActionProvider do
   end
 
   @impl true
+  def result(
+        %{"contract_version" => 1, "opportunities" => _, "search" => _, "route" => _} = value
+      ),
+      do: ContactPlanning.result(value)
+
   def result(value) do
     case JSONBoundary.safe(value) do
       {:ok, safe_value} -> safe_value

@@ -7,7 +7,7 @@ defmodule Cadence.Jobs do
 
   alias Ecto.Changeset
 
-  alias Cadence.Jobs.{BackgroundJobRow, Dispatcher, Job}
+  alias Cadence.Jobs.{Available, BackgroundJobRow, Job}
   alias Cadence.Repo
 
   @spec enqueue(Job.job_type(), binary(), binary(), map()) :: {:ok, Job.t()} | {:error, term()}
@@ -24,7 +24,7 @@ defmodule Cadence.Jobs do
     case Repo.insert(BackgroundJobRow.changeset(job)) do
       {:ok, %BackgroundJobRow{} = background_job_row} ->
         job = BackgroundJobRow.to_domain(background_job_row)
-        notify_available()
+        Available.publish(job)
         {:ok, job}
 
       {:error, %Changeset{} = changeset} ->
@@ -77,6 +77,48 @@ defmodule Cadence.Jobs do
     |> Enum.map(&BackgroundJobRow.to_domain/1)
   end
 
+  @doc "Pages deployment jobs for the exact source before applying the display limit."
+  def source_deployment_page(organization_id, mission_id, source_id, page)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(source_id) and
+             is_integer(page) and page in 1..1_000_000 do
+    rows =
+      source_deployment_query(organization_id, mission_id, source_id)
+      |> order_by([row], desc: row.inserted_at, desc: row.job_id)
+      |> offset(^((page - 1) * 25))
+      |> limit(26)
+      |> Repo.all()
+
+    %{
+      entries: rows |> Enum.take(25) |> Enum.map(&BackgroundJobRow.to_domain/1),
+      page: page,
+      page_size: 25,
+      has_next: length(rows) > 25
+    }
+  end
+
+  defp source_deployment_query(organization_id, mission_id, source_id) do
+    BackgroundJobRow
+    |> where(
+      [row],
+      row.mission_id == ^mission_id and
+        (is_nil(row.organization_id) or row.organization_id == ^organization_id) and
+        row.job_type in ["managed_questdb_provisioning", "tsdb_backend_lifecycle"] and
+        fragment("COALESCE(?->'value', ?) ->> 'data_source_id'", row.payload, row.payload) ==
+          ^source_id
+    )
+    |> deployment_payload_scope("organization_id", organization_id)
+    |> deployment_payload_scope("mission_id", mission_id)
+  end
+
+  defp deployment_payload_scope(query, key, value) do
+    where(
+      query,
+      [row],
+      is_nil(fragment("COALESCE(?->'value', ?) ->> ?", row.payload, row.payload, ^key)) or
+        fragment("COALESCE(?->'value', ?) ->> ?", row.payload, row.payload, ^key) == ^value
+    )
+  end
+
   @spec retry_failed_job(binary()) :: {:ok, Job.t()} | {:error, term()}
   def retry_failed_job(job_id) when is_binary(job_id) do
     with {:ok, %Job{status: :failed} = job} <- fetch_job(job_id),
@@ -88,7 +130,7 @@ defmodule Cadence.Jobs do
                started_at: nil,
                completed_at: nil
            }) do
-      notify_available()
+      Available.publish(retried_job)
       {:ok, retried_job}
     else
       {:ok, %Job{} = job} ->
@@ -110,7 +152,7 @@ defmodule Cadence.Jobs do
                started_at: nil,
                completed_at: nil
            }) do
-      notify_available()
+      Available.publish(requeued_job)
       {:ok, requeued_job}
     else
       {:ok, %Job{} = job} ->
@@ -232,9 +274,5 @@ defmodule Cadence.Jobs do
             {:error, reason}
         end
     end
-  end
-
-  defp notify_available do
-    Dispatcher.notify_available()
   end
 end

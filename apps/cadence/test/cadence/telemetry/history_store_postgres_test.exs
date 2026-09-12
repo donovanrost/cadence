@@ -5,8 +5,10 @@ defmodule Cadence.Telemetry.HistoryStorePostgresTest do
   alias Cadence.IngressArchive.Postgres.RawEvidenceRow
   alias Cadence.Protocol.PacketRecord
   alias Cadence.Protocol.RecordArchive.Postgres.PacketRecordRow
+  alias Cadence.Telemetry.HistoryStore
   alias Cadence.Telemetry.HistoryStore.Postgres
   alias Cadence.Telemetry.Sample
+  alias Cadence.TestSupport.PhysicalSampleFixtures, as: PhysicalFixtures
 
   setup do
     persist_mission_scope("org-postgres-history", "mission-postgres-history")
@@ -44,6 +46,60 @@ defmodule Cadence.Telemetry.HistoryStorePostgresTest do
                limit: 10
              )
              |> Enum.map(& &1.sample_id)
+  end
+
+  test "physical lookup checks tenant and source but does not replace a superseded record" do
+    original =
+      sample("sample-physical", 42, ~U[2026-09-08 12:00:05.654321Z],
+        generation_time: ~U[2026-09-08 12:00:00.123456Z]
+      )
+
+    provenance =
+      put_in(
+        PhysicalFixtures.sample().provenance,
+        ["storage", "organization_id"],
+        "org-postgres-history"
+      )
+
+    original = %{original | provenance: provenance}
+    persist_sample_scope!(original)
+    assert :ok = Postgres.persist_samples([original])
+
+    query =
+      PhysicalFixtures.query(%{
+        organization_id: "org-postgres-history",
+        mission_id: original.mission_id,
+        spacecraft_id: original.spacecraft_id,
+        source_endpoint_ids: ["endpoint-physical"],
+        receipt_time: original.receipt_time,
+        from_observed_at: original.generation_time,
+        to_observed_at: original.generation_time
+      })
+
+    policy = HistoryStore.policy(module: Postgres)
+
+    assert {:ok, actual} = HistoryStore.fetch_sample(policy, query, [])
+    assert actual.sample_id == original.sample_id
+    assert actual.raw_value == 42
+    assert actual.receipt_time == original.receipt_time
+    assert actual.provenance["storage"]["validity_state"] == "superseded"
+
+    for key <- [:organization_id, :mission_id, :sample_id] do
+      assert {:error, :not_found} =
+               HistoryStore.fetch_sample(policy, Map.put(query, key, "foreign"), [])
+    end
+
+    for key <- [:point_id, :data_source_id, :source_binding_id, :spacecraft_id] do
+      assert {:error, :physical_sample_context_mismatch} =
+               HistoryStore.fetch_sample(policy, Map.put(query, key, "foreign"), [])
+    end
+
+    assert {:error, :physical_sample_context_mismatch} =
+             HistoryStore.fetch_sample(
+               policy,
+               %{query | receipt_time: DateTime.add(query.receipt_time, 1, :microsecond)},
+               []
+             )
   end
 
   defp sample(sample_id, raw_value, receipt_time, opts) do

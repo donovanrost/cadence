@@ -23,7 +23,7 @@ defmodule Cadence.Governance do
     BindingRuleRow,
     BindingSetRow,
     CapabilityInstanceRow,
-    GovernedDerivedTelemetryDefinitionRow,
+    DerivedDefinitions,
     GovernedPacketDefinitionRow,
     PacketDefinitionFieldRow
   }
@@ -219,27 +219,23 @@ defmodule Cadence.Governance do
 
   @spec persist_derived_definition(DerivedTelemetryDefinition.t()) ::
           {:ok, DerivedTelemetryDefinition.t()} | {:error, term()}
-  def persist_derived_definition(%DerivedTelemetryDefinition{} = definition) do
-    with :ok <- DerivedTelemetryDefinition.validate(definition) do
-      changeset = GovernedDerivedTelemetryDefinitionRow.changeset(definition)
+  defdelegate persist_derived_definition(definition), to: DerivedDefinitions, as: :persist
 
-      case Repo.insert(changeset,
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :derived_definition_id, :version]
-           ) do
-        {:ok, _row} -> {:ok, definition}
-        {:error, %Changeset{} = changeset} -> {:error, changeset}
-      end
-    end
-  end
+  defdelegate append_derived_definition(org, mission, attrs, expected_version),
+    to: DerivedDefinitions,
+    as: :append
 
-  @spec list_derived_definitions(binary()) :: [DerivedTelemetryDefinition.t()]
-  def list_derived_definitions(mission_id) when is_binary(mission_id) do
-    mission_id
-    |> latest_definition_rows(GovernedDerivedTelemetryDefinitionRow, :derived_definition_id)
-    |> Enum.map(&GovernedDerivedTelemetryDefinitionRow.to_domain/1)
-    |> Enum.sort_by(& &1.point_id)
-  end
+  defdelegate list_derived_definitions(mission), to: DerivedDefinitions, as: :list
+  defdelegate list_derived_definitions(org, mission), to: DerivedDefinitions, as: :list
+  defdelegate derived_definitions_page(org, mission, opts), to: DerivedDefinitions, as: :page
+
+  defdelegate derived_definition_history(org, mission, id, page),
+    to: DerivedDefinitions,
+    as: :history
+
+  defdelegate fetch_derived_definition(org, mission, id, version),
+    to: DerivedDefinitions,
+    as: :fetch
 
   defp validate_binding_set(
          %BindingSet{

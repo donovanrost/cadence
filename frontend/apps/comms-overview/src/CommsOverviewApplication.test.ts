@@ -426,3 +426,18 @@ describe("Comms Overview federated adapter", () => {
     ).not.toThrow();
   });
 });
+
+it.each(["unknown", "toString", "constructor", "__proto__"])(
+  "rejects unsupported renderer %s before querying",
+  async (surfaceId) => {
+    const query = vi.fn().mockRejectedValue(new Error("unexpected query"));
+    const props = propsFor(query);
+    const wrapper = mount(CommsOverviewApplication, {
+      props: { ...props, surface: { ...props.surface, surfaceId } },
+    });
+    await flushPromises();
+    expect(query).not.toHaveBeenCalled();
+    expect(wrapper.find("#comms-overview-error").exists()).toBe(true);
+    wrapper.unmount();
+  },
+);

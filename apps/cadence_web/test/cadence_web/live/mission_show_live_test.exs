@@ -11,12 +11,24 @@ defmodule CadenceWeb.MissionShowLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "authenticated mission members mount the mission overview surface" do
+  test "authenticated mission members mount the core mission overview" do
     {conn, mission} = signed_in_org_and_mission()
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}")
 
-    assert_surface(view, "mission-overview-component", "mission_overview", mission, %{})
+    snapshot =
+      HostTransportTestSupport.assert_context(view, %{
+        "application_key" => nil,
+        "surface_id" => nil,
+        "kind" => "mission",
+        "mission_page" => "mission_overview",
+        "host_scope" => "mission",
+        "mission_id" => mission.mission_id,
+        "query_params" => %{}
+      })
+
+    assert %{"page" => "mission_overview", "version" => 1, "status" => "ready"} =
+             snapshot["mission_page"]
   end
 
   test "unknown mission ids redirect to the mission list" do
@@ -42,15 +54,5 @@ defmodule CadenceWeb.MissionShowLiveTest do
     organization = TestFixtures.persist_org!()
     _membership = TestFixtures.grant_membership!(user, organization)
     {TestFixtures.member_conn(user), organization}
-  end
-
-  defp assert_surface(view, _id, surface_id, mission, query_params) do
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "mission_catalog",
-      "surface_id" => surface_id,
-      "host_scope" => "mission",
-      "mission_id" => mission.mission_id,
-      "query_params" => query_params
-    })
   end
 end

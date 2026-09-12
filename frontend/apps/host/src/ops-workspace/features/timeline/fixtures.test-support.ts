@@ -1,0 +1,41 @@
+import { referenceKeys, type TimelineEvent, type TimelineModel } from "./contracts";
+export const event = (id: string): TimelineEvent => ({
+  id,
+  occurred_at: "2026-09-01T00:00:00Z",
+  category: "health",
+  kind: "source_health_degraded",
+  severity: "warning",
+  status: "degraded",
+  title: "Source degraded",
+  summary: null,
+  source: { kind: "operational_event", id: "source-1" },
+  subject: { kind: "data_source", id: "flight-telemetry" },
+  references: Object.fromEntries(
+    referenceKeys.map((key) => [key, null]),
+  ) as TimelineEvent["references"],
+});
+export const fixture = (): TimelineModel => ({
+  version: 1,
+  context: { organization_id: "org-1", mission_id: "mission-1" },
+  mission_name: "Mission",
+  observed_at: "2026-09-09T00:00:00Z",
+  query: {
+    category: "health",
+    kind: "",
+    severity: "",
+    spacecraft_id: "",
+    from: "",
+    to: "",
+    event_id: "mission_event:selected",
+    source_dashboard_id: "",
+    before_at: "",
+    before_id: "",
+  },
+  errors: [],
+  limit: 100,
+  events: [event("mission_event:newer")],
+  next_cursor: null,
+  selected_status: "ready",
+  selected: { ...event("mission_event:selected"), title: "Canonical source evidence" },
+  source_dashboard_id: null,
+});

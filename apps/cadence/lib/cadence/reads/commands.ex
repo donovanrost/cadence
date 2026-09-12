@@ -148,6 +148,9 @@ defmodule Cadence.Reads.Commands do
     if failed_verification?(request, release_attempt, verifiers), do: :failed
   end
 
+  defp release_transition_status(%CommandReleaseAttempt{lifecycle_state: :release_uncertain}),
+    do: :indeterminate
+
   defp release_transition_status(%CommandReleaseAttempt{lifecycle_state: :release_failed}),
     do: :failed
 

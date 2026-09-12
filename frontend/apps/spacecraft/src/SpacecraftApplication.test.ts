@@ -46,6 +46,8 @@ const componentNames = [
   "SpacecraftTypeShow",
   "SpacecraftShow",
   "SpacecraftEdit",
+  // New and edit are public aliases of the same host-owned vertical feature.
+  "SpacecraftIdentityForm",
   "SpacecraftReadiness",
   "SpacecraftRouting",
   "SpacecraftCommanding",
@@ -243,3 +245,23 @@ function deferred<TResult>() {
   });
   return { promise, resolve, reject };
 }
+
+it.each(["unknown", "toString", "constructor", "__proto__"])(
+  "rejects unsupported renderer %s before querying",
+  async (surfaceId) => {
+    const valid = manifest.surfaces[0]!;
+    const query = vi.fn<() => Promise<never>>().mockRejectedValue(new Error("unexpected query"));
+    const wrapper = mount(SpacecraftApplication, {
+      props: {
+        application: applicationFor(valid.surfaceId),
+        surface: { ...valid, surfaceId },
+        context,
+        bridge: { query, execute: vi.fn(), subscribe: vi.fn() },
+      },
+    });
+    await flushPromises();
+    expect(query).not.toHaveBeenCalled();
+    expect(wrapper.find("#spacecraft-error").exists()).toBe(true);
+    wrapper.unmount();
+  },
+);

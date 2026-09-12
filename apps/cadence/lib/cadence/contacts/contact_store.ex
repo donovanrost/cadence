@@ -126,6 +126,29 @@ defmodule Cadence.Contacts.ContactStore do
     |> Enum.map(&ScheduledContactRow.to_domain/1)
   end
 
+  @doc "A bounded current ledger page; scheduled and realized identities stay separate."
+  def list_record_page(org, mission, kind, page)
+      when kind in [:scheduled, :realized] and is_integer(page) and page in 1..1_000_000 do
+    {schema, key, mapper} = record_page_source(kind)
+
+    rows =
+      schema
+      |> where([r], r.organization_id == ^org and r.mission_id == ^mission)
+      |> order_by([r], desc: r.inserted_at, desc: field(r, ^key))
+      |> offset(^((page - 1) * 25))
+      |> limit(26)
+      |> Repo.all()
+
+    {:ok,
+     %{page: page, more: length(rows) > 25, entries: rows |> Enum.take(25) |> Enum.map(mapper)}}
+  end
+
+  defp record_page_source(:scheduled),
+    do: {ScheduledContactRow, :scheduled_contact_id, &ScheduledContactRow.to_domain/1}
+
+  defp record_page_source(:realized),
+    do: {RealizedContactRow, :realized_contact_id, &RealizedContactRow.to_domain/1}
+
   @spec list_actions(binary(), keyword()) :: [ContactAction.t()]
   def list_actions(mission_id, opts) when is_binary(mission_id) and is_list(opts) do
     ContactActionRow

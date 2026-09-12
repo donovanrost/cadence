@@ -3,8 +3,17 @@ defmodule Cadence.Reads.Telemetry do
   Read-side queries over live current values and optional telemetry history.
   """
 
-  alias Cadence.Telemetry.{CurrentValueStore, HistoryStore, Sample}
+  alias Cadence.Telemetry.{CurrentValueStore, HistoryStore, PhysicalSampleQuery, Sample}
   alias Cadence.Telemetry.Storage, as: TelemetryStorage
+
+  @doc "Reads the exact physical sample, never a canonical replacement or latest value."
+  @spec fetch_sample(PhysicalSampleQuery.t(), keyword()) :: {:ok, Sample.t()} | {:error, term()}
+  def fetch_sample(%PhysicalSampleQuery{} = query, opts \\ []) when is_list(opts) do
+    {policy, opts} =
+      Keyword.pop_lazy(opts, :history_store_policy, &HistoryStore.configured_policy/0)
+
+    HistoryStore.fetch_sample(policy, query, opts)
+  end
 
   def observation_identity_states(identity_ids, opts) do
     TelemetryStorage.fetch_observation_identity_states(identity_ids, opts)
@@ -17,6 +26,13 @@ defmodule Cadence.Reads.Telemetry do
   def list_backfill_lifecycle_events(mission_id, opts) do
     TelemetryStorage.list_backfill_lifecycle_events(mission_id, opts)
   end
+
+  defdelegate list_backfill_lifecycle_groups(mission_id, opts), to: TelemetryStorage
+
+  defdelegate fetch_backfill_lifecycle_group_events(mission_id, group_id, opts),
+    to: TelemetryStorage
+
+  defdelegate backfill_lifecycle_event_corrected?(event_id, opts), to: TelemetryStorage
 
   def fetch_backfill_lifecycle_event(backfill_lifecycle_event_id, opts) do
     TelemetryStorage.fetch_backfill_lifecycle_event(backfill_lifecycle_event_id, opts)

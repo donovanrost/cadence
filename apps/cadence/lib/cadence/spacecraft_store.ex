@@ -165,6 +165,13 @@ defmodule Cadence.SpacecraftStore do
     |> Enum.map(&SpacecraftRow.to_domain/1)
   end
 
+  @doc "Counts spacecraft across an organization's missions without loading their records."
+  def count_organization_spacecraft(organization_id) when is_binary(organization_id) do
+    SpacecraftRow
+    |> where([row], row.organization_id == ^organization_id)
+    |> Repo.aggregate(:count, :spacecraft_id)
+  end
+
   @doc """
   Returns one page of a mission's spacecraft, filtered and sorted.
 

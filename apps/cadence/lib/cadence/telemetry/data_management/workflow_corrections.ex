@@ -18,17 +18,24 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowCorrections do
   def record_request(workflow, attrs, correction, opts \\ [])
       when (is_atom(workflow) or is_binary(workflow)) and is_map(attrs) and is_map(correction) and
              is_list(opts) do
-    with {:ok, workflow} <- WorkflowEvents.normalize_workflow(workflow),
-         {:ok, source_event} <- source_event(correction, attrs),
-         :ok <- require_source(workflow, source_event),
-         :ok <- require_source_open(source_event),
-         :ok <- require_request_policy(source_event) do
+    with {:ok, workflow, source_event} <- review_request(workflow, attrs, correction) do
       attrs =
         attrs
         |> correction_attrs(source_event, correction)
         |> compact_attrs()
 
       WorkflowEvents.record(workflow, :requested, attrs, opts)
+    end
+  end
+
+  @doc "Checks correction evidence and current job policy without recording an event."
+  def review_request(workflow, attrs, correction) do
+    with {:ok, workflow} <- WorkflowEvents.normalize_workflow(workflow),
+         {:ok, source_event} <- source_event(correction, attrs),
+         :ok <- require_source(workflow, source_event),
+         :ok <- require_source_open(source_event),
+         :ok <- require_request_policy(source_event) do
+      {:ok, workflow, source_event}
     end
   end
 
@@ -48,11 +55,39 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowCorrections do
           {:ok, Storage.BackfillLifecycleEvent.t()} | {:error, term()}
   def transition_event(workflow, stage, correction_event, attrs, opts)
       when is_atom(workflow) and is_atom(stage) and is_map(attrs) and is_list(opts) do
-    with :ok <- require_correction_event(workflow, correction_event, attrs),
-         :ok <- require_transition_policy(stage, correction_event) do
+    with :ok <- review_transition(workflow, stage, correction_event, attrs) do
       correction_event
       |> transition_attrs(attrs)
       |> then(&WorkflowEvents.record(workflow, stage, &1, opts))
+    end
+  end
+
+  @doc "Checks the same scoped correction lineage and policy used by a stage transition."
+  def review_transition(workflow, stage, correction_event, attrs) do
+    with :ok <- require_event_scope(correction_event, attrs),
+         :ok <- require_correction_event(workflow, correction_event, attrs),
+         :ok <- require_transition_job_scope(correction_event) do
+      require_transition_policy(stage, correction_event)
+    end
+  end
+
+  defp require_event_scope(event, attrs) do
+    with {:ok, org} <- required_attr(attrs, :organization_id),
+         {:ok, mission} <- required_attr(attrs, :mission_id),
+         true <- event.organization_id == org and event.mission_id == mission do
+      :ok
+    else
+      _ -> {:error, :historical_workflow_group_scope_mismatch}
+    end
+  end
+
+  defp require_transition_job_scope(event) do
+    case Jobs.fetch_job_for_run(:telemetry_historical_data_workflow, event.backfill_run_id) do
+      {:ok, %{mission_id: mission}} when mission != event.mission_id ->
+        {:error, :historical_workflow_job_scope_mismatch}
+
+      _ ->
+        :ok
     end
   end
 
@@ -166,16 +201,10 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowCorrections do
   end
 
   defp source_superseded?(source_event) do
-    source_event.mission_id
-    |> Storage.list_backfill_lifecycle_events(
+    Storage.backfill_lifecycle_event_corrected?(source_event.backfill_lifecycle_event_id,
       organization_id: source_event.organization_id,
-      limit: 1_000
+      mission_id: source_event.mission_id
     )
-    |> Enum.any?(fn event ->
-      Storage.BackfillLifecycleGroup.payload_value(event, :corrects_event_id) ==
-        source_event.backfill_lifecycle_event_id and
-        Storage.BackfillLifecycleGroup.payload_value(event, :stage) == "completed"
-    end)
   end
 
   defp source_workflow(source_event) do
@@ -194,7 +223,7 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowCorrections do
     |> Enum.reduce(attrs, fn {key, source_value}, attrs ->
       put_compact_attr(attrs, key, source_value || get_attr(attrs, key))
     end)
-    |> Map.put(:payload, correction_payload(source_event, correction))
+    |> Map.put(:payload, correction_payload(source_event, correction, attrs))
   end
 
   defp correction_source_attrs(source_event) do
@@ -211,7 +240,7 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowCorrections do
     ]
   end
 
-  defp correction_payload(source_event, correction) do
+  defp correction_payload(source_event, correction, attrs) do
     source_event.payload
     |> Map.take([
       "request_source",
@@ -224,6 +253,12 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowCorrections do
       "comparison_review_origin"
     ])
     |> Map.merge(correction_request_context(correction))
+    |> Map.merge(
+      attrs
+      |> get_attr(:payload, %{})
+      |> ensure_map()
+      |> Map.take(["host_operation_id"])
+    )
     |> Map.merge(%{
       "correction_source" => "dashboard_correction_request",
       "correction_source_event_type" => Atom.to_string(source_event.event_type),
@@ -346,7 +381,8 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowCorrections do
         "dashboard_context",
         "comparison_review_origin",
         "group_transition_source",
-        "group_transition_scope"
+        "group_transition_scope",
+        "host_operation_id"
       ])
 
     event.payload
@@ -377,6 +413,9 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowCorrections do
     case source_event.backfill_run_id do
       run_id when is_binary(run_id) and run_id != "" ->
         case Jobs.fetch_job_for_run(:telemetry_historical_data_workflow, run_id) do
+          {:ok, %Jobs.Job{mission_id: mission}} when mission != source_event.mission_id ->
+            {:error, :historical_workflow_job_scope_mismatch}
+
           {:ok, %Jobs.Job{} = job} ->
             {:ok, job}
 

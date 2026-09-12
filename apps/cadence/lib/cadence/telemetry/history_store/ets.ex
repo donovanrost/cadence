@@ -7,7 +7,7 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
 
   @behaviour Cadence.Telemetry.HistoryStore
 
-  alias Cadence.Telemetry.{Sample, SelectionPolicy, SourceFilters}
+  alias Cadence.Telemetry.{PhysicalSampleQuery, Sample, SelectionPolicy, SourceFilters}
 
   @mission_scope_key "__mission__"
   @table_name :cadence_telemetry_history
@@ -104,6 +104,51 @@ defmodule Cadence.Telemetry.HistoryStore.ETS do
     |> sort_history(order, time_axis)
     |> Enum.take(limit)
   end
+
+  @impl true
+  def fetch_sample(%PhysicalSampleQuery{} = query, backend_opts) do
+    table = ensure_table!(backend_opts, :table_name, @table_name)
+
+    match_spec = [
+      {{{query.mission_id, :_, query.point_id, :_, query.sample_id}, :"$1"}, [], [:"$1"]}
+    ]
+
+    table
+    |> :ets.select(match_spec, 2)
+    |> physical_matches(query, [])
+  end
+
+  defp physical_matches(:"$end_of_table", _query, []), do: {:error, :not_found}
+  defp physical_matches(:"$end_of_table", _query, [record]), do: {:ok, record}
+
+  defp physical_matches({samples, continuation}, query, records) do
+    records =
+      Enum.reduce(samples, records, fn sample, matches ->
+        organization_id = physical_sample_organization(sample)
+
+        if length(matches) < 2 and PhysicalSampleQuery.matches?(query, sample, organization_id),
+          do: [%{organization_id: organization_id, sample: sample} | matches],
+          else: matches
+      end)
+
+    case {records, continuation} do
+      {[_, _], _} -> {:error, :ambiguous_physical_sample}
+      {_, :"$end_of_table"} -> physical_matches(continuation, query, records)
+      _ -> physical_matches(:ets.select(continuation), query, records)
+    end
+  end
+
+  defp physical_sample_organization(%Sample{provenance: provenance}) when is_map(provenance) do
+    case Map.get(provenance, "storage") || Map.get(provenance, :storage) do
+      storage when is_map(storage) ->
+        Map.get(storage, "organization_id", Map.get(storage, :organization_id))
+
+      _ ->
+        nil
+    end
+  end
+
+  defp physical_sample_organization(_sample), do: nil
 
   @impl true
   def reset, do: reset([])

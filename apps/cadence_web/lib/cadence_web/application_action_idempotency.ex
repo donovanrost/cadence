@@ -10,12 +10,12 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
     ActionDefinition,
     ApplicationDefinition,
     HostContext,
-    JSONBoundary,
     SurfaceDefinition
   }
 
   alias Cadence.Auth.Scope
   alias Cadence.Repo
+  alias CadenceWeb.ApplicationActionInput
 
   @primary_key {:id, :id, autogenerate: true}
   @timestamps_opts [type: :utc_datetime_usec]
@@ -179,7 +179,7 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
 
   @spec request_digest(map()) :: {:ok, binary()} | {:error, term()}
   def request_digest(request) when is_map(request) do
-    with {:ok, normalized} <- JSONBoundary.safe(request),
+    with {:ok, normalized} <- ApplicationActionInput.safe(request),
          {:ok, secret} <- server_secret() do
       {:ok, digest(secret, "application-action-request:" <> canonical_json(normalized))}
     else
@@ -312,7 +312,7 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
 
   defp terminal_update(%__MODULE__{} = row, state, response, opts)
        when state in [:completed, :failed, :indeterminate] do
-    with {:ok, response_attrs} <- response_attrs(response),
+    with {:ok, response_attrs} <- response_attrs(response, response_limit(row.application_key)),
          now <- now(opts),
          {1, _} <-
            Repo.update_all(
@@ -339,14 +339,14 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
     end
   end
 
-  defp response_attrs(%{status: status, content_type: content_type, body: body})
+  defp response_attrs(%{status: status, content_type: content_type, body: body}, limit)
        when is_integer(status) and status >= 100 and status <= 599 and
               content_type == @json_content_type and is_binary(body) and
-              byte_size(body) >= 1 and byte_size(body) <= @max_response_bytes do
+              byte_size(body) >= 1 and byte_size(body) <= limit do
     {:ok, %{status: status, content_type: content_type, body: body}}
   end
 
-  defp response_attrs(_response), do: {:error, :invalid_response}
+  defp response_attrs(_response, _limit), do: {:error, :invalid_response}
 
   defp duplicate_claim(identity, key_digest, request_digest, changeset, opts) do
     if duplicate_constraint?(changeset) do
@@ -440,7 +440,7 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
   defp replay_response(%__MODULE__{} = row) do
     with {:ok, status} <- response_status(row.response_status),
          {:ok, content_type} <- response_content_type(row.response_content_type),
-         {:ok, body} <- response_body(row.response_body) do
+         {:ok, body} <- response_body(row.response_body, response_limit(row.application_key)) do
       {:ok, {:replay, %{status: status, content_type: content_type, body: body}}}
     else
       _invalid -> {:error, {:idempotency_persistence_failure, :stored_response_invalid}}
@@ -455,10 +455,14 @@ defmodule CadenceWeb.ApplicationActionIdempotency do
   defp response_content_type(@json_content_type), do: {:ok, @json_content_type}
   defp response_content_type(_content_type), do: :error
 
-  defp response_body(body) when is_binary(body) and byte_size(body) <= @max_response_bytes,
+  defp response_body(body, limit) when is_binary(body) and byte_size(body) <= limit,
     do: {:ok, body}
 
-  defp response_body(_body), do: :error
+  defp response_body(_body, _limit), do: :error
+
+  # The definition receipt includes an 8 KB expression, including JSON escaping.
+  defp response_limit("derived_telemetry"), do: 65_536
+  defp response_limit(_application_key), do: @max_response_bytes
 
   defp insert_changeset(attrs) do
     %__MODULE__{}

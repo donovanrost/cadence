@@ -8,6 +8,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
     ApplicationDefinition,
     ApplicationInstallation,
     JSONBoundary,
+    LifecycleContract,
     SurfaceDefinition,
     SurfaceDocument
   }
@@ -15,7 +16,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
   alias Cadence.Applications.HostQueryRegistry
   alias Cadence.Auth.Scope
   alias Cadence.Reads.ApplicationSurfaces
-  alias CadenceWeb.{ApplicationActionIdempotency, ApplicationHostCatalog}
+  alias CadenceWeb.{ApplicationActionIdempotency, ApplicationActionInput, ApplicationHostCatalog}
   alias CadenceWeb.ApplicationSurfaces.{Declarative, DocumentState}
 
   @type route_context :: ApplicationHostCatalog.route_context()
@@ -80,7 +81,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
       )
       when is_map(params) and is_binary(raw_idempotency_key) and raw_idempotency_key != "" and
              is_list(opts) do
-    with :ok <- validate_request(params),
+    with {:ok, _} <- ApplicationActionInput.safe(params),
          {:ok, idempotency_key_digest} <-
            ApplicationActionIdempotency.key_digest(raw_idempotency_key),
          {:ok, request} <- action_request(params, idempotency_key_digest),
@@ -134,7 +135,8 @@ defmodule CadenceWeb.ApplicationHostBridge do
     with {:ok, result} <-
            ActionDispatcher.dispatch(current_scope, route_context.host_context, dispatch_request),
          {:ok, action_result} <- action_result(request.application_key, result) do
-      safe_output(
+      action_output(
+        request.application_key,
         %{
           "receiptId" => receipt_id(idempotency_key_digest),
           "completedAt" => Keyword.fetch!(opts, :now),
@@ -327,7 +329,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
        ) do
     with true <- action_id in surface.actions,
          {:ok, %ActionDefinition{} = action} <-
-           ApplicationDefinition.fetch_action(definition, action_id),
+           transport_action(definition, surface, action_id),
          true <- action_scope_compatible?(definition, surface, action),
          :ok <- ensure_declared_action_version(action, action_version),
          :ok <- ActionDefinition.validate(action) do
@@ -336,6 +338,38 @@ defmodule CadenceWeb.ApplicationHostBridge do
       false -> {:error, :unsupported_application_action}
       {:error, :undeclared_application_action} -> {:error, :unsupported_application_action}
       _invalid -> {:error, :unsupported_application_action}
+    end
+  end
+
+  defp transport_action(definition, surface, action_id) do
+    case ApplicationDefinition.fetch_action(definition, action_id) do
+      {:ok, action} ->
+        {:ok, action}
+
+      {:error, :undeclared_application_action} ->
+        lifecycle_transport_action(definition, surface, action_id)
+    end
+  end
+
+  # Project declared host lifecycle metadata into the versioned bridge envelope.
+  # The dispatcher still resolves and authorizes the original lifecycle contract.
+  defp lifecycle_transport_action(definition, surface, action_id) do
+    with {:ok, action} <-
+           LifecycleContract.fetch_action(
+             definition.lifecycle_contract,
+             action_id
+           ) do
+      {:ok,
+       %ActionDefinition{
+         action_id: action.action_id,
+         version: 1,
+         scope: surface.scope,
+         intent: :configuration,
+         required_permission: action.required_permission,
+         effect: action.effect,
+         execution: action.execution,
+         confirmation: action.confirmation
+       }}
     end
   end
 
@@ -496,7 +530,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
     if is_nil(result) do
       {:error, :application_action_output_bounds_exceeded}
     else
-      safe_output(result, :application_action_output_bounds_exceeded)
+      action_output(application_key, result, :application_action_output_bounds_exceeded)
     end
   rescue
     _exception -> {:error, :application_action_output_bounds_exceeded}
@@ -504,10 +538,29 @@ defmodule CadenceWeb.ApplicationHostBridge do
     _kind, _value -> {:error, :application_action_output_bounds_exceeded}
   end
 
+  defp action_output("derived_telemetry", value, error), do: safe_workflow_output(value, error)
+  defp action_output(_application_key, value, error), do: safe_output(value, error)
+
+  defp safe_output(%{"host" => %{application_key: "derived_telemetry"}} = value, error),
+    do: safe_workflow_output(value, error)
+
+  defp safe_output(
+         %{"host" => %{application_key: "limits"}, "trusted_surface" => _} = value,
+         :application_host_query_output_bounds_exceeded = error
+       ),
+       do: safe_workflow_output(value, error)
+
   defp safe_output(value, error) do
     case JSONBoundary.safe_trusted_output(value) do
       {:ok, safe} -> {:ok, safe}
       {:error, _reason} -> {:error, error}
+    end
+  end
+
+  defp safe_workflow_output(value, error) do
+    case JSONBoundary.safe_workflow_output(value) do
+      {:ok, safe} -> {:ok, safe}
+      {:error, _} -> {:error, error}
     end
   end
 end

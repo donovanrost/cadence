@@ -18,6 +18,8 @@ defmodule Cadence.CommandingTest do
     CommandRequest,
     CommandStage,
     CommandVerifierInstance,
+    ReleaseStore,
+    RequestQueueStore,
     StagedCommandItem
   }
 
@@ -25,6 +27,7 @@ defmodule Cadence.CommandingTest do
   alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.OperationalEvents
   alias Cadence.Repo
+  alias Cadence.Runtime.TransportRecords
   alias Cadence.Runtime.TransportRecords.TransportActionRequestRow
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
@@ -638,6 +641,128 @@ defmodule Cadence.CommandingTest do
                realized_contact.mission_id,
                realized_contact.realized_contact_id
              )
+  end
+
+  @tag capture_log: true
+  test "holds a release after bytes are delivered but transport record persistence fails", %{
+    source_endpoint: source_endpoint,
+    command_model: command_model
+  } do
+    {:ok, listener} = :gen_tcp.listen(0, [:binary, packet: 0, active: false, reuseaddr: true])
+    {:ok, {_address, port}} = :inet.sockname(listener)
+
+    on_exit(fn ->
+      :gen_tcp.close(listener)
+    end)
+
+    persisted_request =
+      persist_safe_command_request(command_model, source_endpoint, 1, %{
+        "label" => "tcp-provider"
+      })
+
+    assert {:ok, %{queue_entry: queue_entry}} =
+             Cadence.Commanding.enqueue_command_request(
+               @organization_id,
+               @mission_id,
+               persisted_request.command_request_id,
+               %{"user_id" => "queue-operator"}
+             )
+
+    provider_binding =
+      ProviderBinding.new(%{
+        provider_binding_id: "tcp-uplink-provider-alpha",
+        adapter_key: :tcp_socket,
+        configuration: %{
+          mode: :connect,
+          host: "127.0.0.1",
+          port: port
+        }
+      })
+
+    realized_contact =
+      persist_active_uplink_contact(
+        source_endpoint.source_endpoint_id,
+        %{
+          "service_name" => "gateway",
+          "provider_binding_id" => provider_binding.provider_binding_id,
+          "provider_adapter_key" => "tcp_socket"
+        },
+        [provider_binding]
+      )
+
+    {:ok, provider_socket} = :gen_tcp.accept(listener)
+
+    on_exit(fn ->
+      :ok =
+        Cadence.Runtime.stop_realized_contact_sync(
+          realized_contact.mission_id,
+          realized_contact.realized_contact_id
+        )
+
+      :gen_tcp.close(provider_socket)
+    end)
+
+    # The runtime and test share this rollback-only sandbox connection. The
+    # trigger rejects only this request after the provider has delivered bytes.
+    Repo.query!("SELECT set_config('cadence.recovery_test_request', $1, true)", [
+      persisted_request.command_request_id
+    ])
+
+    Repo.query!("""
+    CREATE FUNCTION pg_temp.reject_command_recovery_record() RETURNS trigger AS $$
+    BEGIN
+      IF NEW.command_request_id = current_setting('cadence.recovery_test_request', true) THEN
+        RAISE EXCEPTION 'command recovery persistence failure';
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql
+    """)
+
+    Repo.query!("""
+    CREATE TRIGGER command_recovery_record_failure BEFORE INSERT ON transport_action_requests
+    FOR EACH ROW EXECUTE FUNCTION pg_temp.reject_command_recovery_record()
+    """)
+
+    assert {:error, {:command_release_outcome_uncertain, attempt_id, _reason}} =
+             Cadence.Commanding.release_command_queue_entry(
+               @organization_id,
+               @mission_id,
+               queue_entry.command_queue_entry_id,
+               realized_contact.realized_contact_id,
+               %{"user_id" => "release-operator"}
+             )
+
+    Repo.query!("DROP TRIGGER command_recovery_record_failure ON transport_action_requests")
+    assert {:ok, delivered_frame} = :gen_tcp.recv(provider_socket, 0, 1_000)
+
+    assert {:ok, [decoded_transfer_frame], <<>>} =
+             TransferFrame.decode(delivered_frame, frame_size: 32)
+
+    assert {:ok, command_packet} = SpacePacketCodec.decode(decoded_transfer_frame.payload)
+    assert command_packet.data == <<0x01>>
+
+    assert {:ok, release_attempt} =
+             ReleaseStore.fetch(@organization_id, @mission_id, attempt_id)
+
+    assert release_attempt.lifecycle_state == :release_uncertain
+    assert release_attempt.released_at == nil
+    current = Repo.get!(CommandQueueEntryRow, queue_entry.command_queue_entry_id)
+    assert current.lifecycle_state == "release_pending"
+    assert current.active_release_attempt_id == attempt_id
+    assert Cadence.Commanding.requeue_release_pending_queue_entries() == 0
+    assert {:error, _} = RequestQueueStore.claim_for_release(current)
+
+    assert [] ==
+             TransportRecords.for_command_release_attempt(
+               @organization_id,
+               @mission_id,
+               attempt_id
+             )
+             |> elem(1)
+
+    assert {:error, ended} = :gen_tcp.recv(provider_socket, 0, 100)
+    assert ended in [:timeout, :closed]
   end
 
   test "enforces queue-lane priority order at release time", %{

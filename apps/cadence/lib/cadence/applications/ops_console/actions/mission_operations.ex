@@ -8,12 +8,12 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
   """
 
   alias Cadence.Applications.{ActionRequest, HostContext, JSONBoundary}
+  alias Cadence.Applications.OpsConsole.Actions.HistoricalWorkflowRequest
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.Control.{Activations, TelemetryDataManagement}
-  alias Cadence.Management.Activations, as: ManagementActivations
+  alias Cadence.Control.Activations
+  alias Cadence.Control.TelemetryDataManagement
   alias Cadence.Telemetry.DataManagement.WorkflowEventEvidence
   alias Cadence.Telemetry.Storage
-  alias Cadence.Telemetry.Storage.BackfillLifecycleGroup
 
   @application_key "ops_console"
   @application_version 1
@@ -263,28 +263,22 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
          "activation_requests",
          %ActionRequest{params: params}
        ) do
-    decision_params = Map.fetch!(params, "activation_decision")
-    request_id = decision_params["request_id"]
-    reason = decision_params["reason"]
-
-    with {:ok, request} <- ManagementActivations.fetch(scope, request_id),
-         :ok <- bind_record(scope, mission_id, request.organization_id, request.mission_id) do
-      decide_activation(scope, request_id, reason, params["decision"])
-    end
+    Activations.review(scope, mission_id, params)
   end
 
   defp dispatch(
-         _scope,
-         %HostContext{mission_id: _mission_id},
+         scope,
+         %HostContext{mission_id: mission_id},
          surface_id,
-         %ActionRequest{
-           action_id: "validate-request",
-           params: params
-         }
+         %ActionRequest{action_id: "validate-request", params: params}
        )
        when surface_id in @data_operation_surfaces do
     values = Map.fetch!(params, "historical_workflow_request")
-    {:ok, %{"valid" => true, "values" => values}}
+
+    case HistoricalWorkflowRequest.validate(scope, mission_id, values) do
+      {:ok, _request} -> {:ok, %{"valid" => true, "values" => values, "errors" => []}}
+      {:error, errors} -> {:ok, %{"valid" => false, "values" => values, "errors" => errors}}
+    end
   end
 
   defp dispatch(
@@ -381,86 +375,15 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
   defp dispatch(_scope, _host_context, _surface_id, _request),
     do: {:error, :unsupported_application_action}
 
-  defp decide_activation(scope, request_id, reason, "approved") do
-    case Activations.approve_and_execute(scope, request_id, reason) do
-      {:ok, execution} -> {:ok, activation_result(execution, "approved")}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp decide_activation(scope, request_id, reason, "rejected") do
-    case ManagementActivations.reject(scope, request_id, reason) do
-      {:ok, request, decision} ->
-        {:ok,
-         %{
-           "activationRequestId" => request.activation_request_id,
-           "decision" => Atom.to_string(decision.decision),
-           "state" => Atom.to_string(request.state)
-         }}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp activation_result(execution, decision) do
-    %{
-      "activationExecutionId" => execution.activation_execution_id,
-      "activationRequestId" => execution.activation_request_id,
-      "decision" => decision,
-      "missionId" => execution.mission_id,
-      "status" => Atom.to_string(execution.status)
-    }
-  end
-
   defp record_request(scope, mission_id, values) do
-    workflow = text(values["workflow"]) || "backfill"
-    run_id = text(values["run_id"]) || Cadence.Ids.new("telemetry_backfill_run")
-    point_ids = request_point_ids(values)
-
-    TelemetryDataManagement.record_historical_data_workflow_request(
-      workflow,
-      Map.merge(operation_attrs(scope, mission_id, values), %{
-        backfill_run_id: run_id,
-        import_run_id: run_id
-      }),
-      point_ids,
-      []
-    )
-  end
-
-  defp request_point_ids(values) do
-    case split_text(values["point_ids"]) do
-      [] ->
-        Enum.uniq(
-          Enum.filter([text(values["point_id"]), text(values["observable_id"])], &is_binary/1)
-        )
-
-      point_ids ->
-        point_ids
+    with {:ok, request} <- HistoricalWorkflowRequest.validate(scope, mission_id, values) do
+      TelemetryDataManagement.record_historical_data_workflow_request(
+        request.workflow,
+        request.attrs,
+        request.point_ids,
+        []
+      )
     end
-  end
-
-  defp operation_attrs(scope, mission_id, values) do
-    %{
-      backfill_run_id: text(values["run_id"]),
-      import_run_id: text(values["run_id"]),
-      organization_id: scope.organization_id,
-      mission_id: mission_id,
-      realm: text(values["realm"]),
-      data_source_id: text(values["data_source_id"]),
-      binding_id: text(values["source_binding_id"]),
-      observable_id: text(values["observable_id"]),
-      point_id: text(values["point_id"]),
-      source_from: text(values["source_from"]),
-      source_to: text(values["source_to"]),
-      actor_id: actor_id(scope),
-      actor_kind: "operator",
-      authority: :unknown,
-      reason: text(values["reason"]) || "operator_requested_backfill",
-      payload: %{}
-    }
-    |> compact()
   end
 
   defp operation_actor_attrs(scope, mission_id) do
@@ -473,14 +396,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
     |> compact()
   end
 
-  defp bind_record(scope, mission_id, organization_id, record_mission_id) do
-    cond do
-      scope.organization_id != organization_id -> {:error, :scope_mismatch}
-      mission_id != record_mission_id -> {:error, :scope_mismatch}
-      true -> :ok
-    end
-  end
-
   defp actor_id(%Scope{actor_kind: :user, user: %{user_id: user_id}}), do: user_id
   defp actor_id(%Scope{actor_kind: :user, user: %{id: user_id}}), do: user_id
 
@@ -490,19 +405,9 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
   defp actor_id(_scope), do: nil
 
   defp group_events(organization_id, mission_id, group_id) do
-    events =
-      Storage.list_backfill_lifecycle_events(mission_id,
-        organization_id: organization_id,
-        limit: 1_000
-      )
-      |> Enum.filter(fn event ->
-        BackfillLifecycleGroup.payload_value(event, :request_group_id) == group_id
-      end)
-
-    case events do
-      [_event | _events] -> {:ok, events}
-      [] -> {:error, {:request_group_not_found, group_id}}
-    end
+    Storage.fetch_backfill_lifecycle_group_events(mission_id, group_id,
+      organization_id: organization_id
+    )
   end
 
   defp failed_group_event(organization_id, mission_id, group_id, event_id) do
@@ -548,18 +453,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.MissionOperations do
     |> Map.take([:retried, :nonretryable, :skipped, :failed])
     |> Map.new(fn {key, value} -> {Atom.to_string(key), value} end)
   end
-
-  defp split_text(value) when is_binary(value),
-    do: value |> String.split([",", "\n", "\r", "\t", " "], trim: true) |> Enum.uniq()
-
-  defp split_text(_value), do: []
-
-  defp text(value) when is_binary(value) do
-    value = String.trim(value)
-    if value == "", do: nil, else: value
-  end
-
-  defp text(_value), do: nil
 
   defp compact(map) do
     map

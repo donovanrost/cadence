@@ -70,6 +70,30 @@ defmodule Cadence.Activations do
     end
   end
 
+  @doc "Runs a bounded command-authoring operation while its active generation is locked."
+  def with_locked_command_basis(organization_id, mission_id, operation)
+      when is_function(operation, 1) do
+    Repo.transaction(fn ->
+      row =
+        ActiveBindingSetRow
+        |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+        |> where([row], fragment("octet_length(?::text)", row.metadata) <= 65_536)
+        |> lock("FOR SHARE")
+        |> Repo.one()
+
+      result =
+        case row do
+          nil -> {:error, :command_authoring_basis_unavailable}
+          row -> operation.(ActiveBindingSetRow.to_domain(row))
+        end
+
+      case result do
+        {:ok, value} -> value
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
   @spec fetch_active_activation(binary()) :: {:ok, BindingSetActivation.t()} | {:error, term()}
   def fetch_active_activation(mission_id) when is_binary(mission_id) do
     case Repo.get(ActiveBindingSetRow, mission_id) do

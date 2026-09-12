@@ -35,7 +35,7 @@ defmodule Cadence.Applications.OpsConsoleMissionOperationsTest do
            ]
   end
 
-  test "returns the authoritative validation result for a valid request" do
+  test "returns validation errors for empty workflow fields without claiming they are valid" do
     request = %ActionRequest{
       application_key: "ops_console",
       application_version: 1,
@@ -45,7 +45,7 @@ defmodule Cadence.Applications.OpsConsoleMissionOperationsTest do
       params: %{"historical_workflow_request" => Map.new(@workflow_keys, &{&1, ""})}
     }
 
-    assert {:ok, %{"valid" => true}} =
+    assert {:ok, %{"valid" => false, "errors" => [%{field: "workflow", code: "unsupported"}]}} =
              MissionOperations.execute(
                scope(),
                HostContext.mission("mission-1"),

@@ -8,10 +8,9 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "alarms mount as the mission-scoped federated surface" do
+  test "alarms mount as the mission-scoped module contribution" do
     {conn, mission} = signed_in()
 
     {:ok, view, _html} =
@@ -20,19 +19,19 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
     assert_surface(view, "ops-alarms-component", "alarms", mission, %{"state" => "nominal"})
   end
 
-  test "alarms forward their bounded URL query state to the federated surface" do
+  test "alarms preserve bounded URL filters in the contributed read" do
     {conn, mission} = signed_in()
 
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/ops/alarms?severity=critical&state=active&spacecraft_id=sc-1&query=thermal&ignored=stale"
+        ~p"/missions/#{mission.mission_id}/ops/alarms?severity=critical&state=active&spacecraft_id=mission&query=thermal&ignored=stale"
       )
 
     assert_surface(view, "ops-alarms-component", "alarms", mission, %{
       "severity" => "critical",
       "state" => "active",
-      "spacecraft_id" => "sc-1",
+      "spacecraft_id" => "mission",
       "query" => "thermal"
     })
   end
@@ -57,13 +56,11 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
     {TestFixtures.member_conn(user), user, organization, mission}
   end
 
-  defp assert_surface(view, _id, surface_id, mission, query_params) do
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
-      "surface_id" => surface_id,
-      "host_scope" => "mission",
-      "mission_id" => mission.mission_id,
-      "query_params" => query_params
-    })
+  defp assert_surface(view, _id, _surface_id, mission, query_params) do
+    snapshot = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]
+    assert snapshot["ops_page"]["id"] == "limits.alarm-conditions"
+    assert snapshot["ops_page"]["status"] == "ready"
+    assert snapshot["ops_page"]["context"]["missionId"] == mission.mission_id
+    assert Map.take(snapshot["ops_page"]["data"]["query"], Map.keys(query_params)) == query_params
   end
 end

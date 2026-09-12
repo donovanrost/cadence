@@ -13,7 +13,11 @@ let loadGeneration = 0;
 const surfaceComponents = {
   overview: CommsOverviewPage,
 } as const;
-const renderer = computed(() => surfaceComponents[props.surface.surfaceId as "overview"]);
+const renderer = computed(() =>
+  Object.hasOwn(surfaceComponents, props.surface.surfaceId)
+    ? surfaceComponents[props.surface.surfaceId as "overview"]
+    : undefined,
+);
 
 onMounted(() => void loadSurface());
 

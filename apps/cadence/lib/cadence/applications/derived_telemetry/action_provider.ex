@@ -1,92 +1,122 @@
 defmodule Cadence.Applications.DerivedTelemetry.ActionProvider do
-  @moduledoc "Typed management action adapter for Derived Telemetry definitions."
-
+  @moduledoc "Reviewed management actions for immutable Derived Telemetry definitions."
   @behaviour Cadence.Applications.ActionProvider
-
   alias Cadence.Applications.{ActionFailure, ActionRequest, HostContext}
-  alias Cadence.Auth.Scope
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.DerivedTelemetry.Definition
   alias Cadence.Governance
+  alias Cadence.Missions
 
   @impl true
   def application_key, do: "derived_telemetry"
 
   @impl true
   def execute(
-        %Scope{},
-        %HostContext{placement: :mission, mission_id: mission_id},
-        %ActionRequest{action_id: "save_definition", params: params}
+        %Scope{} = scope,
+        %HostContext{placement: :mission, mission_id: mission} = host,
+        %ActionRequest{
+          application_key: "derived_telemetry",
+          application_version: 1,
+          surface_id: "manage",
+          surface_version: 1,
+          action_id: "save_definition",
+          params: params
+        }
       ) do
-    with {:ok, point_id} <- required_param(params, "point_id", :point_id, "Point ID"),
-         {:ok, expression} <- required_param(params, "expression", :expression, "Expression") do
-      existing =
-        mission_id
-        |> Governance.list_derived_definitions()
-        |> Enum.find(&(&1.point_id == point_id))
+    with {:ok, _} <- Missions.fetch_mission(scope.organization_id, mission),
+         :ok <-
+           Policy.authorize(scope, :operate_mission, %{
+             organization_id: scope.organization_id,
+             mission_id: host.mission_id
+           }),
+         {:ok, point} <- required(params, "point_id", 240, "Point ID"),
+         {:ok, expression} <- required(params, "expression", 8192, "Expression"),
+         {:ok, name} <- name(params, point),
+         {:ok, version, id} <- review(params),
+         {:ok, definition} <-
+           Governance.append_derived_definition(
+             scope.organization_id,
+             mission,
+             %{
+               point_id: point,
+               point_name: name,
+               expression: expression,
+               expected_definition_id: id,
+               metadata: %{"application" => "derived_telemetry"}
+             },
+             version
+           ) do
+      {:ok, definition}
+    else
+      {:error, :derived_definition_version_conflict} ->
+        failure(
+          "review_conflict",
+          "This definition changed. Refresh and review its current version before saving."
+        )
 
-      definition =
-        Definition.new(%{
-          mission_id: mission_id,
-          derived_definition_id:
-            (existing && existing.derived_definition_id) || definition_id(point_id),
-          point_id: point_id,
-          point_name: optional_param(params, "point_name", :point_name) || point_id,
-          expression: expression,
-          version: (existing && existing.version + 1) || 1,
-          metadata: %{"application" => "derived_telemetry"}
-        })
+      {:error, :derived_definition_review_required} ->
+        failure("review_required", "Review the current definition before saving.")
 
-      Governance.persist_derived_definition(definition)
+      {:error, %ActionFailure{}} = error ->
+        error
+
+      {:error, reason} when reason in [:forbidden, :not_found] ->
+        {:error, reason}
+
+      {:error, _reason} ->
+        failure(
+          "invalid_expression",
+          "The expression could not be saved. Use a valid stateless expression with canonical point IDs.",
+          "expression"
+        )
     end
   end
 
-  def execute(%Scope{}, %HostContext{}, %ActionRequest{}),
-    do: {:error, :unsupported_application_action}
+  def execute(_, _, _), do: {:error, :unsupported_application_action}
 
   @impl true
-  def result(%Definition{} = definition) do
-    %{
-      "definitionId" => definition.derived_definition_id,
-      "pointId" => definition.point_id,
-      "pointName" => definition.point_name,
-      "expression" => definition.expression,
-      "version" => definition.version
+  def result(%Definition{} = d),
+    do: %{
+      "definitionId" => d.derived_definition_id,
+      "pointId" => d.point_id,
+      "pointName" => d.point_name,
+      "expression" => d.expression,
+      "version" => d.version,
+      "sourceCount" => length(d.source_point_ids)
     }
-  end
 
-  def result(value) when is_map(value), do: value
-  def result(_value), do: nil
+  def result(_), do: nil
 
-  defp required_param(params, key, atom_key, label) do
-    case optional_param(params, key, atom_key) do
-      nil ->
-        {:error,
-         %ActionFailure{
-           code: "required_field",
-           message: "#{label} is required.",
-           field: key
-         }}
-
-      value ->
-        {:ok, value}
-    end
-  end
-
-  defp optional_param(params, key, atom_key) do
-    case Map.get(params, key, Map.get(params, atom_key)) do
+  defp required(params, key, maximum, label) do
+    case Map.get(params, key) do
       value when is_binary(value) ->
-        case String.trim(value) do
-          "" -> nil
-          trimmed -> trimmed
+        trimmed = String.trim(value)
+
+        cond do
+          trimmed == "" -> failure("required_field", "#{label} is required.", key)
+          byte_size(trimmed) > maximum -> failure("invalid_field", "#{label} is too long.", key)
+          true -> {:ok, trimmed}
         end
 
-      _other ->
-        nil
+      _ ->
+        failure("required_field", "#{label} is required.", key)
     end
   end
 
-  defp definition_id(point_id) do
-    digest = :crypto.hash(:sha256, point_id) |> Base.url_encode64(padding: false)
-    "derived_definition:#{binary_part(digest, 0, 16)}"
+  defp name(params, point) do
+    if Map.get(params, "point_name") in [nil, ""],
+      do: {:ok, point},
+      else: required(params, "point_name", 240, "Display name")
   end
+
+  defp review(%{"expected_version" => 0, "expected_definition_id" => nil}), do: {:ok, 0, nil}
+
+  defp review(%{"expected_version" => version, "expected_definition_id" => id})
+       when is_integer(version) and version > 0 and is_binary(id) and byte_size(id) in 1..256,
+       do: {:ok, version, id}
+
+  defp review(_), do: {:error, :derived_definition_review_required}
+
+  defp failure(code, message, field \\ nil),
+    do: {:error, %ActionFailure{code: code, message: message, field: field}}
 end

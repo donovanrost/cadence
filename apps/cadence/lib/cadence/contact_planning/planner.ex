@@ -128,6 +128,15 @@ defmodule Cadence.ContactPlanning.Planner do
     PlanningResults.list_snapshots(organization_id, mission_id, run_id)
   end
 
+  defdelegate list_runs_page(organization_id, mission_id, requirement_id, page),
+    to: PlanningResults
+
+  defdelegate list_searches_page(organization_id, mission_id, run_id, page),
+    to: PlanningResults
+
+  defdelegate list_snapshots_page(organization_id, mission_id, run_id, page),
+    to: PlanningResults
+
   defp list_routes(requirement, opts) do
     routes_fun =
       Keyword.get(

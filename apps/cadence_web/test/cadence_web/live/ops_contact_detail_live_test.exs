@@ -43,10 +43,16 @@ defmodule CadenceWeb.OpsContactDetailLiveTest do
     {TestFixtures.member_conn(user), user, organization, mission}
   end
 
-  defp assert_surface(view, _id, surface_id, mission, query_params) do
+  defp assert_surface(view, _id, _surface_id, mission, query_params) do
+    page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["id"] == "planning.reservation-review"
+    assert page["context"]["resourceId"] == query_params["provider_reservation_id"]
+
     HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
-      "surface_id" => surface_id,
+      "kind" => "ops_module",
+      "contribution" => "planning.reservation-review",
+      "application_key" => nil,
+      "surface_id" => nil,
       "host_scope" => "mission",
       "mission_id" => mission.mission_id,
       "query_params" => query_params

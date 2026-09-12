@@ -47,8 +47,9 @@ defmodule CadenceWeb.BrowserShellTest do
     assert LazyHTML.attribute(sign_in_component, "data-name") == ["UserSession"]
 
     vue = Test.get_vue(response, id: "user-session-component")
-    assert Map.keys(vue.props) == ["csrf-token"]
-    assert is_binary(vue.props["csrf-token"])
+    assert Map.keys(vue.props) == ["page"]
+    assert vue.props["page"]["version"] == 1
+    assert is_binary(vue.props["page"]["csrf_token"])
   end
 
   test "environment admin credentials on /sign-in enter admin mode and route to admin dashboard",

@@ -1,63 +1,29 @@
 defmodule CadenceWeb.OpsDashboardSharingLiveTest do
   use CadenceWeb.ConnCase, async: false
-
   import Phoenix.LiveViewTest
-
-  use Phoenix.VerifiedRoutes,
-    endpoint: CadenceWeb.Endpoint,
-    router: CadenceWeb.Router,
-    statics: CadenceWeb.static_paths()
-
-  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "share and snapshot routes forward their exact subjects" do
-    {conn, mission} = signed_in()
-
-    {:ok, share, _html} =
-      live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboard-shares/share-1")
-
-    assert_surface(
-      share,
-      "ops-dashboard-share-component",
-      "dashboard_share",
-      mission,
-      %{
-        "share_id" => "share-1"
-      },
-      "h-full"
-    )
-
-    {:ok, snapshot, _html} =
-      live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboard-snapshots/snapshot-1")
-
-    assert_surface(
-      snapshot,
-      "ops-dashboard-snapshot-component",
-      "dashboard_snapshot",
-      mission,
-      %{
-        "snapshot_id" => "snapshot-1"
-      },
-      "h-full"
-    )
-  end
-
-  defp signed_in do
+  test "missing share and snapshot subjects are contained compiled pages" do
     user = TestFixtures.persist_user!()
-    organization = TestFixtures.persist_org!()
-    TestFixtures.grant_membership!(user, organization)
-    mission = TestFixtures.persist_mission!(organization)
-    {TestFixtures.member_conn(user), mission}
-  end
+    org = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, org)
+    mission = TestFixtures.persist_mission!(org)
 
-  defp assert_surface(view, _id, surface_id, mission, query_params, _class) do
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
-      "surface_id" => surface_id,
-      "host_scope" => "mission",
-      "mission_id" => mission.mission_id,
-      "query_params" => query_params
-    })
+    for {segment, id, contribution} <- [
+          {"dashboard-shares", "share-1", "dashboards.share"},
+          {"dashboard-snapshots", "snapshot-1", "dashboards.snapshot"}
+        ] do
+      {:ok, view, _} =
+        live(
+          TestFixtures.member_conn(user),
+          "/missions/#{mission.mission_id}/ops/#{segment}/#{id}"
+        )
+
+      page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
+      assert page["id"] == contribution
+      assert page["status"] == "unavailable"
+      assert page["context"]["resourceId"] == id
+      assert page["context"]["missionId"] == mission.mission_id
+    end
   end
 end

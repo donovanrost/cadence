@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/vue3-vite";
 import { expect, waitFor } from "storybook/test";
-import TelemetryChart from "../../ops-console/src/TelemetryChart.vue";
-import "../../ops-console/src/vendor/uplot/uPlot.min.css";
+import { TelemetryChart } from "@cadence/dashboards-and-exploration/charts";
 
 const start = Date.UTC(2026, 8, 5, 18, 40);
 const args = {
@@ -38,6 +37,9 @@ type Story = StoryObj<typeof meta>;
 export const Production: Story = {
   play: async ({ canvasElement }) => {
     await waitFor(() => expect(canvasElement.querySelector("canvas")).not.toBeNull());
+    const overlay = canvasElement.querySelector<HTMLElement>(".u-over")!;
+    await expect(getComputedStyle(overlay).position).toBe("absolute");
+    await expect(overlay.getBoundingClientRect().width).toBeGreaterThan(0);
     const firstCanvas = canvasElement.querySelector("canvas");
     const root = document.documentElement;
     const previous = root.style.getPropertyValue("--chart-color-label");

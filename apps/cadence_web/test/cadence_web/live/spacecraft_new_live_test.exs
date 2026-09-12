@@ -11,7 +11,7 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "authenticated new route mounts the federated mission surface" do
+  test "authenticated new route mounts the host spacecraft form" do
     {conn, mission} = signed_in_mission()
 
     {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/new")
@@ -26,8 +26,8 @@ defmodule CadenceWeb.SpacecraftNewLiveTest do
 
   defp assert_surface(view, mission) do
     HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "spacecraft",
-      "surface_id" => "new",
+      "kind" => "spacecraft",
+      "spacecraft_page" => "spacecraft_new",
       "host_scope" => "mission",
       "mission_id" => mission.mission_id,
       "query_params" => %{}

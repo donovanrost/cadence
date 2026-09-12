@@ -79,6 +79,11 @@ defmodule Cadence.Dashboards.SourceRegistry.Provenance do
       resolved_binding
       |> binding_metadata()
       |> Map.merge(interval_provenance)
+      |> Map.merge(%{
+        data_source_id: resolved_binding.data_source.data_source_id,
+        dataset: resolved_binding.dataset,
+        realm: resolved_binding.realm
+      })
 
     link_context = source_link_context(request, resolved_binding)
 
@@ -89,7 +94,8 @@ defmodule Cadence.Dashboards.SourceRegistry.Provenance do
 
     SourceResult.new(%{
       result
-      | meta:
+      | resolved_bindings: [resolved_binding],
+        meta:
           result.meta
           |> ensure_map()
           |> Map.merge(provenance)
@@ -144,6 +150,12 @@ defmodule Cadence.Dashboards.SourceRegistry.Provenance do
     meta =
       frame.meta
       |> ensure_map()
+      |> Map.drop([
+        :source_binding_row_spans,
+        "source_binding_row_spans",
+        :segmented_source_bindings?,
+        "segmented_source_bindings?"
+      ])
       |> Map.merge(provenance)
       |> merge_evidence(evidence)
       |> enrich_link_container(link_context)

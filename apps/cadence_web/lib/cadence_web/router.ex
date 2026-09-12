@@ -319,6 +319,8 @@ defmodule CadenceWeb.Router do
         metadata: %{host_policy: :comms}
       )
 
+      live("/missions/:mission_id/ops", HostPageLive, :index, metadata: %{host_policy: :ops})
+
       live("/missions/:mission_id/ops/dashboards/new", HostPageLive, :new,
         metadata: %{host_policy: :ops_dashboard_author}
       )
@@ -423,6 +425,40 @@ defmodule CadenceWeb.Router do
       )
 
       live("/missions/:mission_id/ops/timeline", HostPageLive, :index,
+        metadata: %{host_policy: :ops}
+      )
+
+      live("/missions/:mission_id/ops/commands/stages", HostPageLive, :index,
+        metadata: %{host_policy: :ops}
+      )
+
+      live("/missions/:mission_id/ops/commands/stages/new", HostPageLive, :new,
+        metadata: %{host_policy: :ops}
+      )
+
+      live("/missions/:mission_id/ops/commands/stages/:command_stage_id", HostPageLive, :show,
+        metadata: %{host_policy: :ops}
+      )
+
+      live("/missions/:mission_id/ops/commands/new", HostPageLive, :new,
+        metadata: %{host_policy: :ops}
+      )
+
+      live(
+        "/missions/:mission_id/ops/commands/requests/:command_request_id/history",
+        HostPageLive,
+        :show,
+        metadata: %{host_policy: :ops}
+      )
+
+      live(
+        "/missions/:mission_id/ops/commands/requests/:command_request_id/queue",
+        HostPageLive,
+        :show,
+        metadata: %{host_policy: :ops}
+      )
+
+      live("/missions/:mission_id/ops/commands/requests/:command_request_id", HostPageLive, :show,
         metadata: %{host_policy: :ops}
       )
 

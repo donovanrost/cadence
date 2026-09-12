@@ -13,6 +13,7 @@ config :cadence_web, CadenceWeb.Endpoint,
   check_origin: ["//localhost:4001", "//127.0.0.1:4001"],
   http: [ip: {127, 0, 0, 1}, port: 4001],
   code_reloader: true,
+  reloadable_apps: [:cadence, :cadence_web],
   debug_errors: true,
   watchers: [
     vite: {PhoenixVite.Npm, :run, [:vite, ~w(dev)]},

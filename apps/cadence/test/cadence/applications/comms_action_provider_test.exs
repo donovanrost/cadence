@@ -5,6 +5,8 @@ defmodule Cadence.Applications.CommsActionProviderTest do
   alias Cadence.Applications.Comms.ActionProvider
   alias Cadence.Auth.Scope
   alias Cadence.Comms.GroundStationStore
+  alias Cadence.Comms.TransportStore
+  alias Cadence.Management.CommunicationsSetup
   alias Cadence.Spacecraft
 
   setup do
@@ -23,7 +25,13 @@ defmodule Cadence.Applications.CommsActionProviderTest do
      organization_id: organization_id,
      mission_id: mission_id,
      spacecraft_id: spacecraft.spacecraft_id,
-     scope: %Scope{organization_id: organization_id},
+     scope: %Scope{
+       actor_kind: :user,
+       organization_id: organization_id,
+       mission_id: mission_id,
+       user: %{user_id: "comms-setup-operator"},
+       organization_membership: %{lifecycle_state: :active}
+     },
      host_context: HostContext.mission(mission_id)}
   end
 
@@ -31,6 +39,86 @@ defmodule Cadence.Applications.CommsActionProviderTest do
     for {surface_id, payload} <- form_payloads(context) do
       assert {:ok, %{"valid" => true}} = execute(context, "validate", surface_id, payload)
     end
+  end
+
+  test "transport validation checks real configuration without persisting and satisfies its feature contract",
+       context do
+    {"transport_new", payload} = hd(form_payloads(context))
+
+    assert TransportStore.list_transports(
+             context.organization_id,
+             context.mission_id
+           ) == []
+
+    assert {:ok, result} = execute(context, "validate", "transport_new", payload)
+    assert result["transport_review"]["origin"] == "direct"
+    assert is_binary(result["transport_review"]["endpoint"])
+
+    assert TransportStore.list_transports(
+             context.organization_id,
+             context.mission_id
+           ) == []
+
+    path =
+      Path.expand(
+        "../../../../../frontend/modules/communications/src/features/transports/validation-receipt.ts",
+        __DIR__
+      )
+
+    script = """
+    import {admitValidation} from #{Jason.encode!(path)};
+    admitValidation(JSON.parse(process.argv[1]), JSON.parse(process.argv[2]));
+    """
+
+    node =
+      System.find_executable("node") ||
+        flunk("Node is required for the transport validation contract")
+
+    {output, status} =
+      System.cmd(
+        node,
+        [
+          "--no-warnings",
+          "--input-type=module",
+          "-e",
+          script,
+          Jason.encode!(result),
+          Jason.encode!(payload)
+        ],
+        stderr_to_stdout: true
+      )
+
+    assert status == 0, output
+
+    assert {:ok, receipt} = execute(context, "save", "transport_new", payload)
+
+    assert {:ok, transport} =
+             TransportStore.fetch_transport(
+               context.organization_id,
+               context.mission_id,
+               receipt["transportId"]
+             )
+
+    assert transport.configuration["port"] == 5000
+  end
+
+  test "transport validation rejects incomplete endpoints and unbound provider selections",
+       context do
+    {"transport_new", payload} = hd(form_payloads(context))
+
+    for invalid <- [
+          put_in(payload, ["transport", "port"], "70000"),
+          put_in(payload, ["transport", "display_name"], ""),
+          put_in(payload, ["transport", "origin"], "provider_managed"),
+          %{"transport" => %{"display_name" => "Not enough", "transport_kind" => "tcp_socket"}}
+        ] do
+      assert {:error, _reason} = execute(context, "validate", "transport_new", invalid)
+    end
+
+    assert TransportStore.list_transports(
+             context.organization_id,
+             context.mission_id
+           ) == []
   end
 
   test "saves each Comms form and returns navigation only after persistence", context do
@@ -140,6 +228,61 @@ defmodule Cadence.Applications.CommsActionProviderTest do
     end
   end
 
+  test "setup commands authorize without relying on a frontend adapter", context do
+    for {form, payload} <- form_payloads(context),
+        event <- ["validate", "save"],
+        scope <- [
+          %Scope{organization_id: context.organization_id},
+          %{context.scope | user: nil},
+          %{context.scope | organization_membership: nil},
+          %{context.scope | mission_id: "foreign"},
+          %{context.scope | organization_id: "foreign"}
+        ] do
+      assert {:error, _} =
+               CommunicationsSetup.execute(scope, context.mission_id, form, event, payload)
+    end
+
+    assert TransportStore.list_transports(context.organization_id, context.mission_id) == []
+
+    assert GroundStationStore.list_ground_stations(context.organization_id, context.mission_id) ==
+             []
+  end
+
+  test "setup rejects non-text and oversized nested input before validation or effects",
+       context do
+    for payload <- [
+          nil,
+          [],
+          %{"transport" => %{"port" => 5000}},
+          %{"transport" => %{"display_name" => String.duplicate("x", 8193)}},
+          %{"transport" => %{"display_name" => <<255>>}}
+        ] do
+      for event <- ["validate", "save"] do
+        assert {:error, _} =
+                 CommunicationsSetup.execute(
+                   context.scope,
+                   context.mission_id,
+                   "transport_new",
+                   event,
+                   payload
+                 )
+      end
+    end
+  end
+
+  test "domain and legacy adapters share validation output", context do
+    for {form, payload} <- form_payloads(context) do
+      assert CommunicationsSetup.execute(
+               context.scope,
+               context.mission_id,
+               form,
+               "validate",
+               payload
+             ) ==
+               execute(context, "validate", form, payload)
+    end
+  end
+
   test "keeps form action effects and surface declarations exact" do
     actions = Map.new(Comms.definition().actions, &{&1.action_id, &1})
 
@@ -189,7 +332,14 @@ defmodule Cadence.Applications.CommsActionProviderTest do
        %{
          "transport" => %{
            "display_name" => "Lab TCP",
-           "transport_kind" => "tcp_socket"
+           "transport_kind" => "tcp_socket",
+           "origin" => "direct",
+           "tcp_mode" => "listen",
+           "direction_capability" => "inbound",
+           "host" => "0.0.0.0",
+           "port" => "5000",
+           "framing_mode" => "raw",
+           "tls_enabled" => "false"
          }
        }},
       {"routing_new",

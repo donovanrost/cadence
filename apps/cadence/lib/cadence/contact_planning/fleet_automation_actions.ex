@@ -89,6 +89,26 @@ defmodule Cadence.ContactPlanning.FleetAutomationActions do
     |> Enum.map(&FleetAutomationActionRow.to_domain/1)
   end
 
+  def list_page(org, mission, run_id, page) when is_integer(page) and page in 1..1_000_000 do
+    rows =
+      FleetAutomationActionRow
+      |> where(
+        [a],
+        a.organization_id == ^org and a.mission_id == ^mission and
+          a.fleet_planning_run_id == ^run_id
+      )
+      |> order_by([a], asc: a.inserted_at, asc: a.fleet_automation_action_id)
+      |> offset(^((page - 1) * 10))
+      |> limit(11)
+      |> Repo.all()
+
+    %{
+      page: page,
+      more: length(rows) > 10,
+      entries: rows |> Enum.take(10) |> Enum.map(&FleetAutomationActionRow.to_domain/1)
+    }
+  end
+
   defp build_action(scope, grant, fleet_run_id, action, evidence, plan_ref, now) do
     plan_id = value(plan_ref, :contact_plan_id)
     plan_version = value(plan_ref, :contact_plan_version)

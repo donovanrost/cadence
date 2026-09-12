@@ -8,7 +8,6 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
   test "playlist routes forward only their bounded subject" do
@@ -40,12 +39,17 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLiveTest do
   end
 
   defp assert_surface(view, _id, surface_id, mission, query_params) do
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
-      "surface_id" => surface_id,
-      "host_scope" => "mission",
-      "mission_id" => mission.mission_id,
-      "query_params" => query_params
-    })
+    page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["slot"] == "ops.page"
+    assert page["context"]["missionId"] == mission.mission_id
+
+    if surface_id == "dashboard_playlist_present" do
+      assert page["id"] == "dashboards.playlist-present"
+      assert page["context"]["resourceId"] == query_params["playlist_id"]
+      assert page["status"] == "unavailable"
+    else
+      assert page["id"] == "dashboards.playlists"
+      assert page["status"] == "ready"
+    end
   end
 end

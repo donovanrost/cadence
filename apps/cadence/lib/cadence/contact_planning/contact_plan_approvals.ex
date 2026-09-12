@@ -23,6 +23,10 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
 
   alias Cadence.Repo
 
+  defguardp review_page?(version, page)
+            when is_integer(version) and version in 1..2_147_483_647 and
+                   is_integer(page) and page in 1..1_000_000
+
   @spec approve(
           Scope.t(),
           binary(),
@@ -99,6 +103,36 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
     |> Repo.all()
     |> Enum.map(&ContactPlanApprovalRow.to_domain/1)
   end
+
+  @doc "A bounded live decision ledger excluding versions newer than the reviewed version."
+  def list_page(organization_id, mission_id, plan_id, through_version, page)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(plan_id) and
+             review_page?(through_version, page) do
+    rows =
+      ContactPlanApprovalRow
+      |> where(
+        [approval],
+        approval.organization_id == ^organization_id and approval.mission_id == ^mission_id and
+          approval.contact_plan_id == ^plan_id and
+          approval.contact_plan_version <= ^through_version
+      )
+      |> order_by([approval],
+        desc: approval.contact_plan_version,
+        desc: approval.decided_at,
+        desc: approval.contact_plan_approval_id
+      )
+      |> offset(^((page - 1) * 25))
+      |> limit(26)
+      |> Repo.all()
+
+    {:ok,
+     %{
+       entries: rows |> Enum.take(25) |> Enum.map(&ContactPlanApprovalRow.to_domain/1),
+       more?: length(rows) > 25
+     }}
+  end
+
+  def list_page(_, _, _, _, _), do: {:error, :invalid_contact_plan_review_page}
 
   defp decide(
          %Scope{} = current_scope,

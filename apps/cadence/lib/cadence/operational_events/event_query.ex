@@ -58,7 +58,8 @@ defmodule Cadence.OperationalEvents.EventQuery do
     |> maybe_filter_equals(:source_record_id, Keyword.get(opts, :source_record_id))
     |> maybe_filter_replay_run_id(Keyword.get(opts, :replay_run_id))
     |> maybe_filter_time_range(opts)
-    |> order_by_direction(Keyword.get(opts, :order, :desc))
+    |> maybe_filter_timeline_cursor(Keyword.get(opts, :cursor), Keyword.get(opts, :time_axis))
+    |> order_by_direction(Keyword.get(opts, :order, :desc), Keyword.get(opts, :time_axis))
     |> limit(^limit)
     |> Repo.all()
     |> Enum.map(&OperationalEventRow.to_domain/1)
@@ -86,7 +87,8 @@ defmodule Cadence.OperationalEvents.EventQuery do
     |> maybe_filter_equals(:source_record_id, Keyword.get(opts, :source_record_id))
     |> maybe_filter_replay_run_id(Keyword.get(opts, :replay_run_id))
     |> maybe_filter_time_range(opts)
-    |> order_by_direction(Keyword.get(opts, :order, :desc))
+    |> maybe_filter_timeline_cursor(Keyword.get(opts, :cursor), Keyword.get(opts, :time_axis))
+    |> order_by_direction(Keyword.get(opts, :order, :desc), Keyword.get(opts, :time_axis))
     |> limit(^limit)
     |> Repo.all()
     |> Enum.map(&OperationalEventRow.to_domain/1)
@@ -94,9 +96,45 @@ defmodule Cadence.OperationalEvents.EventQuery do
 
   defp maybe_filter_time_range(query, opts) do
     query
-    |> maybe_filter_from_occurred_at(Keyword.get(opts, :from_occurred_at))
-    |> maybe_filter_to_occurred_at(Keyword.get(opts, :to_occurred_at))
+    |> maybe_filter_from_occurred_at(
+      Keyword.get(opts, :from_occurred_at),
+      Keyword.get(opts, :time_axis)
+    )
+    |> maybe_filter_to_occurred_at(
+      Keyword.get(opts, :to_occurred_at),
+      Keyword.get(opts, :time_axis)
+    )
   end
+
+  defp maybe_filter_from_occurred_at(query, %DateTime{} = from, :effective),
+    do:
+      where(query, [row], fragment("COALESCE(?, ?)", row.effective_at, row.occurred_at) >= ^from)
+
+  defp maybe_filter_from_occurred_at(query, from, _axis),
+    do: maybe_filter_from_occurred_at(query, from)
+
+  defp maybe_filter_to_occurred_at(query, %DateTime{} = to, :effective),
+    do: where(query, [row], fragment("COALESCE(?, ?)", row.effective_at, row.occurred_at) < ^to)
+
+  defp maybe_filter_to_occurred_at(query, to, _axis),
+    do: maybe_filter_to_occurred_at(query, to)
+
+  defp maybe_filter_timeline_cursor(
+         query,
+         %{occurred_at: %DateTime{} = at, mission_event_id: id},
+         :effective
+       )
+       when is_binary(id) do
+    where(
+      query,
+      [row],
+      fragment("COALESCE(?, ?)", row.effective_at, row.occurred_at) < ^at or
+        (fragment("COALESCE(?, ?)", row.effective_at, row.occurred_at) == ^at and
+           fragment("('mission_event:' || ?) COLLATE \"C\"", row.event_id) < ^id)
+    )
+  end
+
+  defp maybe_filter_timeline_cursor(query, _cursor, _axis), do: query
 
   defp maybe_filter_from_occurred_at(query, %DateTime{} = from) do
     where(query, [row], row.occurred_at >= ^from)
@@ -137,6 +175,22 @@ defmodule Cadence.OperationalEvents.EventQuery do
 
   defp maybe_filter_replay_run_id(query, replay_run_id),
     do: maybe_filter_equals(query, :replay_run_id, replay_run_id)
+
+  defp order_by_direction(query, order, :effective) when order in [:asc, "asc"],
+    do:
+      order_by(query, [row],
+        asc: fragment("COALESCE(?, ?)", row.effective_at, row.occurred_at),
+        asc: fragment("? COLLATE \"C\"", row.event_id)
+      )
+
+  defp order_by_direction(query, _order, :effective),
+    do:
+      order_by(query, [row],
+        desc: fragment("COALESCE(?, ?)", row.effective_at, row.occurred_at),
+        desc: fragment("? COLLATE \"C\"", row.event_id)
+      )
+
+  defp order_by_direction(query, order, _axis), do: order_by_direction(query, order)
 
   defp order_by_direction(query, :asc) do
     order_by(query, [row], asc: row.occurred_at, asc: row.event_id)

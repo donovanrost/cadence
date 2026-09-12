@@ -13,7 +13,14 @@
     "test": "node --test release-build-config.test.mjs && vp test --run --exclude release-build-config.test.mjs"
   },
   "dependencies": {
+    "@cadence/commanding": "workspace:*",
+    "@cadence/dashboards-and-exploration": "workspace:*",
+    "@cadence/data-operations": "workspace:*",
+    "@cadence/derived-telemetry": "workspace:*",
     "@cadence/design-tokens": "workspace:*",
+    "@cadence/limits-and-alarming": "workspace:*",
+    "@cadence/planning-and-contacts": "workspace:*",
+    "@cadence/plugin-host": "workspace:*",
     "@cadence/plugin-sdk": "workspace:*",
     "@cadence/ui": "workspace:*",
     "reka-ui": "catalog:",

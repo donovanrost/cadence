@@ -7,6 +7,7 @@ defmodule Cadence.Catalog.Command.Invocation do
   """
 
   alias Cadence.Catalog.Command.Compiler.{ArgumentSpec, RuntimeDefinition}
+  alias Cadence.Catalog.Command.TypeEncoding
 
   @spec resolve(RuntimeDefinition.t(), map()) :: {:ok, map()} | {:error, term()}
   def resolve(%RuntimeDefinition{} = runtime_definition, argument_values)
@@ -59,6 +60,10 @@ defmodule Cadence.Catalog.Command.Invocation do
       not valid_argument_value?(provided_value, spec) ->
         {:error, {:invalid_command_argument_type, spec.name, spec.base_type, provided_value}}
 
+      not fits_encoding?(provided_value, spec) ->
+        {:error,
+         {:command_argument_out_of_range, spec.name, spec.encoding.size_bits, provided_value}}
+
       not is_nil(spec.fixed_value) ->
         {:ok, spec.fixed_value}
 
@@ -69,8 +74,8 @@ defmodule Cadence.Catalog.Command.Invocation do
 
   defp resolve_missing_argument_value(%ArgumentSpec{} = spec) do
     cond do
-      not is_nil(spec.fixed_value) -> {:ok, spec.fixed_value}
-      not is_nil(spec.default_value) -> {:ok, spec.default_value}
+      not is_nil(spec.fixed_value) -> resolve_provided_argument_value(spec, spec.fixed_value)
+      not is_nil(spec.default_value) -> resolve_provided_argument_value(spec, spec.default_value)
       spec.required -> {:error, {:missing_required_command_argument, spec.name}}
       true -> {:ok, :skip}
     end
@@ -86,6 +91,14 @@ defmodule Cadence.Catalog.Command.Invocation do
     do: is_integer(value) or is_binary(value)
 
   defp valid_argument_value?(_value, _argument_spec), do: false
+
+  defp fits_encoding?(value, %ArgumentSpec{base_type: type, encoding: %TypeEncoding{} = encoding})
+       when type in [:integer, :enumerated] and is_integer(value) and
+              is_integer(encoding.size_bits) and encoding.size_bits > 0 do
+    TypeEncoding.integer_fits?(value, encoding.size_bits, encoding.signed)
+  end
+
+  defp fits_encoding?(_, _), do: true
 
   defp normalize_argument_values(argument_values) do
     Map.new(argument_values, fn {key, value} -> {to_string(key), value} end)

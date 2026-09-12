@@ -3,6 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./spacecraft": "./src/mission-and-spacecraft/spacecraft.ts",
+    "./capability-management": "./src/capability-management/index.ts",
+    "./catalog": "./src/catalog/index.ts",
+    "./missions": "./src/mission-and-spacecraft/index.ts",
+    "./administration": "./src/administration/index.ts",
+    "./ops-workspace": "./src/ops-workspace/index.ts",
+    "./auth-and-navigation": "./src/auth-and-navigation/index.ts"
+  },
   "scripts": {
     "dev": "vp dev --host 127.0.0.1 --port 5173 --strictPort",
     "build": "vue-tsc -b && vp build",
@@ -11,7 +20,13 @@
     "test": "node --test phoenix-build-config.test.mjs && vp test --run --exclude phoenix-build-config.test.mjs"
   },
   "dependencies": {
+    "@cadence/commanding": "workspace:*",
+    "@cadence/communications": "workspace:*",
+    "@cadence/dashboards-and-exploration": "workspace:*",
+    "@cadence/data-operations": "workspace:*",
     "@cadence/design-tokens": "workspace:*",
+    "@cadence/limits-and-alarming": "workspace:*",
+    "@cadence/planning-and-contacts": "workspace:*",
     "@cadence/plugin-sdk": "workspace:*",
     "@cadence/ui": "workspace:*",
     "@module-federation/runtime": "catalog:",

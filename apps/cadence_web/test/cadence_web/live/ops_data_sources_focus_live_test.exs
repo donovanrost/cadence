@@ -48,12 +48,22 @@ defmodule CadenceWeb.OpsDataSourcesFocusLiveTest do
   end
 
   defp assert_surface(view, _id, surface_id, mission, query_params) do
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "ops_console",
-      "surface_id" => surface_id,
-      "host_scope" => "mission",
-      "mission_id" => mission.mission_id,
-      "query_params" => query_params
-    })
+    contribution =
+      case surface_id do
+        "data_sources" -> "data-operations.sources"
+        "data_source_registration" -> "data-operations.source-registration"
+        "data_source_settings" -> "data-operations.source-settings"
+      end
+
+    snapshot =
+      HostTransportTestSupport.assert_context(view, %{
+        "kind" => "ops_module",
+        "contribution" => contribution,
+        "host_scope" => "mission",
+        "mission_id" => mission.mission_id,
+        "query_params" => query_params
+      })
+
+    assert snapshot["ops_page"]["id"] == contribution
   end
 end

@@ -27,6 +27,7 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.Applications.{
     ActionDefinition,
     ApplicationDefinition,
+    ConfigurationLock,
     LifecycleContract,
     PacketBindingConfiguration,
     PacketBindings,
@@ -64,17 +65,8 @@ defmodule Cadence.Applications.TelemetryDecom do
   def application_key, do: @application_key
 
   @spec surface_query_contributions() :: [SurfaceQueryContribution.t()]
-  def surface_query_contributions do
-    [
-      %SurfaceQueryContribution{
-        application_key: @application_key,
-        application_version: 1,
-        query_id: "cadence.packet_bindings.manage",
-        query_version: 1,
-        provider: Cadence.Reads.ApplicationSurfaces.PacketBindings
-      }
-    ]
-  end
+  defdelegate surface_query_contributions(),
+    to: Cadence.Applications.TelemetryDecomCatalogContribution
 
   @doc "Returns the authoritative Phoenix-owned application definition."
   @spec definition() :: ApplicationDefinition.t()
@@ -172,7 +164,7 @@ defmodule Cadence.Applications.TelemetryDecom do
           },
           actions: ["save_packet_bindings"],
           refresh: :after_action,
-          renderer: {:declarative, "cadence.host.surface.v1"}
+          renderer: {:trusted, "cadence.telemetry_decom.packet_bindings"}
         }
       ]
     }
@@ -189,10 +181,12 @@ defmodule Cadence.Applications.TelemetryDecom do
   def configure(organization_id, mission_id, spacecraft_id, attrs)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) and
              is_map(attrs) do
-    with {:ok, config_inputs} <-
-           validate_configure_inputs(organization_id, mission_id, spacecraft_id, attrs) do
-      upsert_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs)
-    end
+    ConfigurationLock.run(organization_id, mission_id, fn ->
+      with {:ok, config_inputs} <-
+             validate_configure_inputs(organization_id, mission_id, spacecraft_id, attrs) do
+        upsert_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs)
+      end
+    end)
   end
 
   defp validate_configure_inputs(organization_id, mission_id, spacecraft_id, attrs) do
@@ -488,46 +482,55 @@ defmodule Cadence.Applications.TelemetryDecom do
   binding set and activate it. Returns the updated config for the spacecraft
   that triggered the apply.
   """
-  @spec request_mission_apply(Scope.t(), binary(), binary()) ::
+  @spec request_mission_apply(Scope.t(), binary(), binary(), keyword()) ::
           {:ok, %{config: Config.t(), activation_request: ActivationRequest.t()}}
           | {:error, term()}
-  def request_mission_apply(%Scope{} = current_scope, mission_id, triggering_spacecraft_id)
+  def request_mission_apply(
+        %Scope{} = current_scope,
+        mission_id,
+        triggering_spacecraft_id,
+        opts \\ []
+      )
       when is_binary(mission_id) and
              is_binary(triggering_spacecraft_id) do
     organization_id = current_scope.organization_id
 
-    with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
-         {:ok, config} <-
-           fetch_config(organization_id, mission_id, triggering_spacecraft_id),
-         all_configs <- list_configs(organization_id, mission_id),
-         configs <- Enum.filter(all_configs, & &1.enabled),
-         {:ok, contribution} <-
-           compile_mission_contribution(organization_id, mission_id, configs),
-         {:ok, binding_set} <-
-           MissionBindingComposer.compose(organization_id, mission_id, [contribution]),
-         {:ok, _persisted} <- Governance.persist_binding_set(organization_id, binding_set),
-         {:ok, mission_model_revision_id} <-
-           mission_model_revision_for_apply(
-             organization_id,
-             mission_id,
-             configs,
-             config
-           ),
-         {:ok, %ActivationRequest{} = activation_request} <-
-           MissionModels.request_promotion(
-             current_scope,
-             mission_id,
-             mission_model_revision_id,
-             binding_set.binding_set_id,
-             binding_set.version,
-             metadata: %{
-               "composition" => "mission_applications",
-               "contributors" => mission_contributors(organization_id, mission_id),
-               "triggering_spacecraft_id" => triggering_spacecraft_id
-             }
-           ) do
-      {:ok, %{config: config, activation_request: activation_request}}
-    end
+    ConfigurationLock.run(organization_id, mission_id, fn ->
+      with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
+           {:ok, config} <-
+             fetch_config(organization_id, mission_id, triggering_spacecraft_id),
+           all_configs <- list_configs(organization_id, mission_id),
+           configs <- Enum.filter(all_configs, & &1.enabled),
+           {:ok, contribution} <-
+             compile_mission_contribution(organization_id, mission_id, configs),
+           {:ok, binding_set} <-
+             MissionBindingComposer.compose(organization_id, mission_id, [contribution]),
+           {:ok, _persisted} <- Governance.persist_binding_set(organization_id, binding_set),
+           {:ok, mission_model_revision_id} <-
+             mission_model_revision_for_apply(
+               organization_id,
+               mission_id,
+               configs,
+               config
+             ),
+           {:ok, %ActivationRequest{} = activation_request} <-
+             MissionModels.request_promotion(
+               current_scope,
+               mission_id,
+               mission_model_revision_id,
+               binding_set.binding_set_id,
+               binding_set.version,
+               metadata: %{
+                 "composition" => "mission_applications",
+                 "contributors" => mission_contributors(organization_id, mission_id),
+                 "triggering_spacecraft_id" => triggering_spacecraft_id,
+                 "reviewed_configuration_basis" =>
+                   Keyword.get(opts, :reviewed_configuration_basis)
+               }
+             ) do
+        {:ok, %{config: config, activation_request: activation_request}}
+      end
+    end)
   end
 
   defp mission_model_revision_for_apply(
@@ -574,18 +577,9 @@ defmodule Cadence.Applications.TelemetryDecom do
         %{"composition" => "mission_applications"}
       ) do
     if binding_set_id == binding_set_id(binding_set.mission_id) do
-      with :ok <-
-             binding_set.organization_id
-             |> list_configs(binding_set.mission_id)
-             |> reconcile_application_state(binding_set) do
-        PacketBindings.stamp_applied_for_mission(
-          binding_set.organization_id,
-          binding_set.mission_id,
-          binding_set.binding_set_id,
-          binding_set.version,
-          application_key: @application_key
-        )
-      end
+      ConfigurationLock.run(binding_set.organization_id, binding_set.mission_id, fn ->
+        apply_configuration_state(binding_set)
+      end)
     else
       {:error, :telemetry_decom_activation_binding_set_mismatch}
     end
@@ -600,6 +594,21 @@ defmodule Cadence.Applications.TelemetryDecom do
 
   def activation_applied(%BindingSet{}, _metadata), do: :ok
 
+  defp apply_configuration_state(binding_set) do
+    with :ok <-
+           binding_set.organization_id
+           |> list_configs(binding_set.mission_id)
+           |> reconcile_application_state(binding_set) do
+      PacketBindings.stamp_applied_for_mission(
+        binding_set.organization_id,
+        binding_set.mission_id,
+        binding_set.binding_set_id,
+        binding_set.version,
+        application_key: @application_key
+      )
+    end
+  end
+
   @doc """
   Disable a spacecraft's Telemetry Decom configuration. The configuration is
   kept so the user can re-enable without re-entering choices, but it will no
@@ -607,6 +616,12 @@ defmodule Cadence.Applications.TelemetryDecom do
   """
   @spec disable(binary(), binary(), binary()) :: {:ok, Config.t()} | {:error, term()}
   def disable(organization_id, mission_id, spacecraft_id) do
+    ConfigurationLock.run(organization_id, mission_id, fn ->
+      disable_configuration(organization_id, mission_id, spacecraft_id)
+    end)
+  end
+
+  defp disable_configuration(organization_id, mission_id, spacecraft_id) do
     with {:ok, %ApplicationBinding{} = binding} <-
            ApplicationBindingStore.fetch(
              organization_id,

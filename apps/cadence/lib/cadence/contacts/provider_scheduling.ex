@@ -110,6 +110,42 @@ defmodule Cadence.Contacts.ProviderScheduling do
     end
   end
 
+  @doc "The immutable route pins reviewed before search and sealed into reservation capabilities."
+  def route_evidence(route) do
+    %{
+      "provider_id" => route.provider_id,
+      "provider_version" => route.provider_version,
+      "transport_id" => route.transport_id,
+      "transport_version" => route.transport_version,
+      "provider_profile_id" => route.provider_profile_id,
+      "provider_profile_version" => route.provider_profile_version,
+      "routing_rule_id" => route.routing_rule_id,
+      "path_template_id" => route.path_template_id,
+      "path_template_version" => route.path_template_version,
+      "source_endpoint_id" => route.source_endpoint_id,
+      "provider_spacecraft_ref" => route.provider_spacecraft_ref,
+      "service_profile_ref" => route.service_profile_ref,
+      "delivery_profile_ref" => route.delivery_profile_ref
+    }
+  end
+
+  @doc "Bounded semantic route labels and exact configuration evidence."
+  def route_summary(r) do
+    %{
+      key: r.route_key,
+      spacecraft_id: r.spacecraft_id,
+      provider: route_label(r.provider_display_name),
+      transport: route_label(r.transport_display_name),
+      service: route_label(r.service_display_name),
+      delivery: route_label(r.delivery_display_name),
+      delivery_summary: route_label(r.delivery_operator_summary),
+      evidence: route_evidence(r)
+    }
+  end
+
+  defp route_label(value) when is_binary(value), do: String.slice(value, 0, 120)
+  defp route_label(_), do: "Unavailable label"
+
   @spec search_opportunities(binary(), binary(), binary(), map(), keyword()) ::
           {:ok, %{opportunities: [map()], route: ready_route()}} | {:error, term()}
   def search_opportunities(organization_id, mission_id, route_key, window, opts \\ [])
@@ -125,6 +161,7 @@ defmodule Cadence.Contacts.ProviderScheduling do
              spacecraft_id,
              route_key
            ),
+         :ok <- expected_route(route, Keyword.get(opts, :expected_route)),
          {:ok, starts_at} <- parse_time(window, :starts_at),
          {:ok, ends_at} <- parse_time(window, :ends_at),
          :ok <- validate_window(starts_at, ends_at, opts),
@@ -150,6 +187,9 @@ defmodule Cadence.Contacts.ProviderScheduling do
       {:ok,
        %{
          route: route,
+         truncated:
+           Map.get(response, :truncated, Map.get(response, "truncated", false)) == true or
+             not is_nil(Map.get(response, :next_cursor, Map.get(response, "next_cursor"))),
          provider_evidence:
            response
            |> Map.get(:provider_evidence, Map.get(response, "provider_evidence", %{}))
@@ -165,6 +205,12 @@ defmodule Cadence.Contacts.ProviderScheduling do
       false -> {:error, :spacecraft_required}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  defp expected_route(_, nil), do: :ok
+
+  defp expected_route(route, expected) do
+    if route_evidence(route) === expected, do: :ok, else: {:error, :route_changed}
   end
 
   defp resolve_rules(spacecraft, [], _rules) do

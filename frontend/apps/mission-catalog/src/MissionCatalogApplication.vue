@@ -55,7 +55,11 @@ const actionNotice = ref<string>();
 const actionReceipt = shallowRef<HostActionReceipt<unknown>>();
 let loadGeneration = 0;
 
-const selectedComponent = computed(() => surfaceComponents[props.surface.surfaceId]);
+const selectedComponent = computed(() =>
+  Object.hasOwn(surfaceComponents, props.surface.surfaceId)
+    ? surfaceComponents[props.surface.surfaceId]
+    : undefined,
+);
 const selectedBindings = computed(() => actionBindings[props.surface.surfaceId] ?? {});
 
 const actionLifecycle = createFederatedActionLifecycle({

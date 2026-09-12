@@ -1,6 +1,9 @@
 defmodule Cadence.Projections.DataSources.Watermarks do
   @moduledoc """
-  Durable source-watermark transition log and latest-status projection.
+  Data-plane source-watermark observation journal and live source-status store.
+
+  The historical Projections namespace is retained as the public API. This owner
+  records observed ingestion progress and publishes facts consumed by read models.
   """
 
   import Ecto.Query
@@ -20,6 +23,21 @@ defmodule Cadence.Projections.DataSources.Watermarks do
           {:ok, SourceWatermarkEvent.t(), SourceWatermarkStatus.t()}
           | {:ok, :unchanged, SourceWatermarkStatus.t()}
           | {:error, term()}
+
+  @doc "Fetches one exact event in the mission, including organization-neutral events."
+  def fetch_source_watermark_event(organization_id, mission_id, event_id) do
+    EventRow
+    |> where(
+      [row],
+      (is_nil(row.organization_id) or row.organization_id == ^organization_id) and
+        row.mission_id == ^mission_id and row.source_watermark_event_id == ^event_id
+    )
+    |> Repo.one()
+    |> case do
+      nil -> {:error, :source_watermark_event_not_found}
+      row -> {:ok, EventRow.to_domain(row)}
+    end
+  end
 
   @spec record_source_watermark(map(), keyword()) :: record_result()
   def record_source_watermark(attrs, opts \\ []) when is_map(attrs) and is_list(opts) do
@@ -79,8 +97,13 @@ defmodule Cadence.Projections.DataSources.Watermarks do
     |> maybe_filter(:dataset, Keyword.get(opts, :dataset))
     |> maybe_from_observed_at(Keyword.get(opts, :from_observed_at))
     |> maybe_to_observed_at(Keyword.get(opts, :to_observed_at))
-    |> order_by([row], desc: row.observed_at, desc: row.inserted_at)
+    |> order_by([row],
+      desc: row.observed_at,
+      desc: row.inserted_at,
+      desc: row.source_watermark_event_id
+    )
     |> limit(^limit)
+    |> offset(^Keyword.get(opts, :offset, 0))
     |> Repo.all()
     |> Enum.map(&EventRow.to_domain/1)
   end
@@ -99,7 +122,14 @@ defmodule Cadence.Projections.DataSources.Watermarks do
     |> maybe_filter(:realm, Keyword.get(opts, :realm))
     |> maybe_filter(:replay_run_id, Keyword.get(opts, :replay_run_id))
     |> maybe_filter(:dataset, Keyword.get(opts, :dataset))
-    |> order_by([row], asc: row.logical_source, asc: row.data_source_id, asc: row.realm)
+    |> order_by([row],
+      asc: row.logical_source,
+      asc: row.data_source_id,
+      asc: row.realm,
+      asc: row.source_watermark_key
+    )
+    |> inventory_limit(Keyword.get(opts, :limit))
+    |> offset(^Keyword.get(opts, :offset, 0))
     |> Repo.all()
     |> Enum.map(&StatusRow.to_domain/1)
   end
@@ -337,4 +367,8 @@ defmodule Cadence.Projections.DataSources.Watermarks do
   end
 
   defp get_attr(_attrs, _key), do: nil
+  defp inventory_limit(query, nil), do: query
+
+  defp inventory_limit(query, count) when is_integer(count) and count > 0,
+    do: limit(query, ^count)
 end

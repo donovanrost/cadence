@@ -8,30 +8,33 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
   """
 
   alias Cadence.Applications.{ActionRequest, HostContext, JSONBoundary}
+
+  alias Cadence.Applications.OpsConsole.Actions.{
+    PlanDecisions,
+    ProviderChangeDecisions,
+    RequirementDecisions,
+    RequirementDeclarationInput,
+    RequirementTemplateInput,
+    ScheduleCancellations
+  }
+
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Missions
 
   alias Cadence.ContactPlanning.{
-    ContactPlans,
     ContactRequirements,
     ContactRequirementTemplates,
-    OpportunityCapability,
-    Planner
+    OpportunityCapability
   }
 
   alias Cadence.Contacts.{
     ProviderBooking,
-    ProviderChangeApprovals,
-    ProviderReservationChanges,
-    ProviderReservations,
     ProviderScheduling
   }
 
-  alias Cadence.Control.Contacts, as: ControlContacts
-  alias Cadence.Management.Contacts, as: ManagementContacts
-
   @application_key "ops_console"
   @application_version 1
+  @opportunity_max_age_seconds 900
 
   @bindings [
     {"contact_requirement_new", "validate"},
@@ -108,6 +111,15 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
     do: {:error, :malformed_action_request}
 
   @spec result(term()) :: term()
+  def result(
+        %{"contract_version" => 1, "opportunities" => _, "search" => _, "route" => _} = value
+      ) do
+    case JSONBoundary.safe_trusted_output(value) do
+      {:ok, safe} -> safe
+      {:error, _} -> nil
+    end
+  end
+
   def result(value) do
     case JSONBoundary.safe(value) do
       {:ok, safe} -> safe
@@ -209,48 +221,39 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
   end
 
   defp dispatch(scope, mission_id, "contact_requirement_show", "plan", params) do
-    with {:ok, %{"contact_requirement_id" => requirement_id}} <-
-           exact_ids(params, ["contact_requirement_id"]),
-         {:ok, requirement, _version} <-
-           ContactRequirements.fetch(scope.organization_id, mission_id, requirement_id),
-         {:ok, planning} <-
-           Planner.run(scope, mission_id, requirement_id, requirement.current_version) do
+    with {:ok, planning} <- RequirementDecisions.plan(scope, mission_id, params) do
       {:ok,
        %{
-         "contactRequirementId" => requirement_id,
+         "contactRequirementId" => planning.run.contact_requirement_id,
          "planningRunId" => planning.run.contact_planning_run_id,
          "searchCount" => length(planning.searches),
-         "opportunityCount" => length(planning.snapshots)
+         "opportunityCount" => length(planning.snapshots),
+         "navigation" => %{
+           "href" =>
+             "/missions/#{URI.encode(mission_id, &URI.char_unreserved?/1)}/ops/requirements/#{URI.encode(planning.run.contact_requirement_id, &URI.char_unreserved?/1)}?" <>
+               URI.encode_query(%{
+                 "version" => planning.run.contact_requirement_version,
+                 "planning_run_id" => planning.run.contact_planning_run_id
+               })
+         }
        }}
     end
   end
 
   defp dispatch(scope, mission_id, "contact_requirement_show", "create-plan", params) do
-    with {:ok, %{"contact_requirement_id" => requirement_id, "selected_snapshot_ids" => ids}} <-
-           exact_selection_params(params),
-         true <- ids != [],
-         {:ok, _requirement, requirement_version} <-
-           ContactRequirements.fetch(scope.organization_id, mission_id, requirement_id),
-         {:ok, run_id} <- latest_run_id(scope.organization_id, mission_id, requirement_id),
-         :ok <-
-           selected_snapshots_match(
-             scope.organization_id,
-             mission_id,
-             run_id,
-             requirement_id,
-             ids
-           ),
-         {:ok, plan, plan_version} <-
-           ContactPlans.create(scope, mission_id, %{
-             planning_run_ids: [run_id],
-             selected_snapshot_ids: ids,
-             rationale:
-               "Operator-selected provider windows for #{requirement_version.contact_intent}"
-           }) do
-      {:ok, versioned_result("contactPlan", plan.contact_plan_id, plan_version)}
-    else
-      false -> {:error, :no_opportunities_selected}
-      error -> error
+    with {:ok, plan, version} <- RequirementDecisions.create_plan(scope, mission_id, params) do
+      result = versioned_result("contactPlan", plan.contact_plan_id, version)
+
+      {:ok,
+       Map.merge(result, %{
+         "actorId" => scope.user.user_id,
+         "requirementEvidence" => params["requirement_evidence"],
+         "planningRunId" => params["planning_run_id"],
+         "navigation" => %{
+           "href" =>
+             "/missions/#{URI.encode(mission_id, &URI.char_unreserved?/1)}/ops/plans/#{URI.encode(plan.contact_plan_id, &URI.char_unreserved?/1)}"
+         }
+       })}
     end
   end
 
@@ -302,16 +305,22 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
   end
 
   defp dispatch(scope, mission_id, "contact_schedule", "search", params) do
-    with {:ok, form} <- form_params(params, "contact_search", @search_fields),
+    with {:ok, params} <- exact_map(params, ["contact_search", "route_evidence"]),
+         {:ok, form} <- exact_string_map(params["contact_search"], @search_fields),
+         true <- is_map(params["route_evidence"]),
          {:ok, window} <- search_window(form),
          {:ok, found} <-
            ProviderScheduling.search_opportunities(
              scope.organization_id,
              mission_id,
              form["route_key"],
-             window
+             window,
+             expected_route: params["route_evidence"]
            ) do
-      {:ok, search_result(found, scope.organization_id, mission_id, form)}
+      search_result(found, scope.organization_id, mission_id, form)
+    else
+      false -> {:error, :malformed_input}
+      {:error, _} = error -> error
     end
   end
 
@@ -319,6 +328,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
     with {:ok, %{"token" => token}} <- exact_ids(params, ["token"]),
          {:ok, payload} <- verify_opportunity(token),
          :ok <- token_scope(payload, scope.organization_id, mission_id),
+         :ok <- opportunity_current(payload),
          {:ok, route} <- token_route(payload, scope.organization_id, mission_id),
          :ok <- validate_token_route(route, payload["route"]),
          {:ok, attrs} <- reservation_attrs(payload, route),
@@ -329,42 +339,25 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
   end
 
   defp dispatch(scope, mission_id, "contact_schedule", "cancel", params) do
-    with {:ok, %{"reservation-id" => reservation_id}} <- exact_ids(params, ["reservation-id"]),
-         {:ok, booking} <-
-           ProviderBooking.cancel(scope.organization_id, mission_id, reservation_id) do
-      {:ok, booking_result(booking)}
-    end
+    with {:ok, booking} <- ScheduleCancellations.execute(scope, mission_id, params),
+         do: {:ok, booking_result(booking)}
   end
 
   defp dispatch(scope, mission_id, "contact_plan_show", "submit-plan", params) do
-    with {:ok, plan_id, reason} <- plan_reason_params(params, "submission"),
-         {:ok, plan, version} <-
-           ManagementContacts.fetch_plan(scope.organization_id, mission_id, plan_id),
-         {:ok, updated} <-
-           ManagementContacts.submit_plan(
-             scope,
-             mission_id,
-             plan_id,
-             plan.current_version,
-             reason
-           ) do
-      {:ok, versioned_result("contactPlan", updated.contact_plan_id, version)}
+    with {:ok, plan_id, version} <- PlanDecisions.submit(scope, mission_id, params) do
+      {:ok, versioned_result("contactPlan", plan_id, version)}
     end
   end
 
   defp dispatch(scope, mission_id, "contact_plan_show", action, params)
        when action in ["approve-plan", "reject-plan"] do
-    with {:ok, plan_id, reason} <- plan_reason_params(params, "decision"),
-         {:ok, plan, version} <-
-           ManagementContacts.fetch_plan(scope.organization_id, mission_id, plan_id),
-         {:ok, updated} <- decide_plan(action, scope, mission_id, plan, version, reason) do
-      {:ok, versioned_result("contactPlan", updated.contact_plan_id, version)}
+    with {:ok, plan_id, version} <- PlanDecisions.decide(scope, mission_id, action, params) do
+      {:ok, versioned_result("contactPlan", plan_id, version)}
     end
   end
 
   defp dispatch(scope, mission_id, "contact_plan_show", "execute-plan", params) do
-    with {:ok, %{"contact_plan_id" => plan_id}} <- exact_ids(params, ["contact_plan_id"]),
-         {:ok, execution} <- ControlContacts.execute_approved_plan(scope, mission_id, plan_id) do
+    with {:ok, execution} <- PlanDecisions.execute(scope, mission_id, params) do
       {:ok, execution_result(execution)}
     end
   end
@@ -375,20 +368,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
               "reject-provider-change",
               "acknowledge-provider-change"
             ] do
-    with {:ok, reservation_id, proposal_hash, reason} <- change_params(params, action),
-         {:ok, reservation} <-
-           ProviderReservations.fetch(scope.organization_id, mission_id, reservation_id),
-         {:ok, change} <-
-           current_change(scope.organization_id, reservation.provider_reservation_id),
-         {:ok, decision} <-
-           apply_change_decision(action, scope, change, proposal_hash, reason) do
-      {:ok,
-       %{
-         "providerReservationChangeId" => decision.provider_reservation_change_id,
-         "providerReservationId" => reservation.provider_reservation_id,
-         "lifecycleState" => Atom.to_string(decision.lifecycle_state)
-       }}
-    end
+    ProviderChangeDecisions.decide(scope, mission_id, action, params)
   end
 
   defp dispatch(_scope, _mission_id, _surface_id, _action_id, _params),
@@ -439,123 +419,10 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
     end
   end
 
-  defp exact_selection_params(params) do
-    with {:ok, params} <- exact_map(params, ["contact_requirement_id", "selected_snapshot_ids"]),
-         true <-
-           is_binary(params["contact_requirement_id"]) and params["contact_requirement_id"] != "",
-         ids when is_list(ids) <- params["selected_snapshot_ids"],
-         true <- ids != [] and Enum.all?(ids, &(is_binary(&1) and &1 != "")),
-         true <- length(ids) == length(Enum.uniq(ids)) do
-      {:ok, params}
-    else
-      _invalid -> {:error, :malformed_input}
-    end
-  end
+  defp requirement_attrs(params),
+    do: RequirementDeclarationInput.parse(params)
 
-  defp requirement_attrs(params) do
-    with {:ok, earliest_start} <- parse_datetime(params["earliest_start"]),
-         {:ok, latest_end} <- parse_datetime(params["latest_end"]),
-         {:ok, minimum_duration} <- optional_integer(params["minimum_duration_seconds"]),
-         {:ok, preferred_duration} <- optional_integer(params["preferred_duration_seconds"]),
-         {:ok, minimum_volume} <- optional_integer(params["minimum_data_volume_bytes"]),
-         {:ok, contact_count} <- positive_integer(params["contact_count"], 1),
-         {:ok, separation} <- nonnegative_integer(params["minimum_separation_seconds"], 0) do
-      {:ok,
-       %{
-         spacecraft_id: params["spacecraft_id"],
-         service_direction: :downlink,
-         contact_intent: params["contact_intent"],
-         earliest_start: earliest_start,
-         latest_end: latest_end,
-         success_measure: params["success_measure"],
-         minimum_duration_seconds: minimum_duration,
-         preferred_duration_seconds: preferred_duration,
-         minimum_data_volume_bytes: minimum_volume,
-         contact_count: contact_count,
-         minimum_separation_seconds: separation,
-         priority: params["priority"],
-         provider_constraints_document: %{
-           "allowed" => refs(params["allowed_providers"]),
-           "excluded" => refs(params["excluded_providers"])
-         },
-         station_constraints_document: %{
-           "allowed" => refs(params["allowed_stations"]),
-           "excluded" => refs(params["excluded_stations"])
-         },
-         policy_constraints_document: %{},
-         approval_policy_document: %{"mode" => "manual"},
-         rationale: params["rationale"],
-         metadata: %{"source" => "ops_contact_requirement_form"}
-       }}
-    end
-  end
-
-  defp template_attrs(params) do
-    with {:ok, anchor} <- parse_datetime(params["anchor_at"]),
-         {:ok, offset} <- integer(params["window_offset_minutes"]),
-         {:ok, duration} <- positive_integer(params["window_duration_minutes"]),
-         {:ok, minimum} <- optional_positive_integer(params["minimum_duration_seconds"]),
-         {:ok, preferred} <- optional_positive_integer(params["preferred_duration_seconds"]),
-         {:ok, volume} <- optional_positive_integer(params["minimum_data_volume_bytes"]),
-         {:ok, count} <- positive_integer(params["contact_count"]),
-         {:ok, separation} <- nonnegative_integer(params["minimum_separation_seconds"]),
-         {:ok, maximum} <- positive_integer(params["maximum_occurrences_per_run"]),
-         {:ok, lookback} <- nonnegative_integer(params["maximum_lookback_hours"]),
-         {:ok, schedule} <- schedule_document(params, anchor, offset, duration) do
-      {:ok,
-       %{
-         spacecraft_id: params["spacecraft_id"],
-         schedule_document: schedule,
-         requirement_document: %{
-           "service_direction" => "downlink",
-           "contact_intent" => params["contact_intent"],
-           "success_measure" => params["success_measure"],
-           "minimum_duration_seconds" => minimum,
-           "preferred_duration_seconds" => preferred,
-           "minimum_data_volume_bytes" => volume,
-           "contact_count" => count,
-           "minimum_separation_seconds" => separation,
-           "priority" => params["priority"],
-           "provider_constraints_document" => %{"allowed" => [], "excluded" => []},
-           "station_constraints_document" => %{"allowed" => [], "excluded" => []},
-           "policy_constraints_document" => %{},
-           "approval_policy_document" => %{"mode" => params["approval_mode"]},
-           "rationale" => params["rationale"],
-           "metadata" => %{}
-         },
-         catch_up_policy_document: %{
-           "maximum_occurrences_per_run" => maximum,
-           "maximum_lookback_seconds" => lookback * 3_600
-         }
-       }}
-    end
-  end
-
-  defp schedule_document(params, anchor, offset, duration) do
-    base = %{
-      "type" => params["schedule_type"],
-      "anchor_at" => DateTime.to_iso8601(anchor),
-      "ends_at" => nil,
-      "window_offset_seconds" => offset * 60,
-      "window_duration_seconds" => duration * 60
-    }
-
-    case params["schedule_type"] do
-      "fixed_interval" ->
-        with {:ok, interval} <- positive_integer(params["interval_minutes"]) do
-          {:ok, Map.put(base, "interval_seconds", interval * 60)}
-        end
-
-      "daily" ->
-        case Time.from_iso8601(params["time_utc"]) do
-          {:ok, time} -> {:ok, Map.put(base, "time_utc", Time.to_iso8601(time))}
-          _invalid -> {:error, :invalid_daily_time}
-        end
-
-      _invalid ->
-        {:error, :invalid_schedule_type}
-    end
-  end
+  defp template_attrs(params), do: RequirementTemplateInput.parse(params)
 
   defp parse_datetime(value) when is_binary(value) do
     case NaiveDateTime.from_iso8601(value) do
@@ -565,86 +432,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
   end
 
   defp parse_datetime(_value), do: {:error, :invalid_datetime}
-
-  defp integer(value) do
-    case Integer.parse(value) do
-      {integer, ""} -> {:ok, integer}
-      _invalid -> {:error, :invalid_integer}
-    end
-  end
-
-  defp optional_integer(value) when value in [""], do: {:ok, nil}
-  defp optional_integer(value), do: positive_integer(value, nil)
-
-  defp optional_positive_integer(""), do: {:ok, nil}
-  defp optional_positive_integer(value), do: positive_integer(value)
-
-  defp positive_integer(value, default) do
-    case Integer.parse(value) do
-      {integer, ""} when integer > 0 -> {:ok, integer}
-      {_, ""} -> {:error, :invalid_positive_integer}
-      _invalid when value == "" -> {:ok, default}
-      _invalid -> {:error, :invalid_positive_integer}
-    end
-  end
-
-  defp positive_integer(value) do
-    with {integer, ""} <- Integer.parse(value), true <- integer > 0 do
-      {:ok, integer}
-    else
-      _invalid -> {:error, :invalid_positive_integer}
-    end
-  end
-
-  defp nonnegative_integer(value, default) do
-    case Integer.parse(value) do
-      {integer, ""} when integer >= 0 -> {:ok, integer}
-      _invalid when value == "" -> {:ok, default}
-      _invalid -> {:error, :invalid_nonnegative_integer}
-    end
-  end
-
-  defp nonnegative_integer(value) do
-    with {integer, ""} <- Integer.parse(value), true <- integer >= 0 do
-      {:ok, integer}
-    else
-      _invalid -> {:error, :invalid_nonnegative_integer}
-    end
-  end
-
-  defp refs(value) do
-    value
-    |> String.split(",", trim: true)
-    |> Enum.map(&String.trim/1)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.uniq()
-  end
-
-  defp latest_run_id(organization_id, mission_id, requirement_id) do
-    case Planner.list_runs(organization_id, mission_id, requirement_id) do
-      [%{contact_planning_run_id: run_id} | _] -> {:ok, run_id}
-      [] -> {:error, :contact_planning_run_not_found}
-    end
-  end
-
-  defp selected_snapshots_match(organization_id, mission_id, run_id, requirement_id, ids) do
-    if Enum.all?(ids, &snapshot_matches?(organization_id, mission_id, run_id, requirement_id, &1)) do
-      :ok
-    else
-      {:error, :opportunity_scope_mismatch}
-    end
-  end
-
-  defp snapshot_matches?(organization_id, mission_id, run_id, requirement_id, id) do
-    case ContactPlans.fetch_opportunity_snapshot(organization_id, mission_id, id) do
-      {:ok, snapshot} ->
-        snapshot.contact_planning_run_id == run_id and
-          snapshot.contact_requirement_id == requirement_id
-
-      _not_found ->
-        false
-    end
-  end
 
   defp apply_template_transition("pause-template", scope, mission_id, id, version),
     do: ContactRequirementTemplates.pause(scope, mission_id, id, version, "Paused by Ops Console")
@@ -686,7 +473,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
   end
 
   defp verify_opportunity(token) do
-    case OpportunityCapability.verify(token) do
+    case OpportunityCapability.verify(token, max_age: @opportunity_max_age_seconds) do
       {:ok, payload} when is_map(payload) ->
         case JSONBoundary.validate(payload) do
           :ok -> {:ok, payload}
@@ -724,23 +511,19 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
     if token_route(route) == signed_route, do: :ok, else: {:error, :route_changed}
   end
 
-  defp token_route(route) do
-    %{
-      "provider_id" => route.provider_id,
-      "provider_version" => route.provider_version,
-      "transport_id" => route.transport_id,
-      "transport_version" => route.transport_version,
-      "provider_profile_id" => route.provider_profile_id,
-      "provider_profile_version" => route.provider_profile_version,
-      "routing_rule_id" => route.routing_rule_id,
-      "path_template_id" => route.path_template_id,
-      "path_template_version" => route.path_template_version,
-      "source_endpoint_id" => route.source_endpoint_id,
-      "provider_spacecraft_ref" => route.provider_spacecraft_ref,
-      "service_profile_ref" => route.service_profile_ref,
-      "delivery_profile_ref" => route.delivery_profile_ref
-    }
+  defp token_route(route), do: ProviderScheduling.route_evidence(route)
+
+  defp opportunity_current(%{
+         "opportunity" => %{"expires_at" => expires, "availability" => availability}
+       }) do
+    with true <- is_binary(expires) and availability in ["available", "limited"],
+         {:ok, deadline, _} <- DateTime.from_iso8601(expires),
+         true <- DateTime.after?(deadline, DateTime.utc_now()),
+         do: :ok,
+         else: (_ -> {:error, :opportunity_expired_or_unavailable})
   end
+
+  defp opportunity_current(_), do: {:error, :opportunity_expired_or_unavailable}
 
   defp reservation_attrs(payload, route) do
     with %{"id" => opportunity_id} = opportunity when is_binary(opportunity_id) <-
@@ -785,100 +568,87 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
     end
   end
 
-  defp search_result(
-         %{route: route, opportunities: opportunities},
-         organization_id,
-         mission_id,
-         form
-       ) do
-    route_token = token_route(route)
-
-    rendered_opportunities =
-      Enum.map(opportunities, fn opportunity ->
-        booking_token =
-          OpportunityCapability.sign(
-            opportunity_payload(opportunity, route, organization_id, mission_id)
-          )
-
-        presentation = presentation_opportunity(opportunity, route, booking_token)
-
-        provider_result =
-          opportunity
-          |> Map.take([
-            "id",
-            "ground_station_ref",
-            "antenna_or_service_pool_ref",
-            "starts_at",
-            "ends_at",
-            "extensions"
-          ])
-          |> Map.put("provider_display_name", route.provider_display_name)
-          |> Map.put("service_display_name", route.service_display_name)
-          |> Map.put("delivery_display_name", route.delivery_display_name)
-          |> Map.put("delivery_operator_summary", route.delivery_operator_summary)
-          |> Map.put("booking_token", booking_token)
-          |> Map.put("route_key", route.route_key)
-          |> Map.put("provider_id", route.provider_id)
-          |> Map.put("__dom_id", "opportunity-#{opportunity["id"]}")
-
-        {provider_result, presentation}
-      end)
-
+  defp search_result(%{route: route, opportunities: opportunities} = found, org, mission, form) do
     result = %{
-      "route" => route_token,
-      "opportunities" => Enum.map(rendered_opportunities, &elem(&1, 0))
+      "contract_version" => 1,
+      "context" => %{"organization_id" => org, "mission_id" => mission},
+      "search" => form,
+      "route" => ProviderScheduling.route_summary(route),
+      "truncated" => Map.get(found, :truncated, false),
+      "opportunities" =>
+        Enum.map(opportunities, fn o ->
+          %{
+            "id" => o["id"],
+            "starts_at" => o["starts_at"],
+            "ends_at" => o["ends_at"],
+            "expires_at" => capability_expiry(o),
+            "availability" => o["availability"],
+            "synthetic" => o["synthetic"],
+            "station" => o["ground_station_ref"],
+            "antenna" => o["antenna_or_service_pool_ref"],
+            "cost" => cost(get_in(o, ["extensions", "cost"])),
+            "token" => OpportunityCapability.sign(opportunity_payload(o, route, org, mission))
+          }
+        end)
     }
 
-    Map.put(result, "props", %{
-      "search" => %{"values" => form},
-      "opportunities" => Enum.map(rendered_opportunities, &elem(&1, 1))
-    })
+    bounded_search_result(result)
   end
 
-  defp opportunity_payload(opportunity, route, organization_id, mission_id) do
-    %{
-      "organization_id" => organization_id,
-      "mission_id" => mission_id,
+  defp bounded_search_result(result) do
+    base = Map.put(result, "opportunities", [])
+
+    bounded =
+      Enum.reduce_while(result["opportunities"], base, fn opportunity, acc ->
+        candidate = Map.update!(acc, "opportunities", &(&1 ++ [opportunity]))
+
+        if bounded_search_output?(candidate),
+          do: {:cont, candidate},
+          else: {:halt, Map.put(acc, "truncated", true)}
+      end)
+
+    case JSONBoundary.safe_trusted_output(bounded) do
+      {:ok, safe} -> {:ok, safe}
+      {:error, _} -> {:error, :opportunity_response_unavailable}
+    end
+  end
+
+  defp bounded_search_output?(candidate) do
+    case JSONBoundary.safe_trusted_output(candidate) do
+      {:ok, safe} -> byte_size(Jason.encode!(safe)) <= 60_000
+      {:error, _} -> false
+    end
+  end
+
+  defp capability_expiry(opportunity) do
+    {:ok, provider_expiry, _} = DateTime.from_iso8601(opportunity["expires_at"])
+
+    capability_expiry =
+      DateTime.utc_now()
+      |> DateTime.truncate(:second)
+      |> DateTime.add(@opportunity_max_age_seconds)
+
+    if DateTime.before?(provider_expiry, capability_expiry),
+      do: DateTime.to_iso8601(provider_expiry),
+      else: DateTime.to_iso8601(capability_expiry)
+  end
+
+  defp cost(v) when is_number(v), do: v
+  defp cost(_), do: nil
+
+  defp opportunity_payload(opportunity, route, org, mission),
+    do: %{
+      "organization_id" => org,
+      "mission_id" => mission,
       "spacecraft_id" => route.spacecraft_id,
       "route_key" => route.route_key,
       "route" => token_route(route),
       "opportunity" =>
-        Map.take(opportunity, [
-          "id",
-          "ground_station_ref",
-          "antenna_or_service_pool_ref",
-          "starts_at",
-          "ends_at",
-          "extensions"
-        ])
+        Map.take(
+          opportunity,
+          ~w(id ground_station_ref antenna_or_service_pool_ref starts_at ends_at expires_at availability)
+        )
     }
-  end
-
-  defp presentation_opportunity(opportunity, route, booking_token) do
-    id = opportunity["id"]
-
-    %{
-      "__dom_id" => "opportunity-#{id}",
-      "id" => id,
-      "provider" => route.provider_display_name,
-      "window" => %{
-        "starts_at" => opportunity["starts_at"],
-        "ends_at" => opportunity["ends_at"]
-      },
-      "service_summary" => route.service_display_name,
-      "delivery" => route.delivery_display_name,
-      "antenna" => opportunity["antenna_or_service_pool_ref"],
-      "cost" => get_in(opportunity, ["extensions", "cost"]),
-      "reserve_action" => %{
-        "id" => "reserve-#{id}",
-        "label" => "Reserve",
-        "busy_label" => "Reserving",
-        "busy" => false,
-        "disabled" => false,
-        "payload" => %{"token" => booking_token}
-      }
-    }
-  end
 
   defp stable_booking_suffix(payload) do
     [
@@ -893,48 +663,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
     |> binary_part(0, 24)
   end
 
-  defp plan_reason_params(params, wrapper) do
-    with {:ok, params} <- exact_map(params, ["contact_plan_id", wrapper]),
-         {:ok, wrapper} <- wrapped_map(params, wrapper),
-         {:ok, form} <- exact_string_map(wrapper, ["reason"]),
-         plan_id when is_binary(plan_id) and plan_id != "" <- params["contact_plan_id"] do
-      {:ok, plan_id, form["reason"]}
-    else
-      _invalid -> {:error, :malformed_input}
-    end
-  end
-
-  defp decide_plan("approve-plan", scope, mission_id, plan, version, reason) do
-    ControlContacts.approve_and_accept_plan(
-      scope,
-      mission_id,
-      plan.contact_plan_id,
-      plan.current_version,
-      version.content_sha256,
-      reason
-    )
-    |> normalize_approved_plan()
-  end
-
-  defp decide_plan("reject-plan", scope, mission_id, plan, version, reason) do
-    ManagementContacts.reject_plan(
-      scope,
-      mission_id,
-      plan.contact_plan_id,
-      plan.current_version,
-      version.content_sha256,
-      reason
-    )
-    |> normalize_plan()
-  end
-
-  defp normalize_approved_plan({:ok, approved}), do: {:ok, approved.plan}
-  defp normalize_approved_plan(error), do: error
-
-  defp normalize_plan({:ok, plan, _version, _approval}), do: {:ok, plan}
-  defp normalize_plan({:ok, plan}), do: {:ok, plan}
-  defp normalize_plan(error), do: error
-
   defp execution_result(%{plan: plan, items: items}) do
     %{
       "contactPlanId" => plan.contact_plan_id,
@@ -946,54 +674,11 @@ defmodule Cadence.Applications.OpsConsole.Actions.ContactPlanning do
   defp booking_result(%{provider_reservation: reservation, scheduled_contact: scheduled}) do
     %{
       "providerReservationId" => reservation.provider_reservation_id,
+      "providerRevision" => reservation.provider_revision,
       "lifecycleState" => Atom.to_string(reservation.lifecycle_state),
       "scheduledContactId" => if(scheduled, do: scheduled.scheduled_contact_id, else: nil)
     }
   end
-
-  defp current_change(organization_id, reservation_id) do
-    case ProviderReservationChanges.list_for_reservation(organization_id, reservation_id)
-         |> Enum.reverse()
-         |> Enum.find(&(&1.lifecycle_state in [:pending_approval, :acknowledgment_required])) do
-      nil -> {:error, :provider_reservation_change_not_found}
-      change -> {:ok, change}
-    end
-  end
-
-  defp change_params(params, action) do
-    wrapper =
-      case action do
-        "approve-provider-change" -> "approval"
-        "reject-provider-change" -> "rejection"
-        "acknowledge-provider-change" -> "acknowledgment"
-      end
-
-    with {:ok, form} <- wrapped_map(params, wrapper),
-         {:ok, form} <- exact_string_map(form, ["proposal_hash", "reason"]),
-         {:ok, _params} <- exact_map(params, ["provider_reservation_id", wrapper]),
-         reservation_id when is_binary(reservation_id) and reservation_id != "" <-
-           params["provider_reservation_id"] do
-      {:ok, reservation_id, form["proposal_hash"], form["reason"]}
-    else
-      _invalid -> {:error, :malformed_input}
-    end
-  end
-
-  defp apply_change_decision("approve-provider-change", scope, change, hash, reason),
-    do:
-      ProviderChangeApprovals.approve(scope, change.provider_reservation_change_id, hash, reason)
-
-  defp apply_change_decision("reject-provider-change", scope, change, hash, reason),
-    do: ProviderChangeApprovals.reject(scope, change.provider_reservation_change_id, hash, reason)
-
-  defp apply_change_decision("acknowledge-provider-change", scope, change, hash, reason),
-    do:
-      ProviderChangeApprovals.acknowledge(
-        scope,
-        change.provider_reservation_change_id,
-        hash,
-        reason
-      )
 
   defp versioned_result(prefix, id, version) do
     %{

@@ -6,7 +6,8 @@ defmodule Cadence.Commanding.CommandReleaseAttempt do
 
   alias Cadence.Ids
 
-  @type lifecycle_state :: :release_pending | :released | :release_failed | :canceled
+  @type lifecycle_state ::
+          :release_pending | :released | :release_failed | :release_uncertain | :canceled
   @type verification_state :: :not_required | :pending | :satisfied | :failed | :timed_out | nil
 
   @type t :: %__MODULE__{
@@ -124,6 +125,8 @@ defmodule Cadence.Commanding.CommandReleaseAttempt do
   defp normalize_lifecycle_state("released"), do: :released
   defp normalize_lifecycle_state(:release_failed), do: :release_failed
   defp normalize_lifecycle_state("release_failed"), do: :release_failed
+  defp normalize_lifecycle_state(:release_uncertain), do: :release_uncertain
+  defp normalize_lifecycle_state("release_uncertain"), do: :release_uncertain
   defp normalize_lifecycle_state(:canceled), do: :canceled
   defp normalize_lifecycle_state("canceled"), do: :canceled
   defp normalize_lifecycle_state(_other), do: :release_pending

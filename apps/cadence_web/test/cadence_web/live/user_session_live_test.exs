@@ -9,9 +9,10 @@ defmodule CadenceWeb.UserSessionLiveTest do
     assert vue.component == "UserSession"
     assert vue.ssr == false
     assert vue.handlers == %{}
-    assert Map.keys(vue.props) == ["csrf-token"]
-    assert is_binary(vue.props["csrf-token"])
-    assert vue.props["csrf-token"] != ""
+    assert Map.keys(vue.props) == ["page"]
+    assert vue.props["page"]["version"] == 1
+    assert is_binary(vue.props["page"]["csrf_token"])
+    assert vue.props["page"]["csrf_token"] != ""
     assert Test.get_vue(view, id: "application-shell").props["variant"] == "auth"
     assert has_element?(view, "#user-session-component[data-name=UserSession]")
   end

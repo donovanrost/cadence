@@ -15,14 +15,13 @@ defmodule Cadence.ContactPlanning.OpportunityCapabilityTest do
   test "a capability survives the signing process exiting" do
     parent = self()
 
-    signer =
-      spawn(fn ->
+    {signer, monitor} =
+      spawn_monitor(fn ->
         send(parent, {:capability, OpportunityCapability.sign(@payload)})
       end)
 
-    monitor = Process.monitor(signer)
-    assert_receive {:capability, token}
-    assert_receive {:DOWN, ^monitor, :process, ^signer, :normal}
+    assert_receive {:capability, token}, 5_000
+    assert_receive {:DOWN, ^monitor, :process, ^signer, :normal}, 5_000
     assert {:ok, verified} = OpportunityCapability.verify(token)
     assert verified["mission_id"] == @payload["mission_id"]
   end

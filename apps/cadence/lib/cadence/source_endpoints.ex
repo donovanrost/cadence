@@ -122,6 +122,71 @@ defmodule Cadence.SourceEndpoints do
     |> Enum.map(&SourceEndpointRow.to_domain/1)
   end
 
+  @doc "Curated command target page; no endpoint metadata is returned."
+  def command_targets_page(organization_id, mission_id, after_id, search) do
+    entries =
+      SourceEndpointRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.source_endpoint_id > ^after_id
+      )
+      |> apply_search(search)
+      |> order_by([row], asc: row.source_endpoint_id)
+      |> limit(26)
+      |> select([row], %{
+        id: row.source_endpoint_id,
+        name: row.display_name,
+        spacecraft_id: row.spacecraft_id,
+        source_ref: row.source_ref,
+        scid: row.scid
+      })
+      |> Repo.all()
+
+    page = Enum.take(entries, 25)
+    %{entries: page, next_after: if(length(entries) > 25, do: List.last(page).id, else: nil)}
+  end
+
+  @doc "Locks an exact bounded target through command preview or creation."
+  def fetch_command_authoring_target(organization_id, mission_id, endpoint_id) do
+    if Repo.in_transaction?() do
+      SourceEndpointRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.source_endpoint_id == ^endpoint_id
+      )
+      |> where([row], fragment("octet_length(?::text)", row.metadata) <= 65_536)
+      |> lock("FOR SHARE")
+      |> Repo.one()
+      |> case do
+        nil -> {:error, :command_target_unavailable}
+        row -> {:ok, SourceEndpointRow.to_domain(row)}
+      end
+    else
+      {:error, :command_target_transaction_required}
+    end
+  end
+
+  @doc "Returns only spacecraft identities for explicitly referenced, scoped endpoints."
+  def spacecraft_for_source_endpoints(organization_id, mission_id, ids) when is_list(ids) do
+    ids
+    |> Enum.filter(&is_binary/1)
+    |> Enum.uniq()
+    |> Enum.chunk_every(500)
+    |> Enum.flat_map(fn chunk ->
+      SourceEndpointRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.source_endpoint_id in ^chunk
+      )
+      |> select([row], {row.source_endpoint_id, row.spacecraft_id})
+      |> Repo.all()
+    end)
+    |> Map.new()
+  end
+
   @doc "Returns one bounded page of mission source endpoints."
   @spec list_source_endpoints_page(binary(), binary(), keyword()) :: Listing.Page.t()
   def list_source_endpoints_page(organization_id, mission_id, opts \\ [])
@@ -134,6 +199,8 @@ defmodule Cadence.SourceEndpoints do
         [row],
         row.organization_id == ^organization_id and row.mission_id == ^mission_id
       )
+      |> available_to_spacecraft(Keyword.get(opts, :available_to_spacecraft))
+      |> maybe_filter_spacecraft(Keyword.get(opts, :spacecraft_id))
       |> apply_search(Keyword.get(opts, :search))
 
     items =
@@ -150,6 +217,12 @@ defmodule Cadence.SourceEndpoints do
       page: page,
       page_size: page_size
     }
+  end
+
+  defp available_to_spacecraft(query, nil), do: query
+
+  defp available_to_spacecraft(query, spacecraft_id) when is_binary(spacecraft_id) do
+    where(query, [row], is_nil(row.spacecraft_id) or row.spacecraft_id == ^spacecraft_id)
   end
 
   defp apply_search(query, nil), do: query

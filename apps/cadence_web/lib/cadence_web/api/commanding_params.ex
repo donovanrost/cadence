@@ -24,6 +24,7 @@ defmodule CadenceWeb.API.CommandingParams do
     :release_pending,
     :released,
     :release_failed,
+    :release_uncertain,
     :canceled
   ]
   @command_verifier_instance_lifecycle_states [

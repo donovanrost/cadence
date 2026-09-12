@@ -29,6 +29,20 @@ defmodule Cadence.Management.Activations do
     :identity_policy
   ]
 
+  @doc "Authorizes the host review inbox and decisions without frontend installation authority."
+  def authorize_review(%Scope{mission_id: scoped} = scope, mission_id)
+      when is_binary(mission_id) and (is_nil(scoped) or scoped == mission_id) do
+    with :ok <-
+           Policy.authorize(scope, :manage_missions, %{organization_id: scope.organization_id}) do
+      Policy.authorize(scope, :approve_activation, %{
+        organization_id: scope.organization_id,
+        mission_id: mission_id
+      })
+    end
+  end
+
+  def authorize_review(_scope, _mission_id), do: {:error, :invalid_activation_scope}
+
   @spec request(Scope.t(), binary(), binary(), pos_integer(), keyword()) ::
           {:ok, ActivationRequest.t()} | {:error, term()}
   def request(%Scope{} = current_scope, mission_id, binding_set_id, version, opts \\ [])

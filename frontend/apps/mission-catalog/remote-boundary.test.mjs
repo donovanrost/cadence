@@ -33,7 +33,7 @@ async function filesUnder(directory) {
   return files;
 }
 
-test("mission and catalog pages are self-contained first-party remote code", async () => {
+test("mission remote entries retain public compatibility adapters for core Catalog pages", async () => {
   for (const page of requiredPages) {
     await readFile(new URL(page, root), "utf8");
   }
@@ -47,4 +47,19 @@ test("mission and catalog pages are self-contained first-party remote code", asy
   assert.doesNotMatch(source, new RegExp(legacyVueImport));
   assert.doesNotMatch(source, new RegExp(`from ["']${phoenixUploadPackage}["']`));
   assert.match(source, /@cadence\/ui/);
+  for (const page of requiredPages.filter((page) => page.startsWith("Catalog"))) {
+    const adapter = await readFile(new URL(page, root), "utf8");
+    assert.match(adapter, /from "@cadence\/plugin-host\/catalog"/);
+    assert.doesNotMatch(adapter, /<template>|defineProps|defineEmits/);
+  }
+  for (const page of [
+    "MissionList.vue",
+    "MissionTable.vue",
+    "MissionNew.vue",
+    "MissionOverview.vue",
+  ]) {
+    const adapter = await readFile(new URL(page, root), "utf8");
+    assert.match(adapter, /from "@cadence\/plugin-host\/missions"/);
+    assert.doesNotMatch(adapter, /<template>|defineProps|defineEmits/);
+  }
 });

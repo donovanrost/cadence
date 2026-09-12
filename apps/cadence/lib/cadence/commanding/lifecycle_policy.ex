@@ -3,7 +3,6 @@ defmodule Cadence.Commanding.LifecyclePolicy do
   Applies command-stage, approval, request, and queue-entry lifecycle guards.
   """
 
-  alias Cadence.Commanding.CommandStage
   alias Cadence.Persistence.JsonDocument
 
   @spec ensure_stage_editable(map()) :: :ok | {:error, term()}
@@ -143,16 +142,8 @@ defmodule Cadence.Commanding.LifecyclePolicy do
     :ok
   end
 
-  defp ensure_stage_editable(lifecycle_state, command_stage_id) when is_binary(lifecycle_state) do
-    normalized_lifecycle_state =
-      CommandStage.new(%{
-        mission_id: "normalize",
-        stage_name: "normalize",
-        lifecycle_state: lifecycle_state
-      }).lifecycle_state
-
-    ensure_stage_editable(normalized_lifecycle_state, command_stage_id)
-  end
+  defp ensure_stage_editable(lifecycle_state, _command_stage_id)
+       when lifecycle_state in ["draft", "in_review", "ready_to_submit"], do: :ok
 
   defp ensure_stage_editable(lifecycle_state, command_stage_id) do
     {:error, {:command_stage_not_editable, command_stage_id, lifecycle_state}}

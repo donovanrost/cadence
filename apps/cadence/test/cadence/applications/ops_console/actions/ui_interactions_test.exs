@@ -37,7 +37,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.UiInteractionsTest do
               "surfaceId" => "timeline",
               "missionId" => "mission-1",
               "filters" => %{"category" => "operations"},
-              "events" => []
+              "events" => [],
+              "props" => %{"mission_id" => "mission-1", "query" => %{"category" => "operations"}}
             }} =
              UiInteractions.execute(
                scope(),

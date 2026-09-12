@@ -295,6 +295,8 @@ const routeSurfaces = [
 ] as const;
 
 export const routeQueryContracts = {
+  dashboard_directory: { queryParams: ["query", "lifecycle", "tag", "sort", "page"] },
+  dashboard_new: { queryParams: ["mode", "source_dashboard_id"] },
   dashboard_show: {
     subjectParam: "dashboard_id",
     queryParams: [
@@ -334,6 +336,10 @@ export const routeQueryContracts = {
   dashboard_activity: {
     subjectParam: "dashboard_id",
     queryParams: ["dashboard_id", "version", "selected_publish_issue"],
+  },
+  dashboard_playlist_present: {
+    subjectParam: "playlist_id",
+    queryParams: ["playlist_id", "index"],
   },
   data_source_registration: { subjectParam: null, queryParams: [] },
   data_source_settings: { subjectParam: "data_source_id", queryParams: ["data_source_id"] },

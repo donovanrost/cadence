@@ -11,18 +11,26 @@ defmodule CadenceWeb.MissionNewLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "authenticated organization members mount the mission new surface" do
+  test "authenticated organization members mount the core mission creation page" do
     {conn, organization} = signed_in_org()
 
     {:ok, view, _html} = live(conn, ~p"/missions/new")
 
-    HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "mission_catalog",
-      "surface_id" => "mission_new",
-      "host_scope" => "organization",
-      "organization_id" => organization.organization_id,
-      "query_params" => %{}
-    })
+    snapshot =
+      HostTransportTestSupport.assert_context(view, %{
+        "application_key" => nil,
+        "surface_id" => nil,
+        "kind" => "mission",
+        "mission_page" => "mission_new",
+        "host_scope" => "organization",
+        "organization_id" => organization.organization_id,
+        "query_params" => %{}
+      })
+
+    assert %{"page" => "mission_new", "version" => 1, "status" => "ready"} =
+             snapshot["mission_page"]
+
+    assert is_binary(snapshot["mission_page"]["creation_token"])
   end
 
   test "unauthenticated requests redirect to sign in", %{conn: conn} do

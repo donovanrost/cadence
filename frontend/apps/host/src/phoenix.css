@@ -1,5 +1,6 @@
 @import "../../../packages/ui/src/styles.css";
 @source "../..";
+@source "../../../modules";
 @source "../../../../apps/cadence_web/lib/cadence_web";
 @source "../../../../apps/cadence_web/deps/live_toast/lib";
 
@@ -11,6 +12,4 @@
   display: contents;
 }
 
-@import "../../ops-console/src/vendor/uplot/uPlot.min.css";
-@import "../../ops-console/src/vendor/gridstack/gridstack.min.css";
-@import "../../../packages/ui/src/dashboard.css";
+@import "@cadence/dashboards-and-exploration/workspace.css";

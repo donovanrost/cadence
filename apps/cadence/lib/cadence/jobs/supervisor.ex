@@ -40,7 +40,7 @@ defmodule Cadence.Jobs.Supervisor do
 
     dispatcher_opts =
       opts
-      |> Keyword.take([:safety_poll_interval_ms, :max_concurrency])
+      |> Keyword.take([:safety_poll_interval_ms, :max_concurrency, :event_bus])
       |> Keyword.put(:name, Keyword.get(opts, :dispatcher_name, Dispatcher.default_name()))
       |> Keyword.put(:worker_supervisor, worker_supervisor)
       |> Keyword.put(:runner, Keyword.get(opts, :runner, Runner.default()))

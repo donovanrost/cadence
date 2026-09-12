@@ -725,6 +725,16 @@ defmodule Cadence.Dashboards.DataSourcesBindingHistoryTest do
              second_binding.current_event_id
            ]
 
+    assert [first_execution, second_execution] = result.resolved_bindings
+    assert first_execution.binding.current_event_id == first_binding.current_event_id
+    assert second_execution.binding.current_event_id == second_binding.current_event_id
+    assert first_execution.data_source.data_source_id == "mission-questdb-v1"
+    assert second_execution.data_source.data_source_id == "mission-questdb-v2"
+    assert first_execution.segment_from == from_time
+    assert DateTime.compare(first_execution.segment_to, boundary_time) == :eq
+    assert DateTime.compare(second_execution.segment_from, boundary_time) == :eq
+    assert second_execution.segment_to == to_time
+
     assert [%Frame{} = frame] = result.frames
     assert frame.meta.segmented_source_bindings?
     assert frame.meta.source_binding_segment_count == 2

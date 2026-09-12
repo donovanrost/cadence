@@ -5,7 +5,6 @@ defmodule Cadence.Commanding do
   release attempts.
   """
 
-  alias Ecto.Changeset
   alias Ecto.Multi
 
   alias Cadence.Commanding.{
@@ -626,27 +625,21 @@ defmodule Cadence.Commanding do
   end
 
   defp execute_release_attempt(release_context) when is_map(release_context) do
-    with {:ok, %CommandQueueEntryRow{} = claimed_queue_entry_row} <-
-           RequestQueueStore.claim_for_release(release_context.queue_entry_row),
-         claimed_release_context = %{release_context | queue_entry_row: claimed_queue_entry_row},
-         release_attempt_context =
-           release_attempt_context(claimed_release_context),
-         pending_attempt <-
-           ReleaseArtifacts.build_attempt(
-             release_attempt_context,
-             claimed_release_context.encoded_command,
-             claimed_release_context.released_by,
-             claimed_release_context.attempted_at,
-             claimed_release_context.metadata
-           ),
-         {:ok, %CommandReleaseAttempt{} = persisted_attempt} <-
-           persist_or_restore_release_attempt(
-             claimed_release_context.organization_id,
-             pending_attempt,
-             claimed_queue_entry_row,
-             claimed_release_context.process_namespace
-           ) do
-      dispatch_release_attempt(claimed_release_context, persisted_attempt)
+    pending_attempt =
+      ReleaseArtifacts.build_attempt(
+        release_attempt_context(release_context),
+        release_context.encoded_command,
+        release_context.released_by,
+        release_context.attempted_at,
+        release_context.metadata
+      )
+
+    with {:ok, %{queue: claimed, attempt: persisted}} <-
+           ReleaseStore.claim(
+             release_context.queue_entry_row,
+             release_context.request_row,
+             pending_attempt, attempted_at: release_context.attempted_at) do
+      dispatch_release_attempt(%{release_context | queue_entry_row: claimed}, persisted)
     end
   end
 
@@ -662,52 +655,52 @@ defmodule Cadence.Commanding do
     }
   end
 
-  defp persist_or_restore_release_attempt(
-         organization_id,
-         %CommandReleaseAttempt{} = pending_attempt,
-         %CommandQueueEntryRow{} = claimed_queue_entry_row,
-         %ProcessNamespace{} = process_namespace
-       ) do
-    case ReleaseStore.persist(organization_id, pending_attempt) do
-      {:ok, %CommandReleaseAttempt{} = persisted_attempt} ->
-        {:ok, persisted_attempt}
+  defp dispatch_release_attempt(release_context, %CommandReleaseAttempt{} = persisted_attempt)
+       when is_map(release_context) do
+    case transmit_release_attempt(release_context, persisted_attempt) do
+      {:ok, _transport_outputs} ->
+        case complete_release_success(
+               release_context.queue_entry_row,
+               release_context.request_row,
+               persisted_attempt,
+               release_context.request_basis.verifier_plans,
+               release_context.attempted_at,
+               release_context.process_namespace
+             ) do
+          {:ok, result} -> {:ok, result}
+          {:error, reason} -> retain_uncertain_release(release_context, persisted_attempt, reason)
+        end
 
       {:error, reason} ->
-        RequestQueueStore.restore_pending(claimed_queue_entry_row)
-
-        maybe_schedule_queue_lane_dispatch(
-          process_namespace,
-          claimed_queue_entry_row.organization_id,
-          claimed_queue_entry_row.mission_id,
-          claimed_queue_entry_row.queue_lane_key
-        )
-
-        {:error, reason}
+        retain_uncertain_release(release_context, persisted_attempt, reason)
     end
   end
 
-  defp dispatch_release_attempt(release_context, %CommandReleaseAttempt{} = persisted_attempt)
-       when is_map(release_context) do
-    case ControlCommanding.transmit_release_attempt(release_context, persisted_attempt) do
-      {:ok, _transport_outputs} ->
-        complete_release_success(
-          release_context.queue_entry_row,
-          release_context.request_row,
-          persisted_attempt,
-          release_context.request_basis.verifier_plans,
-          release_context.attempted_at,
-          release_context.process_namespace
-        )
+  defp transmit_release_attempt(context, attempt) do
+    ControlCommanding.transmit_release_attempt(context, attempt)
+  rescue
+    error -> {:error, {:transport_exception, Exception.message(error)}}
+  catch
+    kind, reason -> {:error, {kind, reason}}
+  end
 
-      {:error, reason} ->
-        complete_release_failure(
-          release_context.queue_entry_row,
-          persisted_attempt,
-          reason,
-          release_context.process_namespace
-        )
+  defp retain_uncertain_release(context, attempt, reason) do
+    case ReleaseStore.mark_uncertain(
+           context.queue_entry_row,
+           context.request_row,
+           attempt,
+           reason
+         ) do
+      {:ok, {:already_completed, queue, request, stored_attempt}} ->
+        completed_release_result(queue, request, stored_attempt)
 
-        {:error, reason}
+      {:ok, _} ->
+        {:error, {:command_release_outcome_uncertain, attempt.command_release_attempt_id, reason}}
+
+      {:error, persistence_reason} ->
+        {:error,
+         {:command_release_outcome_uncertain, attempt.command_release_attempt_id,
+          %{transmission: reason, persistence: persistence_reason}}}
     end
   end
 
@@ -740,42 +733,54 @@ defmodule Cadence.Commanding do
          %ProcessNamespace{} = process_namespace
        )
        when is_list(verifier_plans) do
-    with {:ok, %CommandReleaseAttemptRow{} = release_attempt_row} <-
-           ReleaseStore.fetch_row(
-             command_release_attempt.organization_id,
-             command_release_attempt.mission_id,
-             command_release_attempt.command_release_attempt_id
-           ) do
-      initial_verification_state = ReleaseArtifacts.initial_verification_state(verifier_plans)
+    ReleaseStore.with_claim(
+      queue_entry_row,
+      request_row,
+      command_release_attempt,
+      fn current_queue, current_request, release_attempt_row ->
+        initial_verification_state = ReleaseArtifacts.initial_verification_state(verifier_plans)
 
-      completed_release_attempt =
-        %CommandReleaseAttempt{
-          command_release_attempt
-          | lifecycle_state: :released,
-            verification_state: initial_verification_state,
-            released_at: attempted_at,
-            failure_reason: nil
-        }
+        %CommandReleaseAttempt{} =
+          stored_attempt = CommandReleaseAttemptRow.to_domain(release_attempt_row)
 
-      verifier_instances =
-        ReleaseArtifacts.verifier_instances(
-          CommandQueueEntryRow.to_domain(queue_entry_row),
-          CommandRequestRow.to_domain(request_row),
+        completed_release_attempt =
+          %CommandReleaseAttempt{
+            stored_attempt
+            | lifecycle_state: :released,
+              verification_state: initial_verification_state,
+              released_at: attempted_at,
+              failure_reason: nil
+          }
+
+        verifier_instances =
+          ReleaseArtifacts.verifier_instances(
+            CommandQueueEntryRow.to_domain(current_queue),
+            CommandRequestRow.to_domain(current_request),
+            completed_release_attempt,
+            verifier_plans,
+            attempted_at
+          )
+
+        release_attempt_row
+        |> release_success_multi(
+          current_queue,
+          current_request,
           completed_release_attempt,
-          verifier_plans,
-          attempted_at
+          verifier_instances,
+          initial_verification_state
         )
+        |> Repo.transaction()
+      end
+    )
+    |> case do
+      {:ok, {:already_completed, queue, request, attempt}} ->
+        completed_release_result(queue, request, attempt)
 
-      release_attempt_row
-      |> release_success_multi(
-        queue_entry_row,
-        request_row,
-        completed_release_attempt,
-        verifier_instances,
-        initial_verification_state
-      )
-      |> Repo.transaction()
-      |> handle_complete_release_success_result(process_namespace)
+      {:ok, changes} ->
+        handle_complete_release_success_result({:ok, changes}, process_namespace)
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -884,64 +889,13 @@ defmodule Cadence.Commanding do
      }}
   end
 
-  defp handle_complete_release_success_result(
-         {:error, _operation, %Changeset{} = changeset, _changes_so_far},
-         %ProcessNamespace{}
-       ) do
-    {:error, changeset}
-  end
-
-  defp handle_complete_release_success_result(
-         {:error, _operation, reason, _changes_so_far},
-         %ProcessNamespace{}
-       ) do
-    {:error, reason}
-  end
-
-  defp complete_release_failure(
-         %CommandQueueEntryRow{} = queue_entry_row,
-         %CommandReleaseAttempt{} = command_release_attempt,
-         reason,
-         %ProcessNamespace{} = process_namespace
-       ) do
-    case ReleaseStore.fetch_row(
-           command_release_attempt.organization_id,
-           command_release_attempt.mission_id,
-           command_release_attempt.command_release_attempt_id
-         ) do
-      {:ok, %CommandReleaseAttemptRow{} = release_attempt_row} ->
-        failed_release_attempt =
-          %CommandReleaseAttempt{
-            command_release_attempt
-            | lifecycle_state: :release_failed,
-              failure_reason: inspect(reason),
-              released_at: nil
-          }
-
-        _ =
-          Multi.new()
-          |> Multi.update(
-            :command_release_attempt,
-            CommandReleaseAttemptRow.update_changeset(release_attempt_row, failed_release_attempt)
-          )
-          |> Multi.update(
-            :command_queue_entry,
-            CommandQueueEntryRow.lifecycle_changeset(queue_entry_row, :pending)
-          )
-          |> Repo.transaction()
-
-        maybe_schedule_queue_lane_dispatch(
-          process_namespace,
-          queue_entry_row.organization_id,
-          queue_entry_row.mission_id,
-          queue_entry_row.queue_lane_key
-        )
-
-        :ok
-
-      {:error, _reason} ->
-        :ok
-    end
+  defp completed_release_result(queue, request, attempt) do
+    {:ok,
+     %{
+       release_attempt: CommandReleaseAttemptRow.to_domain(attempt),
+       queue_entry: CommandQueueEntryRow.to_domain(queue),
+       command_request: CommandRequestRow.to_domain(request)
+     }}
   end
 
   defp evaluate_transport_command_verifiers_for_release_attempt(

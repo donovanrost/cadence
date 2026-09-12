@@ -102,6 +102,75 @@ defmodule Cadence.Dashboards.SourceRegistry.SegmentResultMergeTest do
             }} = SegmentResultMerge.merge(request(), segment_results, &segment_metadata/1)
   end
 
+  test "positional sample identities retain duplicates and nils across source segments" do
+    times = [~U[2026-07-19 10:00:00Z], ~U[2026-07-19 10:00:01Z]]
+    first = frame(times, [1, 2], data_source_id: "source-1") |> with_ids(["same", nil])
+    second = frame(times, [3, 4], data_source_id: "source-2") |> with_ids(["same", nil])
+    assert {:ok, result} = merge_frames([first, second])
+    [merged] = result.frames
+    assert Enum.at(merged.fields, 1).metadata.sample_ids == ["same", nil, "same", nil]
+    assert Enum.at(merged.fields, 1).values == [1, 2, 3, 4]
+    assert Enum.map(merged.meta.source_binding_row_spans, & &1.count) == [2, 2]
+
+    assert Enum.map(merged.meta.source_binding_row_spans, & &1.source.data_source_id) ==
+             ["source-1", "source-2"]
+
+    refute Map.has_key?(merged.meta, :data_source_id)
+  end
+
+  test "missing positional metadata represents unknown IDs without shifting later rows" do
+    times = [~U[2026-07-19 10:00:00Z]]
+    first = frame(times, [1])
+    second = frame(times, [2]) |> with_ids(["known"])
+    assert {:ok, result} = merge_frames([first, second, first])
+    [merged] = result.frames
+    assert Enum.at(merged.fields, 1).metadata.sample_ids == [nil, "known", nil]
+  end
+
+  test "malformed positional metadata cannot silently shift identities" do
+    valid = frame([~U[2026-07-19 10:00:00Z]], [1]) |> with_ids(["known"])
+
+    for ids <- [[], ["one", "two"], nil, "not-a-list"] do
+      assert {:error, %{code: :source_binding_segment_merge_unsupported}} =
+               merge_frames([valid, with_ids(valid, ids)])
+    end
+  end
+
+  test "nested segment merges preserve the original row spans in observation order" do
+    times = [~U[2026-07-19 10:00:00Z]]
+    first = frame(times, [1], data_source_id: "source-1") |> with_ids(["same"])
+    second = frame(times, [2], data_source_id: "source-2") |> with_ids(["same"])
+    assert {:ok, result} = merge_frames([first, second])
+    assert {:ok, nested} = merge_frames(result.frames ++ [first])
+    [merged] = nested.frames
+    assert Enum.at(merged.fields, 1).metadata.sample_ids == ["same", "same", "same"]
+
+    assert Enum.map(merged.meta.source_binding_row_spans, & &1.source.data_source_id) ==
+             ["source-1", "source-2", "source-1"]
+  end
+
+  test "opposite per-segment field misalignment cannot cancel out in a merged frame" do
+    instant = ~U[2026-07-19 10:00:00Z]
+    first = frame([instant], [1, 2]) |> with_ids(["a", "b"])
+    second = frame([instant, instant], [3]) |> with_ids(["c"])
+
+    assert {:error, %{code: :source_binding_segment_merge_unsupported}} =
+             merge_frames([first, second])
+  end
+
+  defp merge_frames(frames) do
+    SegmentResultMerge.merge(
+      request(),
+      Enum.map(frames, &{:first, %SourceResult{frames: [&1]}}),
+      &segment_metadata/1
+    )
+  end
+
+  defp with_ids(frame, ids) do
+    [time, value] = frame.fields
+    %{frame | fields: [time, %{value | metadata: Map.put(value.metadata, :sample_ids, ids)}]}
+  end
+
   defp request do
     %PlannedSourceRequest{
       request_id: "request-1",

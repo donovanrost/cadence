@@ -224,7 +224,7 @@ defmodule Cadence.Applications.Registry do
           },
           actions: ["save_definition"],
           refresh: :after_action,
-          renderer: {:declarative, "cadence.host.surface.v1"}
+          renderer: {:trusted, "cadence.derived_telemetry.definitions"}
         }
       ],
       capability_contributions: [
@@ -300,7 +300,7 @@ defmodule Cadence.Applications.Registry do
           },
           actions: ["save_limit_definition"],
           refresh: :after_action,
-          renderer: {:declarative, "cadence.host.surface.v1"}
+          renderer: {:trusted, "cadence.limits.feature"}
         },
         %SurfaceDefinition{
           surface_id: "activity",
@@ -315,7 +315,7 @@ defmodule Cadence.Applications.Registry do
           },
           actions: [],
           refresh: :static,
-          renderer: {:declarative, "cadence.host.surface.v1"}
+          renderer: {:trusted, "cadence.limits.feature"}
         }
       ],
       capability_contributions: [

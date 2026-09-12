@@ -14,6 +14,7 @@ defmodule Cadence.Limits do
   alias Cadence.Limits.{
     Definition,
     DefinitionLifecycle,
+    Definitions,
     Evaluator,
     Event,
     GovernedLimitDefinitionRow,
@@ -40,24 +41,20 @@ defmodule Cadence.Limits do
   @spec persist_limit_definition(Definition.t(), keyword()) ::
           {:ok, Definition.t()} | {:error, term()}
   def persist_limit_definition(%Definition{} = definition, opts) when is_list(opts) do
-    opts = Keyword.put_new(opts, :event_bus, EventBus)
-
-    with :ok <- Definition.validate(definition) do
-      changeset = GovernedLimitDefinitionRow.changeset(definition)
-
-      case Repo.insert(changeset,
-             on_conflict: :nothing,
-             conflict_target: [:mission_id, :limit_definition_id, :version]
-           ) do
-        {:ok, %GovernedLimitDefinitionRow{} = row} ->
-          _ = DefinitionLifecycle.record_definition_activation(definition, row, opts)
-          {:ok, definition}
-
-        {:error, %Changeset{} = changeset} ->
-          {:error, changeset}
-      end
-    end
+    Definitions.persist(definition, opts)
   end
+
+  defdelegate append_limit_definition(org, mission, attrs, review, opts \\ []),
+    to: Definitions,
+    as: :append
+
+  defdelegate limit_definition_review(org, mission, point, set, opts \\ []),
+    to: Definitions,
+    as: :review
+
+  defdelegate limit_definitions_page(org, mission, opts \\ []), to: Definitions, as: :page
+
+  defdelegate limit_definition_history(org, mission, id, page), to: Definitions, as: :history
 
   @spec list_limit_definitions(binary()) :: [Definition.t()]
   def list_limit_definitions(mission_id) when is_binary(mission_id) do

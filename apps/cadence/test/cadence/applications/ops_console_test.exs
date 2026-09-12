@@ -113,6 +113,22 @@ defmodule Cadence.Applications.OpsConsoleTest do
                 ]
               }}
 
+    assert OpsConsole.surface_query_contract("fleet_planning") ==
+             {:ok, %{subject_param: nil, query_params: ["page", "state"]}}
+
+    assert OpsConsole.surface_query_contract("fleet_planning_run") ==
+             {:ok,
+              %{
+                subject_param: nil,
+                query_params: [
+                  "requirements_page",
+                  "decisions_page",
+                  "resources_page",
+                  "automation_page",
+                  "commitments_page"
+                ]
+              }}
+
     assert OpsConsole.surface_query_contract("dashboard_editor") ==
              {:ok, %{subject_param: "dashboard_id", query_params: ["dashboard_id"]}}
 

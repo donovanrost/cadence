@@ -12,7 +12,6 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
     SurfaceQueryRequest
   }
 
-  alias Cadence.Applications.SurfaceElements.{Diagnostic, Diagnostics}
   alias Cadence.Auth.Scope
 
   alias Cadence.Comms.{
@@ -33,7 +32,6 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
   alias Cadence.Limits.Definition
   alias Cadence.Limits.Event
   alias Cadence.Limits.Store
-  alias Cadence.Listing.Page
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.{ApplicationReferences, ApplicationSurfaces}
   alias Cadence.Reads.Applications, as: ApplicationReads
@@ -94,11 +92,11 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
                context.surface
              )
 
-    assert document.title == "Derived Telemetry"
-    assert document.form.action_id == "save_definition"
-    assert document.form.success_message == "Derived telemetry definition saved."
-    assert document.table.id == "derived-telemetry-definitions"
-    assert document.table.page == %Page{items: [], total_count: 0, page: 1, page_size: 20}
+    assert document["data"]["contract_version"] == 1
+    assert document["data"]["context"]["mission_id"] == @mission_id
+    assert document["data"]["definitions"]["items"] == []
+    assert document["data"]["definitions"]["total_count"] == 0
+    assert document["data"]["definitions"]["page_size"] == 25
   end
 
   test "dispatches two contributed applications concurrently without cross-talk", context do
@@ -979,7 +977,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
              )
   end
 
-  test "returns bounded definition pages from declarative surface queries", context do
+  test "returns bounded definition pages from the module-owned surface query", context do
     assert {:ok, _installation} =
              ApplicationInstallations.install(
                context.scope,
@@ -987,7 +985,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
                context.definition.application_key
              )
 
-    for number <- 1..25 do
+    for number <- 1..30 do
       suffix = number |> Integer.to_string() |> String.pad_leading(3, "0")
 
       definition =
@@ -1011,12 +1009,12 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
                context.surface
              )
 
-    assert %Page{page: 1, page_size: 20, total_count: 25, items: first_rows} =
-             first_document.table.page
+    assert %{"page" => 1, "page_size" => 25, "total_count" => 30, "items" => first_rows} =
+             first_document["data"]["definitions"]
 
-    assert length(first_rows) == 20
-    assert hd(first_rows).point == "DERIVED.paged_001"
-    assert List.last(first_rows).point == "DERIVED.paged_020"
+    assert length(first_rows) == 25
+    assert hd(first_rows)["point_id"] == "DERIVED.paged_001"
+    assert List.last(first_rows)["point_id"] == "DERIVED.paged_025"
 
     assert {:ok, second_document} =
              ApplicationSurfaces.load(
@@ -1028,11 +1026,11 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
                %{"page" => "2"}
              )
 
-    assert %Page{page: 2, page_size: 20, total_count: 25, items: second_rows} =
-             second_document.table.page
+    assert %{"page" => 2, "page_size" => 25, "total_count" => 30, "items" => second_rows} =
+             second_document["data"]["definitions"]
 
-    assert Enum.map(second_rows, & &1.point) ==
-             Enum.map(21..25, fn number ->
+    assert Enum.map(second_rows, & &1["point_id"]) ==
+             Enum.map(26..30, fn number ->
                "DERIVED.paged_#{number |> Integer.to_string() |> String.pad_leading(3, "0")}"
              end)
 
@@ -1046,10 +1044,10 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
                %{"page" => "999"}
              )
 
-    assert clamped_document.table.page.page == 2
+    assert clamped_document["data"]["definitions"]["page"] == 2
   end
 
-  test "composes limits definitions and current severity into typed host elements", context do
+  test "composes semantic limits definitions, source choices and current severity", context do
     assert {:ok, _installation} =
              ApplicationInstallations.install(
                context.scope,
@@ -1120,40 +1118,16 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
                definitions_surface
              )
 
-    assert document.title == "Limit definitions"
-    assert document.form.action_id == "save_limit_definition"
-    assert document.form.success_message == "Limit definition saved."
+    assert document["data"]["definitions"]["total_count"] == 1
+    assert document["data"]["definitions"]["page_size"] == 25
 
-    assert [point_field | _remaining_fields] = document.form.fields
-    assert point_field.field == :point_id
-    assert point_field.type == :reference
-    assert point_field.reference.provider_id == "cadence.telemetry.canonical_points"
-    assert point_field.reference.version == 1
-    assert point_field.reference.mode == :search
-    assert point_field.reference.result_limit == 20
+    assert [%{"point_id" => "HK.bus_voltage", "version" => 1}] =
+             document["data"]["definitions"]["items"]
 
-    assert %ReferencePage{query: "", more?: false} = point_field.reference_page
-
-    assert point_field.reference_page.options == [
-             %ReferenceOption{
-               value: "DERIVED.bus_power",
-               label: "DERIVED.bus_power",
-               description: "Derived telemetry · Bus power"
-             },
-             %ReferenceOption{
-               value: "HK.bus_voltage",
-               label: "HK.bus_voltage",
-               description: "Active telemetry · Unit: V"
-             }
+    assert document["data"]["points"]["items"] == [
+             %{"id" => "DERIVED.bus_power", "label" => "Bus power", "kind" => "derived"},
+             %{"id" => "HK.bus_voltage", "label" => "HK.bus_voltage", "kind" => "telemetry"}
            ]
-
-    assert document.table.id == "limit-definitions"
-
-    assert %Page{page: 1, page_size: 20, total_count: 1, items: rows} =
-             document.table.page
-
-    assert [%{point: "HK.bus_voltage", version: "v1"}] = rows
-    assert document.activity == nil
 
     assert {:ok, activity_surface} =
              Registry.fetch_surface(limits_definition, :mission, "activity")
@@ -1167,28 +1141,14 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
                activity_surface
              )
 
-    assert activity_document.title == "Current posture"
-    assert activity_document.form == nil
-    assert activity_document.table == nil
-
-    assert %Diagnostics{
-             id: "limit-current-diagnostics",
-             title: "Current departures",
-             total_count: 1,
-             items: [
-               %Diagnostic{
-                 id: "red-departures",
-                 code: "limits.current.red",
-                 severity: :error,
-                 value: "1 RED"
-               }
-             ]
-           } = activity_document.diagnostics
-
-    assert [activity_item] = activity_document.activity.items
-    assert activity_item.title == "Bus voltage"
-    assert activity_item.tone == :blocked
-    assert activity_item.value == "33.2"
+    assert activity_document["data"]["counts"]["red"] == 1
+    assert activity_document["data"]["states"]["total_count"] == 1
+    assert [state] = activity_document["data"]["states"]["items"]
+    assert state["point_name"] == "Bus voltage"
+    assert state["severity"] == "red"
+    assert state["value"] == "33.2"
+    assert state["definition_version"] == 1
+    assert state["sample_id"] == "sample-surface"
 
     assert {:ok, status} =
              ApplicationReads.load_status(
@@ -1239,12 +1199,8 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
                surface
              )
 
-    assert [point_field | _remaining_fields] = document.form.fields
-
-    assert %ReferencePage{query: "", more?: true, options: options} =
-             point_field.reference_page
-
-    assert length(options) == 20
+    assert document["data"]["points"]["total_count"] == 25
+    assert length(document["data"]["points"]["items"]) == 25
 
     assert {:ok,
             %ReferencePage{

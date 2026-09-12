@@ -9,7 +9,10 @@
     "test": "vp test --config vitest.config.ts --project storybook --run"
   },
   "dependencies": {
+    "@cadence/commanding": "workspace:*",
+    "@cadence/dashboards-and-exploration": "workspace:*",
     "@cadence/design-tokens": "workspace:*",
+    "@cadence/plugin-host": "workspace:*",
     "@cadence/ui": "workspace:*",
     "vue": "catalog:"
   },

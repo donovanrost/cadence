@@ -11,7 +11,7 @@ defmodule CadenceWeb.SpacecraftEditLiveTest do
   alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "authenticated edit and identity routes mount the federated spacecraft surface" do
+  test "authenticated edit and identity routes mount the host spacecraft form" do
     {conn, mission, spacecraft} = signed_in_spacecraft()
 
     for path <- [
@@ -38,8 +38,8 @@ defmodule CadenceWeb.SpacecraftEditLiveTest do
 
   defp assert_surface(view, mission, spacecraft) do
     HostTransportTestSupport.assert_context(view, %{
-      "application_key" => "spacecraft",
-      "surface_id" => "edit",
+      "kind" => "spacecraft",
+      "spacecraft_page" => "spacecraft_edit",
       "host_scope" => "spacecraft",
       "mission_id" => mission.mission_id,
       "spacecraft_id" => spacecraft.spacecraft_id,

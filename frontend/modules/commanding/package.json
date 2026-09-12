@@ -1,0 +1,38 @@
+{
+  "name": "@cadence/commanding",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./mission-commands": "./src/mission-commands.ts",
+    "./spacecraft-commanding": "./src/spacecraft-commanding.ts",
+    "./command-review": "./src/command-review.ts",
+    "./command-authoring": "./src/command-authoring.ts",
+    "./command-stages": "./src/command-stages.ts",
+    "./stage-create": "./src/stage-create.ts",
+    "./stage-workbench": "./src/stage-workbench.ts",
+    "./command-history": "./src/command-history.ts",
+    "./queue-submission": "./src/queue-submission.ts"
+  },
+  "scripts": {
+    "typecheck": "vue-tsc -b",
+    "test": "vp test --run"
+  },
+  "dependencies": {
+    "@cadence/plugin-sdk": "workspace:*",
+    "@cadence/ui": "workspace:*",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vue/test-utils": "catalog:",
+    "@vue/tsconfig": "catalog:",
+    "happy-dom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

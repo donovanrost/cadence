@@ -188,9 +188,9 @@ defmodule Cadence.Applications.ProviderRegistryTest do
 
     expected_contribution_counts = %{
       "comms" => 15,
-      "spacecraft" => 12,
+      "spacecraft" => 11,
       "mission_catalog" => 10,
-      "telemetry_decom" => 1,
+      "telemetry_decom" => 2,
       "derived_telemetry" => 1,
       "limits" => 2,
       "ops_console" => 35,
