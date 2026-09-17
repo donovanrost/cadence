@@ -18,6 +18,7 @@ defmodule Cadence.Commanding.RequestStore do
   }
 
   alias Cadence.Management.Commanding.ReviewPrecondition
+  alias Cadence.Platform.ScopedReadUpdates, as: ReadUpdates
   alias Cadence.Repo
 
   @spec persist_request(binary(), CommandRequest.t()) ::
@@ -28,7 +29,12 @@ defmodule Cadence.Commanding.RequestStore do
          {:ok, validated_request} <- RequestValidation.validate_and_enrich(scoped_request),
          {:ok, %CommandRequestRow{} = row} <-
            Repo.insert(CommandRequestRow.changeset(validated_request)) do
-      {:ok, CommandRequestRow.to_domain(row)}
+      ReadUpdates.publish_result(
+        {:ok, CommandRequestRow.to_domain(row)},
+        :commanding_changed,
+        row.organization_id,
+        row.mission_id
+      )
     else
       {:error, %Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
@@ -50,6 +56,7 @@ defmodule Cadence.Commanding.RequestStore do
         expected_target,
         fn enriched, _ -> insert_reviewed(enriched, scoped, before_insert) end
       )
+      |> ReadUpdates.publish_result(:commanding_changed, organization_id, scoped.mission_id)
     end
   end
 
@@ -130,6 +137,7 @@ defmodule Cadence.Commanding.RequestStore do
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
+    |> ReadUpdates.publish_result(:commanding_changed, organization_id, mission_id)
   end
 
   defp lock_request_row(organization_id, mission_id, command_request_id) do

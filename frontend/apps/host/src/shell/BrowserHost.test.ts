@@ -12,6 +12,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createMemoryHistory } from "vue-router";
 import { defineComponent, h } from "vue";
+import type { LiveEventRef } from "live_vue";
 
 type PendingRequest = {
   event: string;
@@ -22,6 +23,10 @@ const transport = vi.hoisted(() => {
   const requests: PendingRequest[] = [];
   return {
     requests,
+    handleEvent: vi.fn<(name: string, callback: (value: unknown) => void) => LiveEventRef>(
+      (event, callback) => ({ event, callback: (customEvent) => callback(customEvent.detail) }),
+    ),
+    removeHandleEvent: vi.fn<(ref: LiveEventRef) => void>(),
     pushEvent:
       vi.fn<
         (event: string, payload: Record<string, unknown>, reply?: (value: unknown) => void) => void
@@ -72,6 +77,7 @@ import { directoryFixture as dashboardDirectoryFixture } from "../../../../modul
 import { snapshotFixture as workspaceFixture } from "../../../../modules/dashboards-and-exploration/src/features/workspace/snapshot-fixture.test-support";
 import { diagnosticsPageFixture } from "../../../../modules/dashboards-and-exploration/src/features/execution-diagnostics/fixtures.test-support";
 import { monitorFixture } from "../../../../modules/commanding/src/features/mission-commands/monitor.test-support";
+import { workspaceFixture as commandWorkspaceFixture } from "../../../../modules/commanding/src/features/workspace/fixtures.test-support";
 import { readMonitorQuery } from "../../../../modules/commanding/src/features/mission-commands/monitor-query";
 import {
   fixture as explorationFixture,
@@ -1739,6 +1745,59 @@ test("fleet directory is host-composed and captured reads retain evidence across
   expect(view().find("#mission-list-table").exists()).toBe(true);
 });
 
+test("live commanding notices are isolated to the captured path and token and stop after departure", async () => {
+  await start();
+  const path = "/missions/mission_one/ops/commands/workspace";
+  const data = commandWorkspaceFixture();
+  const state = snapshot(path, "mission_one");
+  state.context.organization.organization_id = "org_one";
+  const envelope = {
+    id: "commanding.workspace",
+    slot: "ops.page",
+    version: 1,
+    status: "ready",
+    token: "11111111-1111-4111-8111-111111111111",
+    context: data.directory.context,
+    data,
+  };
+  await click(path);
+  await reply(0, { ...state, ops_page: envelope });
+  expect(view().find("#command-workspace").exists()).toBe(true);
+  await reply(1, envelope); // Initial reconciliation after subscribing.
+  await view().get("#workspace-shared-argument-0").setValue("unfinished");
+  const handler = required(
+    transport.handleEvent.mock.calls.find(([name]) => name === "cadence:ops-page-changed"),
+  )[1];
+  const notice = { path, id: envelope.id, token: envelope.token };
+  for (const invalid of [
+    null,
+    {},
+    { ...notice, path: "/missions/other/ops/commands/workspace" },
+    { ...notice, token: "old" },
+    { ...notice, id: "other" },
+  ])
+    handler(invalid);
+  await flushPromises();
+  expect(transport.requests).toHaveLength(2);
+  handler(notice);
+  expect(transport.requests[2]).toMatchObject({ event: "host:ops-page:read", payload: notice });
+  await reply(2, envelope);
+  expect(view().get<HTMLInputElement>("#workspace-shared-argument-0").element.value).toBe(
+    "unfinished",
+  );
+  await click("/missions");
+  await reply(3, snapshot("/missions"));
+  handler(notice);
+  await flushPromises();
+  expect(transport.requests).toHaveLength(4);
+  view().unmount();
+  handler(notice);
+  expect(transport.requests).toHaveLength(4);
+  expect(transport.removeHandleEvent).toHaveBeenCalledWith(
+    transport.handleEvent.mock.results[0]?.value,
+  );
+});
+
 test("organization home composes core facts, refreshes and leaves through the persistent shell", async () => {
   const state = {
     ...snapshot("/"),
@@ -2167,6 +2226,7 @@ for (const page of ["organization_detail", "organization_invite"] as const) {
 
 // Render every catalog entry, so adding a kind without a host branch fails visibly.
 const routeComponents = {
+  settings: "SettingsPage",
   administration: "AdministrationPage",
   mission: "MissionPage",
   organization_module: "OrganizationModulePage",

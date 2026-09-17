@@ -7,7 +7,28 @@ import {
   argumentValuesJson,
   scalarInputText,
   formatArgumentValues,
+  sameArgumentValues,
 } from "./exact-values";
+test("argument comparison tolerates serialization differences while preserving integer and scalar identity", () => {
+  assert.equal(
+    sameArgumentValues(
+      '{"counter":18446744073709551615,"rate":0.00001,"enabled":false}',
+      '{"enabled":false,"rate":1.0e-5,"counter":18446744073709551615}',
+    ),
+    true,
+  );
+  assert.equal(
+    sameArgumentValues('{"counter":9007199254740992}', '{"counter":9007199254740993}'),
+    false,
+  );
+  assert.equal(
+    sameArgumentValues('{"counter":"9007199254740993"}', '{"counter":9007199254740993}'),
+    false,
+  );
+  assert.equal(sameArgumentValues('{"enabled":false}', "{}"), false);
+  assert.equal(sameArgumentValues('{"offset":-0.0}', '{"offset":0.0}'), false);
+  assert.equal(sameArgumentValues('{"name":"A"}', '{"name":"\\u0041"}'), true);
+});
 test("exact decimal and scientific integers preserve boundary digits", () => {
   for (const [input, expected] of [
     ["18446744073709551615", "18446744073709551615"],

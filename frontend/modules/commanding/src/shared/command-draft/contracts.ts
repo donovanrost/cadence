@@ -22,9 +22,12 @@ export type Argument = {
   default_value_json: string | null;
   fixed_value_json: string | null;
   hazardous_values_json: string;
+  choices: readonly { label: string; value_json: string }[];
 };
 export type SelectedCommand = Command & {
   description: string | null;
+  opcode_json: string;
+  opcode_size_bits: number | null;
   critical: boolean;
   hazardous: boolean;
   significance: string | null;
@@ -49,7 +52,24 @@ export type Catalog = {
   commands: { limit: 25; entries: Command[]; next_after: string | null };
   selected_target: Target | null;
   selected_command: SelectedCommand | null;
+  target_bases?: readonly TargetBasis[] | null;
 };
+export type TargetBasis = {
+  sources: readonly string[];
+  revision_id: string;
+  plan_id: string;
+  compatible: boolean;
+};
+export function targetBasis(catalog: Catalog, targetId: string): TargetBasis | null {
+  if (catalog.target_bases == null)
+    return {
+      sources: [targetId],
+      revision_id: catalog.basis.revision_id,
+      plan_id: catalog.basis.plan_id,
+      compatible: true,
+    };
+  return catalog.target_bases.find((basis) => basis.sources.includes(targetId)) ?? null;
+}
 export type Preview = {
   token: string;
   request_id: string;
@@ -145,6 +165,13 @@ function selected(value: unknown): value is SelectedCommand {
     !command(value) ||
     !record(value) ||
     !nullableText(value.description) ||
+    !jsonText(value.opcode_json) ||
+    !(
+      value.opcode_size_bits === null ||
+      (integer(value.opcode_size_bits) &&
+        value.opcode_size_bits > 0 &&
+        value.opcode_size_bits <= 8388608)
+    ) ||
     typeof value.critical !== "boolean" ||
     typeof value.hazardous !== "boolean" ||
     !nullableText(value.significance) ||
@@ -155,6 +182,7 @@ function selected(value: unknown): value is SelectedCommand {
     return false;
   const names = new Set<string>(),
     ids = new Set<string>();
+  const supported = value.supported;
   return value.arguments.every((a) => {
     if (
       !record(a) ||
@@ -169,11 +197,31 @@ function selected(value: unknown): value is SelectedCommand {
       typeof a.required !== "boolean" ||
       !(a.default_value_json === null || jsonText(a.default_value_json)) ||
       !(a.fixed_value_json === null || jsonText(a.fixed_value_json)) ||
-      !jsonText(a.hazardous_values_json, true)
+      !jsonText(a.hazardous_values_json, true) ||
+      !argumentChoices(a.choices, a.type, supported)
     )
       return false;
     names.add(a.name);
     ids.add(a.id);
+    return true;
+  });
+}
+function argumentChoices(value: unknown, type: unknown, supported: boolean): boolean {
+  if (!Array.isArray(value) || value.length > 1024) return false;
+  if (type !== "enumerated") return value.length === 0;
+  if (supported && value.length === 0) return false;
+  const values = new Set<string>();
+  return value.every((choice) => {
+    if (
+      !record(choice) ||
+      !text(choice.label) ||
+      !choice.label ||
+      !text(choice.value_json, 32768) ||
+      !/^-?(?:0|[1-9]\d*)$/.test(choice.value_json) ||
+      values.has(BigInt(choice.value_json).toString())
+    )
+      return false;
+    values.add(BigInt(choice.value_json).toString());
     return true;
   });
 }
@@ -255,6 +303,35 @@ export function readCatalog(value: unknown, context: OpsPageContext): Catalog {
   )
     return fail();
   const catalog = c as Catalog;
+  if (c.target_bases !== undefined && c.target_bases !== null) {
+    if (!Array.isArray(c.target_bases) || c.target_bases.length > 100) return fail();
+    const sources = new Set<string>();
+    for (const value of c.target_bases) {
+      if (
+        !record(value) ||
+        !id(value.revision_id) ||
+        !id(value.plan_id) ||
+        typeof value.compatible !== "boolean" ||
+        !Array.isArray(value.sources) ||
+        value.sources.length < 1 ||
+        value.sources.length > 100
+      )
+        return fail();
+      for (const source of value.sources) {
+        if (!id(source) || sources.has(source)) return fail();
+        sources.add(source);
+      }
+    }
+    if (catalog.selected_target) {
+      const basis = targetBasis(catalog, catalog.selected_target.id);
+      if (
+        !basis ||
+        basis.revision_id !== catalog.basis.revision_id ||
+        basis.plan_id !== catalog.basis.plan_id
+      )
+        return fail();
+    }
+  }
   return catalog;
 }
 export function previewInput(

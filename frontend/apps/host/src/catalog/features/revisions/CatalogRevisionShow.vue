@@ -2,6 +2,7 @@
 import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
+import CatalogSpacecraftUsage from "./CatalogSpacecraftUsage.vue";
 
 type Breadcrumb = {
   label: string;
@@ -30,18 +31,6 @@ type DetailCard = {
   rows: DetailRow[];
 };
 
-type RuntimeUsage = {
-  id: string;
-  title: string;
-  summary_id: string;
-  summary: string;
-  action: {
-    id: string;
-    label: string;
-    disabled: boolean;
-  };
-};
-
 type MissionModel = DetailCard & {
   available: boolean;
   empty_message: string;
@@ -51,7 +40,7 @@ defineProps<{
   revision: Revision;
   navigation: Navigation;
   provenance: DetailCard;
-  runtime_usage: RuntimeUsage;
+  spacecraft_usage: unknown;
   mission_model: MissionModel;
 }>();
 
@@ -73,56 +62,36 @@ const valueClasses: Record<DetailRow["style"], string> = {
       >
     </CadencePageHeading>
 
-    <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      <CadenceCard
-        :id="provenance.id"
-        class="card border border-base-300 bg-base-200 lg:col-span-2"
-        body-class="card-body p-6"
-      >
-        <p class="hud-label">{{ provenance.title }}</p>
-        <div class="mt-3 divide-y divide-base-300">
-          <CadenceDataRow
-            v-for="row in provenance.rows"
-            :key="row.label"
-            row-class="hud-data-row"
-            label-class="hud-data-label"
-            :label="row.label"
-          >
-            <span class="hud-data-value" :class="valueClasses[row.style]">
-              <a
-                v-if="row.href !== null && row.value !== null"
-                :href="row.href"
-                data-phx-link="redirect"
-                data-phx-link-state="push"
-                class="hover:underline"
-                >{{ row.value }}</a
-              >
-              <span v-else>{{ row.value ?? "—" }}</span>
-            </span>
-          </CadenceDataRow>
-        </div>
-      </CadenceCard>
-
-      <CadenceCard
-        :id="runtime_usage.id"
-        class="card border border-base-300 bg-base-200"
-        body-class="card-body p-6"
-      >
-        <p class="hud-label">{{ runtime_usage.title }}</p>
-        <p :id="runtime_usage.summary_id" class="mt-2 text-sm text-base-content/60">
-          {{ runtime_usage.summary }}
-        </p>
-        <button
-          :id="runtime_usage.action.id"
-          type="button"
-          class="btn btn-ghost btn-sm mt-3"
-          :disabled="runtime_usage.action.disabled"
+    <CadenceCard
+      :id="provenance.id"
+      class="card border border-base-300 bg-base-200"
+      body-class="card-body p-6"
+    >
+      <p class="hud-label">{{ provenance.title }}</p>
+      <div class="mt-3 divide-y divide-base-300">
+        <CadenceDataRow
+          v-for="row in provenance.rows"
+          :key="row.label"
+          row-class="hud-data-row"
+          label-class="hud-data-label"
+          :label="row.label"
         >
-          {{ runtime_usage.action.label }}
-        </button>
-      </CadenceCard>
-    </div>
+          <span class="hud-data-value" :class="valueClasses[row.style]">
+            <a
+              v-if="row.href !== null && row.value !== null"
+              :href="row.href"
+              data-phx-link="redirect"
+              data-phx-link-state="push"
+              class="hover:underline"
+              >{{ row.value }}</a
+            >
+            <span v-else>{{ row.value ?? "—" }}</span>
+          </span>
+        </CadenceDataRow>
+      </div>
+    </CadenceCard>
 
+    <CatalogSpacecraftUsage :data="spacecraft_usage" />
     <CadenceCard
       :id="mission_model.id"
       class="card border border-base-300 bg-base-200"

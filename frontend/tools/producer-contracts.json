@@ -143,5 +143,10 @@
     "consumer": "modules/telemetry-decom/src/features/packet-bindings/packet-bindings.test.ts",
     "environment": "CADENCE_PACKET_PAGE",
     "producer": "apps/cadence_web/test/cadence_web/controllers/application_host_telemetry_controller_test.exs"
+  },
+  {
+    "consumer": "modules/commanding/src/features/workspace/CommandWorkspace.test.ts",
+    "environment": "CADENCE_COMMAND_WORKSPACE_DOCUMENT",
+    "producer": "apps/cadence_web/test/cadence_web/ops_command_workspace_page_test.exs"
   }
 ]

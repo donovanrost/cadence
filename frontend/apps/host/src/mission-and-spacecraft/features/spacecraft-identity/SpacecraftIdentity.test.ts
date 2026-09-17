@@ -53,6 +53,33 @@ test("server refreshes and out-of-order validation replies do not erase drafts o
   wrapper.unmount();
 });
 
+test("identity edits preserve reviewed framing and link back to its configuration workspace", async () => {
+  const data = identityFixture(true);
+  const path = "/missions/mission-a/spacecraft/vehicle-one";
+  data.page.breadcrumbs.push({ label: "Vehicle One", href: path });
+  data.form.configuration_href = `${path}?section=communications`;
+  assertIdentityForm(data);
+  const wrapper = mount(SpacecraftIdentityForm, { props: data });
+  expect(wrapper.find("select").exists()).toBe(false);
+  expect(wrapper.get("#spacecraft-identity-communications-link").attributes("href")).toBe(
+    `${path}?section=communications`,
+  );
+  await wrapper.get("#spacecraft-edit-display-name").setValue("Renamed");
+  await wrapper.get("#spacecraft-edit-form").trigger("submit");
+  expect(required(wrapper.emitted("save"))[0]).toMatchObject([
+    {
+      spacecraft: {
+        display_name: "Renamed",
+        spacecraft_type_id: "profile-one",
+        spacecraft_type_version: 1,
+      },
+    },
+  ]);
+  data.form.configuration_href = "/missions/mission-a/spacecraft/other?section=communications";
+  expect(() => assertIdentityForm(data)).toThrow("Invalid spacecraft configuration link");
+  wrapper.unmount();
+});
+
 test("a pending save disables repeat submits and failure retains values for retry", async () => {
   let reject!: (reason?: unknown) => void;
   const execute = vi.fn((event: string) =>

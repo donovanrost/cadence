@@ -51,6 +51,7 @@ const snapshotFields = object({
   diagnostics: optional(array(diagnostics)),
   application_management: featurePayload,
   activation_approvals: maybe(activationPage),
+  settings_page: maybe(activationPage),
   organization_module_page: maybe(contributedPage),
   ops_page: maybe(contributedPage),
   mission_module_page: maybe(contributedPage),

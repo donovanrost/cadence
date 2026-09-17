@@ -148,18 +148,9 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
     commands = surface_props(context, "commands", "OpsCommands")
     assert commands == %{"mission_id" => @mission_id, "query" => %{}}
 
-    assert {:error, :unsupported_application_surface_query} =
-             OpsConsole.load(
-               context.scope,
-               context.host_context,
-               request("ops_console", "activation_requests")
-             )
-
-    admin_scope = %{context.scope | capabilities: MapSet.new([:organization_admin])}
-
     activations =
       surface_props(
-        %{context | scope: admin_scope},
+        context,
         "activation_requests",
         "OpsActivationRequests"
       )

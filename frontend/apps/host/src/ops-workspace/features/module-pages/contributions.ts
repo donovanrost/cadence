@@ -2,6 +2,8 @@ import { createPageRegistry } from "../../../shell/module-pages/lazy-pages";
 import type { OpsPageContribution } from "@cadence/plugin-sdk/ops-pages";
 import type { Component } from "vue";
 export const opsPages = createPageRegistry<OpsPageContribution<Component>>("ops.page", {
+  "commanding.workspace": () =>
+    import("@cadence/commanding/workspace").then((module) => module.commandWorkspaceContribution),
   "commanding.stages": () =>
     import("@cadence/commanding/command-stages").then((module) => module.commandStagesContribution),
   "commanding.stage-create": () =>

@@ -4,10 +4,14 @@ defmodule Cadence.Reads.Catalog.Revisions do
   import Cadence.Reads.Catalog.Presentation
 
   alias Cadence.Catalog
+  alias Cadence.Missions
+  alias Cadence.Reads.Catalog.SpacecraftUsage
 
   def catalog_revision_show(organization_id, mission_id, params) do
     with {:ok, revision_id} <- subject_id(params, "catalog_revision_id"),
-         {:ok, revision} <- Catalog.fetch_revision(organization_id, mission_id, revision_id) do
+         {:ok, revision} <- Catalog.fetch_revision(organization_id, mission_id, revision_id),
+         {:ok, mission} <- Missions.fetch_mission(organization_id, mission_id),
+         {:ok, spacecraft_usage} <- SpacecraftUsage.load(mission, revision_id) do
       database =
         optional(fn ->
           Catalog.fetch_database(organization_id, mission_id, revision.catalog_database_id)
@@ -95,17 +99,7 @@ defmodule Cadence.Reads.Catalog.Revisions do
              }
            ]
          },
-         "runtime_usage" => %{
-           "id" => "catalog-revision-runtime-usage",
-           "title" => "Runtime usage",
-           "summary_id" => "catalog-runtime-usage-summary",
-           "summary" => "No runtime bindings yet.",
-           "action" => %{
-             "id" => "catalog-revision-runtime-action",
-             "label" => "Use this revision in runtime",
-             "disabled" => true
-           }
-         },
+         "spacecraft_usage" => spacecraft_usage,
          "mission_model" => mission_model_dto(model, plans)
        }}
     end

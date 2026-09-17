@@ -50,7 +50,6 @@ test("draft controls preserve optional false, defaults and fixed values in finit
     );
   try {
     await c.wrapper.get('[data-argument-name="amount"]').setValue("2");
-    await c.wrapper.get('[data-argument-enabled="enabled"]').setValue(true);
     await c.wrapper.get('[data-argument-name="enabled"]').setValue("false");
     await c.wrapper.get("#stage-command-form").trigger("submit");
     await flushPromises();
@@ -61,7 +60,7 @@ test("draft controls preserve optional false, defaults and fixed values in finit
         expected_basis: required(page.catalog).basis.token,
         source_endpoint_ref: "target_one",
         command_id: "command_one",
-        argument_values_json: JSON.stringify({ amount: 2, enabled: false }),
+        argument_values_json: JSON.stringify({ amount: 2, delay_s: 5, enabled: false }),
         priority: 3,
         not_before: null,
         expires_at: null,
@@ -314,8 +313,6 @@ test.skipIf(!producer.available)(
           : { amount: "2" };
         for (const [name, value] of Object.entries(inputs)) {
           const raw = fixtureString(value);
-          const enabled = c.wrapper.get<HTMLInputElement>(`[data-argument-enabled="${name}"]`);
-          if (!enabled.element.checked) await enabled.setValue(true);
           await c.wrapper.get(`[data-argument-name="${name}"]`).setValue(raw);
         }
         await c.wrapper.get("#stage-command-form").trigger("submit");

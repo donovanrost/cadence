@@ -7,6 +7,7 @@ defmodule Cadence.Reads.Spacecraft.Profiles do
   def directory(mission) do
     profiles =
       SpacecraftTypeStore.list_spacecraft_types(mission.organization_id, mission.mission_id)
+      |> Enum.reject(&Map.has_key?(&1.metadata, "spacecraft_configuration_revision_id"))
 
     %{
       "presentation" => %{
@@ -17,7 +18,7 @@ defmodule Cadence.Reads.Spacecraft.Profiles do
             do:
               empty_state(
                 "No Spacecraft Profiles",
-                "Define a profile before registering a spacecraft."
+                "Optionally define a shared protocol preset to reuse across spacecraft."
               ),
             else: nil
           ),

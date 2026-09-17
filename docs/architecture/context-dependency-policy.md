@@ -221,6 +221,25 @@ preserves its existing deterministic bytes and lock duration. General read-model
 modules do not inherit this adapter classification. Cadence core architecture
 owns this specific read contract and its native scope/concurrency checks.
 
+Spacecraft configuration drafts, application input reconciliation, and review
+preparation belong to Management in the Applications context, under
+`Applications.SpacecraftConfiguration`. Its immutable revision rows stay private
+to that owner. `Activations.SpacecraftConfiguration` belongs to Control in the
+Catalog and activation context and admits the exact reviewed configuration in
+the activation transaction. Profile resolution remains an Identity store API;
+catalog choices and installation identities are queried through their owners.
+The existing `Reads.MissionModels.ActiveBasis` adapter also exposes an immutable
+active generation for saved-versus-active comparison and applied-state stamps.
+It grants no activation mutation or runtime process authority.
+
+`Catalog.SpacecraftConfigurationInput`, `Catalog.SpacecraftModelBindings`, and
+`Catalog.Command.Compatibility` are shared Catalog value services. They validate
+finite documents and compute deterministic command semantics without IO.
+`Control.SpacecraftModelBindings` owns activation admission and runtime model
+resolution in the Catalog context, using artifacts already parsed and compiled
+during import. `Reads.Catalog.SpacecraftUsage` assembles saved and active catalog
+bindings through public owner APIs.
+
 Telemetry ingestion may synchronously record observed source progress through
 Data Sources' public observation APIs. This is a forward dependency: Data Sources
 does not call Telemetry. The journal write result remains part of the ingestion
@@ -248,3 +267,17 @@ must update this policy or an ADR in the same change and record:
 - a review-by date.
 
 Expired or ownerless exceptions fail the architecture check.
+
+### Scoped settings and spacecraft review
+
+`Management.Settings` is an explicit composition boundary for registered settings
+providers. `Applications.SettingsSectionDefinition` and `SettingsProvider` are
+shared public composition contracts (definition metadata and provider callbacks only); `Platform.ScopedSettings` owns generic revision storage.
+Governance owns activation requirements and Commanding owns workspace defaults.
+
+`Control.SpacecraftConfiguration` belongs to Catalog and activation. It consumes
+the public saved-configuration review and approved-activation boundaries.
+`Activations.ApprovalAdmission` validates the durable approved handoff against
+current Governance evidence within the final activation transaction. Its section
+lock precedes the generation/configuration locks. These additions preserve the
+existing context matrix and plane directions.

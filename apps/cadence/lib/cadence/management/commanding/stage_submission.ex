@@ -32,9 +32,16 @@ defmodule Cadence.Management.Commanding.StageSubmission do
     with {:ok, input} <- StageInput.submit(input),
          :ok <- expected(input.expected_write, write_token),
          :ok <- expected(input.expected_preview, held.token) do
-      StageAccess.with_stage(scope, mission_id, stage_id, :write, fn fresh, _, stage ->
-        submit_locked(scope, fresh, stage, held)
-      end)
+      StageAccess.with_stage(
+        scope,
+        mission_id,
+        stage_id,
+        :write,
+        fn fresh, _, stage ->
+          submit_locked(scope, fresh, stage, held)
+        end,
+        notify: true
+      )
     end
   end
 

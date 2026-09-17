@@ -98,6 +98,37 @@ export function argumentValuesJson(values: Record<string, ScalarJsonText>): stri
     return bad();
   return result;
 }
+
+/** Compare scalar meaning without rounding integers or depending on object key order. */
+export function sameArgumentValues(left: string, right: string): boolean {
+  const a = parseArgumentValues(left),
+    b = parseArgumentValues(right);
+  return (
+    Object.keys(a).length === Object.keys(b).length &&
+    Object.entries(a).every(([name, value]) => {
+      const other = b[name];
+      if (other === undefined) return false;
+      if (value.startsWith('"') || other.startsWith('"'))
+        return (
+          value.startsWith('"') && other.startsWith('"') && JSON.parse(value) === JSON.parse(other)
+        );
+      if (value === "true" || value === "false" || other === "true" || other === "false")
+        return value === other;
+      return canonicalNumber(value) === canonicalNumber(other);
+    })
+  );
+}
+function canonicalNumber(value: string): string {
+  const match = /^(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(value);
+  if (!match) return bad();
+  const fraction = match[3] ?? "";
+  const digits = `${match[2]}${fraction}`.replace(/^0+/, "");
+  if (!digits) return `${match[1]}0`;
+  const significant = digits.replace(/0+$/, "");
+  const exponent =
+    BigInt(match[4] ?? "0") - BigInt(fraction.length) + BigInt(digits.length - significant.length);
+  return `${match[1]}${significant}e${exponent}`;
+}
 export function scalarInputText(value: ScalarJsonText): string {
   if (typeof value !== "string") return bad();
   const values = parseArgumentValues(`{"value":${value}}`);

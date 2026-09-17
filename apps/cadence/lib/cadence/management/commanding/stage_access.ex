@@ -4,6 +4,7 @@ defmodule Cadence.Management.Commanding.StageAccess do
   alias Cadence.Commanding.CommandStageRow
   alias Cadence.Ids
   alias Cadence.Management.Commanding.ReviewAccess
+  alias Cadence.Platform.ScopedReadUpdates, as: ReadUpdates
   alias Cadence.Repo
 
   defdelegate authorize(scope, mission), to: ReviewAccess
@@ -24,11 +25,23 @@ defmodule Cadence.Management.Commanding.StageAccess do
   def owner?(row, fresh),
     do: get_in(row.owner_document, ["value", "user_id"]) == fresh.user.user_id
 
-  def with_stage(scope, mission_id, stage_id, mode, operation)
+  def with_stage(scope, mission_id, stage_id, mode, operation, opts \\ [])
       when mode in [:read, :write] and is_function(operation, 3) do
     with {:ok, fresh, _} <- authorize(scope, mission_id),
          true <- Ids.valid_identifier?(stage_id) do
-      Repo.transaction(fn -> locked(scope, fresh, mission_id, stage_id, mode, operation) end)
+      result =
+        Repo.transaction(fn -> locked(scope, fresh, mission_id, stage_id, mode, operation) end)
+
+      if Keyword.get(opts, :notify, false),
+        do:
+          ReadUpdates.publish_result(
+            result,
+            :commanding_changed,
+            fresh.organization_id,
+            mission_id
+          )
+
+      result
     else
       _ -> {:error, :unavailable}
     end

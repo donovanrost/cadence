@@ -4,6 +4,8 @@ defmodule CadenceWeb.ApplicationInventory do
   the shared lifecycle and status inventory projection.
   """
 
+  alias Cadence.Reads.Applications.SpacecraftInventory
+
   alias Cadence.Applications.HostContext
   alias Cadence.Auth.Scope
   alias Cadence.ExtensionCatalog
@@ -38,15 +40,15 @@ defmodule CadenceWeb.ApplicationInventory do
   end
 
   @doc """
-  Builds the application inventory for a spacecraft from its exact pinned
-  profile plus any retained application installations.
+  Discovers spacecraft applications while retaining exact profile declarations
+  and existing installations for recovery.
   """
   @spec spacecraft(Scope.t(), Spacecraft.t()) :: {:ok, list()} | {:error, term()}
   def spacecraft(%Scope{} = current_scope, %Spacecraft{} = spacecraft) do
     host_context = HostContext.spacecraft(spacecraft.mission_id, spacecraft.spacecraft_id)
     declarations = spacecraft_declarations(current_scope, spacecraft)
 
-    declared(current_scope, host_context, declarations)
+    SpacecraftInventory.load(current_scope, host_context, declarations)
   end
 
   defp spacecraft_declarations(

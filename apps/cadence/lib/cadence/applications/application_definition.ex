@@ -12,6 +12,7 @@ defmodule Cadence.Applications.ApplicationDefinition do
     ApplicationDependency,
     LifecycleContract,
     ResourceContract,
+    SettingsSectionDefinition,
     StatusPlacement,
     SurfaceDefinition
   }
@@ -39,6 +40,7 @@ defmodule Cadence.Applications.ApplicationDefinition do
           preflight_query_id: binary() | nil,
           actions: [ActionDefinition.t()],
           surfaces: [SurfaceDefinition.t()],
+          settings_sections: [SettingsSectionDefinition.t()],
           capability_contributions: [map()]
         }
 
@@ -70,6 +72,7 @@ defmodule Cadence.Applications.ApplicationDefinition do
     status_placements: [],
     actions: [],
     surfaces: [],
+    settings_sections: [],
     capability_contributions: []
   ]
 
@@ -128,6 +131,7 @@ defmodule Cadence.Applications.ApplicationDefinition do
          true <- valid_actions?(definition.actions, definition.installable_scopes),
          true <- distinct_action_contracts?(definition),
          true <- valid_surfaces?(definition),
+         true <- valid_settings_sections?(definition.settings_sections),
          true <- valid_capability_contributions?(definition.capability_contributions) do
       :ok
     else
@@ -143,6 +147,16 @@ defmodule Cadence.Applications.ApplicationDefinition do
   end
 
   defp valid_installable_scopes?(_scopes), do: false
+
+  # An application installed on mission or spacecraft resources can contribute
+  # organization defaults without an organization-level installation.
+  defp valid_settings_sections?(sections) when is_list(sections) do
+    length(sections) <= 8 and
+      Enum.all?(sections, &(SettingsSectionDefinition.validate(&1) == :ok)) and
+      length(Enum.uniq_by(sections, & &1.id)) == length(sections)
+  end
+
+  defp valid_settings_sections?(_sections), do: false
 
   defp valid_dependencies?(dependencies, application_key) when is_list(dependencies) do
     identities = Enum.map(dependencies, &dependency_identity/1)

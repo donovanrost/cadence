@@ -2,7 +2,14 @@ import { producerFixture } from "../../../../../../test-support/producer-fixture
 import "../../../module-pages.test-support";
 import { jsonFixture } from "../../../../../../test-support/json-fixture";
 import BrowserHost from "../../../shell/BrowserHost.vue";
-vi.mock("live_vue", () => ({ useLiveVue: () => ({ pushEvent: vi.fn() }) }));
+import type { useLiveVue } from "live_vue";
+vi.mock("live_vue", () => ({
+  useLiveVue: (): ReturnType<typeof useLiveVue> => ({
+    pushEvent: vi.fn(),
+    handleEvent: (event, callback) => ({ event, callback: (value) => callback(value.detail) }),
+    removeHandleEvent: vi.fn(),
+  }),
+}));
 vi.mock("../../../shell/host-browser-history", async () => {
   const { createMemoryHistory } = await import("vue-router");
   return { hostBrowserHistory: createMemoryHistory(), ownBrowserHistory: vi.fn() };

@@ -1,6 +1,8 @@
 defmodule Cadence.Reads.Spacecraft.Pages do
   @moduledoc "Authorized host reads for core spacecraft features, independent of frontend delivery."
 
+  alias Cadence.Reads.Spacecraft.Configuration, as: ConfigurationRead
+
   alias Cadence.Applications.JSONBoundary
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Missions
@@ -57,6 +59,16 @@ defmodule Cadence.Reads.Spacecraft.Pages do
   defp read(scope, mission, "spacecraft_show", %{"spacecraft_id" => id} = params)
        when map_size(params) == 1 and is_binary(id),
        do: Overview.load(scope, mission, id)
+
+  defp read(scope, mission, "spacecraft_configuration", %{"spacecraft_id" => id} = params)
+       when map_size(params) <= 2 and is_binary(id),
+       do:
+         ConfigurationRead.load(
+           scope,
+           mission,
+           id,
+           Map.get(params, "section", "overview")
+         )
 
   defp read(scope, mission, "spacecraft_readiness", %{"spacecraft_id" => id} = params)
        when map_size(params) == 1 and is_binary(id),

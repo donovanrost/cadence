@@ -13,6 +13,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TelemetryDecom.Configuration do
     TelemetryDecom
   }
 
+  alias Cadence.Applications.SpacecraftConfiguration.Drafts, as: ConfigurationDrafts
   alias Cadence.Applications.TelemetryDecom.Review
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Catalog
@@ -143,7 +144,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TelemetryDecom.Configuration do
          "preview" => telemetry_preview(preview),
          "preflight" => preflight,
          "pending_activation" => pending_activation(pending),
-         "lifecycle_actions" => telemetry_actions(config, report, pending)
+         "lifecycle_actions" => telemetry_actions(config, report, pending, mission)
        }}
     else
       false -> {:error, :invalid_application_scope}
@@ -283,7 +284,10 @@ defmodule Cadence.Reads.ApplicationSurfaces.TelemetryDecom.Configuration do
     }
   end
 
-  defp telemetry_actions(config, report, pending) do
+  defp telemetry_actions(config, report, pending, mission) do
+    workspace? =
+      ConfigurationDrafts.saved_for_mission?(mission.organization_id, mission.mission_id)
+
     %{
       "disable" =>
         if(config && config.enabled,
@@ -291,7 +295,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TelemetryDecom.Configuration do
           else: nil
         ),
       "enable" =>
-        if(config,
+        if(config && !workspace?,
           do:
             lifecycle_action(
               "request_activation",
@@ -302,11 +306,16 @@ defmodule Cadence.Reads.ApplicationSurfaces.TelemetryDecom.Configuration do
           else: nil
         ),
       "empty_message" =>
-        if(is_nil(config),
-          do:
-            "Save a catalog revision, then choose packet inputs before requesting mission changes.",
-          else: nil
-        )
+        cond do
+          workspace? ->
+            "Review and activate these settings in the spacecraft configuration’s Changes section."
+
+          is_nil(config) ->
+            "Save a catalog revision, then choose packet inputs before requesting mission changes."
+
+          true ->
+            nil
+        end
     }
   end
 

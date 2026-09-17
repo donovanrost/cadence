@@ -15,6 +15,7 @@ defmodule Cadence.Commanding.RequestQueueStore do
     QueueLaneSequence
   }
 
+  alias Cadence.Platform.ScopedReadUpdates, as: ReadUpdates
   alias Cadence.Repo
 
   @spec enqueue_request(binary(), binary(), binary(), map(), keyword()) ::
@@ -49,6 +50,7 @@ defmodule Cadence.Commanding.RequestQueueStore do
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
+    |> ReadUpdates.publish_result(:commanding_changed, organization_id, mission_id)
   end
 
   defp lock_request(organization_id, mission_id, command_request_id) do
@@ -292,6 +294,11 @@ defmodule Cadence.Commanding.RequestQueueStore do
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
+    |> ReadUpdates.publish_result(
+      :commanding_changed,
+      expected_queue.organization_id,
+      expected_queue.mission_id
+    )
   end
 
   defp release_basis_matches(queue, expected_queue, request, opts) do

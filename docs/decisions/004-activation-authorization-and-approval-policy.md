@@ -4,7 +4,7 @@ aliases: [activation approval policy, config activation policy, governed activat
 tags: [adr, architecture, activation, authorization, approval, governance]
 status: accepted
 created: 2026-03-28
-updated: 2026-03-28
+updated: 2026-09-13
 ---
 
 # ADR-004: Activation Authorization and Approval Policy
@@ -46,8 +46,7 @@ Without this, runtime reconfiguration becomes either unsafe or inconsistent:
 
 Cadence will use an explicit, governed activation workflow with separate request,
 approval, and execution stages. Approval requirements are policy-driven, but
-release one defaults to a conservative human-approval model in operational
-environments.
+customers select one authorized operator or independent human approval for their organization and missions.
 
 ### 1. Activation Is A Separate Effectful Operation
 
@@ -147,19 +146,35 @@ request activation.
 An actor authorized to request activation is not automatically allowed to
 self-approve.
 
-### 6. Release-One Default Policy
+### 6. Organization Defaults And Mission Requirements
 
-Release one uses a conservative default policy:
+Governance settings select either one authorized operator or independent approval.
+Both are supported operational workflows, including for small teams.
 
-- in operational shared environments, any runtime-affecting activation requires
-  at least one human approver distinct from the requester
-- local development or explicitly designated non-operational environments may
-  allow simplified activation without separate approval
+Organizations set a default. Missions inherit it or save an explicit override.
+An organization may require independent approval for every mission. Enforcement
+retains existing overrides; releasing enforcement restores them. Direct activation
+is a default and cannot prohibit missions from adopting independent approval.
 
-This default applies even if the underlying change appears operationally small.
+Until an organization saves a setting, the existing deployment
+`activation_governance[:approval_required]` value supplies its initial default.
+Saving configuration remains separate from activation in either mode.
 
-Cadence may later support finer-grained approval classes, but release one should
-bias toward safety and clear auditability rather than aggressive auto-activation.
+Settings revisions record actor, scope, version, and the saved document. Writes
+compare exact revision evidence under a lock shared by organization and mission
+settings. Reads expose saved and effective values and their source.
+
+Authorization uses named `read_settings`, `manage_settings`, `request_activation`,
+and `approve_activation` actions. The initial policy admits active human members
+within their organization and mission scope for settings and review. It does not
+require a built-in admin role. These boundaries are intended for Cedar integration;
+Cedar itself is not implemented here.
+
+An activation request captures the effective approval policy and its settings
+revision evidence. Decisions and the final active-basis transaction revalidate
+that evidence. Changed settings invalidate older pending or approved requests,
+including requests created before this evidence contract. Operators must submit
+again; relaxing a requirement never automatically activates an existing request.
 
 ### 7. Separation Of Duties
 
@@ -168,8 +183,8 @@ For activation requests that require approval:
 - the requester must not satisfy the required distinct human approval slot
 - service identities must not satisfy human approval slots
 
-If an environment or policy later permits self-approval for low-risk cases, that
-must be an explicit policy exception rather than the default behavior.
+In one-operator mode, the requester explicitly reviews and activates the saved
+revision without a separate approval decision.
 
 ### 8. Policy Inputs
 
@@ -256,9 +271,10 @@ If validation fails, approval is not requested.
 
 If approval is denied, activation does not proceed.
 
-If execution fails after approval, Cadence must record activation failure
-explicitly and leave the prior active basis unchanged unless a separate
-transactional design later proves a safe partial-transition model.
+If admission fails, the active-basis transaction rolls back. Runtime reconciliation
+follows that durable transaction and can fail after the new basis is recorded.
+Cadence records the execution failure and reports that application needs review;
+the UI must not equate a recorded approval with confirmed runtime application.
 
 ### 14. Deferred Flexibility
 

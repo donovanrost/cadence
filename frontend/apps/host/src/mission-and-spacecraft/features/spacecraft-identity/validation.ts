@@ -31,6 +31,7 @@ const form = shape({
   form: shape({
     id: text,
     profile_version: version,
+    configuration_href: (value) => value === undefined || nullable(href)(value),
     sections: shape({ identity: section, profile: section }),
     fields: shape({
       display_name: field("text", "spacecraft[display_name]"),
@@ -55,6 +56,19 @@ const form = shape({
 export function assertIdentityForm(value: unknown): void {
   assertShape(form, value);
   const data = value as import("./contracts").IdentityData;
+  if (data.form.configuration_href) {
+    const target = data.form.configuration_href;
+    if (
+      data.page.id !== "spacecraft-edit-page" ||
+      !/^\/missions\/[A-Za-z0-9_-]+\/spacecraft\/[A-Za-z0-9_-]+\?section=communications$/.test(
+        target,
+      ) ||
+      !data.page.breadcrumbs.some(
+        (item) => item.href !== null && `${item.href}?section=communications` === target,
+      )
+    )
+      throw new Error("Invalid spacecraft configuration link.");
+  }
   const selected = data.form.fields.spacecraft_type_id.value;
   const pin = data.form.profile_version;
   if (

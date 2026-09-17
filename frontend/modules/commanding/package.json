@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./settings": "./src/settings.ts",
+    "./workspace": "./src/workspace.ts",
     ".": "./src/index.ts",
     "./mission-commands": "./src/mission-commands.ts",
     "./spacecraft-commanding": "./src/spacecraft-commanding.ts",

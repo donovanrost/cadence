@@ -16,6 +16,7 @@ defmodule Cadence.Commanding.ReleaseStore do
     RequestQueueStore
   }
 
+  alias Cadence.Platform.ScopedReadUpdates, as: ReadUpdates
   alias Cadence.Repo
 
   @spec persist(binary(), CommandReleaseAttempt.t()) ::
@@ -26,7 +27,12 @@ defmodule Cadence.Commanding.ReleaseStore do
            put_organization_scope(command_release_attempt, organization_id),
          {:ok, %CommandReleaseAttemptRow{} = row} <-
            Repo.insert(CommandReleaseAttemptRow.changeset(scoped_command_release_attempt)) do
-      {:ok, CommandReleaseAttemptRow.to_domain(row)}
+      ReadUpdates.publish_result(
+        {:ok, CommandReleaseAttemptRow.to_domain(row)},
+        :commanding_changed,
+        row.organization_id,
+        row.mission_id
+      )
     else
       {:error, %Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
@@ -54,6 +60,7 @@ defmodule Cadence.Commanding.ReleaseStore do
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
+    |> ReadUpdates.publish_result(:commanding_changed, queue.organization_id, queue.mission_id)
   end
 
   @doc "Serializes completion with the exact current claim; terminal completion is idempotent."
@@ -83,6 +90,7 @@ defmodule Cadence.Commanding.ReleaseStore do
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
+    |> ReadUpdates.publish_result(:commanding_changed, queue.organization_id, queue.mission_id)
   end
 
   @doc "Records an ambiguous transmission without reopening its lane or replacing earlier evidence."

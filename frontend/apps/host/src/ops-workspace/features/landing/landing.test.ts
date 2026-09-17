@@ -17,7 +17,7 @@ const props = (model: unknown = fixture()) => ({
   missionId: "mission-1",
 });
 
-test("mission landing and Ops rail share destinations and administrative admission", async () => {
+test("mission landing and Ops rail expose approvals to operators regardless of built-in role", async () => {
   const model = fixture();
   const wrapper = mount(WorkspaceLanding, { props: props(model) });
   const rail = (admin: boolean) =>
@@ -28,7 +28,7 @@ test("mission landing and Ops rail share destinations and administrative admissi
       group.items.map((item) => item.href),
     );
   expect(wrapper.findAll("nav a").map((link) => link.attributes("href"))).toEqual(rail(false));
-  expect(wrapper.find("#ops-entry-activations").exists()).toBe(false);
+  expect(wrapper.find("#ops-entry-activations").exists()).toBe(true);
   expect(wrapper.get("#ops-entry-commands").attributes("data-phx-link")).toBe("redirect");
   expect(wrapper.text()).toContain("Firebird");
   expect(wrapper.text()).not.toContain("components available");
@@ -92,7 +92,7 @@ test("actual producer renders scoped navigation without accepting server supplie
   expect(wrapper.get("#ops-entry-dashboards").attributes("href")).toBe(
     `/missions/${encodeURIComponent(model.context.mission_id)}/ops/dashboards`,
   );
-  expect(wrapper.find("#ops-entry-activations").exists()).toBe(model.can_administer);
+  expect(wrapper.find("#ops-entry-activations").exists()).toBe(true);
   expect(wrapper.text()).toContain(model.mission_name);
   expect(
     wrapper

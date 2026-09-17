@@ -19,7 +19,6 @@ const groups = computed(() => {
   return current
     ? workspaceGroups(
         (path) => `/missions/${encodeURIComponent(current.context.mission_id)}/ops/${path}`,
-        current.can_administer,
       )
     : [];
 });

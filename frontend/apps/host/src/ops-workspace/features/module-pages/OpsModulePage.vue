@@ -8,6 +8,7 @@ import type {
   OpsPageNavigationPort,
   OpsPageReadRequest,
   SettledOpsPageNavigationPort,
+  OpsPageUpdateSubscription,
 } from "@cadence/plugin-sdk/ops-pages";
 import { opsPages } from "./contributions";
 import { createOpsReadPort } from "./read-port";
@@ -22,6 +23,7 @@ const props = defineProps<{
   refreshing?: boolean;
   execute?: (request: OpsPageAction) => Promise<unknown>;
   query?: (request: OpsPageReadRequest) => Promise<unknown>;
+  subscribe?: OpsPageUpdateSubscription;
   navigate?: (href: string) => void;
   navigateSettled?: SettledOpsPageNavigationPort["navigate"];
   guardNavigation?: (guard: () => boolean) => () => void;
@@ -59,9 +61,12 @@ const admitted = computed(() => {
           props.context,
           captured.current,
           props.query,
+          registration.query === "live" ? props.subscribe : undefined,
         )
       : undefined;
     if (registration.query && !readPort) throw Error("Missing Ops read capability.");
+    if (registration.query === "live" && (!readPort || !("subscribe" in readPort)))
+      throw Error("Missing live Ops read capability.");
     let port: OpsPagePort | OpsPageNavigationPort | undefined;
     let active = captured.active;
     if (registration.actions) {

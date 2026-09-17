@@ -19,7 +19,7 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
     assert_surface(view, mission, spacecraft)
   end
 
-  test "a forged install event cannot bypass the pinned profile declaration" do
+  test "a spacecraft application can be installed without a protocol preset" do
     {conn, mission, spacecraft} = signed_in_spacecraft()
     {:ok, view, _html} = live(conn, inventory_path(mission, spacecraft))
 
@@ -29,9 +29,27 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
       "path" => Test.get_vue(view, id: "application-shell").props["snapshot"]["path"]
     })
 
-    refute Cadence.Repo.get_by(Cadence.Applications.ApplicationInstallations.InstallationRow,
+    assert Cadence.Repo.get_by(Cadence.Applications.ApplicationInstallations.InstallationRow,
              scope_id: spacecraft.spacecraft_id,
              application_key: "telemetry_decom"
+           )
+
+    assert_surface(view, mission, spacecraft)
+  end
+
+  test "a forged install event cannot install an unavailable spacecraft application" do
+    {conn, mission, spacecraft} = signed_in_spacecraft()
+    {:ok, view, _html} = live(conn, inventory_path(mission, spacecraft))
+
+    render_hook(view, "host:manage", %{
+      "event" => "install",
+      "key" => "unavailable-spacecraft-application",
+      "path" => Test.get_vue(view, id: "application-shell").props["snapshot"]["path"]
+    })
+
+    refute Cadence.Repo.get_by(Cadence.Applications.ApplicationInstallations.InstallationRow,
+             scope_id: spacecraft.spacecraft_id,
+             application_key: "unavailable-spacecraft-application"
            )
 
     assert_surface(view, mission, spacecraft)

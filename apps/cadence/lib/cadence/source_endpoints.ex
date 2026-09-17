@@ -4,6 +4,8 @@ defmodule Cadence.SourceEndpoints do
   endpoints.
   """
 
+  alias Cadence.Platform.ScopedReadUpdates
+
   import Ecto.Query
 
   alias Ecto.Changeset
@@ -38,6 +40,7 @@ defmodule Cadence.SourceEndpoints do
       {:error, %Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
     end
+    |> notify_configuration_change()
   end
 
   @spec persist_source_endpoint(SourceEndpoint.t()) ::
@@ -58,6 +61,7 @@ defmodule Cadence.SourceEndpoints do
           {:error, reason}
       end
     end
+    |> notify_configuration_change()
   end
 
   @spec fetch_source_endpoint(binary(), binary()) :: {:ok, SourceEndpoint.t()} | {:error, term()}
@@ -131,7 +135,7 @@ defmodule Cadence.SourceEndpoints do
         row.organization_id == ^organization_id and row.mission_id == ^mission_id and
           row.source_endpoint_id > ^after_id
       )
-      |> apply_search(search)
+      |> apply_command_search(organization_id, mission_id, search)
       |> order_by([row], asc: row.source_endpoint_id)
       |> limit(26)
       |> select([row], %{
@@ -237,6 +241,24 @@ defmodule Cadence.SourceEndpoints do
       ilike(source_endpoint.source_endpoint_id, ^pattern) or
         ilike(source_endpoint.spacecraft_id, ^pattern) or
         ilike(source_endpoint.display_name, ^pattern)
+    )
+  end
+
+  defp apply_command_search(query, _, _, nil), do: query
+  defp apply_command_search(query, _, _, ""), do: query
+
+  defp apply_command_search(query, organization_id, mission_id, search) when is_binary(search) do
+    pattern = "%" <> Listing.escape_like(search) <> "%"
+    spacecraft = SpacecraftStore.display_name_ids_query(organization_id, mission_id, search)
+
+    where(
+      query,
+      [endpoint],
+      ilike(endpoint.source_endpoint_id, ^pattern) or
+        ilike(endpoint.spacecraft_id, ^pattern) or
+        ilike(endpoint.display_name, ^pattern) or
+        ilike(endpoint.source_ref, ^pattern) or
+        endpoint.spacecraft_id in subquery(spacecraft)
     )
   end
 
@@ -502,4 +524,15 @@ defmodule Cadence.SourceEndpoints do
   defp maybe_filter_spacecraft(query, spacecraft_id) when is_binary(spacecraft_id) do
     where(query, [row], row.spacecraft_id == ^spacecraft_id)
   end
+
+  defp notify_configuration_change({:ok, resource} = result),
+    do:
+      ScopedReadUpdates.publish_result(
+        result,
+        :spacecraft_configuration_changed,
+        resource.organization_id,
+        resource.mission_id
+      )
+
+  defp notify_configuration_change(result), do: result
 end

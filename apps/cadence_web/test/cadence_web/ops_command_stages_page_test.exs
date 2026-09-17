@@ -191,7 +191,7 @@ defmodule CadenceWeb.OpsCommandStagesPageTest do
     assert receipt["item_id"] == preview["item_id"]
     row = Repo.get!(StagedCommandItemRow, receipt["item_id"])
     assert row.notes == String.duplicate("é", 2_000)
-    assert row.argument_values_document == %{"value" => %{"amount" => 2}}
+    assert row.argument_values_document == %{"value" => %{"amount" => 2, "delay_s" => 5}}
     assert row.submitted_command_request_id == nil
     assert %{"snapshot" => refreshed} = read(view, path, p)
     assert refreshed["data"]["item_preview"] == nil

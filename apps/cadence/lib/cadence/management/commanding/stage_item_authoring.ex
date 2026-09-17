@@ -51,9 +51,16 @@ defmodule Cadence.Management.Commanding.StageItemAuthoring do
     with {:ok, input} <- parse_save(held, input),
          :ok <- expected(input.expected_write, write_token),
          :ok <- expected(input.expected_preview, held.token) do
-      StageAccess.with_stage(scope, mission_id, stage_id, :write, fn fresh, _, stage ->
-        save_locked(scope, fresh, stage, held, input)
-      end)
+      StageAccess.with_stage(
+        scope,
+        mission_id,
+        stage_id,
+        :write,
+        fn fresh, _, stage ->
+          save_locked(scope, fresh, stage, held, input)
+        end,
+        notify: true
+      )
     end
   end
 

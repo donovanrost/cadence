@@ -63,7 +63,7 @@ test("the compiled authoring owner receives captured preview, create, and receip
         expected_basis: snapshot.data.catalog.basis.token,
         source_endpoint_ref: "target_one",
         command_id: "command_one",
-        argument_values_json: JSON.stringify({ amount: 2 }),
+        argument_values_json: JSON.stringify({ amount: 2, delay_s: 5, enabled: false }),
         priority: 3,
         not_before: null,
         expires_at: null,

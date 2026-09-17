@@ -3,6 +3,8 @@ defmodule Cadence.SpacecraftStore do
   Persistence boundary for mission-owned spacecraft.
   """
 
+  alias Cadence.Platform.ScopedReadUpdates
+
   import Ecto.Query
 
   alias Ecto.Changeset
@@ -12,6 +14,27 @@ defmodule Cadence.SpacecraftStore do
   alias Cadence.Repo
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore.SpacecraftRow
+  alias Cadence.SpacecraftTypeStore
+
+  def fetch_pinned_profile(_mission, %Spacecraft{spacecraft_type_id: nil}), do: {:ok, nil}
+
+  def fetch_pinned_profile(mission, %Spacecraft{
+        spacecraft_type_id: type_id,
+        spacecraft_type_version: version
+      })
+      when is_binary(type_id) and is_integer(version) do
+    case SpacecraftTypeStore.fetch_spacecraft_type_version(
+           mission.organization_id,
+           mission.mission_id,
+           type_id,
+           version
+         ) do
+      {:ok, profile} -> {:ok, profile}
+      {:error, _reason} -> {:ok, nil}
+    end
+  end
+
+  def fetch_pinned_profile(_mission, _spacecraft), do: {:ok, nil}
 
   @max_batch_size 100
 
@@ -44,6 +67,7 @@ defmodule Cadence.SpacecraftStore do
       {:error, %Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
     end
+    |> notify_configuration_change()
   end
 
   @spec persist_spacecraft(Spacecraft.t()) :: {:ok, Spacecraft.t()} | {:error, term()}
@@ -61,6 +85,7 @@ defmodule Cadence.SpacecraftStore do
       {:error, reason} ->
         {:error, reason}
     end
+    |> notify_configuration_change()
   end
 
   @spec update_spacecraft(binary(), Spacecraft.t()) :: {:ok, Spacecraft.t()} | {:error, term()}
@@ -81,6 +106,7 @@ defmodule Cadence.SpacecraftStore do
         {:error, reason} -> {:error, reason}
       end
     end
+    |> notify_configuration_change()
   end
 
   @spec fetch_spacecraft(binary(), binary()) :: {:ok, Spacecraft.t()} | {:error, term()}
@@ -90,6 +116,31 @@ defmodule Cadence.SpacecraftStore do
       nil -> {:error, :spacecraft_not_found}
       %SpacecraftRow{} = row -> {:ok, SpacecraftRow.to_domain(row)}
     end
+  end
+
+  @doc "Serializes identity and reviewed framing changes against the same current spacecraft."
+  def with_locked_spacecraft(organization_id, mission_id, spacecraft_id, operation) do
+    Repo.transact(fn ->
+      row =
+        Repo.one(
+          from(row in SpacecraftRow,
+            where:
+              row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+                row.spacecraft_id == ^spacecraft_id,
+            lock: "FOR UPDATE"
+          )
+        )
+
+      case row do
+        nil -> {:error, :spacecraft_not_found}
+        row -> operation.(SpacecraftRow.to_domain(row))
+      end
+    end)
+    |> ScopedReadUpdates.publish_result(
+      :spacecraft_configuration_changed,
+      organization_id,
+      mission_id
+    )
   end
 
   @spec fetch_spacecraft(binary(), binary(), binary()) ::
@@ -126,6 +177,35 @@ defmodule Cadence.SpacecraftStore do
 
         {:ok, Map.new(rows, fn row -> {row.spacecraft_id, SpacecraftRow.to_domain(row)} end)}
     end
+  end
+
+  @doc "Curated display names for a bounded set of mission spacecraft; no metadata is loaded."
+  def display_names(organization_id, mission_id, spacecraft_ids) do
+    with {:ok, ids} <- bounded_spacecraft_ids(spacecraft_ids) do
+      rows =
+        Repo.all(
+          from(row in SpacecraftRow,
+            where:
+              row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+                row.spacecraft_id in ^ids,
+            select: %{"id" => row.spacecraft_id, "name" => row.display_name}
+          )
+        )
+
+      {:ok, rows}
+    end
+  end
+
+  @doc "Scoped identity-only subquery for composing paged searches without materializing the fleet."
+  def display_name_ids_query(organization_id, mission_id, search) do
+    pattern = "%" <> Listing.escape_like(search) <> "%"
+
+    from(row in SpacecraftRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          ilike(row.display_name, ^pattern),
+      select: row.spacecraft_id
+    )
   end
 
   defp bounded_spacecraft_ids(spacecraft_ids) do
@@ -334,4 +414,15 @@ defmodule Cadence.SpacecraftStore do
           spacecraft.mission_id}}
     end
   end
+
+  defp notify_configuration_change({:ok, resource} = result),
+    do:
+      ScopedReadUpdates.publish_result(
+        result,
+        :spacecraft_configuration_changed,
+        resource.organization_id,
+        resource.mission_id
+      )
+
+  defp notify_configuration_change(result), do: result
 end

@@ -22,8 +22,11 @@ defmodule CadenceWeb.CatalogPage do
 
   defp snapshot(scope, mission_id, page, params) do
     case Pages.load(scope, mission_id, page, params) do
-      {:ok, data} -> %{version: 1, page: page, status: "ready", data: data}
-      {:error, _reason} -> %{version: 1, page: page, status: "unavailable"}
+      {:ok, data} ->
+        %{version: 1, page: page, status: "ready", data: data}
+
+      {:error, _reason} ->
+        %{version: 1, page: page, status: "unavailable"}
     end
   rescue
     _exception -> %{version: 1, page: page, status: "unavailable"}

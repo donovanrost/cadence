@@ -1,7 +1,7 @@
 defmodule CadenceWeb.OpsShellHook do
   alias Cadence.Applications.OpsDock
   alias Cadence.Reads.OperationalContext
-  alias CadenceWeb.OpsShellHook.ContextDeps
+  alias CadenceWeb.OpsShellHook.{CommandUpdates, ContextDeps}
 
   @moduledoc """
   on_mount hook for the ops console live_session: loads the assigns the
@@ -27,6 +27,7 @@ defmodule CadenceWeb.OpsShellHook do
      |> refresh_ops_dock()
      |> assign(:active_dashboard_id, nil)
      |> assign(:ops_nav_item, :dashboards)
+     |> CommandUpdates.subscribe()
      |> attach_context_refresh(context_deps)}
   end
 
@@ -133,6 +134,13 @@ defmodule CadenceWeb.OpsShellHook do
       socket = assign(socket, :ops_context_refresh_attached?, true)
 
       attach_hook(socket, :ops_context_refresh, :handle_info, fn
+        {:commanding_changed, org, mission}, socket ->
+          # The workspace also consumes the notice to invalidate its own read.
+          {:cont, CommandUpdates.changed(socket, org, mission)}
+
+        {:ops_command_context_flush, token}, socket ->
+          {:halt, CommandUpdates.flush(socket, token)}
+
         :ops_context_refresh, socket ->
           schedule_context_refresh(deps)
           {:halt, refresh_active_context(socket, deps)}

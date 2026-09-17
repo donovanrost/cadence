@@ -12,7 +12,8 @@ defmodule CadenceWeb.SpacecraftPage do
   ]
 
   @routes %{
-    "/missions/:mission_id/spacecraft/:spacecraft_id" => {"spacecraft_show", ["spacecraft_id"]},
+    "/missions/:mission_id/spacecraft/:spacecraft_id" =>
+      {"spacecraft_configuration", ["spacecraft_id", "section"]},
     "/missions/:mission_id/spacecraft/:spacecraft_id/readiness" =>
       {"spacecraft_readiness", ["spacecraft_id"]},
     "/missions/:mission_id/spacecraft/profiles/new" => {"profile_new", []},

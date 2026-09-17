@@ -64,6 +64,13 @@ defmodule CadenceWeb.ActivationApprovals do
       {:error, :invalid_activation_decision} ->
         %{status: "invalid", message: "Provide a decision rationale of at most 4096 bytes."}
 
+      {:error, :activation_policy_changed} ->
+        %{
+          status: "invalid",
+          message:
+            "Approval settings changed. Review the current requirements and submit the configuration again."
+        }
+
       {:error, :activation_request_not_pending_approval} ->
         %{status: "invalid", message: "This request has already been decided. Refresh the inbox."}
 

@@ -2,6 +2,8 @@ import type {
   OpsPageContext,
   OpsPageReadPort,
   OpsPageReadRequest,
+  OpsPageUpdateSubscription,
+  LiveOpsPageReadPort,
 } from "@cadence/plugin-sdk/ops-pages";
 import { readPageEnvelope, validPageToken } from "../../../shell/module-pages/page-admission";
 
@@ -12,10 +14,27 @@ export function createOpsReadPort(
   context: OpsPageContext,
   active: () => boolean,
   query?: (request: OpsPageReadRequest) => Promise<unknown>,
-): OpsPageReadPort | undefined {
+  subscribe?: OpsPageUpdateSubscription,
+): OpsPageReadPort | LiveOpsPageReadPort | undefined {
   if (!query || !validPageToken(token)) return;
   const captured = { ...context };
   return {
+    ...(subscribe
+      ? {
+          subscribe(listener: () => void) {
+            if (!active()) throw Error("Inactive Ops page subscription.");
+            let listening = true;
+            const stop = subscribe({ id, token }, () => {
+              if (listening && active()) listener();
+            });
+            return () => {
+              if (!listening) return;
+              listening = false;
+              stop();
+            };
+          },
+        }
+      : {}),
     async read() {
       if (!active()) throw Error("Inactive Ops page read.");
       const result = await query({ id, token });

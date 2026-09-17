@@ -55,6 +55,7 @@ defmodule CadenceWeb.HostPageLiveTest do
           {"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications",
            "mission_sidebar", mission.mission_id},
           {"/missions/#{mission.mission_id}/ops/dashboards", "ops", mission.mission_id},
+          {"/missions/#{mission.mission_id}/ops/activations", "ops", mission.mission_id},
           {"/missions", "sidebar", nil},
           {"/missions/#{second.mission_id}/ops/dashboards", "ops", second.mission_id},
           {"/", "sidebar", nil}
@@ -117,12 +118,11 @@ defmodule CadenceWeb.HostPageLiveTest do
   end
 
   test "context requests cannot bypass organization or platform administrator policies" do
-    {conn, _organization, mission} = navigation_fixture()
+    {conn, _organization, _mission} = navigation_fixture()
 
     for target <- [
           "/provider-accounts",
-          "/admin",
-          "/missions/#{mission.mission_id}/ops/activations"
+          "/admin"
         ] do
       {:ok, view, _html} = live(conn, "/")
 

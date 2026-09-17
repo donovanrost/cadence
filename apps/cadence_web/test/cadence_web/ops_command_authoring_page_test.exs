@@ -53,7 +53,11 @@ defmodule CadenceWeb.OpsCommandAuthoringPageTest do
     p = snapshot["ops_page"]
     assert p["status"] == "ready"
     preview_input = probe(p)
-    assert Jason.decode!(preview_input["argument_values_json"]) == %{"amount" => 2}
+
+    assert Jason.decode!(preview_input["argument_values_json"]) == %{
+             "amount" => 2,
+             "delay_s" => 5
+           }
 
     assert %{"snapshot" => %{"status" => "previewed", "preview" => preview}} =
              action(view, c.path, p, "preview", preview_input)

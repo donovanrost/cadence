@@ -37,6 +37,7 @@ export type SelectField = {
 export type SpacecraftForm = {
   id: string;
   profile_version: number | null;
+  configuration_href?: string | null;
   sections: {
     identity: Section;
     profile: Section;

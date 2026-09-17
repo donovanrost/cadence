@@ -28,6 +28,9 @@ defmodule Cadence.Architecture.ContextBoundary do
   ]
 
   @file_context_overrides %{
+    "lib/cadence/management/settings.ex" => :composition,
+    "lib/cadence/control/spacecraft_configuration.ex" => :catalog,
+    "lib/cadence/control/spacecraft_model_bindings.ex" => :catalog,
     "lib/cadence/reads/mission_models/active_basis.ex" => :adapter,
     "lib/cadence/contact_planning/fleet_run_actions.ex" => :contacts,
     "lib/cadence/contact_planning/fleet_run_repairs.ex" => :contacts,

@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./settings": "./src/settings-section.ts",
+    "./settings-vue": "./src/settings-vue.ts",
     "./ops-pages": "./src/ops-page-contribution.ts",
     "./mission-pages": "./src/mission-page-contribution.ts",
     "./organization-pages": "./src/organization-page-contribution.ts",
@@ -21,6 +23,10 @@
   },
   "devDependencies": {
     "typescript": "catalog:",
-    "vite-plus": "catalog:"
+    "vite-plus": "catalog:",
+    "vue": "catalog:"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
   }
 }

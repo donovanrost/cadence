@@ -68,9 +68,16 @@ defmodule Cadence.Management.Commanding.StageDrafts do
   def edit_stage(scope, mission_id, stage_id, write_token, input) do
     with {:ok, input} <- StageInput.edit_stage(input),
          :ok <- expected(input.expected_write, write_token) do
-      StageAccess.with_stage(scope, mission_id, stage_id, :write, fn fresh, _, row ->
-        edit_locked_stage(fresh, row, input)
-      end)
+      StageAccess.with_stage(
+        scope,
+        mission_id,
+        stage_id,
+        :write,
+        fn fresh, _, row ->
+          edit_locked_stage(fresh, row, input)
+        end,
+        notify: true
+      )
     end
   end
 
@@ -114,9 +121,16 @@ defmodule Cadence.Management.Commanding.StageDrafts do
   defp maintain_item(scope, mission_id, stage_id, item_id, write_token, input, changes) do
     with true <- Ids.valid_identifier?(item_id),
          :ok <- expected(input.expected_write, write_token) do
-      StageAccess.with_stage(scope, mission_id, stage_id, :write, fn _fresh, _, stage ->
-        maintain_locked_item(scope, stage, item_id, input, changes)
-      end)
+      StageAccess.with_stage(
+        scope,
+        mission_id,
+        stage_id,
+        :write,
+        fn _fresh, _, stage ->
+          maintain_locked_item(scope, stage, item_id, input, changes)
+        end,
+        notify: true
+      )
     else
       false -> {:error, :unavailable}
       error -> error

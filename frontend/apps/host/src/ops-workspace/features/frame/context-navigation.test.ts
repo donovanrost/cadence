@@ -5,11 +5,11 @@ import { contextSections } from "./context";
 import { required } from "../../../../../../test-support/required";
 import { readOpsFrameContext } from "./context-contract";
 import { context } from "../../../auth-and-navigation/shared/context.test-support";
-test("capabilities determine available navigation and active links", () => {
-  const admin = { ...context, capabilities: ["organization_admin"] };
+test("operators can find approvals without a built-in role and links preserve command focus", () => {
+  const operator = { ...context, capabilities: [] };
   expect(
     required(
-      opsNavigation(required(readOpsFrameContext(admin))).groups.find(
+      opsNavigation(required(readOpsFrameContext(operator))).groups.find(
         (group) => group.key === "act",
       ),
     ).items.map((item) => item.key),
@@ -17,13 +17,13 @@ test("capabilities determine available navigation and active links", () => {
   const nav = opsNavigation(
     required(
       readOpsFrameContext({
-        ...admin,
+        ...operator,
         ops_context: { pinned_focus: { kind: "command", id: "cmd/a?b" } },
       }),
     ),
   );
   expect(required(required(nav.groups[1]).items[0]).href).toBe(
-    "/missions/mission%2F1/ops/commands?focus_command_id=cmd%2Fa%3Fb",
+    "/missions/mission%2F1/ops/commands/workspace?focus_command_id=cmd%2Fa%3Fb",
   );
   expect(required(required(nav.groups[1]).items[0]).active).toBe(true);
 });

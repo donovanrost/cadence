@@ -30,6 +30,14 @@ export type GuardedOpsPagePort = OpsPagePort &
   Required<Pick<OpsPageNavigationPort, "guardNavigation">>;
 /** Captured page reads return domain data without replacing the mounted page. */
 export type OpsPageReadPort = { read(): Promise<unknown> };
+/** Changes are wake-ups; the feature reads again through its captured, authorized port. */
+export type LiveOpsPageReadPort = OpsPageReadPort & {
+  subscribe(listener: () => void): () => void;
+};
+export type OpsPageUpdateSubscription = (
+  request: OpsPageReadRequest,
+  listener: () => void,
+) => () => void;
 export type OpsPageReadRequest = { id: string; token: string };
 export type OpsPageAction = {
   id: string;
@@ -47,7 +55,7 @@ export type OpsPageContribution<TComponent = unknown> = {
   /** Read-only pages may navigate without receiving an action port or action token. */
   readonly navigation?: true | "settled";
   /** Supplies a read-only port with page-instance and context admission. */
-  readonly query?: true;
+  readonly query?: true | "live";
   /** A submitted workflow must be able to protect its mounted lifetime. */
   readonly guardNavigation?: true;
   /** Only the feature interprets its DTO and binds any resource identity. */

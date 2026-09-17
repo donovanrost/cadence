@@ -22,6 +22,7 @@ defmodule Cadence.Commanding.StageStore do
   alias Cadence.Ids
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Platform.ScopedReadUpdates, as: ReadUpdates
   alias Cadence.Repo
   alias Cadence.SourceEndpoints
 
@@ -37,7 +38,12 @@ defmodule Cadence.Commanding.StageStore do
            ),
          {:ok, %CommandStageRow{} = row} <-
            Repo.insert(CommandStageRow.changeset(scoped_command_stage)) do
-      {:ok, CommandStageRow.to_domain(row)}
+      ReadUpdates.publish_result(
+        {:ok, CommandStageRow.to_domain(row)},
+        :commanding_changed,
+        row.organization_id,
+        row.mission_id
+      )
     else
       {:error, %Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
@@ -55,6 +61,7 @@ defmodule Cadence.Commanding.StageStore do
         scoped.command_stage_id,
         &update_locked_stage(&1, scoped)
       )
+      |> ReadUpdates.publish_result(:commanding_changed, organization_id, scoped.mission_id)
     end
   end
 
@@ -114,6 +121,7 @@ defmodule Cadence.Commanding.StageStore do
         scoped.command_stage_id,
         &persist_locked_item(&1, scoped)
       )
+      |> ReadUpdates.publish_result(:commanding_changed, organization_id, scoped.mission_id)
     end
   end
 
@@ -141,7 +149,8 @@ defmodule Cadence.Commanding.StageStore do
              item.organization_id,
              item.mission_id,
              item.mission_model_revision_id,
-             item.command_id
+             item.command_id,
+             item.source_endpoint_ref
            ) do
       :ok
     end
@@ -155,6 +164,7 @@ defmodule Cadence.Commanding.StageStore do
       with_locked_stage(organization_id, scoped.mission_id, scoped.command_stage_id, fn stage ->
         update_locked_item(stage, scoped)
       end)
+      |> ReadUpdates.publish_result(:commanding_changed, organization_id, scoped.mission_id)
     end
   end
 
@@ -237,6 +247,7 @@ defmodule Cadence.Commanding.StageStore do
       with_locked_stage(organization_id, mission_id, command_stage_id, fn stage_row ->
         submit_locked(stage_row, staged_command_item_ids, requested_by)
       end)
+      |> ReadUpdates.publish_result(:commanding_changed, organization_id, mission_id)
     end
   end
 
@@ -308,6 +319,7 @@ defmodule Cadence.Commanding.StageStore do
         stage_id,
         &submit_locked_review(&1, ids, held, before_insert)
       )
+      |> ReadUpdates.publish_result(:commanding_changed, org, mission)
     else
       false -> {:error, :command_stage_changed}
       error -> error

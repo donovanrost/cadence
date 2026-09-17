@@ -19,20 +19,35 @@ defmodule Cadence.Spacecraft.Identity do
              mission_id: mission_id
            }),
          {:ok, _mission} <- Missions.fetch_mission(scope.organization_id, mission_id),
-         {:ok, current} <- current(scope.organization_id, mission_id, spacecraft_id),
-         {:ok, attrs} <- fields(input),
-         {:ok, binding} <- binding(scope.organization_id, mission_id, current, attrs) do
-      complete(event, scope.organization_id, mission_id, current, Map.merge(attrs, binding))
+         {:ok, attrs} <- fields(input) do
+      with_current(
+        scope.organization_id,
+        mission_id,
+        spacecraft_id,
+        &apply_fields(event, scope.organization_id, mission_id, &1, attrs)
+      )
     end
   end
 
   def action(_scope, _mission_id, _spacecraft_id, _event, _input),
     do: {:error, :invalid_spacecraft_action}
 
-  defp current(_organization_id, _mission_id, nil), do: {:ok, nil}
+  defp apply_fields(event, organization_id, mission_id, current, attrs) do
+    with {:ok, binding} <- binding(organization_id, mission_id, current, attrs) do
+      complete(event, organization_id, mission_id, current, Map.merge(attrs, binding))
+    end
+  end
 
-  defp current(organization_id, mission_id, spacecraft_id),
-    do: SpacecraftStore.fetch_spacecraft(organization_id, mission_id, spacecraft_id)
+  defp with_current(_organization_id, _mission_id, nil, operation), do: operation.(nil)
+
+  defp with_current(organization_id, mission_id, spacecraft_id, operation),
+    do:
+      SpacecraftStore.with_locked_spacecraft(
+        organization_id,
+        mission_id,
+        spacecraft_id,
+        operation
+      )
 
   defp fields(%{"spacecraft" => attrs}) when is_map(attrs) do
     with {:ok, name} <- name(attrs["display_name"]),
@@ -90,6 +105,16 @@ defmodule Cadence.Spacecraft.Identity do
   end
 
   defp version(_value), do: invalid_profile()
+
+  defp binding(_organization_id, _mission_id, %{metadata: metadata} = current, attrs)
+       when is_map_key(metadata, "spacecraft_configuration_revision_id") do
+    if attrs.spacecraft_type_id == current.spacecraft_type_id and
+         attrs.spacecraft_type_version in [current.spacecraft_type_version, :unspecified] do
+      {:ok, Map.take(current, [:spacecraft_type_id, :spacecraft_type_version])}
+    else
+      invalid("spacecraft_type_id", "Change framing in Communications and submit it for review.")
+    end
+  end
 
   defp binding(_organization_id, _mission_id, _current, %{
          spacecraft_type_id: nil,
@@ -153,8 +178,9 @@ defmodule Cadence.Spacecraft.Identity do
        do: :ok
 
   defp admit_binding(organization_id, mission_id, _current, id, _version) do
-    with {:ok, _active} <-
+    with {:ok, active} <-
            SpacecraftTypeStore.fetch_spacecraft_type(organization_id, mission_id, id),
+         false <- Map.has_key?(active.metadata, "spacecraft_configuration_revision_id"),
          do: :ok
   end
 

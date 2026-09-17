@@ -191,13 +191,16 @@ defmodule CadenceWeb.SpacecraftPageTest do
     {:ok, view, _} = live(conn, base)
 
     overview =
-      assert_page(view, "spacecraft_show", "spacecraft-overview", "assertSpacecraftOverview")
+      assert_page(
+        view,
+        "spacecraft_configuration",
+        "spacecraft-configuration",
+        "readConfiguration"
+      )
 
-    assert overview["profile_binding"]["title"] == "Pinned Flight Profile"
-    assert overview["profile_binding"]["version"] == "v1"
-    assert overview["profile_binding"]["status"]["label"] == "Pinned"
-    assert overview["overview"]["scid"]["value"] == "0"
-    assert [%{"application_key" => "telemetry_decom"}] = overview["applications"]["rows"]
+    assert overview["document"]["protocol"]["downlink"] == to_string(profile.downlink_protocol)
+    assert overview["scid"] == 0
+    assert overview["active"] == nil
     render_hook(view, "host:context", %{"path" => base <> "/readiness"})
 
     data =
@@ -225,7 +228,7 @@ defmodule CadenceWeb.SpacecraftPageTest do
     assert hd(data["contributions"])["status"]["tone"] == "info"
     refute data["page"]["status"]["tone"] == "ready"
     render_hook(view, "host:context", %{"path" => base})
-    assert_page(view, "spacecraft_show", "spacecraft-overview", "assertSpacecraftOverview")
+    assert_page(view, "spacecraft_configuration", "spacecraft-configuration", "readConfiguration")
   end
 
   test "unbound and missing pinned profiles remain distinguishable without losing core pages",
@@ -243,10 +246,15 @@ defmodule CadenceWeb.SpacecraftPageTest do
       {:ok, view, _} = live(conn, base)
 
       data =
-        assert_page(view, "spacecraft_show", "spacecraft-overview", "assertSpacecraftOverview")
+        assert_page(
+          view,
+          "spacecraft_configuration",
+          "spacecraft-configuration",
+          "readConfiguration"
+        )
 
-      assert data["profile_binding"]["status"]["tone"] == tone
-      assert data["profile_binding"]["profile_action"]["href"] == base <> "/identity"
+      assert data["document"]["protocol"] == nil
+      assert data["links"]["identity"] == base <> "/identity"
       render_hook(view, "host:context", %{"path" => base <> "/readiness"})
 
       readiness =
@@ -301,7 +309,12 @@ defmodule CadenceWeb.SpacecraftPageTest do
     assert %{"page" => ^page, "version" => 1, "status" => "ready", "data" => data} =
              snapshot(view)
 
-    path = Path.join([@features, feature, "validation.ts"])
+    path =
+      Path.join([
+        @features,
+        feature,
+        if(feature == "spacecraft-configuration", do: "contracts.ts", else: "validation.ts")
+      ])
 
     node =
       System.find_executable("node") || flunk("Node is required for spacecraft DTO validation")

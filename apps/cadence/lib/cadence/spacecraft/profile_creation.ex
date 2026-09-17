@@ -4,7 +4,7 @@ defmodule Cadence.Spacecraft.ProfileCreation do
   alias Cadence.{ExtensionCatalog, Missions, SpacecraftType, SpacecraftTypeStore}
 
   def available_applications do
-    ExtensionCatalog.available_applications_for_scope(:mission)
+    ExtensionCatalog.available_applications_for_scope(:spacecraft)
     |> Enum.filter(&(&1.installation_policy == :optional))
   end
 

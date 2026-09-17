@@ -5,6 +5,7 @@ defmodule CadenceWeb.HostPageAuthorization do
 
   alias CadenceWeb.{AdminAuth, DashboardAuthorAuth, MissionAuth, OrganizationAuth}
   alias CadenceWeb.{OpsShellHook, SpacecraftAuth, UserAuth}
+  alias CadenceWeb.OpsShellHook.CommandUpdates
 
   @organization {OrganizationAuth, :require_organization_scope}
   @mission {MissionAuth, :load_mission}
@@ -51,7 +52,7 @@ defmodule CadenceWeb.HostPageAuthorization do
   end
 
   defp prepare_operations({:halt, socket}, _params, _mission, _shell),
-    do: {:halt, assign(socket, :ops_context_active?, false)}
+    do: {:halt, socket |> CommandUpdates.stop() |> assign(:ops_context_active?, false)}
 
   defp prepare_operations(
          {:cont, %{assigns: %{ops_context_active?: true}} = socket},
@@ -68,6 +69,8 @@ defmodule CadenceWeb.HostPageAuthorization do
   end
 
   defp prepare_operations({:cont, socket}, _params, _mission, _shell) do
+    socket = CommandUpdates.stop(socket)
+
     {:cont,
      assign(socket,
        ops_context: nil,

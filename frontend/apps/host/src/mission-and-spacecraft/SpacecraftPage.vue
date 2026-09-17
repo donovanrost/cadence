@@ -6,6 +6,13 @@ import type { NavigateDirectory } from "./features/spacecraft-directory/contract
 import SpacecraftIdentityPage from "./features/spacecraft-identity/SpacecraftIdentityPage.vue";
 import ProfileCreationPage from "./features/profile-creation/ProfileCreationPage.vue";
 import type { IdentityAction } from "./features/spacecraft-identity/contracts";
+import SpacecraftConfigurationPage from "./features/spacecraft-configuration/SpacecraftConfigurationPage.vue";
+import { readConfiguration } from "./features/spacecraft-configuration/contracts";
+import type {
+  ConfigurationPort,
+  ConfigurationIdentity,
+  ConfigurationDrafts,
+} from "./configuration";
 const props = defineProps<{
   page: string;
   snapshot: unknown;
@@ -13,6 +20,9 @@ const props = defineProps<{
   navigating?: boolean;
   execute?: IdentityAction & import("./features/profile-creation/contracts").ProfileAction;
   refresh: () => Promise<void>;
+  configurationPort?: ConfigurationPort;
+  configurationIdentity?: ConfigurationIdentity;
+  configurationDrafts?: ConfigurationDrafts;
 }>();
 const crashed = ref(false);
 watch(
@@ -27,6 +37,27 @@ onErrorCaptured(() => {
 });
 const admitted = computed(() => {
   const snapshot = props.snapshot;
+  if (props.page === "spacecraft_configuration") {
+    if (
+      !props.configurationPort ||
+      !props.configurationIdentity ||
+      !props.configurationDrafts ||
+      !record(snapshot) ||
+      snapshot.page !== props.page ||
+      snapshot.version !== 1 ||
+      snapshot.status !== "ready"
+    )
+      return null;
+    try {
+      return {
+        component: SpacecraftConfigurationPage,
+        data: readConfiguration(snapshot.data, props.configurationIdentity),
+        formToken: null,
+      };
+    } catch {
+      return null;
+    }
+  }
   if (
     ["spacecraft_new", "spacecraft_edit", "profile_new"].includes(props.page) &&
     (!props.execute ||
@@ -71,6 +102,18 @@ const admitted = computed(() => {
         Retry
       </button>
     </div>
+    <SpacecraftConfigurationPage
+      v-else-if="
+        page === 'spacecraft_configuration' &&
+        configurationPort &&
+        configurationIdentity &&
+        configurationDrafts
+      "
+      :data="admitted.data"
+      :port="configurationPort"
+      :identity="configurationIdentity"
+      :drafts="configurationDrafts"
+    />
     <ProfileCreationPage
       v-else-if="page === 'profile_new' && execute"
       :key="admitted.formToken ?? page"

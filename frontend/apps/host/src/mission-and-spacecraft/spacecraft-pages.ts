@@ -1,4 +1,6 @@
 import type { Component } from "vue";
+import SpacecraftConfigurationPage from "./features/spacecraft-configuration/SpacecraftConfigurationPage.vue";
+import { readConfiguration } from "./features/spacecraft-configuration/contracts";
 import SpacecraftShow from "./features/spacecraft-overview/SpacecraftShow.vue";
 import { assertSpacecraftOverview } from "./features/spacecraft-overview/validation";
 import SpacecraftReadiness from "./features/spacecraft-readiness/SpacecraftReadiness.vue";
@@ -22,6 +24,7 @@ export const spacecraftPages: Record<
   string,
   { component: Component; validate: (value: unknown) => void }
 > = {
+  spacecraft_configuration: { component: SpacecraftConfigurationPage, validate: readConfiguration },
   spacecraft_new: { component: SpacecraftIdentityForm, validate: assertNewIdentityForm },
   spacecraft_show: { component: SpacecraftShow, validate: assertSpacecraftOverview },
   spacecraft_readiness: { component: SpacecraftReadiness, validate: assertSpacecraftReadiness },

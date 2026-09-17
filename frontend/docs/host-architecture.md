@@ -138,3 +138,28 @@ package and production browser journey, rather than resurrecting migration snaps
 Run `corepack pnpm test` from `frontend`, `mix precommit` from the repository root, and
 `MIX_ENV=test mix test.browser.federation` from `apps/cadence_web` for the separate production
 browser gate. A successful build or ExUnit run does not substitute for that browser gate.
+
+## Organization and mission settings
+
+Settings use the authenticated application host at `/settings/:section_id` and
+`/missions/:mission_id/settings/:section_id`. The host supplies section navigation,
+scope, history, opaque draft retention and page-bound transport ports. Mission
+settings remain in the current mission. Application failures are contained within
+their section.
+
+Domain modules export `SettingsSectionContribution` from a public entry, with the
+versioned `settings.section` metadata, a value reader and a Vue editor. The editor
+receives `SettingsContext`, a snapshot, current edit permission, and a captured
+`SettingsSectionPort`. `@cadence/plugin-sdk/settings-vue` provides the common
+draft/conflict/save lifecycle; the domain owns its value decoder and semantics.
+
+A backend application declares `SettingsSectionDefinition` with a
+`SettingsProvider` implementing `settings_snapshot/2` and `save/4`. Providers
+own defaults and validate values; shared versioned storage handles atomic revisions,
+audit and updates. The settings coordinator admits platform applications or installed
+applications applicable to the scope, and checks admission again for each write.
+Register the matching lazy frontend loader in the host settings composition. These
+are coordinated compiled contributions under ADR-024.
+
+The initial owners are Cadence Governance and Commanding defaults. New owners can
+reuse the shared UI without putting their domain values or effects in the host.

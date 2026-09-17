@@ -166,14 +166,14 @@
     "path": "/missions/:mission_id/spacecraft/:spacecraft_id",
     "scope": "spacecraft",
     "mountId": "spacecraft-show-component",
-    "queryKeys": [],
+    "queryKeys": ["section"],
     "queryAliases": {},
     "viewClass": "",
     "metadata": {
       "nav_item": "spacecraft"
     },
     "kind": "spacecraft",
-    "spacecraftPage": "spacecraft_show"
+    "spacecraftPage": "spacecraft_configuration"
   },
   {
     "path": "/missions/:mission_id/spacecraft/:spacecraft_id/identity",
@@ -553,7 +553,10 @@
     "queryKeys": [],
     "queryAliases": {},
     "viewClass": "contents",
-    "metadata": { "page_title": "Mission Operations", "ops_nav_item": "workspace" }
+    "metadata": {
+      "page_title": "Mission Operations",
+      "ops_nav_item": "workspace"
+    }
   },
   {
     "path": "/missions/:mission_id/ops/dashboards/new",
@@ -975,6 +978,29 @@
     },
     "kind": "ops_workspace",
     "workspacePage": "timeline"
+  },
+  {
+    "path": "/missions/:mission_id/ops/commands/workspace",
+    "kind": "ops_module",
+    "contribution": "commanding.workspace",
+    "scope": "mission",
+    "mountId": "ops-command-workspace-component",
+    "queryKeys": [
+      "stage",
+      "focus_command_id",
+      "command",
+      "target",
+      "command_after",
+      "target_after",
+      "command_query",
+      "target_query"
+    ],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "page_title": "Commanding",
+      "ops_nav_item": "commands"
+    }
   },
   {
     "path": "/missions/:mission_id/ops/commands/stages",
@@ -1486,5 +1512,57 @@
       "page_title": "Applications",
       "nav_item": "spacecraft"
     }
+  },
+  {
+    "path": "/settings",
+    "scope": "organization",
+    "mountId": "settings-page-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "nav_item": "settings",
+      "page_title": "Organization settings"
+    },
+    "kind": "settings"
+  },
+  {
+    "path": "/settings/:section_id",
+    "scope": "organization",
+    "mountId": "settings-page-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "nav_item": "settings",
+      "page_title": "Organization settings"
+    },
+    "kind": "settings"
+  },
+  {
+    "path": "/missions/:mission_id/settings",
+    "scope": "mission",
+    "mountId": "settings-page-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "nav_item": "settings",
+      "page_title": "Mission settings"
+    },
+    "kind": "settings"
+  },
+  {
+    "path": "/missions/:mission_id/settings/:section_id",
+    "scope": "mission",
+    "mountId": "settings-page-component",
+    "queryKeys": [],
+    "queryAliases": {},
+    "viewClass": "contents",
+    "metadata": {
+      "nav_item": "settings",
+      "page_title": "Mission settings"
+    },
+    "kind": "settings"
   }
 ]

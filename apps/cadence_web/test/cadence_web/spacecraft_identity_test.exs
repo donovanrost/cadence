@@ -4,6 +4,7 @@ defmodule CadenceWeb.SpacecraftIdentityTest do
   alias Cadence.Applications.{ActionRequest, HostContext}
   alias Cadence.Applications.Spacecraft.ActionProvider
   alias Cadence.Auth.Scope
+  alias Cadence.Reads.Spacecraft.Profiles
   alias Cadence.Spacecraft.Identity
   alias Cadence.{SpacecraftStore, SpacecraftTypeStore}
   alias CadenceWeb.TestFixtures
@@ -96,6 +97,47 @@ defmodule CadenceWeb.SpacecraftIdentityTest do
     assert craft.organization_id == org.organization_id
     assert craft.spacecraft_type_version == 1
     assert craft.metadata == %{}
+  end
+
+  test "reviewed framing links to Communications and private protocol records are not shared presets",
+       %{conn: conn, mission: mission, path: path} do
+    assert {:ok, profile} =
+             SpacecraftTypeStore.persist_spacecraft_type(
+               mission.organization_id,
+               Cadence.SpacecraftType.new(%{
+                 mission_id: mission.mission_id,
+                 display_name: "Private communications",
+                 downlink_protocol: :tm,
+                 uplink_protocol: :tc,
+                 metadata: %{"spacecraft_configuration_revision_id" => "configuration-one"}
+               })
+             )
+
+    craft =
+      TestFixtures.persist_spacecraft!(mission,
+        spacecraft_type_id: profile.spacecraft_type_id,
+        spacecraft_type_version: 1
+      )
+
+    assert {:ok, craft} =
+             SpacecraftStore.update_spacecraft(mission.organization_id, %{
+               craft
+               | metadata: %{"spacecraft_configuration_revision_id" => "configuration-one"}
+             })
+
+    {:ok, view, _} = live(conn, path <> "/" <> craft.spacecraft_id <> "/identity")
+    data = assert_form(view, "spacecraft_edit", "assertEditIdentityForm")
+
+    assert data["form"]["configuration_href"] ==
+             path <> "/" <> craft.spacecraft_id <> "?section=communications"
+
+    assert data["form"]["fields"]["spacecraft_type_id"]["value"] == profile.spacecraft_type_id
+    render_hook(view, "host:context", %{"path" => path <> "/new"})
+    new = assert_form(view, "spacecraft_new", "assertNewIdentityForm")
+    assert new["form"]["configuration_href"] == nil
+    assert [%{"value" => "", "version" => nil}] = new["profile_options"]["options"]
+
+    assert Profiles.directory(mission)["presentation"]["card"] == nil
   end
 
   test "identity edits preserve pins and permit explicit version changes or clearing", %{

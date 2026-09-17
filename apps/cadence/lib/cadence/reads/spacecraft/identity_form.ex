@@ -21,7 +21,7 @@ defmodule Cadence.Reads.Spacecraft.IdentityForm do
         "id" => "spacecraft-new-page",
         "heading" => "New Spacecraft",
         "subtitle" =>
-          "Register a spacecraft for this mission. Optionally select a profile to pin its byte-interpretation contract.",
+          "Register a spacecraft for this mission. Optionally start with a protocol preset.",
         "breadcrumbs" => [
           breadcrumb(mission.display_name, mission_path(mission)),
           breadcrumb("Spacecraft", spacecraft_path(mission, nil)),
@@ -40,8 +40,7 @@ defmodule Cadence.Reads.Spacecraft.IdentityForm do
       "page" => %{
         "id" => "spacecraft-edit-page",
         "heading" => "Spacecraft Identity",
-        "subtitle" =>
-          "Update the durable identity and profile binding for #{spacecraft.display_name}.",
+        "subtitle" => "Update the name and spacecraft identifier for #{spacecraft.display_name}.",
         "breadcrumbs" => [
           breadcrumb(mission.display_name, mission_path(mission)),
           breadcrumb("Spacecraft", spacecraft_path(mission, nil)),
@@ -58,6 +57,7 @@ defmodule Cadence.Reads.Spacecraft.IdentityForm do
     %{
       "id" => spacecraft_form_id(kind),
       "profile_version" => spacecraft && spacecraft.spacecraft_type_version,
+      "configuration_href" => configuration_href(mission, spacecraft),
       "sections" => %{
         "identity" => %{
           "id" => identity_section_id(kind),
@@ -67,7 +67,7 @@ defmodule Cadence.Reads.Spacecraft.IdentityForm do
         "profile" => %{
           "id" => profile_section_id(kind),
           "number" => "02",
-          "title" => "Profile"
+          "title" => "Communications"
         }
       },
       "fields" => %{
@@ -94,7 +94,7 @@ defmodule Cadence.Reads.Spacecraft.IdentityForm do
             profile_field_id(kind),
             "spacecraft[spacecraft_type_id]",
             "select",
-            "Spacecraft Profile",
+            "Protocol preset",
             (spacecraft && spacecraft.spacecraft_type_id) || "",
             false
           )
@@ -112,6 +112,12 @@ defmodule Cadence.Reads.Spacecraft.IdentityForm do
       }
     }
   end
+
+  defp configuration_href(mission, %{metadata: metadata} = spacecraft)
+       when is_map_key(metadata, "spacecraft_configuration_revision_id"),
+       do: spacecraft_path(mission, spacecraft.spacecraft_id) <> "?section=communications"
+
+  defp configuration_href(_mission, _spacecraft), do: nil
 
   defp spacecraft_form_id("edit"), do: "spacecraft-edit-form"
   defp spacecraft_form_id(_kind), do: "spacecraft-form"
@@ -141,6 +147,8 @@ defmodule Cadence.Reads.Spacecraft.IdentityForm do
   defp cancel_link_id(_kind), do: "cancel-spacecraft-link"
 
   defp profile_options(mission, types, spacecraft) do
+    types = Enum.reject(types, &Map.has_key?(&1.metadata, "spacecraft_configuration_revision_id"))
+
     options =
       Enum.map(
         types,

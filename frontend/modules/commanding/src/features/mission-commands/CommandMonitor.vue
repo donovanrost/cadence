@@ -19,6 +19,8 @@ const props = defineProps<{
   context: OpsPageContext;
   port: OpsPageNavigationPort;
   refresh: () => Promise<void>;
+  live?: boolean;
+  syncFailed?: boolean;
 }>();
 const fields = reactive({ ...props.model.query }),
   pending = ref(false),
@@ -180,20 +182,22 @@ async function retry() {
     <CadenceOpsListBodyFrame>
       <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-base-content/75">
         <p>
-          Snapshot observed
+          {{ live ? "Updated" : "Snapshot observed" }}
           <time id="command-monitor-observed" :datetime="model.observed_at">{{
             model.observed_at
           }}</time
-          >. Refresh to read current state.
+          ><template v-if="!live">. Refresh to read current state.</template>
+          <span v-if="live && syncFailed" role="status"> · Live updates are interrupted.</span>
         </p>
         <button
+          v-if="!live || syncFailed"
           id="command-monitor-refresh"
           type="button"
           class="btn btn-ghost btn-sm"
           :disabled="pending"
           @click="retry"
         >
-          Refresh
+          {{ live ? "Retry updates" : "Refresh" }}
         </button>
       </div>
       <section

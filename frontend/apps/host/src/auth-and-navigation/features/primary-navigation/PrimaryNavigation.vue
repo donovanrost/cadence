@@ -92,6 +92,30 @@ const items = computed(() => (model.value ? navigation(model.value, props.missio
           </li>
         </ul>
       </nav>
+      <slot name="footer">
+        <nav
+          v-if="model.organization && model.nav_context !== 'admin'"
+          aria-label="Settings"
+          class="border-t border-primary/20"
+        >
+          <a
+            :href="
+              mission && model.mission
+                ? '/missions/' + encodeURIComponent(model.mission.mission_id) + '/settings'
+                : '/settings'
+            "
+            class="cd-side-nav-item"
+            :aria-current="model.nav_item === 'settings' ? 'page' : undefined"
+            aria-label="Settings"
+            title="Settings"
+          >
+            <span class="hero-cog-6-tooth cd-side-nav-icon h-4 w-4" aria-hidden="true" /><span
+              class="sidebar-label"
+              >Settings</span
+            >
+          </a>
+        </nav>
+      </slot>
       <form
         id="sidebar-sign-out"
         action="/session"

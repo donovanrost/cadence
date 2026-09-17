@@ -33,20 +33,19 @@ function mountPage(page = pageFixture()) {
 }
 async function enterAndPreview(c: ReturnType<typeof mountPage>) {
   await c.wrapper.get('[data-argument-name="amount"]').setValue("2");
-  await c.wrapper.get('[data-argument-enabled="enabled"]').setValue(true);
   await c.wrapper.get('[data-argument-name="enabled"]').setValue("false");
   await c.wrapper.get("#command-authoring-form").trigger("submit");
   await flushPromises();
 }
 describe("command authoring", () => {
-  test("captures explicit false and omits fixed/default arguments before the real preview", async () => {
+  test("submits explicit defaults and false, leaving fixed arguments to the server", async () => {
     const c = mountPage();
     await enterAndPreview(c);
     expect(c.execute).toHaveBeenCalledWith("preview", {
       expected_basis: "a".repeat(64),
       source_endpoint_ref: "target_one",
       command_id: "command_one",
-      argument_values_json: JSON.stringify({ amount: 2, enabled: false }),
+      argument_values_json: JSON.stringify({ amount: 2, delay_s: 5, enabled: false }),
       priority: 3,
       not_before: null,
       expires_at: null,
@@ -239,10 +238,14 @@ test.skipIf(!producer.available)(
         : { amount: "2" };
       for (const [name, value] of Object.entries(inputs)) {
         const raw = fixtureString(value);
-        const enabled = c.wrapper.get<HTMLInputElement>(`[data-argument-enabled="${name}"]`);
-        if (!enabled.element.checked) await enabled.setValue(true);
-        const enumType = c.wrapper.find(`select[aria-label="${name} value type"]`);
-        if (enumType.exists()) await enumType.setValue(raw.startsWith('"') ? "text" : "number");
+        const argument = page.catalog.selected_command.arguments.find((a) => a.name === name);
+        if (argument?.type === "enumerated") {
+          const field = c.wrapper.get(`[data-argument-name="${name}"]`);
+          const select = field.find("select");
+          if (select.exists()) await select.setValue(raw);
+          else await field.get(`input[value="${raw}"]`).setValue(true);
+          continue;
+        }
         await c.wrapper
           .get(`[data-argument-name="${name}"]`)
           .setValue(raw.startsWith('"') ? JSON.parse(raw) : raw);
@@ -304,4 +307,33 @@ test("old and mixed argument contracts fail closed while exact wide preview text
     mutate(x);
     expect(() => readAuthoringPage(x, p.catalog.context)).toThrow();
   }
+});
+
+test("catalog enum choices require distinct exact integer values and bounded labels", () => {
+  const page = pageFixture();
+  const arg = required(required(page.catalog.selected_command).arguments[0]);
+  arg.type = "enumerated";
+  arg.choices = [{ label: "Maximum", value_json: "18446744073709551615" }];
+  expect(readAuthoringPage(page, page.catalog.context)).toEqual(page);
+  for (const choices of [
+    undefined,
+    null,
+    [],
+    [{ label: "One", value_json: 1 }],
+    [{ label: "One", value_json: '"1"' }],
+    [{ label: "One", value_json: "1.0" }],
+    [{ label: "", value_json: "1" }],
+    [
+      { label: "One", value_json: "1" },
+      { label: "Alias", value_json: "1" },
+    ],
+    Array.from({ length: 1025 }, (_, i) => ({ label: String(i), value_json: String(i) })),
+  ]) {
+    const malformed = structuredClone(page);
+    fixtureRecordAt(malformed, "catalog", "selected_command", "arguments", 0).choices = choices;
+    expect(() => readAuthoringPage(malformed, page.catalog.context)).toThrow();
+  }
+  required(page.catalog.selected_command).supported = false;
+  arg.choices = [];
+  expect(readAuthoringPage(page, page.catalog.context)).toEqual(page);
 });

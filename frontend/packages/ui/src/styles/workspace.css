@@ -1,0 +1,33 @@
+/* Shared desktop workspace density. Small screens retain the stacked, roomier controls.
+   Height matters independently of width: browser chrome and windowed desktops need space too. */
+.cd-page--workspace,
+.cadence-workspace-layout {
+  --workspace-space: 4px;
+  --workspace-heading-size: var(--type-body-md);
+  --workspace-label-size: var(--type-body-md);
+  --workspace-page-title-size: var(--type-title-lg);
+  --workspace-page-padding: 1rem;
+}
+
+@media (min-width: 901px) and (max-width: 1440px), (min-width: 901px) and (max-height: 800px) {
+  .cd-page--workspace,
+  .cadence-workspace-layout {
+    --workspace-space: 3px;
+    --workspace-heading-size: 0.8125rem;
+    --workspace-label-size: var(--type-body-sm);
+    --workspace-page-title-size: var(--type-title-md);
+    --workspace-page-padding: 0.625rem;
+    --workspace-page-header-display: grid;
+    --workspace-page-row-display: contents;
+    --workspace-breadcrumb-margin: 0;
+    --workspace-tile-display: grid;
+    --workspace-tile-visual-width: 3.5rem;
+    --workspace-tile-visual-height: 1.75rem;
+
+    /* Existing control recipes inherit these roles inside the workspace only. */
+    --type-body-md: 0.8125rem;
+    --control-md: 2rem;
+    --control-padding: 0.5rem;
+    --space-2: 0.375rem;
+  }
+}

@@ -156,6 +156,8 @@ defmodule Cadence.Architecture.PlaneBoundary do
                       ])
 
   @public_composition_values MapSet.new([
+                               "lib/cadence/applications/settings_provider.ex",
+                               "lib/cadence/applications/settings_section_definition.ex",
                                "lib/cadence/applications/telemetry_decom_catalog_contribution.ex",
                                "lib/cadence/applications/comms.ex",
                                "lib/cadence/applications/derived_telemetry.ex",
@@ -172,6 +174,9 @@ defmodule Cadence.Architecture.PlaneBoundary do
                              ])
 
   @plane_file_overrides %{
+    "lib/cadence/catalog/command/compatibility.ex" => :shared,
+    "lib/cadence/catalog/spacecraft_configuration_input.ex" => :shared,
+    "lib/cadence/catalog/spacecraft_model_bindings.ex" => :shared,
     "lib/cadence/commanding/authoring_identity.ex" => :shared,
     "lib/cadence/reads/mission_models/active_basis.ex" => :adapter,
     "lib/cadence/projections/data_sources/health.ex" => :data,
@@ -250,6 +255,8 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/applications/action_request.ex" => :shared,
     "lib/cadence/applications/application_dependency.ex" => :shared,
     "lib/cadence/applications/application_definition.ex" => :shared,
+    "lib/cadence/applications/settings_section_definition.ex" => :shared,
+    "lib/cadence/applications/settings_provider.ex" => :shared,
     "lib/cadence/applications/application_installation.ex" => :shared,
     "lib/cadence/applications/application_installation/lifecycle_event.ex" => :management,
     "lib/cadence/applications/application_installations.ex" => :management,
@@ -412,6 +419,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
       "lib/cadence/operational_events/"
     ],
     management: [
+      "lib/cadence/applications/spacecraft_configuration/",
       "lib/cadence/applications/application_binding.ex",
       "lib/cadence/applications/application_binding_store",
       "lib/cadence/contacts/link_assignment_store",

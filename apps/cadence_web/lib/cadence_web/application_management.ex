@@ -55,7 +55,7 @@ defmodule CadenceWeb.ApplicationManagement do
       :allowed
     else
       _denied ->
-        {:denied, "Declare this application in the spacecraft profile before installing it."}
+        {:denied, "This application is not available for this spacecraft."}
     end
   end
 

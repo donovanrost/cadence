@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import CadenceLink from "@cadence/ui/CadenceLink.vue";
 import { computed, reactive } from "vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 import CadenceFormActions from "@cadence/ui/CadenceFormActions.vue";
@@ -139,7 +140,18 @@ function save() {
           divider-class="flex-1 h-px bg-base-300/60"
         />
 
+        <p v-if="form.configuration_href" class="text-sm text-base-content/70">
+          Framing is managed in the spacecraft workspace.
+          <CadenceLink
+            id="spacecraft-identity-communications-link"
+            :href="form.configuration_href"
+            data-phx-link="redirect"
+            data-phx-link-state="push"
+            >Configure communications</CadenceLink
+          >.
+        </p>
         <CadenceField
+          v-else
           :control-id="form.fields.spacecraft_type_id.id"
           wrapper-class="fieldset mb-3"
           :label="form.fields.spacecraft_type_id.label"

@@ -1,5 +1,4 @@
 import { workspaceGroups } from "../../shared/destinations";
-import { canAdminister } from "../../../auth-and-navigation";
 import type { OpsFrameContext } from "./context-contract";
 type OpsNavigationContext = {
   mission: { mission_id: string };
@@ -19,7 +18,7 @@ export function opsNavigation(context: OpsNavigationContext) {
   const focus = context.ops_context?.pinned_focus;
   const href = (path: string) =>
     `${root}/${path}${focus?.kind === "command" && focus.id ? `?focus_command_id=${encodeURIComponent(focus.id)}` : ""}`;
-  const groups = workspaceGroups(href, canAdminister(context), context.ops_nav_item);
+  const groups = workspaceGroups(href, context.ops_nav_item);
   const dashboard_groups = (
     [
       ["starred", "Starred", "hero-star-solid"],

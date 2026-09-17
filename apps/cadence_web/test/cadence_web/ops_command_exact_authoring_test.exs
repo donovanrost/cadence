@@ -41,17 +41,15 @@ defmodule CadenceWeb.OpsCommandExactAuthoringTest do
   end
 
   @tag timeout: 120_000
-  test "real producer and mounted Vue preserve default, explicit, signed and typed enum values through Phoenix create",
+  test "real producer and mounted Vue preserve default, explicit, signed and selected enum values through Phoenix create",
        c do
     for {command, inputs, native} <- [
-          {"SET_COUNTER", %{"amount" => "2"}, %{"amount" => 2}},
+          {"SET_COUNTER", %{"amount" => "2"}, %{"amount" => 2, "counter" => @maximum}},
           {"SET_COUNTER", %{"amount" => "2", "counter" => Integer.to_string(@maximum)},
            %{"amount" => 2, "counter" => @maximum}},
           {"SET_SIGNED", %{"counter" => "-9223372036854775808"},
            %{"counter" => -9_223_372_036_854_775_808}},
-          {"SET_ENUM", %{"counter" => Integer.to_string(@maximum)}, %{"counter" => @maximum}},
-          {"SET_ENUM", %{"counter" => Jason.encode!(Integer.to_string(@maximum))},
-           %{"counter" => Integer.to_string(@maximum)}}
+          {"SET_ENUM", %{"counter" => Integer.to_string(@maximum)}, %{"counter" => @maximum}}
         ] do
       path =
         "/missions/#{c.mission}/ops/commands/new?" <>
@@ -87,9 +85,36 @@ defmodule CadenceWeb.OpsCommandExactAuthoringTest do
       assert request.requested_by["user_id"] == c.user.user_id
     end
 
-    assert Repo.aggregate(CommandRequestRow, :count) == 5
+    assert Repo.aggregate(CommandRequestRow, :count) == 4
     assert Repo.aggregate(CommandQueueEntryRow, :count) == 0
     assert Repo.aggregate(CommandReleaseAttemptRow, :count) == 0
+  end
+
+  @tag timeout: 120_000
+  test "Vue review preserves an already prepared textual enum request", c do
+    path =
+      "/missions/#{c.mission}/ops/commands/new?" <>
+        URI.encode_query(%{
+          "command" => c.model.commands_by_name["SET_ENUM"],
+          "target" => c.target.source_endpoint_id
+        })
+
+    {:ok, view, _} = live(TestFixtures.member_conn(c.user), path)
+    p = page(view)
+    input = authoring_probe(p, %{"counter" => Integer.to_string(@maximum)})
+    # Existing callers and saved requests can retain textual numeric enum intent.
+    values = %{"counter" => Integer.to_string(@maximum)}
+    input = Map.put(input, "argument_values_json", Jason.encode!(values))
+    assert %{"snapshot" => %{"status" => "previewed"}} = action(view, path, p, "preview", input)
+    assert %{"snapshot" => refreshed} = read(view, path, p)
+    create = authoring_probe(refreshed, %{})
+
+    assert %{"snapshot" => %{"status" => "completed", "receipt" => receipt}} =
+             action(view, path, p, "create", create)
+
+    request = Repo.get!(CommandRequestRow, receipt["request_id"]) |> CommandRequestRow.to_domain()
+    assert request.argument_values == values
+    assert request.resolved_argument_values == values
   end
 
   @tag timeout: 120_000

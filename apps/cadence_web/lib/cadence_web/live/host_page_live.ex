@@ -2,6 +2,9 @@ defmodule CadenceWeb.HostPageLive do
   @moduledoc "Authenticated context and event transport for the persistent Vue host."
   use CadenceWeb, :live_view
 
+  alias CadenceWeb.SettingsPage
+  alias CadenceWeb.SpacecraftConfigurationPage
+
   alias Cadence.Catalog.Reimport
   alias Cadence.Reads.OperationalContext
 
@@ -243,6 +246,41 @@ defmodule CadenceWeb.HostPageLive do
          true <- CadenceWeb.OpsCommandStagesPage.matches_read?(socket, params) do
       {page, socket} = CadenceWeb.OpsCommandStagesPage.read(socket)
       {:reply, %{ok: true, snapshot: page}, socket}
+    else
+      {:halt, socket} -> {:noreply, socket}
+      _ -> {:reply, %{ok: false}, socket}
+    end
+  end
+
+  def handle_event(
+        "host:ops-page:read",
+        %{"path" => path, "id" => "commanding.workspace"} = params,
+        socket
+      ) do
+    with true <- CadenceWeb.OpsCommandWorkspacePage.matches_read?(socket, params),
+         {:ok, info} <- resolve_path(path),
+         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
+         true <- CadenceWeb.OpsCommandWorkspacePage.matches_read?(socket, params) do
+      {page, socket} = CadenceWeb.OpsCommandWorkspacePage.read(socket)
+      {:reply, %{ok: true, snapshot: page}, socket}
+    else
+      {:halt, socket} -> {:noreply, socket}
+      _ -> {:reply, %{ok: false}, socket}
+    end
+  end
+
+  def handle_event(
+        "host:ops-page",
+        %{"path" => path, "id" => "commanding.workspace", "event" => event, "input" => input} =
+          params,
+        socket
+      ) do
+    with true <- CadenceWeb.OpsCommandWorkspacePage.matches_action?(socket, params),
+         {:ok, info} <- resolve_path(path),
+         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
+         true <- CadenceWeb.OpsCommandWorkspacePage.matches_action?(socket, params) do
+      {result, socket} = CadenceWeb.OpsCommandWorkspacePage.action(socket, event, input)
+      {:reply, %{ok: true, snapshot: result}, socket}
     else
       {:halt, socket} -> {:noreply, socket}
       _ -> {:reply, %{ok: false}, socket}
@@ -1037,9 +1075,102 @@ defmodule CadenceWeb.HostPageLive do
     end
   end
 
+  def handle_event(
+        "host:spacecraft-configuration",
+        %{"path" => path, "event" => event, "input" => input},
+        socket
+      )
+      when event in ["save", "review", "activate", "decide", "catalog"] do
+    with true <- path == socket.assigns.host_path,
+         {:ok, info} <- resolve_path(path),
+         true <- SpacecraftConfigurationPage.route?(info.route),
+         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params) do
+      result =
+        SpacecraftConfigurationPage.action(
+          socket.assigns.current_scope,
+          info.params,
+          event,
+          input
+        )
+
+      case prepare_context(socket, path) do
+        {:ok, socket} ->
+          {:reply, %{ok: true, snapshot: Map.put(result, :host, snapshot(socket.assigns))},
+           socket}
+
+        {:halt, socket} ->
+          {:noreply, socket}
+
+        :error ->
+          {:reply, %{ok: false}, socket}
+      end
+    else
+      {:halt, socket} -> {:noreply, socket}
+      _ -> {:reply, %{ok: false}, socket}
+    end
+  end
+
+  def handle_event("host:settings", %{"path" => path, "token" => token, "input" => input}, socket) do
+    with true <- SettingsPage.matches?(socket, path, token),
+         {:ok, info} <- resolve_path(path),
+         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
+         true <- SettingsPage.matches?(socket, path, token) do
+      result =
+        SettingsPage.action(socket.assigns.current_scope, socket.assigns.settings_session, input)
+
+      case prepare_context(socket, path) do
+        {:ok, socket} ->
+          {:reply, %{ok: true, snapshot: %{result: result, page: snapshot(socket.assigns)}},
+           socket}
+
+        {:halt, socket} ->
+          {:noreply, socket}
+
+        _ ->
+          {:reply, %{ok: false}, socket}
+      end
+    else
+      {:halt, socket} -> {:noreply, socket}
+      _ -> {:reply, %{ok: false}, socket}
+    end
+  end
+
   def handle_event(_event, _params, socket), do: {:reply, %{ok: false}, socket}
 
   @impl true
+  def handle_info({:settings_changed, org, mission}, socket) do
+    if SettingsPage.relevant?(socket, org, mission) do
+      case prepare_context(socket, socket.assigns.host_path) do
+        {:ok, socket} -> {:noreply, socket}
+        {:halt, socket} -> {:noreply, socket}
+        :error -> {:noreply, socket}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info({:spacecraft_configuration_changed, org, mission}, socket) do
+    if socket.assigns[:spacecraft_configuration_subscription] == {org, mission} do
+      case prepare_context(socket, socket.assigns.host_path) do
+        {:ok, socket} -> {:noreply, socket}
+        {:halt, socket} -> {:noreply, socket}
+        :error -> {:noreply, socket}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info({:commanding_changed, org, mission}, socket),
+    do: {:noreply, CadenceWeb.OpsCommandWorkspacePage.changed(socket, org, mission)}
+
+  def handle_info({:command_workspace_flush, token}, socket),
+    do: {:noreply, CadenceWeb.OpsCommandWorkspacePage.flush(socket, token)}
+
+  def handle_info({:command_workspace_reconcile, token}, socket),
+    do: {:noreply, CadenceWeb.OpsCommandWorkspacePage.reconcile(socket, token)}
+
   def handle_info(:catalog_upload_drain, socket) do
     case socket.assigns[:catalog_upload_session] do
       %{phase: :waiting, path: path} ->
@@ -1081,6 +1212,7 @@ defmodule CadenceWeb.HostPageLive do
     with {:ok, info} <- resolve_path(path),
          {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params) do
       socket = assign(socket, host_path: path, page_title: "Cadence")
+      socket = SettingsPage.prepare(socket, info, path)
 
       diagnostics =
         if info.route == "/admin/runtime" do
@@ -1125,6 +1257,7 @@ defmodule CadenceWeb.HostPageLive do
             ),
           catalog: CatalogPage.load(socket.assigns.current_scope, info)
         )
+        |> SpacecraftConfigurationPage.subscribe(info)
         |> NotificationsPage.prepare(info, path)
         |> PlatformAdministrationPage.prepare(info, path)
         |> CatalogUpload.prepare(info, path)
@@ -1145,6 +1278,7 @@ defmodule CadenceWeb.HostPageLive do
         |> CadenceWeb.OpsCommandQueuePage.prepare(info, path)
         |> CadenceWeb.OpsCommandAuthoringPage.prepare(info, path)
         |> CadenceWeb.OpsCommandStagesPage.prepare(info, path)
+        |> CadenceWeb.OpsCommandWorkspacePage.prepare(info, path)
         |> CadenceWeb.OpsSettingsPage.prepare(info, path)
         |> CadenceWeb.OpsSharedViewPage.prepare(info, path)
         |> CadenceWeb.OpsLibraryPage.prepare(info, path)
@@ -1218,6 +1352,7 @@ defmodule CadenceWeb.HostPageLive do
       application_management: ApplicationManagement.snapshot(assigns),
       diagnostics: assigns[:diagnostics] || [],
       activation_approvals: ActivationApprovals.presentation(assigns),
+      settings_page: assigns[:settings_page],
       catalog: CatalogUpload.presentation(assigns),
       notifications_page: assigns[:notifications_page],
       platform_administration_page: assigns[:platform_administration_page],

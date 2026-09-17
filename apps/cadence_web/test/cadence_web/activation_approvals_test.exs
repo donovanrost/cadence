@@ -131,10 +131,10 @@ defmodule CadenceWeb.ActivationApprovalsTest do
              Activations.fetch(context.scope, pending.activation_request_id)
   end
 
-  test "ordinary members and other organizations cannot read the inbox", context do
+  test "ordinary members can read the inbox and other organizations cannot", context do
     request(context)
 
-    assert {:error, _} =
+    assert {:ok, _} =
              ActivationApprovals.load(
                %{context.scope | capabilities: MapSet.new()},
                context.mission.mission_id

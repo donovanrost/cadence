@@ -2,7 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
 import type { RouteLocationNormalized } from "vue-router";
 import { isNavigationFailure, NavigationFailureType } from "vue-router";
-import type { OpsPageNavigationResult } from "@cadence/plugin-sdk/ops-pages";
+import type {
+  OpsPageNavigationResult,
+  OpsPageUpdateSubscription,
+} from "@cadence/plugin-sdk/ops-pages";
 import { readHostSnapshot, requireRecord, errorMessage, type HostSnapshot } from "./host-snapshot";
 import { record } from "./snapshot-readers";
 import { useLiveVue } from "live_vue";
@@ -16,6 +19,14 @@ import {
   shellForRoute,
 } from "./host-navigation";
 import { hostBrowserHistory, ownBrowserHistory } from "./host-browser-history";
+import {
+  createConfigurationDrafts,
+  createConfigurationPort,
+  readConfiguration,
+} from "../mission-and-spacecraft/configuration";
+import type { SettingsContext, SettingsWriteResult } from "@cadence/plugin-sdk/settings";
+import { createSettingsDrafts, type SettingsAction } from "../settings";
+const SettingsPage = lazyHostPage("SettingsPage", () => import("../settings/SettingsPage.vue"));
 
 const InstallationManagementPage = lazyHostPage(
   "InstallationManagementPage",
@@ -80,6 +91,9 @@ const ActivationApprovalsPage = lazyHostPage(
 const props = defineProps<{ snapshot: unknown }>();
 const initialSnapshot = readHostSnapshot(props.snapshot);
 const live = useLiveVue();
+const configurationDrafts = createConfigurationDrafts();
+const settingsDrafts = createSettingsDrafts();
+const configurationPort = createConfigurationPort(configurationRequest);
 // A native Phoenix navigation can mount this host after the history module loaded.
 hostBrowserHistory.replace(initialSnapshot.path + window.location.hash);
 const router = createHostRouter(hostBrowserHistory);
@@ -107,6 +121,24 @@ let generation = 0;
 let stopped = false;
 let removeLinks: (() => void) | undefined;
 let bootstrap: HostSnapshot | null = initialSnapshot;
+const opsUpdateListeners = new Set<(value: unknown) => void>();
+let opsUpdatesRef: ReturnType<typeof live.handleEvent> | undefined;
+const subscribeOpsUpdates: OpsPageUpdateSubscription = (request, listener) => {
+  const path = currentPage().snapshot.path;
+  const notify = (value: unknown) => {
+    if (
+      record(value) &&
+      value.path === path &&
+      value.id === request.id &&
+      value.token === request.token &&
+      committed.value?.snapshot.path === path &&
+      !stopped
+    )
+      listener();
+  };
+  opsUpdateListeners.add(notify);
+  return () => opsUpdateListeners.delete(notify);
+};
 
 const pendingRequests = new Set<() => void>();
 function request(event: string, payload: Record<string, unknown>): Promise<unknown> {
@@ -146,7 +178,12 @@ function guardNavigation(guard: () => boolean) {
   };
 }
 function beforeUnload(event: BeforeUnloadEvent) {
-  if (leaveGuard && !leaveGuard()) event.preventDefault();
+  if (
+    settingsDrafts.hasUnsaved() ||
+    configurationDrafts.hasUnsaved() ||
+    (leaveGuard && !leaveGuard())
+  )
+    event.preventDefault();
 }
 router.beforeEach(async (to, from) => {
   if (stopped) return false;
@@ -229,6 +266,29 @@ const missionContext = computed(() => {
     ? { organizationId, missionId, ...(resourceId ? { resourceId } : {}) }
     : null;
 });
+const settingsContext = computed<SettingsContext | null>(() => {
+  const current = context.value;
+  if (!current?.user || !current.organization) return null;
+  const identity = {
+    actorId: current.user.user_id,
+    organizationId: current.organization.organization_id,
+    organizationName: current.organization.display_name,
+  };
+  return current.mission
+    ? {
+        ...identity,
+        scope: "mission",
+        missionId: current.mission.mission_id,
+        missionName: current.mission.display_name,
+      }
+    : { ...identity, scope: "organization", missionId: null, missionName: null };
+});
+watch(
+  () => context.value?.user?.user_id,
+  (actor, previous) => {
+    if (previous && actor !== previous) settingsDrafts.clear();
+  },
+);
 const spacecraftContext = computed(() => {
   const mission = missionContext.value,
     spacecraftId = committed.value?.params.spacecraft_id;
@@ -402,6 +462,90 @@ async function spacecraftAction(event: string, input: Record<string, unknown>) {
   }
   return result;
 }
+async function configurationRequest(event: string, input: Record<string, unknown>) {
+  const path = currentPage().snapshot.path;
+  const requestGeneration = generation;
+  const userId = context.value?.user?.user_id;
+  const result = requireRecord(
+    await request("host:spacecraft-configuration", { event, input, path }),
+  );
+  if (
+    stopped ||
+    generation !== requestGeneration ||
+    currentPage().snapshot.path !== path ||
+    context.value?.user?.user_id !== userId
+  )
+    throw new Error("The spacecraft context changed.");
+  const host = readHostSnapshot(result.host);
+  if (host.path !== path || host.context.user?.user_id !== userId)
+    throw new Error("Invalid spacecraft context.");
+  if (event === "save" && result.status === "ok")
+    configurationDrafts.acceptSaved(readConfiguration(host.spacecraft_page?.data));
+  committed.value = { ...currentPage(), snapshot: host };
+  return result;
+}
+async function refreshSettings() {
+  const captured = currentPage();
+  const requestGeneration = generation;
+  const snapshot = readHostSnapshot(
+    await request("host:context", { path: captured.snapshot.path }),
+  );
+  if (
+    stopped ||
+    pending.value ||
+    requestGeneration !== generation ||
+    currentPage().snapshot.path !== captured.snapshot.path ||
+    snapshot.path !== captured.snapshot.path ||
+    snapshot.context.user?.user_id !== captured.snapshot.context.user?.user_id
+  )
+    throw Error("The settings context changed.");
+  committed.value = { ...currentPage(), snapshot };
+}
+async function settingsAction(action: SettingsAction): Promise<SettingsWriteResult> {
+  const captured = currentPage();
+  const requestGeneration = generation;
+  const actorId = captured.snapshot.context.user?.user_id;
+  const current = () =>
+    !stopped &&
+    !pending.value &&
+    generation === requestGeneration &&
+    currentPage().snapshot.path === captured.snapshot.path &&
+    currentPage().snapshot.settings_page?.token === action.token &&
+    context.value?.user?.user_id === actorId;
+  if (!current()) return { status: "rejected", message: "This settings page is no longer active." };
+  try {
+    const response = requireRecord(
+      await request("host:settings", {
+        path: captured.snapshot.path,
+        token: action.token,
+        input: { revision_token: action.revisionToken, document: action.document },
+      }),
+    );
+    if (!current()) return { status: "unconfirmed" };
+    const host = readHostSnapshot(response.page);
+    if (
+      host.path !== captured.snapshot.path ||
+      host.context.user?.user_id !== actorId ||
+      host.context.organization?.organization_id !==
+        captured.snapshot.context.organization?.organization_id ||
+      host.settings_page?.token !== action.token
+    )
+      return { status: "unconfirmed" };
+    const result = requireRecord(response.result);
+    committed.value = { ...currentPage(), snapshot: host };
+    if (result.status === "ok" && typeof result.revision_id === "string")
+      return {
+        status: "saved",
+        revisionId: result.revision_id,
+        snapshot: field(host.settings_page, "data", "settings"),
+      };
+    if (result.status === "rejected" && typeof result.message === "string")
+      return { status: "rejected", message: result.message };
+    return { status: "unconfirmed" };
+  } catch {
+    return { status: "unconfirmed" };
+  }
+}
 async function activationDecision(input: unknown) {
   const path = currentPage().snapshot.path;
   const requestGeneration = generation;
@@ -491,12 +635,19 @@ onMounted(() => {
   ownBrowserHistory(true);
   removeLinks = installHostNavigation(document, window.location, navigate);
   window.addEventListener("cadence:transport-reconnected", reconnect);
+  opsUpdatesRef = live.handleEvent("cadence:ops-page-changed", (value: unknown) => {
+    for (const listener of opsUpdateListeners) listener(value);
+  });
 });
 onBeforeUnmount(() => {
+  configurationDrafts.clear();
+  settingsDrafts.clear();
   window.removeEventListener("beforeunload", beforeUnload);
   stopped = true;
   generation++;
   for (const cancel of pendingRequests) cancel();
+  opsUpdateListeners.clear();
+  if (opsUpdatesRef !== undefined) live.removeHandleEvent(opsUpdatesRef);
   removeLinks?.();
   ownBrowserHistory(false);
   window.removeEventListener("cadence:transport-reconnected", reconnect);
@@ -534,6 +685,17 @@ onBeforeUnmount(() => {
             {{ committed.snapshot.error }}
           </p>
         </div>
+        <SettingsPage
+          v-else-if="route.kind === 'settings' && settingsContext"
+          :id="route.mountId"
+          :snapshot="committed.snapshot.settings_page"
+          :context="settingsContext"
+          :section-id="committed.params.section_id ?? 'cadence.governance'"
+          :drafts="settingsDrafts"
+          :execute="settingsAction"
+          :refresh="refreshSettings"
+          :navigating="pending"
+        />
         <AdministrationDiagnosticsPage
           v-else-if="route.kind === 'administration_diagnostics'"
           :snapshots="committed.snapshot.diagnostics ?? []"
@@ -572,6 +734,7 @@ onBeforeUnmount(() => {
           :context="missionContext"
           :execute="opsPageAction"
           :query="opsPageRead"
+          :subscribe="subscribeOpsUpdates"
           :navigate="navigate"
           :navigate-settled="navigateSettled"
           :guard-navigation="guardNavigation"
@@ -604,6 +767,11 @@ onBeforeUnmount(() => {
           :page="route.spacecraftPage"
           :class="route.viewClass"
           :snapshot="committed.snapshot.spacecraft_page"
+          v-bind="
+            spacecraftContext
+              ? { configurationIdentity: spacecraftContext, configurationPort, configurationDrafts }
+              : {}
+          "
           :execute="spacecraftAction"
           :navigating="pending"
           :navigate="navigate"

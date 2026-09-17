@@ -1,8 +1,7 @@
 defmodule Cadence.Reads.Spacecraft.Context do
   @moduledoc "Shared, scoped inputs for spacecraft overview and readiness composition."
   alias Cadence.Applications.HostContext
-  alias Cadence.ExtensionCatalog
-  alias Cadence.Reads.Applications.Inventory
+  alias Cadence.Reads.Applications.SpacecraftInventory
   alias Cadence.Reads.Spacecraft.PinnedProfile
   alias Cadence.SpacecraftStore
 
@@ -17,11 +16,10 @@ defmodule Cadence.Reads.Spacecraft.Context do
   end
 
   defp inventory(scope, mission, id, profile) do
-    Inventory.declared(
+    SpacecraftInventory.load(
       scope,
       HostContext.spacecraft(mission.mission_id, id),
-      if(profile, do: profile.applications, else: %{}),
-      ExtensionCatalog.applications_for_scope(:spacecraft)
+      if(profile, do: profile.applications, else: %{})
     )
   rescue
     _ -> {:error, :application_inventory_unavailable}

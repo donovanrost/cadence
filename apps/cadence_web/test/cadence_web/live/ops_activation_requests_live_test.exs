@@ -19,11 +19,12 @@ defmodule CadenceWeb.OpsActivationRequestsLiveTest do
     assert_surface(view, "activation-requests-component", "activation_requests", mission, %{})
   end
 
-  test "ordinary members cannot open the activation route" do
+  test "ordinary members mount the host-owned activation inbox" do
     {conn, mission} = signed_in(:member)
 
-    assert {:error, {:redirect, %{to: "/"}}} =
-             live(conn, ~p"/missions/#{mission.mission_id}/ops/activations")
+    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/activations")
+
+    assert_surface(view, "activation-requests-component", "activation_requests", mission, %{})
   end
 
   defp signed_in(role) do

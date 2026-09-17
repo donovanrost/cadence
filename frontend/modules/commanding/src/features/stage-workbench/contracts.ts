@@ -182,9 +182,7 @@ export function readBatchPreview(v: unknown, actor: string, stage: string): Batc
   }
   return v as BatchPreview;
 }
-export function readWorkbenchPage(value: unknown, context: OpsPageContext): WorkbenchPage {
-  bounded(value, 1200000);
-  const w = value.workbench;
+export function readWorkbench(w: unknown, context: OpsPageContext): Workbench {
   identity(w, context, 2);
   const s = w.stage,
     q = w.query,
@@ -251,6 +249,13 @@ export function readWorkbenchPage(value: unknown, context: OpsPageContext): Work
     return fail();
   const selected = w.selected_item === null ? null : readItem(w.selected_item, true);
   if (selected && selected.id !== q.item) return fail();
+  return w as Workbench;
+}
+export function readWorkbenchPage(value: unknown, context: OpsPageContext): WorkbenchPage {
+  bounded(value, 1200000);
+  const w = readWorkbench(value.workbench, context);
+  const s = w.stage;
+  const selected = w.selected_item;
   const catalog = value.catalog === null ? null : readCatalog(value.catalog, context);
   if (catalog && catalog.actor_id !== w.actor_id) return fail();
   if (!(value.write_token === null || digest(value.write_token)) || !nullableText(value.notice))

@@ -53,7 +53,9 @@ defineProps<{
       </main>
     </div>
     <div class="drawer-side">
-      <ShellNavigation :context="context" :mission="variant === 'mission_sidebar'" />
+      <ShellNavigation :context="context" :mission="variant === 'mission_sidebar'">
+        <template #footer><slot name="navigation-footer" /></template>
+      </ShellNavigation>
     </div>
   </div>
   <div v-else class="min-h-screen flex flex-col bg-base-100">

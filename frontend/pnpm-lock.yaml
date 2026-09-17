@@ -745,6 +745,9 @@ importers:
       '@cadence/plugin-host':
         specifier: workspace:*
         version: link:../host
+      '@cadence/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
       '@cadence/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -1195,6 +1198,9 @@ importers:
       vite-plus:
         specifier: 'catalog:'
         version: 0.2.9(@types/node@24.13.3)(@vitest/browser-playwright@4.1.10)(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@6.0.3))(esbuild@0.28.2)(happy-dom@20.11.6)(jiti@2.7.0)(typescript@6.0.3)
+      vue:
+        specifier: 'catalog:'
+        version: 3.5.41(typescript@6.0.3)
 
   packages/ui:
     dependencies:

@@ -1,7 +1,11 @@
 defmodule Cadence.Management.Commanding.AuthoringCatalog do
   @moduledoc "Finite target and command discovery for human request authoring."
+  alias Cadence.Reads.MissionModels.ActiveBasis
+
+  alias Cadence.Management.Commanding.SpacecraftCatalogs
+
   alias Cadence.Catalog.Command.WireEncoding
-  alias Cadence.{Ids, SourceEndpoints}
+  alias Cadence.{Ids, MissionModels, SourceEndpoints}
 
   @keys ~w(command target command_after target_after command_query target_query)
 
@@ -24,6 +28,27 @@ defmodule Cadence.Management.Commanding.AuthoringCatalog do
   end
 
   def page(scope, mission, snapshot, query) do
+    with {:ok, snapshot} <- target_snapshot(scope, mission, snapshot, query["target"]),
+         {:ok, targets} <-
+           SpacecraftCatalogs.load(snapshot, query["command"]) do
+      build_page(scope, mission, snapshot, query, targets)
+    end
+  end
+
+  defp target_snapshot(_scope, _mission, snapshot, ""), do: {:ok, snapshot}
+
+  defp target_snapshot(scope, mission, snapshot, id) do
+    with {:ok, target} <-
+           SourceEndpoints.fetch_command_authoring_target(
+             scope.organization_id,
+             mission.mission_id,
+             id
+           ) do
+      ActiveBasis.for_target(snapshot, target)
+    end
+  end
+
+  defp build_page(scope, mission, snapshot, query, target_bases) do
     targets =
       SourceEndpoints.command_targets_page(
         scope.organization_id,
@@ -46,6 +71,8 @@ defmodule Cadence.Management.Commanding.AuthoringCatalog do
     entries = Enum.take(commands, 25)
     selected = Enum.find(definitions, &(&1.command_id == query["command"]))
 
+    choices = argument_choices(scope.organization_id, mission.mission_id, selected)
+
     model = %{
       "version" => 2,
       "context" => %{"organizationId" => scope.organization_id, "missionId" => mission.mission_id},
@@ -60,6 +87,7 @@ defmodule Cadence.Management.Commanding.AuthoringCatalog do
         "revision_id" => snapshot.basis.mission_model_revision_id,
         "plan_id" => snapshot.catalog.plan_id
       },
+      "target_bases" => target_bases,
       "targets" => %{
         "limit" => 25,
         "entries" => Enum.map(targets.entries, &target/1),
@@ -72,7 +100,7 @@ defmodule Cadence.Management.Commanding.AuthoringCatalog do
       },
       "selected_target" =>
         selected_target(scope.organization_id, mission.mission_id, query["target"]),
-      "selected_command" => selected_command(selected, snapshot.catalog)
+      "selected_command" => selected_command(selected, snapshot.catalog, choices)
     }
 
     case Jason.encode(model) do
@@ -101,25 +129,55 @@ defmodule Cadence.Management.Commanding.AuthoringCatalog do
     end
   end
 
-  defp selected_command(nil, _), do: nil
+  defp argument_choices(_org, _mission, nil), do: {:ok, %{}}
 
-  defp selected_command(definition, catalog) do
+  defp argument_choices(org, mission, definition) do
+    ids =
+      definition.argument_specs
+      |> Enum.filter(&(&1.base_type == :enumerated))
+      |> Enum.map(& &1.argument_id)
+
+    MissionModels.command_argument_choices(
+      org,
+      mission,
+      definition.mission_model_revision_id,
+      ids
+    )
+  end
+
+  defp selected_command(nil, _, _), do: nil
+
+  defp selected_command(definition, catalog, choices_result) do
     case Enum.find(catalog.operational_bindings, &(&1.command_id == definition.command_id)) do
       nil ->
         nil
 
       binding ->
+        choices =
+          case choices_result do
+            {:ok, entries} -> entries
+            _ -> %{}
+          end
+
         Map.merge(command_reference(definition), %{
           "description" => definition.description,
+          "opcode_json" => Jason.encode!(definition.opcode),
+          "opcode_size_bits" =>
+            if(is_nil(definition.opcode), do: nil, else: definition.opcode_size_bits || 8),
           "critical" => binding.critical,
           "hazardous" => binding.hazardous,
           "significance" =>
             if(binding.significance, do: to_string(binding.significance), else: nil),
-          "supported" =>
-            length(definition.argument_specs) <= 64 and WireEncoding.definition(definition) == :ok,
-          "arguments" => Enum.map(Enum.take(definition.argument_specs, 64), &argument/1)
+          "supported" => supported?(definition, choices_result),
+          "arguments" =>
+            Enum.map(Enum.take(definition.argument_specs, 64), &argument(&1, choices))
         })
     end
+  end
+
+  defp supported?(definition, choices_result) do
+    match?({:ok, _}, choices_result) and length(definition.argument_specs) <= 64 and
+      WireEncoding.definition(definition) == :ok
   end
 
   defp command_reference(definition),
@@ -129,13 +187,17 @@ defmodule Cadence.Management.Commanding.AuthoringCatalog do
       "display_name" => definition.display_name
     }
 
-  defp argument(spec),
+  defp argument(spec, choices),
     do: %{
       "id" => spec.argument_id,
       "name" => spec.name,
       "description" => spec.description,
       "type" => to_string(spec.base_type),
       "required" => spec.required,
+      "choices" =>
+        Enum.map(Map.get(choices, spec.argument_id, []), fn choice ->
+          %{"label" => choice.label, "value_json" => Jason.encode!(choice.value)}
+        end),
       "default_value_json" =>
         if(is_nil(spec.default_value), do: nil, else: Jason.encode!(spec.default_value)),
       "fixed_value_json" =>

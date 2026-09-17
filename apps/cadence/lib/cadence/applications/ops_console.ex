@@ -612,6 +612,15 @@ defmodule Cadence.Applications.OpsConsole do
       installation_policy: :platform,
       availability: :available,
       installable_scopes: [:mission],
+      settings_sections: [
+        %Cadence.Applications.SettingsSectionDefinition{
+          id: "commanding.defaults",
+          provider: Cadence.Management.Commanding.WorkspaceSettings,
+          title: "Commanding",
+          description: "Defaults for preparing commands in the workspace.",
+          scopes: [:organization, :mission]
+        }
+      ],
       actions: action_definitions(),
       surfaces: Enum.map(@surface_specs, &surface_definition/1)
     }

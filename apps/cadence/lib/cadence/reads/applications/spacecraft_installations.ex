@@ -1,8 +1,7 @@
 defmodule Cadence.Reads.Applications.SpacecraftInstallations do
   @moduledoc false
   alias Cadence.Applications.HostContext
-  alias Cadence.ExtensionCatalog
-  alias Cadence.Reads.Applications.{Inventory, InventoryItem}
+  alias Cadence.Reads.Applications.{InventoryItem, SpacecraftInventory}
   alias Cadence.Reads.Spacecraft.PinnedProfile
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftType
@@ -11,11 +10,10 @@ defmodule Cadence.Reads.Applications.SpacecraftInstallations do
     with {:ok, spacecraft} <- fetch_host_spacecraft(mission, host_context),
          {:ok, profile} <- PinnedProfile.load(mission, spacecraft),
          {:ok, items} <-
-           Inventory.declared(
+           SpacecraftInventory.load(
              scope,
              host_context,
-             profile_declarations(profile),
-             ExtensionCatalog.applications_for_scope(:spacecraft)
+             profile_declarations(profile)
            ) do
       {:ok,
        %{"presentation" => applications_presentation_dto(mission, spacecraft, profile, items)}}
@@ -46,7 +44,7 @@ defmodule Cadence.Reads.Applications.SpacecraftInstallations do
         "title" => %{"attrs" => %{}, "text" => "Applications"},
         "subtitle" => %{
           "attrs" => %{"class" => "mt-1 text-sm text-base-content/70"},
-          "text" => "Manage the applications declared by the pinned spacecraft profile."
+          "text" => "Enable and configure applications for this spacecraft."
         },
         "actions" => %{
           "attrs" => %{},
@@ -66,12 +64,12 @@ defmodule Cadence.Reads.Applications.SpacecraftInstallations do
     do: %{
       "kind" => "missing",
       "id" => "spacecraft-applications-no-profile",
-      "label" => "Spacecraft Profile",
-      "title" => "No profile selected",
+      "label" => "Protocol preset",
+      "title" => "No protocol preset selected",
       "description" =>
-        "Select a Spacecraft Profile before installing profile-declared applications.",
+        "A protocol preset is optional. Applications can be configured directly on this spacecraft.",
       "action" => %{
-        "label" => "Select profile",
+        "label" => "Choose protocol preset",
         "path" => "#{spacecraft_path(mission, spacecraft.spacecraft_id)}/identity"
       }
     }

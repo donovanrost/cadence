@@ -13,6 +13,7 @@
     "@cadence/dashboards-and-exploration": "workspace:*",
     "@cadence/design-tokens": "workspace:*",
     "@cadence/plugin-host": "workspace:*",
+    "@cadence/plugin-sdk": "workspace:*",
     "@cadence/ui": "workspace:*",
     "vue": "catalog:"
   },

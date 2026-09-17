@@ -8,6 +8,8 @@ defmodule Cadence.Applications.ApplicationInstallations do
   the installation itself.
   """
 
+  alias Cadence.Platform.ScopedReadUpdates
+
   import Ecto.Query
 
   alias Cadence.Applications.{
@@ -33,6 +35,31 @@ defmodule Cadence.Applications.ApplicationInstallations do
           | :application_installation_disabled
           | :application_installation_uninstalled
           | :application_installation_scope_required
+
+  @doc "Installed application keys contributing settings at this scope, including descendants."
+  def settings_application_keys(organization_id, mission_id) do
+    query =
+      from(row in InstallationRow,
+        where: row.organization_id == ^organization_id and row.lifecycle_state == "installed",
+        distinct: true,
+        select: row.application_key
+      )
+
+    query = if mission_id, do: where(query, [row], row.mission_id == ^mission_id), else: query
+    Repo.all(query)
+  end
+
+  @doc "Immutable installation identity contributing to a spacecraft configuration revision."
+  def configuration_basis(organization_id, mission_id, spacecraft_id, application_key) do
+    from(row in InstallationRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.spacecraft_id == ^spacecraft_id and row.application_key == ^application_key,
+      order_by: row.application_installation_id,
+      select: {row.application_installation_id, row.application_version, row.lifecycle_state}
+    )
+    |> Repo.all()
+  end
 
   @spec install(Scope.t(), HostContext.t(), binary(), keyword()) ::
           {:ok, ApplicationInstallation.t()} | {:error, term()}
@@ -62,6 +89,11 @@ defmodule Cadence.Applications.ApplicationInstallations do
         )
       end)
     end
+    |> ScopedReadUpdates.publish_result(
+      :spacecraft_configuration_changed,
+      current_scope.organization_id,
+      host_context.mission_id
+    )
   end
 
   @spec disable(Scope.t(), HostContext.t(), binary()) ::
@@ -74,6 +106,11 @@ defmodule Cadence.Applications.ApplicationInstallations do
          {:ok, actor_id} <- actor_id(current_scope) do
       transact(fn -> persist_disable(scope_attrs, application_key, actor_id) end)
     end
+    |> ScopedReadUpdates.publish_result(
+      :spacecraft_configuration_changed,
+      current_scope.organization_id,
+      host_context.mission_id
+    )
   end
 
   @spec uninstall(Scope.t(), HostContext.t(), binary()) ::
@@ -86,6 +123,11 @@ defmodule Cadence.Applications.ApplicationInstallations do
          {:ok, actor_id} <- actor_id(current_scope) do
       transact(fn -> persist_uninstall(scope_attrs, application_key, actor_id) end)
     end
+    |> ScopedReadUpdates.publish_result(
+      :spacecraft_configuration_changed,
+      current_scope.organization_id,
+      host_context.mission_id
+    )
   end
 
   @spec put_configuration_reference(
@@ -114,6 +156,11 @@ defmodule Cadence.Applications.ApplicationInstallations do
         )
       end)
     end
+    |> ScopedReadUpdates.publish_result(
+      :spacecraft_configuration_changed,
+      current_scope.organization_id,
+      host_context.mission_id
+    )
   end
 
   @doc "Checks an optional capability required by a platform surface without enabling it."

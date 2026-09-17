@@ -10,7 +10,7 @@ defmodule Cadence.Commanding.RequestValidation do
 
   alias Cadence.Catalog.Command.{Invocation, WireEncoding}
   alias Cadence.Commanding.CommandRequest
-  alias Cadence.Missions
+  alias Cadence.{MissionModels, Missions}
   alias Cadence.Reads.MissionModels.ActiveBasis
   alias Cadence.Runtime.MissionModelPlanDecoder
   alias Cadence.SourceEndpoints
@@ -31,14 +31,21 @@ defmodule Cadence.Commanding.RequestValidation do
              command_request.organization_id,
              command_request.mission_id,
              command_request.mission_model_revision_id,
-             command_request.command_id
+             command_request.command_id,
+             command_request.source_endpoint_ref
            ),
          {:ok, resolved_argument_values} <-
            Invocation.resolve(
              request_basis.runtime_definition,
              command_request.argument_values
            ),
-         :ok <- WireEncoding.validate(request_basis.runtime_definition, resolved_argument_values) do
+         :ok <- WireEncoding.validate(request_basis.runtime_definition, resolved_argument_values),
+         :ok <-
+           validate_choices(
+             command_request,
+             request_basis.runtime_definition,
+             resolved_argument_values
+           ) do
       {:ok, enrich(command_request, request_basis, resolved_argument_values)}
     end
   end
@@ -136,6 +143,7 @@ defmodule Cadence.Commanding.RequestValidation do
            ),
          target_token = authoring_digest(target),
          true <- is_nil(expected_target) or target_token == expected_target,
+         {:ok, snapshot} <- ActiveBasis.for_target(snapshot, target),
          {:ok, basis} <-
            MissionModelPlanDecoder.command_basis(snapshot.basis.runtime_plans, request.command_id),
          revision = snapshot.basis.mission_model_revision_id,
@@ -146,7 +154,8 @@ defmodule Cadence.Commanding.RequestValidation do
            |> Map.put(:mission_model_revision_id, revision)
            |> Map.put(:runtime_plan_id, basis.plan_id),
          {:ok, values} <- Invocation.resolve(basis.runtime_definition, request.argument_values),
-         :ok <- WireEncoding.validate(basis.runtime_definition, values) do
+         :ok <- WireEncoding.validate(basis.runtime_definition, values),
+         :ok <- validate_choices(request, basis.runtime_definition, values) do
       {:ok, enrich(request, basis, values),
        %{target: target, target_token: target_token, snapshot: snapshot}}
     else
@@ -157,6 +166,41 @@ defmodule Cadence.Commanding.RequestValidation do
 
   @doc false
   defdelegate authoring_digest(value), to: Cadence.Commanding.AuthoringIdentity, as: :digest
+
+  defp validate_choices(request, definition, values) do
+    specs = Enum.filter(definition.argument_specs, &(&1.base_type == :enumerated))
+
+    with {:ok, choices} <-
+           MissionModels.command_argument_choices(
+             request.organization_id,
+             request.mission_id,
+             definition.mission_model_revision_id,
+             Enum.map(specs, & &1.argument_id)
+           ) do
+      Enum.reduce_while(specs, :ok, fn spec, :ok ->
+        validate_choice(spec, values, choices)
+      end)
+    end
+  end
+
+  defp validate_choice(spec, values, choices) do
+    case Map.fetch(values, spec.name) do
+      :error ->
+        {:cont, :ok}
+
+      {:ok, value} ->
+        if Enum.any?(Map.fetch!(choices, spec.argument_id), &same_choice?(&1.value, value)),
+          do: {:cont, :ok},
+          else: {:halt, {:error, {:invalid_command_argument_choice, spec.name}}}
+    end
+  end
+
+  defp same_choice?(expected, value) when is_integer(value), do: expected == value
+
+  defp same_choice?(expected, value) when is_binary(value),
+    do: Integer.parse(value) == {expected, ""}
+
+  defp same_choice?(_, _), do: false
 
   defp enrich(command_request, request_basis, resolved_argument_values) do
     CommandRequest.new(%{
@@ -216,8 +260,22 @@ defmodule Cadence.Commanding.RequestValidation do
   def resolve_basis(organization_id, mission_id, mission_model_revision_id, command_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(mission_model_revision_id) and is_binary(command_id) do
+    resolve_basis(organization_id, mission_id, mission_model_revision_id, command_id, nil)
+  end
+
+  def resolve_basis(
+        organization_id,
+        mission_id,
+        mission_model_revision_id,
+        command_id,
+        source_endpoint_id
+      ) do
     with {:ok, %{runtime_plans: plans} = runtime_basis} <-
-           ActiveBasis.fetch_runtime_basis(organization_id, mission_id),
+           ActiveBasis.fetch_command_runtime_basis(
+             organization_id,
+             mission_id,
+             source_endpoint_id
+           ),
          :ok <- exact_revision(runtime_basis, mission_model_revision_id),
          {:ok, basis} <- MissionModelPlanDecoder.command_basis(plans, command_id) do
       {:ok,

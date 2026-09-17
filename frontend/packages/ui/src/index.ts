@@ -1,4 +1,5 @@
 export { default as CadenceButton } from "./CadenceButton.vue";
+export { default as CadenceLink } from "./CadenceLink.vue";
 export { default as CadenceCheckbox } from "./CadenceCheckbox.vue";
 export { default as CadenceSpinner } from "./CadenceSpinner.vue";
 export { default as CadenceStatePanel } from "./CadenceStatePanel.vue";
@@ -7,6 +8,9 @@ export { default as CadenceStatusSymbol } from "./CadenceStatusSymbol.vue";
 export type { StatusSymbolRole } from "./status-symbol";
 export { default as CadenceTextField } from "./CadenceTextField.vue";
 export { default as CadenceTooltip } from "./CadenceTooltip.vue";
+export { default as CadenceSplitterGroup } from "./CadenceSplitterGroup.vue";
+export { default as CadenceSplitterPanel } from "./CadenceSplitterPanel.vue";
+export { default as CadenceSplitterResizeHandle } from "./CadenceSplitterResizeHandle.vue";
 
 // Shared layout and presentation components used by Phoenix and every remote.
 export { default as CadenceBadge } from "./CadenceBadge.vue";
@@ -80,3 +84,18 @@ export { default as CadencePageChrome } from "./CadencePageChrome.vue";
 export { default as CadenceBreadcrumbTrail } from "./CadenceBreadcrumbTrail.vue";
 export { default as CadencePageActions } from "./CadencePageActions.vue";
 export { default as CadencePageDescription } from "./CadencePageDescription.vue";
+export { default as CadenceWorkspaceLayout } from "./CadenceWorkspaceLayout.vue";
+export { default as CadencePane } from "./CadencePane.vue";
+export { default as CadenceDateTimeField } from "./CadenceDateTimeField.vue";
+export { default as CadenceChoiceField } from "./CadenceChoiceField.vue";
+export { default as CadenceSegmentedControl } from "./CadenceSegmentedControl.vue";
+export { default as CadenceSelectionTile } from "./CadenceSelectionTile.vue";
+
+export { default as CadenceResourceNavigation } from "./CadenceResourceNavigation.vue";
+export { default as CadenceSettingsSection } from "./CadenceSettingsSection.vue";
+export { default as CadenceSettingRow } from "./CadenceSettingRow.vue";
+export { default as CadenceRadioCard } from "./CadenceRadioCard.vue";
+export { default as CadenceSettingSource } from "./CadenceSettingSource.vue";
+export { default as CadenceSettingsEditorFrame } from "./CadenceSettingsEditorFrame.vue";
+
+export { default as CadenceInfiniteScroll } from "./CadenceInfiniteScroll.vue";

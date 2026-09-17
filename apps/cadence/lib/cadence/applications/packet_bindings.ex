@@ -8,6 +8,8 @@ defmodule Cadence.Applications.PacketBindings do
   configuration is replaced.
   """
 
+  alias Cadence.Platform.ScopedReadUpdates
+
   import Ecto.Query
 
   alias Cadence.Applications.{
@@ -110,6 +112,11 @@ defmodule Cadence.Applications.PacketBindings do
         persist_replacement(desired, attrs)
       end
     end)
+    |> ScopedReadUpdates.publish_result(
+      :spacecraft_configuration_changed,
+      current_scope.organization_id,
+      host_context.mission_id
+    )
   end
 
   @spec disable(Scope.t(), HostContext.t(), binary()) ::
@@ -128,6 +135,11 @@ defmodule Cadence.Applications.PacketBindings do
         |> normalize_configuration_transaction()
       end
     end)
+    |> ScopedReadUpdates.publish_result(
+      :spacecraft_configuration_changed,
+      current_scope.organization_id,
+      host_context.mission_id
+    )
   end
 
   @doc false
@@ -167,10 +179,16 @@ defmodule Cadence.Applications.PacketBindings do
 
       organization_id
       |> applied_rows_query(mission_id, application_key)
+      |> filter_stamp_spacecraft(Keyword.get(opts, :spacecraft_ids))
       |> stamp_applied_transaction(binding_set_id, binding_set_version, now)
       |> normalize_stamp_transaction()
     end)
   end
+
+  defp filter_stamp_spacecraft(query, nil), do: query
+
+  defp filter_stamp_spacecraft(query, ids) when is_list(ids),
+    do: where(query, [row], row.spacecraft_id in ^ids)
 
   defp applied_rows_query(organization_id, mission_id, application_key) do
     ConfigurationRow

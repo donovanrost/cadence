@@ -175,6 +175,16 @@ defmodule CadenceWeb.Router do
       live("/", HostPageLive, :show, metadata: %{host_policy: :organization})
       live("/missions", HostPageLive, :index, metadata: %{host_policy: :organization})
       live("/missions/new", HostPageLive, :new, metadata: %{host_policy: :organization})
+      live("/settings", HostPageLive, :show, metadata: %{host_policy: :organization})
+      live("/settings/:section_id", HostPageLive, :show, metadata: %{host_policy: :organization})
+
+      live("/missions/:mission_id/settings", HostPageLive, :show,
+        metadata: %{host_policy: :mission}
+      )
+
+      live("/missions/:mission_id/settings/:section_id", HostPageLive, :show,
+        metadata: %{host_policy: :mission}
+      )
 
       live("/provider-accounts", HostPageLive, :index,
         metadata: %{host_policy: :provider_accounts}
@@ -428,6 +438,10 @@ defmodule CadenceWeb.Router do
         metadata: %{host_policy: :ops}
       )
 
+      live("/missions/:mission_id/ops/commands/workspace", HostPageLive, :index,
+        metadata: %{host_policy: :ops}
+      )
+
       live("/missions/:mission_id/ops/commands/stages", HostPageLive, :index,
         metadata: %{host_policy: :ops}
       )
@@ -483,7 +497,7 @@ defmodule CadenceWeb.Router do
       )
 
       live("/missions/:mission_id/ops/activations", HostPageLive, :index,
-        metadata: %{host_policy: :ops_admin}
+        metadata: %{host_policy: :ops}
       )
 
       live("/missions/:mission_id/ops/data-sources/registration/new", HostPageLive, :new,

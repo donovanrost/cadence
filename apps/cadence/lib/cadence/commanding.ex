@@ -44,7 +44,21 @@ defmodule Cadence.Commanding do
 
   alias Cadence.Runtime.TransportRecords
 
+  alias Cadence.Platform.ScopedReadUpdates, as: ReadUpdates
   alias Cadence.Repo
+
+  defp publish_verifier_changes({:ok, instances} = result) when is_list(instances) do
+    instances
+    |> Enum.map(&{&1.organization_id, &1.mission_id})
+    |> Enum.uniq()
+    |> Enum.each(fn {org, mission} ->
+      ReadUpdates.publish_result(result, :commanding_changed, org, mission)
+    end)
+
+    result
+  end
+
+  defp publish_verifier_changes(result), do: result
 
   @spec persist_command_stage(binary(), CommandStage.t()) ::
           {:ok, CommandStage.t()} | {:error, term()}
@@ -408,6 +422,7 @@ defmodule Cadence.Commanding do
       {:error, reason} ->
         {:error, reason}
     end
+    |> publish_verifier_changes()
   end
 
   def evaluate_command_verifiers(repo, telemetry_samples)
@@ -475,6 +490,7 @@ defmodule Cadence.Commanding do
       {:error, reason} ->
         {:error, reason}
     end
+    |> publish_verifier_changes()
   end
 
   def evaluate_transport_command_verifiers(
@@ -510,6 +526,7 @@ defmodule Cadence.Commanding do
       {:ok, result} -> result
       {:error, reason} -> {:error, reason}
     end
+    |> publish_verifier_changes()
   end
 
   @spec timeout_command_verifier_instances(module(), DateTime.t()) ::
@@ -584,7 +601,8 @@ defmodule Cadence.Commanding do
              organization_id,
              mission_id,
              request_row.mission_model_revision_id,
-             request_row.command_id
+             request_row.command_id,
+             request_row.source_endpoint_ref
            ),
          :ok <-
            ConstraintEvaluation.validate(

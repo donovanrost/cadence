@@ -15,6 +15,7 @@ const argument = (
   default_value_json: default_value === null ? null : JSON.stringify(default_value),
   fixed_value_json: fixed_value === null ? null : JSON.stringify(fixed_value),
   hazardous_values_json: "[]",
+  choices: [],
 });
 export function pageFixture(): AuthoringPage {
   const target = {
@@ -53,6 +54,8 @@ export function pageFixture(): AuthoringPage {
       selected_command: {
         ...command,
         description: "Adjust spacecraft power",
+        opcode_json: "32",
+        opcode_size_bits: 8,
         critical: true,
         hazardous: true,
         significance: "hazardous",
@@ -60,7 +63,7 @@ export function pageFixture(): AuthoringPage {
         arguments: [
           argument("amount", "integer", true),
           argument("delay_s", "integer", false, 5),
-          argument("enabled", "boolean", false),
+          argument("enabled", "boolean", false, false),
           argument("channel", "string", true, null, "primary"),
         ],
       },
@@ -85,7 +88,7 @@ export function previewFixture(): Preview {
     expires_at: null,
     requested_at: "2026-09-10T10:01:00.123456Z",
     lifecycle_state: "approval_pending",
-    argument_values_json: JSON.stringify({ amount: 2, enabled: false }),
+    argument_values_json: JSON.stringify({ amount: 2, delay_s: 5, enabled: false }),
     resolved_argument_values_json: JSON.stringify({
       amount: 2,
       delay_s: 5,

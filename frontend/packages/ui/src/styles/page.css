@@ -67,6 +67,10 @@
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+.cd-page-actions:empty,
+.cd-page-actions:has(> .cd-page-actions:only-child:empty) {
+  display: none;
+}
 .cd-page-breadcrumbs {
   margin-bottom: 0.75rem;
   color: var(--text-muted);
@@ -112,9 +116,32 @@
   flex-shrink: 0;
 }
 .cd-page--workspace .cd-page-header {
+  display: var(--workspace-page-header-display, block);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
   flex-shrink: 0;
-  padding-top: 1rem;
-  padding-bottom: 1rem;
+  padding-block: var(--workspace-page-padding, 1rem);
+}
+.cd-page--workspace .cd-page-header__row {
+  display: var(--workspace-page-row-display, flex);
+}
+.cd-page--workspace .cd-page-header__content {
+  grid-column: 1;
+  grid-row: 1;
+}
+.cd-page--workspace .cd-page-header__row > .cd-page-actions {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  justify-content: flex-end;
+}
+.cd-page--workspace .cd-page-title {
+  font-size: var(--workspace-page-title-size, 1.5rem);
+}
+.cd-page--workspace .cd-page-breadcrumbs {
+  grid-column: 2;
+  grid-row: 1;
+  margin-bottom: var(--workspace-breadcrumb-margin, 0.75rem);
 }
 .cd-page--workspace > .cd-page-body {
   flex: 1;
@@ -134,4 +161,20 @@
 }
 .cd-page--workspace .cd-page-body > [data-host-path] {
   min-height: 100%;
+}
+
+/* Resizable surfaces need a bounded flex area through the host transport wrappers. */
+.cd-page--workspace:has(.cadence-workspace-layout) > .cd-page-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.cd-page--workspace [data-host-path]:has(.cadence-workspace-layout),
+.cd-page--workspace [data-host-path] > section:has(.cadence-workspace-layout) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }

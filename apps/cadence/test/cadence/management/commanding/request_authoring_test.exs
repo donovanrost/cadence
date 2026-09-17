@@ -99,6 +99,18 @@ defmodule Cadence.Management.Commanding.RequestAuthoringTest do
     refute Jason.encode!(RequestAuthoring.public_preview(held)) =~ "target-secret"
   end
 
+  test "authoring exposes the selected catalog command opcode and wire width", c do
+    for i <- 1..2 do
+      assert {:ok, catalog} =
+               RequestAuthoring.load(c.scope, c.mission, %{
+                 "command" => c.model.commands_by_name["COMMAND_#{i}"]
+               })
+
+      assert catalog["selected_command"]["opcode_json"] == Integer.to_string(i)
+      assert catalog["selected_command"]["opcode_size_bits"] == 8
+    end
+  end
+
   test "a duplicate request identity returns an error and cannot substitute unstored content",
        c do
     {:ok, held} = RequestAuthoring.preview(c.scope, c.mission, input(c))

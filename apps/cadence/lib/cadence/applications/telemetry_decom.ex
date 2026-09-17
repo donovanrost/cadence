@@ -16,6 +16,14 @@ defmodule Cadence.Applications.TelemetryDecom do
   overlapping APIDs across heterogeneous spacecraft.
   """
 
+  alias Cadence.Platform.ScopedReadUpdates
+  alias Cadence.Reads.MissionModels.ActiveBasis
+
+  alias Cadence.Applications.SpacecraftConfiguration.ApplicationInputs,
+    as: ConfigurationApplications
+
+  alias Cadence.Applications.SpacecraftConfiguration.Drafts, as: ConfigurationDrafts
+
   import Ecto.Query
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
@@ -187,6 +195,11 @@ defmodule Cadence.Applications.TelemetryDecom do
         upsert_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs)
       end
     end)
+    |> ScopedReadUpdates.publish_result(
+      :spacecraft_configuration_changed,
+      organization_id,
+      mission_id
+    )
   end
 
   defp validate_configure_inputs(organization_id, mission_id, spacecraft_id, attrs) do
@@ -496,7 +509,12 @@ defmodule Cadence.Applications.TelemetryDecom do
     organization_id = current_scope.organization_id
 
     ConfigurationLock.run(organization_id, mission_id, fn ->
-      with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
+      with :ok <-
+             ConfigurationDrafts.legacy_apply_allowed(
+               organization_id,
+               mission_id
+             ),
+           {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
            {:ok, config} <-
              fetch_config(organization_id, mission_id, triggering_spacecraft_id),
            all_configs <- list_configs(organization_id, mission_id),
@@ -572,6 +590,15 @@ defmodule Cadence.Applications.TelemetryDecom do
 
   @doc "Records the applied state produced by a governed Telemetry Decom activation."
   @spec activation_applied(BindingSet.t(), map()) :: :ok | {:error, term()}
+  def activation_applied(%BindingSet{} = binding_set, %{
+        "spacecraft_configuration_version" => 1,
+        "spacecraft_configurations" => entries
+      }) do
+    ConfigurationLock.run(binding_set.organization_id, binding_set.mission_id, fn ->
+      apply_spacecraft_configuration_state(binding_set, entries)
+    end)
+  end
+
   def activation_applied(
         %BindingSet{binding_set_id: binding_set_id} = binding_set,
         %{"composition" => "mission_applications"}
@@ -593,6 +620,57 @@ defmodule Cadence.Applications.TelemetryDecom do
   end
 
   def activation_applied(%BindingSet{}, _metadata), do: :ok
+
+  defp apply_spacecraft_configuration_state(binding_set, entries) do
+    with {:ok, mission} <-
+           Missions.fetch_mission(binding_set.organization_id, binding_set.mission_id),
+         {:ok, active} <-
+           ActiveBasis.fetch_activation(
+             mission.organization_id,
+             mission.mission_id
+           ),
+         true <-
+           active.binding_set_id == binding_set.binding_set_id and
+             active.binding_set_version == binding_set.version do
+      ids =
+        Enum.flat_map(entries, fn {id, entry} ->
+          applied_configuration_ids(mission, id, entry)
+        end)
+
+      configs =
+        list_configs(mission.organization_id, mission.mission_id)
+        |> Enum.filter(&(&1.spacecraft_id in ids))
+
+      with :ok <- reconcile_application_state(configs, binding_set, ids) do
+        PacketBindings.stamp_applied_for_mission(
+          mission.organization_id,
+          mission.mission_id,
+          binding_set.binding_set_id,
+          binding_set.version,
+          application_key: @application_key,
+          spacecraft_ids: ids
+        )
+      end
+    else
+      false -> {:error, :spacecraft_configuration_review_stale}
+      error -> error
+    end
+  end
+
+  defp applied_configuration_ids(mission, id, entry) do
+    row =
+      ConfigurationDrafts.latest(
+        mission.organization_id,
+        mission.mission_id,
+        id
+      )
+
+    if row && row.configuration_revision_id == entry["configuration_revision_id"] &&
+         row.application_basis ==
+           ConfigurationApplications.basis(mission, id),
+       do: [id],
+       else: []
+  end
 
   defp apply_configuration_state(binding_set) do
     with :ok <-
@@ -619,6 +697,11 @@ defmodule Cadence.Applications.TelemetryDecom do
     ConfigurationLock.run(organization_id, mission_id, fn ->
       disable_configuration(organization_id, mission_id, spacecraft_id)
     end)
+    |> ScopedReadUpdates.publish_result(
+      :spacecraft_configuration_changed,
+      organization_id,
+      mission_id
+    )
   end
 
   defp disable_configuration(organization_id, mission_id, spacecraft_id) do
@@ -849,7 +932,7 @@ defmodule Cadence.Applications.TelemetryDecom do
     end)
   end
 
-  defp clear_disabled_application_state(organization_id, mission_id) do
+  defp clear_disabled_application_state(organization_id, mission_id, spacecraft_ids) do
     now = DateTime.utc_now()
 
     from(
@@ -858,6 +941,7 @@ defmodule Cadence.Applications.TelemetryDecom do
         row.organization_id == ^organization_id and row.mission_id == ^mission_id and
           row.application_key == ^@application_key and row.enabled == false
     )
+    |> filter_stamp_spacecraft(spacecraft_ids)
     |> Repo.update_all(
       set: [
         applied_binding_set_id: nil,
@@ -870,14 +954,17 @@ defmodule Cadence.Applications.TelemetryDecom do
     :ok
   end
 
-  defp reconcile_application_state(configs, %BindingSet{} = binding_set) do
+  defp filter_stamp_spacecraft(query, nil), do: query
+  defp filter_stamp_spacecraft(query, ids), do: where(query, [row], row.spacecraft_id in ^ids)
+
+  defp reconcile_application_state(configs, %BindingSet{} = binding_set, spacecraft_ids \\ nil) do
     enabled_configs = Enum.filter(configs, & &1.enabled)
     mission_id = binding_set.mission_id
     organization_id = binding_set.organization_id
 
     case stamp_applied(enabled_configs, binding_set) do
       :ok ->
-        clear_disabled_application_state(organization_id, mission_id)
+        clear_disabled_application_state(organization_id, mission_id, spacecraft_ids)
 
       {:error, reason} ->
         {:error, reason}

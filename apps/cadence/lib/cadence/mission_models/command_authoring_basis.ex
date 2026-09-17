@@ -42,7 +42,7 @@ defmodule Cadence.MissionModels.CommandAuthoringBasis do
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.revision_id == ^revision_id and row.status == "approved"
+        row.revision_id == ^revision_id
     )
     |> select([row], %{revision_id: row.revision_id, content_sha256: row.content_sha256})
     |> lock("FOR SHARE")

@@ -14,7 +14,6 @@ export type WorkspaceGroup = {
 
 export function workspaceGroups(
   href: (path: string) => string,
-  canAdminister: boolean,
   activeKey?: string,
 ): WorkspaceGroup[] {
   const item = (key: string, label: string, icon: string, path = key.replaceAll("_", "-")) => ({
@@ -40,8 +39,8 @@ export function workspaceGroups(
         "act",
         "Act",
         [
-          item("commands", "Commands", "hero-command-line"),
-          ...(canAdminister ? [item("activations", "Approvals", "hero-shield-check")] : []),
+          item("commands", "Commands", "hero-command-line", "commands/workspace"),
+          item("activations", "Approvals", "hero-shield-check"),
         ],
       ],
       [

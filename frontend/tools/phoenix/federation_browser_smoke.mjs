@@ -4750,6 +4750,7 @@ async function assertRemoteSurface({
       `${applicationKey} 403 query evidence: ${JSON.stringify(forbiddenQueryEvidence)}`,
     );
   }
+  await diagnostics.drainLateEvents(300, signal);
   diagnostics.assertClean(`${applicationKey} surface`);
   return {
     catalog,

@@ -214,7 +214,7 @@ Tailwind's CommonJS export, and generic test mocks.
 rules, package/browser stories, root tools, and transport tests. Each shared test suite has
 one aggregate owner. [CI](../../.github/workflows/frontend.yml) runs this command independently
 of the real Phoenix producer and federation browser job. The ordinary suite explicitly skips
-29 producer-dependent tests; `corepack pnpm test:producers` requires their native fixtures and
+30 producer-dependent tests; `corepack pnpm test:producers` requires their native fixtures and
 checks that all consumers executed. `mix precommit` does not run the complete frontend gates,
 and Elixir tests remain outside frontend-only acceptance.
 

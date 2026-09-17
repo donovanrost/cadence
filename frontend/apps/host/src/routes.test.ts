@@ -317,6 +317,12 @@ test("each core host route resolves to its registered owner", () => {
       expect(route).not.toHaveProperty("surface");
       continue;
     }
+    if (route.kind === "settings") {
+      expect(["organization", "mission"]).toContain(route.scope);
+      expect(route.path).toMatch(/settings(?:\/:section_id)?$/);
+      expect(route.queryKeys).toEqual([]);
+      continue;
+    }
     if (route.kind === "activation_approvals") {
       expect(route.path).toBe("/missions/:mission_id/ops/activations");
       expect(route).not.toHaveProperty("application");

@@ -8,6 +8,8 @@ defmodule Cadence.Control.MissionModelPromotion do
   drift before handing a complete specification to the data plane.
   """
 
+  alias Cadence.Control.SpacecraftModelBindings
+
   alias Cadence.Activations.BindingSetActivation
   alias Cadence.Catalog.MissionModel.{Revision, RuntimePlan}
   alias Cadence.MissionModels
@@ -16,6 +18,19 @@ defmodule Cadence.Control.MissionModelPromotion do
   @targets [:telemetry, :algorithm, :monitoring, :command]
 
   @doc false
+  def validate_activation_metadata(
+        organization_id,
+        mission_id,
+        _binding_set,
+        %{"spacecraft_configurations" => _} = metadata
+      ) do
+    SpacecraftModelBindings.validate(
+      organization_id,
+      mission_id,
+      metadata
+    )
+  end
+
   def validate_activation_metadata(organization_id, mission_id, binding_set, metadata) do
     case value(metadata, :mission_model) do
       nil ->
@@ -88,20 +103,26 @@ defmodule Cadence.Control.MissionModelPromotion do
              optional(:runtime_plans) => %{atom() => RuntimePlan.t()}
            }}
           | {:error, term()}
+  def runtime_basis(
+        %BindingSetActivation{metadata: %{"spacecraft_configurations" => _}} = activation
+      ),
+      do: SpacecraftModelBindings.runtime_basis(activation)
+
   def runtime_basis(%BindingSetActivation{} = activation) do
     case value(activation.metadata, :mission_model) do
       nil ->
         {:error, :mission_model_activation_manifest_required}
 
       manifest when is_map(manifest) ->
-        resolve_runtime_basis(activation, manifest)
+        runtime_basis(activation.organization_id, activation.mission_id, manifest)
 
       _other ->
         {:error, :invalid_mission_model_activation_manifest}
     end
   end
 
-  defp resolve_runtime_basis(activation, manifest) do
+  @doc false
+  def runtime_basis(organization_id, mission_id, manifest) when is_map(manifest) do
     revision_id = value(manifest, :revision_id)
     expected_revision_hash = value(manifest, :content_sha256)
     expected_plans = value(manifest, :plans, %{})
@@ -111,15 +132,15 @@ defmodule Cadence.Control.MissionModelPromotion do
          true <- is_map(expected_plans),
          {:ok, %Revision{} = revision} <-
            MissionModels.fetch_revision(
-             activation.organization_id,
-             activation.mission_id,
+             organization_id,
+             mission_id,
              revision_id
            ),
          :ok <- exact_value(revision.content_sha256, expected_revision_hash, :revision_content),
          {:ok, plans} <-
            MissionModels.fetch_runtime_plans(
-             activation.organization_id,
-             activation.mission_id,
+             organization_id,
+             mission_id,
              revision_id
            ),
          :ok <- exact_plan_manifest(plans, expected_plans),
@@ -136,7 +157,14 @@ defmodule Cadence.Control.MissionModelPromotion do
     end
   end
 
+  def runtime_basis(_, _, _), do: {:error, :invalid_mission_model_activation_manifest}
+
   @doc false
+  def command_authoring_basis(
+        %BindingSetActivation{metadata: %{"spacecraft_configurations" => _}} = activation
+      ),
+      do: SpacecraftModelBindings.command_basis(activation, nil)
+
   def command_authoring_basis(%BindingSetActivation{} = activation) do
     MissionModels.command_authoring_basis(
       activation.organization_id,

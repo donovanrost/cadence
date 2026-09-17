@@ -41,6 +41,9 @@ const closeWithoutFocus = () => {
   suppressCloseAutoFocus = true;
   open.value = false;
 };
+const close = () => {
+  open.value = false;
+};
 
 const updateOpen = async (nextOpen: boolean) => {
   if (nextOpen && (!props.identity || !root.value)) return;
@@ -117,7 +120,7 @@ onBeforeUnmount(() => {
   <div ref="root" v-bind="$attrs" :data-overlay-open="open ? '' : undefined">
     <PopoverRoot :open="open" :modal="false" @update:open="updateOpen">
       <PopoverTrigger as-child>
-        <slot name="trigger" :open="open"></slot>
+        <slot name="trigger" :open="open" :close="close"></slot>
       </PopoverTrigger>
 
       <PopoverContent
@@ -134,9 +137,9 @@ onBeforeUnmount(() => {
         @interact-outside="handleInteractOutside"
         @escape-key-down="handleEscapeKeyDown"
       >
-        <slot name="content" :open="open"></slot>
+        <slot name="content" :open="open" :close="close"></slot>
       </PopoverContent>
-      <slot v-else name="content" :open="open"></slot>
+      <slot v-else name="content" :open="open" :close="close"></slot>
     </PopoverRoot>
   </div>
 </template>

@@ -45,6 +45,11 @@ defmodule Cadence.MissionModels do
     to: Cadence.MissionModels.CommandAuthoringBasis,
     as: :load
 
+  @doc "Reads allowed enum values from the exact semantic revision used by a command."
+  defdelegate command_argument_choices(organization_id, mission_id, revision_id, argument_ids),
+    to: Cadence.MissionModels.CommandArgumentChoices,
+    as: :load
+
   @spec compile_layers([Layer.t()], keyword()) ::
           {:ok, CompilerResult.t()} | {:error, term()}
   def compile_layers(layers, opts \\ []) when is_list(layers) and is_list(opts) do
