@@ -9,6 +9,7 @@ export const fixture = (): MutableFixture<CommandReviewPage> => ({
       resourceId: "request_review",
     },
     mission_name: "Review mission",
+    target_name: "Aurora",
     actor_id: "reviewer",
     observed_at: "2026-09-10T08:00:00Z",
     expected_review: "a".repeat(64),

@@ -97,6 +97,10 @@ defmodule Cadence.Reads.ApplicationSurfaces.TelemetryDecomConfigurationTest do
 
     assert {:ok, page} = Configuration.load(c.scope, c.host, c.mission)
     assert page["status"]["state"] == "configured"
+    assert [entry] = page["review"]["configurations"]
+    assert entry["spacecraft_name"] == c.spacecraft.display_name
+    assert entry["source_endpoint_name"] == c.endpoint.display_name
+    assert entry["source_endpoint_id"] == c.endpoint.source_endpoint_id
     assert page["status"]["tone"] == "attention"
     assert page["revision"]["field"]["value"] == config.catalog_revision_id
     assert page["packet_handoff"]["selection_count"] == 1

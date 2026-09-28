@@ -15,6 +15,7 @@ defmodule Cadence.Reads.CommandsTest do
 
     snapshot =
       Commands.snapshot("org-1", "mission-1",
+        target_names: fn "org-1", "mission-1", _ids -> %{"endpoint-queued" => "Aurora"} end,
         observed_at: fn -> observed_at end,
         requests:
           records([
@@ -65,6 +66,7 @@ defmodule Cadence.Reads.CommandsTest do
   test "filters by state, target, and command identity" do
     snapshot =
       Commands.snapshot("org-1", "mission-1",
+        target_names: fn "org-1", "mission-1", _ids -> %{"endpoint-queued" => "Aurora"} end,
         requests: records([request("queued", :queued), request("other", :approved)]),
         queue_entries: records([queue_entry("queued", :pending)]),
         release_attempts: records([]),

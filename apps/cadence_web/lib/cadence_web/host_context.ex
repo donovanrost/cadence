@@ -98,7 +98,13 @@ defmodule CadenceWeb.HostContext do
     ])
     |> Map.put(
       :followed_command,
-      fields(data[:followed_command], [:command_request_id, :command_name, :status, :target])
+      fields(data[:followed_command], [
+        :command_request_id,
+        :command_name,
+        :status,
+        :target,
+        :target_name
+      ])
     )
   end
 

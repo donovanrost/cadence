@@ -37,6 +37,7 @@ export function fixture(): HistoryModel {
       command_id: "command-a",
       name: "Set power",
       target: "endpoint-a",
+      target_name: "Aurora",
       model_revision_id: "revision-a",
       state: "released",
       verification_state: "satisfied",

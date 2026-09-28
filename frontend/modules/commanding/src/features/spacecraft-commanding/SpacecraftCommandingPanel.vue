@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { targetLabel } from "../../shared/command-draft/target-label";
 import { computed, ref, watch } from "vue";
 import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
@@ -99,8 +100,8 @@ const monitorHref = (id: string) =>
       <div>
         <h2 class="text-lg font-semibold">Command target identities</h2>
         <p class="mt-1 text-sm text-base-content/70">
-          Source endpoints assigned to this spacecraft. Open an endpoint's command monitor to
-          inspect requests and their evidence.
+          Command targets assigned to this spacecraft. Open a target's command monitor to inspect
+          requests and their evidence.
         </p>
       </div>
       <form
@@ -109,7 +110,7 @@ const monitorHref = (id: string) =>
         :action="spacecraftCommandingHref(model.context.missionId, model.context.spacecraftId)"
         class="flex flex-wrap items-end gap-3"
       >
-        <CadenceField label="Find an endpoint" control-id="commanding-endpoint-search"
+        <CadenceField label="Find a command target" control-id="commanding-endpoint-search"
           ><input
             id="commanding-endpoint-search"
             v-model="search"
@@ -124,13 +125,13 @@ const monitorHref = (id: string) =>
           >Reset</a
         >
       </form>
-      <p class="text-sm font-mono">{{ model.endpoints.total_count }} matching endpoints</p>
+      <p class="text-sm font-mono">{{ model.endpoints.total_count }} matching targets</p>
       <p
         v-if="model.endpoints.items.length === 0"
         id="commanding-endpoints-empty"
         class="text-sm text-base-content/70"
       >
-        No source endpoints match this spacecraft and search.
+        No command targets match this spacecraft and search.
       </p>
       <ul v-else id="commanding-endpoints" class="divide-y divide-base-300">
         <li
@@ -139,36 +140,35 @@ const monitorHref = (id: string) =>
           :data-endpoint="endpoint.id"
           class="py-4 space-y-2"
         >
-          <h3 class="font-semibold break-words">{{ endpoint.name || endpoint.id }}</h3>
+          <h3 class="font-semibold break-words">{{ targetLabel(endpoint) }}</h3>
           <p class="font-mono text-sm break-all">
-            <span class="block">{{ endpoint.id }}</span
-            ><span class="block break-normal">SCID {{ endpoint.scid ?? "not set" }}</span>
+            <span class="block break-normal">SCID {{ endpoint.scid ?? "not set" }}</span>
           </p>
           <a v-if="endpoint.id !== 'all'" :href="monitorHref(endpoint.id)" class="link text-sm"
             >Open command monitor</a
           >
           <p v-else class="text-sm">
-            This endpoint uses the monitor's reserved all-targets value. Inspect request identities
-            in the mission monitor.
+            This target uses the monitor's reserved all-targets value. Inspect request identities in
+            the mission monitor.
           </p>
         </li>
       </ul>
       <nav
-        aria-label="Source endpoint pages"
+        aria-label="Command target pages"
         class="flex flex-wrap justify-between items-center gap-3"
       >
         <a
           v-if="model.query.page > 1"
           :href="endpointPageHref(model, model.query.page - 1)"
           class="link text-sm"
-          >Previous endpoints</a
+          >Previous targets</a
         >
         <span class="text-sm font-mono">Page {{ model.query.page }} of {{ pages }}</span>
         <a
           v-if="model.query.page < pages"
           :href="endpointPageHref(model, model.query.page + 1)"
           class="link text-sm"
-          >Next endpoints</a
+          >Next targets</a
         >
       </nav>
       <a :href="`${mission}/ops/commands`" class="link text-sm">Open mission command monitor</a>

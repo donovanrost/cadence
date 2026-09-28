@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { targetLabel } from "../../shared/command-draft/target-label";
 import { computed, onMounted, ref, watch } from "vue";
 import CadencePane from "@cadence/ui/CadencePane.vue";
 import CadenceButton from "@cadence/ui/CadenceButton.vue";
@@ -79,7 +80,8 @@ function targetDraft(target: Target) {
 }
 function targetHeading(target: Target) {
   const spacecraft = target.spacecraft_id && props.spacecraftNames[target.spacecraft_id];
-  return spacecraft ? `${spacecraft} · ${target.name || target.id}` : target.name || target.id;
+  const endpoint = targetLabel(target);
+  return spacecraft && spacecraft !== endpoint ? `${spacecraft} · ${endpoint}` : endpoint;
 }
 function prepare() {
   if (props.disabled) return;
@@ -185,11 +187,10 @@ function timingEdited(event: Event) {
           :key="target.id"
           type="button"
           :disabled="disabled"
-          :aria-label="`Remove ${target.name || target.id} from selection`"
+          :aria-label="`Remove ${targetLabel(target)} from selection`"
           @click="emit('remove', target)"
         >
-          {{ target.name || target.id
-          }}<span class="hero-x-mark cw-small-icon" aria-hidden="true" />
+          {{ targetLabel(target) }}<span class="hero-x-mark cw-small-icon" aria-hidden="true" />
         </button>
         <p v-if="!targets.length" class="cw-subtle">
           Select targets to prepare this command. Your edits remain here.
@@ -212,7 +213,7 @@ function timingEdited(event: Event) {
               v-for="target in targets"
               :key="target.id"
               class="cw-override"
-              :aria-label="`Settings for ${target.name || target.id}`"
+              :aria-label="`Settings for ${targetLabel(target)}`"
             >
               <CommandArguments
                 :ref="
@@ -300,8 +301,7 @@ function timingEdited(event: Event) {
           :key="request.request_id"
           class="cw-preview-item"
         >
-          <h4>{{ request.target.name || request.target.id }}</h4>
-          <code class="cw-subtle">{{ request.target.id }}</code>
+          <h4>{{ targetHeading(request.target) }}</h4>
           <dl>
             <div
               v-for="(value, name) in parseArgumentValues(

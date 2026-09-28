@@ -16,6 +16,7 @@ defmodule Cadence.Reads.CommandMonitorProjection do
       name: text(row.command_name, 512),
       status: state(row.status, @statuses),
       target: optional(row.target),
+      target_name: if(row.target_name, do: text(row.target_name, 512)),
       requested_by: text(row.requested_by, 512),
       requested_at: time(row.requested_at),
       occurred_at: time(row.occurred_at),

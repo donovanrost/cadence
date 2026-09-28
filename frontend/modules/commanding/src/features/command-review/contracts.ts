@@ -65,6 +65,7 @@ export type CommandReviewPage = Snapshot<{
     observed_at: string;
     expected_review: string;
     request: Request;
+    target_name: string | null;
     can_decide: boolean;
     query: { after: string };
     history: {
@@ -159,6 +160,7 @@ function validReviewPage(value: unknown, context: OpsPageContext): value is Comm
     if (!id(context[k]) || v.context[k] !== context[k]) return fail();
   if (
     !text(v.mission_name) ||
+    !(v.target_name === null || text(v.target_name, 512)) ||
     !id(v.actor_id) ||
     !time(v.observed_at) ||
     typeof v.expected_review !== "string" ||

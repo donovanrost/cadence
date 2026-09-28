@@ -179,6 +179,7 @@ export function readCommandHistory(value: unknown, context: OpsPageContext): His
     command_id: identity,
     name: text,
     target: identity,
+    target_name: optional(text),
     model_revision_id: identity,
     state: oneOf(
       "draft",

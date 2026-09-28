@@ -77,7 +77,7 @@ export function contextSections(context: OpsFrameContext) {
         followed_command: data?.followed_command
           ? {
               ...data.followed_command,
-              detail: `${data?.followed_command.status} · ${data?.followed_command.target}`,
+              detail: `${data.followed_command.status} · ${data.followed_command.target_name || "Unnamed target"}`,
             }
           : null,
       });

@@ -70,7 +70,9 @@ test("request evidence is rendered without dropping canonical IDs or timestamp p
   const { wrapper } = setup();
   expect(wrapper.get("#command-monitor-summary").attributes("data-command-active-count")).toBe("1");
   const row = wrapper.get('[data-command-request="request-a"]');
-  expect(row.get('[data-command-queue="queue-request-a"]').text()).toContain("endpoint-a");
+  expect(row.get('[data-command-queue="queue-request-a"]').text()).toContain("released");
+  expect(row.get('[data-command-queue="queue-request-a"]').text()).not.toContain("endpoint-a");
+  expect(row.findAll("details").some((details) => details.text().includes("Target ID"))).toBe(true);
   expect(row.get('[data-command-release="release-request-a"]').text()).toContain("contact-a");
   expect(row.get('[data-command-verifier="verifier-request-a"]').text()).toContain(
     "release-request-a",
@@ -101,6 +103,18 @@ test("filters navigate once with canonical query and wait for an admitted replac
   expect(wrapper.get("#command-monitor-apply").attributes("disabled")).toBeUndefined();
   await wrapper.get("#command-monitor-reset").trigger("click");
   expect(navigate).toHaveBeenLastCalledWith("/missions/mission-1/ops/commands");
+  wrapper.unmount();
+});
+test("endpoint names are visible while filtering retains the exact endpoint identity", async () => {
+  const { wrapper, navigate } = setup();
+  const target = wrapper.get('#command-monitor-target option[value="endpoint-a"]');
+  expect(target.text()).toBe("Aurora");
+  expect(wrapper.get('[data-command-request="request-a"]').text()).toContain("Aurora");
+  await wrapper.get("#command-monitor-target").setValue("endpoint-a");
+  await wrapper.get("#command-monitor-filters").trigger("submit");
+  expect(navigate).toHaveBeenCalledExactlyOnceWith(
+    "/missions/mission-1/ops/commands?target=endpoint-a",
+  );
   wrapper.unmount();
 });
 test("focus is URL navigation, survives filters and has scoped clear and native modified links", async () => {

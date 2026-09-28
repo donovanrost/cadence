@@ -11,6 +11,7 @@ const source: QueuePage = {
       resourceId: "command_request_3wmxvj3p4y_2F",
     },
     mission_name: "Review mission",
+    target_name: "Aurora",
     observed_at: "2026-09-10T14:50:12.764132Z",
     queue: null,
     request: {

@@ -7,6 +7,7 @@ export function itemFixture(): Item {
     command_id: "command_one",
     revision_id: "model_one",
     target_id: "target_one",
+    target_name: "Primary",
     order: 0,
     state: "draft",
     priority: 3,

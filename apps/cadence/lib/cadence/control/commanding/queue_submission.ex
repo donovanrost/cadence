@@ -32,6 +32,11 @@ defmodule Cadence.Control.Commanding.QueueSubmission do
         "actor_id" => fresh.user.user_id,
         "observed_at" => time(DateTime.utc_now()),
         "request" => request_document(request),
+        "target_name" =>
+          Cadence.SourceEndpoints.display_names(fresh.organization_id, mission_id, [
+            request.source_endpoint_ref
+          ])
+          |> Map.get(request.source_endpoint_ref),
         "queue" => queue_document(queue),
         "availability" => availability(request, queue, held)
       }

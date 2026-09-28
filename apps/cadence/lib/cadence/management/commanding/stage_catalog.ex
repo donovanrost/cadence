@@ -5,6 +5,7 @@ defmodule Cadence.Management.Commanding.StageCatalog do
   alias Cadence.Management.Commanding.{StageAccess, StageInput}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
+  alias Cadence.SourceEndpoints
 
   @item_fields ~w(staged_command_item_id command_stage_id organization_id mission_id source_endpoint_ref mission_model_revision_id command_id priority not_before expires_at item_order lifecycle_state submitted_command_request_id inserted_at updated_at)a
 
@@ -48,6 +49,9 @@ defmodule Cadence.Management.Commanding.StageCatalog do
       StageAccess.with_stage(scope, mission_id, stage_id, :read, fn fresh, mission, stage ->
         page = items_page(stage, query)
         selected = selected_item(stage, query.item)
+        target_ids = Enum.map(page["entries"] ++ List.wrap(selected), & &1["target_id"])
+        names = SourceEndpoints.display_names(fresh.organization_id, mission_id, target_ids)
+        named_item = &Map.put(&1, "target_name", names[&1["target_id"]])
 
         bounded(
           Map.merge(context(fresh, mission), %{
@@ -59,8 +63,8 @@ defmodule Cadence.Management.Commanding.StageCatalog do
                 "after_order",
                 if(is_nil(query.after_order), do: "", else: to_string(query.after_order))
               ),
-            "items" => page,
-            "selected_item" => selected
+            "items" => Map.update!(page, "entries", &Enum.map(&1, named_item)),
+            "selected_item" => if(selected, do: named_item.(selected))
           })
         )
       end)
@@ -136,7 +140,10 @@ defmodule Cadence.Management.Commanding.StageCatalog do
   defp selected_item(_, ""), do: nil
 
   defp selected_item(stage, id) do
-    case stage |> item_query() |> where([row], row.staged_command_item_id == ^id) |> Repo.one() do
+    case stage
+         |> item_query()
+         |> where([row], row.staged_command_item_id == ^id)
+         |> Repo.one() do
       nil -> nil
       row -> item_document(row, true)
     end

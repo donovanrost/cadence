@@ -544,13 +544,11 @@ const buttonClasses: Record<ButtonVariant, string> = {
               class="break-all rounded border border-base-300/40 p-3 text-sm"
             >
               <p>
-                <strong>{{ entry.spacecraft_id }}</strong> · Configuration v{{
-                  entry.configuration_version
-                }}
-                · {{ entry.enabled ? "Enabled" : "Disabled" }}
+                <strong>{{ entry.spacecraft_name || "Unnamed spacecraft" }}</strong> · Configuration
+                v{{ entry.configuration_version }} · {{ entry.enabled ? "Enabled" : "Disabled" }}
               </p>
               <p>Catalog revision: {{ entry.catalog_revision_id }}</p>
-              <p>Source endpoint: {{ entry.source_endpoint_id }}</p>
+              <p>Source endpoint: {{ entry.source_endpoint_name || "Unnamed endpoint" }}</p>
               <p>Saved APIDs: {{ entry.handled_apids.join(", ") || "None" }}</p>
             </li>
           </ul>
@@ -561,10 +559,9 @@ const buttonClasses: Record<ButtonVariant, string> = {
               class="break-all rounded border border-base-300/40 p-3 text-sm"
             >
               <p>
-                <strong>{{ input.spacecraft_id }}</strong> · {{ input.input_id }} v{{
-                  input.configuration_version
-                }}
-                · {{ input.enabled ? "Enabled" : "Disabled" }}
+                <strong>{{ input.spacecraft_name || "Unnamed spacecraft" }}</strong> ·
+                {{ input.input_id }} v{{ input.configuration_version }} ·
+                {{ input.enabled ? "Enabled" : "Disabled" }}
               </p>
               <p>
                 {{ input.packet_count }} selected packets. Saved packet inputs override matching

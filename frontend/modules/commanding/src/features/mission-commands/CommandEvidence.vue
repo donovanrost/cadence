@@ -46,10 +46,11 @@ const label = (value: string | null) => value?.replaceAll("_", " ") ?? "Not reco
       <div v-if="row.queue" :data-command-queue="row.queue.id">
         <dt class="hud-label">Queue entry</dt>
         <dd class="mt-1 break-all font-mono">
-          {{ row.queue.id }} · {{ label(row.queue.state) }}<br />Lane {{ row.queue.lane
-          }}<br /><time v-if="row.queue.enqueued_at" :datetime="row.queue.enqueued_at">{{
-            row.queue.enqueued_at
-          }}</time>
+          {{ label(row.queue.state) }}<br /><time
+            v-if="row.queue.enqueued_at"
+            :datetime="row.queue.enqueued_at"
+            >{{ row.queue.enqueued_at }}</time
+          >
         </dd>
       </div>
       <div v-else>
@@ -75,6 +76,25 @@ const label = (value: string | null) => value?.replaceAll("_", " ") ?? "Not reco
         <dd class="mt-1">Not recorded</dd>
       </div>
     </dl>
+    <details>
+      <summary class="cursor-pointer text-base-content/70">Technical details</summary>
+      <dl class="mt-2 space-y-2 break-all font-mono">
+        <div>
+          <dt>Target ID</dt>
+          <dd>{{ row.target || "Not recorded" }}</dd>
+        </div>
+        <template v-if="row.queue">
+          <div>
+            <dt>Queue entry ID</dt>
+            <dd>{{ row.queue.id }}</dd>
+          </div>
+          <div>
+            <dt>Queue lane</dt>
+            <dd>{{ row.queue.lane }}</dd>
+          </div>
+        </template>
+      </dl>
+    </details>
     <div class="border-t border-base-300 pt-3">
       <p class="hud-label">Verifier records · {{ row.verifier_total }}</p>
       <p v-if="row.verifier_total === 0" class="mt-2 text-base-content/70">No verifier records.</p>

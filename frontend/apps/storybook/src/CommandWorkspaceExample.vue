@@ -296,6 +296,7 @@ let current: WorkspacePreparation = {
                   command_id: selected.id,
                   revision_id: base.basis.revision_id,
                   target_id: target.id,
+                  target_name: target.name,
                   order: index,
                   state: "draft",
                   priority: 3,

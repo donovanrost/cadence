@@ -62,7 +62,7 @@ test("endpoint pages preserve search and filter submission resets the page", () 
   data.query = { page: 2, query: "runtime & bus" };
   data.endpoints = { page: 2, total_count: 26, items: data.endpoints.items };
   const wrapper = mount(contribution.component, { props: contribution.read(data, context) });
-  expect(wrapper.text()).toContain("26 matching endpoints");
+  expect(wrapper.text()).toContain("26 matching targets");
   expect(wrapper.get("nav a").attributes("href")).toBe(
     "/missions/mission-a/spacecraft/spacecraft-a/commanding?query=runtime+%26+bus",
   );

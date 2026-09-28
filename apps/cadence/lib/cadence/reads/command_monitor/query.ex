@@ -4,7 +4,14 @@ defmodule Cadence.Reads.CommandMonitor.Query do
   alias Cadence.Reads.CommandMonitor.Search
 
   @search Enum.map_join(
-            ["command_name", "command_id", "command_request_id", "target", "requested_by"],
+            [
+              "command_name",
+              "command_id",
+              "command_request_id",
+              "target",
+              "target_name",
+              "requested_by"
+            ],
             " OR ",
             &"strpos(#{Search.expression(&1)}, $5::text) > 0"
           )
@@ -20,6 +27,7 @@ defmodule Cadence.Reads.CommandMonitor.Query do
     SELECT r.command_request_id, r.command_id,
       coalesce(r.command_display_name, r.command_name, r.command_id) AS command_name,
       r.source_endpoint_ref AS target,
+      endpoint.display_name AS target_name,
       CASE WHEN jsonb_typeof(label.value) = 'string' THEN label.value #>> '{}' END AS requested_by,
       r.requested_at,
       CASE WHEN r.lifecycle_state IN ('draft','validated','approval_pending','approved','rejected','queued','released','canceled')
@@ -37,6 +45,8 @@ defmodule Cadence.Reads.CommandMonitor.Query do
       v.verifier_total, v.failed, v.timed_out, v.pending, v.satisfied,
       greatest(r.requested_at, q.enqueued_at, a.attempted_at, a.released_at, v.occurred_at) AS occurred_at
     FROM command_requests r
+    LEFT JOIN mission_source_endpoints endpoint ON endpoint.organization_id = $1 AND endpoint.mission_id = $2
+      AND endpoint.source_endpoint_id = r.source_endpoint_ref
     CROSS JOIN LATERAL (
       SELECT CASE WHEN r.requested_by_document ? 'value'
         THEN r.requested_by_document->'value' ELSE r.requested_by_document END AS doc
@@ -112,6 +122,7 @@ defmodule Cadence.Reads.CommandMonitor.Query do
     SELECT c.command_request_id, jsonb_build_object(
       'command_request_id', c.command_request_id, 'command_id', c.command_id,
       'command_name', c.command_name, 'target', c.target, 'requested_by', c.requested_by,
+      'target_name', c.target_name,
       'requested_at', c.requested_at, 'occurred_at', c.occurred_at,
       'request_state', c.request_state, 'status', c.status, 'verification_state', c.verification_state,
       'verifier_total', c.verifier_total,
@@ -151,7 +162,7 @@ defmodule Cadence.Reads.CommandMonitor.Query do
       CASE WHEN octet_length(data::text) <= 65536 THEN data ELSE '{"invalid": true}'::jsonb END AS data
     FROM projected
   ), targets AS MATERIALIZED (
-    SELECT DISTINCT target COLLATE "C" AS target FROM classified WHERE target IS NOT NULL
+    SELECT DISTINCT target COLLATE "C" AS target, target_name FROM classified WHERE target IS NOT NULL
     ORDER BY target COLLATE "C" LIMIT 201
   )
   SELECT jsonb_build_object(
@@ -167,7 +178,9 @@ defmodule Cadence.Reads.CommandMonitor.Query do
       'indeterminate_count', count(*) FILTER (WHERE status = 'indeterminate')
     ) FROM classified),
     'targets', (SELECT coalesce(jsonb_agg(CASE WHEN octet_length(target) BETWEEN 1 AND 256
-      THEN target ELSE NULL END ORDER BY target COLLATE "C"), '[]'::jsonb) FROM targets),
+      AND (target_name IS NULL OR octet_length(target_name) BETWEEN 1 AND 512)
+      THEN jsonb_build_object('id', target, 'name', target_name) ELSE NULL END
+      ORDER BY target COLLATE "C"), '[]'::jsonb) FROM targets),
     'rows', (SELECT coalesce(jsonb_agg(b.data ORDER BY p.ordinal), '[]'::jsonb)
       FROM page_rows p JOIN bounded b USING (command_request_id)),
     'focus', (SELECT data FROM bounded WHERE command_request_id = $7::text)

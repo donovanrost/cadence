@@ -13,9 +13,12 @@ defmodule Cadence.Reads.CommandHistory.Query do
       'command_id', r.command_id,
       'name', coalesce(r.command_display_name,r.command_name,r.command_id),
       'target', r.source_endpoint_ref,
+      'target_name', endpoint.display_name,
       'model_revision_id', r.mission_model_revision_id,
       'state', CASE WHEN r.lifecycle_state IN ('draft','validated','approval_pending','approved','rejected','queued','released','canceled') THEN r.lifecycle_state ELSE 'draft' END,
       'verification_state', CASE WHEN r.verification_state IN ('not_required','pending','satisfied','failed','timed_out') THEN r.verification_state ELSE NULL END) AS data FROM command_requests r
+    LEFT JOIN mission_source_endpoints endpoint ON endpoint.organization_id = $1 AND endpoint.mission_id = $2
+      AND endpoint.source_endpoint_id = r.source_endpoint_ref
     WHERE r.organization_id = $1 AND r.mission_id = $2 AND r.command_request_id = $3
   ), releases AS MATERIALIZED (
     SELECT a.command_release_attempt_id AS id, a.attempted_at AS occurred_at,

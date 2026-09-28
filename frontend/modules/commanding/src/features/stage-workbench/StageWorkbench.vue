@@ -380,7 +380,9 @@ async function cancelItem() {
           Selected item · {{ selected.state }}
         </h2>
         <p class="font-mono break-all text-xs text-base-content/60">{{ selected.id }}</p>
-        <p class="text-sm">{{ selected.command_id }} → {{ selected.target_id }}</p>
+        <p class="text-sm">
+          {{ selected.command_id }} → {{ selected.target_name || "Unnamed target" }}
+        </p>
         <p class="text-xs font-mono break-all text-base-content/50">
           Draft model: {{ selected.revision_id }}
         </p>

@@ -55,6 +55,23 @@ async function prepareOne(c: ReturnType<typeof setup>) {
   await c.wrapper.get("#workspace-shared-argument-0").setValue("2");
   await flushPromises();
 }
+test("the fleet and shelf show endpoint names without exposing internal endpoint keys", async () => {
+  const page = workspaceFixture();
+  const target = required(page.catalog?.targets.entries[0]);
+  target.source_ref = null;
+  const { wrapper } = setup(page);
+  const fleet = wrapper.get(`[data-workspace-target="${target.id}"]`);
+  expect(fleet.text()).toContain("KESTREL-01");
+  expect(fleet.text()).toContain("Flight command endpoint");
+  expect(fleet.text()).not.toContain(target.id);
+  expect(wrapper.get('[data-workspace-item="item_one"]').text()).toContain("Primary");
+  expect(wrapper.get('[data-workspace-item="item_one"]').text()).not.toContain("target_one");
+  await fleet.trigger("click");
+  expect(wrapper.get('[aria-label="Selected targets"]').text()).toContain(
+    "Flight command endpoint",
+  );
+  expect(wrapper.get('[aria-label="Selected targets"]').text()).not.toContain(target.id);
+});
 function previewResult(preview: TargetsPreview) {
   return { status: "previewed", preview, queue_preview: queuePreviewFixture(preview) };
 }

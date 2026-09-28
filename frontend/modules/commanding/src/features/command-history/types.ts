@@ -16,6 +16,7 @@ export type RequestHeader = {
   command_id: string;
   name: string;
   target: string;
+  target_name: string | null;
   model_revision_id: string;
   state:
     | "draft"

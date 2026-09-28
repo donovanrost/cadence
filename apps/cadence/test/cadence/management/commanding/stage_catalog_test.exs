@@ -14,6 +14,8 @@ defmodule Cadence.Management.Commanding.StageCatalogTest do
 
   alias Cadence.Ids
   alias Cadence.Management.Commanding.StageCatalog
+  alias Cadence.SourceEndpoints
+  alias Cadence.SourceEndpoints.SourceEndpoint
 
   setup do
     c = CommandReviewFixtures.scope!()
@@ -89,6 +91,39 @@ defmodule Cadence.Management.Commanding.StageCatalogTest do
     assert {:ok, search} = StageCatalog.directory(other, c.mission, %{"query" => "%_ready\\"})
     assert [%{"id" => id}] = search["stages"]["entries"]
     assert id == literal.command_stage_id
+  end
+
+  test "draft labels are independent of catalog browsing and do not change the item token", %{
+    c: c
+  } do
+    stage = stage!(c, %{})
+    item = item!(c, stage, %{})
+    query = %{"item" => item.staged_command_item_id}
+
+    assert {:ok, before} =
+             StageCatalog.workbench(c.scope, c.mission, stage.command_stage_id, query)
+
+    assert before["selected_item"]["target_name"] == nil
+
+    assert {:ok, _} =
+             SourceEndpoints.persist_source_endpoint(
+               c.org,
+               SourceEndpoint.new(%{
+                 mission_id: c.mission,
+                 source_endpoint_id: item.source_endpoint_ref,
+                 display_name: "Aurora"
+               })
+             )
+
+    assert {:ok, after_name} =
+             StageCatalog.workbench(c.scope, c.mission, stage.command_stage_id, query)
+
+    assert [%{"target_name" => "Aurora"}] = after_name["items"]["entries"]
+    assert after_name["selected_item"]["target_name"] == "Aurora"
+    assert after_name["selected_item"]["target_id"] == item.source_endpoint_ref
+
+    assert after_name["selected_item"]["expected_item"] ==
+             before["selected_item"]["expected_item"]
   end
 
   test "item paging follows order and ID ties; selection is independent of the current page", %{

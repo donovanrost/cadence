@@ -172,7 +172,7 @@ function follow(event: MouseEvent, href: string) {
           <div
             v-for="field in [
               ['Request ID', request.command_request_id],
-              ['Target endpoint', request.source_endpoint_ref],
+              ['Command target', review.target_name || 'Unnamed target'],
               ['Model revision', request.mission_model_revision_id],
               ['Command ID', request.command_id],
               ['Command name', request.command_name],

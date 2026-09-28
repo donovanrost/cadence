@@ -72,6 +72,7 @@ export type QueuePage = {
     actor_id: string;
     observed_at: string;
     request: Request;
+    target_name: string | null;
     queue: Queue | null;
     availability: "available" | "queued" | "approval_required" | "expired" | "closed";
   };
@@ -269,6 +270,7 @@ export function readQueuePage(value: unknown, context: OpsPageContext): QueuePag
       "actor_id",
       "observed_at",
       "request",
+      "target_name",
       "queue",
       "availability",
     ]) ||
@@ -283,6 +285,7 @@ export function readQueuePage(value: unknown, context: OpsPageContext): QueuePag
     !id(m.actor_id) ||
     !time(m.observed_at) ||
     !request(m.request) ||
+    !nullable(m.target_name, (value) => text(value, 512)) ||
     m.request.command_request_id !== context.resourceId ||
     !nullable(m.queue, queue) ||
     !["available", "queued", "approval_required", "expired", "closed"].includes(

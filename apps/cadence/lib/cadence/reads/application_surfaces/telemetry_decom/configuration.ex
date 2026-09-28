@@ -102,8 +102,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.TelemetryDecom.Configuration do
            "spacecraft_id" => spacecraft.spacecraft_id
          },
          "configuration" => configuration(config),
-         "review" =>
-           Review.snapshot(mission.organization_id, mission.mission_id, spacecraft.spacecraft_id),
+         "review" => review(mission, spacecraft),
          "page" => %{
            "id" => "spacecraft-telemetry-decom-page",
            "title" => "Telemetry Decom",
@@ -169,6 +168,44 @@ defmodule Cadence.Reads.ApplicationSurfaces.TelemetryDecom.Configuration do
       {:error, :no_active_binding_set} ->
         {:ok, nil}
     end
+  end
+
+  defp review(mission, spacecraft) do
+    review =
+      Review.snapshot(mission.organization_id, mission.mission_id, spacecraft.spacecraft_id)
+
+    spacecraft_names =
+      (review["configurations"] ++ review["packet_inputs"])
+      |> Enum.map(& &1["spacecraft_id"])
+      |> Enum.uniq()
+      |> Enum.chunk_every(100)
+      |> Enum.flat_map(fn ids ->
+        {:ok, names} =
+          SpacecraftStore.display_names(mission.organization_id, mission.mission_id, ids)
+
+        names
+      end)
+      |> Map.new(&{&1["id"], &1["name"]})
+
+    endpoint_names =
+      Cadence.SourceEndpoints.display_names(
+        mission.organization_id,
+        mission.mission_id,
+        Enum.map(review["configurations"], & &1["source_endpoint_id"])
+      )
+
+    review
+    |> Map.update!("configurations", fn entries ->
+      Enum.map(entries, fn entry ->
+        Map.merge(entry, %{
+          "spacecraft_name" => spacecraft_names[entry["spacecraft_id"]],
+          "source_endpoint_name" => endpoint_names[entry["source_endpoint_id"]]
+        })
+      end)
+    end)
+    |> Map.update!("packet_inputs", fn entries ->
+      Enum.map(entries, &Map.put(&1, "spacecraft_name", spacecraft_names[&1["spacecraft_id"]]))
+    end)
   end
 
   defp configuration(nil), do: nil

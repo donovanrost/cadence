@@ -29,7 +29,13 @@ const commandData = nullable(
     failed_count: optional(count),
     indeterminate_count: optional(count),
     followed_command: maybe(
-      object({ command_request_id: string, command_name: string, status: string, target: string }),
+      object({
+        command_request_id: string,
+        command_name: string,
+        status: string,
+        target: string,
+        target_name: nullable(string),
+      }),
     ),
   }),
 );

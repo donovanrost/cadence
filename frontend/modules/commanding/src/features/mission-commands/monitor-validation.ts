@@ -43,6 +43,7 @@ function observation(value: unknown) {
     "name",
     "status",
     "target",
+    "target_name",
     "requested_by",
     "requested_at",
     "occurred_at",
@@ -59,6 +60,7 @@ function observation(value: unknown) {
     !text(r.requested_by, 512) ||
     !optional(r.command_id) ||
     !optional(r.target) ||
+    !optional(r.target_name, 512) ||
     !oneOf(r.status, commandStates) ||
     !oneOf(r.request_state, commandStates.slice(0, 8)) ||
     !verification(r.verification_state) ||
@@ -207,8 +209,12 @@ export function readCommandMonitor(value: unknown, context: OpsPageContext): Com
   if (
     !Array.isArray(m.targets) ||
     m.targets.length > 200 ||
-    !m.targets.every((v) => text(v)) ||
-    new Set(m.targets).size !== m.targets.length ||
+    !m.targets.every((v) => {
+      const target = object(v, ["id", "name"]);
+      return text(target.id) && optional(target.name, 512);
+    }) ||
+    new Set(m.targets.map((v: unknown) => object(v, ["id", "name"]).id)).size !==
+      m.targets.length ||
     typeof m.targets_limited !== "boolean"
   )
     throw Error("Invalid command targets");

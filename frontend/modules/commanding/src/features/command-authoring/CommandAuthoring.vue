@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { targetLabel } from "../../shared/command-draft/target-label";
 import { formatArgumentValues } from "../../shared/command-draft/exact-values";
 import { priorityChoices, priorityLabel } from "../../shared/priority";
 import { computed, onBeforeUnmount, reactive, ref, shallowRef } from "vue";
@@ -219,19 +220,19 @@ const format = (value: unknown) =>
           class="min-w-0 border border-base-300 bg-base-100 p-4 space-y-4"
           aria-labelledby="authoring-target-title"
         >
-          <h2 id="authoring-target-title" class="font-semibold">1. Target endpoint</h2>
+          <h2 id="authoring-target-title" class="font-semibold">1. Command target</h2>
           <form id="authoring-target-search" class="flex gap-2" @submit.prevent="search('target')">
             <input
               id="authoring-target-query"
               v-model="searches.target_query"
-              aria-label="Search target endpoints"
+              aria-label="Search command targets"
               class="input input-bordered input-sm min-w-0 flex-1"
               maxlength="240"
             /><button class="btn btn-ghost btn-sm" :disabled="locked">Search</button>
           </form>
-          <p v-if="target" class="text-sm text-info">Selected: {{ target.name || target.id }}</p>
+          <p v-if="target" class="text-sm text-info">Selected: {{ targetLabel(target) }}</p>
           <p v-else-if="catalog.query.target" class="text-sm text-warning">
-            The selected endpoint is unavailable. Choose a current target.
+            The selected target is unavailable. Choose a current target.
           </p>
           <ul id="authoring-targets" class="divide-y divide-base-300">
             <li v-for="item in catalog.targets.entries" :key="item.id">
@@ -240,15 +241,15 @@ const format = (value: unknown) =>
                 class="block py-3 space-y-1 hover:text-info"
                 :aria-current="item.id === catalog.query.target ? 'true' : undefined"
                 @click="follow($event, href({ target: item.id }))"
-                ><span class="block font-medium text-sm">{{ item.name || item.id }}</span
+                ><span class="block font-medium text-sm">{{ targetLabel(item) }}</span
                 ><span class="block font-mono text-xs break-all text-base-content/60"
-                  >{{ item.id }} · SCID {{ item.scid ?? "Not recorded" }}</span
+                  >SCID {{ item.scid ?? "Not recorded" }}</span
                 ></a
               >
             </li>
           </ul>
           <p v-if="!catalog.targets.entries.length" class="text-sm text-base-content/60">
-            No matching target endpoints.
+            No matching command targets.
           </p>
           <div class="flex gap-3 text-sm">
             <a
@@ -445,7 +446,7 @@ const format = (value: unknown) =>
           <div
             v-for="field in [
               ['Request ID', preview.request_id],
-              ['Target endpoint', preview.target.id],
+              ['Command target', targetLabel(preview.target)],
               ['SCID', preview.target.scid],
               ['Model revision', preview.revision_id],
               ['Command ID', preview.command_id],

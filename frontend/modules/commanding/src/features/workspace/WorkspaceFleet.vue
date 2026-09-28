@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { targetLabel } from "../../shared/command-draft/target-label";
 import { computed, ref, watch } from "vue";
 import CadenceInfiniteScroll from "@cadence/ui/CadenceInfiniteScroll.vue";
 import type { CatalogResults } from "./useCatalogResults";
@@ -34,8 +35,8 @@ function search(event: Event) {
 const selectedIds = computed(() => new Set(props.selected.map((item) => item.id)));
 function title(target: Target) {
   return target.spacecraft_id
-    ? props.names[target.spacecraft_id] || target.spacecraft_id
-    : target.name || target.id;
+    ? props.names[target.spacecraft_id] || targetLabel(target)
+    : targetLabel(target);
 }
 </script>
 <template>
@@ -82,7 +83,7 @@ function title(target: Target) {
         :key="target.id"
         layout="responsive"
         :selected="selectedIds.has(target.id)"
-        :label="`Select ${title(target)} · ${target.name || target.id}`"
+        :label="`Select ${title(target)}${targetLabel(target) !== title(target) ? ` · ${targetLabel(target)}` : ''}`"
         :disabled="disabled"
         :data-workspace-target="target.id"
         @click="emit('toggle', target)"
@@ -96,8 +97,8 @@ function title(target: Target) {
             class="hero-cpu-chip cw-endpoint-visual"
             aria-hidden="true"
         /></template>
-        <strong>{{ target.name || "Command target" }}</strong>
-        <span class="cw-subtle cw-truncate">{{ target.source_ref || target.id }}</span>
+        <strong v-if="targetLabel(target) !== title(target)">{{ targetLabel(target) }}</strong>
+        <span v-if="target.source_ref" class="cw-subtle cw-truncate">{{ target.source_ref }}</span>
         <span v-if="catalog?.target_bases" class="cw-subtle">{{
           !targetBasis(catalog, target.id)
             ? "Commanding not active"
@@ -107,7 +108,9 @@ function title(target: Target) {
         }}</span>
         <template #footer
           ><span>SCID {{ target.scid ?? "—" }}</span
-          ><span>{{ target.spacecraft_id ? "Spacecraft" : "No spacecraft assigned" }}</span></template
+          ><span>{{
+            target.spacecraft_id ? "Spacecraft" : "No spacecraft assigned"
+          }}</span></template
         >
       </CadenceSelectionTile>
       <p

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { targetLabel } from "../../shared/command-draft/target-label";
 import { parseArgumentValues } from "../../shared/command-draft/exact-values";
 import { priorityLabel } from "../../shared/priority";
 import type { BatchPreview } from "./contracts";
@@ -28,7 +29,7 @@ const emit = defineEmits<{ "update:confirmed": [value: boolean]; submit: [] }>()
     >
       <h3 class="font-semibold text-sm">
         {{ request.command_display_name || request.command_name }} →
-        {{ request.target.name || request.target.id }}
+        {{ targetLabel(request.target) }}
       </h3>
       <p v-if="request.hazardous || request.critical" class="text-sm text-warning">
         {{ request.hazardous ? "Hazardous command" : "Critical command" }} ·
@@ -46,10 +47,6 @@ const emit = defineEmits<{ "update:confirmed": [value: boolean]; submit: [] }>()
         <div>
           <dt class="text-base-content/50">Reserved request</dt>
           <dd class="font-mono break-all">{{ request.request_id }}</dd>
-        </div>
-        <div>
-          <dt class="text-base-content/50">Target identity</dt>
-          <dd class="font-mono break-all">{{ request.target.id }}</dd>
         </div>
         <div>
           <dt class="text-base-content/50">Actor</dt>

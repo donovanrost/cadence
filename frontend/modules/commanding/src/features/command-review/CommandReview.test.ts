@@ -33,7 +33,7 @@ test("review shows exact identities, requested and resolved arguments, criticali
   const { w, port } = setup();
   try {
     expect(w.get('[data-review-field="Request ID"]').text()).toBe("request_review");
-    expect(w.get('[data-review-field="Target endpoint"]').text()).toBe("endpoint_review");
+    expect(w.get('[data-review-field="Command target"]').text()).toBe("Aurora");
     expect(w.get('[data-review-field="Command name"]').text()).toBe("Set_power");
     expect(JSON.parse(w.get("#review-resolved-arguments").text())).toEqual({
       amount: 3,
@@ -235,7 +235,7 @@ test.skipIf(!producer.available)(
         page.review.request.resolved_argument_values_json,
       );
       for (const [label, expected] of [
-        ["Target endpoint", page.review.request.source_endpoint_ref],
+        ["Command target", page.review.target_name || "Unnamed target"],
         ["Model revision", page.review.request.mission_model_revision_id],
         ["Requested by", page.review.request.requested_by.user_id],
       ])

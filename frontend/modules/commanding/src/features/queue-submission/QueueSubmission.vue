@@ -90,7 +90,7 @@ const actor = (v: Actor) =>
           <div
             v-for="field in [
               ['Request ID', request.command_request_id],
-              ['Target', request.source_endpoint_ref],
+              ['Target', model.target_name || 'Unnamed target'],
               ['Mission model', request.mission_model_revision_id],
               ['Command ID', request.command_id],
               ['Priority', priorityLabel(request.priority)],

@@ -175,7 +175,7 @@ const label = (value: string) => value.replaceAll("_", " ");
                 {{ commandNames[item.command_id] || item.command_id }}
               </button>
             </td>
-            <td>{{ targetNames[item.target_id] || item.target_id }}</td>
+            <td>{{ item.target_name || targetNames[item.target_id] || "Unnamed target" }}</td>
             <td>{{ priorityLabel(item.priority) }}</td>
             <td>
               <span class="cw-state"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { targetLabel } from "../../shared/command-draft/target-label";
 import { computed, nextTick, ref } from "vue";
 import type { OpsPagePort, LiveOpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
 import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
@@ -87,7 +88,7 @@ const targetNames = computed(() =>
   Object.fromEntries(
     [...targetResults.value.entries, ...selection.value].map((target) => [
       target.id,
-      target.name || target.id,
+      targetLabel(target),
     ]),
   ),
 );

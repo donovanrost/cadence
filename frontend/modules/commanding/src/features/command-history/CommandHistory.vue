@@ -113,7 +113,9 @@ async function refreshPage() {
         </div>
         <div>
           <dt class="hud-label">Target</dt>
-          <dd class="mt-1 break-all font-mono">{{ model.request.target }}</dd>
+          <dd class="mt-1 break-all font-mono">
+            {{ model.request.target_name || "Unnamed target" }}
+          </dd>
         </div>
         <div>
           <dt class="hud-label">Model revision</dt>

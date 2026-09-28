@@ -16,7 +16,7 @@ defmodule Cadence.Reads.CommandMonitor.Store do
   alias Cadence.Reads.CommandMonitor.{Query, Search}
   alias Cadence.Repo
 
-  @row_fields ~w(command_request_id command_id command_name target requested_by request_state status verification_state verifier_total)a
+  @row_fields ~w(command_request_id command_id command_name target target_name requested_by request_state status verification_state verifier_total)a
   @queue_fields ~w(command_queue_entry_id queue_lane_key lifecycle_state)a
   @release_fields ~w(command_release_attempt_id command_queue_entry_id lifecycle_state verification_state realized_contact_id)a
   @verifier_fields ~w(command_verifier_instance_id command_release_attempt_id verifier_name lifecycle_state matched_record_kind matched_record_id)a
@@ -91,6 +91,10 @@ defmodule Cadence.Reads.CommandMonitor.Store do
     naive |> Map.put(:microsecond, {microseconds, 6}) |> DateTime.from_naive!("Etc/UTC")
   end
 
-  defp target!(value) when is_binary(value) and byte_size(value) in 1..256, do: value
+  defp target!(%{"id" => id, "name" => name})
+       when is_binary(id) and byte_size(id) in 1..256 and
+              (is_nil(name) or (is_binary(name) and byte_size(name) in 1..512)),
+       do: %{id: id, name: name}
+
   defp target!(_), do: raise(ArgumentError, "invalid command target")
 end

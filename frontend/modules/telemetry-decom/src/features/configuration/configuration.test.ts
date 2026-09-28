@@ -219,7 +219,14 @@ test("mission submission requires review and a refresh cannot silently acknowled
   };
   required(p.revision).field.value = "revision-1";
   p.review.total_count = 1;
-  p.review.configurations = [{ spacecraft_id: "spacecraft", ...p.configuration }];
+  p.review.configurations = [
+    {
+      spacecraft_id: "spacecraft",
+      spacecraft_name: "Aurora",
+      source_endpoint_name: "Aurora command endpoint",
+      ...p.configuration,
+    },
+  ];
   p.preflight.state = "ready";
   p.preflight.activation_ready = true;
   required(p.preflight.checks[0]).state = "ready";
@@ -251,11 +258,16 @@ test("mission submission requires review and a refresh cannot silently acknowled
     total_count: 2,
     configurations: [
       ...p.review.configurations,
-      { ...p.review.configurations[0], spacecraft_id: "other-spacecraft" },
+      {
+        ...p.review.configurations[0],
+        spacecraft_id: "other-spacecraft",
+        spacecraft_name: "Kestrel",
+      },
     ],
   };
   await w.setProps({ review });
-  expect(w.get("#telemetry-decom-mission-review").text()).toContain("other-spacecraft");
+  expect(w.get("#telemetry-decom-mission-review").text()).toContain("Kestrel");
+  expect(w.get("#telemetry-decom-mission-review").text()).not.toContain("other-spacecraft");
   expect(w.get("#request-mission").attributes("disabled")).toBeDefined();
   await w.get("#request-mission").trigger("click");
   expect(w.emitted("enable")).toHaveLength(1);

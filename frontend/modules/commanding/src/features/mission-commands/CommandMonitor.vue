@@ -275,19 +275,30 @@ async function retry() {
           </select></label
         >
         <label class="block"
-          ><span class="hud-label mb-1.5 block">Target endpoint</span
-          ><input
+          ><span class="hud-label mb-1.5 block">Command target</span
+          ><select
             id="command-monitor-target"
             v-model="fields.target"
-            list="command-monitor-targets"
-            class="input w-full"
-            maxlength="256"
-            :disabled="pending" /><datalist id="command-monitor-targets">
+            class="select w-full"
+            :disabled="pending"
+          >
             <option value="all">All targets</option>
-            <option v-for="target in model.targets" :key="target" :value="target" /></datalist
-        ></label>
+            <option
+              v-if="
+                fields.target !== 'all' &&
+                !model.targets.some((target) => target.id === fields.target)
+              "
+              :value="fields.target"
+            >
+              Selected target
+            </option>
+            <option v-for="target in model.targets" :key="target.id" :value="target.id">
+              {{ target.name || "Unnamed target" }}
+            </option>
+          </select></label
+        >
         <label class="block"
-          ><span class="hud-label mb-1.5 block">Command or requester</span
+          ><span class="hud-label mb-1.5 block">Command, spacecraft, or requester</span
           ><input
             id="command-monitor-query"
             v-model="fields.query"
@@ -326,8 +337,8 @@ async function retry() {
           the target or search text and try again.
         </p>
         <p v-if="model.targets_limited" class="text-xs text-warning md:col-span-3">
-          Target suggestions are limited to 200 entries. Enter an exact endpoint ID to search
-          another target.
+          The target list shows 200 targets. Search by spacecraft or target name to find commands
+          for other targets.
         </p>
       </form>
       <p class="font-mono text-xs text-base-content/75">
@@ -375,7 +386,9 @@ async function retry() {
             </div>
             <div>
               <p class="hud-label">Target</p>
-              <p class="mt-1 break-all font-mono text-xs">{{ row.target ?? "Not recorded" }}</p>
+              <p class="mt-1 break-all font-mono text-xs">
+                {{ row.target_name || "Unnamed target" }}
+              </p>
             </div>
             <div>
               <p class="hud-label">Requested by</p>

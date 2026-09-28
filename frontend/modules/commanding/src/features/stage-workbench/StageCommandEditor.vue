@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { targetLabel } from "../../shared/command-draft/target-label";
 import { parseArgumentValues } from "../../shared/command-draft/exact-values";
 import { priorityChoices, priorityLabel } from "../../shared/priority";
 import { computed, reactive, ref } from "vue";
@@ -104,21 +105,21 @@ function save() {
     <p v-if="feedback" role="alert" class="text-sm text-warning">{{ feedback }}</p>
     <div v-if="!ready" class="grid gap-4 lg:grid-cols-2">
       <section class="border border-base-300 bg-base-100 p-4 space-y-3" aria-label="Choose target">
-        <h3 class="text-sm font-semibold">Target endpoint</h3>
+        <h3 class="text-sm font-semibold">Command target</h3>
         <form id="stage-target-search" class="flex gap-2" @submit.prevent="search('target')">
           <input
             id="stage-target-query"
             v-model="searches.target_query"
-            aria-label="Search target endpoints"
+            aria-label="Search command targets"
             class="input input-bordered input-sm min-w-0 flex-1"
             maxlength="240"
           /><button class="btn btn-ghost btn-sm" :disabled="disabled">Search</button>
         </form>
         <p v-if="catalog.selected_target" class="text-xs text-info">
-          Selected: {{ catalog.selected_target.name || catalog.selected_target.id }}
+          Selected: {{ targetLabel(catalog.selected_target) }}
         </p>
         <p v-else-if="catalog.query.target" class="text-xs text-warning">
-          The selected target is unavailable. Choose a current endpoint.
+          The selected target is unavailable. Choose a current target.
         </p>
         <ul id="stage-targets" class="divide-y divide-base-300">
           <li v-for="target in catalog.targets.entries" :key="target.id">
@@ -126,15 +127,12 @@ function save() {
               :href="href({ target: target.id })"
               class="block py-3 text-sm hover:text-info"
               @click="follow($event, href({ target: target.id }))"
-              >{{ target.name || target.id
-              }}<span class="block font-mono text-xs text-base-content/50 break-all">{{
-                target.id
-              }}</span></a
+              >{{ targetLabel(target) }}</a
             >
           </li>
         </ul>
         <p v-if="!catalog.targets.entries.length" class="text-xs text-base-content/60">
-          No matching endpoints.
+          No matching targets.
         </p>
         <nav class="flex gap-3 text-sm" aria-label="Target pages">
           <a
@@ -287,7 +285,7 @@ function save() {
       <h3 class="font-semibold">Resolved draft</h3>
       <p class="text-sm">
         {{ preview.command.command_display_name || preview.command.command_name }} →
-        {{ preview.command.target.name || preview.command.target.id }}
+        {{ targetLabel(preview.command.target) }}
       </p>
       <dl class="grid gap-2 text-sm">
         <div

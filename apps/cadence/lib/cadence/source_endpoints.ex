@@ -151,6 +151,25 @@ defmodule Cadence.SourceEndpoints do
     %{entries: page, next_after: if(length(entries) > 25, do: List.last(page).id, else: nil)}
   end
 
+  @doc "Display names for a scoped set of endpoints, without loading endpoint metadata."
+  def display_names(organization_id, mission_id, ids) when is_list(ids) do
+    ids
+    |> Enum.filter(&is_binary/1)
+    |> Enum.uniq()
+    |> Enum.chunk_every(500)
+    |> Enum.flat_map(fn chunk ->
+      Repo.all(
+        from(row in SourceEndpointRow,
+          where:
+            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+              row.source_endpoint_id in ^chunk,
+          select: {row.source_endpoint_id, row.display_name}
+        )
+      )
+    end)
+    |> Map.new()
+  end
+
   @doc "Locks an exact bounded target through command preview or creation."
   def fetch_command_authoring_target(organization_id, mission_id, endpoint_id) do
     if Repo.in_transaction?() do

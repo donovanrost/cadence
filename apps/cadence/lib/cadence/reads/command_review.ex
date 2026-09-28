@@ -54,6 +54,11 @@ defmodule Cadence.Reads.CommandReview do
       "observed_at" => DateTime.to_iso8601(DateTime.utc_now()),
       "expected_review" => RequestReview.review_token(request),
       "request" => request_document(request),
+      "target_name" =>
+        Cadence.SourceEndpoints.display_names(fresh.organization_id, mission_id, [
+          request.source_endpoint_ref
+        ])
+        |> Map.get(request.source_endpoint_ref),
       "can_decide" =>
         request.lifecycle_state == :approval_pending and
           request.requested_by["user_id"] != fresh.user.user_id,

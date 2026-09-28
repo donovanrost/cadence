@@ -58,7 +58,7 @@ defmodule Cadence.Reads.CommandHistory.Projection do
     Map.new(record, fn {key, value} -> {key, field!(key, value)} end)
   end
 
-  defp field!(key, nil) when key in @times or key in @identities, do: nil
+  defp field!(key, nil) when key in @times or key in @identities or key == "target_name", do: nil
 
   defp field!(key, value) when key in @times do
     {:ok, naive} = NaiveDateTime.from_iso8601(value)
@@ -81,7 +81,7 @@ defmodule Cadence.Reads.CommandHistory.Projection do
     value
   end
 
-  defp field!(key, value) when key in ~w(name point_name) do
+  defp field!(key, value) when key in ~w(name point_name target_name) do
     true = is_binary(value) and String.valid?(value) and byte_size(value) in 1..512
     value
   end

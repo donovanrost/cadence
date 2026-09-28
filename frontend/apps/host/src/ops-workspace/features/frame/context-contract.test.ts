@@ -2,7 +2,42 @@ import { expect, test } from "vite-plus/test";
 import { mount } from "@vue/test-utils";
 import OpsWorkspaceFrame from "./OpsWorkspaceFrame.vue";
 import { readOpsFrameContext } from "./context-contract";
+import { contextSections } from "./context";
 import { context } from "../../../auth-and-navigation/shared/context.test-support";
+
+test.each(["Aurora", null])(
+  "command context uses the endpoint name rather than its internal key: %s",
+  (name) => {
+    const value = readOpsFrameContext({
+      ...context,
+      ops_context: {
+        pinned_focus: { kind: "command", id: "request-1" },
+        modules: [
+          {
+            key: "commands",
+            status: "info",
+            count: 1,
+            freshness: "current",
+            observed_at: null,
+            data: {
+              followed_command: {
+                command_request_id: "request-1",
+                command_name: "NOOP",
+                status: "queued",
+                target: "spacecraft_runtime:spacecraft-1",
+                target_name: name,
+              },
+            },
+          },
+        ],
+      },
+    });
+    if (!value) throw Error("Expected command context to be admitted");
+    expect(contextSections(value)).toMatchObject([
+      { content: { followed_command: { detail: `queued · ${name || "Unnamed target"}` } } },
+    ]);
+  },
+);
 
 test("the frame admits producer nulls for absent focus and dashboard selection", () => {
   const value = { ...context, active_dashboard_id: null, fleet_health: null, ops_context: null };

@@ -43,6 +43,7 @@ export type Item = {
   command_id: string;
   revision_id: string;
   target_id: string;
+  target_name: string | null;
   order: number;
   state: "draft" | "submitted" | "canceled";
   priority: number;
@@ -104,6 +105,7 @@ function readItem(v: unknown, selected: boolean): Item {
     !id(v.command_id) ||
     !id(v.revision_id) ||
     !id(v.target_id) ||
+    !nullableText(v.target_name, 512) ||
     !order(v.order) ||
     !order(v.priority) ||
     !["draft", "submitted", "canceled"].includes(String(v.state)) ||

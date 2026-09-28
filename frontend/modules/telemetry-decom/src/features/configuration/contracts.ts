@@ -165,6 +165,8 @@ type ConfigurationReview = {
   truncated: boolean;
   configurations: {
     spacecraft_id: string;
+    spacecraft_name: string | null;
+    source_endpoint_name: string | null;
     configuration_version: number;
     catalog_revision_id: string;
     source_endpoint_id: string;
@@ -174,6 +176,7 @@ type ConfigurationReview = {
   packet_inputs: {
     id: string;
     spacecraft_id: string;
+    spacecraft_name: string | null;
     input_id: string;
     configuration_version: number;
     enabled: boolean;
@@ -263,6 +266,8 @@ const fields = {
     configurations: list(
       object({
         spacecraft_id: id,
+        spacecraft_name: nullable(text),
+        source_endpoint_name: nullable(text),
         configuration_version: positive,
         catalog_revision_id: id,
         source_endpoint_id: id,
@@ -275,6 +280,7 @@ const fields = {
       object({
         id,
         spacecraft_id: id,
+        spacecraft_name: nullable(text),
         input_id: id,
         configuration_version: positive,
         enabled: boolean,

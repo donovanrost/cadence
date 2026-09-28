@@ -33,6 +33,7 @@ export type CommandObservation = {
   name: string;
   status: CommandState;
   target: string | null;
+  target_name: string | null;
   requested_by: string;
   requested_at: string | null;
   occurred_at: string | null;
@@ -90,7 +91,7 @@ export type CommandMonitorModel = {
   total: number;
   pages: number;
   page_size: 25;
-  targets: string[];
+  targets: { id: string; name: string | null }[];
   targets_limited: boolean;
   rows: CommandObservation[];
   focus:
