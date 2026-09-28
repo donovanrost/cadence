@@ -11,6 +11,7 @@ const props = defineProps<{
   stage: Stage | null;
   operation: WorkspaceOperation | null;
   disabled: boolean;
+  actionDisabled: boolean;
   browseStages: (query: Partial<StageQuery>) => Promise<void>;
   chooseStage: (id: string) => Promise<void>;
   createStage: (name: string, visibility: "private" | "shared") => Promise<void>;
@@ -25,9 +26,16 @@ async function selectStage(id: string, close: () => void) {
   if (props.stage?.id === id) close();
 }
 async function create(close: () => void) {
-  if (!stageName.value.trim()) return;
-  await props.createStage(stageName.value, stageVisibility.value);
-  if (props.operation?.status === "completed" && props.operation.event === "create_stage") {
+  if (!stageName.value.trim() || props.actionDisabled) return;
+  const name = stageName.value;
+  const visibility = stageVisibility.value;
+  await props.createStage(name, visibility);
+  if (
+    props.operation?.status === "completed" &&
+    props.operation.event === "create_stage" &&
+    stageName.value === name &&
+    stageVisibility.value === visibility
+  ) {
     creating.value = false;
     stageName.value = "";
     close();
@@ -87,7 +95,7 @@ async function create(close: () => void) {
             type="submit"
             size="sm"
             variant="primary"
-            :disabled="disabled || !stageName.trim()"
+            :disabled="disabled || actionDisabled || !stageName.trim()"
             >Create stage</CadenceButton
           >
         </form>

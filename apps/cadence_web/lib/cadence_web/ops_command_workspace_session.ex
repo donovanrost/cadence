@@ -36,6 +36,7 @@ defmodule CadenceWeb.OpsCommandWorkspaceSession do
       creation: nil,
       write_token: StageDrafts.new_write_token(),
       operation: nil,
+      write_attempt: nil,
       draft_preview: nil,
       queue_preview: nil,
       batch_preview: nil,
@@ -123,23 +124,16 @@ defmodule CadenceWeb.OpsCommandWorkspaceSession do
     do: {rejected("The catalog query is invalid."), session}
 
   def action(scope, session, "browse", input) do
-    if available?(session) do
-      with {:ok, next} <- browse(session, input), {:ok, data, next} <- load(scope, next) do
-        {%{status: "browsed", data: data}, next}
-      else
-        _ ->
-          {rejected("This view is unavailable. Refresh to check your current access."), session}
-      end
+    with {:ok, next} <- browse(session, input), {:ok, data, next} <- load(scope, next) do
+      {%{status: "browsed", data: data}, next}
     else
-      {rejected("Check the previous write before changing the workspace."), session}
+      _ ->
+        {rejected("This view is unavailable. Refresh to check your current access."), session}
     end
   end
 
-  def action(scope, session, event, input) when event in ["preview_targets", "preview_batch"] do
-    if available?(session),
-      do: preview(scope, session, event, input),
-      else: {rejected("Refresh and check the previous write first."), session}
-  end
+  def action(scope, session, event, input) when event in ["preview_targets", "preview_batch"],
+    do: preview(scope, session, event, input)
 
   def action(scope, session, event, input), do: Writes.action(scope, session, event, input)
 
@@ -189,7 +183,7 @@ defmodule CadenceWeb.OpsCommandWorkspaceSession do
     else
       _ ->
         {rejected(
-           "One or more targets or arguments could not be validated. Refresh the model and check every selected endpoint."
+           "One or more targets or arguments could not be validated. Refresh the model and check every selected target."
          ), session}
     end
   rescue
@@ -276,8 +270,6 @@ defmodule CadenceWeb.OpsCommandWorkspaceSession do
        do: %{session | write_token: StageDrafts.new_write_token()}
 
   defp renew_write(session), do: session
-
-  defp invalidate_previews(%{operation: %{status: "unconfirmed"}} = session, _scope), do: session
 
   defp invalidate_previews(session, scope) do
     {_, _, mission, _} = session.identity

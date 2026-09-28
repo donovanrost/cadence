@@ -17,7 +17,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "The production Ops workspace with deterministic mission fixtures. Core UI owns the splitter layout, pane framing, selection tiles, and popover behavior. Commanding owns endpoint identity, exact arguments, stages, and request review.",
+          "The production Ops workspace with deterministic mission fixtures. Core UI owns the splitter layout, pane framing, selection tiles, and popover behavior. Commanding owns target identity, exact arguments, stages, and request review.",
       },
     },
   },
@@ -35,7 +35,9 @@ async function prepareInViewport({ canvasElement }: { canvasElement: HTMLElement
   await userEvent.type(argument, "12");
 
   // This checks actual clipping: toBeVisible alone also passes for offscreen scroll content.
-  const preview = canvas.getByRole("button", { name: "Preview 2 endpoints" });
+  const preview = canvas.getByRole("button", { name: "Enqueue 2 commands" });
+  await waitFor(() => expect(preview).toBeEnabled());
+  preview.scrollIntoView({ block: "center" });
   const scrollArea = preview.closest(".cadence-pane__body");
   if (!scrollArea) throw Error("Preparation must have an independent scroll area");
   const actionBounds = preview.getBoundingClientRect();
@@ -54,8 +56,7 @@ async function prepareInViewport({ canvasElement }: { canvasElement: HTMLElement
   await expect(argument).toHaveValue("12");
   await userEvent.keyboard("{Enter}");
   await expect(argument).toHaveValue("12");
-  await userEvent.click(preview);
-  await expect(canvas.getByRole("heading", { name: "2 endpoints validated" })).toBeVisible();
+  await expect(canvas.getByRole("heading", { name: "2 targets validated" })).toBeVisible();
   await expect(
     canvas.getByRole("button", { name: "Add 2 drafts to Flight preparation" }),
   ).toBeEnabled();
@@ -73,13 +74,14 @@ export const EnqueueWithoutStage: Story = {
       canvas.getByRole("button", { name: "Select KESTREL-01 · KESTREL-01 OBC" }),
     );
     await userEvent.click(canvas.getByRole("button", { name: /Set telemetry rate SET_TLM_RATE/ }));
-    await userEvent.click(canvas.getByRole("button", { name: "Preview 1 endpoint" }));
+    await waitFor(() =>
+      expect(canvas.getByRole("button", { name: "Enqueue command" })).toBeEnabled(),
+    );
     await userEvent.click(canvas.getByRole("button", { name: "Enqueue command" }));
     await expect(await canvas.findByText("Command queued.")).toBeVisible();
     await expect(canvas.getByRole("button", { name: "Expand command shelf" })).toBeVisible();
     await expect(canvas.queryByRole("link", { name: /Queued/ })).not.toBeInTheDocument();
-    await expect(canvas.queryByRole("button", { name: "Enqueue command" })).not.toBeInTheDocument();
-    await expect(canvas.getByRole("button", { name: "Preview 1 endpoint" })).toBeEnabled();
+    await expect(canvas.getByRole("button", { name: "Enqueue command" })).toBeDisabled();
     await userEvent.click(canvas.getByRole("button", { name: "Expand command shelf" }));
     await expect(canvas.getByRole("button", { name: "Choose a stage" })).toBeVisible();
   },
@@ -97,12 +99,13 @@ export const EnumeratedArguments: Story = {
     await expect(canvas.getByRole("radiogroup", { name: "heater_id" })).toBeVisible();
     await userEvent.click(canvas.getByRole("radio", { name: "2" }));
     await userEvent.type(canvas.getByRole("textbox", { name: "setpoint float" }), "18.5");
-    await userEvent.click(canvas.getByRole("button", { name: "Preview 1 endpoint" }));
-    await expect(canvas.getByRole("heading", { name: "1 endpoints validated" })).toBeVisible();
+    await expect(canvas.getByRole("heading", { name: "1 target validated" })).toBeVisible();
     await userEvent.click(canvas.getByRole("radio", { name: "1" }));
-    await expect(
-      canvas.queryByRole("heading", { name: "1 endpoints validated" }),
-    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        canvas.getByRole("region", { name: "Resolved target previews" }).querySelector("dd"),
+      ).toHaveTextContent("1"),
+    );
   },
 };
 export const ManyEnumChoices: Story = {
@@ -116,8 +119,7 @@ export const ManyEnumChoices: Story = {
       canvas.getByRole("button", { name: /Select downlink channel SELECT_CHANNEL/ }),
     );
     await userEvent.selectOptions(canvas.getByRole("combobox", { name: "channel" }), "7");
-    await userEvent.click(canvas.getByRole("button", { name: "Preview 1 endpoint" }));
-    await expect(canvas.getByRole("heading", { name: "1 endpoints validated" })).toBeVisible();
+    await expect(canvas.getByRole("heading", { name: "1 target validated" })).toBeVisible();
   },
 };
 export const PerSpacecraftValues: Story = {
@@ -145,12 +147,9 @@ export const PerSpacecraftValues: Story = {
     await expect(canvas.getByRole("textbox", { name: "interval_seconds integer" })).toHaveValue(
       "5",
     );
-    await userEvent.click(canvas.getByRole("button", { name: "Preview 2 endpoints" }));
-    await expect(canvas.getByRole("heading", { name: "2 endpoints validated" })).toBeVisible();
+    await expect(canvas.getByRole("heading", { name: "2 targets validated" })).toBeVisible();
     await userEvent.click(canvas.getByRole("radio", { name: "Per spacecraft" }));
-    await expect(
-      canvas.queryByRole("heading", { name: "2 endpoints validated" }),
-    ).not.toBeInTheDocument();
+
     const restoredFirst = within(
       canvas.getByRole("region", { name: "Settings for KESTREL-01 OBC" }),
     );
@@ -159,8 +158,7 @@ export const PerSpacecraftValues: Story = {
     );
     await expect(restoredFirst.getByRole("textbox")).toHaveValue("12");
     await expect(restoredSecond.getByRole("textbox")).toHaveValue("20");
-    await userEvent.click(canvas.getByRole("button", { name: "Preview 2 endpoints" }));
-    const preview = canvas.getByRole("region", { name: "Resolved endpoint previews" });
+    const preview = canvas.getByRole("region", { name: "Resolved target previews" });
     await expect(preview.querySelectorAll("dd")[0]).toHaveTextContent("12");
     await expect(preview.querySelectorAll("dd")[1]).toHaveTextContent("20");
   },
@@ -196,9 +194,8 @@ export const PrepareAcrossSpacecraft: Story = {
       canvas.getByRole("button", { name: "Select KESTREL-02 · KESTREL-02 OBC" }),
     );
     await userEvent.click(canvas.getByRole("button", { name: /Set telemetry rate SET_TLM_RATE/ }));
-    await expect(canvas.getByRole("heading", { name: /Spacecraft & endpoints/ })).toBeVisible();
-    await userEvent.click(canvas.getByRole("button", { name: "Preview 2 endpoints" }));
-    await expect(canvas.getByRole("heading", { name: "2 endpoints validated" })).toBeVisible();
+    await expect(canvas.getByRole("heading", { name: /Command targets/ })).toBeVisible();
+    await expect(canvas.getByRole("heading", { name: "2 targets validated" })).toBeVisible();
     await expect(
       canvas.getByRole("button", { name: "Add 2 drafts to Flight preparation" }),
     ).toBeEnabled();
@@ -232,8 +229,7 @@ export const SearchAndInfiniteScroll: Story = {
     await userEvent.click(canvas.getByRole("button", { name: /Set telemetry rate SET_TLM_RATE/ }));
     await userEvent.clear(canvas.getByRole("textbox", { name: "interval_seconds integer" }));
     await userEvent.type(canvas.getByRole("textbox", { name: "interval_seconds integer" }), "12");
-    await userEvent.click(canvas.getByRole("button", { name: "Preview 1 endpoint" }));
-    const fleet = canvas.getByRole("region", { name: /Spacecraft & endpoints/ });
+    const fleet = canvas.getByRole("region", { name: /Command targets/ });
     const catalog = canvas.getByRole("region", { name: /Command catalog/ });
     for (const [region, selector] of [
       [fleet, "[data-workspace-target]"],
@@ -247,7 +243,7 @@ export const SearchAndInfiniteScroll: Story = {
       await waitFor(() => expect(region.querySelectorAll(selector).length).toBeGreaterThan(50));
     }
     await userEvent.type(
-      canvas.getByRole("searchbox", { name: "Find spacecraft or endpoints" }),
+      canvas.getByRole("searchbox", { name: "Search command targets" }),
       "KESTREL-64",
     );
     await userEvent.type(canvas.getByRole("searchbox", { name: "Find commands" }), "TEST_060");
@@ -262,7 +258,7 @@ export const SearchAndInfiniteScroll: Story = {
     await expect(canvas.getByRole("textbox", { name: "interval_seconds integer" })).toHaveValue(
       "12",
     );
-    await expect(canvas.getByRole("heading", { name: "1 endpoints validated" })).toBeVisible();
+    await expect(canvas.getByRole("heading", { name: "1 target validated" })).toBeVisible();
     await expect(canvas.queryByRole("button", { name: "Find" })).not.toBeInTheDocument();
     await expect(canvasElement.ownerDocument.documentElement.scrollWidth).toBeLessThanOrEqual(
       window.innerWidth,

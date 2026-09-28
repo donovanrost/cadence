@@ -53,7 +53,6 @@ function setup(
 async function prepareOne(c: ReturnType<typeof setup>) {
   await c.wrapper.get('[data-workspace-target="target_one"]').trigger("click");
   await c.wrapper.get("#workspace-shared-argument-0").setValue("2");
-  await c.wrapper.get("#workspace-preparation-form").trigger("submit");
   await flushPromises();
 }
 function previewResult(preview: TargetsPreview) {
@@ -149,8 +148,10 @@ test.each([
     expect(c.wrapper.get(".cw-stage-trigger").text()).toBe(
       page.workbench?.stage.name ?? "Choose a stage",
     );
-    expect(c.wrapper.find("#workspace-enqueue").exists()).toBe(false);
-    expect(c.wrapper.get("#workspace-preview-targets").attributes("disabled")).toBeUndefined();
+    expect(c.wrapper.get("#workspace-enqueue").attributes("disabled")).toBeDefined();
+    expect(
+      c.wrapper.get("#workspace-shared-argument-0").element.closest("fieldset")?.disabled,
+    ).toBe(false);
     expect(c.wrapper.get<HTMLInputElement>("#workspace-shared-argument-0").element.value).toBe("2");
     await c.wrapper.get("#workspace-shared-argument-0").setValue("3");
     c.notify();
@@ -229,7 +230,9 @@ test("an uncertain enqueue cannot repeat and its exact recovered receipt unlocks
   await flushPromises();
   expect(c.wrapper.get("#workspace-enqueue-result").text()).toBe("Command queued.");
   expect(c.wrapper.find('[aria-label="Expand command shelf"]').exists()).toBe(true);
-  expect(c.wrapper.get("#workspace-preview-targets").attributes("disabled")).toBeUndefined();
+  expect(c.wrapper.get("#workspace-shared-argument-0").element.closest("fieldset")?.disabled).toBe(
+    false,
+  );
 });
 
 test("a mismatched enqueue receipt remains unconfirmed", async () => {
@@ -365,7 +368,6 @@ test("enum selection survives a catalog refresh and changing it invalidates a pr
   expect(c.wrapper.get<HTMLInputElement>("#workspace-shared-argument-0-1").element.checked).toBe(
     true,
   );
-  await c.wrapper.get("#workspace-preparation-form").trigger("submit");
   await flushPromises();
   expect(c.execute).toHaveBeenCalledWith(
     "preview_targets",
@@ -402,7 +404,6 @@ test("per-spacecraft mode starts with shared values and retains exact edits thro
   );
   await c.wrapper.get("#workspace-target_two-argument-0").setValue("9007199254740993");
   await c.wrapper.get('[data-workspace-target="target_one"]').trigger("click");
-  await c.wrapper.get("#workspace-preparation-form").trigger("submit");
   await flushPromises();
   expect(c.execute).toHaveBeenCalledWith("preview_targets", {
     expected_stage: page.workbench?.stage.expected_stage,
@@ -434,7 +435,8 @@ test("switching value modes invalidates preview, keeps edits and only validates 
   await prepareOne(c);
   expect(c.wrapper.find("#workspace-save-targets").exists()).toBe(true);
   await c.wrapper.get('#workspace-value-mode input[value="individual"]').setValue(true);
-  expect(c.wrapper.find("#workspace-save-targets").exists()).toBe(false);
+  await flushPromises();
+  expect(c.wrapper.find("#workspace-save-targets").exists()).toBe(true);
   expect(c.wrapper.find("#workspace-shared-argument-0").exists()).toBe(false);
   expect(c.wrapper.get<HTMLInputElement>("#workspace-target_one-argument-0").element.value).toBe(
     "2",
@@ -442,7 +444,6 @@ test("switching value modes invalidates preview, keeps edits and only validates 
   await c.wrapper.get("#workspace-target_one-argument-0").setValue("unfinished");
   await c.wrapper.get('#workspace-value-mode input[value="shared"]').setValue(true);
   expect(c.wrapper.get<HTMLInputElement>("#workspace-shared-argument-0").element.value).toBe("2");
-  await c.wrapper.get("#workspace-preparation-form").trigger("submit");
   await flushPromises();
   expect(c.wrapper.find("#workspace-save-targets").exists()).toBe(true);
   await c.wrapper.get("#workspace-shared-argument-0").setValue("incomplete shared value");
@@ -451,11 +452,9 @@ test("switching value modes invalidates preview, keeps edits and only validates 
     "unfinished",
   );
   c.execute.mockClear();
-  await c.wrapper.get("#workspace-preparation-form").trigger("submit");
   expect(c.execute).not.toHaveBeenCalled();
   expect(c.wrapper.get("#workspace-argument-error").text()).toContain("valid integer");
   await c.wrapper.get("#workspace-target_one-argument-0").setValue("7");
-  await c.wrapper.get("#workspace-preparation-form").trigger("submit");
   await flushPromises();
   expect(c.execute).toHaveBeenCalledWith(
     "preview_targets",
@@ -496,7 +495,7 @@ test("preview mismatch, changed spacecraft mapping and microsecond timing substi
       );
     await prepareOne(c);
     expect(c.wrapper.find("#workspace-save-targets").exists()).toBe(false);
-    expect(c.wrapper.get("#workspace-feedback").text()).toContain("could not be confirmed");
+    expect(c.wrapper.get("#workspace-feedback").text()).toContain("could not be completed");
   }
 });
 
@@ -551,12 +550,14 @@ test("unconfirmed save is consumed and cannot replay; current receipt refresh un
   await c.wrapper.get("#workspace-save-targets").trigger("click");
   await flushPromises();
   expect(c.wrapper.get("#workspace-write-result").text()).toContain("unconfirmed");
-  await c.wrapper.get("#workspace-save-targets").trigger("click");
+  expect(c.wrapper.find("#workspace-save-targets").exists()).toBe(false);
   expect(execute.mock.calls.filter(([event]) => event === "save_targets")).toHaveLength(1);
   await c.wrapper.get("#workspace-check-result").trigger("click");
   await flushPromises();
   expect(c.wrapper.get("#workspace-write-result").text()).toContain("1 drafts saved");
-  expect(c.wrapper.get("#workspace-preview-targets").attributes("disabled")).toBeUndefined();
+  expect(c.wrapper.get("#workspace-shared-argument-0").element.closest("fieldset")?.disabled).toBe(
+    false,
+  );
 });
 
 test("request receipt recovery retains exact submitted identities across repeated unconfirmed reads", async () => {
@@ -611,7 +612,7 @@ test("request receipt recovery retains exact submitted identities across repeate
   expect(c.execute).toHaveBeenCalledOnce();
 });
 
-test("pending actions hold the navigation guard and ignore completions after unmount", async () => {
+test("pending validation allows navigation and ignores completions after unmount", async () => {
   let finish: (value: unknown) => void = () => {};
   const c = setup(
     workspaceFixture(),
@@ -623,8 +624,7 @@ test("pending actions hold the navigation guard and ignore completions after unm
     ),
   );
   await prepareOne(c);
-  const guard = required(c.guardNavigation.mock.calls[0])[0];
-  expect(guard()).toBe(false);
+  expect(c.guardNavigation).not.toHaveBeenCalled();
   c.wrapper.unmount();
   finish(previewResult(onePreview()));
   await flushPromises();
@@ -712,7 +712,7 @@ test("a collaborator changing selected draft evidence invalidates review without
   expect(c.wrapper.get("#workspace-feedback").text()).toContain("evidence changed");
 });
 
-test("live reads preserve an unfinished order edit until the persisted order changes", async () => {
+test.each([true, false])("live order updates preserve local edits: %s", async (edited) => {
   const workbench = workbenchFixture(true).workbench,
     page = { ...workspaceFixture(), workbench };
   let next = structuredClone(page);
@@ -722,10 +722,12 @@ test("live reads preserve an unfinished order edit until the persisted order cha
     vi.fn(async () => next),
   );
   await flushPromises();
-  await c.wrapper.get("#workspace-draft-order").setValue("17");
+  if (edited) await c.wrapper.get("#workspace-draft-order").setValue("17");
   c.notify();
   await flushPromises();
-  expect(c.wrapper.get<HTMLInputElement>("#workspace-draft-order").element.value).toBe("17");
+  expect(c.wrapper.get<HTMLInputElement>("#workspace-draft-order").element.value).toBe(
+    edited ? "17" : String(required(workbench.selected_item).order),
+  );
   const item = required(workbench.selected_item);
   next = {
     ...page,
@@ -737,7 +739,9 @@ test("live reads preserve an unfinished order edit until the persisted order cha
   };
   c.notify();
   await flushPromises();
-  expect(c.wrapper.get<HTMLInputElement>("#workspace-draft-order").element.value).toBe("4");
+  expect(c.wrapper.get<HTMLInputElement>("#workspace-draft-order").element.value).toBe(
+    edited ? "17" : "4",
+  );
 });
 
 test("live notices coalesce behind an action and never apply a read overtaken by that action", async () => {
@@ -829,7 +833,6 @@ test.skipIf(!producer.available)(
     } else {
       for (const tile of c.wrapper.findAll("[data-workspace-target]")) await tile.trigger("click");
       await c.wrapper.get("#workspace-shared-argument-0").setValue("2");
-      await c.wrapper.get("#workspace-preparation-form").trigger("submit");
     }
     await flushPromises();
     expect(c.execute).toHaveBeenCalledOnce();

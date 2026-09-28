@@ -4,7 +4,7 @@ import type { LiveOpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
 /** Coalesce live wake-ups and discard reads overtaken by a local action. */
 export function useLiveWorkspaceRead(
   port: LiveOpsPageReadPort,
-  busy: Ref<boolean>,
+  deferRead: Ref<boolean>,
   receive: (value: unknown) => void,
 ) {
   const syncing = ref(false),
@@ -16,14 +16,14 @@ export function useLiveWorkspaceRead(
   let unsubscribe: (() => void) | undefined;
 
   async function drain() {
-    while (requested && !busy.value && !disposed) {
+    while (requested && !deferRead.value && !disposed) {
       requested = false;
       syncing.value = true;
       const started = generation;
       try {
         const value = await port.read();
         if (disposed) return;
-        if (busy.value || generation !== started) requested = true;
+        if (deferRead.value || generation !== started) requested = true;
         else {
           receive(value);
           failed.value = false;
@@ -39,15 +39,15 @@ export function useLiveWorkspaceRead(
     if (disposed) return Promise.resolve();
     requested = true;
     if (active) return active;
-    if (busy.value) return Promise.resolve();
+    if (deferRead.value) return Promise.resolve();
     active = drain().finally(() => {
       active = undefined;
-      if (requested && !busy.value && !disposed) void refresh();
+      if (requested && !deferRead.value && !disposed) void refresh();
     });
     return active;
   }
   watch(
-    busy,
+    deferRead,
     (pending) => {
       if (pending) generation++;
       else if (requested) void refresh();

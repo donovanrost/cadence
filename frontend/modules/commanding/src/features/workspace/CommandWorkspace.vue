@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
-import type { GuardedOpsPagePort, LiveOpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
+import type { OpsPagePort, LiveOpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
 import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import CadenceWorkspaceLayout from "@cadence/ui/CadenceWorkspaceLayout.vue";
 import CadenceButton from "@cadence/ui/CadenceButton.vue";
@@ -15,17 +15,21 @@ import type { WorkspacePreparation as PreparationPage, WorkspaceObservation } fr
 import "./workspace.css";
 const props = defineProps<{
   page: PreparationPage;
-  port: GuardedOpsPagePort;
+  port: OpsPagePort;
   readPort: LiveOpsPageReadPort;
 }>();
 const emit = defineEmits<{ observe: [page: WorkspaceObservation] }>();
 const {
   page,
   context,
-  busy,
+  submitting,
+  browsing,
+  reviewing,
+  validating,
+  validationEpoch,
   syncing,
   syncFailed,
-  locked,
+  writesDisabled,
   feedback,
   accessLost,
   operation,
@@ -118,7 +122,7 @@ const commandNames = computed(() =>
     <WorkspaceEnqueueResult
       v-if="enqueueResult && !command"
       :operation="enqueueResult"
-      :pending="busy"
+      :pending="submitting"
       :checking="syncing"
       @check-result="refresh"
     />
@@ -141,7 +145,7 @@ const commandNames = computed(() =>
           :results="targetResults"
           :selected="selection"
           :names="names"
-          :disabled="locked"
+          :disabled="accessLost"
           @toggle="select"
           @clear="clearSelection"
           @select-visible="selectVisible"
@@ -155,7 +159,7 @@ const commandNames = computed(() =>
           :catalog="page.catalog"
           :results="commandResults"
           :selected-count="selection.length"
-          :disabled="locked"
+          :disabled="accessLost"
           @browse="browseCatalog"
           @search="searchCommands"
           @load-more="loadMoreCommands"
@@ -172,7 +176,18 @@ const commandNames = computed(() =>
           :stage="stage"
           :preview="targetPreview"
           :queue-preview="queuePreview"
-          :disabled="locked"
+          :disabled="accessLost"
+          :validating="validating"
+          :action-disabled="writesDisabled"
+          :validation-error="!!feedback"
+          :validation-context="
+            JSON.stringify([
+              page.catalog?.basis,
+              page.catalog?.target_bases,
+              validationEpoch,
+              browsing,
+            ])
+          "
           @close="closePreparation"
           @update:draft="setDraft"
           @remove="select"
@@ -183,7 +198,7 @@ const commandNames = computed(() =>
             ><WorkspaceEnqueueResult
               v-if="enqueueResult"
               :operation="enqueueResult"
-              :pending="busy"
+              :pending="submitting"
               :checking="syncing"
               @check-result="refresh" /></template></WorkspacePreparation
       ></template>
@@ -191,12 +206,14 @@ const commandNames = computed(() =>
         ><WorkspaceShelf
           :mission="context.missionId"
           :workbench="page.workbench"
+          :action-disabled="writesDisabled"
+          :reviewing="reviewing || browsing"
           :selection="itemSelection"
           :preview="batchPreview"
           v-model:confirmed="confirmed"
           :operation="stageOperation"
-          :checking-result="busy || syncing"
-          :disabled="locked"
+          :checking-result="submitting || syncing"
+          :disabled="accessLost"
           :target-names="targetNames"
           :command-names="commandNames"
           :follow="follow"
@@ -211,9 +228,10 @@ const commandNames = computed(() =>
           ><template #stage-picker
             ><WorkspaceStagePicker
               :directory="page.directory"
+              :action-disabled="writesDisabled"
               :stage="stage"
               :operation="stageOperation"
-              :disabled="locked"
+              :disabled="accessLost"
               :browse-stages="browseStages"
               :choose-stage="chooseStage"
               :create-stage="createStage"

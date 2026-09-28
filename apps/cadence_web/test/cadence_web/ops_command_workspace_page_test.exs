@@ -2,6 +2,7 @@ defmodule CadenceWeb.OpsCommandWorkspacePageTest do
   use CadenceWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
   import Ecto.Query
+  alias Cadence.Auth.Scope
   alias Cadence.CommandAuthoringFixtures
 
   alias Cadence.Commanding.{
@@ -13,9 +14,11 @@ defmodule CadenceWeb.OpsCommandWorkspacePageTest do
     StageStore
   }
 
+  alias Cadence.Control.Commanding.WorkspaceSubmission
   alias Cadence.Platform.ScopedReadUpdates, as: ReadUpdates
   alias Cadence.Repo
   alias CadenceWeb.{HostTransportTestSupport, TestFixtures}
+  alias CadenceWeb.OpsCommandWorkspaceSession, as: Session
 
   @probe Path.expand(
            "../../../../frontend/modules/commanding/src/features/workspace/producer-consumer-probe.mjs",
@@ -59,6 +62,88 @@ defmodule CadenceWeb.OpsCommandWorkspacePageTest do
       second: second,
       stage: stage
     }
+  end
+
+  test "an uncertain write retains its own evidence while browsing and previewing continue", c do
+    scope = Scope.new(%{user: c.user, organization_membership: c.member})
+    command_id = c.model.commands_by_name["COMMAND_1"]
+
+    session =
+      Session.new({c.org, c.user.user_id, c.mission, path(c)}, %{
+        "command" => command_id,
+        "target" => c.target.source_endpoint_id
+      })
+
+    assert {:ok, data, session} = Session.load(scope, session)
+
+    command = %{
+      "expected_basis" => data.catalog["basis"]["token"],
+      "source_endpoint_ref" => c.target.source_endpoint_id,
+      "command_id" => command_id,
+      "argument_values_json" => ~s({"amount":2,"delay_s":5}),
+      "priority" => 3,
+      "not_before" => nil,
+      "expires_at" => nil
+    }
+
+    input = %{"expected_stage" => nil, "commands" => [command], "notes" => nil}
+
+    assert {%{status: "previewed", queue_preview: original}, session} =
+             Session.action(scope, session, "preview_targets", input)
+
+    attempt =
+      Map.take(session, [
+        :stage_id,
+        :creation,
+        :create_input,
+        :draft_preview,
+        :queue_preview,
+        :batch_preview
+      ])
+
+    token = session.write_token
+    operation = %{status: "unconfirmed", event: "enqueue", stage_id: nil, write_token: token}
+    session = %{session | operation: operation, write_attempt: attempt}
+
+    assert {%{status: "browsed"}, session} =
+             Session.action(scope, session, "browse", %{
+               "kind" => "stage",
+               "id" => c.stage.command_stage_id
+             })
+
+    assert session.operation.status == "unconfirmed"
+
+    assert {%{status: "rejected"}, _} =
+             Session.action(scope, session, "enqueue", %{
+               "expected_write" => token,
+               "expected_preview" => original["token"]
+             })
+
+    newer = %{
+      input
+      | "commands" => [%{command | "argument_values_json" => ~s({"amount":7,"delay_s":5})}]
+    }
+
+    assert {%{status: "previewed", queue_preview: newer_preview}, session} =
+             Session.action(scope, session, "preview_targets", newer)
+
+    assert session.write_attempt == attempt
+    assert session.queue_preview != attempt.queue_preview
+
+    # Model a write whose durable result arrives after the user has continued preparing.
+    assert {:ok, receipt} =
+             WorkspaceSubmission.submit(scope, c.mission, token, attempt.queue_preview, %{
+               "expected_write" => token,
+               "expected_preview" => original["token"]
+             })
+
+    assert {:ok, data, recovered} = Session.load(scope, session)
+    assert recovered.operation.status == "completed"
+    assert recovered.operation.receipt == receipt
+    assert recovered.stage_id == c.stage.command_stage_id
+    assert data.queue_preview["token"] == newer_preview["token"]
+    assert recovered.write_token != token
+    assert request_count(c) == 1
   end
 
   test "real workspace controls prepare two endpoints, persist drafts and submit exact reviewed requests",

@@ -1,5 +1,6 @@
-import { computed, onBeforeUnmount, ref, shallowRef } from "vue";
-import type { GuardedOpsPagePort, LiveOpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
+import type { OpsPagePort, LiveOpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
+import { useWorkspaceRequests } from "./useWorkspaceRequests";
 import { useCatalogResults } from "./useCatalogResults";
 import { useLiveWorkspaceRead } from "./useLiveWorkspaceRead";
 import { readQueuePreview, type QueuePreview } from "./queue-contracts";
@@ -19,7 +20,11 @@ import {
   type Target,
 } from "../../shared/command-draft/contracts";
 import type { ArgumentEditorDraft } from "../../shared/command-draft/argument-editor";
-import { sameArgumentValues } from "../../shared/command-draft/exact-values";
+import {
+  parseArgumentValues,
+  scalarInputText,
+  sameArgumentValues,
+} from "../../shared/command-draft/exact-values";
 import { record, text } from "../../shared/stages/validation";
 import {
   readTargetsPreview,
@@ -55,12 +60,14 @@ type CommandInput = ReturnType<typeof previewInput>;
 
 export function useCommandWorkspace(
   initial: WorkspacePreparation,
-  port: GuardedOpsPagePort,
+  port: OpsPagePort,
   readPort: LiveOpsPageReadPort,
   observe: (page: WorkspaceObservation) => void,
 ) {
   const page = shallowRef(initial),
-    busy = ref(false),
+    submitting = ref(false),
+    browsing = ref(false),
+    reviewing = ref(false),
     feedback = ref(""),
     accessLost = ref(false);
   const context = { ...initial.directory.context },
@@ -88,14 +95,20 @@ export function useCommandWorkspace(
   const itemSelection = shallowRef<Readonly<Record<string, string>>>({});
   const confirmed = ref(false),
     dockOpen = ref(initial.initial_shelf === "expanded" || !!initial.workbench);
-  const drafts = shallowRef<Readonly<Record<string, WorkspaceDraft>>>({});
+  const drafts = shallowRef<Readonly<Record<string, WorkspaceDraft>>>(restoreDraft(initial));
   const command = computed(() => page.value.catalog?.selected_command ?? null);
   const draft = computed(() =>
     command.value
       ? (drafts.value[command.value.id] ?? emptyWorkspaceDraft())
       : emptyWorkspaceDraft(),
   );
-  const locked = computed(() => busy.value || accessLost.value || !writeToken.value);
+  const writesDisabled = computed(
+    () => accessLost.value || submitting.value || browsing.value || !writeToken.value,
+  );
+  const requests = useWorkspaceRequests(port);
+  let browseGeneration = 0;
+  const browseRequests = new Map<unknown, number>();
+  let reviewGeneration = 0;
   const names = shallowRef<Readonly<Record<string, string>>>(
     Object.fromEntries(initial.spacecraft.map((row) => [row.id, row.name])),
   );
@@ -104,28 +117,60 @@ export function useCommandWorkspace(
   let attemptedBatch = initial.batch_preview;
   let attemptedQueue = initial.queue_preview;
   let disposed = false;
-  const unguard = port.guardNavigation(() => !busy.value);
+  const validating = ref(false);
+  const validationEpoch = ref(0);
+  let validationGeneration = 0;
+  let validationSuspended = false;
+  let pendingValidation: (() => Promise<void>) | null = null;
+  let activeValidation: Promise<void> | null = null;
+  function invalidateValidation() {
+    validationGeneration++;
+    pendingValidation = null;
+    targetPreview.value = null;
+    queuePreview.value = null;
+  }
+  async function drainValidation() {
+    if (activeValidation || browsing.value || disposed) return;
+    validating.value = true;
+    activeValidation = (async () => {
+      while (pendingValidation && !browsing.value && !disposed) {
+        const validate = pendingValidation;
+        pendingValidation = null;
+        await validate();
+      }
+    })();
+    try {
+      await activeValidation;
+    } finally {
+      activeValidation = null;
+      validating.value = false;
+    }
+  }
+  watch(browsing, (value) => {
+    if (!value && pendingValidation) void drainValidation();
+  });
   onBeforeUnmount(() => {
     disposed = true;
-    unguard();
+    invalidateValidation();
   });
 
   function edited() {
-    if (operation.value?.event === "enqueue") dismissedEnqueue.value = operation.value.write_token;
-    targetPreview.value = null;
-    queuePreview.value = null;
+    validationSuspended = false;
+    if (operation.value?.event === "enqueue" && operation.value.status !== "unconfirmed")
+      dismissedEnqueue.value = operation.value.write_token;
+    invalidateValidation();
     feedback.value = "";
   }
   function setDraft(value: WorkspaceDraft) {
-    if (locked.value || !command.value) return;
+    if (accessLost.value || !command.value) return;
     drafts.value = { ...drafts.value, [command.value.id]: value };
     edited();
   }
   async function select(target: Target) {
-    if (locked.value) return;
+    if (accessLost.value) return;
     const selected = selection.value.some((item) => item.id === target.id);
     if (!selected && selection.value.length === 25) {
-      feedback.value = "Prepare up to 25 endpoints at a time.";
+      feedback.value = "Prepare up to 25 targets at a time.";
       return;
     }
     selection.value = selected
@@ -140,19 +185,19 @@ export function useCommandWorkspace(
       await browseCatalog({ target: selection.value[0].id, command: "" });
   }
   function selectVisible() {
-    if (locked.value) return;
+    if (accessLost.value) return;
     const next = new Map(selection.value.map((target) => [target.id, target]));
     for (const target of targetResults.state.value.entries.slice(0, 25))
       next.set(target.id, target);
     if (next.size > 25) {
-      feedback.value = "This would exceed 25 selected endpoints. Clear some targets first.";
+      feedback.value = "This would exceed 25 selected targets. Clear some targets first.";
       return;
     }
     selection.value = [...next.values()];
     edited();
   }
   function clearSelection() {
-    if (!locked.value) {
+    if (!accessLost.value) {
       selection.value = [];
       edited();
     }
@@ -160,6 +205,7 @@ export function useCommandWorkspace(
   function receive(value: unknown) {
     const next = readWorkspace(value, context);
     if (next.state !== "prepare") {
+      invalidateValidation();
       accessLost.value = true;
       observe(next);
       return;
@@ -205,6 +251,10 @@ export function useCommandWorkspace(
     accessLost.value = false;
     operation.value = next.operation;
     writeToken.value = next.write_token;
+    const previewInvalidated =
+      (targetPreview.value && targetPreview.value.token !== next.draft_preview?.token) ||
+      (queuePreview.value && queuePreview.value.token !== next.queue_preview?.token);
+    if (previewInvalidated) validationEpoch.value++;
     // A read cannot restore a preview invalidated by local edits or selection changes.
     if (targetPreview.value?.token !== next.draft_preview?.token) targetPreview.value = null;
     if (queuePreview.value?.token !== next.queue_preview?.token) queuePreview.value = null;
@@ -221,10 +271,14 @@ export function useCommandWorkspace(
       ...Object.fromEntries(next.spacecraft.map((row) => [row.id, row.name])),
     };
   }
-  const { refresh, syncing, syncFailed } = useLiveWorkspaceRead(readPort, busy, receive);
+  const { refresh, syncing, syncFailed } = useLiveWorkspaceRead(
+    readPort,
+    computed(() => requests.pending.value > 0 || validating.value || browsing.value),
+    receive,
+  );
   const catalogOptions = {
     catalog: computed(() => page.value.catalog),
-    blocked: locked,
+    blocked: accessLost,
     port,
     context,
     actor,
@@ -249,8 +303,12 @@ export function useCommandWorkspace(
     pick: (catalog) => catalog.commands,
   });
   async function browse(input: Record<string, unknown>) {
-    if (locked.value || disposed) return;
-    busy.value = true;
+    if (accessLost.value || disposed) return;
+    const generation = ++browseGeneration;
+    browseRequests.set(input.kind, generation);
+    browsing.value = true;
+    reviewGeneration++;
+    reviewing.value = false;
     edited();
     confirmed.value = false;
     if (input.kind === "stage" || input.kind === "items") {
@@ -258,8 +316,12 @@ export function useCommandWorkspace(
       itemSelection.value = {};
     }
     try {
-      const value = await port.execute("browse", input);
-      if (disposed) return;
+      const value = await requests.execute(
+        "browse",
+        input,
+        () => browseRequests.get(input.kind) === generation,
+      );
+      if (disposed || generation !== browseGeneration) return;
       if (record(value) && value.status === "rejected" && text(value.feedback)) {
         feedback.value = value.feedback;
         return;
@@ -267,11 +329,11 @@ export function useCommandWorkspace(
       if (!record(value) || value.status !== "browsed") throw Error("Invalid workspace view");
       receive(value.data);
     } catch {
-      if (!disposed)
+      if (!disposed && generation === browseGeneration)
         feedback.value =
           "This view could not be loaded. Your preparation is still here; try opening it again.";
     } finally {
-      if (!disposed) busy.value = false;
+      if (!disposed && generation === browseGeneration) browsing.value = false;
     }
   }
   const browseCatalog = (query: Partial<Query>) =>
@@ -288,10 +350,13 @@ export function useCommandWorkspace(
   const browseStages = (query: Partial<StageQuery>) =>
     browse({ kind: "stages", query: { ...page.value.directory.query, ...query } });
 
-  async function prepare(intents: readonly TargetIntent[]) {
+  function prepare(intents: readonly TargetIntent[] | null) {
+    if (validationSuspended) return;
+    invalidateValidation();
+    feedback.value = "";
     const catalog = page.value.catalog,
       workbench = page.value.workbench;
-    if (locked.value || !catalog || !intents.length) return;
+    if (accessLost.value || browsing.value || !catalog || !intents?.length) return;
     if (intents.some((entry) => !targetBasis(catalog, entry.target.id)?.compatible)) {
       feedback.value =
         "The selected command differs between these spacecraft catalogs or is unavailable. Prepare those spacecraft separately.";
@@ -316,89 +381,106 @@ export function useCommandWorkspace(
       if (!text(draft.value.notes, 4000))
         throw Error("Draft notes must fit within 4,000 UTF-8 bytes.");
     } catch {
-      feedback.value = "Check the selected endpoints, arguments, notes and UTC timing.";
+      feedback.value = "Check the selected targets, arguments, notes and UTC timing.";
       return;
     }
     const notes = draft.value.notes || null;
-    busy.value = true;
-    edited();
-    try {
-      const value = await port.execute("preview_targets", {
-        expected_stage: workbench?.stage.can_edit_items ? workbench.stage.expected_stage : null,
-        commands: inputs,
-        notes,
-      });
-      if (disposed) return;
-      if (record(value) && value.status === "rejected" && text(value.feedback)) {
-        feedback.value = value.feedback;
-        return;
-      }
-      if (!record(value) || value.status !== "previewed") throw Error();
-      const queue = readQueuePreview(value.queue_preview, actor);
-      if (
-        queue.requests.length !== inputs.length ||
-        queue.requests.some(
-          (request, index) =>
-            !matchesIntent(
-              request,
-              inputs[index],
-              intents[index]?.target,
-              targetBasis(catalog, request.target.id)?.revision_id,
-            ),
-        )
-      )
-        throw Error("Preview differs from preparation");
-      if (value.preview !== null) {
-        if (!workbench) throw Error("Unexpected stage preview");
-        const preview = readTargetsPreview(value.preview, actor, workbench.stage.id);
+    const generation = validationGeneration;
+    pendingValidation = async () => {
+      try {
+        const value = await requests.execute(
+          "preview_targets",
+          {
+            expected_stage: workbench?.stage.can_edit_items ? workbench.stage.expected_stage : null,
+            commands: inputs,
+            notes,
+          },
+          () => generation === validationGeneration,
+        );
+        if (disposed || generation !== validationGeneration) return;
+        if (record(value) && value.status === "rejected" && text(value.feedback)) {
+          feedback.value = value.feedback;
+          return;
+        }
+        if (!record(value) || value.status !== "previewed") throw Error();
+        const queue = readQueuePreview(value.queue_preview, actor);
         if (
-          preview.notes !== notes ||
-          preview.items.length !== inputs.length ||
-          preview.items.some(
-            (item, index) =>
+          queue.requests.length !== inputs.length ||
+          queue.requests.some(
+            (request, index) =>
               !matchesIntent(
-                item.command,
+                request,
                 inputs[index],
                 intents[index]?.target,
-                targetBasis(catalog, item.command.target.id)?.revision_id,
+                targetBasis(catalog, request.target.id)?.revision_id,
               ),
           )
         )
-          throw Error("Stage preview differs from preparation");
-        targetPreview.value = preview;
+          throw Error("Preview differs from preparation");
+        if (value.preview !== null) {
+          if (!workbench) throw Error("Unexpected stage preview");
+          const preview = readTargetsPreview(value.preview, actor, workbench.stage.id);
+          if (
+            preview.notes !== notes ||
+            preview.items.length !== inputs.length ||
+            preview.items.some(
+              (item, index) =>
+                !matchesIntent(
+                  item.command,
+                  inputs[index],
+                  intents[index]?.target,
+                  targetBasis(catalog, item.command.target.id)?.revision_id,
+                ),
+            )
+          )
+            throw Error("Stage preview differs from preparation");
+          targetPreview.value = preview;
+        }
+        queuePreview.value = queue;
+      } catch {
+        if (!disposed && generation === validationGeneration)
+          feedback.value = "Validation could not be completed. Check your connection and retry.";
       }
-      queuePreview.value = queue;
-    } catch {
-      if (!disposed)
-        feedback.value =
-          "The endpoint previews could not be confirmed. Preview the endpoints again.";
-    } finally {
-      if (!disposed) busy.value = false;
-    }
+    };
+    void drainValidation();
   }
   function chooseItem(item: Item) {
-    if (locked.value || item.state !== "draft" || !item.available) return;
+    if (accessLost.value || item.state !== "draft" || !item.available) return;
     const next = { ...itemSelection.value };
     if (next[item.id]) delete next[item.id];
     else next[item.id] = item.expected_item;
     itemSelection.value = next;
+    reviewGeneration++;
+    reviewing.value = false;
     batchPreview.value = null;
     confirmed.value = false;
   }
   async function reviewBatch() {
     const workbench = page.value.workbench,
       selected = { ...itemSelection.value };
-    if (locked.value || !workbench || !Object.keys(selected).length) return;
-    busy.value = true;
+    if (
+      accessLost.value ||
+      browsing.value ||
+      reviewing.value ||
+      !workbench ||
+      !Object.keys(selected).length
+    )
+      return;
+    const generation = ++reviewGeneration;
+    reviewing.value = true;
     feedback.value = "";
     batchPreview.value = null;
     confirmed.value = false;
     try {
-      const value = await port.execute("preview_batch", {
-        expected_stage: workbench.stage.expected_stage,
-        items: Object.entries(selected).map(([id, expected_item]) => ({ id, expected_item })),
-      });
-      if (disposed) return;
+      const value = await requests.execute(
+        "preview_batch",
+        {
+          expected_stage: workbench.stage.expected_stage,
+          items: Object.entries(selected).map(([id, expected_item]) => ({ id, expected_item })),
+        },
+        () => generation === reviewGeneration,
+      );
+      if (disposed || generation !== reviewGeneration) return;
       if (record(value) && value.status === "rejected" && text(value.feedback)) {
         feedback.value = value.feedback;
         return;
@@ -412,15 +494,15 @@ export function useCommandWorkspace(
         throw Error();
       batchPreview.value = preview;
     } catch {
-      if (!disposed)
+      if (!disposed && generation === reviewGeneration)
         feedback.value =
           "The request preview could not be confirmed. Select the current drafts and review again.";
     } finally {
-      if (!disposed) busy.value = false;
+      if (!disposed && generation === reviewGeneration) reviewing.value = false;
     }
   }
   async function write(event: WriteEvent, input: Record<string, unknown>) {
-    if (locked.value || !writeToken.value) return;
+    if (writesDisabled.value || !writeToken.value) return;
     const token = writeToken.value,
       targets = targetPreview.value,
       queue = queuePreview.value,
@@ -428,7 +510,9 @@ export function useCommandWorkspace(
     const stage =
       event === "create_stage" ? page.value.new_stage_id : page.value.workbench?.stage.id;
     if (event !== "enqueue" && !stage) return;
-    busy.value = true;
+    submitting.value = true;
+    validationSuspended = event === "enqueue" || event === "save_targets";
+    invalidateValidation();
     feedback.value = "";
     writeToken.value = null;
     if (event === "enqueue") {
@@ -437,6 +521,7 @@ export function useCommandWorkspace(
       if (!stage) return;
       operation.value = { status: "unconfirmed", event, stage_id: stage, write_token: token };
     }
+    const attempt = operation.value;
     attemptedItem = typeof input.item_id === "string" ? input.item_id : undefined;
     attemptedTargets = targets;
     attemptedBatch = batch;
@@ -444,7 +529,7 @@ export function useCommandWorkspace(
     if (event !== "enqueue") dockOpen.value = true;
     let known = false;
     try {
-      const value = await port.execute(event, { ...input, expected_write: token });
+      const value = await requests.execute(event, { ...input, expected_write: token });
       if (disposed) return;
       // A bare rejection can only deny this attempt; it cannot restore a consumed write token.
       if (
@@ -457,7 +542,7 @@ export function useCommandWorkspace(
         return;
       }
       const result = readWorkspaceOperation(value, actor);
-      checkReceipt(result, operation.value, targets, batch, attemptedItem, queue);
+      checkReceipt(result, attempt, targets, batch, attemptedItem, queue);
       operation.value = result;
       known = true;
     } catch {
@@ -465,16 +550,16 @@ export function useCommandWorkspace(
         feedback.value =
           "The write result is unconfirmed. Use Check result to inspect the saved outcome.";
     } finally {
-      if (!disposed) busy.value = false;
+      if (!disposed) submitting.value = false;
     }
     if (!disposed && known) await refresh();
   }
   const saveTargets = () =>
-    targetPreview.value
+    !validating.value && targetPreview.value
       ? write("save_targets", { expected_preview: targetPreview.value.token })
       : Promise.resolve();
   const enqueue = () =>
-    queuePreview.value
+    !validating.value && queuePreview.value
       ? write("enqueue", { expected_preview: queuePreview.value.token })
       : Promise.resolve();
   const submit = () =>
@@ -502,15 +587,19 @@ export function useCommandWorkspace(
   function follow(event: MouseEvent, href: string) {
     if (event.button || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
     event.preventDefault();
-    if (!busy.value) port.navigate(href);
+    port.navigate(href);
   }
   return {
     page,
     context,
-    busy,
+    submitting,
+    browsing,
+    reviewing,
+    validating,
+    validationEpoch,
     syncing,
     syncFailed,
-    locked,
+    writesDisabled,
     feedback,
     accessLost,
     operation,
@@ -630,3 +719,43 @@ const normalizeUtc = (value: string) => {
 };
 const sameTime = (left: string | null, right: string | null) =>
   left === right || (left !== null && right !== null && normalizeUtc(left) === normalizeUtc(right));
+
+function restoreDraft(page: WorkspacePreparation): Readonly<Record<string, WorkspaceDraft>> {
+  const command = page.catalog?.selected_command;
+  const requests =
+    page.queue_preview?.requests ?? page.draft_preview?.items.map((item) => item.command) ?? [];
+  const first = requests[0];
+  if (!command || !first || requests.some((request) => request.command_id !== command.id))
+    return {};
+  const overrides = Object.fromEntries(
+    requests.map((request) => {
+      const values = parseArgumentValues(request.argument_values_json);
+      return [
+        request.target.id,
+        {
+          values: Object.fromEntries(
+            command.arguments.flatMap((argument) => {
+              const value = values[argument.name];
+              if (argument.fixed_value_json !== null || value === undefined) return [];
+              return [
+                [argument.name, argument.type === "enumerated" ? value : scalarInputText(value)],
+              ];
+            }),
+          ),
+        },
+      ];
+    }),
+  );
+  return {
+    [command.id]: {
+      ...emptyWorkspaceDraft(),
+      valueMode: requests.length > 1 ? "individual" : "shared",
+      arguments: overrides[first.target.id],
+      overrides,
+      priority: String(first.priority),
+      notBefore: first.not_before ?? "",
+      expiresAt: first.expires_at ?? "",
+      notes: page.draft_preview?.notes ?? "",
+    },
+  };
+}

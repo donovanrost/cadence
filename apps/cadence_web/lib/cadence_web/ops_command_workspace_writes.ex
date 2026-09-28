@@ -18,6 +18,18 @@ defmodule CadenceWeb.OpsCommandWorkspaceWrites do
       operation = %{status: "unconfirmed", event: event, stage_id: stage_id, write_token: token}
       session = %{session | operation: operation}
       session = if event == "create_stage", do: %{session | create_input: input}, else: session
+      # Recovery owns an immutable attempt, independently of subsequent browsing/preparation.
+      attempt =
+        Map.take(session, [
+          :stage_id,
+          :creation,
+          :create_input,
+          :draft_preview,
+          :queue_preview,
+          :batch_preview
+        ])
+
+      session = %{session | write_attempt: attempt}
       result = perform(scope, session, event, input)
       result = Map.merge(operation, result)
       session = %{session | operation: result} |> after_write()
@@ -30,22 +42,26 @@ defmodule CadenceWeb.OpsCommandWorkspaceWrites do
 
   def action(_, session, _, _), do: {Session.rejected("Invalid workspace action."), session}
 
-  def recover(scope, %{operation: %{status: "unconfirmed"} = operation} = session) do
+  def recover(
+        scope,
+        %{operation: %{status: "unconfirmed"} = operation, write_attempt: attempt} = session
+      )
+      when is_map(attempt) do
     {_, _, mission, _} = session.identity
 
     result =
       case operation.event do
-        "enqueue" when is_map(session.queue_preview) ->
-          WorkspaceSubmission.recover(scope, mission, session.queue_preview)
+        "enqueue" when is_map(attempt.queue_preview) ->
+          WorkspaceSubmission.recover(scope, mission, attempt.queue_preview)
 
-        "save_targets" when is_map(session.draft_preview) ->
-          WorkspaceDrafts.recover(scope, mission, session.draft_preview)
+        "save_targets" when is_map(attempt.draft_preview) ->
+          WorkspaceDrafts.recover(scope, mission, attempt.draft_preview)
 
-        "submit" when is_map(session.batch_preview) ->
-          StageSubmission.recover(scope, mission, session.stage_id, session.batch_preview)
+        "submit" when is_map(attempt.batch_preview) ->
+          StageSubmission.recover(scope, mission, attempt.stage_id, attempt.batch_preview)
 
         "create_stage" ->
-          recover_creation(scope, mission, session)
+          recover_creation(scope, mission, attempt)
 
         _ ->
           {:error, :unconfirmed}
@@ -54,7 +70,7 @@ defmodule CadenceWeb.OpsCommandWorkspaceWrites do
     case result do
       {:ok, receipt} ->
         %{session | operation: Map.merge(operation, %{status: "completed", receipt: receipt})}
-        |> after_write()
+        |> after_recovery()
 
       _ ->
         session
@@ -77,12 +93,12 @@ defmodule CadenceWeb.OpsCommandWorkspaceWrites do
 
       {:error, :command_authoring_basis_changed} ->
         Session.rejected(
-          "The command model or an endpoint changed. Refresh and prepare new previews."
+          "The command model or a command target changed. Refresh and prepare new previews."
         )
 
       {:error, :command_authoring_preview_changed} ->
         Session.rejected(
-          "The command preview changed. Preview the endpoints again before enqueueing."
+          "The command preview changed. Preview the targets again before enqueueing."
         )
 
       {:error, _} ->
@@ -175,6 +191,21 @@ defmodule CadenceWeb.OpsCommandWorkspaceWrites do
     else
       {:error, :command_stage_changed}
     end
+  end
+
+  # A late receipt must not clear a newer preview or move the user's selected stage.
+  defp after_recovery(session) do
+    session =
+      if session.operation.event == "create_stage" and
+           session.creation == session.write_attempt.creation,
+         do: %{session | creation: nil},
+         else: session
+
+    Enum.reduce([:draft_preview, :queue_preview, :batch_preview], session, fn key, current ->
+      if Map.get(current, key) == Map.get(session.write_attempt, key),
+        do: Map.put(current, key, nil),
+        else: current
+    end)
   end
 
   defp after_write(

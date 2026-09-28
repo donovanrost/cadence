@@ -42,20 +42,20 @@ function title(target: Target) {
   <CadencePane
     ref="pane"
     id="command-workspace-fleet"
-    title="Spacecraft & endpoints"
+    title="Command targets"
     icon="hero-square-3-stack-3d"
     :count="`${selected.length} selected`"
   >
     <template #toolbar>
-      <div class="cw-search" role="search" aria-label="Spacecraft and endpoints">
+      <div class="cw-search" role="search" aria-label="Command targets">
         <span class="hero-magnifying-glass cw-icon" aria-hidden="true" />
         <input
           id="workspace-target-search"
           :value="results.query"
           @input="search"
           type="search"
-          aria-label="Find spacecraft or endpoints"
-          placeholder="Find spacecraft or endpoint…"
+          aria-label="Search command targets"
+          placeholder="Search targets…"
           maxlength="240"
           :disabled="disabled"
         />
@@ -73,7 +73,7 @@ function title(target: Target) {
           :disabled="disabled || !selected.length"
           @click="emit('clear')"
           >Clear</CadenceButton
-        ><span class="cw-subtle">Up to 25 endpoints</span>
+        ><span class="cw-subtle">Up to 25 targets</span>
       </div>
     </template>
     <div class="cw-fleet-grid">
@@ -96,7 +96,7 @@ function title(target: Target) {
             class="hero-cpu-chip cw-endpoint-visual"
             aria-hidden="true"
         /></template>
-        <strong>{{ target.name || "Command endpoint" }}</strong>
+        <strong>{{ target.name || "Command target" }}</strong>
         <span class="cw-subtle cw-truncate">{{ target.source_ref || target.id }}</span>
         <span v-if="catalog?.target_bases" class="cw-subtle">{{
           !targetBasis(catalog, target.id)
@@ -107,14 +107,14 @@ function title(target: Target) {
         }}</span>
         <template #footer
           ><span>SCID {{ target.scid ?? "—" }}</span
-          ><span>{{ target.spacecraft_id ? "Spacecraft" : "Unassigned endpoint" }}</span></template
+          ><span>{{ target.spacecraft_id ? "Spacecraft" : "No spacecraft assigned" }}</span></template
         >
       </CadenceSelectionTile>
       <p
         v-if="catalog && !results.entries.length && !results.loading && !results.error"
         class="cw-empty"
       >
-        No endpoints match this search.
+        No targets match this search.
       </p>
       <p v-if="!catalog" class="cw-empty">
         Activate a command model to browse targets and commands.
@@ -126,12 +126,12 @@ function title(target: Target) {
       :loading="results.loading"
       :error="results.error"
       :disabled="disabled"
-      label="Loading endpoints…"
+      label="Loading targets…"
       @load-more="emit('loadMore')"
       @retry="emit('retry')"
     />
     <template #footer
-      ><span>{{ results.entries.length }} endpoints</span></template
+      ><span>{{ results.entries.length }} targets</span></template
     >
   </CadencePane>
 </template>

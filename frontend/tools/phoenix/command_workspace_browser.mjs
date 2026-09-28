@@ -83,14 +83,14 @@ try {
       .getByRole("region", { name: "Settings for Secondary OBC" })
       .locator('input[id$="-argument-0"]')
       .fill("7");
-    await page.locator("#workspace-preview-targets").click();
+    await page.locator("#workspace-enqueue:not([disabled])").waitFor();
     await page.getByRole("button", { name: "Enqueue 2 commands", exact: true }).waitFor();
     assert.equal(await page.locator("#workspace-save-targets").count(), 0);
     await page.locator("#workspace-enqueue").scrollIntoViewIfNeeded();
     await page.screenshot({ path: `${out}/enqueue-preview-laptop.png` });
     await page.locator("#workspace-enqueue").click();
     await page.getByText("2 commands queued.", { exact: true }).waitFor();
-    await page.locator("#workspace-enqueue").waitFor({ state: "detached" });
+    await page.locator("#workspace-enqueue[disabled]").waitFor();
     await page
       .locator(
         '[data-ops-context-collapsed-section="commands"][data-ops-context-section-count="2"]',
@@ -181,7 +181,7 @@ try {
     await page.getByRole("radio", { name: "Per spacecraft", exact: true }).check();
     const override = page.getByRole("region", { name: "Settings for Secondary OBC" });
     await override.locator('input[id$="-argument-0"]').fill("7");
-    await page.locator("#workspace-preview-targets").click();
+    await page.locator("#workspace-enqueue:not([disabled])").waitFor();
     await page.locator("#workspace-save-targets").waitFor();
     assert.equal(await page.locator("#command-workspace-fleet-title").isVisible(), true);
     assert.equal(await page.locator("#command-workspace-catalog-title").isVisible(), true);

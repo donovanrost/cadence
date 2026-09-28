@@ -60,8 +60,8 @@ defineExpose({ focusCommand });
       <p class="cw-context">
         <span class="hero-cursor-arrow-rays cw-icon" aria-hidden="true" />{{
           selectedCount
-            ? `${selectedCount} endpoints selected · validated together on preview`
-            : "Select spacecraft and endpoints, then prepare a command."
+            ? `${selectedCount} targets selected · validated together on preview`
+            : "Select command targets, then prepare a command."
         }}
       </p>
     </template>

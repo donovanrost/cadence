@@ -23,6 +23,8 @@ const props = defineProps<{
   operation: Exclude<WorkspaceOperation, { event: "enqueue" }> | null;
   checkingResult: boolean;
   disabled: boolean;
+  actionDisabled: boolean;
+  reviewing: boolean;
   targetNames: Readonly<Record<string, string>>;
   commandNames: Readonly<Record<string, string>>;
   follow: (event: MouseEvent, href: string) => void;
@@ -43,7 +45,10 @@ const cancelId = ref<string | null>(null),
 watch(
   () => props.workbench?.selected_item,
   (item, previous) => {
-    if (item?.id !== previous?.id || item?.order !== previous?.order)
+    if (
+      item?.id !== previous?.id ||
+      (item?.order !== previous?.order && itemOrder.value === String(previous?.order ?? 0))
+    )
       itemOrder.value = String(item?.order ?? 0);
     if (item?.expected_item !== previous?.expected_item) cancelId.value = null;
   },
@@ -135,7 +140,7 @@ const label = (value: string) => value.replaceAll("_", " ");
             <th scope="col"><span class="sr-only">Select draft</span></th>
             <th scope="col">Order</th>
             <th scope="col">Command</th>
-            <th scope="col">Endpoint</th>
+            <th scope="col">Target</th>
             <th scope="col">Priority</th>
             <th scope="col">State</th>
             <th scope="col"><span class="sr-only">Draft actions</span></th>
@@ -206,7 +211,7 @@ const label = (value: string) => value.replaceAll("_", " ");
                   ><CadenceButton
                     size="xs"
                     variant="danger"
-                    :disabled="disabled"
+                    :disabled="disabled || actionDisabled"
                     @click="emit('cancel', item)"
                     >Cancel draft</CadenceButton
                   ><CadenceButton size="xs" variant="quiet" @click="cancelId = null"
@@ -264,7 +269,12 @@ const label = (value: string) => value.replaceAll("_", " ");
         /><CadenceButton
           size="xs"
           variant="outline"
-          :disabled="disabled || !orderValid || Number(itemOrder) === workbench.selected_item.order"
+          :disabled="
+            disabled ||
+            actionDisabled ||
+            !orderValid ||
+            Number(itemOrder) === workbench.selected_item.order
+          "
           @click="emit('move', workbench.selected_item, Number(itemOrder))"
           >Save order</CadenceButton
         >
@@ -274,7 +284,7 @@ const label = (value: string) => value.replaceAll("_", " ");
         <dl class="cw-evidence">
           <dt>Model</dt>
           <dd>{{ workbench.selected_item.revision_id }}</dd>
-          <dt>Endpoint</dt>
+          <dt>Target</dt>
           <dd>{{ workbench.selected_item.target_id }}</dd>
           <dt>Draft</dt>
           <dd>{{ workbench.selected_item.id }}</dd>
@@ -285,7 +295,7 @@ const label = (value: string) => value.replaceAll("_", " ");
       v-if="preview"
       :preview="preview"
       :confirmed="confirmed"
-      :disabled="disabled"
+      :disabled="disabled || actionDisabled"
       @update:confirmed="emit('update:confirmed', $event)"
       @submit="emit('submit')"
     />
@@ -296,7 +306,7 @@ const label = (value: string) => value.replaceAll("_", " ");
           id="workspace-review-stage"
           size="sm"
           variant="primary"
-          :disabled="disabled || !Object.keys(selection).length"
+          :disabled="disabled || reviewing || !Object.keys(selection).length"
           @click="emit('review')"
           >Review {{ Object.keys(selection).length }} selected drafts</CadenceButton
         ><CadenceButton

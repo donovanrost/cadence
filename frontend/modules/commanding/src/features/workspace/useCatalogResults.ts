@@ -1,5 +1,5 @@
 import { computed, onBeforeUnmount, ref, shallowRef, watch, type Ref } from "vue";
-import type { GuardedOpsPagePort, OpsPageContext } from "@cadence/plugin-sdk/ops-pages";
+import type { OpsPagePort, OpsPageContext } from "@cadence/plugin-sdk/ops-pages";
 import { queryKeys, type Catalog, type Query } from "../../shared/command-draft/contracts";
 import { readCatalogPage } from "./contracts";
 
@@ -17,7 +17,7 @@ type LoadState = { status: "idle" } | { status: "loading" } | { status: "failed"
 export function useCatalogResults<T extends { id: string }>(options: {
   catalog: Readonly<Ref<Catalog | null>>;
   blocked: Readonly<Ref<boolean>>;
-  port: GuardedOpsPagePort;
+  port: OpsPagePort;
   context: OpsPageContext;
   actor: string;
   queryKey: "target_query" | "command_query";

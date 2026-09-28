@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type {
-  GuardedOpsPagePort,
+  OpsPagePort,
   OpsPageContext,
   LiveOpsPageReadPort,
 } from "@cadence/plugin-sdk/ops-pages";
@@ -13,7 +13,7 @@ import { useLiveWorkspaceRead } from "./useLiveWorkspaceRead";
 const props = defineProps<{
   page: WorkspacePage;
   context: OpsPageContext;
-  port: GuardedOpsPagePort;
+  port: OpsPagePort;
   readPort: LiveOpsPageReadPort;
   refresh: () => Promise<void>;
 }>();

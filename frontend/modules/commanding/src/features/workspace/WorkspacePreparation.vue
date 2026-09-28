@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import CadencePane from "@cadence/ui/CadencePane.vue";
 import CadenceButton from "@cadence/ui/CadenceButton.vue";
 import CadenceDateTimeField from "@cadence/ui/CadenceDateTimeField.vue";
@@ -23,18 +23,25 @@ const props = defineProps<{
   preview: TargetsPreview | null;
   queuePreview: QueuePreview | null;
   disabled: boolean;
+  actionDisabled: boolean;
+  validating: boolean;
+  validationError: boolean;
+  validationContext: string;
 }>();
 const emit = defineEmits<{
   close: [];
   "update:draft": [draft: WorkspaceDraft];
   remove: [target: Target];
-  prepare: [intents: readonly TargetIntent[]];
+  prepare: [intents: readonly TargetIntent[] | null];
   save: [];
   enqueue: [];
 }>();
 const shared = ref<InstanceType<typeof CommandArguments> | null>(null);
 const overrides = new Map<string, InstanceType<typeof CommandArguments>>();
 const feedback = ref("");
+const form = ref<HTMLFormElement | null>(null);
+const timingEdits = ref(0);
+const invalidTiming = new Set<string>();
 const opcode = computed(() => opcodeLabel(props.command));
 const approvalCount = computed(
   () =>
@@ -42,10 +49,10 @@ const approvalCount = computed(
       .length ?? 0,
 );
 const enqueueLabel = computed(() => {
-  const count = props.queuePreview?.requests.length ?? 0;
-  if (approvalCount.value === count) return "Request approval";
+  const count = props.queuePreview?.requests.length ?? props.targets.length;
+  if (count > 0 && approvalCount.value === count) return "Request approval";
   if (approvalCount.value > 0) return "Submit commands";
-  return `Enqueue ${count === 1 ? "command" : `${count} commands`}`;
+  return `Enqueue ${count <= 1 ? "command" : `${count} commands`}`;
 });
 const valueModes = [
   { value: "shared", label: "All spacecraft" },
@@ -75,8 +82,14 @@ function targetHeading(target: Target) {
   return spacecraft ? `${spacecraft} · ${target.name || target.id}` : target.name || target.id;
 }
 function prepare() {
-  if (props.disabled || !props.command.supported || !props.targets.length) return;
+  if (props.disabled) return;
+  if (!props.command.supported || !props.targets.length) {
+    emit("prepare", null);
+    return;
+  }
   try {
+    if (invalidTiming.size || form.value?.querySelector("input:invalid"))
+      throw Error("Enter valid UTC timing and argument values.");
     const sharedValues = props.draft.valueMode === "shared" ? shared.value?.collect() : undefined;
     const intents = props.targets.map((target) => {
       if (props.draft.valueMode === "shared") {
@@ -91,7 +104,34 @@ function prepare() {
     emit("prepare", intents);
   } catch (error) {
     feedback.value = error instanceof Error ? error.message : "Check the argument values.";
+    emit("prepare", null);
   }
+}
+// Watch semantic inputs, not preview responses or catalog object identity.
+watch(
+  () =>
+    JSON.stringify([
+      props.command,
+      props.targets,
+      props.draft,
+      props.stage?.expected_stage,
+      props.disabled,
+      props.validationContext,
+      timingEdits.value,
+    ]),
+  prepare,
+  { flush: "post" },
+);
+onMounted(() => {
+  if (!props.queuePreview) prepare();
+});
+function timingEdited(event: Event) {
+  if (!(event.target instanceof HTMLInputElement)) return;
+  if (event.target.validity.badInput) invalidTiming.add(event.target.id);
+  else invalidTiming.delete(event.target.id);
+  // Native date fields can contain an incomplete edit without changing their model value.
+  timingEdits.value++;
+  emit("prepare", null);
 }
 </script>
 <template>
@@ -139,7 +179,7 @@ function prepare() {
         This command definition cannot be prepared. Choose another command or update the mission
         model.
       </p>
-      <div class="cw-target-chips" aria-label="Selected endpoints">
+      <div class="cw-target-chips" aria-label="Selected targets">
         <button
           v-for="target in targets"
           :key="target.id"
@@ -152,10 +192,10 @@ function prepare() {
           }}<span class="hero-x-mark cw-small-icon" aria-hidden="true" />
         </button>
         <p v-if="!targets.length" class="cw-subtle">
-          Select endpoints to prepare this command. Your edits remain here.
+          Select targets to prepare this command. Your edits remain here.
         </p>
       </div>
-      <form id="workspace-preparation-form" @submit.prevent="prepare">
+      <form id="workspace-preparation-form" ref="form" @submit.prevent>
         <fieldset :disabled="disabled || !command.supported" class="cw-form-stack">
           <CommandArguments
             v-if="draft.valueMode === 'shared'"
@@ -218,14 +258,14 @@ function prepare() {
                 :model-value="draft.notBefore"
                 :max="draft.expiresAt"
                 @update:model-value="patch({ notBefore: $event })"
-                @invalid="patch({})"
+                @input="timingEdited"
               /><CadenceDateTimeField
                 id="workspace-expires"
                 label="Expires at"
                 :model-value="draft.expiresAt"
                 :min="draft.notBefore"
                 @update:model-value="patch({ expiresAt: $event })"
-                @invalid="patch({})"
+                @input="timingEdited"
               /><label class="cw-field"
                 >Draft notes<textarea
                   id="workspace-notes"
@@ -241,25 +281,20 @@ function prepare() {
           <p v-if="feedback" id="workspace-argument-error" class="cw-notice" role="alert">
             {{ feedback }}
           </p>
-          <CadenceButton
-            id="workspace-preview-targets"
-            type="submit"
-            variant="primary"
-            size="sm"
-            :disabled="disabled || !targets.length || !command.supported"
-            >Preview {{ targets.length }} endpoint{{
-              targets.length === 1 ? "" : "s"
-            }}</CadenceButton
-          >
         </fieldset>
       </form>
       <section
         v-if="queuePreview"
         id="workspace-target-preview"
         class="cw-resolved"
-        aria-label="Resolved endpoint previews"
+        aria-label="Resolved target previews"
       >
-        <h3>{{ queuePreview.requests.length }} endpoints validated</h3>
+        <h3>
+          {{ queuePreview.requests.length }} target{{
+            queuePreview.requests.length === 1 ? "" : "s"
+          }}
+          validated
+        </h3>
         <article
           v-for="request in queuePreview.requests"
           :key="request.request_id"
@@ -288,27 +323,46 @@ function prepare() {
             Requires approval before queueing.
           </p>
         </article>
-        <CadenceButton
-          id="workspace-enqueue"
-          variant="primary"
-          size="sm"
-          :disabled="disabled"
-          @click="emit('enqueue')"
-          ><span class="hero-queue-list cw-small-icon" aria-hidden="true" />{{
-            enqueueLabel
-          }}</CadenceButton
-        >
         <p v-if="preview?.notes" class="cw-description">{{ preview.notes }}</p>
         <CadenceButton
           v-if="preview && stage?.can_edit_items"
           id="workspace-save-targets"
           variant="outline"
           size="sm"
-          :disabled="disabled"
+          :disabled="disabled || actionDisabled || validating"
           @click="emit('save')"
           >Add {{ preview.items.length }} drafts to {{ stage?.name }}</CadenceButton
         >
       </section>
+      <p v-if="validating" id="workspace-validation-pending" role="status" class="cw-subtle">
+        Validating command…
+      </p>
+      <CadenceButton
+        id="workspace-enqueue"
+        variant="primary"
+        size="sm"
+        :disabled="disabled || actionDisabled || validating || !queuePreview"
+        @click="emit('enqueue')"
+        ><span class="hero-queue-list cw-small-icon" aria-hidden="true" />{{
+          enqueueLabel
+        }}</CadenceButton
+      >
+      <CadenceButton
+        v-if="
+          validationError &&
+          !validating &&
+          !queuePreview &&
+          !feedback &&
+          targets.length &&
+          command.supported
+        "
+        id="workspace-retry-validation"
+        size="sm"
+        variant="quiet"
+        :disabled="disabled"
+        @click="prepare"
+        >Retry validation</CadenceButton
+      >
       <slot name="result" />
     </div>
     <template #footer
