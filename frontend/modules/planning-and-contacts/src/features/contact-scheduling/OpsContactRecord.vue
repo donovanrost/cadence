@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ContactLink from "./ContactLink.vue";
 import { computed, inject } from "vue";
 import CadencePanel from "@cadence/ui/CadencePanel.vue";
 import { CONTACT_RECORD_PORT, type OpsContactRecordProps } from "./OpsContactRecord.contracts";
@@ -40,10 +41,10 @@ const contextSections = computed(() =>
 <template>
   <main v-if="record" id="ops-contact-record-page" class="space-y-6 p-4 md:p-6">
     <header class="space-y-3">
-      <a
+      <ContactLink
         :href="`/missions/${encodeURIComponent(record.context.mission_id)}/ops/contacts`"
         class="text-sm text-primary"
-        >Contact scheduling</a
+        >Contact scheduling</ContactLink
       >
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -88,11 +89,11 @@ const contextSections = computed(() =>
           <div>
             <dt class="text-base-content/60">Scheduled identity</dt>
             <dd class="break-all">
-              <a
+              <ContactLink
                 id="contact-record-scheduled-link"
                 :href="contactPath(record, record.scheduled.id)"
                 class="text-primary"
-                >{{ record.scheduled.id }}</a
+                >{{ record.scheduled.id }}</ContactLink
               >
             </dd>
           </div>
@@ -126,11 +127,11 @@ const contextSections = computed(() =>
           <div>
             <dt class="text-base-content/60">Realized identity</dt>
             <dd class="break-all">
-              <a
+              <ContactLink
                 id="contact-record-realized-link"
                 :href="contactPath(record, record.realized.id)"
                 class="text-primary"
-                >{{ record.realized.id }}</a
+                >{{ record.realized.id }}</ContactLink
               >
             </dd>
           </div>
@@ -175,7 +176,7 @@ const contextSections = computed(() =>
         >
           Historical schedule evidence. The current schedule and realized paths are shown
           separately.
-          <a
+          <ContactLink
             id="contact-record-current-revision"
             class="text-primary"
             :href="
@@ -185,7 +186,7 @@ const contextSections = computed(() =>
                 sources_page: 1,
               })
             "
-            >Review current revision</a
+            >Review current revision</ContactLink
           >
         </p>
         <div
@@ -193,11 +194,11 @@ const contextSections = computed(() =>
           id="contact-record-origin"
           class="space-y-2 rounded border border-base-300 p-3"
         >
-          <a
+          <ContactLink
             id="contact-record-reservation-link"
             class="text-primary"
             :href="`/missions/${encodeURIComponent(record.context.mission_id)}/ops/contacts/${encodeURIComponent(record.origin.reservation_id)}?change_id=${encodeURIComponent(record.origin.change_id)}`"
-            >Provider change · Revision {{ record.origin.provider_revision }}</a
+            >Provider change · Revision {{ record.origin.provider_revision }}</ContactLink
           >
           <p class="break-all font-mono text-xs">{{ record.origin.proposal_hash }}</p>
         </div>
@@ -251,17 +252,17 @@ const contextSections = computed(() =>
         No paths on this page.
       </p>
       <nav :aria-label="`${section.title} pages`" class="mt-4 flex gap-4 text-sm text-primary">
-        <a
+        <ContactLink
           v-if="section.data.page > 1"
           :id="`${section.key}-previous`"
           :href="recordHref(record, { [sectionPage(section.key)]: section.data.page - 1 })"
-          >Previous</a
+          >Previous</ContactLink
         ><span class="text-base-content/60">Page {{ section.data.page }}</span
-        ><a
+        ><ContactLink
           v-if="section.data.more"
           :id="`${section.key}-next`"
           :href="recordHref(record, { [sectionPage(section.key)]: section.data.page + 1 })"
-          >Next</a
+          >Next</ContactLink
         >
       </nav>
     </CadencePanel>
@@ -286,17 +287,17 @@ const contextSections = computed(() =>
           No {{ section.title.toLowerCase() }} on this page.
         </p>
         <nav :aria-label="`${section.title} pages`" class="mt-4 flex gap-4 text-sm text-primary">
-          <a
+          <ContactLink
             v-if="section.data.page > 1"
             :id="`${section.key}-previous`"
             :href="recordHref(record, { [sectionPage(section.key)]: section.data.page - 1 })"
-            >Previous</a
+            >Previous</ContactLink
           ><span class="text-base-content/60">Page {{ section.data.page }}</span
-          ><a
+          ><ContactLink
             v-if="section.data.more"
             :id="`${section.key}-next`"
             :href="recordHref(record, { [sectionPage(section.key)]: section.data.page + 1 })"
-            >Next</a
+            >Next</ContactLink
           >
         </nav>
       </CadencePanel>
@@ -314,7 +315,7 @@ const contextSections = computed(() =>
       >
       <ol class="divide-y divide-base-300">
         <li v-for="revision in record.revisions.entries" :key="revision.id" class="py-3 text-sm">
-          <a
+          <ContactLink
             :href="
               recordHref(record, {
                 revision: revision.revision,
@@ -324,7 +325,7 @@ const contextSections = computed(() =>
             "
             :aria-current="revision.revision === record.review.revision ? 'page' : undefined"
             class="text-primary"
-            >Revision {{ revision.revision }}</a
+            >Revision {{ revision.revision }}</ContactLink
           >
           <p class="text-xs text-base-content/60">
             {{ revision.created_at }} · {{ revision.created_by }}
@@ -338,16 +339,16 @@ const contextSections = computed(() =>
         aria-label="Schedule revision history pages"
         class="mt-4 flex gap-4 text-sm text-primary"
       >
-        <a
+        <ContactLink
           v-if="record.query.before_revision"
           id="contact-revisions-latest"
           :href="recordHref(record, { before_revision: null })"
-          >Latest in this review</a
-        ><a
+          >Latest in this review</ContactLink
+        ><ContactLink
           v-if="record.revisions.next"
           id="contact-revisions-older"
           :href="recordHref(record, { before_revision: record.revisions.next })"
-          >Older revisions</a
+          >Older revisions</ContactLink
         >
       </nav>
     </CadencePanel>

@@ -2,11 +2,12 @@ defmodule Cadence.Reads.ApplicationSurfaces.Planning.ContactSchedule do
   @moduledoc "Scoped route readiness and paged ledgers for native contact scheduling."
   alias Cadence.Auth.Scope
   alias Cadence.Contacts.ProviderScheduling
+  alias Cadence.Contacts.ScheduleOperations
   alias Cadence.Control.Contacts
   alias Cadence.Reads.ApplicationSurfaces.Planning.ContactScheduleProjection
   alias Cadence.SpacecraftStore
 
-  @pages ~w(spacecraft_page routes_page findings_page scheduled_page realized_page reservations_page)
+  @pages ~w(spacecraft_page routes_page findings_page scheduled_page realized_page reservations_page operations_page)
   @keys ~w(spacecraft_id spacecraft_q) ++ @pages
 
   def admit_query(params) when is_map(params) do
@@ -57,6 +58,14 @@ defmodule Cadence.Reads.ApplicationSurfaces.Planning.ContactSchedule do
              realized: realized,
              reservations: reservations
            })
+           |> Map.put(
+             :workflow,
+             ScheduleOperations.page(
+               scope,
+               mid,
+               q["operations_page"]
+             )
+           )
        }}
     end
   end

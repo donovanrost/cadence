@@ -7,6 +7,10 @@ import type {
   HostQueryRequest,
 } from "@cadence/plugin-sdk";
 import { createContactSchedulePort } from "./contact-schedule-port";
+import {
+  scheduleFixture,
+  searchFixture,
+} from "../../../modules/planning-and-contacts/src/features/contact-scheduling/contact-schedule.test-support";
 import { surfaceContracts } from "./federated-application";
 
 function harness() {
@@ -49,46 +53,68 @@ function harness() {
   return { props, query, execute };
 }
 
-test("the contact scheduling port captures host authority and only delegates declared scheduling actions", async () => {
+const operationId = "11111111-1111-4111-8111-111111111111";
+function accepted() {
+  return {
+    contract_version: 2,
+    operation_id: operationId,
+    action: "reserve",
+    actor_id: "operator-one",
+    context: scheduleFixture().context,
+    reservation_id: "reservation-one",
+    status: "accepted",
+    revision: 1,
+    result: null,
+  };
+}
+
+test("the federated adapter admits the same search, operation and observation contract as native scheduling", async () => {
   const { props, query, execute } = harness();
   const port = required(createContactSchedulePort(props, () => true));
+  const model = scheduleFixture();
+  port.admit(model);
   const input = { token: "opaque-opportunity-token" };
-  execute.mockResolvedValue({ receiptId: "completed" });
-  await port.execute("reserve", input);
+  execute.mockResolvedValue({ receiptId: "receipt", result: accepted() });
+  expect(await port.submit({ operationId, action: "reserve", input })).toEqual(accepted());
   expect(execute).toHaveBeenCalledExactlyOnceWith({
     applicationKey: "ops_console",
     applicationVersion: 1,
     surfaceId: "contact_schedule",
     surfaceVersion: 1,
     actionId: "reserve",
-    input,
+    input: { contract_version: 2, operation_id: operationId, payload: input },
     context: props.context,
   });
-  expect(port.context).toEqual({ organization_id: "org-one", mission_id: "mission-one" });
-  // @ts-expect-error Exercise admission of a malformed external action.
-  await expect(port.execute("delete-plan", {})).rejects.toThrow("Undeclared");
-  expect(execute).toHaveBeenCalledTimes(1);
+  execute.mockResolvedValueOnce({ receiptId: "observation", result: { operation: accepted() } });
+  expect(await port.observe({ operationId, action: "reserve" })).toEqual(accepted());
+  const found = searchFixture(model);
+  execute.mockResolvedValueOnce({ receiptId: "search", result: found });
+  expect(
+    await port.search(
+      { contact_search: found.search, route_evidence: found.route.evidence },
+      found.route,
+    ),
+  ).toEqual(found);
   query.mockResolvedValue({
     trusted_surface: {
       queryVersion: 1,
-      presentation: {
-        component: "OpsContactSchedule",
-        props: { schedule: { contract_version: 1 } },
-      },
+      presentation: { component: "OpsContactSchedule", props: { schedule: model } },
     },
   });
-  expect(await port.refresh()).toEqual({ contract_version: 1 });
-  expect(query).toHaveBeenCalledExactlyOnceWith({
-    queryId: props.surface.dataContract.id,
-    version: props.surface.dataContract.version,
-    context: props.context,
-  });
+  expect((await port.read()).model).toEqual(model);
+  expect(query).toHaveBeenCalledOnce();
+  props.surface = { ...props.surface, actions: [] };
+  const unavailable = required(createContactSchedulePort(props, () => true));
+  unavailable.admit(model);
+  await expect(unavailable.submit({ operationId, action: "reserve", input })).rejects.toThrow(
+    "Undeclared",
+  );
 });
 
 test("departed authority refuses new operations and drops late responses", async () => {
   const { props, query, execute } = harness();
-  let active = true,
-    resolve!: (value: unknown) => void;
+  let active = true;
+  let resolve: ((value: unknown) => void) | undefined;
   execute.mockImplementation(
     () =>
       new Promise((done) => {
@@ -96,24 +122,14 @@ test("departed authority refuses new operations and drops late responses", async
       }),
   );
   const port = required(createContactSchedulePort(props, () => active));
-  const pending = port.execute("reserve", { token: "opaque-opportunity-token" });
+  port.admit(scheduleFixture());
+  const command = { operationId, action: "reserve" as const, input: { token: "opaque-token" } };
+  const pending = port.submit(command);
   active = false;
-  resolve({ receiptId: "late" });
+  required(resolve)({ receiptId: "late", result: accepted() });
   await expect(pending).rejects.toThrow("departed");
-  await expect(port.refresh()).rejects.toThrow("departed");
-  await expect(
-    port.execute("cancel", {
-      reservation_evidence: {
-        contract_version: 1,
-        organization_id: "org-one",
-        mission_id: "mission-one",
-        reservation_id: "reservation-one",
-        provider_revision: 2,
-        lifecycle_state: "confirmed",
-        provider_contact_ref: "provider-contact-one",
-      },
-    }),
-  ).rejects.toThrow("departed");
+  await expect(port.read()).rejects.toThrow("departed");
+  await expect(port.submit(command)).rejects.toThrow("departed");
   expect(query).not.toHaveBeenCalled();
-  expect(execute).toHaveBeenCalledTimes(1);
+  expect(execute).toHaveBeenCalledOnce();
 });

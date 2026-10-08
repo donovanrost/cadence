@@ -7,7 +7,7 @@ import OpsContextRail from "./OpsContextRail.vue";
 import { opsNavigation } from "./navigation";
 import { readOpsFrameContext } from "./context-contract";
 import { contextRail, contextSections } from "./context";
-const props = defineProps<{ context: unknown }>();
+const props = defineProps<{ context: unknown; connectionLabel?: string | undefined }>();
 const model = computed(() => readOpsFrameContext(props.context));
 const nav = computed(() => (model.value ? opsNavigation(model.value) : null));
 const sections = computed(() => (model.value ? contextSections(model.value) : []));
@@ -68,6 +68,13 @@ const posture = computed(() => {
             class="whitespace-nowrap font-mono text-xs text-base-content/70 tabular-nums"
           />
           <span
+            v-if="connectionLabel"
+            id="ops-refresh-status"
+            class="text-xs text-base-content/70"
+            >{{ connectionLabel }}</span
+          >
+          <span
+            v-else
             id="ops-conn-ok"
             class="h-2 w-2 shrink-0 rounded-full bg-success"
             title="Connected"
@@ -75,6 +82,7 @@ const posture = computed(() => {
             phx-disconnected='[["hide",{}]]'
           ></span>
           <span
+            v-if="!connectionLabel"
             id="ops-conn-lost"
             class="hidden h-2 w-2 shrink-0 rounded-full bg-error motion-safe:animate-pulse"
             title="Connection lost"

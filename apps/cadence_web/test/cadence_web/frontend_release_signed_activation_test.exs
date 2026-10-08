@@ -32,14 +32,19 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
   @publisher_token "frontend-release-publisher-test-token"
   @promotion_seed "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb"
   @fork_seed "d4f7f6f5c3d5b7c7e4a2b7eecf8f6e5d6c8b4e6f7a8b9c0d1e2f3a4b5c6d7e8f"
-  @catalog_expires_at "2026-09-30T00:00:00Z"
-  @n_minus_1_catalog_published_at "2026-09-01T18:00:00Z"
-  @n_catalog_published_at "2026-09-01T18:01:00Z"
-  @rollback_catalog_published_at "2026-09-01T18:02:00Z"
+  # The releases have fixed provenance; HTTP catalog activation uses the wall clock.
+  @test_now DateTime.utc_now() |> DateTime.truncate(:second)
+  @catalog_expires_at @test_now |> DateTime.add(1, :day) |> DateTime.to_iso8601()
+  @n_minus_1_catalog_published_at @test_now |> DateTime.add(-4, :minute) |> DateTime.to_iso8601()
+  @n_catalog_published_at @test_now |> DateTime.add(-3, :minute) |> DateTime.to_iso8601()
+  @rollback_catalog_published_at @test_now |> DateTime.add(-2, :minute) |> DateTime.to_iso8601()
+  @mixed_catalog_published_at @test_now |> DateTime.add(-1, :minute) |> DateTime.to_iso8601()
+  @key_valid_until @test_now |> DateTime.add(2, :day) |> DateTime.to_iso8601()
 
   @fixture Path.expand("../../../../test/fixtures/frontend_release_catalog_v1.json", __DIR__)
   @corpus @fixture |> File.read!() |> Jason.decode!()
-  @publication_config [trust_records: @corpus["keys"], allowed_origins: [@artifact_origin]]
+  @keys Enum.map(@corpus["keys"], &Map.put(&1, "validUntil", @key_valid_until))
+  @publication_config [trust_records: @keys, allowed_origins: [@artifact_origin]]
   @publisher_config [token_sha256: :crypto.hash(:sha256, @publisher_token)]
 
   setup_all do
@@ -290,10 +295,10 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
       promotion_document(
         "promotion",
         4,
-        "2026-09-01T18:03:00Z",
+        @mixed_catalog_published_at,
         n,
         n_minus_1,
-        route_snapshot_digest("promotion", 4, "2026-09-01T18:03:00Z", n, n_minus_1),
+        route_snapshot_digest("promotion", 4, @mixed_catalog_published_at, n, n_minus_1),
         identity: %{
           "application" => %{"id" => "telemetry_decom", "version" => 2},
           "package" => %{"id" => "cadence.telemetry-applications", "version" => 1},
@@ -310,7 +315,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
     end)
 
     assert {:ok, %{source: :database, entries: entries}} =
-             CadenceWeb.ApplicationReleaseRegistry.snapshot(now: "2026-09-03T00:00:00Z")
+             CadenceWeb.ApplicationReleaseRegistry.snapshot(now: @test_now)
 
     assert [{{"telemetry_decom", 1, "packet_bindings", 1}, active_release}] = entries
     assert active_release.release_id == n_minus_1.release["releaseId"]
@@ -465,7 +470,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
 
       assert FrontendReleaseCatalog.verify_release(
                package.document_bytes,
-               @corpus["keys"],
+               @keys,
                allowed_origins: [@artifact_origin],
                now: "2026-09-01T19:00:00Z"
              )
@@ -1128,7 +1133,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
   end
 
   defp publication_config(extra_keys),
-    do: [trust_records: @corpus["keys"] ++ extra_keys, allowed_origins: [@artifact_origin]]
+    do: [trust_records: @keys ++ extra_keys, allowed_origins: [@artifact_origin]]
 
   defp alternate_release_document(package) do
     package.release
@@ -1147,7 +1152,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
       "publicKey" => Base.url_encode64(public_key, padding: false),
       "allowedRoles" => ["release"],
       "validFrom" => "2026-01-01T00:00:00Z",
-      "validUntil" => "2027-01-01T00:00:00Z",
+      "validUntil" => @key_valid_until,
       "revokedAt" => nil
     }
   end

@@ -11,18 +11,17 @@ import { contactOperation, contactPage } from "./contact-workflow.test-support";
 import { searchFixture } from "./contact-schedule.test-support";
 
 function rejectedPrograms(
-  remote: Extract<ContactSchedulePort, { protocol: "remote-query" }>,
-  pagePort: Extract<ContactSchedulePort, { protocol: "page-snapshot" }>,
+  service: ContactSchedulePort,
   operation: ContactOperation,
   page: ContactPage,
 ) {
   // @ts-expect-error A cancellation needs reviewed reservation evidence.
   const wrongInput: ScheduleRequest = ["cancel", { token: "opaque" }];
   void wrongInput;
-  // @ts-expect-error The remote protocol takes bare domain inputs.
-  void remote.execute("reserve", { sequence: 1, payload: { token: "opaque" } });
-  // @ts-expect-error The page protocol needs a recovery sequence.
-  void pagePort.execute("reserve", { token: "opaque" });
+  // @ts-expect-error Commands require an immutable operation identity.
+  void service.submit({ action: "reserve", input: { token: "opaque" } });
+  // @ts-expect-error Cancellation requires reviewed reservation evidence.
+  void service.submit({ operationId: "id", action: "cancel", input: { token: "opaque" } });
   // @ts-expect-error A completed booking cannot omit its receipt.
   const missingReceipt: ContactOperation = {
     sequence: 1,

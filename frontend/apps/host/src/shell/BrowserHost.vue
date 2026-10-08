@@ -236,6 +236,7 @@ watch(
       failure.value = errorMessage(error);
     }
   },
+  { deep: true },
 );
 const route = computed(() => committed.value?.route.meta.host);
 const context = computed(() => {

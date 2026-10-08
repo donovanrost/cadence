@@ -18,7 +18,10 @@ defmodule CadenceWeb.ApplicationActionInput do
            "surfaceVersion" => 1
          } = params
        ) do
-    if reserve?(params), do: capability_input(params), else: JSONBoundary.safe(params)
+    case JSONBoundary.safe(params) do
+      {:ok, _} = safe -> safe
+      _ -> if reserve?(params), do: capability_input(params), else: JSONBoundary.safe(params)
+    end
   end
 
   defp normalize(
@@ -90,15 +93,25 @@ defmodule CadenceWeb.ApplicationActionInput do
 
   defp capability_fields(params) do
     fields = Map.take(params, ~w(input params))
-    values = Map.values(fields)
 
-    case Enum.uniq(values) do
-      [%{"token" => token} = input]
-      when map_size(input) == 1 and is_binary(token) and byte_size(token) in 1..8192 ->
-        if String.valid?(token), do: {:ok, fields}, else: {:error, :string}
-
-      _ ->
-        {:error, :invalid_application_request}
-    end
+    with [input] <- fields |> Map.values() |> Enum.uniq(),
+         :ok <- capability_value(input),
+         do: {:ok, fields},
+         else: (_ -> {:error, :invalid_application_request})
   end
+
+  defp capability_value(%{"token" => token} = input)
+       when map_size(input) == 1 and is_binary(token) and byte_size(token) in 1..8192 do
+    if String.valid?(token), do: :ok, else: {:error, :string}
+  end
+
+  defp capability_value(
+         %{"contract_version" => 2, "operation_id" => id, "payload" => %{"token" => _} = payload} =
+           input
+       )
+       when map_size(input) == 3 do
+    with {:ok, ^id} <- Ecto.UUID.cast(id), do: capability_value(payload)
+  end
+
+  defp capability_value(_), do: {:error, :invalid_application_request}
 end

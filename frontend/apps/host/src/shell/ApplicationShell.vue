@@ -8,6 +8,7 @@ import {
 import OpsWorkspaceFrame from "../ops-workspace/features/frame/OpsWorkspaceFrame.vue";
 defineProps<{
   managedPage?: boolean;
+  connectionLabel?: string;
   variant: "auth" | "ops" | "sidebar" | "mission_sidebar" | "user_shell";
   context: unknown;
 }>();
@@ -22,7 +23,12 @@ defineProps<{
       <div id="application-content" class="contents"><slot /></div>
     </div>
   </div>
-  <OpsWorkspaceFrame v-else-if="variant === 'ops'" :context="context"><slot /></OpsWorkspaceFrame>
+  <OpsWorkspaceFrame
+    v-else-if="variant === 'ops'"
+    :context="context"
+    :connection-label="connectionLabel"
+    ><slot
+  /></OpsWorkspaceFrame>
   <div
     v-else-if="variant === 'sidebar' || variant === 'mission_sidebar'"
     class="drawer lg:drawer-open"

@@ -11,7 +11,7 @@ import { directoryFixture as fleetDirectoryFixture } from "../../../../modules/p
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createMemoryHistory } from "vue-router";
-import { defineComponent, h } from "vue";
+import { defineComponent, h, reactive, nextTick } from "vue";
 import type { LiveEventRef } from "live_vue";
 
 type PendingRequest = {
@@ -2287,4 +2287,13 @@ test("an unrecognized catalog kind is contained by the host", async () => {
   } finally {
     route.kind = kind;
   }
+});
+
+test("nested LiveVue patches pass through snapshot admission", async () => {
+  const state = reactive(snapshot("/missions", null));
+  wrapper = mount(BrowserHost, { props: { snapshot: state } });
+  await flushPromises();
+  state.context.organization.display_name = "Patched organization";
+  await nextTick();
+  expect(wrapper.text()).toContain("Patched organization");
 });

@@ -17,7 +17,7 @@ const contextFields = object({
   spacecraft: maybe(object({ spacecraft_id: string, display_name: string })),
   csrf_token: string,
 });
-function hostContext(value: unknown) {
+export function readHostContext(value: unknown) {
   if (!record(value) || value.version !== 1) return invalid();
   // Account, navigation, and Ops readers own their additional payloads.
   return { ...value, ...contextFields(value) };
@@ -46,7 +46,7 @@ const diagnostics = (value: unknown): DiagnosticsSnapshot => {
 };
 const snapshotFields = object({
   path: string,
-  context: hostContext,
+  context: readHostContext,
   error: maybe(string),
   diagnostics: optional(array(diagnostics)),
   application_management: featurePayload,

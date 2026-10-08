@@ -71,7 +71,7 @@ defmodule CadenceWeb.Assets.FederationBrowserSmokeSetup do
       csrf_token: "fixture-catalog-csrf",
       bridge_base_url: CadenceWeb.ApplicationHostCatalog.bridge_base_path(mission_route_context),
       manifest_url: fn path -> "https://cdn.example.com" <> path end,
-      now: "2026-09-02T00:03:00Z"
+      now: release_fixture.now
     ]
 
     assert {:error, :no_history} =

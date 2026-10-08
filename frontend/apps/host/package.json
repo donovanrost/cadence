@@ -30,6 +30,7 @@
     "@cadence/plugin-sdk": "workspace:*",
     "@cadence/ui": "workspace:*",
     "@module-federation/runtime": "catalog:",
+    "@tanstack/vue-query": "5.104.0",
     "live_vue": "file:../../../deps/live_vue",
     "phoenix": "file:../../../deps/phoenix",
     "phoenix_live_view": "file:../../../deps/phoenix_live_view",

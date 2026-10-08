@@ -31,6 +31,9 @@ defmodule CadenceWeb.Plugs.RequireAuthenticatedScope do
   defp requested_path(conn), do: conn.request_path <> "?" <> conn.query_string
 
   defp application_host_json_path?(request_path) do
-    String.starts_with?(request_path, "/api/cadence/application-host/")
+    String.starts_with?(request_path, [
+      "/api/cadence/application-host/",
+      "/api/cadence/contact-workspace/"
+    ])
   end
 end

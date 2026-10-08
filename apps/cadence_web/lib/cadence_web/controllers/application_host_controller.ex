@@ -373,14 +373,14 @@ defmodule CadenceWeb.ApplicationHostController do
   end
 
   defp fetch_route_context(conn, %Scope{} = current_scope, params) do
-    params = Map.merge(params, conn.path_params)
-
-    case Map.get(params, "mission_id") do
+    # Query filters may have resource-shaped names (for example spacecraft_id).
+    # Only path captures establish mission/spacecraft authority.
+    case Map.get(conn.path_params, "mission_id") do
       mission_id when is_binary(mission_id) ->
-        fetch_route_context(current_scope, params)
+        fetch_route_context(current_scope, conn.path_params)
 
       _missing ->
-        fetch_generic_route_context(current_scope, params)
+        fetch_generic_route_context(current_scope, Map.merge(params, conn.path_params))
     end
   end
 

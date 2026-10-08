@@ -26,8 +26,14 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
   @promotion_seed "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb"
   @origin "https://cdn.example.com"
   @now "2026-09-01T19:00:00Z"
+  # HTTP requests use the wall clock; keep their catalogs current for each test run.
+  @http_now DateTime.utc_now() |> DateTime.truncate(:second)
+  @http_published_at @http_now |> DateTime.add(-1, :minute) |> DateTime.to_iso8601()
+  @http_expires_at @http_now |> DateTime.add(1, :day) |> DateTime.to_iso8601()
+  @key_valid_until @http_now |> DateTime.add(2, :day) |> DateTime.to_iso8601()
+  @keys Enum.map(@corpus["keys"], &Map.put(&1, "validUntil", @key_valid_until))
   @host_catalog_suffix "/api/cadence/application-host/v1/missions"
-  @config [trust_records: @corpus["keys"], allowed_origins: [@origin]]
+  @config [trust_records: @keys, allowed_origins: [@origin]]
   @chunk_size 1_048_576
   @artifact_bytes %{
     "assets/app.js" => "app-bytes",
@@ -612,10 +618,13 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
         surface: %{"id" => "overview", "version" => 1}
       )
 
-    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
-    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
+    digest = snapshot_digest("initial", 1, @http_published_at, release, nil, @http_expires_at)
 
-    assert {:ok, %{status: 201}} = activate(document, "reader-package-mismatch-contributed-key")
+    document =
+      v2_document("initial", 1, @http_published_at, release, nil, digest, @http_expires_at)
+
+    assert {:ok, %{status: 201}} =
+             activate(document, "reader-package-mismatch-contributed-key", @http_now)
 
     assert {:error, :application_unavailable} =
              ApplicationHostCatalog.admit_application(
@@ -623,7 +632,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
                route_context,
                "comms_overview",
                nil,
-               now: @now
+               now: @http_now
              )
 
     scope_document = ApplicationHostCatalog.scope_document(scope, route_context)
@@ -724,9 +733,13 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     {_document, _payload, release} =
       admit_release!(@artifact_bytes, "reader-no-history-controller")
 
-    digest = snapshot_digest("initial", 1, "2026-09-01T18:00:00Z", release, nil)
-    document = v2_document("initial", 1, "2026-09-01T18:00:00Z", release, nil, digest)
-    assert {:ok, %{status: 201}} = activate(document, "reader-no-history-controller-key")
+    digest = snapshot_digest("initial", 1, @http_published_at, release, nil, @http_expires_at)
+
+    document =
+      v2_document("initial", 1, @http_published_at, release, nil, digest, @http_expires_at)
+
+    assert {:ok, %{status: 201}} =
+             activate(document, "reader-no-history-controller-key", @http_now)
 
     no_history_catalog_response = get(member_conn, catalog_path(mission.mission_id))
 
@@ -1351,9 +1364,9 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     end
   end
 
-  defp activate(document, key) do
+  defp activate(document, key, now \\ @now) do
     FrontendReleaseActivation.activate_catalog(document, key,
-      now: @now,
+      now: now,
       publication_config: @config,
       publisher_identity: "github-actions/frontend-release"
     )
@@ -1857,14 +1870,22 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     {document, payload, release}
   end
 
-  defp v2_document(transition, sequence, published_at, current, previous, snapshot_digest) do
+  defp v2_document(
+         transition,
+         sequence,
+         published_at,
+         current,
+         previous,
+         snapshot_digest,
+         expires_at \\ "2026-09-30T18:00:00Z"
+       ) do
     entry = %{"identity" => identity(current), "current" => release_envelope(current)}
     entry = if previous, do: Map.put(entry, "fallback", release_envelope(previous)), else: entry
 
     payload =
       canonical(%{
         "entries" => [entry],
-        "expiresAt" => "2026-09-30T18:00:00Z",
+        "expiresAt" => expires_at,
         "identityCount" => 1,
         "publishedAt" => published_at,
         "schema" => FrontendReleaseCatalog.catalog_v2_schema(),
@@ -1906,7 +1927,14 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
     |> canonical()
   end
 
-  defp snapshot_digest(transition, sequence, published_at, current, previous) do
+  defp snapshot_digest(
+         transition,
+         sequence,
+         published_at,
+         current,
+         previous,
+         expires_at \\ "2026-09-30T18:00:00Z"
+       ) do
     snapshot = %{
       "entries" => [
         %{
@@ -1915,7 +1943,7 @@ defmodule CadenceWeb.FrontendReleaseActivationTest do
           "previous" => if(previous, do: snapshot_release(previous), else: nil)
         }
       ],
-      "expiresAt" => "2026-09-30T18:00:00.000000Z",
+      "expiresAt" => normalize_timestamp(expires_at),
       "identityCount" => 1,
       "publishedAt" => normalize_timestamp(published_at),
       "schema" => "cadence.first-party-frontend-release-persisted-snapshot.v1",

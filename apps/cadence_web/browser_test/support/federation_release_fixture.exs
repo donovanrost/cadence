@@ -12,16 +12,21 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
   @release_seed "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
   @promotion_seed "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb"
   @source_revision "bb9990ef6ec667999842f4605404c4489f184f88"
-  @built_at "2026-09-01T16:00:00Z"
-  @n_minus_1_released_at "2026-09-01T17:00:00Z"
-  @n_released_at "2026-09-01T18:00:00Z"
-  @published_at "2026-09-01T19:00:00Z"
-  @promotion_published_at "2026-09-02T00:01:00Z"
-  @rollback_published_at "2026-09-02T00:02:00Z"
-  @stale_published_at "2026-09-01T18:00:00Z"
-  @stale_expires_at "2026-09-01T18:59:59Z"
-  @expires_at "2026-09-30T00:00:00Z"
-  @activation_now "2026-09-02T00:03:00Z"
+  # Browser requests use the wall clock. Keep the signed fixture's entire timeline
+  # relative to one instant so freshness checks remain exercised on future runs.
+  @fixture_now DateTime.utc_now() |> DateTime.truncate(:second)
+  @built_at @fixture_now |> DateTime.add(-8, :hour) |> DateTime.to_iso8601()
+  @n_minus_1_released_at @fixture_now |> DateTime.add(-7, :hour) |> DateTime.to_iso8601()
+  @n_released_at @fixture_now |> DateTime.add(-6, :hour) |> DateTime.to_iso8601()
+  @published_at @fixture_now |> DateTime.add(-5, :hour) |> DateTime.to_iso8601()
+  @promotion_published_at @fixture_now |> DateTime.add(-2, :minute) |> DateTime.to_iso8601()
+  @rollback_published_at @fixture_now |> DateTime.add(-1, :minute) |> DateTime.to_iso8601()
+  @stale_published_at @n_released_at
+  @stale_expires_at @fixture_now |> DateTime.add(-18_001) |> DateTime.to_iso8601()
+  @expires_at @fixture_now |> DateTime.add(1, :day) |> DateTime.to_iso8601()
+  @activation_now DateTime.to_iso8601(@fixture_now)
+  @key_valid_from @fixture_now |> DateTime.add(-1, :day) |> DateTime.to_iso8601()
+  @key_valid_until @fixture_now |> DateTime.add(2, :day) |> DateTime.to_iso8601()
   @activation_idempotency_key "federation-browser-active-generation-r1"
   @stale_activation_idempotency_key "federation-browser-stale-generation-r1"
   @promotion_idempotency_key "federation-browser-promotion-generation-r1"
@@ -35,12 +40,23 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
   @spec publication_config() :: keyword()
   def publication_config do
     corpus = @fixture |> File.read!() |> Jason.decode!()
-    [trust_records: corpus["keys"], allowed_origins: [@artifact_origin]]
+
+    keys =
+      Enum.map(
+        corpus["keys"],
+        &Map.merge(&1, %{
+          "validFrom" => @key_valid_from,
+          "validUntil" => @key_valid_until
+        })
+      )
+
+    [trust_records: keys, allowed_origins: [@artifact_origin]]
   end
 
   @spec prepare_and_activate!(binary(), keyword()) :: map()
   def prepare_and_activate!(app_root, opts \\ []) when is_binary(app_root) do
     sandbox_owner = Keyword.fetch!(opts, :sandbox_owner)
+    ops_surface = Keyword.get(opts, :ops_console_surface, "dashboard_directory")
     temp_root = temporary_root!()
 
     try do
@@ -121,7 +137,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
             node,
             "ops-console-n-minus-1",
             ops_console_build,
-            ops_console_metadata(:n_minus_1),
+            ops_console_metadata(:n_minus_1, ops_surface),
             temp_root
           ),
           package!(
@@ -149,7 +165,13 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
             mission_catalog_metadata(:n),
             temp_root
           ),
-          package!(node, "ops-console-n", ops_console_build, ops_console_metadata(:n), temp_root),
+          package!(
+            node,
+            "ops-console-n",
+            ops_console_build,
+            ops_console_metadata(:n, ops_surface),
+            temp_root
+          ),
           package!(
             node,
             "organization-admin-n",
@@ -220,6 +242,8 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
       lifecycle = start_lifecycle!(sandbox_owner, admitted)
 
       %{
+        now: @activation_now,
+        expires_at: @expires_at,
         temp_root: temp_root,
         packages: packages,
         admitted: admitted,
@@ -569,13 +593,14 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     )
   end
 
-  defp ops_console_metadata(slot) do
+  defp ops_console_metadata(slot, surface)
+       when surface in ["dashboard_directory", "contact_schedule"] do
     metadata(
       "ops_console",
       "cadence.ops_console",
-      "dashboard_directory",
-      "cadence.ops.dashboard_directory",
-      [],
+      surface,
+      "cadence.ops.#{surface}",
+      if(surface == "contact_schedule", do: ~w(validate search reserve cancel), else: []),
       "cadence_ops_console",
       "federation-browser-ops-console-#{slot_name(slot)}",
       released_at(slot)

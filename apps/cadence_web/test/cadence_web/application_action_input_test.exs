@@ -42,6 +42,26 @@ defmodule CadenceWeb.ApplicationActionInputTest do
              })
   end
 
+  test "version two capability admission preserves operation identity without widening other fields" do
+    input = %{
+      "contract_version" => 2,
+      "operation_id" => Ecto.UUID.generate(),
+      "payload" => %{"token" => String.duplicate("x", 4096)}
+    }
+
+    envelope = request("unused") |> Map.put("input", input)
+    assert {:ok, ^envelope} = ApplicationActionInput.safe(envelope)
+
+    for bad <- [
+          put_in(envelope, ["input", "operation_id"], "invalid"),
+          put_in(envelope, ["input", "payload", "token"], String.duplicate("x", 8193)),
+          put_in(envelope, ["input", "payload", "extra"], "value"),
+          put_in(envelope, ["input", "contract_version"], 3)
+        ] do
+      assert {:error, _} = ApplicationActionInput.safe(bad)
+    end
+  end
+
   defp request(token),
     do: %{
       "applicationKey" => "ops_console",

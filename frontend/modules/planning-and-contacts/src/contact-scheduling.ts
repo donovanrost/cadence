@@ -32,3 +32,14 @@ export {
   contactRecordContribution,
   reservationContribution,
 } from "./features/contact-scheduling/contact.contributions";
+
+export { createContactScheduleService } from "./features/contact-scheduling/schedule-service";
+export { admitContactRecord } from "./features/contact-scheduling/contact-record";
+export { contactNavigationKey } from "./features/contact-scheduling/contact-navigation";
+export type {
+  ContactScheduleService,
+  ScheduleCommand,
+  ScheduleOperation,
+  ScheduleProjection,
+  ScheduleWireRequest,
+} from "./features/contact-scheduling/schedule-service";

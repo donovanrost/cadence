@@ -4,6 +4,7 @@ defmodule CadenceWeb.OpsContactSchedulingPage do
   alias Cadence.Applications.OpsConsole.Actions.ContactWorkflow, as: Workflow
   alias Cadence.Applications.OpsConsole.Actions.NativePlanningInput
   alias Cadence.Auth.Policy
+  alias Cadence.Contacts.ScheduleOperations
   alias Cadence.Missions
   alias Cadence.Reads.ApplicationSurfaces.Planning.{ContactDetail, ContactRecord, ContactSchedule}
   alias Phoenix.Component
@@ -77,6 +78,28 @@ defmodule CadenceWeb.OpsContactSchedulingPage do
   def read(socket) do
     {page, session} = snapshot(socket.assigns.current_scope, socket.assigns.ops_contact_session)
     {page, Component.assign(socket, :ops_contact_session, session)}
+  end
+
+  def action(socket, event, %{"contract_version" => 2} = request) do
+    session = socket.assigns.ops_contact_session
+    {_, _, mission, _} = session.identity
+
+    result =
+      if session.kind == "schedule" do
+        ScheduleOperations.request(
+          socket.assigns.current_scope,
+          mission,
+          event,
+          request
+        )
+      else
+        {:error, :unsupported_action}
+      end
+
+    case result do
+      {:ok, result} -> {result, socket}
+      _ -> {%{status: "rejected"}, socket}
+    end
   end
 
   def action(socket, event, %{"sequence" => sequence, "payload" => input} = request)

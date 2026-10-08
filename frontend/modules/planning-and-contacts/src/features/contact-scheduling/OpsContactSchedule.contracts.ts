@@ -1,5 +1,5 @@
 import type { Snapshot } from "@cadence/plugin-sdk/admission";
-import type { PageSnapshotProtocol, RemoteQueryProtocol } from "../../shared/workflow-protocol";
+import type { ContactScheduleService } from "./schedule-service";
 import type { InjectionKey } from "vue";
 export const schedulePageKeys = [
   "spacecraft_page",
@@ -8,6 +8,7 @@ export const schedulePageKeys = [
   "scheduled_page",
   "realized_page",
   "reservations_page",
+  "operations_page",
 ] as const;
 export type SchedulePageKey = (typeof schedulePageKeys)[number];
 export type SchedulePage<T> = Snapshot<{ page: number; more: boolean; entries: T[] }>;
@@ -149,13 +150,7 @@ export type ScheduleRequest = {
 export type SchedulePageRequest = {
   [A in ScheduleAction]: [action: A, input: { sequence: number; payload: ScheduleInputs[A] }];
 }[ScheduleAction];
-export type ContactSchedulePort = {
-  context: ScheduleContext;
-  refresh: () => Promise<unknown>;
-} & (
-  | (RemoteQueryProtocol & { execute: (...request: ScheduleRequest) => Promise<unknown> })
-  | (PageSnapshotProtocol & { execute: (...request: SchedulePageRequest) => Promise<unknown> })
-);
+export type ContactSchedulePort = ContactScheduleService;
 export const CONTACT_SCHEDULE_PORT: InjectionKey<ContactSchedulePort> = Symbol(
   "cadence.contact-schedule-port",
 );

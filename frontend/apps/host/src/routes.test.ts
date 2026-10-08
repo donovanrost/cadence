@@ -469,6 +469,7 @@ test("contact scheduling captures spacecraft selection and independent ledger pa
     "scheduled_page",
     "realized_page",
     "reservations_page",
+    "operations_page",
   ]);
 });
 

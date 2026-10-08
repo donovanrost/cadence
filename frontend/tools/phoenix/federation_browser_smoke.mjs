@@ -4869,7 +4869,8 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
             shell.querySelectorAll(${JSON.stringify(coreContent)}).length === 1 &&
             document.querySelectorAll('#cadence-federation-root').length === 0 &&
             header?.dataset.pageHeadingSource === 'application' && title?.textContent.trim() &&
-            document.querySelectorAll('h1').length === 1 && getComputedStyle(title).fontSize === '24px';
+            document.querySelectorAll('h1').length === 1 &&
+            getComputedStyle(title).fontSize === ${JSON.stringify(path === `${root}/ops/dashboards` ? "20px" : "24px")};
         })()`,
           `persistent core host navigation to ${path}`,
           { signal },
@@ -5172,6 +5173,14 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   );
   diagnostics.assertLiveViewWebSocket(origin, { generation: authenticatedGeneration });
   reportProgress("authenticated LiveView websocket asserted");
+  // The shell and socket can be ready while the lazy landing page is still loading.
+  // Finish this visit before navigating away so its module request has a terminal event.
+  await waitForExpression(
+    client,
+    "Boolean(document.querySelector('#organization-home-page'))",
+    "authenticated organization landing page",
+    { signal },
+  );
 
   /** @type {import("./browser-diagnostics.ts").RepresentativeConfig[]} */
   const representativeConfigs = [

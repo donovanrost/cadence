@@ -88,6 +88,7 @@ defmodule Cadence.Jobs.BackgroundJobRow do
     ]
   end
 
+  defp job_type("contact_schedule_operation"), do: :contact_schedule_operation
   defp job_type("replay_telemetry_scope"), do: :replay_telemetry_scope
   defp job_type("telemetry_latest_value_rebuild"), do: :telemetry_latest_value_rebuild
   defp job_type("derived_telemetry_evaluation"), do: :derived_telemetry_evaluation

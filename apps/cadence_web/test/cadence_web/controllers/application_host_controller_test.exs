@@ -12,6 +12,23 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
   @catalog_suffix "/api/cadence/application-host/v1/missions"
 
+  test "resource-shaped query selectors cannot change the authorized path scope" do
+    {conn, _org, mission, _scope} = signed_in_scope_and_mission()
+
+    html =
+      conn
+      |> get(
+        "/missions/#{mission.mission_id}/applications/ops_console/dashboard_activity/federated?spacecraft_id=filter-only"
+      )
+      |> html_response(200)
+
+    root = html |> LazyHTML.from_fragment() |> LazyHTML.query("#cadence-federation-root")
+    assert LazyHTML.attribute(root, "data-mission-id") == [mission.mission_id]
+    assert LazyHTML.attribute(root, "data-spacecraft-id") == []
+    assert [encoded] = LazyHTML.attribute(root, "data-query-params")
+    assert Jason.decode!(encoded) == %{"spacecraft_id" => "filter-only"}
+  end
+
   test "generic federation shells preserve literal URL selectors in the bounded host payload" do
     {conn, _org, mission, _scope} = signed_in_scope_and_mission()
 

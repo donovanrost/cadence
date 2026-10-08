@@ -885,7 +885,8 @@
       "findings_page",
       "scheduled_page",
       "realized_page",
-      "reservations_page"
+      "reservations_page",
+      "operations_page"
     ],
     "queryAliases": {},
     "viewClass": "contents",

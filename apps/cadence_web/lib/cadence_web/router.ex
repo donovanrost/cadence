@@ -88,6 +88,14 @@ defmodule CadenceWeb.Router do
     delete("/admin-mode", AdminModeController, :delete)
     get("/no-organization", NoOrganizationController, :show)
 
+    get("/missions/:mission_id/ops/contact-workspace", ContactWorkspaceController, :show)
+
+    get(
+      "/missions/:mission_id/ops/contact-workspace/records/:contact_id",
+      ContactWorkspaceController,
+      :show
+    )
+
     get(
       "/missions/:mission_id/catalog/artifacts/:artifact_id/download",
       CatalogArtifactDownloadController,
@@ -714,6 +722,14 @@ defmodule CadenceWeb.Router do
     put("/objects/:digest", FrontendReleasePublisherController, :upload)
     post("/releases", FrontendReleasePublisherController, :create)
     post("/promotions", FrontendReleasePublisherController, :promote)
+  end
+
+  scope "/api/cadence/contact-workspace/v1", CadenceWeb do
+    pipe_through([:browser, :require_authenticated_user])
+
+    get("/missions/:mission_id/schedule", ContactWorkspaceController, :schedule)
+    get("/missions/:mission_id/records/:contact_id", ContactWorkspaceController, :record)
+    post("/missions/:mission_id/actions/:action", ContactWorkspaceController, :execute)
   end
 
   scope "/api/cadence/application-host/v1", CadenceWeb do

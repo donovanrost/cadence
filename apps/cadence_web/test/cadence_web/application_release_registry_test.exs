@@ -166,7 +166,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
 
     on_exit(fn -> FederationReleaseFixture.cleanup!(fixture) end)
 
-    accepted = ApplicationReleaseRegistry.snapshot(now: "2026-09-02T00:00:00Z")
+    accepted = ApplicationReleaseRegistry.snapshot(now: fixture.now)
     assert {:ok, %{source: :database, entries: entries}} = accepted
     assert length(entries) == 6
 
@@ -184,7 +184,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
       """).rows
 
     assert {:error, {:integrity_failure, :active_catalog_expired}} =
-             ApplicationReleaseRegistry.snapshot(now: "2026-10-01T00:00:00Z")
+             ApplicationReleaseRegistry.snapshot(now: fixture.expires_at)
 
     assert Repo.query!("""
            SELECT cutover_epoch, cutover_at, legacy_catalog_publication_id

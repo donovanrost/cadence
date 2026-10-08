@@ -96,7 +96,7 @@ defmodule CadenceWeb.MixProject do
       "test.browser.federation": [
         "cmd --cd ../../frontend corepack pnpm@11.22.0 run test:browser:contract",
         "cmd node ../../frontend/tools/phoenix/run_federation_publication_build.mjs assets.deploy",
-        "cmd env CADENCE_BROWSER_PROPS_DIFF=true MIX_ENV=test mix test --include browser_smoke --only browser_smoke browser_test/cadence_web/assets/federation_browser_smoke_test.exs browser_test/cadence_web/assets/admin_mode_browser_smoke_test.exs browser_test/cadence_web/assets/command_workspace_browser_test.exs browser_test/cadence_web/assets/spacecraft_configuration_browser_test.exs browser_test/cadence_web/assets/settings_browser_test.exs"
+        "cmd env CADENCE_BROWSER_PROPS_DIFF=true MIX_ENV=test mix test --include browser_smoke --only browser_smoke browser_test/cadence_web/assets/federation_browser_smoke_test.exs browser_test/cadence_web/assets/admin_mode_browser_smoke_test.exs browser_test/cadence_web/assets/command_workspace_browser_test.exs browser_test/cadence_web/assets/spacecraft_configuration_browser_test.exs browser_test/cadence_web/assets/settings_browser_test.exs test/cadence_web/ops_contact_scheduling_page_test.exs"
       ]
     ]
   end

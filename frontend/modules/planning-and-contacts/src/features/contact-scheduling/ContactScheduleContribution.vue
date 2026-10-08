@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
-import type { ContactSchedulePort } from "./OpsContactSchedule.contracts";
+import { createPageScheduleService } from "./schedule-page-adapter";
+import { onBeforeUnmount } from "vue";
 import type { ContactPage } from "./contact-workflow";
 import OpsContactSchedule from "./OpsContactSchedule.vue";
 defineOptions({ inheritAttrs: false });
@@ -9,17 +10,14 @@ const props = defineProps<{
   port: OpsPagePort;
   readPort: OpsPageReadPort;
 }>();
-const contactPort: ContactSchedulePort = {
-  context: { ...props.page.model.context },
-  protocol: "page-snapshot",
-  actorId: props.page.actor_id,
-  guardNavigation: (guard) => props.port.guardNavigation?.(guard) ?? (() => {}),
-  execute: (action, input) => props.port.execute(action, input),
-  refresh: () => props.readPort.read(),
-};
+let active = true;
+onBeforeUnmount(() => {
+  active = false;
+});
+const contactPort = createPageScheduleService(props.page, props.port, props.readPort, () => active);
 </script>
 <template>
   <section id="contact-schedule-contribution" class="min-w-0">
-    <OpsContactSchedule :schedule="page" :port="contactPort" />
+    <OpsContactSchedule :schedule="page.model" :port="contactPort" />
   </section>
 </template>

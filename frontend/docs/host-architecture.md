@@ -1,8 +1,15 @@
 # Frontend and web ownership
 
+The [current architecture inventory and triage](frontend-inventory-2026-10-06.md) records
+route ownership, real-time coverage, refresh controls, operation lifetimes, and migration priorities.
+
 The browser application lives in the frontend workspace. Phoenix authenticates requests,
 loads authorized resource context, transports LiveView updates, and exposes the REST and
 application-host APIs. Cadence core registers and executes domain application queries and actions.
+
+The isolated [contact workspace experiment](contact-workspace-experiment.md) uses controller
+document routes, Vue Router, and TanStack Query without LiveView. The BrowserHost transport
+and history integration described below applies to the existing routes, not that experiment.
 
 | Owner                    | Responsibility                                                                                                          |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
@@ -163,3 +170,9 @@ are coordinated compiled contributions under ADR-024.
 
 The initial owners are Cadence Governance and Commanding defaults. New owners can
 reuse the shared UI without putting their domain values or effects in the host.
+
+## Contact scheduling reference
+
+[Contact scheduling](contact-scheduling-architecture.md) uses a single typed application service
+through native and federated adapters. Accepted booking and cancellation operations belong to
+the durable job queue and operation journal, independent of the page or LiveView lifetime.

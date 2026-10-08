@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import ContactLink from "./ContactLink.vue";
+import { useContactQueryNavigation } from "./contact-navigation";
 import { computed, inject } from "vue";
 import CadencePanel from "@cadence/ui/CadencePanel.vue";
 import {
@@ -9,16 +11,23 @@ import {
 import { cancellable, scheduleHref, schedulePath } from "./contact-schedule";
 import { useContactSchedule } from "./contact-schedule-state";
 const props = defineProps<OpsContactScheduleProps>();
+const submitQuery = useContactQueryNavigation();
 const {
   schedule,
   draft,
-  pending,
+  reading,
+  searching,
+  operations,
+  operationPage,
+  cancelling,
+  retry,
   notice,
   uncertain,
   result,
   receipt,
   cancellation,
   connected,
+  operable,
   refresh,
   search,
   reservable,
@@ -83,10 +92,10 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
           id="contact-schedule-refresh"
           type="button"
           class="rounded border border-base-300 px-4 py-2 text-sm"
-          :disabled="pending || !connected"
+          :disabled="reading || !connected"
           @click="refresh"
         >
-          {{ pending ? "Working…" : "Refresh ledgers" }}
+          {{ reading ? "Refreshing…" : "Refresh ledgers" }}
         </button>
       </div>
       <p
@@ -98,15 +107,14 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
         {{ notice }}
       </p>
       <p v-if="uncertain" id="contact-schedule-uncertain" role="alert" class="text-sm text-warning">
-        An earlier provider operation needs reconciliation. Refreshing is read-only and does not
-        retry that operation.
+        A provider operation is pending or unconfirmed. Refresh to check its recorded outcome.
       </p>
       <p v-if="receipt" id="contact-schedule-receipt" class="break-all text-sm">
         Recorded {{ label(receipt.lifecycleState) }} ·
-        <a
+        <ContactLink
           :href="`${schedulePath(schedule.context)}/${encodeURIComponent(receipt.providerReservationId)}`"
           class="text-primary"
-          >{{ receipt.providerReservationId }}</a
+          >{{ receipt.providerReservationId }}</ContactLink
         >
         · Revision {{ receipt.providerRevision }}
       </p>
@@ -119,6 +127,7 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
       <template #header><h2 class="text-lg font-semibold">Choose spacecraft</h2></template>
       <form
         id="contact-spacecraft-filter"
+        @submit="submitQuery"
         method="get"
         :action="schedulePath(schedule.context)"
         class="flex flex-wrap items-end gap-3"
@@ -143,14 +152,14 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
       </p>
       <ul class="mt-3 grid gap-2 sm:grid-cols-2">
         <li v-for="craft in schedule.spacecraft.entries" :key="craft.id">
-          <a
+          <ContactLink
             :href="
               scheduleHref(schedule, { spacecraft_id: craft.id, routes_page: 1, findings_page: 1 })
             "
             :aria-current="craft.id === schedule.query.spacecraft_id ? 'true' : undefined"
             class="block break-all rounded border border-base-300 p-3 text-sm text-primary"
             >{{ craft.name
-            }}<span class="block text-xs text-base-content/60">{{ craft.id }}</span></a
+            }}<span class="block text-xs text-base-content/60">{{ craft.id }}</span></ContactLink
           >
         </li>
       </ul>
@@ -177,7 +186,7 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
         @submit.prevent="search"
       >
         <fieldset
-          :disabled="pending || uncertain || !connected || !schedule.permissions.operate"
+          :disabled="!operable || !schedule.permissions.operate"
           class="grid gap-4 md:grid-cols-2"
         >
           <label for="contact-route" class="text-sm md:col-span-2"
@@ -207,6 +216,7 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
           /></label>
           <button
             id="contact-search-submit"
+            :aria-busy="searching"
             type="submit"
             class="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-content md:col-span-2"
           >
@@ -246,10 +256,10 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
           }}</span>
         </li>
       </ul>
-      <a
+      <ContactLink
         :href="`/missions/${encodeURIComponent(schedule.context.mission_id)}/comms`"
         class="mt-3 inline-block text-sm text-primary"
-        >Review communications setup</a
+        >Review communications setup</ContactLink
       >
     </CadencePanel>
     <CadencePanel
@@ -313,20 +323,20 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
         ><template #header><h2 class="text-lg font-semibold">Scheduled contacts</h2></template>
         <ul class="divide-y divide-base-300 text-sm">
           <li v-for="row in schedule.scheduled.entries" :key="row.id" class="space-y-1 py-3">
-            <a
+            <ContactLink
               :href="`${schedulePath(schedule.context)}/records/${encodeURIComponent(row.id)}`"
               class="break-all text-primary"
-              >{{ row.id }}</a
+              >{{ row.id }}</ContactLink
             >
             <p>{{ label(row.lifecycle_state) }} · Revision {{ row.revision }}</p>
             <p class="text-xs text-base-content/60">
               {{ row.starts_at ?? "Unrecorded start" }} – {{ row.ends_at ?? "Open-ended" }}
             </p>
-            <a
+            <ContactLink
               v-if="row.realized_id"
               :href="`${schedulePath(schedule.context)}/records/${encodeURIComponent(row.realized_id)}`"
               class="text-primary"
-              >Realized contact</a
+              >Realized contact</ContactLink
             >
           </li>
         </ul>
@@ -341,10 +351,10 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
         ><template #header><h2 class="text-lg font-semibold">Realized contacts</h2></template>
         <ul class="divide-y divide-base-300 text-sm">
           <li v-for="row in schedule.realized.entries" :key="row.id" class="space-y-1 py-3">
-            <a
+            <ContactLink
               :href="`${schedulePath(schedule.context)}/records/${encodeURIComponent(row.id)}`"
               class="break-all text-primary"
-              >{{ row.id }}</a
+              >{{ row.id }}</ContactLink
             >
             <p>{{ label(row.lifecycle_state) }} · {{ row.clock_mode }}</p>
             <p class="text-xs text-base-content/60">
@@ -365,15 +375,15 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
       <ul class="divide-y divide-base-300 text-sm">
         <li v-for="row in schedule.reservations.entries" :key="row.id" class="space-y-2 py-4">
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <a
+            <ContactLink
               :href="`${schedulePath(schedule.context)}/${encodeURIComponent(row.id)}`"
               class="break-all text-primary"
-              >{{ row.id }}</a
+              >{{ row.id }}</ContactLink
             ><button
               v-if="schedule.permissions.cancel && cancellable(row)"
               :id="`cancel-review-${encodeURIComponent(row.id)}`"
               type="button"
-              :disabled="pending || uncertain || !connected"
+              :disabled="cancelling(row.id) || !operable"
               class="rounded border border-base-300 px-3 py-2"
               @click="reviewCancel(row)"
             >
@@ -392,11 +402,11 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
           >
             Provider outcome needs reconciliation. Review the reservation evidence.
           </p>
-          <a
+          <ContactLink
             v-if="row.scheduled_id"
             :href="`${schedulePath(schedule.context)}/records/${encodeURIComponent(row.scheduled_id)}`"
             class="text-primary"
-            >Scheduled contact</a
+            >Scheduled contact</ContactLink
           >
         </li>
       </ul>
@@ -423,7 +433,7 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
           <button
             id="contact-cancel-confirm"
             type="button"
-            :disabled="pending || uncertain || !connected"
+            :disabled="cancelling(cancellation.id) || !operable"
             class="rounded border border-warning px-4 py-2"
             @click="cancel"
           >
@@ -431,7 +441,7 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
           ><button
             id="contact-cancel-dismiss"
             type="button"
-            :disabled="pending"
+            :disabled="cancelling(cancellation.id)"
             @click="cancellation = null"
           >
             Keep reservation
@@ -439,6 +449,71 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
         </div>
       </div>
     </CadencePanel>
+    <section
+      id="contact-schedule-operations"
+      class="space-y-3 rounded border border-base-300 p-4"
+      aria-label="Scheduling operations"
+    >
+      <h2 class="text-lg font-semibold">Scheduling operations</h2>
+      <p class="text-sm text-base-content/60">
+        Recorded operations remain available when you return to this mission.
+      </p>
+      <ul class="space-y-3 text-sm">
+        <li
+          v-for="entry in operations"
+          :key="
+            entry.kind === 'recorded' ? entry.operation.operation_id : entry.command.operationId
+          "
+          :data-operation-id="
+            entry.kind === 'recorded' ? entry.operation.operation_id : entry.command.operationId
+          "
+          class="break-all"
+        >
+          <template v-if="entry.kind === 'recorded'">
+            {{ label(entry.operation.action) }} · {{ label(entry.operation.status) }} ·
+            {{ entry.operation.operation_id }}
+            <ContactLink
+              :href="`${schedulePath(schedule.context)}/${encodeURIComponent(entry.operation.reservation_id)}`"
+              class="ml-2 text-primary"
+              >Reservation</ContactLink
+            >
+          </template>
+          <template v-else>
+            {{ label(entry.command.action) }} ·
+            {{
+              entry.kind === "submitting"
+                ? "Sending"
+                : entry.kind === "rejected"
+                  ? "Not accepted"
+                  : "Acceptance unconfirmed"
+            }}
+            · {{ entry.command.operationId }}
+            <button
+              v-if="entry.kind === 'unknown'"
+              type="button"
+              class="ml-2 text-primary"
+              @click="retry(entry)"
+            >
+              Retry acceptance
+            </button>
+          </template>
+        </li>
+      </ul>
+      <div v-if="operationPage" class="flex gap-4 text-sm text-primary">
+        <ContactLink
+          v-if="operationPage.page > 1"
+          id="operations_page-previous"
+          :href="scheduleHref(schedule, { operations_page: operationPage.page - 1 })"
+          >Previous operations</ContactLink
+        >
+        <ContactLink
+          v-if="operationPage.more"
+          id="operations_page-next"
+          :href="scheduleHref(schedule, { operations_page: operationPage.page + 1 })"
+          >More operations</ContactLink
+        >
+      </div>
+    </section>
     <nav
       aria-label="Contact scheduling pages"
       class="grid gap-3 rounded border border-base-300 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3"
@@ -446,16 +521,16 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
       <div v-for="page in pages" :key="page.key" class="space-y-2">
         <p class="font-medium">{{ page.title }} · Page {{ page.data.page }}</p>
         <div class="flex gap-4 text-primary">
-          <a
+          <ContactLink
             v-if="page.data.page > 1"
             :id="`${page.key}-previous`"
             :href="scheduleHref(schedule, { [page.key]: page.data.page - 1 })"
-            >Previous</a
-          ><a
+            >Previous</ContactLink
+          ><ContactLink
             v-if="page.data.more"
             :id="`${page.key}-next`"
             :href="scheduleHref(schedule, { [page.key]: page.data.page + 1 })"
-            >Next</a
+            >Next</ContactLink
           >
         </div>
       </div>
@@ -467,7 +542,7 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
     <button
       id="contact-schedule-retry"
       type="button"
-      :disabled="pending || !connected"
+      :disabled="reading || !connected"
       @click="refresh"
     >
       Refresh evidence

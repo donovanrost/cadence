@@ -13,6 +13,20 @@ defmodule Cadence.Jobs do
   @spec enqueue(Job.job_type(), binary(), binary(), map()) :: {:ok, Job.t()} | {:error, term()}
   def enqueue(job_type, mission_id, run_id, payload)
       when is_atom(job_type) and is_binary(mission_id) and is_binary(run_id) and is_map(payload) do
+    with {:ok, job} <- insert_job(job_type, mission_id, run_id, payload) do
+      Available.publish(job)
+      {:ok, job}
+    end
+  end
+
+  @doc "Stages a job with its domain intent; publish Jobs.Available only after the outer transaction commits."
+  def enqueue_in_transaction(job_type, mission_id, run_id, payload) do
+    if Repo.in_transaction?(),
+      do: insert_job(job_type, mission_id, run_id, payload),
+      else: raise(ArgumentError, "job staging requires an enclosing transaction")
+  end
+
+  defp insert_job(job_type, mission_id, run_id, payload) do
     job =
       Job.new(%{
         mission_id: mission_id,
@@ -23,9 +37,7 @@ defmodule Cadence.Jobs do
 
     case Repo.insert(BackgroundJobRow.changeset(job)) do
       {:ok, %BackgroundJobRow{} = background_job_row} ->
-        job = BackgroundJobRow.to_domain(background_job_row)
-        Available.publish(job)
-        {:ok, job}
+        {:ok, BackgroundJobRow.to_domain(background_job_row)}
 
       {:error, %Changeset{} = changeset} ->
         {:error, changeset}

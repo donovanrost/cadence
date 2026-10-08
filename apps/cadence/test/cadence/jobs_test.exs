@@ -16,6 +16,33 @@ defmodule Cadence.JobsTest do
     [:cadence, :jobs, :dispatcher, :stale_timer]
   ]
 
+  test "transactional job staging requires a transaction and rolls back with its owner" do
+    assert_raise ArgumentError, "job staging requires an enclosing transaction", fn ->
+      Cadence.Jobs.enqueue_in_transaction(
+        :contact_schedule_operation,
+        "mission-alpha",
+        "intent",
+        %{}
+      )
+    end
+
+    assert {:error, :intent_rejected} =
+             Cadence.Repo.transaction(fn ->
+               assert {:ok, _} =
+                        Cadence.Jobs.enqueue_in_transaction(
+                          :contact_schedule_operation,
+                          "mission-alpha",
+                          "intent",
+                          %{}
+                        )
+
+               Cadence.Repo.rollback(:intent_rejected)
+             end)
+
+    assert {:error, :job_not_found} =
+             Cadence.Jobs.fetch_job_for_run(:contact_schedule_operation, "intent")
+  end
+
   test "requeues running jobs for recovery" do
     assert {:ok, job} =
              Cadence.Jobs.enqueue(

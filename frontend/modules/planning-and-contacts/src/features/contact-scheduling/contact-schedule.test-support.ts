@@ -6,7 +6,22 @@ import type {
   ScheduleSearchResult,
   ScheduleReceipt,
 } from "./OpsContactSchedule.contracts";
-export const scheduleFixture = (): MutableFixture<ContactSchedule> => ({
+export const scheduleFixture = (): MutableFixture<ContactSchedule> & {
+  workflow: {
+    contract_version: 2;
+    actor_id: string;
+    operations: {
+      page: number;
+      more: boolean;
+      entries: import("./schedule-service").ScheduleOperation[];
+    };
+  };
+} => ({
+  workflow: {
+    contract_version: 2,
+    actor_id: "operator-one",
+    operations: { page: 1, more: false, entries: [] },
+  },
   permissions: { operate: true, cancel: true },
   contract_version: 1,
   context: { organization_id: "org-one", mission_id: "mission-one" },
@@ -19,6 +34,7 @@ export const scheduleFixture = (): MutableFixture<ContactSchedule> => ({
     scheduled_page: 1,
     realized_page: 1,
     reservations_page: 1,
+    operations_page: 1,
   },
   initial_window: { starts_at: "2099-09-09T12:00:00Z", ends_at: "2099-09-09T13:00:00Z" },
   spacecraft: { page: 1, more: false, entries: [{ id: "craft-one", name: "Test craft" }] },
