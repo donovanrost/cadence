@@ -1,117 +1,163 @@
 defmodule CadenceWeb.OpsDirectoryPage do
-  @moduledoc "Host placement and page-instance action admission for the dashboard directory."
+  @moduledoc """
+  Host lifetime of the dashboard directory.
+
+  The page is the mission's dashboards for one person, filtered by the URL.
+  Actions are sequenced like the dashboard page: each effect carries the next
+  sequence number and is answered with the re-read page. The directory follows
+  the mission live: any dashboard created, saved, archived or restored by
+  anyone re-reads the page (bursts coalesce into one refresh).
+  """
   alias Cadence.Dashboards.DirectoryActions
+  alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Reads.Dashboards.Directory
   alias Phoenix.Component
+  alias Phoenix.LiveView
 
   @route "/missions/:mission_id/ops/dashboards"
   @id "dashboards.directory"
+  @filters ~w(query tags starred archived sort page lifecycle tag)
+  @events ~w(star archive restore duplicate)
+  @coalesce_ms 250
+
+  def id, do: @id
+  def events, do: @events
 
   def prepare(socket, %{route: @route, params: params}, path) do
     scope = socket.assigns.current_scope
-    mission = params["mission_id"]
-    identity = {scope.organization_id, scope.user.user_id, mission, path}
+    identity = {scope.organization_id, scope.user.user_id, params["mission_id"], path}
 
     session =
       case socket.assigns[:ops_directory_session] do
         %{identity: ^identity} = previous ->
-          previous
+          %{previous | filters: Map.take(params, @filters)}
 
         _ ->
           %{
             identity: identity,
             token: Ecto.UUID.generate(),
             sequence: 0,
-            phase: :editing,
-            model: nil
+            filters: Map.take(params, @filters),
+            pending: nil
           }
       end
 
-    result = Directory.load(scope, mission, Map.take(params, ~w(query lifecycle tag sort page)))
-    {session, snapshot} = snapshot(session, result)
-    Component.assign(socket, ops_directory_session: session, ops_page: snapshot)
+    socket
+    |> follow(session)
+    |> Component.assign(ops_directory_session: session, ops_page: page(scope, session))
   end
 
-  def prepare(socket, _info, _path),
-    do: Component.assign(socket, ops_directory_session: nil, ops_page: nil)
+  def prepare(socket, _info, _path) do
+    socket
+    |> unfollow()
+    |> Component.assign(ops_directory_session: nil)
+  end
 
-  def matches?(socket, %{"id" => @id, "path" => path, "token" => token}) do
+  def matches_action?(socket, %{"id" => @id, "event" => event, "input" => input} = params)
+      when map_size(params) == 5 and is_map(input) and event in @events,
+      do: matches?(socket, params)
+
+  def matches_action?(_socket, _params), do: false
+
+  defp matches?(socket, %{"path" => path, "token" => token}) do
     scope = socket.assigns.current_scope
 
     case socket.assigns[:ops_directory_session] do
       %{identity: {org, user, mission, ^path}, token: ^token} ->
         path == socket.assigns.host_path and org == scope.organization_id and
-          user == scope.user.user_id and
-          (is_nil(scope.mission_id) or scope.mission_id == mission)
+          user == scope.user.user_id and scope.mission_id in [nil, mission]
 
       _ ->
         false
     end
   end
 
-  def matches?(_socket, _request), do: false
-
-  def action(socket, event, input) when event in ~w(star restore) and is_map(input) do
+  def action(socket, event, %{"sequence" => sequence, "command" => command} = input)
+      when map_size(input) == 2 and is_integer(sequence) and is_map(command) do
+    scope = socket.assigns.current_scope
     session = socket.assigns.ops_directory_session
+    {_, _, mission, _} = session.identity
 
-    with true <-
-           session.phase == :editing and is_integer(input["sequence"]) and
-             input["sequence"] == session.sequence + 1 and session.sequence < 1_000_000,
-         {:ok, command} <- admit(session.model, event, input) do
-      session = %{session | sequence: input["sequence"], phase: :submitted}
-      socket = Component.assign(socket, :ops_directory_session, session)
-      {_, _, mission, _} = session.identity
-      result = effect(socket.assigns.current_scope, mission, event, command)
-      phase = if result.status == "ok", do: :editing, else: :submitted
-      session = %{session | phase: phase}
+    {status, code, result, session} =
+      if sequence == session.sequence + 1 do
+        session = %{session | sequence: sequence}
+        {status, code, result} = effect(scope, mission, event, command)
+        {status, code, result, session}
+      else
+        {"rejected", nil, nil, session}
+      end
 
-      {Map.put(result, :sequence, session.sequence),
-       Component.assign(socket, :ops_directory_session, session)}
-    else
-      _ -> rejected(socket)
-    end
+    page = page(scope, session)
+    socket = Component.assign(socket, ops_directory_session: session, ops_page: page)
+    {%{status: status, code: code, page: page, result: result}, socket}
   end
 
-  def action(socket, _event, _input), do: rejected(socket)
-
-  defp admit(
-         %{rows: rows} = model,
-         event,
-         %{"dashboard_id" => id, "expected_version" => version, "sequence" => _} = input
-       )
-       when is_integer(version) do
-    case Enum.find(rows, &(&1.id == id)) do
-      %{version: ^version} = row -> admit_command(model.author, row, event, input)
-      _ -> {:error, :stale}
-    end
-  end
-
-  defp admit(_model, _event, _input), do: {:error, :invalid_request}
-
-  defp admit_command(_author, %{lifecycle: "active"}, "star", %{"starred" => starred} = input)
-       when map_size(input) == 4 and is_boolean(starred),
-       do: {:ok, Map.take(input, ~w(dashboard_id starred))}
-
-  defp admit_command(true, %{lifecycle: "archived"}, "restore", input) when map_size(input) == 3,
-    do: {:ok, Map.take(input, ~w(dashboard_id expected_version))}
-
-  defp admit_command(_author, _row, _event, _input), do: {:error, :invalid_request}
+  def action(socket, _event, _input),
+    do: {%{status: "rejected", code: nil, result: nil}, socket}
 
   defp effect(scope, mission, event, command) do
     case DirectoryActions.execute(scope, mission, event, command) do
-      {:ok, data} -> %{status: "ok", data: data}
-      _ -> %{status: "unknown"}
+      {:ok, result} -> {"ok", nil, result}
+      {:error, :invalid_name} -> {"invalid", "invalid_name", nil}
+      {:error, reason} when reason in [:forbidden, :unauthorized] -> {"forbidden", nil, nil}
+      _ -> {"unknown", nil, nil}
     end
   rescue
-    _ -> %{status: "unknown"}
-  catch
-    _, _ -> %{status: "unknown"}
+    _ -> {"unknown", nil, nil}
   end
 
-  defp rejected(socket),
-    do: {%{status: "rejected", sequence: socket.assigns.ops_directory_session.sequence}, socket}
+  @doc "Another session changed this mission's dashboards; coalesce into one refresh."
+  def changed(socket, org, mission) do
+    case socket.assigns[:ops_directory_session] do
+      %{identity: {^org, _, ^mission, _}, pending: nil, token: token} = session ->
+        timer = Process.send_after(self(), {:dashboard_directory_flush, token}, @coalesce_ms)
+        Component.assign(socket, :ops_directory_session, %{session | pending: timer})
 
-  defp snapshot(session, result) do
+      _ ->
+        socket
+    end
+  end
+
+  @doc "A coalesced change. Returns `{:refresh, socket}` while the page is current."
+  def flush(socket, token) do
+    case socket.assigns[:ops_directory_session] do
+      %{token: ^token} = session ->
+        {:refresh, Component.assign(socket, :ops_directory_session, %{session | pending: nil})}
+
+      _ ->
+        {:ignore, socket}
+    end
+  end
+
+  defp follow(socket, %{identity: {org, _, mission, _}}) do
+    following = {org, mission}
+
+    cond do
+      not LiveView.connected?(socket) ->
+        socket
+
+      socket.assigns[:ops_directory_following] == following ->
+        socket
+
+      true ->
+        socket = unfollow(socket)
+        :ok = ScopedReadUpdates.subscribe(:dashboards_changed, org, mission)
+        Component.assign(socket, :ops_directory_following, following)
+    end
+  end
+
+  defp unfollow(socket) do
+    case socket.assigns[:ops_directory_following] do
+      {org, mission} ->
+        ScopedReadUpdates.unsubscribe(:dashboards_changed, org, mission)
+        Component.assign(socket, :ops_directory_following, nil)
+
+      _ ->
+        socket
+    end
+  end
+
+  defp page(scope, session) do
     {org, _, mission, _} = session.identity
 
     envelope = %{
@@ -122,16 +168,12 @@ defmodule CadenceWeb.OpsDirectoryPage do
       context: %{organizationId: org, missionId: mission}
     }
 
-    case result do
+    case Directory.load(scope, mission, session.filters) do
       {:ok, model} ->
-        {%{session | model: model},
-         Map.merge(envelope, %{
-           status: "ready",
-           data: %{model: model, sequence: session.sequence, phase: Atom.to_string(session.phase)}
-         })}
+        Map.merge(envelope, %{status: "ready", data: %{model: model, sequence: session.sequence}})
 
       _ ->
-        {session, Map.put(envelope, :status, "unavailable")}
+        Map.put(envelope, :status, "unavailable")
     end
   end
 end

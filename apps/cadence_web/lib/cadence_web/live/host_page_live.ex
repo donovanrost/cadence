@@ -786,14 +786,14 @@ defmodule CadenceWeb.HostPageLive do
 
   def handle_event(
         "host:ops-page",
-        %{"path" => path, "event" => event, "input" => input} = params,
+        %{"path" => path, "id" => "dashboards.directory", "event" => event, "input" => input} =
+          params,
         socket
-      )
-      when event in ["star", "restore"] do
-    with true <- CadenceWeb.OpsDirectoryPage.matches?(socket, params),
+      ) do
+    with true <- CadenceWeb.OpsDirectoryPage.matches_action?(socket, params),
          {:ok, info} <- resolve_path(path),
          {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsDirectoryPage.matches?(socket, params) do
+         true <- CadenceWeb.OpsDirectoryPage.matches_action?(socket, params) do
       {result, socket} = CadenceWeb.OpsDirectoryPage.action(socket, event, input)
       {:reply, %{ok: true, snapshot: result}, socket}
     else
@@ -1174,6 +1174,12 @@ defmodule CadenceWeb.HostPageLive do
 
   def handle_info({:dashboard_runtime_invalidated, event}, socket),
     do: {:noreply, DashboardUpdates.invalidated(socket, event)}
+
+  def handle_info({:dashboards_changed, org, mission}, socket),
+    do: {:noreply, CadenceWeb.OpsDirectoryPage.changed(socket, org, mission)}
+
+  def handle_info({:dashboard_directory_flush, token}, socket),
+    do: dashboard_refresh(CadenceWeb.OpsDirectoryPage.flush(socket, token))
 
   def handle_info({:command_workspace_flush, token}, socket),
     do: {:noreply, CadenceWeb.OpsCommandWorkspacePage.flush(socket, token)}

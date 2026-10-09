@@ -26,6 +26,7 @@ defmodule Cadence.Dashboards.DocumentStore do
 
   alias Cadence.Dashboards.DocumentStore.VersionRow, as: DashboardVersionRow
   alias Cadence.Missions
+  alias Cadence.Platform.ScopedReadUpdates
 
   alias Cadence.Repo
 
@@ -996,6 +997,10 @@ defmodule Cadence.Dashboards.DocumentStore do
   end
 
   defp invalidate_dashboard_runtime(%Document{} = document, lifecycle_action, opts \\ []) do
+    # Directory readers follow the mission; skipped inside an outer transaction,
+    # whose owner announces the committed change.
+    ScopedReadUpdates.publish(:dashboards_changed, document.organization_id, document.mission_id)
+
     RuntimeInvalidation.dashboard_version_changed(%{
       organization_id: document.organization_id,
       mission_id: document.mission_id,

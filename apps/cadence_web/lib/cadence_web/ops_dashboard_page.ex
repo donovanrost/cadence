@@ -9,11 +9,13 @@ defmodule CadenceWeb.OpsDashboardPage do
   and edit-conflict notices are in `CadenceWeb.OpsDashboardPage.Updates`;
   action effects are in `CadenceWeb.OpsDashboardPage.Actions`.
   """
+  alias Cadence.Dashboards
   alias Cadence.Dashboards.{AuthoringDraft, Document}
   alias Cadence.Reads.Dashboards.{DashboardPage, Editor, Versions}
   alias CadenceWeb.OpsDashboardPage.{Actions, Updates}
   alias CadenceWeb.OpsWorkspaceURL
   alias Phoenix.Component
+  alias Phoenix.LiveView
 
   @view_route "/missions/:mission_id/ops/dashboards/:dashboard_id"
   @edit_route "/missions/:mission_id/ops/dashboards/:dashboard_id/edit"
@@ -31,16 +33,17 @@ defmodule CadenceWeb.OpsDashboardPage do
 
     mode = if route == @edit_route, do: :edit, else: :view
 
-    session =
+    {session, opened?} =
       case socket.assigns[:ops_dashboard_session] do
-        %{identity: ^identity} = previous -> previous
-        _ -> new_session(identity, mode, params)
+        %{identity: ^identity} = previous -> {previous, false}
+        _ -> {new_session(identity, mode, params), true}
       end
 
     session =
       if mode == :edit and is_nil(session.draft), do: Actions.open(scope, session), else: session
 
     {page, session} = page(scope, session)
+    if opened?, do: record_view(socket, scope, session, page)
 
     socket
     |> Component.assign(ops_dashboard_session: session, ops_page: page)
@@ -52,6 +55,16 @@ defmodule CadenceWeb.OpsDashboardPage do
     |> Updates.stop()
     |> Component.assign(:ops_dashboard_session, nil)
   end
+
+  # Opening a dashboard (not a live refresh) feeds the directory's "Recently viewed".
+  defp record_view(socket, scope, %{identity: {org, user, mission, dashboard, _}}, %{
+         status: "ready"
+       }) do
+    if LiveView.connected?(socket) and scope.user.user_id == user,
+      do: Dashboards.record_dashboard_view(org, mission, user, dashboard)
+  end
+
+  defp record_view(_socket, _scope, _session, _page), do: nil
 
   defp new_session(identity, mode, params) do
     %{

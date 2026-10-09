@@ -1,4 +1,8 @@
-import { fixtureRows, fixtureString } from "../../../../../test-support/json-fixture.ts";
+import {
+  fixtureRecord,
+  fixtureRows,
+  fixtureString,
+} from "../../../../../test-support/json-fixture.ts";
 import assert from "node:assert/strict";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,11 +25,11 @@ try {
     await server.ssrLoadModule("/src/directory.ts")
   );
   for (const raw of fixtureRows(process.argv[2])) {
-    const props = directoryContribution.read(
-      { model: raw, sequence: 0, phase: "editing" },
-      { organizationId: "producer-test", missionId: fixtureString(raw.mission_id) },
-    );
-    const model = props.state.model;
+    const model = fixtureRecord(raw.model);
+    const props = directoryContribution.read(raw, {
+      organizationId: "producer-test",
+      missionId: fixtureString(model.mission_id),
+    });
     // oxlint-disable-next-line typescript/no-unsafe-argument -- vue-tsc checks the SFC constructor at this registration or render boundary.
     const app = createSSRApp(directoryContribution.component, {
       ...props,
@@ -45,22 +49,26 @@ try {
     try {
       window.document.body.innerHTML = html;
       assert.ok(window.document.getElementById("dashboard-directory-feature"));
-      assert.ok(window.document.getElementById("directory_query"));
-      for (const row of model.rows) {
-        const card = window.document.getElementById("dashboard-" + row.id);
-        assert.ok(card);
-        assert.equal(card.getAttribute("data-dashboard-directory-starred"), String(row.starred));
-        const open = window.document.getElementById("open-" + row.id);
-        if (row.lifecycle === "active")
+      const read = props.page.model;
+      if (read.total === 0 && read.filters.query === "" && !read.filters.archived) {
+        assert.ok(window.document.getElementById("dashboard-directory-first-run"));
+        continue;
+      }
+      assert.ok(window.document.getElementById("dashboard-directory-search"));
+      for (const row of read.rows) {
+        const item = window.document.getElementById("dashboard-" + row.id);
+        assert.ok(item);
+        assert.equal(item.getAttribute("data-starred"), String(row.starred));
+        const link = item.querySelector("a");
+        if (row.archived) assert.equal(link, null);
+        else
           assert.equal(
-            open?.getAttribute("href"),
+            link?.getAttribute("href"),
             "/missions/" +
-              encodeURIComponent(model.mission_id) +
+              encodeURIComponent(read.mission_id) +
               "/ops/dashboards/" +
-              encodeURIComponent(row.id) +
-              (row.published_version === null && model.author ? "/edit" : ""),
+              encodeURIComponent(row.id),
           );
-        else assert.equal(open, null);
       }
     } finally {
       await window.happyDOM.close();

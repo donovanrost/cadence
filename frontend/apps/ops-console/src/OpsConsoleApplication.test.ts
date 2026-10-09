@@ -44,9 +44,16 @@ const dashboardResponse = {
     component: "OpsDashboardDirectory",
     props: {
       model: {
-        version: 1,
+        version: 2,
         context: { organization_id: "org-1", mission_id: "mission-1" },
-        filters: { query: "Flight", lifecycle: "archived", tag: "all", sort: "name", page: 2 },
+        filters: {
+          query: "Flight",
+          tags: ["thermal"],
+          starred: false,
+          archived: true,
+          sort: "name",
+          page: 2,
+        },
       },
     },
   },
@@ -692,7 +699,7 @@ describe("Ops Console federated application", () => {
     });
     await flushPromises();
     expect(wrapper.get("#dashboard-directory-destination-open").attributes("href")).toBe(
-      "/missions/mission-1/ops/dashboards?query=Flight&lifecycle=archived&tag=all&sort=name&page=2",
+      "/missions/mission-1/ops/dashboards?query=Flight&tags=thermal&archived=true&sort=name&page=2",
     );
     expect(wrapper.findAll("form")).toHaveLength(0);
     await wrapper.setProps({ context: { ...context, missionId: "mission-2" } });
@@ -982,10 +989,13 @@ describe("Ops Console federated application", () => {
   it("publishes exact deep-route subject and query contracts", () => {
     expect(routeQueryContracts.dashboard_directory.queryParams).toEqual([
       "query",
-      "lifecycle",
-      "tag",
+      "tags",
+      "starred",
+      "archived",
       "sort",
       "page",
+      "lifecycle",
+      "tag",
     ]);
     expect(routeQueryContracts.dashboard_new.queryParams).toEqual(["mode", "source_dashboard_id"]);
     expect(routeQueryContracts.dashboard_show.subjectParam).toBe("dashboard_id");

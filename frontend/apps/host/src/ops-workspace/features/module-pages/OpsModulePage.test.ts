@@ -219,13 +219,13 @@ test("binds action to the admitted page token and contains transport failure", a
       navigate: vi.fn(),
     },
   });
-  await app.get("#star-dashboard-1").trigger("click");
+  await app.get("#dashboard-dashboard-1 [aria-label='Star Pass Overview']").trigger("click");
   await flushPromises();
   expect(execute).toHaveBeenCalledWith({
     id: "dashboards.directory",
     token,
     event: "star",
-    input: { dashboard_id: "dashboard-1", expected_version: 3, sequence: 1, starred: false },
+    input: { sequence: 1, command: { dashboard_id: "dashboard-1", starred: false } },
   });
-  expect(app.get("#star-dashboard-1").attributes("disabled")).toBeDefined();
+  expect(app.get("#dashboard-directory-notice").text()).toContain("could not be confirmed");
 });

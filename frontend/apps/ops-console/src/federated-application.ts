@@ -295,7 +295,9 @@ const routeSurfaces = [
 ] as const;
 
 export const routeQueryContracts = {
-  dashboard_directory: { queryParams: ["query", "lifecycle", "tag", "sort", "page"] },
+  dashboard_directory: {
+    queryParams: ["query", "tags", "starred", "archived", "sort", "page", "lifecycle", "tag"],
+  },
   dashboard_new: { queryParams: ["mode", "source_dashboard_id"] },
   dashboard_show: {
     subjectParam: "dashboard_id",

@@ -679,7 +679,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
       {:ok, model} ->
         envelope("OpsDashboardDirectory", %{
           "model" => %{
-            "version" => 1,
+            "version" => 2,
             "context" => %{
               "organization_id" => scope.organization_id,
               "mission_id" => mission.mission_id

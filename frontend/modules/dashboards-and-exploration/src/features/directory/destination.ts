@@ -1,5 +1,6 @@
 import { identity, pathIdentity } from "../../shared/legacy-destination";
-import { directoryHref } from "./presentation";
+import { directorySorts } from "./contracts";
+import { directoryHref } from "./href";
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -14,12 +15,14 @@ function text(value: unknown): value is string {
   );
 }
 
+const flag = (value: unknown): value is boolean => typeof value === "boolean";
+
 export function directoryDestination(model: unknown, organization: unknown, mission: unknown) {
   if (
     !identity(organization) ||
     !pathIdentity(mission) ||
     !record(model) ||
-    model.version !== 1 ||
+    model.version !== 2 ||
     !record(model.context) ||
     model.context.organization_id !== organization ||
     model.context.mission_id !== mission ||
@@ -27,12 +30,16 @@ export function directoryDestination(model: unknown, organization: unknown, miss
   )
     return null;
 
-  const { query, lifecycle, tag, sort, page } = model.filters;
+  const { query, tags, starred, archived, sort, page } = model.filters;
+  const chosenSort = directorySorts.find((option) => option === sort);
   if (
     !text(query) ||
-    !text(tag) ||
-    (lifecycle !== "active" && lifecycle !== "archived" && lifecycle !== "all") ||
-    (sort !== "updated" && sort !== "name" && sort !== "widgets") ||
+    !Array.isArray(tags) ||
+    tags.length > 10 ||
+    !tags.every(text) ||
+    !flag(starred) ||
+    !flag(archived) ||
+    chosenSort === undefined ||
     typeof page !== "number" ||
     !Number.isSafeInteger(page) ||
     page < 1 ||
@@ -40,5 +47,5 @@ export function directoryDestination(model: unknown, organization: unknown, miss
   )
     return null;
 
-  return directoryHref(mission, { query, lifecycle, tag, sort }, page);
+  return directoryHref(mission, { query, tags, starred, archived, sort: chosenSort }, page);
 }

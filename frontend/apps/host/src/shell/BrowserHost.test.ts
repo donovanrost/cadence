@@ -618,7 +618,7 @@ function setupSnapshot() {
   };
   return state;
 }
-test("dashboard directory uses the Ops port and preserves the workspace through an uncertain effect", async () => {
+test("dashboard directory uses the Ops port and keeps the workspace through an unconfirmed effect", async () => {
   const state = {
     ...snapshot("/missions/mission-1/ops/dashboards", "mission-1"),
     ops_page: {
@@ -637,7 +637,7 @@ test("dashboard directory uses the Ops port and preserves the workspace through 
   await flushHostUpdates();
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   const rail = view().get("#ops-nav-rail").element;
-  await view().get("#restore-dashboard-2").trigger("click");
+  await view().get("[aria-label='Star Power Bus']").trigger("click");
   expect(transport.requests[0]).toEqual(
     containing({
       event: "host:ops-page",
@@ -645,24 +645,16 @@ test("dashboard directory uses the Ops port and preserves the workspace through 
         id: state.ops_page.id,
         token: state.ops_page.token,
         path: state.path,
-        event: "restore",
-        input: { dashboard_id: "dashboard-2", expected_version: 2, sequence: 1 },
+        event: "star",
+        input: { sequence: 1, command: { dashboard_id: "dashboard-2", starred: true } },
       },
     }),
   );
-  await reply(0, { status: "unknown", sequence: 1 });
-  await view().get("#dashboard-directory-refresh").trigger("click");
-  expect(required(transport.requests[1]).event).toBe("host:context");
-  await reply(1, {
-    ...state,
-    ops_page: {
-      ...state.ops_page,
-      data: { ...state.ops_page.data, sequence: 1, phase: "submitted" },
-    },
-  });
+  await reply(0, { status: "unknown" });
+  expect(view().get("#dashboard-directory-notice").text()).toContain("could not be confirmed");
   expect(view().get("#ops-nav-rail").element).toBe(rail);
-  expect(view().get("#restore-dashboard-2").attributes("disabled")).toBeDefined();
-  expect(transport.requests).toHaveLength(2);
+  expect(view().get("#dashboard-dashboard-2").attributes("data-starred")).toBe("false");
+  expect(transport.requests).toHaveLength(1);
 });
 test("the dashboard viewer binds the path resource and keeps the Ops frame through live refresh and failure", async () => {
   const path = "/missions/mission-1/ops/dashboards/dashboard-1";

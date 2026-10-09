@@ -1,171 +1,131 @@
-import { fixtureRecordAt } from "../../../../../test-support/json-fixture";
-import { required } from "../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { mount, flushPromises } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import DashboardDirectory from "./DashboardDirectory.vue";
 import { directoryContribution } from "./contribution";
-import { directoryFixture } from "./fixtures.test-support";
-let wrapper: Pick<ReturnType<typeof mount>, "unmount" | "get" | "find" | "setProps"> | undefined;
+import type { DirectoryPage } from "./contracts";
+import { directoryFixture, row } from "./fixtures.test-support";
+import { directoryHref } from "./href";
+
+const context = { organizationId: "org-1", missionId: "mission-1" };
+let wrapper: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   wrapper?.unmount();
   vi.useRealTimers();
   document.body.innerHTML = "";
 });
-function render(
-  execute = vi.fn(async (): Promise<unknown> => ({
-    status: "ok",
-    sequence: 1,
-    data: { dashboard_id: "dashboard-1", starred: false },
-  })),
-) {
-  const state = directoryFixture(),
-    navigate = vi.fn((_: string) => {}),
-    refresh = vi.fn(async () => {});
+
+function envelope(page: DirectoryPage) {
+  return { status: "ready", data: page };
+}
+
+function render(page = directoryFixture(), execute = vi.fn(async (): Promise<unknown> => null)) {
+  const navigate = vi.fn((_: string) => {});
   wrapper = mount(DashboardDirectory, {
     attachTo: document.body,
-    props: { state, port: { execute, navigate }, refresh },
+    props: { page, context, port: { execute, navigate }, refresh: async () => {} },
   });
-  return { state, navigate, execute, refresh, app: wrapper };
+  return { app: wrapper, execute, navigate };
 }
-test("validates context, lifecycle, pagination, row identities and supported DTO versions", () => {
-  const context = { organizationId: "org-1", missionId: "mission-1" };
-  expect(directoryContribution.read(directoryFixture(), context)).toHaveProperty("state");
-  for (const change of [
-    (s: unknown) => {
-      fixtureRecordAt(s, "model").version = 2;
-    },
-    (s: unknown) => {
-      fixtureRecordAt(s, "model").mission_id = "foreign";
-    },
-    (s: unknown) => {
-      fixtureRecordAt(s, "model", "rows", 1).id = fixtureRecordAt(s, "model", "rows", 0).id;
-    },
-    (s: unknown) => {
-      fixtureRecordAt(s, "model", "rows", 0).lifecycle = "arbitrary";
-    },
-    (s: unknown) => {
-      fixtureRecordAt(s, "model").total = 51;
-    },
-    (s: unknown) => {
-      fixtureRecordAt(s, "model", "rows", 0).version = 1.5;
-    },
-    (s: unknown) => {
-      fixtureRecordAt(s).sequence = -1;
-    },
-    (s: unknown) => {
-      fixtureRecordAt(s).phase = "complete";
-    },
-  ]) {
-    const state = directoryFixture();
-    change(state);
-    expect(() => directoryContribution.read(state, context)).toThrow();
+
+test("reads only the current mission's version 2 directory", () => {
+  expect(directoryContribution.read(directoryFixture(), context).page.model.rows).toHaveLength(2);
+  const broken: ((page: DirectoryPage & Record<string, unknown>) => void)[] = [
+    (p) => Object.assign(p.model, { version: 1 }),
+    (p) => Object.assign(p.model, { mission_id: "foreign" }),
+    (p) => Object.assign(p.model, { total: 51 }),
+    (p) => Object.assign(p.model.filters, { sort: "widgets" }),
+    (p) => Object.assign(p.model.rows[1] ?? {}, { id: "dashboard-1" }),
+    (p) => Object.assign(p.model.rows[0] ?? {}, { updated_at: "yesterday" }),
+    (p) => Object.assign(p, { phase: "editing" }),
+    (p) => Object.assign(p, { sequence: -1 }),
+  ];
+  for (const change of broken) {
+    const page = directoryFixture();
+    change(page);
+    expect(() => directoryContribution.read(page, context)).toThrow();
   }
-});
-test("keeps real dashboard links, personal stars, author controls and URL filters", async () => {
-  vi.useFakeTimers();
-  const { app, navigate } = render();
-  expect(app.get("#open-dashboard-1").attributes("href")).toBe(
-    "/missions/mission-1/ops/dashboards/dashboard-1",
-  );
-  expect(app.get("#star-dashboard-1").attributes("aria-pressed")).toBe("true");
-  expect(app.find("#open-dashboard-2").exists()).toBe(false);
-  expect(app.get("#restore-dashboard-2").attributes("disabled")).toBeUndefined();
-  await app.get("#directory_query").setValue("thermal & flight");
-  await vi.advanceTimersByTimeAsync(250);
-  expect(navigate).toHaveBeenCalledOnce();
-  const url = new URL(required(navigate.mock.calls[0])[0], "http://localhost");
-  expect(url.searchParams.get("query")).toBe("thermal & flight");
-  expect(url.searchParams.get("page")).toBe("1");
-});
-test("sends observed version and ordered effects, then refreshes without replacing native filters", async () => {
-  const { app, execute, refresh, state } = render();
-  const input = app.get("#directory_query").element;
-  refresh.mockImplementation(async () => {
-    await app.setProps({ state: { ...state, sequence: 1 } });
-  });
-  await app.get("#star-dashboard-1").trigger("click");
-  await flushPromises();
-  expect(execute).toHaveBeenCalledWith("star", {
-    dashboard_id: "dashboard-1",
-    expected_version: 3,
-    sequence: 1,
-    starred: false,
-  });
-  expect(refresh).toHaveBeenCalledOnce();
-  expect(app.get("#directory_query").element).toBe(input);
-  expect(app.get("#star-dashboard-1").attributes("disabled")).toBeUndefined();
-});
-test("uncertain effects stay locked across a host refresh and read-only recovery", async () => {
-  const execute = vi.fn(async (): Promise<unknown> => ({ status: "unknown", sequence: 1 }));
-  const { app, refresh, state } = render(execute);
-  await app.get("#restore-dashboard-2").trigger("click");
-  await flushPromises();
-  expect(execute).toHaveBeenCalledWith("restore", {
-    dashboard_id: "dashboard-2",
-    expected_version: 2,
-    sequence: 1,
-  });
-  await app.setProps({ state: { ...state, sequence: 1, phase: "submitted" } });
-  await app.get("#dashboard-directory-refresh").trigger("click");
-  await flushPromises();
-  expect(refresh).toHaveBeenCalledOnce();
-  expect(app.get("#restore-dashboard-2").attributes("disabled")).toBeDefined();
-  expect(app.get("#star-dashboard-1").attributes("disabled")).toBeDefined();
-  expect(execute).toHaveBeenCalledOnce();
-});
-test("pagination links preserve filters and malformed confirmations cannot unlock actions", async () => {
-  const execute = vi.fn(async (): Promise<unknown> => ({
-    status: "ok",
-    sequence: 1,
-    data: { dashboard_id: "dashboard-1", starred: true },
-  }));
-  const { app, state } = render(execute);
-  await app.get("#star-dashboard-1").trigger("click");
-  await flushPromises();
-  expect(app.get("#star-dashboard-1").attributes("disabled")).toBeDefined();
-  const paged = directoryFixture();
-  paged.model.total = 51;
-  paged.model.pages = 2;
-  paged.model.filters.page = 2;
-  paged.model.filters.query = "flight";
-  paged.model.rows = [required(state.model.rows[0])];
-  await app.setProps({ state: paged });
-  const previous = new URL(
-    required(app.get("#dashboard-directory-previous").attributes("href")),
-    "http://localhost",
-  );
-  expect(previous.searchParams.get("page")).toBe("1");
-  expect(previous.searchParams.get("query")).toBe("flight");
-  expect(app.find("#dashboard-directory-next").exists()).toBe(false);
-});
-test("known rejection permits correction and uses the server sequence", async () => {
-  const execute = vi.fn(async (): Promise<unknown> => ({ status: "rejected", sequence: 0 }));
-  const { app } = render(execute);
-  await app.get("#star-dashboard-1").trigger("click");
-  await flushPromises();
-  await app.get("#star-dashboard-1").trigger("click");
-  await flushPromises();
-  expect(execute.mock.calls[1]).toEqual([
-    "star",
-    { dashboard_id: "dashboard-1", expected_version: 3, sequence: 1, starred: false },
-  ]);
+  expect(() =>
+    directoryContribution.read(directoryFixture(), { ...context, resourceId: "x" }),
+  ).toThrow();
 });
 
-test("authors open unpublished drafts in the editor and publication restores the viewer link", async () => {
-  const { app, state } = render();
-  const draft = structuredClone(state);
-  required(draft.model.rows[0]).published_version = null;
-  await app.setProps({ state: draft });
-  expect(app.get("#open-dashboard-1").attributes("href")).toBe(
-    "/missions/mission-1/ops/dashboards/dashboard-1/edit",
-  );
-  expect(app.get("#dashboard-dashboard-1").text()).toContain("Unpublished");
-  await app.setProps({ state: { ...draft, model: { ...draft.model, author: false } } });
-  expect(app.get("#open-dashboard-1").attributes("href")).toBe(
+test("lists dashboards with shortcuts, links names and filters by a row's tag", async () => {
+  const { app, navigate } = render();
+  const list = app.get("[aria-label=Dashboards]");
+  expect(list.findAll("li")).toHaveLength(2);
+  expect(list.get("li a").attributes("href")).toBe(
     "/missions/mission-1/ops/dashboards/dashboard-1",
   );
-  await app.setProps({ state });
-  expect(app.get("#open-dashboard-1").attributes("href")).toBe(
-    "/missions/mission-1/ops/dashboards/dashboard-1",
+  expect(list.text()).toContain("Dana Rost");
+  expect(app.get("#dashboard-directory-shortcuts").text()).toContain("Pass Overview");
+  await list.get("button[title='Filter by eps']").trigger("click");
+  expect(navigate).toHaveBeenCalledWith(directoryHref("mission-1", { tags: ["eps"] }));
+});
+
+test("search is debounced into the URL; filtered views hide the shortcuts", async () => {
+  vi.useFakeTimers();
+  const filtered = directoryFixture();
+  filtered.model.filters.query = "power";
+  const { app, navigate } = render(filtered);
+  expect(app.find("#dashboard-directory-shortcuts").exists()).toBe(false);
+  await app.get("#dashboard-directory-search").setValue("pass");
+  expect(navigate).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(300);
+  expect(navigate).toHaveBeenCalledWith("/missions/mission-1/ops/dashboards?query=pass");
+});
+
+test("star is a sequenced effect that adopts the confirmed page", async () => {
+  const confirmed = directoryFixture();
+  confirmed.sequence = 1;
+  confirmed.model.rows = confirmed.model.rows.map((r) => ({ ...r, starred: true }));
+  const execute = vi.fn(async (): Promise<unknown> => ({
+    status: "ok",
+    page: envelope(confirmed),
+    result: { dashboard_id: "dashboard-2" },
+  }));
+  const { app } = render(directoryFixture(), execute);
+  await app.get("[aria-label='Star Power Bus']").trigger("click");
+  await flushPromises();
+  expect(execute).toHaveBeenCalledWith("star", {
+    sequence: 1,
+    command: { dashboard_id: "dashboard-2", starred: true },
+  });
+  expect(app.get("#dashboard-dashboard-2").attributes("data-starred")).toBe("true");
+});
+
+test("an unconfirmed effect is reported and leaves the page as it was", async () => {
+  const { app } = render(
+    directoryFixture(),
+    vi.fn(async (): Promise<unknown> => ({ status: "unknown" })),
   );
+  await app.get("[aria-label='Star Power Bus']").trigger("click");
+  await flushPromises();
+  expect(app.get("#dashboard-directory-notice").text()).toContain("could not be confirmed");
+  expect(app.get("#dashboard-dashboard-2").attributes("data-starred")).toBe("false");
+});
+
+test("someone else's change to the same view is highlighted; viewers get no authoring", async () => {
+  const { app } = render();
+  const next = directoryFixture();
+  next.model.rows = [row("dashboard-3", { name: "Conjunction Watch" }), ...next.model.rows];
+  next.model.total = 3;
+  await app.setProps({ page: next });
+  expect(app.get("#dashboard-dashboard-3").classes()).toContain("bg-primary/10");
+  expect(app.get("#dashboard-dashboard-1").classes()).not.toContain("bg-primary/10");
+
+  const viewer = directoryFixture();
+  viewer.model.author = false;
+  wrapper?.unmount();
+  const second = render(viewer).app;
+  expect(second.find("#dashboard-directory-new").exists()).toBe(false);
+  expect(second.find("[aria-label^='Actions for']").exists()).toBe(false);
+});
+
+test("a mission without dashboards offers creation and archived dashboards", () => {
+  const empty = directoryFixture();
+  Object.assign(empty.model, { rows: [], total: 0, available_tags: [] });
+  empty.model.shortcuts = { starred: [], recent: [] };
+  const { app } = render(empty);
+  expect(app.get("#dashboard-directory-first-run").text()).toContain("No dashboards yet");
+  expect(app.find("[aria-label=Dashboards]").exists()).toBe(false);
 });

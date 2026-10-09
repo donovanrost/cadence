@@ -651,7 +651,7 @@
     "path": "/missions/:mission_id/ops/dashboards",
     "scope": "mission",
     "mountId": "ops-dashboard-directory-component",
-    "queryKeys": ["query", "lifecycle", "tag", "sort", "page"],
+    "queryKeys": ["query", "tags", "starred", "archived", "sort", "page", "lifecycle", "tag"],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {

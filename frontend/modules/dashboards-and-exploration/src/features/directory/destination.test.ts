@@ -9,16 +9,28 @@ import { expect, test } from "vite-plus/test";
 import DirectoryDestination from "./DirectoryDestination.vue";
 
 const fixture = () => ({
-  version: 1,
+  version: 2,
   context: { organization_id: "org-1", mission_id: "mission-1" },
   filters: {
     query: "Flight /?&+",
-    lifecycle: "all",
-    tag: "thermal & power",
-    sort: "widgets",
+    tags: ["thermal & power", "eps"],
+    starred: true,
+    archived: true,
+    sort: "name",
     page: 2,
   },
 });
+const params = (filters: Record<string, unknown>) =>
+  Object.fromEntries(
+    Object.entries({
+      query: filters.query || undefined,
+      tags: Array.isArray(filters.tags) && filters.tags.length ? filters.tags.join(",") : undefined,
+      starred: filters.starred ? "true" : undefined,
+      archived: filters.archived ? "true" : undefined,
+      sort: filters.sort === "updated" ? undefined : filters.sort,
+      page: filters.page === 1 ? undefined : String(filters.page),
+    }).filter(([, value]) => value !== undefined),
+  );
 const props = (model: unknown = fixture()) => ({
   model,
   organizationId: "org-1",
@@ -29,7 +41,7 @@ test("all filters survive encoded navigation to the canonical directory", () => 
   const wrapper = mount(DirectoryDestination, { props: props() });
   const url = new URL(required(wrapper.get("a").attributes("href")), "https://cadence.test");
   expect(url.pathname).toBe("/missions/mission-1/ops/dashboards");
-  expect(Object.fromEntries(url.searchParams)).toEqual({ ...fixture().filters, page: "2" });
+  expect(Object.fromEntries(url.searchParams)).toEqual(params(fixture().filters));
   expect(wrapper.findAll("form,button")).toHaveLength(0);
   wrapper.unmount();
 });
@@ -37,14 +49,15 @@ test("all filters survive encoded navigation to the canonical directory", () => 
 test.each([
   null,
   {},
-  { ...fixture(), version: 2 },
+  { ...fixture(), version: 1 },
   ...[
     { query: 1 },
     { query: "x".repeat(513) },
     { query: "bad\nquery" },
-    { tag: null },
-    { sort: "other" },
-    { lifecycle: "other" },
+    { tags: "eps" },
+    { tags: [1] },
+    { starred: "true" },
+    { sort: "widgets" },
     { page: 0 },
     { page: 1.2 },
     { page: 1_000_001 },
@@ -90,10 +103,7 @@ test("actual producer models mount without accepting injected destinations", () 
     const url = new URL(required(wrapper.get("a").attributes("href")), "https://cadence.test");
     expect(url.origin).toBe("https://cadence.test");
     expect(url.pathname).toBe(`/missions/${encodeURIComponent(missionId)}/ops/dashboards`);
-    expect(Object.fromEntries(url.searchParams)).toEqual({
-      ...fixtureRecord(model.filters),
-      page: String(fixtureRecord(model.filters).page),
-    });
+    expect(Object.fromEntries(url.searchParams)).toEqual(params(fixtureRecord(model.filters)));
     wrapper.unmount();
   }
 });

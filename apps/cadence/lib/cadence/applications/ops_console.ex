@@ -107,7 +107,7 @@ defmodule Cadence.Applications.OpsConsole do
       purpose: :collection,
       label: "Dashboards",
       path: "/missions/:mission_id/ops/dashboards",
-      query_params: ~w(query lifecycle tag sort page),
+      query_params: ~w(query tags starred archived sort page lifecycle tag),
       actions: ["filter_dashboards", "toggle_dashboard_star", "restore_dashboard"]
     },
     %{

@@ -4,9 +4,9 @@ defmodule Cadence.Reads.Dashboards.Versions do
   an author is about to save. Version documents are exposed as pretty JSON for
   diffing, without authoring metadata.
   """
-  alias Cadence.Accounts
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Dashboards.{Document, Documents, Version, VersionDiff}
+  alias Cadence.Reads.Dashboards.Authors
 
   @max_versions 200
 
@@ -19,7 +19,7 @@ defmodule Cadence.Reads.Dashboards.Versions do
            Documents.list_versions(scope.organization_id, mission, dashboard) do
       latest = Document.version(current)
       versions = versions |> Enum.sort_by(& &1.version, :desc) |> Enum.take(@max_versions)
-      names = names(versions)
+      names = Authors.names(Enum.map(versions, & &1.created_by))
 
       {:ok,
        %{
@@ -82,19 +82,6 @@ defmodule Cadence.Reads.Dashboards.Versions do
         if(version.snapshot_kind == :revert, do: version.based_on_version, else: nil),
       current: version.version == latest
     }
-  end
-
-  defp names(versions) do
-    versions
-    |> Enum.map(& &1.created_by)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
-    |> Map.new(fn id ->
-      case Accounts.fetch_user(id) do
-        {:ok, user} -> {id, user.display_name || user.email}
-        _ -> {id, id}
-      end
-    end)
   end
 
   defp json(%Document{} = document) do

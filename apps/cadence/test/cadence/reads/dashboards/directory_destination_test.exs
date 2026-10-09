@@ -32,12 +32,13 @@ defmodule Cadence.Reads.Dashboards.DirectoryDestinationTest do
             %{},
             %{
               "query" => "Flight /?&+",
-              "lifecycle" => "archived",
-              "sort" => "name",
-              "tag" => "thermal & power",
+              "archived" => "true",
+              "starred" => "true",
+              "sort" => "name_desc",
+              "tags" => "thermal & power,eps",
               "page" => "2"
             },
-            %{"lifecycle" => "all", "sort" => "widgets"}
+            %{"lifecycle" => "all", "tag" => "flight", "sort" => "widgets"}
           ] do
         assert {:ok, canonical} = Directory.load(c.scope, @mission, params)
         assert {:ok, response} = load(c.scope, params)
@@ -45,7 +46,7 @@ defmodule Cadence.Reads.Dashboards.DirectoryDestinationTest do
         assert %{"component" => "OpsDashboardDirectory", "props" => %{"model" => model}} =
                  response["data"]["presentation"]
 
-        assert model["version"] == 1
+        assert model["version"] == 2
         assert model["context"] == %{"organization_id" => @org, "mission_id" => @mission}
         assert model["filters"] == canonical.filters
         model
@@ -59,7 +60,7 @@ defmodule Cadence.Reads.Dashboards.DirectoryDestinationTest do
   test "durable surface and actions retain their identities with explicit filter admission" do
     spec = Enum.find(OpsDefinition.surface_specs(), &(&1.id == "dashboard_directory"))
     assert spec.path == "/missions/:mission_id/ops/dashboards"
-    assert spec.query_params == ~w(query lifecycle tag sort page)
+    assert spec.query_params == ~w(query tags starred archived sort page lifecycle tag)
     assert spec.actions == ~w(filter_dashboards toggle_dashboard_star restore_dashboard)
   end
 
@@ -67,6 +68,7 @@ defmodule Cadence.Reads.Dashboards.DirectoryDestinationTest do
     for params <- [
           %{"sort" => "other"},
           %{"lifecycle" => "other"},
+          %{"starred" => "yes"},
           %{"page" => "0"},
           %{"page" => "1000001"},
           %{"page" => "1.2"},

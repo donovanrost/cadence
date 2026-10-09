@@ -28,6 +28,14 @@ defmodule CadenceWeb.OpsDashboardPageTest do
       assert_renders([first, second])
     end
 
+    test "opening a dashboard records it as recently viewed; live refreshes do not", c do
+      {:ok, view, _} = live(c.conn, c.path)
+      assert [%{last_viewed_at: %DateTime{} = viewed_at}] = preferences(c)
+      send(view.pid, {:dashboard_live_tick, page(view)["token"]})
+      _ = page(view)
+      assert [%{last_viewed_at: ^viewed_at}] = preferences(c)
+    end
+
     test "live views declare refresh delivery and re-resolve on ticks and invalidations", c do
       {:ok, view, _} = live(c.conn, c.path)
       first = page(view)
@@ -110,4 +118,12 @@ defmodule CadenceWeb.OpsDashboardPageTest do
       assert_redirect(view, "/sign-in")
     end
   end
+
+  defp preferences(c),
+    do:
+      Cadence.Dashboards.list_dashboard_user_preferences(
+        c.org.organization_id,
+        c.mission.mission_id,
+        c.user.user_id
+      )
 end

@@ -12,6 +12,7 @@ defmodule Cadence.Dashboards.CurrentVersions do
   re-read on a pre-commit notice still observe the new version.
   """
   alias Cadence.Dashboards.{Document, DocumentStore, RuntimeInvalidation, Version}
+  alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Repo
 
   @doc "Creates a dashboard whose first version is immediately current."
@@ -95,6 +96,8 @@ defmodule Cadence.Dashboards.CurrentVersions do
   defp notify(%Version{document: document}), do: notify(document)
 
   defp notify(%Document{} = document) do
+    ScopedReadUpdates.publish(:dashboards_changed, document.organization_id, document.mission_id)
+
     RuntimeInvalidation.dashboard_version_changed(%{
       organization_id: document.organization_id,
       mission_id: document.mission_id,
