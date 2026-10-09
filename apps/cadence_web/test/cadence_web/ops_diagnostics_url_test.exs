@@ -36,7 +36,13 @@ defmodule CadenceWeb.OpsDiagnosticsURLTest do
     assert {:ok, defaults} = OpsDiagnosticsURL.admit(%{})
     assert defaults.selection == %{collection: "plan", row: nil, filter: ""}
     assert defaults.runtime_query == %{}
-    assert defaults.runtime == %{time_context: %{}, data_context: %{}, limit_context: %{}}
+
+    assert defaults.runtime == %{
+             time_context: %{},
+             scope_context: %{},
+             data_context: %{},
+             limit_context: %{}
+           }
   end
 
   test "malformed selections and unsupported context fail rather than being dropped" do

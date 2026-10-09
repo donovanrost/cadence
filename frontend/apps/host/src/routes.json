@@ -613,11 +613,21 @@
   {
     "path": "/missions/:mission_id/ops/dashboards/:dashboard_id/edit",
     "kind": "ops_module",
-    "contribution": "dashboards.editor",
+    "contribution": "dashboards.workspace",
     "resourceParam": "dashboard_id",
     "scope": "mission",
     "mountId": "ops-dashboard-editor-surface",
-    "queryKeys": [],
+    "pageChrome": "none",
+    "queryKeys": [
+      "from",
+      "to",
+      "time_mode",
+      "time_axis",
+      "realm",
+      "selection_view",
+      "limit_mode",
+      "spacecraft"
+    ],
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {}
@@ -1181,6 +1191,7 @@
     "resourceParam": "dashboard_id",
     "scope": "mission",
     "mountId": "ops-dashboard-show-surface",
+    "pageChrome": "none",
     "queryKeys": [
       "dashboard_id",
       "panel",
@@ -1211,7 +1222,8 @@
       "selected_scope_link_id",
       "realm",
       "data_source_id",
-      "source_binding_id"
+      "source_binding_id",
+      "spacecraft"
     ],
     "queryAliases": {},
     "viewClass": "contents",

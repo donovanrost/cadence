@@ -297,6 +297,10 @@ const spacecraftContext = computed(() => {
     ? { organizationId: mission.organizationId, missionId: mission.missionId, spacecraftId }
     : null;
 });
+// A route may opt out of the host heading when its page renders its own identity bar.
+const pageHeading = computed(
+  () => !(route.value && "pageChrome" in route.value && route.value.pageChrome === "none"),
+);
 const pageTitle = computed(
   () => route.value?.metadata.page_title || context.value?.mission?.display_name || "Overview",
 );
@@ -672,6 +676,7 @@ onBeforeUnmount(() => {
       :title="pageTitle"
       :breadcrumbs="pageBreadcrumbs"
       :workspace="variant === 'ops'"
+      :heading="pageHeading"
     >
       <p v-if="failure" id="host-navigation-error" role="alert">{{ failure }}</p>
       <div :aria-busy="pending" :data-host-path="committed.snapshot.path">

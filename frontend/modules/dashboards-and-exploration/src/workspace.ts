@@ -1,6 +1,5 @@
 export { default as OpsDashboardShow } from "./features/workspace/OpsDashboardShow.vue";
 export { default as DashboardCanvas } from "./features/workspace/DashboardCanvas.vue";
-export { default as DashboardEditorGuard } from "./features/workspace/DashboardEditorGuard.vue";
 export { default as DashboardGrid } from "./features/workspace/DashboardGrid.vue";
 export { default as DashboardWidget } from "./features/workspace/DashboardWidget.vue";
 export { default as DashboardWidgetHeader } from "./features/workspace/DashboardWidgetHeader.vue";
@@ -14,7 +13,7 @@ export { default as TelemetryChart } from "./features/workspace/TelemetryChart.v
 export { CHART_RUNTIME_PORT } from "./features/workspace/chart-runtime";
 export type { ChartRuntimePort, ChartAction, ChartTopic } from "./features/workspace/chart-runtime";
 export { readWorkspaceSnapshot } from "./features/workspace/validation";
-export { workspaceContribution } from "./features/workspace/contribution";
+export { dashboardContribution } from "./features/dashboard/contribution";
 export { default as WorkspaceSnapshotCanvas } from "./features/workspace/WorkspaceSnapshotCanvas.vue";
 export type {
   WorkspaceSnapshot,

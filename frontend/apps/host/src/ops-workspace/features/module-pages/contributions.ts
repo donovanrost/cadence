@@ -136,11 +136,7 @@ export const opsPages = createPageRegistry<OpsPageContribution<Component>>("ops.
     ),
   "dashboards.workspace": () =>
     import("@cadence/dashboards-and-exploration/workspace").then(
-      (module) => module.workspaceContribution,
-    ),
-  "dashboards.editor": () =>
-    import("@cadence/dashboards-and-exploration/editor").then(
-      (module) => module.editorContribution,
+      (module) => module.dashboardContribution,
     ),
   "dashboards.activity": () =>
     import("@cadence/dashboards-and-exploration/activity").then(

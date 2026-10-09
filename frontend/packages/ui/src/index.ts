@@ -1,4 +1,8 @@
 export { default as CadenceButton } from "./CadenceButton.vue";
+export { default as CadenceIcon } from "./CadenceIcon.vue";
+export { default as CadenceDateTimeRangeField } from "./CadenceDateTimeRangeField.vue";
+export type { UtcRange } from "./date-time-range";
+export { default as CadenceIconButton } from "./CadenceIconButton.vue";
 export { default as CadenceLink } from "./CadenceLink.vue";
 export { default as CadenceCheckbox } from "./CadenceCheckbox.vue";
 export { default as CadenceSpinner } from "./CadenceSpinner.vue";

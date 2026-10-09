@@ -2,6 +2,7 @@ defmodule CadenceWeb.HostPageLive do
   @moduledoc "Authenticated context and event transport for the persistent Vue host."
   use CadenceWeb, :live_view
 
+  alias CadenceWeb.OpsDashboardPage.Updates, as: DashboardUpdates
   alias CadenceWeb.SettingsPage
   alias CadenceWeb.SpacecraftConfigurationPage
 
@@ -750,15 +751,15 @@ defmodule CadenceWeb.HostPageLive do
 
   def handle_event(
         "host:ops-page",
-        %{"path" => path, "id" => "dashboards.editor", "event" => event, "input" => input} =
+        %{"path" => path, "id" => "dashboards.workspace", "event" => event, "input" => input} =
           params,
         socket
       ) do
-    with true <- CadenceWeb.OpsEditorPage.matches?(socket, params),
+    with true <- CadenceWeb.OpsDashboardPage.matches_action?(socket, params),
          {:ok, info} <- resolve_path(path),
          {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsEditorPage.matches?(socket, params) do
-      {result, socket} = CadenceWeb.OpsEditorPage.action(socket, event, input)
+         true <- CadenceWeb.OpsDashboardPage.matches_action?(socket, params) do
+      {result, socket} = CadenceWeb.OpsDashboardPage.action(socket, event, input)
       {:reply, %{ok: true, snapshot: result}, socket}
     else
       {:halt, socket} -> {:noreply, socket}
@@ -1165,6 +1166,15 @@ defmodule CadenceWeb.HostPageLive do
   def handle_info({:commanding_changed, org, mission}, socket),
     do: {:noreply, CadenceWeb.OpsCommandWorkspacePage.changed(socket, org, mission)}
 
+  def handle_info({:dashboard_live_tick, token}, socket),
+    do: dashboard_refresh(DashboardUpdates.tick(socket, token))
+
+  def handle_info({:dashboard_live_flush, token}, socket),
+    do: dashboard_refresh(DashboardUpdates.flush(socket, token))
+
+  def handle_info({:dashboard_runtime_invalidated, event}, socket),
+    do: {:noreply, DashboardUpdates.invalidated(socket, event)}
+
   def handle_info({:command_workspace_flush, token}, socket),
     do: {:noreply, CadenceWeb.OpsCommandWorkspacePage.flush(socket, token)}
 
@@ -1207,6 +1217,17 @@ defmodule CadenceWeb.HostPageLive do
   def handle_info({event, _record}, socket)
       when event in [:notification_created, :notification_updated, :invitation_accepted],
       do: {:noreply, socket}
+
+  # Live dashboard refreshes reauthorize through the ordinary context path.
+  defp dashboard_refresh({:refresh, socket}) do
+    case prepare_context(socket, socket.assigns.host_path) do
+      {:ok, socket} -> {:noreply, socket}
+      {:halt, socket} -> {:noreply, socket}
+      :error -> {:noreply, socket}
+    end
+  end
+
+  defp dashboard_refresh({:ignore, socket}), do: {:noreply, socket}
 
   defp prepare_context(socket, path) do
     with {:ok, info} <- resolve_path(path),
@@ -1267,8 +1288,7 @@ defmodule CadenceWeb.HostPageLive do
         |> CadenceWeb.MissionProviderPage.prepare(info, path)
         |> CadenceWeb.OpsDirectoryPage.prepare(info, path)
         |> CadenceWeb.OpsCreationPage.prepare(info, path)
-        |> CadenceWeb.OpsWorkspacePage.prepare(info, path)
-        |> CadenceWeb.OpsEditorPage.prepare(info, path)
+        |> CadenceWeb.OpsDashboardPage.prepare(info, path)
         |> CadenceWeb.OpsActivityPage.prepare(info, path)
         |> CadenceWeb.OpsDiagnosticsPage.prepare(info, path)
         |> CadenceWeb.OpsExplorationPage.prepare(info, path)

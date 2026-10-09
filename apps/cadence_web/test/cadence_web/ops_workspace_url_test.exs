@@ -67,4 +67,39 @@ defmodule CadenceWeb.OpsWorkspaceURLTest do
       assert {:error, :invalid_context} = OpsWorkspaceURL.admit(params)
     end
   end
+
+  test "Grafana relative bounds become a live sliding window; frozen relative ranges are refused" do
+    assert {:ok, %{time_context: %{mode: "live", window_seconds: 21_600}}} =
+             OpsWorkspaceURL.admit(%{"from" => "now-6h", "to" => "now"})
+
+    assert {:ok, %{time_context: %{mode: "range", from: ~U[2026-09-07 00:00:00Z]}}} =
+             OpsWorkspaceURL.admit(%{
+               "from" => "2026-09-07T00:00:00Z",
+               "to" => "2026-09-07T01:00:00Z"
+             })
+
+    for invalid <- [
+          %{"from" => "now-6h", "to" => "now-1h"},
+          %{"from" => "now-30d", "to" => "now"},
+          %{"from" => "now-6h", "to" => "now", "time_mode" => "archive"},
+          %{"from" => "now-6h"}
+        ] do
+      assert {:error, :invalid_context} = OpsWorkspaceURL.admit(invalid)
+    end
+  end
+
+  test "a spacecraft scope is admitted as one bounded id for the page to check" do
+    assert {:ok, runtime} = OpsWorkspaceURL.admit(%{"spacecraft" => "sc-1"})
+
+    assert runtime.scope_context == %{
+             primary: %{kind: "spacecraft", mode: "one", ids: ["sc-1"]},
+             spacecraft_id: "sc-1"
+           }
+
+    assert OpsWorkspaceURL.spacecraft(runtime) == "sc-1"
+
+    for invalid <- ["", String.duplicate("x", 257), <<0xFF>>, ["sc-1"]] do
+      assert {:error, :invalid_context} = OpsWorkspaceURL.admit(%{"spacecraft" => invalid})
+    end
+  end
 end

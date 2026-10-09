@@ -74,7 +74,6 @@ import { databaseIndexFixture } from "../catalog/features/databases/fixtures.tes
 import { artifactFixture } from "../catalog/features/artifacts/fixtures.test-support";
 import { diagnosticsFixture } from "../../../../modules/dashboards-and-exploration/src/features/runtime-diagnostics/fixtures.test-support";
 import { directoryFixture as dashboardDirectoryFixture } from "../../../../modules/dashboards-and-exploration/src/features/directory/fixtures.test-support";
-import { snapshotFixture as workspaceFixture } from "../../../../modules/dashboards-and-exploration/src/features/workspace/snapshot-fixture.test-support";
 import { diagnosticsPageFixture } from "../../../../modules/dashboards-and-exploration/src/features/execution-diagnostics/fixtures.test-support";
 import { monitorFixture } from "../../../../modules/commanding/src/features/mission-commands/monitor.test-support";
 import { workspaceFixture as commandWorkspaceFixture } from "../../../../modules/commanding/src/features/workspace/fixtures.test-support";
@@ -84,13 +83,18 @@ import {
   selectedFixture as explorationSelectedFixture,
 } from "../../../../modules/dashboards-and-exploration/src/features/exploration/fixtures.test-support";
 import {
-  editorFixture,
-  editorContext,
-} from "../../../../modules/dashboards-and-exploration/src/features/editor/fixtures.test-support";
-import {
-  activityFixture,
-  versionFixture,
-} from "../../../../modules/dashboards-and-exploration/src/features/activity/fixtures.test-support";
+  editPage,
+  forContext,
+  viewPage,
+} from "../../../../modules/dashboards-and-exploration/src/features/dashboard/fixtures.test-support";
+
+const dashboardContext = {
+  organizationId: "org-1",
+  missionId: "mission-1",
+  resourceId: "dashboard-1",
+};
+const dashboardEditPage = (sequence = 0, dirty = false) =>
+  forContext(editPage(sequence, dirty), dashboardContext);
 
 function snapshot(path: string, mission: string | null = null) {
   const page =
@@ -306,12 +310,7 @@ test("Explore opens its admitted origin through host navigation and restores the
       status: "ready",
       token: "11111111-1111-4111-8111-111111111111",
       context: { organizationId: "org-1", missionId: "mission-1", resourceId: "origin" },
-      data: {
-        ...workspaceFixture(),
-        organization_id: "org-1",
-        mission_id: "mission-1",
-        dashboard_id: "origin",
-      },
+      data: forContext(viewPage(), { ...dashboardContext, resourceId: "origin" }),
     },
   });
   expect(view().get('[data-workspace-value="battery"]').text()).toBe("28.40");
@@ -467,29 +466,22 @@ test("compiled diagnostics selects through host URLs, restores history and keeps
   expect(view().get("#ops-nav-rail").element).toBe(rail);
   expect(view().get("#diagnostics-loaded-at").attributes("datetime")).toBe(data.model.loaded_at);
 });
-test("the compiled editor guards host navigation and back without losing its draft or Ops frame", async () => {
+test("the dashboard editor guards host navigation and back while it holds unsaved changes", async () => {
   const confirm = vi.fn(() => false);
   vi.stubGlobal("confirm", confirm);
   try {
     await start();
     const path = "/missions/mission-1/ops/dashboards/dashboard-1/edit";
     await click(path);
-    const state = {
+    await reply(0, {
       ...snapshot(path, "mission-1"),
-      ops_page: {
-        id: "dashboards.editor",
-        slot: "ops.page",
-        version: 1,
-        status: "ready",
-        token: "11111111-1111-4111-8111-111111111111",
-        context: editorContext,
-        data: editorFixture(),
-      },
-    };
-    await reply(0, state);
+      ops_page: dashboardEnvelope(
+        dashboardEditPage(1, true),
+        "11111111-1111-4111-8111-111111111111",
+      ),
+    });
     expect(view().find("#host-route-unavailable").exists()).toBe(false);
     const rail = view().get("#ops-nav-rail").element;
-    await view().get("#editor-name").setValue("Local editor draft");
     await click("/missions/mission-1/ops/dashboards");
     expect(confirm).toHaveBeenCalledOnce();
     expect(transport.requests).toHaveLength(1);
@@ -497,12 +489,9 @@ test("the compiled editor guards host navigation and back without losing its dra
     await flushHostUpdates();
     expect(confirm).toHaveBeenCalledTimes(2);
     expect(transport.requests).toHaveLength(1);
-    expect(view().get<HTMLInputElement | HTMLSelectElement>("#editor-name").element.value).toBe(
-      "Local editor draft",
-    );
     confirm.mockReturnValue(true);
     await click("/missions/mission-1/ops/dashboards");
-    const directory = {
+    await reply(1, {
       ...snapshot("/missions/mission-1/ops/dashboards", "mission-1"),
       ops_page: {
         id: "dashboards.directory",
@@ -513,15 +502,14 @@ test("the compiled editor guards host navigation and back without losing its dra
         context: { organizationId: "org-1", missionId: "mission-1" },
         data: dashboardDirectoryFixture(),
       },
-    };
-    await reply(1, directory);
+    });
     expect(view().get("#ops-nav-rail").element).toBe(rail);
     expect(view().find("#dashboard-directory-feature").exists()).toBe(true);
   } finally {
     vi.unstubAllGlobals();
   }
 });
-test("the compiled editor stages, retains dirty guards after host refresh, and opens the saved Activity version", async () => {
+test("the dashboard editor stages a section, then saves and returns to the live viewer", async () => {
   vi.stubGlobal(
     "confirm",
     vi.fn(() => false),
@@ -529,107 +517,73 @@ test("the compiled editor stages, retains dirty guards after host refresh, and o
   try {
     await start();
     const path = "/missions/mission-1/ops/dashboards/dashboard-1/edit";
+    const token = "11111111-1111-4111-8111-111111111111";
     await click(path);
-    const state = {
+    await reply(0, {
       ...snapshot(path, "mission-1"),
-      ops_page: {
-        id: "dashboards.editor",
-        slot: "ops.page",
-        version: 1,
-        status: "ready",
-        token: "11111111-1111-4111-8111-111111111111",
-        context: editorContext,
-        data: editorFixture(),
-      },
-    };
-    await reply(0, state);
-    const rail = view().get("#ops-nav-rail").element;
-    await view().get("#editor-name").setValue("Candidate");
-    await view().get("#dashboard-editor-form").trigger("submit");
-    const staged = editorFixture();
-    Object.assign(staged, { sequence: 1, revision: 1, dirty: true });
-    staged.model.name = "Candidate";
+      ops_page: dashboardEnvelope(dashboardEditPage(), token),
+    });
+    await view().get('[aria-label="Dashboard editing"] button:nth-child(2)').trigger("click");
+    await flushHostUpdates();
+    await view().get("#section-title").setValue("Thermal");
+    await view().get(".cadence-sheet form").trigger("submit");
     expect(transport.requests[1]).toMatchObject({
       event: "host:ops-page",
       payload: {
         path,
-        event: "rename",
+        event: "add_section",
         input: {
           sequence: 1,
-          command: { expected_version: 1, expected_revision: 0, name: "Candidate" },
+          command: { title: "Thermal", expected_version: 2, expected_revision: 0 },
         },
       },
     });
-    await reply(1, { status: "ok", state: staged });
-    // A LiveView projection update replaces the port but not the editor instance.
-    await view().setProps({
-      snapshot: { ...state, ops_page: { ...state.ops_page, data: staged } },
+    await reply(1, {
+      status: "ok",
+      code: null,
+      page: dashboardEnvelope(dashboardEditPage(1, true), token),
     });
     await flushHostUpdates();
-    await view().get("#editor-runtime").trigger("click");
-    expect(confirm).not.toHaveBeenCalled();
+    expect(view().find(".cadence-sheet").exists()).toBe(false);
     await click("/missions/mission-1/ops/dashboards");
-    expect(confirm).toHaveBeenCalledOnce();
     expect(transport.requests).toHaveLength(2);
-    await view().get("#editor-review").trigger("click");
+    const done = view()
+      .findAll("button")
+      .find((b) => b.text().includes("Save & exit"));
+    await done?.trigger("click");
     expect(transport.requests[2]).toMatchObject({
       event: "host:ops-page",
       payload: {
-        event: "save_draft",
-        input: { sequence: 2, command: { expected_version: 1, expected_revision: 1 } },
+        event: "save",
+        input: { sequence: 2, command: { expected_version: 2, expected_revision: 1 } },
       },
     });
-    const saved = structuredClone(staged);
-    Object.assign(saved, { sequence: 2, revision: 2, dirty: false });
-    saved.model.document_version = 2;
-    await reply(2, { status: "ok", state: saved });
-    const activityPath = "/missions/mission-1/ops/dashboards/dashboard-1/activity?version=2";
+    await reply(2, {
+      status: "ok",
+      code: null,
+      page: dashboardEnvelope(dashboardEditPage(2, false), token),
+    });
+    await flushHostUpdates();
     expect(transport.requests[3]).toMatchObject({
       event: "host:context",
-      payload: { path: activityPath },
+      payload: { path: "/missions/mission-1/ops/dashboards/dashboard-1" },
     });
-    const activity = activityFixture();
-    activity.model.query.version = 2;
-    activity.model.selected = {
-      ...versionFixture(2),
-      name: "Candidate",
-      widget_count: 1,
-      section_count: 1,
-    };
-    await reply(3, {
-      ...snapshot(activityPath, "mission-1"),
-      ops_page: {
-        ...state.ops_page,
-        id: "dashboards.activity",
-        token: "22222222-2222-4222-8222-222222222222",
-        data: activity,
-      },
-    });
-    expect(view().get("#ops-nav-rail").element).toBe(rail);
-    expect(view().find("#ops-module-unavailable").exists()).toBe(false);
-    expect(view().find("#dashboard-editor-form").exists()).toBe(false);
-    hostBrowserHistory.go(-1);
-    await flushHostUpdates();
-    expect(transport.requests[4]).toMatchObject({ event: "host:context", payload: { path } });
-    const reopened = structuredClone(saved);
-    Object.assign(reopened, { sequence: 0, revision: 0 });
-    await reply(4, {
-      ...state,
-      ops_page: {
-        ...state.ops_page,
-        token: "33333333-3333-4333-8333-333333333333",
-        data: reopened,
-      },
-    });
-    expect(view().get("#editor-save-state").text()).toBe("Saved");
-    expect(view().get<HTMLInputElement | HTMLSelectElement>("#editor-name").element.value).toBe(
-      "Candidate",
-    );
-    expect(view().get("#ops-nav-rail").element).toBe(rail);
   } finally {
     vi.unstubAllGlobals();
   }
 });
+
+function dashboardEnvelope(data: unknown, token: string) {
+  return {
+    id: "dashboards.workspace",
+    slot: "ops.page",
+    version: 1,
+    status: "ready",
+    token,
+    context: dashboardContext,
+    data,
+  };
+}
 
 function setupSnapshot() {
   const base = snapshot("/missions/mission-1/comms/ground-stations/new", "mission-1");
@@ -699,26 +653,13 @@ test("dashboard directory uses the Ops port and preserves the workspace through 
   expect(view().get("#restore-dashboard-2").attributes("disabled")).toBeDefined();
   expect(transport.requests).toHaveLength(2);
 });
-test("the compiled dashboard viewer binds the path resource and keeps the Ops frame through refresh and failure", async () => {
+test("the dashboard viewer binds the path resource and keeps the Ops frame through live refresh and failure", async () => {
   const path = "/missions/mission-1/ops/dashboards/dashboard-1";
   const base = snapshot(path, "mission-1");
-  const model = {
-    ...workspaceFixture(),
-    organization_id: "org-1",
-    mission_id: "mission-1",
-    dashboard_id: "dashboard-1",
-  };
+  const model = forContext(viewPage(), dashboardContext);
   const state = {
     ...base,
-    ops_page: {
-      id: "dashboards.workspace",
-      slot: "ops.page",
-      version: 1,
-      status: "ready",
-      token: "11111111-1111-4111-8111-111111111111",
-      context: { organizationId: "org-1", missionId: "mission-1", resourceId: "dashboard-1" },
-      data: model,
-    },
+    ops_page: dashboardEnvelope(model, "11111111-1111-4111-8111-111111111111"),
   };
   wrapper = mount(BrowserHost, {
     props: { snapshot: state },
@@ -726,27 +667,34 @@ test("the compiled dashboard viewer binds the path resource and keeps the Ops fr
   await flushHostUpdates();
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   expect(view().get('[data-workspace-value="battery"]').text()).toBe("28.40");
+  // The dashboard owns its identity bar; the host heading is omitted, not hidden.
+  expect(view().find("#host-page-heading").exists()).toBe(false);
+  expect(
+    view()
+      .findAll("h1")
+      .map((h) => h.text()),
+  ).toEqual(["Flight telemetry"]);
   const rail = view().get("#ops-nav-rail").element,
     grid = view().get(".grid-stack").element;
-  await view().get("#dashboard-viewer-refresh").trigger("click");
-  expect(transport.requests[0]).toMatchObject({ event: "host:context", payload: { path } });
-  await reply(0, { ...state, ops_page: { ...state.ops_page, data: structuredClone(model) } });
+  // A live refresh is a props update from Phoenix: same page instance, same grid.
+  await wrapper.setProps({
+    snapshot: { ...state, ops_page: { ...state.ops_page, data: structuredClone(model) } },
+  });
+  await flushHostUpdates();
   expect(view().get("#ops-nav-rail").element).toBe(rail);
   expect(view().get(".grid-stack").element).toBe(grid);
-  await view().get("#dashboard-viewer-mode").setValue("live");
-  await view().get("#dashboard-viewer-realm").setValue("rehearsal");
+  await view().get("#dashboard-time-range .cadence-dashboard-query-trigger").trigger("click");
   await flushHostUpdates();
-  expect(
-    view().get<HTMLInputElement | HTMLSelectElement>("#dashboard-viewer-realm").element.value,
-  ).toBe("rehearsal");
-  await view().get("#dashboard-viewer-context-form").trigger("submit");
+  const lastHour = view()
+    .findAll("button")
+    .find((b) => b.text() === "Last 1 hour");
+  await lastHour?.trigger("click");
   await flushHostUpdates();
-  expect(requestedPath(1)).toContain("time_mode=live");
-  expect(requestedPath(1)).toContain("realm=rehearsal");
-  const nextPath = requestedPath(1);
-  await reply(1, {
+  expect(requestedPath(0)).toContain("from=now-1h");
+  expect(requestedPath(0)).toContain("to=now");
+  await reply(0, {
     ...state,
-    path: nextPath,
+    path: requestedPath(0),
     ops_page: { ...state.ops_page, context: { ...state.ops_page.context, resourceId: "foreign" } },
   });
   expect(view().find("#ops-module-unavailable").exists()).toBe(true);

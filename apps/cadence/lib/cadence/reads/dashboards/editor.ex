@@ -57,6 +57,9 @@ defmodule Cadence.Reads.Dashboards.Editor do
     _, _ -> {:error, :unavailable}
   end
 
+  @doc "Editable outline of a server-held document, without resolving a preview."
+  def outline(%Document{} = document), do: document |> project(nil) |> Map.delete(:preview)
+
   defp project(document, preview) do
     {:ok, defaults_json} = AuthoringDefaults.encode(document.defaults)
 

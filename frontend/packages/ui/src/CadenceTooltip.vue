@@ -27,14 +27,14 @@ withDefaults(
       <TooltipTrigger as-child><slot /></TooltipTrigger>
       <TooltipPortal>
         <TooltipContent
-          class="cui-tooltip"
+          class="cadence-tooltip"
           :align="align"
           :collision-padding="12"
           :side="side"
           :side-offset="8"
         >
           {{ content }}
-          <TooltipArrow class="cui-tooltip__arrow" :width="9" :height="5" />
+          <TooltipArrow class="cadence-tooltip__arrow" :width="9" :height="5" />
         </TooltipContent>
       </TooltipPortal>
     </TooltipRoot>
@@ -42,7 +42,7 @@ withDefaults(
 </template>
 
 <style>
-.cui-tooltip {
+.cadence-tooltip {
   z-index: var(--z-tooltip);
   max-width: 260px;
   padding: 8px 11px;
@@ -51,14 +51,14 @@ withDefaults(
   background: var(--surface-base);
   font-size: var(--type-body-sm);
   line-height: 1.45;
-  animation: cui-tooltip-enter var(--duration-fast) var(--ease-standard);
+  animation: cadence-tooltip-enter var(--duration-fast) var(--ease-standard);
 }
 
-.cui-tooltip__arrow {
+.cadence-tooltip__arrow {
   fill: var(--border-default);
 }
 
-@keyframes cui-tooltip-enter {
+@keyframes cadence-tooltip-enter {
   from {
     opacity: 0;
     transform: translateY(-2px);

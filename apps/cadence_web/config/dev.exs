@@ -8,10 +8,12 @@ config :cadence_web,
     source_execution_timeout_ms: 15_000
   ]
 
+dev_port = String.to_integer(System.get_env("PORT", "4001"))
+
 config :cadence_web, CadenceWeb.Endpoint,
   url: [host: "127.0.0.1"],
-  check_origin: ["//localhost:4001", "//127.0.0.1:4001"],
-  http: [ip: {127, 0, 0, 1}, port: 4001],
+  check_origin: ["//localhost:#{dev_port}", "//127.0.0.1:#{dev_port}"],
+  http: [ip: {127, 0, 0, 1}, port: dev_port],
   code_reloader: true,
   reloadable_apps: [:cadence, :cadence_web],
   debug_errors: true,

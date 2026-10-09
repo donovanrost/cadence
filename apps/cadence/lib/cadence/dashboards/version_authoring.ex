@@ -18,6 +18,33 @@ defmodule Cadence.Dashboards.VersionAuthoring do
     _, _ -> {:error, :unknown}
   end
 
+  @doc """
+  Publishes the latest saved version, observed by the caller as `version`.
+  A newer saved version makes this a conflict rather than publishing it unseen.
+  """
+  def publish_latest(scope, mission, dashboard, version)
+      when is_integer(version) and version in 1..@max_version do
+    with :ok <- Authoring.authorize(scope, mission),
+         true <- AuthoringInput.id?(dashboard),
+         {:ok, _} <-
+           Documents.publish(scope.organization_id, mission, dashboard, version,
+             expected_version: version,
+             published_by: scope.user.user_id
+           ) do
+      {:ok,
+       %{version: 1, dashboard_id: dashboard, event: "publish_version", target_version: version}}
+    else
+      false -> {:error, :invalid_input}
+      error -> normalize(error)
+    end
+  rescue
+    _ -> {:error, :unknown}
+  catch
+    _, _ -> {:error, :unknown}
+  end
+
+  def publish_latest(_, _, _, _), do: {:error, :invalid_input}
+
   def admit(
         event,
         %{"version" => target, "expected_version" => version, "expected_revision" => revision} =

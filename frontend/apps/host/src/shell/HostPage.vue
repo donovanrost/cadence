@@ -8,7 +8,16 @@ import {
   type PageHeadingContent,
   type PageRegion,
 } from "@cadence/ui/page-chrome";
-const props = defineProps<{ title: string; breadcrumbs?: PageBreadcrumb[]; workspace?: boolean }>();
+const props = withDefaults(
+  defineProps<{
+    title: string;
+    breadcrumbs?: PageBreadcrumb[];
+    workspace?: boolean;
+    /** Full-bleed surfaces (e.g. a dashboard) own their identity bar; the host omits its heading. */
+    heading?: boolean;
+  }>(),
+  { heading: true },
+);
 const content = shallowRef<PageHeadingContent>();
 const targets = shallowReactive<PageChrome["targets"]>({});
 let owner: symbol | undefined;
@@ -52,7 +61,11 @@ const has = (region: PageRegion) => content.value?.regions.includes(region);
 </script>
 <template>
   <div class="cd-page" :class="{ 'cd-page--workspace': workspace }">
-    <div id="host-page-heading" :data-page-heading-source="content ? 'application' : 'route'">
+    <div
+      v-if="heading"
+      id="host-page-heading"
+      :data-page-heading-source="content ? 'application' : 'route'"
+    >
       <CadencePageChrome :id="content?.id" :breadcrumbs="breadcrumbs">
         <template #eyebrow
           ><span :ref="(el) => (targets.eyebrow = el as HTMLElement)" v-show="has('eyebrow')"

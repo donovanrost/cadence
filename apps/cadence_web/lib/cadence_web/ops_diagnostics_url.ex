@@ -11,7 +11,9 @@ defmodule CadenceWeb.OpsDiagnosticsURL do
     row = Map.get(params, "row")
     filter = Map.get(params, "filter", "")
 
-    with true <- collection in @collections,
+    # Diagnostics never checks spacecraft membership, so it admits no scope selection.
+    with false <- Map.has_key?(params, "spacecraft"),
+         true <- collection in @collections,
          true <- valid_row?(row),
          true <- valid_filter?(filter),
          {:ok, runtime} <- OpsWorkspaceURL.admit(runtime_params) do

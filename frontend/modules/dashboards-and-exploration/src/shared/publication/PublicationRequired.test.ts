@@ -1,6 +1,5 @@
 import { mount, flushPromises } from "@vue/test-utils";
 import { expect, test, vi } from "vite-plus/test";
-import { workspaceContribution } from "../../features/workspace/contribution";
 import { executionDiagnosticsContribution } from "../../features/execution-diagnostics/contribution";
 import { readPublicationRequirement } from "./contracts";
 const context = { organizationId: "org-1", missionId: "mission-1", resourceId: "dashboard-1" };
@@ -24,7 +23,7 @@ test("publication notice rejects cross-scope identity, unknown versions and draf
   ])
     expect(() => readPublicationRequirement(bad, context)).toThrow();
 });
-for (const contribution of [workspaceContribution, executionDiagnosticsContribution]) {
+for (const contribution of [executionDiagnosticsContribution]) {
   test(`${contribution.id} renders a scoped publication notice without resolving or inspecting drafts`, async () => {
     const execute = vi.fn(),
       refresh = vi.fn().mockRejectedValue(Error("private failure"));

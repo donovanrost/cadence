@@ -30,7 +30,7 @@ defmodule CadenceWeb.OpsDashboardEditorLiveTest do
     })
 
     page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
-    assert page["id"] == "dashboards.editor"
+    assert page["id"] == "dashboards.workspace"
     assert page["context"]["resourceId"] == dashboard_id
     assert page["status"] == "unavailable"
   end

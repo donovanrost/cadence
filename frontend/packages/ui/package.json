@@ -15,7 +15,8 @@
     "./widget_form_field": "./src/widget_form_field.ts",
     "./presentation_types": "./src/presentation_types.ts",
     "./status-symbol": "./src/status-symbol.ts",
-    "./page-chrome": "./src/page-chrome.ts"
+    "./page-chrome": "./src/page-chrome.ts",
+    "./date-time-range": "./src/date-time-range.ts"
   },
   "scripts": {
     "build": "vue-tsc -p tsconfig.json --noEmit",
@@ -23,6 +24,7 @@
   },
   "dependencies": {
     "@cadence/design-tokens": "workspace:*",
+    "@internationalized/date": "catalog:",
     "reka-ui": "catalog:",
     "tailwindcss": "4.1.12"
   },

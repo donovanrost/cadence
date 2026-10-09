@@ -9,7 +9,8 @@ export default defineConfig(({command}) => ({
   base: command === "build" ? "/assets/" : "/",
   resolve: {
     alias: {"@cadence/ui": fileURLToPath(new URL("../../frontend/packages/ui/src", import.meta.url))},
-    dedupe: ["vue", "reka-ui"]
+    // Reka checks date classes by identity; its date library must be the same copy.
+    dedupe: ["vue", "reka-ui", "@internationalized/date"]
   },
   publicDir: "public",
   server: {

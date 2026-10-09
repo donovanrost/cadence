@@ -4,7 +4,6 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import DashboardCanvas from "./DashboardCanvas.vue";
-import DashboardEditorGuard from "./DashboardEditorGuard.vue";
 import { workspaceFixture } from "./fixtures.test-support";
 let app: Pick<ReturnType<typeof mount>, "emitted" | "get" | "setProps" | "unmount">;
 afterEach(() => {
@@ -57,24 +56,4 @@ test("real GridStack emits layout changes only in edit mode and disposes timers"
   });
   app.unmount();
   await vi.advanceTimersByTimeAsync(500);
-});
-test("editor navigation guard follows dirty state and removes its global listeners", async () => {
-  const confirm = vi.fn().mockReturnValue(false);
-  vi.stubGlobal("confirm", confirm);
-  app = mount(DashboardEditorGuard, { props: { editor_dirty: true } });
-  const anchor = document.createElement("a");
-  anchor.href = "/missions";
-  document.body.appendChild(anchor);
-  const click = () => {
-    const e = new MouseEvent("click", { bubbles: true, cancelable: true });
-    anchor.dispatchEvent(e);
-    return e;
-  };
-  expect(click().defaultPrevented).toBe(true);
-  expect(confirm).toHaveBeenCalledOnce();
-  await app.setProps({ editor_dirty: false });
-  expect(click().defaultPrevented).toBe(false);
-  app.unmount();
-  expect(click().defaultPrevented).toBe(false);
-  anchor.remove();
 });

@@ -153,6 +153,17 @@ defmodule Cadence.Dashboards.DocumentStore do
     |> Enum.map(&summary_from_row/1)
   end
 
+  @doc "Summary of one dashboard row, archived or active, without resolving its document."
+  @spec fetch_dashboard_summary(binary(), binary(), binary()) ::
+          {:ok, DashboardSummary.t()} | {:error, :dashboard_not_found}
+  def fetch_dashboard_summary(organization_id, mission_id, dashboard_id)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(dashboard_id) do
+    case get_row(organization_id, mission_id, dashboard_id) do
+      nil -> {:error, :dashboard_not_found}
+      %OpsDashboardRow{} = row -> {:ok, summary_from_row(row)}
+    end
+  end
+
   @spec list_archived_dashboard_summaries(binary(), binary()) :: [DashboardSummary.t()]
   def list_archived_dashboard_summaries(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do

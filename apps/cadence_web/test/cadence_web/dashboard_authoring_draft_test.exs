@@ -20,10 +20,6 @@ defmodule CadenceWeb.DashboardAuthoringDraftTest do
              "../../../cadence/test/fixtures/dashboards/value_tile_latest.v1.json",
              __DIR__
            )
-  @renderer Path.expand(
-              "../../../../frontend/modules/dashboards-and-exploration/src/features/editor/producer-render-check.mjs",
-              __DIR__
-            )
 
   setup do
     org = TestFixtures.persist_org!()
@@ -336,33 +332,6 @@ defmodule CadenceWeb.DashboardAuthoringDraftTest do
     assert fetch(c) == c.document
     assert length(versions(c)) == 1
 
-    page = %{
-      id: "dashboards.editor",
-      slot: "ops.page",
-      version: 1,
-      context: %{
-        organizationId: c.org.organization_id,
-        missionId: c.mission.mission_id,
-        resourceId: c.document.dashboard_id
-      },
-      data: %{
-        version: 2,
-        sequence: 0,
-        phase: "editing",
-        revision: read.revision,
-        dirty: read.dirty,
-        model: read.model
-      }
-    }
-
-    assert {output, 0} =
-             System.cmd(
-               System.find_executable("node"),
-               ["--no-warnings", @renderer, Jason.encode!([page])],
-               stderr_to_stdout: true
-             )
-
-    assert output =~ "Editor producer/renderer contract passed"
     refute Map.has_key?(read, :baseline)
     refute Map.has_key?(read, :document)
     assert {:ok, failed_preview} = Editor.staged(c.scope, staged, resolution_context: :invalid)

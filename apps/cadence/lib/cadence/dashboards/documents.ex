@@ -58,6 +58,10 @@ defmodule Cadence.Dashboards.Documents do
     to: DocumentStore,
     as: :list_dashboard_summaries
 
+  defdelegate fetch_summary(organization_id, mission_id, dashboard_id),
+    to: DocumentStore,
+    as: :fetch_dashboard_summary
+
   defdelegate list_archived_summaries(organization_id, mission_id),
     to: DocumentStore,
     as: :list_archived_dashboard_summaries

@@ -4,16 +4,12 @@ import { required } from "../../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mount, flushPromises } from "@vue/test-utils";
 import OpsModulePage from "./OpsModulePage.vue";
-import { DashboardEditor } from "@cadence/dashboards-and-exploration/editor";
+import DashboardPage from "../../../../../../modules/dashboards-and-exploration/src/features/dashboard/DashboardPage.vue";
 import {
-  editorFixture,
-  editorContext,
-} from "../../../../../../modules/dashboards-and-exploration/src/features/editor/fixtures.test-support";
-import DashboardWorkspace from "../../../../../../modules/dashboards-and-exploration/src/features/workspace/DashboardWorkspace.vue";
-import {
-  snapshotFixture as workspaceFixture,
-  snapshotContext as workspaceContext,
-} from "../../../../../../modules/dashboards-and-exploration/src/features/workspace/snapshot-fixture.test-support";
+  editPage,
+  pageContext as workspaceContext,
+  viewPage,
+} from "../../../../../../modules/dashboards-and-exploration/src/features/dashboard/fixtures.test-support";
 import { directoryFixture } from "../../../../../../modules/dashboards-and-exploration/src/features/directory/fixtures.test-support";
 import { ExplorationPanel } from "@cadence/dashboards-and-exploration/exploration";
 import {
@@ -33,18 +29,16 @@ const snapshot = () => ({
 });
 let app: ReturnType<typeof mount>;
 afterEach(() => app?.unmount());
-test("editor guards span host transitions while commands remain disabled", async () => {
-  const state = editorFixture();
-  state.dirty = true;
-  state.revision = 1;
+test("dashboard edit guards span host transitions while commands remain disabled", async () => {
+  const editorContext = workspaceContext;
   const editor = {
-    id: "dashboards.editor",
+    id: "dashboards.workspace",
     slot: "ops.page",
     version: 1,
     status: "ready",
     token,
     context: editorContext,
-    data: state,
+    data: editPage(1, true),
   };
   const execute = vi.fn(),
     remove = vi.fn();
@@ -72,8 +66,8 @@ test("editor guards span host transitions while commands remain disabled", async
     await flushPromises();
     expect(app.find("#ops-module-unavailable").exists()).toBe(false);
     expect(guard()).toBe(false);
-    const port: OpsPagePort = app.getComponent(DashboardEditor).props("port");
-    await expect(port.execute("save_draft", {})).rejects.toThrow("Inactive");
+    const port: OpsPagePort = app.getComponent(DashboardPage).props("port");
+    await expect(port.execute("save", {})).rejects.toThrow("Inactive");
     expect(execute).not.toHaveBeenCalled();
     await app.setProps({ refreshing: false, snapshot: { ...editor, status: "unavailable" } });
     expect(app.find("#ops-module-unavailable").exists()).toBe(true);
@@ -147,7 +141,7 @@ test("workspace identity is bound at both envelopes and stale viewer ports canno
     status: "ready",
     token,
     context: workspaceContext,
-    data: workspaceFixture(),
+    data: viewPage(),
   };
   const navigate = vi.fn(),
     execute = vi.fn();
@@ -159,9 +153,10 @@ test("workspace identity is bound at both envelopes and stale viewer ports canno
       refresh: vi.fn(),
       execute,
       navigate,
+      guardNavigation: () => () => {},
     },
   });
-  const port: OpsPagePort = app.getComponent(DashboardWorkspace).props("port");
+  const port: OpsPagePort = app.getComponent(DashboardPage).props("port");
   await expect(port.execute("create", {})).rejects.toThrow();
   expect(execute).not.toHaveBeenCalled();
   await app.setProps({ refreshing: true });
@@ -172,8 +167,8 @@ test("workspace identity is bound at both envelopes and stale viewer ports canno
   expect(navigate).toHaveBeenCalledOnce();
   for (const invalid of [
     { context: { ...workspaceContext, resourceId: "other" } },
-    { data: { ...workspaceFixture(), dashboard_id: "other" } },
-    { data: { ...workspaceFixture(), document_mode: "draft" } },
+    { data: { ...viewPage(), snapshot: { ...viewPage().snapshot, dashboard_id: "other" } } },
+    { data: { ...viewPage(), edit: editPage().edit } },
     { token: "invalid" },
   ]) {
     await app.setProps({ snapshot: { ...workspace, ...invalid } });

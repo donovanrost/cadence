@@ -105,7 +105,9 @@ is idempotent by semantic content; unmount releases the owner, and a disposed ro
 late registrations. An isolated page or Storybook preview renders the same UI components
 locally when no host context is present.
 
-Declare exactly one page heading per full-page surface. Keep section headings (`h2`),
+Declare exactly one page heading per full-page surface. A full-bleed surface that owns its
+identity bar (the Ops dashboard page) instead sets `"pageChrome": "none"` on its route in
+`routes.json`; the host then omits its heading region and the page renders its own single `h1`. Keep section headings (`h2`),
 filters, statistics, tables, and workspace tools in the page body. Actions belong to their
 domain component; the host controls their placement. Narrow forms can constrain their
 content width without shrinking or restyling the page header. New pages must use this

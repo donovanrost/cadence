@@ -248,7 +248,7 @@ test("dashboard history is a resource-bound compiled feature with independent bo
     "reload_activity",
   ]);
 });
-test("dashboard authoring is a resource-bound compiled feature without an installation lookup", () => {
+test("dashboard editing is the dashboard page in edit mode, without an installation lookup", () => {
   const route = required(
     routes.find(
       (route) => route.path === "/missions/:mission_id/ops/dashboards/:dashboard_id/edit",
@@ -256,7 +256,7 @@ test("dashboard authoring is a resource-bound compiled feature without an instal
   );
   expect(route).toMatchObject({
     kind: "ops_module",
-    contribution: "dashboards.editor",
+    contribution: "dashboards.workspace",
     resourceParam: "dashboard_id",
   });
   expect(route).not.toHaveProperty("application");

@@ -12,7 +12,6 @@
     "./playlists": "./src/playlists.ts",
     "./library": "./src/library.ts",
     "./activity": "./src/activity.ts",
-    "./editor": "./src/editor.ts",
     "./workspace": "./src/workspace.ts",
     "./workspace.css": "./src/workspace.css",
     "./charts.css": "./src/charts.css",
