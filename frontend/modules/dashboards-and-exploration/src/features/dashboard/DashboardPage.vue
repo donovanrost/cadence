@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch } from "vue";
 import CadenceButton from "@cadence/ui/CadenceButton.vue";
+import CadenceDialog from "@cadence/ui/CadenceDialog.vue";
 import CadenceNoticeFrame from "@cadence/ui/CadenceNoticeFrame.vue";
 import CadenceEmptyStateFrame from "@cadence/ui/CadenceEmptyStateFrame.vue";
 import type { LayoutEdit } from "./contracts";
@@ -44,6 +45,36 @@ const streamState = computed(() => {
   return receiving.value ? "receiving" : "following";
 });
 
+// Leaving edit mode with unsaved changes asks first, like Grafana's Exit edit.
+const exiting = ref(false);
+function requestExit() {
+  if (dirty.value) exiting.value = true;
+  else state.exitEdit();
+}
+async function discardAndExit() {
+  exiting.value = false;
+  await state.discardAndExit();
+}
+
+// Someone else saved: offer to replay my edits on their version. A dismissed
+// prompt stays dismissed until their next save.
+const dismissedAt = ref<number | null>(null);
+const conflictOpen = computed(
+  () =>
+    page.value.mode === "edit" &&
+    page.value.edit.conflict &&
+    dismissedAt.value !== page.value.saved.version,
+);
+const dismissConflict = () => (dismissedAt.value = page.value.saved.version);
+async function continueEditing() {
+  dismissConflict();
+  await state.rebase();
+}
+async function discardConflict() {
+  dismissConflict();
+  await state.discard();
+}
+
 // Drags report often; only the newest layout waits behind an in-flight change.
 let queuedLayout: LayoutEdit[] | null = null;
 async function stageLayout(layouts: LayoutEdit[]) {
@@ -68,7 +99,6 @@ async function stageLayout(layouts: LayoutEdit[]) {
     <DashboardHeader
       :name="snapshot?.name ?? outline?.name ?? 'Dashboard'"
       :description="snapshot?.description ?? null"
-      :publication="page.publication"
       :author="page.author"
       :editing="editing"
       :dirty="dirty"
@@ -77,10 +107,10 @@ async function stageLayout(layouts: LayoutEdit[]) {
       :base="state.base.value"
       :diagnostics-href="diagnosticsHref(state.base.value, snapshot)"
       @edit="state.enterEdit"
-      @done="state.done"
-      @save="state.save"
-      @discard="state.discard"
-      @publish="state.publish"
+      @exit="requestExit"
+      @save="panel = { kind: 'save' }"
+      @copy="panel = { kind: 'copy' }"
+      @versions="panel = { kind: 'versions' }"
     >
       <DashboardToolbar
         v-if="snapshot"
@@ -106,14 +136,6 @@ async function stageLayout(layouts: LayoutEdit[]) {
       @add-section="panel = { kind: 'section', id: null }"
       @details="panel = { kind: 'details' }"
     />
-    <CadenceNoticeFrame
-      v-if="page.mode === 'edit' && page.edit.conflict"
-      tone="warning"
-      role="alert"
-    >
-      Someone else saved a newer version of this dashboard. Your staged changes can't be saved;
-      discard them to continue editing the latest version.
-    </CadenceNoticeFrame>
     <CadenceNoticeFrame
       v-if="notice"
       :tone="notice.tone === 'success' || notice.tone === 'info' ? 'info' : 'warning'"
@@ -166,5 +188,34 @@ async function stageLayout(layouts: LayoutEdit[]) {
       @remove-section="(id) => state.stage('remove_section', { section_id: id })"
     />
     <DashboardPanels v-model="panel" :state="state" :outline="outline" />
+    <CadenceDialog
+      :open="exiting"
+      tone="danger"
+      title="Discard unsaved changes?"
+      description="You have unsaved changes to this dashboard. Leaving edit mode discards them."
+      @update:open="(open) => (exiting = open)"
+    >
+      <template #actions>
+        <CadenceButton variant="quiet" size="sm" @click="exiting = false">Cancel</CadenceButton>
+        <CadenceButton variant="danger" size="sm" :loading="pending" @click="discardAndExit">
+          Discard
+        </CadenceButton>
+      </template>
+    </CadenceDialog>
+    <CadenceDialog
+      :open="conflictOpen"
+      title="Dashboard changed"
+      description="Someone else saved this dashboard while you were editing. Continue to reapply your changes on top of their version, or discard yours."
+      @update:open="(open) => !open && dismissConflict()"
+    >
+      <template #actions>
+        <CadenceButton variant="quiet" size="sm" :disabled="pending" @click="discardConflict">
+          Discard my changes
+        </CadenceButton>
+        <CadenceButton variant="primary" size="sm" :loading="pending" @click="continueEditing">
+          Continue editing
+        </CadenceButton>
+      </template>
+    </CadenceDialog>
   </div>
 </template>

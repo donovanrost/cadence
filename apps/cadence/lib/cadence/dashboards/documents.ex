@@ -3,7 +3,7 @@ defmodule Cadence.Dashboards.Documents do
   Application service for dashboard document lifecycle and persistence.
   """
 
-  alias Cadence.Dashboards.{Document, DocumentCodec, DocumentStore}
+  alias Cadence.Dashboards.{CurrentVersions, Document, DocumentCodec, DocumentStore}
 
   def clone(organization_id, mission_id, source_dashboard_id, opts \\ []) do
     with {:ok, %Document{} = source} <-
@@ -16,7 +16,9 @@ defmodule Cadence.Dashboards.Documents do
         source_dashboard_id: source.dashboard_id,
         actor_id: Keyword.get(opts, :actor_id)
       )
-      |> then(&persist(organization_id, &1))
+      |> then(
+        &CurrentVersions.create(organization_id, &1, created_by: Keyword.get(opts, :actor_id))
+      )
     end
   end
 
@@ -30,7 +32,9 @@ defmodule Cadence.Dashboards.Documents do
         source_dashboard_id: source.dashboard_id,
         actor_id: Keyword.get(opts, :actor_id)
       )
-      |> then(&persist(organization_id, &1))
+      |> then(
+        &CurrentVersions.create(organization_id, &1, created_by: Keyword.get(opts, :actor_id))
+      )
     end
   end
 

@@ -38,5 +38,6 @@ export type ActivityModel = {
   next_event: string | null;
 };
 export type ActivityState = { sequence: number; phase: "ready" | "review"; model: ActivityModel };
-export const activityActions = ["publish_version", "restore_version", "reload_activity"] as const;
+/** History is read-only: every save is current, and restore lives in the dashboard's Versions view. */
+export const activityActions = ["reload_activity"] as const;
 export type ActivityAction = (typeof activityActions)[number];

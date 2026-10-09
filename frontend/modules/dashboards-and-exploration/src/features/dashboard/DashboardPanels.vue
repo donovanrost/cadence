@@ -5,7 +5,10 @@ import type { DashboardPageState } from "./useDashboardPage";
 import type { Panel } from "./panels";
 import DetailsEditor from "./DetailsEditor.vue";
 import EditSheet from "./EditSheet.vue";
+import SaveCopySheet from "./SaveCopySheet.vue";
+import SaveDashboardSheet from "./SaveDashboardSheet.vue";
 import SectionEditor from "./SectionEditor.vue";
+import VersionsSheet from "./VersionsSheet.vue";
 import WidgetEditor from "./WidgetEditor.vue";
 import WidgetInspector from "./WidgetInspector.vue";
 
@@ -33,6 +36,12 @@ const title = computed(() => {
       return panel.value.id ? "Edit section" : "Add section";
     case "details":
       return "Dashboard details";
+    case "save":
+      return "Save dashboard";
+    case "copy":
+      return "Save as copy";
+    case "versions":
+      return "Versions";
     case "inspect":
       return `Inspect · ${panel.value.placement.widget?.title ?? panel.value.placement.authored_id}`;
     default:
@@ -67,10 +76,22 @@ async function applyDetails(change: DetailsChange) {
   <EditSheet
     v-if="panel"
     :title="title"
-    :width="panel.kind === 'inspect' ? 'lg' : 'md'"
+    :width="['inspect', 'versions', 'save'].includes(panel.kind) ? 'lg' : 'md'"
     @close="close"
   >
     <WidgetInspector v-if="panel.kind === 'inspect'" :placement="panel.placement" />
+    <VersionsSheet
+      v-else-if="panel.kind === 'versions'"
+      :state="state"
+      :author="state.page.value.author"
+    />
+    <SaveDashboardSheet v-else-if="panel.kind === 'save'" :state="state" @close="close" />
+    <SaveCopySheet
+      v-else-if="panel.kind === 'copy' && outline"
+      :state="state"
+      :name="outline.name"
+      @close="close"
+    />
     <template v-else-if="outline">
       <WidgetEditor
         v-if="panel.kind === 'widget' && (placement?.fields || !panel.id)"

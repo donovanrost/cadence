@@ -5,6 +5,7 @@ import CadenceMenuItem from "@cadence/ui/CadenceMenuItem.vue";
 import CadenceModalMenu from "@cadence/ui/CadenceModalMenu.vue";
 
 const props = defineProps<{ base: string; author: boolean; diagnosticsHref: string | null }>();
+const emit = defineEmits<{ versions: [] }>();
 type Link = { href: string | null; icon: `hero-${string}`; label: string; show: boolean };
 const ops = computed(() => props.base.replace(/\/dashboards\/[^/]+$/, ""));
 const links = computed(() => {
@@ -12,7 +13,7 @@ const links = computed(() => {
     {
       href: `${props.base}/activity`,
       icon: "hero-clock",
-      label: "Versions & activity",
+      label: "Activity log",
       show: true,
     },
     {
@@ -55,6 +56,11 @@ const links = computed(() => {
     </template>
     <template #content="{ open }">
       <div id="dashboard-more-menu" class="cadence-overlay-panel cadence-menu-panel">
+        <div class="cadence-menu-item">
+          <CadenceMenuItem :active="open" @select="emit('versions')">
+            <button type="button"><CadenceIcon name="hero-clock" />Versions</button>
+          </CadenceMenuItem>
+        </div>
         <div v-for="link in links" :key="link.label" class="cadence-menu-item">
           <CadenceMenuItem :active="open">
             <a :href="link.href"><CadenceIcon :name="link.icon" />{{ link.label }}</a>

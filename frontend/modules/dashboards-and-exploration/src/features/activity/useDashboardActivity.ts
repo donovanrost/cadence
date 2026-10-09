@@ -13,9 +13,6 @@ export function useDashboardActivity(props: {
     notice = ref("");
   const sequence = ref(state.value.sequence);
   const model = computed(() => state.value.model);
-  const writable = computed(
-    () => !pending.value && !review.value && model.value.author && !model.value.archived,
-  );
   watch(
     () => props.state,
     (next) => {
@@ -43,17 +40,8 @@ export function useDashboardActivity(props: {
     window.removeEventListener("beforeunload", beforeUnload);
   });
   async function execute(action: ActivityAction) {
-    if (pending.value || (action !== "reload_activity" && !writable.value)) return;
+    if (pending.value) return;
     const observed = model.value;
-    if (
-      action !== "reload_activity" &&
-      !window.confirm(
-        action === "restore_version"
-          ? `Restore version ${observed.selected.version} as a new draft after version ${observed.document_version}? The published version will not change.`
-          : `Publish version ${observed.selected.version}? This replaces the published pointer; draft version ${observed.document_version} is retained.`,
-      )
-    )
-      return;
     const requested = sequence.value + 1;
     sequence.value = requested;
     pending.value = true;
@@ -61,17 +49,7 @@ export function useDashboardActivity(props: {
     notice.value = "";
     try {
       const response = exact(
-        await props.port.execute(action, {
-          sequence: requested,
-          command:
-            action === "reload_activity"
-              ? {}
-              : {
-                  version: observed.selected.version,
-                  expected_version: observed.document_version,
-                  expected_revision: observed.revision,
-                },
-        }),
+        await props.port.execute(action, { sequence: requested, command: {} }),
         ["status", "code", "state"],
       );
       const next = readActivity(response.state, props.context);
@@ -85,39 +63,13 @@ export function useDashboardActivity(props: {
         )
       )
         throw Error("Changed selection");
-      if (
-        response.status === "invalid" &&
-        ["invalid_input", "invalid_document"].includes(response.code as string) &&
-        next.phase === "ready"
-      ) {
-        state.value = next;
-        review.value = false;
-        notice.value =
-          "The selected version could not pass validation or publication readiness. No change was applied.";
-        return;
-      }
       if (response.status !== "ok" || response.code !== null || next.phase !== "ready")
         throw Error("Unconfirmed outcome");
-      if (
-        action !== "reload_activity" &&
-        (next.model.document_version !==
-          observed.document_version + (action === "restore_version" ? 1 : 0) ||
-          next.model.revision !== observed.revision + 1 ||
-          next.model.published_version !==
-            (action === "publish_version" ? observed.selected.version : observed.published_version))
-      )
-        throw Error("Unconfirmed revision");
       state.value = next;
       review.value = false;
-      notice.value =
-        action === "restore_version"
-          ? "Version restored as a new draft. Publication is unchanged."
-          : action === "publish_version"
-            ? "Selected version published. The latest draft is retained."
-            : "History reloaded. Review the current versions before making changes.";
+      notice.value = "History reloaded.";
     } catch {
-      notice.value =
-        "The outcome could not be confirmed. Reload history and review the current versions before another change.";
+      notice.value = "History could not be reloaded. Try again.";
     } finally {
       pending.value = false;
     }
@@ -152,5 +104,5 @@ export function useDashboardActivity(props: {
     event.preventDefault();
     props.port.navigate(path);
   }
-  return { model, pending, review, writable, notice, execute, base, href, navigate };
+  return { model, pending, review, notice, execute, base, href, navigate };
 }

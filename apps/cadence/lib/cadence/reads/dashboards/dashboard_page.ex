@@ -2,10 +2,10 @@ defmodule Cadence.Reads.Dashboards.DashboardPage do
   @moduledoc """
   Authorized read model for the Ops dashboard page.
 
-  Authors see the latest saved draft so their own work is visible before it is
-  published; every other mission member sees the published version. A
-  dashboard without a published version is only reported as unpublished to
-  non-authors, never resolved from its draft.
+  Every save makes a new current version (`Cadence.Dashboards.CurrentVersions`),
+  so everyone sees the same dashboard. A legacy dashboard that was never made
+  current is shown to authors from its latest version and reported unavailable
+  to everyone else.
 
   The runtime spacecraft scope comes from the browser, so it is admitted only
   when it names a spacecraft of this mission.
@@ -20,7 +20,7 @@ defmodule Cadence.Reads.Dashboards.DashboardPage do
   @type view :: %{
           version: 2,
           author: boolean(),
-          publication: map(),
+          saved: map(),
           snapshot: map() | nil,
           scope_options: [map()]
         }
@@ -34,7 +34,7 @@ defmodule Cadence.Reads.Dashboards.DashboardPage do
        %{
          version: 2,
          author: author,
-         publication: publication(summary),
+         saved: saved(summary),
          snapshot: snapshot,
          scope_options: options
        }}
@@ -70,7 +70,7 @@ defmodule Cadence.Reads.Dashboards.DashboardPage do
        %{
          version: 2,
          author: true,
-         publication: publication(summary),
+         saved: saved(summary),
          snapshot: snapshot,
          scope_options: options
        }, %{document: document, conflict: conflict}}
@@ -92,15 +92,17 @@ defmodule Cadence.Reads.Dashboards.DashboardPage do
     end
   end
 
-  # Authors resolve the latest saved draft; Workspace refuses :edit to everyone else.
+  # Everyone resolves the current version. Only a legacy dashboard that was never
+  # made current falls back to its latest version, and only for authors
+  # (Workspace refuses :edit to everyone else).
   defp snapshot(scope, mission, dashboard, runtime) do
-    case Workspace.load(scope, mission, dashboard, :edit, runtime: runtime) do
+    case Workspace.load(scope, mission, dashboard, :view, runtime: runtime) do
       {:ok, snapshot} ->
-        {:ok, true, snapshot}
+        {:ok, snapshot.author, snapshot}
 
       _ ->
-        case Workspace.load(scope, mission, dashboard, :view, runtime: runtime) do
-          {:ok, snapshot} -> {:ok, snapshot.author, snapshot}
+        case Workspace.load(scope, mission, dashboard, :edit, runtime: runtime) do
+          {:ok, snapshot} -> {:ok, true, snapshot}
           _ -> unpublished(scope, mission, dashboard)
         end
     end
@@ -113,21 +115,10 @@ defmodule Cadence.Reads.Dashboards.DashboardPage do
     end
   end
 
-  defp publication(%DashboardSummary{} = summary) do
-    latest = summary.latest_version || summary.document_version
-    published = summary.published_version
-
+  defp saved(%DashboardSummary{} = summary) do
     %{
-      latest_version: latest,
-      published_version: published,
-      published_at: summary.published_at && DateTime.to_iso8601(summary.published_at),
-      lifecycle: summary.lifecycle_state,
-      state:
-        cond do
-          is_nil(published) -> "unpublished"
-          published == latest -> "published"
-          true -> "draft_ahead"
-        end
+      version: summary.published_version || summary.latest_version || summary.document_version,
+      updated_at: summary.updated_at && DateTime.to_iso8601(summary.updated_at)
     }
   end
 

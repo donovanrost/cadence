@@ -12,13 +12,7 @@ export function viewPage(
     mode: "view",
     sequence: 0,
     author: true,
-    publication: {
-      latest_version: 2,
-      published_version: 1,
-      published_at: "2026-10-01T00:00:00Z",
-      lifecycle: "active",
-      state: "draft_ahead",
-    },
+    saved: { version: 2, updated_at: "2026-10-01T00:00:00Z" },
     snapshot,
     scope_options: [{ id: "sc-1", name: "Pathfinder" }],
     live: { active: false, refresh_ms: null },
@@ -62,7 +56,16 @@ export function editPage(sequence = 0, dirty = false): DashboardPageData {
     mode: "edit",
     sequence,
     snapshot,
-    edit: { revision: sequence, dirty, conflict: false, document_version: 2, outline: outline() },
+    edit: {
+      revision: sequence,
+      dirty,
+      conflict: false,
+      document_version: 2,
+      changes: dirty
+        ? [{ kind: "added", subject: "section", label: "Added section “Thermal”", detail: null }]
+        : [],
+      outline: outline(),
+    },
   };
 }
 

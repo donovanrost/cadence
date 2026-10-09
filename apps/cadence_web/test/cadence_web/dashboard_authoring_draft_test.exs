@@ -1,5 +1,6 @@
 defmodule CadenceWeb.DashboardAuthoringDraftTest do
   use CadenceWeb.ConnCase, async: false
+  import CadenceWeb.DashboardAuthoringDraftTestSupport
   alias Cadence.Auth.Scope
 
   alias Cadence.Dashboards.{
@@ -7,7 +8,6 @@ defmodule CadenceWeb.DashboardAuthoringDraftTest do
     AuthoringDraft,
     AuthoringWidget,
     Document,
-    DocumentCodec,
     Documents,
     ResolutionContext
   }
@@ -16,49 +16,9 @@ defmodule CadenceWeb.DashboardAuthoringDraftTest do
   alias Cadence.Telemetry.Sample
   alias CadenceWeb.TestFixtures
 
-  @fixture Path.expand(
-             "../../../cadence/test/fixtures/dashboards/value_tile_latest.v1.json",
-             __DIR__
-           )
+  setup do: authoring_draft_setup()
 
-  setup do
-    org = TestFixtures.persist_org!()
-    user = TestFixtures.persist_user!()
-    membership = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org)
-
-    scope =
-      Scope.new(%{
-        user: user,
-        organization_id: org.organization_id,
-        organization_membership: membership
-      })
-
-    base = DocumentCodec.load!(@fixture)
-    [placement] = base.placements
-
-    placement = %{
-      placement
-      | widget_def: %{
-          placement.widget_def
-          | binding: Map.put(placement.widget_def.binding, :overlays, [])
-        }
-    }
-
-    document = %{
-      base
-      | organization_id: org.organization_id,
-        mission_id: mission.mission_id,
-        dashboard_id: "staging-" <> Ecto.UUID.generate(),
-        placements: [placement]
-    }
-
-    assert {:ok, document} = Documents.persist(org.organization_id, document)
-    assert {:ok, draft} = AuthoringDraft.open(scope, mission.mission_id, document.dashboard_id)
-    %{org: org, user: user, mission: mission, scope: scope, document: document, draft: draft}
-  end
-
-  test "multiple staged changes create one attributed version only on save and never publish",
+  test "multiple staged changes create one attributed, current version only on save",
        c do
     assert {:ok, _} =
              Documents.publish(
@@ -123,18 +83,19 @@ defmodule CadenceWeb.DashboardAuthoringDraftTest do
     version = List.last(versions(c))
     assert version.created_by == c.user.user_id
 
-    assert version.change_summary ==
-             "Dashboard editor: staged changes (add_section x1, add_widget x1, layout x1, rename x1)"
+    # Without a note the version records its changes in words.
+    assert version.change_summary == "Renamed dashboard and 3 more"
 
-    assert {:ok, published} =
+    # There is no publish step: the save is what everyone sees.
+    assert {:ok, current} =
              Documents.fetch_published(
                c.org.organization_id,
                c.mission.mission_id,
                c.document.dashboard_id
              )
 
-    assert published.name == c.document.name
-    assert Document.version(published) == 1
+    assert current.name == "Staged power"
+    assert Document.version(current) == 2
     assert {:error, :conflict} = AuthoringDraft.save(c.scope, arranged, control(arranged))
     assert length(versions(c)) == 2
   end
@@ -194,35 +155,6 @@ defmodule CadenceWeb.DashboardAuthoringDraftTest do
     assert length(staged.document.sections) == 1
     assert fetch(c) == c.document
     assert length(versions(c)) == 1
-  end
-
-  test "another saved draft never silently replaces the starting version or staged content", c do
-    assert {:ok, other} =
-             AuthoringDraft.open(c.scope, c.mission.mission_id, c.document.dashboard_id)
-
-    assert {:ok, mine, _} = stage(c, c.draft, "rename", %{"name" => "Mine", "description" => ""})
-
-    assert {:ok, theirs, _} =
-             stage(c, other, "rename", %{"name" => "Theirs", "description" => ""})
-
-    assert {:ok, _, _} = AuthoringDraft.save(c.scope, theirs, control(theirs))
-    assert {:error, :conflict} = AuthoringDraft.current(c.scope, mine)
-    assert {:error, :conflict} = AuthoringDraft.save(c.scope, mine, control(mine))
-    assert {:error, :conflict} = AuthoringDraft.discard(c.scope, mine, control(mine))
-
-    assert {:error, :conflict} =
-             stage(c, mine, "remove_widget", %{"placement_id" => "placement_battery_voltage"})
-
-    assert {:error, :conflict} = Editor.staged(c.scope, mine)
-    assert mine.document.name == "Mine"
-    assert fetch(c).name == "Theirs"
-    assert length(versions(c)) == 2
-
-    assert {:ok, reopened} =
-             AuthoringDraft.open(c.scope, c.mission.mission_id, c.document.dashboard_id)
-
-    assert reopened.document.name == "Theirs"
-    assert Document.version(reopened.baseline) == 2
   end
 
   test "actor binding, revoked authority and archived resources reject every retained-draft operation",
@@ -398,34 +330,5 @@ defmodule CadenceWeb.DashboardAuthoringDraftTest do
       resolution_context: context,
       runtime: %{scope_context: %{primary: %{kind: :spacecraft, mode: :one, ids: ["sc_001"]}}}
     ]
-  end
-
-  defp control(draft),
-    do: %{
-      "expected_version" => Document.version(draft.baseline),
-      "expected_revision" => draft.revision
-    }
-
-  defp stage(c, draft, event, fields),
-    do: AuthoringDraft.stage(c.scope, draft, event, Map.merge(fields, control(draft)))
-
-  defp versions(c),
-    do:
-      Documents.list_versions(
-        c.org.organization_id,
-        c.mission.mission_id,
-        c.document.dashboard_id
-      )
-
-  defp fetch(c) do
-    assert {:ok, document} =
-             Documents.fetch_for_mode(
-               c.org.organization_id,
-               c.mission.mission_id,
-               c.document.dashboard_id,
-               :edit
-             )
-
-    document
   end
 end

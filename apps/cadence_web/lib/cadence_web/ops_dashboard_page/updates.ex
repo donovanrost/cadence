@@ -6,7 +6,9 @@ defmodule CadenceWeb.OpsDashboardPage.Updates do
   invalidations and by a refresh tick. A refresh re-prepares the host context,
   which reauthorizes the page and re-resolves the dashboard; LiveVue delivers
   the changed snapshot to the browser as a props diff. Bursts of invalidations
-  coalesce into one refresh. Edit mode and frozen time ranges are not live.
+  coalesce into one refresh. Frozen time ranges are not live. Edit mode has no
+  refresh tick but still listens for invalidations, so a save by someone else
+  re-prepares the page and surfaces the conflict while the author is editing.
   """
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Phoenix.Component
@@ -36,6 +38,10 @@ defmodule CadenceWeb.OpsDashboardPage.Updates do
     if LiveView.connected?(socket), do: start(socket, session, ms), else: socket
   end
 
+  def sync(socket, %{mode: :edit} = session, %{status: "ready"}) do
+    if LiveView.connected?(socket), do: start(socket, session, nil), else: socket
+  end
+
   def sync(socket, _session, _page), do: stop(socket)
 
   defp start(socket, %{token: token, identity: {org, _, mission, dashboard, _path}}, ms) do
@@ -44,8 +50,8 @@ defmodule CadenceWeb.OpsDashboardPage.Updates do
         socket
 
       %{token: ^token} = updates ->
-        Process.cancel_timer(updates.timer)
-        timer = Process.send_after(self(), {:dashboard_live_tick, token}, ms)
+        cancel(updates.timer)
+        timer = schedule(token, ms)
 
         Component.assign(socket, :ops_dashboard_updates, %{updates | timer: timer, refresh_ms: ms})
 
@@ -59,7 +65,7 @@ defmodule CadenceWeb.OpsDashboardPage.Updates do
           topics: topics(org, mission, dashboard),
           scope: {org, mission, dashboard},
           refresh_ms: ms,
-          timer: Process.send_after(self(), {:dashboard_live_tick, token}, ms),
+          timer: schedule(token, ms),
           pending: nil
         })
     end
@@ -68,8 +74,8 @@ defmodule CadenceWeb.OpsDashboardPage.Updates do
   def stop(socket) do
     case socket.assigns[:ops_dashboard_updates] do
       %{timer: timer, pending: pending, topics: topics} ->
-        Process.cancel_timer(timer)
-        if pending, do: Process.cancel_timer(pending)
+        cancel(timer)
+        cancel(pending)
         Enum.each(topics, &Phoenix.PubSub.unsubscribe(@pubsub, &1))
         Component.assign(socket, :ops_dashboard_updates, nil)
 
@@ -81,9 +87,9 @@ defmodule CadenceWeb.OpsDashboardPage.Updates do
   @doc "A refresh tick. Returns `{:refresh, socket}` when the current page is due."
   def tick(socket, token) do
     case socket.assigns[:ops_dashboard_updates] do
-      %{token: ^token, refresh_ms: ms, pending: pending} = updates ->
-        if pending, do: Process.cancel_timer(pending)
-        timer = Process.send_after(self(), {:dashboard_live_tick, token}, ms)
+      %{token: ^token, refresh_ms: ms, pending: pending} = updates when is_integer(ms) ->
+        cancel(pending)
+        timer = schedule(token, ms)
         updates = %{updates | timer: timer, pending: nil}
         {:refresh, Component.assign(socket, :ops_dashboard_updates, updates)}
 
@@ -118,6 +124,11 @@ defmodule CadenceWeb.OpsDashboardPage.Updates do
         {:ignore, socket}
     end
   end
+
+  defp schedule(_token, nil), do: nil
+  defp schedule(token, ms), do: Process.send_after(self(), {:dashboard_live_tick, token}, ms)
+  defp cancel(nil), do: :ok
+  defp cancel(timer), do: Process.cancel_timer(timer)
 
   # Topics are mission- or dashboard-narrowed; an org-wide event without a
   # dashboard still applies, another dashboard's event does not.

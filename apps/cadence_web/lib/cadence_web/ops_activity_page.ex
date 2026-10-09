@@ -1,6 +1,10 @@
 defmodule CadenceWeb.OpsActivityPage do
-  @moduledoc "Host placement and page-instance admission for dashboard history."
-  alias Cadence.Dashboards.VersionAuthoring
+  @moduledoc """
+  Host placement and page-instance admission for dashboard history.
+
+  History is read-only: every save is the current version, and comparing or
+  restoring versions happens on the dashboard page (`CadenceWeb.OpsDashboardPage`).
+  """
   alias Cadence.Reads.Dashboards.Activity
   alias Phoenix.Component
   @route "/missions/:mission_id/ops/dashboards/:dashboard_id/activity"
@@ -76,52 +80,12 @@ defmodule CadenceWeb.OpsActivityPage do
   defp admit_command(_session, "reload_activity", command) when command == %{},
     do: {:ok, command}
 
-  defp admit_command(
-         %{phase: "ready", model: %{author: true, archived: false} = model},
-         event,
-         command
-       )
-       when event in ["publish_version", "restore_version"] do
-    expected = %{
-      "version" => model.selected.version,
-      "expected_version" => model.document_version,
-      "expected_revision" => model.revision
-    }
-
-    if command == expected, do: {:ok, command}, else: :error
-  end
-
   defp admit_command(_, _, _), do: :error
 
   defp effect(scope, session, "reload_activity", _) do
     case read(scope, session) do
       {:ok, model} -> {"ok", nil, %{session | model: model, phase: "ready"}}
       _ -> {"unknown", nil, %{session | model: nil}}
-    end
-  end
-
-  defp effect(scope, session, event, command) do
-    {_, _, mission, dashboard, _} = session.identity
-
-    case VersionAuthoring.execute(scope, mission, dashboard, event, command) do
-      {:ok, receipt} ->
-        case read(scope, session) do
-          {:ok, %{document_version: version, revision: revision} = model}
-          when version == receipt.document_version and revision == receipt.revision ->
-            {"ok", nil, %{session | model: model, phase: "ready"}}
-
-          _ ->
-            {"unknown", nil, session}
-        end
-
-      {:error, code} when code in [:invalid_input, :invalid_document] ->
-        {"invalid", Atom.to_string(code), %{session | phase: "ready"}}
-
-      {:error, :conflict} ->
-        {"conflict", nil, session}
-
-      _ ->
-        {"unknown", nil, session}
     end
   end
 

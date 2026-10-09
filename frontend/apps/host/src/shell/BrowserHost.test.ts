@@ -509,7 +509,7 @@ test("the dashboard editor guards host navigation and back while it holds unsave
     vi.unstubAllGlobals();
   }
 });
-test("the dashboard editor stages a section, then saves and returns to the live viewer", async () => {
+test("the dashboard editor stages a section, saves in place, then exits to the live viewer", async () => {
   vi.stubGlobal(
     "confirm",
     vi.fn(() => false),
@@ -547,10 +547,15 @@ test("the dashboard editor stages a section, then saves and returns to the live 
     expect(view().find(".cadence-sheet").exists()).toBe(false);
     await click("/missions/mission-1/ops/dashboards");
     expect(transport.requests).toHaveLength(2);
-    const done = view()
-      .findAll("button")
-      .find((b) => b.text().includes("Save & exit"));
-    await done?.trigger("click");
+    // Like Grafana: Save dashboard opens the save drawer and keeps the author editing.
+    const button = (text: string) =>
+      view()
+        .findAll("button")
+        .find((b) => b.text() === text);
+    await button("Save dashboard")?.trigger("click");
+    await flushHostUpdates();
+    expect(view().get(".cadence-sheet").text()).toContain("Changes (1)");
+    await view().get(".cadence-sheet form").trigger("submit");
     expect(transport.requests[2]).toMatchObject({
       event: "host:ops-page",
       payload: {
@@ -561,8 +566,14 @@ test("the dashboard editor stages a section, then saves and returns to the live 
     await reply(2, {
       status: "ok",
       code: null,
+      result: null,
       page: dashboardEnvelope(dashboardEditPage(2, false), token),
     });
+    await flushHostUpdates();
+    expect(transport.requests).toHaveLength(3);
+    expect(view().find(".cadence-sheet").exists()).toBe(false);
+    // Nothing unsaved remains, so Exit edit returns to the viewer without asking.
+    await button("Exit edit")?.trigger("click");
     await flushHostUpdates();
     expect(transport.requests[3]).toMatchObject({
       event: "host:context",

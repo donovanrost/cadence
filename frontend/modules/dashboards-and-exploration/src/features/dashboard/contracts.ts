@@ -67,6 +67,14 @@ export type DashboardOutline = Readonly<{
   placements: readonly OutlinePlacement[];
 }>;
 
+/** One readable difference between two dashboard versions (server-computed). */
+export type VersionChange = Readonly<{
+  kind: "added" | "removed" | "changed";
+  subject: "dashboard" | "section" | "widget" | "layout";
+  label: string;
+  detail: string | null;
+}>;
+
 export type EditSession = Readonly<{
   revision: number;
   dirty: boolean;
@@ -74,16 +82,13 @@ export type EditSession = Readonly<{
   conflict: boolean;
   /** The saved version this staging transaction will replace. */
   document_version: number;
+  /** What a save would change, relative to the saved version. */
+  changes: readonly VersionChange[];
   outline: DashboardOutline;
 }>;
 
-export type Publication = Readonly<{
-  latest_version: number;
-  published_version: number | null;
-  published_at: string | null;
-  lifecycle: string;
-  state: "unpublished" | "published" | "draft_ahead";
-}>;
+/** The current version: every save makes one, there is no separate publish. */
+export type SavedVersion = Readonly<{ version: number; updated_at: string | null }>;
 
 export type ScopeOption = Readonly<{ id: string; name: string }>;
 
@@ -92,7 +97,7 @@ type PageBase = Readonly<{
   /** The last confirmed action sequence; the next action must use sequence + 1. */
   sequence: number;
   author: boolean;
-  publication: Publication;
+  saved: SavedVersion;
   scope_options: readonly ScopeOption[];
   live: Readonly<{ active: boolean; refresh_ms: number | null }>;
   resolved_at: string;
@@ -119,7 +124,18 @@ export const stageActions = [
   "runtime_defaults",
 ] as const;
 export type StageAction = (typeof stageActions)[number];
-export const pageActions = [...stageActions, "save", "discard", "publish", "search_observables"];
+export const pageActions = [
+  ...stageActions,
+  "save",
+  "discard",
+  "rebase",
+  "save_as_copy",
+  "restore",
+  "search_observables",
+  "versions",
+  "compare",
+  "compare_staged",
+];
 
 export type LayoutEdit = { placement_id: string; x: number; y: number; w: number; h: number };
 export type SectionInput = { title: string; description: string; collapsed_by_default: boolean };
@@ -140,10 +156,37 @@ export type StageInputs = {
 };
 
 export type ActionStatus = "ok" | "invalid" | "conflict" | "rejected" | "unknown";
+/** Effect-specific results: skipped edits after a rebase, a copy's id, a restored version. */
+export type ActionResult = Readonly<{
+  skipped?: readonly string[];
+  dashboard_id?: string;
+  version?: number;
+}>;
+
 export type ActionOutcome =
-  | { status: "ok"; page: DashboardPageData }
+  | { status: "ok"; page: DashboardPageData; result: ActionResult | null }
   | { status: "invalid"; code: string; page: DashboardPageData | null }
   | { status: "conflict" | "rejected" | "unknown"; page: DashboardPageData | null };
+
+export type VersionRow = Readonly<{
+  version: number;
+  saved_at: string | null;
+  saved_by: string | null;
+  message: string | null;
+  restored_from: number | null;
+  current: boolean;
+}>;
+
+export type VersionList = Readonly<{ current_version: number; versions: readonly VersionRow[] }>;
+
+/** Two versions (or the saved version and the staged candidate when `to` is null). */
+export type VersionComparison = Readonly<{
+  from: number;
+  to: number | null;
+  changes: readonly VersionChange[];
+  from_json: string;
+  to_json: string;
+}>;
 
 /** The dashboard details sheet stages a rename and/or new runtime defaults, in order. */
 export type DetailsChange = {

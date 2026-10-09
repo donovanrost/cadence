@@ -4,7 +4,11 @@ defmodule Cadence.Dashboards.AuthoringDraft do
 
   Staging and discarding never write documents. Save persists the accumulated
   document against the originally observed durable version, exactly once under
-  the store's optimistic lock. This struct is not a browser DTO and must never
+  the store's optimistic lock, and makes it the current version (there is no
+  separate publish step; see `Cadence.Dashboards.CurrentVersions`).
+
+  The admitted commands are retained so that, after someone else saves, the
+  author can `rebase/2`: replay their edits onto the newer version. This struct is not a browser DTO and must never
   be reconstructed from client-supplied document maps. A host owns its lifetime
   and must replace its retained value only after a confirmed response.
   """
@@ -13,13 +17,15 @@ defmodule Cadence.Dashboards.AuthoringDraft do
     AuthoringChanges,
     AuthoringErrors,
     AuthoringInput,
+    CurrentVersions,
     Document,
-    Documents
+    Documents,
+    VersionDiff
   }
 
   @events ~w(rename add_section update_section remove_section move_section add_widget update_widget remove_widget layout runtime_defaults)
   @enforce_keys [:organization_id, :mission_id, :dashboard_id, :user_id, :baseline, :document]
-  defstruct @enforce_keys ++ [revision: 0, changes: %{}]
+  defstruct @enforce_keys ++ [revision: 0, changes: %{}, commands: []]
 
   def open(scope, mission, dashboard) do
     protect(fn ->
@@ -65,7 +71,8 @@ defmodule Cadence.Dashboards.AuthoringDraft do
            draft
            | document: document,
              revision: draft.revision + 1,
-             changes: Map.update(draft.changes, event, 1, &(&1 + 1))
+             changes: Map.update(draft.changes, event, 1, &(&1 + 1)),
+             commands: draft.commands ++ [{event, payload}]
          }, details}
       end
     end)
@@ -76,7 +83,14 @@ defmodule Cadence.Dashboards.AuthoringDraft do
   def discard(scope, %__MODULE__{} = draft, input) do
     protect(fn ->
       with :ok <- control(draft, input), :ok <- check(scope, draft) do
-        {:ok, %{draft | document: draft.baseline, changes: %{}, revision: draft.revision + 1}}
+        {:ok,
+         %{
+           draft
+           | document: draft.baseline,
+             changes: %{},
+             commands: [],
+             revision: draft.revision + 1
+         }}
       end
     end)
   end
@@ -85,15 +99,17 @@ defmodule Cadence.Dashboards.AuthoringDraft do
 
   def save(scope, %__MODULE__{} = draft, input) do
     protect(fn ->
-      with :ok <- control(draft, input),
+      with {:ok, message} <- message(input),
+           :ok <- control(draft, Map.delete(input, "message")),
            :ok <- check(scope, draft),
            changed? = dirty?(draft),
-           {:ok, saved} <- persist(scope, draft, changed?) do
+           {:ok, saved} <- persist(scope, draft, changed?, message) do
         next = %{
           draft
           | document: saved,
             baseline: saved,
             changes: %{},
+            commands: [],
             revision: draft.revision + 1
         }
 
@@ -113,20 +129,90 @@ defmodule Cadence.Dashboards.AuthoringDraft do
 
   def dirty?(%__MODULE__{} = draft), do: draft.document != draft.baseline
 
-  defp persist(_scope, draft, false), do: {:ok, draft.baseline}
+  @doc """
+  Replays the staged commands onto the latest saved version after someone else
+  saved. Commands that no longer apply (e.g. their widget was removed) are
+  skipped and reported; the rest stay staged against the new baseline.
+  """
+  def rebase(scope, %__MODULE__{} = draft) do
+    protect(fn ->
+      with :ok <- Authoring.authorize(scope, draft.mission_id),
+           true <- scope.organization_id == draft.organization_id,
+           true <- scope.user.user_id == draft.user_id,
+           {:ok, latest} <-
+             Documents.fetch_for_mode(
+               draft.organization_id,
+               draft.mission_id,
+               draft.dashboard_id,
+               :edit
+             ),
+           true <-
+             document_identity?(
+               latest,
+               draft.organization_id,
+               draft.mission_id,
+               draft.dashboard_id
+             ) do
+        {document, applied, skipped} = replay(latest, draft.commands)
 
-  defp persist(scope, draft, true) do
-    summary =
-      draft.changes
-      |> Enum.sort()
-      |> Enum.map_join(", ", fn {event, count} -> "#{event} x#{count}" end)
+        {:ok,
+         %{
+           draft
+           | baseline: latest,
+             document: document,
+             commands: applied,
+             changes: Enum.frequencies_by(applied, &elem(&1, 0)),
+             revision: draft.revision + 1
+         }, %{version: 1, event: "rebase", skipped: Enum.map(skipped, &elem(&1, 0))}}
+      end
+    end)
+  end
 
-    Documents.update(draft.organization_id, draft.mission_id, draft.dashboard_id, draft.document,
+  def rebase(_, _), do: {:error, :invalid_input}
+
+  defp replay(document, commands) do
+    Enum.reduce(commands, {document, [], []}, fn {event, payload} = command,
+                                                 {doc, applied, skipped} ->
+      case AuthoringChanges.apply(doc, event, payload) do
+        {:ok, next, _details} -> {next, applied ++ [command], skipped}
+        _ -> {doc, applied, skipped ++ [command]}
+      end
+    end)
+  end
+
+  defp persist(_scope, draft, false, _message), do: {:ok, draft.baseline}
+
+  defp persist(scope, draft, true, message) do
+    summary = message || describe(VersionDiff.changes(draft.baseline, draft.document))
+
+    CurrentVersions.save(
+      draft.organization_id,
+      draft.mission_id,
+      draft.dashboard_id,
+      draft.document,
       expected_version: Document.version(draft.baseline),
       created_by: scope.user.user_id,
-      change_summary: "Dashboard editor: staged changes (#{summary})"
+      change_summary: summary
     )
   end
+
+  # Without a note, record what changed in words, like "Added widget “Uptime” and 2 more".
+  defp describe([]), do: "Saved without changes"
+  defp describe([%{label: label}]), do: label
+  defp describe([%{label: label} | rest]), do: "#{label} and #{length(rest)} more"
+
+  defp message(%{"message" => message}) when is_binary(message) do
+    trimmed = String.trim(message)
+
+    cond do
+      byte_size(trimmed) > 1_000 or not String.valid?(trimmed) -> {:error, :invalid_input}
+      trimmed == "" -> {:ok, nil}
+      true -> {:ok, trimmed}
+    end
+  end
+
+  defp message(%{"message" => _}), do: {:error, :invalid_input}
+  defp message(_input), do: {:ok, nil}
 
   defp control(draft, %{"expected_version" => version, "expected_revision" => revision} = input)
        when map_size(input) == 2 do

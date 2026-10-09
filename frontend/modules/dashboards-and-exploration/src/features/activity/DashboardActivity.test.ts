@@ -75,58 +75,16 @@ test("admits exact resource-bound metadata without raw documents, audit payloads
     expect(() => readActivity(bad, activityContext)).toThrow();
   }
 });
-test("publishes the selected immutable version with both observed concurrency preconditions", async () => {
-  const next = activityFixture();
-  next.sequence = 1;
-  next.model.revision = 3;
-  next.model.published_version = 1;
-  const { wrapper, execute } = setup(
-    activityFixture(),
-    vi.fn(async () => reply(next)),
-  );
-  await wrapper.get("#activity-publish").trigger("click");
-  await flushPromises();
-  expect(execute).toHaveBeenCalledExactlyOnceWith("publish_version", {
-    sequence: 1,
-    command: { version: 1, expected_version: 2, expected_revision: 2 },
-  });
-  expect(wrapper.get("#activity-outcome").text()).toContain("Selected version published");
-  expect(wrapper.get("#activity-publish").attributes("disabled")).toBeDefined();
-  expect(wrapper.get("#activity-restore").attributes("disabled")).toBeUndefined();
+test("history is read-only: no publish or restore controls, and versions live on the dashboard", () => {
+  const { wrapper } = setup();
+  expect(activityContribution.actions).toEqual(["reload_activity"]);
+  expect(wrapper.find("#activity-publish").exists()).toBe(false);
+  expect(wrapper.find("#activity-restore").exists()).toBe(false);
+  expect(wrapper.text()).toContain("Every save is the current version");
 });
-test("restore appends a draft and keeps publication separate", async () => {
-  const next = activityFixture();
-  next.sequence = 1;
-  next.model.document_version = 3;
-  next.model.revision = 3;
-  const { wrapper } = setup(
-    activityFixture(),
-    vi.fn(async () => reply(next)),
-  );
-  await wrapper.get("#activity-restore").trigger("click");
-  await flushPromises();
-  expect(wrapper.get("#activity-outcome").text()).toContain("new draft");
-  expect(window.confirm).toHaveBeenCalledWith(
-    expect.stringContaining("published version will not change"),
-  );
-});
-test("declined confirmations and read-only or archived history cannot write", async () => {
-  const { wrapper, execute } = setup();
-  vi.mocked(window.confirm).mockReturnValue(false);
-  await wrapper.get("#activity-restore").trigger("click");
-  expect(execute).not.toHaveBeenCalled();
-  for (const patch of [{ author: false }, { archived: true }]) {
-    const state = activityFixture();
-    Object.assign(state.model, patch);
-    const { wrapper } = setup(state);
-    expect(wrapper.find("#activity-restore").exists()).toBe(false);
-    expect(wrapper.find("#activity-publish").exists()).toBe(false);
-    expect(wrapper.find("#activity-reload").exists()).toBe(true);
-  }
-});
-test("pending effects guard navigation and ignore unsolicited refresh, then dispose the guard", async () => {
+test("a pending reload guards navigation, ignores unsolicited refresh, then disposes the guard", async () => {
   let resolve!: (value: unknown) => void;
-  const { wrapper, canLeave, navigate, dispose } = setup(
+  const { wrapper, canLeave, dispose } = setup(
     activityFixture(),
     vi.fn(
       () =>
@@ -135,58 +93,28 @@ test("pending effects guard navigation and ignore unsolicited refresh, then disp
         }),
     ),
   );
-  await wrapper.get("#activity-restore").trigger("click");
+  await wrapper.get("#activity-reload").trigger("click");
   expect(canLeave()).toBe(false);
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
   expect(event.defaultPrevented).toBe(true);
-  await wrapper.get("#activity-editor").trigger("click");
-  expect(navigate).not.toHaveBeenCalled();
   const refresh = activityFixture();
   refresh.model.revision = 50;
   await wrapper.setProps({ state: refresh });
-  resolve(reply({ ...activityFixture(), sequence: 1, phase: "review" }, "unknown"));
+  resolve(reply({ ...activityFixture(), sequence: 1 }));
   await flushPromises();
   expect(canLeave()).toBe(true);
-  expect(wrapper.get("#activity-restore").attributes("disabled")).toBeDefined();
   wrapper.unmount();
   expect(dispose).toHaveBeenCalledOnce();
   wrappers.splice(wrappers.indexOf(wrapper), 1);
 });
-test("unknown and mismatched receipts remain locked across refresh until explicit reload", async () => {
-  for (const response of [
-    new Error("Lost"),
-    reply({ ...activityFixture(), sequence: 1 }, "unknown"),
-    reply({ ...activityFixture(), sequence: 1 }),
-    reply({ ...activityFixture(), sequence: 1 }, "invalid", "untrusted"),
-  ]) {
-    const execute = vi.fn(async () => {
-      if (response instanceof Error) throw response;
-      return response;
-    });
-    const { wrapper } = setup(activityFixture(), execute);
-    await wrapper.get("#activity-restore").trigger("click");
-    await flushPromises();
-    const refreshed = activityFixture();
-    refreshed.sequence = 1;
-    await wrapper.setProps({ state: refreshed });
-    expect(wrapper.get("#activity-restore").attributes("disabled")).toBeDefined();
-    execute.mockResolvedValue(reply({ ...activityFixture(), sequence: 2 }));
-    await wrapper.get("#activity-reload").trigger("click");
-    await flushPromises();
-    expect(execute).toHaveBeenLastCalledWith("reload_activity", { sequence: 2, command: {} });
-    expect(wrapper.get("#activity-restore").attributes("disabled")).toBeUndefined();
-  }
-});
-test("known validation rejection permits correction without accepting arbitrary errors", async () => {
-  const { wrapper } = setup(
-    activityFixture(),
-    vi.fn(async () => reply({ ...activityFixture(), sequence: 1 }, "invalid", "invalid_document")),
-  );
-  await wrapper.get("#activity-publish").trigger("click");
+test("reload is sequence-bound and reports an unconfirmed outcome", async () => {
+  const execute = vi.fn(async (): Promise<unknown> => reply({ ...activityFixture(), sequence: 7 }));
+  const { wrapper } = setup(activityFixture(), execute);
+  await wrapper.get("#activity-reload").trigger("click");
   await flushPromises();
-  expect(wrapper.get("#activity-outcome").text()).toContain("readiness");
-  expect(wrapper.get("#activity-publish").attributes("disabled")).toBeUndefined();
+  expect(execute).toHaveBeenLastCalledWith("reload_activity", { sequence: 1, command: {} });
+  expect(wrapper.get("#activity-outcome").text()).toContain("could not be reloaded");
 });
 test("page links preserve independent selection and pagination, and navigate through the host", async () => {
   const state = activityFixture();

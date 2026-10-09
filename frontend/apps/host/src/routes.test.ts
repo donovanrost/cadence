@@ -242,11 +242,8 @@ test("dashboard history is a resource-bound compiled feature with independent bo
   });
   expect(route).not.toHaveProperty("application");
   expect(route).not.toHaveProperty("surface");
-  expect(required(opsPages["dashboards.activity"]).actions).toEqual([
-    "publish_version",
-    "restore_version",
-    "reload_activity",
-  ]);
+  // History is read-only; versions are compared and restored on the dashboard page.
+  expect(required(opsPages["dashboards.activity"]).actions).toEqual(["reload_activity"]);
 });
 test("dashboard editing is the dashboard page in edit mode, without an installation lookup", () => {
   const route = required(

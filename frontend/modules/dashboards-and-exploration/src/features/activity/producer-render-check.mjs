@@ -55,7 +55,8 @@ try {
       );
       assert.equal(doc.querySelectorAll("#activity-versions > li").length, model.versions.length);
       assert.equal(doc.querySelectorAll("#activity-events > li").length, model.events.length);
-      assert.equal(!!doc.getElementById("activity-restore"), model.author && !model.archived);
+      // History is read-only; restore lives in the dashboard Versions view.
+      assert.equal(!!doc.getElementById("activity-restore"), false);
       assert.equal(!!doc.getElementById("activity-older-versions"), model.next_version !== null);
     } finally {
       await window.happyDOM.close();

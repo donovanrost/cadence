@@ -4,12 +4,17 @@ import { readWorkspaceSnapshot } from "../workspace/validation";
 import {
   widgetDefaults,
   type ActionOutcome,
+  type ActionResult,
   type DashboardOutline,
   type DashboardPageData,
   type EditSession,
   type OutlinePlacement,
   type OutlineSection,
-  type Publication,
+  type SavedVersion,
+  type VersionChange,
+  type VersionComparison,
+  type VersionList,
+  type VersionRow,
   type ScopeOption,
   type WidgetFields,
 } from "./contracts";
@@ -230,35 +235,43 @@ export function readOutline(value: unknown, context: OpsPageContext): DashboardO
 }
 
 function readEdit(value: unknown, context: OpsPageContext): EditSession {
-  const e = exact(value, ["revision", "dirty", "conflict", "document_version", "outline"]);
+  const e = exact(value, [
+    "revision",
+    "dirty",
+    "conflict",
+    "document_version",
+    "changes",
+    "outline",
+  ]);
   return {
     revision: integer(e.revision, 0, 1_000_000),
     dirty: bool(e.dirty),
     conflict: bool(e.conflict),
     document_version: integer(e.document_version, 1),
+    changes: list(e.changes, 2048).map(readChange),
     outline: readOutline(e.outline, context),
   };
 }
 
-function readPublication(value: unknown): Publication {
-  const p = exact(value, [
-    "latest_version",
-    "published_version",
-    "published_at",
-    "lifecycle",
-    "state",
-  ]);
-  const latest = integer(p.latest_version, 1);
-  const published = p.published_version === null ? null : integer(p.published_version, 1, latest);
-  const state = oneOf(p.state, ["unpublished", "published", "draft_ahead"] as const);
-  if ((state === "unpublished") !== (published === null)) fail();
-  if (state === "published" && published !== latest) fail();
+function readSaved(value: unknown): SavedVersion {
+  const p = exact(value, ["version", "updated_at"]);
   return {
-    latest_version: latest,
-    published_version: published,
-    published_at: p.published_at === null ? null : timestamp(p.published_at),
-    lifecycle: text(p.lifecycle, 64),
-    state,
+    version: integer(p.version, 1),
+    updated_at: p.updated_at === null ? null : timestamp(p.updated_at),
+  };
+}
+
+function nullableText(value: unknown, max = 512): string | null {
+  return value === null ? null : text(value, max);
+}
+
+export function readChange(value: unknown): VersionChange {
+  const c = exact(value, ["kind", "subject", "label", "detail"]);
+  return {
+    kind: oneOf(c.kind, ["added", "removed", "changed"] as const),
+    subject: oneOf(c.subject, ["dashboard", "section", "widget", "layout"] as const),
+    label: text(c.label, 1024),
+    detail: nullableText(c.detail, 1024),
   };
 }
 
@@ -272,7 +285,7 @@ export function readDashboardPage(value: unknown, context: OpsPageContext): Dash
     "version",
     "mode",
     "author",
-    "publication",
+    "saved",
     "snapshot",
     "scope_options",
     "live",
@@ -288,7 +301,7 @@ export function readDashboardPage(value: unknown, context: OpsPageContext): Dash
     version: 2 as const,
     sequence: integer(d.sequence, 0, 1_000_000),
     author: bool(d.author),
-    publication: readPublication(d.publication),
+    saved: readSaved(d.saved),
     scope_options: scopeOptions,
     live: {
       active: bool(live.active),
@@ -306,13 +319,62 @@ export function readDashboardPage(value: unknown, context: OpsPageContext): Dash
   return { ...base, mode: "edit", snapshot, edit };
 }
 
+function readResult(value: unknown): ActionResult | null {
+  if (value === null || value === undefined) return null;
+  const r = record(value);
+  return {
+    ...(r.skipped === undefined ? {} : { skipped: list(r.skipped, 1024).map((v) => text(v, 64)) }),
+    ...(r.dashboard_id === undefined ? {} : { dashboard_id: id(r.dashboard_id) }),
+    ...(r.version === undefined ? {} : { version: integer(r.version, 1) }),
+  };
+}
+
 export function readActionOutcome(value: unknown, context: OpsPageContext): ActionOutcome {
   const r = record(value);
   const status = oneOf(r.status, ["ok", "invalid", "conflict", "rejected", "unknown"] as const);
   const page = record(r.page ?? {}).status === "ready" ? readEnvelopeData(r.page, context) : null;
-  if (status === "ok") return page ? { status, page } : fail();
+  if (status === "ok") return page ? { status, page, result: readResult(r.result) } : fail();
   if (status === "invalid") return { status, code: text(r.code ?? "invalid_input", 64), page };
   return { status, page };
+}
+
+function readVersionRow(value: unknown): VersionRow {
+  const v = exact(value, [
+    "version",
+    "saved_at",
+    "saved_by",
+    "message",
+    "restored_from",
+    "current",
+  ]);
+  return {
+    version: integer(v.version, 1),
+    saved_at: v.saved_at === null ? null : timestamp(v.saved_at),
+    saved_by: nullableText(v.saved_by),
+    message: nullableText(v.message, 4096),
+    restored_from: v.restored_from === null ? null : integer(v.restored_from, 1),
+    current: bool(v.current),
+  };
+}
+
+export function readVersionList(value: unknown, context: OpsPageContext): VersionList {
+  const r = exact(value, ["version", "dashboard_id", "current_version", "versions"]);
+  if (r.version !== 1 || r.dashboard_id !== context.resourceId) fail();
+  const versions = list(r.versions, 200).map(readVersionRow);
+  unique(versions.map((v) => String(v.version)));
+  return { current_version: integer(r.current_version, 1), versions };
+}
+
+export function readComparison(value: unknown): VersionComparison {
+  const r = exact(value, ["version", "from", "to", "changes", "from_json", "to_json"]);
+  if (r.version !== 1) fail();
+  return {
+    from: integer(r.from, 1),
+    to: r.to === null ? null : integer(r.to, 1),
+    changes: list(r.changes, 2048).map(readChange),
+    from_json: text(r.from_json, 2_000_000),
+    to_json: text(r.to_json, 2_000_000),
+  };
 }
 
 function readEnvelopeData(value: unknown, context: OpsPageContext): DashboardPageData {

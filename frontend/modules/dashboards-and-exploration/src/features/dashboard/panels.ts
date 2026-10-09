@@ -5,4 +5,7 @@ export type Panel =
   | { kind: "widget"; id: string | null }
   | { kind: "section"; id: string | null }
   | { kind: "details" }
+  | { kind: "save" }
+  | { kind: "copy" }
+  | { kind: "versions" }
   | { kind: "inspect"; placement: WorkspacePlacement };

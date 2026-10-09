@@ -1,7 +1,7 @@
 defmodule Cadence.Dashboards.Creation do
   @moduledoc "Scoped blank, clone and import creation independent of frontend delivery."
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.Dashboards.{Document, DocumentCodec, Documents}
+  alias Cadence.Dashboards.{CurrentVersions, Document, DocumentCodec, Documents}
   alias Cadence.Missions
 
   def authorize(
@@ -25,7 +25,7 @@ defmodule Cadence.Dashboards.Creation do
     with :ok <- authorize(scope, mission),
          {:ok, fields} <- fields(input, model.mode),
          {:ok, document} <- document(scope, mission, model, fields) do
-      case Documents.persist(scope.organization_id, document) do
+      case CurrentVersions.create(scope.organization_id, document, created_by: scope.user.user_id) do
         {:ok, saved} ->
           {:ok,
            %{dashboard_id: saved.dashboard_id, version: Document.version(saved), mode: model.mode}}

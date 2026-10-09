@@ -8,7 +8,13 @@ import type {
   StageInputs,
   WidgetFields,
 } from "./contracts";
-import { readActionOutcome, readObservableChoices, record } from "./validation";
+import {
+  readActionOutcome,
+  readComparison,
+  readObservableChoices,
+  readVersionList,
+  record,
+} from "./validation";
 import { selectionParams, withParams, type TimeSelection } from "./time-range";
 
 export type DashboardPageProps = {
@@ -18,6 +24,7 @@ export type DashboardPageProps = {
   refresh: () => Promise<void>;
 };
 export type Notice = { tone: "info" | "success" | "warning" | "error"; text: string };
+export type SaveOptions = { message?: string; defaults?: { time?: boolean; scope?: boolean } };
 
 const invalidMessages: Record<string, string> = {
   invalid_input: "Check the field values and observable IDs.",
@@ -26,13 +33,13 @@ const invalidMessages: Record<string, string> = {
   invalid_options: "Check the widget's display options and numeric ranges.",
   invalid_binding: "The selected observables do not support this source or scope.",
   invalid_widget: "Check the observable count and source for this widget type.",
-  invalid_document: "This dashboard is not ready to publish. Review readiness in Versions.",
+  invalid_document:
+    "This dashboard can't be saved yet: a widget's bindings or sources are not valid.",
   missing_section: "That section no longer exists.",
   missing_placement: "That widget no longer exists.",
   unsupported_widget: "Edit this widget in its owning library.",
   invalid_type: "Choose a supported widget type.",
   capacity: "The dashboard has reached its section or widget limit.",
-  unsaved_changes: "Save or discard your changes before publishing.",
 };
 
 function outcomeNotice(outcome: ActionOutcome): Notice | null {
@@ -47,7 +54,7 @@ function outcomeNotice(outcome: ActionOutcome): Notice | null {
     case "conflict":
       return {
         tone: "error",
-        text: "Someone else saved this dashboard. Discard to load their version, then edit again.",
+        text: "Someone else saved this dashboard while you were editing.",
       };
     case "rejected":
     case "unknown":
@@ -109,8 +116,12 @@ export function useDashboardPage(props: DashboardPageProps) {
   const enterEdit = () => navigate(`${base.value}/edit${withParams(search(), {})}`);
   const exitEdit = () => navigate(viewHref());
 
-  async function execute(action: string, command: Record<string, unknown>): Promise<boolean> {
-    if (disposed || pending.value) return false;
+  /** Sequenced effects: the server confirms each against the page's last sequence. */
+  async function execute(
+    action: string,
+    command: Record<string, unknown>,
+  ): Promise<ActionOutcome | null> {
+    if (disposed || pending.value) return null;
     pending.value = true;
     notice.value = null;
     const sequence = page.value.sequence + 1;
@@ -119,20 +130,28 @@ export function useDashboardPage(props: DashboardPageProps) {
         await props.port.execute(action, { sequence, command }),
         props.context,
       );
-      if (disposed) return false;
+      if (disposed) return null;
       if (outcome.page) adopt(outcome.page);
       notice.value = outcomeNotice(outcome);
-      return outcome.status === "ok";
+      return outcome;
     } catch {
       if (!disposed)
         notice.value = {
           tone: "error",
           text: "The change could not be confirmed. Reload the page before trying again.",
         };
-      return false;
+      return null;
     } finally {
       if (!disposed) pending.value = false;
     }
+  }
+  const succeeded = (outcome: ActionOutcome | null) => outcome?.status === "ok";
+
+  /** Read-only queries (versions, comparisons): no sequence, no page change. */
+  async function query(action: string, input: Record<string, unknown>) {
+    const response = record(await props.port.execute(action, input));
+    if (response.status !== "ok") throw Error(`${action} unavailable`);
+    return response;
   }
 
   function observed() {
@@ -144,36 +163,78 @@ export function useDashboardPage(props: DashboardPageProps) {
     };
   }
 
-  function stage<A extends StageAction>(action: A, input: StageInputs[A]) {
+  async function stage<A extends StageAction>(action: A, input: StageInputs[A]) {
     const control = observed();
-    return control ? execute(action, { ...input, ...control }) : Promise.resolve(false);
+    return control ? succeeded(await execute(action, { ...input, ...control })) : false;
   }
 
-  async function save() {
+  /** Saves a new current version; like Grafana, the author stays in edit mode. */
+  async function save(options: SaveOptions = {}) {
     const control = observed();
     if (!control) return false;
-    const saved = await execute("save", control);
-    if (saved) notice.value = { tone: "success", text: "Draft saved." };
+    const saved = succeeded(
+      await execute("save", {
+        ...control,
+        ...(options.message ? { message: options.message } : {}),
+        ...(options.defaults ? { defaults: options.defaults } : {}),
+      }),
+    );
+    if (saved)
+      notice.value = { tone: "success", text: `Saved version ${page.value.saved.version}.` };
     return saved;
+  }
+
+  async function saveAsCopy(name: string) {
+    const outcome = await execute("save_as_copy", { name });
+    const id = outcome?.status === "ok" ? outcome.result?.dashboard_id : undefined;
+    if (!id) return false;
+    // The copy is a new dashboard; leaving discards nothing because this draft is unchanged.
+    navigate(`${base.value.replace(/\/[^/]+$/, "")}/${encodeURIComponent(id)}`);
+    return true;
   }
 
   async function discard() {
     const control = observed();
-    return control ? execute("discard", control) : false;
+    return control ? succeeded(await execute("discard", control)) : false;
   }
 
-  /** Saves pending edits, then leaves edit mode. */
-  async function done() {
-    if (dirty.value && !(await save())) return;
+  /** Leaves edit mode; unsaved changes are discarded first so the leave guard stays quiet. */
+  async function discardAndExit() {
+    if (dirty.value && !(await discard())) return;
     exitEdit();
   }
 
-  async function publish() {
-    const version = page.value.publication.latest_version;
-    const published = await execute("publish", { version });
-    if (published) notice.value = { tone: "success", text: `Version ${version} is now published.` };
-    return published;
+  /** After someone else saved: replay my edits onto their version. */
+  async function rebase() {
+    const outcome = await execute("rebase", {});
+    if (outcome?.status !== "ok") return false;
+    const skipped = outcome.result?.skipped ?? [];
+    notice.value = skipped.length
+      ? {
+          tone: "warning",
+          text: `Your edits were reapplied on the latest version, except ${skipped.length} that no longer apply (${skipped.map((e) => e.replaceAll("_", " ")).join(", ")}).`,
+        }
+      : { tone: "info", text: "Your edits were reapplied on the latest version." };
+    return true;
   }
+
+  async function restore(version: number) {
+    const restored = succeeded(
+      await execute("restore", { version, expected_version: page.value.saved.version }),
+    );
+    if (restored)
+      notice.value = {
+        tone: "success",
+        text: `Restored version ${version} as version ${page.value.saved.version}.`,
+      };
+    return restored;
+  }
+
+  const versions = async () =>
+    readVersionList((await query("versions", {})).versions, props.context);
+  const compare = async (from: number, to: number) =>
+    readComparison((await query("compare", { from, to })).comparison);
+  const compareStaged = async () => readComparison((await query("compare_staged", {})).comparison);
 
   async function searchObservables(query: string, fields: WidgetFields) {
     const current = page.value;
@@ -224,9 +285,14 @@ export function useDashboardPage(props: DashboardPageProps) {
     navigate,
     stage,
     save,
+    saveAsCopy,
     discard,
-    done,
-    publish,
+    discardAndExit,
+    rebase,
+    restore,
+    versions,
+    compare,
+    compareStaged,
     searchObservables,
   };
 }

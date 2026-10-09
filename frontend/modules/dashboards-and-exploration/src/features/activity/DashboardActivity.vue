@@ -3,7 +3,7 @@ import type { OpsPageContext, OpsPagePort } from "@cadence/plugin-sdk/ops-pages"
 import type { ActivityState } from "./contracts";
 import { useDashboardActivity } from "./useDashboardActivity";
 const props = defineProps<{ state: ActivityState; context: OpsPageContext; port: OpsPagePort }>();
-const { model, pending, review, writable, notice, execute, base, href, navigate } =
+const { model, pending, review, notice, execute, base, href, navigate } =
   useDashboardActivity(props);
 const label = (value: string) => value.replaceAll("_", " ");
 </script>
@@ -182,32 +182,11 @@ const label = (value: string) => value.replaceAll("_", " ");
               model.selected.saved_at || "Time unavailable"
             }}</time>
           </p>
-          <div
-            v-if="model.author && !model.archived"
-            class="mt-5 space-y-3 border-t border-base-300 pt-5"
-          >
-            <p class="text-sm text-base-content/70">
-              Restore creates a new draft and leaves publication unchanged. Publish points the
-              viewer at this saved version and retains the latest draft.
-            </p>
-            <div class="flex flex-wrap gap-2">
-              <button
-                id="activity-restore"
-                class="btn btn-sm"
-                :disabled="!writable"
-                @click="execute('restore_version')"
-              >
-                Restore as new draft</button
-              ><button
-                id="activity-publish"
-                class="btn btn-sm btn-primary"
-                :disabled="!writable || model.published_version === model.selected.version"
-                @click="execute('publish_version')"
-              >
-                Publish this version
-              </button>
-            </div>
-          </div>
+          <p class="mt-5 border-t border-base-300 pt-5 text-sm text-base-content/70">
+            Every save is the current version. To compare or restore versions, open
+            <a :href="base" class="text-primary hover:underline">the dashboard</a> and choose
+            Versions.
+          </p>
         </section>
         <section aria-labelledby="activity-events-title" class="border border-base-300">
           <h2

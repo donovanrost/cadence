@@ -4,23 +4,20 @@ defmodule CadenceWeb.OpsDashboardPage do
 
   `/dashboards/:id` views the dashboard; `/dashboards/:id/edit` is the same page
   holding a server-owned `AuthoringDraft`. Every staged change is resolved
-  immediately so the canvas shows the candidate; nothing persists until `save`.
-  Live delivery (view mode only) is a wake-up: the browser reads again through
-  its captured page port. See `CadenceWeb.OpsDashboardPage.Updates`.
+  immediately so the canvas shows the candidate; nothing persists until `save`,
+  which makes a new current version (there is no publish step). Live delivery
+  and edit-conflict notices are in `CadenceWeb.OpsDashboardPage.Updates`;
+  action effects are in `CadenceWeb.OpsDashboardPage.Actions`.
   """
-  alias Cadence.Dashboards.{AuthoringDraft, Document, VersionAuthoring}
-  alias Cadence.Reads.Dashboards.{DashboardPage, Editor, ObservableChoices}
-  alias CadenceWeb.OpsDashboardPage.Updates
+  alias Cadence.Dashboards.{AuthoringDraft, Document}
+  alias Cadence.Reads.Dashboards.{DashboardPage, Editor, Versions}
+  alias CadenceWeb.OpsDashboardPage.{Actions, Updates}
   alias CadenceWeb.OpsWorkspaceURL
   alias Phoenix.Component
 
   @view_route "/missions/:mission_id/ops/dashboards/:dashboard_id"
   @edit_route "/missions/:mission_id/ops/dashboards/:dashboard_id/edit"
   @id "dashboards.workspace"
-  @stage_events ~w(rename add_section update_section remove_section move_section add_widget update_widget remove_widget layout runtime_defaults)
-  @edit_events @stage_events ++ ~w(save discard search_observables)
-  @events @edit_events ++ ~w(publish)
-  @invalid ~w(invalid_input invalid_defaults missing_section missing_placement unsupported_widget invalid_widget invalid_type invalid_title invalid_options invalid_binding invalid_document capacity)a
 
   def id, do: @id
 
@@ -40,7 +37,9 @@ defmodule CadenceWeb.OpsDashboardPage do
         _ -> new_session(identity, mode, params)
       end
 
-    session = if mode == :edit and is_nil(session.draft), do: open(scope, session), else: session
+    session =
+      if mode == :edit and is_nil(session.draft), do: Actions.open(scope, session), else: session
+
     {page, session} = page(scope, session)
 
     socket
@@ -66,8 +65,8 @@ defmodule CadenceWeb.OpsDashboardPage do
   end
 
   def matches_action?(socket, %{"event" => event, "input" => input} = params)
-      when map_size(params) == 5 and is_map(input) and event in @events,
-      do: matches?(socket, params)
+      when map_size(params) == 5 and is_map(input),
+      do: event in Actions.events() and matches?(socket, params)
 
   def matches_action?(_, _), do: false
 
@@ -86,105 +85,35 @@ defmodule CadenceWeb.OpsDashboardPage do
 
   defp matches?(_, _), do: false
 
-  def action(socket, "search_observables", input) do
-    scope = socket.assigns.current_scope
-
-    response =
-      with %{mode: :edit, draft: %AuthoringDraft{} = draft} <-
-             socket.assigns.ops_dashboard_session,
-           {:ok, choices} <- ObservableChoices.staged(scope, draft, input) do
-        %{status: "ok", choices: choices}
-      else
-        _ -> %{status: "unavailable"}
-      end
-
-    {response, socket}
-  end
-
-  def action(socket, event, %{"sequence" => sequence, "command" => command} = input)
-      when map_size(input) == 2 and is_integer(sequence) and is_map(command) do
+  def action(socket, event, input) do
     scope = socket.assigns.current_scope
     session = socket.assigns.ops_dashboard_session
 
-    {status, code, session} =
+    if Actions.query?(event),
+      do: {Actions.query(scope, session, event, input), socket},
+      else: effect(socket, scope, session, event, input)
+  end
+
+  defp effect(
+         socket,
+         scope,
+         session,
+         event,
+         %{"sequence" => sequence, "command" => command} = input
+       )
+       when map_size(input) == 2 and is_integer(sequence) and is_map(command) do
+    {status, code, session, result} =
       if sequence == session.sequence + 1,
-        do: effect(scope, %{session | sequence: sequence}, event, command),
-        else: {"rejected", nil, session}
+        do: Actions.effect(scope, %{session | sequence: sequence}, event, command),
+        else: {"rejected", nil, session, nil}
 
     {page, session} = page(scope, session)
     socket = Component.assign(socket, ops_dashboard_session: session, ops_page: page)
-    {%{status: status, code: code, page: page}, socket}
+    {%{status: status, code: code, page: page, result: result}, socket}
   end
 
-  def action(socket, _event, _input), do: {%{status: "rejected", code: nil}, socket}
-
-  defp effect(scope, %{mode: :edit, draft: %AuthoringDraft{} = draft} = session, event, command)
-       when event in @stage_events do
-    AuthoringDraft.stage(scope, draft, event, command) |> applied(session)
-  end
-
-  defp effect(scope, %{mode: :edit, draft: %AuthoringDraft{} = draft} = session, "save", command),
-    do: AuthoringDraft.save(scope, draft, command) |> applied(session)
-
-  defp effect(
-         scope,
-         %{mode: :edit, draft: %AuthoringDraft{} = draft} = session,
-         "discard",
-         command
-       ) do
-    # Discarding after someone else saved adopts their version instead of failing.
-    case AuthoringDraft.discard(scope, draft, command) do
-      {:error, :conflict} -> {"ok", nil, reopen(scope, session)}
-      result -> applied(result, session)
-    end
-  end
-
-  defp effect(scope, session, "publish", %{"version" => version} = command)
-       when map_size(command) == 1 and is_integer(version) do
-    {_, _, mission, dashboard, _} = session.identity
-
-    if is_nil(session.draft) or not AuthoringDraft.dirty?(session.draft) do
-      case VersionAuthoring.publish_latest(scope, mission, dashboard, version) do
-        {:ok, _receipt} ->
-          {"ok", nil, reopen(scope, session)}
-
-        {:error, :conflict} ->
-          {"conflict", nil, session}
-
-        {:error, code} when code in [:invalid_input, :invalid_document] ->
-          {"invalid", Atom.to_string(code), session}
-
-        _ ->
-          {"unknown", nil, session}
-      end
-    else
-      {"invalid", "unsaved_changes", session}
-    end
-  end
-
-  defp effect(_scope, session, _event, _command), do: {"rejected", nil, session}
-
-  defp applied({:ok, draft, _details}, session), do: {"ok", nil, %{session | draft: draft}}
-  defp applied({:ok, draft}, session), do: {"ok", nil, %{session | draft: draft}}
-
-  defp applied({:error, code}, session) when code in @invalid,
-    do: {"invalid", Atom.to_string(code), session}
-
-  defp applied({:error, :conflict}, session), do: {"conflict", nil, session}
-  defp applied(_, session), do: {"unknown", nil, session}
-
-  # Publishing moves the saved baseline; a held draft must observe the new version.
-  defp reopen(scope, %{mode: :edit} = session), do: open(scope, %{session | draft: nil})
-  defp reopen(_scope, session), do: session
-
-  defp open(scope, session) do
-    {_, _, mission, dashboard, _} = session.identity
-
-    case AuthoringDraft.open(scope, mission, dashboard) do
-      {:ok, draft} -> %{session | draft: draft}
-      _ -> session
-    end
-  end
+  defp effect(socket, _scope, _session, _event, _input),
+    do: {%{status: "rejected", code: nil, result: nil}, socket}
 
   defp page(scope, session) do
     {org, _, mission, dashboard, _} = session.identity
@@ -236,6 +165,7 @@ defmodule CadenceWeb.OpsDashboardPage do
         dirty: AuthoringDraft.dirty?(draft),
         conflict: staged.conflict,
         document_version: Document.version(draft.baseline),
+        changes: Versions.summary(draft.baseline, staged.document),
         outline: Editor.outline(staged.document)
       }
 
