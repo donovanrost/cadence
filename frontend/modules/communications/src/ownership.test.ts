@@ -8,18 +8,12 @@ import * as communications from "./index";
 const features = {
   overview: ["CommsOverview", "CommsOverviewPage"],
   "setup-validation": ["CommsValidation"],
-  transports: [
-    "CommsTransportList",
-    "CommsTransportListPage",
-    "CommsTransportNew",
-    "CommsTransportShow",
-  ],
-  routing: ["CommsRoutingList", "CommsRoutingListPage", "CommsRoutingNew", "CommsRoutingShow"],
+  transports: ["CommsTransportList", "CommsTransportListPage", "CommsTransportNew"],
+  routing: ["CommsRoutingList", "CommsRoutingListPage", "CommsRoutingNew"],
   "ground-stations": [
     "CommsGroundStationForm",
     "CommsGroundStationList",
     "CommsGroundStationListPage",
-    "CommsGroundStationShow",
   ],
   providers: ["CommsProviderList", "CommsProviderTable", "CommsProviderNew", "CommsProviderShow"],
 } as const;
