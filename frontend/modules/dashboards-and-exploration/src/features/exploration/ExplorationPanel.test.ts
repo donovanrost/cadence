@@ -1,4 +1,5 @@
 import { required } from "../../../../../test-support/required";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import ExplorationPanel from "./ExplorationPanel.vue";
@@ -13,9 +14,13 @@ function setup(model = fixture(), refresh = vi.fn().mockResolvedValue(undefined)
     navigate: vi.fn((_: string) => {}),
     guardNavigation: vi.fn((_guard: () => boolean) => vi.fn()),
   };
-  const wrapper = mount(ExplorationPanel, { props: { model, context, port, refresh } });
+  const header = pageHeaderHarness("/missions/:mission_id/ops/explore");
+  const wrapper = mount(ExplorationPanel, {
+    props: { model, context, port, refresh },
+    global: { provide: header.provide },
+  });
   wrappers.push(wrapper);
-  return { wrapper, port, refresh };
+  return { wrapper, port, refresh, header };
 }
 test("renders real observations with exact timestamps and no nested main landmark", () => {
   const { wrapper, port } = setup();
@@ -110,9 +115,10 @@ test("failed refresh hides old rows and a pending read prevents duplicate work a
         reject = fail;
       }),
   );
-  const { wrapper, port } = setup(selectedFixture(), refresh);
-  await wrapper.get("#exploration-reload").trigger("click");
-  await wrapper.get("#exploration-reload").trigger("click");
+  const { wrapper, port, header } = setup(selectedFixture(), refresh);
+  void header.refresh();
+  void header.refresh();
+  await flushPromises();
   expect(refresh).toHaveBeenCalledOnce();
   expect(wrapper.get("#exploration-clear-selection").attributes("disabled")).toBeDefined();
   expect(required(port.guardNavigation.mock.calls[0])[0]()).toBe(false);

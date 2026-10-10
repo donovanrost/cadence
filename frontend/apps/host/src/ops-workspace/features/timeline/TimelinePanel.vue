@@ -1,14 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from "vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
+import { href } from "@cadence/plugin-sdk/routes";
 import CadenceClipboardButton from "@cadence/ui/CadenceClipboardButton.vue";
-import {
-  dashboardHref,
-  filterKeys,
-  referenceKeys,
-  timelineHref,
-  type TimelineModel,
-} from "./contracts";
+import { filterKeys, referenceKeys, timelineHref, type TimelineModel } from "./contracts";
 const props = defineProps<{
   model: TimelineModel;
   navigate: (href: string) => void;
@@ -73,33 +68,26 @@ const options = {
   category: ["operations", "health", "runtime", "transport"],
   severity: ["info", "warning", "error", "critical"],
 };
+useOpsHeader("/missions/:mission_id/ops/timeline", () => ({
+  description: "Contacts, alarms, commands and runtime events across the mission.",
+  actions: props.model.source_dashboard_id
+    ? [
+        {
+          id: "source-dashboard",
+          label: "Return to dashboard",
+          icon: "hero-arrow-uturn-left",
+          href: href("/missions/:mission_id/ops/dashboards/:dashboard_id", {
+            mission_id: missionId.value,
+            dashboard_id: props.model.source_dashboard_id,
+          }),
+        },
+      ]
+    : [],
+  refresh: { run: refreshPage, pending: busy.value },
+}));
 </script>
 <template>
   <div id="ops-timeline-page" class="space-y-5">
-    <CadencePageHeading>
-      <template #title>Mission timeline</template>
-      <template #description
-        >Contacts, alarms, commands and runtime events in {{ model.mission_name }}.</template
-      >
-      <template #actions>
-        <a
-          v-if="model.source_dashboard_id"
-          id="timeline-source-dashboard"
-          :href="dashboardHref(missionId, model.source_dashboard_id)"
-          class="btn btn-ghost btn-sm"
-          >Return to dashboard</a
-        >
-        <button
-          id="refresh-timeline"
-          class="btn btn-sm"
-          type="button"
-          :disabled="busy"
-          @click="refreshPage"
-        >
-          {{ busy ? "Refreshing…" : "Refresh" }}
-        </button>
-      </template>
-    </CadencePageHeading>
     <p v-if="refreshError" role="alert" class="text-sm text-warning">
       The refresh failed. These events are from the previous observation.
     </p>

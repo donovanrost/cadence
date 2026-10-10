@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import type { IconName } from "./icons";
 import CadenceIcon from "./CadenceIcon.vue";
 
 /** An icon-only control. `label` is required: icon buttons have no visible name. */
 withDefaults(
   defineProps<{
-    icon: `hero-${string}`;
+    icon: IconName;
     label: string;
     disabled?: boolean;
     tone?: "neutral" | "danger";

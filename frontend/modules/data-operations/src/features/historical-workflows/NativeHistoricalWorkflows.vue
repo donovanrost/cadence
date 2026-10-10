@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeaders } from "@cadence/plugin-sdk/page-header";
+import { href } from "@cadence/plugin-sdk/routes";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
 import { same, type HistoryPage, type HistoryInputs } from "./native-contract";
@@ -130,46 +131,42 @@ function confirmRequest(event: Event) {
   if (event.currentTarget instanceof HTMLInputElement)
     draft.confirmed = event.currentTarget.checked ? "true" : "false";
 }
+const history = "/missions/:mission_id/ops/data-operations";
+const historyDescription =
+  "Request historical telemetry, follow each item and review the evidence behind recovery decisions.";
+const historyRefresh = () => ({ run: () => state.refresh(), pending: pending.value });
+const historyParams = () => ({ mission_id: model.value.context.mission_id });
+useOpsHeaders({
+  [history]: () => ({
+    description: historyDescription,
+    actions: model.value.permissions.manage
+      ? [
+          {
+            id: "manage",
+            label: "Manage workflows",
+            icon: "hero-wrench-screwdriver",
+            href: href("/missions/:mission_id/ops/data-operations/manage", historyParams()),
+          },
+        ]
+      : [],
+    refresh: historyRefresh(),
+  }),
+  "/missions/:mission_id/ops/data-operations/manage": () => ({
+    description: historyDescription,
+    actions: [
+      {
+        id: "reader",
+        label: "Reader view",
+        icon: "hero-eye",
+        href: href(history, historyParams()),
+      },
+    ],
+    refresh: historyRefresh(),
+  }),
+});
 </script>
 <template>
   <main id="ops-data-operations-page" class="min-w-0 space-y-5">
-    <CadencePageHeading>
-      <template #title>Data Operations</template>
-      <template #eyebrow>System / Historical telemetry</template>
-      <template #description
-        >Request historical telemetry, follow each item, and review the evidence behind recovery
-        decisions.</template
-      >
-      <template #actions>
-        <nav aria-label="Data Operations view" class="flex flex-wrap gap-2">
-          <a
-            v-if="model.mode === 'manage'"
-            id="history-reader"
-            :href="missionPath"
-            class="btn btn-sm btn-outline"
-            @click.prevent="port.navigate(missionPath)"
-            >Reader view</a
-          >
-          <a
-            v-else-if="model.permissions.manage"
-            id="history-manage"
-            :href="missionPath + '/manage'"
-            class="btn btn-sm btn-outline"
-            @click.prevent="port.navigate(missionPath + '/manage')"
-            >Manage workflows</a
-          >
-          <button
-            id="history-refresh"
-            type="button"
-            class="btn btn-sm btn-outline"
-            :disabled="pending"
-            @click="state.refresh()"
-          >
-            Refresh evidence
-          </button>
-        </nav>
-      </template>
-    </CadencePageHeading>
     <p v-if="notice" id="history-notice" role="status" class="border border-base-300 p-3 text-sm">
       {{ notice }}
     </p>

@@ -1,3 +1,4 @@
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { producerFixture } from "../../../../../test-support/producer-fixture";
 import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
 import { required } from "../../../../../test-support/required";
@@ -104,6 +105,17 @@ async function fill(w: Pick<ReturnType<typeof mount>, "get">) {
   await w.get("#history-reason").setValue("Recover telemetry");
   await w.get("#history-confirmed").setValue(true);
 }
+let header = pageHeaderHarness("/missions/:mission_id/ops/data-operations");
+/** The route each test page is mounted on, so the header harness admits its header. */
+function headerFor(page: { model: { mode?: string } }) {
+  header = pageHeaderHarness(
+    page.model.mode === "manage"
+      ? "/missions/:mission_id/ops/data-operations/manage"
+      : "/missions/:mission_id/ops/data-operations",
+  );
+  return header.provide;
+}
+
 test("native DTO rejects foreign context, malformed versions and forged result identities", () => {
   const p = fixture();
   expect(admitHistoryPage(p, context, "reader")).toEqual(p);
@@ -168,6 +180,7 @@ test("lost response retains native drafts and refresh recovers the exact operati
     operation: completed(required(submitted).payload, p),
   }));
   const w = mount(NativeHistoricalWorkflows, {
+    global: { provide: headerFor(p) },
     props: {
       page: p,
       port: {
@@ -188,7 +201,7 @@ test("lost response retains native drafts and refresh recovers the exact operati
   expect(w.find("#history-unconfirmed").exists()).toBe(true);
   expect(guard()).toBe(false);
   expect(required(submitted).payload.request.source_from).toBe("2026-09-08T14:00:17Z");
-  await w.get("#history-refresh").trigger("click");
+  void header.refresh();
   await flushPromises();
   expect(w.find("#history-unconfirmed").exists()).toBe(false);
   expect(w.get("#history-operation").text()).toContain("event");
@@ -205,10 +218,11 @@ test("foreign and stale refreshes cannot overwrite drafts or admit another actio
       model: { ...p.model, context: { ...context, mission_id: "foreign" } },
     }));
   const w = mount(NativeHistoricalWorkflows, {
+    global: { provide: headerFor(p) },
     props: { page: p, port: { execute, navigate: vi.fn() }, readPort: { read } },
   });
   await fill(w);
-  await w.get("#history-refresh").trigger("click");
+  void header.refresh();
   await flushPromises();
   expect(w.get("#history-record-request").attributes("disabled")).toBeDefined();
   expect((w.get("#history-reason").element as HTMLTextAreaElement).value).toBe("Recover telemetry");
@@ -248,6 +262,7 @@ test("binding paging retains the reviewed binding and unsaved request", async ()
     },
   }));
   const w = mount(NativeHistoricalWorkflows, {
+    global: { provide: headerFor(p) },
     props: { page: p, port: { execute, navigate: vi.fn() }, readPort: { read } },
   });
   await fill(w);
@@ -286,6 +301,7 @@ test.skipIf(!producer.available)("producer supplied native history contribution"
   });
   const calls: [string, Record<string, unknown>][] = [];
   const w = mount(NativeHistoricalWorkflows, {
+    global: { provide: headerFor(props.page) },
     props: {
       ...props,
       port: {
@@ -343,10 +359,11 @@ test("a changed binding requires an explicit review while retaining request valu
     throw Error("capture-only");
   });
   const w = mount(NativeHistoricalWorkflows, {
+    global: { provide: headerFor(p) },
     props: { page: p, port: { execute, navigate: vi.fn() }, readPort: { read: async () => fresh } },
   });
   await fill(w);
-  await w.get("#history-refresh").trigger("click");
+  void header.refresh();
   await flushPromises();
   expect(w.get("#history-record-request").attributes("disabled")).toBeDefined();
   expect((w.get("#history-reason").element as HTMLTextAreaElement).value).toBe("Recover telemetry");

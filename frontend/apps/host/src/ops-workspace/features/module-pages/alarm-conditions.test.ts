@@ -1,3 +1,4 @@
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import "../../../module-pages.test-support";
 import { required } from "../../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -7,6 +8,7 @@ import { alarmFixture } from "../../../../../../modules/limits-and-alarming/src/
 const token = "11111111-1111-4111-8111-111111111111";
 let w: ReturnType<typeof mount>;
 afterEach(() => w?.unmount());
+let header = pageHeaderHarness("/missions/:mission_id/ops/alarms");
 function start() {
   const data = alarmFixture(),
     context = { organizationId: data.organization_id, missionId: data.mission_id };
@@ -23,28 +25,30 @@ function start() {
     execute = vi.fn(),
     refresh = vi.fn(),
     navigate = vi.fn();
+  header = pageHeaderHarness("/missions/:mission_id/ops/alarms");
   w = mount(OpsModulePage, {
     props: { contributionId: snapshot.id, snapshot, context, query, execute, refresh, navigate },
+    global: { provide: header.provide },
   });
   return { snapshot, query, execute, refresh, navigate };
 }
 test("host admits the public alarm owner with captured reads and navigation only", async () => {
   const h = start();
   expect(w.find("#ops-alarms-page").exists()).toBe(true);
-  await w.get("#refresh-alarm-conditions").trigger("click");
+  await header.refresh();
   await flushPromises();
   expect(h.query).toHaveBeenCalledExactlyOnceWith({ id: h.snapshot.id, token });
   expect(h.execute).not.toHaveBeenCalled();
   expect(h.refresh).not.toHaveBeenCalled();
-  await w.get(`a[href="${h.snapshot.data.links.definitions}"]`).trigger("click");
-  expect(h.navigate).toHaveBeenCalledWith(h.snapshot.data.links.definitions);
+  // The sub-page link is a host header link; the host shell navigates it.
+  expect(header.href("definitions")).toBe(h.snapshot.data.links.definitions);
 });
 test("same-context bootstrap rerenders cannot rewind a successful refresh", async () => {
   const h = start(),
     next = structuredClone(h.snapshot);
   required(next.data.states.items[0]).value = "47";
   h.query.mockResolvedValueOnce(next);
-  await w.get("#refresh-alarm-conditions").trigger("click");
+  await header.refresh();
   await flushPromises();
   expect(w.text()).toContain("Value 47");
   await w.setProps({ snapshot: structuredClone(h.snapshot), context: { ...h.snapshot.context } });
@@ -58,7 +62,7 @@ test("wrong tokens or malformed read data retain prior conditions and host navig
     { data: { ...h.snapshot.data, version: 2 } },
   ]) {
     h.query.mockResolvedValueOnce({ ...h.snapshot, ...changed } as typeof h.snapshot);
-    await w.get("#refresh-alarm-conditions").trigger("click");
+    await header.refresh();
     await flushPromises();
     expect(w.find("#ops-module-unavailable").exists()).toBe(false);
     expect(w.findAll("[data-limit-event]")).toHaveLength(1);

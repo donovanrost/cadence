@@ -1,3 +1,4 @@
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { producerFixture } from "../../../../../test-support/producer-fixture";
 import {
   fixtureRecord,
@@ -155,14 +156,17 @@ test("unconfirmed operations and invalid receipt navigation cannot grant further
 test("semantic directory data owns native links and captured read recovery", async () => {
   const directory = requirementDirectoryFixture(),
     read = vi.fn().mockResolvedValue({ ...directory, query: { page: 2, state: "all" } });
+  const header = pageHeaderHarness("/missions/:mission_id/ops/requirements");
   const w = mount(requirementDirectoryContribution.component, {
     props: { directory, readPort: { read } },
+    global: { provide: header.provide },
   });
   wrappers.push(w);
   expect(w.get("#requirements-filter-closed").attributes("href")).toBe(
     "/missions/mission-1/ops/requirements?page=1&state=closed",
   );
-  await w.get("#requirement-directory-refresh").trigger("click");
+  expect(header.href("declare-need")).toBe("/missions/mission-1/ops/requirements/new");
+  await header.refresh();
   await flushPromises();
   expect(w.get("#requirement-directory-notice").text()).toContain("retained");
   expect(w.get("#contact-requirements a").attributes("href")).toBe(

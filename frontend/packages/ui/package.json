@@ -16,7 +16,9 @@
     "./presentation_types": "./src/presentation_types.ts",
     "./status-symbol": "./src/status-symbol.ts",
     "./page-chrome": "./src/page-chrome.ts",
-    "./date-time-range": "./src/date-time-range.ts"
+    "./date-time-range": "./src/date-time-range.ts",
+    "./icons": "./src/icons.ts",
+    "./tones": "./src/tones.ts"
   },
   "scripts": {
     "build": "vue-tsc -p tsconfig.json --noEmit",

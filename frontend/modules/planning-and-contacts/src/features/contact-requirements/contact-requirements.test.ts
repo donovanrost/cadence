@@ -66,7 +66,6 @@ test("requirement identities and scoped links survive empty-to-populated updates
   expect(wrapper.get("#requirement-row-1").attributes("href")).toBe(
     required(props.requirements[0]).detail_href,
   );
-  expect(wrapper.get("#new-requirement").attributes("data-phx-link")).toBe("redirect");
   await wrapper.setProps({ requirements: [] });
   expect(wrapper.find("#requirements-empty").exists()).toBe(true);
   await wrapper.setProps({ requirements: props.requirements });

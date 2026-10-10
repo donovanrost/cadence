@@ -1197,7 +1197,17 @@ importers:
   packages/design-tokens: {}
 
   packages/plugin-sdk:
+    dependencies:
+      '@cadence/ui':
+        specifier: workspace:*
+        version: link:../ui
     devDependencies:
+      '@vue/test-utils':
+        specifier: 'catalog:'
+        version: 2.4.11(@vue/compiler-dom@3.5.41)(@vue/server-renderer@3.5.41)(vue@3.5.41(typescript@6.0.3))
+      happy-dom:
+        specifier: 'catalog:'
+        version: 20.11.6
       typescript:
         specifier: 'catalog:'
         version: 6.0.3

@@ -6,6 +6,7 @@ import { defaults, explorationHref, options, queryKeys } from "./query";
 import { readExploration } from "./validation";
 import { sameInstant } from "./sample-validation";
 import SampleInspection from "./SampleInspection.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 const props = defineProps<{
   model: unknown;
   context: OpsPageContext;
@@ -23,6 +24,10 @@ const pending = ref(false),
   failed = ref(false),
   notice = ref("");
 let disposed = false;
+useOpsHeader("/missions/:mission_id/ops/explore", () => ({
+  description: "Inspect source observations without saving a dashboard.",
+  refresh: { run: reload, pending: pending.value },
+}));
 watch(
   model,
   (value) => {
@@ -156,27 +161,7 @@ async function reload() {
 }
 </script>
 <template>
-  <section id="exploration-feature" class="space-y-5 p-4 lg:p-6" :aria-busy="pending">
-    <header class="flex flex-wrap items-start justify-between gap-3 border-b border-base-300 pb-4">
-      <div>
-        <p class="text-xs uppercase tracking-widest text-base-content/60">
-          Telemetry investigation
-        </p>
-        <h1 class="mt-1 text-2xl font-semibold">Explore</h1>
-        <p class="mt-1 text-sm text-base-content/70">
-          Inspect source observations without saving a dashboard.
-        </p>
-      </div>
-      <button
-        id="exploration-reload"
-        class="btn btn-sm"
-        type="button"
-        :disabled="pending"
-        @click="reload"
-      >
-        {{ pending ? "Reading…" : "Read again" }}
-      </button>
-    </header>
+  <section id="exploration-feature" class="space-y-5" :aria-busy="pending">
     <aside
       v-if="!failed && model.origin.status !== 'not_provided'"
       id="exploration-origin"

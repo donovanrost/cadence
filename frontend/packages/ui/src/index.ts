@@ -1,4 +1,5 @@
 export { default as CadenceButton } from "./CadenceButton.vue";
+export { default as CadenceLinkButton } from "./CadenceLinkButton.vue";
 export { default as CadenceIcon } from "./CadenceIcon.vue";
 export { default as CadenceDialog } from "./CadenceDialog.vue";
 export { default as CadenceTextArea } from "./CadenceTextArea.vue";

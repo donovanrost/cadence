@@ -1,3 +1,4 @@
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import type { FleetDirectoryPort } from "../../../../../../modules/planning-and-contacts/src/features/fleet-planning/OpsFleetPlanning.contracts";
 import { required } from "../../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -20,13 +21,16 @@ function snapshot() {
 }
 let wrapper: ReturnType<typeof mount>;
 afterEach(() => wrapper?.unmount());
+let header = pageHeaderHarness("/missions/:mission_id/ops/planning");
 function harness() {
   const initial = snapshot(),
     query = vi.fn().mockResolvedValue(initial),
     refresh = vi.fn(),
     execute = vi.fn();
+  header = pageHeaderHarness("/missions/:mission_id/ops/planning");
   wrapper = mount(OpsModulePage, {
     props: { contributionId: initial.id, snapshot: initial, context, query, refresh, execute },
+    global: { provide: header.provide },
   });
   return { initial, query, refresh, execute };
 }
@@ -38,7 +42,7 @@ test("captured read port updates evidence without reconnecting or granting effec
   const root = wrapper.get("#ops-fleet-planning-page").element;
   const port: FleetDirectoryPort = required(wrapper.getComponent(OpsFleetPlanning).props("port"));
   expect(Object.hasOwn(port, "execute")).toBe(false);
-  await wrapper.get("#refresh-fleet-planning").trigger("click");
+  await header.refresh();
   await flushPromises();
   expect(h.query).toHaveBeenCalledExactlyOnceWith({ id: h.initial.id, token });
   expect(wrapper.find("#fleet-run-updated").exists()).toBe(true);
@@ -66,16 +70,16 @@ test("failed and malformed reads retain evidence and admit a later valid recover
   ];
   for (const changed of mutations) {
     h.query.mockResolvedValueOnce({ ...h.initial, ...changed });
-    await wrapper.get("#refresh-fleet-planning").trigger("click");
+    await header.refresh();
     await flushPromises();
     expect(wrapper.find("#fleet-run-run-1").exists()).toBe(true);
     expect(wrapper.find("#ops-module-unavailable").exists()).toBe(false);
   }
   h.query.mockRejectedValueOnce(Error("Disconnected"));
-  await wrapper.get("#refresh-fleet-planning").trigger("click");
+  await header.refresh();
   await flushPromises();
   expect(wrapper.find("#fleet-run-run-1").exists()).toBe(true);
-  await wrapper.get("#refresh-fleet-planning").trigger("click");
+  await header.refresh();
   await flushPromises();
   expect(wrapper.get("#fleet-directory-notice").text()).toBe("Fleet directory refreshed.");
 });
@@ -88,7 +92,8 @@ test("same-context host rerenders cannot rewind a captured read", async () => {
         settle = resolve;
       }),
   );
-  await wrapper.get("#refresh-fleet-planning").trigger("click");
+  void header.refresh();
+  await flushPromises();
   await wrapper.setProps({ context: { ...context }, snapshot: structuredClone(h.initial) });
   const next = snapshot();
   required(next.data.runs.entries[0]).id = "fresh";

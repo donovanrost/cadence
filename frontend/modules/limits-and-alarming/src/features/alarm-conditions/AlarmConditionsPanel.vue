@@ -5,7 +5,8 @@ import type {
   OpsPageNavigationPort,
   OpsPageReadPort,
 } from "@cadence/plugin-sdk/ops-pages";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
+import { serverHref } from "@cadence/plugin-sdk/routes";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 import LimitStateList from "../../shared/LimitStateList.vue";
@@ -22,6 +23,18 @@ const page = shallowRef(props.model),
 const filters = ref({ ...props.model.query });
 let active = true,
   generation = 0;
+useOpsHeader("/missions/:mission_id/ops/alarms", () => ({
+  description: "Latest evaluated limit states across the mission.",
+  actions: [
+    {
+      id: "definitions",
+      label: "Limit definitions",
+      href: serverHref(page.value.links.definitions),
+    },
+    { id: "posture", label: "Current posture", href: serverHref(page.value.links.posture) },
+  ],
+  refresh: { run: refresh, pending: reading.value },
+}));
 async function refresh() {
   if (reading.value) return;
   const n = ++generation;
@@ -86,32 +99,6 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <div id="ops-alarms-page" class="space-y-5">
-    <CadencePageHeading
-      ><template #title>Alarm conditions</template
-      ><template #description
-        >{{ page.mission_name }} · Latest evaluated limit states</template
-      ></CadencePageHeading
-    >
-    <div class="flex flex-wrap items-center justify-between gap-3 text-sm">
-      <div class="flex flex-wrap gap-4">
-        <a
-          :href="page.links.definitions"
-          class="link"
-          @click="navigate(page.links.definitions, $event)"
-          >Limit definitions</a
-        ><a :href="page.links.posture" class="link" @click="navigate(page.links.posture, $event)"
-          >Current posture</a
-        >
-      </div>
-      <button
-        id="refresh-alarm-conditions"
-        class="btn btn-ghost btn-sm"
-        :disabled="reading"
-        @click="refresh"
-      >
-        {{ reading ? "Refreshing…" : "Refresh conditions" }}
-      </button>
-    </div>
     <p
       v-if="error"
       id="alarm-conditions-error"

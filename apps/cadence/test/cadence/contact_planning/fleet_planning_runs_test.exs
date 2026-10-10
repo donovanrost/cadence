@@ -183,7 +183,6 @@ defmodule Cadence.ContactPlanning.FleetPlanningRunsTest do
                 presentIds: [
                   "ops-fleet-planning-page",
                   "fleet-planning-active-policy",
-                  "new-fleet-planning-run-link",
                   "fleet-run-#{run.fleet_planning_run_id}"
                 ],
                 absentIds: ["fleet-directory-unavailable", "fleet-planning-policy-required"]

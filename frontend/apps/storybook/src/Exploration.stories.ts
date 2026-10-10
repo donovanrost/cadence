@@ -2,6 +2,7 @@ import { required } from "../../../test-support/required";
 import type { Meta, StoryObj } from "@storybook/vue3-vite";
 import { expect, userEvent, within } from "storybook/test";
 import { ref } from "vue";
+import HostPage from "../../host/src/shell/HostPage.vue";
 import {
   ExplorationPanel,
   readExploration,
@@ -93,7 +94,7 @@ const meta = {
     refresh: async () => {},
   },
   render: (args) => ({
-    components: { ExplorationPanel },
+    components: { ExplorationPanel, HostPage },
     setup() {
       const current = ref<ExplorationModel>(
         readExploration(JSON.parse(JSON.stringify(args.model)), {
@@ -124,8 +125,9 @@ const meta = {
       }
       return { args, current, destination, port, refresh };
     },
+    // The host draws the page header (and its Refresh) from the route catalog.
     template:
-      '<ExplorationPanel v-bind="args" :model="current" :port="port" :refresh="refresh" /><output aria-label="Requested destination" class="block break-all p-4 font-mono text-xs">{{ destination }}</output>',
+      '<HostPage title="Telemetry Explore" route="/missions/:mission_id/ops/explore"><ExplorationPanel v-bind="args" :model="current" :port="port" :refresh="refresh" /></HostPage><output aria-label="Requested destination" class="block break-all p-4 font-mono text-xs">{{ destination }}</output>',
   }),
 } satisfies Meta<typeof ExplorationPanel>;
 export default meta;
@@ -146,7 +148,7 @@ export const Observations: Story = {
     await expect(selected.searchParams.get("source_binding_id")).toBe("flight-telemetry-v3");
     await userEvent.click(canvas.getByRole("button", { name: "Clear selection" }));
     await expect(canvasElement.querySelector("#exploration-selection")).not.toBeInTheDocument();
-    await userEvent.click(canvas.getByRole("button", { name: "Read again" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Refresh" }));
     await expect(canvasElement.querySelector("#exploration-loaded-at")).toHaveAttribute(
       "datetime",
       "2026-09-07T12:01:00.123456Z",
@@ -216,13 +218,13 @@ export const FailedRefresh: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole("button", { name: "Read again" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Refresh" }));
     await expect(canvas.getByRole("alert")).toHaveTextContent("could not be confirmed");
     await expect(canvas.queryByRole("table")).not.toBeInTheDocument();
     await expect(
       canvasElement.querySelector("#exploration-sample-details"),
     ).not.toBeInTheDocument();
-    await expect(canvas.getByRole("button", { name: "Read again" })).toBeEnabled();
+    await expect(canvas.getByRole("button", { name: "Refresh" })).toBeEnabled();
   },
 };
 export const SampleDetails: Story = {

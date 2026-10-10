@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { flushPromises, mount } from "@vue/test-utils";
 import DashboardDirectory from "./DashboardDirectory.vue";
 import { directoryContribution } from "./contribution";
@@ -20,11 +21,13 @@ function envelope(page: DirectoryPage) {
 
 function render(page = directoryFixture(), execute = vi.fn(async (): Promise<unknown> => null)) {
   const navigate = vi.fn((_: string) => {});
+  const header = pageHeaderHarness("/missions/:mission_id/ops/dashboards");
   wrapper = mount(DashboardDirectory, {
     attachTo: document.body,
     props: { page, context, port: { execute, navigate }, refresh: async () => {} },
+    global: { provide: header.provide },
   });
-  return { app: wrapper, execute, navigate };
+  return { app: wrapper, execute, navigate, header };
 }
 
 test("reads only the current mission's version 2 directory", () => {
@@ -50,7 +53,8 @@ test("reads only the current mission's version 2 directory", () => {
 });
 
 test("lists dashboards with shortcuts, links names and filters by a row's tag", async () => {
-  const { app, navigate } = render();
+  const { app, navigate, header } = render();
+  expect(header.href("import")).toBe("/missions/mission-1/ops/dashboards/new?mode=import");
   const list = app.get("[aria-label=Dashboards]");
   expect(list.findAll("li")).toHaveLength(2);
   expect(list.get("li a").attributes("href")).toBe(
@@ -116,9 +120,10 @@ test("someone else's change to the same view is highlighted; viewers get no auth
   const viewer = directoryFixture();
   viewer.model.author = false;
   wrapper?.unmount();
-  const second = render(viewer).app;
-  expect(second.find("#dashboard-directory-new").exists()).toBe(false);
-  expect(second.find("[aria-label^='Actions for']").exists()).toBe(false);
+  const second = render(viewer);
+  expect(second.header.has("new")).toBe(false);
+  expect(second.header.href("library")).toBe("/missions/mission-1/ops/dashboards/library");
+  expect(second.app.find("[aria-label^='Actions for']").exists()).toBe(false);
 });
 
 test("a mission without dashboards offers creation and archived dashboards", () => {

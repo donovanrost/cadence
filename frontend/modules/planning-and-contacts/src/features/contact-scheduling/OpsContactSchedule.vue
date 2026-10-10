@@ -2,6 +2,7 @@
 import ContactLink from "./ContactLink.vue";
 import { useContactQueryNavigation } from "./contact-navigation";
 import { computed, inject } from "vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import CadencePanel from "@cadence/ui/CadencePanel.vue";
 import {
   CONTACT_SCHEDULE_PORT,
@@ -75,29 +76,16 @@ const pages = computed(() =>
     : [],
 );
 const label = (v: string) => v.replaceAll("_", " ");
+useOpsHeader("/missions/:mission_id/ops/contacts", () => ({
+  description:
+    "Review route readiness, search provider opportunities and track contact reservations.",
+  refresh: { run: refresh, pending: reading.value || !connected },
+}));
 const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 text-sm";
 </script>
 <template>
-  <main v-if="schedule" id="ops-contact-schedule-page" class="min-w-0 space-y-6 p-4 md:p-6">
-    <header class="space-y-3">
-      <p class="text-xs uppercase tracking-widest text-base-content/60">Planning &amp; contacts</p>
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 class="text-2xl font-semibold">Contact scheduling</h1>
-          <p class="mt-1 text-sm text-base-content/70">
-            Review route readiness, search provider opportunities, and track contact reservations.
-          </p>
-        </div>
-        <button
-          id="contact-schedule-refresh"
-          type="button"
-          class="rounded border border-base-300 px-4 py-2 text-sm"
-          :disabled="reading || !connected"
-          @click="refresh"
-        >
-          {{ reading ? "Refreshing…" : "Refresh ledgers" }}
-        </button>
-      </div>
+  <main v-if="schedule" id="ops-contact-schedule-page" class="min-w-0 space-y-6">
+    <div class="space-y-3">
       <p
         v-if="notice"
         id="contact-schedule-notice"
@@ -118,7 +106,7 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
         >
         · Revision {{ receipt.providerRevision }}
       </p>
-    </header>
+    </div>
     <CadencePanel
       id="contact-schedule-spacecraft"
       class="rounded-lg border border-base-300 bg-base-100 p-5"

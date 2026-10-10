@@ -50,6 +50,7 @@
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
+      "page_title": "Provider Accounts",
       "nav_item": "provider_accounts"
     }
   },
@@ -63,6 +64,7 @@
     "queryAliases": {},
     "viewClass": "max-w-3xl space-y-6",
     "metadata": {
+      "page_title": "Register Provider Account",
       "nav_item": "provider_accounts"
     }
   },
@@ -76,6 +78,7 @@
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
+      "page_title": "Provider Account",
       "nav_item": "provider_accounts"
     }
   },
@@ -227,7 +230,7 @@
     "queryAliases": {},
     "viewClass": "",
     "metadata": {
-      "page_title": "#{spacecraft.display_name} Routing",
+      "page_title": "Spacecraft Routing",
       "nav_item": "spacecraft"
     }
   },
@@ -353,7 +356,7 @@
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
-      "page_title": "Comms Transports",
+      "page_title": "Transports",
       "nav_item": "comms_transports"
     }
   },
@@ -425,7 +428,7 @@
     "queryAliases": {},
     "viewClass": "",
     "metadata": {
-      "page_title": "New Ground Station",
+      "page_title": "Edit Ground Station",
       "nav_item": "comms_ground_stations"
     }
   },
@@ -454,7 +457,7 @@
     "queryAliases": {},
     "viewClass": "contents",
     "metadata": {
-      "page_title": "Comms Routing",
+      "page_title": "Routing",
       "nav_item": "comms_routing"
     }
   },
@@ -497,7 +500,7 @@
     "queryAliases": {},
     "viewClass": "",
     "metadata": {
-      "page_title": "Comms Validation",
+      "page_title": "Setup Validation",
       "nav_item": "comms_validation"
     }
   },

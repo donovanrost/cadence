@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { IconName } from "@cadence/ui/icons";
 import { computed } from "vue";
 import CadenceIcon from "@cadence/ui/CadenceIcon.vue";
 import CadenceMenuItem from "@cadence/ui/CadenceMenuItem.vue";
@@ -6,7 +7,7 @@ import CadenceModalMenu from "@cadence/ui/CadenceModalMenu.vue";
 
 const props = defineProps<{ base: string; author: boolean; diagnosticsHref: string | null }>();
 const emit = defineEmits<{ versions: [] }>();
-type Link = { href: string | null; icon: `hero-${string}`; label: string; show: boolean };
+type Link = { href: string | null; icon: IconName; label: string; show: boolean };
 const ops = computed(() => props.base.replace(/\/dashboards\/[^/]+$/, ""));
 const links = computed(() => {
   const all: Link[] = [

@@ -1,3 +1,4 @@
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { describe, expect, test, vi } from "vite-plus/test";
 import { mount, flushPromises } from "@vue/test-utils";
 import { reactive, nextTick } from "vue";
@@ -69,8 +70,13 @@ function harness(native = false) {
     }
     return Promise.reject(Error("Invalid test request"));
   }
-  const wrapper = mount(OpsContactSchedule, { props: { schedule: model, port } });
+  const header = pageHeaderHarness("/missions/:mission_id/ops/contacts");
+  const wrapper = mount(OpsContactSchedule, {
+    props: { schedule: model, port },
+    global: { provide: header.provide },
+  });
   return {
+    header,
     model,
     read,
     execute,
@@ -158,7 +164,7 @@ test("refresh and search cannot supersede a pending mutation, and duplicate clic
     await h.wrapper.get("#reserve-opportunity-one").trigger("click");
     const call = required(h.execute.mock.calls.at(-1));
     if (!("operation_id" in call[1])) throw Error("Missing command");
-    await h.wrapper.get("#contact-schedule-refresh").trigger("click");
+    void h.header.refresh();
     await flushPromises();
     await h.wrapper.get("#contact-search").trigger("submit");
     await flushPromises();
@@ -189,7 +195,7 @@ test("a lost acceptance is observed by its original ID and retries reuse immutab
     const call = required(h.execute.mock.calls[0]);
     if (!("operation_id" in call[1])) throw Error("Missing command");
     h.execute.mockResolvedValueOnce({ operation: null });
-    await h.wrapper.get("#contact-schedule-refresh").trigger("click");
+    void h.header.refresh();
     await flushPromises();
     expect(h.execute.mock.calls[1]).toEqual([
       "cancel",
@@ -235,7 +241,7 @@ test("an older read and a departed response cannot replace current evidence", as
   const old = deferred<unknown>();
   try {
     h.read.mockReturnValueOnce(old.promise);
-    await h.wrapper.get("#contact-schedule-refresh").trigger("click");
+    void h.header.refresh();
     const incoming = scheduleFixture();
     required(incoming.reservations.entries[0]).provider_revision = 9;
     await h.wrapper.setProps({ schedule: incoming });

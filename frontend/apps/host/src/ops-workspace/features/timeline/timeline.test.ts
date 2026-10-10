@@ -1,3 +1,4 @@
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { producerFixture } from "../../../../../../test-support/producer-fixture";
 import { jsonFixture, fixtureRecord } from "../../../../../../test-support/json-fixture";
 import { required } from "../../../../../../test-support/required";
@@ -62,11 +63,16 @@ test("invalid filter values remain editable and do not render stale events as ma
 test("refresh is bounded to one request and failure keeps the observed evidence visible", async () => {
   let reject!: (reason: Error) => void;
   const refresh = vi.fn(() => new Promise<void>((_, failure) => (reject = failure)));
-  const wrapper = mount(TimelinePanel, { props: { ...props(), refresh } });
-  await wrapper.get("#refresh-timeline").trigger("click");
-  await wrapper.get("#refresh-timeline").trigger("click");
+  const header = pageHeaderHarness("/missions/:mission_id/ops/timeline");
+  const wrapper = mount(TimelinePanel, {
+    props: { ...props(), refresh },
+    global: { provide: header.provide },
+  });
+  void header.refresh();
+  void header.refresh();
+  await flushPromises();
   expect(refresh).toHaveBeenCalledTimes(1);
-  expect(wrapper.get("#refresh-timeline").attributes("disabled")).toBeDefined();
+  expect(header.header().refresh?.pending).toBe(true);
   reject(Error("offline"));
   await flushPromises();
   expect(wrapper.text()).toContain("previous observation");

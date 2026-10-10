@@ -8,6 +8,8 @@ import {
 } from "./requirement-directory";
 import { requirementDirectoryPresentation } from "./requirement-directory-presentation";
 import OpsContactRequirementList from "./OpsContactRequirementList.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
+import { href } from "@cadence/plugin-sdk/routes";
 defineOptions({ inheritAttrs: false });
 const props = defineProps<{ directory: RequirementDirectory; readPort: OpsPageReadPort }>();
 const initial = props.directory,
@@ -31,6 +33,19 @@ onBeforeUnmount(() => {
   active = false;
   generation++;
 });
+useOpsHeader("/missions/:mission_id/ops/requirements", () => ({
+  description:
+    "Declare the mission outcome first; Cadence searches every provider route and keeps the evidence.",
+  primary: {
+    id: "declare-need",
+    label: "Declare need",
+    icon: "hero-plus",
+    href: href("/missions/:mission_id/ops/requirements/new", {
+      mission_id: currentDirectory.value.context.mission_id,
+    }),
+  },
+  refresh: { run: refresh, pending: pending.value },
+}));
 async function refresh() {
   if (pending.value) return;
   const n = ++generation;
@@ -52,19 +67,14 @@ async function refresh() {
 </script>
 <template>
   <section id="requirement-directory-contribution" class="min-w-0 space-y-4">
-    <div class="flex flex-wrap items-center justify-between gap-3 px-4 pt-4">
-      <p id="requirement-directory-notice" role="status" class="text-sm text-base-content/65">
-        {{ notice }}
-      </p>
-      <button
-        id="requirement-directory-refresh"
-        class="btn btn-ghost btn-sm"
-        :disabled="pending"
-        @click="refresh"
-      >
-        Refresh requirements
-      </button>
-    </div>
+    <p
+      v-if="notice"
+      id="requirement-directory-notice"
+      role="status"
+      class="text-sm text-base-content/70"
+    >
+      {{ notice }}
+    </p>
     <OpsContactRequirementList v-bind="presentation" />
   </section>
 </template>

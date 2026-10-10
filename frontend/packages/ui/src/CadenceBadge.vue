@@ -1,5 +1,5 @@
 <script setup lang="ts">
-type Tone = "info" | "success" | "warning" | "error";
+import type { Tone } from "./tones";
 
 const props = defineProps<{ tone: Tone }>();
 

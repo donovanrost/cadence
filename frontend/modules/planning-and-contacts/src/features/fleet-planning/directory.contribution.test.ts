@@ -9,15 +9,18 @@ import { expect, test, vi } from "vite-plus/test";
 import { fleetDirectoryContribution } from "../../fleet-planning";
 import { planningContributions } from "../../contributions";
 import { directoryFixture } from "./fleet-directory.test-support";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 const context = { organizationId: "org-one", missionId: "mission-one" };
 test("public contribution owns admission and uses the existing fleet workflow", async () => {
   const directory = directoryFixture();
   expect(planningContributions).toContain(fleetDirectoryContribution);
   const read = vi.fn().mockResolvedValue(directory);
+  const header = pageHeaderHarness("/missions/:mission_id/ops/planning");
   const wrapper = mount(fleetDirectoryContribution.component, {
     props: { ...fleetDirectoryContribution.read(directory, context), readPort: { read } },
+    global: { provide: header.provide },
   });
-  await wrapper.get("#refresh-fleet-planning").trigger("click");
+  await header.refresh();
   await flushPromises();
   expect(read).toHaveBeenCalledOnce();
   expect(wrapper.find("#fleet-run-run-1").exists()).toBe(true);
@@ -40,14 +43,16 @@ test.skipIf(!producer.available)("producer-supplied directory contribution", asy
     missionId: fixtureString(rawContext.missionId),
   };
   const read = vi.fn().mockResolvedValue(snapshot.data);
+  const header = pageHeaderHarness("/missions/:mission_id/ops/planning");
   const wrapper = mount(fleetDirectoryContribution.component, {
     props: {
       ...fleetDirectoryContribution.read(snapshot.data, context),
       readPort: { read },
     },
+    global: { provide: header.provide },
   });
   expect(wrapper.find("#ops-fleet-planning-page").exists()).toBe(true);
-  await wrapper.get("#refresh-fleet-planning").trigger("click");
+  await header.refresh();
   await flushPromises();
   expect(read).toHaveBeenCalledOnce();
   wrapper.unmount();

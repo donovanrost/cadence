@@ -1,5 +1,6 @@
 import routes from "../routes.json";
 import { createRouter, type RouterHistory } from "vue-router";
+import { routeLayer } from "@cadence/plugin-sdk/routes";
 
 type CatalogRoute = (typeof routes)[number];
 function normalizeHostRoute(route: CatalogRoute) {
@@ -129,7 +130,7 @@ export function createHostRouter(history: RouterHistory) {
 }
 
 export function shellForRoute(route: Pick<HostRoute, "path" | "scope">) {
-  if (route.path === "/missions/:mission_id/ops" || route.path.includes("/ops/")) return "ops";
+  if (routeLayer(route.path) === "ops") return "ops";
   if (route.scope === "user") return "user_shell";
   if (route.scope === "mission" || route.scope === "spacecraft") return "mission_sidebar";
   return "sidebar";

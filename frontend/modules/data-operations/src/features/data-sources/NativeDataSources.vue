@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
 import {
@@ -14,6 +13,7 @@ import {
 import { useDataSources } from "./native-state";
 import SourcePageControls from "./SourcePageControls.vue";
 import SourceEvidence from "./SourceEvidence.vue";
+import { useSourcesHeader } from "./header";
 defineOptions({ inheritAttrs: false });
 const props = defineProps<{ page: SourcePage; port: OpsPagePort; readPort: OpsPageReadPort }>();
 const state = useDataSources(() => props.page, props.port, props.readPort);
@@ -31,6 +31,7 @@ const {
 } = state;
 const model = computed(() => currentPage.value.model),
   selected = computed(() => model.value.selected);
+useSourcesHeader(model, () => state.refresh(), pending);
 const receipt = computed(() =>
   lastEffect.value?.status === "completed" ? lastEffect.value.result : null,
 );
@@ -198,38 +199,6 @@ function chooseTarget(event: Event) {
 </script>
 <template>
   <main id="ops-data-sources-page" class="min-w-0 space-y-5">
-    <CadencePageHeading>
-      <template #title>Data Sources</template>
-      <template #eyebrow>System / Source operations</template>
-      <template #description
-        >Inspect source configuration, binding history and observed telemetry before changing a
-        backend.</template
-      >
-      <template #actions>
-        <nav aria-label="Data Sources navigation" class="flex flex-wrap gap-2">
-          <a :href="base" class="btn btn-sm btn-outline" @click.prevent="port.navigate(base)"
-            >Source directory</a
-          >
-          <a
-            v-if="model.permissions.manage && model.mode !== 'registration'"
-            id="sources-registration"
-            :href="base + '/registration/new'"
-            class="btn btn-sm btn-outline"
-            @click.prevent="port.navigate(base + '/registration/new')"
-            >Register source</a
-          >
-          <button
-            id="sources-refresh"
-            type="button"
-            class="btn btn-sm btn-outline"
-            :disabled="pending"
-            @click="state.refresh()"
-          >
-            Refresh evidence
-          </button>
-        </nav>
-      </template>
-    </CadencePageHeading>
     <p v-if="notice" id="sources-notice" role="status" class="border border-base-300 p-3 text-sm">
       {{ notice }}
     </p>

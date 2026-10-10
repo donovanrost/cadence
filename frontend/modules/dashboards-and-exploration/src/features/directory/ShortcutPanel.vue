@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import type { IconName } from "@cadence/ui/icons";
 import CadenceIcon from "@cadence/ui/CadenceIcon.vue";
 import CadenceOpsListFrame from "@cadence/ui/CadenceOpsListFrame.vue";
 
-defineProps<{ label: string; icon: `hero-${string}`; count: number; empty: string }>();
+defineProps<{ label: string; icon: IconName; count: number; empty: string }>();
 defineSlots<{ default(): unknown; action?(): unknown }>();
 </script>
 

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import { ref, watch } from "vue";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
@@ -79,11 +78,6 @@ const decide = (event: SubmitEvent) => {
 
 <template>
   <section :id="page.id" class="space-y-4">
-    <CadencePageHeading>
-      <template #title>{{ page.heading }}</template>
-      <template #description>{{ page.subtitle }}</template>
-    </CadencePageHeading>
-
     <CadenceCard
       :id="page.list.card_id"
       class="card bg-base-200 border border-base-300"

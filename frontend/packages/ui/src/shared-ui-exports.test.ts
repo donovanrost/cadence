@@ -5,6 +5,7 @@ const presentationExports = [
   "CadenceBadge",
   "CadenceBreadcrumbs",
   "CadenceButton",
+  "CadenceLinkButton",
   "CadenceIcon",
   "CadenceDialog",
   "CadenceTextArea",

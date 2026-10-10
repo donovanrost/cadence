@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import DirectoryHeading from "./DirectoryHeading.vue";
 import DirectoryNotice from "./DirectoryNotice.vue";
 import DirectoryResults from "./DirectoryResults.vue";
 import DirectoryShortcuts from "./DirectoryShortcuts.vue";
@@ -9,11 +8,13 @@ import DuplicateDialog from "./DuplicateDialog.vue";
 import FirstRun from "./FirstRun.vue";
 import type { DashboardRow } from "./contracts";
 import { useDashboardDirectory, type DirectoryProps } from "./useDashboardDirectory";
+import { useDirectoryHeader } from "./header";
 
 const props = defineProps<DirectoryProps>();
 const { model, mission, filtered, pending, notice, highlighted, query, filters, actions } =
   useDashboardDirectory(props);
 const duplicating = ref<DashboardRow | null>(null);
+useDirectoryHeader(mission, () => model.value.author);
 const firstRun = computed(
   () => model.value.total === 0 && !filtered.value && !model.value.filters.archived,
 );
@@ -27,7 +28,6 @@ async function duplicate(name: string) {
 
 <template>
   <section id="dashboard-directory-feature" class="space-y-4">
-    <DirectoryHeading :mission="mission" :author="model.author" />
     <DirectoryNotice v-if="notice" :notice="notice" @dismiss="actions.dismiss" />
     <FirstRun
       v-if="firstRun"

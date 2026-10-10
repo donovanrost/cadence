@@ -10,6 +10,8 @@ import { readHostSnapshot, requireRecord, errorMessage, type HostSnapshot } from
 import { record } from "./snapshot-readers";
 import { useLiveVue } from "live_vue";
 import HostPage from "./HostPage.vue";
+import { workspaceGroups } from "../ops-workspace/shared/destinations";
+import { breadcrumbTrail } from "./breadcrumbs";
 import { lazyHostPage } from "./lazy-host-page";
 import ApplicationShell from "./ApplicationShell.vue";
 import {
@@ -301,34 +303,26 @@ const spacecraftContext = computed(() => {
 const pageHeading = computed(
   () => !(route.value && "pageChrome" in route.value && route.value.pageChrome === "none"),
 );
+// The sidebar section names a page's place for its eyebrow (e.g. "Plan").
+const pageSection = computed(() => {
+  const item =
+    route.value?.metadata && "ops_nav_item" in route.value.metadata
+      ? route.value.metadata.ops_nav_item
+      : undefined;
+  if (!item) return null;
+  return (
+    workspaceGroups((path) => path, item).find((group) => group.items.some((i) => i.key === item))
+      ?.label ?? null
+  );
+});
 const pageTitle = computed(
   () => route.value?.metadata.page_title || context.value?.mission?.display_name || "Overview",
 );
-const pageBreadcrumbs = computed(() => {
-  const items: { label: string; href?: string }[] = [];
-  const current = context.value;
-  if (!current) return items;
-  if (route.value?.scope === "admin") items.push({ label: "Platform", href: "/admin" });
-  else if (route.value?.scope === "user") items.push({ label: "Account" });
-  else {
-    items.push({ label: current.organization?.display_name || "Organization", href: "/" });
-    if (current.mission)
-      items.push({
-        label: current.mission.display_name,
-        href: `/missions/${encodeURIComponent(current.mission.mission_id)}`,
-      });
-    if (current.spacecraft && current.mission)
-      items.push({
-        label: current.spacecraft.display_name,
-        href: `/missions/${encodeURIComponent(current.mission.mission_id)}/spacecraft/${encodeURIComponent(current.spacecraft.spacecraft_id)}`,
-      });
-  }
-  const path = committed.value?.route.path;
-  const last = items.at(-1);
-  if (last && last.href === path) items[items.length - 1] = { label: last.label };
-  else items.push({ label: pageTitle.value });
-  return items;
-});
+const pageBreadcrumbs = computed(() =>
+  route.value && committed.value && context.value
+    ? breadcrumbTrail(route.value, committed.value.route.path, context.value, pageTitle.value)
+    : [],
+);
 const variant = computed(() => route.value && shellForRoute(route.value));
 function navigate(href: string, replace = false) {
   const target = new URL(href, window.location.href);
@@ -677,6 +671,8 @@ onBeforeUnmount(() => {
       :breadcrumbs="pageBreadcrumbs"
       :workspace="variant === 'ops'"
       :heading="pageHeading"
+      :route="route.path"
+      :section="pageSection"
     >
       <p v-if="failure" id="host-navigation-error" role="alert">{{ failure }}</p>
       <div :aria-busy="pending" :data-host-path="committed.snapshot.path">

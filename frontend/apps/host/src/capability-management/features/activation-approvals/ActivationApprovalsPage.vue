@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onErrorCaptured, ref, watch } from "vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import OpsActivationRequests from "./OpsActivationRequests.vue";
 import { admitInbox, assertDecisionResult } from "./validation";
 import type { DecisionInput, ReviewContext } from "./contracts";
@@ -16,6 +17,10 @@ const message = ref("");
 const failure = ref(false);
 const crashed = ref(false);
 let disposed = false;
+useOpsHeader("/missions/:mission_id/ops/activations", () => ({
+  description: "Review governed mission changes before Control applies them to runtime.",
+  refresh: { run: props.refresh, pending: busy.value || props.navigating === true },
+}));
 onBeforeUnmount(() => {
   disposed = true;
 });
@@ -62,7 +67,7 @@ async function decide(input: DecisionInput) {
 </script>
 <template>
   <section id="activation-approvals-host" :aria-busy="busy">
-    <div class="mb-4 flex items-center justify-between gap-4">
+    <div v-if="busy || message" class="mb-4">
       <p v-if="busy" id="activation-review-pending" role="status">Recording decision…</p>
       <p
         v-else-if="message"
@@ -72,15 +77,6 @@ async function decide(input: DecisionInput) {
       >
         {{ message }}
       </p>
-      <button
-        id="activation-inbox-refresh"
-        class="btn btn-ghost btn-sm ml-auto"
-        type="button"
-        :disabled="busy || navigating"
-        @click="refresh"
-      >
-        Refresh inbox
-      </button>
     </div>
     <p
       v-if="!admitted || crashed"

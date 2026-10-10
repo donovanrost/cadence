@@ -2,7 +2,6 @@
 import { computed } from "vue";
 import type { OpsContactRequirementListProps } from "./OpsContactRequirementList.contracts";
 import { admitRequirementList } from "./requirement-list";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
 
 const props = defineProps<OpsContactRequirementListProps>();
@@ -11,24 +10,6 @@ const admitted = computed(() => admitRequirementList(props));
 
 <template>
   <CadenceOpsViewport v-if="admitted" :id="page.id">
-    <CadencePageHeading>
-      <template #title>{{ page.header.title }}</template>
-      <template #eyebrow>{{ page.header.eyebrow }}</template>
-      <template #description>{{ page.header.description }}</template>
-      <template #actions
-        ><a
-          :id="page.header.create_action.id"
-          :href="page.header.create_action.href"
-          data-phx-link="redirect"
-          data-phx-link-state="push"
-          class="btn btn-primary btn-sm gap-2 font-mono text-xs uppercase tracking-wider"
-        >
-          <span class="hero-plus h-4 w-4" aria-hidden="true"></span>
-          {{ page.header.create_action.label }}
-        </a></template
-      >
-    </CadencePageHeading>
-
     <div class="">
       <div class="mb-5 grid border border-base-300 bg-base-200/25 sm:grid-cols-4">
         <div

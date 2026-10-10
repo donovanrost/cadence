@@ -1,3 +1,4 @@
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { producerFixture } from "../../../../../test-support/producer-fixture";
 import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
 import { required } from "../../../../../test-support/required";
@@ -129,6 +130,21 @@ function completed(
     },
   };
 }
+let header = pageHeaderHarness("/missions/:mission_id/ops/data-sources");
+/** The route each test page is mounted on, so the header harness admits its header. */
+function headerFor(page: { model: { mode: string; query: { data_source_id: string | null } } }) {
+  const route =
+    page.model.mode === "registration"
+      ? "/missions/:mission_id/ops/data-sources/registration/new"
+      : page.model.mode === "settings"
+        ? "/missions/:mission_id/ops/data-sources/:data_source_id/settings"
+        : page.model.query.data_source_id
+          ? "/missions/:mission_id/ops/data-sources/:data_source_id"
+          : "/missions/:mission_id/ops/data-sources";
+  header = pageHeaderHarness(route);
+  return header.provide;
+}
+
 test("semantic admission rejects substituted source, observation, paging, permission and receipt identities", () => {
   const p = settings();
   expect(admitSourcePage(p, context, "settings")).toEqual(p);
@@ -214,6 +230,7 @@ test("lost registration response recovers without resubmitting and retains nativ
   const read = vi.fn(async () => ({ ...p, sequence: 1, operation: completed(required(request)) }));
   const confirm = stubConfirm(true);
   const w = mount(NativeDataSources, {
+    global: { provide: headerFor(p) },
     props: {
       page: p,
       port: {
@@ -232,7 +249,7 @@ test("lost registration response recovers without resubmitting and retains nativ
   await flushPromises();
   expect(guard()).toBe(false);
   expect(w.find("#sources-unconfirmed").exists()).toBe(true);
-  await w.get("#sources-refresh").trigger("click");
+  void header.refresh();
   await flushPromises();
   expect(w.find("#sources-unconfirmed").exists()).toBe(false);
   expect(w.get("#sources-operation").text()).toContain("new-event");
@@ -249,13 +266,14 @@ test("changed source evidence requires explicit review and cancel creates no act
   const execute = vi.fn(),
     confirm = stubConfirm(false);
   const w = mount(NativeDataSources, {
+    global: { provide: headerFor(p) },
     props: {
       page: p,
       port: { execute, navigate: vi.fn() },
       readPort: { read: async () => structuredClone(fresh) },
     },
   });
-  await w.get("#sources-refresh").trigger("click");
+  void header.refresh();
   await flushPromises();
   expect(w.get("#source-disable").attributes("disabled")).toBeDefined();
   await w.get("#source-accept-review").trigger("click");
@@ -270,6 +288,7 @@ test("foreign refresh and invalid local input retain registration draft without 
     execute = vi.fn();
   const confirm = stubConfirm(true);
   const w = mount(NativeDataSources, {
+    global: { provide: headerFor(p) },
     props: {
       page: p,
       port: { execute, navigate: vi.fn() },
@@ -282,7 +301,7 @@ test("foreign refresh and invalid local input retain registration draft without 
   expect(execute).not.toHaveBeenCalled();
   expect(w.find("#sources-unconfirmed").exists()).toBe(false);
   await w.get("#source-data_source_id").setValue("retained-source");
-  await w.get("#sources-refresh").trigger("click");
+  void header.refresh();
   await flushPromises();
   expect(w.get("#source-register").attributes("disabled")).toBeDefined();
   expect((w.get("#source-data_source_id").element as HTMLInputElement).value).toBe(
@@ -304,6 +323,7 @@ test("reader and shared definitions expose no administrative controls", () => {
     }
     expect(admitSourcePage(p, context, p.model.mode)).not.toBeNull();
     const w = mount(NativeDataSources, {
+      global: { provide: headerFor(p) },
       props: {
         page: p,
         port: { execute: vi.fn(), navigate: vi.fn() },
@@ -339,6 +359,7 @@ test.skipIf(!producer.available)("producer supplied native source contribution",
   const calls: [string, Record<string, unknown>][] = [],
     confirm = stubConfirm(true);
   const w = mount(NativeDataSources, {
+    global: { provide: headerFor(props.page) },
     props: {
       ...props,
       port: {
@@ -404,6 +425,7 @@ test("paging retains binding review and a changed destination requires explicit 
   const fresh = structuredClone(p);
   required(fresh.model.sources.entries[1]).evidence = "d".repeat(64);
   const w = mount(NativeDataSources, {
+    global: { provide: headerFor(p) },
     props: {
       page: p,
       port: { execute: vi.fn(), navigate: vi.fn() },
@@ -420,14 +442,14 @@ test("paging retains binding review and a changed destination requires explicit 
     await w.get(selector).setValue("");
     expect((w.get(selector).element as HTMLSelectElement).value).toBe("");
     expect(w.get("#source-change-binding").attributes("disabled")).toBeDefined();
-    await w.get("#sources-refresh").trigger("click");
+    void header.refresh();
     await flushPromises();
     expect((w.get(selector).element as HTMLSelectElement).value).toBe("");
     expect(w.get("#source-change-binding").attributes("disabled")).toBeDefined();
     await w.get(selector).setValue(value);
   }
   required(fresh.model.sources.entries[1]).evidence = "e".repeat(64);
-  await w.get("#sources-refresh").trigger("click");
+  void header.refresh();
   await flushPromises();
   expect((w.get("#source-binding").element as HTMLSelectElement).value).toBe("binding");
   expect((w.get("#source-target").element as HTMLSelectElement).value).toBe("target");
@@ -437,7 +459,7 @@ test("paging retains binding review and a changed destination requires explicit 
   fresh.model.sources.entries = [required(fresh.model.sources.entries[0])];
   fresh.model.sources.page = 2;
   fresh.model.query.page = 2;
-  await w.get("#sources-refresh").trigger("click");
+  void header.refresh();
   await flushPromises();
   expect((w.get("#source-target").element as HTMLSelectElement).value).toBe("target");
   expect(w.get("#source-change-binding").attributes("disabled")).toBeDefined();
@@ -467,6 +489,7 @@ test("observations retain microseconds and distinct binding context without rend
   });
   expect(admitSourcePage(p, context, "settings")).not.toBeNull();
   const w = mount(NativeDataSources, {
+    global: { provide: headerFor(p) },
     props: { page: p, port: { execute: vi.fn(), navigate: vi.fn() }, readPort: { read: vi.fn() } },
   });
   expect(w.get("#sources-health_page").text()).toContain(at);
@@ -495,6 +518,7 @@ test("job recovery matches failed versus running state and lifecycle controls re
     }),
     confirm = stubConfirm(true);
   const w = mount(NativeDataSources, {
+    global: { provide: headerFor(p) },
     props: { page: p, port: { execute, navigate: vi.fn() }, readPort: { read: vi.fn() } },
   });
   expect(w.find("#source-provision-tsdb-backend").exists()).toBe(false);
@@ -516,6 +540,7 @@ test("job recovery matches failed versus running state and lifecycle controls re
   confirm.mockRestore();
   required(p.model.selected).source.kind = "byo_tsdb";
   const byo = mount(NativeDataSources, {
+    global: { provide: headerFor(p) },
     props: { page: p, port: { execute: vi.fn(), navigate: vi.fn() }, readPort: { read: vi.fn() } },
   });
   expect(byo.get("#source-provision-tsdb-backend").attributes("disabled")).toBeUndefined();

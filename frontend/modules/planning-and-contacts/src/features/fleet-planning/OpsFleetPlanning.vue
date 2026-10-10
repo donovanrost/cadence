@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { inject } from "vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
+import { href } from "@cadence/plugin-sdk/routes";
 import CadencePanel from "@cadence/ui/CadencePanel.vue";
 import {
   FLEET_DIRECTORY_PORT,
@@ -14,44 +16,35 @@ const { directory, pending, notice, refresh, connected } = useFleetDirectory(
   props.port ?? inject(FLEET_DIRECTORY_PORT, undefined),
 );
 const label = (value: string) => value.replaceAll("_", " ");
+useOpsHeader("/missions/:mission_id/ops/planning", () => {
+  const current = directory.value;
+  if (!current) return {};
+  const params = { mission_id: current.context.mission_id };
+  return {
+    description: "Review mission horizons, exact policy inputs and durable planning progress.",
+    actions: [
+      {
+        id: "policy",
+        label: "Policy",
+        href: href("/missions/:mission_id/ops/planning/policy", params),
+      },
+    ],
+    ...(current.active_policy
+      ? {
+          primary: {
+            id: "plan-horizon",
+            label: "Plan horizon",
+            icon: "hero-plus",
+            href: href("/missions/:mission_id/ops/planning/new", params),
+          },
+        }
+      : {}),
+    refresh: { run: refresh, pending: pending.value || !connected },
+  };
+});
 </script>
 <template>
-  <main v-if="directory" id="ops-fleet-planning-page" class="space-y-6 p-4 md:p-6">
-    <header class="flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <p class="text-xs uppercase tracking-widest text-base-content/60">
-          Planning &amp; contacts
-        </p>
-        <h1 class="mt-1 text-2xl font-semibold">Fleet Planning</h1>
-        <p class="mt-2 max-w-2xl text-sm text-base-content/60">
-          Review mission horizons, exact policy inputs, and durable planning progress.
-        </p>
-      </div>
-      <div class="flex flex-wrap gap-2">
-        <button
-          id="refresh-fleet-planning"
-          class="btn btn-ghost btn-sm"
-          type="button"
-          :disabled="pending || !connected"
-          @click="refresh"
-        >
-          {{ pending ? "Refreshing…" : "Refresh" }}
-        </button>
-        <a
-          id="fleet-planning-policy-link"
-          :href="`${fleetBase(directory)}/policy`"
-          class="btn btn-ghost btn-sm"
-          >Policy</a
-        >
-        <a
-          v-if="directory.active_policy"
-          id="new-fleet-planning-run-link"
-          :href="`${fleetBase(directory)}/new`"
-          class="btn btn-primary btn-sm"
-          >Plan horizon</a
-        >
-      </div>
-    </header>
+  <main v-if="directory" id="ops-fleet-planning-page" class="space-y-6">
     <p v-if="notice" id="fleet-directory-notice" role="status" class="text-sm text-base-content/70">
       {{ notice }}
     </p>

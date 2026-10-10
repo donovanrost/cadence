@@ -1,6 +1,6 @@
 /* The host owns page geometry; domains own the contents of each named region. */
 .cd-page {
-  --page-gutter: clamp(1rem, 2.5vw, 2rem);
+  --page-gutter: clamp(1rem, 2vw, 1.5rem);
   min-width: 0;
   background: var(--surface-base);
   color: var(--text-bright);
@@ -128,10 +128,10 @@
 }
 .cd-page--workspace .cd-page-header__content {
   grid-column: 1;
-  grid-row: 1;
+  grid-row: 1 / span 2;
 }
 .cd-page--workspace .cd-page-header__row > .cd-page-actions {
-  grid-column: 1 / -1;
+  grid-column: 2;
   grid-row: 2;
   justify-content: flex-end;
 }

@@ -2,7 +2,6 @@
 import { targetLabel } from "../../shared/command-draft/target-label";
 import { computed, nextTick, ref } from "vue";
 import type { OpsPagePort, LiveOpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import CadenceWorkspaceLayout from "@cadence/ui/CadenceWorkspaceLayout.vue";
 import CadenceButton from "@cadence/ui/CadenceButton.vue";
 import WorkspaceFleet from "./WorkspaceFleet.vue";
@@ -103,7 +102,6 @@ const commandNames = computed(() =>
 </script>
 <template>
   <div id="command-workspace" class="command-workspace">
-    <CadencePageHeading><template #title>Commanding</template></CadencePageHeading>
     <p v-if="accessLost" role="alert" class="cw-notice">
       Command preparation is unavailable with your current access. Reopen Ops to read the current
       mission view.

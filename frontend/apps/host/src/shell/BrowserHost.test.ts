@@ -392,7 +392,7 @@ test("compiled Explore navigates real query and sample identities through host h
       .value,
   ).toBe("binding+b");
   expect(view().get("#ops-nav-rail").element).toBe(rail);
-  await view().get("#exploration-reload").trigger("click");
+  await view().get("#host-page-refresh").trigger("click");
   await flushHostUpdates();
   expect(transport.requests).toHaveLength(6);
   await click("/missions/mission-1/ops/dashboards");
@@ -403,7 +403,7 @@ test("compiled Explore navigates real query and sample identities through host h
   await flushHostUpdates();
   expect(view().find("#exploration-refresh-failed").exists()).toBe(true);
   expect(view().find("#exploration-results").exists()).toBe(false);
-  await view().get("#exploration-reload").trigger("click");
+  await view().get("#host-page-refresh").trigger("click");
   await flushHostUpdates();
   const revoked = stateAt(changed);
   revoked.ops_page = { ...revoked.ops_page, status: "unavailable" };
@@ -1671,7 +1671,7 @@ test("fleet directory is host-composed and captured reads retain evidence across
   await reply(0, fleetSnapshot(path));
   expect(view().find("#host-route-unavailable").exists()).toBe(false);
   const rail = view().get("#ops-nav-rail").element;
-  await view().get("#refresh-fleet-planning").trigger("click");
+  await view().get("#host-page-refresh").trigger("click");
   expect(transport.requests[1]).toMatchObject({
     event: "host:ops-page:read",
     payload: {
@@ -1685,10 +1685,10 @@ test("fleet directory is host-composed and captured reads retain evidence across
   await reply(1, fresh);
   expect(view().find("#fleet-run-fresh-run").exists()).toBe(true);
   expect(view().get("#ops-nav-rail").element).toBe(rail);
-  await view().get("#refresh-fleet-planning").trigger("click");
+  await view().get("#host-page-refresh").trigger("click");
   await reply(2, { ...fresh, status: "unavailable" });
   expect(view().find("#fleet-run-fresh-run").exists()).toBe(true);
-  await view().get("#refresh-fleet-planning").trigger("click");
+  await view().get("#host-page-refresh").trigger("click");
   await click("/missions");
   await reply(4, snapshot("/missions"));
   await reply(3, fresh);

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, provide, shallowReactive, shallowRef } from "vue";
 import CadencePageChrome from "@cadence/ui/CadencePageChrome.vue";
+import HostPageHeader from "./HostPageHeader.vue";
+import { providePageHeaderHost } from "./page-header-host";
 import {
   pageChromeKey,
   type PageBreadcrumb,
@@ -15,9 +17,22 @@ const props = withDefaults(
     workspace?: boolean;
     /** Full-bleed surfaces (e.g. a dashboard) own their identity bar; the host omits its heading. */
     heading?: boolean;
+    /** The catalog route being shown; its header policy decides what the page may say. */
+    route?: string;
+    /** The sidebar section, shown when the route opts into an eyebrow. */
+    section?: string | null;
   }>(),
-  { heading: true },
+  { heading: true, route: "", section: null },
 );
+const typed = providePageHeaderHost(() => props.route);
+const policy = typed.policy;
+const eyebrow = computed(() => (policy.value?.eyebrow ? props.section : null));
+// The trail ends at the page; a resource page's crumb is the resource's own name.
+const routeBreadcrumbs = computed(() => {
+  const items = policy.value?.breadcrumbs === false ? [] : (props.breadcrumbs ?? []);
+  const title = typed.header.value?.title;
+  return title && items.length ? [...items.slice(0, -1), { label: title }] : items;
+});
 const content = shallowRef<PageHeadingContent>();
 const targets = shallowReactive<PageChrome["targets"]>({});
 let owner: symbol | undefined;
@@ -62,10 +77,20 @@ const has = (region: PageRegion) => content.value?.regions.includes(region);
 <template>
   <div class="cd-page" :class="{ 'cd-page--workspace': workspace }">
     <div
-      v-if="heading"
+      v-if="heading && !content"
       id="host-page-heading"
-      :data-page-heading-source="content ? 'application' : 'route'"
+      :data-page-heading-source="typed.claimed.value ? 'page' : 'route'"
     >
+      <HostPageHeader
+        :title="title"
+        :eyebrow="eyebrow"
+        :breadcrumbs="routeBreadcrumbs"
+        :description="policy?.description ?? null"
+        :header="typed.header.value"
+      />
+    </div>
+    <!-- Pages not yet on useOpsHeader or useManagementHeader publish header markup through CadencePageHeading. -->
+    <div v-else-if="heading" id="host-page-heading" data-page-heading-source="application">
       <CadencePageChrome :id="content?.id" :breadcrumbs="breadcrumbs">
         <template #eyebrow
           ><span :ref="(el) => (targets.eyebrow = el as HTMLElement)" v-show="has('eyebrow')"

@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { IconName } from "./icons";
 /**
  * A Heroicon from the vendored set. Decorative unless `label` is given, in
  * which case it is announced as an image.
  */
 withDefaults(
   defineProps<{
-    name: `hero-${string}`;
+    name: IconName;
     size?: "xs" | "sm" | "md" | "lg";
     label?: string;
   }>(),

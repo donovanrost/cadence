@@ -16,7 +16,7 @@
     --workspace-heading-size: 0.8125rem;
     --workspace-label-size: var(--type-body-sm);
     --workspace-page-title-size: var(--type-title-md);
-    --workspace-page-padding: 0.625rem;
+    --workspace-page-padding: 0.875rem;
     --workspace-page-header-display: grid;
     --workspace-page-row-display: contents;
     --workspace-breadcrumb-margin: 0;

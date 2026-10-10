@@ -1,5 +1,6 @@
 import { jsonFixture, fixtureString } from "../../../../../test-support/json-fixture";
 import { required } from "../../../../../test-support/required";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
 import { alarmConditionsContribution, AlarmConditionsLegacyRedirect } from "../../alarm-conditions";
@@ -11,11 +12,13 @@ function start(model = alarmFixture()) {
   const context = { organizationId: model.organization_id, missionId: model.mission_id },
     readPort = { read: vi.fn(async () => model) },
     port = { navigate: vi.fn<(href: string) => void>() };
+  const header = pageHeaderHarness("/missions/:mission_id/ops/alarms");
   const w = mount(alarmConditionsContribution.component, {
     props: { ...alarmConditionsContribution.read(model, context), port, readPort },
+    global: { provide: header.provide },
   });
   mounted.push(w);
-  return { w, context, readPort, port };
+  return { w, context, readPort, port, header };
 }
 test("the public alarm contribution renders producer conditions and follows exact evidence", async () => {
   const raw = process.env.CADENCE_ALARM_DOCUMENT
@@ -119,18 +122,19 @@ test("rejects foreign scope, contradictory counts, substituted evidence and wron
   expect(() => alarmConditionsContribution.read(d, { ...ctx, resourceId: "unexpected" })).toThrow();
 });
 test("failed or foreign refresh retains last loaded evidence and navigation", async () => {
-  const { w, readPort, port } = start();
+  const { w, readPort, header } = start();
   readPort.read.mockRejectedValueOnce(Error("forbidden"));
-  await w.get("#refresh-alarm-conditions").trigger("click");
+  await header.refresh();
   await flushPromises();
   expect(w.get("#alarm-conditions-error").text()).toContain("last loaded evidence");
   expect(w.findAll("[data-limit-event]")).toHaveLength(1);
   readPort.read.mockResolvedValueOnce({ ...alarmFixture(), mission_id: "foreign" });
-  await w.get("#refresh-alarm-conditions").trigger("click");
+  await header.refresh();
   await flushPromises();
   expect(w.find("#alarm-conditions-error").exists()).toBe(true);
-  await w.get(`a[href="${alarmFixture().links.definitions}"]`).trigger("click");
-  expect(port.navigate).toHaveBeenCalledWith(alarmFixture().links.definitions);
+  // Sub-page links stay in the header, pointing at the server-produced destinations.
+  expect(header.href("definitions")).toBe(alarmFixture().links.definitions);
+  expect(header.href("posture")).toBe(alarmFixture().links.posture);
 });
 
 test("legacy entry preserves the canonical Ops destination and rejects arbitrary URLs", () => {

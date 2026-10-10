@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import type {
   OpsPagePort,
   OpsPageContext,
@@ -25,6 +26,9 @@ const { refresh: refreshObservation, syncFailed } = useLiveWorkspaceRead(
     page.value = readWorkspace(value, props.context);
   },
 );
+useOpsHeader("/missions/:mission_id/ops/commands/workspace", {
+  description: "Choose targets, prepare commands and follow them through review and release.",
+});
 </script>
 <template>
   <CommandWorkspace

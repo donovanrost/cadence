@@ -23,7 +23,8 @@
     "test:tools": "node --test tools/*.test.mjs",
     "lint:structure": "ast-grep test --config sgconfig.yml --skip-snapshot-tests && ast-grep scan --config sgconfig.yml",
     "test:structure": "ast-grep test --config sgconfig.yml --skip-snapshot-tests && node --test tools/structural-rules.test.mjs",
-    "test:producers": "node tools/producer-contracts.mjs"
+    "test:producers": "node tools/producer-contracts.mjs",
+    "routes:generate": "node tools/generate-route-types.mjs"
   },
   "devDependencies": {
     "@ast-grep/cli": "0.45.3",
