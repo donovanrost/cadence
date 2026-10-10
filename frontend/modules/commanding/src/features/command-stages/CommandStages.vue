@@ -2,7 +2,8 @@
 import { onBeforeUnmount, reactive, ref, shallowRef } from "vue";
 import type { OpsPageNavigationPort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
+import { href as routeHref } from "@cadence/plugin-sdk/routes";
 import CadenceOpsListBodyFrame from "@cadence/ui/CadenceOpsListBodyFrame.vue";
 import { directoryHref, readDirectory, type Directory } from "./contracts";
 import { stagesHref } from "../../shared/stages/links";
@@ -50,25 +51,22 @@ async function refresh() {
     if (!disposed) busy.value = false;
   }
 }
+useOpsHeader("/missions/:mission_id/ops/commands/stages", () => ({
+  description:
+    "Prepare commands privately or collaborate in a shared stage. Submit reviewed drafts as formal requests when they are ready.",
+  primary: {
+    id: "stage-create-link",
+    label: "Create stage",
+    icon: "hero-plus",
+    href: routeHref("/missions/:mission_id/ops/commands/stages/new", {
+      mission_id: context.missionId,
+    }),
+  },
+  refresh: { run: refresh, pending: busy.value },
+}));
 </script>
 <template>
   <CadenceOpsViewport id="command-stages">
-    <CadencePageHeading
-      ><template #eyebrow>{{ directory.mission_name }} / Commanding</template
-      ><template #title>Command stages</template
-      ><template #description
-        >Prepare commands privately or collaborate in a shared stage. Submit reviewed drafts as
-        formal requests when they are ready.</template
-      ><template #actions
-        ><a
-          id="stage-create-link"
-          :href="stagesHref(context.missionId, 'new')"
-          class="btn btn-primary btn-sm"
-          @click="follow($event, stagesHref(context.missionId, 'new'))"
-          >Create stage</a
-        ></template
-      ></CadencePageHeading
-    >
     <CadenceOpsListBodyFrame>
       <form
         id="stage-directory-filters"
@@ -94,16 +92,7 @@ async function refresh() {
             <option value="submitted">Submitted</option>
             <option value="canceled">Canceled</option>
           </select></label
-        ><button class="btn btn-ghost" :disabled="busy">Apply filters</button
-        ><button
-          id="stage-directory-refresh"
-          type="button"
-          class="btn btn-ghost"
-          :disabled="busy"
-          @click="refresh"
-        >
-          {{ busy ? "Refreshing…" : "Refresh" }}
-        </button>
+        ><button class="btn btn-ghost" :disabled="busy">Apply filters</button>
       </form>
       <p v-if="feedback" role="alert" class="text-sm text-warning">{{ feedback }}</p>
       <p class="text-xs text-base-content/60">

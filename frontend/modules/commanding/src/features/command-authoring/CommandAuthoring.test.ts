@@ -8,6 +8,7 @@ import {
 import { required } from "../../../../../test-support/required";
 import { fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { describe, expect, test, vi } from "vite-plus/test";
 import { writeFileSync } from "node:fs";
 import CommandAuthoring from "./CommandAuthoring.vue";
@@ -26,9 +27,12 @@ function mountPage(page = pageFixture()) {
     read = vi.fn(async (): Promise<unknown> => page),
     dispose = vi.fn();
   const guardNavigation = vi.fn((_guard: () => boolean) => dispose);
-  const wrapper = mount(CommandAuthoring, {
-    props: { page, port: { execute, navigate, guardNavigation }, readPort: { read } },
-  });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/commands/new").stage(CommandAuthoring),
+    {
+      props: { page, port: { execute, navigate, guardNavigation }, readPort: { read } },
+    },
+  );
   return { wrapper, execute, navigate, read, dispose, guardNavigation };
 }
 async function enterAndPreview(c: ReturnType<typeof mountPage>) {
@@ -80,7 +84,7 @@ describe("command authoring", () => {
       },
     };
     c.read.mockResolvedValue(p);
-    await c.wrapper.get("#command-authoring-refresh").trigger("click");
+    await c.wrapper.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(c.wrapper.get("#command-authoring-result").text()).toContain("Command request saved");
     expect(c.execute).toHaveBeenCalledTimes(2);
@@ -101,13 +105,13 @@ describe("command authoring", () => {
     const changed = pageFixture();
     changed.catalog.basis.token = "c".repeat(64);
     c.read.mockResolvedValue(changed);
-    await c.wrapper.get("#command-authoring-refresh").trigger("click");
+    await c.wrapper.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(c.wrapper.find("#command-authoring-preview-details").exists()).toBe(false);
     expect(c.wrapper.get("#command-authoring-feedback").text()).toContain("active model changed");
     changed.catalog.actor_id = "other_user";
     c.read.mockResolvedValue(changed);
-    await c.wrapper.get("#command-authoring-refresh").trigger("click");
+    await c.wrapper.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(c.wrapper.get("#command-authoring-feedback").text()).toContain("could not be refreshed");
     c.wrapper.unmount();
@@ -124,7 +128,6 @@ describe("command authoring", () => {
     await c.wrapper.get('[data-argument-name="amount"]').setValue("2");
     await c.wrapper.get("#command-authoring-form").trigger("submit");
     expect(required(c.guardNavigation.mock.calls[0])[0]()).toBe(false);
-    await c.wrapper.get("#command-authoring-back").trigger("click");
     expect(c.navigate).not.toHaveBeenCalled();
     c.wrapper.unmount();
     resolve({ status: "previewed", preview: previewFixture() });
@@ -199,14 +202,17 @@ test.skipIf(!producer.available)(
     const contribution = readAuthoringContribution(raw.data, fixtureContext(raw.context));
     if (!("catalog" in contribution)) {
       const execute = vi.fn();
-      const wrapper = mount(CommandAuthoringPage, {
-        props: {
-          page: contribution,
-          port: { execute, navigate: vi.fn() },
-          readPort: { read: vi.fn() },
-          refresh: vi.fn(),
+      const wrapper = mount(
+        pageHeaderHarness("/missions/:mission_id/ops/commands/new").stage(CommandAuthoringPage),
+        {
+          props: {
+            page: contribution,
+            port: { execute, navigate: vi.fn() },
+            readPort: { read: vi.fn() },
+            refresh: vi.fn(),
+          },
         },
-      });
+      );
       expect(wrapper.find("#command-authoring-prerequisite").exists()).toBe(true);
       expect(wrapper.find("#command-authoring-form").exists()).toBe(false);
       expect(execute).not.toHaveBeenCalled();

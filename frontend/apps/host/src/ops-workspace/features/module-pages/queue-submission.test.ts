@@ -1,6 +1,7 @@
 import "../../../module-pages.test-support";
 import { required } from "../../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { test, expect, vi } from "vite-plus/test";
 import OpsModulePage from "./OpsModulePage.vue";
 import {
@@ -28,17 +29,22 @@ test("the compiled commanding owner receives only captured queue and receipt por
       ...snapshot,
       data: { ...snapshot.data, operation: completed(snapshot.data) },
     }));
-  const w = mount(OpsModulePage, {
-    props: {
-      contributionId: snapshot.id,
-      snapshot,
-      context: snapshot.context,
-      execute,
-      query,
-      refresh: vi.fn(),
-      navigate: vi.fn(),
+  const w = mount(
+    pageHeaderHarness(
+      "/missions/:mission_id/ops/commands/requests/:command_request_id/queue",
+    ).stage(OpsModulePage),
+    {
+      props: {
+        contributionId: snapshot.id,
+        snapshot,
+        context: snapshot.context,
+        execute,
+        query,
+        refresh: vi.fn(),
+        navigate: vi.fn(),
+      },
     },
-  });
+  );
   try {
     await w.get("#command-queue-confirm").setValue(true);
     await w.get("#command-queue-form").trigger("submit");
@@ -51,7 +57,7 @@ test("the compiled commanding owner receives only captured queue and receipt por
         expected_queue: required(snapshot.data.preview).token,
       },
     });
-    await w.get("#command-queue-refresh").trigger("click");
+    await w.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(query).toHaveBeenCalledExactlyOnceWith({ id: snapshot.id, token: snapshot.token });
     expect(w.get("#command-queue-receipt").text()).toContain("queue_saved");
@@ -71,17 +77,22 @@ test("a retained response cannot reach a replaced queue confirmation", async () 
         reply = resolve;
       }),
   );
-  const w = mount(OpsModulePage, {
-    props: {
-      contributionId: snapshot.id,
-      snapshot,
-      context: snapshot.context,
-      execute,
-      query: vi.fn(),
-      refresh: vi.fn(),
-      navigate: vi.fn(),
+  const w = mount(
+    pageHeaderHarness(
+      "/missions/:mission_id/ops/commands/requests/:command_request_id/queue",
+    ).stage(OpsModulePage),
+    {
+      props: {
+        contributionId: snapshot.id,
+        snapshot,
+        context: snapshot.context,
+        execute,
+        query: vi.fn(),
+        refresh: vi.fn(),
+        navigate: vi.fn(),
+      },
     },
-  });
+  );
   try {
     await w.get("#command-queue-confirm").setValue(true);
     await w.get("#command-queue-form").trigger("submit");

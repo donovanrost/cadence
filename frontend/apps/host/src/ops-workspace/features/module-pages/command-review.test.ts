@@ -1,5 +1,6 @@
 import "../../../module-pages.test-support";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { test, expect, vi } from "vite-plus/test";
 import OpsModulePage from "./OpsModulePage.vue";
 import {
@@ -27,17 +28,22 @@ test("the compiled commanding owner receives only captured decision and receipt 
       ...snapshot,
       data: { ...snapshot.data, operation: completed(snapshot.data) },
     }));
-  const w = mount(OpsModulePage, {
-    props: {
-      contributionId: snapshot.id,
-      snapshot,
-      context: snapshot.context,
-      execute,
-      query,
-      refresh: vi.fn(),
-      navigate: vi.fn(),
+  const w = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/commands/requests/:command_request_id").stage(
+      OpsModulePage,
+    ),
+    {
+      props: {
+        contributionId: snapshot.id,
+        snapshot,
+        context: snapshot.context,
+        execute,
+        query,
+        refresh: vi.fn(),
+        navigate: vi.fn(),
+      },
     },
-  });
+  );
   try {
     await w.get("#command-review-choice").setValue("approved");
     await w.get("#command-review-confirm").setValue(true);
@@ -53,7 +59,7 @@ test("the compiled commanding owner receives only captured decision and receipt 
         expected_review: snapshot.data.review.expected_review,
       },
     });
-    await w.get("#command-review-refresh").trigger("click");
+    await w.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(query).toHaveBeenCalledExactlyOnceWith({ id: snapshot.id, token: snapshot.token });
     expect(w.get("[data-review-receipt]").text()).toContain("approval_saved");
@@ -73,17 +79,22 @@ test("a retained response cannot reach a replaced command review", async () => {
         reply = resolve;
       }),
   );
-  const w = mount(OpsModulePage, {
-    props: {
-      contributionId: snapshot.id,
-      snapshot,
-      context: snapshot.context,
-      execute,
-      query: vi.fn(),
-      refresh: vi.fn(),
-      navigate: vi.fn(),
+  const w = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/commands/requests/:command_request_id").stage(
+      OpsModulePage,
+    ),
+    {
+      props: {
+        contributionId: snapshot.id,
+        snapshot,
+        context: snapshot.context,
+        execute,
+        query: vi.fn(),
+        refresh: vi.fn(),
+        navigate: vi.fn(),
+      },
     },
-  });
+  );
   try {
     await w.get("#command-review-choice").setValue("approved");
     await w.get("#command-review-confirm").setValue(true);

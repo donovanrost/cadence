@@ -4,7 +4,7 @@ import { formatArgumentValues } from "../../shared/command-draft/exact-values";
 import { priorityChoices, priorityLabel } from "../../shared/priority";
 import { computed, onBeforeUnmount, reactive, ref, shallowRef } from "vue";
 import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
 import CadenceOpsListBodyFrame from "@cadence/ui/CadenceOpsListBodyFrame.vue";
 import CommandArguments from "../../shared/command-draft/CommandArguments.vue";
@@ -43,7 +43,6 @@ const command = computed(() => catalog.value.selected_command),
   target = computed(() => catalog.value.selected_target);
 const ready = computed(() => !!command.value?.supported && !!target.value),
   locked = computed(() => busy.value || reading.value || !!operation.value);
-const monitor = `/missions/${encodeURIComponent(context.missionId)}/ops/commands`;
 let disposed = false;
 const disposeGuard = props.port.guardNavigation?.(() => !busy.value && !reading.value);
 onBeforeUnmount(() => {
@@ -114,6 +113,11 @@ async function create() {
     if (!disposed) busy.value = false;
   }
 }
+useOpsHeader("/missions/:mission_id/ops/commands/new", () => ({
+  description:
+    "Choose a target and command, then review the resolved request. Approval and release are separate steps.",
+  refresh: { run: refresh, pending: reading.value || busy.value },
+}));
 async function refresh() {
   if (busy.value || reading.value) return;
   reading.value = true;
@@ -177,23 +181,6 @@ const format = (value: unknown) =>
 </script>
 <template>
   <CadenceOpsViewport id="command-authoring">
-    <CadencePageHeading>
-      <template #eyebrow>{{ catalog.mission_name }} / Commanding</template>
-      <template #title>Create command request</template>
-      <template #description
-        >Choose a target and command, then review the resolved request. Approval and release are
-        separate steps.</template
-      >
-      <template #actions
-        ><a
-          id="command-authoring-back"
-          :href="monitor"
-          class="btn btn-ghost btn-sm"
-          @click="follow($event, monitor)"
-          >Return to Commands</a
-        ></template
-      >
-    </CadencePageHeading>
     <CadenceOpsListBodyFrame>
       <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-base-content/70">
         <p>
@@ -203,14 +190,6 @@ const format = (value: unknown) =>
           }}</span>
           · Generation {{ catalog.basis.generation }}
         </p>
-        <button
-          id="command-authoring-refresh"
-          class="btn btn-ghost btn-sm"
-          :disabled="busy || reading"
-          @click="refresh"
-        >
-          {{ reading ? "Refreshing…" : "Refresh model and receipt" }}
-        </button>
       </div>
       <p v-if="feedback" id="command-authoring-feedback" role="alert" class="text-sm text-warning">
         {{ feedback }}

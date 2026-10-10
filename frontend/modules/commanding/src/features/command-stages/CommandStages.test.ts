@@ -2,6 +2,7 @@ import { fixtureString } from "../../../../../test-support/json-fixture";
 import { required } from "../../../../../test-support/required";
 import { fixtureArrayAt, fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { test, expect, vi } from "vite-plus/test";
 import CommandStages from "./CommandStages.vue";
 import { directoryFixture } from "./fixtures.test-support";
@@ -26,7 +27,10 @@ test("directory controls preserve scoped IDs, literal searches and modifier navi
   const directory = directoryFixture(),
     navigate = vi.fn(),
     read = vi.fn(async () => ({ directory }));
-  const w = mount(CommandStages, { props: { directory, port: { navigate }, readPort: { read } } });
+  const w = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/commands/stages").stage(CommandStages),
+    { props: { directory, port: { navigate }, readPort: { read } } },
+  );
   try {
     await w.get('[data-stage-id="stage_one"]').trigger("click", { ctrlKey: true });
     expect(navigate).not.toHaveBeenCalled();
@@ -38,7 +42,7 @@ test("directory controls preserve scoped IDs, literal searches and modifier navi
     const url = new URL(fixtureString(required(navigate.mock.calls.at(-1))[0]), "http://localhost");
     expect(url.searchParams.get("query")).toBe("100% flight");
     expect(url.searchParams.get("state")).toBe("draft");
-    await w.get("#stage-directory-refresh").trigger("click");
+    await w.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(read).toHaveBeenCalledOnce();
   } finally {
@@ -50,15 +54,18 @@ test("a refreshed directory cannot switch its captured actor", async () => {
   const other = structuredClone(directory);
   other.actor_id = "other";
   other.stages.entries = [];
-  const w = mount(CommandStages, {
-    props: {
-      directory,
-      port: { navigate: vi.fn() },
-      readPort: { read: vi.fn(async () => ({ directory: other })) },
+  const w = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/commands/stages").stage(CommandStages),
+    {
+      props: {
+        directory,
+        port: { navigate: vi.fn() },
+        readPort: { read: vi.fn(async () => ({ directory: other })) },
+      },
     },
-  });
+  );
   try {
-    await w.get("#stage-directory-refresh").trigger("click");
+    await w.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(w.find('[data-stage-id="stage_one"]').exists()).toBe(true);
     expect(w.get('[role="alert"]').text()).toContain("could not be refreshed");

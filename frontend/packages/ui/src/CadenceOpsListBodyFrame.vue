@@ -1,7 +1,8 @@
 <script lang="ts">
 import { Fragment, cloneVNode, defineComponent, h, isVNode, type VNodeChild } from "vue";
 
-const frameClass = "mx-auto max-w-[100rem] space-y-4 p-5 lg:p-7";
+// The host page body owns the gutter; the frame only bounds and spaces its content.
+const frameClass = "mx-auto max-w-[100rem] space-y-4";
 
 const flattenSlotChildren = (
   children: VNodeChild[],

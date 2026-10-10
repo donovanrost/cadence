@@ -2,6 +2,7 @@ import { fixtureString } from "../../../../../test-support/json-fixture";
 import { required } from "../../../../../test-support/required";
 import { fixtureArrayAt, fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { test, expect, vi } from "vite-plus/test";
 import CommandHistory from "./CommandHistory.vue";
 import { fixture } from "./fixtures";
@@ -12,9 +13,14 @@ const context = { organizationId: "org-a", missionId: "mission-a", resourceId: "
 function setup(model = fixture()) {
   const port = { navigate: vi.fn() },
     refresh = vi.fn(async () => {});
-  const w = mount(CommandHistory, {
-    props: { model: readCommandHistory(model, context), context, port, refresh },
-  });
+  const w = mount(
+    pageHeaderHarness(
+      "/missions/:mission_id/ops/commands/requests/:command_request_id/history",
+    ).stage(CommandHistory),
+    {
+      props: { model: readCommandHistory(model, context), context, port, refresh },
+    },
+  );
   return { w, port, refresh };
 }
 test("typed contribution renders exact selected evidence without a numeric round trip", () => {
@@ -83,10 +89,10 @@ test("refresh waits for the host and recovers its pending control after failure"
   const { w, refresh } = setup();
   try {
     refresh.mockRejectedValueOnce(Error("Host unavailable"));
-    await w.get("#command-history-refresh").trigger("click");
+    await w.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(refresh).toHaveBeenCalledOnce();
-    expect(w.get("#command-history-refresh").attributes("disabled")).toBeUndefined();
+    expect(w.get("#page-header-refresh").attributes("disabled")).toBeUndefined();
   } finally {
     w.unmount();
   }

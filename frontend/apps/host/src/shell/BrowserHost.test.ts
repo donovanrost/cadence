@@ -263,7 +263,7 @@ test("unavailable command refresh hides stale evidence and permits a read-only r
   await click(path);
   await reply(0, { ...snapshot(path, "mission-1"), ops_page: page });
   const rail = view().get("#ops-nav-rail").element;
-  await view().get("#command-monitor-refresh").trigger("click");
+  await view().get("#host-page-refresh").trigger("click");
   await flushHostUpdates();
   await reply(1, {
     ...snapshot(path, "mission-1"),

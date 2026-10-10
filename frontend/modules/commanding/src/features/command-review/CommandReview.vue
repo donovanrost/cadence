@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { priorityLabel } from "../../shared/priority";
-import { queueSubmissionHref } from "@cadence/commanding/queue-submission";
 import { computed, onBeforeUnmount, ref, shallowRef } from "vue";
 import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
+import { href as routeHref } from "@cadence/plugin-sdk/routes";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
 import CadenceOpsListBodyFrame from "@cadence/ui/CadenceOpsListBodyFrame.vue";
 import {
@@ -44,7 +44,23 @@ const context = { ...props.page.review.context },
 const allowed = computed(
   () => review.value.can_decide && !operation.value && !busy.value && !reading.value,
 );
-const monitor = `/missions/${encodeURIComponent(context.missionId)}/ops/commands?focus_command_id=${encodeURIComponent(context.resourceId)}`;
+useOpsHeader("/missions/:mission_id/ops/commands/requests/:command_request_id", () => ({
+  title: request.value.command_display_name || request.value.command_name || "Command request",
+  description: "Review the formal command request and record a human decision.",
+  primary: {
+    id: "command-review-queue",
+    label:
+      ["validated", "approved"].includes(request.value.lifecycle_state) ||
+      (operation.value?.status === "completed" && operation.value.receipt.decision === "approved")
+        ? "Review for queueing"
+        : "Queue details",
+    href: routeHref("/missions/:mission_id/ops/commands/requests/:command_request_id/queue", {
+      mission_id: context.missionId,
+      command_request_id: context.resourceId,
+    }),
+  },
+  refresh: { run: refresh, pending: reading.value || busy.value },
+}));
 const format = (v: unknown) =>
   v === null ? "Not recorded" : typeof v === "object" ? JSON.stringify(v, null, 2) : String(v);
 const actor = (v: Actor) => v.user_id ?? v.service_identity_id ?? "Not recorded";
@@ -104,47 +120,11 @@ function follow(event: MouseEvent, href: string) {
 </script>
 <template>
   <CadenceOpsViewport id="command-review">
-    <CadencePageHeading>
-      <template #eyebrow>{{ review.mission_name }} / Commanding</template>
-      <template #title>{{ request.command_display_name || request.command_name }}</template>
-      <template #description
-        >Review the formal command request and record a human decision.</template
-      >
-      <template #actions
-        ><a
-          id="command-review-back"
-          :href="monitor"
-          class="btn btn-ghost btn-sm"
-          @click="follow($event, monitor)"
-          >Return to Commands</a
-        ></template
-      >
-    </CadencePageHeading>
-    <a
-      id="command-review-queue"
-      :href="queueSubmissionHref(context.missionId, context.resourceId)"
-      class="btn btn-primary btn-sm self-start"
-      @click="follow($event, queueSubmissionHref(context.missionId, context.resourceId))"
-      >{{
-        ["validated", "approved"].includes(request.lifecycle_state) ||
-        (operation?.status === "completed" && operation.receipt.decision === "approved")
-          ? "Review for queueing"
-          : "Queue details"
-      }}</a
-    >
     <CadenceOpsListBodyFrame>
       <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-base-content/70">
         <p>
           Observed <time :datetime="review.observed_at">{{ review.observed_at }}</time>
         </p>
-        <button
-          id="command-review-refresh"
-          class="btn btn-ghost btn-sm"
-          :disabled="busy || reading"
-          @click="refresh"
-        >
-          {{ reading ? "Refreshing…" : "Refresh request and receipt" }}
-        </button>
       </div>
       <p v-if="feedback" id="command-review-feedback" role="alert" class="text-sm text-warning">
         {{ feedback }}

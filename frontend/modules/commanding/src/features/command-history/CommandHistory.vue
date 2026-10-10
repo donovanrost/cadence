@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { ref, watch } from "vue";
 import type { OpsPageContext, OpsPageNavigationPort } from "@cadence/plugin-sdk/ops-pages";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceOpsListBodyFrame from "@cadence/ui/CadenceOpsListBodyFrame.vue";
-import { monitorHref } from "@cadence/commanding/mission-commands";
 import MatchedEvidence from "./MatchedEvidence.vue";
 import { commandHistoryHref } from "./query";
 import type { HistoryModel, HistoryQuery } from "./types";
@@ -25,15 +24,6 @@ watch(
 const label = (v: string | null) => v?.replaceAll("_", " ") ?? "Not recorded";
 const href = (query: HistoryQuery) =>
   commandHistoryHref(props.model.mission_id, props.model.request.id, query);
-const backHref = computed(() =>
-  monitorHref(props.model.mission_id, {
-    status: "all",
-    target: "all",
-    query: "",
-    page: "1",
-    focus_command_id: props.model.request.id,
-  }),
-);
 function follow(event: MouseEvent, destination: string) {
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
     return;
@@ -48,6 +38,11 @@ function selectRelease(id: string): HistoryQuery {
 function selectVerifier(id: string, release: string): HistoryQuery {
   return { ...selectRelease(release), verifier: id };
 }
+useOpsHeader("/missions/:mission_id/ops/commands/requests/:command_request_id/history", () => ({
+  title: props.model.request.name,
+  description: "Release attempts, verifiers and their recorded evidence.",
+  refresh: { run: refreshPage, pending: pending.value },
+}));
 async function refreshPage() {
   if (pending.value) return;
   pending.value = true;
@@ -62,38 +57,12 @@ async function refreshPage() {
 </script>
 <template>
   <CadenceOpsViewport id="command-history">
-    <CadencePageHeading>
-      <template #eyebrow>Mission operations / commanding</template>
-      <template #title>Command history</template>
-      <template #description
-        >Release attempts, verifiers and their recorded evidence for
-        {{ model.request.name }}.</template
-      >
-      <template #actions
-        ><a
-          id="command-history-back"
-          :href="backHref"
-          class="btn btn-ghost btn-sm"
-          @click="follow($event, backHref)"
-          >Back to commands</a
-        ></template
-      >
-    </CadencePageHeading>
     <CadenceOpsListBodyFrame>
       <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-base-content/75">
         <p>
           Observed <time :datetime="model.observed_at">{{ model.observed_at }}</time
           >. Refresh reads current states. New records may appear between pages.
         </p>
-        <button
-          id="command-history-refresh"
-          type="button"
-          class="btn btn-ghost btn-sm"
-          :disabled="pending"
-          @click="refreshPage"
-        >
-          Refresh history
-        </button>
       </div>
       <dl
         id="command-history-request"

@@ -1,6 +1,7 @@
 import { required } from "../../../../../test-support/required";
 import { fixtureArrayAt, fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { flushPromises, mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test, vi } from "vite-plus/test";
 import {
   CommandMonitor,
@@ -14,7 +15,8 @@ function setup(model = monitorFixture()) {
   const navigate = vi.fn(),
     refresh = vi.fn().mockResolvedValue(undefined);
   const port = { navigate };
-  const wrapper = mount(CommandMonitor, {
+  const header = pageHeaderHarness("/missions/:mission_id/ops/commands");
+  const wrapper = mount(header.stage(CommandMonitor), {
     props: {
       model: readCommandMonitor(model, monitorContext),
       context: monitorContext,
@@ -22,7 +24,7 @@ function setup(model = monitorFixture()) {
       refresh,
     },
   });
-  return { wrapper, navigate, refresh, port };
+  return { wrapper, header, navigate, refresh, port };
 }
 test("admission validates the semantic model, bounds, evidence and exact scope", () => {
   const model = monitorFixture();
@@ -67,8 +69,8 @@ test("admission validates the semantic model, bounds, evidence and exact scope",
   expect(readCommandMonitor(sorted, monitorContext)).toEqual(model);
 });
 test("request evidence is rendered without dropping canonical IDs or timestamp precision", async () => {
-  const { wrapper } = setup();
-  expect(wrapper.get("#command-monitor-summary").attributes("data-command-active-count")).toBe("1");
+  const { wrapper, header } = setup();
+  expect(header.header().facts).toContain("1 in flight");
   const row = wrapper.get('[data-command-request="request-a"]');
   expect(row.get('[data-command-queue="queue-request-a"]').text()).toContain("released");
   expect(row.get('[data-command-queue="queue-request-a"]').text()).not.toContain("endpoint-a");
@@ -216,9 +218,9 @@ test("empty, unavailable focus and verifier truncation are explicit", () => {
 test("refresh handles rejected reads and query admission rejects unsupported or malformed values", async () => {
   const { wrapper, refresh } = setup();
   refresh.mockRejectedValueOnce(Error("offline"));
-  await wrapper.get("#command-monitor-refresh").trigger("click");
+  await wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
-  expect(wrapper.get("#command-monitor-refresh").attributes("disabled")).toBeUndefined();
+  expect(wrapper.get("#page-header-refresh").attributes("disabled")).toBeUndefined();
   wrapper.unmount();
   for (const query of [
     { status: "unknown" },
@@ -271,14 +273,11 @@ test("monitoring operators keep evidence and focus without privileged review lin
 
 test("creation uses the public command authoring route only for admitted managers", async () => {
   const c = setup();
-  const link = c.wrapper.get("#command-monitor-create");
-  expect(link.attributes("href")).toBe(`/missions/${monitorContext.missionId}/ops/commands/new`);
-  await link.trigger("click", { ctrlKey: true });
-  expect(c.navigate).not.toHaveBeenCalled();
-  await link.trigger("click");
-  expect(c.navigate).toHaveBeenCalledWith(link.attributes("href"));
+  expect(c.header.href("command-monitor-create")).toBe(
+    `/missions/${monitorContext.missionId}/ops/commands/new`,
+  );
   await c.wrapper.setProps({ model: { ...monitorFixture(), can_review: false } });
-  expect(c.wrapper.find("#command-monitor-create").exists()).toBe(false);
+  expect(c.header.has("command-monitor-create")).toBe(false);
   c.wrapper.unmount();
 });
 

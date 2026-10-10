@@ -3,6 +3,7 @@ import { jsonFixture, fixtureContext } from "../../../../../test-support/json-fi
 import { required } from "../../../../../test-support/required";
 import { fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { test, expect, vi } from "vite-plus/test";
 import { writeFileSync } from "node:fs";
 import CommandReview from "./CommandReview.vue";
@@ -19,7 +20,12 @@ function setup(
     readPort = {
       read: vi.fn<() => Promise<unknown>>(async () => ({ ...page, operation: completed(page) })),
     };
-  const w = mount(CommandReview, { props: { page, port, readPort } });
+  const w = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/commands/requests/:command_request_id").stage(
+      CommandReview,
+    ),
+    { props: { page, port, readPort } },
+  );
   return { w, port, readPort };
 }
 async function decide(w: ReturnType<typeof setup>["w"]) {
@@ -61,7 +67,7 @@ test("unknown result recovers by read without repeating the decision", async () 
     await decide(w);
     expect(w.get("#command-review-operation").text()).toContain("unconfirmed");
     expect(w.find("#command-review-form").exists()).toBe(false);
-    await w.get("#command-review-refresh").trigger("click");
+    await w.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(readPort.read).toHaveBeenCalledOnce();
     expect(execute).toHaveBeenCalledOnce();
@@ -80,7 +86,7 @@ test("a missing recovered operation does not rearm an unknown decision", async (
   readPort.read.mockResolvedValue(fixture());
   try {
     await decide(w);
-    await w.get("#command-review-refresh").trigger("click");
+    await w.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(w.get("#command-review-operation").text()).toContain("unconfirmed");
     expect(w.find("#command-review-form").exists()).toBe(false);
@@ -120,7 +126,7 @@ test("read failures and changed actor preserve the consumed submission", async (
   readPort.read.mockResolvedValue(other);
   try {
     await decide(w);
-    await w.get("#command-review-refresh").trigger("click");
+    await w.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(w.find("#command-review-feedback").exists()).toBe(true);
     expect(w.get("#command-review-operation").text()).toContain("unconfirmed");
@@ -266,7 +272,7 @@ test("refreshing changed semantics clears the earlier decision and confirmation"
   try {
     await w.get("#command-review-choice").setValue("approved");
     await w.get("#command-review-confirm").setValue(true);
-    await w.get("#command-review-refresh").trigger("click");
+    await w.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(w.get<HTMLSelectElement>("#command-review-choice").element.value).toBe("");
     expect(w.get<HTMLInputElement>("#command-review-confirm").element.checked).toBe(false);
@@ -288,20 +294,25 @@ test("pending decisions guard host navigation and release the guard on disposal"
           reply = resolve;
         }),
     );
-  const w = mount(CommandReview, {
-    props: {
-      page,
-      port: {
-        execute,
-        navigate: vi.fn(),
-        guardNavigation: (g: () => boolean) => {
-          guard = g;
-          return dispose;
+  const w = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/commands/requests/:command_request_id").stage(
+      CommandReview,
+    ),
+    {
+      props: {
+        page,
+        port: {
+          execute,
+          navigate: vi.fn(),
+          guardNavigation: (g: () => boolean) => {
+            guard = g;
+            return dispose;
+          },
         },
+        readPort: { read: vi.fn() },
       },
-      readPort: { read: vi.fn() },
     },
-  });
+  );
   expect(guard()).toBe(true);
   await decide(w);
   expect(guard()).toBe(false);

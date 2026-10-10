@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
 import type { OpsPageContext, OpsPageNavigationPort } from "@cadence/plugin-sdk/ops-pages";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
+import { href as routeHref } from "@cadence/plugin-sdk/routes";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
 import CadenceOpsListBodyFrame from "@cadence/ui/CadenceOpsListBodyFrame.vue";
 import CadenceOpsListFrame from "@cadence/ui/CadenceOpsListFrame.vue";
@@ -9,8 +10,6 @@ import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
 import CommandEvidence from "./CommandEvidence.vue";
 import { commandHistoryHref } from "@cadence/commanding/command-history";
 import { commandReviewHref } from "@cadence/commanding/command-review";
-import { stagesHref } from "@cadence/commanding/command-stages";
-import { authoringHref } from "@cadence/commanding/command-authoring";
 import { commandStates, type CommandMonitorModel, type MonitorQuery } from "./monitor.contracts";
 import { monitorHref } from "./monitor-query";
 defineOptions({ inheritAttrs: false });
@@ -51,12 +50,6 @@ function navigate(query: MonitorQuery) {
   pending.value = true;
   props.port.navigate(destination);
 }
-function openStages(event: MouseEvent) {
-  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-    return;
-  event.preventDefault();
-  if (!pending.value) props.port.navigate(stagesHref(props.model.mission_id));
-}
 function follow(event: MouseEvent, id: string) {
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
     return;
@@ -92,27 +85,6 @@ function reviewRequest(event: MouseEvent, id: string) {
   const destination = reviewHref(id);
   if (!pending.value && destination) props.port.navigate(destination);
 }
-const createHref = computed(() => {
-  if (!props.model.can_review) return undefined;
-  try {
-    return authoringHref(props.model.mission_id, {
-      command: "",
-      target: "",
-      command_after: "",
-      target_after: "",
-      command_query: "",
-      target_query: "",
-    });
-  } catch {
-    return undefined;
-  }
-});
-function createRequest(event: MouseEvent) {
-  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-    return;
-  event.preventDefault();
-  if (!pending.value && createHref.value) props.port.navigate(createHref.value);
-}
 function clearFocus() {
   const { focus_command_id: _, ...query } = props.model.query;
   navigate(query);
@@ -128,57 +100,42 @@ async function retry() {
     pending.value = false;
   }
 }
+useOpsHeader("/missions/:mission_id/ops/commands", () => {
+  const summary = props.model.summary;
+  const mission = { mission_id: props.model.mission_id };
+  return {
+    description:
+      "Request, queue, release and verifier evidence. Open a request for detailed review.",
+    facts: [
+      `${summary.queued_count} queued`,
+      `${summary.release_pending_count} release pending`,
+      `${summary.in_flight_count} in flight`,
+      `${summary.failed_count + summary.indeterminate_count} failed or indeterminate`,
+    ],
+    ...(props.model.can_review
+      ? {
+          primary: {
+            id: "command-monitor-create",
+            label: "Create request",
+            icon: "hero-plus",
+            href: routeHref("/missions/:mission_id/ops/commands/new", mission),
+          },
+          actions: [
+            {
+              id: "command-monitor-stages",
+              label: "Command stages",
+              icon: "hero-rectangle-stack",
+              href: routeHref("/missions/:mission_id/ops/commands/stages", mission),
+            },
+          ],
+        }
+      : {}),
+    ...(!props.live || props.syncFailed ? { refresh: { run: retry, pending: pending.value } } : {}),
+  };
+});
 </script>
 <template>
   <CadenceOpsViewport id="command-monitor">
-    <CadencePageHeading>
-      <template #title>Commands</template>
-      <template #eyebrow>Mission operations / command posture</template>
-      <template #description
-        >Request, queue, release and verifier evidence. Open a request for detailed
-        review.</template
-      >
-      <template #actions>
-        <a
-          v-if="model.can_review"
-          id="command-monitor-stages"
-          :href="stagesHref(model.mission_id)"
-          class="btn btn-ghost btn-sm"
-          @click="openStages"
-          >Command stages</a
-        >
-        <a
-          v-if="createHref"
-          id="command-monitor-create"
-          :href="createHref"
-          class="btn btn-primary btn-sm"
-          @click="createRequest"
-          >Create request</a
-        >
-        <div
-          id="command-monitor-summary"
-          class="grid grid-cols-2 gap-px border border-base-300 bg-base-300 sm:grid-cols-4"
-          :data-command-active-count="model.summary.active_count"
-        >
-          <div
-            v-for="metric in [
-              { label: 'Queued', value: model.summary.queued_count },
-              { label: 'Release pending', value: model.summary.release_pending_count },
-              { label: 'In flight', value: model.summary.in_flight_count },
-              {
-                label: 'Failed / indeterminate',
-                value: model.summary.failed_count + model.summary.indeterminate_count,
-              },
-            ]"
-            :key="metric.label"
-            class="min-w-24 bg-base-100/80 px-3 py-2"
-          >
-            <p class="hud-label">{{ metric.label }}</p>
-            <p class="mt-1 font-mono text-lg font-semibold">{{ metric.value }}</p>
-          </div>
-        </div></template
-      >
-    </CadencePageHeading>
     <CadenceOpsListBodyFrame>
       <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-base-content/75">
         <p>
@@ -189,16 +146,6 @@ async function retry() {
           ><template v-if="!live">. Refresh to read current state.</template>
           <span v-if="live && syncFailed" role="status"> · Live updates are interrupted.</span>
         </p>
-        <button
-          v-if="!live || syncFailed"
-          id="command-monitor-refresh"
-          type="button"
-          class="btn btn-ghost btn-sm"
-          :disabled="pending"
-          @click="retry"
-        >
-          {{ live ? "Retry updates" : "Refresh" }}
-        </button>
       </div>
       <section
         v-if="model.focus.status !== 'not_selected'"

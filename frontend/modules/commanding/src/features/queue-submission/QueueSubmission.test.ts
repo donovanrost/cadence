@@ -2,6 +2,7 @@ import { producerFixture } from "../../../../../test-support/producer-fixture";
 import { jsonFixture, fixtureContext } from "../../../../../test-support/json-fixture";
 import { required } from "../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { test, expect, vi } from "vite-plus/test";
 import { writeFileSync } from "node:fs";
 import QueueSubmission from "./QueueSubmission.vue";
@@ -12,13 +13,18 @@ function mountPage(page = fixture()) {
     completed(page),
   );
   const read = vi.fn(async (): Promise<unknown> => page);
-  const wrapper = mount(QueueSubmission, {
-    props: {
-      page,
-      port: { execute, navigate: vi.fn(), guardNavigation: vi.fn(() => vi.fn()) },
-      readPort: { read },
+  const wrapper = mount(
+    pageHeaderHarness(
+      "/missions/:mission_id/ops/commands/requests/:command_request_id/queue",
+    ).stage(QueueSubmission),
+    {
+      props: {
+        page,
+        port: { execute, navigate: vi.fn(), guardNavigation: vi.fn(() => vi.fn()) },
+        readPort: { read },
+      },
     },
-  });
+  );
   return { wrapper, execute, read };
 }
 test("confirmation gates one queue operation and its durable receipt", async () => {
@@ -49,7 +55,7 @@ test("an uncertain reply is recovered through a read without sending another act
     await c.wrapper.get("#command-queue-form").trigger("submit");
     await flushPromises();
     expect(c.wrapper.find("#command-queue-unconfirmed").exists()).toBe(true);
-    await c.wrapper.get("#command-queue-refresh").trigger("click");
+    await c.wrapper.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(c.read).toHaveBeenCalledOnce();
     expect(c.execute).toHaveBeenCalledOnce();
@@ -73,7 +79,7 @@ test.each(["operation_id", "actor_id", "request_id", "approved_content_sha256"] 
       await flushPromises();
       expect(c.wrapper.find("#command-queue-unconfirmed").exists()).toBe(true);
       expect(c.wrapper.find("#command-queue-receipt").exists()).toBe(false);
-      await c.wrapper.get("#command-queue-refresh").trigger("click");
+      await c.wrapper.get("#page-header-refresh").trigger("click");
       await flushPromises();
       expect(c.wrapper.find("#command-queue-unconfirmed").exists()).toBe(true);
       expect(c.execute).toHaveBeenCalledOnce();
@@ -90,7 +96,7 @@ test("a fresh review token clears confirmation before queueing", async () => {
   c.read.mockResolvedValue(next);
   try {
     await c.wrapper.get("#command-queue-confirm").setValue(true);
-    await c.wrapper.get("#command-queue-refresh").trigger("click");
+    await c.wrapper.get("#page-header-refresh").trigger("click");
     await flushPromises();
     await c.wrapper.get("#command-queue-form").trigger("submit");
     expect(c.execute).not.toHaveBeenCalled();

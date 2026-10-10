@@ -3,10 +3,9 @@ import { parseArgumentValues } from "../../shared/command-draft/exact-values";
 import { computed, reactive, ref, watch } from "vue";
 import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceOpsListBodyFrame from "@cadence/ui/CadenceOpsListBodyFrame.vue";
 import { commandReviewHref } from "@cadence/commanding/command-review";
-import { stagesHref } from "../../shared/stages/links";
 import { order, text } from "../../shared/stages/validation";
 import { emptyCatalogQuery, type WorkbenchPage } from "./contracts";
 import { useStageWorkbench } from "./useStageWorkbench";
@@ -41,6 +40,11 @@ const {
 } = useStageWorkbench(props.page, props.port, props.readPort);
 const stage = computed(() => workbench.value.stage),
   selected = computed(() => workbench.value.selected_item);
+useOpsHeader("/missions/:mission_id/ops/commands/stages/:command_stage_id", () => ({
+  title: stage.value.name,
+  description: stage.value.description || "Prepare and review a finite batch of command drafts.",
+  refresh: { run: refresh, pending: reading.value || busy.value },
+}));
 const stageForm = reactive({ name: "", description: "", visibility: "private", state: "draft" }),
   details = reactive({ notes: "", order: "0" }),
   confirmCancel = ref(false),
@@ -113,29 +117,7 @@ async function cancelItem() {
 }
 </script>
 <template>
-  <CadenceOpsViewport id="stage-workbench"
-    ><CadencePageHeading
-      ><template #eyebrow>{{ workbench.mission_name }} / Commanding</template
-      ><template #title>{{ stage.name }}</template
-      ><template #description>{{
-        stage.description || "Prepare and review a finite batch of command drafts."
-      }}</template
-      ><template #actions
-        ><a
-          :href="stagesHref(context.missionId)"
-          class="btn btn-ghost btn-sm"
-          @click="follow($event, stagesHref(context.missionId))"
-          >All stages</a
-        ><button
-          id="stage-workbench-refresh"
-          class="btn btn-ghost btn-sm"
-          :disabled="busy || reading"
-          @click="refresh"
-        >
-          {{ reading ? "Refreshing…" : "Refresh stage and result" }}
-        </button></template
-      ></CadencePageHeading
-    >
+  <CadenceOpsViewport id="stage-workbench">
     <CadenceOpsListBodyFrame>
       <div class="flex flex-wrap justify-between gap-3 text-xs">
         <p class="flex gap-3">

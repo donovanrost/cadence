@@ -1,5 +1,6 @@
 import "../../../module-pages.test-support";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { test, expect, vi } from "vite-plus/test";
 import OpsModulePage from "./OpsModulePage.vue";
 import {
@@ -40,17 +41,20 @@ test("the compiled authoring owner receives captured preview, create, and receip
     ...snapshot,
     data: { ...snapshot.data, preview, operation },
   }));
-  const w = mount(OpsModulePage, {
-    props: {
-      contributionId: snapshot.id,
-      snapshot,
-      context: snapshot.context,
-      execute,
-      query,
-      refresh: vi.fn(),
-      navigate: vi.fn(),
+  const w = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/commands/new").stage(OpsModulePage),
+    {
+      props: {
+        contributionId: snapshot.id,
+        snapshot,
+        context: snapshot.context,
+        execute,
+        query,
+        refresh: vi.fn(),
+        navigate: vi.fn(),
+      },
     },
-  });
+  );
   try {
     await w.get('[data-argument-name="amount"]').setValue("2");
     await w.get("#command-authoring-form").trigger("submit");
@@ -78,7 +82,7 @@ test("the compiled authoring owner receives captured preview, create, and receip
       event: "create",
       input: { expected_preview: preview.token },
     });
-    await w.get("#command-authoring-refresh").trigger("click");
+    await w.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(query).toHaveBeenCalledExactlyOnceWith({ id: snapshot.id, token: snapshot.token });
     expect(w.get("#command-authoring-result").text()).toContain("Command request saved");
@@ -100,17 +104,20 @@ test("a late preview cannot reach a replaced authoring instance", async () => {
         reply = resolve;
       }),
   );
-  const w = mount(OpsModulePage, {
-    props: {
-      contributionId: snapshot.id,
-      snapshot,
-      context: snapshot.context,
-      execute,
-      query: vi.fn(),
-      refresh: vi.fn(),
-      navigate: vi.fn(),
+  const w = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/commands/new").stage(OpsModulePage),
+    {
+      props: {
+        contributionId: snapshot.id,
+        snapshot,
+        context: snapshot.context,
+        execute,
+        query: vi.fn(),
+        refresh: vi.fn(),
+        navigate: vi.fn(),
+      },
     },
-  });
+  );
   try {
     await w.get('[data-argument-name="amount"]').setValue("2");
     await w.get("#command-authoring-form").trigger("submit");

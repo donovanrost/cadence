@@ -9,6 +9,7 @@ import { required } from "../../../../../test-support/required";
 import { fixtureArrayAt, fixtureRecordAt } from "../../../../../test-support/json-fixture";
 import { readFileSync, writeFileSync } from "node:fs";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { test, expect, vi } from "vite-plus/test";
 import StageWorkbench from "./StageWorkbench.vue";
 import { workbenchFixture, itemPreviewFixture, batchPreviewFixture } from "./fixtures.test-support";
@@ -23,9 +24,14 @@ function setup(page = workbenchFixture(), execute = vi.fn(), read = vi.fn()) {
     navigate,
     dispose,
     guardNavigation,
-    wrapper: mount(StageWorkbench, {
-      props: { page, port: { execute, navigate, guardNavigation }, readPort: { read } },
-    }),
+    wrapper: mount(
+      pageHeaderHarness("/missions/:mission_id/ops/commands/stages/:command_stage_id").stage(
+        StageWorkbench,
+      ),
+      {
+        props: { page, port: { execute, navigate, guardNavigation }, readPort: { read } },
+      },
+    ),
   };
 }
 test("an unsupported command definition leaves draft inspection available without offering a preview", () => {
@@ -98,7 +104,7 @@ test("unknown draft save is consumed and its exact item receipt is recovered by 
     await flushPromises();
     expect(c.execute).toHaveBeenCalledOnce();
     expect(c.wrapper.get("#stage-item-save").attributes("disabled")).toBeDefined();
-    await c.wrapper.get("#stage-workbench-refresh").trigger("click");
+    await c.wrapper.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(c.wrapper.get("#stage-workbench-result").text()).toContain("item_new");
     expect(c.wrapper.find("#stage-item-preview").exists()).toBe(false);

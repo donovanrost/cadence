@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
 import CadenceOpsListBodyFrame from "@cadence/ui/CadenceOpsListBodyFrame.vue";
 import { priorityLabel } from "../../shared/priority";
@@ -25,42 +25,22 @@ const {
   refresh,
   follow,
 } = useQueueSubmission(props.page, props.port, props.readPort);
+useOpsHeader("/missions/:mission_id/ops/commands/requests/:command_request_id/queue", () => ({
+  title: request.value.command_display_name ?? request.value.command_name ?? "Command request",
+  description: "Review the approved request before admitting it for dispatch.",
+  refresh: { run: refresh, pending: reading.value || busy.value },
+}));
 const format = (v: unknown) => (v === null || v === "" ? "Not recorded" : String(v));
 const actor = (v: Actor) =>
   v.display_name ?? v.user_id ?? v.service_identity_id ?? v.id ?? "Not recorded";
 </script>
 <template>
   <CadenceOpsViewport id="command-queue">
-    <CadencePageHeading>
-      <template #eyebrow>{{ model.mission_name }} / Commanding</template>
-      <template #title>Queue command</template>
-      <template #description
-        >Review the approved request before admitting it for dispatch.</template
-      >
-      <template #actions
-        ><a
-          id="command-queue-back"
-          :href="monitor"
-          class="btn btn-ghost btn-sm"
-          @click="follow($event, monitor)"
-          >Return to Commands</a
-        ></template
-      >
-    </CadencePageHeading>
     <CadenceOpsListBodyFrame>
       <div class="flex flex-wrap items-center justify-between gap-3 text-xs text-base-content/70">
         <p>
           Observed <time :datetime="model.observed_at">{{ model.observed_at }}</time>
         </p>
-        <button
-          id="command-queue-refresh"
-          type="button"
-          class="btn btn-ghost btn-sm"
-          :disabled="busy || reading"
-          @click="refresh"
-        >
-          {{ reading ? "Refreshing…" : "Refresh request and receipt" }}
-        </button>
       </div>
       <p v-if="feedback" id="command-queue-feedback" role="alert" class="text-sm text-warning">
         {{ feedback }}

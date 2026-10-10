@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { targetLabel } from "../../shared/command-draft/target-label";
 import { computed, ref, watch } from "vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 import {
@@ -31,24 +31,15 @@ const profileLabel = computed(
       unavailable: "Pinned profile unavailable",
     })[props.model.profile.status],
 );
+useManagementHeader("/missions/:mission_id/spacecraft/:spacecraft_id/commanding", () => ({
+  title: `Commanding for ${props.model.spacecraft_name}`,
+  description: "Review this spacecraft's pinned protocols and command target identities.",
+}));
 const monitorHref = (id: string) =>
   `${mission.value}/ops/commands?${new URLSearchParams({ target: id })}`;
 </script>
 <template>
   <div id="spacecraft-commanding-page" class="space-y-6">
-    <CadencePageHeading>
-      <template #title>Commanding for {{ model.spacecraft_name }}</template>
-      <template #eyebrow>{{ model.mission_name }} · Command interpretation</template>
-      <template #description
-        >Review this spacecraft's pinned protocols and command target identities.</template
-      >
-      <template #actions
-        ><a :href="base" class="btn btn-sm btn-ghost">Spacecraft overview</a
-        ><a :href="endpointPageHref(model, model.query.page)" class="btn btn-sm"
-          >Refresh evidence</a
-        ></template
-      >
-    </CadencePageHeading>
     <CadenceCard body-class="p-5 space-y-4">
       <h2 id="spacecraft-commanding-profile" class="text-lg font-semibold">{{ profileLabel }}</h2>
       <dl class="grid gap-4 sm:grid-cols-2">

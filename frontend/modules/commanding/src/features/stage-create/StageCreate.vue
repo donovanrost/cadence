@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, reactive, ref, shallowRef } from "vue";
 import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceOpsListBodyFrame from "@cadence/ui/CadenceOpsListBodyFrame.vue";
 import { createInput, readCreationPage, type CreationPage } from "./contracts";
 import { readWriteResult, type Operation } from "../../shared/stages/operations";
@@ -93,24 +93,13 @@ async function refresh() {
     if (!disposed) reading.value = false;
   }
 }
+useOpsHeader("/missions/:mission_id/ops/commands/stages/new", {
+  description:
+    "A stage holds editable command drafts. You will review and submit them as formal requests separately.",
+});
 </script>
 <template>
-  <CadenceOpsViewport id="stage-create"
-    ><CadencePageHeading
-      ><template #eyebrow>{{ creation.mission_name }} / Commanding</template
-      ><template #title>Create command stage</template
-      ><template #description
-        >A stage holds editable command drafts. You will review and submit them as formal requests
-        separately.</template
-      ><template #actions
-        ><a
-          :href="stagesHref(context.missionId)"
-          class="btn btn-ghost btn-sm"
-          @click="follow($event, stagesHref(context.missionId))"
-          >Return to stages</a
-        ></template
-      ></CadencePageHeading
-    >
+  <CadenceOpsViewport id="stage-create">
     <CadenceOpsListBodyFrame>
       <p v-if="feedback" id="stage-create-feedback" role="alert" class="text-sm text-warning">
         {{ feedback }}
