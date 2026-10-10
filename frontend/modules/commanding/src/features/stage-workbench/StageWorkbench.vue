@@ -3,7 +3,7 @@ import { parseArgumentValues } from "../../shared/command-draft/exact-values";
 import { computed, reactive, ref, watch } from "vue";
 import type { OpsPagePort, OpsPageReadPort } from "@cadence/plugin-sdk/ops-pages";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
-import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
+import { headerText, useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceOpsListBodyFrame from "@cadence/ui/CadenceOpsListBodyFrame.vue";
 import { commandReviewHref } from "@cadence/commanding/command-review";
 import { order, text } from "../../shared/stages/validation";
@@ -41,8 +41,9 @@ const {
 const stage = computed(() => workbench.value.stage),
   selected = computed(() => workbench.value.selected_item);
 useOpsHeader("/missions/:mission_id/ops/commands/stages/:command_stage_id", () => ({
-  title: stage.value.name,
-  description: stage.value.description || "Prepare and review a finite batch of command drafts.",
+  title: headerText(stage.value.name, 120) ?? "Command stage",
+  description:
+    headerText(stage.value.description) ?? "Prepare and review a finite batch of command drafts.",
   refresh: { run: refresh, pending: reading.value || busy.value },
 }));
 const stageForm = reactive({ name: "", description: "", visibility: "private", state: "draft" }),

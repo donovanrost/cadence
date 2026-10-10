@@ -33,8 +33,8 @@ type UpTo3<T> = UpTo2<T> | readonly [T, T, T];
 export type HeaderStatus = { tone: Tone; label: string };
 
 type Shared = {
-  /** One sentence; replaces the route's default description. */
-  description?: string;
+  /** One sentence; replaces the route's default description. Undefined keeps the default. */
+  description?: string | undefined;
   /** Short facts after the title, e.g. "14 open". */
   facts?: readonly string[];
   /** The single solid button. */
@@ -91,6 +91,17 @@ export type PageHeader =
   | OpsResourceHeader
   | ManagementCollectionHeader
   | ManagementResourceHeader;
+
+/**
+ * Fits free text, such as a description a user wrote, to a header limit: blank
+ * text becomes undefined and long text is cut with an ellipsis. Titles take 120
+ * characters and descriptions 240.
+ */
+export function headerText(text: string | null | undefined, max = 240): string | undefined {
+  const trimmed = text?.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > max ? `${trimmed.slice(0, max - 1).trimEnd()}…` : trimmed;
+}
 
 export type PageHeaderHost = {
   /** The catalog route the host has mounted. */

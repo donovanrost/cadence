@@ -21,7 +21,7 @@ import {
   SELECTION_LIMIT,
 } from "./requirement-selection";
 import RequirementDetailPagination from "./RequirementDetailPagination.vue";
-import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
+import { headerText, useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
 import CadencePanel from "@cadence/ui/CadencePanel.vue";
 
@@ -141,15 +141,13 @@ onBeforeUnmount(() => {
 });
 const label = (value: string) => value.replaceAll("_", " ").replace(/^./, (c) => c.toUpperCase());
 const rowId = (kind: string, id: string) => kind + "-" + encodeURIComponent(id);
-const clip = (text: string, max: number) =>
-  text.length > max ? `${text.slice(0, max - 1)}…` : text;
 useOpsHeader("/missions/:mission_id/ops/requirements/:contact_requirement_id", () => {
   const detail = d.value;
   if (!detail) return { title: "Contact requirement" };
   const requirement = detail.requirement;
   return {
     title: label(requirement.intent),
-    description: clip(requirement.outcome, 240),
+    description: headerText(requirement.outcome),
     facts: [
       `v${requirement.version} · ${requirement.priority} · ${requirement.direction}`,
       label(requirement.lifecycle_state),
