@@ -5,7 +5,7 @@ import type {
   SettingsSectionPort,
   SettingsWriteResult,
 } from "@cadence/plugin-sdk/settings";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeaders } from "@cadence/plugin-sdk/page-header";
 import CadenceButton from "@cadence/ui/CadenceButton.vue";
 import CadenceLink from "@cadence/ui/CadenceLink.vue";
 import SettingsSectionBoundary from "./SettingsSectionBoundary.vue";
@@ -31,6 +31,19 @@ watch(
     search.value = "";
   },
 );
+const settingsHeader = () => ({
+  description:
+    props.context.scope === "mission"
+      ? "Configure this mission and see what it inherits from your organization."
+      : "Set shared defaults and requirements for your missions.",
+  facts: [props.context.organizationName],
+});
+useManagementHeaders({
+  "/settings": settingsHeader,
+  "/settings/:section_id": settingsHeader,
+  "/missions/:mission_id/settings": settingsHeader,
+  "/missions/:mission_id/settings/:section_id": settingsHeader,
+});
 const page = computed(() => {
   try {
     return readSettingsPage(props.snapshot, props.context, props.sectionId);
@@ -92,26 +105,6 @@ async function retry() {
 </script>
 <template>
   <div class="settings-page">
-    <CadencePageHeading>
-      <template #eyebrow>{{
-        context.scope === "mission" ? context.missionName : context.organizationName
-      }}</template>
-      <template #title>{{
-        context.scope === "mission" ? "Mission settings" : "Organization settings"
-      }}</template>
-      <template #description>{{
-        context.scope === "mission"
-          ? "Configure this mission and see what it inherits from your organization."
-          : "Set shared defaults and requirements for your missions."
-      }}</template>
-      <template #metadata
-        ><span class="settings-page__metadata"
-          ><span class="hero-building-office-2" aria-hidden="true" />{{
-            context.organizationName
-          }}</span
-        ></template
-      >
-    </CadencePageHeading>
     <div v-if="page.status === 'ready' && sectionPort" class="settings-page__layout">
       <aside class="settings-page__sections" aria-label="Settings navigation">
         <label class="settings-page__search"

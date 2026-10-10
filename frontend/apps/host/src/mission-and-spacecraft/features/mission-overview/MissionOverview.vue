@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import StatusBadge from "../../shared/StatusBadge.vue";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
@@ -63,19 +63,17 @@ type SpacecraftReadinessRow = {
   view_spacecraft_href: string;
 };
 
-defineProps<{
+const props = defineProps<{
   overview: MissionOverview;
   spacecraft_readiness: SpacecraftReadinessRow[];
 }>();
+useManagementHeader("/missions/:mission_id", () => ({
+  title: props.overview.mission.display_name,
+  identifier: props.overview.mission.slug,
+}));
 </script>
 
 <template>
-  <CadencePageHeading>
-    <template #title>{{ overview.mission.display_name }}</template>
-    <template #eyebrow>{{ overview.mission.eyebrow }}</template>
-    <template #description>{{ overview.mission.slug }}</template>
-  </CadencePageHeading>
-
   <div class="grid gap-4 md:grid-cols-3">
     <CadenceCard
       v-for="card in overview.readiness_cards"

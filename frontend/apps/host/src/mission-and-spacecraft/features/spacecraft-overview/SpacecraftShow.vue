@@ -1,29 +1,19 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
 import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
 import StatusBadge from "../../shared/StatusBadge.vue";
 
 import type { OverviewData } from "./contracts";
-defineProps<OverviewData>();
+const props = defineProps<OverviewData>();
+useManagementHeader("/missions/:mission_id/spacecraft/:spacecraft_id", () => ({
+  title: props.page.header.title,
+  facts: [props.page.header.title_suffix.label],
+}));
 </script>
 <template>
   <div :id="page.id" class="space-y-6">
-    <CadencePageHeading :breadcrumbs="page.header.breadcrumbs">
-      <template #title>{{ page.header.title }} </template>
-      <template #metadata
-        ><span>
-          <span v-if="page.header.title_suffix.set" class="mc-value-small text-base-content">{{
-            page.header.title_suffix.label
-          }}</span>
-          <span v-else class="hud-label text-warning/70">
-            {{ page.header.title_suffix.label }}
-          </span>
-        </span></template
-      >
-    </CadencePageHeading>
-
     <CadenceCard
       :id="profile_binding.id"
       class="card bg-base-200 border border-base-300"

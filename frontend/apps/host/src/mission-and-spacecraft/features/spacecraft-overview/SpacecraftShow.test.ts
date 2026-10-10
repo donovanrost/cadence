@@ -1,4 +1,5 @@
 import { mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test } from "vite-plus/test";
 import SpacecraftShow from "./SpacecraftShow.vue";
 import { overviewFixture } from "./fixtures.test-support";
@@ -7,7 +8,10 @@ import { assertSpacecraftOverview } from "./validation";
 test("shows the pinned version and links to readiness without declaring operations ready", () => {
   const data = overviewFixture();
   assertSpacecraftOverview(data);
-  const wrapper = mount(SpacecraftShow, { props: data });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/spacecraft/:spacecraft_id").stage(SpacecraftShow),
+    { props: data },
+  );
   expect(wrapper.get("#spacecraft-profile-binding").text()).toContain("v1");
   expect(wrapper.get("#spacecraft-profile-binding").text()).toContain("Pinned");
   expect(wrapper.get("#spacecraft-workflow-readiness").text()).toContain("Review setup");
@@ -30,7 +34,10 @@ test("an unavailable profile retains identity editing and the rest of the overvi
     view_profile_href: null,
   });
   assertSpacecraftOverview(data);
-  const wrapper = mount(SpacecraftShow, { props: data });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/spacecraft/:spacecraft_id").stage(SpacecraftShow),
+    { props: data },
+  );
   expect(wrapper.get("#spacecraft-profile-binding").text()).toContain("Pinned profile unavailable");
   expect(wrapper.get("#spacecraft-profile-binding a").attributes("href")).toBe(
     "/missions/mission-a/spacecraft/craft-a/identity",

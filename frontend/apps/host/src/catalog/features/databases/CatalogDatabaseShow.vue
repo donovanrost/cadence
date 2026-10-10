@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import { ref, watch } from "vue";
 import CatalogUploadForm from "./CatalogUploadForm.vue";
 import StatusBadge from "../../shared/StatusBadge.vue";
@@ -7,7 +7,6 @@ import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
 import CadenceCollapsible from "@cadence/ui/CadenceCollapsible.vue";
 import CadenceCollapsibleContent from "@cadence/ui/CadenceCollapsibleContent.vue";
-import CadenceCollapsibleTrigger from "@cadence/ui/CadenceCollapsibleTrigger.vue";
 
 type NavigationItem = {
   label: string;
@@ -81,42 +80,25 @@ const requestRevisionFormChange = (open: boolean) => {
   revisionFormOpen.value = open;
   emit("toggle-revision-form", {});
 };
+useManagementHeader("/missions/:mission_id/catalog/databases/:catalog_database_id", () => ({
+  title: props.database.name,
+  identifier: props.database.slug,
+  primary: {
+    id: "add-revision-toggle",
+    label: revisionFormOpen.value ? "Cancel" : "Add revision",
+    ...(revisionFormOpen.value ? {} : { icon: "hero-plus" as const }),
+    run: () => requestRevisionFormChange(!revisionFormOpen.value),
+  },
+}));
 </script>
 
 <template>
   <CadenceCollapsible
     content-id="catalog-revision-upload-slot"
     :open="revisionFormOpen"
-    client-seeded
-    :seed-epoch="revision_form_open ? 'open' : 'closed'"
     @request-change="requestRevisionFormChange"
   >
     <div id="catalog-database-show-surface" class="space-y-6">
-      <CadencePageHeading
-        :breadcrumbs="[
-          { label: navigation.mission.label, href: navigation.mission.href },
-          { label: navigation.catalog.label, href: navigation.catalog.href },
-          { label: navigation.current.label },
-        ]"
-      >
-        <template #title>{{ database.name }} </template>
-        <template #metadata
-          ><span>{{ database.slug }}</span></template
-        >
-        <template #actions
-          ><CadenceCollapsibleTrigger>
-            <button
-              id="add-revision-toggle"
-              type="button"
-              class="btn"
-              :class="revisionFormOpen ? 'btn-ghost' : 'btn-primary'"
-            >
-              {{ revisionFormOpen ? "Cancel" : "+ Add revision" }}
-            </button>
-          </CadenceCollapsibleTrigger></template
-        >
-      </CadencePageHeading>
-
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <CadenceCard
           class="card border border-base-300 bg-base-200 lg:col-span-2"

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { pageContentAttrs } from "@cadence/ui/page-chrome";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
-import { installationBreadcrumbs } from "./breadcrumbs";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import MissionApplications from "./MissionApplications.vue";
 
 import type { ApplicationEvent, MissionPresentation } from "./contracts";
@@ -13,17 +12,13 @@ const emit = defineEmits<{
   disable: [payload: ApplicationEvent];
   uninstall: [payload: ApplicationEvent];
 }>();
+useManagementHeader("/missions/:mission_id/applications", () => ({
+  description: props.presentation.header.subtitle.text,
+}));
 </script>
 
 <template>
   <div v-bind="pageContentAttrs(props.presentation.root.attrs)">
-    <CadencePageHeading
-      :breadcrumbs="installationBreadcrumbs(props.presentation.header.breadcrumbs)"
-    >
-      <template #title>{{ props.presentation.header.title.text }}</template>
-      <template #description>{{ props.presentation.header.subtitle.text }}</template>
-    </CadencePageHeading>
-
     <div v-bind="props.presentation.applications_component.attrs">
       <MissionApplications
         :applications="props.presentation.applications_component.props.applications"

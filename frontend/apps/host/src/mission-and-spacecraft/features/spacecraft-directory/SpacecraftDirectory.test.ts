@@ -1,18 +1,21 @@
 import { required } from "../../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import SpacecraftListPage from "./SpacecraftListPage.vue";
 import { spacecraftDirectoryFixture } from "./fixtures.test-support";
 import { assertSpacecraftDirectory } from "./validation";
 
 afterEach(() => vi.useRealTimers());
-test("directory renders real roster, profile preview and compact producer breadcrumbs", () => {
+test("directory renders real roster and profile preview", () => {
   const data = spacecraftDirectoryFixture();
   assertSpacecraftDirectory(data);
-  const wrapper = mount(SpacecraftListPage, { props: data });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/spacecraft").stage(SpacecraftListPage),
+    { props: data },
+  );
   expect(wrapper.get("#spacecraft-one").text()).toContain("Vehicle One");
   expect(wrapper.get("#profile-one").text()).toContain("v1 × 2");
-  expect(wrapper.find('a[href="/missions/mission-a"]').exists()).toBe(true);
   expect(wrapper.get("#spacecraft-tile-missing-scid").attributes("href")).toContain(
     "filter=missing_scid",
   );
@@ -22,9 +25,12 @@ test("directory renders real roster, profile preview and compact producer breadc
 test("search, sorting and pagination preserve filters and cancel searches after unmount", async () => {
   vi.useFakeTimers();
   const navigate = vi.fn<(href: string, replace?: boolean) => void>();
-  const wrapper = mount(SpacecraftListPage, {
-    props: { ...spacecraftDirectoryFixture(), navigate },
-  });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/spacecraft").stage(SpacecraftListPage),
+    {
+      props: { ...spacecraftDirectoryFixture(), navigate },
+    },
+  );
   await wrapper.get("#spacecraft-roster-toolbar-search").setValue("Vehicle & Two");
   expect(navigate).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(300);
@@ -49,7 +55,10 @@ test("empty fleet and filtered empty states remain distinct", async () => {
   const data = spacecraftDirectoryFixture();
   data.presentation.roster.rows = [];
   data.presentation.roster.filtered_empty = true;
-  const wrapper = mount(SpacecraftListPage, { props: data });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/spacecraft").stage(SpacecraftListPage),
+    { props: data },
+  );
   expect(wrapper.text()).toContain("No spacecraft match");
   data.presentation.roster.fleet_empty = true;
   data.presentation.profiles.empty = true;

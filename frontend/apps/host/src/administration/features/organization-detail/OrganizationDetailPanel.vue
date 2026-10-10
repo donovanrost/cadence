@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
+import { href } from "@cadence/plugin-sdk/routes";
 import CadenceTextField from "@cadence/ui/CadenceTextField.vue";
-import { organizationHref } from "../../shared/platform-contract";
 import {
   detailHref,
   readIssueResult,
@@ -54,37 +54,43 @@ async function issue() {
     pending.value = false;
   }
 }
+const openForm = ref<HTMLFormElement | null>(null);
+useManagementHeader("/admin/organizations/:org_id", () => ({
+  title: props.model.organization.name,
+  identifier: props.model.organization.slug,
+  primary: {
+    id: "admin-organization-invite-link",
+    label: "Invite user",
+    icon: "hero-user-plus",
+    href: href("/admin/organizations/:org_id/invite", { org_id: props.model.organization.id }),
+  },
+  actions: [
+    {
+      id: "open-organization",
+      label: "Open organization",
+      icon: "hero-arrow-right-end-on-rectangle",
+      disabled: !props.csrfToken,
+      run: () => openForm.value?.requestSubmit(),
+    },
+  ],
+}));
 </script>
 <template>
   <main id="admin-organization-detail" class="space-y-6">
-    <CadencePageHeading
-      :breadcrumbs="[
-        { label: 'Platform Admin', href: '/admin' },
-        { label: 'Organizations', href: '/admin/organizations' },
-        { label: model.organization.name, href: null },
-      ]"
+    <!-- "Open organization" switches the session; the header's button submits this form. -->
+    <form
+      id="open-organization-form"
+      ref="openForm"
+      action="/session/organization"
+      method="post"
+      hidden
     >
-      <template #title>{{ model.organization.name }}</template
-      ><template #description>{{ model.organization.slug }}</template>
-      <template #actions>
-        <form id="open-organization-form" action="/session/organization" method="post">
-          <input type="hidden" name="_csrf_token" :value="csrfToken" /><input
-            type="hidden"
-            name="_method"
-            value="put"
-          /><input type="hidden" name="organization_id" :value="model.organization.id" />
-          <button type="submit" class="btn btn-secondary btn-sm" :disabled="!csrfToken">
-            Open organization
-          </button>
-        </form>
-        <a
-          id="admin-organization-invite-link"
-          :href="organizationHref(model.organization.id) + '/invite'"
-          class="btn btn-primary btn-sm"
-          >Invite user</a
-        >
-      </template>
-    </CadencePageHeading>
+      <input type="hidden" name="_csrf_token" :value="csrfToken" /><input
+        type="hidden"
+        name="_method"
+        value="put"
+      /><input type="hidden" name="organization_id" :value="model.organization.id" />
+    </form>
     <div class="grid gap-6 xl:grid-cols-2">
       <section
         id="admin-organization-members"

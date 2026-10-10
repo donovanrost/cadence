@@ -23,8 +23,12 @@ export type CatalogEntry = {
   resourceParam?: string;
   pageChrome?: string;
   metadata?: { page_title?: string };
-  header?: { kind?: HeaderKind; breadcrumbs?: boolean; eyebrow?: boolean; description?: string };
+  // A string here: the catalog is JSON, so the kind is checked when projected.
+  header?: { kind?: string; breadcrumbs?: boolean; eyebrow?: boolean; description?: string };
 };
+
+const headerKinds: readonly string[] = ["collection", "resource", "none"] satisfies HeaderKind[];
+const isHeaderKind = (value: string): value is HeaderKind => headerKinds.includes(value);
 
 /** The one rule for a route's layer; the host's shell and the header contracts both read it. */
 export function routeLayer(path: string): Layer {
@@ -37,7 +41,12 @@ export function routeLayer(path: string): Layer {
  * everything else takes its title from the catalog.
  */
 function headerKind(route: CatalogEntry): HeaderKind {
-  if (route.header?.kind) return route.header.kind;
+  const declared = route.header?.kind;
+  if (declared !== undefined) {
+    if (!isHeaderKind(declared))
+      throw new Error(`Unknown header kind ${declared} on ${route.path}`);
+    return declared;
+  }
   if (route.pageChrome === "none") return "none";
   const params = [...route.path.matchAll(/:([a-z_]+)/g)].map((match) => match[1]);
   return route.resourceParam || params.some((param) => param !== "mission_id")

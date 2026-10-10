@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
-import StatusBadge from "../../shared/StatusBadge.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
 
@@ -46,7 +45,7 @@ type DiagnosticGroup = {
   items: Diagnostic[];
 };
 
-defineProps<{
+const props = defineProps<{
   navigation: Navigation;
   status: Status;
   run_details: RunDetails;
@@ -54,17 +53,15 @@ defineProps<{
   diagnostic_groups: DiagnosticGroup[];
   failure_reason: string | null;
 }>();
+const tones = { info: "info", ready: "success", blocked: "error" } as const;
+useManagementHeader("/missions/:mission_id/catalog/imports/:import_run_id", () => ({
+  title: "Import run",
+  status: { tone: tones[props.status.tone], label: props.status.label },
+}));
 </script>
 
 <template>
   <div id="catalog-import-run-show-surface" class="space-y-6">
-    <CadencePageHeading :breadcrumbs="navigation.breadcrumbs">
-      <template #title> Import run </template>
-      <template #metadata
-        ><span> <StatusBadge :status="status.tone" :label="status.label" /> </span
-      ></template>
-    </CadencePageHeading>
-
     <CadenceCard class="card bg-base-200 border border-base-300" body-class="card-body p-6">
       <div class="text-sm space-y-1">
         <div class="flex items-center gap-2">

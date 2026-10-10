@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import StatusBadge from "../../shared/StatusBadge.vue";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
@@ -15,20 +15,16 @@ const overall = computed(() =>
     ? { tone: "blocked" as const, label: "Contribution unavailable" }
     : props.page.status,
 );
+const tones = { ready: "success", attention: "warning", blocked: "error", info: "info" } as const;
+useManagementHeader("/missions/:mission_id/spacecraft/:spacecraft_id/readiness", () => ({
+  title: props.page.title,
+  description: props.page.subtitle,
+  facts: [props.page.title_suffix],
+  status: { tone: tones[overall.value.tone], label: overall.value.label },
+}));
 </script>
 <template>
   <div :id="page.id" class="space-y-6">
-    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
-      <template #title>{{ page.title }} </template>
-      <template #description>{{ page.subtitle }}</template>
-      <template #metadata
-        ><span>
-          {{ page.title_suffix }}
-        </span></template
-      >
-      <template #actions><StatusBadge :status="overall.tone" :label="overall.label" /></template>
-    </CadencePageHeading>
-
     <div class="grid gap-4 xl:grid-cols-2">
       <CadenceCard
         v-for="panel in panels"

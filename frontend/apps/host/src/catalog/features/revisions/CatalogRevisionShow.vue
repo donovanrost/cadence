@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
 import CatalogSpacecraftUsage from "./CatalogSpacecraftUsage.vue";
@@ -36,7 +36,7 @@ type MissionModel = DetailCard & {
   empty_message: string;
 };
 
-defineProps<{
+const props = defineProps<{
   revision: Revision;
   navigation: Navigation;
   provenance: DetailCard;
@@ -49,19 +49,14 @@ const valueClasses: Record<DetailRow["style"], string> = {
   mono: "font-mono",
   hash: "font-mono text-xs break-all",
 };
+useManagementHeader("/missions/:mission_id/catalog/revisions/:catalog_revision_id", () => ({
+  title: props.revision.title,
+  facts: [props.revision.number_label],
+}));
 </script>
 
 <template>
   <div id="catalog-revision-show-surface" class="space-y-6">
-    <CadencePageHeading :breadcrumbs="navigation.breadcrumbs">
-      <template #title>{{ revision.title }} </template>
-      <template #metadata
-        ><span>
-          {{ revision.number_label }}
-        </span></template
-      >
-    </CadencePageHeading>
-
     <CadenceCard
       :id="provenance.id"
       class="card border border-base-300 bg-base-200"

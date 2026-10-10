@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CatalogUploadForm from "./CatalogUploadForm.vue";
 import CadenceFormPageFrame from "@cadence/ui/CadenceFormPageFrame.vue";
 
@@ -34,14 +34,11 @@ const emit = defineEmits<{
   save: [];
   "cancel-upload": [payload: { ref: string }];
 }>();
+useManagementHeader("/missions/:mission_id/catalog/new", {});
 </script>
 
 <template>
   <CadenceFormPageFrame :id="page.id">
-    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
-      <template #title>{{ page.heading }}</template>
-    </CadencePageHeading>
-
     <CatalogUploadForm
       :form="form"
       :upload="upload"

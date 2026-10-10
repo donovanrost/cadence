@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, shallowRef, watch } from "vue";
 import CadenceButton from "@cadence/ui/CadenceButton.vue";
-import CadenceLink from "@cadence/ui/CadenceLink.vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
+import { serverHref } from "@cadence/plugin-sdk/routes";
 import CadenceResourceNavigation from "@cadence/ui/CadenceResourceNavigation.vue";
-import CadenceStatusSymbol from "@cadence/ui/CadenceStatusSymbol.vue";
 import SpacecraftSwitcher from "./SpacecraftSwitcher.vue";
 import ConfigurationOverview from "./ConfigurationOverview.vue";
 import CatalogApplications from "./CatalogApplications.vue";
@@ -38,6 +37,34 @@ const unsaved = computed(
   () => !equalDocuments(draft.value, session.value.baseline) || snapshot.value.external_changes,
 );
 const changes = computed(() => configurationChanges(snapshot.value, draft.value));
+useManagementHeader("/missions/:mission_id/spacecraft/:spacecraft_id", () => {
+  const current = snapshot.value;
+  const editIdentity = {
+    id: "spacecraft-edit-identity",
+    label: "Edit identity",
+    icon: "hero-identification",
+    href: serverHref(current.links.identity),
+  } as const;
+  const openOps = (link: string) =>
+    ({
+      id: "spacecraft-open-ops",
+      label: "Open in Ops",
+      icon: "hero-arrow-up-right",
+      href: serverHref(link),
+    }) as const;
+  return {
+    title: current.name,
+    facts: [
+      `SCID ${current.scid ?? "—"}`,
+      current.active
+        ? current.active.version
+          ? `Active r${current.active.version}`
+          : "Active legacy configuration"
+        : "No active configuration",
+    ],
+    actions: current.links.ops ? [editIdentity, openOps(current.links.ops)] : [editIdentity],
+  };
+});
 const issues = computed(() => setupIssues(draft.value));
 const inspector = ref<Inspector | null>(null);
 const root = ref<HTMLElement | null>(null);
@@ -123,28 +150,9 @@ async function decide(reason: string, decision: "approved" | "rejected") {
 </script>
 <template>
   <div id="spacecraft-configuration-workspace" ref="root" class="scw" @keydown.esc="closeInspector">
-    <CadencePageHeading id="spacecraft-configuration-heading"
-      ><template #eyebrow>SPACECRAFT / ONBOARD COMPUTER</template
-      ><template #title>{{ snapshot.name }}</template
-      ><template #metadata
-        ><span class="scw-identity-metadata"
-          ><span>SCID {{ snapshot.scid ?? "—" }}</span
-          ><CadenceLink :href="snapshot.links.identity">Edit identity</CadenceLink></span
-        ></template
-      ><template #actions
-        ><div class="scw-heading-actions">
-          <SpacecraftSwitcher :snapshot="snapshot" :drafts="drafts" /><span class="scw-tag"
-            ><CadenceStatusSymbol :status="snapshot.active ? 'normal' : 'standby'" />{{
-              snapshot.active
-                ? snapshot.active.version
-                  ? `Active r${snapshot.active.version}`
-                  : "Active legacy configuration"
-                : "No active configuration"
-            }}</span
-          ><CadenceLink v-if="snapshot.links.ops" :href="snapshot.links.ops"
-            >Open in Ops<template #icon><span class="hero-arrow-up-right" /></template
-          ></CadenceLink></div></template
-    ></CadencePageHeading>
+    <div class="flex justify-end">
+      <SpacecraftSwitcher :snapshot="snapshot" :drafts="drafts" />
+    </div>
     <CadenceResourceNavigation label="Spacecraft sections"
       ><a
         v-for="item in sections"

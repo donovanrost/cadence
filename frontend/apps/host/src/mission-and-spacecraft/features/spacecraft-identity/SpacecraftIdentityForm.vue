@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeaders } from "@cadence/plugin-sdk/page-header";
 import CadenceLink from "@cadence/ui/CadenceLink.vue";
 import { computed, reactive } from "vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
@@ -51,15 +51,19 @@ function validate() {
 function save() {
   if (!props.disabled) emit("save", { spacecraft: { ...spacecraft } });
 }
+const identityHeader = () => ({
+  title: props.form.fields.display_name.value || props.page.heading,
+  description: props.page.subtitle,
+});
+useManagementHeaders({
+  "/missions/:mission_id/spacecraft/new": () => ({ description: props.page.subtitle }),
+  "/missions/:mission_id/spacecraft/:spacecraft_id/identity": identityHeader,
+  "/missions/:mission_id/spacecraft/:spacecraft_id/edit": identityHeader,
+});
 </script>
 
 <template>
   <CadenceNarrowFormPageFrame :id="page.id">
-    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
-      <template #title>{{ page.heading }}</template>
-      <template #description>{{ page.subtitle }}</template>
-    </CadencePageHeading>
-
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
       <CadenceFormSectionFrame :id="form.sections.identity.id">
         <CadenceFormSectionHeader

@@ -1,15 +1,12 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import type { PlatformOverview } from "./contracts";
 defineProps<{ model: PlatformOverview }>();
+useManagementHeader("/admin", { description: "Organizations and system diagnostics" });
 </script>
 <template>
   <div id="admin-home" class="space-y-6">
-    <CadencePageHeading
-      ><template #title>Platform Administration</template
-      ><template #description>Organizations and system diagnostics</template></CadencePageHeading
-    >
     <div class="grid gap-4 md:grid-cols-3">
       <CadenceCard
         id="admin-home-organizations-card"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceTextField from "@cadence/ui/CadenceTextField.vue";
 import { organizationHref } from "../../shared/platform-contract";
 import {
@@ -42,20 +42,13 @@ async function invite() {
     pending.value = false;
   }
 }
+useManagementHeader("/admin/organizations/:org_id/invite", () => ({
+  title: "Invite user",
+  description: `Invite a user to ${props.model.organization.name}.`,
+}));
 </script>
 <template>
   <main id="admin-organization-invite" class="max-w-2xl space-y-6">
-    <CadencePageHeading
-      :breadcrumbs="[
-        { label: 'Platform Admin', href: '/admin' },
-        { label: 'Organizations', href: '/admin/organizations' },
-        { label: model.organization.name, href: organizationHref(model.organization.id) },
-        { label: 'Invite User', href: null },
-      ]"
-    >
-      <template #title>Invite User</template
-      ><template #description>Invite a user to {{ model.organization.name }}.</template>
-    </CadencePageHeading>
     <section
       v-if="submitted"
       id="organization-invitation-created"

@@ -1,12 +1,14 @@
 [
   {
     "path": "/",
+    "header": { "kind": "resource" },
     "scope": "organization",
     "mountId": "organization-home-component",
     "queryKeys": [],
     "queryAliases": {},
     "viewClass": "",
     "metadata": {
+      "page_title": "Home",
       "nav_item": "organization_home"
     },
     "kind": "administration",
@@ -84,6 +86,7 @@
   },
   {
     "path": "/missions/:mission_id",
+    "header": { "kind": "resource" },
     "scope": "mission",
     "mountId": "mission-overview-component",
     "queryKeys": [],
@@ -173,6 +176,7 @@
     "queryAliases": {},
     "viewClass": "",
     "metadata": {
+      "page_title": "Spacecraft",
       "nav_item": "spacecraft"
     },
     "kind": "spacecraft",
@@ -188,7 +192,7 @@
     "queryAliases": {},
     "viewClass": "",
     "metadata": {
-      "page_title": "#{spacecraft.display_name} Identity",
+      "page_title": "Spacecraft Identity",
       "nav_item": "spacecraft"
     }
   },
@@ -202,7 +206,7 @@
     "queryAliases": {},
     "viewClass": "",
     "metadata": {
-      "page_title": "#{spacecraft.display_name} Identity",
+      "page_title": "Spacecraft Identity",
       "nav_item": "spacecraft"
     }
   },
@@ -214,7 +218,7 @@
     "queryAliases": {},
     "viewClass": "",
     "metadata": {
-      "page_title": "#{spacecraft.display_name} Readiness",
+      "page_title": "Spacecraft Readiness",
       "nav_item": "spacecraft"
     },
     "kind": "spacecraft",
@@ -1544,6 +1548,7 @@
   },
   {
     "path": "/settings/:section_id",
+    "header": { "kind": "collection" },
     "scope": "organization",
     "mountId": "settings-page-component",
     "queryKeys": [],
@@ -1570,6 +1575,7 @@
   },
   {
     "path": "/missions/:mission_id/settings/:section_id",
+    "header": { "kind": "collection" },
     "scope": "mission",
     "mountId": "settings-page-component",
     "queryKeys": [],

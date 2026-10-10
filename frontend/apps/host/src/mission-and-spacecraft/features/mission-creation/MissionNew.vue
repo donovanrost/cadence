@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import { reactive, watch } from "vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 import CadenceFormActions from "@cadence/ui/CadenceFormActions.vue";
@@ -88,14 +88,11 @@ const validate = () => emit("validate", payload());
 const save = () => {
   if (!props.disabled) emit("save", payload());
 };
+useManagementHeader("/missions/new", {});
 </script>
 
 <template>
   <CadenceNarrowFormPageFrame :id="page.id">
-    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
-      <template #title>{{ page.heading }}</template>
-    </CadencePageHeading>
-
     <form :id="form.id" class="space-y-6" @submit.prevent="save">
       <CadenceField
         :control-id="form.fields.display_name.id"

@@ -1,5 +1,6 @@
 import { required } from "../../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test } from "vite-plus/test";
 import SpacecraftReadiness from "./SpacecraftReadiness.vue";
 import { contributionFixture, readinessFixture } from "./fixtures.test-support";
@@ -8,7 +9,12 @@ import { admitContributions, assertSpacecraftReadiness } from "./validation";
 test("renders core identity and the independently admitted routing contribution", () => {
   const data = readinessFixture();
   assertSpacecraftReadiness(data);
-  const wrapper = mount(SpacecraftReadiness, { props: data });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/spacecraft/:spacecraft_id/readiness").stage(
+      SpacecraftReadiness,
+    ),
+    { props: data },
+  );
   expect(wrapper.get("#spacecraft-readiness-identity").text()).toContain("0");
   expect(wrapper.get("#readiness-contribution-0").text()).toContain("Enabled routing rules");
   expect(wrapper.get("#readiness-contribution-0 a").attributes("href")).toBe(
@@ -45,7 +51,12 @@ test.each([
     ...patch,
   });
   assertSpacecraftReadiness(data);
-  const wrapper = mount(SpacecraftReadiness, { props: data });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/spacecraft/:spacecraft_id/readiness").stage(
+      SpacecraftReadiness,
+    ),
+    { props: data },
+  );
   expect(wrapper.find("#spacecraft-readiness-identity").exists()).toBe(true);
   expect(wrapper.get("#readiness-contribution-0").text()).toContain("Review routing");
   expect(wrapper.find("#readiness-contribution-1 [role=alert]").exists()).toBe(true);
@@ -68,7 +79,12 @@ test("duplicate identities are both rejected and explicit unavailable results bl
       details: [],
     },
   ];
-  const wrapper = mount(SpacecraftReadiness, { props: data });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/spacecraft/:spacecraft_id/readiness").stage(
+      SpacecraftReadiness,
+    ),
+    { props: data },
+  );
   expect(wrapper.find("#readiness-contribution-0 [role=alert]").exists()).toBe(true);
   expect(wrapper.text()).not.toContain("Checks ready");
   expect(wrapper.text()).toContain("Contribution unavailable");

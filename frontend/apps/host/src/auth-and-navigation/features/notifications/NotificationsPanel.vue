@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref } from "vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import {
   inboxHref,
   readActionResult,
@@ -57,26 +57,23 @@ const state = (row: Notification) =>
     unavailable: "Invitation unavailable",
     none: row.read_at ? "Read" : "Unread",
   })[row.invitation_status];
+useManagementHeader("/notifications", {
+  description: "Invitations, access grants, and system notices for your account.",
+});
 </script>
 <template>
   <section id="notifications-page" class="mx-auto max-w-4xl space-y-6">
-    <CadencePageHeading>
-      <template #title>Notifications</template>
-      <template #description
-        >Invitations, access grants, and system notices for your account.</template
+    <div class="flex justify-end">
+      <button
+        id="refresh-notifications"
+        type="button"
+        class="btn btn-sm"
+        :disabled="busy"
+        @click="refreshPage"
       >
-      <template #actions
-        ><button
-          id="refresh-notifications"
-          type="button"
-          class="btn btn-sm"
-          :disabled="busy"
-          @click="refreshPage"
-        >
-          Refresh
-        </button></template
-      >
-    </CadencePageHeading>
+        Refresh
+      </button>
+    </div>
     <div class="flex flex-wrap items-center justify-between gap-3">
       <nav aria-label="Notification filter" class="flex gap-3">
         <a

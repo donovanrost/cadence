@@ -74,12 +74,24 @@ export function pageHeaderHarness(route: string) {
         : []),
     ];
   };
+  /** The admitted text, as the host would show it beside the controls. */
+  const text = () => {
+    const admitted = current.value;
+    if (!admitted) return [];
+    return [
+      ...(admitted.title ? [h("h1", admitted.title)] : []),
+      ...(admitted.status ? [h("span", admitted.status.label)] : []),
+      ...(admitted.identifier ? [h("span", admitted.identifier)] : []),
+      ...(admitted.facts ?? []).map((fact) => h("span", fact)),
+      ...(admitted.description ? [h("p", admitted.description)] : []),
+    ];
+  };
   const Controls = defineComponent({
     name: "PageHeaderControls",
-    setup: () => () => h("div", { id: "page-header-stage" }, controls()),
+    setup: () => () => h("div", { id: "page-header-stage" }, [...text(), ...controls()]),
   });
   /**
-   * Wraps a page so its admitted header renders beside it as plain controls;
+   * Wraps a page so its admitted header renders beside it as plain text and controls;
    * mount the result with the page's props, which pass through unchanged.
    */
   function stage<C extends Component>(page: C): C;

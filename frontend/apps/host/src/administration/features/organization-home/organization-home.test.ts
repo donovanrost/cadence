@@ -2,6 +2,7 @@ import { producerFixture } from "../../../../../../test-support/producer-fixture
 import { jsonFixture, fixtureRecord } from "../../../../../../test-support/json-fixture";
 import { required } from "../../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test, vi } from "vite-plus/test";
 import AdministrationPage from "../../AdministrationPage.vue";
 import OrganizationHomePanel from "./OrganizationHomePanel.vue";
@@ -26,7 +27,7 @@ const fixture = () => ({
   ],
 });
 test("scoped totals and producer-ordered recent missions have canonical links without readiness claims", () => {
-  const wrapper = mount(OrganizationHomePanel, {
+  const wrapper = mount(pageHeaderHarness("/").stage(OrganizationHomePanel), {
     props: { model: readOrganizationHome(fixture(), "org-a") },
   });
   expect(wrapper.get("#organization-stat-missions").text()).toContain("26");
@@ -46,7 +47,7 @@ test("empty organization keeps a reachable mission creation action", () => {
   doc.counts.missions = 0;
   doc.counts.spacecraft = 0;
   doc.recent_missions = [];
-  const wrapper = mount(OrganizationHomePanel, {
+  const wrapper = mount(pageHeaderHarness("/").stage(OrganizationHomePanel), {
     props: { model: readOrganizationHome(doc, "org-a") },
   });
   expect(wrapper.find("#organization-missions-empty").exists()).toBe(true);
@@ -118,7 +119,7 @@ test.skipIf(!producer.available)("actual producer document reaches the core home
   const encoded = producer.read();
   const data = jsonFixture(encoded);
   const model = readOrganizationHome(data, fixtureRecord(data.organization).id);
-  const wrapper = mount(OrganizationHomePanel, { props: { model } });
+  const wrapper = mount(pageHeaderHarness("/").stage(OrganizationHomePanel), { props: { model } });
   expect(wrapper.findAll("li a").map((a) => a.attributes("href"))).toEqual(
     model.recent_missions.map((m) => `/missions/${encodeURIComponent(m.id)}`),
   );

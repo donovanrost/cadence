@@ -1,8 +1,19 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
+import { href } from "@cadence/plugin-sdk/routes";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import { missionHref, type OrganizationHomeModel } from "./contracts";
-defineProps<{ model: OrganizationHomeModel }>();
+const props = defineProps<{ model: OrganizationHomeModel }>();
+useManagementHeader("/", () => ({
+  title: props.model.organization.name,
+  identifier: props.model.organization.slug,
+  primary: {
+    id: "organization-new-mission",
+    label: "New mission",
+    icon: "hero-plus",
+    href: href("/missions/new"),
+  },
+}));
 const createdDate = (value: string) =>
   new Intl.DateTimeFormat("en", {
     year: "numeric",
@@ -13,15 +24,6 @@ const createdDate = (value: string) =>
 </script>
 <template>
   <div id="organization-home-page" class="space-y-6">
-    <CadencePageHeading>
-      <template #title>{{ model.organization.name }}</template>
-      <template #description>{{ model.organization.slug }}</template>
-      <template #actions
-        ><a id="organization-new-mission" href="/missions/new" class="btn btn-primary btn-sm"
-          >New mission</a
-        ></template
-      >
-    </CadencePageHeading>
     <div id="organization-stats" class="grid gap-4 md:grid-cols-3">
       <CadenceCard
         id="organization-stat-missions"

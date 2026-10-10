@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { pageContentAttrs } from "@cadence/ui/page-chrome";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
+import { serverHref } from "@cadence/plugin-sdk/routes";
 import CatalogDatabaseTable from "./CatalogDatabaseTable.vue";
 
 type Attrs = Record<string, string>;
@@ -51,31 +52,19 @@ type Presentation = {
 };
 
 const props = defineProps<{ presentation: Presentation }>();
+useManagementHeader("/missions/:mission_id/catalog", () => ({
+  description: props.presentation.header.subtitle.text,
+  primary: {
+    id: String(props.presentation.header.new_database.attrs.id ?? "catalog-new-database"),
+    label: props.presentation.header.new_database.text,
+    icon: "hero-plus",
+    href: serverHref(String(props.presentation.header.new_database.attrs.href)),
+  },
+}));
 </script>
 
 <template>
   <div v-bind="pageContentAttrs(props.presentation.root.attrs)">
-    <CadencePageHeading
-      :breadcrumbs="[
-        {
-          label: props.presentation.header.breadcrumbs.mission.text,
-          ...(props.presentation.header.breadcrumbs.mission.attrs.href === undefined
-            ? {}
-            : { href: props.presentation.header.breadcrumbs.mission.attrs.href }),
-        },
-        { label: props.presentation.header.breadcrumbs.current.text },
-      ]"
-    >
-      <template #title>{{ props.presentation.header.title.text }}</template>
-      <template #description>{{ props.presentation.header.subtitle.text }}</template>
-      <template #actions
-        ><a v-bind="props.presentation.header.new_database.attrs">
-          <span v-bind="props.presentation.header.new_database.icon.attrs"></span>
-          {{ props.presentation.header.new_database.text }}
-        </a></template
-      >
-    </CadencePageHeading>
-
     <div
       v-if="props.presentation.empty_state.visible"
       v-bind="props.presentation.empty_state.list.attrs"

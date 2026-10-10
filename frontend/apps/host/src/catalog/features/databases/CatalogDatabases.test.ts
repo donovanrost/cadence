@@ -1,5 +1,6 @@
 import { required } from "../../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test } from "vite-plus/test";
 import CatalogIndex from "./CatalogIndex.vue";
 import CatalogDatabaseNew from "./CatalogDatabaseNew.vue";
@@ -14,7 +15,9 @@ import { assertDatabaseIndex, assertDatabaseNew, assertDatabaseShow } from "./va
 test("database directory renders revision/import navigation from a validated DTO", () => {
   const data = databaseIndexFixture();
   assertDatabaseIndex(data);
-  const wrapper = mount(CatalogIndex, { props: data });
+  const wrapper = mount(pageHeaderHarness("/missions/:mission_id/catalog").stage(CatalogIndex), {
+    props: data,
+  });
   expect(
     wrapper
       .get("#database-row-one")
@@ -43,11 +46,18 @@ test("new database preserves editable fields and the mission-scoped cancel link"
 test("database details retain disclosure and real revision history", async () => {
   const data = databaseShowFixture();
   assertDatabaseShow(data);
-  const wrapper = mount(CatalogDatabaseShow, { props: data });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/catalog/databases/:catalog_database_id").stage(
+      CatalogDatabaseShow,
+    ),
+    { props: data },
+  );
   expect(wrapper.find("#revision-row-one").exists()).toBe(true);
   expect(wrapper.find("#import-row-one").exists()).toBe(true);
   await wrapper.get("#add-revision-toggle").trigger("click");
-  expect(wrapper.emitted("toggle-revision-form")).toHaveLength(1);
+  expect(wrapper.findComponent(CatalogDatabaseShow).emitted("toggle-revision-form")).toHaveLength(
+    1,
+  );
   expect(wrapper.find("#catalog-upload-form").exists()).toBe(true);
   wrapper.unmount();
 });

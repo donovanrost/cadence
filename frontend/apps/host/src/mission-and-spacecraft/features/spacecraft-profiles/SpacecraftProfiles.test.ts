@@ -1,17 +1,22 @@
 import type { ProfileDirectory } from "./contracts";
 import { required } from "../../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test } from "vite-plus/test";
 import SpacecraftTypeShow from "./SpacecraftTypeShow.vue";
 import SpacecraftTypeListPage from "./SpacecraftTypeListPage.vue";
 import { assertProfileDetail, assertProfileDirectory } from "./validation";
 import { profileDetailFixture } from "./fixtures.test-support";
 
-test("profile detail consumes producer navigation, labels and immutable version history", () => {
+test("profile detail consumes producer labels and immutable version history", () => {
   const data = profileDetailFixture();
   assertProfileDetail(data);
-  const wrapper = mount(SpacecraftTypeShow, { props: data });
-  expect(wrapper.find('a[href="/missions/mission-a/spacecraft/profiles"]').exists()).toBe(true);
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/spacecraft/profiles/:profile_id").stage(
+      SpacecraftTypeShow,
+    ),
+    { props: data },
+  );
   expect(wrapper.get("#spacecraft-profile-byte-interpretation").text()).toContain(
     "Downlink Protocol",
   );
@@ -45,7 +50,10 @@ test("profile directory renders empty and populated producer states", async () =
     },
   };
   assertProfileDirectory(data);
-  const wrapper = mount(SpacecraftTypeListPage, { props: data });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/spacecraft/profiles").stage(SpacecraftTypeListPage),
+    { props: data },
+  );
   expect(wrapper.text()).toContain("No Profiles");
   data.presentation.empty_state = null;
   data.presentation.card = {

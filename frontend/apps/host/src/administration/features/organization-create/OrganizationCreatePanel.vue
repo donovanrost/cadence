@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceTextField from "@cadence/ui/CadenceTextField.vue";
 import { organizationHref, type Organization } from "../../shared/platform-contract";
 import { readResult, type Act, type OrganizationCreate } from "./contracts";
@@ -31,19 +31,12 @@ async function save() {
     pending.value = false;
   }
 }
+useManagementHeader("/admin/organizations/new", {
+  description: "Add an organization to the platform.",
+});
 </script>
 <template>
   <div id="admin-organization-new" class="max-w-2xl space-y-6">
-    <CadencePageHeading
-      :breadcrumbs="[
-        { label: 'Platform Admin', href: '/admin' },
-        { label: 'Organizations', href: '/admin/organizations' },
-        { label: 'Create Organization', href: null },
-      ]"
-    >
-      <template #title>Create Organization</template
-      ><template #description>Add an organization to the platform.</template>
-    </CadencePageHeading>
     <section
       v-if="created"
       id="admin-organization-created"

@@ -1,5 +1,6 @@
 import { required } from "../../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test } from "vite-plus/test";
 import OrganizationDirectoryPanel from "./OrganizationDirectoryPanel.vue";
 import { readOrganizationDirectory } from "./contracts";
@@ -14,9 +15,12 @@ const fixture = () => ({
 });
 test("directory owns canonical links and encodes continuation without arbitrary navigation", () => {
   const doc = fixture();
-  const wrapper = mount(OrganizationDirectoryPanel, {
-    props: { model: readOrganizationDirectory(doc, "admin") },
-  });
+  const wrapper = mount(
+    pageHeaderHarness("/admin/organizations").stage(OrganizationDirectoryPanel),
+    {
+      props: { model: readOrganizationDirectory(doc, "admin") },
+    },
+  );
   expect(wrapper.get("#admin-organization-org-a a").attributes("href")).toBe(
     "/admin/organizations/org-a",
   );
@@ -35,7 +39,7 @@ test("directory owns canonical links and encodes continuation without arbitrary 
     organizations,
     next_cursor: { after_id: "org-49", after_slug: "A + & Test" },
   };
-  const paged = mount(OrganizationDirectoryPanel, {
+  const paged = mount(pageHeaderHarness("/admin/organizations").stage(OrganizationDirectoryPanel), {
     props: { model: readOrganizationDirectory(page, "admin") },
   });
   const href = paged.get("#admin-organizations-next").attributes("href");
@@ -46,7 +50,7 @@ test("directory owns canonical links and encodes continuation without arbitrary 
 });
 test("empty pages and malformed cursor, identities and duplicate rows fail precisely", () => {
   const doc = fixture();
-  const empty = mount(OrganizationDirectoryPanel, {
+  const empty = mount(pageHeaderHarness("/admin/organizations").stage(OrganizationDirectoryPanel), {
     props: { model: readOrganizationDirectory({ ...doc, organizations: [] }, "admin") },
   });
   expect(empty.find("#admin-organizations-empty").exists()).toBe(true);

@@ -1,30 +1,17 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
 import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
 import type { ProfileDetail } from "./contracts";
-defineProps<ProfileDetail>();
+const props = defineProps<ProfileDetail>();
+useManagementHeader("/missions/:mission_id/spacecraft/profiles/:profile_id", () => ({
+  title: props.profile.display_name,
+  facts: [props.profile.version, props.profile.lifecycle],
+}));
 </script>
 <template>
   <div id="spacecraft-profile-show-surface" class="space-y-6">
-    <CadencePageHeading
-      :breadcrumbs="
-        navigation.breadcrumbs.map((item) => ({
-          label: item.label,
-          ...(item.href == null ? {} : { href: item.href }),
-        }))
-      "
-    >
-      <template #title>{{ profile.display_name }} </template>
-      <template #metadata
-        ><span>
-          <span class="mc-value-medium text-base-content">{{ profile.version }}</span>
-          <span class="hud-label">{{ profile.lifecycle }}</span>
-        </span></template
-      >
-    </CadencePageHeading>
-
     <CadenceCard
       id="spacecraft-profile-byte-interpretation"
       class="card bg-base-200 border border-base-300"

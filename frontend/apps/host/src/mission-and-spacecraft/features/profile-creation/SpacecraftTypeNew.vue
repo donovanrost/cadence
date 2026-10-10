@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import { reactive } from "vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 import CadenceFormActions from "@cadence/ui/CadenceFormActions.vue";
@@ -59,14 +59,12 @@ function toggleApplication(key: string, event: Event) {
   else delete values.applications[key];
   validate();
 }
+useManagementHeader("/missions/:mission_id/spacecraft/profiles/new", () => ({
+  description: props.page.subtitle,
+}));
 </script>
 <template>
   <CadenceFormPageFrame :id="page.id">
-    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
-      <template #title>{{ page.title }}</template>
-      <template #description>{{ page.subtitle }}</template>
-    </CadencePageHeading>
-
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
       <div
         v-if="Object.keys(errors).length"

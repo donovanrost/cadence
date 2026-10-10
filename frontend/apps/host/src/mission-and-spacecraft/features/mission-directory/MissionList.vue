@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
+import { serverHref } from "@cadence/plugin-sdk/routes";
 import MissionTable from "./MissionTable.vue";
 
 type RawAttrs = Record<string, string>;
@@ -53,27 +54,20 @@ type MissionListPresentation = {
   };
 };
 
-defineProps<{ presentation: MissionListPresentation }>();
+const props = defineProps<{ presentation: MissionListPresentation }>();
+useManagementHeader("/missions", () => ({
+  facts: [props.presentation.header.title.suffix.text],
+  primary: {
+    id: String(props.presentation.header.action.attrs.id ?? "missions-new"),
+    label: props.presentation.header.action.label,
+    icon: "hero-plus",
+    href: serverHref(String(props.presentation.header.action.attrs.href)),
+  },
+}));
 </script>
 
 <template>
   <div :class="presentation.root_class">
-    <CadencePageHeading>
-      <template #title>{{ presentation.header.title.text }} </template>
-      <template #eyebrow>{{ presentation.header.eyebrow.text }}</template>
-      <template #metadata
-        ><span>
-          {{ presentation.header.title.suffix.text }}
-        </span></template
-      >
-      <template #actions
-        ><a v-bind="presentation.header.action.attrs" :class="presentation.header.action.class">
-          <span :class="presentation.header.action.icon_class"></span>
-          {{ presentation.header.action.label }}
-        </a></template
-      >
-    </CadencePageHeading>
-
     <div v-if="presentation.empty_state.visible" :id="presentation.empty_state.id">
       <div :class="presentation.empty_state.class">
         <span :class="presentation.empty_state.icon_class"></span>

@@ -5,10 +5,10 @@ export const routeCatalog = {
     kind: "administration",
     layer: "management",
     scope: "organization",
-    title: null,
+    title: "Home",
     queryKeys: [],
     header: {
-      kind: "collection",
+      kind: "resource",
       breadcrumbs: true,
       eyebrow: false,
       description: null,
@@ -86,7 +86,7 @@ export const routeCatalog = {
     title: null,
     queryKeys: [],
     header: {
-      kind: "collection",
+      kind: "resource",
       breadcrumbs: true,
       eyebrow: false,
       description: null,
@@ -161,7 +161,7 @@ export const routeCatalog = {
     kind: "spacecraft",
     layer: "management",
     scope: "spacecraft",
-    title: null,
+    title: "Spacecraft",
     queryKeys: ["section"],
     header: {
       kind: "resource",
@@ -174,7 +174,7 @@ export const routeCatalog = {
     kind: "spacecraft",
     layer: "management",
     scope: "spacecraft",
-    title: "#{spacecraft.display_name} Identity",
+    title: "Spacecraft Identity",
     queryKeys: [],
     header: {
       kind: "resource",
@@ -187,7 +187,7 @@ export const routeCatalog = {
     kind: "spacecraft",
     layer: "management",
     scope: "spacecraft",
-    title: "#{spacecraft.display_name} Identity",
+    title: "Spacecraft Identity",
     queryKeys: [],
     header: {
       kind: "resource",
@@ -200,7 +200,7 @@ export const routeCatalog = {
     kind: "spacecraft",
     layer: "management",
     scope: "spacecraft",
-    title: "#{spacecraft.display_name} Readiness",
+    title: "Spacecraft Readiness",
     queryKeys: [],
     header: {
       kind: "resource",
@@ -1451,7 +1451,7 @@ export const routeCatalog = {
     title: "Organization settings",
     queryKeys: [],
     header: {
-      kind: "resource",
+      kind: "collection",
       breadcrumbs: true,
       eyebrow: false,
       description: null,
@@ -1477,7 +1477,7 @@ export const routeCatalog = {
     title: "Mission settings",
     queryKeys: [],
     header: {
-      kind: "resource",
+      kind: "collection",
       breadcrumbs: true,
       eyebrow: false,
       description: null,

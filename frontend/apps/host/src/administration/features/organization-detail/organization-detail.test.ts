@@ -4,6 +4,7 @@ import { writeFileSync } from "node:fs";
 import OrganizationInvitePanel from "../organization-invite/OrganizationInvitePanel.vue";
 import { readOrganizationInvite } from "../organization-invite/contracts";
 import { flushPromises, mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test, vi } from "vite-plus/test";
 import OrganizationDetailPanel from "./OrganizationDetailPanel.vue";
 import { readOrganizationDetail, readIssueResult, detailHref } from "./contracts";
@@ -56,14 +57,17 @@ export const detailFixture = () => ({
 });
 test("detail renders authoritative facts and preserves native organization switching", async () => {
   const act = vi.fn();
-  const wrapper = mount(OrganizationDetailPanel, {
-    props: {
-      model: readOrganizationDetail(detailFixture(), "admin", "org-a"),
-      csrfToken: "csrf-test",
-      act,
-      refresh: vi.fn(),
+  const wrapper = mount(
+    pageHeaderHarness("/admin/organizations/:org_id").stage(OrganizationDetailPanel),
+    {
+      props: {
+        model: readOrganizationDetail(detailFixture(), "admin", "org-a"),
+        csrfToken: "csrf-test",
+        act,
+        refresh: vi.fn(),
+      },
     },
-  });
+  );
   expect(wrapper.get("#organization-member-member-a").text()).toContain("Account disabled");
   expect(wrapper.get("#organization-invitation-invite-a time").attributes("datetime")).toBe(
     "2026-09-20T00:00:00Z",
@@ -117,14 +121,17 @@ test("issuance is single-flight, displays its token once and dismisses it locall
         finish = resolve;
       }),
   );
-  const wrapper = mount(OrganizationDetailPanel, {
-    props: {
-      model: readOrganizationDetail(detailFixture(), "admin", "org-a"),
-      csrfToken: "csrf",
-      act,
-      refresh: vi.fn(),
+  const wrapper = mount(
+    pageHeaderHarness("/admin/organizations/:org_id").stage(OrganizationDetailPanel),
+    {
+      props: {
+        model: readOrganizationDetail(detailFixture(), "admin", "org-a"),
+        csrfToken: "csrf",
+        act,
+        refresh: vi.fn(),
+      },
     },
-  });
+  );
   await wrapper.get("#service_identity_display_name").setValue("Flight API");
   await wrapper.get("#service_identity_id").setValue("svc-new");
   await wrapper.get("#service-identity-form").trigger("submit");
@@ -155,14 +162,17 @@ test("uncertain issuance survives refresh without replay and curated duplicate e
     })
     .mockRejectedValueOnce(Error("network lost"));
   const refresh = vi.fn(async () => {});
-  const wrapper = mount(OrganizationDetailPanel, {
-    props: {
-      model: readOrganizationDetail(detailFixture(), "admin", "org-a"),
-      csrfToken: "csrf",
-      act,
-      refresh,
+  const wrapper = mount(
+    pageHeaderHarness("/admin/organizations/:org_id").stage(OrganizationDetailPanel),
+    {
+      props: {
+        model: readOrganizationDetail(detailFixture(), "admin", "org-a"),
+        csrfToken: "csrf",
+        act,
+        refresh,
+      },
     },
-  });
+  );
   await wrapper.get("#service_identity_display_name").setValue("Flight API");
   await wrapper.get("#service_identity_id").setValue("svc-a");
   await wrapper.get("#service-identity-form").trigger("submit");
@@ -206,14 +216,17 @@ test.skipIf(!producer.available)(
       return { status: "unavailable" };
     });
     const detailModel = readOrganizationDetail(data.detail, userId, organizationId);
-    const detail = mount(OrganizationDetailPanel, {
-      props: {
-        model: detailModel,
-        csrfToken: "probe-csrf",
-        act,
-        refresh: vi.fn(),
+    const detail = mount(
+      pageHeaderHarness("/admin/organizations/:org_id").stage(OrganizationDetailPanel),
+      {
+        props: {
+          model: detailModel,
+          csrfToken: "probe-csrf",
+          act,
+          refresh: vi.fn(),
+        },
       },
-    });
+    );
     for (const row of detailModel.members.entries)
       expect(detail.get(`#organization-member-${row.id}`).text()).toContain(row.email);
     expect(detail.get('#open-organization-form [name="organization_id"]').attributes("value")).toBe(
@@ -222,13 +235,16 @@ test.skipIf(!producer.available)(
     await detail.get("#service_identity_display_name").setValue("Issued through the real form");
     await detail.get("#service_identity_id").setValue("producer-vue-service");
     await detail.get("#service-identity-form").trigger("submit");
-    const invitation = mount(OrganizationInvitePanel, {
-      props: {
-        model: readOrganizationInvite(data.invite, userId, organizationId),
-        act,
-        refresh: vi.fn(),
+    const invitation = mount(
+      pageHeaderHarness("/admin/organizations/:org_id/invite").stage(OrganizationInvitePanel),
+      {
+        props: {
+          model: readOrganizationInvite(data.invite, userId, organizationId),
+          act,
+          refresh: vi.fn(),
+        },
       },
-    });
+    );
     await invitation.get("#invite_email").setValue(data.recipient_email);
     await invitation.get("#invite_display_name").setValue("Reviewed operator");
     await invitation.get("#invite_membership_role").setValue("organization_admin");

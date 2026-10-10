@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { pageContentAttrs } from "@cadence/ui/page-chrome";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
-import { presentationBreadcrumbs } from "@cadence/ui/page-chrome";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CatalogArtifactShow from "./CatalogArtifactShow.vue";
 
 type Attrs = Record<string, string>;
@@ -47,16 +46,13 @@ const props = defineProps<{ presentation: Presentation }>();
 const emit = defineEmits<{
   reimport: [];
 }>();
+useManagementHeader("/missions/:mission_id/catalog/artifacts/:artifact_id", () => ({
+  title: props.presentation.header.title.text,
+}));
 </script>
 
 <template>
   <div v-bind="pageContentAttrs(props.presentation.root.attrs)">
-    <CadencePageHeading
-      :breadcrumbs="presentationBreadcrumbs(props.presentation.header.breadcrumbs)"
-    >
-      <template #title>{{ props.presentation.header.title.text }}</template>
-    </CadencePageHeading>
-
     <div v-bind="props.presentation.child_wrapper.attrs">
       <CatalogArtifactShow
         :artifact="props.presentation.artifact_show.artifact"

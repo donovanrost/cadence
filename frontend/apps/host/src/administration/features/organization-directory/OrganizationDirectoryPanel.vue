@@ -1,28 +1,21 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
+import { href } from "@cadence/plugin-sdk/routes";
 import { organizationHref } from "../../shared/platform-contract";
 import { directoryHref, type OrganizationDirectory } from "./contracts";
 defineProps<{ model: OrganizationDirectory }>();
+useManagementHeader("/admin/organizations", {
+  description: "Browse organizations across the platform.",
+  primary: {
+    id: "admin-organizations-create",
+    label: "Create organization",
+    icon: "hero-plus",
+    href: href("/admin/organizations/new"),
+  },
+});
 </script>
 <template>
   <div id="admin-organizations-page" class="space-y-6">
-    <CadencePageHeading
-      :breadcrumbs="[
-        { label: 'Platform Admin', href: '/admin' },
-        { label: 'Organizations', href: null },
-      ]"
-    >
-      <template #title>Organizations</template
-      ><template #description>Browse organizations across the platform.</template>
-      <template #actions
-        ><a
-          id="admin-organizations-create"
-          href="/admin/organizations/new"
-          class="btn btn-primary btn-sm"
-          >Create organization</a
-        ></template
-      >
-    </CadencePageHeading>
     <section
       id="admin-organization-list-component"
       class="card border border-base-300 bg-base-200 p-6"
