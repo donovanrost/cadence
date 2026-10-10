@@ -45,9 +45,14 @@ function harness(initial = requirementPageFixture()) {
     ),
     read = vi.fn(async () => structuredClone(server)),
     navigate = vi.fn();
-  const wrapper = mount(requirementReviewContribution.component, {
-    props: { page: initial, port: { execute, navigate }, readPort: { read } },
-  });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/requirements/:contact_requirement_id").stage(
+      requirementReviewContribution.component,
+    ),
+    {
+      props: { page: initial, port: { execute, navigate }, readPort: { read } },
+    },
+  );
   wrappers.push(wrapper);
   return {
     wrapper,
@@ -207,9 +212,14 @@ test.skipIf(!producer.available)("producer supplied native requirement contribut
       ? { ...page, sequence: suppliedOperation?.sequence, operation: supplied.operation }
       : page,
   );
-  const w = mount(requirementReviewContribution.component, {
-    props: { ...props, port: { execute, navigate: vi.fn() }, readPort: { read } },
-  });
+  const w = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/requirements/:contact_requirement_id").stage(
+      requirementReviewContribution.component,
+    ),
+    {
+      props: { ...props, port: { execute, navigate: vi.fn() }, readPort: { read } },
+    },
+  );
   wrappers.push(w);
   if (supplied.action === "create-plan") {
     const selection =

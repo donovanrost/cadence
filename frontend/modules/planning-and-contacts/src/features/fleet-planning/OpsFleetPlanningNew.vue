@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject } from "vue";
 import CadencePanel from "@cadence/ui/CadencePanel.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import { FLEET_START_PORT, type OpsFleetPlanningNewProps } from "./OpsFleetPlanningNew.contracts";
 import { useFleetStart } from "./fleet-start-state";
 const props = defineProps<OpsFleetPlanningNewProps>();
@@ -25,32 +26,14 @@ const base = computed(() =>
   model.value ? `/missions/${encodeURIComponent(model.value.context.mission_id)}/ops/planning` : "",
 );
 const label = (v: string) => v.replaceAll("_", " ");
+useOpsHeader("/missions/:mission_id/ops/planning/new", () => ({
+  description:
+    "Review the approved policy and exact demand inputs before creating a queued planning run.",
+  ...(connected ? { refresh: { run: () => refresh(), pending: !!pending.value } } : {}),
+}));
 </script>
 <template>
-  <main v-if="model" id="ops-fleet-planning-new-page" class="space-y-6 p-4 md:p-6">
-    <header class="space-y-3">
-      <a id="fleet-start-back" :href="base" class="text-sm text-primary">Fleet planning</a>
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p class="text-xs uppercase tracking-widest text-base-content/60">
-            Planning &amp; contacts
-          </p>
-          <h1 class="mt-1 text-2xl font-semibold">Plan a fleet horizon</h1>
-          <p class="mt-2 max-w-2xl text-sm text-base-content/60">
-            Review the approved policy and exact demand inputs before creating a queued planning
-            run.
-          </p>
-        </div>
-        <button
-          id="fleet-start-refresh"
-          class="btn btn-ghost btn-sm"
-          :disabled="!!pending || !connected"
-          @click="refresh()"
-        >
-          {{ pending === "read" ? "Refreshing…" : "Refresh policy" }}
-        </button>
-      </div>
-    </header>
+  <main v-if="model" id="ops-fleet-planning-new-page" class="space-y-6">
     <p v-if="notice" id="fleet-start-notice" role="status" class="text-sm text-base-content/70">
       {{ notice }}
     </p>
@@ -350,7 +333,7 @@ const label = (v: string) => v.replaceAll("_", " ");
     </section>
   </main>
   <section v-else id="fleet-start-unavailable" role="alert" class="space-y-3 p-6">
-    <h1 class="text-xl font-semibold">Fleet creation unavailable</h1>
+    <h2 class="text-xl font-semibold">Fleet creation unavailable</h2>
     <p class="text-sm text-base-content/60">Current policy evidence could not be verified.</p>
     <button
       v-if="connected"

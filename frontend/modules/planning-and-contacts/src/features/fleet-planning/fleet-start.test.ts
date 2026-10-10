@@ -7,6 +7,7 @@ import {
 } from "../../../../../test-support/json-fixture";
 import { admitFleetStart, windowValid } from "./fleet-start";
 import { flushPromises, mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test, vi } from "vite-plus/test";
 import { OpsFleetPlanningNew } from "../../fleet-planning";
 import {
@@ -29,9 +30,12 @@ function harness() {
     return startCompletion(action === "preview" ? { review } : startReceiptFixture(review));
   });
   const refresh = vi.fn(async () => model);
-  const wrapper = mount(OpsFleetPlanningNew, {
-    props: { start: model, port: { context: model.context, execute, refresh } },
-  });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/planning/new").stage(OpsFleetPlanningNew),
+    {
+      props: { start: model, port: { context: model.context, execute, refresh } },
+    },
+  );
   return { model, execute, refresh, wrapper };
 }
 
@@ -66,7 +70,7 @@ test("native review captures UTC fields and create sends the reviewed evidence",
     "/missions/mission-one/ops/planning/runs/run-one",
   );
   expect(wrapper.get("#fleet-start-create").attributes("disabled")).toBeDefined();
-  expect(wrapper.emitted("create-fleet-run")).toBeUndefined();
+  expect(wrapper.findComponent(OpsFleetPlanningNew).emitted("create-fleet-run")).toBeUndefined();
   wrapper.unmount();
 });
 
@@ -145,7 +149,7 @@ test("unknown creation stays locked through read recovery and is never retried",
   await wrapper.get("#fleet-start-create").trigger("click");
   await flushPromises();
   expect(wrapper.find("#fleet-start-uncertain").exists()).toBe(true);
-  await wrapper.get("#fleet-start-refresh").trigger("click");
+  await wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(refresh).toHaveBeenCalledExactlyOnceWith();
   expect(wrapper.find("#fleet-start-uncertain").exists()).toBe(true);
@@ -170,7 +174,7 @@ test("a confirmed receipt survives a failed read and an empty review cannot crea
   await wrapper.get("#fleet-start-create").trigger("click");
   await flushPromises();
   refresh.mockRejectedValue(new Error("read unavailable"));
-  await wrapper.get("#fleet-start-refresh").trigger("click");
+  await wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(wrapper.find("#fleet-start-receipt").exists()).toBe(true);
   expect(wrapper.get("#fleet-start-notice").text()).toContain("retained");
@@ -180,9 +184,12 @@ test("a confirmed receipt survives a failed read and an empty review cannot crea
 test("unsupported initial data can recover, while a missing approved policy keeps creation closed", async () => {
   const model = startFixture();
   const refresh = vi.fn(async () => model);
-  const wrapper = mount(OpsFleetPlanningNew, {
-    props: { start: null, port: { context: model.context, refresh, execute: vi.fn() } },
-  });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/planning/new").stage(OpsFleetPlanningNew),
+    {
+      props: { start: null, port: { context: model.context, refresh, execute: vi.fn() } },
+    },
+  );
   expect(wrapper.find("#fleet-start-unavailable").exists()).toBe(true);
   await wrapper.get("#fleet-start-retry").trigger("click");
   await flushPromises();
@@ -220,16 +227,19 @@ test.skipIf(!producer.available)("producer-supplied fleet creation workflow", as
     window = supplied.window;
   if (!windowValid(window)) throw Error("Invalid native fleet window");
   const execute = vi.fn().mockRejectedValue(Error("Captured request"));
-  const wrapper = mount(OpsFleetPlanningNew, {
-    props: {
-      start: model,
-      port: {
-        context: model.context,
-        execute,
-        refresh: vi.fn(),
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/planning/new").stage(OpsFleetPlanningNew),
+    {
+      props: {
+        start: model,
+        port: {
+          context: model.context,
+          execute,
+          refresh: vi.fn(),
+        },
       },
     },
-  });
+  );
   expect(wrapper.find("#fleet-start-form").exists()).toBe(true);
   await wrapper.get("#fleet-start-horizon-start").setValue(window.horizon_start.slice(0, 19));
   await wrapper.get("#fleet-start-horizon-end").setValue(window.horizon_end.slice(0, 19));

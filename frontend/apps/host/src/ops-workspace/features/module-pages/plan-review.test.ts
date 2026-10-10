@@ -3,6 +3,7 @@ import { fixtureRecord } from "../../../../../../test-support/json-fixture";
 import type { OpsPageAction } from "@cadence/plugin-sdk/ops-pages";
 import { required } from "../../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test, vi } from "vite-plus/test";
 import OpsModulePage from "./OpsModulePage.vue";
 import {
@@ -39,21 +40,24 @@ test("host captures the plan resource and token and recovers the native submissi
     });
     throw Error("Lost response");
   });
-  const w = mount(OpsModulePage, {
-    props: {
-      contributionId: initial.id,
-      snapshot: initial,
-      context: initial.context,
-      execute,
-      query,
-      refresh,
-      navigate: vi.fn(),
-      guardNavigation: (g: () => boolean) => {
-        guard = g;
-        return dispose;
+  const w = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/plans/:contact_plan_id").stage(OpsModulePage),
+    {
+      props: {
+        contributionId: initial.id,
+        snapshot: initial,
+        context: initial.context,
+        execute,
+        query,
+        refresh,
+        navigate: vi.fn(),
+        guardNavigation: (g: () => boolean) => {
+          guard = g;
+          return dispose;
+        },
       },
     },
-  });
+  );
   try {
     await w.get("#submission-reason").setValue("Reviewed host proposal");
     await w.get("#submission").trigger("submit");
@@ -65,7 +69,7 @@ test("host captures the plan resource and token and recovers the native submissi
       event: "submit-plan",
       input: { sequence: 1, payload: { contact_plan_id: data.detail.plan.id } },
     });
-    await w.get("#refresh-plan-review").trigger("click");
+    await w.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(query).toHaveBeenCalledExactlyOnceWith({ id: initial.id, token: initial.token });
     expect(w.get("#plan-operation-receipt").text()).toContain("submit-plan");

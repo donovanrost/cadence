@@ -8,7 +8,7 @@ import type {
   OpsContactRequirementNewProps,
   OpsContactRequirementNewEmits,
 } from "./OpsContactRequirementNew.contracts";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
 import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
@@ -16,6 +16,9 @@ import { computed, reactive, watch } from "vue";
 import CadencePanel from "@cadence/ui/CadencePanel.vue";
 
 const props = defineProps<OpsContactRequirementNewProps>();
+useOpsHeader("/missions/:mission_id/ops/requirements/new", () => ({
+  description: props.page.description,
+}));
 
 const emit = defineEmits<OpsContactRequirementNewEmits>();
 
@@ -126,24 +129,6 @@ const activeError = computed(() =>
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <CadencePageHeading>
-      <template #title>{{ page.heading }}</template>
-      <template #eyebrow>{{ page.eyebrow }}</template>
-      <template #description>{{ page.description }}</template>
-      <template #actions
-        ><a
-          :id="actions.back.id"
-          :href="actions.back.href"
-          data-phx-link="redirect"
-          data-phx-link-state="push"
-          class="inline-flex items-center gap-1 font-mono text-xs text-base-content/55 hover:text-primary"
-        >
-          <span :class="[actions.back.icon, 'h-3.5 w-3.5']"></span>
-          {{ actions.back.label }}
-        </a></template
-      >
-    </CadencePageHeading>
-
     <div class="">
       <form :id="form.id" class="space-y-5" @submit.prevent="save">
         <CadencePanel

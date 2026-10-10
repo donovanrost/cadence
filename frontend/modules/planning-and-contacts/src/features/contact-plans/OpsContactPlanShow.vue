@@ -4,7 +4,7 @@ import { PLAN_DETAIL_PORT, type OpsContactPlanShowProps } from "./OpsContactPlan
 import { usePlanDetail } from "./plan-detail-state";
 import { reviewHref } from "./plan-detail";
 import PlanReviewPagination from "./PlanReviewPagination.vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
 import CadencePanel from "@cadence/ui/CadencePanel.vue";
 const props = defineProps<OpsContactPlanShowProps>();
@@ -44,44 +44,23 @@ const forms = [
   },
 ];
 const label = (v: string) => v.replaceAll("_", " ");
+useOpsHeader("/missions/:mission_id/ops/plans/:contact_plan_id", () => {
+  const detail = d.value;
+  if (!detail) return { title: "Contact plan" };
+  return {
+    title: `Contact plan v${detail.plan.version}`,
+    description: "Review the immutable proposal before submission, approval or execution.",
+    facts: [
+      `Current plan: ${label(detail.plan.lifecycle_state)} · v${detail.plan.current_version}`,
+    ],
+    ...(connected ? { refresh: { run: refresh, pending: pending.value } } : {}),
+  };
+});
 const requirementHref = (mission: string, id: string, version: number) =>
   `/missions/${encodeURIComponent(mission)}/ops/requirements/${encodeURIComponent(id)}?version=${version}`;
 </script>
 <template>
   <CadenceOpsViewport v-if="d" id="ops-contact-plan-show-page">
-    <CadencePageHeading
-      :breadcrumbs="[
-        {
-          label: 'Contact requirements',
-          href: `/missions/${encodeURIComponent(d.context.mission_id)}/ops/requirements`,
-        },
-        { label: 'Plan review' },
-      ]"
-    >
-      <template #eyebrow>Mission operations / contact planning</template>
-      <template #title
-        >Contact plan <span class="font-mono text-primary">v{{ d.plan.version }}</span></template
-      >
-      <template #description
-        >Review the immutable proposal before submission, approval or execution.</template
-      >
-      <template #metadata
-        ><span class="font-mono text-xs uppercase"
-          >Current plan: {{ label(d.plan.lifecycle_state) }} · v{{ d.plan.current_version }}</span
-        ></template
-      >
-      <template #actions
-        ><button
-          id="refresh-plan-review"
-          type="button"
-          class="btn btn-sm"
-          :disabled="!connected || pending"
-          @click="refresh"
-        >
-          Refresh evidence
-        </button></template
-      >
-    </CadencePageHeading>
     <aside
       v-if="d.plan.version !== d.plan.current_version"
       id="plan-review-historical"

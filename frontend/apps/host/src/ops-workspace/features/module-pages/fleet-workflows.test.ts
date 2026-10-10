@@ -4,6 +4,7 @@ import type { FleetRunPort } from "../../../../../../modules/planning-and-contac
 import { required } from "../../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import {
   OpsFleetPlanningNew,
   OpsFleetPlanningRun,
@@ -43,17 +44,24 @@ function harness(
   const query = vi.fn().mockResolvedValue(initial),
     execute = vi.fn(),
     refresh = vi.fn();
-  wrapper = mount(OpsModulePage, {
-    props: {
-      contributionId: initial.id,
-      snapshot: initial,
-      context,
-      query,
-      execute,
-      refresh,
-      navigate: vi.fn(),
+  wrapper = mount(
+    pageHeaderHarness(
+      run
+        ? "/missions/:mission_id/ops/planning/runs/:fleet_planning_run_id"
+        : "/missions/:mission_id/ops/planning/new",
+    ).stage(OpsModulePage),
+    {
+      props: {
+        contributionId: initial.id,
+        snapshot: initial,
+        context,
+        query,
+        execute,
+        refresh,
+        navigate: vi.fn(),
+      },
     },
-  });
+  );
   return { initial, query, execute, refresh, context };
 }
 test("host dispatches only declared start actions with captured token and exact review", async () => {
@@ -110,7 +118,7 @@ test("same-context bootstrap copies preserve an in-flight preview and a confirme
 test("run refresh is read-only and captures the resource, preserving evidence after invalid responses", async () => {
   const model = runFixture(),
     h = harness(model);
-  await wrapper.get("#fleet-run-refresh").trigger("click");
+  await wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(h.query).toHaveBeenCalledExactlyOnceWith({ id: h.initial.id, token });
   expect(h.execute).not.toHaveBeenCalled();
@@ -122,7 +130,7 @@ test("run refresh is read-only and captures the resource, preserving evidence af
   ];
   for (const changed of bad) {
     h.query.mockResolvedValueOnce({ ...h.initial, ...changed });
-    await wrapper.get("#fleet-run-refresh").trigger("click");
+    await wrapper.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(wrapper.get("#fleet-run-notice").text()).toContain("Previous evidence is retained");
     expect(wrapper.find("#fleet-run-continue").exists()).toBe(true);
@@ -146,7 +154,7 @@ test("repair sends the displayed commitment evidence and an unconfirmed receipt 
     },
   });
   expect(wrapper.find("#fleet-run-uncertain").exists()).toBe(true);
-  await wrapper.get("#fleet-run-refresh").trigger("click");
+  await wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(wrapper.get("#fleet-run-repair-submit").attributes("disabled")).toBeDefined();
   expect(h.execute).toHaveBeenCalledOnce();

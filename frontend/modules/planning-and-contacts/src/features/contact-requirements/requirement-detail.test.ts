@@ -3,6 +3,7 @@ import { jsonFixture } from "../../../../../test-support/json-fixture";
 import type { CreatePlanInput } from "./OpsContactRequirementShow.contracts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { nextTick } from "vue";
 import OpsContactRequirementShow from "./OpsContactRequirementShow.vue";
 import { requirementDetailFixture } from "./requirement-detail.test-support";
@@ -25,10 +26,15 @@ test("producer-supplied review emits through the client-compiled Vue controls", 
     ? { detail: required(admitRequirementDetail(jsonFixture(input).detail)) }
     : { detail: requirementDetailFixture() };
   const warnings: string[] = [];
-  const app = mount(OpsContactRequirementShow, {
-    props,
-    global: { config: { warnHandler: (message) => warnings.push(message) } },
-  });
+  const app = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/requirements/:contact_requirement_id").stage(
+      OpsContactRequirementShow,
+    ),
+    {
+      props,
+      global: { config: { warnHandler: (message) => warnings.push(message) } },
+    },
+  );
   try {
     const opportunity = required(props.detail.opportunities.entries[0]);
     const checkbox = app.get("#select-" + opportunity.id);
@@ -36,7 +42,9 @@ test("producer-supplied review emits through the client-compiled Vue controls", 
     await checkbox.setValue(true);
     await app.get("#create-contact-plan").trigger("click");
     expect(warnings).toEqual([]);
-    const events = app.emitted<[CreatePlanInput]>("create-plan");
+    const events = app
+      .findComponent(OpsContactRequirementShow)
+      .emitted<[CreatePlanInput]>("create-plan");
     expect(events).toHaveLength(1);
     expect(required(required(events)[0])[0].selected_snapshot_ids).toEqual([opportunity.id]);
     if (input)
@@ -53,12 +61,21 @@ test("the restored 100-item selection prevents an additional checkbox choice", a
   required(d.opportunities.entries[0]).id = "op-101";
   const ids = Array.from({ length: 100 }, (_, i) => "op-" + i);
   persistSelection(window.sessionStorage, d, ids);
-  const app = mount(OpsContactRequirementShow, { props: { detail: d } });
+  const app = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/requirements/:contact_requirement_id").stage(
+      OpsContactRequirementShow,
+    ),
+    { props: { detail: d } },
+  );
   await nextTick();
   expect(app.get("#select-op-101").attributes("disabled")).toBeDefined();
   await app.get("#create-contact-plan").trigger("click");
   expect(
-    required(required(app.emitted<[CreatePlanInput]>("create-plan"))[0])[0].selected_snapshot_ids,
+    required(
+      required(
+        app.findComponent(OpsContactRequirementShow).emitted<[CreatePlanInput]>("create-plan"),
+      )[0],
+    )[0].selected_snapshot_ids,
   ).toEqual(ids);
   app.unmount();
 });
@@ -80,7 +97,12 @@ test("failed tab storage blocks pagination until unsaved selections are cleared"
       return storage.length;
     },
   });
-  const app = mount(OpsContactRequirementShow, { props: { detail: d } });
+  const app = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/requirements/:contact_requirement_id").stage(
+      OpsContactRequirementShow,
+    ),
+    { props: { detail: d } },
+  );
   await app.get("#select-op-1").setValue(true);
   const event = new MouseEvent("click", { bubbles: true, cancelable: true });
   app.get("#opportunities-previous-page").element.dispatchEvent(event);
@@ -92,31 +114,51 @@ test("failed tab storage blocks pagination until unsaved selections are cleared"
 
 test("real controls emit exact reviewed requirement and run references", async () => {
   const d = requirementDetailFixture(),
-    app = mount(OpsContactRequirementShow, { props: { detail: d } });
+    app = mount(
+      pageHeaderHarness("/missions/:mission_id/ops/requirements/:contact_requirement_id").stage(
+        OpsContactRequirementShow,
+      ),
+      { props: { detail: d } },
+    );
   expect(admitRequirementDetail(d)).toEqual(d);
   expect(app.get("#create-contact-plan").attributes("disabled")).toBeDefined();
   await app.get("#select-op-1").setValue(true);
   await app.get("#create-contact-plan").trigger("click");
-  expect(app.emitted<[CreatePlanInput]>("create-plan")).toEqual([
-    [{ ...decision(d), planning_run_id: "run-1", selected_snapshot_ids: ["op-1"] }],
-  ]);
+  expect(
+    app.findComponent(OpsContactRequirementShow).emitted<[CreatePlanInput]>("create-plan"),
+  ).toEqual([[{ ...decision(d), planning_run_id: "run-1", selected_snapshot_ids: ["op-1"] }]]);
   app.unmount();
-  const search = mount(OpsContactRequirementShow, { props: { detail: d } });
+  const search = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/requirements/:contact_requirement_id").stage(
+      OpsContactRequirementShow,
+    ),
+    { props: { detail: d } },
+  );
   await search.get("#plan-contact-requirement").trigger("click");
-  expect(search.emitted("plan")).toEqual([[decision(d)]]);
+  expect(search.findComponent(OpsContactRequirementShow).emitted("plan")).toEqual([[decision(d)]]);
   search.unmount();
 });
 
 test("off-page selections survive a same-run remount and page navigation retains review identity", async () => {
   const d = requirementDetailFixture();
-  const app = mount(OpsContactRequirementShow, { props: { detail: d } });
+  const app = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/requirements/:contact_requirement_id").stage(
+      OpsContactRequirementShow,
+    ),
+    { props: { detail: d } },
+  );
   await app.get("#select-op-1").setValue(true);
   app.unmount();
   const next = requirementDetailFixture();
   next.query.opportunities_page = 2;
   next.opportunities.page = 2;
   required(next.opportunities.entries[0]).id = "op-2";
-  const second = mount(OpsContactRequirementShow, { props: { detail: next } });
+  const second = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/requirements/:contact_requirement_id").stage(
+      OpsContactRequirementShow,
+    ),
+    { props: { detail: next } },
+  );
   await nextTick();
   expect(second.get("#requirement-selected-count").text()).toContain("1 selected across pages");
   expect(second.get("#opportunities-previous-page").attributes("href")).toBe(
@@ -125,8 +167,11 @@ test("off-page selections survive a same-run remount and page navigation retains
   await second.get("#select-op-2").setValue(true);
   await second.get("#create-contact-plan").trigger("click");
   expect(
-    required(required(second.emitted<[CreatePlanInput]>("create-plan"))[0])[0]
-      .selected_snapshot_ids,
+    required(
+      required(
+        second.findComponent(OpsContactRequirementShow).emitted<[CreatePlanInput]>("create-plan"),
+      )[0],
+    )[0].selected_snapshot_ids,
   ).toEqual(["op-1", "op-2"]);
   second.unmount();
 });
@@ -166,17 +211,29 @@ test("history, inactive requirements, running runs and ineligible evidence canno
   ]) {
     const d = requirementDetailFixture();
     change(d);
-    const app = mount(OpsContactRequirementShow, { props: { detail: d } });
+    const app = mount(
+      pageHeaderHarness("/missions/:mission_id/ops/requirements/:contact_requirement_id").stage(
+        OpsContactRequirementShow,
+      ),
+      { props: { detail: d } },
+    );
     expect(app.get("#select-op-1").attributes("disabled")).toBeDefined();
     expect(app.get("#create-contact-plan").attributes("disabled")).toBeDefined();
-    expect(app.emitted<[CreatePlanInput]>("create-plan")).toBeUndefined();
+    expect(
+      app.findComponent(OpsContactRequirementShow).emitted<[CreatePlanInput]>("create-plan"),
+    ).toBeUndefined();
     app.unmount();
   }
 });
 
 test("a lifecycle refresh clears selections without substituting another run", async () => {
   const d = requirementDetailFixture(),
-    app = mount(OpsContactRequirementShow, { props: { detail: d } });
+    app = mount(
+      pageHeaderHarness("/missions/:mission_id/ops/requirements/:contact_requirement_id").stage(
+        OpsContactRequirementShow,
+      ),
+      { props: { detail: d } },
+    );
   await app.get("#select-op-1").setValue(true);
   const next = requirementDetailFixture();
   next.requirement.current_version = 2;
@@ -212,7 +269,12 @@ test("malformed and cross-run models render no actions or links", () => {
   }
   for (const detail of invalid) {
     expect(admitRequirementDetail(detail)).toBeNull();
-    const app = mount(OpsContactRequirementShow, { props: { detail } });
+    const app = mount(
+      pageHeaderHarness("/missions/:mission_id/ops/requirements/:contact_requirement_id").stage(
+        OpsContactRequirementShow,
+      ),
+      { props: { detail } },
+    );
     expect(app.find("#requirement-detail-unavailable").exists()).toBe(true);
     expect(app.find("a,button,input").exists()).toBe(false);
     app.unmount();
@@ -221,7 +283,12 @@ test("malformed and cross-run models render no actions or links", () => {
 
 test("only a matching completed receipt clears selection; storage is bounded and validated", async () => {
   const d = requirementDetailFixture(),
-    app = mount(OpsContactRequirementShow, { props: { detail: d } });
+    app = mount(
+      pageHeaderHarness("/missions/:mission_id/ops/requirements/:contact_requirement_id").stage(
+        OpsContactRequirementShow,
+      ),
+      { props: { detail: d } },
+    );
   await app.get("#select-op-1").setValue(true);
   const result = {
     actorId: "actor-1",

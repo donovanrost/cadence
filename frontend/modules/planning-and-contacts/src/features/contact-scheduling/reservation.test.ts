@@ -4,6 +4,7 @@ import { oneOf } from "@cadence/plugin-sdk/admission";
 import { reservationActions } from "./contact-workflow";
 import { required } from "../../../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test, vi } from "vite-plus/test";
 import OpsContactDetail from "./OpsContactDetail.vue";
 import type { ReservationPort } from "./OpsContactDetail.contracts";
@@ -25,7 +26,12 @@ function harness() {
     execute,
     refresh,
     port,
-    wrapper: mount(OpsContactDetail, { props: { detail, port } }),
+    wrapper: mount(
+      pageHeaderHarness("/missions/:mission_id/ops/contacts/:provider_reservation_id").stage(
+        OpsContactDetail,
+      ),
+      { props: { detail, port } },
+    ),
   };
 }
 test("native approval sends exactly the reviewed proposal and reconciles its completed receipt", async () => {
@@ -67,7 +73,7 @@ test("unknown outcomes retain reasons and refresh never repeats the mutation", a
     (h.wrapper.get("#reject-provider-change-reason").element as HTMLTextAreaElement).value,
   ).toBe("Conflicts with commanding");
   expect(h.wrapper.get("#reject-provider-change").attributes("disabled")).toBeDefined();
-  await h.wrapper.get("#reservation-refresh").trigger("click");
+  await h.wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   await h.wrapper.get("#reject-provider-change-form").trigger("submit");
   await flushPromises();
@@ -164,18 +170,23 @@ test.skipIf(!producer.available)("producer-supplied reservation review", async (
   const execute = vi
     .fn<Extract<ReservationPort, { protocol: "remote-query" }>["execute"]>()
     .mockRejectedValue(new Error("payload only"));
-  const wrapper = mount(OpsContactDetail, {
-    props: {
-      ...props,
-      detail: props.detail,
-      port: {
-        protocol: "remote-query" as const,
-        context: required(detail).context,
-        execute,
-        refresh: vi.fn(),
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/contacts/:provider_reservation_id").stage(
+      OpsContactDetail,
+    ),
+    {
+      props: {
+        ...props,
+        detail: props.detail,
+        port: {
+          protocol: "remote-query" as const,
+          context: required(detail).context,
+          execute,
+          refresh: vi.fn(),
+        },
       },
     },
-  });
+  );
   expect(wrapper.find("#ops-contact-detail-page").exists()).toBe(true);
   const action = process.env.CADENCE_RESERVATION_REVIEW_ACTION;
   if (action) {
@@ -199,7 +210,12 @@ test("reservation links retain the plan and requirement versions actually booked
     requirement_id: "requirement-one",
     requirement_version: 2,
   });
-  const wrapper = mount(OpsContactDetail, { props: { detail } });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/contacts/:provider_reservation_id").stage(
+      OpsContactDetail,
+    ),
+    { props: { detail } },
+  );
   expect(wrapper.get("#reservation-plan").attributes("href")).toBe(
     "/missions/mission-one/ops/plans/plan-one?version=3",
   );

@@ -10,7 +10,6 @@ import {
   canPlan,
   canCreate,
   decision,
-  detailPath,
   reviewHref,
 } from "./requirement-detail";
 import {
@@ -22,7 +21,7 @@ import {
   SELECTION_LIMIT,
 } from "./requirement-selection";
 import RequirementDetailPagination from "./RequirementDetailPagination.vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
 import CadencePanel from "@cadence/ui/CadencePanel.vue";
 
@@ -142,44 +141,32 @@ onBeforeUnmount(() => {
 });
 const label = (value: string) => value.replaceAll("_", " ").replace(/^./, (c) => c.toUpperCase());
 const rowId = (kind: string, id: string) => kind + "-" + encodeURIComponent(id);
+const clip = (text: string, max: number) =>
+  text.length > max ? `${text.slice(0, max - 1)}…` : text;
+useOpsHeader("/missions/:mission_id/ops/requirements/:contact_requirement_id", () => {
+  const detail = d.value;
+  if (!detail) return { title: "Contact requirement" };
+  const requirement = detail.requirement;
+  return {
+    title: label(requirement.intent),
+    description: clip(requirement.outcome, 240),
+    facts: [
+      `v${requirement.version} · ${requirement.priority} · ${requirement.direction}`,
+      label(requirement.lifecycle_state),
+    ],
+    primary: {
+      id: "plan-contact-requirement",
+      label: "Search provider options",
+      icon: "hero-magnifying-glass",
+      disabled: !canPlan(detail) || pending.value,
+      run: plan,
+    },
+  };
+});
 </script>
 
 <template>
   <CadenceOpsViewport v-if="d" id="ops-contact-requirement-show-page">
-    <CadencePageHeading
-      :breadcrumbs="[
-        {
-          label: 'Contact requirements',
-          href: detailPath(d).slice(0, detailPath(d).lastIndexOf('/')),
-        },
-        { label: 'Review' },
-      ]"
-    >
-      <template #eyebrow>Mission operations / requirement review</template>
-      <template #title>{{ label(d.requirement.intent) }}</template>
-      <template #description>{{ d.requirement.outcome }}</template>
-      <template #metadata>
-        <span class="font-mono text-xs uppercase text-primary"
-          >v{{ d.requirement.version }} · {{ d.requirement.priority }} ·
-          {{ d.requirement.direction }}</span
-        >
-        <span class="ml-2 font-mono text-xs uppercase text-base-content/55">{{
-          d.requirement.lifecycle_state
-        }}</span>
-      </template>
-      <template #actions
-        ><button
-          id="plan-contact-requirement"
-          type="button"
-          class="btn btn-primary btn-sm"
-          :disabled="!canPlan(d) || pending"
-          @click="plan"
-        >
-          Search provider options
-        </button></template
-      >
-    </CadencePageHeading>
-
     <aside
       v-if="!canPlan(d)"
       id="requirement-review-readonly"

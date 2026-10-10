@@ -8,6 +8,7 @@ import {
 } from "../../../../../test-support/json-fixture";
 import { oneOf } from "@cadence/plugin-sdk/admission";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test, vi } from "vite-plus/test";
 import {
   contactScheduleContribution,
@@ -34,7 +35,13 @@ function mountPage(page: ContactPage, execute = vi.fn(), read = vi.fn()) {
   let guard = () => true;
   const release = vi.fn();
   const c = contribution(page);
-  const w = mount(c.component, {
+  const route =
+    c === contactRecordContribution
+      ? "/missions/:mission_id/ops/contacts/records/:contact_id"
+      : c === reservationContribution
+        ? "/missions/:mission_id/ops/contacts/:provider_reservation_id"
+        : "/missions/:mission_id/ops/contacts";
+  const w = mount(pageHeaderHarness(route).stage(c.component), {
     props: {
       page,
       port: {
@@ -103,7 +110,7 @@ test("pending decisions survive bootstrap copies, block navigation and recover o
     );
     expect(w.get("#approve-provider-change").attributes("disabled")).toBeDefined();
     read.mockResolvedValue(fresh);
-    await w.get("#reservation-refresh").trigger("click");
+    await w.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(w.get("#reservation-notice").text()).toContain("verified");
     expect(execute).toHaveBeenCalledOnce();
@@ -119,7 +126,7 @@ test("record reads preserve pinned history and failed reads retain the previous 
     read = vi.fn().mockResolvedValue({ ...page, actor_id: "foreign" });
   const { w } = mountPage(page, vi.fn(), read);
   try {
-    await w.get("#contact-record-refresh").trigger("click");
+    await w.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(w.find("#ops-contact-record-page").exists()).toBe(true);
     expect(w.get("#contact-record-notice").text()).toContain("retained");

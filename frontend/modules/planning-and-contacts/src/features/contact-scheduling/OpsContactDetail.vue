@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { inject } from "vue";
 import CadencePanel from "@cadence/ui/CadencePanel.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import {
   RESERVATION_PORT,
   type OpsContactDetailProps,
@@ -28,33 +29,15 @@ const actions: { id: ReservationAction; label: string }[] = [
   { id: "acknowledge-provider-change", label: "Acknowledge change" },
 ];
 const label = (value: string) => value.replaceAll("_", " ");
+useOpsHeader("/missions/:mission_id/ops/contacts/:provider_reservation_id", () => ({
+  title: "Reservation review",
+  ...(connected ? { refresh: { run: refresh, pending: pending.value } } : {}),
+}));
 </script>
 <template>
-  <main v-if="detail" id="ops-contact-detail-page" class="space-y-6 p-4 md:p-6">
+  <main v-if="detail" id="ops-contact-detail-page" class="space-y-6">
     <header class="space-y-3">
-      <a
-        :href="`/missions/${encodeURIComponent(detail.context.mission_id)}/ops/contacts`"
-        class="text-sm text-primary"
-        >Contact scheduling</a
-      >
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p class="text-xs uppercase tracking-widest text-base-content/60">
-            Planning &amp; contacts
-          </p>
-          <h1 class="text-2xl font-semibold">Reservation review</h1>
-          <p class="break-all text-sm text-base-content/70">{{ detail.reservation.id }}</p>
-        </div>
-        <button
-          id="reservation-refresh"
-          type="button"
-          class="rounded border border-base-300 px-4 py-2 text-sm"
-          :disabled="pending || !connected"
-          @click="refresh"
-        >
-          {{ pending ? "Working…" : "Refresh evidence" }}
-        </button>
-      </div>
+      <p class="break-all text-sm text-base-content/70">{{ detail.reservation.id }}</p>
       <p id="reservation-current-state" class="text-sm">
         {{ label(detail.reservation.lifecycle_state) }} · Provider revision
         {{ detail.reservation.provider_revision }} · {{ detail.reservation.starts_at }} –

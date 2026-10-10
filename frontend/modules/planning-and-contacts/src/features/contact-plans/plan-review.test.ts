@@ -5,6 +5,7 @@ import { fixtureRecord, jsonFixture } from "../../../../../test-support/json-fix
 import { oneOf } from "@cadence/plugin-sdk/admission";
 import { expect, test, vi } from "vite-plus/test";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { planReviewContribution } from "../../contact-plans";
 import type { PlanAction } from "./OpsContactPlanShow.contracts";
 import {
@@ -39,9 +40,14 @@ function harness(page = reviewFixture()) {
     resourceId: page.detail.plan.id,
   };
   const props = planReviewContribution.read(page, context);
-  const w = mount(planReviewContribution.component, {
-    props: { ...props, port, readPort: { read } },
-  });
+  const w = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/plans/:contact_plan_id").stage(
+      planReviewContribution.component,
+    ),
+    {
+      props: { ...props, port, readPort: { read } },
+    },
+  );
   return { w, page, execute, read, dispose, canLeave: () => canLeave() };
 }
 async function native(
@@ -96,7 +102,7 @@ test("lost responses recover only the exact captured operation and preserve draf
   });
   await native(h.w, "submit-plan", "Keep this reason");
   h.read.mockResolvedValue(h.page);
-  await h.w.get("#refresh-plan-review").trigger("click");
+  await h.w.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(h.w.get("#submit-plan").attributes("disabled")).toBeDefined();
   expect((h.w.get("#submission-reason").element as HTMLTextAreaElement).value).toBe(
@@ -105,11 +111,11 @@ test("lost responses recover only the exact captured operation and preserve draf
   const foreign = mutableFixture(required(recovered));
   required(required(foreign.operation).receipt).result.actor_id = "foreign";
   h.read.mockResolvedValue(foreign);
-  await h.w.get("#refresh-plan-review").trigger("click");
+  await h.w.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(h.w.find("#plan-operation-receipt").exists()).toBe(false);
   h.read.mockResolvedValue(recovered);
-  await h.w.get("#refresh-plan-review").trigger("click");
+  await h.w.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(h.w.get("#approve-plan").attributes("disabled")).toBeDefined(); // empty approval reason
   expect(h.w.get("#approval-reason").attributes("disabled")).toBeUndefined();
@@ -158,7 +164,7 @@ test("known rejections preserve reasons and require a fresh admitted review", as
   );
   expect(h.w.get("#submit-plan").attributes("disabled")).toBeDefined();
   h.read.mockResolvedValue(completedReview(h.page, required(op)));
-  await h.w.get("#refresh-plan-review").trigger("click");
+  await h.w.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(h.w.get("#submit-plan").attributes("disabled")).toBeUndefined();
   h.w.unmount();
@@ -167,7 +173,7 @@ test("failed and version-substituted reads retain prior evidence, reasons and ac
   const h = harness();
   await h.w.get("#submission-reason").setValue("Retained");
   h.read.mockResolvedValue({ detail: {} });
-  await h.w.get("#refresh-plan-review").trigger("click");
+  await h.w.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(h.w.find("#plan-reviewed-hash").exists()).toBe(true);
   expect((h.w.get("#submission-reason").element as HTMLTextAreaElement).value).toBe("Retained");
@@ -176,7 +182,7 @@ test("failed and version-substituted reads retain prior evidence, reasons and ac
   newer.detail.plan.current_version = 2;
   newer.detail.query.version = 2;
   h.read.mockResolvedValue(newer);
-  await h.w.get("#refresh-plan-review").trigger("click");
+  await h.w.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(h.w.get("#plan-review-summary").text()).toContain(h.page.detail.plan.content_sha256);
   expect((h.w.get("#submission-reason").element as HTMLTextAreaElement).value).toBe("Retained");
@@ -274,7 +280,7 @@ test("a completed execution waits for evidence beyond the pre-execution approved
   expect(h.w.get("#plan-operation-receipt").text()).toContain("execute-plan");
   expect(h.w.get("#execute-plan").attributes("disabled")).toBeDefined();
   h.read.mockResolvedValue(updated);
-  await h.w.get("#refresh-plan-review").trigger("click");
+  await h.w.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(h.w.get("#execute-plan").attributes("disabled")).toBeUndefined();
   expect(h.execute).toHaveBeenCalledTimes(1);

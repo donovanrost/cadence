@@ -2,6 +2,7 @@ import "../../../module-pages.test-support";
 import type { OpsPageAction } from "@cadence/plugin-sdk/ops-pages";
 import { containing } from "../../../../../../test-support/matchers";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   requirementPageFixture,
@@ -34,18 +35,23 @@ function harness() {
     guard = next;
     return dispose;
   });
-  wrapper = mount(OpsModulePage, {
-    props: {
-      contributionId: initial.id,
-      snapshot: initial,
-      context,
-      execute,
-      query,
-      refresh,
-      navigate: vi.fn(),
-      guardNavigation,
+  wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/requirements/:contact_requirement_id").stage(
+      OpsModulePage,
+    ),
+    {
+      props: {
+        contributionId: initial.id,
+        snapshot: initial,
+        context,
+        execute,
+        query,
+        refresh,
+        navigate: vi.fn(),
+        guardNavigation,
+      },
     },
-  });
+  );
   return { initial, execute, query, refresh, dispose, guardNavigation, canLeave: () => guard() };
 }
 test("host binds planning action and lost receipt recovery to the captured resource and token", async () => {

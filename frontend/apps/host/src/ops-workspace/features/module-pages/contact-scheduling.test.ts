@@ -2,6 +2,7 @@ import "../../../module-pages.test-support";
 import type { OpsPageAction } from "@cadence/plugin-sdk/ops-pages";
 import { required } from "../../../../../../test-support/required";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test, vi } from "vite-plus/test";
 import OpsModulePage from "./OpsModulePage.vue";
 import {
@@ -36,17 +37,22 @@ test("host captures reservation identity, query port and token for native decisi
     });
     throw Error("lost response");
   });
-  const w = mount(OpsModulePage, {
-    props: {
-      contributionId: initial.id,
-      snapshot: initial,
-      context: initial.context,
-      execute,
-      query,
-      refresh,
-      navigate: vi.fn(),
+  const w = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/contacts/:provider_reservation_id").stage(
+      OpsModulePage,
+    ),
+    {
+      props: {
+        contributionId: initial.id,
+        snapshot: initial,
+        context: initial.context,
+        execute,
+        query,
+        refresh,
+        navigate: vi.fn(),
+      },
     },
-  });
+  );
   try {
     await w.get("#approve-provider-change-reason").setValue("Reviewed host proposal");
     await w.get("#approve-provider-change-form").trigger("submit");
@@ -58,7 +64,7 @@ test("host captures reservation identity, query port and token for native decisi
       event: "approve-provider-change",
       input: { sequence: 1, payload: { provider_reservation_id: model.reservation.id } },
     });
-    await w.get("#reservation-refresh").trigger("click");
+    await w.get("#page-header-refresh").trigger("click");
     await flushPromises();
     expect(query).toHaveBeenCalledExactlyOnceWith({ id: initial.id, token: initial.token });
     expect(w.get("#reservation-receipt").text()).toContain("approved");

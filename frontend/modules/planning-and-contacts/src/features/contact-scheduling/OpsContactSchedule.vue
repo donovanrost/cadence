@@ -525,7 +525,7 @@ const fieldClass = "w-full rounded border border-base-300 bg-base-100 px-3 py-2 
     </nav>
   </main>
   <div v-else id="contact-schedule-unavailable" role="alert" class="space-y-3 p-6">
-    <h1 class="text-lg font-semibold">Contact scheduling unavailable</h1>
+    <h2 class="text-lg font-semibold">Contact scheduling unavailable</h2>
     <p v-if="notice">{{ notice }}</p>
     <button
       id="contact-schedule-retry"

@@ -8,6 +8,7 @@ import {
 import type { OpsPagePort } from "@cadence/plugin-sdk/ops-pages";
 import { windowValid } from "./fleet-start";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test, vi } from "vite-plus/test";
 import { fleetStartContribution, fleetRunContribution } from "../../fleet-planning";
 import { planningContributions } from "../../contributions";
@@ -52,13 +53,18 @@ test("the start adapter preserves reviewed native payloads and successful receip
     );
   });
   const read = vi.fn().mockResolvedValue(start);
-  const wrapper = mount(fleetStartContribution.component, {
-    props: {
-      ...fleetStartContribution.read(start, context),
-      port: { execute, navigate: vi.fn() },
-      readPort: { read },
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/planning/new").stage(
+      fleetStartContribution.component,
+    ),
+    {
+      props: {
+        ...fleetStartContribution.read(start, context),
+        port: { execute, navigate: vi.fn() },
+        readPort: { read },
+      },
     },
-  });
+  );
   await wrapper.get("#fleet-start-form").trigger("submit");
   await flushPromises();
   await wrapper.get("#fleet-start-create").trigger("click");
@@ -71,7 +77,7 @@ test("the start adapter preserves reviewed native payloads and successful receip
   expect(wrapper.get("#fleet-start-open-run").attributes("href")).toBe(
     "/missions/mission-one/ops/planning/runs/run-one",
   );
-  await wrapper.get("#fleet-start-refresh").trigger("click");
+  await wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(read).toHaveBeenCalledOnce();
   expect(execute).toHaveBeenCalledTimes(2);
@@ -93,7 +99,11 @@ test.skipIf(!producer.available)("producer-supplied host fleet workflow", async 
   const contribution =
     snapshot.id === fleetStartContribution.id ? fleetStartContribution : fleetRunContribution;
   const execute = vi.fn<OpsPagePort["execute"]>().mockRejectedValue(Error("Captured request"));
-  const wrapper = mount(contribution.component, {
+  const route =
+    contribution === fleetStartContribution
+      ? "/missions/:mission_id/ops/planning/new"
+      : "/missions/:mission_id/ops/planning/runs/:fleet_planning_run_id";
+  const wrapper = mount(pageHeaderHarness(route).stage(contribution.component), {
     props: {
       ...contribution.read(snapshot.data, context),
       port: { execute, navigate: vi.fn() },

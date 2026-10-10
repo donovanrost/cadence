@@ -9,7 +9,7 @@ import type {
   OpsFleetPlanningPolicyProps,
   OpsFleetPlanningPolicyEmits,
 } from "./OpsFleetPlanningPolicy.contracts";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceCollapsible from "@cadence/ui/CadenceCollapsible.vue";
 import CadenceCollapsibleContent from "@cadence/ui/CadenceCollapsibleContent.vue";
 import CadenceCollapsibleTrigger from "@cadence/ui/CadenceCollapsibleTrigger.vue";
@@ -31,6 +31,10 @@ import CadencePanel from "@cadence/ui/CadencePanel.vue";
 const props = defineProps<OpsFleetPlanningPolicyProps>();
 
 const emit = defineEmits<OpsFleetPlanningPolicyEmits>();
+useOpsHeader("/missions/:mission_id/ops/planning/policy", () => ({
+  description: props.page.header.copy,
+  facts: [props.page.state.label],
+}));
 
 const searchPolicyFieldKeys = [
   "max_horizon_duration",
@@ -350,24 +354,6 @@ const revokeGrant = () => {
 
 <template>
   <section id="ops-fleet-planning-policy-page" class="h-full overflow-y-auto bg-base-100">
-    <CadencePageHeading
-      :breadcrumbs="[
-        { label: page.back.label, href: page.back.href },
-        { label: page.header.title },
-      ]"
-    >
-      <template #title>{{ page.header.title }}</template>
-      <template #eyebrow>{{ page.header.eyebrow }}</template>
-      <template #description>{{ page.header.copy }}</template>
-      <template #actions> </template>
-
-      <template #metadata
-        ><span :id="page.state.id" :class="page.state.class">
-          {{ page.state.label }}
-        </span></template
-      ></CadencePageHeading
-    >
-
     <div class="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(24rem,0.75fr)]">
       <div class="min-w-0 space-y-5">
         <CadencePanel

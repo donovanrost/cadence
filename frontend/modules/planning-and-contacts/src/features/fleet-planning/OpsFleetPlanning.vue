@@ -217,7 +217,7 @@ useOpsHeader("/missions/:mission_id/ops/planning", () => {
     </div>
   </main>
   <section v-else id="fleet-directory-unavailable" class="space-y-3 p-6" role="alert">
-    <h1 class="text-xl font-semibold">Fleet directory unavailable</h1>
+    <h2 class="text-xl font-semibold">Fleet directory unavailable</h2>
     <p class="text-sm text-base-content/60">Current fleet evidence could not be verified.</p>
     <button
       v-if="connected"

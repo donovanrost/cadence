@@ -6,7 +6,7 @@ import type {
   OpsContactRequirementTemplateProps,
   OpsContactRequirementTemplateEmits,
 } from "./OpsContactRequirementTemplate.contracts";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceOpsViewport from "@cadence/ui/CadenceOpsViewport.vue";
 import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
 import CadenceInlineWarning from "@cadence/ui/CadenceInlineWarning.vue";
@@ -38,6 +38,9 @@ const templateFields = [
 ] as const;
 
 const props = defineProps<OpsContactRequirementTemplateProps>();
+useOpsHeader("/missions/:mission_id/ops/requirement-templates", () => ({
+  description: props.page.header.copy,
+}));
 
 const emit = defineEmits<OpsContactRequirementTemplateEmits>();
 
@@ -123,18 +126,6 @@ const fieldClass = (field: FormField) => [
 
 <template>
   <CadenceOpsViewport :id="page.id">
-    <CadencePageHeading
-      :breadcrumbs="[
-        { label: page.back.label, href: page.back.href },
-        { label: page.header.title },
-      ]"
-    >
-      <template #title>{{ page.header.title }}</template>
-      <template #eyebrow>{{ page.header.eyebrow }}</template>
-      <template #description>{{ page.header.copy }}</template>
-      <template #actions></template>
-    </CadencePageHeading>
-
     <div class="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(26rem,0.85fr)]">
       <CadencePanel
         class="min-w-0 border border-base-300 bg-base-200/15"

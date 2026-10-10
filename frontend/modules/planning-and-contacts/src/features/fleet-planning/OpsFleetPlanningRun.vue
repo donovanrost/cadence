@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, h, inject } from "vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import CadencePanel from "@cadence/ui/CadencePanel.vue";
 import {
   FLEET_RUN_PORT,
@@ -32,6 +33,10 @@ const planHref = (id: string, version: number) =>
     ? `/missions/${encodeURIComponent(model.value.context.mission_id)}/ops/plans/${encodeURIComponent(id)}?version=${version}`
     : undefined;
 const label = (v: string) => v.replaceAll("_", " ");
+useOpsHeader("/missions/:mission_id/ops/planning/runs/:fleet_planning_run_id", () => ({
+  title: "Fleet planning run",
+  ...(connected ? { refresh: { run: () => refresh(), pending: !!pending.value } } : {}),
+}));
 const Pager = (p: { kind: keyof RunQuery; page: number; more: boolean; label: string }) => {
   const current = model.value;
   if (!current) return null;
@@ -70,26 +75,9 @@ const Pager = (p: { kind: keyof RunQuery; page: number; more: boolean; label: st
 };
 </script>
 <template>
-  <main v-if="model" id="ops-fleet-planning-run-page" class="space-y-6 p-4 md:p-6">
+  <main v-if="model" id="ops-fleet-planning-run-page" class="space-y-6">
     <header class="space-y-3">
-      <a id="fleet-run-back" :href="planning" class="text-sm text-primary">Fleet planning</a>
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div class="min-w-0">
-          <p class="text-xs uppercase tracking-widest text-base-content/60">
-            Planning &amp; contacts
-          </p>
-          <h1 class="mt-1 text-2xl font-semibold">Fleet planning run</h1>
-          <p class="mt-2 break-all font-mono text-xs text-base-content/60">{{ model.id }}</p>
-        </div>
-        <button
-          id="fleet-run-refresh"
-          class="btn btn-ghost btn-sm"
-          :disabled="!!pending || !connected"
-          @click="refresh()"
-        >
-          {{ pending === "read" ? "Refreshing…" : "Refresh evidence" }}
-        </button>
-      </div>
+      <p class="break-all font-mono text-xs text-base-content/60">{{ model.id }}</p>
       <div class="flex flex-wrap items-center gap-3 text-sm">
         <span id="fleet-run-lifecycle" class="border border-base-300 px-2 py-1 font-medium">{{
           label(model.lifecycle_state)
@@ -470,7 +458,7 @@ const Pager = (p: { kind: keyof RunQuery; page: number; more: boolean; label: st
     </section>
   </main>
   <section v-else id="fleet-run-unavailable" role="alert" class="space-y-3 p-6">
-    <h1 class="text-xl font-semibold">Fleet run unavailable</h1>
+    <h2 class="text-xl font-semibold">Fleet run unavailable</h2>
     <p class="text-sm text-base-content/60">The run evidence could not be verified.</p>
     <button
       v-if="connected"

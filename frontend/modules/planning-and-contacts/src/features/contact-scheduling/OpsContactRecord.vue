@@ -2,6 +2,7 @@
 import ContactLink from "./ContactLink.vue";
 import { computed, inject } from "vue";
 import CadencePanel from "@cadence/ui/CadencePanel.vue";
+import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import { CONTACT_RECORD_PORT, type OpsContactRecordProps } from "./OpsContactRecord.contracts";
 import { contactPath, recordHref, sectionPage } from "./contact-record";
 import { useContactRecord } from "./contact-record-state";
@@ -11,6 +12,10 @@ const { record, pending, notice, refresh, connected } = useContactRecord(
   props.port ?? inject(CONTACT_RECORD_PORT, undefined),
 );
 const label = (value: string) => value.replaceAll("_", " ");
+useOpsHeader("/missions/:mission_id/ops/contacts/records/:contact_id", () => ({
+  title: record.value?.subject.kind === "realized" ? "Realized contact" : "Scheduled contact",
+  ...(connected ? { refresh: { run: refresh, pending: pending.value } } : {}),
+}));
 const pathSections = computed(() =>
   record.value
     ? [
@@ -39,35 +44,11 @@ const contextSections = computed(() =>
 );
 </script>
 <template>
-  <main v-if="record" id="ops-contact-record-page" class="space-y-6 p-4 md:p-6">
+  <main v-if="record" id="ops-contact-record-page" class="space-y-6">
     <header class="space-y-3">
-      <ContactLink
-        :href="`/missions/${encodeURIComponent(record.context.mission_id)}/ops/contacts`"
-        class="text-sm text-primary"
-        >Contact scheduling</ContactLink
-      >
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p class="text-xs uppercase tracking-widest text-base-content/60">
-            Planning &amp; contacts
-          </p>
-          <h1 class="text-2xl font-semibold">
-            {{ record.subject.kind === "scheduled" ? "Scheduled contact" : "Realized contact" }}
-          </h1>
-          <p id="contact-record-identity" class="break-all text-sm text-base-content/70">
-            {{ record.subject.id }}
-          </p>
-        </div>
-        <button
-          id="contact-record-refresh"
-          type="button"
-          class="rounded border border-base-300 px-4 py-2 text-sm"
-          :disabled="pending || !connected"
-          @click="refresh"
-        >
-          {{ pending ? "Refreshing…" : "Refresh evidence" }}
-        </button>
-      </div>
+      <p id="contact-record-identity" class="break-all text-sm text-base-content/70">
+        {{ record.subject.id }}
+      </p>
       <p
         v-if="notice"
         id="contact-record-notice"
@@ -354,7 +335,7 @@ const contextSections = computed(() =>
     </CadencePanel>
   </main>
   <div v-else id="contact-record-unavailable" role="alert" class="space-y-3 p-6">
-    <h1 class="text-lg font-semibold">Contact record unavailable</h1>
+    <h2 class="text-lg font-semibold">Contact record unavailable</h2>
     <p v-if="notice">{{ notice }}</p>
     <button
       id="contact-record-retry"

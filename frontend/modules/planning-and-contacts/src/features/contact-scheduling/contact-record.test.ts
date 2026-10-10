@@ -1,6 +1,7 @@
 import { fixtureRecord } from "../../../../../test-support/json-fixture";
 import { required } from "../../../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test, vi } from "vite-plus/test";
 import { OpsContactRecord, type ContactRecordPort } from "../../contact-scheduling";
 import { admitContactRecord, recordHref } from "./contact-record";
@@ -8,7 +9,12 @@ import { contactRecordFixture } from "./contact-record.test-support";
 
 test("historical schedule values and current or realized paths remain visibly distinct", () => {
   const record = contactRecordFixture();
-  const wrapper = mount(OpsContactRecord, { props: { record } });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/contacts/records/:contact_id").stage(
+      OpsContactRecord,
+    ),
+    { props: { record } },
+  );
   expect(wrapper.get("#contact-record-reviewed-window").text()).toContain("12:00:00Z");
   expect(wrapper.get("#contact-record-schedule").text()).toContain("12:01:00Z");
   expect(wrapper.get("#contact-record-historical").text()).toContain(
@@ -37,7 +43,12 @@ test("a standalone realized record renders empty execution evidence without a fi
   r.realized_paths.entries = [];
   r.sources.entries = [];
   r.intents.entries = [];
-  const wrapper = mount(OpsContactRecord, { props: { record: r } });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/contacts/records/:contact_id").stage(
+      OpsContactRecord,
+    ),
+    { props: { record: r } },
+  );
   expect(wrapper.find("#contact-record-no-schedule").exists()).toBe(true);
   expect(wrapper.find("#contact-record-realized_paths-empty").exists()).toBe(true);
   expect(wrapper.find("#contact-record-schedule").exists()).toBe(false);
@@ -57,7 +68,12 @@ test("history and section navigation preserve the selected revision and independ
     proposal_hash: "a".repeat(64),
   };
   required(r.review).provider_change_id = "change-one";
-  const wrapper = mount(OpsContactRecord, { props: { record: r } });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/contacts/records/:contact_id").stage(
+      OpsContactRecord,
+    ),
+    { props: { record: r } },
+  );
   expect(wrapper.get("#contact-record-reservation-link").attributes("href")).toBe(
     "/missions/mission-one/ops/contacts/reservation-one?change_id=change-one",
   );
@@ -72,14 +88,19 @@ test("read recovery retains the previous record, rejects foreign refreshes and s
         resolve = done;
       }),
   );
-  const wrapper = mount(OpsContactRecord, {
-    props: {
-      record,
-      port: { protocol: "remote-query" as const, context: record.context, refresh },
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/contacts/records/:contact_id").stage(
+      OpsContactRecord,
+    ),
+    {
+      props: {
+        record,
+        port: { protocol: "remote-query" as const, context: record.context, refresh },
+      },
     },
-  });
-  await wrapper.get("#contact-record-refresh").trigger("click");
-  await wrapper.get("#contact-record-refresh").trigger("click");
+  );
+  await wrapper.get("#page-header-refresh").trigger("click");
+  await wrapper.get("#page-header-refresh").trigger("click");
   expect(refresh).toHaveBeenCalledTimes(1);
   const foreign = structuredClone(record);
   foreign.context.organization_id = "foreign";
@@ -88,12 +109,12 @@ test("read recovery retains the previous record, rejects foreign refreshes and s
   expect(wrapper.get("#contact-record-identity").text()).toBe("scheduled-one");
   expect(wrapper.get("#contact-record-notice").text()).toContain("previous record is retained");
   refresh.mockRejectedValue(new Error("private failure"));
-  await wrapper.get("#contact-record-refresh").trigger("click");
+  await wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(wrapper.get("#contact-record-identity").text()).toBe("scheduled-one");
   expect(wrapper.text()).not.toContain("private failure");
   refresh.mockResolvedValue(record);
-  await wrapper.get("#contact-record-refresh").trigger("click");
+  await wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(wrapper.get("#contact-record-notice").text()).toBe("Contact evidence refreshed.");
   wrapper.unmount();
@@ -107,13 +128,18 @@ test("a departed record ignores a late read and rejects replacement identity", a
         resolve = done;
       }),
   );
-  const wrapper = mount(OpsContactRecord, {
-    props: {
-      record,
-      port: { protocol: "remote-query" as const, context: record.context, refresh },
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/contacts/records/:contact_id").stage(
+      OpsContactRecord,
+    ),
+    {
+      props: {
+        record,
+        port: { protocol: "remote-query" as const, context: record.context, refresh },
+      },
     },
-  });
-  await wrapper.get("#contact-record-refresh").trigger("click");
+  );
+  await wrapper.get("#page-header-refresh").trigger("click");
   const other = structuredClone(record);
   other.subject.id = "other";
   other.query.contact_id = "other";

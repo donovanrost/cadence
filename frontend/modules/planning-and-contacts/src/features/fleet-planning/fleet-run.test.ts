@@ -7,6 +7,7 @@ import {
 } from "../../../../../test-support/json-fixture";
 import type { FleetRunModel, FleetRunPort } from "./OpsFleetPlanningRun.contracts";
 import { flushPromises, mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test, vi } from "vite-plus/test";
 import { OpsFleetPlanningRun } from "../../fleet-planning";
 import { admitFleetRun } from "./fleet-run";
@@ -17,14 +18,19 @@ function harness(model: FleetRunModel = runFixture()) {
       startCompletion(runReceipt(model, action)),
     ),
     refresh = vi.fn(async () => model);
-  const wrapper = mount(OpsFleetPlanningRun, {
-    props: { run: model, port: { context: model.context, execute, refresh } },
-  });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/ops/planning/runs/:fleet_planning_run_id").stage(
+      OpsFleetPlanningRun,
+    ),
+    {
+      props: { run: model, port: { context: model.context, execute, refresh } },
+    },
+  );
   return { model, wrapper, execute, refresh };
 }
 test("refresh is read-only and continuation carries exact observed run evidence", async () => {
   const h = harness();
-  await h.wrapper.get("#fleet-run-refresh").trigger("click");
+  await h.wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(h.execute).not.toHaveBeenCalled();
   await h.wrapper.get("#fleet-run-continue").trigger("click");
@@ -72,7 +78,7 @@ test("unknown outcomes stay locked through successful read recovery", async () =
   await h.wrapper.get("#fleet-run-continue").trigger("click");
   await flushPromises();
   expect(h.wrapper.find("#fleet-run-uncertain").exists()).toBe(true);
-  await h.wrapper.get("#fleet-run-refresh").trigger("click");
+  await h.wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect((h.wrapper.get("#fleet-run-continue").element as HTMLButtonElement).disabled).toBe(true);
   expect(h.execute).toHaveBeenCalledTimes(1);
@@ -83,7 +89,7 @@ test("failed reads retain confirmed receipts and input evidence", async () => {
   await h.wrapper.get("#fleet-run-continue").trigger("click");
   await flushPromises();
   h.refresh.mockRejectedValueOnce(Error("lost"));
-  await h.wrapper.get("#fleet-run-refresh").trigger("click");
+  await h.wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(h.wrapper.find("#fleet-run-receipt").exists()).toBe(true);
   expect(h.wrapper.find("#fleet-run-input-ref-one").exists()).toBe(true);
@@ -195,7 +201,7 @@ test("fresh evidence after continuation enables repair without unlocking a later
   next.evidence.sha256 = "f".repeat(64);
   next.repair.evidence.run_sha256 = next.evidence.sha256;
   h.refresh.mockResolvedValue(next);
-  await h.wrapper.get("#fleet-run-refresh").trigger("click");
+  await h.wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect((h.wrapper.get("#fleet-run-repair-submit").element as HTMLButtonElement).disabled).toBe(
     false,
@@ -203,7 +209,7 @@ test("fresh evidence after continuation enables repair without unlocking a later
   h.execute.mockRejectedValueOnce(Error("Unconfirmed repair"));
   await h.wrapper.get("#fleet-run-repair-form").trigger("submit");
   await flushPromises();
-  await h.wrapper.get("#fleet-run-refresh").trigger("click");
+  await h.wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect((h.wrapper.get("#fleet-run-repair-submit").element as HTMLButtonElement).disabled).toBe(
     true,

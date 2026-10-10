@@ -5,6 +5,7 @@ import { oneOf } from "@cadence/plugin-sdk/admission";
 import { planReviewActions } from "./plan-review";
 import { test, expect, vi } from "vite-plus/test";
 import { flushPromises, mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { OpsContactPlanShow, type PlanDetailPort } from "../../contact-plans";
 import { planFixture } from "./fixtures.test-support";
 import { admitPlanDetail, canAct, planDecision, reviewHref } from "./plan-detail";
@@ -16,7 +17,16 @@ function harness() {
     execute: vi.fn(),
     refresh: vi.fn(),
   };
-  return { props, port, wrapper: mount(OpsContactPlanShow, { props: { ...props, port } }) };
+  return {
+    props,
+    port,
+    wrapper: mount(
+      pageHeaderHarness("/missions/:mission_id/ops/plans/:contact_plan_id").stage(
+        OpsContactPlanShow,
+      ),
+      { props: { ...props, port } },
+    ),
+  };
 }
 const receipt = (d: ReturnType<typeof planFixture>["detail"]) => ({
   receiptId: "receipt-one",
@@ -82,7 +92,7 @@ test("uncertain outcomes preserve reasons and stay locked through read-only reco
   expect((wrapper.get("#submission-reason").element as HTMLTextAreaElement).value).toBe(
     "Keep my reason",
   );
-  await wrapper.get("#refresh-plan-review").trigger("click");
+  await wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(wrapper.get("#submit-plan").attributes("disabled")).toBeDefined();
   expect(port.execute).toHaveBeenCalledTimes(1);
@@ -187,7 +197,12 @@ test.skipIf(!producer.available)(
       refresh: vi.fn(),
       execute: vi.fn(() => new Promise(() => {})),
     };
-    const wrapper = mount(OpsContactPlanShow, { props: { detail, port } });
+    const wrapper = mount(
+      pageHeaderHarness("/missions/:mission_id/ops/plans/:contact_plan_id").stage(
+        OpsContactPlanShow,
+      ),
+      { props: { detail, port } },
+    );
     if (action === "execute-plan") await wrapper.get("#execute-plan").trigger("click");
     else {
       const form =
@@ -221,7 +236,7 @@ test("a prior confirmed submission cannot unlock a later uncertain approval", as
   await wrapper.get("#approval-reason").setValue("Approve review");
   await wrapper.get("#approval").trigger("submit");
   await flushPromises();
-  await wrapper.get("#refresh-plan-review").trigger("click");
+  await wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(wrapper.get("#approve-plan").attributes("disabled")).toBeDefined();
   expect(port.execute).toHaveBeenCalledTimes(2);
@@ -243,7 +258,7 @@ test("a confirmed decision can recover from a failed refresh without repeating t
   await wrapper.get("#submission").trigger("submit");
   await flushPromises();
   expect(wrapper.get("#approval-reason").attributes("disabled")).toBeDefined();
-  await wrapper.get("#refresh-plan-review").trigger("click");
+  await wrapper.get("#page-header-refresh").trigger("click");
   await flushPromises();
   expect(wrapper.get("#approval-reason").attributes("disabled")).toBeUndefined();
   expect(port.execute).toHaveBeenCalledTimes(1);
