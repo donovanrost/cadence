@@ -7,6 +7,7 @@ import type {
   HostContext,
 } from "@cadence/plugin-sdk";
 import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
+import FederatedPageFrame from "./FederatedPageFrame.vue";
 import RemoteApplicationBoundary from "./RemoteApplicationBoundary.vue";
 import {
   loadPhoenixApplicationCatalog,
@@ -234,14 +235,19 @@ function boundedCatalogFetch(
       </div>
     </section>
 
-    <RemoteApplicationBoundary
+    <FederatedPageFrame
       v-else-if="application && bridge && context"
-      :key="`${application.release.releaseId}:${mountGeneration}`"
       :application="application"
-      :bridge="bridge"
       :context="context"
-      :fallback-href="props.fallbackHref"
-      @retry="remountApplication"
-    />
+    >
+      <RemoteApplicationBoundary
+        :key="`${application.release.releaseId}:${mountGeneration}`"
+        :application="application"
+        :bridge="bridge"
+        :context="context"
+        :fallback-href="props.fallbackHref"
+        @retry="remountApplication"
+      />
+    </FederatedPageFrame>
   </div>
 </template>

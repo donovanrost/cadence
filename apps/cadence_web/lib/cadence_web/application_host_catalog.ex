@@ -24,7 +24,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   alias Cadence.Ids
   alias Cadence.Missions.Mission
   alias Cadence.Spacecraft
-  alias CadenceWeb.ApplicationReleaseRegistry
+  alias CadenceWeb.{ApplicationReleaseRegistry, HostRoutes}
 
   @application_catalog_schema "cadence.first-party-frontend-catalog.v1"
   @application_host_contract "cadence.application-host.v1"
@@ -1035,7 +1035,11 @@ defmodule CadenceWeb.ApplicationHostCatalog do
       "surface" => surface_document(surface, release),
       "release" => release_document(release, manifest_url)
     }
+    |> put_host_route(HostRoutes.for_surface(surface.scope, surface.navigation))
   end
+
+  defp put_host_route(document, nil), do: document
+  defp put_host_route(document, route), do: Map.put(document, "hostRoute", route)
 
   defp surface_document(surface, release) do
     %{

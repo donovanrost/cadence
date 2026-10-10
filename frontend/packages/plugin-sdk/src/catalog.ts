@@ -1,4 +1,5 @@
 import { isHostContext, type HostContext } from "./bridge";
+import { isRouteId, type RouteId } from "./routes";
 import {
   APPLICATION_HOST_CONTRACT,
   assertCompatibleManifest,
@@ -31,6 +32,8 @@ export interface CatalogApplication {
   };
   surface: FederatedSurfaceDefinition;
   release: FederatedApplicationRelease;
+  /** The host catalog page this surface stands in for; the host draws its header. */
+  hostRoute?: RouteId;
 }
 
 export interface HostSessionDescriptor {
@@ -143,7 +146,9 @@ function validCatalogApplication(value: unknown): value is CatalogApplication {
     nonEmptyString(value.description) &&
     validPackage(value.package) &&
     validSurface(value.surface) &&
-    validRelease(value.release)
+    validRelease(value.release) &&
+    (value.hostRoute === undefined ||
+      (typeof value.hostRoute === "string" && isRouteId(value.hostRoute)))
   );
 }
 
