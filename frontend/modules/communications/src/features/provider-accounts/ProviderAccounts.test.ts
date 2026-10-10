@@ -1,6 +1,7 @@
 import { required } from "../../../../../test-support/required";
 import { readFileSync } from "node:fs";
 import { mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import * as accounts from "../../provider-accounts";
 import { registrationFixture, detailFixture, listFixture } from "./provider-accounts.test-support";
@@ -30,7 +31,10 @@ test("legacy provider account surfaces are exact public-entry adapters", () => {
 });
 
 test.each([false, true])("directory retains scoped links and empty state, empty=%s", (empty) => {
-  const wrapper = mount(accounts.ProviderAccountListPage, { props: listFixture(empty) });
+  const header = pageHeaderHarness("/provider-accounts");
+  const wrapper = mount(header.stage(accounts.ProviderAccountListPage), {
+    props: listFixture(empty),
+  });
   expect(wrapper.find('a[href="/provider-accounts/new"]').exists()).toBe(true);
   expect(wrapper.find("#provider-accounts-empty-state").exists()).toBe(empty);
   expect(wrapper.find("#provider-account-account-1").exists()).toBe(!empty);
@@ -109,8 +113,12 @@ test("registration accepts a server-corrected unavailable connector", async () =
 });
 
 test("detail keeps configured versions, audit rows and string-valued grant payloads", async () => {
-  const wrapper = mount(accounts.ProviderAccountShow, { props: detailFixture() });
-  expect(wrapper.text()).toContain("Config v3");
+  const header = pageHeaderHarness("/provider-accounts/:provider_account_id");
+  const wrapper = mount(accounts.ProviderAccountShow, {
+    props: detailFixture(),
+    global: { provide: header.provide },
+  });
+  expect(header.header().facts).toEqual(["Config v3"]);
   expect(wrapper.get("#grant-row-1").text()).toContain("v2");
   expect(wrapper.find("#audit-row-1").exists()).toBe(true);
   await wrapper.get("#grant-max_quota").setValue("0");
@@ -136,20 +144,22 @@ test("credential and grant revocation require confirmation; disabled actions sta
   const props = detailFixture();
   const confirm = vi.fn().mockReturnValue(false);
   vi.stubGlobal("confirm", confirm);
-  const wrapper = mount(accounts.ProviderAccountShow, { props });
+  const header = pageHeaderHarness("/provider-accounts/:provider_account_id");
+  const wrapper = mount(header.stage(accounts.ProviderAccountShow), { props });
+  const page = wrapper.findComponent(accounts.ProviderAccountShow);
   await wrapper.get("#revoke-credential").trigger("click");
   await wrapper.get("#revoke-grant-1").trigger("click");
-  expect(wrapper.emitted("revoke-credential")).toBeUndefined();
-  expect(wrapper.emitted("revoke-grant")).toBeUndefined();
+  expect(page.emitted("revoke-credential")).toBeUndefined();
+  expect(page.emitted("revoke-grant")).toBeUndefined();
   confirm.mockReturnValue(true);
   await wrapper.get("#revoke-credential").trigger("click");
   await wrapper.get("#revoke-grant-1").trigger("click");
-  expect(wrapper.emitted("revoke-credential")).toEqual([[{}]]);
-  expect(wrapper.emitted("revoke-grant")).toEqual([[{ "grant-id": "grant-1" }]]);
+  expect(page.emitted("revoke-credential")).toEqual([[{}]]);
+  expect(page.emitted("revoke-grant")).toEqual([[{ "grant-id": "grant-1" }]]);
   await wrapper.get("#validate-account").trigger("click");
   await wrapper.get("#rotate-credential").trigger("click");
-  expect(wrapper.emitted("validate-account")).toEqual([[{}]]);
-  expect(wrapper.emitted("rotate-credential")).toEqual([[{}]]);
+  expect(page.emitted("validate-account")).toEqual([[{}]]);
+  expect(page.emitted("rotate-credential")).toEqual([[{}]]);
   await wrapper.setProps({
     actions: {
       ...required(props.actions),
@@ -160,8 +170,8 @@ test("credential and grant revocation require confirmation; disabled actions sta
   });
   await wrapper.get("#validate-account").trigger("click");
   await wrapper.get("#rotate-credential").trigger("click");
-  expect(wrapper.emitted("validate-account")).toHaveLength(1);
-  expect(wrapper.emitted("rotate-credential")).toHaveLength(1);
+  expect(page.emitted("validate-account")).toHaveLength(1);
+  expect(page.emitted("rotate-credential")).toHaveLength(1);
   expect(wrapper.find("#revoke-credential").exists()).toBe(false);
   wrapper.unmount();
 });

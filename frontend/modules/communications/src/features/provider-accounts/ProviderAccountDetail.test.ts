@@ -1,6 +1,7 @@
 import { containing } from "../../../../../test-support/matchers";
 import { required } from "../../../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import ProviderAccountDetail from "./ProviderAccountDetail.vue";
 import { accountDetailFixture } from "./detail.test-support";
@@ -15,8 +16,9 @@ function setup() {
   const execute = vi.fn<AccountDetailPort["execute"]>(async () => receipt({ patch: model }));
   const query = vi.fn(async () => model);
   const port = { execute, query };
-  const wrapper = mount(ProviderAccountDetail, { props: { model, port } });
-  return { wrapper, model, port, execute, query };
+  const header = pageHeaderHarness("/provider-accounts/:provider_account_id");
+  const wrapper = mount(header.stage(ProviderAccountDetail), { props: { model, port } });
+  return { wrapper, header, model, port, execute, query };
 }
 test("account validation carries identity and updates without losing an unrelated grant draft", async () => {
   const { wrapper, execute, query } = setup();
@@ -196,7 +198,7 @@ test("read-only refresh failures preserve the mounted page and editable draft", 
 test.each(["refresh", "action"])(
   "late %s replies cannot overwrite a different account",
   async (operation) => {
-    const { wrapper, execute, query } = setup();
+    const { wrapper, header, execute, query } = setup();
     const pending = deferred<unknown>();
     if (operation === "refresh") {
       query.mockImplementationOnce(() => pending.promise as ReturnType<typeof query>);
@@ -214,7 +216,7 @@ test.each(["refresh", "action"])(
       operation === "refresh" ? accountDetailFixture() : receipt({ patch: accountDetailFixture() }),
     );
     await flushPromises();
-    expect(wrapper.text()).toContain("Second account");
+    expect(header.header().title).toBe("Second account");
     wrapper.unmount();
   },
 );

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import { reactive, watch } from "vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 import CadenceFormActions from "@cadence/ui/CadenceFormActions.vue";
@@ -23,6 +23,9 @@ const props = defineProps<{
   options: RoutingRuleOptions;
   feedback?: Feedback;
 }>();
+useManagementHeader("/missions/:mission_id/comms/routing/new", () => ({
+  description: props.page.subtitle,
+}));
 
 const emit = defineEmits<{
   validate: [payload: RoutingRulePayload];
@@ -67,11 +70,6 @@ const save = () => emit("save", { routing_rule: routingRuleValues() });
 
 <template>
   <CadenceFormPageFrame :id="page.id">
-    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
-      <template #title>{{ page.title }}</template>
-      <template #description>{{ page.subtitle }}</template>
-    </CadencePageHeading>
-
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
       <CadenceFormSectionFrame id="routing-rule-intent-section">
         <CadenceFormSectionHeader

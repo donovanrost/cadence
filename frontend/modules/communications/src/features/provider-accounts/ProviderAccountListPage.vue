@@ -1,31 +1,24 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
+import { href } from "@cadence/plugin-sdk/routes";
 import ProviderAccountCards from "./ProviderAccountCards.vue";
 import type { ProviderAccountDirectory } from "./list.contracts";
-defineProps<ProviderAccountDirectory>();
+const props = defineProps<ProviderAccountDirectory>();
+useManagementHeader("/provider-accounts", () => ({
+  description:
+    "Organization-owned ground network control planes. Grant access to missions without copying credentials.",
+  facts: [`${props.count} registered`],
+  primary: {
+    id: "new-provider-account",
+    label: "New account",
+    icon: "hero-plus",
+    href: href("/provider-accounts/new"),
+  },
+}));
 </script>
 
 <template>
   <div id="provider-accounts-page" class="space-y-6">
-    <CadencePageHeading :breadcrumbs="[{ label: 'Provider Accounts' }]">
-      <template #title>Provider Accounts</template>
-      <template #description
-        >Organization-owned ground network control planes. Grant access to missions without copying
-        credentials.</template
-      >
-      <template #metadata
-        ><span>{{ count }} registered</span></template
-      >
-      <template #actions>
-        <a
-          id="new-provider-account-link"
-          href="/provider-accounts/new"
-          class="btn btn-primary btn-sm gap-1"
-        >
-          <span class="hero-plus h-4 w-4"></span>New Account
-        </a>
-      </template>
-    </CadencePageHeading>
     <div
       v-if="count === 0"
       id="provider-accounts-empty-state"

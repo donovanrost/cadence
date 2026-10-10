@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import { reactive, watch } from "vue";
 import CadenceNoticeFrame from "@cadence/ui/CadenceNoticeFrame.vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
@@ -114,15 +114,11 @@ const validate = () => {
 };
 
 const save = () => emit("save", { provider_account: values() });
+useManagementHeader("/provider-accounts/new", () => ({ description: props.page.subtitle }));
 </script>
 
 <template>
   <div :id="page.id" class="max-w-3xl space-y-6">
-    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
-      <template #title>{{ page.heading }}</template>
-      <template #description>{{ page.subtitle }}</template>
-    </CadencePageHeading>
-
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
       <input
         v-for="fieldKey in form.hidden_field_keys"

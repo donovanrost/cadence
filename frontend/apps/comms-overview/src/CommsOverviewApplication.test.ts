@@ -1,5 +1,6 @@
 import { containing } from "../../../test-support/matchers";
 import { flushPromises, mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   assertReleaseMatchesModule,
@@ -117,7 +118,12 @@ function propsFor(query: unknown): FullPageSurfaceProps {
 describe("Comms Overview federated adapter", () => {
   it("queries the mission context and renders the real Phoenix presentation page", async () => {
     const query = vi.fn<HostBridge["query"]>().mockResolvedValue(presentationResponse);
-    const wrapper = mount(CommsOverviewApplication, { props: propsFor(query) });
+    // The host draws the title (and the mission in its breadcrumbs); the page describes it.
+    const header = pageHeaderHarness("/missions/:mission_id/comms");
+    const wrapper = mount(CommsOverviewApplication, {
+      props: propsFor(query),
+      global: { provide: header.provide },
+    });
 
     expect(wrapper.find("#comms-overview-loading").exists()).toBe(true);
     await flushPromises();
@@ -130,7 +136,7 @@ describe("Comms Overview federated adapter", () => {
     expect(wrapper.find("#comms-overview-page").exists()).toBe(true);
     expect(wrapper.find("#comms-overview-content").exists()).toBe(true);
     expect(wrapper.find("#comms-transports").exists()).toBe(true);
-    expect(wrapper.text()).toContain("Firebird");
+    expect(header.header().description).toBeTypeOf("string");
     wrapper.unmount();
   });
 

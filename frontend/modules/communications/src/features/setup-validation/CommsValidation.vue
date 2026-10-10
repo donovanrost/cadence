@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { findingDomId } from "../../shared/finding-dom-id";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadencePanel from "@cadence/ui/CadencePanel.vue";
 import StatusBadge from "../../shared/StatusBadge.vue";
@@ -50,24 +50,15 @@ type Validation = {
   finding_groups: FindingGroup[];
 };
 
-defineProps<{ validation: Validation }>();
+const props = defineProps<{ validation: Validation }>();
+useManagementHeader("/missions/:mission_id/comms/validation", () => ({
+  description: props.validation.subtitle,
+  facts: [props.validation.finding_count_suffix, props.validation.status.label],
+}));
 </script>
 
 <template>
   <div :id="validation.id" class="space-y-6">
-    <CadencePageHeading :breadcrumbs="validation.breadcrumbs">
-      <template #title>{{ validation.title }} </template>
-      <template #description>{{ validation.subtitle }}</template>
-      <template #metadata
-        ><span>
-          {{ validation.finding_count_suffix }}
-        </span></template
-      >
-      <template #actions
-        ><StatusBadge :status="validation.status.tone" :label="validation.status.label"
-      /></template>
-    </CadencePageHeading>
-
     <CadenceCard
       v-if="validation.empty"
       :id="validation.empty_state.id"

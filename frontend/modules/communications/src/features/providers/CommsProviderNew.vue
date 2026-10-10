@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import { reactive, watch } from "vue";
 import CadenceNoticeFrame from "@cadence/ui/CadenceNoticeFrame.vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
@@ -28,6 +28,9 @@ const props = defineProps<{
   managedDraft?: boolean;
   canSave?: boolean;
 }>();
+useManagementHeader("/missions/:mission_id/comms/providers/new", () => ({
+  description: props.page.subtitle,
+}));
 
 const emit = defineEmits<{
   validate: [payload: ProviderPayload];
@@ -112,11 +115,6 @@ const save = () => emit("save", { provider: values() });
 
 <template>
   <div :id="page.id" class="max-w-3xl space-y-6">
-    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
-      <template #title>{{ page.title }}</template>
-      <template #description>{{ page.subtitle }}</template>
-    </CadencePageHeading>
-
     <div
       v-if="accounts.empty"
       :id="accounts.empty_state.id"

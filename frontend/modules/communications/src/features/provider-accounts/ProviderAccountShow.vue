@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import { reactive, watch } from "vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 
@@ -68,6 +68,41 @@ const revokeCredential = () => {
   }
 };
 
+useManagementHeader("/provider-accounts/:provider_account_id", () => ({
+  title: props.page.header.title,
+  identifier: props.page.header.subtitle,
+  facts: [props.page.header.config_label],
+  primary: {
+    id: props.actions.rotate.id,
+    label: props.actions.rotate.label,
+    icon: "hero-key",
+    disabled: props.actions.rotate.disabled,
+    run: () => emit("rotate-credential", props.actions.rotate.payload),
+  },
+  actions: [
+    {
+      id: props.actions.validate.id,
+      label: props.actions.validate.label,
+      icon: "hero-shield-check",
+      disabled: props.actions.validate.disabled,
+      run: () => emit("validate-account", props.actions.validate.payload),
+    },
+  ],
+  ...(props.actions.revoke
+    ? {
+        more: [
+          {
+            id: props.actions.revoke.id,
+            label: props.actions.revoke.label,
+            tone: "danger" as const,
+            disabled: props.actions.revoke.disabled,
+            run: revokeCredential,
+          },
+        ],
+      }
+    : {}),
+}));
+
 const revokeGrant = (grant: Grant) => {
   if (grant.revoke && window.confirm(grant.revoke.confirm)) {
     emit("revoke-grant", grant.revoke.payload);
@@ -77,49 +112,6 @@ const revokeGrant = (grant: Grant) => {
 
 <template>
   <div :id="page.id" class="space-y-6">
-    <CadencePageHeading :breadcrumbs="page.header.breadcrumbs">
-      <template #title>{{ page.header.title }} </template>
-      <template #description>{{ page.header.subtitle }}</template>
-      <template #metadata
-        ><span>
-          <span class="font-mono text-xs text-base-content/60">
-            {{ page.header.config_label }}
-          </span>
-        </span></template
-      >
-      <template #actions
-        ><button
-          :id="actions.validate.id"
-          type="button"
-          class="btn btn-secondary btn-sm"
-          :disabled="actions.validate.disabled"
-          @click="emit('validate-account', actions.validate.payload)"
-        >
-          <span :class="[actions.validate.icon, 'h-4 w-4']"></span>
-          {{ actions.validate.label }}</button
-        ><button
-          :id="actions.rotate.id"
-          type="button"
-          class="btn btn-primary btn-sm"
-          :disabled="actions.rotate.disabled"
-          @click="emit('rotate-credential', actions.rotate.payload)"
-        >
-          <span :class="[actions.rotate.icon, 'h-4 w-4']"></span>
-          {{ actions.rotate.label }}</button
-        ><button
-          v-if="actions.revoke"
-          :id="actions.revoke.id"
-          type="button"
-          class="btn btn-error btn-outline btn-sm"
-          :data-confirm="actions.revoke.confirm"
-          :disabled="actions.revoke.disabled"
-          @click="revokeCredential"
-        >
-          {{ actions.revoke.label }}
-        </button></template
-      >
-    </CadencePageHeading>
-
     <div class="grid gap-3 md:grid-cols-4">
       <CadenceStatTile v-for="stat in stats" :id="stat.id" :key="stat.id">
         <template #label>{{ stat.label }}</template>

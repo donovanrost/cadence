@@ -1,17 +1,26 @@
 <script setup lang="ts">
 import CollectionFrame from "../../shared/CollectionFrame.vue";
 import CadenceHoverTableRow from "@cadence/ui/CadenceHoverTableRow.vue";
-import type { Collection } from "../../shared/read-contracts";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
+import { href } from "@cadence/plugin-sdk/routes";
+import type { Collection, ReadContext } from "../../shared/read-contracts";
 import type { GroundStationRow } from "./read-contracts";
-defineProps<{ page: Collection<GroundStationRow> }>();
+const props = defineProps<{ page: Collection<GroundStationRow>; context: ReadContext }>();
+useManagementHeader("/missions/:mission_id/comms/ground-stations", () => ({
+  description: "Mission-owned antenna and site identities.",
+  facts: [`${props.page.data.total_count} configured`],
+  primary: {
+    id: "new",
+    label: "New ground station",
+    icon: "hero-plus",
+    href: href("/missions/:mission_id/comms/ground-stations/new", {
+      mission_id: props.context.missionId,
+    }),
+  },
+}));
 </script>
 <template>
-  <CollectionFrame
-    id="comms-ground-stations-directory"
-    :page="page"
-    description="Mission-owned antenna and site identities."
-    create-label="New ground station"
-  >
+  <CollectionFrame id="comms-ground-stations-directory" :page="page">
     <template #columns
       ><th class="hud-label">Name</th>
       <th class="hud-label">Provider</th>

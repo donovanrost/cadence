@@ -118,7 +118,7 @@ defmodule CadenceWeb.OrganizationModulePageTest do
         organization_id: scope.organization_id,
         props: snapshot["data"],
         ids:
-          ["provider-accounts-page", "new-provider-account-link"] ++
+          ["provider-accounts-page"] ++
             Enum.map(snapshot["data"]["provider_accounts"], & &1["__dom_id"])
       }
     ]

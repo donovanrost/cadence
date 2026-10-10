@@ -1,5 +1,6 @@
 import { required } from "../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test } from "vite-plus/test";
 import GroundStationDirectory from "./GroundStationDirectory.vue";
 import GroundStationDetail from "./GroundStationDetail.vue";
@@ -8,9 +9,13 @@ import { context, directoryPayload, detailPayload } from "./read-fixtures.test-s
 
 test("directory consumes numeric counts, preserves query pagination and exposes creation", () => {
   const page = readDirectory(directoryPayload(), context),
-    wrapper = mount(GroundStationDirectory, { props: { page } });
+    header = pageHeaderHarness("/missions/:mission_id/comms/ground-stations"),
+    wrapper = mount(GroundStationDirectory, {
+      props: { page, context },
+      global: { provide: header.provide },
+    });
   try {
-    expect(wrapper.get("#comms-ground-stations-directory-count").text()).toBe("2 configured");
+    expect(header.header().facts).toEqual(["2 configured"]);
     const next = new URL(
       required(wrapper.get("#comms-ground-stations-directory-next").attributes("href")),
       "https://cadence.invalid",
@@ -22,9 +27,7 @@ test("directory consumes numeric counts, preserves query pagination and exposes 
       sort: "display_name",
       dir: "asc",
     });
-    expect(wrapper.get("#comms-ground-stations-directory-new").attributes("href")).toBe(
-      "/missions/mission-1/comms/ground-stations/new",
-    );
+    expect(header.href("new")).toBe("/missions/mission-1/comms/ground-stations/new");
     expect(wrapper.get("#ground_stations-ground-stations-1 a").attributes("href")).toBe(
       "/missions/mission-1/comms/ground-stations/ground-stations-1",
     );
@@ -35,22 +38,24 @@ test("directory consumes numeric counts, preserves query pagination and exposes 
     wrapper.unmount();
   }
 });
-test("detail renders explicit domain facts, omits unknown data and navigates to its list", () => {
+test("detail names its record, renders explicit domain facts and omits unknown data", () => {
   const input = {
     ...detailPayload(),
     data: { ...detailPayload().data, secret: "must-not-render" },
   };
-  const wrapper = mount(GroundStationDetail, { props: { page: readDetail(input, context) } });
+  const header = pageHeaderHarness(
+    "/missions/:mission_id/comms/ground-stations/:ground_station_id",
+  );
+  const wrapper = mount(GroundStationDetail, {
+    props: { page: readDetail(input, context), context },
+    global: { provide: header.provide },
+  });
   try {
-    expect(wrapper.text()).toContain("Saved GroundStation");
+    expect(header.header().title).toBe("Saved GroundStation");
     expect(wrapper.text()).not.toContain("must-not-render");
     expect(wrapper.text()).not.toContain("Open Phoenix surface");
-    expect(wrapper.get("#comms-ground-stations-detail-back").attributes("href")).toBe(
-      "/missions/mission-1/comms/ground-stations",
-    );
-    expect(wrapper.get("#comms-ground-station-edit").attributes("href")).toBe(
-      detailPayload().data.edit_href,
-    );
+    expect(header.header().identifier).toBe(input.data.id);
+    expect(header.href("edit")).toBe(detailPayload().data.edit_href);
   } finally {
     wrapper.unmount();
   }

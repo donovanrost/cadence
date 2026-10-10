@@ -806,7 +806,7 @@ test("provider creation and detail share the mission host port without loading a
   };
   expect(requestedPath(1)).toBe(detail.path);
   await reply(1, detail);
-  await view().get("#validate-provider-button").trigger("click");
+  await view().get("#host-action-validate-provider-button").trigger("click");
   expect(required(transport.requests[2]).payload).toEqual({
     id: "comms.provider-show",
     token: detail.mission_module_page.token,
@@ -815,7 +815,7 @@ test("provider creation and detail share the mission host port without loading a
     input: { provider_id: "provider-1", expected_provider_version: 1, sequence: 1 },
   });
   await reply(2, { status: "unknown", sequence: 1 });
-  expect(view().get("#sync-provider-button").attributes("disabled")).toBeDefined();
+  expect(view().get("#host-action-sync-provider-button").attributes("disabled")).toBeDefined();
 });
 test("mission setup uses page-bound host actions and only confirmed saves navigate", async () => {
   const state = setupSnapshot();
@@ -995,7 +995,7 @@ test("account detail binds refresh and effect sequence to its route and contains
   );
   await reply(0, { status: "ok", data: model });
   expect(view().get("#grant-grant_reason").element).toHaveProperty("value", "Preserved");
-  await view().get("#validate-account").trigger("click");
+  await view().get("#host-action-validate-account").trigger("click");
   expect(required(transport.requests[1]).payload.input).toEqual(
     containing({
       provider_account_id: "account-1",

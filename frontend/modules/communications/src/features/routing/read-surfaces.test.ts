@@ -1,5 +1,6 @@
 import { required } from "../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test } from "vite-plus/test";
 import RoutingDirectory from "./RoutingDirectory.vue";
 import RoutingDetail from "./RoutingDetail.vue";
@@ -8,9 +9,13 @@ import { context, directoryPayload, detailPayload } from "./read-fixtures.test-s
 
 test("directory consumes numeric counts, preserves query pagination and exposes creation", () => {
   const page = readDirectory(directoryPayload(), context),
-    wrapper = mount(RoutingDirectory, { props: { page } });
+    header = pageHeaderHarness("/missions/:mission_id/comms/routing"),
+    wrapper = mount(RoutingDirectory, {
+      props: { page, context },
+      global: { provide: header.provide },
+    });
   try {
-    expect(wrapper.get("#comms-routing-directory-count").text()).toBe("2 configured");
+    expect(header.header().facts).toEqual(["2 configured"]);
     const next = new URL(
       required(wrapper.get("#comms-routing-directory-next").attributes("href")),
       "https://cadence.invalid",
@@ -22,9 +27,7 @@ test("directory consumes numeric counts, preserves query pagination and exposes 
       sort: "display_name",
       dir: "asc",
     });
-    expect(wrapper.get("#comms-routing-directory-new").attributes("href")).toBe(
-      "/missions/mission-1/comms/routing/new",
-    );
+    expect(header.href("new")).toBe("/missions/mission-1/comms/routing/new");
     expect(wrapper.get("#routing-routing-1 a").attributes("href")).toBe(
       "/missions/mission-1/comms/routing/routing-1",
     );
@@ -33,19 +36,21 @@ test("directory consumes numeric counts, preserves query pagination and exposes 
     wrapper.unmount();
   }
 });
-test("detail renders explicit domain facts, omits unknown data and navigates to its list", () => {
+test("detail names its record, renders explicit domain facts and omits unknown data", () => {
   const input = {
     ...detailPayload(),
     data: { ...detailPayload().data, secret: "must-not-render" },
   };
-  const wrapper = mount(RoutingDetail, { props: { page: readDetail(input, context) } });
+  const header = pageHeaderHarness("/missions/:mission_id/comms/routing/:routing_rule_id");
+  const wrapper = mount(RoutingDetail, {
+    props: { page: readDetail(input, context), context },
+    global: { provide: header.provide },
+  });
   try {
-    expect(wrapper.text()).toContain("Saved Routing");
+    expect(header.header().title).toBe("Saved Routing");
     expect(wrapper.text()).not.toContain("must-not-render");
     expect(wrapper.text()).not.toContain("Open Phoenix surface");
-    expect(wrapper.get("#comms-routing-detail-back").attributes("href")).toBe(
-      "/missions/mission-1/comms/routing",
-    );
+    expect(header.header().identifier).toBe(input.data.id);
     expect(wrapper.text()).toContain("Pinned transport version");
   } finally {
     wrapper.unmount();

@@ -1,17 +1,26 @@
 <script setup lang="ts">
 import CollectionFrame from "../../shared/CollectionFrame.vue";
 import CadenceHoverTableRow from "@cadence/ui/CadenceHoverTableRow.vue";
-import type { Collection } from "../../shared/read-contracts";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
+import { href } from "@cadence/plugin-sdk/routes";
+import type { Collection, ReadContext } from "../../shared/read-contracts";
 import type { TransportRow } from "./read-contracts";
-defineProps<{ page: Collection<TransportRow> }>();
+const props = defineProps<{ page: Collection<TransportRow>; context: ReadContext }>();
+useManagementHeader("/missions/:mission_id/comms/transports", () => ({
+  description: "Durable byte-moving capabilities for spacecraft traffic.",
+  facts: [`${props.page.data.total_count} configured`],
+  primary: {
+    id: "new",
+    label: "New transport",
+    icon: "hero-plus",
+    href: href("/missions/:mission_id/comms/transports/new", {
+      mission_id: props.context.missionId,
+    }),
+  },
+}));
 </script>
 <template>
-  <CollectionFrame
-    id="comms-transports-directory"
-    :page="page"
-    description="Durable byte-moving capabilities for spacecraft traffic."
-    create-label="New transport"
-  >
+  <CollectionFrame id="comms-transports-directory" :page="page">
     <template #columns
       ><th class="hud-label">Name</th>
       <th class="hud-label">Origin</th>

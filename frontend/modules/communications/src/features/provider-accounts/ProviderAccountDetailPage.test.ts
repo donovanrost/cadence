@@ -1,6 +1,7 @@
 import { containing } from "../../../../../test-support/matchers";
 import { required } from "../../../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test, vi } from "vite-plus/test";
 import ProviderAccountDetailPage from "./ProviderAccountDetailPage.vue";
 import { providerAccountDetailContribution } from "./detail.contribution";
@@ -13,7 +14,8 @@ function setup(locked = false) {
     status: "ok",
     data: event === "refresh" ? model : receipt({ patch: model }),
   }));
-  const wrapper = mount(ProviderAccountDetailPage, {
+  const header = pageHeaderHarness("/provider-accounts/:provider_account_id");
+  const wrapper = mount(header.stage(ProviderAccountDetailPage), {
     props: { model, sequence: 4, locked, port: { execute, navigate: vi.fn() } },
   });
   return { wrapper, execute, model };

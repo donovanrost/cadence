@@ -1,17 +1,24 @@
 <script setup lang="ts">
 import CollectionFrame from "../../shared/CollectionFrame.vue";
 import CadenceHoverTableRow from "@cadence/ui/CadenceHoverTableRow.vue";
-import type { Collection } from "../../shared/read-contracts";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
+import { href } from "@cadence/plugin-sdk/routes";
+import type { Collection, ReadContext } from "../../shared/read-contracts";
 import type { RoutingRow } from "./read-contracts";
-defineProps<{ page: Collection<RoutingRow> }>();
+const props = defineProps<{ page: Collection<RoutingRow>; context: ReadContext }>();
+useManagementHeader("/missions/:mission_id/comms/routing", () => ({
+  description: "Saved bindings between spacecraft and mission transports.",
+  facts: [`${props.page.data.total_count} configured`],
+  primary: {
+    id: "new",
+    label: "New routing rule",
+    icon: "hero-plus",
+    href: href("/missions/:mission_id/comms/routing/new", { mission_id: props.context.missionId }),
+  },
+}));
 </script>
 <template>
-  <CollectionFrame
-    id="comms-routing-directory"
-    :page="page"
-    description="Saved bindings between spacecraft and mission transports."
-    create-label="New routing rule"
-  >
+  <CollectionFrame id="comms-routing-directory" :page="page">
     <template #columns
       ><th class="hud-label">Name</th>
       <th class="hud-label">Spacecraft</th>

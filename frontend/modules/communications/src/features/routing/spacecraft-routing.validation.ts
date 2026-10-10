@@ -53,5 +53,5 @@ export function readSpacecraftRouting(value: unknown, context: SpacecraftPageCon
   })(value);
   unique(result.page.rows.map((row) => row.id));
   if (!result.page.breadcrumbs.some((item) => item.href === spacecraftPath)) invalid();
-  return result;
+  return { ...result, missionId: context.missionId, spacecraftId: spacecraft };
 }

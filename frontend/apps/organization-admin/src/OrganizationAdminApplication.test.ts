@@ -1,6 +1,7 @@
 import { containing } from "../../../test-support/matchers";
 import { required } from "../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type {
   FullPageSurfaceProps,
@@ -163,7 +164,10 @@ describe("Organization Admin federated adapter", () => {
     executeMock.mockResolvedValueOnce(receipt({ patch: next }));
     const props = propsFor(surface, query);
     props.bridge.execute = execute;
-    const wrapper = mount(OrganizationAdminApplication, { props });
+    const stage = pageHeaderHarness("/provider-accounts/:provider_account_id").stage(
+      OrganizationAdminApplication,
+    );
+    const wrapper = mount(stage, { props });
     await flushPromises();
     const input = wrapper.get("#grant-grant_reason").element;
     await wrapper.get("#grant-grant_reason").setValue("Keep across rotation");
@@ -205,7 +209,10 @@ describe("Organization Admin federated adapter", () => {
       });
       const props = propsFor(surface, query);
       props.bridge.execute = execute;
-      const wrapper = mount(OrganizationAdminApplication, { props });
+      const stage = pageHeaderHarness("/provider-accounts/:provider_account_id").stage(
+        OrganizationAdminApplication,
+      );
+      const wrapper = mount(stage, { props });
       await flushPromises();
       await wrapper.get("#rotate-credential").trigger("click");
       await flushPromises();

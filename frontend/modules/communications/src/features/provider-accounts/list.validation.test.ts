@@ -1,6 +1,7 @@
 import { required } from "../../../../../test-support/required";
 import { expect, test } from "vite-plus/test";
 import { mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { listFixture } from "./provider-accounts.test-support";
 import { readAccountDirectory } from "./list.validation";
 import ProviderAccountListPage from "./ProviderAccountListPage.vue";
@@ -10,11 +11,13 @@ test.each([false, true])("directory admits only its scoped known-field DTO, empt
   expect(readAccountDirectory({ ...model, attrs: { onclick: "private" } }, "org-1")).toEqual(model);
   expect(() => readAccountDirectory(model, "foreign")).toThrow();
   expect(() => readAccountDirectory(model, "org-1", 2)).toThrow();
-  const wrapper = mount(ProviderAccountListPage, { props: model });
+  const header = pageHeaderHarness("/provider-accounts");
+  const wrapper = mount(ProviderAccountListPage, {
+    props: model,
+    global: { provide: header.provide },
+  });
   expect(wrapper.find("#provider-accounts-empty-state").exists()).toBe(empty);
-  expect(wrapper.get("#new-provider-account-link").attributes("href")).toBe(
-    "/provider-accounts/new",
-  );
+  expect(header.href("new-provider-account")).toBe("/provider-accounts/new");
   wrapper.unmount();
 });
 test("directory rejects cross-account links, inconsistent counts, duplicate identities and malformed rows", () => {

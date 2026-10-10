@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import { computed, reactive, shallowRef, watch } from "vue";
 import CadenceNoticeFrame from "@cadence/ui/CadenceNoticeFrame.vue";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
@@ -28,6 +28,9 @@ const props = defineProps<{
   feedback?: Feedback;
   validationReview?: TransportReview | null;
 }>();
+useManagementHeader("/missions/:mission_id/comms/transports/new", () => ({
+  description: props.page.subtitle,
+}));
 
 const emit = defineEmits<{
   validate: [payload: TransportPayload];
@@ -230,11 +233,6 @@ const statusClass = (status: "ready" | "attention") =>
 
 <template>
   <div :id="page.id" class="mx-auto max-w-4xl space-y-6">
-    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
-      <template #title>{{ page.title }}</template>
-      <template #description>{{ page.subtitle }}</template>
-    </CadencePageHeading>
-
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
       <CadenceFormSectionFrame :id="form.sections.identity.id">
         <CadenceFormSectionHeader

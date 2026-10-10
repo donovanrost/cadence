@@ -1,5 +1,6 @@
 import { containing } from "../../../../../test-support/matchers";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test, vi } from "vite-plus/test";
 import Creation from "./MissionProviderCreation.vue";
 import Detail from "./MissionProviderDetail.vue";
@@ -79,9 +80,12 @@ test("provider actions send observed versions and consume an ordered sequence be
       .mockResolvedValueOnce({ status: "rejected", sequence: 1 }),
     navigate: vi.fn(),
   };
-  const wrapper = mount(Detail, {
-    props: { ...missionPages[2].read(detail(), detailContext), port } as never,
-  });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/comms/providers/:provider_id").stage(Detail),
+    {
+      props: { ...missionPages[2].read(detail(), detailContext), port } as never,
+    },
+  );
   try {
     await wrapper.get("#sync-provider-button").trigger("click");
     await flushPromises();
@@ -111,9 +115,12 @@ test("unknown detail effects stay locked after query and host refresh", async ()
       .mockResolvedValue({ status: "ok", sequence: 1, data: detail(1, 1, "submitted") }),
     navigate: vi.fn(),
   };
-  const wrapper = mount(Detail, {
-    props: { ...missionPages[2].read(detail(), detailContext), port } as never,
-  });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/comms/providers/:provider_id").stage(Detail),
+    {
+      props: { ...missionPages[2].read(detail(), detailContext), port } as never,
+    },
+  );
   try {
     await wrapper.get("#validate-provider-button").trigger("click");
     await flushPromises();
@@ -152,9 +159,12 @@ test("confirmed archive survives a same-provider host snapshot arriving before i
     ),
     navigate: vi.fn(),
   };
-  const wrapper = mount(Detail, {
-    props: { ...missionPages[2].read(detail(), detailContext), port } as never,
-  });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/comms/providers/:provider_id").stage(Detail),
+    {
+      props: { ...missionPages[2].read(detail(), detailContext), port } as never,
+    },
+  );
   const originalConfirm = Object.getOwnPropertyDescriptor(window, "confirm");
   Object.defineProperty(window, "confirm", {
     configurable: true,

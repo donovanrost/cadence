@@ -145,7 +145,10 @@ export function readDetail(value: unknown, context: ReadContext): ProviderDetail
   return result;
 }
 
-export function readList(value: unknown, context: ReadContext): { presentation: Presentation } {
+export function readList(
+  value: unknown,
+  context: ReadContext,
+): { presentation: Presentation; missionId: string } {
   const envelope = record(value),
     base = missionPath(context) + "/comms/providers";
   navigation(envelope.navigation, context, base);
@@ -250,5 +253,5 @@ export function readList(value: unknown, context: ReadContext): { presentation: 
     unique(presentation.card.rows.map((row) => row.id));
     unique(presentation.card.rows.map((row) => row.href));
   }
-  return result;
+  return { presentation, missionId: context.missionId };
 }

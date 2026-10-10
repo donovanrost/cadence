@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeaders } from "@cadence/plugin-sdk/page-header";
 import { reactive, watch } from "vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 import CadenceFormActions from "@cadence/ui/CadenceFormActions.vue";
@@ -22,6 +22,16 @@ const props = defineProps<{
   form: GroundStationForm;
   feedback?: Feedback;
 }>();
+useManagementHeaders({
+  "/missions/:mission_id/comms/ground-stations/new": () => ({
+    description: props.page.subtitle,
+  }),
+  "/missions/:mission_id/comms/ground-stations/:ground_station_id/edit": () => ({
+    title: `Edit ${props.form.fields.display_name.value}`,
+    identifier: props.form.fields.ground_station_id.value,
+    description: props.page.subtitle,
+  }),
+});
 
 const emit = defineEmits<{
   validate: [payload: GroundStationPayload];
@@ -64,11 +74,6 @@ const save = () => emit("save", { ground_station: values() });
 
 <template>
   <CadenceFormPageFrame :id="page.id" :data-mode="mode">
-    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
-      <template #title>{{ page.heading }}</template>
-      <template #description>{{ page.subtitle }}</template>
-    </CadencePageHeading>
-
     <form :id="form.id" class="space-y-8" @submit.prevent="save">
       <CadenceFormSectionFrame :id="form.sections.identity.id">
         <CadenceFormSectionHeader

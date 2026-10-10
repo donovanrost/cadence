@@ -1,5 +1,6 @@
 import { required } from "../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test } from "vite-plus/test";
 import TransportDirectory from "./TransportDirectory.vue";
 import TransportDetail from "./TransportDetail.vue";
@@ -13,9 +14,13 @@ test("transport ownership cannot contradict its origin", () => {
 
 test("directory consumes numeric counts, preserves query pagination and exposes creation", () => {
   const page = readDirectory(directoryPayload(), context),
-    wrapper = mount(TransportDirectory, { props: { page } });
+    header = pageHeaderHarness("/missions/:mission_id/comms/transports"),
+    wrapper = mount(TransportDirectory, {
+      props: { page, context },
+      global: { provide: header.provide },
+    });
   try {
-    expect(wrapper.get("#comms-transports-directory-count").text()).toBe("2 configured");
+    expect(header.header().facts).toEqual(["2 configured"]);
     const next = new URL(
       required(wrapper.get("#comms-transports-directory-next").attributes("href")),
       "https://cadence.invalid",
@@ -27,9 +32,7 @@ test("directory consumes numeric counts, preserves query pagination and exposes 
       sort: "display_name",
       dir: "asc",
     });
-    expect(wrapper.get("#comms-transports-directory-new").attributes("href")).toBe(
-      "/missions/mission-1/comms/transports/new",
-    );
+    expect(header.href("new")).toBe("/missions/mission-1/comms/transports/new");
     expect(wrapper.get("#transports-transports-1 a").attributes("href")).toBe(
       "/missions/mission-1/comms/transports/transports-1",
     );
@@ -38,19 +41,21 @@ test("directory consumes numeric counts, preserves query pagination and exposes 
     wrapper.unmount();
   }
 });
-test("detail renders explicit domain facts, omits unknown data and navigates to its list", () => {
+test("detail names its record, renders explicit domain facts and omits unknown data", () => {
   const input = {
     ...detailPayload(),
     data: { ...detailPayload().data, secret: "must-not-render" },
   };
-  const wrapper = mount(TransportDetail, { props: { page: readDetail(input, context) } });
+  const header = pageHeaderHarness("/missions/:mission_id/comms/transports/:transport_id");
+  const wrapper = mount(TransportDetail, {
+    props: { page: readDetail(input, context), context },
+    global: { provide: header.provide },
+  });
   try {
-    expect(wrapper.text()).toContain("Saved Transport");
+    expect(header.header().title).toBe("Saved Transport");
     expect(wrapper.text()).not.toContain("must-not-render");
     expect(wrapper.text()).not.toContain("Open Phoenix surface");
-    expect(wrapper.get("#comms-transports-detail-back").attributes("href")).toBe(
-      "/missions/mission-1/comms/transports",
-    );
+    expect(header.header().identifier).toBe(input.data.id);
     expect(wrapper.text()).toContain("Version");
   } finally {
     wrapper.unmount();

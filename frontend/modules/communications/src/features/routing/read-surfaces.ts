@@ -7,11 +7,17 @@ export const readSurfaces = {
   routing: {
     // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
     component: RoutingDirectory,
-    admit: (payload: unknown, context: ReadContext) => ({ page: readDirectory(payload, context) }),
+    admit: (payload: unknown, context: ReadContext) => ({
+      page: readDirectory(payload, context),
+      context,
+    }),
   },
   routing_detail: {
     // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
     component: RoutingDetail,
-    admit: (payload: unknown, context: ReadContext) => ({ page: readDetail(payload, context) }),
+    admit: (payload: unknown, context: ReadContext) => ({
+      page: readDetail(payload, context),
+      context,
+    }),
   },
 } as const;

@@ -1,5 +1,6 @@
 import { containing } from "../../../../../test-support/matchers";
 import { mount, flushPromises } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test, vi } from "vite-plus/test";
 import ProviderCreation from "./ProviderCreation.vue";
 import ProviderDetail from "./ProviderDetail.vue";
@@ -118,9 +119,12 @@ test("detail actions disable pending controls and refresh through the same admit
     query: vi.fn().mockResolvedValue(providerDetailSurface(2)),
     navigate: vi.fn(),
   };
-  const wrapper = mount(ProviderDetail, {
-    props: { model: readDetail(providerDetailSurface(), context), context, port },
-  });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/comms/providers/:provider_id").stage(ProviderDetail),
+    {
+      props: { model: readDetail(providerDetailSurface(), context), context, port },
+    },
+  );
   try {
     await wrapper.get("#sync-provider-button").trigger("click");
     expect(port.execute).toHaveBeenCalledExactlyOnceWith("sync_provider", {
@@ -146,9 +150,12 @@ test("a failed refresh retains the page and offers only read-only recovery befor
       .mockResolvedValue(providerDetailSurface(2)),
     navigate: vi.fn(),
   };
-  const wrapper = mount(ProviderDetail, {
-    props: { model: readDetail(providerDetailSurface(), context), context, port },
-  });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/comms/providers/:provider_id").stage(ProviderDetail),
+    {
+      props: { model: readDetail(providerDetailSurface(), context), context, port },
+    },
+  );
   try {
     await wrapper.get("#validate-provider-button").trigger("click");
     await flushPromises();
@@ -175,9 +182,12 @@ test("confirmed archival returns to the directory instead of querying a now-unav
     value: vi.fn().mockReturnValueOnce(false).mockReturnValue(true),
   });
   const port = { execute: vi.fn().mockResolvedValue(receipt), query: vi.fn(), navigate: vi.fn() };
-  const wrapper = mount(ProviderDetail, {
-    props: { model: readDetail(providerDetailSurface(), context), context, port },
-  });
+  const wrapper = mount(
+    pageHeaderHarness("/missions/:mission_id/comms/providers/:provider_id").stage(ProviderDetail),
+    {
+      props: { model: readDetail(providerDetailSurface(), context), context, port },
+    },
+  );
   try {
     await wrapper.get("#archive-provider-button").trigger("click");
     expect(port.execute).not.toHaveBeenCalled();
@@ -213,9 +223,14 @@ test("unmounted creation cannot navigate and unmounted detail cannot start a ref
         ? mount(ProviderCreation, {
             props: { model: readForm(providerNewSurface(), context), context, port },
           })
-        : mount(ProviderDetail, {
-            props: { model: readDetail(providerDetailSurface(), context), context, port },
-          });
+        : mount(
+            pageHeaderHarness("/missions/:mission_id/comms/providers/:provider_id").stage(
+              ProviderDetail,
+            ),
+            {
+              props: { model: readDetail(providerDetailSurface(), context), context, port },
+            },
+          );
     if (component === ProviderCreation)
       await wrapper.get("#mission-provider-form").trigger("submit");
     else await wrapper.get("#sync-provider-button").trigger("click");

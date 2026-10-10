@@ -1,5 +1,6 @@
 import { required } from "../../../../../test-support/required";
 import { mount } from "@vue/test-utils";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { expect, test } from "vite-plus/test";
 import CommsValidation from "./CommsValidation.vue";
 import { readValidation } from "./read-validation";
@@ -33,12 +34,16 @@ function payload() {
   };
 }
 test("validation renders actual grouped findings with bounded actions and honest setup status", () => {
-  const wrapper = mount(CommsValidation, { props: readValidation(payload(), context) });
+  const header = pageHeaderHarness("/missions/:mission_id/comms/validation");
+  const wrapper = mount(CommsValidation, {
+    props: readValidation(payload(), context),
+    global: { provide: header.provide },
+  });
   try {
     expect(wrapper.get("#transports-finding-1 a").attributes("href")).toBe(
       "/missions/mission-1/comms/transports",
     );
-    expect(wrapper.text()).toContain("1 finding");
+    expect(header.header().facts?.[0]).toBe("1 finding");
     expect(wrapper.text()).toContain("Blocking");
     expect(wrapper.find("#comms-validation-empty").exists()).toBe(false);
   } finally {

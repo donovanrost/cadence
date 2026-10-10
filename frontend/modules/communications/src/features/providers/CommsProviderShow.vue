@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
 import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
@@ -21,57 +21,41 @@ const emit = defineEmits<{
 const archiveProvider = () => {
   if (window.confirm(props.actions.archive.confirm)) emit("archive-provider");
 };
+useManagementHeader("/missions/:mission_id/comms/providers/:provider_id", () => ({
+  title: props.provider.display_name,
+  identifier: props.provider.provider_id,
+  status: { tone: "info", label: props.provider.simulated_badge.label },
+  facts: [props.provider.version],
+  primary: {
+    id: props.actions.sync.id,
+    label: props.actions.sync.label,
+    icon: "hero-arrow-path",
+    disabled: props.actions.sync.disabled,
+    run: () => emit("sync-provider"),
+  },
+  actions: [
+    {
+      id: props.actions.validate.id,
+      label: props.actions.validate.label,
+      icon: "hero-shield-check",
+      disabled: props.actions.validate.disabled,
+      run: () => emit("validate-provider"),
+    },
+  ],
+  more: [
+    {
+      id: props.actions.archive.id,
+      label: props.actions.archive.label,
+      tone: "danger",
+      disabled: props.actions.archive.disabled,
+      run: archiveProvider,
+    },
+  ],
+}));
 </script>
 
 <template>
   <div :id="provider.page_id" class="space-y-6">
-    <CadencePageHeading :breadcrumbs="navigation.breadcrumbs">
-      <template #title>{{ provider.display_name }} </template>
-      <template #description>{{ provider.provider_id }}</template>
-      <template #metadata
-        ><span>
-          <span
-            :id="provider.simulated_badge.id"
-            class="inline-flex rounded-full bg-info/20 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide text-info"
-            >{{ provider.simulated_badge.label }}</span
-          >
-          <span class="ml-2 font-mono text-xs text-base-content/60">
-            {{ provider.version }}
-          </span>
-        </span></template
-      >
-      <template #actions
-        ><button
-          :id="actions.validate.id"
-          type="button"
-          class="btn btn-secondary btn-sm"
-          :disabled="actions.validate.disabled"
-          @click="emit('validate-provider')"
-        >
-          <span class="hero-shield-check h-4 w-4"></span>
-          {{ actions.validate.label }}</button
-        ><button
-          :id="actions.sync.id"
-          type="button"
-          class="btn btn-primary btn-sm"
-          :disabled="actions.sync.disabled"
-          @click="emit('sync-provider')"
-        >
-          <span class="hero-arrow-path h-4 w-4"></span>
-          {{ actions.sync.label }}</button
-        ><button
-          :id="actions.archive.id"
-          type="button"
-          class="btn btn-error btn-outline btn-sm"
-          :data-confirm="actions.archive.confirm"
-          :disabled="actions.archive.disabled"
-          @click="archiveProvider"
-        >
-          {{ actions.archive.label }}
-        </button></template
-      >
-    </CadencePageHeading>
-
     <div class="grid gap-3 md:grid-cols-4">
       <CadenceStatTile v-for="summary in provider.summary_tiles" :id="summary.id" :key="summary.id">
         <template #label>{{ summary.label }}</template>

@@ -1,15 +1,10 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
 import type { Collection } from "./read-contracts";
-const props = defineProps<{
-  id: string;
-  page: Collection<{ id: string }>;
-  description: string;
-  createLabel: string;
-}>();
+/** A searchable, paged record list; the routed page describes its header. */
+const props = defineProps<{ id: string; page: Collection<{ id: string }> }>();
 const search = ref(props.page.data.query);
 watch(
   () => props.page.data.query,
@@ -28,23 +23,6 @@ function pageHref(page: number) {
 </script>
 <template>
   <section :id="id" class="space-y-6">
-    <CadencePageHeading :breadcrumbs="page.navigation.breadcrumbs">
-      <template #title>{{ page.data.title }}</template>
-      <template #description>{{ description }}</template>
-      <template #metadata
-        ><span :id="id + '-count'">{{ page.data.total_count }} configured</span></template
-      >
-      <template #actions
-        ><a
-          :id="id + '-new'"
-          :href="page.navigation.fallback_href + '/new'"
-          data-phx-link="redirect"
-          data-phx-link-state="push"
-          class="btn btn-primary btn-sm"
-          >{{ createLabel }}</a
-        ></template
-      >
-    </CadencePageHeading>
     <form
       :id="id + '-search'"
       :action="page.navigation.fallback_href"

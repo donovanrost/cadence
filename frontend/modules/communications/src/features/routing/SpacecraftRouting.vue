@@ -1,29 +1,27 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
-
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
+import { href } from "@cadence/plugin-sdk/routes";
 import type { Page } from "./spacecraft-routing.contracts";
 
-defineProps<{ page: Page }>();
+const props = defineProps<{ page: Page; missionId: string; spacecraftId: string }>();
+useManagementHeader("/missions/:mission_id/spacecraft/:spacecraft_id/routing", () => ({
+  title: props.page.title,
+  description: props.page.subtitle,
+  primary: {
+    id: props.page.new_rule.id,
+    label: props.page.new_rule.label,
+    icon: "hero-plus",
+    href: href(
+      "/missions/:mission_id/comms/routing/new",
+      { mission_id: props.missionId },
+      { spacecraft_id: props.spacecraftId },
+    ),
+  },
+}));
 </script>
 
 <template>
   <div class="space-y-6">
-    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
-      <template #title>{{ page.title }}</template>
-      <template #description>{{ page.subtitle }}</template>
-      <template #actions
-        ><a
-          :id="page.new_rule.id"
-          :href="page.new_rule.href"
-          data-phx-link="redirect"
-          data-phx-link-state="push"
-          class="btn btn-primary btn-sm gap-1"
-        >
-          <span class="hero-plus h-4 w-4"></span> {{ page.new_rule.label }}
-        </a></template
-      >
-    </CadencePageHeading>
-
     <div
       v-if="page.rows.length === 0"
       class="rounded border border-dashed border-base-300/60 bg-base-100/30 p-8 text-center"

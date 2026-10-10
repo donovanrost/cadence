@@ -1,9 +1,24 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import DetailFrame from "../../shared/DetailFrame.vue";
-import type { Detail } from "../../shared/read-contracts";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
+import { href } from "@cadence/plugin-sdk/routes";
+import type { Detail, ReadContext } from "../../shared/read-contracts";
 import type { GroundStationDetails } from "./read-contracts";
-const props = defineProps<{ page: Detail<GroundStationDetails> }>();
+const props = defineProps<{ page: Detail<GroundStationDetails>; context: ReadContext }>();
+useManagementHeader("/missions/:mission_id/comms/ground-stations/:ground_station_id", () => ({
+  title: props.page.data.display_name,
+  identifier: props.page.data.id,
+  primary: {
+    id: "edit",
+    label: "Edit station",
+    icon: "hero-pencil-square",
+    href: href("/missions/:mission_id/comms/ground-stations/:ground_station_id/edit", {
+      mission_id: props.context.missionId,
+      ground_station_id: props.page.data.id,
+    }),
+  },
+}));
 const facts = computed(() => [
   { label: "Lifecycle", value: props.page.data.lifecycle_state },
   { label: "Provider", value: props.page.data.provider },
@@ -11,23 +26,5 @@ const facts = computed(() => [
 ]);
 </script>
 <template>
-  <DetailFrame
-    id="comms-ground-stations-detail"
-    :navigation="page.navigation"
-    :title="page.data.display_name"
-    :subject-id="page.data.id"
-    :list-href="page.data.list_href"
-    :facts="facts"
-  >
-    <template #actions
-      ><a
-        id="comms-ground-station-edit"
-        :href="page.data.edit_href"
-        data-phx-link="redirect"
-        data-phx-link-state="push"
-        class="btn btn-primary btn-sm"
-        >Edit station</a
-      ></template
-    >
-  </DetailFrame>
+  <DetailFrame id="comms-ground-stations-detail" :facts="facts" />
 </template>
