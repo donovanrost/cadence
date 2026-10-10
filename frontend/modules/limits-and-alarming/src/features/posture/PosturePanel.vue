@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, shallowRef, watch } from "vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 import LimitStateList from "../../shared/LimitStateList.vue";
@@ -86,15 +86,13 @@ onBeforeUnmount(() => {
   alive = false;
   generation++;
 });
+useManagementHeader("/missions/:mission_id/applications/:application_key/:surface_id", {
+  title: "Current limit posture",
+  description: "Latest evaluated state per spacecraft and point.",
+});
 </script>
 <template>
   <div id="limits-posture-page" class="space-y-5">
-    <CadencePageHeading
-      ><template #title>Current limit posture</template
-      ><template #description
-        >{{ page.mission_name }} · Latest evaluated state per spacecraft and point</template
-      ></CadencePageHeading
-    >
     <div class="flex flex-wrap items-center justify-between gap-3 text-sm">
       <div class="flex gap-4">
         <a

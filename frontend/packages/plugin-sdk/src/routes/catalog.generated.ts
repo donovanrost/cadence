@@ -1483,4 +1483,30 @@ export const routeCatalog = {
       description: null,
     },
   },
+  "/missions/:mission_id/applications/:application_key/:surface_id": {
+    kind: "application_surface",
+    layer: "management",
+    scope: "mission",
+    title: null,
+    queryKeys: [],
+    header: {
+      kind: "resource",
+      breadcrumbs: true,
+      eyebrow: false,
+      description: null,
+    },
+  },
+  "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id": {
+    kind: "application_surface",
+    layer: "management",
+    scope: "spacecraft",
+    title: null,
+    queryKeys: [],
+    header: {
+      kind: "resource",
+      breadcrumbs: true,
+      eyebrow: false,
+      description: null,
+    },
+  },
 } as const;

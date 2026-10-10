@@ -1535,9 +1535,11 @@ test("Back and Forward reenter the guard without replacing the Vue shell", async
   expect(app.getComponent(SpacecraftPage).props("page")).toBe("spacecraft_list");
 });
 
+// Application surfaces are served by the Phoenix application host, not this router.
+const hostRoutes = routes.filter((route) => route.kind !== "application_surface");
 test("every catalog path selects its declared frontend route, including static/dynamic siblings", async () => {
   const router = createHostRouter(createMemoryHistory());
-  for (const route of routes) {
+  for (const route of hostRoutes) {
     const path = route.path.replace(/:([a-z_]+)/g, (_, name) => `${name}-test`);
     const resolved = router.resolve(path);
     expect(resolved.meta.host, path).toEqual(route);
@@ -2202,7 +2204,7 @@ const routeStubs = Object.fromEntries(
     },
   ]),
 );
-test.each(routes)("the host handles $path ($kind)", async (entry) => {
+test.each(hostRoutes)("the host handles $path ($kind)", async (entry) => {
   const path = entry.path.replace(/:([a-z_]+)/g, "$1-test");
   const route = required(hostRoute(new URL(path, "https://cadence.test")));
   if (route.kind === "unavailable")

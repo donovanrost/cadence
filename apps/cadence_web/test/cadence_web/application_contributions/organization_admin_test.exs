@@ -13,7 +13,7 @@ defmodule Cadence.Applications.OrganizationAdminTest do
       purpose: :overview,
       scope: :organization,
       placement: :application_workspace,
-      navigation: %{label: "Overview", order: 10},
+      navigation: %{label: "Overview", order: 10, fallback_path: "/"},
       query: %{id: "cadence.organization.home", version: 1},
       actions: [],
       exposed_module: "./Application"
@@ -23,7 +23,7 @@ defmodule Cadence.Applications.OrganizationAdminTest do
       purpose: :collection,
       scope: :organization,
       placement: :application_workspace,
-      navigation: %{label: "Provider Accounts", order: 20},
+      navigation: %{label: "Provider Accounts", order: 20, fallback_path: "/provider-accounts"},
       query: %{id: "cadence.organization.provider_accounts.list", version: 1},
       actions: [],
       exposed_module: "./Application"
@@ -33,7 +33,11 @@ defmodule Cadence.Applications.OrganizationAdminTest do
       purpose: :configuration,
       scope: :organization,
       placement: :application_workspace,
-      navigation: %{label: "New Provider Account", order: 30},
+      navigation: %{
+        label: "New Provider Account",
+        order: 30,
+        fallback_path: "/provider-accounts/new"
+      },
       query: %{id: "cadence.organization.provider_accounts.new", version: 1},
       actions: ["validate_provider_account_form", "register_provider_account"],
       exposed_module: "./Application"
@@ -43,7 +47,11 @@ defmodule Cadence.Applications.OrganizationAdminTest do
       purpose: :subject_detail,
       scope: :organization,
       placement: :application_workspace,
-      navigation: %{label: "Provider Account", order: 40},
+      navigation: %{
+        label: "Provider Account",
+        order: 40,
+        fallback_path: "/provider-accounts/:subject"
+      },
       query: %{id: "cadence.organization.provider_account.show", version: 1},
       actions: [
         "validate_provider_account",
@@ -79,7 +87,7 @@ defmodule Cadence.Applications.OrganizationAdminTest do
       purpose: :overview,
       scope: :admin,
       placement: :application_workspace,
-      navigation: %{label: "Overview", order: 70},
+      navigation: %{label: "Overview", order: 70, fallback_path: "/"},
       query: %{id: "cadence.platform_admin.home", version: 1},
       actions: [],
       exposed_module: "./Application"
@@ -89,7 +97,7 @@ defmodule Cadence.Applications.OrganizationAdminTest do
       purpose: :activity,
       scope: :admin,
       placement: :application_workspace,
-      navigation: %{label: "Runtime", order: 80},
+      navigation: %{label: "Runtime", order: 80, fallback_path: "/runtime"},
       query: %{id: "cadence.platform_admin.runtime", version: 1},
       actions: ["refresh_runtime", "filter_runtime_decisions"],
       exposed_module: "./Application"
@@ -99,7 +107,7 @@ defmodule Cadence.Applications.OrganizationAdminTest do
       purpose: :collection,
       scope: :admin,
       placement: :application_workspace,
-      navigation: %{label: "Organizations", order: 90},
+      navigation: %{label: "Organizations", order: 90, fallback_path: "/organizations"},
       query: %{id: "cadence.platform_admin.organizations", version: 1},
       actions: [],
       exposed_module: "./Application"
@@ -109,7 +117,7 @@ defmodule Cadence.Applications.OrganizationAdminTest do
       purpose: :configuration,
       scope: :admin,
       placement: :application_workspace,
-      navigation: %{label: "New Organization", order: 100},
+      navigation: %{label: "New Organization", order: 100, fallback_path: "/organizations/new"},
       query: %{id: "cadence.platform_admin.organization.new", version: 1},
       actions: ["validate_organization", "create_organization"],
       exposed_module: "./Application"
@@ -119,7 +127,7 @@ defmodule Cadence.Applications.OrganizationAdminTest do
       purpose: :subject_detail,
       scope: :admin,
       placement: :application_workspace,
-      navigation: %{label: "Organization", order: 110},
+      navigation: %{label: "Organization", order: 110, fallback_path: "/organizations/:subject"},
       query: %{id: "cadence.platform_admin.organization.show", version: 1},
       actions: ["issue_service_identity", "dismiss_service_token", "open_organization"],
       exposed_module: "./Application"
@@ -129,7 +137,11 @@ defmodule Cadence.Applications.OrganizationAdminTest do
       purpose: :configuration,
       scope: :admin,
       placement: :application_workspace,
-      navigation: %{label: "Invite User", order: 120},
+      navigation: %{
+        label: "Invite User",
+        order: 120,
+        fallback_path: "/organizations/:subject/invite"
+      },
       query: %{id: "cadence.platform_admin.organization.invite", version: 1},
       actions: ["validate_invitation", "invite_organization_member"],
       exposed_module: "./Application"
@@ -286,13 +298,19 @@ defmodule Cadence.Applications.OrganizationAdminTest do
     assert Enum.all?(wrappers, fn wrapper -> wrapper.component =~ ~r/^[A-Z][A-Za-z]+$/ end)
   end
 
+  defp navigation(%{fallback_path: path} = surface),
+    do: %{label: surface.navigation_label, order: surface.navigation_order, fallback_path: path}
+
+  defp navigation(surface),
+    do: %{label: surface.navigation_label, order: surface.navigation_order}
+
   defp surface_contract(surface) do
     %{
       id: surface.id,
       purpose: surface.purpose,
       scope: surface.scope,
       placement: surface.placement,
-      navigation: %{label: surface.navigation_label, order: surface.navigation_order},
+      navigation: navigation(surface),
       query: %{id: surface.query, version: surface.query_version},
       actions: surface.actions,
       exposed_module: surface.exposed_module

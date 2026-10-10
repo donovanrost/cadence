@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import { computed, ref, watch } from "vue";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceDiagnosticsSectionFrame from "@cadence/ui/CadenceDiagnosticsSectionFrame.vue";
@@ -225,15 +225,17 @@ const buttonClasses: Record<ButtonVariant, string> = {
   secondary: "btn-secondary",
   danger: "btn-error btn-outline",
 };
+useManagementHeader(
+  "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id",
+  () => ({
+    title: props.page.title,
+    description: props.page.subtitle,
+  }),
+);
 </script>
 
 <template>
   <div :id="page.id" class="space-y-6">
-    <CadencePageHeading :breadcrumbs="page.breadcrumbs">
-      <template #title>{{ page.title }}</template>
-      <template #description>{{ page.subtitle }}</template>
-    </CadencePageHeading>
-
     <CadenceCard
       :id="card.id"
       class="card bg-base-200 border border-base-300"

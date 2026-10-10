@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 import type { DefinitionsDocument, DefinitionsPort } from "./contracts";
@@ -27,15 +27,13 @@ const search = ref(page.value.query.q),
   valuesSearch = ref(page.value.query.values_q),
   spacecraft = ref(page.value.query.spacecraft),
   spacecraftSearch = ref(page.value.query.spacecraft_q);
+useManagementHeader("/missions/:mission_id/applications/:application_key/:surface_id", {
+  title: "Derived telemetry",
+  description: "Definitions and latest values.",
+});
 </script>
 <template>
   <div id="derived-definitions-page" class="space-y-5">
-    <CadencePageHeading
-      ><template #title>Derived telemetry</template
-      ><template #description
-        >{{ page.mission_name }} · Definitions and latest values</template
-      ></CadencePageHeading
-    >
     <div class="flex flex-wrap items-center justify-between gap-3">
       <a
         :href="page.links.applications"

@@ -13,7 +13,7 @@ const href = computed(() => {
 </script>
 <template>
   <section id="timeline-destination" class="card space-y-4 p-6">
-    <h1 class="text-lg font-semibold">Mission timeline</h1>
+    <h2 class="text-lg font-semibold">Mission timeline</h2>
     <p>Open the workspace timeline to filter mission events and inspect their evidence.</p>
     <a v-if="href" :href="href" class="btn btn-primary btn-sm">Open mission timeline</a>
     <p v-else role="alert">The mission destination is unavailable.</p>

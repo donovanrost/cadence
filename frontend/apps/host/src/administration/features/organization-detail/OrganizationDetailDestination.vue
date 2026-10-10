@@ -11,7 +11,7 @@ const href = computed(() =>
 </script>
 <template>
   <section id="organization-detail-destination" class="card p-6 space-y-4">
-    <h1 class="text-lg font-semibold">Organization</h1>
+    <h2 class="text-lg font-semibold">Organization</h2>
     <a :href="href" class="btn btn-primary btn-sm">Open organization</a>
   </section>
 </template>

@@ -24,7 +24,7 @@ const href = computed(() => {
 </script>
 <template>
   <section id="history-legacy-redirect" class="space-y-3 p-6">
-    <h1 class="text-xl font-semibold">Data Operations</h1>
+    <h2 class="text-xl font-semibold">Data Operations</h2>
     <p class="text-sm">
       Historical workflows are part of the Cadence Ops workspace. Open the page to inspect requests
       and act with your current permissions.

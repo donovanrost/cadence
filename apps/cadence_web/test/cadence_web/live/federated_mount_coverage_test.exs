@@ -18,6 +18,15 @@ defmodule CadenceWeb.FederatedMountCoverageTest do
           end),
         else: host_routes
 
+    # Application surfaces are catalogued for typed headers; ApplicationHostLive serves them.
+    {surfaces, catalog} = Enum.split_with(catalog, &(&1["kind"] == "application_surface"))
+
+    for %{"path" => path} <- surfaces do
+      example = Regex.replace(~r/:[a-z_]+/, path, "example")
+      info = Phoenix.Router.route_info(CadenceWeb.Router, "GET", example, "localhost")
+      assert {CadenceWeb.ApplicationHostLive, _, _, _} = info.phoenix_live_view
+    end
+
     assert Enum.sort(Enum.map(host_routes, & &1.path)) ==
              Enum.sort(Enum.map(catalog, & &1["path"]))
 

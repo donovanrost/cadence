@@ -1,3 +1,4 @@
+import { hostRoute } from "./shell/host-navigation";
 import { required } from "../../../test-support/required";
 import { expect, test } from "vite-plus/test";
 import routes from "./routes.json";
@@ -419,6 +420,12 @@ test("each core host route resolves to its registered owner", () => {
     if (route.kind === "application_management") {
       expect(resolveHostComponent(required(route.component))).toBeDefined();
       expect(route.queryKeys).toEqual([]);
+      expect(["mission", "spacecraft"]).toContain(route.scope);
+      continue;
+    }
+    if (route.kind === "application_surface") {
+      // Served by the Phoenix application host; catalogued only for typed headers.
+      expect(hostRoute(new URL(route.path, "https://cadence.test"))).toBeUndefined();
       expect(["mission", "spacecraft"]).toContain(route.scope);
       continue;
     }

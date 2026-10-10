@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 import DefinitionEvidence from "../../shared/DefinitionEvidence.vue";
@@ -26,15 +26,13 @@ const {
 } = state;
 const search = ref(page.value.query.q as string),
   pointSearch = ref(page.value.query.points_q as string);
+useManagementHeader("/missions/:mission_id/applications/:application_key/:surface_id", {
+  title: "Limit definitions",
+  description: "Governed thresholds and activation evidence.",
+});
 </script>
 <template>
   <div id="limits-definitions-page" class="space-y-5">
-    <CadencePageHeading
-      ><template #title>Limit definitions</template
-      ><template #description
-        >{{ page.mission_name }} · Governed thresholds and activation evidence</template
-      ></CadencePageHeading
-    >
     <div class="flex flex-wrap items-center justify-between gap-3 text-sm">
       <div class="flex gap-4">
         <a

@@ -12,7 +12,7 @@ const href = computed(() => {
 </script>
 <template>
   <section id="spacecraft-commanding-legacy" class="p-6 space-y-4">
-    <h1 class="text-xl font-semibold">Command interpretation</h1>
+    <h2 class="text-xl font-semibold">Command interpretation</h2>
     <p class="text-sm">Review the spacecraft's pinned profile and command target identities.</p>
     <a v-if="href" :href="href" class="btn btn-primary">Open spacecraft commanding</a>
     <p v-else role="status">The spacecraft identity is unavailable.</p>

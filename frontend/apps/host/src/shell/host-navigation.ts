@@ -75,7 +75,10 @@ declare module "vue-router" {
     snapshot?: import("./host-snapshot").HostSnapshot;
   }
 }
-const matchers = routes.map((route) => ({
+// Application surfaces are served by the Phoenix application host, not this router;
+// they are in the catalog only so those pages can describe a typed header.
+const hostRoutes = routes.filter((route) => route.kind !== "application_surface");
+const matchers = hostRoutes.map((route) => ({
   route,
   pattern: new RegExp(
     `^${route.path
@@ -120,7 +123,7 @@ export function createHostRouter(history: RouterHistory) {
   };
   return createRouter({
     history: ownedHistory,
-    routes: routes.map((route) => ({
+    routes: hostRoutes.map((route) => ({
       path: route.path,
       name: route.path,
       component: {},

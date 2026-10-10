@@ -24,7 +24,7 @@ const href = computed(() => {
 </script>
 <template>
   <section id="sources-legacy-redirect" class="space-y-3 p-6">
-    <h1 class="text-xl font-semibold">Data Sources</h1>
+    <h2 class="text-xl font-semibold">Data Sources</h2>
     <p class="text-sm">
       Source configuration, observations and backend operations are part of the Cadence Ops
       workspace.

@@ -11,7 +11,7 @@ const href = computed(() =>
 </script>
 <template>
   <section id="organization-invite-destination" class="card p-6 space-y-4">
-    <h1 class="text-lg font-semibold">Invite user</h1>
+    <h2 class="text-lg font-semibold">Invite user</h2>
     <a :href="href" class="btn btn-primary btn-sm">Open invite user</a>
   </section>
 </template>

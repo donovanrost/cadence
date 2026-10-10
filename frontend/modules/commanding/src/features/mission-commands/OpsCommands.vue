@@ -13,7 +13,7 @@ const href = computed(() => {
 </script>
 <template>
   <section id="commands-legacy-redirect" class="p-6">
-    <h1 class="text-xl font-semibold">Commands</h1>
+    <h2 class="text-xl font-semibold">Commands</h2>
     <p class="mt-3 text-sm">
       Command monitoring is part of the Cadence Ops workspace. Open the page to read the current
       mission projection with your current permissions.

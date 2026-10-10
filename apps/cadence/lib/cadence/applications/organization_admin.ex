@@ -21,6 +21,7 @@ defmodule Cadence.Applications.OrganizationAdmin do
   @surface_contracts [
     %{
       id: "organization_home",
+      fallback_path: "/",
       scope: :organization,
       component: "OrganizationHome",
       purpose: :overview,
@@ -34,6 +35,7 @@ defmodule Cadence.Applications.OrganizationAdmin do
     },
     %{
       id: "provider_accounts",
+      fallback_path: "/provider-accounts",
       scope: :organization,
       component: "ProviderAccountListPage",
       purpose: :collection,
@@ -47,6 +49,7 @@ defmodule Cadence.Applications.OrganizationAdmin do
     },
     %{
       id: "provider_account_new",
+      fallback_path: "/provider-accounts/new",
       scope: :organization,
       component: "ProviderAccountNew",
       purpose: :configuration,
@@ -60,6 +63,7 @@ defmodule Cadence.Applications.OrganizationAdmin do
     },
     %{
       id: "provider_account_show",
+      fallback_path: "/provider-accounts/:subject",
       scope: :organization,
       component: "ProviderAccountShow",
       purpose: :subject_detail,
@@ -105,6 +109,7 @@ defmodule Cadence.Applications.OrganizationAdmin do
     },
     %{
       id: "admin_home",
+      fallback_path: "/",
       scope: :admin,
       component: "AdminHome",
       purpose: :overview,
@@ -118,6 +123,7 @@ defmodule Cadence.Applications.OrganizationAdmin do
     },
     %{
       id: "admin_runtime",
+      fallback_path: "/runtime",
       scope: :admin,
       component: "AdminRuntime",
       purpose: :activity,
@@ -131,6 +137,7 @@ defmodule Cadence.Applications.OrganizationAdmin do
     },
     %{
       id: "admin_organizations",
+      fallback_path: "/organizations",
       scope: :admin,
       component: "AdminOrganizationListPage",
       purpose: :collection,
@@ -144,6 +151,7 @@ defmodule Cadence.Applications.OrganizationAdmin do
     },
     %{
       id: "admin_organization_new",
+      fallback_path: "/organizations/new",
       scope: :admin,
       component: "AdminOrganizationNew",
       purpose: :configuration,
@@ -157,6 +165,7 @@ defmodule Cadence.Applications.OrganizationAdmin do
     },
     %{
       id: "admin_organization_show",
+      fallback_path: "/organizations/:subject",
       scope: :admin,
       component: "AdminOrganizationShow",
       purpose: :subject_detail,
@@ -170,6 +179,7 @@ defmodule Cadence.Applications.OrganizationAdmin do
     },
     %{
       id: "admin_organization_invite",
+      fallback_path: "/organizations/:subject/invite",
       scope: :admin,
       component: "AdminOrganizationInvite",
       purpose: :configuration,
@@ -493,13 +503,20 @@ defmodule Cadence.Applications.OrganizationAdmin do
       purpose: surface.purpose,
       scope: surface.scope,
       placement: surface.placement,
-      navigation: %{label: surface.navigation_label, order: surface.navigation_order},
+      navigation: navigation(surface),
       data_contract: %{query_id: surface.query, version: surface.query_version},
       actions: surface.actions,
       refresh: :after_action,
       renderer: {:trusted, "cadence.organization_admin.#{surface.id}"}
     }
   end
+
+  # The host page a surface stands in for, relative to its scope's base path.
+  defp navigation(%{fallback_path: path} = surface),
+    do: %{label: surface.navigation_label, order: surface.navigation_order, fallback_path: path}
+
+  defp navigation(surface),
+    do: %{label: surface.navigation_label, order: surface.navigation_order}
 
   defp action_scope(action_id) do
     @surface_contracts

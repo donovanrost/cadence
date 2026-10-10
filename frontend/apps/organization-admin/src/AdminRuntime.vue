@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Compatibility surface; the host now owns /admin/runtime.
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import {
   DashboardRuntimeDiagnostics,
   type DashboardRuntimeDiagnosticsProps,
@@ -11,26 +11,19 @@ const emit = defineEmits<{
   refresh: [];
   filter_decisions: [payload: { runtime_decision_filters: FilterValues }];
 }>();
+useManagementHeader("/admin/runtime", {});
 </script>
 <template>
-  <CadencePageHeading
-    :breadcrumbs="[
-      { label: 'Platform Admin', href: navigation.admin_href },
-      { label: 'Runtime Diagnostics' },
-    ]"
-  >
-    <template #title>Runtime Diagnostics</template>
-    <template #actions
-      ><button
-        id="admin-runtime-refresh"
-        type="button"
-        class="btn btn-secondary btn-sm"
-        @click="emit('refresh')"
-      >
-        Refresh
-      </button></template
+  <div class="flex justify-end">
+    <button
+      id="admin-runtime-refresh"
+      type="button"
+      class="btn btn-secondary btn-sm"
+      @click="emit('refresh')"
     >
-  </CadencePageHeading>
+      Refresh
+    </button>
+  </div>
   <DashboardRuntimeDiagnostics
     v-bind="$props"
     @filter_decisions="emit('filter_decisions', $event)"

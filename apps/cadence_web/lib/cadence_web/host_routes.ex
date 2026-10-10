@@ -8,7 +8,12 @@ defmodule CadenceWeb.HostRoutes do
   """
 
   @external_resource Path.expand("../../../../frontend/apps/host/src/routes.json", __DIR__)
-  @paths @external_resource |> File.read!() |> Jason.decode!() |> Enum.map(& &1["path"])
+  @routes @external_resource |> File.read!() |> Jason.decode!()
+  @paths for route <- @routes, route["kind"] != "application_surface", do: route["path"]
+  @application_surfaces for route <- @routes,
+                            route["kind"] == "application_surface",
+                            into: %{},
+                            do: {String.to_existing_atom(route["scope"]), route["path"]}
 
   @scope_bases %{
     mission: "/missions/:mission_id",
@@ -18,16 +23,33 @@ defmodule CadenceWeb.HostRoutes do
     admin: "/admin"
   }
 
-  @doc "The catalog route a surface stands in for, or nil when the host has no such page."
+  @doc """
+  The catalog route a surface stands in for. A surface with no host page of its
+  own is an application page: it takes its scope's generic application route.
+  Nil when the host has neither.
+  """
   @spec for_surface(atom(), map()) :: String.t() | nil
   def for_surface(scope, navigation) do
-    with {:ok, base} <- Map.fetch(@scope_bases, scope),
-         fallback when is_binary(fallback) <- Map.get(navigation, :fallback_path) do
-      shape = shape(base <> fallback)
-      Enum.find(@paths, &(shape(&1) == shape))
-    else
-      _no_route -> nil
+    case {Map.fetch(@scope_bases, scope), Map.get(navigation, :fallback_path)} do
+      {{:ok, base}, fallback} when is_binary(fallback) ->
+        # Applications give fallback paths relative to their scope, or absolute.
+        Enum.find_value([join(base, fallback), fallback], &matching/1)
+
+      {_base, nil} ->
+        Map.get(@application_surfaces, scope)
+
+      _no_route ->
+        nil
     end
+  end
+
+  defp join("", path), do: path
+  defp join(base, "/"), do: base
+  defp join(base, path), do: base <> path
+
+  defp matching(path) do
+    shape = shape(path)
+    Enum.find(@paths, &(shape(&1) == shape))
   end
 
   defp shape(path) do

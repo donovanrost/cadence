@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import CadencePageHeading from "@cadence/ui/CadencePageHeading.vue";
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceField from "@cadence/ui/CadenceField.vue";
 import CadenceStatTile from "@cadence/ui/CadenceStatTile.vue";
@@ -41,13 +41,16 @@ function changeEndpoint(event: Event) {
   const id = (event.target as HTMLSelectElement).value;
   state.chooseEndpoint(id ? (page.value.endpoints.items.find((e) => e.id === id) ?? null) : null);
 }
+useManagementHeader(
+  "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id",
+  {
+    title: "Packet bindings",
+    description: "Saved packet bindings for Telemetry Decom.",
+  },
+);
 </script>
 <template>
   <div id="telemetry-packet-bindings-page" class="space-y-5">
-    <CadencePageHeading>
-      <template #title>Packet bindings</template>
-      <template #description>{{ page.spacecraft_name }} · Telemetry Decom</template>
-    </CadencePageHeading>
     <div class="flex flex-wrap items-center justify-between gap-3">
       <a
         :href="page.links.manage"
