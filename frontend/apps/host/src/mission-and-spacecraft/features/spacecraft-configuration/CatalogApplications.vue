@@ -18,7 +18,8 @@ const selected = computed(() =>
         <p class="scw-eyebrow">DEFINITIONS & CONSUMERS</p>
         <h2>Catalog & applications</h2>
         <p class="scw-muted">
-          Choose the definitions for this onboard computer. Its consumers use the same binding.
+          Select an imported revision in this draft, save the configuration, then review and
+          activate it to change the active configuration.
         </p>
       </div>
       <CadenceLink :href="snapshot.links.catalog"
@@ -60,8 +61,8 @@ const selected = computed(() =>
           ><strong>{{ selected.declarations }}</strong> declarations</span
         ><span class="scw-muted">{{
           snapshot.active?.document.catalog_revision_id === selected.id
-            ? "Matches active binding"
-            : "Draft binding"
+            ? "Matches active configuration"
+            : "Selected in draft"
         }}</span>
       </div>
     </section>

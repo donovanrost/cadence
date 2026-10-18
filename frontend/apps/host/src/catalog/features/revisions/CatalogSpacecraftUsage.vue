@@ -12,9 +12,11 @@ const snapshot = computed(() => readSpacecraftUsage(props.data));
     id="catalog-spacecraft-usage"
     class="card border border-base-300 bg-base-200"
     body-class="card-body p-6"
-    ><h2 class="text-base font-semibold">Spacecraft bindings</h2>
+    ><h2 class="text-base font-semibold">Spacecraft usage</h2>
     <p class="text-sm text-base-content/60">
-      Active and saved bindings using this catalog revision.
+      Active means this revision is in the spacecraft’s active configuration. Saved configuration
+      means it is selected in the latest saved configuration, which may also be active. Unsaved
+      selections are not included.
     </p>
     <CadenceTableFrame v-if="snapshot.usage.length" class="table-sm"
       ><thead>
@@ -25,11 +27,15 @@ const snapshot = computed(() => readSpacecraftUsage(props.data));
         </tr>
       </thead>
       <tbody>
-        <tr v-for="craft in snapshot.usage" :key="craft.id">
+        <tr
+          v-for="craft in snapshot.usage"
+          :id="`catalog-spacecraft-usage-${craft.id}`"
+          :key="craft.id"
+        >
           <th scope="row">{{ craft.name }}</th>
           <td>
             {{ craft.active ? "Active" : "" }}{{ craft.active && craft.saved ? " · " : ""
-            }}{{ craft.saved ? "Saved draft" : "" }}
+            }}{{ craft.saved ? "Saved configuration" : "" }}
           </td>
           <td>
             <CadenceLink :href="craft.href">Review changes for {{ craft.name }}</CadenceLink>
@@ -37,8 +43,20 @@ const snapshot = computed(() => readSpacecraftUsage(props.data));
         </tr>
       </tbody></CadenceTableFrame
     >
-    <p v-else class="text-sm text-base-content/60">
-      No spacecraft has saved or activated this revision yet.
+    <p
+      v-if="snapshot.total_count > snapshot.usage.length"
+      id="catalog-spacecraft-usage-limit"
+      class="text-sm text-base-content/60"
+    >
+      Showing {{ snapshot.usage.length }} of {{ snapshot.total_count }} spacecraft.
+    </p>
+    <p
+      v-if="snapshot.total_count === 0"
+      id="catalog-spacecraft-usage-empty"
+      class="text-sm text-base-content/60"
+    >
+      Imported and available to select. No spacecraft has this revision in an active or saved
+      configuration.
       <CadenceLink :href="`/missions/${snapshot.mission_id}/spacecraft`"
         >Choose a spacecraft</CadenceLink
       >

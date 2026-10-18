@@ -8,9 +8,15 @@ defmodule CadenceWeb.SpacecraftConfigurationPage do
   import Phoenix.Component, only: [assign: 3]
 
   @route "/missions/:mission_id/spacecraft/:spacecraft_id"
+  @usage_routes [
+    @route,
+    "/missions/:mission_id/catalog",
+    "/missions/:mission_id/catalog/databases/:catalog_database_id",
+    "/missions/:mission_id/catalog/revisions/:catalog_revision_id"
+  ]
   def route?(route), do: route == @route
 
-  def subscribe(socket, %{route: @route, params: params}) do
+  def subscribe(socket, %{route: route, params: params}) when route in @usage_routes do
     identity = {socket.assigns.current_scope.organization_id, params["mission_id"]}
 
     if socket.assigns[:spacecraft_configuration_subscription] == identity do

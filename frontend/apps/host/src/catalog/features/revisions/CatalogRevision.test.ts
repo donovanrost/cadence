@@ -21,6 +21,7 @@ test("revision links imported catalog usage back to spacecraft configuration", (
     },
     spacecraft_usage: {
       mission_id: "mission-a",
+      total_count: 1,
       usage: [
         {
           id: "spacecraft-1",
@@ -80,7 +81,7 @@ test("revision keeps source links and model counts visible with complete provena
           row("Content SHA-256", hash, "hash"),
         ],
       },
-      spacecraft_usage: { mission_id: "mission-a", usage: [] },
+      spacecraft_usage: { mission_id: "mission-a", total_count: 0, usage: [] },
       mission_model: {
         id: "catalog-mission-model",
         title: "Mission Model",

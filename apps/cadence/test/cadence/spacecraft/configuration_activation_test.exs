@@ -10,6 +10,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModels
   alias Cadence.MissionModels.{ComparisonReportRow, QualificationCaseRow}
+  alias Cadence.Reads.Catalog.{Databases, Revisions}
   alias Cadence.Reads.Spacecraft.Configuration, as: ConfigurationRead
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Runtime.Missions, as: RuntimeMissions
@@ -436,6 +437,119 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
              )
 
     assert {:ok, %{generation: 1}} = RuntimeMissions.applied_spec(c.mission.mission_id)
+  end
+
+  test "catalog list, database, revision, and spacecraft agree through saved and active transitions",
+       c do
+    assert_catalog_usage(c, c.revision, 0, 0)
+    save(c, c.first, c.revision)
+    assert_catalog_usage(c, c.revision, 0, 1)
+
+    assert {:ok, request} = review(c, c.first)
+    assert {:ok, _} = activate(c, request)
+    assert_catalog_usage(c, c.revision, 1, 1)
+
+    # A newer saved configuration does not replace the active catalog.
+    save(c, c.first, c.other_revision)
+    assert_catalog_usage(c, c.revision, 1, 0)
+    assert_catalog_usage(c, c.other_revision, 0, 1)
+
+    assert {:ok, page} =
+             ConfigurationRead.load(c.scope, c.mission, c.first.spacecraft_id, "changes")
+
+    assert page.active.document["catalog_revision_id"] == c.revision.catalog_revision_id
+    assert page.document["catalog_revision_id"] == c.other_revision.catalog_revision_id
+
+    assert {:ok, request} = review(c, c.first)
+    assert {:ok, _} = activate(c, request)
+    assert_catalog_usage(c, c.revision, 0, 0)
+    assert_catalog_usage(c, c.other_revision, 1, 1)
+  end
+
+  test "database usage includes older revisions and counts each spacecraft once", c do
+    save(c, c.first, c.revision)
+    assert {:ok, request} = review(c, c.first)
+    assert {:ok, _} = activate(c, request)
+
+    {:ok, artifact} =
+      Cadence.Catalog.fetch_artifact(c.org, c.mission.mission_id, c.revision.artifact_id)
+
+    {:ok, run} =
+      Cadence.Catalog.start_revision_import(
+        c.org,
+        c.mission.mission_id,
+        c.revision.catalog_database_id,
+        artifact,
+        "cadence_yaml",
+        metadata: %{"revision_label" => "Next imported revision"}
+      )
+
+    {:ok, _} = Cadence.Catalog.execute_enqueued_run(run.import_run_id)
+
+    {:ok, next} =
+      Cadence.Catalog.fetch_revision_by_import_run(c.org, c.mission.mission_id, run.import_run_id)
+
+    assert_catalog_usage(c, c.revision, 1, 1)
+    save(c, c.first, next)
+
+    {:ok, database} =
+      Databases.catalog_database_show(
+        c.org,
+        c.mission.mission_id,
+        %{"catalog_database_id" => c.revision.catalog_database_id}
+      )
+
+    assert database["database"]["spacecraft_usage"] == %{active_count: 1, saved_count: 1}
+    rows = Map.new(database["revisions"], &{&1["revision_id"], &1["spacecraft_usage"]})
+    assert rows[c.revision.catalog_revision_id] == %{active_count: 1, saved_count: 0}
+    assert rows[next.catalog_revision_id] == %{active_count: 0, saved_count: 1}
+
+    {:ok, index} = Databases.catalog_index(c.org, c.mission.mission_id)
+
+    row =
+      Enum.find(
+        index["presentation"]["card"]["rows"],
+        &String.ends_with?(&1["href"], c.revision.catalog_database_id)
+      )
+
+    assert row["spacecraft_usage"] == %{active_count: 1, saved_count: 1}
+    assert row["latest_revision"]["label"] == "Next imported revision"
+  end
+
+  defp assert_catalog_usage(c, revision, active, saved) do
+    summary = %{active_count: active, saved_count: saved}
+    {:ok, index} = Databases.catalog_index(c.org, c.mission.mission_id)
+
+    row =
+      Enum.find(
+        index["presentation"]["card"]["rows"],
+        &String.ends_with?(&1["href"], revision.catalog_database_id)
+      )
+
+    assert row["spacecraft_usage"] == summary
+
+    {:ok, database} =
+      Databases.catalog_database_show(c.org, c.mission.mission_id, %{
+        "catalog_database_id" => revision.catalog_database_id
+      })
+
+    assert database["database"]["spacecraft_usage"] == summary
+    row = Enum.find(database["revisions"], &(&1["revision_id"] == revision.catalog_revision_id))
+    assert row["spacecraft_usage"] == summary
+
+    {:ok, detail} =
+      Revisions.catalog_revision_show(c.org, c.mission.mission_id, %{
+        "catalog_revision_id" => revision.catalog_revision_id
+      })
+
+    usage = detail["spacecraft_usage"]
+    assert Enum.count(usage.usage, & &1.active) == active
+    assert Enum.count(usage.usage, & &1.saved) == saved
+    assert usage.total_count == length(usage.usage)
+
+    for row <- usage.usage do
+      assert row.href == "/missions/#{c.mission.mission_id}/spacecraft/#{row.id}?section=changes"
+    end
   end
 
   defp save(c, spacecraft, revision, overrides \\ %{}) do

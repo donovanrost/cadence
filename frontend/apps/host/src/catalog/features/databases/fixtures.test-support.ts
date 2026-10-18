@@ -42,6 +42,7 @@ export function databaseIndexFixture() {
             slug: "flight",
             href: `${catalogHref}/databases/one`,
             latest_revision: { label: "Revision 1", href: `${catalogHref}/revisions/one` },
+            spacecraft_usage: { active_count: 0, saved_count: 0 },
             latest_import: {
               status: "ready" as const,
               status_label: "Completed",
@@ -132,7 +133,7 @@ export function databaseShowFixture() {
       name: "Flight database",
       slug: "flight",
       description: "Immutable revisions",
-      runtime_usage_summary: "No runtime bindings yet.",
+      spacecraft_usage: { active_count: 0, saved_count: 0 },
     },
     navigation: {
       mission: { label: "Mission", href: "/missions/mission-a" },
@@ -147,6 +148,7 @@ export function databaseShowFixture() {
         revision_id: "one",
         label: "Revision 1",
         number: 1,
+        spacecraft_usage: { active_count: 0, saved_count: 0 },
         mission_model_revision_id: "model-one",
         href: `${catalogHref}/revisions/one`,
       },

@@ -13,6 +13,7 @@ import {
   text,
   tone,
 } from "../../shared/validation.ts";
+import { readUsageSummary } from "../../shared/usage-summary.ts";
 
 const field = shape({
   key: text,
@@ -87,6 +88,10 @@ const uploadFields = {
   submit_disabled: bool,
 };
 const link = shape({ label: text, href });
+const usageSummary = (value: unknown) => {
+  readUsageSummary(value);
+  return true;
+};
 export const databaseRow = shape({
   id: text,
   actions_id: text,
@@ -94,6 +99,7 @@ export const databaseRow = shape({
   slug: text,
   href,
   latest_revision: nullable(link),
+  spacecraft_usage: usageSummary,
   latest_import: nullable(shape({ status: tone, status_label: text, href })),
 });
 export function assertDatabaseIndex(value: unknown): void {
@@ -156,7 +162,7 @@ export function assertDatabaseShow(value: unknown): void {
         name: text,
         slug: text,
         description: text,
-        runtime_usage_summary: text,
+        spacecraft_usage: usageSummary,
       }),
       navigation: shape({ mission: link, catalog: link, current: shape({ label: text }) }),
       revisions: list(
@@ -165,6 +171,7 @@ export function assertDatabaseShow(value: unknown): void {
           revision_id: text,
           label: text,
           number: count,
+          spacecraft_usage: usageSummary,
           mission_model_revision_id: text,
           href,
         }),

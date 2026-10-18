@@ -71,8 +71,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
     |> Repo.one()
   end
 
-  @doc "Spacecraft whose latest saved configuration uses this catalog, bounded independently of fleet ordering."
-  def catalog_usage_ids(organization_id, mission_id, catalog_id) do
+  @doc "Catalog references from each spacecraft’s latest saved configuration in this mission."
+  def catalog_usage_entries(organization_id, mission_id) do
     latest =
       from(row in ConfigurationRevisionRow,
         where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
@@ -82,10 +82,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
       )
 
     from(row in subquery(latest),
-      where: row.catalog_revision_id == ^catalog_id,
-      order_by: row.spacecraft_id,
-      limit: 100,
-      select: row.spacecraft_id
+      where: not is_nil(row.catalog_revision_id),
+      select: row
     )
     |> Repo.all()
   end

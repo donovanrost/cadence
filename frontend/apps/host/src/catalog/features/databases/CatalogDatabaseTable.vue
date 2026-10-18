@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import StatusBadge from "../../shared/StatusBadge.vue";
+import { usageSummaryText, type UsageSummary } from "../../shared/usage-summary";
 import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
 import CadenceHoverTableRow from "@cadence/ui/CadenceHoverTableRow.vue";
 import CadenceMenuItem from "@cadence/ui/CadenceMenuItem.vue";
@@ -25,6 +26,7 @@ type DatabaseRow = {
   slug: string;
   href: string;
   latest_revision: Revision | null;
+  spacecraft_usage: UsageSummary;
   latest_import: ImportRun | null;
 };
 
@@ -38,7 +40,7 @@ defineProps<{ rows: DatabaseRow[] }>();
         <th>Database</th>
         <th>Latest revision</th>
         <th>Latest import</th>
-        <th>Runtime usage</th>
+        <th>Spacecraft usage</th>
         <th class="text-right">Actions</th>
       </tr>
     </thead>
@@ -81,9 +83,9 @@ defineProps<{ rows: DatabaseRow[] }>();
           <span v-else class="text-xs text-base-content/50">—</span>
         </td>
         <td>
-          <span class="text-xs text-base-content/60" id="catalog-runtime-usage-summary">
-            No runtime bindings yet
-          </span>
+          <a :id="`${row.id}-usage`" :href="row.href" class="text-xs hover:underline">
+            {{ usageSummaryText(row.spacecraft_usage) }}
+          </a>
         </td>
         <td class="text-right">
           <CadenceModalMenu side="bottom" align="end" :side-offset="4">

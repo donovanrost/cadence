@@ -53,6 +53,7 @@ try {
     await page.getByRole("button", { name: "Done", exact: true }).click();
     await page.getByRole("link", { name: "Mission catalog", exact: true }).click();
     await page.waitForURL(`${base}/missions/${mission}/catalog`);
+    await page.getByText("No active or saved spacecraft configurations", { exact: true }).waitFor();
     await page.goBack();
     await page.locator("#spacecraft-save-draft").waitFor();
     assert.equal(
@@ -82,6 +83,23 @@ try {
       .locator(`a[href="/missions/${mission}/catalog/revisions/${revision}"]`)
       .first()
       .click();
+    await page.locator(`#catalog-spacecraft-usage-${first}`).waitFor();
+    assert.equal(
+      await page.locator(`#catalog-spacecraft-usage-${first} td`).first().innerText(),
+      "Saved configuration",
+    );
+    await page.locator(`a[href="/missions/${mission}/catalog"]`).first().click();
+    const usage = page.locator('#catalog-databases-table a[id$="-usage"]');
+    await page
+      .getByRole("link", { name: "Saved configuration on 1 spacecraft", exact: true })
+      .waitFor();
+    await usage.click();
+    await page.locator("#catalog-spacecraft-usage-summary").waitFor();
+    assert.equal(
+      await page.locator("#catalog-spacecraft-usage-summary").innerText(),
+      "Saved configuration on 1 spacecraft",
+    );
+    await page.getByRole("link", { name: "View revision", exact: true }).click();
     await page
       .locator("#catalog-spacecraft-usage")
       .getByRole("link", { name: "Review changes for KESTREL-01" })

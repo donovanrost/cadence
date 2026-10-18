@@ -4,8 +4,21 @@ defmodule Cadence.Reads.Catalog.Databases do
   import Cadence.Reads.Catalog.Presentation
 
   alias Cadence.Catalog
+  alias Cadence.Missions
+  alias Cadence.Reads.Catalog.SpacecraftUsage
 
   def catalog_index(organization_id, mission_id) do
+    with {:ok, mission} <- Missions.fetch_mission(organization_id, mission_id),
+         {:ok, usage} <- SpacecraftUsage.snapshot(mission) do
+      catalog_index_data(organization_id, mission_id, usage)
+    end
+  end
+
+  defp catalog_index_data(organization_id, mission_id, usage) do
+    revision_ids =
+      Catalog.list_revisions(organization_id, mission_id)
+      |> Enum.group_by(& &1.catalog_database_id, & &1.catalog_revision_id)
+
     databases = Catalog.list_databases(organization_id, mission_id)
     revisions = Catalog.latest_revision_by_database(organization_id, mission_id)
     runs = Catalog.latest_import_run_by_database(organization_id, mission_id)
@@ -20,6 +33,11 @@ defmodule Cadence.Reads.Catalog.Databases do
           "actions_id" => "#{database.catalog_database_id}-actions",
           "name" => database.name,
           "slug" => database.slug,
+          "spacecraft_usage" =>
+            SpacecraftUsage.summary(
+              usage,
+              Map.get(revision_ids, database.catalog_database_id, [])
+            ),
           "href" => "/missions/#{mission_id}/catalog/databases/#{database.catalog_database_id}",
           "latest_revision" =>
             revision &&
@@ -109,7 +127,9 @@ defmodule Cadence.Reads.Catalog.Databases do
 
   def catalog_database_show(organization_id, mission_id, params) do
     with {:ok, database_id} <- subject_id(params, "catalog_database_id"),
-         {:ok, database} <- Catalog.fetch_database(organization_id, mission_id, database_id) do
+         {:ok, database} <- Catalog.fetch_database(organization_id, mission_id, database_id),
+         {:ok, mission} <- Missions.fetch_mission(organization_id, mission_id),
+         {:ok, usage} <- SpacecraftUsage.snapshot(mission) do
       revisions = Catalog.list_revisions(organization_id, mission_id, database_id)
 
       runs =
@@ -123,8 +143,9 @@ defmodule Cadence.Reads.Catalog.Databases do
            "slug" => database.slug,
            "description" =>
              database.description ||
-               "Mission catalog library entry. Add immutable revisions here, then choose runtime usage separately.",
-           "runtime_usage_summary" => "No runtime bindings yet."
+               "Imported revisions are available for spacecraft configuration. Select a revision on a spacecraft, save the configuration, then review and activate it.",
+           "spacecraft_usage" =>
+             SpacecraftUsage.summary(usage, Enum.map(revisions, & &1.catalog_revision_id))
          },
          "navigation" => %{
            "mission" => %{"label" => "Mission", "href" => mission_href(mission_id)},
@@ -143,18 +164,19 @@ defmodule Cadence.Reads.Catalog.Databases do
          "upload" => upload_config("artifact"),
          "detected_importer" => %{"status" => "empty", "display_name" => nil},
          "submit_disabled" => true,
-         "revisions" => Enum.map(revisions, &revision_row(&1, mission_id)),
+         "revisions" => Enum.map(revisions, &revision_row(&1, mission_id, usage)),
          "import_runs" => Enum.map(runs, &import_run_row(&1, mission_id))
        }}
     end
   end
 
-  defp revision_row(revision, mission_id),
+  defp revision_row(revision, mission_id, usage),
     do: %{
       "id" => "catalog-revision-row-#{revision.catalog_revision_id}",
       "revision_id" => revision.catalog_revision_id,
       "label" => revision.revision_label,
       "number" => revision.revision_number,
+      "spacecraft_usage" => SpacecraftUsage.summary(usage, [revision.catalog_revision_id]),
       "mission_model_revision_id" => revision.mission_model_revision_id,
       "href" => "/missions/#{mission_id}/catalog/revisions/#{revision.catalog_revision_id}"
     }
@@ -188,7 +210,7 @@ defmodule Cadence.Reads.Catalog.Databases do
         if(name == "catalog_database",
           do: %{
             "text" =>
-              "Save the upload as an immutable revision in the mission catalog library. Runtime usage is chosen separately.",
+              "Import an immutable revision into the mission catalog. To use it, select it on a spacecraft, save the configuration, then review and activate it.",
             "class" => "text-sm text-base-content/70"
           },
           else: nil
@@ -296,7 +318,7 @@ defmodule Cadence.Reads.Catalog.Databases do
       "subtitle" => %{
         "attrs" => %{"class" => "mt-1 max-w-3xl text-sm text-base-content/70"},
         "text" =>
-          "Mission database library. Revisions are imported here; runtime usage is selected later."
+          "Import revisions here, then select them in spacecraft configurations. Usage includes all revisions of each database."
       },
       "actions" => %{"attrs" => %{"class" => "flex items-center gap-2"}},
       "new_database" => %{

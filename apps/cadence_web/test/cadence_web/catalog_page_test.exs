@@ -2,6 +2,7 @@ defmodule CadenceWeb.CatalogPageTest do
   use CadenceWeb.ConnCase, async: false
   import Phoenix.LiveViewTest
 
+  alias Cadence.Applications.TelemetryDecomFixtures
   alias Cadence.Catalog
   alias CadenceWeb.TestFixtures
 
@@ -96,6 +97,74 @@ defmodule CadenceWeb.CatalogPageTest do
     render_hook(view, "host:context", %{"path" => "/missions"})
     render_hook(view, "host:catalog", %{"event" => "reimport", "path" => path})
     assert length(Catalog.list_import_runs(mission.organization_id, mission.mission_id)) == 1
+  end
+
+  test "catalog usage pages refresh on spacecraft saves without another navigation", %{
+    conn: conn,
+    mission: mission
+  } do
+    craft = TestFixtures.persist_spacecraft!(mission)
+
+    revision =
+      TelemetryDecomFixtures.persist_imported_revision!(
+        mission.organization_id,
+        mission.mission_id
+      )
+
+    {:ok, database} =
+      Catalog.fetch_database(
+        mission.organization_id,
+        mission.mission_id,
+        revision.catalog_database_id
+      )
+
+    base = "/missions/#{mission.mission_id}/catalog"
+
+    paths = [
+      base,
+      base <> "/databases/#{database.catalog_database_id}",
+      base <> "/revisions/#{revision.catalog_revision_id}"
+    ]
+
+    views =
+      Enum.map(paths, fn path ->
+        {:ok, view, _} = live(conn, path)
+        view
+      end)
+
+    spacecraft_path = "/missions/#{mission.mission_id}/spacecraft/#{craft.spacecraft_id}"
+    {:ok, editor, _} = live(conn, spacecraft_path)
+    data = snapshot(editor)["spacecraft_page"]["data"]
+
+    render_hook(editor, "host:spacecraft-configuration", %{
+      "path" => spacecraft_path,
+      "event" => "save",
+      "input" => %{
+        "token" => data["token"],
+        "document" =>
+          Map.put(data["document"], "catalog_revision_id", revision.catalog_revision_id)
+      }
+    })
+
+    assert snapshot(editor)["spacecraft_page"]["data"]["saved_version"] == 1
+
+    # Sandbox writes stay in an outer transaction, so production post-commit
+    # invalidations are suppressed. Deliver that notification to the subscribers.
+    Phoenix.PubSub.broadcast(
+      Cadence.PubSub,
+      "read-updates:spacecraft_configuration_changed:#{mission.organization_id}:#{mission.mission_id}",
+      {:spacecraft_configuration_changed, mission.organization_id, mission.mission_id}
+    )
+
+    [index, detail, revision_view] = Enum.map(views, &snapshot(&1)["catalog"]["data"])
+
+    assert hd(index["presentation"]["card"]["rows"])["spacecraft_usage"] == %{
+             "active_count" => 0,
+             "saved_count" => 1
+           }
+
+    assert detail["database"]["spacecraft_usage"] == %{"active_count" => 0, "saved_count" => 1}
+    assert [%{"saved" => true, "active" => false}] = revision_view["spacecraft_usage"]["usage"]
   end
 
   test "refresh reauthorizes a revoked user session", %{conn: conn, mission: mission} do

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import { ref, watch } from "vue";
+import { usageSummaryText, type UsageSummary } from "../../shared/usage-summary";
 import CatalogUploadForm from "./CatalogUploadForm.vue";
 import StatusBadge from "../../shared/StatusBadge.vue";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
@@ -24,7 +25,7 @@ type CatalogDatabase = {
   name: string;
   slug: string;
   description: string;
-  runtime_usage_summary: string;
+  spacecraft_usage: UsageSummary;
 };
 
 type Revision = {
@@ -32,6 +33,7 @@ type Revision = {
   revision_id: string;
   label: string;
   number: number;
+  spacecraft_usage: UsageSummary;
   mission_model_revision_id: string;
   href: string;
 };
@@ -109,9 +111,12 @@ useManagementHeader("/missions/:mission_id/catalog/databases/:catalog_database_i
         </CadenceCard>
 
         <CadenceCard class="card border border-base-300 bg-base-200" body-class="card-body p-6">
-          <p class="hud-label">Runtime usage</p>
-          <p id="catalog-runtime-usage-summary" class="mt-2 text-sm text-base-content/60">
-            {{ database.runtime_usage_summary }}
+          <p class="hud-label">Spacecraft usage</p>
+          <p id="catalog-spacecraft-usage-summary" class="mt-2 text-sm text-base-content/60">
+            {{ usageSummaryText(database.spacecraft_usage) }}
+          </p>
+          <p class="mt-2 text-xs text-base-content/60">
+            Across all revisions. One spacecraft may have both an active and a saved configuration.
           </p>
         </CadenceCard>
       </div>
@@ -147,7 +152,7 @@ useManagementHeader("/missions/:mission_id/catalog/databases/:catalog_database_i
           <thead>
             <tr>
               <th class="hud-label">Revision</th>
-              <th class="hud-label">Mission Model</th>
+              <th class="hud-label">Spacecraft usage</th>
               <th class="hud-label text-right">Actions</th>
             </tr>
           </thead>
@@ -158,7 +163,9 @@ useManagementHeader("/missions/:mission_id/catalog/databases/:catalog_database_i
                 <p class="font-mono text-xs text-base-content/60">#{{ revision.number }}</p>
               </td>
               <td>
-                <span class="font-mono text-xs">{{ revision.mission_model_revision_id }}</span>
+                <span :id="`${revision.id}-usage`" class="text-sm">{{
+                  usageSummaryText(revision.spacecraft_usage)
+                }}</span>
               </td>
               <td class="text-right">
                 <a

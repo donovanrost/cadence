@@ -61,3 +61,57 @@ test("database details retain disclosure and real revision history", async () =>
   expect(wrapper.find("#catalog-upload-form").exists()).toBe(true);
   wrapper.unmount();
 });
+
+test.each([
+  [{ active_count: 0, saved_count: 0 }, "No active or saved spacecraft configurations"],
+  [{ active_count: 0, saved_count: 2 }, "Saved configuration on 2 spacecraft"],
+  [{ active_count: 1, saved_count: 0 }, "Active on 1 spacecraft"],
+  [
+    { active_count: 1, saved_count: 1 },
+    "Active on 1 spacecraft · Saved configuration on 1 spacecraft",
+  ],
+])("directory, database and revision history agree on usage %j", (usage, label) => {
+  const index = databaseIndexFixture();
+  required(index.presentation.card.rows[0]).spacecraft_usage = usage;
+  const detail = databaseShowFixture();
+  detail.database.spacecraft_usage = usage;
+  required(detail.revisions[0]).spacecraft_usage = usage;
+  assertDatabaseIndex(index);
+  assertDatabaseShow(detail);
+  const list = mount(CatalogIndex, { props: index });
+  const database = mount(CatalogDatabaseShow, { props: detail });
+  expect(list.get("#database-row-one-usage").text()).toBe(label);
+  expect(list.get("#database-row-one-usage").attributes("href")).toBe(
+    detail.navigation.catalog.href + "/databases/one",
+  );
+  expect(database.get("#catalog-spacecraft-usage-summary").text()).toBe(label);
+  expect(database.get("#revision-row-one-usage").text()).toBe(label);
+  list.unmount();
+  database.unmount();
+});
+test("usage counts must be present, nonnegative safe integers", () => {
+  for (const invalid of [
+    undefined,
+    null,
+    { active_count: -1, saved_count: 0 },
+    { active_count: 1, saved_count: 0.5 },
+  ]) {
+    const data = databaseShowFixture();
+    expect(() =>
+      assertDatabaseShow({ ...data, database: { ...data.database, spacecraft_usage: invalid } }),
+    ).toThrow();
+    const index = databaseIndexFixture();
+    expect(() =>
+      assertDatabaseIndex({
+        ...index,
+        presentation: {
+          ...index.presentation,
+          card: {
+            ...index.presentation.card,
+            rows: [{ ...required(index.presentation.card.rows[0]), spacecraft_usage: invalid }],
+          },
+        },
+      }),
+    ).toThrow();
+  }
+});
