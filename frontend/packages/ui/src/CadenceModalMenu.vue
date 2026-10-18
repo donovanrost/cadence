@@ -24,6 +24,7 @@ const positioning = computed(() => ({
 
 const emit = defineEmits<{
   "update:open": [open: boolean];
+  closeAutoFocus: [event: Event];
 }>();
 </script>
 
@@ -36,7 +37,11 @@ const emit = defineEmits<{
     </DropdownMenuTrigger>
 
     <DropdownMenuPortal>
-      <DropdownMenuContent as-child v-bind="positioning">
+      <DropdownMenuContent
+        as-child
+        v-bind="positioning"
+        @close-auto-focus="emit('closeAutoFocus', $event)"
+      >
         <CadencePrimitiveChild contract-name="CadenceModalMenu content" :enforce-attrs="[]">
           <slot name="content" :open="open"></slot>
         </CadencePrimitiveChild>

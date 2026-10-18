@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import CadenceSheet from "@cadence/ui/CadenceSheet.vue";
 import type { DashboardOutline, DetailsChange, SectionInput, WidgetInput } from "./contracts";
 import type { DashboardPageState } from "./useDashboardPage";
 import type { Panel } from "./panels";
 import DetailsEditor from "./DetailsEditor.vue";
-import EditSheet from "./EditSheet.vue";
 import SaveCopySheet from "./SaveCopySheet.vue";
 import SaveDashboardSheet from "./SaveDashboardSheet.vue";
 import SectionEditor from "./SectionEditor.vue";
@@ -73,11 +73,12 @@ async function applyDetails(change: DetailsChange) {
 </script>
 
 <template>
-  <EditSheet
+  <CadenceSheet
     v-if="panel"
+    :open="true"
     :title="title"
     :width="['inspect', 'versions', 'save'].includes(panel.kind) ? 'lg' : 'md'"
-    @close="close"
+    @update:open="(open) => !open && close()"
   >
     <WidgetInspector v-if="panel.kind === 'inspect'" :placement="panel.placement" />
     <VersionsSheet
@@ -129,5 +130,5 @@ async function applyDetails(change: DetailsChange) {
         @cancel="close"
       />
     </template>
-  </EditSheet>
+  </CadenceSheet>
 </template>

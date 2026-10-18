@@ -9,7 +9,7 @@ import {
 import { queryKeys as timelineQueryKeys } from "../ops-workspace/features/timeline/contracts";
 import { directoryFixture as fleetDirectoryFixture } from "../../../../modules/planning-and-contacts/src/features/fleet-planning/fleet-directory.test-support";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
+import { DOMWrapper, flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createMemoryHistory } from "vue-router";
 import { defineComponent, h, reactive, nextTick } from "vue";
 import type { LiveEventRef } from "live_vue";
@@ -510,6 +510,7 @@ test("the dashboard editor guards host navigation and back while it holds unsave
   }
 });
 test("the dashboard editor stages a section, saves in place, then exits to the live viewer", async () => {
+  const page = new DOMWrapper(document.body);
   vi.stubGlobal(
     "confirm",
     vi.fn(() => false),
@@ -525,8 +526,8 @@ test("the dashboard editor stages a section, saves in place, then exits to the l
     });
     await view().get('[aria-label="Dashboard editing"] button:nth-child(2)').trigger("click");
     await flushHostUpdates();
-    await view().get("#section-title").setValue("Thermal");
-    await view().get(".cadence-sheet form").trigger("submit");
+    await page.get("#section-title").setValue("Thermal");
+    await page.get('[role="dialog"][aria-modal="true"] form').trigger("submit");
     expect(transport.requests[1]).toMatchObject({
       event: "host:ops-page",
       payload: {
@@ -544,7 +545,7 @@ test("the dashboard editor stages a section, saves in place, then exits to the l
       page: dashboardEnvelope(dashboardEditPage(1, true), token),
     });
     await flushHostUpdates();
-    expect(view().find(".cadence-sheet").exists()).toBe(false);
+    expect(page.find('[role="dialog"][aria-modal="true"]').exists()).toBe(false);
     await click("/missions/mission-1/ops/dashboards");
     expect(transport.requests).toHaveLength(2);
     // Like Grafana: Save dashboard opens the save drawer and keeps the author editing.
@@ -554,8 +555,8 @@ test("the dashboard editor stages a section, saves in place, then exits to the l
         .find((b) => b.text() === text);
     await button("Save dashboard")?.trigger("click");
     await flushHostUpdates();
-    expect(view().get(".cadence-sheet").text()).toContain("Changes (1)");
-    await view().get(".cadence-sheet form").trigger("submit");
+    expect(page.get('[role="dialog"][aria-modal="true"]').text()).toContain("Changes (1)");
+    await page.get('[role="dialog"][aria-modal="true"] form').trigger("submit");
     expect(transport.requests[2]).toMatchObject({
       event: "host:ops-page",
       payload: {
@@ -571,7 +572,7 @@ test("the dashboard editor stages a section, saves in place, then exits to the l
     });
     await flushHostUpdates();
     expect(transport.requests).toHaveLength(3);
-    expect(view().find(".cadence-sheet").exists()).toBe(false);
+    expect(page.find('[role="dialog"][aria-modal="true"]').exists()).toBe(false);
     // Nothing unsaved remains, so Exit edit returns to the viewer without asking.
     await button("Exit edit")?.trigger("click");
     await flushHostUpdates();

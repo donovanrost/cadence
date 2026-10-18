@@ -1,18 +1,34 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import CadenceIcon from "@cadence/ui/CadenceIcon.vue";
 import CadenceMenuItem from "@cadence/ui/CadenceMenuItem.vue";
 import CadenceModalMenu from "@cadence/ui/CadenceModalMenu.vue";
 
 defineProps<{ id: string; title: string; editing: boolean; inspectable: boolean }>();
 const emit = defineEmits<{ inspect: []; configure: []; remove: [] }>();
+const trigger = ref<HTMLButtonElement>();
+const requestedPanel = ref<"inspect" | "configure" | null>(null);
+
+function openPanel(event: Event) {
+  const panel = requestedPanel.value;
+  requestedPanel.value = null;
+  if (!panel) return;
+  // Hand focus back to the durable opener before the dialog captures it.
+  // The selected menu item disappears when this menu closes.
+  event.preventDefault();
+  trigger.value?.focus();
+  if (panel === "inspect") emit("inspect");
+  else emit("configure");
+}
 </script>
 
 <template>
-  <CadenceModalMenu side="bottom" align="end" :side-offset="4">
+  <CadenceModalMenu side="bottom" align="end" :side-offset="4" @close-auto-focus="openPanel">
     <template #trigger>
       <!-- Menu triggers must be native elements; this uses the icon-button recipe. -->
       <button
         :id="`${id}-trigger`"
+        ref="trigger"
         type="button"
         class="cadence-icon-button"
         :aria-label="`Actions for ${title}`"
@@ -23,13 +39,13 @@ const emit = defineEmits<{ inspect: []; configure: []; remove: [] }>();
     <template #content="{ open }">
       <div :id="id" class="cadence-overlay-panel cadence-menu-panel">
         <div v-if="inspectable" class="cadence-menu-item">
-          <CadenceMenuItem :active="open" @select="emit('inspect')">
+          <CadenceMenuItem :active="open" @select="requestedPanel = 'inspect'">
             <button type="button"><CadenceIcon name="hero-table-cells" />Inspect data</button>
           </CadenceMenuItem>
         </div>
         <template v-if="editing">
           <div class="cadence-menu-item">
-            <CadenceMenuItem :active="open" @select="emit('configure')">
+            <CadenceMenuItem :active="open" @select="requestedPanel = 'configure'">
               <button type="button"><CadenceIcon name="hero-cog-6-tooth" />Configure</button>
             </CadenceMenuItem>
           </div>
