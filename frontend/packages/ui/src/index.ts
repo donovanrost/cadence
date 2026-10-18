@@ -28,6 +28,7 @@ export { default as CadenceDashboardSettingsSectionFrame } from "./CadenceDashbo
 export { default as CadenceDataRow } from "./CadenceDataRow.vue";
 export { default as CadenceDefinitionListPanel } from "./CadenceDefinitionListPanel.vue";
 export { default as CadenceDetailsFrame } from "./CadenceDetailsFrame.vue";
+export { default as CadenceTechnicalDetails } from "./CadenceTechnicalDetails.vue";
 export { default as CadenceDiagnosticsSectionFrame } from "./CadenceDiagnosticsSectionFrame.vue";
 export { default as CadenceEmptyState } from "./CadenceEmptyState.vue";
 export { default as CadenceEmptyStateFrame } from "./CadenceEmptyStateFrame.vue";

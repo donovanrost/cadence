@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
+import CadenceTechnicalDetails from "@cadence/ui/CadenceTechnicalDetails.vue";
 import StatusBadge from "../../shared/StatusBadge.vue";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
@@ -68,8 +69,7 @@ const props = defineProps<{
   spacecraft_readiness: SpacecraftReadinessRow[];
 }>();
 useManagementHeader("/missions/:mission_id", () => ({
-  title: props.overview.mission.display_name,
-  identifier: props.overview.mission.slug,
+  title: props.overview.mission.display_name.trim() || props.overview.mission.slug,
 }));
 </script>
 
@@ -127,7 +127,6 @@ useManagementHeader("/missions/:mission_id", () => ({
           <tr>
             <th class="hud-label">Spacecraft</th>
             <th class="hud-label">SCID</th>
-            <th class="hud-label">Runtime Identity</th>
             <th class="hud-label">Downlink Link</th>
             <th class="hud-label">Status</th>
             <th class="hud-label text-right">Actions</th>
@@ -141,24 +140,33 @@ useManagementHeader("/missions/:mission_id", () => ({
             class="border-l-2 border-l-transparent hover:border-l-primary/60 transition-colors"
           >
             <td>
-              <div class="font-medium">{{ row.spacecraft_display_name }}</div>
-              <div class="font-mono text-xs text-base-content/60">
-                {{ row.spacecraft_id }}
+              <div class="font-medium">
+                {{ row.spacecraft_display_name.trim() || row.spacecraft_id }}
               </div>
+              <CadenceTechnicalDetails
+                :id="`${row.__dom_id}-details`"
+                class="mt-2 max-w-xs whitespace-normal"
+                :context="row.spacecraft_display_name.trim() || row.spacecraft_id"
+                :items="[
+                  { label: 'Spacecraft ID', value: row.spacecraft_id },
+                  {
+                    label: 'Runtime identity',
+                    value: row.endpoint_label === 'Missing' ? null : row.endpoint_ref_label,
+                  },
+                ]"
+              />
             </td>
             <td class="font-mono text-sm text-primary/80">{{ row.scid_label }}</td>
-            <td>
-              <div class="text-sm">{{ row.endpoint_label }}</div>
-              <div class="font-mono text-xs text-base-content/60">
-                {{ row.endpoint_ref_label }}
-              </div>
-            </td>
             <td>
               <div class="text-sm">{{ row.path_label }}</div>
               <div class="text-xs text-base-content/60">{{ row.path_detail }}</div>
             </td>
             <td>
               <StatusBadge :status="row.status" :label="row.status_label" />
+              <p class="mt-1 text-xs text-base-content/70">
+                Telemetry identity:
+                {{ row.endpoint_label === "Missing" ? "Missing" : "Configured" }}
+              </p>
               <p class="mt-1 max-w-xs text-xs text-base-content/70">{{ row.issue }}</p>
             </td>
             <td class="text-right">
@@ -209,4 +217,10 @@ useManagementHeader("/missions/:mission_id", () => ({
       </CadenceTableFrame>
     </div>
   </CadenceCard>
+  <CadenceTechnicalDetails
+    id="mission-technical-details"
+    summary="Mission details"
+    :context="overview.mission.display_name.trim() || overview.mission.slug"
+    :items="[{ label: 'Mission slug', value: overview.mission.slug }]"
+  />
 </template>

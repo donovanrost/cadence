@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
+import CadenceTechnicalDetails from "@cadence/ui/CadenceTechnicalDetails.vue";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
 import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
@@ -8,7 +9,7 @@ import StatusBadge from "../../shared/StatusBadge.vue";
 import type { OverviewData } from "./contracts";
 const props = defineProps<OverviewData>();
 useManagementHeader("/missions/:mission_id/spacecraft/:spacecraft_id", () => ({
-  title: props.page.header.title,
+  title: props.page.header.title.trim() || props.overview.spacecraft_id.value,
   facts: [props.page.header.title_suffix.label],
 }));
 </script>
@@ -166,15 +167,6 @@ useManagementHeader("/missions/:mission_id/spacecraft/:spacecraft_id", () => ({
         <CadenceDataRow
           row-class="hud-data-row"
           label-class="hud-data-label"
-          :label="overview.spacecraft_id.label"
-        >
-          <span class="hud-data-value">
-            <span class="text-xs">{{ overview.spacecraft_id.value }}</span>
-          </span>
-        </CadenceDataRow>
-        <CadenceDataRow
-          row-class="hud-data-row"
-          label-class="hud-data-label"
           :label="overview.mission.label"
         >
           <a
@@ -185,15 +177,17 @@ useManagementHeader("/missions/:mission_id/spacecraft/:spacecraft_id", () => ({
             >{{ overview.mission.value }}</a
           >
         </CadenceDataRow>
-        <CadenceDataRow
-          row-class="hud-data-row md:col-span-2"
-          label-class="hud-data-label"
-          :label="overview.organization_id.label"
-        >
-          <span class="hud-data-value text-xs">{{ overview.organization_id.value }}</span>
-        </CadenceDataRow>
       </div>
 
+      <CadenceTechnicalDetails
+        id="spacecraft-technical-details"
+        class="mt-4"
+        :context="page.header.title.trim() || overview.spacecraft_id.value"
+        :items="[
+          { label: overview.spacecraft_id.label, value: overview.spacecraft_id.value },
+          { label: overview.organization_id.label, value: overview.organization_id.value },
+        ]"
+      />
       <div v-if="overview.metadata_json !== null" class="pt-2">
         <CadenceDetailsFrame class="text-sm">
           <summary class="cursor-pointer hud-label hover:text-primary">Metadata</summary>

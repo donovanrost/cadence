@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceTechnicalDetails from "@cadence/ui/CadenceTechnicalDetails.vue";
 import StatusBadge from "../../shared/StatusBadge.vue";
 import CadenceTableFrame from "@cadence/ui/CadenceTableFrame.vue";
 
@@ -12,7 +13,11 @@ type MissionRow = {
   href: string;
 };
 
-defineProps<{ rows: MissionRow[] }>();
+const props = defineProps<{ rows: MissionRow[] }>();
+const repeatedName = (row: MissionRow) =>
+  props.rows.some(
+    (other) => other.id !== row.id && other.display_name.trim() === row.display_name.trim(),
+  );
 </script>
 
 <template>
@@ -20,7 +25,6 @@ defineProps<{ rows: MissionRow[] }>();
     <thead>
       <tr>
         <th class="hud-label">Mission</th>
-        <th class="hud-label">Slug</th>
         <th class="hud-label text-right">Spacecraft</th>
         <th class="hud-label">Status</th>
       </tr>
@@ -38,10 +42,16 @@ defineProps<{ rows: MissionRow[] }>();
             data-phx-link="redirect"
             data-phx-link-state="push"
             class="text-primary hover:underline"
-            >{{ row.display_name }}</a
+            >{{ row.display_name.trim() || row.slug }}</a
           >
+          <p v-if="repeatedName(row)" class="text-xs text-base-content/70">{{ row.slug }}</p>
+          <CadenceTechnicalDetails
+            :id="`${row.id}-details`"
+            class="mt-2"
+            :context="row.display_name.trim() || row.slug"
+            :items="[{ label: 'Mission slug', value: row.slug }]"
+          />
         </td>
-        <td class="font-mono text-sm text-primary/80">{{ row.slug }}</td>
         <td class="text-right font-mono text-sm">{{ row.spacecraft_count }}</td>
         <td>
           <StatusBadge :status="row.status" :label="row.status_label" />

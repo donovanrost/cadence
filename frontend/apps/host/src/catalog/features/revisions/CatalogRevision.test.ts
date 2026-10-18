@@ -58,3 +58,50 @@ test("revision links imported catalog usage back to spacecraft configuration", (
   ).toThrow();
   expect(() => assertRevision({ ...data, provenance: { rows: [] } })).toThrow();
 });
+
+test("revision keeps source links and model counts visible with complete provenance in one disclosure", () => {
+  const row = (
+    label: string,
+    value: string | number | null,
+    style: "default" | "mono" | "hash",
+    href: string | null = null,
+  ) => ({ label, value, style, href });
+  const hash = "abcdef0123456789".repeat(4);
+  const wrapper = mount(CatalogRevisionShow, {
+    props: {
+      revision: { title: "Flight software 3.2", number_label: "Revision 7" },
+      navigation: breadcrumbs,
+      provenance: {
+        id: "catalog-revision-provenance",
+        title: "Revision provenance",
+        rows: [
+          row("Artifact", "flight.yaml", "default", `${catalogHref}/artifacts/one`),
+          row("Import run", "import_run_complete", "mono", `${catalogHref}/imports/one`),
+          row("Content SHA-256", hash, "hash"),
+        ],
+      },
+      spacecraft_usage: { mission_id: "mission-a", usage: [] },
+      mission_model: {
+        id: "catalog-mission-model",
+        title: "Mission Model",
+        available: true,
+        empty_message: "Unavailable",
+        rows: [
+          row("Revision", `mission_model_revision:${hash}`, "hash"),
+          row("Declarations", 547, "default"),
+          row("Revision label", "Flight software 3.2", "mono"),
+        ],
+      },
+    },
+  });
+  expect(wrapper.get("#catalog-revision-provenance a").text()).toBe("flight.yaml");
+  expect(wrapper.get("#catalog-mission-model").text()).toContain("547");
+  expect(wrapper.get("#catalog-mission-model").text()).toContain("Flight software 3.2");
+  expect(wrapper.get("#catalog-mission-model").text()).not.toContain(hash);
+  const details = wrapper.get("#catalog-revision-technical-details");
+  expect(details.attributes("open")).toBeUndefined();
+  expect(details.text()).toContain(`mission_model_revision:${hash}`);
+  expect(details.get("a").attributes("href")).toBe(`${catalogHref}/imports/one`);
+  expect(details.findAll("button")).toHaveLength(3);
+  wrapper.unmount();
+});

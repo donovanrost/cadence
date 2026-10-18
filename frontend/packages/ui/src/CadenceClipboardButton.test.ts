@@ -32,3 +32,22 @@ test("retains caller IDs, native button, URL resolution and copy feedback", asyn
   app.unmount();
   await vi.runAllTimersAsync();
 });
+
+test("raw text mode preserves hashes, punctuation and empty values without URL conversion", async () => {
+  const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+  app = mount(CadenceClipboardButton, {
+    props: {
+      button_id: "copy-id",
+      clipboard_text: "spacecraft_runtime:craft/a?b=1#fragment",
+      copy_as: "text",
+      icon: "hero-clipboard-document",
+    },
+  });
+  await app.get("#copy-id").trigger("click");
+  await flushPromises();
+  expect(write).toHaveBeenLastCalledWith("spacecraft_runtime:craft/a?b=1#fragment");
+  await app.setProps({ clipboard_text: "" });
+  await app.get("#copy-id").trigger("click");
+  await flushPromises();
+  expect(write).toHaveBeenLastCalledWith("");
+});

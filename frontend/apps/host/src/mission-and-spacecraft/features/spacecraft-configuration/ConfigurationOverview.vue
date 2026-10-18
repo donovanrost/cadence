@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CadenceTechnicalDetails from "@cadence/ui/CadenceTechnicalDetails.vue";
 import CadenceButton from "@cadence/ui/CadenceButton.vue";
 import CadenceLink from "@cadence/ui/CadenceLink.vue";
 import CadenceStatusSymbol from "@cadence/ui/CadenceStatusSymbol.vue";
@@ -177,5 +178,13 @@ defineEmits<{ inspect: [kind: Inspector, event: MouseEvent] }>();
         <p class="scw-note">Contact, delivery and execution status remain available in Ops.</p>
       </section>
     </div>
+    <CadenceTechnicalDetails
+      id="spacecraft-configuration-details"
+      :context="snapshot.name.trim() || snapshot.spacecraft_id"
+      :items="[
+        { label: 'Spacecraft ID', value: snapshot.spacecraft_id },
+        { label: 'Mission ID', value: snapshot.mission_id },
+      ]"
+    />
   </div>
 </template>

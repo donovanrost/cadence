@@ -5,6 +5,8 @@ const props = withDefaults(
   defineProps<{
     button_id: string;
     clipboard_text?: string;
+    copy_as?: "url" | "text";
+    feedback_class?: string;
     button_class?: string;
     icon: string;
     icon_class?: string;
@@ -15,6 +17,8 @@ const props = withDefaults(
   }>(),
   {
     clipboard_text: "",
+    copy_as: "url",
+    feedback_class: "sr-only",
     button_class: "",
     icon_class: "",
     label: "",
@@ -35,11 +39,13 @@ const feedbackMessage = computed(() => {
 });
 
 const absoluteText = () => {
+  if (props.copy_as === "text") return props.clipboard_text;
   const value = props.clipboard_text || window.location.pathname + window.location.search;
   return new URL(value, window.location.origin).toString();
 };
 
 const copyWithFallback = (text: string) => {
+  const previouslyFocused = document.activeElement;
   const textarea = document.createElement("textarea");
   textarea.value = text;
   textarea.setAttribute("readonly", "readonly");
@@ -52,6 +58,7 @@ const copyWithFallback = (text: string) => {
     return document.execCommand("copy");
   } finally {
     textarea.remove();
+    if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
   }
 };
 
@@ -110,7 +117,7 @@ onUnmounted(() => {
   >
     <span :class="[props.icon, props.icon_class]"></span> {{ props.label }}
   </button>
-  <span class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+  <span :class="props.feedback_class" role="status" aria-live="polite" aria-atomic="true">
     {{ feedbackMessage }}
   </span>
 </template>

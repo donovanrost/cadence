@@ -32,8 +32,9 @@ const items = computed(() => (model.value ? navigation(model.value, props.missio
         </a>
       </div>
       <div v-if="mission" class="px-3 pt-4 pb-2 sidebar-expanded-only">
-        <p class="text-sm font-bold truncate">{{ model.mission?.display_name }}</p>
-        <p class="text-xs text-base-content/50 font-mono truncate">{{ model.mission?.slug }}</p>
+        <p class="text-sm font-bold truncate">
+          {{ model.mission?.display_name.trim() || model.mission?.slug }}
+        </p>
       </div>
       <nav class="flex-1 overflow-y-auto py-2" aria-label="Primary navigation">
         <p v-if="!mission" class="px-3 mb-2 sidebar-expanded-only hud-label">
