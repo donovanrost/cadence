@@ -4,11 +4,14 @@ defmodule Cadence.SourceEndpoints do
   endpoints.
   """
 
+  alias Cadence.Platform.ScopedReadUpdates
+
   import Ecto.Query
 
   alias Ecto.Changeset
 
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Listing
   alias Cadence.Missions
   alias Cadence.Repo
   alias Cadence.SourceEndpoints.{SourceEndpoint, SourceEndpointRow}
@@ -37,6 +40,7 @@ defmodule Cadence.SourceEndpoints do
       {:error, %Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
     end
+    |> notify_configuration_change()
   end
 
   @spec persist_source_endpoint(SourceEndpoint.t()) ::
@@ -57,6 +61,7 @@ defmodule Cadence.SourceEndpoints do
           {:error, reason}
       end
     end
+    |> notify_configuration_change()
   end
 
   @spec fetch_source_endpoint(binary(), binary()) :: {:ok, SourceEndpoint.t()} | {:error, term()}
@@ -119,6 +124,161 @@ defmodule Cadence.SourceEndpoints do
     |> order_by([row], asc: row.source_endpoint_id)
     |> Repo.all()
     |> Enum.map(&SourceEndpointRow.to_domain/1)
+  end
+
+  @doc "Curated command target page; no endpoint metadata is returned."
+  def command_targets_page(organization_id, mission_id, after_id, search) do
+    entries =
+      SourceEndpointRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.source_endpoint_id > ^after_id
+      )
+      |> apply_command_search(organization_id, mission_id, search)
+      |> order_by([row], asc: row.source_endpoint_id)
+      |> limit(26)
+      |> select([row], %{
+        id: row.source_endpoint_id,
+        name: row.display_name,
+        spacecraft_id: row.spacecraft_id,
+        source_ref: row.source_ref,
+        scid: row.scid
+      })
+      |> Repo.all()
+
+    page = Enum.take(entries, 25)
+    %{entries: page, next_after: if(length(entries) > 25, do: List.last(page).id, else: nil)}
+  end
+
+  @doc "Display names for a scoped set of endpoints, without loading endpoint metadata."
+  def display_names(organization_id, mission_id, ids) when is_list(ids) do
+    ids
+    |> Enum.filter(&is_binary/1)
+    |> Enum.uniq()
+    |> Enum.chunk_every(500)
+    |> Enum.flat_map(fn chunk ->
+      Repo.all(
+        from(row in SourceEndpointRow,
+          where:
+            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+              row.source_endpoint_id in ^chunk,
+          select: {row.source_endpoint_id, row.display_name}
+        )
+      )
+    end)
+    |> Map.new()
+  end
+
+  @doc "Locks an exact bounded target through command preview or creation."
+  def fetch_command_authoring_target(organization_id, mission_id, endpoint_id) do
+    if Repo.in_transaction?() do
+      SourceEndpointRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.source_endpoint_id == ^endpoint_id
+      )
+      |> where([row], fragment("octet_length(?::text)", row.metadata) <= 65_536)
+      |> lock("FOR SHARE")
+      |> Repo.one()
+      |> case do
+        nil -> {:error, :command_target_unavailable}
+        row -> {:ok, SourceEndpointRow.to_domain(row)}
+      end
+    else
+      {:error, :command_target_transaction_required}
+    end
+  end
+
+  @doc "Returns only spacecraft identities for explicitly referenced, scoped endpoints."
+  def spacecraft_for_source_endpoints(organization_id, mission_id, ids) when is_list(ids) do
+    ids
+    |> Enum.filter(&is_binary/1)
+    |> Enum.uniq()
+    |> Enum.chunk_every(500)
+    |> Enum.flat_map(fn chunk ->
+      SourceEndpointRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.source_endpoint_id in ^chunk
+      )
+      |> select([row], {row.source_endpoint_id, row.spacecraft_id})
+      |> Repo.all()
+    end)
+    |> Map.new()
+  end
+
+  @doc "Returns one bounded page of mission source endpoints."
+  @spec list_source_endpoints_page(binary(), binary(), keyword()) :: Listing.Page.t()
+  def list_source_endpoints_page(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    %{page: page, page_size: page_size, offset: offset} = Listing.page_opts(opts)
+
+    filtered =
+      SourceEndpointRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id
+      )
+      |> available_to_spacecraft(Keyword.get(opts, :available_to_spacecraft))
+      |> maybe_filter_spacecraft(Keyword.get(opts, :spacecraft_id))
+      |> apply_search(Keyword.get(opts, :search))
+
+    items =
+      filtered
+      |> order_by([row], asc: row.source_endpoint_id)
+      |> limit(^page_size)
+      |> offset(^offset)
+      |> Repo.all()
+      |> Enum.map(&SourceEndpointRow.to_domain/1)
+
+    %Listing.Page{
+      items: items,
+      total_count: Repo.aggregate(filtered, :count),
+      page: page,
+      page_size: page_size
+    }
+  end
+
+  defp available_to_spacecraft(query, nil), do: query
+
+  defp available_to_spacecraft(query, spacecraft_id) when is_binary(spacecraft_id) do
+    where(query, [row], is_nil(row.spacecraft_id) or row.spacecraft_id == ^spacecraft_id)
+  end
+
+  defp apply_search(query, nil), do: query
+  defp apply_search(query, ""), do: query
+
+  defp apply_search(query, search) when is_binary(search) do
+    pattern = "%" <> Listing.escape_like(search) <> "%"
+
+    where(
+      query,
+      [source_endpoint],
+      ilike(source_endpoint.source_endpoint_id, ^pattern) or
+        ilike(source_endpoint.spacecraft_id, ^pattern) or
+        ilike(source_endpoint.display_name, ^pattern)
+    )
+  end
+
+  defp apply_command_search(query, _, _, nil), do: query
+  defp apply_command_search(query, _, _, ""), do: query
+
+  defp apply_command_search(query, organization_id, mission_id, search) when is_binary(search) do
+    pattern = "%" <> Listing.escape_like(search) <> "%"
+    spacecraft = SpacecraftStore.display_name_ids_query(organization_id, mission_id, search)
+
+    where(
+      query,
+      [endpoint],
+      ilike(endpoint.source_endpoint_id, ^pattern) or
+        ilike(endpoint.spacecraft_id, ^pattern) or
+        ilike(endpoint.display_name, ^pattern) or
+        ilike(endpoint.source_ref, ^pattern) or
+        endpoint.spacecraft_id in subquery(spacecraft)
+    )
   end
 
   @spec ensure_managed_source_endpoint(binary(), Spacecraft.t()) ::
@@ -383,4 +543,15 @@ defmodule Cadence.SourceEndpoints do
   defp maybe_filter_spacecraft(query, spacecraft_id) when is_binary(spacecraft_id) do
     where(query, [row], row.spacecraft_id == ^spacecraft_id)
   end
+
+  defp notify_configuration_change({:ok, resource} = result),
+    do:
+      ScopedReadUpdates.publish_result(
+        result,
+        :spacecraft_configuration_changed,
+        resource.organization_id,
+        resource.mission_id
+      )
+
+  defp notify_configuration_change(result), do: result
 end

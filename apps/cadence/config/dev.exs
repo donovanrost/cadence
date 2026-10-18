@@ -1,5 +1,7 @@
 import Config
 
+config :cadence, :opportunity_capability_secret, "cadence-dev-opportunity-capability-secret-2026"
+
 config :cadence, provider_local_credentials: [enabled: true]
 
 config :cadence, Cadence.Repo,

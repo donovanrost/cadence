@@ -18,6 +18,30 @@ defmodule Cadence.Applications.ApplicationDefinitionTest do
     assert :ok = ApplicationDefinition.validate(valid_application())
   end
 
+  test "bounds application action vocabularies at 128" do
+    application = valid_application()
+    [action] = application.actions
+
+    actions = [
+      action
+      | Enum.map(1..127, fn index -> %ActionDefinition{action | action_id: "action-#{index}"} end)
+    ]
+
+    over_bound = %ActionDefinition{action | action_id: "action-129"}
+
+    assert :ok =
+             ApplicationDefinition.validate(%ApplicationDefinition{
+               application
+               | actions: actions
+             })
+
+    assert {:error, :invalid_application_definition} =
+             ApplicationDefinition.validate(%ApplicationDefinition{
+               application
+               | actions: actions ++ [over_bound]
+             })
+  end
+
   test "rejects surface actions that are absent from both application contracts" do
     application = valid_application()
     [surface] = application.surfaces

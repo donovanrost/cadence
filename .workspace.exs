@@ -1,5 +1,5 @@
 [
-  ignore_paths: ["cover", "deps", "legacy", "priv", "var"],
+  ignore_paths: ["cover", "deps", "frontend", "legacy", "priv", "var"],
   checks: [
     [
       id: :valid_layers,

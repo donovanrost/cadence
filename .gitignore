@@ -31,6 +31,7 @@ cadence-*.tar
 
 # Ignore digested assets cache.
 /priv/static/cache_manifest.json
+/apps/*/priv/static/cache_manifest.json
 /priv/telemetry_logs/
 /var/
 .DS_Store
@@ -44,3 +45,6 @@ npm-debug.log
 
 # Transient state for the superpowers brainstorming visual companion.
 .superpowers/
+
+# TypeScript incremental compiler metadata
+*.tsbuildinfo

@@ -84,6 +84,34 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
     |> Enum.map(&ProviderReservationChangeRow.to_domain/1)
   end
 
+  @doc "A descending, scoped page of immutable provider revisions."
+  def list_page(org, mission, reservation, before_revision \\ nil)
+      when is_binary(org) and is_binary(mission) and is_binary(reservation) do
+    query =
+      ProviderReservationChangeRow
+      |> where(
+        [r],
+        r.organization_id == ^org and r.mission_id == ^mission and
+          r.provider_reservation_id == ^reservation
+      )
+
+    with {:ok, query} <- before_revision(query, before_revision) do
+      rows = query |> order_by([r], desc: r.provider_revision) |> limit(26) |> Repo.all()
+      entries = rows |> Enum.take(25) |> Enum.map(&ProviderReservationChangeRow.to_domain/1)
+
+      {:ok,
+       %{entries: entries, next: if(length(rows) > 25, do: List.last(entries).provider_revision)}}
+    end
+  end
+
+  defp before_revision(query, nil), do: {:ok, query}
+
+  defp before_revision(query, revision)
+       when is_integer(revision) and revision in 1..2_147_483_647,
+       do: {:ok, where(query, [r], r.provider_revision < ^revision)}
+
+  defp before_revision(_, _), do: {:error, :invalid_provider_revision_cursor}
+
   @doc false
   @spec apply(binary(), binary(), map(), keyword()) ::
           {:ok, map()} | {:error, term()}

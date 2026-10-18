@@ -1,0 +1,1398 @@
+defmodule CadenceWeb.FrontendReleasePublicationTest do
+  use Cadence.DataCase, async: false
+
+  alias Ecto.Adapters.SQL.Sandbox
+
+  alias CadenceWeb.FrontendReleaseCatalog
+  alias CadenceWeb.FrontendReleasePublication
+
+  alias CadenceWeb.FrontendReleasePublication.{
+    DatabaseArtifactStore,
+    ReleaseObject,
+    ReleasePublication
+  }
+
+  @publication_config_key {FrontendReleasePublication, :publication_config}
+
+  @fixture Path.expand("../../../../test/fixtures/frontend_release_catalog_v1.json", __DIR__)
+  @corpus @fixture |> File.read!() |> Jason.decode!()
+  @release_seed "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+  @promotion_seed "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb"
+  @fork_seed "d4f7f6f5c3d5b7c7e4a2b7eecf8f6e5d6c8b4e6f7a8b9c0d1e2f3a4b5c6d7e8f"
+  @origin "https://cdn.example.com"
+  @now "2026-08-30T18:30:00Z"
+  @publication_config [trust_records: @corpus["keys"], allowed_origins: [@origin]]
+  @artifact_bytes %{
+    "assets/app.js" => "app-bytes",
+    "mf-manifest.json" => "manifest-bytes"
+  }
+
+  setup do
+    previous_config = Process.get(@publication_config_key, :not_configured)
+    set_publication_config(publication_config(@corpus["keys"]))
+
+    on_exit(fn -> restore_process_config(previous_config) end)
+    :ok
+  end
+
+  test "valid release admission stores immutable metadata and database objects" do
+    {envelope, payload, release} = release_document(@artifact_bytes, "build-valid")
+
+    assert {:ok, %ReleasePublication{} = publication} =
+             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+
+    assert publication.release_id == release["releaseId"]
+
+    assert publication.publication_id ==
+             "frontend_release_publication_" <> digest_hex(canonical(envelope))
+
+    assert publication.payload_bytes == payload
+    assert publication.payload_digest == sha256(payload)
+    assert publication.signed_document_bytes == canonical(envelope)
+    assert length(publication.artifacts) == 2
+
+    Enum.each(publication.artifacts, fn artifact ->
+      assert artifact.release_id == publication.release_id
+      assert artifact.object_key == "sha256:" <> artifact.sha256
+
+      expected_artifact_id =
+        "frontend_release_artifact_" <>
+          digest_hex(
+            canonical(%{
+              "mediaType" => artifact.media_type,
+              "objectKey" => artifact.object_key,
+              "path" => artifact.path,
+              "releaseId" => artifact.release_id,
+              "releasePublicationId" => artifact.release_publication_id,
+              "sha256" => artifact.sha256,
+              "size" => artifact.size
+            })
+          )
+
+      assert artifact.artifact_id == expected_artifact_id
+
+      object = Repo.get!(ReleaseObject, artifact.sha256)
+      assert object.size == artifact.size
+      assert object.bytes == Map.fetch!(@artifact_bytes, artifact.path)
+    end)
+  end
+
+  test "put deduplicates identical objects and preserves the logical key" do
+    bytes = "deduplicated-object"
+    digest = sha256(bytes)
+
+    assert {:ok, %{digest: ^digest, object_key: ^digest, status: :stored, size: size}} =
+             DatabaseArtifactStore.put(digest, bytes)
+
+    assert size == byte_size(bytes)
+
+    assert {:ok, %{digest: ^digest, object_key: ^digest, status: :existing}} =
+             DatabaseArtifactStore.put(digest, bytes)
+
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 1
+  end
+
+  test "a conflicting existing object fails closed without replacement" do
+    bytes = "expected-data"
+    conflicting_bytes = String.duplicate("x", byte_size(bytes))
+    digest = sha256(bytes)
+    sha256_hex = digest_hex(bytes)
+
+    Repo.query!(
+      """
+      INSERT INTO frontend_release_objects (sha256, bytes, size, inserted_at)
+      VALUES ($1, $2, $3, now())
+      """,
+      [sha256_hex, conflicting_bytes, byte_size(conflicting_bytes)]
+    )
+
+    assert {:error, :artifact_bytes_mismatch} = DatabaseArtifactStore.put(digest, bytes)
+    assert Repo.one(from(object in ReleaseObject, select: object.bytes)) == conflicting_bytes
+  end
+
+  test "verify and read_chunk enforce metadata-first bounded reads at chunk boundaries" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = sha256(bytes)
+
+    assert {:ok, %{status: :stored}} = DatabaseArtifactStore.put(digest, bytes)
+    assert :ok = DatabaseArtifactStore.verify(digest, byte_size(bytes))
+    assert :ok = DatabaseArtifactStore.verify(digest, bytes)
+
+    assert {:error, :invalid_chunk_bounds} =
+             DatabaseArtifactStore.read_chunk(digest, 0, 1_048_577)
+
+    assert {:ok, first_chunk} = DatabaseArtifactStore.read_chunk(digest, 0, 1_048_576)
+    assert byte_size(first_chunk) == 1_048_576
+
+    assert {:ok, last_chunk} = DatabaseArtifactStore.read_chunk(digest, 1_048_576, 5)
+    assert last_chunk == :binary.copy(<<"a">>, 5)
+
+    assert {:ok, <<>>} = DatabaseArtifactStore.read_chunk(digest, byte_size(bytes), 1)
+    assert {:error, :invalid_chunk_bounds} = DatabaseArtifactStore.read_chunk(digest, 1, 0)
+  end
+
+  test "file uploads stay staged until promotion and serve from immutable chunks" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = sha256(bytes)
+    file_path = write_temp_file(bytes)
+
+    assert {:ok, %{status: :stored, size: 1_048_581}} =
+             DatabaseArtifactStore.put_file(digest, file_path)
+
+    assert [[1, 1_048_581]] =
+             Repo.query!(
+               "SELECT COUNT(*), MAX(size) FROM frontend_release_staged_objects",
+               []
+             ).rows
+
+    assert [[2]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_staged_object_chunks",
+               []
+             ).rows
+
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 0
+    assert {:error, :artifact_not_found} = DatabaseArtifactStore.read_chunk(digest, 0, 1)
+
+    assert {:ok, %{status: :existing}} = DatabaseArtifactStore.put_file(digest, file_path)
+
+    assert {:ok, %{status: :stored}} =
+             Repo.transaction(fn ->
+               {:ok, stored} = DatabaseArtifactStore.promote_staged(digest, byte_size(bytes))
+               stored
+             end)
+
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 1
+    assert [[nil]] = Repo.query!("SELECT bytes FROM frontend_release_objects", []).rows
+    assert [[2]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_object_chunks", []).rows
+    assert [[0]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_staged_objects", []).rows
+    assert :ok = DatabaseArtifactStore.verify(digest, byte_size(bytes))
+    assert :ok = DatabaseArtifactStore.verify(digest, bytes)
+    assert {:ok, first_chunk} = DatabaseArtifactStore.read_chunk(digest, 0, 1_048_576)
+    assert byte_size(first_chunk) == 1_048_576
+    assert {:ok, last_chunk} = DatabaseArtifactStore.read_chunk(digest, 1_048_576, 5)
+    assert last_chunk == :binary.copy(<<"a">>, 5)
+  end
+
+  test "staged promotion rejects an extra suffix chunk before finalization" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = sha256(bytes)
+
+    stage_file!(digest, bytes)
+
+    assert %{num_rows: 1} =
+             Repo.query!(
+               """
+               INSERT INTO frontend_release_staged_object_chunks
+                 (sha256, chunk_index, bytes, size, inserted_at)
+               VALUES ($1, 2, $2, $3, now())
+               """,
+               [digest_hex(bytes), <<"x">>, 1]
+             )
+
+    assert {:error, :stored_object_size_mismatch} =
+             DatabaseArtifactStore.promote_staged(digest, byte_size(bytes))
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_objects WHERE sha256 = $1",
+               [digest_hex(bytes)]
+             ).rows
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_object_chunks WHERE sha256 = $1",
+               [digest_hex(bytes)]
+             ).rows
+
+    assert [[1]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_staged_objects WHERE sha256 = $1",
+               [digest_hex(bytes)]
+             ).rows
+
+    assert [[3]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_staged_object_chunks WHERE sha256 = $1",
+               [digest_hex(bytes)]
+             ).rows
+  end
+
+  test "direct staged promotion rolls back final writes after post-validation mutation" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = sha256(bytes)
+
+    stage_file!(digest, bytes)
+
+    with_promotion_fault_trigger!(digest, fn ->
+      assert {:error, :stored_object_size_mismatch} =
+               DatabaseArtifactStore.promote_staged(digest, byte_size(bytes))
+    end)
+
+    assert_staged_object_retained!(digest, byte_size(bytes), 2)
+
+    assert [[0, 1_048_576, 1_048_576], [1, 5, 5]] =
+             Repo.query!(
+               """
+               SELECT chunk_index, size, octet_length(bytes)
+               FROM frontend_release_staged_object_chunks
+               WHERE sha256 = $1
+               ORDER BY chunk_index
+               """,
+               [digest_hex(bytes)]
+             ).rows
+  end
+
+  test "direct staged promotion rolls back final writes after post-copy mutation" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = sha256(bytes)
+
+    stage_file!(digest, bytes)
+
+    with_post_copy_fault_trigger!(digest, fn ->
+      assert {:error, :stored_object_size_mismatch} =
+               DatabaseArtifactStore.promote_staged(digest, byte_size(bytes))
+    end)
+
+    assert_staged_object_retained!(digest, byte_size(bytes), 2)
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM pg_trigger WHERE tgname = 'cadence_test_post_copy_fault_trigger'",
+               []
+             ).rows
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM pg_proc WHERE proname = 'cadence_test_post_copy_fault'",
+               []
+             ).rows
+  end
+
+  test "direct staged promotion accepts canonical multi-chunk and zero-byte objects" do
+    multi_chunk_bytes = :binary.copy(<<"a">>, 1_048_581)
+    multi_chunk_digest = sha256(multi_chunk_bytes)
+    stage_file!(multi_chunk_digest, multi_chunk_bytes)
+
+    assert {:ok, %{digest: ^multi_chunk_digest, status: :stored, size: 1_048_581}} =
+             DatabaseArtifactStore.promote_staged(
+               multi_chunk_digest,
+               byte_size(multi_chunk_bytes)
+             )
+
+    zero_bytes = <<>>
+    zero_digest = sha256(zero_bytes)
+    stage_file!(zero_digest, zero_bytes)
+
+    assert {:ok, %{digest: ^zero_digest, status: :stored, size: 0}} =
+             DatabaseArtifactStore.promote_staged(zero_digest, 0)
+
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 2
+    assert [[2]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_object_chunks", []).rows
+    assert [[0]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_staged_objects", []).rows
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_staged_object_chunks",
+               []
+             ).rows
+  end
+
+  test "staged promotion rejects malformed chunk topology before finalization" do
+    cases = [
+      {"zero-sized stage with a row", 0, [{0, <<"x">>, 1}]},
+      {"nonzero-sized stage with no rows", 1, []},
+      {
+        "undersized non-final chunk",
+        1_048_581,
+        [
+          {0, :binary.copy(<<"a">>, 1_048_575), 1_048_575},
+          {1, :binary.copy(<<"a">>, 6), 6}
+        ]
+      },
+      {
+        "noncontiguous index with a beyond-gap suffix",
+        1_048_581,
+        [
+          {0, :binary.copy(<<"a">>, 1_048_576), 1_048_576},
+          {2, :binary.copy(<<"a">>, 5), 5}
+        ]
+      }
+    ]
+
+    for {label, size, chunks} <- cases do
+      digest = sha256("staged-topology-" <> label)
+      insert_staged_object!(digest, size)
+
+      Enum.each(chunks, fn {chunk_index, bytes, declared_size} ->
+        insert_staged_chunk!(digest, chunk_index, bytes, declared_size)
+      end)
+
+      assert {:error, :stored_object_size_mismatch} =
+               DatabaseArtifactStore.promote_staged(digest, size)
+
+      assert_staged_object_retained!(digest, size, length(chunks))
+    end
+  end
+
+  test "stage_artifact and release admission preserve zero-byte chunk-backed objects" do
+    bytes_by_path = %{
+      "assets/empty.js" => <<>>,
+      "mf-manifest.json" => "manifest-bytes"
+    }
+
+    digest = sha256(<<>>)
+    file_path = write_temp_file(<<>>)
+
+    assert {:ok, %{digest: ^digest, status: :stored, size: 0}} =
+             FrontendReleasePublication.stage_artifact(digest, file_path)
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_staged_object_chunks WHERE sha256 = $1",
+               [digest_hex(<<>>)]
+             ).rows
+
+    {envelope, _payload, release} = release_document(bytes_by_path, "build-zero-length")
+
+    artifact_input = %{
+      "assets/empty.js" => {:object, digest, 0},
+      "mf-manifest.json" => "manifest-bytes"
+    }
+
+    assert {:ok, %ReleasePublication{} = publication} =
+             FrontendReleasePublication.admit_release(
+               envelope,
+               artifact_input,
+               now: @now
+             )
+
+    assert publication.release_id == release["releaseId"]
+
+    object = Repo.get!(ReleaseObject, digest_hex(<<>>))
+    assert object.size == 0
+    assert object.bytes == nil
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_object_chunks WHERE sha256 = $1",
+               [digest_hex(<<>>)]
+             ).rows
+
+    assert :ok = DatabaseArtifactStore.verify(digest, 0)
+    assert :ok = DatabaseArtifactStore.verify(digest, <<>>)
+    assert {:ok, <<>>} = DatabaseArtifactStore.read_chunk(digest, 0, 1)
+    assert {:ok, <<>>} = DatabaseArtifactStore.read_chunk(digest, 1, 1)
+    assert {:error, :invalid_chunk_bounds} = DatabaseArtifactStore.read_chunk(digest, 0, 0)
+  end
+
+  test "verify rejects an oversized final chunk before hashing its declared prefix" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = promote_chunked_object!(bytes)
+
+    with_disabled_triggers!(["frontend_release_object_chunks"], fn ->
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 """
+                 UPDATE frontend_release_object_chunks
+                 SET bytes = $1, size = $2
+                 WHERE sha256 = $3 AND chunk_index = 1
+                 """,
+                 [:binary.copy(<<"a">>, 6), 6, digest_hex(bytes)]
+               )
+    end)
+
+    assert {:error, :stored_object_size_mismatch} =
+             DatabaseArtifactStore.verify(digest, byte_size(bytes))
+  end
+
+  test "verify rejects an extra trailing chunk row" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = promote_chunked_object!(bytes)
+
+    with_disabled_triggers!(["frontend_release_object_chunks"], fn ->
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 """
+                 INSERT INTO frontend_release_object_chunks
+                   (sha256, chunk_index, bytes, size, inserted_at)
+                 VALUES ($1, 2, $2, $3, now())
+                 """,
+                 [digest_hex(bytes), <<"x">>, 1]
+               )
+    end)
+
+    assert {:error, :stored_object_size_mismatch} =
+             DatabaseArtifactStore.verify(digest, byte_size(bytes))
+  end
+
+  test "verify rejects a missing chunk index" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = promote_chunked_object!(bytes)
+
+    with_disabled_triggers!(["frontend_release_object_chunks"], fn ->
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 "DELETE FROM frontend_release_object_chunks WHERE sha256 = $1 AND chunk_index = 1",
+                 [digest_hex(bytes)]
+               )
+    end)
+
+    assert {:error, :stored_object_size_mismatch} =
+             DatabaseArtifactStore.verify(digest, byte_size(bytes))
+  end
+
+  test "verify rejects noncontiguous chunk indexes" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = promote_chunked_object!(bytes)
+
+    with_disabled_triggers!(["frontend_release_object_chunks"], fn ->
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 "DELETE FROM frontend_release_object_chunks WHERE sha256 = $1 AND chunk_index = 1",
+                 [digest_hex(bytes)]
+               )
+
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 """
+                 INSERT INTO frontend_release_object_chunks
+                   (sha256, chunk_index, bytes, size, inserted_at)
+                 VALUES ($1, 2, $2, $3, now())
+                 """,
+                 [digest_hex(bytes), :binary.copy(<<"a">>, 5), 5]
+               )
+    end)
+
+    assert {:error, :stored_object_size_mismatch} =
+             DatabaseArtifactStore.verify(digest, byte_size(bytes))
+  end
+
+  test "verify rejects a wrong stored object size" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = promote_chunked_object!(bytes)
+
+    with_disabled_triggers!(["frontend_release_objects"], fn ->
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 "UPDATE frontend_release_objects SET size = $1 WHERE sha256 = $2",
+                 [byte_size(bytes) + 1, digest_hex(bytes)]
+               )
+    end)
+
+    assert {:error, :artifact_size_mismatch} =
+             DatabaseArtifactStore.verify(digest, byte_size(bytes))
+  end
+
+  test "verify rejects same-size tampered chunk data" do
+    bytes = :binary.copy(<<"a">>, 1_048_581)
+    digest = promote_chunked_object!(bytes)
+
+    with_disabled_triggers!(["frontend_release_object_chunks"], fn ->
+      assert %{num_rows: 1} =
+               Repo.query!(
+                 """
+                 UPDATE frontend_release_object_chunks
+                 SET bytes = $1, size = $2
+                 WHERE sha256 = $3 AND chunk_index = 1
+                 """,
+                 [:binary.copy(<<"b">>, 5), 5, digest_hex(bytes)]
+               )
+    end)
+
+    assert {:error, :artifact_bytes_mismatch} = DatabaseArtifactStore.verify(digest, bytes)
+
+    assert {:error, :artifact_digest_mismatch} =
+             DatabaseArtifactStore.verify(digest, byte_size(bytes))
+  end
+
+  test "failed finalization retains stages and retry promotes them atomically" do
+    {envelope, _payload, _release} = release_document(@artifact_bytes, "build-staged-retry")
+    app_digest = sha256(@artifact_bytes["assets/app.js"])
+    manifest_digest = sha256(@artifact_bytes["mf-manifest.json"])
+
+    stage_file!(app_digest, @artifact_bytes["assets/app.js"])
+
+    assert {:error, %{code: :artifact_not_found}} =
+             FrontendReleasePublication.admit_release(
+               envelope,
+               %{
+                 "assets/app.js" =>
+                   {:object, app_digest, byte_size(@artifact_bytes["assets/app.js"])},
+                 "mf-manifest.json" =>
+                   {:object, manifest_digest, byte_size(@artifact_bytes["mf-manifest.json"])}
+               },
+               now: @now
+             )
+
+    assert [[1]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_staged_objects", []).rows
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 0
+
+    stage_file!(manifest_digest, @artifact_bytes["mf-manifest.json"])
+
+    assert {:ok, publication} =
+             FrontendReleasePublication.admit_release(
+               envelope,
+               staged_artifacts(@artifact_bytes),
+               now: @now
+             )
+
+    assert length(publication.artifacts) == 2
+    assert [[0]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_staged_objects", []).rows
+    assert [[2]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_objects", []).rows
+  end
+
+  test "exact release replay is honored before staged-object promotion" do
+    {envelope, _payload, release} = release_document(@artifact_bytes, "build-replay-stage")
+
+    assert {:ok, _publication} =
+             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+
+    assert {:ok, replayed} =
+             FrontendReleasePublication.admit_release(
+               envelope,
+               staged_artifacts(@artifact_bytes),
+               now: @now
+             )
+
+    assert replayed.release_id == release["releaseId"]
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 2
+  end
+
+  test "expiry cleanup removes only unreferenced stages" do
+    {envelope, _payload, _release} = release_document(@artifact_bytes, "build-stage-expiry")
+
+    assert {:ok, _publication} =
+             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+
+    referenced_digest = sha256(@artifact_bytes["assets/app.js"])
+    unreferenced_bytes = "unreferenced-staged-object"
+    unreferenced_digest = sha256(unreferenced_bytes)
+    insert_expired_stage!(referenced_digest, @artifact_bytes["assets/app.js"])
+    insert_expired_stage!(unreferenced_digest, unreferenced_bytes)
+
+    assert {:ok, 1} = DatabaseArtifactStore.cleanup_expired_staged_artifacts()
+    assert [[1]] = Repo.query!("SELECT COUNT(*) FROM frontend_release_staged_objects", []).rows
+
+    expected_stage_digest = digest_hex(@artifact_bytes["assets/app.js"])
+
+    assert [[^expected_stage_digest]] =
+             Repo.query!("SELECT sha256 FROM frontend_release_staged_objects", []).rows
+  end
+
+  test "staged metadata and chunk rows reject updates after insert" do
+    bytes = "immutable-staged-object"
+    digest = sha256(bytes)
+    insert_expired_stage!(digest, bytes)
+
+    for sql <- [
+          "UPDATE frontend_release_staged_objects SET size = size",
+          "UPDATE frontend_release_staged_objects SET expires_at = expires_at",
+          "UPDATE frontend_release_staged_object_chunks SET bytes = bytes",
+          "UPDATE frontend_release_staged_object_chunks SET chunk_index = chunk_index"
+        ] do
+      assert_sql_rejected(sql)
+    end
+  end
+
+  test "release objects and publication rows roll back together" do
+    {envelope, _payload, release} = release_document(@artifact_bytes, "build-rollback")
+
+    assert {:error, :forced_rollback} =
+             Repo.transaction(fn ->
+               assert {:ok, _publication} =
+                        FrontendReleasePublication.admit_release(
+                          envelope,
+                          @artifact_bytes,
+                          now: @now
+                        )
+
+               Repo.rollback(:forced_rollback)
+             end)
+
+    assert Repo.get_by(ReleasePublication, release_id: release["releaseId"]) == nil
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 0
+  end
+
+  test "identical release retry returns the original immutable publication" do
+    {envelope, _payload, release} = release_document(@artifact_bytes, "build-retry")
+
+    assert {:ok, first} =
+             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+
+    assert {:ok, second} =
+             FrontendReleasePublication.admit_release(
+               envelope,
+               @artifact_bytes,
+               now: "2026-08-30T18:31:00Z"
+             )
+
+    assert second.publication_id == first.publication_id
+    assert second.release_id == release["releaseId"]
+    assert Repo.aggregate(ReleasePublication, :count, :publication_id) == 1
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 2
+  end
+
+  test "same release identity with different signed bytes fails closed" do
+    {envelope, _payload, release} = release_document(@artifact_bytes, "build-fork")
+    alternate_key = alternate_release_key()
+
+    set_publication_config(publication_config(@corpus["keys"] ++ [alternate_key]))
+
+    alternate_envelope =
+      sign_fixture(
+        canonical(release),
+        "fixture-release-key-alt",
+        "release",
+        @fork_seed
+      )
+
+    assert {:ok, first} =
+             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+
+    assert first.release_id == release["releaseId"]
+
+    assert {:error, %{code: :release_identity_fork}} =
+             FrontendReleasePublication.admit_release(
+               alternate_envelope,
+               @artifact_bytes,
+               now: @now
+             )
+  end
+
+  test "artifact admission is exact and rejects missing, extra, duplicate, size, and hash inputs" do
+    {envelope, _payload, _release} = release_document(@artifact_bytes, "build-artifacts")
+
+    assert {:error, %{code: :missing_artifact}} =
+             FrontendReleasePublication.admit_release(
+               envelope,
+               %{"assets/app.js" => @artifact_bytes["assets/app.js"]},
+               now: @now
+             )
+
+    assert {:error, %{code: :undeclared_artifact}} =
+             FrontendReleasePublication.admit_release(
+               envelope,
+               Map.put(@artifact_bytes, "assets/extra.js", "extra"),
+               now: @now
+             )
+
+    assert {:error, %{code: :duplicate_artifact_path}} =
+             FrontendReleasePublication.admit_release(
+               envelope,
+               [
+                 {"assets/app.js", "app-bytes"},
+                 {"assets/app.js", "app-bytes"},
+                 {"mf-manifest.json", "manifest-bytes"}
+               ],
+               now: @now
+             )
+
+    assert {:error, %{code: :artifact_size_mismatch}} =
+             FrontendReleasePublication.admit_release(
+               envelope,
+               Map.put(@artifact_bytes, "assets/app.js", "wrong"),
+               now: @now
+             )
+
+    assert {:error, %{code: :artifact_hash_mismatch}} =
+             FrontendReleasePublication.admit_release(
+               envelope,
+               Map.put(@artifact_bytes, "assets/app.js", "app-bytez"),
+               now: @now
+             )
+  end
+
+  test "artifact path spellings outside the signed allowlist fail closed" do
+    {envelope, _payload, _release} = release_document(@artifact_bytes, "build-paths")
+
+    for file_path <- [
+          "../assets/app.js",
+          "assets/../app.js",
+          "assets\\app.js",
+          "/assets/app.js"
+        ] do
+      assert {:error, %{code: :undeclared_artifact}} =
+               FrontendReleasePublication.admit_release(
+                 envelope,
+                 Map.put(@artifact_bytes, file_path, "app-bytes"),
+                 now: @now
+               )
+    end
+  end
+
+  test "aggregate artifact byte cap is enforced before storage and by PostgreSQL" do
+    large_bytes = :binary.copy(<<"l">>, 100_000_000)
+    small_bytes = "s"
+
+    {over_cap_envelope, _payload, over_cap_release} =
+      release_document(
+        %{"assets/large.js" => large_bytes, "mf-manifest.json" => small_bytes},
+        "build-over-cap"
+      )
+
+    assert {:error, %{code: :artifact_byte_cap_exceeded}} =
+             FrontendReleasePublication.admit_release(
+               over_cap_envelope,
+               %{"assets/large.js" => large_bytes, "mf-manifest.json" => small_bytes},
+               now: @now
+             )
+
+    assert Repo.get_by(ReleasePublication, release_id: over_cap_release["releaseId"]) == nil
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 0
+
+    {seed_envelope, _seed_payload, seed_release} =
+      release_document(%{"mf-manifest.json" => small_bytes}, "build-cap-trigger")
+
+    assert {:ok, seed_publication} =
+             FrontendReleasePublication.admit_release(
+               seed_envelope,
+               %{"mf-manifest.json" => small_bytes},
+               now: @now
+             )
+
+    large_digest = digest_hex(large_bytes)
+
+    Repo.query!(
+      """
+      INSERT INTO frontend_release_objects (sha256, bytes, size, inserted_at)
+      VALUES ($1, $2, $3, now())
+      """,
+      [large_digest, large_bytes, byte_size(large_bytes)]
+    )
+
+    assert_sql_rejected(
+      """
+      INSERT INTO frontend_release_artifacts
+        (artifact_id, release_publication_id, release_id, path, sha256, size, media_type, object_key, metadata, inserted_at)
+      VALUES
+        ('cap-trigger-artifact', $1, $2, 'assets/large.js', $3, 100000000,
+         'application/javascript', $4, '{}'::jsonb, now())
+      """,
+      [
+        seed_publication.publication_id,
+        seed_release["releaseId"],
+        large_digest,
+        "sha256:" <> large_digest
+      ]
+    )
+  end
+
+  test "concurrent identical release admissions converge to one publication and objects" do
+    {envelope, _payload, release} = release_document(@artifact_bytes, "build-concurrent")
+
+    release_tasks =
+      Enum.map(1..2, fn _index ->
+        Task.async(fn ->
+          FrontendReleasePublication.admit_release(envelope, @artifact_bytes,
+            now: @now,
+            publication_config: @publication_config
+          )
+        end)
+      end)
+
+    Enum.each(release_tasks, fn %Task{pid: pid} -> Sandbox.allow(Cadence.Repo, self(), pid) end)
+    release_results = Enum.map(release_tasks, &Task.await(&1, 30_000))
+
+    assert Enum.all?(release_results, &match?({:ok, %ReleasePublication{}}, &1))
+    assert Repo.aggregate(ReleasePublication, :count, :publication_id) == 1
+    assert Repo.aggregate(ReleaseObject, :count, :sha256) == 2
+
+    catalog = catalog_document(release, nil, 1, "2026-08-30T18:00:00Z")
+
+    assert {:error, :catalog_activation_required} =
+             FrontendReleasePublication.admit_catalog(catalog,
+               now: @now,
+               publication_config: @publication_config
+             )
+
+    assert Repo.aggregate(
+             CadenceWeb.FrontendReleasePublication.CatalogPublication,
+             :count,
+             :publication_id
+           ) == 0
+  end
+
+  test "direct catalog admission is closed to preserve the sole activation writer" do
+    {current_envelope, _current_payload, current_release} =
+      release_document(@artifact_bytes, "build-catalog-current", "2026-08-30T17:30:00Z")
+
+    fallback_bytes = Map.put(@artifact_bytes, "assets/app.js", "fallback-bytes")
+
+    {fallback_envelope, _fallback_payload, fallback_release} =
+      release_document(fallback_bytes, "build-catalog-fallback", "2026-08-30T16:30:00Z")
+
+    assert {:ok, _} =
+             FrontendReleasePublication.admit_release(
+               current_envelope,
+               @artifact_bytes,
+               now: @now
+             )
+
+    assert {:ok, _} =
+             FrontendReleasePublication.admit_release(fallback_envelope, fallback_bytes,
+               now: @now
+             )
+
+    catalog = catalog_document(current_release, fallback_release, 2, "2026-08-30T18:00:00Z")
+
+    assert {:error, :catalog_activation_required} =
+             FrontendReleasePublication.admit_catalog(catalog, now: @now)
+
+    assert Repo.aggregate(
+             CadenceWeb.FrontendReleasePublication.CatalogPublication,
+             :count,
+             :publication_id
+           ) == 0
+  end
+
+  test "alternate valid signature over identical nested payload fails closed" do
+    {canonical_envelope, _payload, release} =
+      release_document(@artifact_bytes, "build-nested-envelope")
+
+    alternate_key = alternate_release_key()
+
+    set_publication_config(publication_config(@corpus["keys"] ++ [alternate_key]))
+
+    alternate_envelope =
+      sign_fixture(
+        canonical(release),
+        "fixture-release-key-alt",
+        "release",
+        @fork_seed
+      )
+
+    assert alternate_envelope["payload"] == canonical_envelope["payload"]
+    assert alternate_envelope["signature"] != canonical_envelope["signature"]
+
+    assert {:ok, _publication} =
+             FrontendReleasePublication.admit_release(
+               alternate_envelope,
+               @artifact_bytes,
+               now: @now
+             )
+
+    catalog = catalog_document(release, nil, 1, "2026-08-30T18:00:00Z")
+
+    assert {:error, :catalog_activation_required} =
+             FrontendReleasePublication.admit_catalog(catalog, now: @now)
+
+    assert Repo.aggregate(
+             CadenceWeb.FrontendReleasePublication.CatalogPublication,
+             :count,
+             :publication_id
+           ) == 0
+  end
+
+  test "catalog replay, fork, lower, and non-monotonic publication cases are enforced" do
+    {current_envelope, _current_payload, current_release} =
+      release_document(@artifact_bytes, "build-catalog-rules", "2026-08-30T17:30:00Z")
+
+    assert {:ok, _} =
+             FrontendReleasePublication.admit_release(
+               current_envelope,
+               @artifact_bytes,
+               now: @now
+             )
+
+    catalog = catalog_document(current_release, nil, 2, "2026-08-30T18:00:00Z")
+    fork = catalog_document(current_release, nil, 2, "2026-08-30T18:01:00Z")
+    lower = catalog_document(current_release, nil, 1, "2026-08-30T18:02:00Z")
+    non_monotonic = catalog_document(current_release, nil, 3, "2026-08-30T18:00:00Z")
+
+    for candidate <- [catalog, fork, lower, non_monotonic] do
+      assert {:error, :catalog_activation_required} =
+               FrontendReleasePublication.admit_catalog(candidate, now: @now)
+    end
+
+    assert Repo.aggregate(
+             CadenceWeb.FrontendReleasePublication.CatalogPublication,
+             :count,
+             :publication_id
+           ) == 0
+  end
+
+  test "catalog references to a missing release roll back the catalog transaction" do
+    {_missing_envelope, _missing_payload, missing_release} =
+      release_document(@artifact_bytes, "build-missing-catalog-release")
+
+    catalog = catalog_document(missing_release, nil, 1, "2026-08-30T18:00:00Z")
+
+    assert {:error, :catalog_activation_required} =
+             FrontendReleasePublication.admit_catalog(catalog, now: @now)
+
+    assert Repo.aggregate(
+             CadenceWeb.FrontendReleasePublication.CatalogPublication,
+             :count,
+             :publication_id
+           ) == 0
+  end
+
+  test "configured trust records and allowed origins are mandatory" do
+    {envelope, _payload, _release} = release_document(@artifact_bytes, "build-policy")
+    config = @publication_config
+
+    set_publication_config(Keyword.put(config, :trust_records, []))
+
+    assert {:error, %{code: :unknown_key}} =
+             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+
+    set_publication_config(
+      config
+      |> Keyword.put(:trust_records, @corpus["keys"])
+      |> Keyword.put(:allowed_origins, ["https://other.example.com"])
+    )
+
+    assert {:error, %{code: :invalid_base_url}} =
+             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+
+    refute Keyword.has_key?(config, :artifact_root)
+    refute Keyword.has_key?(config, :artifact_store)
+    refute function_exported?(CadenceWeb.FrontendReleasePublication, :readback, 1)
+  end
+
+  test "publication and object tables reject update, delete, and truncate" do
+    {envelope, _payload, release} = release_document(@artifact_bytes, "build-mutations")
+
+    assert {:ok, publication} =
+             FrontendReleasePublication.admit_release(envelope, @artifact_bytes, now: @now)
+
+    catalog = catalog_document(release, nil, 1, "2026-08-30T18:00:00Z")
+
+    assert {:error, :catalog_activation_required} =
+             FrontendReleasePublication.admit_catalog(catalog, now: @now)
+
+    for sql <- [
+          "UPDATE frontend_release_objects SET size = size",
+          "DELETE FROM frontend_release_objects",
+          "TRUNCATE frontend_release_objects CASCADE",
+          "UPDATE frontend_release_artifacts SET size = size",
+          "DELETE FROM frontend_release_artifacts",
+          "TRUNCATE frontend_release_artifacts CASCADE",
+          "UPDATE frontend_release_publications SET accepted_at = accepted_at",
+          "DELETE FROM frontend_release_publications",
+          "TRUNCATE frontend_release_publications CASCADE"
+        ] do
+      assert_sql_rejected(sql)
+    end
+
+    assert Repo.get!(ReleasePublication, publication.publication_id).release_id ==
+             release["releaseId"]
+  end
+
+  test "publication boundary exposes no update or delete API" do
+    refute function_exported?(FrontendReleasePublication, :update_release, 2)
+    refute function_exported?(FrontendReleasePublication, :delete_release, 1)
+    refute function_exported?(FrontendReleasePublication, :update_catalog, 2)
+    refute function_exported?(FrontendReleasePublication, :delete_catalog, 1)
+  end
+
+  test "invalid direct signed-document terms remain coded without masking" do
+    assert {:error, %{code: :invalid_document, path: "$"}} =
+             FrontendReleasePublication.admit_release(
+               %{"unsupported" => self()},
+               %{},
+               now: @now
+             )
+  end
+
+  defp assert_sql_rejected(sql, params \\ []) do
+    result =
+      Repo.transaction(fn ->
+        case Repo.query(sql, params) do
+          {:error, %Postgrex.Error{} = error} -> Repo.rollback(error)
+          {:ok, _result} -> flunk("expected SQL rejection: #{sql}")
+        end
+      end)
+
+    assert {:error, %Postgrex.Error{}} = result
+  end
+
+  defp with_disabled_triggers!(tables, fun) do
+    trigger_states = Enum.map(tables, &{&1, trigger_states!(&1)})
+
+    try do
+      Enum.each(tables, fn table ->
+        Repo.query!("ALTER TABLE #{quote_identifier(table)} DISABLE TRIGGER ALL")
+      end)
+
+      fun.()
+    after
+      restore_trigger_states!(trigger_states)
+    end
+  end
+
+  defp trigger_states!(table) do
+    Repo.query!(
+      """
+      SELECT tgname, tgenabled::text
+      FROM pg_trigger
+      WHERE tgrelid = to_regclass($1::text)
+      ORDER BY tgname
+      """,
+      [table]
+    ).rows
+    |> Enum.map(fn [name, state] -> {name, state} end)
+  end
+
+  defp restore_trigger_states!(trigger_states) do
+    Enum.each(trigger_states, fn {table, states} ->
+      Enum.each(states, fn {name, state} ->
+        Repo.query!(
+          "ALTER TABLE #{quote_identifier(table)} #{trigger_state_sql(state)} #{quote_identifier(name)}"
+        )
+      end)
+    end)
+  end
+
+  defp with_promotion_fault_trigger!(digest, fun) do
+    function_name = "cadence_test_promotion_fault"
+    trigger_name = "cadence_test_promotion_fault_trigger"
+
+    try do
+      Repo.query!(
+        "DROP TRIGGER IF EXISTS #{quote_identifier(trigger_name)} ON frontend_release_objects"
+      )
+
+      Repo.query!("DROP FUNCTION IF EXISTS #{quote_identifier(function_name)}()")
+
+      Repo.query!("""
+      CREATE FUNCTION #{quote_identifier(function_name)}()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      BEGIN
+        IF NEW.sha256 = TG_ARGV[0] THEN
+          INSERT INTO frontend_release_staged_object_chunks
+            (sha256, chunk_index, bytes, size, inserted_at)
+          VALUES (NEW.sha256, 2, decode('78', 'hex'), 1, now());
+        END IF;
+
+        RETURN NEW;
+      END;
+      $$
+      """)
+
+      Repo.query!("""
+      CREATE TRIGGER #{quote_identifier(trigger_name)}
+      AFTER INSERT ON frontend_release_objects
+      FOR EACH ROW
+      EXECUTE FUNCTION #{quote_identifier(function_name)}(#{quote_literal(digest_hex_value(digest))})
+      """)
+
+      fun.()
+    after
+      Repo.query!(
+        "DROP TRIGGER IF EXISTS #{quote_identifier(trigger_name)} ON frontend_release_objects"
+      )
+
+      Repo.query!("DROP FUNCTION IF EXISTS #{quote_identifier(function_name)}()")
+    end
+  end
+
+  defp with_post_copy_fault_trigger!(digest, fun) do
+    function_name = "cadence_test_post_copy_fault"
+    trigger_name = "cadence_test_post_copy_fault_trigger"
+
+    try do
+      Repo.query!(
+        "DROP TRIGGER IF EXISTS #{quote_identifier(trigger_name)} ON frontend_release_object_chunks"
+      )
+
+      Repo.query!("DROP FUNCTION IF EXISTS #{quote_identifier(function_name)}()")
+
+      Repo.query!("""
+      CREATE FUNCTION #{quote_identifier(function_name)}()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      BEGIN
+        IF NEW.sha256 = TG_ARGV[0] AND NEW.chunk_index = 0 THEN
+          INSERT INTO frontend_release_object_chunks
+            (sha256, chunk_index, bytes, size, inserted_at)
+          VALUES (NEW.sha256, 2, decode('78', 'hex'), 1, now());
+        END IF;
+
+        RETURN NEW;
+      END;
+      $$
+      """)
+
+      Repo.query!("""
+      CREATE TRIGGER #{quote_identifier(trigger_name)}
+      AFTER INSERT ON frontend_release_object_chunks
+      FOR EACH ROW
+      EXECUTE FUNCTION #{quote_identifier(function_name)}(#{quote_literal(digest_hex_value(digest))})
+      """)
+
+      fun.()
+    after
+      Repo.query!(
+        "DROP TRIGGER IF EXISTS #{quote_identifier(trigger_name)} ON frontend_release_object_chunks"
+      )
+
+      Repo.query!("DROP FUNCTION IF EXISTS #{quote_identifier(function_name)}()")
+    end
+  end
+
+  defp trigger_state_sql("O"), do: "ENABLE TRIGGER"
+  defp trigger_state_sql("D"), do: "DISABLE TRIGGER"
+  defp trigger_state_sql("R"), do: "ENABLE REPLICA TRIGGER"
+  defp trigger_state_sql("A"), do: "ENABLE ALWAYS TRIGGER"
+
+  defp quote_identifier(value), do: ~s("#{String.replace(value, "\"", "\"\"")}")
+  defp quote_literal(value), do: "'" <> String.replace(value, "'", "''") <> "'"
+
+  defp publication_config(trust_records) do
+    [trust_records: trust_records, allowed_origins: [@origin]]
+  end
+
+  defp set_publication_config(config), do: Process.put(@publication_config_key, config)
+
+  defp restore_process_config(:not_configured),
+    do: Process.delete(@publication_config_key)
+
+  defp restore_process_config(config),
+    do: Process.put(@publication_config_key, config)
+
+  defp release_document(bytes_by_path, build_id, released_at \\ "2026-08-30T17:00:00Z") do
+    base = Jason.decode!(@corpus["release"]["payload"])
+
+    artifacts =
+      bytes_by_path
+      |> Enum.sort_by(fn {file_path, _bytes} -> file_path end)
+      |> Enum.map(fn {file_path, bytes} ->
+        %{
+          "mediaType" =>
+            if(file_path == "mf-manifest.json",
+              do: "application/json",
+              else: "application/javascript"
+            ),
+          "path" => file_path,
+          "sha256" => digest_hex(bytes),
+          "size" => byte_size(bytes)
+        }
+      end)
+
+    release =
+      base
+      |> Map.put("artifacts", artifacts)
+      |> Map.put("manifest", Enum.find(artifacts, &(&1["path"] == "mf-manifest.json")))
+      |> put_in(["provenance", "buildId"], build_id)
+      |> Map.put("releasedAt", released_at)
+      |> with_release_id()
+
+    payload = canonical(release)
+    {sign_fixture(payload, "fixture-release-key", "release", @release_seed), payload, release}
+  end
+
+  defp catalog_document(current, fallback, sequence, published_at) do
+    entry = %{
+      "identity" => identity(current),
+      "current" => release_envelope(current)
+    }
+
+    entry = if fallback, do: Map.put(entry, "fallback", release_envelope(fallback)), else: entry
+
+    payload =
+      canonical(%{
+        "entries" => [entry],
+        "expiresAt" => "2026-09-01T18:00:00Z",
+        "publishedAt" => published_at,
+        "schema" => FrontendReleaseCatalog.catalog_schema(),
+        "sequence" => sequence
+      })
+
+    sign_fixture(payload, "fixture-promotion-key", "promotion", @promotion_seed)
+  end
+
+  defp release_envelope(release),
+    do: sign_fixture(canonical(release), "fixture-release-key", "release", @release_seed)
+
+  defp identity(release) do
+    %{
+      "application" => release["application"],
+      "package" => release["package"],
+      "surface" => release["surface"]
+    }
+  end
+
+  defp with_release_id(release) do
+    logical = release |> Map.delete("releaseId") |> Map.delete("artifactBaseUrl")
+    release_id = sha256(canonical(logical))
+
+    Map.put(
+      release,
+      "releaseId",
+      release_id
+    )
+    |> Map.put(
+      "artifactBaseUrl",
+      @origin <>
+        "/releases/" <> release["application"]["id"] <> "/" <> release_id <> "/artifacts/"
+    )
+  end
+
+  defp sign_fixture(payload, key_id, role, seed_hex) do
+    private_key = Base.decode16!(seed_hex, case: :lower)
+    signature = :crypto.sign(:eddsa, :none, payload, [private_key, :ed25519])
+
+    %{
+      "schema" => FrontendReleaseCatalog.envelope_schema(),
+      "keyId" => key_id,
+      "algorithm" => "ed25519",
+      "signingRole" => role,
+      "payloadEncoding" => "base64url-json",
+      "payload" => Base.url_encode64(payload, padding: false),
+      "signature" => Base.url_encode64(signature, padding: false)
+    }
+  end
+
+  defp alternate_release_key do
+    {public_key, _private_key} =
+      :crypto.generate_key(
+        :eddsa,
+        :ed25519,
+        Base.decode16!(@fork_seed, case: :lower)
+      )
+
+    %{
+      "keyId" => "fixture-release-key-alt",
+      "algorithm" => "ed25519",
+      "publicKey" => Base.url_encode64(public_key, padding: false),
+      "allowedRoles" => ["release"],
+      "validFrom" => "2026-01-01T00:00:00Z",
+      "validUntil" => "2027-01-01T00:00:00Z",
+      "revokedAt" => nil
+    }
+  end
+
+  defp staged_artifacts(bytes_by_path) do
+    Map.new(bytes_by_path, fn {file_path, bytes} ->
+      {file_path, {:object, sha256(bytes), byte_size(bytes)}}
+    end)
+  end
+
+  defp stage_file!(digest, bytes) do
+    file_path = write_temp_file(bytes)
+
+    assert {:ok, %{digest: ^digest}} = DatabaseArtifactStore.put_file(digest, file_path)
+    file_path
+  end
+
+  defp promote_chunked_object!(bytes) do
+    digest = sha256(bytes)
+    _file_path = stage_file!(digest, bytes)
+
+    assert {:ok, %{status: :stored}} =
+             DatabaseArtifactStore.promote_staged(digest, byte_size(bytes))
+
+    digest
+  end
+
+  defp insert_staged_object!(digest, size) do
+    Repo.query!(
+      """
+      INSERT INTO frontend_release_staged_objects (sha256, size, expires_at, inserted_at)
+      VALUES ($1, $2, now() + interval '1 hour', now())
+      """,
+      [digest_hex_value(digest), size]
+    )
+  end
+
+  defp insert_staged_chunk!(digest, chunk_index, bytes, declared_size) do
+    Repo.query!(
+      """
+      INSERT INTO frontend_release_staged_object_chunks
+        (sha256, chunk_index, bytes, size, inserted_at)
+      VALUES ($1, $2, $3, $4, now())
+      """,
+      [digest_hex_value(digest), chunk_index, bytes, declared_size]
+    )
+  end
+
+  defp assert_staged_object_retained!(digest, size, chunk_count) do
+    digest_value = digest_hex_value(digest)
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_objects WHERE sha256 = $1",
+               [digest_value]
+             ).rows
+
+    assert [[0]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_object_chunks WHERE sha256 = $1",
+               [digest_value]
+             ).rows
+
+    assert [[1, ^size]] =
+             Repo.query!(
+               "SELECT COUNT(*), MAX(size) FROM frontend_release_staged_objects WHERE sha256 = $1",
+               [digest_value]
+             ).rows
+
+    assert [[^chunk_count]] =
+             Repo.query!(
+               "SELECT COUNT(*) FROM frontend_release_staged_object_chunks WHERE sha256 = $1",
+               [digest_value]
+             ).rows
+  end
+
+  defp insert_expired_stage!(digest, bytes) do
+    sha256_hex = digest_hex_value(digest)
+
+    Repo.query!(
+      """
+      INSERT INTO frontend_release_staged_objects (sha256, size, expires_at, inserted_at)
+      VALUES ($1, $2, now() - interval '1 hour', now())
+      """,
+      [sha256_hex, byte_size(bytes)]
+    )
+
+    Repo.query!(
+      """
+      INSERT INTO frontend_release_staged_object_chunks
+        (sha256, chunk_index, bytes, size, inserted_at)
+      VALUES ($1, 0, $2, $3, now())
+      """,
+      [sha256_hex, bytes, byte_size(bytes)]
+    )
+  end
+
+  defp digest_hex_value(digest), do: String.replace_prefix(digest, "sha256:", "")
+
+  defp write_temp_file(bytes) do
+    file_path =
+      Path.join(
+        System.tmp_dir!(),
+        ".cadence_frontend_release_test_" <> Integer.to_string(System.unique_integer([:positive]))
+      )
+
+    File.write!(file_path, bytes)
+    on_exit(fn -> File.rm(file_path) end)
+    file_path
+  end
+
+  defp canonical(value) when is_map(value) do
+    value
+    |> Map.keys()
+    |> Enum.sort()
+    |> Enum.map_join(",", fn key ->
+      Jason.encode!(key) <> ":" <> canonical(Map.fetch!(value, key))
+    end)
+    |> then(&("{" <> &1 <> "}"))
+  end
+
+  defp canonical(value) when is_list(value),
+    do: "[" <> Enum.map_join(value, ",", &canonical/1) <> "]"
+
+  defp canonical(value) when is_binary(value), do: Jason.encode!(value)
+  defp canonical(value) when is_integer(value), do: Integer.to_string(value)
+  defp canonical(true), do: "true"
+  defp canonical(false), do: "false"
+  defp canonical(nil), do: "null"
+
+  defp sha256(bytes), do: "sha256:" <> digest_hex(bytes)
+  defp digest_hex(bytes), do: Base.encode16(:crypto.hash(:sha256, bytes), case: :lower)
+end

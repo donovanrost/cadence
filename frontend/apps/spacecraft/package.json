@@ -1,0 +1,38 @@
+{
+  "name": "@cadence/spacecraft-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev",
+    "build": "vue-tsc -b && vp build && vp build --mode previous",
+    "build:release": "test -n \"$CADENCE_RELEASE_OUTPUT_DIR\" && vue-tsc -b && vp build --mode release --outDir \"$CADENCE_RELEASE_OUTPUT_DIR\"",
+    "build:phoenix": "vue-tsc -b && vp build --config vite.phoenix.config.ts",
+    "check:release": "test -n \"$CADENCE_RELEASE_OUTPUT_DIR\" && node ../../tools/frontend-release-output-check.mjs --outDir \"$CADENCE_RELEASE_OUTPUT_DIR\" --remoteName cadence_spacecraft",
+    "preview": "vp preview",
+    "test": "node --test release-build-config.test.mjs && vp test --run --exclude release-build-config.test.mjs"
+  },
+  "dependencies": {
+    "@cadence/commanding": "workspace:*",
+    "@cadence/communications": "workspace:*",
+    "@cadence/design-tokens": "workspace:*",
+    "@cadence/plugin-host": "workspace:*",
+    "@cadence/plugin-sdk": "workspace:*",
+    "@cadence/telemetry-decom": "workspace:*",
+    "@cadence/ui": "workspace:*",
+    "reka-ui": "catalog:",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@module-federation/vite": "catalog:",
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vue/test-utils": "catalog:",
+    "@vue/tsconfig": "catalog:",
+    "happy-dom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

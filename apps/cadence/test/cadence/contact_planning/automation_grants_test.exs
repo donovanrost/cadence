@@ -321,6 +321,95 @@ defmodule Cadence.ContactPlanning.AutomationGrantsTest do
              )
   end
 
+  test "reviewed policy evidence is rechecked by the transactional issuance boundary", context do
+    expected = %{
+      policy_id: context.policy.fleet_planning_policy_id,
+      version: context.policy_version.version,
+      content_sha256: context.policy_version.content_sha256
+    }
+
+    assert {:ok, _, next_version} =
+             FleetPlanningPolicies.version(
+               context.admin_scope,
+               @mission_id,
+               expected.policy_id,
+               1,
+               %{horizon_document: %{"max_horizon_seconds" => 172_800}}
+             )
+
+    assert {:ok, _, _, _} =
+             FleetPlanningPolicies.approve(
+               context.admin_scope,
+               @mission_id,
+               expected.policy_id,
+               2,
+               next_version.content_sha256,
+               "Activate a different reviewed boundary"
+             )
+
+    assert {:error, :stale_fleet_planning_policy_evidence} =
+             AutomationGrants.issue(
+               context.admin_scope,
+               @mission_id,
+               grant_attrs(context.service_identity),
+               now: @now,
+               expected_policy: expected
+             )
+
+    assert AutomationGrants.list(@organization_id, @mission_id) == []
+
+    assert {:ok, grant} =
+             AutomationGrants.issue(
+               context.admin_scope,
+               @mission_id,
+               grant_attrs(context.service_identity),
+               now: @now,
+               expected_policy: %{
+                 expected
+                 | version: 2,
+                   content_sha256: next_version.content_sha256
+               }
+             )
+
+    assert grant.fleet_planning_policy_version == 2
+  end
+
+  test "an explicitly invalid expected policy never falls back to the current policy", context do
+    for expected <- [
+          nil,
+          %{},
+          %{
+            policy_id: context.policy.fleet_planning_policy_id,
+            version: context.policy_version.version,
+            content_sha256: String.duplicate("0", 64)
+          }
+        ] do
+      assert {:error, :stale_fleet_planning_policy_evidence} =
+               AutomationGrants.issue(
+                 context.admin_scope,
+                 @mission_id,
+                 grant_attrs(context.service_identity),
+                 now: @now,
+                 expected_policy: expected
+               )
+    end
+
+    assert AutomationGrants.list(@organization_id, @mission_id) == []
+  end
+
+  test "a locking policy read requires an explicit transaction", context do
+    assert {:error, :fleet_planning_policy_transaction_required} =
+             FleetPlanningPolicies.fetch_active_locked(@organization_id, @mission_id)
+
+    assert {:ok, {:ok, policy, version}} =
+             Cadence.Repo.transaction(fn ->
+               FleetPlanningPolicies.fetch_active_locked(@organization_id, @mission_id)
+             end)
+
+    assert policy.fleet_planning_policy_id == context.policy.fleet_planning_policy_id
+    assert version.content_sha256 == context.policy_version.content_sha256
+  end
+
   defp grant_attrs(service_identity, overrides \\ %{}) do
     Map.merge(
       %{

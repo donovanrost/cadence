@@ -1,0 +1,17 @@
+{
+  "id": "no-double-assertion",
+  "valid":
+    [
+      "const x = value as unknown;",
+      "const x = { state: 'ready' } as const;",
+      "const x = 'value as unknown as Model';",
+      "// value as unknown as Model\nconst x = 1;",
+    ],
+  "invalid":
+    [
+      "const x = value as unknown as Model;",
+      "const x = (value as unknown) as Model;",
+      "const x = value as any as Model;",
+      "const x = (\n value /* input */ as unknown\n) as Model;",
+    ],
+}

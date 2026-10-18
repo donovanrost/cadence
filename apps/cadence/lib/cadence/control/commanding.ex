@@ -11,34 +11,36 @@ defmodule Cadence.Control.Commanding do
   alias Cadence.Runtime.Commanding, as: RuntimeCommanding
   alias Cadence.Runtime.TransmitCommand
 
+  @doc """
+  Checks the approved basis under the request and lane locks before admission.
+
+  An internal `:before_enqueue` callback may reject the locked request. Dispatch
+  is scheduled only after the store transaction commits.
+  """
   @spec enqueue(ApprovedCommand.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
   def enqueue(%ApprovedCommand{} = approved_command, enqueued_by \\ %{}, opts \\ []) do
-    with {:ok, command_request} <-
-           LegacyCommanding.fetch_command_request(
-             approved_command.organization_id,
-             approved_command.mission_id,
-             approved_command.command_request_id
-           ),
-         true <- ApprovedCommand.matches_request?(approved_command, command_request),
-         {:ok, %{command_request: queued_request} = result} <-
-           LegacyCommanding.enqueue_command_request(
-             approved_command.organization_id,
-             approved_command.mission_id,
-             approved_command.command_request_id,
-             enqueued_by,
-             Keyword.update(
-               opts,
-               :metadata,
-               %{approved_content_sha256: approved_command.content_sha256},
-               &Map.put(&1, :approved_content_sha256, approved_command.content_sha256)
-             )
-           ),
-         true <- ApprovedCommand.matches_request?(approved_command, queued_request) do
-      {:ok, result}
-    else
-      false -> {:error, :approved_command_basis_changed}
-      {:error, reason} -> {:error, reason}
-    end
+    before_enqueue = Keyword.get(opts, :before_enqueue, fn _request -> :ok end)
+
+    opts =
+      opts
+      |> Keyword.put(:before_enqueue, fn request ->
+        if ApprovedCommand.matches_request?(approved_command, request),
+          do: before_enqueue.(request),
+          else: {:error, :approved_command_basis_changed}
+      end)
+      |> Keyword.update(
+        :metadata,
+        %{approved_content_sha256: approved_command.content_sha256},
+        &Map.put(&1, :approved_content_sha256, approved_command.content_sha256)
+      )
+
+    LegacyCommanding.enqueue_command_request(
+      approved_command.organization_id,
+      approved_command.mission_id,
+      approved_command.command_request_id,
+      enqueued_by,
+      opts
+    )
   end
 
   @spec enqueue_approved_command(binary(), binary(), binary(), map(), keyword()) ::

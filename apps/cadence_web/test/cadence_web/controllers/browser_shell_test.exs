@@ -1,6 +1,8 @@
 defmodule CadenceWeb.BrowserShellTest do
   use CadenceWeb.ConnCase, async: false
 
+  import Phoenix.LiveViewTest
+
   alias Cadence.Accounts.{
     EnvironmentAdminPolicy,
     Password,
@@ -12,6 +14,7 @@ defmodule CadenceWeb.BrowserShellTest do
   alias Cadence.Ids
   alias Cadence.Organizations.Organization
   alias Cadence.Repo
+  alias LiveVue.Test
 
   @environment_admin_email "environment-admin@example.com"
   @environment_admin_password "environment-admin-password-123"
@@ -38,11 +41,15 @@ defmodule CadenceWeb.BrowserShellTest do
 
   test "sign-in page renders a single unified sign-in form", %{conn: conn} do
     response = conn |> get("/sign-in") |> html_response(200)
+    document = LazyHTML.from_fragment(response)
+    sign_in_component = LazyHTML.query(document, "#user-session-component")
 
-    assert response =~ "Sign in"
-    assert response =~ ~s(id="sign-in-form")
-    refute response =~ "setup-access-sign-in-form"
-    refute response =~ "durable-sign-in-form"
+    assert LazyHTML.attribute(sign_in_component, "data-name") == ["UserSession"]
+
+    vue = Test.get_vue(response, id: "user-session-component")
+    assert Map.keys(vue.props) == ["page"]
+    assert vue.props["page"]["version"] == 1
+    assert is_binary(vue.props["page"]["csrf_token"])
   end
 
   test "environment admin credentials on /sign-in enter admin mode and route to admin dashboard",
@@ -152,8 +159,18 @@ defmodule CadenceWeb.BrowserShellTest do
 
     assert ordinary_admin_conn |> get("/admin") |> redirected_to() == "/admin-mode"
 
-    admin_mode_page = build_conn() |> init_test_session(ordinary_session) |> get("/admin-mode")
-    assert html_response(admin_mode_page, 200) =~ ~s(id="admin-mode-form")
+    {:ok, admin_mode_view, _html} =
+      build_conn()
+      |> init_test_session(ordinary_session)
+      |> live("/admin-mode")
+
+    admin_mode_vue = Test.get_vue(admin_mode_view, id: "admin-mode-page-component")
+
+    assert admin_mode_vue.component == "AdminModePage"
+    assert admin_mode_vue.ssr == false
+    assert admin_mode_vue.props == Jason.decode!(Jason.encode!(admin_mode_vue.props))
+    assert is_binary(admin_mode_vue.props["page"]["csrf_token"])
+    assert admin_mode_vue.props["page"]["csrf_token"] != ""
 
     elevated_conn =
       build_conn()
@@ -164,14 +181,17 @@ defmodule CadenceWeb.BrowserShellTest do
     admin_mode_expires_at = get_session(elevated_conn, :admin_mode_expires_at)
     assert CadenceWeb.AdminMode.active?(admin_mode_expires_at)
 
-    assert build_conn()
-           |> init_test_session(%{
-             user_session_token: session.session_token,
-             admin_mode_expires_at: admin_mode_expires_at
-           })
-           |> get("/admin")
-           |> html_response(200) =~
-             "Platform Administration"
+    {:ok, admin_home_view, _html} =
+      build_conn()
+      |> init_test_session(%{
+        user_session_token: session.session_token,
+        admin_mode_expires_at: admin_mode_expires_at
+      })
+      |> live("/admin")
+
+    snapshot = CadenceWeb.HostTransportTestSupport.assert_context(admin_home_view, %{})
+    assert snapshot["path"] == "/admin"
+    assert snapshot["context"]["admin_mode"]
   end
 
   test "leaving admin mode removes the durable administrator's elevation", %{conn: _conn} do
@@ -227,13 +247,15 @@ defmodule CadenceWeb.BrowserShellTest do
 
     invitation_path = "/invitations/#{token}"
 
-    invitation_response =
-      build_conn()
-      |> get(invitation_path)
-      |> html_response(200)
+    {:ok, invitation_view, _html} = live(build_conn(), invitation_path)
+    invitation_vue = Test.get_vue(invitation_view, id: "organization-invitation-page-component")
 
-    assert invitation_response =~ "organization-invitation-acceptance-form"
-    assert invitation_response =~ "new-admin@example.com"
+    assert invitation_vue.component == "OrganizationInvitationPage"
+    assert invitation_vue.ssr == false
+    assert invitation_vue.props == Jason.decode!(Jason.encode!(invitation_vue.props))
+
+    assert invitation_vue.props["page"]["available"]
+    assert invitation_vue.props["page"]["invitation"]["email"] == "new-admin@example.com"
 
     accepted_conn =
       build_conn()

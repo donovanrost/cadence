@@ -7,6 +7,8 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   planner execute IO; callers pass a `PlannedSourceRequest` here after planning.
   """
 
+  @behaviour Cadence.Dashboards.SourceRegistry.SampleInspection
+
   alias Cadence.Dashboards.{
     DataContext,
     PlannedSourceRequest,
@@ -23,7 +25,7 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   alias Cadence.Dashboards.Sources.Telemetry.HistoricalWorkflows
   alias Cadence.Dashboards.Sources.Telemetry.RevisionState
   alias Cadence.Reads.Telemetry, as: TelemetryReads
-  alias Cadence.Telemetry.Sample
+  alias Cadence.Telemetry.{PhysicalSampleQuery, Sample}
 
   @history_sampling_modes [:raw_series, :bounded_history, :bounded_raw_series]
   @native_decimated_sampling_modes [:decimated_envelope]
@@ -35,6 +37,36 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   @type latest_fun :: (binary() | nil, binary(), binary(), keyword() -> Sample.t() | nil)
   @type watermark_fun :: (binary() | nil, binary(), binary(), keyword() ->
                             {:ok, map()} | {:error, term()} | map())
+
+  @doc "Inspects an exact sample through the captured history policy and resolved binding."
+  @impl true
+  @spec inspect_sample(PhysicalSampleQuery.t(), keyword()) ::
+          {:ok, %{organization_id: binary(), sample: Sample.t()}} | {:error, term()}
+  def inspect_sample(%PhysicalSampleQuery{} = query, opts) when is_list(opts) do
+    case Keyword.fetch(opts, :history_store_policy) do
+      {:ok, policy} when is_map(policy) ->
+        read_opts =
+          Keyword.take(opts, [
+            :http_endpoint,
+            :headers,
+            :source_connection_profile,
+            :source_connection_material
+          ])
+
+        with {:ok, sample} <-
+               TelemetryReads.fetch_sample(
+                 query,
+                 Keyword.put(read_opts, :history_store_policy, policy)
+               ) do
+          # The history facade already compared the backend's stored tenant
+          # identity with this query before returning the sample.
+          {:ok, %{organization_id: query.organization_id, sample: sample}}
+        end
+
+      _ ->
+        {:error, :missing_physical_sample_policy}
+    end
+  end
 
   @spec capabilities() :: SourceCapabilities.t()
   def capabilities do

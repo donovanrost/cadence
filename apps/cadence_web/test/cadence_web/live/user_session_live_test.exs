@@ -1,56 +1,26 @@
 defmodule CadenceWeb.UserSessionLiveTest do
   use CadenceWeb.ConnCase, async: true
-
   import Phoenix.LiveViewTest
+  alias LiveVue.Test
 
-  use Phoenix.VerifiedRoutes,
-    endpoint: CadenceWeb.Endpoint,
-    router: CadenceWeb.Router,
-    statics: CadenceWeb.static_paths()
+  test "sign-in bootstraps only its session transport", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/sign-in")
+    vue = Test.get_vue(view, id: "user-session-component")
+    assert vue.component == "UserSession"
+    assert vue.ssr == false
+    assert vue.handlers == %{}
+    assert Map.keys(vue.props) == ["page"]
+    assert vue.props["page"]["version"] == 1
+    assert is_binary(vue.props["page"]["csrf_token"])
+    assert vue.props["page"]["csrf_token"] != ""
+    assert Test.get_vue(view, id: "application-shell").props["variant"] == "auth"
+    assert has_element?(view, "#user-session-component[data-name=UserSession]")
+  end
 
-  describe "GET /sign-in" do
-    test "renders the sign-in form with title and brand", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/sign-in")
-
-      assert has_element?(view, "a[href='/']", "Cadence")
-      assert has_element?(view, "h1", "Sign in")
-      assert has_element?(view, "#sign-in-form input[name='user[email]'][type='email']")
-      assert has_element?(view, "#sign-in-form input[name='user[password]'][type='password']")
-    end
-
-    test "mounts the LiveToast host in the shared auth layout", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/sign-in")
-
-      assert has_element?(view, "#toast-group[data-live-toast-group='true']")
-      assert has_element?(view, "#toast-group #client-error[phx-hook='LiveToast']")
-      assert has_element?(view, "#toast-group #server-error[phx-hook='LiveToast']")
-    end
-
-    test "renders no setup-access-specific UI", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/sign-in")
-
-      refute has_element?(view, "#setup-access-sign-in-form")
-      refute has_element?(view, "div", "Temporary Access")
-      refute has_element?(view, "div", "Setup Password")
-    end
-
-    test "form posts to the controller action", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/sign-in")
-
-      assert has_element?(view, "#sign-in-form[action='/sign-in'][method='post']")
-    end
-
-    test "phx-change updates the form assigns without error", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/sign-in")
-
-      view
-      |> form("#sign-in-form", user: %{email: "ops@example.com", password: "in-progress"})
-      |> render_change()
-
-      assert has_element?(
-               view,
-               "#sign-in-form input[name='user[email]'][value='ops@example.com']"
-             )
-    end
+  test "keeps the connection and flash transport in the auth boundary", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/sign-in")
+    assert has_element?(view, "#toast-group[data-live-toast-group='true']")
+    assert has_element?(view, "#toast-group #client-error[phx-hook='LiveToast']")
+    assert has_element?(view, "#toast-group #server-error[phx-hook='LiveToast']")
   end
 end

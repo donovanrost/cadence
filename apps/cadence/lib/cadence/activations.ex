@@ -3,6 +3,10 @@ defmodule Cadence.Activations do
   Durable activation control plane for mission-scoped binding-set bases.
   """
 
+  alias Cadence.Activations.ApprovalAdmission
+  alias Cadence.Activations.SpacecraftConfiguration, as: ConfigurationActivation
+  alias Cadence.Platform.ScopedReadUpdates
+
   import Ecto.Query
 
   alias Ecto.Adapters.SQL
@@ -57,6 +61,7 @@ defmodule Cadence.Activations do
     with {:ok, _content_hash} <- Keyword.fetch(opts, :binding_set_content_sha256) do
       persist_activation(
         %{
+          organization_id: Missions.organization_id_for_mission(mission_id),
           mission_id: mission_id,
           activation_request_id: Keyword.get(opts, :activation_request_id),
           binding_set_id: binding_set_id,
@@ -68,6 +73,30 @@ defmodule Cadence.Activations do
         Keyword.get(opts, :event_bus, EventBus)
       )
     end
+  end
+
+  @doc "Runs a bounded command-authoring operation while its active generation is locked."
+  def with_locked_command_basis(organization_id, mission_id, operation)
+      when is_function(operation, 1) do
+    Repo.transaction(fn ->
+      row =
+        ActiveBindingSetRow
+        |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+        |> where([row], fragment("octet_length(?::text)", row.metadata) <= 65_536)
+        |> lock("FOR SHARE")
+        |> Repo.one()
+
+      result =
+        case row do
+          nil -> {:error, :command_authoring_basis_unavailable}
+          row -> operation.(ActiveBindingSetRow.to_domain(row))
+        end
+
+      case result do
+        {:ok, value} -> value
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
   end
 
   @spec fetch_active_activation(binary()) :: {:ok, BindingSetActivation.t()} | {:error, term()}
@@ -200,6 +229,9 @@ defmodule Cadence.Activations do
 
   defp persist_activation(attrs, event_bus) do
     Multi.new()
+    |> Multi.run(:approval_admission, fn _repo, _changes ->
+      ApprovalAdmission.lock_and_admit(attrs)
+    end)
     |> Multi.run(:generation_lock, fn repo, _changes ->
       acquire_generation_lock(repo, attrs.mission_id)
     end)
@@ -219,7 +251,27 @@ defmodule Cadence.Activations do
     |> case do
       {:ok, %{activation_record: %{row: activation_row, inserted?: inserted?}}} ->
         activation = BindingSetActivationRow.to_domain(activation_row)
-        if inserted?, do: Facts.publish(event_bus, activation)
+
+        if inserted? do
+          Facts.publish(event_bus, activation)
+
+          ScopedReadUpdates.publish_result(
+            {:ok, activation},
+            :commanding_changed,
+            activation.organization_id,
+            activation.mission_id
+          )
+        end
+
+        if inserted?,
+          do:
+            ScopedReadUpdates.publish_result(
+              {:ok, activation},
+              :spacecraft_configuration_changed,
+              activation.organization_id,
+              activation.mission_id
+            )
+
         {:ok, activation}
 
       {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->
@@ -236,16 +288,22 @@ defmodule Cadence.Activations do
         {:ok, %{row: row, inserted?: false}}
 
       nil ->
-        changeset =
-          attrs
-          |> Map.put(:generation, generation)
-          |> BindingSetActivation.new()
-          |> BindingSetActivationRow.changeset()
+        insert_admitted_activation(repo, attrs, generation)
+    end
+  end
 
-        case repo.insert(changeset) do
-          {:ok, row} -> {:ok, %{row: row, inserted?: true}}
-          {:error, reason} -> {:error, reason}
-        end
+  defp insert_admitted_activation(repo, attrs, generation) do
+    with {:ok, _admission} <- ConfigurationActivation.admit(attrs) do
+      changeset =
+        attrs
+        |> Map.put(:generation, generation)
+        |> BindingSetActivation.new()
+        |> BindingSetActivationRow.changeset()
+
+      case repo.insert(changeset) do
+        {:ok, row} -> {:ok, %{row: row, inserted?: true}}
+        {:error, reason} -> {:error, reason}
+      end
     end
   end
 

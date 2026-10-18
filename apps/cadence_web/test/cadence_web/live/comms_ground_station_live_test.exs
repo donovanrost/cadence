@@ -8,181 +8,98 @@ defmodule CadenceWeb.CommsGroundStationLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Comms.GroundStationStore
-
-  alias Cadence.Comms.GroundStation
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
+
+  test "authenticated ground-station list mounts the federated mission surface" do
+    {conn, _organization, mission} = signed_in_org_and_mission()
+
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/comms/ground-stations")
+
+    assert_surface(
+      view,
+      "comms-ground-station-list-page-component",
+      "ground_stations",
+      mission,
+      %{},
+      class: "contents"
+    )
+  end
+
+  test "authenticated ground-station new mounts the federated mission surface" do
+    {conn, _organization, mission} = signed_in_org_and_mission()
+
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/comms/ground-stations/new")
+
+    assert_surface(
+      view,
+      "comms-ground-station-form-component",
+      "ground_station_new",
+      mission,
+      %{}
+    )
+  end
+
+  test "authenticated ground-station edit forwards its bounded subject" do
+    {conn, _organization, mission} = signed_in_org_and_mission()
+    ground_station_id = "ground-station-test"
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/comms/ground-stations/#{ground_station_id}/edit"
+      )
+
+    assert_surface(
+      view,
+      "comms-ground-station-form-component",
+      "ground_station_edit",
+      mission,
+      %{"ground_station_id" => ground_station_id}
+    )
+  end
+
+  test "authenticated ground-station show forwards its bounded subject" do
+    {conn, _organization, mission} = signed_in_org_and_mission()
+    ground_station_id = "ground-station-test"
+
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/comms/ground-stations/#{ground_station_id}")
+
+    assert_surface(
+      view,
+      "comms-ground-station-show-component",
+      "ground_station",
+      mission,
+      %{"ground_station_id" => ground_station_id}
+    )
+  end
+
+  test "ground-station routes redirect unauthenticated users to sign in", %{conn: conn} do
+    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+             live(conn, "/missions/mission-test/comms/ground-stations")
+  end
+
+  defp assert_surface(view, _id, surface_id, mission, query_params, _opts \\ []) do
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => nil,
+      "surface_id" => nil,
+      "kind" => "mission_module",
+      "contribution" => "comms." <> String.replace(surface_id, "_", "-"),
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => query_params
+    })
+  end
 
   defp signed_in_org_and_mission do
     user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org, slug: "primary", display_name: "Primary Mission")
-    {TestFixtures.member_conn(user), org, mission}
-  end
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
 
-  describe "ground station routes" do
-    test "lists and shows configured ground stations" do
-      {conn, org, mission} = signed_in_org_and_mission()
-      ground_station = persist_ground_station!(org.organization_id, mission.mission_id)
-
-      {:ok, view, html} =
-        live(conn, ~p"/missions/#{mission.mission_id}/comms/ground-stations")
-
-      assert has_element?(view, "#comms-ground-stations-page")
-      assert has_element?(view, "#new-ground-station-link")
-      assert has_element?(view, "#ground-stations[phx-update='stream']")
-      assert has_element?(view, "td", ground_station.display_name)
-      assert has_element?(view, "details[open] a", "Ground Stations")
-      assert html =~ "Mission-owned antenna"
-
-      html =
-        view
-        |> element("#ground-stations-toolbar form")
-        |> render_change(%{"q" => "goldstone"})
-
-      assert html =~ "Goldstone DSS-14"
-
-      {:ok, show_view, show_html} =
-        live(
-          conn,
-          ~p"/missions/#{mission.mission_id}/comms/ground-stations/#{ground_station.ground_station_id}"
-        )
-
-      assert has_element?(show_view, "#comms-ground-station-show-page")
-      assert has_element?(show_view, "#edit-ground-station-link")
-      assert has_element?(show_view, "#archive-ground-station-button")
-      assert show_html =~ "Ground Station"
-      assert show_html =~ "DSN"
-      assert show_html =~ "Runtime contact and RF state are observed separately."
-    end
-
-    test "creates, edits, and archives ground stations" do
-      {conn, org, mission} = signed_in_org_and_mission()
-
-      {:ok, view, html} =
-        live(conn, ~p"/missions/#{mission.mission_id}/comms/ground-stations/new")
-
-      assert has_element?(view, "#comms-ground-station-form-page")
-      assert has_element?(view, "#ground-station-form")
-      assert html =~ "New Ground Station"
-
-      assert {:error, {:live_redirect, %{to: show_path}}} =
-               view
-               |> form("#ground-station-form",
-                 ground_station: %{
-                   ground_station_id: "dss-25",
-                   display_name: "Goldstone DSS-25",
-                   provider: "DSN",
-                   region: "goldstone",
-                   metadata_json: ~s({"antenna_diameter_m":34})
-                 }
-               )
-               |> render_submit()
-
-      assert show_path ==
-               "/missions/#{mission.mission_id}/comms/ground-stations/dss-25"
-
-      assert {:ok, persisted} =
-               GroundStationStore.fetch_ground_station(
-                 org.organization_id,
-                 mission.mission_id,
-                 "dss-25"
-               )
-
-      assert persisted.display_name == "Goldstone DSS-25"
-      assert persisted.metadata["antenna_diameter_m"] == 34
-
-      {:ok, edit_view, edit_html} = live(conn, "#{show_path}/edit")
-
-      assert has_element?(edit_view, "#ground-station-form")
-      assert edit_html =~ "Edit Ground Station"
-
-      assert {:error, {:live_redirect, %{to: ^show_path}}} =
-               edit_view
-               |> form("#ground-station-form",
-                 ground_station: %{
-                   display_name: "Goldstone DSS-25 Prime",
-                   provider: "DSN",
-                   region: "california",
-                   metadata_json: ~s({"antenna_diameter_m":34,"azimuth_drive":"upgraded"})
-                 }
-               )
-               |> render_submit()
-
-      assert {:ok, updated} =
-               GroundStationStore.fetch_ground_station(
-                 org.organization_id,
-                 mission.mission_id,
-                 "dss-25"
-               )
-
-      assert updated.display_name == "Goldstone DSS-25 Prime"
-      assert updated.region == "california"
-      assert updated.metadata["azimuth_drive"] == "upgraded"
-
-      {:ok, show_view, _show_html} = live(conn, show_path)
-
-      assert {:error, {:live_redirect, %{to: list_path}}} =
-               show_view
-               |> element("#archive-ground-station-button")
-               |> render_click()
-
-      assert list_path == "/missions/#{mission.mission_id}/comms/ground-stations"
-
-      assert [] =
-               GroundStationStore.list_ground_stations(
-                 org.organization_id,
-                 mission.mission_id
-               )
-    end
-
-    test "rejects invalid metadata JSON" do
-      {conn, org, mission} = signed_in_org_and_mission()
-
-      {:ok, view, _html} =
-        live(conn, ~p"/missions/#{mission.mission_id}/comms/ground-stations/new")
-
-      html =
-        view
-        |> form("#ground-station-form",
-          ground_station: %{
-            ground_station_id: "dss-26",
-            display_name: "Goldstone DSS-26",
-            provider: "DSN",
-            region: "goldstone",
-            metadata_json: "not json"
-          }
-        )
-        |> render_submit()
-
-      assert html =~ "Metadata JSON must be an object."
-
-      assert [] =
-               GroundStationStore.list_ground_stations(
-                 org.organization_id,
-                 mission.mission_id
-               )
-    end
-  end
-
-  defp persist_ground_station!(organization_id, mission_id) do
-    ground_station =
-      GroundStation.new(%{
-        mission_id: mission_id,
-        ground_station_id: "dss-14",
-        display_name: "Goldstone DSS-14",
-        provider: "DSN",
-        region: "goldstone",
-        metadata: %{"antenna_diameter_m" => 70}
-      })
-
-    assert {:ok, persisted} =
-             GroundStationStore.persist_ground_station(
-               organization_id,
-               ground_station
-             )
-
-    persisted
+    {TestFixtures.member_conn(user), organization, mission}
   end
 end

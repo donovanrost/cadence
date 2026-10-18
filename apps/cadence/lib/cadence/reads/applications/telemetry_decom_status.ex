@@ -24,6 +24,30 @@ defmodule Cadence.Reads.Applications.TelemetryDecomStatus do
 
   def load(%Scope{}, %HostContext{}), do: {:error, :unsupported_application_host_context}
 
+  @doc "Loads status projections for one bounded spacecraft batch."
+  @spec load_many(Scope.t(), binary(), [binary()]) ::
+          {:ok, %{optional(binary()) => Status.t()}} | {:error, term()}
+  def load_many(%Scope{organization_id: organization_id}, mission_id, spacecraft_ids)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(spacecraft_ids) do
+    if spacecraft_ids == [] do
+      {:ok, %{}}
+    else
+      with {:ok, configs} <-
+             TelemetryDecom.status_configs_for_spacecrafts(
+               organization_id,
+               mission_id,
+               spacecraft_ids
+             ) do
+        active = load_active_binding_set(organization_id, mission_id)
+
+        {:ok,
+         Map.new(spacecraft_ids, fn spacecraft_id ->
+           {spacecraft_id, status(Map.get(configs, spacecraft_id), active)}
+         end)}
+      end
+    end
+  end
+
   defp load_configuration(organization_id, mission_id, spacecraft_id) do
     case TelemetryDecom.fetch_config(organization_id, mission_id, spacecraft_id) do
       {:ok, config} -> config

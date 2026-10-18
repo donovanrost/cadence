@@ -3,13 +3,13 @@ defmodule Cadence.MissionModels.Comparison do
 
   import Ecto.Query
 
-  alias Cadence.Activations
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Catalog.MissionModel.{Declaration, Revision, RuntimePlan}
   alias Cadence.MissionModels
   alias Cadence.MissionModels.{ComparisonReportRow, QualificationCaseRow}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Platform.ContentHash
+  alias Cadence.Reads.MissionModels.ActiveBasis
   alias Cadence.Repo
   alias Cadence.SemanticRuntime
   alias Cadence.SemanticRuntime.{PlanDecoder, Result, State, Update}
@@ -53,6 +53,9 @@ defmodule Cadence.MissionModels.Comparison do
         expected_result_sha256: Keyword.get(opts, :expected_result_sha256)
       }
 
+      model_id = opts |> Keyword.get(:metadata, %{}) |> Map.get("mission_model_revision_id")
+      basis = if model_id, do: Map.put(basis, :mission_model_revision_id, model_id), else: basis
+
       attrs = %{
         qualification_case_id:
           ContentHash.term_sha256({:mission_model_qualification_case, basis}),
@@ -79,7 +82,14 @@ defmodule Cadence.MissionModels.Comparison do
 
   @spec run(binary(), binary(), binary(), binary(), pos_integer()) ::
           {:ok, map()} | {:error, term()}
-  def run(organization_id, mission_id, candidate_revision_id, binding_set_id, binding_set_version)
+  def run(
+        organization_id,
+        mission_id,
+        candidate_revision_id,
+        binding_set_id,
+        binding_set_version,
+        opts \\ []
+      )
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(candidate_revision_id) and is_binary(binding_set_id) and
              is_integer(binding_set_version) and binding_set_version > 0 do
@@ -87,7 +97,7 @@ defmodule Cadence.MissionModels.Comparison do
            MissionModels.fetch_revision(organization_id, mission_id, candidate_revision_id),
          {:ok, candidate_plans} <-
            MissionModels.fetch_runtime_plans(organization_id, mission_id, candidate_revision_id),
-         {:ok, baseline, baseline_plans} <- baseline(organization_id, mission_id, candidate),
+         {:ok, baseline, baseline_plans} <- baseline(organization_id, mission_id, candidate, opts),
          static <- static_comparison(baseline, candidate, baseline_plans, candidate_plans),
          replay <-
            replay_comparison(
@@ -95,7 +105,8 @@ defmodule Cadence.MissionModels.Comparison do
              mission_id,
              static.risk,
              baseline_plans,
-             candidate_plans
+             candidate_plans,
+             candidate_revision_id
            ),
          report <-
            build_report(
@@ -123,8 +134,22 @@ defmodule Cadence.MissionModels.Comparison do
     end
   end
 
-  defp baseline(organization_id, mission_id, candidate) do
-    baseline_revision_id = active_revision_id(organization_id, mission_id)
+  defp baseline(organization_id, mission_id, candidate, opts) do
+    case Keyword.fetch(opts, :baseline_revision_id) do
+      {:ok, nil} ->
+        {:ok, nil, %{}}
+
+      {:ok, id} ->
+        with {:ok, revision} <- MissionModels.fetch_revision(organization_id, mission_id, id),
+             do: baseline_plans(organization_id, mission_id, revision)
+
+      :error ->
+        legacy_baseline(organization_id, mission_id, candidate)
+    end
+  end
+
+  defp legacy_baseline(organization_id, mission_id, candidate) do
+    baseline_revision_id = ActiveBasis.active_revision_id(organization_id, mission_id)
 
     with {:ok, baseline} <-
            baseline_revision(organization_id, mission_id, candidate, baseline_revision_id) do
@@ -153,13 +178,6 @@ defmodule Cadence.MissionModels.Comparison do
          ) do
       {:ok, plans} -> {:ok, baseline, plans}
       {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp active_revision_id(organization_id, mission_id) do
-    case Activations.fetch_active_activation(organization_id, mission_id) do
-      {:ok, activation} -> get_in(activation.metadata, ["mission_model", "revision_id"])
-      {:error, :no_active_binding_set} -> nil
     end
   end
 
@@ -219,13 +237,20 @@ defmodule Cadence.MissionModels.Comparison do
     |> Enum.sort()
   end
 
-  defp replay_comparison(_organization_id, _mission_id, risk, _baseline, _candidate)
+  defp replay_comparison(_organization_id, _mission_id, risk, _baseline, _candidate, _revision)
        when risk in [:low, :medium] do
     %{required: false, status: :not_required, cases: []}
   end
 
-  defp replay_comparison(organization_id, mission_id, :high, baseline_plans, candidate_plans) do
-    cases = approved_cases(organization_id, mission_id)
+  defp replay_comparison(
+         organization_id,
+         mission_id,
+         :high,
+         baseline_plans,
+         candidate_plans,
+         revision
+       ) do
+    cases = approved_cases(organization_id, mission_id, revision)
 
     results =
       Enum.map(cases, fn qualification_case ->
@@ -247,7 +272,7 @@ defmodule Cadence.MissionModels.Comparison do
     }
   end
 
-  defp approved_cases(organization_id, mission_id) do
+  defp approved_cases(organization_id, mission_id, revision) do
     QualificationCaseRow
     |> where(
       [row],
@@ -255,6 +280,15 @@ defmodule Cadence.MissionModels.Comparison do
         row.status == :approved
     )
     |> order_by([row], asc: row.qualification_case_id)
+    |> where(
+      [row],
+      fragment(
+        "? #>> '{value,mission_model_revision_id}' IS NULL OR ? #>> '{value,mission_model_revision_id}' = ?",
+        row.metadata,
+        row.metadata,
+        ^revision
+      )
+    )
     |> Repo.all()
   end
 

@@ -55,6 +55,20 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
           {:ok, ContactRequirement.t(), ContactRequirementVersion.t()} | {:error, term()}
   def create(%Scope{} = current_scope, mission_id, attrs, opts \\ [])
       when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
+    with {:ok, requirement, version} <- prepare_create(current_scope, mission_id, attrs, opts) do
+      Multi.new()
+      |> Multi.insert(:requirement, ContactRequirementRow.changeset(requirement))
+      |> Multi.insert(:version, ContactRequirementVersionRow.changeset(version))
+      |> Repo.transaction()
+      |> normalize_create_result()
+    end
+  end
+
+  @doc "Prepare an authorized declaration using the same normalization and validation as persistence, without writing rows."
+  @spec prepare_create(Scope.t(), binary(), map(), keyword()) ::
+          {:ok, ContactRequirement.t(), ContactRequirementVersion.t()} | {:error, term()}
+  def prepare_create(%Scope{} = current_scope, mission_id, attrs, opts \\ [])
+      when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
     now = now(opts)
 
     with :ok <- authorize_member(current_scope, mission_id),
@@ -89,11 +103,7 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
           lifecycle_reason: "created"
         })
 
-      Multi.new()
-      |> Multi.insert(:requirement, ContactRequirementRow.changeset(requirement))
-      |> Multi.insert(:version, ContactRequirementVersionRow.changeset(version))
-      |> Repo.transaction()
-      |> normalize_create_result()
+      {:ok, requirement, version}
     end
   end
 
@@ -236,6 +246,80 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
     |> order_by([version], desc: version.version)
     |> Repo.all()
     |> Enum.map(&ContactRequirementVersionRow.to_domain/1)
+  end
+
+  @doc "Bounded immutable history, anchored at the version reviewed by the caller."
+  def list_versions_page(organization_id, mission_id, requirement_id, through_version, page)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(requirement_id) and
+             is_integer(through_version) and through_version in 1..9_007_199_254_740_991 and
+             is_integer(page) and page in 1..1_000_000 do
+    rows =
+      version_history_query(organization_id, mission_id, requirement_id, through_version)
+      |> order_by([version], desc: version.version)
+      |> offset(^((page - 1) * 25))
+      |> limit(26)
+      |> Repo.all()
+
+    {:ok,
+     %{
+       entries: rows |> Enum.take(25) |> Enum.map(&ContactRequirementVersionRow.to_domain/1),
+       more?: length(rows) > 25
+     }}
+  end
+
+  def list_versions_page(_, _, _, _, _), do: {:error, :invalid_requirement_history_page}
+
+  defp version_history_query(organization_id, mission_id, requirement_id, through_version) do
+    from(version in ContactRequirementVersionRow,
+      where:
+        version.organization_id == ^organization_id and version.mission_id == ^mission_id and
+          version.contact_requirement_id == ^requirement_id and
+          version.version <= ^through_version
+    )
+  end
+
+  @doc "A bounded live ledger page. Missing current versions are errors, not absent requirements."
+  def list_page(organization_id, mission_id, page, state)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_integer(page) and page in 1..1_000_000 and
+             state in [nil, :active, :closed, :canceled] do
+    rows =
+      ContactRequirementRow
+      |> where(
+        [requirement],
+        requirement.organization_id == ^organization_id and requirement.mission_id == ^mission_id
+      )
+      |> maybe_filter_lifecycle(state)
+      |> join(:left, [requirement], version in ContactRequirementVersionRow,
+        on:
+          version.organization_id == requirement.organization_id and
+            version.mission_id == requirement.mission_id and
+            version.contact_requirement_id == requirement.contact_requirement_id and
+            version.version == requirement.current_version
+      )
+      |> order_by([requirement], asc: requirement.contact_requirement_id)
+      |> offset(^((page - 1) * 25))
+      |> limit(26)
+      |> select([requirement, version], {requirement, version})
+      |> Repo.all()
+
+    project_page(rows)
+  end
+
+  defp project_page(rows) do
+    if Enum.any?(rows, fn {_requirement, version} -> is_nil(version) end) do
+      {:error, :contact_requirement_version_not_found}
+    else
+      entries =
+        rows
+        |> Enum.take(25)
+        |> Enum.map(fn {requirement, version} ->
+          {ContactRequirementRow.to_domain(requirement),
+           ContactRequirementVersionRow.to_domain(version)}
+        end)
+
+      {:ok, %{entries: entries, more?: length(rows) > 25}}
+    end
   end
 
   defp transition(

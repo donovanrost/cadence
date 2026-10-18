@@ -8,97 +8,50 @@ defmodule CadenceWeb.OpsDashboardAuthoringEntryLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.Document
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "Directory exposes capability-aware clone and import entry points" do
-    {conn, _user, _org, mission} = signed_in_user_org_and_mission()
-    source = TestFixtures.persist_dashboard_document!(mission, name: "Flight Power")
+  test "dashboard directory and creation mount their host contributions" do
+    {conn, mission} = signed_in()
 
-    {:ok, directory, _html} = live(conn, directory_path(mission))
+    {:ok, directory, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards")
 
-    assert has_element?(directory, "#dashboard-directory-import")
-    assert has_element?(directory, "#clone-dashboard-#{source.dashboard_id}")
+    HostTransportTestSupport.assert_context(directory, %{
+      "application_key" => nil,
+      "surface_id" => nil,
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => %{}
+    })
 
-    {:ok, clone_view, _html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/ops/dashboards/new?source_dashboard_id=#{source.dashboard_id}"
-      )
+    page = LiveVue.Test.get_vue(directory, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["id"] == "dashboards.directory"
+    assert page["slot"] == "ops.page"
+    assert page["status"] == "ready"
 
-    assert has_element?(
-             clone_view,
-             ~s(#dashboard-clone-source[data-source-dashboard-id="#{source.dashboard_id}"])
-           )
+    {:ok, new_view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/new")
 
-    clone_view
-    |> form("#dashboard-form", dashboard: %{name: "Flight Power Copy", description: "Clone"})
-    |> render_submit()
+    HostTransportTestSupport.assert_context(new_view, %{
+      "application_key" => nil,
+      "surface_id" => nil,
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => %{}
+    })
 
-    {clone_editor_path, _flash} = assert_redirect(clone_view)
-    assert clone_editor_path =~ "/edit"
+    creation =
+      LiveVue.Test.get_vue(new_view, id: "application-shell").props["snapshot"]["ops_page"]
 
-    clone =
-      mission.organization_id
-      |> Cadence.Dashboards.list_documents(mission.mission_id)
-      |> Enum.find(&(&1.name == "Flight Power Copy"))
-
-    assert %Document{} = clone
-    assert clone.dashboard_id != source.dashboard_id
-    assert clone.metadata["source"] == "dashboard_clone"
-    assert clone.metadata["source_dashboard_id"] == source.dashboard_id
+    assert creation["id"] == "dashboards.creation"
+    assert creation["slot"] == "ops.page"
+    assert creation["status"] == "ready"
   end
 
-  test "import validates JSON and replaces untrusted identity with the current mission scope" do
-    {conn, _user, org, mission} = signed_in_user_org_and_mission()
-
-    foreign = %Document{
-      dashboard_id: "foreign-dashboard",
-      organization_id: "foreign-org",
-      mission_id: "foreign-mission",
-      name: "Foreign Dashboard",
-      description: "Imported telemetry",
-      metadata: %{"version" => 19, "tags" => ["flight"]}
-    }
-
-    {:ok, json} = Cadence.Dashboards.export_bundle(foreign)
-
-    {:ok, import_view, _html} =
-      live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/new?mode=import")
-
-    assert has_element?(import_view, "#dashboard-form textarea[name='dashboard[document_json]']")
-
-    import_view
-    |> form("#dashboard-form",
-      dashboard: %{
-        name: "Imported Flight Dashboard",
-        description: "Governed import",
-        document_json: json
-      }
-    )
-    |> render_submit()
-
-    {editor_path, _flash} = assert_redirect(import_view)
-    assert editor_path =~ "/edit"
-
-    assert [%Document{} = imported] =
-             Cadence.Dashboards.list_documents(org.organization_id, mission.mission_id)
-
-    assert imported.dashboard_id != foreign.dashboard_id
-    assert imported.organization_id == org.organization_id
-    assert imported.mission_id == mission.mission_id
-    assert imported.name == "Imported Flight Dashboard"
-    assert imported.metadata["source"] == "dashboard_import"
-    assert Document.version(imported) == 1
-  end
-
-  defp directory_path(mission), do: ~p"/missions/#{mission.mission_id}/ops/dashboards"
-
-  defp signed_in_user_org_and_mission do
+  defp signed_in do
     user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org, slug: "dashboard-authoring")
-    {TestFixtures.member_conn(user), user, org, mission}
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    {TestFixtures.member_conn(user), mission}
   end
 end

@@ -39,6 +39,8 @@ defmodule Cadence.Dashboards.SourceRegistry.SegmentResultMerge do
          annotations: annotations,
          warnings: warnings,
          watermarks: watermarks,
+         resolved_bindings:
+           Enum.flat_map(segment_results, fn {_binding, result} -> result.resolved_bindings end),
          meta: %{
            logical_source: request.logical_source,
            returned_frame_count: length(frames),
@@ -76,7 +78,8 @@ defmodule Cadence.Dashboards.SourceRegistry.SegmentResultMerge do
   end
 
   defp merge_frame_segments(%PlannedSourceRequest{} = request, [%Frame{} = first | rest] = frames) do
-    if Enum.all?(rest, &compatible_frame_segment?(first, &1)) do
+    if Enum.all?(rest, &compatible_frame_segment?(first, &1)) and
+         Enum.all?(frames, &aligned_segment?/1) do
       {:ok, merge_compatible_frame_segments(frames)}
     else
       {:error, segment_merge_warning(request, frames)}
@@ -91,6 +94,18 @@ defmodule Cadence.Dashboards.SourceRegistry.SegmentResultMerge do
 
   defp field_signature(fields) do
     Enum.map(fields, fn %Field{} = field -> {field.name, field.kind} end)
+  end
+
+  defp aligned_segment?(%Frame{fields: fields}) do
+    row_counts = fields |> Enum.map(&length(&1.values)) |> Enum.uniq()
+    length(row_counts) <= 1 and Enum.all?(fields, &aligned_sample_ids?/1)
+  end
+
+  defp aligned_sample_ids?(field) do
+    case Map.fetch(ensure_map(field.metadata), :sample_ids) do
+      :error -> true
+      {:ok, ids} -> is_list(ids) and length(ids) == length(field.values)
+    end
   end
 
   defp merge_compatible_frame_segments([%Frame{} = first | _rest] = frames) do
@@ -116,9 +131,26 @@ defmodule Cadence.Dashboards.SourceRegistry.SegmentResultMerge do
   end
 
   defp merge_segment_field_metadata(segment_fields) do
-    segment_fields
-    |> Enum.map(&ensure_map(&1.metadata))
-    |> merge_metadata_maps()
+    metadata =
+      segment_fields
+      |> Enum.map(&ensure_map(&1.metadata))
+      |> merge_metadata_maps()
+
+    if Enum.any?(segment_fields, &Map.has_key?(ensure_map(&1.metadata), :sample_ids)) do
+      # These are positional observations, not a set of evidence references.
+      ids =
+        Enum.flat_map(segment_fields, fn field ->
+          Map.get(
+            ensure_map(field.metadata),
+            :sample_ids,
+            List.duplicate(nil, length(field.values))
+          )
+        end)
+
+      Map.put(metadata, :sample_ids, ids)
+    else
+      metadata
+    end
   end
 
   defp merge_segment_frame_meta(frames) do
@@ -140,6 +172,7 @@ defmodule Cadence.Dashboards.SourceRegistry.SegmentResultMerge do
       :dataset
     ])
     |> Map.put(:segmented_source_bindings?, true)
+    |> Map.put(:source_binding_row_spans, Enum.flat_map(frames, &row_spans/1))
     |> Map.put(:source_binding_segments, segment_metadata)
     |> Map.put(:source_binding_segment_count, length(segment_metadata))
     |> Map.put(:data_source_ids, unique_meta_values(frames, :data_source_id))
@@ -150,6 +183,19 @@ defmodule Cadence.Dashboards.SourceRegistry.SegmentResultMerge do
     )
     |> Map.put(:truncated?, Enum.any?(frames, &Map.get(&1.meta, :truncated?, false)))
   end
+
+  defp row_spans(%Frame{meta: meta, fields: [field | _]}) do
+    Map.get_lazy(meta, :source_binding_row_spans, fn ->
+      [
+        %{
+          count: length(field.values),
+          source: Map.take(meta, [:data_source_id, :source_binding_id, :dataset, :realm])
+        }
+      ]
+    end)
+  end
+
+  defp row_spans(_frame), do: []
 
   defp merge_metadata_maps([]), do: %{}
 

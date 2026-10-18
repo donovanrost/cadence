@@ -8,101 +8,78 @@ defmodule CadenceWeb.OpsDataSourcesAuthorizationLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Management.DataSources
-
-  alias Cadence.DataSources.DataSource
+  alias Cadence.Applications.OpsConsole
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
+
+  test "members can inspect sources but not administrator routes" do
+    {conn, mission} = signed_in(:member)
+
+    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
+    assert_surface(view, "ops-data-sources-component", "data_sources", mission, %{})
+
+    assert {:error, {:redirect, %{to: "/"}}} =
+             live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources/registration/new")
+
+    assert {:error, {:redirect, %{to: "/"}}} =
+             live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources/source-1/settings")
+  end
+
+  test "administrators receive exact registration and settings subjects" do
+    {conn, mission} = signed_in(:organization_admin)
+
+    {:ok, registration, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources/registration/new")
+
+    assert_surface(
+      registration,
+      "ops-data-sources-component",
+      "data_source_registration",
+      mission,
+      %{}
+    )
+
+    {:ok, settings, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources/source-1/settings")
+
+    assert_surface(settings, "ops-data-sources-component", "data_source_settings", mission, %{
+      "data_source_id" => "source-1"
+    })
+  end
+
+  test "data-source query contracts keep registration unscoped and settings source-scoped" do
+    assert {:ok, %{subject_param: nil, query_params: []}} =
+             OpsConsole.surface_query_contract("data_source_registration")
+
+    assert {:ok, %{subject_param: "data_source_id", query_params: ["data_source_id"]}} =
+             OpsConsole.surface_query_contract("data_source_settings")
+  end
 
   defp signed_in(role) do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, organization, role: role)
+    TestFixtures.grant_membership!(user, organization, role: role)
     mission = TestFixtures.persist_mission!(organization)
-
-    assert {:ok, _source} =
-             DataSources.persist_data_source(%DataSource{
-               data_source_id: "mission-telemetry",
-               owner: :cadence,
-               kind: :managed_tsdb,
-               adapter: Cadence.Dashboards.Sources.Telemetry,
-               organization_id: organization.organization_id,
-               mission_id: mission.mission_id,
-               isolation_level: :mission_isolated,
-               capabilities: %{latest?: true, range_scan?: true, watermarks?: true},
-               metadata: %{storage: :questdb}
-             })
-
     {TestFixtures.member_conn(user), mission}
   end
 
-  test "ordinary operators can inspect inventory and source detail without mutation controls" do
-    {conn, mission} = signed_in(:member)
+  defp assert_surface(view, _id, surface_id, mission, query_params) do
+    contribution =
+      case surface_id do
+        "data_sources" -> "data-operations.sources"
+        "data_source_registration" -> "data-operations.source-registration"
+        "data_source_settings" -> "data-operations.source-settings"
+      end
 
-    {:ok, inventory, _html} =
-      live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
+    snapshot =
+      HostTransportTestSupport.assert_context(view, %{
+        "kind" => "ops_module",
+        "contribution" => contribution,
+        "host_scope" => "mission",
+        "mission_id" => mission.mission_id,
+        "query_params" => query_params
+      })
 
-    assert has_element?(inventory, "#ops-data-sources-page")
-
-    assert has_element?(
-             inventory,
-             ~s(#data-source-mission-telemetry a[href="/missions/#{mission.mission_id}/ops/data-sources/mission-telemetry"])
-           )
-
-    refute has_element?(inventory, "#register-source-button")
-    refute has_element?(inventory, "#source-settings-mission-telemetry")
-    refute has_element?(inventory, "#probe-source-mission-telemetry")
-    refute has_element?(inventory, "#disable-source-mission-telemetry")
-
-    {:ok, detail, _html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/ops/data-sources/mission-telemetry"
-      )
-
-    assert has_element?(
-             detail,
-             ~s(#ops-data-sources-page[data-source-focus-state="matched"][data-source-focus-data-source="mission-telemetry"])
-           )
-
-    assert {:error, {:redirect, %{to: "/"}}} =
-             live(
-               conn,
-               ~p"/missions/#{mission.mission_id}/ops/data-sources/mission-telemetry/settings"
-             )
-
-    assert {:error, {:redirect, %{to: "/"}}} =
-             live(
-               conn,
-               ~p"/missions/#{mission.mission_id}/ops/data-sources/registration/new"
-             )
-  end
-
-  test "organization administrators enter dedicated registration and settings routes" do
-    {conn, mission} = signed_in(:organization_admin)
-
-    {:ok, inventory, _html} =
-      live(conn, ~p"/missions/#{mission.mission_id}/ops/data-sources")
-
-    assert has_element?(inventory, "#register-source-button")
-    assert has_element?(inventory, "#source-settings-mission-telemetry")
-    refute has_element?(inventory, "#probe-source-mission-telemetry")
-
-    {:ok, settings, _html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/ops/data-sources/mission-telemetry/settings"
-      )
-
-    assert has_element?(settings, "#probe-source-mission-telemetry")
-    assert has_element?(settings, "#disable-source-mission-telemetry")
-
-    {:ok, registration, _html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/ops/data-sources/registration/new"
-      )
-
-    assert has_element?(registration, "#register-source-panel")
-    assert has_element?(registration, "#register-source-form")
+    assert snapshot["ops_page"]["id"] == contribution
   end
 end

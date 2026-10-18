@@ -402,6 +402,8 @@ defmodule Cadence.Dashboards.Management do
        ) do
     Repo.transaction(fn ->
       item = fetch_library_item_for_update(organization_id, mission_id, item_id)
+      expected = Keyword.get(opts, :expected_version, item.latest_version)
+      if expected != item.latest_version, do: Repo.rollback(:library_version_conflict)
       next_version = item.latest_version + 1
 
       %DashboardLibraryVersion{}

@@ -48,6 +48,14 @@ defmodule Cadence.Telemetry.HistoryStore.Postgres do
   end
 
   @impl true
+  def fetch_sample(query, _opts) do
+    with {:ok, sample} <-
+           SampleRecords.fetch_sample(query.organization_id, query.mission_id, query.sample_id) do
+      {:ok, %{organization_id: query.organization_id, sample: sample}}
+    end
+  end
+
+  @impl true
   def reset do
     SampleRecords.reset()
   end

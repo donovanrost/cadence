@@ -1,0 +1,10 @@
+@import "@cadence/ui/styles.css";
+@source "./";
+@source "../../../modules/limits-and-alarming/src";
+@source "../../../modules/derived-telemetry/src";
+@source "../../../modules/commanding/src";
+@source "../../../modules/data-operations/src";
+@source "../../../modules/planning-and-contacts/src";
+@source "../../../modules/dashboards-and-exploration/src";
+@source "../../host/src/capability-management/features/activation-approvals";
+@import "@cadence/dashboards-and-exploration/workspace.css";

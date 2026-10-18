@@ -9,7 +9,8 @@ defmodule Cadence.Control.Contacts do
     ProviderReservation,
     ProviderReservations,
     RealizedContact,
-    ScheduledContact
+    ScheduledContact,
+    Scheduler
   }
 
   alias Cadence.Management.Contacts, as: ManagementContacts
@@ -17,6 +18,15 @@ defmodule Cadence.Control.Contacts do
   alias Cadence.Runtime.Contacts, as: RuntimeContacts
   alias Cadence.Runtime.RealizedContactRuntimeSpec
   alias Cadence.SourceEndpoints
+
+  @doc "Waits for in-flight contact scheduling before mission shutdown or reconfiguration."
+  @spec await_scheduler_settled(GenServer.server()) :: {:ok, term()} | {:error, :noproc}
+  def await_scheduler_settled(server) do
+    case GenServer.whereis(server) do
+      pid when is_pid(pid) -> Scheduler.await_settled(server)
+      nil -> {:ok, :disabled}
+    end
+  end
 
   @spec accept_approved_plan(ApprovedContactPlan.t()) :: :ok | {:error, term()}
   def accept_approved_plan(%ApprovedContactPlan{} = approved_plan),
@@ -64,8 +74,25 @@ defmodule Cadence.Control.Contacts do
              mission_id,
              plan_id
            ),
+         :ok <- expected_approved_plan(approved_plan, opts),
          :ok <- accept_approved_plan(approved_plan) do
       ContactPlanExecutions.execute(current_scope, mission_id, plan_id, opts)
+    end
+  end
+
+  defp expected_approved_plan(approved_plan, opts) do
+    case {Keyword.fetch(opts, :expected_plan_version), Keyword.fetch(opts, :expected_plan_hash)} do
+      {:error, :error} ->
+        :ok
+
+      {{:ok, version}, {:ok, hash}}
+      when is_integer(version) and is_binary(hash) and
+             version == approved_plan.contact_plan_version and
+             hash == approved_plan.content_sha256 ->
+        :ok
+
+      _ ->
+        {:error, :stale_contact_plan_evidence}
     end
   end
 
@@ -74,15 +101,61 @@ defmodule Cadence.Control.Contacts do
   def list_plan_execution(organization_id, mission_id, plan_id, version),
     do: ContactPlanExecutions.list(organization_id, mission_id, plan_id, version)
 
+  defdelegate list_plan_execution_page(organization_id, mission_id, plan_id, version, page),
+    to: ContactPlanExecutions,
+    as: :list_page
+
+  defdelegate list_contact_records_page(org, mission, kind, page),
+    to: ContactStore,
+    as: :list_record_page
+
+  defdelegate list_provider_reservations_page(org, mission, page),
+    to: ProviderReservations,
+    as: :list_mission_page
+
   @spec fetch_provider_reservation(binary(), binary(), binary()) ::
           {:ok, ProviderReservation.t()} | {:error, term()}
   def fetch_provider_reservation(organization_id, mission_id, reservation_id),
     do: ProviderReservations.fetch(organization_id, mission_id, reservation_id)
 
+  defdelegate fetch_provider_change(organization_id, change_id),
+    to: Cadence.Contacts.ProviderReservationChanges,
+    as: :fetch
+
+  defdelegate list_provider_changes_page(org, mission, reservation, before_revision),
+    to: Cadence.Contacts.ProviderReservationChanges,
+    as: :list_page
+
+  defdelegate approve_provider_change(scope, change_id, hash, reason),
+    to: Cadence.Contacts.ProviderChangeApprovals,
+    as: :approve
+
+  defdelegate reject_provider_change(scope, change_id, hash, reason),
+    to: Cadence.Contacts.ProviderChangeApprovals,
+    as: :reject
+
+  defdelegate acknowledge_provider_change(scope, change_id, hash, reason),
+    to: Cadence.Contacts.ProviderChangeApprovals,
+    as: :acknowledge
+
   @spec fetch_scheduled_contact(binary(), binary(), binary()) ::
           {:ok, ScheduledContact.t()} | {:error, term()}
   def fetch_scheduled_contact(organization_id, mission_id, scheduled_contact_id),
     do: ContactStore.fetch_scheduled(organization_id, mission_id, scheduled_contact_id)
+
+  defdelegate fetch_realized_contact(org, mission, contact), to: ContactStore, as: :fetch_realized
+
+  defdelegate fetch_scheduled_contact_revision(org, mission, contact, revision),
+    to: Cadence.Contacts.ScheduledContactRevisions,
+    as: :fetch_scoped
+
+  defdelegate list_scheduled_contact_revisions_page(
+                org,
+                mission,
+                contact,
+                revision,
+                before_revision
+              ), to: Cadence.Contacts.ScheduledContactRevisions, as: :list_page
 
   @spec start_realized_contact(RealizedContact.t()) :: {:ok, pid()} | {:error, term()}
   def start_realized_contact(%RealizedContact{} = realized_contact) do

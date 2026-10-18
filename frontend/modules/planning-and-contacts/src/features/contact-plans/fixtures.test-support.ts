@@ -1,0 +1,80 @@
+import type { MutableFixture } from "../../../../../test-support/mutable-fixture";
+import type { PlanDetail } from "./OpsContactPlanShow.contracts";
+export function planFixture(): { detail: MutableFixture<PlanDetail> } {
+  const hash = "a".repeat(64),
+    time = "2027-01-01T00:00:00Z";
+  const page = <T>(entries: T[]) => ({ page: 1, more: false, entries });
+  return {
+    detail: {
+      contract_version: 1,
+      context: { organization_id: "org-plan", mission_id: "mission-plan" },
+      plan: {
+        id: "plan-one",
+        version: 1,
+        current_version: 1,
+        content_sha256: hash,
+        lifecycle_state: "draft",
+        approved_version: null,
+        reviewed_decision: null,
+        rationale: "Review the selected downlink opportunity.",
+        created_at: time,
+        selected_count: 1,
+        locked_count: 1,
+        rejected_count: 0,
+        coverage_satisfied: true,
+        conflicts_clear: true,
+        unsatisfied_clear: true,
+        manual_review: true,
+      },
+      permissions: { operate: true, decide: true },
+      query: {
+        contact_plan_id: "plan-one",
+        version: 1,
+        versions_page: 1,
+        approvals_page: 1,
+        opportunities_page: 1,
+        execution_page: 1,
+        requirements_page: 1,
+        issues_page: 1,
+      },
+      versions: page([{ id: "version-one", version: 1, content_sha256: hash, created_at: time }]),
+      approvals: page([]),
+      execution: page([]),
+      issues: page([]),
+      requirements: page([
+        {
+          id: "requirement-one",
+          version: 1,
+          satisfied: true,
+          selected_count: 2,
+          eligible_count: 2,
+          hard_failure_count: 0,
+          search_failure_count: 0,
+          approval_mode: "manual",
+        },
+      ]),
+      opportunities: page(
+        (["selected", "locked"] as const).map((disposition, index) => ({
+          id: "snapshot-" + index,
+          disposition,
+          content_sha256: hash,
+          requirement_id: "requirement-one",
+          requirement_version: 1,
+          provider: "Ground network",
+          station: "Station Alpha",
+          starts_at: time,
+          ends_at: "2027-01-01T00:01:00Z",
+          expires_at: "2027-01-02T00:00:00Z",
+          eligible: true,
+          synthetic: true,
+          availability: "available" as const,
+          route_key: "downlink",
+          provider_id: "provider-one",
+          provider_version: 2,
+          transport_id: "transport-one",
+          transport_version: 3,
+        })),
+      ),
+    },
+  };
+}

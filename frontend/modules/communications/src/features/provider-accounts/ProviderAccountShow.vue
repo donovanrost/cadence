@@ -1,0 +1,378 @@
+<script setup lang="ts">
+import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
+import { reactive, watch } from "vue";
+import CadenceField from "@cadence/ui/CadenceField.vue";
+
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
+import CadenceDetailsFrame from "@cadence/ui/CadenceDetailsFrame.vue";
+import CadencePanel from "@cadence/ui/CadencePanel.vue";
+import CadenceStatTile from "@cadence/ui/CadenceStatTile.vue";
+import StatusBadge from "../../shared/StatusBadge.vue";
+
+import type {
+  Grant,
+  EmptyPayload,
+  GrantValues,
+  GrantInputValues,
+  ProviderAccountShowProps,
+} from "./detail.contracts";
+
+const props = defineProps<ProviderAccountShowProps>();
+
+const emit = defineEmits<{
+  "validate-account": [payload: EmptyPayload];
+  "rotate-credential": [payload: EmptyPayload];
+  "revoke-credential": [payload: EmptyPayload];
+  "grant-mission": [payload: { grant: GrantValues }];
+  "revoke-grant": [payload: { "grant-id": string }];
+  "draft-change": [payload: { grant: GrantValues }];
+}>();
+
+const grantValues = reactive<GrantInputValues>({ ...props.grant_form.values });
+const grantFieldOrder: Array<keyof GrantValues> = [
+  "mission_id",
+  "allowed_services",
+  "allowed_stations",
+  "max_quota",
+  "grant_reason",
+];
+
+watch(
+  () => props.grant_form.values,
+  (values) => Object.assign(grantValues, values),
+  { deep: true },
+);
+
+const grantMission = () =>
+  emit("grant-mission", {
+    grant: {
+      mission_id: String(grantValues.mission_id ?? ""),
+      allowed_services: String(grantValues.allowed_services ?? ""),
+      allowed_stations: String(grantValues.allowed_stations ?? ""),
+      max_quota: String(grantValues.max_quota ?? ""),
+      grant_reason: String(grantValues.grant_reason ?? ""),
+    },
+  });
+
+const draftChanged = () =>
+  emit("draft-change", {
+    grant: Object.fromEntries(
+      grantFieldOrder.map((key) => [key, String(grantValues[key] ?? "")]),
+    ) as GrantValues,
+  });
+
+const revokeCredential = () => {
+  if (props.actions.revoke && window.confirm(props.actions.revoke.confirm)) {
+    emit("revoke-credential", props.actions.revoke.payload);
+  }
+};
+
+useManagementHeader("/provider-accounts/:provider_account_id", () => ({
+  title: props.page.header.title,
+  identifier: props.page.header.subtitle,
+  facts: [props.page.header.config_label],
+  primary: {
+    id: props.actions.rotate.id,
+    label: props.actions.rotate.label,
+    icon: "hero-key",
+    disabled: props.actions.rotate.disabled,
+    run: () => emit("rotate-credential", props.actions.rotate.payload),
+  },
+  actions: [
+    {
+      id: props.actions.validate.id,
+      label: props.actions.validate.label,
+      icon: "hero-shield-check",
+      disabled: props.actions.validate.disabled,
+      run: () => emit("validate-account", props.actions.validate.payload),
+    },
+  ],
+  ...(props.actions.revoke
+    ? {
+        more: [
+          {
+            id: props.actions.revoke.id,
+            label: props.actions.revoke.label,
+            tone: "danger" as const,
+            disabled: props.actions.revoke.disabled,
+            run: revokeCredential,
+          },
+        ],
+      }
+    : {}),
+}));
+
+const revokeGrant = (grant: Grant) => {
+  if (grant.revoke && window.confirm(grant.revoke.confirm)) {
+    emit("revoke-grant", grant.revoke.payload);
+  }
+};
+</script>
+
+<template>
+  <div :id="page.id" class="space-y-6">
+    <div class="grid gap-3 md:grid-cols-4">
+      <CadenceStatTile v-for="stat in stats" :id="stat.id" :key="stat.id">
+        <template #label>{{ stat.label }}</template>
+        <p class="mt-1 font-mono text-xl text-base-content">{{ stat.value }}</p>
+      </CadenceStatTile>
+    </div>
+
+    <div class="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.6fr)]">
+      <div class="space-y-4">
+        <CadencePanel
+          :id="page.grants.card_id"
+          class="card bg-base-200 border border-base-300"
+          header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+        >
+          <template #header>
+            <div>
+              <h2 class="text-base font-semibold text-base-content">{{ page.grants.heading }}</h2>
+              <p class="mt-1 text-xs text-base-content/70">{{ page.grants.subtitle }}</p>
+            </div>
+          </template>
+          <div class="card-body p-0">
+            <div :id="page.grants.stream_id" class="divide-y divide-base-300">
+              <div
+                :id="page.grants.empty.id"
+                class="hidden only:block p-5 text-sm text-base-content/60"
+              >
+                {{ page.grants.empty.text }}
+              </div>
+              <div
+                v-for="grant in account_grants"
+                :id="grant.__dom_id"
+                :key="grant.id"
+                class="flex items-start justify-between gap-4 px-5 py-4"
+              >
+                <div>
+                  <p class="font-medium">{{ grant.mission_name }}</p>
+                  <p class="mt-1 font-mono text-xs text-base-content/50">
+                    {{ grant.version_label }}
+                  </p>
+                  <p v-if="grant.restriction_summary" class="mt-2 text-xs text-base-content/60">
+                    {{ grant.restriction_summary }}
+                  </p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <StatusBadge :status="grant.lifecycle.status" :label="grant.lifecycle.label" />
+                  <button
+                    v-if="grant.revoke"
+                    :id="grant.revoke.id"
+                    type="button"
+                    class="btn btn-error btn-outline btn-xs"
+                    :data-confirm="grant.revoke.confirm"
+                    :disabled="actionsDisabled"
+                    @click="revokeGrant(grant)"
+                  >
+                    {{ grant.revoke.label }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CadencePanel>
+
+        <CadencePanel
+          :id="page.grant_form_card.id"
+          class="card bg-base-200 border border-base-300"
+          header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+        >
+          <template #header>
+            <div>
+              <h2 class="text-base font-semibold text-base-content">
+                {{ page.grant_form_card.heading }}
+              </h2>
+              <p class="mt-1 text-xs text-base-content/70">
+                {{ page.grant_form_card.subtitle }}
+              </p>
+            </div>
+          </template>
+          <div class="card-body p-6">
+            <form :id="grant_form.id" class="space-y-4" @submit.prevent="grantMission">
+              <CadenceField
+                v-for="fieldKey in grantFieldOrder"
+                :key="fieldKey"
+                wrapper-class="fieldset mb-3"
+                :label="grant_form.fields[fieldKey].label"
+                label-class="hud-label block mb-1.5"
+              >
+                <select
+                  v-if="grant_form.fields[fieldKey].type === 'select'"
+                  :id="grant_form.fields[fieldKey].id"
+                  v-model="grantValues[fieldKey]"
+                  :name="grant_form.fields[fieldKey].name"
+                  :required="grant_form.fields[fieldKey].required"
+                  class="w-full select"
+                  @change="draftChanged"
+                >
+                  <option
+                    v-for="option in grant_form.fields[fieldKey].options"
+                    :key="option.value"
+                    :value="option.value"
+                    :disabled="option.disabled"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+                <input
+                  v-else
+                  :id="grant_form.fields[fieldKey].id"
+                  v-model="grantValues[fieldKey]"
+                  :name="grant_form.fields[fieldKey].name"
+                  :type="grant_form.fields[fieldKey].type"
+                  :placeholder="grant_form.fields[fieldKey].placeholder || undefined"
+                  :required="grant_form.fields[fieldKey].required"
+                  :min="grant_form.fields[fieldKey].min ?? undefined"
+                  class="w-full input"
+                  @input="draftChanged"
+                />
+              </CadenceField>
+              <div class="flex justify-end">
+                <button
+                  :id="grant_form.action.id"
+                  type="submit"
+                  class="btn btn-primary btn-sm"
+                  :disabled="canGrant === false"
+                >
+                  {{ grant_form.action.label }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </CadencePanel>
+
+        <CadencePanel
+          :id="page.audit.card_id"
+          class="card bg-base-200 border border-base-300"
+          header-class="flex items-start justify-between gap-4 border-b border-base-300 px-4 py-3"
+        >
+          <template #header>
+            <div>
+              <h2 class="text-base font-semibold text-base-content">{{ page.audit.heading }}</h2>
+              <p class="mt-1 text-xs text-base-content/70">{{ page.audit.subtitle }}</p>
+            </div>
+          </template>
+          <div class="card-body p-0">
+            <div :id="page.audit.stream_id" class="divide-y divide-base-300">
+              <div
+                :id="page.audit.empty.id"
+                class="hidden only:block p-5 text-sm text-base-content/60"
+              >
+                {{ page.audit.empty.text }}
+              </div>
+              <div
+                v-for="entry in account_audit"
+                :id="entry.__dom_id"
+                :key="entry.id"
+                class="grid gap-2 px-5 py-3 sm:grid-cols-[10rem_minmax(0,1fr)_6rem] sm:items-center"
+              >
+                <time class="font-mono text-xs text-base-content/50">{{ entry.recorded_at }}</time>
+                <span class="text-sm">{{ entry.action }}</span>
+                <StatusBadge :status="entry.outcome.status" :label="entry.outcome.label" />
+              </div>
+            </div>
+          </div>
+        </CadencePanel>
+      </div>
+
+      <aside class="space-y-4">
+        <CadenceCard
+          :id="configuration.id"
+          class="card bg-base-200 border border-base-300"
+          body-class="card-body p-6"
+        >
+          <p class="hud-label">{{ configuration.title }}</p>
+          <div class="mt-3 divide-y divide-base-300">
+            <CadenceDataRow
+              v-for="row in configuration.rows"
+              :key="row.label"
+              row-class="hud-data-row"
+              label-class="hud-data-label"
+              :label="row.label"
+            >
+              <span class="hud-data-value" :class="row.mono && 'font-mono text-sm'">
+                {{ row.value }}
+              </span>
+            </CadenceDataRow>
+          </div>
+        </CadenceCard>
+
+        <CadenceCard
+          :id="ingestion.id"
+          class="card bg-base-200 border border-base-300"
+          body-class="card-body p-6"
+        >
+          <p class="hud-label">{{ ingestion.title }}</p>
+          <div class="mt-3 divide-y divide-base-300">
+            <template v-for="row in ingestion.rows" :key="row.label">
+              <div v-if="row.wrapper_id" :id="row.wrapper_id">
+                <CadenceDataRow
+                  row-class="hud-data-row"
+                  label-class="hud-data-label"
+                  :label="row.label"
+                >
+                  <span class="hud-data-value" :class="row.mono && 'font-mono text-sm'">
+                    {{ row.value }}
+                  </span>
+                </CadenceDataRow>
+              </div>
+              <CadenceDataRow
+                v-else
+                row-class="hud-data-row"
+                label-class="hud-data-label"
+                :label="row.label"
+              >
+                <span class="hud-data-value" :class="row.mono && 'font-mono text-sm'">
+                  {{ row.value }}
+                </span>
+              </CadenceDataRow>
+            </template>
+          </div>
+          <p class="mt-3 text-xs text-base-content/50">
+            {{ ingestion.description }}
+          </p>
+        </CadenceCard>
+
+        <CadenceCard
+          :id="guardrails.id"
+          class="card bg-base-200 border border-base-300"
+          body-class="card-body p-6"
+        >
+          <p class="hud-label">{{ guardrails.title }}</p>
+          <pre
+            class="mt-3 max-h-72 overflow-auto bg-base-100/50 p-3 font-mono text-xs text-base-content/70"
+            v-text="guardrails.json"
+          ></pre>
+        </CadenceCard>
+      </aside>
+    </div>
+
+    <CadenceDetailsFrame
+      :id="diagnostics.id"
+      class="rounded border border-base-300 bg-base-200/60 p-4 text-sm"
+    >
+      <summary class="cursor-pointer hud-label hover:text-primary">{{ diagnostics.title }}</summary>
+      <div class="mt-4 grid gap-4 lg:grid-cols-2">
+        <div
+          v-for="(column, columnIndex) in diagnostics.columns"
+          :key="columnIndex"
+          class="divide-y divide-base-300"
+        >
+          <CadenceDataRow
+            v-for="row in column"
+            :key="row.label"
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            :label="row.label"
+          >
+            <span class="hud-data-value" :class="row.mono && 'font-mono text-sm'">
+              {{ row.value }}
+            </span>
+          </CadenceDataRow>
+        </div>
+      </div>
+    </CadenceDetailsFrame>
+  </div>
+</template>

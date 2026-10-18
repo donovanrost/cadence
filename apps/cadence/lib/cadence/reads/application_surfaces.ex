@@ -16,51 +16,26 @@ defmodule Cadence.Reads.ApplicationSurfaces do
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Extensions.Presentation.FieldDefinition
-  alias Cadence.Reads.ApplicationSurfaces.DerivedTelemetry, as: DerivedTelemetrySurface
-  alias Cadence.Reads.ApplicationSurfaces.Limits, as: LimitsSurface
-  alias Cadence.Reads.ApplicationSurfaces.PacketBindings, as: PacketBindingsSurface
+  alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry
   alias Cadence.Reads.ApplicationSurfaces.ReferenceResolver
-
-  @providers %{
-    "cadence.derived_telemetry.manage" => DerivedTelemetrySurface,
-    "cadence.limits.manage" => LimitsSurface,
-    "cadence.limits.activity" => LimitsSurface,
-    "cadence.packet_bindings.manage" => PacketBindingsSurface
-  }
 
   @spec validate_providers() ::
           :ok | {:error, :invalid_application_surface_provider_registry}
-  def validate_providers, do: validate_providers(Registry.all(), @providers)
+  def validate_providers, do: validate_providers(Registry.all(), ProviderRegistry.providers())
 
   @doc false
   @spec validate_providers([ApplicationDefinition.t()], map()) ::
           :ok | {:error, :invalid_application_surface_provider_registry}
   def validate_providers(definitions, providers)
       when is_list(definitions) and is_map(providers) do
-    required_query_ids =
-      for definition <- definitions,
-          surface <- definition.surfaces,
-          match?({:declarative, "cadence.host.surface.v1"}, surface.renderer),
-          do: Map.get(surface.data_contract, :query_id)
-
-    registered_query_ids = Map.keys(providers)
-
-    if unique?(required_query_ids) and
-         same_identities?(required_query_ids, registered_query_ids) and
-         Enum.all?(providers, fn {_query_id, provider} ->
-           Code.ensure_loaded?(provider) and function_exported?(provider, :load, 3)
-         end) do
-      :ok
-    else
-      {:error, :invalid_application_surface_provider_registry}
-    end
+    ProviderRegistry.validate(definitions, providers)
   end
 
   def validate_providers(_definitions, _providers),
     do: {:error, :invalid_application_surface_provider_registry}
 
   @spec load(Scope.t(), HostContext.t(), binary(), pos_integer(), SurfaceDefinition.t(), map()) ::
-          {:ok, Cadence.Applications.SurfaceDocument.t()} | {:error, term()}
+          {:ok, SurfaceDocument.t() | map()} | {:error, term()}
   def load(
         %Scope{} = current_scope,
         %HostContext{} = host_context,
@@ -70,7 +45,7 @@ defmodule Cadence.Reads.ApplicationSurfaces do
         params \\ %{}
       )
       when is_binary(application_key) and is_integer(application_version) and is_map(params) do
-    with {:ok, document} <-
+    with {:ok, result} <-
            load_unresolved_document(
              current_scope,
              host_context,
@@ -78,11 +53,32 @@ defmodule Cadence.Reads.ApplicationSurfaces do
              application_version,
              surface,
              params
-           ),
+           ) do
+      finalize_result(current_scope, host_context, result, surface)
+    end
+  end
+
+  defp finalize_result(
+         %Scope{} = current_scope,
+         %HostContext{} = host_context,
+         %SurfaceDocument{} = document,
+         %SurfaceDefinition{} = surface
+       ) do
+    with :ok <- validate_document(document, surface),
          {:ok, document} <- bind_reference_contracts(document, surface) do
       ReferenceResolver.resolve(current_scope, host_context, document)
     end
   end
+
+  defp finalize_result(_current_scope, _host_context, result, %SurfaceDefinition{} = surface)
+       when is_map(result) do
+    if trusted_surface?(surface),
+      do: {:ok, result},
+      else: {:error, :invalid_application_surface_document}
+  end
+
+  defp finalize_result(_current_scope, _host_context, _result, _surface),
+    do: {:error, :invalid_application_surface_document}
 
   defp load_unresolved_document(
          current_scope,
@@ -94,39 +90,45 @@ defmodule Cadence.Reads.ApplicationSurfaces do
        ) do
     with {:ok, definition} <- Registry.fetch_available(application_key, application_version),
          :ok <- ensure_declared_surface(definition, surface, host_context),
-         :ok <- authorize_surface(current_scope, host_context),
+         :ok <- authorize_surface(current_scope, host_context, surface),
+         :ok <- ApplicationInstallations.authorize_surface(current_scope, host_context, surface),
          {:ok, installation} <-
-           ApplicationInstallations.fetch_installed(
-             current_scope,
-             host_context,
-             application_key
-           ),
+           maybe_fetch_installation(current_scope, host_context, application_key),
          :ok <- ensure_installation_version(installation, application_version),
          {:ok, query_id, query_version} <- query_contract(surface),
-         {:ok, provider} <- fetch_provider(query_id) do
-      with {:ok, document} <-
-             provider.load(
-               current_scope,
-               host_context,
-               %SurfaceQueryRequest{
-                 application_key: application_key,
-                 application_version: application_version,
-                 surface_id: surface.surface_id,
-                 surface_version: surface.version,
-                 query_id: query_id,
-                 query_version: query_version,
-                 params: params
-               }
-             ),
-           :ok <- validate_document(document, surface) do
-        {:ok, document}
-      end
+         {provider_key, provider_surface_id} <-
+           provider_identity(application_key, surface.surface_id, query_id),
+         {:ok, provider} <- fetch_provider(provider_key, query_id) do
+      ProviderRegistry.dispatch(
+        current_scope,
+        host_context,
+        %SurfaceQueryRequest{
+          application_key: provider_key,
+          application_version: application_version,
+          surface_id: provider_surface_id,
+          surface_version: surface.version,
+          query_id: query_id,
+          query_version: query_version,
+          params: params
+        },
+        %{{provider_key, query_id} => provider}
+      )
     end
   end
+
+  # Preserve the historical Spacecraft surface while the canonical query has one domain owner.
+  defp provider_identity("spacecraft", "telemetry_decom", "cadence.telemetry_decom.manage"),
+    do: {"telemetry_decom", "manage"}
+
+  defp provider_identity(application_key, surface_id, _query_id),
+    do: {application_key, surface_id}
 
   defp validate_document(%SurfaceDocument{} = document, %SurfaceDefinition{} = surface) do
     SurfaceDocument.validate(document, surface.actions)
   end
+
+  defp trusted_surface?(%SurfaceDefinition{renderer: {:trusted, _renderer_id}}), do: true
+  defp trusted_surface?(%SurfaceDefinition{}), do: false
 
   defp bind_reference_contracts(
          %SurfaceDocument{form: %GeneratedForm{} = form} = document,
@@ -186,12 +188,77 @@ defmodule Cadence.Reads.ApplicationSurfaces do
     if declared?, do: :ok, else: {:error, :undeclared_application_surface}
   end
 
-  defp authorize_surface(current_scope, host_context) do
+  defp authorize_surface(
+         current_scope,
+         %HostContext{placement: :organization, organization_id: organization_id},
+         %SurfaceDefinition{scope: :organization}
+       )
+       when is_binary(organization_id) do
+    Policy.authorize(current_scope, :operate_organization, %{organization_id: organization_id})
+  end
+
+  defp authorize_surface(
+         current_scope,
+         %HostContext{placement: :mission, mission_id: mission_id},
+         %SurfaceDefinition{scope: :mission}
+       )
+       when is_binary(mission_id) do
     Policy.authorize(current_scope, :operate_mission, %{
       organization_id: current_scope.organization_id,
-      mission_id: host_context.mission_id
+      mission_id: mission_id
     })
   end
+
+  defp authorize_surface(
+         current_scope,
+         %HostContext{placement: :spacecraft, mission_id: mission_id},
+         %SurfaceDefinition{scope: :spacecraft}
+       )
+       when is_binary(mission_id) do
+    Policy.authorize(current_scope, :operate_mission, %{
+      organization_id: current_scope.organization_id,
+      mission_id: mission_id
+    })
+  end
+
+  defp authorize_surface(
+         %Scope{actor_kind: :user, user: %{user_id: user_id}},
+         %HostContext{placement: :user, user_id: user_id},
+         %SurfaceDefinition{scope: :user}
+       ),
+       do: :ok
+
+  defp authorize_surface(
+         %Scope{} = current_scope,
+         %HostContext{placement: :admin},
+         %SurfaceDefinition{scope: :admin}
+       ) do
+    if Scope.admin_mode?(current_scope), do: :ok, else: {:error, :forbidden}
+  end
+
+  defp authorize_surface(_current_scope, _host_context, _surface),
+    do: {:error, :unsupported_application_host_context}
+
+  defp maybe_fetch_installation(
+         current_scope,
+         %HostContext{placement: placement} = host_context,
+         application_key
+       ) do
+    if installation_exempt?(application_key, placement) do
+      {:ok, nil}
+    else
+      ApplicationInstallations.fetch_installed(current_scope, host_context, application_key)
+    end
+  end
+
+  @doc false
+  @spec organization_installation_exempt?(binary()) :: boolean()
+  def organization_installation_exempt?(application_key),
+    do: installation_exempt?(application_key, :organization)
+
+  @doc false
+  @spec installation_exempt?(binary(), HostContext.placement()) :: boolean()
+  defdelegate installation_exempt?(application_key, placement), to: Registry, as: :platform?
 
   defp ensure_installation_version(
          %ApplicationInstallation{application_version: version},
@@ -201,6 +268,8 @@ defmodule Cadence.Reads.ApplicationSurfaces do
 
   defp ensure_installation_version(%ApplicationInstallation{}, _requested_version),
     do: {:error, :application_installation_version_mismatch}
+
+  defp ensure_installation_version(nil, _requested_version), do: :ok
 
   defp query_contract(%SurfaceDefinition{data_contract: data_contract}) do
     case {Map.get(data_contract, :query_id), Map.get(data_contract, :version)} do
@@ -212,15 +281,10 @@ defmodule Cadence.Reads.ApplicationSurfaces do
     end
   end
 
-  defp fetch_provider(query_id) do
-    case Map.fetch(@providers, query_id) do
+  defp fetch_provider(application_key, query_id) do
+    case ProviderRegistry.fetch(application_key, query_id) do
       {:ok, provider} -> {:ok, provider}
-      :error -> {:error, :unknown_application_surface_query}
+      {:error, reason} -> {:error, reason}
     end
   end
-
-  defp same_identities?(left, right),
-    do: MapSet.equal?(MapSet.new(left), MapSet.new(right))
-
-  defp unique?(identities), do: length(identities) == length(Enum.uniq(identities))
 end

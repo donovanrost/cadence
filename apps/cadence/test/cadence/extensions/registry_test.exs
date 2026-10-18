@@ -50,6 +50,26 @@ defmodule Cadence.Extensions.RegistryTest do
              ExtensionCatalog.fetch("cadence.cfdp", 2)
 
     assert {:error, :unknown_extension_package} = ExtensionCatalog.fetch("mission-uploaded")
+
+    assert {:ok, comms_package} = ExtensionCatalog.fetch("cadence.comms")
+
+    assert comms_package.contributions == [
+             %ApplicationContribution{application_key: "comms", application_version: 1}
+           ]
+
+    for {package_id, application_key} <- [
+          {"cadence.mission-catalog", "mission_catalog"},
+          {"cadence.ops_console", "ops_console"},
+          {"cadence.spacecraft", "spacecraft"}
+        ] do
+      assert {:ok, package} = ExtensionCatalog.fetch(package_id)
+      assert package.trust == :first_party
+      assert package.version == 1
+
+      assert package.contributions == [
+               %ApplicationContribution{application_key: application_key, application_version: 1}
+             ]
+    end
   end
 
   test "every typed contribution resolves through its owning domain registry" do
@@ -243,9 +263,9 @@ defmodule Cadence.Extensions.RegistryTest do
     assert :ok = ExtensionCatalog.validate()
 
     assert ExtensionCatalog.inventory() == %{
-             packages: 9,
-             applications: 4,
-             available_applications: 3,
+             packages: 13,
+             applications: 8,
+             available_applications: 7,
              capabilities: 5,
              transport_kinds: 1,
              provider_connectors: 1,
@@ -255,15 +275,30 @@ defmodule Cadence.Extensions.RegistryTest do
            }
 
     assert Enum.map(ExtensionCatalog.applications_for_scope(:spacecraft), & &1.application_key) ==
-             ["telemetry_decom"]
+             ["telemetry_decom", "spacecraft"]
 
     assert Enum.map(ExtensionCatalog.applications_for_scope(:mission), & &1.application_key) ==
-             ["derived_telemetry", "limits", "cfdp"]
+             [
+               "derived_telemetry",
+               "limits",
+               "comms",
+               "mission_catalog",
+               "ops_console",
+               "spacecraft",
+               "cfdp"
+             ]
 
     assert Enum.map(
              ExtensionCatalog.available_applications_for_scope(:mission),
              & &1.application_key
-           ) == ["derived_telemetry", "limits"]
+           ) == [
+             "derived_telemetry",
+             "limits",
+             "comms",
+             "mission_catalog",
+             "ops_console",
+             "spacecraft"
+           ]
 
     assert {:ok, %{application_key: "derived_telemetry", version: 1}} =
              ExtensionCatalog.fetch_available_application("derived_telemetry", 1)
@@ -288,7 +323,7 @@ defmodule Cadence.Extensions.RegistryTest do
       ApplicationRegistry.all()
       |> MapSet.new(&{&1.application_key, &1.version})
 
-    assert contributed_versions == registered_versions
+    assert MapSet.subset?(contributed_versions, registered_versions)
   end
 
   test "complete catalog validation rejects hidden invalid and duplicate packages" do

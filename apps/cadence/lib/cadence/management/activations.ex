@@ -8,6 +8,7 @@ defmodule Cadence.Management.Activations do
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Governance
+  alias Cadence.Governance.ActivationPolicy
 
   alias Cadence.Management.Activations.{
     ActivationDecision,
@@ -29,6 +30,17 @@ defmodule Cadence.Management.Activations do
     :identity_policy
   ]
 
+  @doc "Authorizes the host review inbox and decisions without frontend installation authority."
+  def authorize_review(%Scope{mission_id: scoped} = scope, mission_id)
+      when is_binary(mission_id) and (is_nil(scoped) or scoped == mission_id) do
+    Policy.authorize(scope, :approve_activation, %{
+      organization_id: scope.organization_id,
+      mission_id: mission_id
+    })
+  end
+
+  def authorize_review(_scope, _mission_id), do: {:error, :invalid_activation_scope}
+
   @spec request(Scope.t(), binary(), binary(), pos_integer(), keyword()) ::
           {:ok, ActivationRequest.t()} | {:error, term()}
   def request(%Scope{} = current_scope, mission_id, binding_set_id, version, opts \\ [])
@@ -48,15 +60,17 @@ defmodule Cadence.Management.Activations do
              binding_set_id,
              version
            ) do
-      current_scope
-      |> build_request(
-        binding_set,
-        requester_actor,
-        change_class,
-        Keyword.get(opts, :metadata, %{}),
-        requested_at
-      )
-      |> persist_request()
+      request =
+        build_request(
+          current_scope,
+          binding_set,
+          requester_actor,
+          change_class,
+          Keyword.get(opts, :metadata, %{}),
+          requested_at
+        )
+
+      with :ok <- expected_policy(request.policy_document, opts), do: persist_request(request)
     end
   end
 
@@ -116,6 +130,25 @@ defmodule Cadence.Management.Activations do
     |> List.first()
   end
 
+  @doc "Latest review evidence for one spacecraft, without exposing persistence rows."
+  def latest_spacecraft_request(organization_id, mission_id, spacecraft_id) do
+    row =
+      from(request in ActivationRequestRow,
+        where: request.organization_id == ^organization_id and request.mission_id == ^mission_id,
+        where:
+          fragment(
+            "? #>> '{value,configuration_review,spacecraft_id}' = ?",
+            request.metadata,
+            ^spacecraft_id
+          ),
+        order_by: [desc: request.requested_at, desc: request.activation_request_id],
+        limit: 1
+      )
+      |> Repo.one()
+
+    if row, do: ActivationRequestRow.to_domain(row)
+  end
+
   @spec fetch_approved(binary()) :: {:ok, ApprovedActivation.t()} | {:error, term()}
   def fetch_approved(request_id) when is_binary(request_id) do
     with %ActivationRequestRow{} = row <- Repo.get(ActivationRequestRow, request_id),
@@ -144,13 +177,17 @@ defmodule Cadence.Management.Activations do
   defp decide(_scope, _request_id, _decision, _reason, _opts),
     do: {:error, :invalid_activation_decision}
 
-  defp authorize_request(scope, mission_id, change_class) do
+  defp authorize_request(%Scope{mission_id: scoped} = scope, mission_id, change_class)
+       when is_nil(scoped) or scoped == mission_id do
     Policy.authorize(scope, :request_activation, %{
       organization_id: scope.organization_id,
       mission_id: mission_id,
       change_class: change_class
     })
   end
+
+  defp authorize_request(_scope, _mission_id, _change_class),
+    do: {:error, :invalid_activation_scope}
 
   defp build_request(
          scope,
@@ -160,7 +197,8 @@ defmodule Cadence.Management.Activations do
          metadata,
          requested_at
        ) do
-    approval_required? = approval_required?()
+    policy = ActivationPolicy.evidence(scope.organization_id, binding_set.mission_id)
+    approval_required? = policy["approval_required"]
 
     ActivationRequest.new(%{
       organization_id: scope.organization_id,
@@ -173,7 +211,7 @@ defmodule Cadence.Management.Activations do
       requester_actor_kind: scope.actor_kind,
       requester_actor_id: requester_actor["id"],
       requester_actor_document: requester_actor,
-      policy_document: request_policy(approval_required?),
+      policy_document: policy,
       metadata: metadata,
       requested_at: requested_at,
       decided_at: decided_at(approval_required?, requested_at)
@@ -190,30 +228,36 @@ defmodule Cadence.Management.Activations do
     end
   end
 
+  defp expected_policy(policy, opts) do
+    token = Keyword.get(opts, :expected_policy_token, policy["settings_token"])
+    required = Keyword.get(opts, :expected_approval_required, policy["approval_required"])
+
+    if token == policy["settings_token"] and required == policy["approval_required"],
+      do: :ok,
+      else: {:error, :activation_policy_changed}
+  end
+
   defp request_state(true), do: :approval_pending
   defp request_state(false), do: :approved
 
   defp decided_at(true, _requested_at), do: nil
   defp decided_at(false, requested_at), do: requested_at
 
-  defp request_policy(approval_required?) do
-    %{
-      "policy" => "activation_release_one",
-      "approval_required" => approval_required?,
-      "required_human_approvals" => if(approval_required?, do: 1, else: 0),
-      "separation_of_duties" => approval_required?
-    }
-  end
-
   defp transact_decision(scope, request_id, decision, actor, reason, decided_at) do
-    Repo.transaction(fn ->
-      persist_decision(scope, request_id, decision, actor, reason, decided_at)
+    ActivationPolicy.with_lock(scope.organization_id, fn ->
+      {:ok, persist_decision(scope, request_id, decision, actor, reason, decided_at)}
     end)
   end
 
   defp persist_decision(scope, request_id, decision, actor, reason, decided_at) do
     with {:ok, request_row} <- lock_pending_request(scope, request_id),
          :ok <- authorize_decision(scope, request_row),
+         :ok <-
+           ActivationPolicy.validate(
+             request_row.organization_id,
+             request_row.mission_id,
+             JsonDocument.unwrap_value(request_row.policy_document)
+           ),
          :ok <- distinct_approver(request_row, actor),
          {:ok, decision_row} <-
            insert_decision(request_row, request_id, decision, actor, reason, decided_at),
@@ -225,11 +269,7 @@ defmodule Cadence.Management.Activations do
   end
 
   defp authorize_decision(scope, request_row) do
-    Policy.authorize(scope, :approve_activation, %{
-      organization_id: request_row.organization_id,
-      mission_id: request_row.mission_id,
-      change_class: request_row.change_class
-    })
+    authorize_review(scope, request_row.mission_id)
   end
 
   defp insert_decision(request_row, request_id, decision, actor, reason, decided_at) do
@@ -382,12 +422,6 @@ defmodule Cadence.Management.Activations do
   defp valid_change_class(_change_class), do: {:error, :invalid_activation_change_class}
   defp require_reason(""), do: {:error, :activation_decision_reason_required}
   defp require_reason(_reason), do: :ok
-
-  defp approval_required? do
-    :cadence
-    |> Application.get_env(:activation_governance, [])
-    |> Keyword.get(:approval_required, true)
-  end
 
   defp now(opts) do
     datetime = Keyword.get(opts, :now, DateTime.utc_now())

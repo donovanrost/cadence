@@ -9,7 +9,7 @@ defmodule Cadence.Control.DataSources.SourceOperations do
 
   alias Cadence.DataSources.{SourceHealthEvent, SourceProbe}
 
-  alias Cadence.Management.DataSources.Credentials, as: SourceCredentials
+  alias Cadence.Management.DataSources, as: SourceDefinitions
 
   alias Cadence.DataSources.{DataSource, ResolvedSourceCredential, SourceCredentialMaterial}
 
@@ -214,9 +214,9 @@ defmodule Cadence.Control.DataSources.SourceOperations do
 
     resolver_result =
       if credential_material_resolver_configured?(opts) do
-        SourceCredentials.resolve_material(data_source.credentials_ref, resolver_opts)
+        SourceDefinitions.resolve_credential_material(data_source.credentials_ref, resolver_opts)
       else
-        SourceCredentials.resolve(data_source.credentials_ref, resolver_opts)
+        SourceDefinitions.resolve_credential(data_source.credentials_ref, resolver_opts)
       end
 
     case resolver_result do

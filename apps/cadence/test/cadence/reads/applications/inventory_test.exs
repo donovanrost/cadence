@@ -46,7 +46,10 @@ defmodule Cadence.Reads.Applications.InventoryTest do
     assert {:ok, applications} =
              Inventory.catalog(context.scope, context.mission_host, definitions)
 
-    assert Enum.map(applications, & &1.application_key) == ["derived_telemetry", "limits"]
+    assert Enum.map(applications, & &1.application_key) == [
+             "derived_telemetry",
+             "limits"
+           ]
 
     assert Enum.all?(applications, fn application ->
              not application.declared? and
@@ -55,6 +58,47 @@ defmodule Cadence.Reads.Applications.InventoryTest do
                application.lifecycle_state == nil and
                application.status.state == :not_installed
            end)
+  end
+
+  test "legacy platform rows are preserved but excluded while disabled optional apps stay disabled",
+       context do
+    row =
+      Repo.insert!(%InstallationRow{
+        application_installation_id: "legacy-platform",
+        organization_id: @organization_id,
+        mission_id: @mission_id,
+        scope_kind: "mission",
+        scope_id: @mission_id,
+        application_key: "comms",
+        application_version: 1,
+        lifecycle_state: "disabled",
+        metadata: %{}
+      })
+
+    assert {:ok, _} =
+             ApplicationInstallations.install(context.scope, context.mission_host, "limits")
+
+    assert {:ok, _} =
+             ApplicationInstallations.disable(context.scope, context.mission_host, "limits")
+
+    definitions = ExtensionCatalog.available_applications_for_scope(:mission)
+
+    assert {:ok, applications} =
+             Inventory.catalog(context.scope, context.mission_host, definitions)
+
+    refute Enum.any?(applications, &(&1.application_key == "comms"))
+    assert Enum.find(applications, &(&1.application_key == "limits")).lifecycle_state == :disabled
+
+    assert {:ok, [limits]} =
+             Inventory.declared(
+               context.scope,
+               context.mission_host,
+               %{"comms" => %{}, "limits" => %{}},
+               definitions
+             )
+
+    assert limits.application_key == "limits"
+    assert Repo.get!(InstallationRow, row.application_installation_id) == row
   end
 
   test "declared inventory preserves package metadata and unknown extension keys", context do

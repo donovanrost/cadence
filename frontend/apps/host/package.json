@@ -1,0 +1,54 @@
+{
+  "name": "@cadence/plugin-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./spacecraft": "./src/mission-and-spacecraft/spacecraft.ts",
+    "./capability-management": "./src/capability-management/index.ts",
+    "./catalog": "./src/catalog/index.ts",
+    "./missions": "./src/mission-and-spacecraft/index.ts",
+    "./administration": "./src/administration/index.ts",
+    "./ops-workspace": "./src/ops-workspace/index.ts",
+    "./auth-and-navigation": "./src/auth-and-navigation/index.ts"
+  },
+  "scripts": {
+    "dev": "vp dev",
+    "build": "vue-tsc -b && vp build",
+    "build:phoenix": "vue-tsc -b && vp build --config vite.phoenix.config.ts",
+    "preview": "vp preview",
+    "test": "node --test phoenix-build-config.test.mjs && vp test --run --exclude phoenix-build-config.test.mjs"
+  },
+  "dependencies": {
+    "@cadence/commanding": "workspace:*",
+    "@cadence/communications": "workspace:*",
+    "@cadence/dashboards-and-exploration": "workspace:*",
+    "@cadence/data-operations": "workspace:*",
+    "@cadence/design-tokens": "workspace:*",
+    "@cadence/limits-and-alarming": "workspace:*",
+    "@cadence/planning-and-contacts": "workspace:*",
+    "@cadence/plugin-sdk": "workspace:*",
+    "@cadence/ui": "workspace:*",
+    "@module-federation/runtime": "catalog:",
+    "@tanstack/vue-query": "5.104.0",
+    "live_vue": "file:../../../deps/live_vue",
+    "phoenix": "file:../../../deps/phoenix",
+    "phoenix_live_view": "file:../../../deps/phoenix_live_view",
+    "vue": "catalog:",
+    "vue-router": "5.3.1"
+  },
+  "devDependencies": {
+    "@module-federation/vite": "catalog:",
+    "@types/node": "catalog:",
+    "@types/phoenix": "^1.6.7",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vue/test-utils": "catalog:",
+    "@vue/tsconfig": "catalog:",
+    "happy-dom": "catalog:",
+    "tidewave": "0.9.0",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

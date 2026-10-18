@@ -8,94 +8,47 @@ defmodule CadenceWeb.OrganizationHomeLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Missions.Mission
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  describe "mount" do
-    test "renders org display_name and slug" do
-      user = TestFixtures.persist_user!()
-      org = TestFixtures.persist_org!(display_name: "Cadence Ops", slug: "cadence-ops")
-      _membership = TestFixtures.grant_membership!(user, org)
+  test "authenticated organization members mount the host-owned organization home" do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    _membership = TestFixtures.grant_membership!(user, organization)
 
-      conn = TestFixtures.member_conn(user)
+    {:ok, view, _html} = live(TestFixtures.member_conn(user), ~p"/")
 
-      {:ok, _view, html} = live(conn, ~p"/")
+    snapshot =
+      HostTransportTestSupport.assert_context(view, %{
+        "kind" => "administration",
+        "host_scope" => "organization",
+        "organization_id" => organization.organization_id,
+        "query_params" => %{}
+      })
 
-      assert html =~ "Cadence Ops"
-      assert html =~ "cadence-ops"
-    end
+    assert snapshot["administration_page"]["page"] == "organization_home"
+    assert snapshot["administration_page"]["status"] == "ready"
 
-    test "sidebar highlights the Home nav item" do
-      user = TestFixtures.persist_user!()
-      org = TestFixtures.persist_org!()
-      _membership = TestFixtures.grant_membership!(user, org)
-
-      {:ok, _view, html} = live(TestFixtures.member_conn(user), ~p"/")
-
-      assert html =~ ~r/border-primary[^"]*".*Home/s
-    end
-
-    test "shows the current mission count and link to /missions" do
-      user = TestFixtures.persist_user!()
-      org = TestFixtures.persist_org!()
-      _ = TestFixtures.grant_membership!(user, org)
-
-      mission =
-        Mission.new(%{
-          organization_id: org.organization_id,
-          slug: "alpha",
-          display_name: "Alpha"
-        })
-
-      assert {:ok, _} = Cadence.Missions.persist_mission(mission)
-
-      {:ok, view, html} = live(TestFixtures.member_conn(user), ~p"/")
-
-      assert html =~ "All missions"
-      assert html =~ ~s(href="/missions")
-      assert has_element?(view, "#organization-stat-missions", "1")
-    end
-
-    test "lists recent missions with status badges" do
-      user = TestFixtures.persist_user!()
-      org = TestFixtures.persist_org!()
-      _ = TestFixtures.grant_membership!(user, org)
-
-      mission =
-        Mission.new(%{
-          organization_id: org.organization_id,
-          slug: "alpha",
-          display_name: "Alpha Mission"
-        })
-
-      assert {:ok, _} = Cadence.Missions.persist_mission(mission)
-
-      {:ok, view, html} = live(TestFixtures.member_conn(user), ~p"/")
-
-      assert has_element?(view, "#organization-recent-missions")
-      assert html =~ "Alpha Mission"
-      assert html =~ "No spacecraft"
-    end
+    assert snapshot["administration_page"]["data"]["organization"]["id"] ==
+             organization.organization_id
   end
 
-  describe "authorization" do
-    test "active admin mode redirects to /admin even from /" do
-      user =
-        TestFixtures.persist_user!(
-          email: "elevated-admin-root@example.com",
-          capabilities: [:platform_admin]
-        )
+  test "active admin mode redirects to /admin even from /" do
+    user =
+      TestFixtures.persist_user!(
+        email: "elevated-admin-root@example.com",
+        capabilities: [:platform_admin]
+      )
 
-      token = TestFixtures.member_session_token!(user)
+    token = TestFixtures.member_session_token!(user)
 
-      conn =
-        Phoenix.ConnTest.build_conn()
-        |> Plug.Test.init_test_session(%{
-          user_session_token: token,
-          admin_mode_expires_at: CadenceWeb.AdminMode.expires_at()
-        })
+    conn =
+      Phoenix.ConnTest.build_conn()
+      |> Plug.Test.init_test_session(%{
+        user_session_token: token,
+        admin_mode_expires_at: CadenceWeb.AdminMode.expires_at()
+      })
 
-      assert {:error, {:redirect, %{to: "/admin"}}} = live(conn, ~p"/")
-    end
+    assert {:error, {:redirect, %{to: "/admin"}}} = live(conn, ~p"/")
   end
 end

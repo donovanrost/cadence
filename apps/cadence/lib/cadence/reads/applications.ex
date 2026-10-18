@@ -13,6 +13,7 @@ defmodule Cadence.Reads.Applications do
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Reads.Applications.DerivedTelemetryStatus
   alias Cadence.Reads.Applications.LimitsStatus
+  alias Cadence.Reads.Applications.StatusProvider
   alias Cadence.Reads.Applications.TelemetryDecomStatus
 
   @providers %{
@@ -74,7 +75,7 @@ defmodule Cadence.Reads.Applications do
            ),
          :ok <- ensure_installation_version(installation, definition.version),
          {:ok, provider} <- fetch_provider(query_id) do
-      provider.load(current_scope, host_context)
+      StatusProvider.invoke(provider, current_scope, host_context)
     else
       false -> {:error, :undeclared_application_status_query}
       {:error, reason} -> {:error, reason}

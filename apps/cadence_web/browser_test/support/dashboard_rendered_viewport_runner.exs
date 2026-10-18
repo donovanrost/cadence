@@ -1,8 +1,11 @@
+Code.require_file(Path.join(__DIR__, "browser_endpoint_plug.exs"))
+
 defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
   @moduledoc false
 
   @dashboard_viewport_smoke_timeout_ms 540_000
   @dashboard_viewport_smoke_shutdown_timeout_ms 5_000
+  @dashboard_viewport_smoke_kill_observation_timeout_ms 1_000
 
   import ExUnit.Assertions
   import ExUnit.Callbacks
@@ -33,6 +36,9 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
     node = System.find_executable("node") || raise "node executable is required"
     timeout = Keyword.get(opts, :timeout, @dashboard_viewport_smoke_timeout_ms)
 
+    shutdown_timeout =
+      Keyword.get(opts, :shutdown_timeout, @dashboard_viewport_smoke_shutdown_timeout_ms)
+
     port_opts =
       [
         :binary,
@@ -45,9 +51,22 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
       |> maybe_put_port_env(Keyword.get(opts, :env))
 
     port = Port.open({:spawn_executable, node}, port_opts)
-    deadline = System.monotonic_time(:millisecond) + timeout
 
-    collect_dashboard_viewport_smoke(port, "", deadline, timeout)
+    try do
+      send_port_stdin(port, Keyword.get(opts, :stdin))
+      deadline = System.monotonic_time(:millisecond) + timeout
+
+      collect_dashboard_viewport_smoke(port, "", deadline, timeout, shutdown_timeout)
+    after
+      close_dashboard_viewport_smoke_port(port)
+    end
+  end
+
+  def send_port_stdin(_port, nil), do: :ok
+
+  def send_port_stdin(port, stdin) when is_binary(stdin) do
+    true = Port.command(port, stdin)
+    :ok
   end
 
   def maybe_put_port_cd(port_opts, cd) when is_binary(cd), do: [{:cd, cd} | port_opts]
@@ -56,42 +75,91 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
   def maybe_put_port_env(port_opts, env) when is_list(env), do: [{:env, env} | port_opts]
   def maybe_put_port_env(port_opts, _env), do: port_opts
 
-  def collect_dashboard_viewport_smoke(port, output, deadline, timeout) do
-    receive do
-      {^port, {:data, data}} ->
-        collect_dashboard_viewport_smoke(port, output <> data, deadline, timeout)
+  def collect_dashboard_viewport_smoke(port, output, deadline, timeout, shutdown_timeout) do
+    remaining = deadline - System.monotonic_time(:millisecond)
 
-      {^port, {:exit_status, status}} ->
-        {output, status}
-    after
-      max(deadline - System.monotonic_time(:millisecond), 0) ->
-        timeout_output =
-          output <>
-            "\nDashboard viewport smoke timed out after #{timeout}ms; terminating node process.\n"
+    if remaining <= 0 do
+      timeout_dashboard_viewport_smoke(port, output, timeout, shutdown_timeout)
+    else
+      receive do
+        {^port, {:data, data}} ->
+          collect_dashboard_viewport_smoke(
+            port,
+            output <> data,
+            deadline,
+            timeout,
+            shutdown_timeout
+          )
 
-        terminate_dashboard_viewport_smoke(port, timeout_output)
+        {^port, {:exit_status, status}} ->
+          close_dashboard_viewport_smoke_port(port)
+          {output, status}
+      after
+        remaining ->
+          timeout_dashboard_viewport_smoke(port, output, timeout, shutdown_timeout)
+      end
     end
   end
 
-  def terminate_dashboard_viewport_smoke(port, output) do
+  defp timeout_dashboard_viewport_smoke(port, output, timeout, shutdown_timeout) do
+    timeout_output =
+      output <>
+        "\nDashboard viewport smoke timed out after #{timeout}ms; terminating node process.\n"
+
+    terminate_dashboard_viewport_smoke(port, timeout_output, shutdown_timeout)
+  end
+
+  def terminate_dashboard_viewport_smoke(
+        port,
+        output,
+        shutdown_timeout \\ @dashboard_viewport_smoke_shutdown_timeout_ms,
+        kill_observation_timeout \\ @dashboard_viewport_smoke_kill_observation_timeout_ms
+      ) do
     kill_dashboard_viewport_smoke(port, "TERM")
+    term_deadline = System.monotonic_time(:millisecond) + shutdown_timeout
 
-    receive do
-      {^port, {:data, data}} ->
-        terminate_dashboard_viewport_smoke(port, output <> data)
+    case observe_dashboard_viewport_exit(port, output, term_deadline) do
+      {:exited, output, _status} ->
+        close_dashboard_viewport_smoke_port(port)
+        {output <> "\nDashboard viewport smoke timeout observed after TERM.\n", 124}
 
-      {^port, {:exit_status, status}} ->
-        {output, status}
-    after
-      @dashboard_viewport_smoke_shutdown_timeout_ms ->
+      {:timed_out, output} ->
         kill_dashboard_viewport_smoke(port, "KILL")
+        kill_deadline = System.monotonic_time(:millisecond) + kill_observation_timeout
 
-        receive do
-          {^port, {:data, data}} -> {output <> data, 124}
-          {^port, {:exit_status, status}} -> {output, status}
-        after
-          1_000 -> {output, 124}
+        result = observe_dashboard_viewport_exit(port, output, kill_deadline)
+        close_dashboard_viewport_smoke_port(port)
+
+        case result do
+          {:exited, output, _status} ->
+            {output <>
+               "\nDashboard viewport smoke timeout observed after KILL; process exit observed.\n",
+             124}
+
+          {:timed_out, output} ->
+            {output <>
+               "\nDashboard viewport smoke timeout: process exit was not observed after KILL.\n",
+             124}
         end
+    end
+  end
+
+  def observe_dashboard_viewport_exit(port, output, deadline) do
+    remaining = deadline - System.monotonic_time(:millisecond)
+
+    if remaining <= 0 do
+      {:timed_out, output}
+    else
+      receive do
+        {^port, {:data, data}} ->
+          observe_dashboard_viewport_exit(port, output <> data, deadline)
+
+        {^port, {:exit_status, status}} ->
+          {:exited, output, status}
+      after
+        remaining ->
+          {:timed_out, output}
+      end
     end
   end
 
@@ -105,16 +173,22 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
     end
   end
 
-  def start_browser_endpoint!(port, sandbox_owner) do
-    endpoint_id = {:dashboard_browser_endpoint, port}
+  def close_dashboard_viewport_smoke_port(port) do
+    try do
+      if Port.info(port) != nil, do: Port.close(port)
+    catch
+      :error, :badarg -> :ok
+    end
+  end
 
+  def start_browser_endpoint!(port, sandbox_owner) do
     :ok = Sandbox.mode(Cadence.Repo, {:shared, sandbox_owner})
 
     endpoint_pid =
       start_supervised!(
         Supervisor.child_spec(
-          {Bandit, plug: CadenceWeb.Endpoint, scheme: :http, ip: {127, 0, 0, 1}, port: port},
-          id: endpoint_id,
+          {Bandit, browser_endpoint_options(port)},
+          id: {:dashboard_browser_endpoint, make_ref()},
           restart: :temporary
         )
       )
@@ -125,6 +199,29 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
     end)
 
     endpoint_pid
+  end
+
+  def start_browser_endpoint_on_ephemeral_port!(sandbox_owner) do
+    endpoint_pid = start_browser_endpoint!(0, sandbox_owner)
+    {:ok, {_address, port}} = ThousandIsland.listener_info(endpoint_pid)
+    port
+  end
+
+  def start_browser_endpoint_link!(port) do
+    {:ok, endpoint_pid} = Bandit.start_link(browser_endpoint_options(port))
+
+    case ThousandIsland.listener_info(endpoint_pid) do
+      {:ok, {_address, actual_port}} ->
+        {endpoint_pid, actual_port}
+
+      :error ->
+        stop_browser_endpoint(endpoint_pid)
+        raise "browser endpoint listener was not available"
+    end
+  end
+
+  def browser_endpoint_options(port) do
+    [plug: CadenceWeb.Assets.BrowserEndpointPlug, scheme: :http, ip: {127, 0, 0, 1}, port: port]
   end
 
   def stop_browser_endpoint(pid) when is_pid(pid) do
@@ -279,7 +376,8 @@ defmodule CadenceWeb.Assets.DashboardRenderedViewportRunner do
       padding: 10px;
     }
 
-    [phx-hook="TelemetryChart"] {
+    [data-name="TelemetryChart"],
+    [data-telemetry-chart] {
       display: block;
       flex: 1 1 auto;
       min-height: 132px;

@@ -30,6 +30,35 @@ defmodule Cadence.Management.Contacts do
     as: :submit
 
   defdelegate fetch_plan(organization_id, mission_id, plan_id), to: ContactPlans, as: :fetch
+
+  defdelegate fetch_plan_version(organization_id, mission_id, plan_id, version),
+    to: ContactPlans,
+    as: :fetch_version
+
+  defdelegate list_plan_versions_page(
+                organization_id,
+                mission_id,
+                plan_id,
+                through_version,
+                page
+              ),
+              to: ContactPlans,
+              as: :list_versions_page
+
+  defdelegate list_plan_opportunities_page(organization_id, mission_id, plan_id, version, page),
+    to: ContactPlans,
+    as: :list_opportunities_page
+
+  defdelegate list_plan_approvals_page(
+                organization_id,
+                mission_id,
+                plan_id,
+                through_version,
+                page
+              ),
+              to: ContactPlanApprovals,
+              as: :list_page
+
   defdelegate list_plans(organization_id, mission_id, opts \\ []), to: ContactPlans, as: :list
 
   defdelegate selected_opportunities(organization_id, mission_id, plan_id, version),

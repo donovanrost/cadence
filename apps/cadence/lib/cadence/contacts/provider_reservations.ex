@@ -214,6 +214,24 @@ defmodule Cadence.Contacts.ProviderReservations do
     |> Enum.map(&ProviderReservationRow.to_domain/1)
   end
 
+  @doc "A bounded current reservation ledger page inside its mission."
+  def list_mission_page(org, mission, page) when is_integer(page) and page in 1..1_000_000 do
+    rows =
+      ProviderReservationRow
+      |> where([r], r.organization_id == ^org and r.mission_id == ^mission)
+      |> order_by([r], desc: r.starts_at, desc: r.provider_reservation_id)
+      |> offset(^((page - 1) * 25))
+      |> limit(26)
+      |> Repo.all()
+
+    {:ok,
+     %{
+       page: page,
+       more: length(rows) > 25,
+       entries: rows |> Enum.take(25) |> Enum.map(&ProviderReservationRow.to_domain/1)
+     }}
+  end
+
   @spec list_due_for_reconciliation(binary(), keyword()) :: [ProviderReservation.t()]
   def list_due_for_reconciliation(organization_id, opts)
       when is_binary(organization_id) and is_list(opts) do
@@ -282,12 +300,46 @@ defmodule Cadence.Contacts.ProviderReservations do
     end
   end
 
-  @spec mark_canceling(binary(), binary(), binary()) ::
+  @spec mark_canceling(binary(), binary(), binary(), keyword()) ::
           {:ok, ProviderReservation.t()} | {:error, term()}
-  def mark_canceling(organization_id, mission_id, provider_reservation_id) do
-    with {:ok, reservation} <- fetch(organization_id, mission_id, provider_reservation_id) do
-      transition(reservation, :canceling, %{last_error_document: JsonDocument.wrap_value(%{})})
-    end
+  def mark_canceling(org, mission, id, opts \\ []) do
+    Repo.transaction(fn ->
+      row =
+        ProviderReservationRow
+        |> where(
+          [r],
+          r.organization_id == ^org and r.mission_id == ^mission and
+            r.provider_reservation_id == ^id
+        )
+        |> lock("FOR UPDATE")
+        |> Repo.one()
+
+      with %ProviderReservationRow{} <- row,
+           :ok <- reviewed_cancellation(row, Keyword.get(opts, :expected_cancel_evidence)),
+           {:ok, reservation} <-
+             transition(ProviderReservationRow.to_domain(row), :canceling, %{
+               last_error_document: JsonDocument.wrap_value(%{})
+             }) do
+        reservation
+      else
+        nil -> Repo.rollback(:provider_reservation_not_found)
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  defp reviewed_cancellation(_, nil), do: :ok
+
+  defp reviewed_cancellation(row, evidence) do
+    current = %{
+      "provider_revision" => row.provider_revision,
+      "lifecycle_state" => row.lifecycle_state,
+      "provider_contact_ref" => row.provider_contact_ref
+    }
+
+    if current === evidence and row.lifecycle_state in ~w(pending confirmed active),
+      do: :ok,
+      else: {:error, :stale_reservation_cancellation_evidence}
   end
 
   @spec materialize_scheduled_contact(binary(), binary(), binary()) ::
@@ -438,6 +490,8 @@ defmodule Cadence.Contacts.ProviderReservations do
       :ends_at,
       :request_document
     ])
+    |> Map.update!(:starts_at, &DateTime.to_unix(&1, :microsecond))
+    |> Map.update!(:ends_at, &DateTime.to_unix(&1, :microsecond))
   end
 
   defp transition(%ProviderReservation{} = reservation, requested_state, attrs) do

@@ -422,7 +422,7 @@ defmodule Cadence.Dashboards.Engine do
       scope_context: runtime_contexts.scope,
       time_context:
         SourceRequestPlanning.source_time_context(runtime_contexts.time, source, planned_sampling),
-      data_context: SourceRequestPlanning.overlay_data_context(runtime_contexts.data, source),
+      data_context: runtime_contexts.data,
       limit_context: runtime_contexts.limit,
       value_type: Map.get(binding, :value_type),
       sampling: planned_sampling,
@@ -511,7 +511,7 @@ defmodule Cadence.Dashboards.Engine do
       scope_context: runtime_contexts.scope,
       time_context:
         SourceRequestPlanning.source_time_context(runtime_contexts.time, source, sampling),
-      data_context: runtime_contexts.data,
+      data_context: SourceRequestPlanning.overlay_data_context(runtime_contexts.data, source),
       limit_context: runtime_contexts.limit,
       value_type: Map.get(binding, :value_type),
       sampling: sampling,
@@ -637,6 +637,10 @@ defmodule Cadence.Dashboards.Engine do
       | frames_by_placement: frames_by_placement,
         dashboard_warnings: plan_result.dashboard_warnings ++ source_warnings,
         watermarks: Enum.flat_map(source_results, fn {_request, result} -> result.watermarks end),
+        resolved_bindings_by_request_id:
+          Map.new(source_results, fn {request, result} ->
+            {request.request_id, Map.get(result, :resolved_bindings, [])}
+          end),
         plan_metadata:
           plan_result.plan_metadata
           |> Map.put(:source_execution_policy, execution.source_execution_policy)

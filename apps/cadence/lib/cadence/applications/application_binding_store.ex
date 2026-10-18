@@ -5,10 +5,12 @@ defmodule Cadence.Applications.ApplicationBindingStore do
 
   import Ecto.Query
 
-  alias Cadence.Applications.ApplicationBinding
+  alias Cadence.Applications.{ApplicationBinding, ConfigurationLock}
   alias Cadence.Applications.ApplicationBindingStore.BindingRow
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
+
+  @max_batch_size 100
 
   @type app_key :: atom() | binary()
 
@@ -17,10 +19,9 @@ defmodule Cadence.Applications.ApplicationBindingStore do
   def upsert(%ApplicationBinding{} = binding, opts \\ []) when is_list(opts) do
     versioning = Keyword.get(opts, :versioning, :configuration)
 
-    case Repo.transaction(fn -> locked_upsert(binding, versioning) end) do
-      {:ok, %ApplicationBinding{} = persisted} -> {:ok, persisted}
-      {:error, reason} -> {:error, reason}
-    end
+    ConfigurationLock.run(binding.organization_id, binding.mission_id, fn ->
+      {:ok, locked_upsert(binding, versioning)}
+    end)
   end
 
   @spec fetch(binary(), binary(), binary(), app_key()) ::
@@ -55,6 +56,55 @@ defmodule Cadence.Applications.ApplicationBindingStore do
     |> order_by([row], asc: row.spacecraft_id, asc: row.application_key)
     |> Repo.all()
     |> Enum.map(&BindingRow.to_domain/1)
+  end
+
+  @doc "Fetches application bindings for one bounded spacecraft batch in one query."
+  @spec list_for_spacecrafts(binary(), binary(), [binary()], keyword()) ::
+          {:ok, [ApplicationBinding.t()]} | {:error, :batch_bounds_exceeded}
+  def list_for_spacecrafts(organization_id, mission_id, spacecraft_ids, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(spacecraft_ids) and
+             is_list(opts) do
+    case bounded_spacecraft_ids(spacecraft_ids) do
+      {:error, reason} ->
+        {:error, reason}
+
+      {:ok, []} ->
+        {:ok, []}
+
+      {:ok, spacecraft_ids} ->
+        bindings =
+          BindingRow
+          |> where(
+            [row],
+            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+              row.spacecraft_id in ^spacecraft_ids
+          )
+          |> maybe_filter(
+            :application_key,
+            normalize_optional_application_key(Keyword.get(opts, :application_key))
+          )
+          |> maybe_filter(:enabled, Keyword.get(opts, :enabled))
+          |> order_by([row], asc: row.spacecraft_id, asc: row.application_key)
+          |> Repo.all()
+          |> Enum.map(&BindingRow.to_domain/1)
+
+        {:ok, bindings}
+    end
+  end
+
+  defp bounded_spacecraft_ids(spacecraft_ids) do
+    spacecraft_ids = Enum.take(spacecraft_ids, @max_batch_size + 1)
+
+    cond do
+      length(spacecraft_ids) > @max_batch_size ->
+        {:error, :batch_bounds_exceeded}
+
+      not Enum.all?(spacecraft_ids, &(is_binary(&1) and &1 != "")) ->
+        {:error, :batch_bounds_exceeded}
+
+      true ->
+        {:ok, Enum.uniq(spacecraft_ids)}
+    end
   end
 
   @spec list_apid_conflicts(binary(), binary(), binary(), app_key()) ::

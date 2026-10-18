@@ -1,0 +1,65 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./apps/comms-overview"
+    },
+    {
+      "path": "./apps/contract-probe"
+    },
+    {
+      "path": "./apps/host"
+    },
+    {
+      "path": "./apps/mission-catalog"
+    },
+    {
+      "path": "./apps/ops-console"
+    },
+    {
+      "path": "./apps/organization-admin"
+    },
+    {
+      "path": "./apps/spacecraft"
+    },
+    {
+      "path": "./apps/storybook"
+    },
+    {
+      "path": "./apps/telemetry-decom"
+    },
+    {
+      "path": "./modules/commanding"
+    },
+    {
+      "path": "./modules/communications"
+    },
+    {
+      "path": "./modules/dashboards-and-exploration"
+    },
+    {
+      "path": "./modules/data-operations"
+    },
+    {
+      "path": "./modules/derived-telemetry"
+    },
+    {
+      "path": "./modules/limits-and-alarming"
+    },
+    {
+      "path": "./modules/planning-and-contacts"
+    },
+    {
+      "path": "./modules/telemetry-decom"
+    },
+    {
+      "path": "./packages/plugin-sdk"
+    },
+    {
+      "path": "./packages/ui"
+    },
+    {
+      "path": "./tsconfig.tools.json"
+    }
+  ]
+}

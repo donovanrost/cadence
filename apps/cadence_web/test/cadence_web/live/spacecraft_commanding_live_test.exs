@@ -8,34 +8,57 @@ defmodule CadenceWeb.SpacecraftCommandingLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  defp signed_in_org_and_mission do
-    user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _ = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org, slug: "primary", display_name: "Primary Mission")
-    {TestFixtures.member_conn(user), org, mission}
+  test "authenticated command route mounts the commanding spacecraft contribution" do
+    {conn, mission, spacecraft} = signed_in_spacecraft()
+
+    {:ok, view, _html} = live(conn, commanding_path(mission, spacecraft))
+
+    assert_surface(view, mission, spacecraft)
   end
 
-  describe "mount" do
-    test "renders command interpretation placeholder for a spacecraft" do
-      {conn, _org, mission} = signed_in_org_and_mission()
-      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1", scid: 42)
+  test "out-of-scope spacecraft redirects to the mission inventory" do
+    {conn, mission, spacecraft} = signed_in_spacecraft()
+    path = ~p"/missions/#{mission.mission_id}/spacecraft"
 
-      {:ok, view, html} =
-        live(
-          conn,
-          ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/commanding"
-        )
+    assert {:error, {:redirect, %{to: ^path, flash: %{"error" => "Spacecraft not found."}}}} =
+             live(conn, commanding_path(mission, spacecraft.spacecraft_id <> "-missing"))
+  end
 
-      assert has_element?(view, "#spacecraft-commanding-page")
-      assert has_element?(view, "#spacecraft-commanding-encoding")
-      assert has_element?(view, "#spacecraft-commanding-tc-framing")
-      assert has_element?(view, "#spacecraft-commanding-uplink")
-      assert html =~ "Command Interpretation"
-      assert html =~ "Commanding for Nova-1"
-      assert html =~ "Not tracked"
-    end
+  test "unauthenticated command requests redirect to sign in" do
+    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+             live(build_conn(), "/missions/mission-test/spacecraft/spacecraft-test/commanding")
+  end
+
+  defp assert_surface(view, mission, spacecraft) do
+    HostTransportTestSupport.assert_context(view, %{
+      "kind" => "spacecraft_module",
+      "contribution" => "commanding.spacecraft",
+      "host_scope" => "spacecraft",
+      "mission_id" => mission.mission_id,
+      "spacecraft_id" => spacecraft.spacecraft_id,
+      "query_params" => %{}
+    })
+  end
+
+  defp signed_in_spacecraft do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1")
+    {TestFixtures.member_conn(user), mission, spacecraft}
+  end
+
+  defp commanding_path(mission, spacecraft_or_id) do
+    spacecraft_id =
+      case spacecraft_or_id do
+        %{spacecraft_id: id} -> id
+        id -> id
+      end
+
+    ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft_id}/commanding"
   end
 end

@@ -71,6 +71,7 @@ defmodule Cadence.Commanding.CommandRequestRow do
     |> validate_required(@required_fields)
     |> validate_number(:priority, greater_than_or_equal_to: 0)
     |> unique_constraint([:mission_id, :command_request_id], name: :command_requests_scope_idx)
+    |> unique_constraint(:command_request_id, name: :command_requests_pkey)
   end
 
   @spec lifecycle_changeset(struct(), atom()) :: Ecto.Changeset.t()

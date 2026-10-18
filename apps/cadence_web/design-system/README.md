@@ -1,3 +1,9 @@
+> Historical design-system reference. The maintained source and workshop now live in
+> [`frontend/packages`](../../../frontend/packages) and
+> [`frontend/apps/storybook`](../../../frontend/apps/storybook).
+> See the [current architecture](../../../frontend/docs/design-system/architecture.md).
+> Older paths and DaisyUI references below describe the former implementation.
+
 # Cadence Design System
 
 The canonical visual reference for Cadence's HUD aesthetic — Tokyo Night /
@@ -87,7 +93,6 @@ claude.ai/design.
 - `components/list-controls.html` — `<.toolbar>` + `<.pagination>` and the URL-as-source-of-truth list-state contract.
 - `components/form-helpers.html` — `<.form_section>` numbered headings + the `<.form_actions>` submit/cancel footer.
 - `components/empty-state.html` — `<.empty_state>` no-rows placeholder, incl. the compact variant.
-- `components/action-menu.html` — `<.action_menu>` row-actions dropdown with its keyboard/ARIA contract.
 - `components/callout.html` — `<.callout>` inline contextual message (replaced raw daisyUI alerts).
 
 Every component card carries a **Usage** do/don't panel lifted from the rules in

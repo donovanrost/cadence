@@ -308,6 +308,19 @@ defmodule Cadence.Dashboards.Document do
     get_attr(attrs, :placement_id) || get_attr(attrs, :widget_id)
   end
 
+  @doc "Coordinate and size bounds used by dashboard layout authoring."
+  def layout_constraints(%__MODULE__{} = document, %Placement{} = placement) do
+    minimum = minimum_layout(placement)
+
+    %{
+      min_w: minimum.w,
+      min_h: minimum.h,
+      max_w: grid_columns(document),
+      max_h: @default_max_rows,
+      max_y: @default_max_rows - 1
+    }
+  end
+
   defp apply_layout(%__MODULE__{} = document, %Placement{} = placement, layout) do
     columns = grid_columns(document)
     minimum = minimum_layout(placement)

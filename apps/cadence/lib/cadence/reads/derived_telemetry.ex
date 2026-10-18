@@ -29,6 +29,8 @@ defmodule Cadence.Reads.DerivedTelemetry do
     Store.list_latest_values(mission_id, Keyword.put(opts, :organization_id, organization_id))
   end
 
+  defdelegate latest_values_page(organization_id, mission_id, opts), to: Store
+
   @spec sample_history(binary(), binary(), keyword()) :: [Sample.t()]
   def sample_history(mission_id, point_id, opts \\ [])
       when is_binary(mission_id) and is_binary(point_id) and is_list(opts) do

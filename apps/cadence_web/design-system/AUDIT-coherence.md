@@ -82,7 +82,6 @@ the same card:
 | accent | badge |
 |---|---|
 | `spacecraft_show_live.ex:211` | `:214` |
-| `spacecraft_show_components.ex:15` | `:80/:86/:92` |
 | `spacecraft_applications_live.ex:111` | `:117` |
 | `spacecraft_applications_live.ex:57` (hardcoded `:warning`) | `:82` |
 | `spacecraft_readiness_live.ex:122` | `:125` |

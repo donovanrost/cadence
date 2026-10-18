@@ -9,6 +9,7 @@ defmodule CadenceWeb.Application do
 
     children = [
       {Phoenix.PubSub, name: CadenceWeb.PubSub},
+      CadenceWeb.FrontendReleasePublication.Janitor,
       CadenceWeb.Endpoint
     ]
 

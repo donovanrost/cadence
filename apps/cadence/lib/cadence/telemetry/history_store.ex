@@ -3,7 +3,7 @@ defmodule Cadence.Telemetry.HistoryStore do
   Pluggable backend for telemetry sample history.
   """
 
-  alias Cadence.Telemetry.{Sample, Storage}
+  alias Cadence.Telemetry.{PhysicalSampleQuery, Sample, Storage}
 
   @default_backend Cadence.Telemetry.HistoryStore.Noop
 
@@ -32,6 +32,8 @@ defmodule Cadence.Telemetry.HistoryStore do
               {:ok, %{buckets: [map()], diagnostics: map()}} | {:error, term()}
   @callback reset() :: :ok
   @callback reset(keyword()) :: :ok
+  @callback fetch_sample(PhysicalSampleQuery.t(), keyword()) ::
+              {:ok, %{organization_id: binary(), sample: Sample.t()}} | {:error, term()}
 
   @optional_callbacks decimated_sample_history_result: 3,
                       decimated_sample_history_result: 4,
@@ -41,7 +43,48 @@ defmodule Cadence.Telemetry.HistoryStore do
                       sample_history: 4,
                       sample_watermark_result: 3,
                       sample_watermark_result: 4,
-                      reset: 1
+                      reset: 1,
+                      fetch_sample: 2
+
+  @doc """
+  Fetches an exact physical record through a captured history backend.
+
+  There is deliberately no fallback to history, current values, or Postgres
+  when a backend does not implement physical lookup. The callback returns the
+  stored tenant identity separately because legacy Sample structs lack it.
+  """
+  @spec fetch_sample(PhysicalSampleQuery.t(), keyword()) :: {:ok, Sample.t()} | {:error, term()}
+  def fetch_sample(%PhysicalSampleQuery{} = query, opts \\ []) when is_list(opts),
+    do: fetch_sample(configured_policy(), query, opts)
+
+  @spec fetch_sample(policy(), PhysicalSampleQuery.t(), keyword()) ::
+          {:ok, Sample.t()} | {:error, term()}
+  def fetch_sample(%{} = policy, %PhysicalSampleQuery{} = query, opts) when is_list(opts) do
+    with :ok <- PhysicalSampleQuery.validate(query) do
+      backend = backend(policy)
+
+      if function_exported?(backend, :fetch_sample, 2) do
+        backend.fetch_sample(query, operation_opts(policy, opts))
+        |> validate_physical_sample_result(query)
+      else
+        {:error, {:unsupported_history_capability, backend, :fetch_sample}}
+      end
+    end
+  end
+
+  defp validate_physical_sample_result(
+         {:ok, %{organization_id: organization_id, sample: %Sample{} = sample}},
+         query
+       ) do
+    if PhysicalSampleQuery.matches?(query, sample, organization_id),
+      do: {:ok, sample},
+      else: {:error, :physical_sample_context_mismatch}
+  end
+
+  defp validate_physical_sample_result({:error, _reason} = error, _query), do: error
+
+  defp validate_physical_sample_result(_result, _query),
+    do: {:error, :invalid_physical_sample_result}
 
   @doc """
   Builds a child spec from the current application configuration.

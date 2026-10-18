@@ -57,28 +57,26 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowRetries do
     do: {:error, {:missing_field, :request_group_id}}
 
   defp group_failed_events(mission_id, organization_id, request_group_id) do
-    mission_id
-    |> Storage.list_backfill_lifecycle_events(
-      organization_id: organization_id,
-      limit: 1_000
-    )
-    |> Enum.filter(fn event ->
-      event.event_type in [:backfill_failed, :import_failed] and
-        Storage.BackfillLifecycleGroup.payload_value(event, :request_group_id) == request_group_id
-    end)
-    |> Enum.sort_by(fn event ->
-      {Storage.BackfillLifecycleGroup.payload_value(event, :request_item_index) || 0,
-       event.backfill_run_id}
-    end)
+    with {:ok, events} <-
+           Storage.fetch_backfill_lifecycle_group_events(
+             mission_id,
+             request_group_id,
+             organization_id: organization_id
+           ) do
+      {:ok,
+       events
+       |> Enum.filter(&(&1.event_type in [:backfill_failed, :import_failed]))
+       |> Enum.sort_by(fn event ->
+         {Storage.BackfillLifecycleGroup.payload_value(event, :request_item_index) || 0,
+          event.backfill_run_id, event.backfill_lifecycle_event_id}
+       end)}
+    end
   end
 
   defp group_retry_events(mission_id, organization_id, request_group_id, opts) do
-    failed_events =
-      mission_id
-      |> group_failed_events(organization_id, request_group_id)
-      |> filter_group_retry_events(opts)
-
-    with :ok <- require_group_retry_policy(request_group_id, failed_events) do
+    with {:ok, events} <- group_failed_events(mission_id, organization_id, request_group_id),
+         failed_events = filter_group_retry_events(events, opts),
+         :ok <- require_group_retry_policy(request_group_id, failed_events) do
       {:ok, failed_events}
     end
   end
@@ -125,6 +123,12 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowRetries do
           {:error,
            {:historical_workflow_retry_blocked, source_event.backfill_lifecycle_event_id,
             :job_run_mismatch}}
+
+        job.mission_id != source_event.mission_id ->
+          {:error, :historical_workflow_job_scope_mismatch}
+
+        WorkflowEventEvidence.job_id(source_event) not in [nil, "", job.job_id] ->
+          {:error, :historical_workflow_job_identity_mismatch}
 
         true ->
           {:ok, job}
@@ -198,13 +202,18 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowRetries do
 
   defp retry_group_failed_job(event, summary, attrs, opts) do
     case Jobs.fetch_job_for_run(:telemetry_historical_data_workflow, event.backfill_run_id) do
+      {:ok, %{mission_id: mission}} when mission != event.mission_id ->
+        summary
+        |> increment_summary(:skipped)
+        |> prepend_skipped_item(event, nil, :job_scope_mismatch)
+
       {:ok, %{status: :failed, job_id: job_id}} ->
-        with {:ok, retried_job} <- retry_failed_job(job_id),
-             {:ok, retry_event} <- record_retry_event(event, retried_job, attrs, opts) do
-          summary
-          |> increment_summary(:retried)
-          |> prepend_retry_event(retry_event)
-        else
+        case retry_job(job_id, event.backfill_lifecycle_event_id, attrs, opts) do
+          {:ok, _retried_job, retry_event} ->
+            summary
+            |> increment_summary(:retried)
+            |> prepend_retry_event(retry_event)
+
           {:error, reason} ->
             summary
             |> increment_summary(:failed)
@@ -262,15 +271,15 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowRetries do
       receipt_from: source_event.receipt_from,
       receipt_to: source_event.receipt_to,
       authority: :authoritative,
-      reason: "dashboard_historical_workflow_retried",
+      reason: get_attr(attrs, :reason) || "dashboard_historical_workflow_retried",
       actor_id: get_attr(attrs, :actor_id),
       actor_kind: get_attr(attrs, :actor_kind),
-      payload: retry_payload(source_event, retried_job)
+      payload: retry_payload(source_event, retried_job, attrs)
     }
     |> compact_attrs()
   end
 
-  defp retry_payload(source_event, retried_job) do
+  defp retry_payload(source_event, retried_job, attrs) do
     source_event.payload
     |> Map.take([
       "request_source",
@@ -288,6 +297,7 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowRetries do
       "dashboard_context",
       "comparison_review_origin"
     ])
+    |> Map.merge(attrs |> get_attr(:payload) |> ensure_map() |> Map.take(["host_operation_id"]))
     |> Map.merge(%{
       "retry_action" => "retry_job",
       "retry_source_event_id" => source_event.backfill_lifecycle_event_id,
@@ -399,6 +409,9 @@ defmodule Cadence.Telemetry.DataManagement.WorkflowRetries do
       _value -> {:error, {:missing_field, field}}
     end
   end
+
+  defp ensure_map(value) when is_map(value), do: value
+  defp ensure_map(_value), do: %{}
 
   defp compact_attrs(attrs) do
     attrs

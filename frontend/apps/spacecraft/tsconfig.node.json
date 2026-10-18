@@ -1,0 +1,28 @@
+{
+  "include": [
+    "../../test-support/json-fixture.ts",
+    "vite*.config.*",
+    "module-federation.config.ts",
+    "../../tools/publication-metadata.ts",
+    "*.mjs",
+    "../../tools/release-build-output.mjs",
+    "../../tools/frontend-release-paths.mjs",
+    "../../tools/dev-services.ts"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "checkJs": true
+  },
+  "extends": ["../../tsconfig.strict.json"]
+}

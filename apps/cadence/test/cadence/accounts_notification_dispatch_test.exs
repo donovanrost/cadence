@@ -11,6 +11,7 @@ defmodule Cadence.AccountsNotificationDispatchTest do
     UserRow
   }
 
+  alias Cadence.Auth.Scope
   alias Cadence.Ids
   alias Cadence.Notifications
   alias Cadence.Organizations.Organization
@@ -157,6 +158,40 @@ defmodule Cadence.AccountsNotificationDispatchTest do
   end
 
   describe "accept_invitation_as_user/2" do
+    test "approved platform administrator eligibility is granted without entering admin mode", %{
+      inviter: admin,
+      org: org
+    } do
+      user = durable_user!("grant-#{System.unique_integer([:positive])}@example.com")
+
+      assert {:ok, %{invitation: invitation}} =
+               Accounts.establish_organization_access(user.email, org.organization_id,
+                 membership_role: :member,
+                 grant_platform_admin: true,
+                 invited_by_user_id: admin.user_id,
+                 force_invitation: true
+               )
+
+      assert {:ok, %{membership: membership}} =
+               Accounts.accept_invitation_as_user(
+                 user.user_id,
+                 invitation.organization_invitation_id
+               )
+
+      assert membership.role == :member
+      assert {:ok, updated} = Accounts.fetch_user(user.user_id)
+      assert :platform_admin in updated.capabilities
+      scope = Scope.new(%{user: updated})
+      assert Scope.platform_admin_eligible?(scope)
+      refute Scope.admin_mode?(scope)
+
+      assert {:error, :invitation_not_pending} =
+               Accounts.accept_invitation_as_user(
+                 user.user_id,
+                 invitation.organization_invitation_id
+               )
+    end
+
     test "inserts membership, marks invitation accepted, and marks related notifications read",
          %{inviter: admin, org: org} do
       user = durable_user!("recipient-#{System.unique_integer([:positive])}@example.com")

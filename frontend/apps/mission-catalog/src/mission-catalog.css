@@ -1,0 +1,114 @@
+:root {
+  color-scheme: dark;
+}
+
+body {
+  min-width: 320px;
+  margin: 0;
+  color: var(--color-base-content);
+  background:
+    radial-gradient(circle at 82% 12%, var(--surface-raised), transparent 28rem),
+    linear-gradient(135deg, var(--surface-inset), var(--surface-base));
+  font-family: var(--font-body);
+}
+
+.mission-catalog-application,
+.mission-catalog-standalone {
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  padding: clamp(1.25rem, 4vw, 3rem);
+}
+
+.mission-catalog-application__header,
+.mission-catalog-standalone__masthead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.mission-catalog-application h1,
+.mission-catalog-standalone h1 {
+  margin: 0.35rem 0 0;
+  color: var(--text-bright);
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 5vw, 4rem);
+  font-weight: 520;
+  letter-spacing: -0.055em;
+  line-height: 0.95;
+}
+
+.mission-catalog-application__header p:last-child,
+.mission-catalog-standalone__intro {
+  max-width: 48rem;
+  margin: 0.9rem 0 0;
+  color: var(--text-subtle);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.mission-catalog-eyebrow {
+  margin: 0;
+  color: var(--color-action);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.mission-catalog-surface-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.5rem;
+  padding: 1.5rem 0;
+}
+
+.mission-catalog-surface-nav button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.75rem;
+  min-height: 3.2rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border-default);
+  color: var(--text-subtle);
+  background: var(--surface-raised);
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    background 160ms ease;
+}
+
+.mission-catalog-surface-nav button span {
+  color: var(--color-action);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+}
+
+.mission-catalog-surface-nav button:hover,
+.mission-catalog-surface-nav button.is-active {
+  border-color: var(--color-action);
+  color: var(--text-bright);
+  background: var(--surface-raised);
+}
+
+.mission-catalog-standalone__intro {
+  margin-top: 2rem;
+  font-size: 1.1rem;
+}
+
+@media (max-width: 600px) {
+  .mission-catalog-application__header,
+  .mission-catalog-standalone__masthead {
+    display: grid;
+  }
+}
+@source "../../host/src/catalog";
+@source "../../host/src/mission-and-spacecraft";
+@source "../../host/src/capability-management";

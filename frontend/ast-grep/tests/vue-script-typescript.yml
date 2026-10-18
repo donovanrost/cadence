@@ -1,0 +1,12 @@
+{
+  "id": "vue-script-typescript",
+  "valid":
+    [
+      '<script setup lang="ts">const value = 1;</script>',
+      "<script lang='ts' setup>const value = 1;</script>",
+      '<script lang="tsx">const value = <div />;</script>',
+      "<template><div>no script required</div></template>",
+    ],
+  "invalid":
+    ["<script setup>const value = 1;</script>", '<script lang="js">const value = 1;</script>'],
+}

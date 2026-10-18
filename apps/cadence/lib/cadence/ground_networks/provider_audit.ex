@@ -73,6 +73,53 @@ defmodule Cadence.GroundNetworks.ProviderAudit do
     |> Enum.map(&ProviderAuditEntryRow.to_domain/1)
   end
 
+  @doc "A reservation-scoped audit page, seeking strictly behind an admitted ledger entry."
+  def list_reservation_page(org, mission, reservation, before_id \\ nil) do
+    query =
+      ProviderAuditEntryRow
+      |> where(
+        [r],
+        r.organization_id == ^org and r.mission_id == ^mission and
+          r.provider_reservation_id == ^reservation
+      )
+
+    with {:ok, query} <- before_reservation_entry(query, before_id) do
+      rows =
+        query
+        |> order_by([r], desc: r.recorded_at, desc: r.provider_audit_entry_id)
+        |> limit(26)
+        |> Repo.all()
+
+      entries = rows |> Enum.take(25) |> Enum.map(&ProviderAuditEntryRow.to_domain/1)
+
+      {:ok,
+       %{
+         entries: entries,
+         next: if(length(rows) > 25, do: List.last(entries).provider_audit_entry_id)
+       }}
+    end
+  end
+
+  defp before_reservation_entry(query, nil), do: {:ok, query}
+
+  defp before_reservation_entry(query, id) when is_binary(id) do
+    case Repo.one(where(query, [r], r.provider_audit_entry_id == ^id)) do
+      nil ->
+        {:error, :invalid_reservation_audit_cursor}
+
+      anchor ->
+        {:ok,
+         where(
+           query,
+           [r],
+           r.recorded_at < ^anchor.recorded_at or
+             (r.recorded_at == ^anchor.recorded_at and r.provider_audit_entry_id < ^id)
+         )}
+    end
+  end
+
+  defp before_reservation_entry(_, _), do: {:error, :invalid_reservation_audit_cursor}
+
   @spec project_entry(ProviderAuditEntry.t()) ::
           {:ok, Event.t() | :organization_only} | {:error, term()}
   def project_entry(%ProviderAuditEntry{mission_id: nil}), do: {:ok, :organization_only}

@@ -2,6 +2,7 @@ import Config
 
 config :cadence_web, CadenceWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4101],
+  check_origin: :conn,
   server: false,
   secret_key_base: String.duplicate("1", 64)
 
@@ -18,6 +19,11 @@ config :cadence_web,
   ]
 
 config :cadence_web, dashboard_live_refresh_ms: 60_000
+
+# LiveVue tests inspect complete component contracts after LiveView patches.
+# Browser tests exercise the production incremental protocol in a separate VM;
+# contract tests retain complete projections for their server-side assertions.
+config :live_vue, enable_props_diff: System.get_env("CADENCE_BROWSER_PROPS_DIFF") == "true"
 
 config :cadence_web,
   dashboard_engine_source_execution: [

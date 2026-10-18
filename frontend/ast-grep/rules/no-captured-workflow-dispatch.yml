@@ -1,0 +1,11 @@
+id: no-captured-workflow-dispatch
+language: TypeScript
+severity: error
+message: Select workflow behavior using the explicit page-snapshot or remote-query protocol.
+rule:
+  any:
+    - pattern: port.captured
+    - pattern: port?.captured
+ignores:
+  - "**/vendor/**"
+  - "ast-grep/fixtures/**"

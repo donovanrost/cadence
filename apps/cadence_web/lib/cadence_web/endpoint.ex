@@ -21,6 +21,9 @@ defmodule CadenceWeb.Endpoint do
     gzip: false,
     only: CadenceWeb.static_paths()
 
+  plug(CadenceWeb.Plugs.FrontendReleasePublisher)
+  plug(CadenceWeb.Plugs.FrontendReleaseRequestBody)
+
   if Mix.env() == :dev do
     plug Tidewave
   end
@@ -30,8 +33,9 @@ defmodule CadenceWeb.Endpoint do
     pass: ["*/*"],
     json_decoder: Jason
 
-  plug Plug.Session, @session_options
+  plug(CadenceWeb.Plugs.FrontendReleasePublisherSession, @session_options)
   plug Plug.MethodOverride
+  plug CadenceWeb.Plugs.PreserveRequestMethod
   plug Plug.Head
   plug CadenceWeb.Router
 end

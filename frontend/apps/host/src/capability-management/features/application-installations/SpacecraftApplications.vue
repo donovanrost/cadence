@@ -1,0 +1,189 @@
+<script setup lang="ts">
+import StatusBadge from "./SpacecraftStatusBadge.vue";
+import CadenceCard from "@cadence/ui/CadenceCard.vue";
+import CadenceDataRow from "@cadence/ui/CadenceDataRow.vue";
+
+import type {
+  ApplicationCard,
+  ApplicationEvent,
+  ButtonVariant,
+  LifecycleAction,
+  LifecycleEvent,
+  MissingProfile,
+  PinnedProfile,
+} from "./contracts";
+
+const props = defineProps<{
+  profile: MissingProfile | PinnedProfile;
+  applications: ApplicationCard[];
+  disabled?: boolean;
+}>();
+
+const emit = defineEmits<{
+  install: [payload: ApplicationEvent];
+  disable: [payload: ApplicationEvent];
+  uninstall: [payload: ApplicationEvent];
+}>();
+
+const buttonClasses: Record<ButtonVariant, string> = {
+  primary: "btn-primary",
+  secondary: "btn-secondary",
+  danger: "btn-error",
+};
+
+const dispatch = (
+  event: LifecycleEvent,
+  application: ApplicationCard,
+  action: LifecycleAction | null,
+) => {
+  if (!action || props.disabled) return;
+  if (action.confirmation && !window.confirm(action.confirmation.prompt)) return;
+
+  const payload = { key: application.application_key };
+  if (event === "install") emit("install", payload);
+  if (event === "disable") emit("disable", payload);
+  if (event === "uninstall") emit("uninstall", payload);
+};
+</script>
+
+<template>
+  <section id="spacecraft-applications-inventory" class="space-y-6">
+    <CadenceCard
+      v-if="props.profile.kind === 'missing'"
+      :id="props.profile.id"
+      class="card border border-base-300 bg-base-200"
+      body-class="card-body p-6"
+    >
+      <p class="hud-label">{{ props.profile.label }}</p>
+      <h2 class="mt-2 text-base font-semibold">{{ props.profile.title }}</h2>
+      <p class="mt-1 text-sm text-base-content/70">{{ props.profile.description }}</p>
+      <a
+        :href="props.profile.action.path"
+        data-phx-link="redirect"
+        data-phx-link-state="push"
+        class="btn btn-primary btn-sm mt-5"
+        >{{ props.profile.action.label }}</a
+      >
+    </CadenceCard>
+
+    <CadenceCard
+      v-else
+      :id="props.profile.id"
+      class="card border border-base-300 bg-base-200"
+      body-class="card-body p-6"
+    >
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="hud-label">{{ props.profile.label }}</p>
+          <h2 class="mt-2 text-base font-semibold">
+            {{ props.profile.display_name }}
+            <span class="mc-value-small text-base-content/70">v{{ props.profile.version }}</span>
+          </h2>
+        </div>
+        <StatusBadge :status="props.profile.status.tone" :label="props.profile.status.label" />
+      </div>
+    </CadenceCard>
+
+    <section
+      v-if="props.profile.kind === 'pinned' || props.applications.length > 0"
+      id="spacecraft-applications-list"
+      class="grid gap-4 lg:grid-cols-2"
+    >
+      <CadenceCard
+        v-for="application in props.applications"
+        :id="application.id"
+        :key="application.id"
+        class="card border border-base-300 bg-base-200"
+        body-class="card-body p-6"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="hud-label">{{ application.scope_label }}</p>
+            <h2 class="mt-2 text-base font-semibold">{{ application.display_name }}</h2>
+          </div>
+          <StatusBadge :status="application.status.tone" :label="application.status.label" />
+        </div>
+
+        <p class="mt-3 text-sm text-base-content/70">{{ application.description }}</p>
+
+        <div class="mt-5 space-y-1">
+          <CadenceDataRow
+            v-for="fact in application.status.facts"
+            :key="fact.id"
+            row-class="hud-data-row"
+            label-class="hud-data-label"
+            :label="fact.label"
+          >
+            <span class="hud-data-value">{{ fact.value || "—" }}</span>
+          </CadenceDataRow>
+        </div>
+
+        <div class="mt-5 flex flex-wrap items-center gap-2">
+          <a
+            v-if="application.manageable"
+            :href="application.manage_path"
+            data-phx-link="redirect"
+            data-phx-link-state="push"
+            class="btn btn-primary btn-sm"
+            >Manage</a
+          >
+
+          <button
+            v-if="application.install_action"
+            :id="application.install_action.id"
+            :disabled="props.disabled"
+            type="button"
+            class="btn btn-primary btn-sm"
+            @click="dispatch('install', application, application.install_action)"
+          >
+            {{ application.install_action.label }}
+          </button>
+
+          <button
+            v-if="application.disable_action"
+            :id="application.disable_action.id"
+            :disabled="props.disabled"
+            type="button"
+            class="btn btn-sm"
+            :class="buttonClasses[application.disable_action.variant]"
+            :data-application-lifecycle-action="application.disable_action.action_id"
+            :data-lifecycle-effect="application.disable_action.effect"
+            :data-lifecycle-execution="application.disable_action.execution"
+            :data-confirmation-required="String(Boolean(application.disable_action.confirmation))"
+            :data-confirmation-tone="application.disable_action.confirmation?.tone"
+            :data-confirmation-title="application.disable_action.confirmation?.title"
+            :data-confirmation-label="application.disable_action.confirmation?.confirm_label"
+            :data-confirm="application.disable_action.confirmation?.prompt"
+            @click.stop="dispatch('disable', application, application.disable_action)"
+          >
+            {{ application.disable_action.label }}
+          </button>
+
+          <button
+            v-if="application.uninstall_action"
+            :id="application.uninstall_action.id"
+            :disabled="props.disabled"
+            type="button"
+            class="btn btn-sm"
+            :class="buttonClasses[application.uninstall_action.variant]"
+            :data-application-lifecycle-action="application.uninstall_action.action_id"
+            :data-lifecycle-effect="application.uninstall_action.effect"
+            :data-lifecycle-execution="application.uninstall_action.execution"
+            :data-confirmation-required="String(Boolean(application.uninstall_action.confirmation))"
+            :data-confirmation-tone="application.uninstall_action.confirmation?.tone"
+            :data-confirmation-title="application.uninstall_action.confirmation?.title"
+            :data-confirmation-label="application.uninstall_action.confirmation?.confirm_label"
+            :data-confirm="application.uninstall_action.confirmation?.prompt"
+            @click.stop="dispatch('uninstall', application, application.uninstall_action)"
+          >
+            {{ application.uninstall_action.label }}
+          </button>
+        </div>
+
+        <p v-if="application.unavailable_message" class="mt-5 text-xs text-base-content/50">
+          {{ application.unavailable_message }}
+        </p>
+      </CadenceCard>
+    </section>
+  </section>
+</template>

@@ -1,292 +1,267 @@
 defmodule CadenceWeb.OpsContactRequirementsLiveTest do
   use CadenceWeb.ConnCase, async: false
 
-  import CadenceWeb.AsyncLiveViewTestSupport,
-    only: [render_async: 1, track_async_view: 1]
-
-  import Phoenix.LiveViewTest, except: [render_async: 1]
+  import Phoenix.LiveViewTest
 
   use Phoenix.VerifiedRoutes,
     endpoint: CadenceWeb.Endpoint,
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Auth.Scope
-  alias Cadence.ContactPlanning.{ContactPlans, ContactRequirements, Planner}
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "authenticated Ops routes expose Requirements navigation" do
-    {member_conn, _scope, _org, mission, _spacecraft} = signed_in_scope()
+  test "requirements routes expose exact compiled and historical subjects" do
+    {conn, mission} = signed_in()
 
-    {:ok, view, _html} =
-      live(member_conn, ~p"/missions/#{mission.mission_id}/ops/requirements")
+    {:ok, list, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/requirements")
 
-    assert has_element?(view, "#ops-contact-requirements-page")
-    assert has_element?(view, "#new-contact-requirement-link")
+    assert_surface(
+      list,
+      "ops-contact-requirements-component",
+      "contact_requirement_list",
+      mission,
+      %{}
+    )
 
-    assert has_element?(
-             view,
-             ~s(#ops-nav-rail a[href="/missions/#{mission.mission_id}/ops/requirements"][class*="text-primary"])
-           )
+    {:ok, new_view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/requirements/new")
+
+    assert_surface(
+      new_view,
+      "ops-contact-requirement-new-component",
+      "contact_requirement_new",
+      mission,
+      %{}
+    )
+
+    {:ok, show, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/requirements/requirement-1")
+
+    assert_surface(
+      show,
+      "ops-contact-requirement-show-component",
+      "contact_requirement_show",
+      mission,
+      %{
+        "contact_requirement_id" => "requirement-1"
+      }
+    )
+
+    {:ok, plan, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/plans/plan-1")
+
+    assert_surface(plan, "ops-contact-plan-show-component", "contact_plan_show", mission, %{
+      "contact_plan_id" => "plan-1"
+    })
+
+    {:ok, templates, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/requirement-templates")
+
+    assert_surface(
+      templates,
+      "ops-contact-requirement-template-component",
+      "contact_requirement_template",
+      mission,
+      %{}
+    )
   end
 
-  test "outcome-first form progressively changes and creates a durable Requirement" do
-    {conn, _scope, org, mission, spacecraft} = signed_in_scope()
+  test "contact planning pages remain authentication scoped" do
+    {_conn, _user, _organization, mission} = signed_in_user_org_and_mission()
+
+    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+             live(build_conn(), ~p"/missions/#{mission.mission_id}/ops/requirements")
+
+    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+             live(build_conn(), ~p"/missions/#{mission.mission_id}/ops/plans/plan-1?version=2")
+  end
+
+  test "plan review parameters reach the host with path-owned plan identity" do
+    {conn, mission} = signed_in()
+
+    params = %{
+      "version" => "2",
+      "versions_page" => "3",
+      "approvals_page" => "4",
+      "opportunities_page" => "5",
+      "execution_page" => "6",
+      "requirements_page" => "7",
+      "issues_page" => "8",
+      "contact_plan_id" => "query-cannot-replace-plan"
+    }
 
     {:ok, view, _html} =
-      live(conn, ~p"/missions/#{mission.mission_id}/ops/requirements/new")
+      live(conn, "/missions/#{mission.mission_id}/ops/plans/plan-1?" <> URI.encode_query(params))
 
-    assert has_element?(view, "#contact-requirement-form")
-    assert has_element?(view, "#requirement-minimum-data-volume")
-    assert has_element?(view, "#requirement-preferred-duration")
-    assert has_element?(view, "#requirement-advanced-constraints")
-
-    params = requirement_form_params(spacecraft)
-
-    view
-    |> form("#contact-requirement-form",
-      contact_requirement: Map.put(params, "success_measure", "contact_count")
-    )
-    |> render_change()
-
-    refute has_element?(view, "#requirement-minimum-data-volume")
-    assert has_element?(view, "#requirement-contact-count")
-
-    view
-    |> form(
-      "#contact-requirement-form",
-      contact_requirement:
-        Map.drop(params, ["minimum_data_volume_bytes", "minimum_duration_seconds"])
-    )
-    |> render_change()
-
-    view
-    |> form("#contact-requirement-form", contact_requirement: params)
-    |> render_submit()
-
-    [{requirement, version}] =
-      ContactRequirements.list(org.organization_id, mission.mission_id)
-
-    assert_redirect(
+    assert_surface(
       view,
-      ~p"/missions/#{mission.mission_id}/ops/requirements/#{requirement.contact_requirement_id}"
+      "ops-contact-plan-show-component",
+      "contact_plan_show",
+      mission,
+      Map.put(params, "contact_plan_id", "plan-1")
     )
-
-    assert version.spacecraft_id == spacecraft.spacecraft_id
-    assert version.success_measure == :minimum_data_volume
-    assert version.minimum_data_volume_bytes == 1_500_000_000
-    assert version.preferred_duration_seconds == 900
-    assert version.provider_constraints_document["allowed"] == ["provider-a"]
   end
 
-  test "Requirement detail preserves no-route readiness as evidence rather than no availability" do
-    {conn, scope, _org, mission, spacecraft} = signed_in_scope()
-    {requirement, _version} = create_requirement(scope, mission, spacecraft)
+  test "requirements pagination and lifecycle filters reach the scoped query" do
+    {conn, mission} = signed_in()
+
+    {:ok, view, _html} =
+      live(conn, "/missions/#{mission.mission_id}/ops/requirements?page=2&state=closed")
+
+    assert_surface(
+      view,
+      "ops-contact-requirements-component",
+      "contact_requirement_list",
+      mission,
+      %{"page" => "2", "state" => "closed"}
+    )
+  end
+
+  test "detail review identity and all page parameters reach the host query",
+    do: assert_review_query()
+
+  defp assert_review_query do
+    {conn, mission} = signed_in()
+
+    params = %{
+      "version" => "2",
+      "planning_run_id" => "run-1",
+      "versions_page" => "3",
+      "runs_page" => "2",
+      "searches_page" => "4",
+      "opportunities_page" => "5"
+    }
 
     {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/ops/requirements/#{requirement.contact_requirement_id}"
+        "/missions/#{mission.mission_id}/ops/requirements/requirement-1?" <>
+          URI.encode_query(params)
       )
 
-    track_async_view(view)
-
-    assert has_element?(view, "#ops-contact-requirement-show-page")
-    assert has_element?(view, "#plan-contact-requirement")
-    assert has_element?(view, "#planning-searches-empty")
-
-    view |> element("#plan-contact-requirement") |> render_click()
-    render_async(view)
-
-    assert has_element?(view, "#planning-searches [id^=planning-search-]")
-    assert has_element?(view, "[id^=planning-search-evidence-]")
-    assert has_element?(view, "#planning-run-state", "failed")
-    assert has_element?(view, "#planning-opportunities-empty")
+    assert_surface(
+      view,
+      "ops-contact-requirement-show-component",
+      "contact_requirement_show",
+      mission,
+      Map.put(params, "contact_requirement_id", "requirement-1")
+    )
   end
 
-  test "Plan page renders an exact manifest and separates submission from admin approval" do
-    {member_conn, member_scope, org, mission, spacecraft} = signed_in_scope()
-    {requirement, requirement_version} = create_requirement(member_scope, mission, spacecraft)
-    route = route(spacecraft.spacecraft_id)
+  test "reservation review cursors preserve the authenticated path-owned reservation" do
+    {conn, mission} = signed_in()
 
-    assert {:ok, planning} =
-             Planner.run(
-               member_scope,
-               mission.mission_id,
-               requirement.contact_requirement_id,
-               requirement_version.version,
-               now: fixed_now(),
-               list_routes: fn _, _, _ -> {:ok, %{routes: [route], findings: []}} end,
-               search_opportunities: fn _, _, _, _, _ ->
-                 {:ok, %{opportunities: [opportunity()]}}
-               end
-             )
+    params = %{
+      "provider_reservation_id" => "query-substitution",
+      "change_id" => "change-2",
+      "before_revision" => "10",
+      "before_audit" => "audit-25"
+    }
 
-    [snapshot] = planning.snapshots
+    {:ok, view, _} =
+      live(
+        conn,
+        "/missions/#{mission.mission_id}/ops/contacts/reservation-1?" <> URI.encode_query(params)
+      )
 
-    assert {:ok, plan, plan_version} =
-             ContactPlans.create(member_scope, mission.mission_id, %{
-               planning_run_ids: [planning.run.contact_planning_run_id],
-               selected_snapshot_ids: [snapshot.contact_opportunity_snapshot_id],
-               rationale: "Use the provider's first eligible pass"
-             })
+    assert_surface(
+      view,
+      "ops-contact-detail-component",
+      "contact_detail",
+      mission,
+      Map.put(params, "provider_reservation_id", "reservation-1")
+    )
 
-    {:ok, member_view, _html} =
-      live(member_conn, ~p"/missions/#{mission.mission_id}/ops/plans/#{plan.contact_plan_id}")
-
-    assert has_element?(member_view, "#ops-contact-plan-show-page")
-    assert has_element?(member_view, "#contact-plan-content-hash", plan_version.content_sha256)
-    assert has_element?(member_view, "#plan-selections [id^=plan-selection-]")
-    assert has_element?(member_view, "#contact-plan-submit-form")
-    refute has_element?(member_view, "#contact-plan-approve-form")
-
-    member_view
-    |> form("#contact-plan-submit-form", submission: %{reason: "Ready for admin review"})
-    |> render_submit()
-
-    assert has_element?(member_view, "#contact-plan-admin-required")
-
-    admin = TestFixtures.persist_user!()
-    admin_membership = TestFixtures.grant_membership!(admin, org, role: :organization_admin)
-    admin_conn = TestFixtures.member_conn(admin)
-
-    assert admin_membership.role == :organization_admin
-
-    {:ok, admin_view, _html} =
-      live(admin_conn, ~p"/missions/#{mission.mission_id}/ops/plans/#{plan.contact_plan_id}")
-
-    assert has_element?(admin_view, "#contact-plan-approve-form")
-    assert has_element?(admin_view, "#contact-plan-rejection-disclosure")
-    assert has_element?(admin_view, "#plan-execution-items-empty")
+    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+             live(build_conn(), "/missions/#{mission.mission_id}/ops/contacts/reservation-1")
   end
 
-  defp signed_in_scope do
+  defp signed_in do
+    {conn, _user, _organization, mission} = signed_in_user_org_and_mission()
+    {conn, mission}
+  end
+
+  defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    membership = TestFixtures.grant_membership!(user, org)
-
-    mission =
-      TestFixtures.persist_mission!(org, slug: "planning", display_name: "Planning Mission")
-
-    spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Asteria")
-
-    scope =
-      Scope.new(%{
-        user: user,
-        organization_id: org.organization_id,
-        organization: org,
-        organization_membership: membership
-      })
-
-    {TestFixtures.member_conn(user), scope, org, mission, spacecraft}
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    {TestFixtures.member_conn(user), user, organization, mission}
   end
 
-  defp create_requirement(scope, mission, spacecraft) do
-    assert {:ok, requirement, version} =
-             ContactRequirements.create(
-               scope,
-               mission.mission_id,
-               requirement_attrs(spacecraft.spacecraft_id),
-               now: fixed_now()
-             )
-
-    {requirement, version}
+  defp assert_surface(view, _id, "contact_detail", mission, query_params) do
+    HostTransportTestSupport.assert_context(view, %{
+      "kind" => "ops_module",
+      "contribution" => "planning.reservation-review",
+      "application_key" => nil,
+      "surface_id" => nil,
+      "mission_id" => mission.mission_id,
+      "query_params" => query_params
+    })
   end
 
-  defp requirement_form_params(spacecraft) do
-    starts_at = DateTime.utc_now() |> DateTime.add(3_600, :second) |> DateTime.truncate(:second)
+  defp assert_surface(view, _id, "contact_plan_show", mission, query_params) do
+    snapshot = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]
+    page = snapshot["ops_page"]
+    assert page["id"] == "planning.plan-review"
+    assert page["context"]["missionId"] == mission.mission_id
+    assert page["context"]["resourceId"] == query_params["contact_plan_id"]
+    assert page["status"] == "unavailable"
 
-    %{
-      "spacecraft_id" => spacecraft.spacecraft_id,
-      "contact_intent" => "payload_downlink",
-      "earliest_start" => Calendar.strftime(starts_at, "%Y-%m-%dT%H:%M:%S"),
-      "latest_end" =>
-        starts_at |> DateTime.add(21_600, :second) |> Calendar.strftime("%Y-%m-%dT%H:%M:%S"),
-      "success_measure" => "minimum_data_volume",
-      "minimum_duration_seconds" => "600",
-      "preferred_duration_seconds" => "900",
-      "minimum_data_volume_bytes" => "1500000000",
-      "contact_count" => "1",
-      "minimum_separation_seconds" => "0",
-      "priority" => "high",
-      "allowed_providers" => "provider-a",
-      "excluded_providers" => "",
-      "allowed_stations" => "",
-      "excluded_stations" => "station-c",
-      "rationale" => "Recorder pressure requires a downlink"
-    }
+    HostTransportTestSupport.assert_context(view, %{
+      "kind" => "ops_module",
+      "contribution" => "planning.plan-review",
+      "application_key" => nil,
+      "surface_id" => nil,
+      "query_params" => query_params
+    })
   end
 
-  defp requirement_attrs(spacecraft_id) do
-    %{
-      spacecraft_id: spacecraft_id,
-      service_direction: :downlink,
-      contact_intent: "payload_downlink",
-      earliest_start: DateTime.add(fixed_now(), 3_600, :second),
-      latest_end: DateTime.add(fixed_now(), 28_800, :second),
-      success_measure: :minimum_data_volume,
-      minimum_duration_seconds: 600,
-      preferred_duration_seconds: 900,
-      minimum_data_volume_bytes: 1_500_000_000,
-      contact_count: 1,
-      minimum_separation_seconds: 0,
-      priority: :high,
-      provider_constraints_document: %{"allowed" => [], "excluded" => []},
-      station_constraints_document: %{"allowed" => [], "excluded" => []},
-      policy_constraints_document: %{},
-      approval_policy_document: %{"mode" => "manual"},
-      rationale: "Recorder pressure requires a downlink",
-      metadata: %{}
-    }
+  defp assert_surface(view, _id, surface, mission, query_params)
+       when surface in ["contact_requirement_list", "contact_requirement_show"] do
+    snapshot = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]
+    page = snapshot["ops_page"]
+    assert page["slot"] == "ops.page"
+    assert page["context"]["missionId"] == mission.mission_id
+    assert page["token"]
+
+    if surface == "contact_requirement_list" do
+      assert page["id"] == "planning.requirement-directory"
+
+      assert page["data"]["query"] == %{
+               "page" => String.to_integer(Map.get(query_params, "page", "1")),
+               "state" => Map.get(query_params, "state", "all")
+             }
+    else
+      assert page["id"] == "planning.requirement-review"
+      assert page["context"]["resourceId"] == query_params["contact_requirement_id"]
+      assert page["status"] == "unavailable"
+    end
   end
 
-  defp route(spacecraft_id) do
-    %{
-      route_key: "route-live-test",
-      spacecraft_id: spacecraft_id,
-      provider_spacecraft_ref: "SC-LIVE",
-      source_endpoint_id: "source-live",
-      routing_rule_id: "routing-live",
-      link_assignment_id: "link-live",
-      path_template_id: "path-live",
-      path_template_version: 1,
-      transport_id: "transport-live",
-      transport_version: 1,
-      provider_id: "provider-live",
-      provider_version: 1,
-      provider_account_id: "account-live",
-      provider_account_version: 1,
-      provider_account_grant_id: "grant-live",
-      provider_account_grant_version: 1,
-      provider_profile_id: "runtime-live",
-      provider_profile_version: 1,
-      service_profile_ref: %{"id" => "service-downlink", "version" => 1},
-      delivery_profile_ref: %{"id" => "delivery-cadence", "version" => 1},
-      delivery_policy_document: %{},
-      provider_display_name: "Ground Network Simulator",
-      service_display_name: "Downlink",
-      delivery_display_name: "Cadence",
-      route_display_name: "Simulator route",
-      client: OpsContactRequirementsLiveTest.FakeClient
-    }
+  defp assert_surface(view, _id, "contact_requirement_new", mission, _query_params) do
+    page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["id"] == "planning.requirement-declaration"
+    assert page["status"] == "ready"
+    assert page["context"]["missionId"] == mission.mission_id
+    assert page["data"]["model"]["spacecraft"]["total"] == 0
+    refute page["data"]["model"]["can_declare"]
   end
 
-  defp opportunity do
-    %{
-      "id" => "opportunity-live",
-      "spacecraft_ref" => "SC-LIVE",
-      "ground_station_ref" => "station-live",
-      "antenna_or_service_pool_ref" => "pool-live",
-      "service_profile_ref" => "service-downlink",
-      "starts_at" => fixed_now() |> DateTime.add(3_600, :second) |> DateTime.to_iso8601(),
-      "ends_at" => fixed_now() |> DateTime.add(4_500, :second) |> DateTime.to_iso8601(),
-      "expires_at" => fixed_now() |> DateTime.add(18_000, :second) |> DateTime.to_iso8601(),
-      "availability" => "available",
-      "estimated_capacity" => %{"bytes" => 2_000_000_000},
-      "synthetic" => true,
-      "extensions" => %{"orbit_readiness" => %{"status" => "current"}}
-    }
+  defp assert_surface(view, _id, "contact_requirement_template", mission, _query_params) do
+    page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["id"] == "planning.requirement-templates"
+    assert page["status"] == "ready"
+    assert page["context"]["missionId"] == mission.mission_id
+    assert page["data"]["model"]["templates"]["entries"] == []
   end
 
-  defp fixed_now, do: ~U[2026-07-16 20:00:00.000000Z]
+  defp assert_surface(view, _id, surface_id, mission, query_params) do
+    HostTransportTestSupport.assert_context(view, %{
+      "application_key" => "ops_console",
+      "surface_id" => surface_id,
+      "host_scope" => "mission",
+      "mission_id" => mission.mission_id,
+      "query_params" => query_params
+    })
+  end
 end

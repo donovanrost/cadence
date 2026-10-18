@@ -56,6 +56,191 @@ defmodule Cadence.ContactPlanning.FleetPlanningRunsTest do
     }
   end
 
+  test "directory pages are bounded, ordered, filtered, and scoped", context do
+    assert {:ok, _, _} =
+             ContactRequirements.create(context.member_scope, @mission_id, requirement_attrs())
+
+    runs =
+      for _ <- 1..27 do
+        assert {:ok, run, _} =
+                 FleetPlanningRuns.create(context.member_scope, @mission_id, run_attrs())
+
+        run
+      end
+
+    # Exercise the durable identifier tie-breaker, independent of clock precision.
+    Cadence.Repo.update_all(Cadence.Management.Contacts.Store.FleetPlanningRunRow,
+      set: [inserted_at: @now]
+    )
+
+    expected = runs |> Enum.map(& &1.fleet_planning_run_id) |> Enum.sort(:desc)
+    assert {:ok, first} = FleetPlanningRuns.list_page(@organization_id, @mission_id, 1)
+    assert {:ok, second} = FleetPlanningRuns.list_page(@organization_id, @mission_id, 2)
+    assert first.more
+    refute second.more
+    assert length(first.entries) == 25
+    assert length(second.entries) == 2
+    assert Enum.map(first.entries ++ second.entries, & &1.fleet_planning_run_id) == expected
+
+    assert {:ok, %{entries: [], more: false}} =
+             FleetPlanningRuns.list_page(@organization_id, @mission_id, 3)
+
+    run = hd(runs)
+
+    assert {:ok, canceled} =
+             FleetPlanningRuns.cancel(
+               context.member_scope,
+               @mission_id,
+               run.fleet_planning_run_id,
+               "Horizon no longer needed"
+             )
+
+    assert {:ok, %{entries: [^canceled], more: false}} =
+             FleetPlanningRuns.list_page(@organization_id, @mission_id, 1, "canceled")
+
+    assert {:ok, %{entries: [], more: false}} =
+             FleetPlanningRuns.list_page("another-org", @mission_id, 1)
+
+    assert {:ok, %{entries: [], more: false}} =
+             FleetPlanningRuns.list_page(@organization_id, "another-mission", 1)
+  end
+
+  test "directory refuses malformed pages and lifecycle filters" do
+    for page <- [0, -1, "1", 1.5, 1_000_001] do
+      assert {:error, :invalid_fleet_planning_page} =
+               FleetPlanningRuns.list_page(@organization_id, @mission_id, page)
+    end
+
+    assert {:error, :invalid_fleet_planning_page} =
+             FleetPlanningRuns.list_page(@organization_id, @mission_id, 1, "unknown")
+  end
+
+  test "public directory renders persisted policy and run evidence without advancing a run", c do
+    alias Cadence.Applications.{HostContext, SurfaceQueryRequest}
+    alias Cadence.Reads.ApplicationSurfaces.OpsConsole
+
+    assert {:ok, _, _} =
+             ContactRequirements.create(c.member_scope, @mission_id, requirement_attrs())
+
+    assert {:ok, run, _} = FleetPlanningRuns.create(c.member_scope, @mission_id, run_attrs())
+
+    assert {:ok, _, draft} =
+             FleetPlanningPolicies.version(
+               c.admin_scope,
+               @mission_id,
+               c.policy.fleet_planning_policy_id,
+               1,
+               policy_attrs()
+             )
+
+    assert draft.version == 2
+
+    request = %SurfaceQueryRequest{
+      application_key: "ops_console",
+      application_version: 1,
+      surface_id: "fleet_planning",
+      surface_version: 1,
+      query_id: "cadence.ops.fleet_planning",
+      query_version: 1,
+      params: %{"state" => "queued"}
+    }
+
+    host = HostContext.mission(@mission_id)
+
+    assert {:ok, %{"data" => %{"presentation" => %{"props" => props}}}} =
+             OpsConsole.load(c.member_scope, host, request)
+
+    directory = props["directory"]
+    assert directory["active_policy"]["version"] == 1
+    assert directory["active_policy"]["content_sha256"] == c.policy_version.content_sha256
+    assert [row] = directory["runs"]["entries"]
+    assert row["id"] == run.fleet_planning_run_id
+    assert row["requirement_count"] == 1
+    assert row["phase"] == "queued"
+    assert row["candidate_plan"] == nil
+    refute Map.has_key?(row, "input_document")
+    refute Map.has_key?(row, "trigger_actor_document")
+
+    assert {:ok, ^run} =
+             FleetPlanningRuns.fetch(@organization_id, @mission_id, run.fleet_planning_run_id)
+
+    renderer =
+      Path.expand(
+        "../../../../../frontend/modules/planning-and-contacts/src/test-support/producer-render-check.mjs",
+        __DIR__
+      )
+
+    {output, status} =
+      System.cmd(
+        "node",
+        [
+          renderer,
+          Jason.encode!([
+            %{
+              component: "OpsFleetPlanning",
+              props: props,
+              expected: %{
+                presentIds: [
+                  "ops-fleet-planning-page",
+                  "fleet-planning-active-policy",
+                  "fleet-run-#{run.fleet_planning_run_id}"
+                ],
+                absentIds: ["fleet-directory-unavailable", "fleet-planning-policy-required"]
+              }
+            }
+          ])
+        ],
+        stderr_to_stdout: true
+      )
+
+    assert status == 0, output
+
+    for params <- [
+          %{"mission_id" => "foreign"},
+          %{"page" => "01"},
+          %{"state" => "unknown"},
+          %{"unknown" => "x"}
+        ] do
+      assert {:error, :unsupported_application_surface_query} =
+               OpsConsole.load(c.member_scope, host, %{request | params: params})
+    end
+
+    assert {:error, :unsupported_application_surface_query} =
+             OpsConsole.load(%{c.member_scope | organization_membership: nil}, host, request)
+  end
+
+  test "directory does not present a broken active version as an absent policy", c do
+    alias Cadence.Reads.ApplicationSurfaces.Planning.FleetDirectory
+
+    Cadence.Repo.update_all(Cadence.Management.Contacts.Store.FleetPlanningPolicyRow,
+      set: [active_version: 99]
+    )
+
+    assert {:error, :fleet_planning_policy_version_not_found} =
+             FleetDirectory.load(c.member_scope, %{mission_id: @mission_id}, %{})
+  end
+
+  test "directory admits an absent active policy and rejects malformed queries", c do
+    alias Cadence.Reads.ApplicationSurfaces.Planning.FleetDirectory
+    mission = %{mission_id: @mission_id}
+
+    assert {:ok, _} =
+             FleetPlanningPolicies.retire(
+               c.admin_scope,
+               @mission_id,
+               c.policy.fleet_planning_policy_id,
+               1,
+               "No unattended planning"
+             )
+
+    assert {:ok, %{directory: %{active_policy: nil}}} =
+             FleetDirectory.load(c.member_scope, mission, %{})
+
+    for params <- [%{"page" => "0"}, %{"page" => 1}, %{"state" => nil}, %{"page" => "1000001"}] do
+      assert {:error, :invalid_fleet_directory_query} = FleetDirectory.admit_query(params)
+    end
+  end
+
   test "a mission member snapshots the exact active policy and intersecting Requirements",
        context do
     assert {:ok, requirement, requirement_version} =

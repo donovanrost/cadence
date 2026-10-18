@@ -28,6 +28,49 @@ defmodule Cadence.Architecture.ContextBoundary do
   ]
 
   @file_context_overrides %{
+    "lib/cadence/management/settings.ex" => :composition,
+    "lib/cadence/control/spacecraft_configuration.ex" => :catalog,
+    "lib/cadence/control/spacecraft_model_bindings.ex" => :catalog,
+    "lib/cadence/reads/mission_models/active_basis.ex" => :adapter,
+    "lib/cadence/contact_planning/fleet_run_actions.ex" => :contacts,
+    "lib/cadence/contact_planning/fleet_run_repairs.ex" => :contacts,
+    "lib/cadence/control/missions.ex" => :composition,
+    "lib/cadence/applications/telemetry_decom_catalog_contribution.ex" => :composition,
+    "lib/cadence/semantic_runtime.ex" => :catalog,
+    "lib/cadence/semantic_runtime/algorithm_plan.ex" => :catalog,
+    "lib/cadence/semantic_runtime/expression_evaluator.ex" => :catalog,
+    "lib/cadence/semantic_runtime/monitoring_evaluator.ex" => :catalog,
+    "lib/cadence/semantic_runtime/monitoring_plan.ex" => :catalog,
+    "lib/cadence/semantic_runtime/monitoring_result.ex" => :catalog,
+    "lib/cadence/semantic_runtime/plan_decoder.ex" => :catalog,
+    "lib/cadence/semantic_runtime/registered_implementation.ex" => :catalog,
+    "lib/cadence/semantic_runtime/registered_registry.ex" => :catalog,
+    "lib/cadence/semantic_runtime/result.ex" => :catalog,
+    "lib/cadence/semantic_runtime/scope.ex" => :catalog,
+    "lib/cadence/semantic_runtime/state.ex" => :catalog,
+    "lib/cadence/semantic_runtime/update.ex" => :catalog,
+    "lib/cadence/runtime/mission_model_plan_decoder.ex" => :catalog,
+    "lib/cadence/semantic_runtime/store.ex" => :runtime,
+    "lib/cadence/semantic_runtime/commit_row.ex" => :runtime,
+    "lib/cadence/control/mission_model_promotion.ex" => :catalog,
+    "lib/cadence/extensions/registry.ex" => :composition,
+    "lib/cadence/applications/registry.ex" => :composition,
+    "lib/cadence/applications/organization_admin.ex" => :composition,
+    "lib/cadence/applications/legacy_comms_overview.ex" => :composition,
+    "lib/cadence/applications/spacecraft.ex" => :composition,
+    "lib/cadence/applications/ops_console.ex" => :composition,
+    "lib/cadence/applications/mission_catalog.ex" => :composition,
+    "lib/cadence/applications/limits.ex" => :composition,
+    "lib/cadence/applications/derived_telemetry.ex" => :composition,
+    "lib/cadence/applications/comms.ex" => :composition,
+    "lib/cadence/applications/ops_dock.ex" => :read_models,
+    "lib/cadence/runtime/process_namespace.ex" => :composition,
+    "lib/cadence/notifications/actions.ex" => :identity,
+    "lib/cadence/notifications/recipient.ex" => :identity,
+    "lib/cadence/runtime/supervisor.ex" => :composition,
+    "lib/cadence/platform/root_composition.ex" => :composition,
+    "lib/cadence/applications/json_boundary.ex" => :platform,
+    "lib/cadence/applications/packet_input_definition.ex" => :catalog,
     "lib/cadence/application.ex" => :composition,
     "lib/cadence/extension_catalog.ex" => :composition,
     "lib/cadence/jobs.ex" => :platform,
@@ -83,6 +126,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/runtime_fact_consumer.ex" => :commanding,
     "lib/cadence/control/mission_runtime.ex" => :runtime,
     "lib/cadence/management/transports.ex" => :composition,
+    "lib/cadence/management/communications_setup.ex" => :composition,
     "lib/cadence/derived_telemetry/definition.ex" => :catalog,
     "lib/cadence/derived_telemetry/expression_evaluator.ex" => :catalog,
     "lib/cadence/derived_telemetry/expression_parser.ex" => :catalog,
@@ -128,6 +172,7 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/contacts/profile_store"
     ],
     data_sources: [
+      "lib/cadence/projections/data_sources/",
       "lib/cadence/reads/data_sources.ex",
       "lib/cadence/reads/data_sources/"
     ],
@@ -145,6 +190,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     identity: [
       "lib/cadence/accounts.ex",
       "lib/cadence/accounts/",
+      "lib/cadence/administration/",
       "lib/cadence/auth.ex",
       "lib/cadence/auth/",
       "lib/cadence/missions.ex",
@@ -152,6 +198,7 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/organizations.ex",
       "lib/cadence/organizations/",
       "lib/cadence/spacecraft.ex",
+      "lib/cadence/spacecraft/",
       "lib/cadence/spacecraft_store.ex",
       "lib/cadence/spacecraft_store/",
       "lib/cadence/spacecraft_type.ex",
@@ -263,9 +310,7 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/management/data_sources",
       "lib/cadence/management/managed_resources",
       "lib/cadence/control/data_sources",
-      "lib/cadence/control/managed_resources",
-      "lib/cadence/projections/data_source",
-      "lib/cadence/projections/data_sources"
+      "lib/cadence/control/managed_resources"
     ],
     dashboards: [],
     platform: [
@@ -290,7 +335,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     ],
     commanding: [:identity, :catalog, :comms, :contacts, :runtime, :telemetry, :platform],
     runtime: [:identity, :catalog, :comms, :telemetry, :platform],
-    telemetry: [:identity, :catalog, :comms, :platform],
+    telemetry: [:identity, :catalog, :comms, :data_sources, :platform],
     data_sources: [:identity, :platform],
     dashboards: @contexts,
     read_models: @contexts,
@@ -303,6 +348,10 @@ defmodule Cadence.Architecture.ContextBoundary do
   # points the other way. These are named vertical handoffs through a public
   # service, not permission for arbitrary reverse dependencies.
   @public_orchestration_edges MapSet.new([
+                                {"lib/cadence/contacts/scheduler.ex",
+                                 "lib/cadence/control/missions.ex"},
+                                {"lib/cadence/control/mission_recovery.ex",
+                                 "lib/cadence/control/missions.ex"},
                                 {"lib/cadence/control/activations.ex",
                                  "lib/cadence/control/mission_runtime_reconciler.ex"},
                                 {"lib/cadence/control/activations.ex",
@@ -348,6 +397,7 @@ defmodule Cadence.Architecture.ContextBoundary do
          sink_context when not is_nil(sink_context) <- classify(sink),
          false <- source_context == sink_context,
          false <- source_context == :adapter or sink_context == :adapter,
+         false <- PlaneBoundary.public_composition_value?(sink),
          false <- MapSet.member?(@public_orchestration_edges, {source, sink}),
          false <- adjacent_plane_handoff?(source, sink),
          false <- sink_context in Map.fetch!(@allowed, source_context) do
@@ -362,6 +412,9 @@ defmodule Cadence.Architecture.ContextBoundary do
     cond do
       path == "lib/cadence.ex" or String.starts_with?(path, "lib/cadence_web/") ->
         nil
+
+      PlaneBoundary.host_adapter?(path) ->
+        :adapter
 
       context = Map.get(@file_context_overrides, path) ->
         context

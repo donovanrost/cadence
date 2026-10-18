@@ -1,0 +1,11 @@
+import DefinitionsSurface from "./DefinitionsSurface.vue";
+export const definitionsContribution = {
+  id: "derived-telemetry.definitions",
+  version: 1,
+  applicationKey: "derived_telemetry",
+  surfaceId: "manage",
+  query: { id: "cadence.derived_telemetry.manage", version: 1 },
+  actionId: "save_definition",
+  // oxlint-disable-next-line typescript/no-unsafe-assignment -- vue-tsc checks the SFC constructor at this registration or render boundary.
+  component: DefinitionsSurface,
+} as const;

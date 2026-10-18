@@ -7,6 +7,7 @@ defmodule Cadence.Dashboards.DashboardResolveResult do
     DashboardResolveRequest,
     PlacementFrames,
     PlannedSourceRequest,
+    ResolvedSourceBinding,
     ResolveWarning
   }
 
@@ -24,6 +25,7 @@ defmodule Cadence.Dashboards.DashboardResolveResult do
           watermarks: [SourceWatermark.t()],
           subscriptions: [term()],
           planned_source_requests: [PlannedSourceRequest.t()],
+          resolved_bindings_by_request_id: %{optional(binary()) => [ResolvedSourceBinding.t()]},
           plan_metadata: map()
         }
 
@@ -35,6 +37,8 @@ defmodule Cadence.Dashboards.DashboardResolveResult do
     watermarks: [],
     subscriptions: [],
     planned_source_requests: [],
+    # Kept outside serializable diagnostics and browser models.
+    resolved_bindings_by_request_id: %{},
     plan_metadata: %{}
   ]
 
@@ -43,6 +47,8 @@ defmodule Cadence.Dashboards.DashboardResolveResult do
 
   @spec normalize(map() | t()) :: t()
   def normalize(%__MODULE__{} = result) do
+    result = Map.put_new(result, :resolved_bindings_by_request_id, %{})
+
     %__MODULE__{
       result
       | resolve_mode: ContractNormalization.known_atom(result.resolve_mode, @resolve_modes),
@@ -82,6 +88,8 @@ defmodule Cadence.Dashboards.DashboardResolveResult do
         attrs
         |> ContractNormalization.attr(:planned_source_requests, [])
         |> normalize_planned_requests(),
+      resolved_bindings_by_request_id:
+        ContractNormalization.attr(attrs, :resolved_bindings_by_request_id, %{}),
       plan_metadata:
         attrs
         |> ContractNormalization.attr(:plan_metadata, %{})

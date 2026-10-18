@@ -1,7 +1,7 @@
 defmodule Cadence.Control.Missions do
   @moduledoc "Public Control-plane lifecycle boundary for mission control owners."
 
-  alias Cadence.Contacts.Scheduler
+  alias Cadence.Control.Contacts
   alias Cadence.Control.MissionRuntime
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.ProcessNamespace
@@ -105,9 +105,6 @@ defmodule Cadence.Control.Missions do
   defp await_contact_scheduler(process_namespace, mission_id) do
     server = MissionRuntime.contact_scheduler_name(process_namespace, mission_id)
 
-    case GenServer.whereis(server) do
-      pid when is_pid(pid) -> Scheduler.await_settled(server)
-      nil -> {:ok, :disabled}
-    end
+    Contacts.await_scheduler_settled(server)
   end
 end

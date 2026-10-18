@@ -4,14 +4,15 @@ defmodule Cadence.Commanding.Encoder do
   """
 
   alias Cadence.Catalog.Command.Compiler.{ArgumentSpec, EncodingStep, RuntimeDefinition}
-  alias Cadence.Catalog.Command.TypeEncoding
+  alias Cadence.Catalog.Command.{TypeEncoding, WireEncoding}
 
   @spec encode(RuntimeDefinition.t(), map()) ::
           {:ok, %{binary: binary(), base64: binary(), size_bytes: non_neg_integer()}}
           | {:error, term()}
   def encode(%RuntimeDefinition{} = runtime_definition, resolved_argument_values)
       when is_map(resolved_argument_values) do
-    with {:ok, argument_specs_by_id} <- argument_specs_by_id(runtime_definition),
+    with :ok <- WireEncoding.validate(runtime_definition, resolved_argument_values),
+         {:ok, argument_specs_by_id} <- argument_specs_by_id(runtime_definition),
          {:ok, layout_binary} <-
            encode_layout(runtime_definition, argument_specs_by_id, resolved_argument_values),
          {:ok, encoded_binary} <- prepend_opcode(runtime_definition, layout_binary) do
@@ -33,7 +34,7 @@ defmodule Cadence.Commanding.Encoder do
          argument_specs_by_id,
          resolved_values
        ) do
-    total_bits = total_layout_bits(runtime_definition)
+    total_bits = WireEncoding.layout_bits(runtime_definition)
 
     if total_bits == 0 do
       {:ok, <<>>}
@@ -175,7 +176,7 @@ defmodule Cadence.Commanding.Encoder do
          %ArgumentSpec{base_type: :boolean, encoding: %TypeEncoding{} = encoding},
          value
        ) do
-    encode_boolean(value, encoding.size_bits)
+    encode_boolean(value, encoding.size_bits, encoding.byte_order)
   end
 
   defp encode_argument_value(
@@ -183,7 +184,8 @@ defmodule Cadence.Commanding.Encoder do
          value
        ) do
     with {:ok, integer_value} <- normalize_enumerated_value(value) do
-      encode_integer(integer_value, encoding.size_bits, :unsigned, encoding.byte_order)
+      sign_mode = if encoding.signed, do: :signed, else: :unsigned
+      encode_integer(integer_value, encoding.size_bits, sign_mode, encoding.byte_order)
     end
   end
 
@@ -210,6 +212,9 @@ defmodule Cadence.Commanding.Encoder do
       value < 0 ->
         {:error, {:negative_value_for_unsigned_integer, value, size_bits}}
 
+      not TypeEncoding.integer_fits?(value, size_bits, false) ->
+        {:error, {:integer_value_out_of_range, value, size_bits, :unsigned}}
+
       byte_order == :little_endian and rem(size_bits, 8) != 0 ->
         {:error, {:little_endian_non_byte_aligned_integer_unsupported, size_bits}}
 
@@ -224,6 +229,9 @@ defmodule Cadence.Commanding.Encoder do
   defp encode_integer(value, size_bits, :signed, byte_order)
        when is_integer(value) and is_integer(size_bits) and size_bits > 0 do
     cond do
+      not TypeEncoding.integer_fits?(value, size_bits, true) ->
+        {:error, {:integer_value_out_of_range, value, size_bits, :signed}}
+
       byte_order == :little_endian and rem(size_bits, 8) != 0 ->
         {:error, {:little_endian_non_byte_aligned_integer_unsupported, size_bits}}
 
@@ -254,8 +262,7 @@ defmodule Cadence.Commanding.Encoder do
   defp encode_string(value, %TypeEncoding{size_bits: size_bits})
        when is_integer(size_bits) and size_bits > 0 and rem(size_bits, 8) == 0 do
     byte_length = div(size_bits, 8)
-    padded_value = String.pad_trailing(value, byte_length, <<0>>)
-    {:ok, binary_part(padded_value, 0, byte_length)}
+    {:ok, value <> :binary.copy(<<0>>, byte_length - byte_size(value))}
   end
 
   defp encode_string(_value, %TypeEncoding{} = encoding) do
@@ -270,7 +277,7 @@ defmodule Cadence.Commanding.Encoder do
     case byte_size(value) do
       ^byte_length -> {:ok, value}
       size when size < byte_length -> {:ok, value <> :binary.copy(<<0>>, byte_length - size)}
-      _size -> {:ok, binary_part(value, 0, byte_length)}
+      _size -> {:error, {:command_binary_value_too_long, size_bits}}
     end
   end
 
@@ -278,24 +285,16 @@ defmodule Cadence.Commanding.Encoder do
     {:error, {:unsupported_command_binary_encoding, size_bits}}
   end
 
-  defp encode_boolean(true, size_bits) when is_integer(size_bits) and size_bits > 0,
-    do: {:ok, <<1::size(size_bits)>>}
+  defp encode_boolean(value, size_bits), do: encode_boolean(value, size_bits, :big_endian)
 
-  defp encode_boolean(false, size_bits) when is_integer(size_bits) and size_bits > 0,
-    do: {:ok, <<0::size(size_bits)>>}
+  defp encode_boolean(true, size_bits, byte_order),
+    do: encode_integer(1, size_bits, :unsigned, byte_order)
 
-  defp encode_boolean(value, size_bits)
-       when is_integer(value) and is_integer(size_bits) and size_bits > 0,
-       do: {:ok, <<value::size(size_bits)>>}
+  defp encode_boolean(false, size_bits, byte_order),
+    do: encode_integer(0, size_bits, :unsigned, byte_order)
 
-  defp encode_boolean(value, _size_bits), do: {:error, {:invalid_command_boolean_value, value}}
-
-  defp total_layout_bits(%RuntimeDefinition{} = runtime_definition) do
-    runtime_definition.size_bits ||
-      Enum.reduce(runtime_definition.encoding_steps, 0, fn %EncodingStep{} = step, max_bits ->
-        max(max_bits, step.bit_offset + step.size_bits)
-      end)
-  end
+  defp encode_boolean(value, _size_bits, _byte_order),
+    do: {:error, {:invalid_command_boolean_value, value}}
 
   defp insert_bits(buffer, bit_offset, bit_length, value) when rem(bit_offset, 8) == 0 do
     byte_offset = div(bit_offset, 8)
@@ -316,18 +315,7 @@ defmodule Cadence.Commanding.Encoder do
     pad_to_bytes(<<before::bitstring, value_bits::bitstring-size(bit_length), rest::bitstring>>)
   end
 
-  defp binary_to_bits(binary, bit_length) do
-    total_bits = bit_size(binary)
-
-    if total_bits >= bit_length do
-      skip = total_bits - bit_length
-      <<_::size(^skip), bits::bitstring-size(^bit_length)>> = binary
-      bits
-    else
-      padding = bit_length - total_bits
-      <<0::size(padding), binary::bitstring>>
-    end
-  end
+  defp binary_to_bits(value, bit_length) when bit_size(value) == bit_length, do: value
 
   defp pad_to_bytes(bitstring) do
     case rem(bit_size(bitstring), 8) do

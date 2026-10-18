@@ -1,0 +1,95 @@
+name: Frontend
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MIX_ENV: test
+  ERL_FLAGS: "+S 4:4"
+
+jobs:
+  quality:
+    name: Frontend quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24.16.0"
+      - uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236 # v1
+        with:
+          otp-version: "29.0.5"
+          elixir-version: "1.20.3"
+      # The frontend consumes the locked Phoenix and LiveVue JavaScript packages.
+      - run: mix deps.get --check-locked
+      - run: corepack enable
+      - run: corepack pnpm install --frozen-lockfile
+        working-directory: frontend
+      - run: corepack pnpm exec playwright install --with-deps chromium chrome
+        working-directory: frontend
+      - run: corepack pnpm verify
+        working-directory: frontend
+
+  contracts-and-browser:
+    name: Phoenix producer contracts and federation browser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24.16.0"
+      - uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236 # v1
+        with:
+          otp-version: "29.0.5"
+          elixir-version: "1.20.3"
+      - run: mix deps.get --check-locked
+      - run: mix setup --check-locked
+      - run: corepack enable
+      - run: corepack pnpm install --frozen-lockfile
+        working-directory: frontend
+      - run: npm ci
+        working-directory: apps/cadence_web
+      - run: corepack pnpm exec playwright install --with-deps chromium chrome
+        working-directory: frontend
+      - name: Select the installed browser
+        working-directory: frontend
+        run: node --input-type=module -e 'import { chromium } from "playwright"; console.log("CHROME_BIN=" + chromium.executablePath())' >> "$GITHUB_ENV"
+      - run: corepack pnpm test:producers
+        working-directory: frontend
+      # This alias builds and validates the publication before starting Phoenix and Chrome.
+      - run: mix test.browser.federation
+        working-directory: apps/cadence_web
+      - name: Exercise the lazy Ops pages in the production browser
+        run: mix test --include browser_smoke --only browser_smoke browser_test/cadence_web/assets/ops_initial_state_browser_test.exs
+        working-directory: apps/cadence_web
+        env:
+          CADENCE_BROWSER_PROPS_DIFF: "true"

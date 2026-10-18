@@ -155,7 +155,9 @@ defmodule Cadence.Runtime.PartitionOwner do
         default_initial_time(clock_mode, active_activation)
       end)
 
-    with {:ok, tm_pipeline_state} <- TMFrameIngress.init(),
+    with {:ok, active_activation} <-
+           MissionRuntimeSpec.for_partition(active_activation, partition_key),
+         {:ok, tm_pipeline_state} <- TMFrameIngress.init(),
          {:ok, runtime_binding_set, managed_application_states, timer_service, runtime_records} <-
            build_runtime_partition_state(
              process_namespace,
@@ -277,61 +279,67 @@ defmodule Cadence.Runtime.PartitionOwner do
       ) do
     state = refresh_live_clock(state)
 
-    case build_runtime_partition_state(
-           state.process_namespace,
-           binding_set,
-           activation,
-           state.partition_key,
-           state.timer_service.clock.mode,
-           current_runtime_time(state)
-         ) do
-      {:ok, runtime_binding_set, managed_application_states, timer_service, runtime_records} ->
-        previous_timer_events = build_timer_cancellation_records(state)
+    case MissionRuntimeSpec.for_partition(activation, state.partition_key) do
+      {:ok, activation} ->
+        case build_runtime_partition_state(
+               state.process_namespace,
+               binding_set,
+               activation,
+               state.partition_key,
+               state.timer_service.clock.mode,
+               current_runtime_time(state)
+             ) do
+          {:ok, runtime_binding_set, managed_application_states, timer_service, runtime_records} ->
+            previous_timer_events = build_timer_cancellation_records(state)
 
-        with {:ok, semantic_state, semantic_timer_cursors, pending_semantic_timers} <-
-               recover_semantic_runtime(
-                 state.persist_runtime_records?,
-                 activation,
-                 state.partition_key
-               ),
-             :ok <-
-               reproject_pending_semantic_timers(
-                 state.persist_runtime_records?,
-                 state.persistence_policy,
-                 activation,
-                 state.partition_key,
-                 pending_semantic_timers
-               ),
-             semantic_timers <-
-               build_semantic_timers(activation, timer_service, semantic_timer_cursors),
-             {:ok, pending_runtime_records} <-
-               maybe_persist_runtime_records(
-                 state.persist_runtime_records?,
-                 merge_runtime_records(runtime_records, %{
-                   capability_records: [],
-                   action_requests: [],
-                   timer_events: previous_timer_events
-                 })
-               ) do
-          _ = TimerService.cancel_all(state.timer_service)
-          cancel_semantic_timers(state.semantic_timers)
+            with {:ok, semantic_state, semantic_timer_cursors, pending_semantic_timers} <-
+                   recover_semantic_runtime(
+                     state.persist_runtime_records?,
+                     activation,
+                     state.partition_key
+                   ),
+                 :ok <-
+                   reproject_pending_semantic_timers(
+                     state.persist_runtime_records?,
+                     state.persistence_policy,
+                     activation,
+                     state.partition_key,
+                     pending_semantic_timers
+                   ),
+                 semantic_timers <-
+                   build_semantic_timers(activation, timer_service, semantic_timer_cursors),
+                 {:ok, pending_runtime_records} <-
+                   maybe_persist_runtime_records(
+                     state.persist_runtime_records?,
+                     merge_runtime_records(runtime_records, %{
+                       capability_records: [],
+                       action_requests: [],
+                       timer_events: previous_timer_events
+                     })
+                   ) do
+              _ = TimerService.cancel_all(state.timer_service)
+              cancel_semantic_timers(state.semantic_timers)
 
-          {:reply, :ok,
-           %{
-             state
-             | active_activation: activation,
-               binding_set: binding_set,
-               runtime_binding_set: runtime_binding_set,
-               managed_application_states: managed_application_states,
-               timer_service: timer_service,
-               semantic_timers: semantic_timers,
-               pending_runtime_records: pending_runtime_records,
-               async_outputs: [],
-               semantic_state: semantic_state
-           }}
-        else
+              {:reply, :ok,
+               %{
+                 state
+                 | active_activation: activation,
+                   binding_set: binding_set,
+                   runtime_binding_set: runtime_binding_set,
+                   managed_application_states: managed_application_states,
+                   timer_service: timer_service,
+                   semantic_timers: semantic_timers,
+                   pending_runtime_records: pending_runtime_records,
+                   async_outputs: [],
+                   semantic_state: semantic_state
+               }}
+            else
+              {:error, reason} ->
+                _ = TimerService.cancel_all(timer_service)
+                {:stop, reason, {:error, reason}, state}
+            end
+
           {:error, reason} ->
-            _ = TimerService.cancel_all(timer_service)
             {:stop, reason, {:error, reason}, state}
         end
 

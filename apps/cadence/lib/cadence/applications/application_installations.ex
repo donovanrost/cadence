@@ -8,22 +8,58 @@ defmodule Cadence.Applications.ApplicationInstallations do
   the installation itself.
   """
 
+  alias Cadence.Platform.ScopedReadUpdates
+
   import Ecto.Query
 
-  alias Cadence.Applications.ApplicationInstallation
+  alias Cadence.Applications.{
+    ApplicationDefinition,
+    ApplicationDependency,
+    ApplicationInstallation
+  }
+
   alias Cadence.Applications.ApplicationInstallation.LifecycleEvent
   alias Cadence.Applications.ApplicationInstallations.{InstallationRow, LifecycleEventRow}
-  alias Cadence.Applications.{ConfigurationReference, HostContext, Registry}
+  alias Cadence.Applications.{ConfigurationReference, HostContext, Registry, SurfaceDefinition}
   alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Listing
   alias Cadence.Missions
   alias Cadence.Repo
   alias Cadence.SpacecraftStore
+
+  @max_page 10_000
+  @max_page_size 100
 
   @type fetch_error ::
           :application_not_installed
           | :application_installation_disabled
           | :application_installation_uninstalled
           | :application_installation_scope_required
+
+  @doc "Installed application keys contributing settings at this scope, including descendants."
+  def settings_application_keys(organization_id, mission_id) do
+    query =
+      from(row in InstallationRow,
+        where: row.organization_id == ^organization_id and row.lifecycle_state == "installed",
+        distinct: true,
+        select: row.application_key
+      )
+
+    query = if mission_id, do: where(query, [row], row.mission_id == ^mission_id), else: query
+    Repo.all(query)
+  end
+
+  @doc "Immutable installation identity contributing to a spacecraft configuration revision."
+  def configuration_basis(organization_id, mission_id, spacecraft_id, application_key) do
+    from(row in InstallationRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.spacecraft_id == ^spacecraft_id and row.application_key == ^application_key,
+      order_by: row.application_installation_id,
+      select: {row.application_installation_id, row.application_version, row.lifecycle_state}
+    )
+    |> Repo.all()
+  end
 
   @spec install(Scope.t(), HostContext.t(), binary(), keyword()) ::
           {:ok, ApplicationInstallation.t()} | {:error, term()}
@@ -37,6 +73,7 @@ defmodule Cadence.Applications.ApplicationInstallations do
     requested_version = Keyword.get(opts, :application_version, :latest)
 
     with {:ok, definition} <- Registry.fetch_available(application_key, requested_version),
+         :ok <- ensure_optional(definition),
          :ok <- ensure_host_scope(definition.installable_scopes, host_context),
          {:ok, scope_attrs} <- scope_attrs(current_scope, host_context),
          :ok <- authorize_management(current_scope, scope_attrs),
@@ -52,6 +89,11 @@ defmodule Cadence.Applications.ApplicationInstallations do
         )
       end)
     end
+    |> ScopedReadUpdates.publish_result(
+      :spacecraft_configuration_changed,
+      current_scope.organization_id,
+      host_context.mission_id
+    )
   end
 
   @spec disable(Scope.t(), HostContext.t(), binary()) ::
@@ -60,9 +102,15 @@ defmodule Cadence.Applications.ApplicationInstallations do
       when is_binary(application_key) do
     with {:ok, scope_attrs} <- scope_attrs(current_scope, host_context),
          :ok <- authorize_management(current_scope, scope_attrs),
+         :ok <- ensure_optional_key(application_key),
          {:ok, actor_id} <- actor_id(current_scope) do
       transact(fn -> persist_disable(scope_attrs, application_key, actor_id) end)
     end
+    |> ScopedReadUpdates.publish_result(
+      :spacecraft_configuration_changed,
+      current_scope.organization_id,
+      host_context.mission_id
+    )
   end
 
   @spec uninstall(Scope.t(), HostContext.t(), binary()) ::
@@ -71,9 +119,15 @@ defmodule Cadence.Applications.ApplicationInstallations do
       when is_binary(application_key) do
     with {:ok, scope_attrs} <- scope_attrs(current_scope, host_context),
          :ok <- authorize_management(current_scope, scope_attrs),
+         :ok <- ensure_optional_key(application_key),
          {:ok, actor_id} <- actor_id(current_scope) do
       transact(fn -> persist_uninstall(scope_attrs, application_key, actor_id) end)
     end
+    |> ScopedReadUpdates.publish_result(
+      :spacecraft_configuration_changed,
+      current_scope.organization_id,
+      host_context.mission_id
+    )
   end
 
   @spec put_configuration_reference(
@@ -91,6 +145,7 @@ defmodule Cadence.Applications.ApplicationInstallations do
       when is_binary(application_key) do
     with {:ok, scope_attrs} <- scope_attrs(current_scope, host_context),
          :ok <- authorize_management(current_scope, scope_attrs),
+         :ok <- ensure_optional_key(application_key),
          {:ok, actor_id} <- actor_id(current_scope) do
       transact(fn ->
         persist_configuration_reference(
@@ -100,6 +155,50 @@ defmodule Cadence.Applications.ApplicationInstallations do
           actor_id
         )
       end)
+    end
+    |> ScopedReadUpdates.publish_result(
+      :spacecraft_configuration_changed,
+      current_scope.organization_id,
+      host_context.mission_id
+    )
+  end
+
+  @doc "Checks an optional capability required by a platform surface without enabling it."
+  @spec authorize_surface(Scope.t(), HostContext.t(), SurfaceDefinition.t()) ::
+          :ok | {:error, term()}
+  def authorize_surface(_scope, _host_context, %SurfaceDefinition{required_application: nil}),
+    do: :ok
+
+  def authorize_surface(scope, host_context, %SurfaceDefinition{
+        required_application: %ApplicationDependency{
+          application_key: key,
+          minimum_version: minimum_version,
+          scope: :same_host,
+          required: true
+        }
+      }) do
+    with {:ok, installation} <- fetch_installed(scope, host_context, key),
+         {:ok, definition} <- Registry.fetch_available(key, installation.application_version),
+         :ok <- ensure_optional(definition),
+         true <- installation.application_version >= minimum_version do
+      :ok
+    else
+      false -> {:error, :application_installation_version_mismatch}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def authorize_surface(_scope, _host_context, _surface),
+    do: {:error, :invalid_application_surface_definition}
+
+  defp ensure_optional(%ApplicationDefinition{installation_policy: :optional}), do: :ok
+  defp ensure_optional(%ApplicationDefinition{}), do: {:error, :platform_application}
+
+  defp ensure_optional_key(key) do
+    case Registry.fetch(key) do
+      {:ok, definition} -> ensure_optional(definition)
+      # Retained optional installations remain removable when their package disappears.
+      {:error, _reason} -> :ok
     end
   end
 
@@ -153,6 +252,28 @@ defmodule Cadence.Applications.ApplicationInstallations do
     end
   end
 
+  @doc "Returns one bounded page of installations for a host context."
+  @spec list_page(Scope.t(), HostContext.t(), keyword()) ::
+          {:ok, Listing.Page.t()} | {:error, term()}
+  def list_page(%Scope{} = current_scope, %HostContext{} = host_context, opts \\ [])
+      when is_list(opts) do
+    with {:ok, scope_attrs} <- scope_attrs(current_scope, host_context),
+         :ok <- authorize_management(current_scope, scope_attrs) do
+      query =
+        InstallationRow
+        |> where(
+          [row],
+          row.organization_id == ^scope_attrs.organization_id and
+            row.mission_id == ^scope_attrs.mission_id and
+            row.scope_kind == ^Atom.to_string(scope_attrs.scope_kind) and
+            row.scope_id == ^scope_attrs.scope_id
+        )
+        |> maybe_filter_lifecycle_state(Keyword.get(opts, :lifecycle_state))
+
+      bounded_installation_page(query, opts)
+    end
+  end
+
   @spec list_for_mission(Scope.t(), binary(), keyword()) ::
           {:ok, [ApplicationInstallation.t()]} | {:error, term()}
   def list_for_mission(%Scope{} = current_scope, mission_id, opts \\ [])
@@ -183,6 +304,32 @@ defmodule Cadence.Applications.ApplicationInstallations do
         |> Enum.map(&InstallationRow.to_domain/1)
 
       {:ok, installations}
+    else
+      false -> {:error, :application_installation_scope_required}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "Returns one bounded page of all installations in a mission."
+  @spec list_for_mission_page(Scope.t(), binary(), keyword()) ::
+          {:ok, Listing.Page.t()} | {:error, term()}
+  def list_for_mission_page(%Scope{} = current_scope, mission_id, opts \\ [])
+      when is_binary(mission_id) and is_list(opts) do
+    scope_attrs = %{organization_id: current_scope.organization_id, mission_id: mission_id}
+
+    with true <- is_binary(scope_attrs.organization_id),
+         true <- scope_matches_mission?(current_scope.mission_id, mission_id),
+         :ok <- authorize_management(current_scope, scope_attrs),
+         {:ok, _mission} <- Missions.fetch_mission(scope_attrs.organization_id, mission_id) do
+      query =
+        InstallationRow
+        |> where(
+          [row],
+          row.organization_id == ^scope_attrs.organization_id and row.mission_id == ^mission_id
+        )
+        |> maybe_filter_lifecycle_state(Keyword.get(opts, :lifecycle_state))
+
+      bounded_installation_page(query, opts)
     else
       false -> {:error, :application_installation_scope_required}
       {:error, reason} -> {:error, reason}
@@ -480,6 +627,46 @@ defmodule Cadence.Applications.ApplicationInstallations do
 
   defp maybe_filter_lifecycle_state(query, lifecycle_state) when is_atom(lifecycle_state) do
     where(query, [row], row.lifecycle_state == ^Atom.to_string(lifecycle_state))
+  end
+
+  defp bounded_installation_page(query, opts) do
+    max_total = Keyword.get(opts, :max_total, 100)
+
+    if valid_page_opts?(opts) and is_integer(max_total) and max_total > 0 and max_total <= 100 do
+      total_count = Repo.aggregate(query, :count)
+
+      if total_count <= max_total do
+        %{page: page, page_size: page_size, offset: offset} = Listing.page_opts(opts)
+
+        items =
+          query
+          |> order_by([row], asc: row.scope_kind, asc: row.scope_id, asc: row.application_key)
+          |> limit(^page_size)
+          |> offset(^offset)
+          |> Repo.all()
+          |> Enum.map(&InstallationRow.to_domain/1)
+
+        {:ok,
+         %Listing.Page{
+           items: items,
+           total_count: total_count,
+           page: page,
+           page_size: page_size
+         }}
+      else
+        {:error, :application_installation_bounds_exceeded}
+      end
+    else
+      {:error, :application_installation_bounds_exceeded}
+    end
+  end
+
+  defp valid_page_opts?(opts) do
+    page = Keyword.get(opts, :page, 1)
+    page_size = Keyword.get(opts, :page_size, 50)
+
+    is_integer(page) and page > 0 and page <= @max_page and is_integer(page_size) and
+      page_size > 0 and page_size <= @max_page_size
   end
 
   defp actor_id(%Scope{actor_kind: :user, user: %{user_id: user_id}})

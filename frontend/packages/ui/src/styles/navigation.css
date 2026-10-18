@@ -1,0 +1,104 @@
+@layer components {
+  .cd-side-nav,
+  .cd-side-nav-children {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .cd-side-nav-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    min-height: 2.25rem;
+    padding: var(--space-2) var(--space-3);
+    border-inline-start: 2px solid transparent;
+    color: var(--text-muted);
+    font-size: var(--type-body-sm);
+    text-align: start;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    cursor: pointer;
+    transition:
+      background-color var(--transition-fast),
+      color var(--transition-fast);
+  }
+
+  .cd-side-nav-item:hover {
+    background: var(--state-hover);
+    color: var(--text-bright);
+  }
+
+  .cd-side-nav-item:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: -2px;
+  }
+
+  /* The containing section identifies the branch; only the current page is filled. */
+  .cd-side-nav-item[data-active-branch] {
+    color: var(--color-action);
+  }
+
+  .cd-side-nav-item[aria-current="page"] {
+    background: var(--state-selected);
+    border-inline-start-color: var(--color-action);
+    color: var(--color-action);
+  }
+
+  .cd-side-nav-icon {
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+  }
+
+  .cd-side-nav-label {
+    flex: 1;
+  }
+
+  .cd-side-nav-chevron {
+    width: 0.75rem;
+    height: 0.75rem;
+    flex: none;
+    transition: transform var(--transition-fast);
+  }
+
+  .cd-side-nav-item[aria-expanded="true"] .cd-side-nav-chevron {
+    transform: rotate(90deg);
+  }
+
+  .cd-side-nav-children {
+    margin-block: var(--space-1);
+    margin-inline-start: var(--space-6);
+    border-inline-start: 1px solid var(--border-subtle);
+  }
+
+  .cd-side-nav-child {
+    margin-inline-start: -1px;
+    width: calc(100% + 1px);
+    padding-inline-start: var(--space-6);
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  .sidebar-collapsed:not(:hover):not(:has(:focus-visible)) .cd-side-nav-item[data-active-branch] {
+    background: var(--state-selected);
+    border-inline-start-color: var(--color-action);
+  }
+
+  /* A compact rail exposes group icons, never invisible child hit targets. */
+  .sidebar-collapsed:not(:hover):not(:has(:focus-visible)) .cd-side-nav-item {
+    justify-content: center;
+    padding-inline: 0;
+    gap: 0;
+  }
+
+  .sidebar-collapsed:not(:hover):not(:has(:focus-visible))
+    :is(.cd-side-nav-item .sidebar-label, .cd-side-nav-chevron, .cd-side-nav-children) {
+    /* Icon utilities set display too; compact state must take precedence. */
+    display: none !important;
+  }
+}

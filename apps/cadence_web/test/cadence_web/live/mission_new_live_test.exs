@@ -8,111 +8,39 @@ defmodule CadenceWeb.MissionNewLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Missions.Mission
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  defp signed_in_conn do
+  test "authenticated organization members mount the core mission creation page" do
+    {conn, organization} = signed_in_org()
+
+    {:ok, view, _html} = live(conn, ~p"/missions/new")
+
+    snapshot =
+      HostTransportTestSupport.assert_context(view, %{
+        "application_key" => nil,
+        "surface_id" => nil,
+        "kind" => "mission",
+        "mission_page" => "mission_new",
+        "host_scope" => "organization",
+        "organization_id" => organization.organization_id,
+        "query_params" => %{}
+      })
+
+    assert %{"page" => "mission_new", "version" => 1, "status" => "ready"} =
+             snapshot["mission_page"]
+
+    assert is_binary(snapshot["mission_page"]["creation_token"])
+  end
+
+  test "unauthenticated requests redirect to sign in", %{conn: conn} do
+    assert {:error, {:redirect, %{to: "/sign-in"}}} = live(conn, ~p"/missions/new")
+  end
+
+  defp signed_in_org do
     user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _ = TestFixtures.grant_membership!(user, org)
-    {TestFixtures.member_conn(user), org}
-  end
-
-  describe "render" do
-    test "renders the empty form" do
-      {conn, _org} = signed_in_conn()
-
-      {:ok, _view, html} = live(conn, ~p"/missions/new")
-
-      assert html =~ "New Mission"
-      assert html =~ "Display Name"
-      assert html =~ "Slug"
-    end
-  end
-
-  describe "auto slug" do
-    test "derives slug from display_name on validate when slug is empty" do
-      {conn, _org} = signed_in_conn()
-
-      {:ok, view, _html} = live(conn, ~p"/missions/new")
-
-      html =
-        view
-        |> form("#mission-form", mission: %{display_name: "Alpha Mission", slug: ""})
-        |> render_change()
-
-      assert html =~ ~s(value="alpha-mission")
-    end
-
-    test "preserves user-entered slug even when display_name changes" do
-      {conn, _org} = signed_in_conn()
-
-      {:ok, view, _html} = live(conn, ~p"/missions/new")
-
-      view
-      |> form("#mission-form", mission: %{display_name: "Foo", slug: "custom-slug"})
-      |> render_change()
-
-      html =
-        view
-        |> form("#mission-form", mission: %{display_name: "Bar", slug: "custom-slug"})
-        |> render_change()
-
-      assert html =~ ~s(value="custom-slug")
-    end
-  end
-
-  describe "submit" do
-    test "creates the mission and navigates to its show page" do
-      {conn, org} = signed_in_conn()
-
-      {:ok, view, _html} = live(conn, ~p"/missions/new")
-
-      view
-      |> form("#mission-form", mission: %{display_name: "Alpha", slug: "alpha"})
-      |> render_submit()
-
-      {redirect_path, _flash} = assert_redirect(view)
-      assert redirect_path =~ ~r|^/missions/mission_|
-
-      assert [mission] = Cadence.Missions.list_missions(org.organization_id)
-      assert mission.slug == "alpha"
-      assert mission.display_name == "Alpha"
-    end
-
-    test "flashes an error when display_name is blank" do
-      {conn, _org} = signed_in_conn()
-
-      {:ok, view, _html} = live(conn, ~p"/missions/new")
-
-      html =
-        view
-        |> form("#mission-form", mission: %{display_name: "", slug: "alpha"})
-        |> render_submit()
-
-      assert html =~ "required"
-    end
-
-    test "flashes a humanized error when slug is already taken" do
-      {conn, org} = signed_in_conn()
-
-      existing =
-        Mission.new(%{
-          organization_id: org.organization_id,
-          slug: "alpha",
-          display_name: "Alpha"
-        })
-
-      assert {:ok, _} = Cadence.Missions.persist_mission(existing)
-
-      {:ok, view, _html} = live(conn, ~p"/missions/new")
-
-      html =
-        view
-        |> form("#mission-form", mission: %{display_name: "Alpha Two", slug: "alpha"})
-        |> render_submit()
-
-      assert html =~ "has already been taken"
-    end
+    organization = TestFixtures.persist_org!()
+    _membership = TestFixtures.grant_membership!(user, organization)
+    {TestFixtures.member_conn(user), organization}
   end
 end

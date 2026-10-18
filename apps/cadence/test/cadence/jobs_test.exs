@@ -3,7 +3,7 @@ defmodule Cadence.JobsTest do
 
   alias Cadence.Jobs.Runner, as: JobRunner
 
-  alias Cadence.Jobs.{BackgroundJobRow, Dispatcher, Job}
+  alias Cadence.Jobs.{BackgroundJobRow, Job}
 
   @dispatcher_event_prefix [:cadence, :jobs, :dispatcher]
   @dispatcher_events [
@@ -15,6 +15,33 @@ defmodule Cadence.JobsTest do
     [:cadence, :jobs, :dispatcher, :safety_dispatch_scheduled],
     [:cadence, :jobs, :dispatcher, :stale_timer]
   ]
+
+  test "transactional job staging requires a transaction and rolls back with its owner" do
+    assert_raise ArgumentError, "job staging requires an enclosing transaction", fn ->
+      Cadence.Jobs.enqueue_in_transaction(
+        :contact_schedule_operation,
+        "mission-alpha",
+        "intent",
+        %{}
+      )
+    end
+
+    assert {:error, :intent_rejected} =
+             Cadence.Repo.transaction(fn ->
+               assert {:ok, _} =
+                        Cadence.Jobs.enqueue_in_transaction(
+                          :contact_schedule_operation,
+                          "mission-alpha",
+                          "intent",
+                          %{}
+                        )
+
+               Cadence.Repo.rollback(:intent_rejected)
+             end)
+
+    assert {:error, :job_not_found} =
+             Cadence.Jobs.fetch_job_for_run(:contact_schedule_operation, "intent")
+  end
 
   test "requeues running jobs for recovery" do
     assert {:ok, job} =
@@ -141,12 +168,11 @@ defmodule Cadence.JobsTest do
              Cadence.Jobs.requeue_running_job(queued_job.job_id)
   end
 
-  test "enqueue notification wakes dispatcher without waiting for safety scan" do
+  test "availability fact wakes a nondefault dispatcher without waiting for safety scan" do
     attach_dispatcher_telemetry(self())
 
     runtime =
       start_job_runtime(
-        dispatcher_name: Dispatcher.default_name(),
         safety_poll_interval_ms: :timer.hours(1),
         max_concurrency: 1
       )

@@ -1,0 +1,8 @@
+@import "@cadence/ui/styles.css";
+@source "./";
+@source "../../../modules/commanding/src";
+@import "@cadence/ui/dashboard.css";
+@source "../../host/src/capability-management";
+@source "../../host/src/mission-and-spacecraft";
+
+@source "../../../modules/telemetry-decom/src";

@@ -8,137 +8,62 @@ defmodule CadenceWeb.SpacecraftProfileLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  defp signed_in_org_and_mission do
-    user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org, slug: "primary", display_name: "Primary Mission")
-    {TestFixtures.member_conn(user), org, mission}
+  test "authenticated profile list mounts the host profile directory" do
+    {conn, mission} = signed_in_mission()
+
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/profiles")
+
+    assert_surface(view, "spacecraft-type-list-page-component", "profile_list", mission, %{})
   end
 
-  describe "profile routes" do
-    test "spacecraft management page exposes vehicle and profile cards with scoped actions" do
-      {conn, _org, mission} = signed_in_org_and_mission()
-      profile = TestFixtures.persist_spacecraft_profile!(mission, display_name: "Aurora Bus")
-      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Aurora-1", scid: 42)
+  test "authenticated profile new mounts the host profile creation slice" do
+    {conn, mission} = signed_in_mission()
 
-      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/profiles/new")
 
-      assert has_element?(view, "#spacecraft-management-page")
-      assert has_element?(view, "#spacecraft-vehicles-card")
-      assert has_element?(view, "#spacecraft-profiles-card")
+    assert_surface(view, "spacecraft-profile-new-component", "profile_new", mission, %{})
+  end
 
-      assert has_element?(
-               view,
-               "#spacecraft-vehicles-card a[href='/missions/#{mission.mission_id}/spacecraft/new']",
-               "New spacecraft"
-             )
+  test "profile show forwards only its bounded profile query" do
+    {conn, mission} = signed_in_mission()
+    profile_id = "profile-test"
 
-      assert has_element?(
-               view,
-               "#spacecraft-profiles-card a[href='/missions/#{mission.mission_id}/spacecraft/profiles/new']",
-               "New profile"
-             )
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/profiles/#{profile_id}")
 
-      assert has_element?(view, "#spacecraft-vehicles-card td", spacecraft.display_name)
-      assert has_element?(view, "#spacecraft-profiles-card td", profile.display_name)
+    assert_surface(view, "spacecraft-profile-show-component", "profile_show", mission, %{
+      "profile_id" => profile_id
+    })
+  end
 
-      page_header =
-        view
-        |> element("#spacecraft-management-page > header:first-child")
-        |> render()
+  test "unauthenticated profile requests redirect to sign in" do
+    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+             live(build_conn(), "/missions/mission-test/spacecraft/profiles/profile-test")
+  end
 
-      refute page_header =~ "New spacecraft"
-      refute page_header =~ "New profile"
-    end
+  defp assert_surface(view, _id, surface_id, mission, query_params) do
+    ownership = %{"kind" => "spacecraft", "spacecraft_page" => surface_id}
 
-    test "mission sidebar keeps profiles under the spacecraft area" do
-      {conn, _org, mission} = signed_in_org_and_mission()
+    HostTransportTestSupport.assert_context(
+      view,
+      Map.merge(ownership, %{
+        "host_scope" => "mission",
+        "mission_id" => mission.mission_id,
+        "query_params" => query_params
+      })
+    )
+  end
 
-      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft")
-
-      refute has_element?(
-               view,
-               "nav a[href='/missions/#{mission.mission_id}/spacecraft/profiles']",
-               "Spacecraft Profiles"
-             )
-
-      assert has_element?(
-               view,
-               "nav a[href='/missions/#{mission.mission_id}/spacecraft']",
-               "Spacecraft"
-             )
-    end
-
-    test "lists spacecraft profiles using profile vocabulary" do
-      {conn, _org, mission} = signed_in_org_and_mission()
-      profile = TestFixtures.persist_spacecraft_profile!(mission, display_name: "Aurora Bus")
-
-      {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/profiles")
-
-      assert has_element?(
-               view,
-               "a[href='/missions/#{mission.mission_id}/spacecraft/profiles/new']"
-             )
-
-      assert has_element?(view, "td", profile.display_name)
-
-      page = render(view)
-      assert page =~ "Spacecraft Profiles"
-      refute page =~ "Spacecraft Types"
-    end
-
-    test "creates a spacecraft profile and redirects to the profile show page" do
-      {conn, org, mission} = signed_in_org_and_mission()
-
-      {:ok, view, _html} =
-        live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/profiles/new")
-
-      assert has_element?(view, "#spacecraft-profile-new-page")
-      assert has_element?(view, "#spacecraft-profile-form")
-      assert has_element?(view, "#spacecraft-profile-application-telemetry_decom")
-      refute has_element?(view, "#spacecraft-profile-application-cfdp")
-
-      assert {:error, {:live_redirect, %{to: target}}} =
-               view
-               |> form("#spacecraft-profile-form",
-                 spacecraft_type: %{
-                   display_name: "Lab TM/TC",
-                   downlink_protocol: "tm",
-                   uplink_protocol: "tc",
-                   frame_size: "1024",
-                   secondary_header_length: "0",
-                   ocf_length: "0",
-                   applications: %{"telemetry_decom" => "1"}
-                 }
-               )
-               |> render_submit()
-
-      assert target =~ "/missions/#{mission.mission_id}/spacecraft/profiles/"
-
-      [persisted] =
-        Cadence.SpacecraftTypeStore.list_spacecraft_types(org.organization_id, mission.mission_id)
-
-      assert persisted.display_name == "Lab TM/TC"
-      assert target =~ persisted.spacecraft_type_id
-    end
-
-    test "shows a spacecraft profile" do
-      {conn, _org, mission} = signed_in_org_and_mission()
-      profile = TestFixtures.persist_spacecraft_profile!(mission, display_name: "Aurora Bus")
-
-      {:ok, view, html} =
-        live(
-          conn,
-          ~p"/missions/#{mission.mission_id}/spacecraft/profiles/#{profile.spacecraft_type_id}"
-        )
-
-      assert has_element?(view, "a[href='/missions/#{mission.mission_id}/spacecraft/profiles']")
-      assert html =~ "Aurora Bus"
-      assert html =~ "Byte Interpretation"
-      refute html =~ "Spacecraft Type"
-    end
+  defp signed_in_mission do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    {TestFixtures.member_conn(user), mission}
   end
 end

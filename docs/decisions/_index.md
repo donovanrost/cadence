@@ -2,7 +2,7 @@
 title: Architecture Decision Records
 tags: [decisions, adr, index]
 created: 2026-03-28
-updated: 2026-08-21
+updated: 2026-08-23
 status: active
 ---
 
@@ -40,6 +40,8 @@ Legacy ADRs remain under
 | [ADR-020](020-xtce-informed-mission-model-intermediate-representation.md) | XTCE-Informed Mission Model Intermediate Representation | Accepted |
 | [ADR-021](021-monorepo-poncho-project-and-package-layout.md) | Monorepo Poncho Project and Package Layout | Accepted |
 | [ADR-022](022-standalone-xtce-library-boundary.md) | Standalone XTCE Library Boundary | Accepted |
+| [ADR-023](023-first-party-frontend-federation-transport.md) | First-Party Frontend Federation Transport | Accepted |
+| [ADR-024](024-host-composition-and-vertical-frontend-modules.md) | Host Composition and Vertical Frontend Modules | Accepted |
 
 ## Proposed Decisions
 

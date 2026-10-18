@@ -11,7 +11,7 @@ defmodule Mix.Tasks.Cadence.Architecture.Check do
     * `--production-file-limit` - production `.ex` line limit, defaults to 1000
     * `--test-file-limit` - test source line limit, defaults to 1500
     * `--test-function-limit` - individual `test` block line limit, defaults to 300
-    * `--xref-json` - read a prepared core xref JSON graph instead of generating one
+    * `--xref-json` - verify a prepared JSON graph against current domain and web compiler references
     * `--skip-dependencies` - run only the advisory source-size diagnostic
     * `--summary` - print counts without listing every finding
     * `--strict` - fail when any source-size finding is present
@@ -19,7 +19,7 @@ defmodule Mix.Tasks.Cadence.Architecture.Check do
 
   use Mix.Task
 
-  alias Cadence.Architecture.{DependencyBoundary, SourceSize}
+  alias Cadence.Architecture.{CompiledGraph, DependencyBoundary, SourceSize}
 
   @shortdoc "Check architecture size and dependency boundaries"
 
@@ -140,39 +140,57 @@ defmodule Mix.Tasks.Cadence.Architecture.Check do
   end
 
   defp load_xref_graph!(repo_root, opts) do
+    build_path = compile_web_project!(repo_root)
+    current = CompiledGraph.load!(repo_root, build_path)
+
+    Mix.shell().info(
+      "Architecture production coverage: #{map_size(current)} domain and web sources, " <>
+        "#{Enum.sum(Enum.map(current, fn {_, references} -> map_size(references) end))} dependencies, MIX_ENV=#{Mix.env()}."
+    )
+
     case opts[:xref_json] do
-      nil -> generate_xref_graph!(repo_root)
-      path -> path |> File.read!() |> Jason.decode!()
+      nil -> current
+      path -> path |> File.read!() |> Jason.decode!() |> CompiledGraph.validate_prepared!(current)
     end
   end
 
-  defp generate_xref_graph!(repo_root) do
-    output_path =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence-xref-#{System.unique_integer([:positive, :monotonic])}.json"
+  defp compile_web_project!(repo_root) do
+    # Compiling this dependent project also compiles Cadence. Keep the caller's
+    # environment and build configuration; never substitute the empty workspace
+    # root manifest or switch to a development graph.
+    project_command!(repo_root, ["compile", "--warnings-as-errors"])
+    marker = "CADENCE_ARCHITECTURE_BUILD_PATH:"
+
+    output =
+      project_command!(repo_root, [
+        "run",
+        "--no-start",
+        "--no-compile",
+        "-e",
+        "IO.puts(\"#{marker}\" <> Mix.Project.build_path())"
+      ])
+
+    case output
+         |> String.split("\n", trim: true)
+         |> Enum.filter(&String.starts_with?(&1, marker)) do
+      [line] -> String.replace_prefix(line, marker, "")
+      _ -> Mix.raise("Could not locate the compiled web project build path.")
+    end
+  end
+
+  defp project_command!(repo_root, arguments) do
+    {output, status} =
+      System.cmd("mix", arguments,
+        cd: Path.join(repo_root, "apps/cadence_web"),
+        env: [
+          {"MIX_ENV", Atom.to_string(Mix.env())},
+          {"MIX_TARGET", Atom.to_string(Mix.target())}
+        ],
+        stderr_to_stdout: true
       )
 
-    try do
-      {_output, status} =
-        System.cmd(
-          "mix",
-          ["xref", "graph", "--format", "json", "--output", output_path],
-          cd: repo_root,
-          env: [{"MIX_ENV", "dev"}],
-          stderr_to_stdout: true
-        )
-
-      if status != 0 do
-        Mix.raise("Could not generate the core xref dependency graph.")
-      end
-
-      output_path
-      |> File.read!()
-      |> Jason.decode!()
-    after
-      File.rm(output_path)
-    end
+    if status != 0, do: Mix.raise("Could not inspect compiled production sources:\n" <> output)
+    output
   end
 
   defp maybe_raise_dependency_failure!(:skipped), do: :ok

@@ -1,0 +1,52 @@
+{
+  "name": "@cadence/frontend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp run -r --parallel dev",
+    "build": "vp run -r build",
+    "build:publication": "node tools/build-first-party-publication.mjs && node tools/production-publication-output-check.mjs",
+    "release:package": "node tools/frontend-release-package.mjs",
+    "test:publication": "node tools/production-publication-output-check.mjs",
+    "test:browser:contract": "node --test tools/phoenix/federation_browser_smoke_contract.test.mjs tools/phoenix/federation_browser_smoke_hardening.test.mjs tools/phoenix/federation_publication_build_lock.test.mjs",
+    "preview": "node tools/production-server.ts",
+    "check": "vp check && corepack pnpm typecheck && corepack pnpm lint:structure",
+    "test": "corepack pnpm -r --if-present test && corepack pnpm test:tools && corepack pnpm test:transport",
+    "storybook": "corepack pnpm --filter @cadence/storybook storybook",
+    "storybook:build": "corepack pnpm --filter @cadence/storybook build-storybook",
+    "storybook:test": "corepack pnpm --filter @cadence/storybook test",
+    "test:transport": "node --test tools/phoenix/*.test.mjs",
+    "typecheck": "node tools/typecheck-workspace.mjs",
+    "test:typecheck": "node --test tools/typecheck-workspace.test.mjs",
+    "verify": "corepack pnpm check && corepack pnpm test",
+    "test:tools": "node --test tools/*.test.mjs",
+    "lint:structure": "ast-grep test --config sgconfig.yml --skip-snapshot-tests && ast-grep scan --config sgconfig.yml",
+    "test:structure": "ast-grep test --config sgconfig.yml --skip-snapshot-tests && node --test tools/structural-rules.test.mjs",
+    "test:producers": "node tools/producer-contracts.mjs",
+    "routes:generate": "node tools/generate-route-types.mjs"
+  },
+  "devDependencies": {
+    "@ast-grep/cli": "0.45.3",
+    "@tailwindcss/vite": "4.1.12",
+    "@types/node": "^24.13.3",
+    "playwright": "catalog:",
+    "typescript": "~6.0.2",
+    "vite-plus": "catalog:",
+    "vue": "catalog:",
+    "vue-tsc": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.22.0",
+      "onFail": "download"
+    },
+    "runtime": {
+      "name": "node",
+      "version": "24.16.0",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@11.22.0"
+}

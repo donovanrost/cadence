@@ -183,21 +183,46 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicies do
   @spec fetch_active(binary(), binary()) ::
           {:ok, FleetPlanningPolicy.t(), FleetPlanningPolicyVersion.t()} | {:error, term()}
   def fetch_active(organization_id, mission_id) do
-    case Repo.get_by(FleetPlanningPolicyRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           lifecycle_state: "active"
-         ) do
-      %FleetPlanningPolicyRow{active_version: version} = row when is_integer(version) ->
-        with {:ok, version_row} <- fetch_version_row(row, version) do
-          {:ok, FleetPlanningPolicyRow.to_domain(row),
-           FleetPlanningPolicyVersionRow.to_domain(version_row)}
-        end
+    FleetPlanningPolicyRow
+    |> Repo.get_by(
+      organization_id: organization_id,
+      mission_id: mission_id,
+      lifecycle_state: "active"
+    )
+    |> active_version_result()
+  end
 
-      _row ->
-        {:error, :active_fleet_planning_policy_not_found}
+  @doc """
+  Locks the active policy against version activation or retirement until the
+  caller's transaction finishes. Used when issuing authority for that policy.
+  """
+  @spec fetch_active_locked(binary(), binary()) ::
+          {:ok, FleetPlanningPolicy.t(), FleetPlanningPolicyVersion.t()} | {:error, term()}
+  def fetch_active_locked(organization_id, mission_id) do
+    if Repo.in_transaction?() do
+      FleetPlanningPolicyRow
+      |> where(
+        [policy],
+        policy.organization_id == ^organization_id and policy.mission_id == ^mission_id and
+          policy.lifecycle_state == "active"
+      )
+      |> lock("FOR SHARE")
+      |> Repo.one()
+      |> active_version_result()
+    else
+      {:error, :fleet_planning_policy_transaction_required}
     end
   end
+
+  defp active_version_result(%FleetPlanningPolicyRow{active_version: version} = row)
+       when is_integer(version) do
+    with {:ok, version_row} <- fetch_version_row(row, version) do
+      {:ok, FleetPlanningPolicyRow.to_domain(row),
+       FleetPlanningPolicyVersionRow.to_domain(version_row)}
+    end
+  end
+
+  defp active_version_result(_), do: {:error, :active_fleet_planning_policy_not_found}
 
   @spec fetch_version(binary(), binary(), binary(), pos_integer()) ::
           {:ok, FleetPlanningPolicyVersion.t()} | {:error, term()}

@@ -15,6 +15,44 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(current_scope, organization_id, :organization_admin)
   end
 
+  # Settings and activation review use named policy actions. The initial policy
+  # admits active human members; customer approval requirements never assign a
+  # built-in role. These action boundaries are the future Cedar integration.
+  def authorize(%Scope{actor_kind: :user} = scope, action, %{
+        organization_id: organization_id,
+        mission_id: mission_id
+      })
+      when action in [:read_settings, :manage_settings] do
+    if is_nil(mission_id) do
+      authorize(scope, :operate_organization, %{organization_id: organization_id})
+    else
+      authorize(scope, :operate_mission, %{
+        organization_id: organization_id,
+        mission_id: mission_id
+      })
+    end
+  end
+
+  def authorize(%Scope{}, action, _params) when action in [:read_settings, :manage_settings],
+    do: {:error, :authenticated_user_required}
+
+  def authorize(%Scope{} = current_scope, :operate_organization, %{
+        organization_id: organization_id
+      }) do
+    case current_scope.actor_kind do
+      :user ->
+        with :ok <- authenticated_user(current_scope) do
+          authorized_mission_organization(current_scope, organization_id)
+        end
+
+      :service ->
+        {:error, :authenticated_user_required}
+
+      _invalid_actor ->
+        {:error, :authenticated_user_required}
+    end
+  end
+
   def authorize(%Scope{} = current_scope, :manage_provider_accounts, %{
         organization_id: organization_id
       }) do
@@ -64,7 +102,30 @@ defmodule Cadence.Auth.Policy do
 
       :service ->
         authorize_service_mission(current_scope, organization_id, mission_id)
+
+      _invalid_actor ->
+        {:error, :authenticated_user_required}
     end
+  end
+
+  def authorize(%Scope{} = current_scope, :read_application_catalog, %{
+        organization_id: organization_id,
+        mission_id: mission_id
+      }) do
+    authorize(current_scope, :operate_mission, %{
+      organization_id: organization_id,
+      mission_id: mission_id
+    })
+  end
+
+  def authorize(%Scope{} = current_scope, :read_legacy_application, %{
+        organization_id: organization_id,
+        mission_id: mission_id
+      }) do
+    authorize(current_scope, :operate_mission, %{
+      organization_id: organization_id,
+      mission_id: mission_id
+    })
   end
 
   # Dashboard authoring deliberately starts with the existing mission-operator
@@ -90,7 +151,7 @@ defmodule Cadence.Auth.Policy do
         organization_id: organization_id,
         mission_id: mission_id
       }) do
-    authorize(current_scope, :manage_mission, %{
+    authorize(current_scope, :operate_mission, %{
       organization_id: organization_id,
       mission_id: mission_id
     })

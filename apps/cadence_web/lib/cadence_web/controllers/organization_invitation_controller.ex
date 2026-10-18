@@ -2,11 +2,13 @@ defmodule CadenceWeb.OrganizationInvitationController do
   use CadenceWeb, :controller
 
   import Phoenix.Component, only: [to_form: 2]
+  import Phoenix.LiveView.Controller, only: [live_render: 3]
 
   alias CadenceWeb.API.IdentityParams, as: IdentityParams
 
   alias Cadence.Auth.Scope
   alias CadenceWeb.AuthenticatedEntry
+  alias Phoenix.HTML.Form
 
   def show(conn, %{"invitation_token" => invitation_token}) do
     case invitation_assigns(invitation_token) do
@@ -84,8 +86,28 @@ defmodule CadenceWeb.OrganizationInvitationController do
 
   defp render_invitation(conn, assigns, error_message) do
     conn
-    |> put_layout(html: {CadenceWeb.Layouts, :auth})
-    |> render(:show, Map.merge(assigns, %{error_message: error_message}))
+    |> put_layout(false)
+    |> live_render(CadenceWeb.OrganizationInvitationLive,
+      session: live_session(conn, invitation_page(assigns, error_message)),
+      container: {:div, class: "contents"}
+    )
+  end
+
+  defp invitation_page(assigns, error_message) do
+    %{
+      version: 1,
+      csrf_token: Plug.CSRFProtection.get_csrf_token(),
+      token: assigns.invitation_token,
+      available: assigns.invitation_available?,
+      error: error_message,
+      display_name: Form.input_value(assigns.form, :display_name) || "",
+      organization:
+        if(assigns.organization, do: Map.take(assigns.organization, [:display_name, :slug])),
+      invitation:
+        if(assigns.invitation,
+          do: Map.take(assigns.invitation, [:email, :membership_role, :grant_platform_admin])
+        )
+    }
   end
 
   defp invitation_assigns(invitation_token) when is_binary(invitation_token) do
@@ -176,5 +198,14 @@ defmodule CadenceWeb.OrganizationInvitationController do
     conn
     |> configure_session(renew: true)
     |> clear_session()
+  end
+
+  defp live_session(conn, page) do
+    %{
+      "admin_mode_expires_at" => get_session(conn, :admin_mode_expires_at),
+      "current_organization_id" => get_session(conn, :current_organization_id),
+      "user_session_token" => get_session(conn, :user_session_token),
+      "page" => page
+    }
   end
 end

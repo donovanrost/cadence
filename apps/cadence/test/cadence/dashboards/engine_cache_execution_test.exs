@@ -1,5 +1,7 @@
 defmodule Cadence.Dashboards.EngineCacheExecutionTest do
-  use Cadence.UnitCase, async: true
+  # Keep short wall-clock deadlines independent of unrelated async test load.
+  # Provider requests still execute concurrently within each test.
+  use Cadence.UnitCase, async: false
 
   import Cadence.Dashboards.EngineFixtures
 
@@ -74,6 +76,14 @@ defmodule Cadence.Dashboards.EngineCacheExecutionTest do
       )
 
     assert source_cache_statuses(second) == [:hit, :hit]
+
+    assert second.resolved_bindings_by_request_id == first.resolved_bindings_by_request_id
+
+    assert [telemetry_binding] =
+             second.resolved_bindings_by_request_id[telemetry_request.request_id]
+
+    assert telemetry_binding.binding.binding_id == "default_flight_telemetry"
+    refute Map.has_key?(second.plan_metadata, :resolved_bindings_by_request_id)
 
     assert source_cache_entry_by_source(second, :telemetry).capability_provenance ==
              telemetry_provenance

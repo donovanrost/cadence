@@ -16,49 +16,123 @@ defmodule Cadence.Reads.MissionTimeline do
   @spec list_for_mission(binary(), binary(), keyword()) :: [Entry.t()]
   def list_for_mission(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    page_for_mission(organization_id, mission_id, opts).entries
+  end
+
+  @doc "Reads a bounded portion of canonical history with a stable exclusive continuation."
+  def page_for_mission(organization_id, mission_id, opts \\ []) do
     limit = Keyword.get(opts, :limit, 100)
     source_limit = max(limit * 4, 1_000)
 
-    projected_entries =
+    projected =
       MissionEvents.list_for_mission(
         organization_id,
         mission_id,
-        projected_read_opts(opts, source_limit)
+        projected_read_opts(opts, source_limit + 1)
       )
 
+    operational =
+      OperationalEvents.list_events(
+        organization_id,
+        mission_id,
+        operational_read_opts(opts, source_limit + 1)
+      )
+
+    {projected, projected_frontier} = portion(projected, source_limit, &cursor/1)
+
+    {operational, operational_frontier} =
+      portion(operational, source_limit, &operational_cursor/1)
+
+    frontier =
+      [projected_frontier, operational_frontier]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.max_by(&cursor_key/1, fn -> nil end)
+
     operational_entries =
-      organization_id
-      |> OperationalEvents.list_events(mission_id, operational_read_opts(opts, source_limit))
-      |> Enum.flat_map(&MissionEventProjection.project_operational_event/1)
+      Enum.flat_map(operational, &MissionEventProjection.project_operational_event/1)
 
-    endpoint_spacecraft = endpoint_spacecraft(organization_id, mission_id, opts)
+    overrides =
+      MissionEvents.fetch_many_for_mission(
+        organization_id,
+        mission_id,
+        Enum.map(operational_entries, & &1.mission_event_id)
+      )
 
-    operational_entries
-    |> then(&(&1 ++ projected_entries))
-    |> Map.new(&{&1.mission_event_id, &1})
-    |> Map.values()
-    |> Enum.map(&enrich_spacecraft(&1, endpoint_spacecraft))
-    |> Enum.filter(&matches?(&1, opts))
-    |> Enum.sort_by(
-      fn entry ->
-        {DateTime.to_unix(entry.occurred_at, :microsecond), entry.mission_event_id}
-      end,
-      :desc
-    )
-    |> Enum.take(limit)
+    entries =
+      (operational_entries ++ overrides ++ projected)
+      |> Map.new(&{&1.mission_event_id, &1})
+      |> Map.values()
+
+    endpoints = endpoint_spacecraft(organization_id, mission_id, entries)
+
+    matching =
+      entries
+      |> Enum.map(&enrich_spacecraft(&1, endpoints))
+      |> Enum.filter(
+        &(matches?(&1, opts) and before_cursor?(&1, Keyword.get(opts, :cursor)) and
+            covered?(&1, frontier))
+      )
+      |> Enum.sort_by(&entry_key/1, :desc)
+
+    visible = Enum.take(matching, limit)
+
+    next_cursor =
+      cond do
+        length(matching) > limit and visible != [] -> cursor(List.last(visible))
+        frontier != nil and visible != [] -> cursor(List.last(visible))
+        frontier != nil -> frontier
+        true -> nil
+      end
+
+    %{entries: visible, next_cursor: next_cursor}
   end
+
+  defp portion(entries, limit, to_cursor) do
+    visible = Enum.take(entries, limit)
+    frontier = if length(entries) > limit, do: to_cursor.(List.last(visible)), else: nil
+    {visible, frontier}
+  end
+
+  defp cursor(entry),
+    do: %{occurred_at: entry.occurred_at, mission_event_id: entry.mission_event_id}
+
+  defp operational_cursor(event),
+    do: %{
+      occurred_at: event.effective_at || event.occurred_at,
+      mission_event_id: "mission_event:" <> event.event_id
+    }
+
+  defp entry_key(entry),
+    do: {DateTime.to_unix(entry.occurred_at, :microsecond), entry.mission_event_id}
+
+  defp cursor_key(cursor),
+    do: {DateTime.to_unix(cursor.occurred_at, :microsecond), cursor.mission_event_id}
+
+  defp covered?(_entry, nil), do: true
+  defp covered?(entry, frontier), do: entry_key(entry) >= cursor_key(frontier)
+  defp before_cursor?(_entry, nil), do: true
+  defp before_cursor?(entry, cursor), do: entry_key(entry) < cursor_key(cursor)
 
   @spec fetch_for_mission(binary(), binary(), binary()) ::
           {:ok, Entry.t()} | {:error, :mission_event_not_found}
   def fetch_for_mission(organization_id, mission_id, mission_event_id)
       when is_binary(organization_id) and is_binary(mission_id) and
              is_binary(mission_event_id) do
-    case MissionEvents.fetch_for_mission(organization_id, mission_id, mission_event_id) do
-      {:ok, %Entry{} = entry} ->
-        {:ok, entry}
+    result =
+      case MissionEvents.fetch_for_mission(organization_id, mission_id, mission_event_id) do
+        {:ok, %Entry{} = entry} ->
+          {:ok, entry}
 
-      {:error, :mission_event_not_found} ->
-        fetch_operational_event(organization_id, mission_id, mission_event_id)
+        {:error, :mission_event_not_found} ->
+          fetch_operational_event(organization_id, mission_id, mission_event_id)
+      end
+
+    case result do
+      {:ok, entry} ->
+        {:ok, enrich_spacecraft(entry, endpoint_spacecraft(organization_id, mission_id, [entry]))}
+
+      error ->
+        error
     end
   end
 
@@ -87,7 +161,7 @@ defmodule Cadence.Reads.MissionTimeline do
       :category,
       :kind,
       :severity,
-      :spacecraft_id,
+      :cursor,
       :from_occurred_at,
       :to_occurred_at
     ])
@@ -97,8 +171,9 @@ defmodule Cadence.Reads.MissionTimeline do
 
   defp operational_read_opts(opts, source_limit) do
     opts
-    |> Keyword.take([:kind, :severity, :from_occurred_at, :to_occurred_at])
-    |> maybe_put(:category, operational_categories(Keyword.get(opts, :category)))
+    |> Keyword.take([:kind, :from_occurred_at, :to_occurred_at, :cursor])
+    |> Keyword.put(:category, operational_categories(Keyword.get(opts, :category)))
+    |> Keyword.put(:time_axis, :effective)
     |> Keyword.put(:limit, source_limit)
     |> Keyword.put(:order, :desc)
   end
@@ -106,34 +181,23 @@ defmodule Cadence.Reads.MissionTimeline do
   defp operational_categories(nil), do: nil
 
   defp operational_categories(categories) do
-    categories = List.wrap(categories)
+    categories = Enum.map(List.wrap(categories), &to_string/1)
 
-    if Enum.any?(categories, &(to_string(&1) == "runtime")) do
-      nil
-    else
-      categories
-      |> Enum.flat_map(&operational_category/1)
-      |> Enum.uniq()
-    end
+    if "runtime" in categories,
+      do: nil,
+      else: Enum.flat_map(categories, &operational_category/1) |> Enum.uniq()
   end
 
-  defp operational_category(category) do
-    case to_string(category) do
-      "operations" -> [:contact, :commanding, :dashboard]
-      "health" -> [:limits, :data_source, :source_credential]
-      "transport" -> [:comms]
-      _unknown -> []
-    end
-  end
+  defp operational_category("operations"), do: [:contact, :commanding, :dashboard]
+  defp operational_category("health"), do: [:limits, :data_source, :source_credential]
+  defp operational_category("transport"), do: [:comms]
+  defp operational_category(_), do: []
 
-  defp endpoint_spacecraft(organization_id, mission_id, opts) do
-    if is_binary(Keyword.get(opts, :spacecraft_id)) do
-      organization_id
-      |> SourceEndpoints.list_source_endpoints(mission_id)
-      |> Map.new(&{&1.source_endpoint_id, &1.spacecraft_id})
-    else
-      %{}
-    end
+  defp endpoint_spacecraft(organization_id, mission_id, entries) do
+    ids =
+      entries |> Enum.filter(&is_nil(&1.spacecraft_id)) |> Enum.flat_map(&source_endpoint_refs/1)
+
+    SourceEndpoints.spacecraft_for_source_endpoints(organization_id, mission_id, ids)
   end
 
   defp enrich_spacecraft(%Entry{spacecraft_id: nil} = entry, endpoint_spacecraft) do
@@ -152,22 +216,24 @@ defmodule Cadence.Reads.MissionTimeline do
 
   defp enrich_spacecraft(%Entry{} = entry, _endpoint_spacecraft), do: entry
 
-  defp source_endpoint_refs(%Entry{metadata: metadata}) when is_map(metadata) do
-    scope = Map.get(metadata, "scope") || Map.get(metadata, :scope) || %{}
-    payload = Map.get(metadata, "payload") || Map.get(metadata, :payload) || %{}
+  defp source_endpoint_refs(%Entry{} = entry) do
+    metadata = if is_map(entry.metadata), do: entry.metadata, else: %{}
+    scope = map_value(metadata, "scope", :scope)
+    payload = map_value(metadata, "payload", :payload)
 
-    (Map.get(scope, :source_endpoint_refs) ||
-       Map.get(scope, "source_endpoint_refs") ||
-       Map.get(payload, :source_endpoint_refs) ||
-       Map.get(payload, "source_endpoint_refs") || [])
-    |> List.wrap()
+    references =
+      map_value(scope, "source_endpoint_refs", :source_endpoint_refs) ||
+        map_value(payload, "source_endpoint_refs", :source_endpoint_refs) || []
+
+    [entry.source_endpoint_ref | List.wrap(references)]
+    |> Enum.filter(&is_binary/1)
+    |> Enum.uniq()
   end
 
-  defp source_endpoint_refs(%Entry{}), do: []
+  defp map_value(map, string_key, atom_key) when is_map(map),
+    do: Map.get(map, string_key) || Map.get(map, atom_key)
 
-  defp maybe_put(opts, _key, nil), do: opts
-  defp maybe_put(opts, _key, []), do: opts
-  defp maybe_put(opts, key, value), do: Keyword.put(opts, key, value)
+  defp map_value(_, _, _), do: nil
 
   defp matches?(entry, opts) do
     atom_matches?(entry.category, Keyword.get(opts, :category)) and

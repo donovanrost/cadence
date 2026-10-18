@@ -1,0 +1,10 @@
+export { default as SpacecraftList } from "./features/spacecraft-directory/SpacecraftList.vue";
+export { default as SpacecraftListPage } from "./features/spacecraft-directory/SpacecraftListPage.vue";
+export { default as SpacecraftTypeList } from "./features/spacecraft-profiles/SpacecraftTypeList.vue";
+export { default as SpacecraftTypeListPage } from "./features/spacecraft-profiles/SpacecraftTypeListPage.vue";
+export { default as SpacecraftTypeShow } from "./features/spacecraft-profiles/SpacecraftTypeShow.vue";
+export { default as SpacecraftNew } from "./features/spacecraft-identity/SpacecraftIdentityForm.vue";
+export { default as SpacecraftEdit } from "./features/spacecraft-identity/SpacecraftIdentityForm.vue";
+export { default as SpacecraftTypeNew } from "./features/profile-creation/SpacecraftTypeNew.vue";
+export { default as SpacecraftShow } from "./features/spacecraft-overview/SpacecraftShow.vue";
+export { default as SpacecraftReadiness } from "./features/spacecraft-readiness/SpacecraftReadiness.vue";

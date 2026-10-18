@@ -52,6 +52,7 @@ defmodule Cadence.Commanding.StagedCommandItemRow do
     |> cast(domain_attrs(staged_command_item), all_fields())
     |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
+    |> unique_constraint(:staged_command_item_id, name: :staged_command_items_pkey)
     |> validate_number(:priority, greater_than_or_equal_to: 0)
     |> validate_number(:item_order, greater_than_or_equal_to: 0)
     |> unique_constraint([:mission_id, :staged_command_item_id],

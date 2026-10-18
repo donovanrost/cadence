@@ -7,6 +7,7 @@ defmodule Cadence.Applications.SurfaceDefinition do
   """
 
   alias Cadence.Applications.ActionDefinition
+  alias Cadence.Applications.ApplicationDependency
   alias Cadence.Extensions.Presentation.ReferenceDefinition
 
   @type purpose ::
@@ -43,7 +44,8 @@ defmodule Cadence.Applications.SurfaceDefinition do
           references: %{optional(binary()) => ReferenceDefinition.t()},
           actions: [binary()],
           refresh: refresh(),
-          renderer: renderer()
+          renderer: renderer(),
+          required_application: ApplicationDependency.t() | nil
         }
 
   @enforce_keys [
@@ -64,6 +66,7 @@ defmodule Cadence.Applications.SurfaceDefinition do
     :placement,
     :subject_contract,
     :renderer,
+    :required_application,
     navigation: %{},
     data_contract: %{},
     references: %{},
@@ -80,7 +83,7 @@ defmodule Cadence.Applications.SurfaceDefinition do
     :subject_detail,
     :activity
   ]
-  @scopes [:organization, :mission, :spacecraft, :source_endpoint, :transport]
+  @scopes [:organization, :user, :admin, :mission, :spacecraft, :source_endpoint, :transport]
   @placements [:application_workspace, :ops_workspace, :ops_dock, :administration]
   @max_references 32
   @max_actions 32
@@ -99,7 +102,7 @@ defmodule Cadence.Applications.SurfaceDefinition do
          true <- valid_actions?(surface.actions),
          true <- valid_refresh?(surface.refresh),
          true <- valid_renderer?(surface.renderer) do
-      :ok
+      validate_required_application(surface.required_application)
     else
       _invalid -> {:error, :invalid_application_surface_definition}
     end
@@ -107,15 +110,34 @@ defmodule Cadence.Applications.SurfaceDefinition do
 
   def validate(_surface), do: {:error, :invalid_application_surface_definition}
 
+  defp validate_required_application(nil), do: :ok
+
+  defp validate_required_application(
+         %ApplicationDependency{scope: :same_host, required: true} = dependency
+       ) do
+    case ApplicationDependency.validate(dependency) do
+      :ok -> :ok
+      _invalid -> {:error, :invalid_application_surface_definition}
+    end
+  end
+
+  defp validate_required_application(_dependency),
+    do: {:error, :invalid_application_surface_definition}
+
   defp valid_subject_contract?(nil), do: true
 
   defp valid_subject_contract?(contract),
     do: valid_versioned_contract?(contract, :schema_id)
 
   defp valid_navigation?(navigation) when is_map(navigation) do
-    Enum.all?(Map.keys(navigation), &(&1 in [:label, :order])) and
+    Enum.all?(
+      Map.keys(navigation),
+      &(&1 in [:label, :order, :fallback_path, :fallback_parent_path])
+    ) and
       optional_text?(Map.get(navigation, :label)) and
-      optional_integer?(Map.get(navigation, :order))
+      optional_integer?(Map.get(navigation, :order)) and
+      optional_path?(Map.get(navigation, :fallback_path)) and
+      optional_path?(Map.get(navigation, :fallback_parent_path))
   end
 
   defp valid_navigation?(_navigation), do: false
@@ -167,4 +189,9 @@ defmodule Cadence.Applications.SurfaceDefinition do
   defp valid_text?(value), do: is_binary(value) and value != ""
   defp optional_text?(nil), do: true
   defp optional_text?(value), do: is_binary(value)
+
+  defp optional_path?(nil), do: true
+
+  defp optional_path?(value),
+    do: is_binary(value) and value != "" and String.starts_with?(value, "/")
 end

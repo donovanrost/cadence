@@ -1,5 +1,12 @@
 defmodule CadenceWeb.UserNotifier do
   @moduledoc false
+  @behaviour Cadence.Accounts.InvitationDelivery
+
+  @impl true
+  def deliver(invitation, organization, token) do
+    url = CadenceWeb.Endpoint.url() <> "/invitations/" <> URI.encode_www_form(token)
+    deliver_organization_invitation(invitation, organization, url)
+  end
 
   import Swoosh.Email
 

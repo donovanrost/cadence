@@ -8,6 +8,7 @@ defmodule Cadence.Comms.GroundStationStore do
   alias Ecto.Changeset
 
   alias Cadence.Comms.{GroundStation, GroundStationRow}
+  alias Cadence.Listing
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
@@ -71,6 +72,38 @@ defmodule Cadence.Comms.GroundStationStore do
     |> order_by([row], asc: row.display_name, asc: row.ground_station_id)
     |> Repo.all()
     |> Enum.map(&GroundStationRow.to_domain/1)
+  end
+
+  @doc "Returns one bounded page of active mission ground stations."
+  @spec list_ground_stations_page(binary(), binary(), keyword()) :: Listing.Page.t()
+  def list_ground_stations_page(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    %{page: page, page_size: page_size, offset: offset} = Listing.page_opts(opts)
+    direction = if Keyword.get(opts, :direction) == :desc, do: :desc, else: :asc
+
+    filtered =
+      GroundStationRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.lifecycle_state == "active"
+      )
+      |> apply_ground_station_search(Keyword.get(opts, :search))
+
+    items =
+      filtered
+      |> order_by(^[{direction, :display_name}, {:asc, :ground_station_id}])
+      |> limit(^page_size)
+      |> offset(^offset)
+      |> Repo.all()
+      |> Enum.map(&GroundStationRow.to_domain/1)
+
+    %Listing.Page{
+      items: items,
+      total_count: Repo.aggregate(filtered, :count),
+      page: page,
+      page_size: page_size
+    }
   end
 
   @spec update_ground_station(binary(), binary(), binary(), map()) ::
@@ -147,6 +180,22 @@ defmodule Cadence.Comms.GroundStationStore do
     else
       {:error, changeset}
     end
+  end
+
+  defp apply_ground_station_search(query, nil), do: query
+  defp apply_ground_station_search(query, ""), do: query
+
+  defp apply_ground_station_search(query, search) when is_binary(search) do
+    pattern = "%" <> Listing.escape_like(search) <> "%"
+
+    where(
+      query,
+      [row],
+      ilike(row.display_name, ^pattern) or
+        ilike(row.ground_station_id, ^pattern) or
+        ilike(row.provider, ^pattern) or
+        ilike(row.region, ^pattern)
+    )
   end
 
   defp put_organization_scope(%GroundStation{} = ground_station, organization_id)

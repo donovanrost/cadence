@@ -43,6 +43,89 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
     %{scope: scope, host_context: host_context}
   end
 
+  test "platform modules cannot acquire or change installation lifecycle", %{scope: scope} do
+    host = HostContext.mission(@mission_id)
+
+    for key <- ["mission_catalog", "spacecraft", "comms", "ops_console"] do
+      assert {:error, :platform_application} = ApplicationInstallations.install(scope, host, key)
+      assert {:error, :platform_application} = ApplicationInstallations.disable(scope, host, key)
+
+      assert {:error, :platform_application} =
+               ApplicationInstallations.uninstall(scope, host, key)
+    end
+
+    assert {:ok, []} = ApplicationInstallations.list(scope, host)
+  end
+
+  test "a platform surface retains optional installation and activation gates", context do
+    alias Cadence.Applications.Registry
+    alias Cadence.Reads.ApplicationSurfaces
+
+    {:ok, definition} = Registry.fetch_available("spacecraft")
+    {:ok, surface} = Registry.fetch_surface(definition, :spacecraft, "telemetry_decom")
+
+    request = %ActionRequest{
+      application_key: "spacecraft",
+      application_version: 1,
+      surface_id: "telemetry_decom",
+      surface_version: 1,
+      action_id: "save_configuration",
+      params: %{}
+    }
+
+    assert {:error, :application_not_installed} =
+             ApplicationSurfaces.load(
+               context.scope,
+               context.host_context,
+               "spacecraft",
+               1,
+               surface
+             )
+
+    assert {:error, :application_not_installed} =
+             ActionDispatcher.authorize(context.scope, context.host_context, request)
+
+    assert {:error, :invalid_application_action_surface} =
+             ActionDispatcher.authorize(context.scope, context.host_context, %{
+               request
+               | surface_id: nil
+             })
+
+    assert {:ok, _} =
+             ApplicationInstallations.install(
+               context.scope,
+               context.host_context,
+               "telemetry_decom"
+             )
+
+    assert :ok = ActionDispatcher.authorize(context.scope, context.host_context, request)
+
+    assert {:error, {:application_preflight_blocked, "telemetry_decom"}} =
+             ActionDispatcher.authorize(context.scope, context.host_context, %{
+               request
+               | action_id: "request_activation"
+             })
+
+    assert {:ok, _} =
+             ApplicationInstallations.disable(
+               context.scope,
+               context.host_context,
+               "telemetry_decom"
+             )
+
+    assert {:error, :application_installation_disabled} =
+             ApplicationSurfaces.load(
+               context.scope,
+               context.host_context,
+               "spacecraft",
+               1,
+               surface
+             )
+
+    assert {:error, :application_installation_disabled} =
+             ActionDispatcher.authorize(context.scope, context.host_context, request)
+  end
+
   test "installs once per application and scope and records an idempotent lifecycle", context do
     assert {:ok, installed} =
              ApplicationInstallations.install(
@@ -82,6 +165,15 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
 
     assert event.event_type == :installed
     assert event.actor_id == "installation-operator"
+  end
+
+  test "fails closed when a caller requests an installation page above the hard cap", context do
+    assert {:error, :application_installation_bounds_exceeded} =
+             ApplicationInstallations.list_page(
+               context.scope,
+               context.host_context,
+               max_total: 101
+             )
   end
 
   test "retains configuration across disable, uninstall, and reinstall transitions", context do

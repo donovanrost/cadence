@@ -1,5 +1,6 @@
 defmodule Cadence.Telemetry.RuntimeHealthTest do
-  use Cadence.UnitCase, async: true
+  # The collector subscribes to global telemetry and asserts exact event counts.
+  use Cadence.UnitCase, async: false
 
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Dashboards.RuntimeInvalidation.Event

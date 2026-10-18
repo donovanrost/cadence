@@ -33,6 +33,16 @@ defmodule Cadence.Persistence.OrganizationScope do
     fetch_organization_id(mission_id)
   end
 
+  @doc "Checks an explicit row scope without materializing a mission domain object."
+  @spec validate_mission_scope(binary(), binary()) :: :ok | {:error, :mission_not_found}
+  def validate_mission_scope(organization_id, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    case organization_id_for_mission(mission_id) do
+      ^organization_id -> :ok
+      _ -> {:error, :mission_not_found}
+    end
+  end
+
   defp organization_id(changeset), do: get_field(changeset, :organization_id)
   defp mission_id(changeset), do: get_field(changeset, :mission_id)
 

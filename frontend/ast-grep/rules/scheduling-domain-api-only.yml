@@ -1,0 +1,14 @@
+id: scheduling-domain-api-only
+language: TypeScript
+severity: error
+message: Scheduling workflows use the typed scheduling service; transport access belongs in adapters.
+files:
+  - "**/contact-scheduling/contact-schedule-state.ts"
+  - "**/contact-scheduling/schedule-transitions.ts"
+  - "**/contact-scheduling/OpsContactSchedule.vue"
+rule:
+  any:
+    - pattern: fetch($$$ARGS)
+    - pattern: $PORT.execute($$$ARGS)
+    - pattern: $PORT.protocol
+    - pattern: $PORT?.protocol

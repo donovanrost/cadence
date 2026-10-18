@@ -8,152 +8,51 @@ defmodule CadenceWeb.SpacecraftEditLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  defp signed_in_org_and_mission do
-    user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _ = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org, slug: "primary", display_name: "Primary Mission")
-    {TestFixtures.member_conn(user), org, mission}
-  end
+  test "authenticated edit and identity routes mount the host spacecraft form" do
+    {conn, mission, spacecraft} = signed_in_spacecraft()
 
-  describe "mount" do
-    test "renders the edit form" do
-      {conn, _org, mission} = signed_in_org_and_mission()
-      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1", scid: 42)
-
-      {:ok, _view, html} =
-        live(
-          conn,
-          ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/edit"
-        )
-
-      assert html =~ "Spacecraft Identity"
-      assert html =~ "Display Name"
-      assert html =~ "SCID"
-      assert html =~ "Save Identity"
-    end
-
-    test "renders through the spacecraft identity route" do
-      {conn, _org, mission} = signed_in_org_and_mission()
-      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1", scid: 42)
-
-      {:ok, view, html} =
-        live(
-          conn,
+    for path <- [
+          ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/edit",
           ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/identity"
-        )
-
-      assert has_element?(view, "#spacecraft-edit-form")
-      assert html =~ "Spacecraft Identity"
-      assert html =~ "SCID"
+        ] do
+      {:ok, view, _html} = live(conn, path)
+      assert_surface(view, mission, spacecraft)
     end
   end
 
-  describe "save" do
-    test "updates spacecraft identity and creates the managed source endpoint" do
-      {conn, org, mission} = signed_in_org_and_mission()
-      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1")
+  test "missing spacecraft redirects to the mission inventory" do
+    {conn, mission, _spacecraft} = signed_in_spacecraft()
+    path = ~p"/missions/#{mission.mission_id}/spacecraft"
 
-      {:ok, view, _html} =
-        live(
-          conn,
-          ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/edit"
-        )
+    assert {:error, {:redirect, %{to: ^path, flash: %{"error" => "Spacecraft not found."}}}} =
+             live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/missing-spacecraft/edit")
+  end
 
-      assert {:error, {:live_redirect, %{to: target}}} =
-               view
-               |> form("#spacecraft-edit-form",
-                 spacecraft: %{display_name: "Nova-1 Prime", scid: "51"}
-               )
-               |> render_submit()
+  test "unauthenticated edit requests redirect to sign in" do
+    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+             live(build_conn(), "/missions/mission-test/spacecraft/spacecraft-test/edit")
+  end
 
-      assert target == ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}"
+  defp assert_surface(view, mission, spacecraft) do
+    HostTransportTestSupport.assert_context(view, %{
+      "kind" => "spacecraft",
+      "spacecraft_page" => "spacecraft_edit",
+      "host_scope" => "spacecraft",
+      "mission_id" => mission.mission_id,
+      "spacecraft_id" => spacecraft.spacecraft_id,
+      "query_params" => %{}
+    })
+  end
 
-      assert {:ok, updated_spacecraft} =
-               Cadence.SpacecraftStore.fetch_spacecraft(
-                 org.organization_id,
-                 mission.mission_id,
-                 spacecraft.spacecraft_id
-               )
-
-      assert updated_spacecraft.display_name == "Nova-1 Prime"
-      assert updated_spacecraft.scid == 51
-
-      assert [endpoint] =
-               Cadence.SourceEndpoints.list_source_endpoints(
-                 org.organization_id,
-                 mission.mission_id,
-                 spacecraft_id: spacecraft.spacecraft_id
-               )
-
-      assert endpoint.source_endpoint_id == "spacecraft_runtime:" <> spacecraft.spacecraft_id
-      assert endpoint.display_name == "Nova-1 Prime"
-      assert endpoint.scid == 51
-      assert endpoint.metadata["managed_by"] == "spacecraft"
-    end
-
-    test "clearing SCID updates an existing managed source endpoint instead of leaving stale identity" do
-      {conn, org, mission} = signed_in_org_and_mission()
-      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1", scid: 42)
-
-      assert {:ok, _endpoint} =
-               Cadence.SourceEndpoints.ensure_managed_source_endpoint(
-                 org.organization_id,
-                 spacecraft
-               )
-
-      {:ok, view, _html} =
-        live(
-          conn,
-          ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/edit"
-        )
-
-      assert {:error, {:live_redirect, %{to: _target}}} =
-               view
-               |> form("#spacecraft-edit-form",
-                 spacecraft: %{display_name: "Nova-1", scid: ""}
-               )
-               |> render_submit()
-
-      assert {:ok, updated_spacecraft} =
-               Cadence.SpacecraftStore.fetch_spacecraft(
-                 org.organization_id,
-                 mission.mission_id,
-                 spacecraft.spacecraft_id
-               )
-
-      assert updated_spacecraft.scid == nil
-
-      assert {:ok, endpoint} =
-               Cadence.SourceEndpoints.fetch_source_endpoint(
-                 org.organization_id,
-                 mission.mission_id,
-                 "spacecraft_runtime:" <> spacecraft.spacecraft_id
-               )
-
-      assert endpoint.scid == nil
-    end
-
-    test "invalid SCID stays on page with a validation message" do
-      {conn, _org, mission} = signed_in_org_and_mission()
-      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1")
-
-      {:ok, view, _html} =
-        live(
-          conn,
-          ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/edit"
-        )
-
-      html =
-        view
-        |> form("#spacecraft-edit-form",
-          spacecraft: %{display_name: "Nova-1", scid: "2048"}
-        )
-        |> render_submit()
-
-      assert html =~ "SCID must be an integer from 0 to 1023."
-    end
+  defp signed_in_spacecraft do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1")
+    {TestFixtures.member_conn(user), mission, spacecraft}
   end
 end

@@ -1,7 +1,7 @@
 defmodule CadenceWeb.OpsShellHook do
   alias Cadence.Applications.OpsDock
-  alias CadenceWeb.OpsContextSnapshot
-  alias CadenceWeb.OpsShellHook.ContextDeps
+  alias Cadence.Reads.OperationalContext
+  alias CadenceWeb.OpsShellHook.{CommandUpdates, ContextDeps}
 
   @moduledoc """
   on_mount hook for the ops console live_session: loads the assigns the
@@ -19,6 +19,7 @@ defmodule CadenceWeb.OpsShellHook do
 
     {:cont,
      socket
+     |> assign(:ops_context_active?, true)
      |> assign(:ops_context_deps, context_deps)
      |> refresh_context(context_deps)
      |> pin_context_from_params(params)
@@ -26,6 +27,7 @@ defmodule CadenceWeb.OpsShellHook do
      |> refresh_ops_dock()
      |> assign(:active_dashboard_id, nil)
      |> assign(:ops_nav_item, :dashboards)
+     |> CommandUpdates.subscribe()
      |> attach_context_refresh(context_deps)}
   end
 
@@ -102,14 +104,14 @@ defmodule CadenceWeb.OpsShellHook do
     ops_context =
       socket.assigns
       |> Map.get(:ops_context)
-      |> OpsContextSnapshot.put_fleet_health(
+      |> OperationalContext.put_fleet_health(
         mission.mission_id,
         fleet_health,
         observed_at
       )
-      |> OpsContextSnapshot.put_alarm_summary(alarm_summary, observed_at)
-      |> OpsContextSnapshot.put_command_summary(command_summary, observed_at)
-      |> OpsContextSnapshot.pin_command_focus(pinned_command_id)
+      |> OperationalContext.put_alarm_summary(alarm_summary, observed_at)
+      |> OperationalContext.put_command_summary(command_summary, observed_at)
+      |> OperationalContext.pin_command_focus(pinned_command_id)
 
     socket
     |> assign(:fleet_health, fleet_health)
@@ -127,13 +129,21 @@ defmodule CadenceWeb.OpsShellHook do
   end
 
   defp attach_context_refresh(socket, %ContextDeps{} = deps) do
-    if connected?(socket) do
+    if connected?(socket) && !socket.assigns[:ops_context_refresh_attached?] do
       schedule_context_refresh(deps)
+      socket = assign(socket, :ops_context_refresh_attached?, true)
 
       attach_hook(socket, :ops_context_refresh, :handle_info, fn
+        {:commanding_changed, org, mission}, socket ->
+          # The workspace also consumes the notice to invalidate its own read.
+          {:cont, CommandUpdates.changed(socket, org, mission)}
+
+        {:ops_command_context_flush, token}, socket ->
+          {:halt, CommandUpdates.flush(socket, token)}
+
         :ops_context_refresh, socket ->
           schedule_context_refresh(deps)
-          {:halt, refresh_context(socket, deps)}
+          {:halt, refresh_active_context(socket, deps)}
 
         _message, socket ->
           {:cont, socket}
@@ -142,6 +152,11 @@ defmodule CadenceWeb.OpsShellHook do
       socket
     end
   end
+
+  defp refresh_active_context(%{assigns: %{ops_context_active?: true}} = socket, deps),
+    do: refresh_context(socket, deps)
+
+  defp refresh_active_context(socket, _deps), do: socket
 
   defp schedule_context_refresh(%ContextDeps{} = deps) do
     Process.send_after(self(), :ops_context_refresh, deps.refresh_interval_ms)
@@ -189,7 +204,7 @@ defmodule CadenceWeb.OpsShellHook do
     assign(
       socket,
       :ops_context,
-      OpsContextSnapshot.pin_command_focus(
+      OperationalContext.pin_command_focus(
         socket.assigns.ops_context,
         Map.get(params, "focus_command_id")
       )

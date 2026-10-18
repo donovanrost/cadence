@@ -9,204 +9,91 @@ defmodule CadenceWeb.SpacecraftApplicationsLiveTest do
     statics: CadenceWeb.static_paths()
 
   alias CadenceWeb.TestFixtures
+  alias LiveVue.Test
 
-  defp setup_session do
+  test "authenticated inventory mounts host-owned application management without an installation" do
+    {conn, mission, spacecraft} = signed_in_spacecraft()
+
+    {:ok, view, _html} = live(conn, inventory_path(mission, spacecraft))
+
+    assert_surface(view, mission, spacecraft)
+  end
+
+  test "a spacecraft application can be installed without a protocol preset" do
+    {conn, mission, spacecraft} = signed_in_spacecraft()
+    {:ok, view, _html} = live(conn, inventory_path(mission, spacecraft))
+
+    render_hook(view, "host:manage", %{
+      "event" => "install",
+      "key" => "telemetry_decom",
+      "path" => Test.get_vue(view, id: "application-shell").props["snapshot"]["path"]
+    })
+
+    assert Cadence.Repo.get_by(Cadence.Applications.ApplicationInstallations.InstallationRow,
+             scope_id: spacecraft.spacecraft_id,
+             application_key: "telemetry_decom"
+           )
+
+    assert_surface(view, mission, spacecraft)
+  end
+
+  test "a forged install event cannot install an unavailable spacecraft application" do
+    {conn, mission, spacecraft} = signed_in_spacecraft()
+    {:ok, view, _html} = live(conn, inventory_path(mission, spacecraft))
+
+    render_hook(view, "host:manage", %{
+      "event" => "install",
+      "key" => "unavailable-spacecraft-application",
+      "path" => Test.get_vue(view, id: "application-shell").props["snapshot"]["path"]
+    })
+
+    refute Cadence.Repo.get_by(Cadence.Applications.ApplicationInstallations.InstallationRow,
+             scope_id: spacecraft.spacecraft_id,
+             application_key: "unavailable-spacecraft-application"
+           )
+
+    assert_surface(view, mission, spacecraft)
+  end
+
+  test "missing spacecraft redirects to the mission inventory" do
+    {conn, mission, _spacecraft} = signed_in_spacecraft()
+    path = ~p"/missions/#{mission.mission_id}/spacecraft"
+
+    assert {:error, {:redirect, %{to: ^path, flash: flash}}} =
+             live(
+               conn,
+               ~p"/missions/#{mission.mission_id}/spacecraft/missing-spacecraft/applications"
+             )
+
+    assert flash["error"] == "Spacecraft not found."
+  end
+
+  test "unauthenticated inventory requests redirect to sign in" do
+    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+             live(build_conn(), "/missions/mission-test/spacecraft/spacecraft-test/applications")
+  end
+
+  defp assert_surface(view, _mission, _spacecraft) do
+    assert has_element?(view, "#application-shell")
+
+    vue = Test.get_vue(view, id: "application-shell")
+    assert vue.component == "BrowserHost"
+    assert vue.id == "application-shell"
+    assert vue.ssr == false
+    assert vue.handlers == %{}
+    assert is_map(vue.props["snapshot"]["presentation"])
+  end
+
+  defp signed_in_spacecraft do
     user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _ = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org, slug: "primary", display_name: "Primary")
-    {TestFixtures.member_conn(user), org, mission}
-  end
-
-  test "lists applications from the pinned spacecraft profile" do
-    {conn, _org, mission} = setup_session()
-    profile = TestFixtures.persist_spacecraft_profile!(mission, display_name: "Aurora Bus")
-
-    spacecraft =
-      TestFixtures.persist_spacecraft!(mission,
-        display_name: "Nova-1",
-        spacecraft_type_id: profile.spacecraft_type_id,
-        spacecraft_type_version: profile.version
-      )
-
-    {:ok, view, html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
-      )
-
-    assert has_element?(view, "#spacecraft-applications-page")
-    assert has_element?(view, "#spacecraft-application-telemetry_decom")
-    assert html =~ "Applications"
-    assert html =~ "Telemetry Decom"
-    assert html =~ "Workspace"
-
-    assert has_element?(view, "#install-spacecraft-application-telemetry_decom", "Install")
-
-    refute has_element?(
-             view,
-             "#spacecraft-application-telemetry_decom a[href='/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom']"
-           )
-
-    view
-    |> element("#install-spacecraft-application-telemetry_decom")
-    |> render_click()
-
-    assert has_element?(
-             view,
-             "#spacecraft-application-telemetry_decom a[href='/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom']",
-             "Manage"
-           )
-
-    assert has_element?(
-             view,
-             "#disable-spacecraft-application-telemetry_decom[data-application-lifecycle-action='disable'][data-confirmation-required='true'][data-confirmation-tone='attention']",
-             "Disable workspace"
-           )
-
-    assert has_element?(
-             view,
-             "#uninstall-spacecraft-application-telemetry_decom[data-application-lifecycle-action='uninstall'][data-confirmation-required='true'][data-confirmation-tone='danger']",
-             "Uninstall"
-           )
-  end
-
-  test "lists custom application keys from the pinned spacecraft profile" do
-    {conn, _org, mission} = setup_session()
-
-    profile =
-      TestFixtures.persist_spacecraft_profile!(mission,
-        display_name: "Aurora Bus",
-        applications: %{
-          "custom:thermal-alerting" => %{
-            "display_name" => "Thermal Alerting",
-            "description" => "Mission-owned temperature monitoring."
-          }
-        }
-      )
-
-    spacecraft =
-      TestFixtures.persist_spacecraft!(mission,
-        display_name: "Nova-1",
-        spacecraft_type_id: profile.spacecraft_type_id,
-        spacecraft_type_version: profile.version
-      )
-
-    {:ok, view, _html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
-      )
-
-    assert has_element?(view, "#spacecraft-application-custom-thermal-alerting")
-
-    assert has_element?(
-             view,
-             "#spacecraft-application-custom-thermal-alerting",
-             "Thermal Alerting"
-           )
-
-    refute has_element?(view, "#spacecraft-application-custom-thermal-alerting a", "Manage")
-  end
-
-  test "manages retained workspace lifecycle for a spacecraft application" do
-    {conn, _org, mission} = setup_session()
-    profile = TestFixtures.persist_spacecraft_profile!(mission, display_name: "Aurora Bus")
-
-    spacecraft =
-      TestFixtures.persist_spacecraft!(mission,
-        display_name: "Nova-1",
-        spacecraft_type_id: profile.spacecraft_type_id,
-        spacecraft_type_version: profile.version
-      )
-
-    {:ok, view, _html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
-      )
-
-    view
-    |> element("#install-spacecraft-application-telemetry_decom")
-    |> render_click()
-
-    view
-    |> element("#disable-spacecraft-application-telemetry_decom")
-    |> render_click()
-
-    assert has_element?(view, "#install-spacecraft-application-telemetry_decom", "Enable")
-
-    view
-    |> element("#uninstall-spacecraft-application-telemetry_decom")
-    |> render_click()
-
-    assert has_element?(view, "#install-spacecraft-application-telemetry_decom", "Reinstall")
-
-    view
-    |> element("#install-spacecraft-application-telemetry_decom")
-    |> render_click()
-
-    assert has_element?(view, "#disable-spacecraft-application-telemetry_decom")
-  end
-
-  test "shows a profile setup gap when no profile is pinned" do
-    {conn, _org, mission} = setup_session()
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
     spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1")
-
-    {:ok, view, html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
-      )
-
-    assert has_element?(view, "#spacecraft-applications-no-profile")
-    assert html =~ "No profile selected"
+    {TestFixtures.member_conn(user), mission, spacecraft}
   end
 
-  test "unknown application detail redirects back to the applications list" do
-    {conn, _org, mission} = setup_session()
-    profile = TestFixtures.persist_spacecraft_profile!(mission, display_name: "Aurora Bus")
-
-    spacecraft =
-      TestFixtures.persist_spacecraft!(mission,
-        display_name: "Nova-1",
-        spacecraft_type_id: profile.spacecraft_type_id,
-        spacecraft_type_version: profile.version
-      )
-
-    assert {:error, {:live_redirect, %{to: path, flash: %{"error" => "Application not found."}}}} =
-             live(
-               conn,
-               ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/not_real"
-             )
-
-    assert path ==
-             ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
-  end
-
-  test "known but uninstalled application detail redirects to the inventory" do
-    {conn, _org, mission} = setup_session()
-    profile = TestFixtures.persist_spacecraft_profile!(mission, display_name: "Aurora Bus")
-
-    spacecraft =
-      TestFixtures.persist_spacecraft!(mission,
-        display_name: "Nova-1",
-        spacecraft_type_id: profile.spacecraft_type_id,
-        spacecraft_type_version: profile.version
-      )
-
-    assert {:error,
-            {:live_redirect,
-             %{
-               to: path,
-               flash: %{"error" => "Install the application before opening it."}
-             }}} =
-             live(
-               conn,
-               ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications/telemetry_decom"
-             )
-
-    assert path ==
-             ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
+  defp inventory_path(mission, spacecraft) do
+    ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
   end
 end

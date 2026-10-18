@@ -1,6 +1,6 @@
 defmodule CadenceWeb.LegacyApplicationRedirectController do
   @moduledoc """
-  Redirects retired application-specific URLs to the generic application host.
+  Redirects retired application URLs to their canonical generic destinations.
 
   Legacy mappings are compatibility policy, not application-host dispatch.
   Keeping them here prevents the generic host from acquiring one `live_action`

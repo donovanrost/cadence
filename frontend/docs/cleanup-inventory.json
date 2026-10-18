@@ -1,0 +1,570 @@
+{
+  "description": "Preparation snapshot for findings 6-12. This is an inventory, not a lint allowance or a claim of current compliance.",
+  "sourceCommit": "a38ad3005a0fdb723167258340f21ec26c4c7cea",
+  "pathsRelativeTo": "repository root",
+  "method": {
+    "files": "Git-tracked frontend files, excluding vendor directories.",
+    "vue": "Vue SFC parser; TypeScript means every present script block declares ts or tsx.",
+    "explicitAny": "TypeScript AnyKeyword AST nodes in src TypeScript and SFC script blocks. Excludes test/spec/stories/test-support filenames and test/tests/__tests__/__fixtures__ directories. Includes declaration files; legitimate interop still needs classification.",
+    "javascript": "Tracked .js/.mjs/.cjs/.jsx files, including tests and Node tools. This does not assert that every file is application runtime code.",
+    "configs": "Effective compiler options in leaf tsconfig files, resolved through installed TypeScript. Solution configs are not leaf configs."
+  },
+  "vue": {
+    "total": 443,
+    "typescript": 424,
+    "javascript": [
+      {
+        "file": "frontend/apps/host/src/auth-and-navigation/features/primary-navigation/PrimaryNavigation.vue",
+        "lines": 131
+      },
+      {
+        "file": "frontend/apps/host/src/ops-workspace/features/frame/OpsContextRail.vue",
+        "lines": 200
+      },
+      {
+        "file": "frontend/apps/host/src/ops-workspace/features/frame/OpsNavRail.vue",
+        "lines": 127
+      },
+      {
+        "file": "frontend/apps/host/src/ops-workspace/features/frame/OpsWorkspaceFrame.vue",
+        "lines": 124
+      },
+      {
+        "file": "frontend/apps/host/src/shell/ApplicationShell.vue",
+        "lines": 71
+      },
+      {
+        "file": "frontend/apps/host/src/shell/BrowserHost.vue",
+        "lines": 591
+      },
+      {
+        "file": "frontend/apps/host/src/shell/RoutedFederationSurface.vue",
+        "lines": 34
+      },
+      {
+        "file": "frontend/apps/host/src/shell/UtcClock.vue",
+        "lines": 27
+      },
+      {
+        "file": "frontend/modules/dashboards-and-exploration/src/features/editor/EditorLayoutGrid.vue",
+        "lines": 238
+      },
+      {
+        "file": "frontend/modules/dashboards-and-exploration/src/features/workspace/DashboardCanvas.vue",
+        "lines": 135
+      },
+      {
+        "file": "frontend/modules/dashboards-and-exploration/src/features/workspace/DashboardComparisonInspector.vue",
+        "lines": 57
+      },
+      {
+        "file": "frontend/modules/dashboards-and-exploration/src/features/workspace/DashboardComparisonRollup.vue",
+        "lines": 205
+      },
+      {
+        "file": "frontend/modules/dashboards-and-exploration/src/features/workspace/DashboardEditorGuard.vue",
+        "lines": 65
+      },
+      {
+        "file": "frontend/modules/dashboards-and-exploration/src/features/workspace/DashboardGrid.vue",
+        "lines": 235
+      },
+      {
+        "file": "frontend/modules/dashboards-and-exploration/src/features/workspace/TelemetryChart.vue",
+        "lines": 3519
+      },
+      {
+        "file": "frontend/packages/ui/src/CadenceClipboardButton.vue",
+        "lines": 102
+      }
+    ],
+    "scriptless": [
+      "frontend/apps/host/src/shell/AuthLayoutBrand.vue",
+      "frontend/packages/ui/src/CadencePageActions.vue",
+      "frontend/packages/ui/src/CadencePageDescription.vue"
+    ]
+  },
+  "explicitAny": [
+    {
+      "file": "frontend/modules/data-operations/src/features/data-sources/native-contract.ts",
+      "count": 33
+    },
+    {
+      "file": "frontend/modules/data-operations/src/features/historical-workflows/native-contract.ts",
+      "count": 31
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/fleet-planning/fleet-policy.ts",
+      "count": 26
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/fleet-planning/fleet-run.ts",
+      "count": 20
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-scheduling/contact-schedule.ts",
+      "count": 16
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/fleet-planning/fleet-start.ts",
+      "count": 15
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-scheduling/contact-record.ts",
+      "count": 14
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-requirements/templates.ts",
+      "count": 11
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-scheduling/contact-workflow.ts",
+      "count": 10
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-requirements/declaration.ts",
+      "count": 9
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-requirements/requirement-directory.ts",
+      "count": 9
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-scheduling/reservation-detail.ts",
+      "count": 9
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-plans/plan-review.ts",
+      "count": 6
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-plans/plan-detail.ts",
+      "count": 5
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-requirements/requirement-workflow.ts",
+      "count": 4
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/fleet-planning/fleet-directory.ts",
+      "count": 4
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-requirements/requirement-detail.ts",
+      "count": 3
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-scheduling/contact-workflow-state.ts",
+      "count": 3
+    },
+    {
+      "file": "frontend/modules/dashboards-and-exploration/src/features/editor/useDashboardEditor.ts",
+      "count": 2
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-requirements/declaration-workflow-state.ts",
+      "count": 2
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-requirements/requirement-list.ts",
+      "count": 2
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-requirements/template-workflow-state.ts",
+      "count": 2
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-requirements/use-requirement-workflow.ts",
+      "count": 2
+    },
+    {
+      "file": "frontend/apps/ops-console/src/contact-record-port.ts",
+      "count": 1
+    },
+    {
+      "file": "frontend/apps/ops-console/src/contact-schedule-port.ts",
+      "count": 1
+    },
+    {
+      "file": "frontend/apps/ops-console/src/env.d.ts",
+      "count": 1
+    },
+    {
+      "file": "frontend/apps/ops-console/src/fleet-directory-port.ts",
+      "count": 1
+    },
+    {
+      "file": "frontend/apps/ops-console/src/fleet-run-port.ts",
+      "count": 1
+    },
+    {
+      "file": "frontend/apps/ops-console/src/fleet-start-port.ts",
+      "count": 1
+    },
+    {
+      "file": "frontend/apps/ops-console/src/ops-console.ts",
+      "count": 1
+    },
+    {
+      "file": "frontend/apps/ops-console/src/plan-detail-port.ts",
+      "count": 1
+    },
+    {
+      "file": "frontend/apps/ops-console/src/reservation-port.ts",
+      "count": 1
+    },
+    {
+      "file": "frontend/modules/dashboards-and-exploration/src/features/editor/EditorLayoutCanvas.vue",
+      "count": 1
+    },
+    {
+      "file": "frontend/modules/dashboards-and-exploration/src/features/editor/layout-draft.ts",
+      "count": 1
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/contact-requirements/requirement-selection.ts",
+      "count": 1
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/fleet-planning/fleet-start-state.ts",
+      "count": 1
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/src/features/fleet-planning/FleetPolicyContribution.vue",
+      "count": 1
+    }
+  ],
+  "javascript": [
+    "frontend/apps/comms-overview/release-build-config.test.mjs",
+    "frontend/apps/host/phoenix-build-config.test.mjs",
+    "frontend/apps/host/src/administration/features/organization-create/producer-consumer-probe.mjs",
+    "frontend/apps/host/src/administration/features/organization-detail/producer-consumer-probe.mjs",
+    "frontend/apps/host/src/administration/features/organization-home/producer-consumer-probe.mjs",
+    "frontend/apps/host/src/auth-and-navigation/features/notifications/federated-bell-probe.mjs",
+    "frontend/apps/host/src/auth-and-navigation/features/notifications/producer-consumer-probe.mjs",
+    "frontend/apps/host/src/auth-and-navigation/features/sign-in/producer-consumer-probe.mjs",
+    "frontend/apps/host/src/ops-workspace/features/frame/context-navigation.test.js",
+    "frontend/apps/host/src/ops-workspace/features/frame/context.js",
+    "frontend/apps/host/src/ops-workspace/features/frame/nav-rail-controller.test.js",
+    "frontend/apps/host/src/ops-workspace/features/frame/nav_rail_controller.js",
+    "frontend/apps/host/src/ops-workspace/features/landing/producer-consumer-probe.mjs",
+    "frontend/apps/host/src/ops-workspace/features/timeline/producer-consumer-probe.mjs",
+    "frontend/apps/host/src/shell/ApplicationShell.test.js",
+    "frontend/apps/host/src/shell/BrowserHost.test.js",
+    "frontend/apps/host/src/shell/__tests__/application-host-components.test.js",
+    "frontend/apps/host/src/shell/__tests__/cadence-badge.test.js",
+    "frontend/apps/host/src/shell/__tests__/federated-full-page-surface-adapter.test.js",
+    "frontend/apps/host/src/shell/federation-lifecycle.js",
+    "frontend/apps/mission-catalog/release-build-config.test.mjs",
+    "frontend/apps/mission-catalog/remote-boundary.test.mjs",
+    "frontend/apps/ops-console/release-build-config.test.mjs",
+    "frontend/apps/organization-admin/contract-static.test.mjs",
+    "frontend/apps/spacecraft/release-build-config.test.mjs",
+    "frontend/apps/telemetry-decom/release-build-config.test.mjs",
+    "frontend/modules/commanding/src/features/command-authoring/producer-consumer-probe.mjs",
+    "frontend/modules/commanding/src/features/command-history/producer-contract-check.mjs",
+    "frontend/modules/commanding/src/features/command-review/producer-consumer-probe.mjs",
+    "frontend/modules/commanding/src/features/mission-commands/producer-contract-check.mjs",
+    "frontend/modules/commanding/src/features/queue-submission/producer-consumer-probe.mjs",
+    "frontend/modules/commanding/src/features/spacecraft-commanding/producer-consumer-probe.mjs",
+    "frontend/modules/commanding/src/shared/stages/producer-consumer-probe.mjs",
+    "frontend/modules/communications/src/features/provider-accounts/producer-render-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/activity/producer-render-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/creation/destination-producer-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/creation/producer-render-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/directory/destination-producer-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/directory/producer-render-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/editor/producer-render-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/execution-diagnostics/page-producer-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/execution-diagnostics/producer-contract-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/execution-diagnostics/producer-render-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/exploration/producer-contract-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/library/producer-render-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/playlists/producer-render-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/settings/producer-contract-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/sharing/producer-contract-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/workspace/producer-contract-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/features/workspace/viewer-producer-render-check.mjs",
+    "frontend/modules/dashboards-and-exploration/src/test-support/legacy-dashboard-producer-check.mjs",
+    "frontend/modules/data-operations/src/features/data-sources/native-producer-check.mjs",
+    "frontend/modules/data-operations/src/features/historical-workflows/native-producer-check.mjs",
+    "frontend/modules/derived-telemetry/src/features/definitions/producer-check.mjs",
+    "frontend/modules/limits-and-alarming/src/features/alarm-conditions/producer-consumer-probe.mjs",
+    "frontend/modules/limits-and-alarming/src/features/definitions/producer-consumer-probe.mjs",
+    "frontend/modules/planning-and-contacts/src/features/contact-plans/decision-producer-check.mjs",
+    "frontend/modules/planning-and-contacts/src/features/contact-plans/plan-review-check.mjs",
+    "frontend/modules/planning-and-contacts/src/features/contact-requirements/decision-producer-check.mjs",
+    "frontend/modules/planning-and-contacts/src/features/contact-requirements/declaration-check.mjs",
+    "frontend/modules/planning-and-contacts/src/features/contact-requirements/requirement-workflow-check.mjs",
+    "frontend/modules/planning-and-contacts/src/features/contact-requirements/template-check.mjs",
+    "frontend/modules/planning-and-contacts/src/features/contact-scheduling/contact-workflow-check.mjs",
+    "frontend/modules/planning-and-contacts/src/features/contact-scheduling/decision-producer-check.mjs",
+    "frontend/modules/planning-and-contacts/src/features/contact-scheduling/schedule-producer-check.mjs",
+    "frontend/modules/planning-and-contacts/src/features/fleet-planning/decision-producer-check.mjs",
+    "frontend/modules/planning-and-contacts/src/features/fleet-planning/directory-contribution-check.mjs",
+    "frontend/modules/planning-and-contacts/src/features/fleet-planning/policy-workflow-check.mjs",
+    "frontend/modules/planning-and-contacts/src/features/fleet-planning/run-producer-check.mjs",
+    "frontend/modules/planning-and-contacts/src/features/fleet-planning/start-producer-check.mjs",
+    "frontend/modules/planning-and-contacts/src/features/fleet-planning/workflow-contribution-check.mjs",
+    "frontend/modules/planning-and-contacts/src/test-support/producer-render-check.mjs",
+    "frontend/modules/telemetry-decom/src/features/configuration/producer-check.mjs",
+    "frontend/modules/telemetry-decom/src/features/packet-bindings/producer-check.mjs",
+    "frontend/packages/ui/src/__tests__/account-dropdown-menu.test.js",
+    "frontend/packages/ui/src/__tests__/cadence-card.test.js",
+    "frontend/packages/ui/src/__tests__/cadence-collapsible-adapter.test.js",
+    "frontend/packages/ui/src/__tests__/cadence-collapsible-livevue-reconciliation.test.js",
+    "frontend/packages/ui/src/__tests__/cadence-field.test.js",
+    "frontend/packages/ui/src/__tests__/cadence-page-header-frame.test.js",
+    "frontend/packages/ui/src/__tests__/cadence-table-frame.test.js",
+    "frontend/packages/ui/src/cadence_primitive_child.js",
+    "frontend/packages/ui/src/popover_compatibility.js",
+    "frontend/test-support/mounted-contract.js",
+    "frontend/tools/build-first-party-publication.mjs",
+    "frontend/tools/first-party-remote-contract.test.mjs",
+    "frontend/tools/first-party-remote-workspace.mjs",
+    "frontend/tools/first-party-remote-workspace.test.mjs",
+    "frontend/tools/frontend-release-output-check.mjs",
+    "frontend/tools/frontend-release-output-check.test.mjs",
+    "frontend/tools/frontend-release-package.mjs",
+    "frontend/tools/frontend-release-package.test.mjs",
+    "frontend/tools/import-heroicons.mjs",
+    "frontend/tools/phoenix/admin_mode_browser_smoke.mjs",
+    "frontend/tools/phoenix/federation_browser_smoke.mjs",
+    "frontend/tools/phoenix/federation_browser_smoke_contract.test.mjs",
+    "frontend/tools/phoenix/federation_browser_smoke_hardening.test.mjs",
+    "frontend/tools/phoenix/federation_publication_build_lock.test.mjs",
+    "frontend/tools/phoenix/ops_initial_state_browser.mjs",
+    "frontend/tools/phoenix/run_federation_publication_build.mjs",
+    "frontend/tools/production-publication-output-check.mjs",
+    "frontend/tools/production-publication-output-check.test.mjs",
+    "frontend/tools/typecheck-workspace.mjs",
+    "frontend/tools/typecheck-workspace.test.mjs"
+  ],
+  "compilerConfigs": [
+    {
+      "file": "frontend/apps/comms-overview/tsconfig.app.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/comms-overview/tsconfig.node.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/contract-probe/tsconfig.app.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/contract-probe/tsconfig.node.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/host/tsconfig.app.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/host/tsconfig.node.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/mission-catalog/tsconfig.app.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/mission-catalog/tsconfig.node.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/ops-console/tsconfig.app.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": true,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/ops-console/tsconfig.node.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/organization-admin/tsconfig.app.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/organization-admin/tsconfig.node.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/spacecraft/tsconfig.app.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/spacecraft/tsconfig.node.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/storybook/tsconfig.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/telemetry-decom/tsconfig.app.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/apps/telemetry-decom/tsconfig.node.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/modules/commanding/tsconfig.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/modules/communications/tsconfig.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/modules/dashboards-and-exploration/tsconfig.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": true,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/modules/data-operations/tsconfig.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/modules/derived-telemetry/tsconfig.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/modules/limits-and-alarming/tsconfig.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/modules/planning-and-contacts/tsconfig.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/modules/telemetry-decom/tsconfig.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/packages/plugin-sdk/tsconfig.json",
+      "strict": true,
+      "indexed": true,
+      "optional": true,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/packages/ui/tsconfig.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    },
+    {
+      "file": "frontend/tsconfig.tools.json",
+      "strict": true,
+      "indexed": false,
+      "optional": false,
+      "allowJs": false,
+      "checkJs": false
+    }
+  ],
+  "checkedInCiConfigurations": []
+}

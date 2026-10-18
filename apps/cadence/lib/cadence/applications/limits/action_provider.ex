@@ -4,9 +4,13 @@ defmodule Cadence.Applications.Limits.ActionProvider do
   @behaviour Cadence.Applications.ActionProvider
 
   alias Cadence.Applications.{ActionFailure, ActionRequest, HostContext}
-  alias Cadence.Auth.Scope
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Limits
   alias Cadence.Limits.Definition
+  alias Cadence.Missions
+
+  @impl true
+  def application_key, do: "limits"
 
   @threshold_fields [
     {"red_low", :red_low},
@@ -17,42 +21,120 @@ defmodule Cadence.Applications.Limits.ActionProvider do
 
   @impl true
   def execute(
-        %Scope{},
+        %Scope{} = scope,
         %HostContext{placement: :mission, mission_id: mission_id},
-        %ActionRequest{action_id: "save_limit_definition", params: params}
+        %ActionRequest{
+          application_key: "limits",
+          application_version: 1,
+          surface_id: "manage",
+          surface_version: 1,
+          action_id: "save_limit_definition",
+          params: params
+        }
       ) do
-    with {:ok, point_id} <- required_param(params, "point_id", :point_id, "Canonical point ID"),
-         limit_set_name <- optional_param(params, "limit_set_name", :limit_set_name) || "DEFAULT",
+    with {:ok, _} <- Missions.fetch_mission(scope.organization_id, mission_id),
+         :ok <-
+           Policy.authorize(scope, :operate_mission, %{
+             organization_id: scope.organization_id,
+             mission_id: mission_id
+           }),
+         {:ok, point_id} <- required_param(params, "point_id", :point_id, "Canonical point ID"),
+         {:ok, limit_set_name} <- limit_set_name(params),
+         :ok <- bounded_identity(point_id, limit_set_name),
          {:ok, thresholds} <- thresholds(params),
-         :ok <- validate_threshold_order(thresholds) do
-      existing = existing_definition(mission_id, point_id, limit_set_name)
-
-      definition =
-        Definition.new(%{
-          mission_id: mission_id,
-          limit_definition_id:
-            (existing && existing.limit_definition_id) || definition_id(point_id, limit_set_name),
+         :ok <- validate_threshold_order(thresholds),
+         {:ok, reviewed} <- review(params) do
+      Limits.append_limit_definition(
+        scope.organization_id,
+        mission_id,
+        %{
           point_id: point_id,
-          version: (existing && existing.version + 1) || 1,
           limit_set_name: limit_set_name,
           thresholds: thresholds,
           metadata: %{"application" => "limits"}
-        })
+        },
+        reviewed
+      )
+    end
+    |> action_result()
+  end
 
-      Limits.persist_limit_definition(definition)
+  def execute(_, _, _), do: {:error, :unsupported_application_action}
+
+  defp action_result({:error, :limit_definition_review_conflict}),
+    do:
+      failure(
+        "review_conflict",
+        "This definition or its active version changed. Refresh and review it before saving."
+      )
+
+  defp action_result({:error, :limit_definition_version_conflict}),
+    do:
+      failure(
+        "review_conflict",
+        "This immutable version already exists with different contents. Refresh before saving."
+      )
+
+  defp action_result({:error, :limit_definition_review_required}),
+    do: failure("review_required", "Review the current point and limit set before saving.")
+
+  defp action_result({:error, %Ecto.Changeset{}}),
+    do:
+      failure(
+        "invalid_definition",
+        "The limit definition could not be saved and activated. Check the retained draft."
+      )
+
+  defp action_result(result), do: result
+
+  defp review(%{
+         "expected_definition_id" => nil,
+         "expected_version" => 0,
+         "expected_activation_event_id" => nil
+       }),
+       do: {:ok, %{definition_id: nil, version: 0, activation_event_id: nil}}
+
+  defp review(%{
+         "expected_definition_id" => id,
+         "expected_version" => version,
+         "expected_activation_event_id" => event
+       })
+       when is_binary(id) and byte_size(id) in 1..240 and is_integer(version) and
+              version in 1..9_007_199_254_740_991 and
+              (is_nil(event) or (is_binary(event) and byte_size(event) in 1..240)),
+       do: {:ok, %{definition_id: id, version: version, activation_event_id: event}}
+
+  defp review(_), do: {:error, :limit_definition_review_required}
+
+  defp bounded_identity(point, set) do
+    cond do
+      byte_size(point) > 240 ->
+        failure("invalid_field", "Canonical point ID is too long.", "point_id")
+
+      byte_size(set) > 240 ->
+        failure("invalid_field", "Limit set name is too long.", "limit_set_name")
+
+      true ->
+        :ok
     end
   end
 
-  def execute(%Scope{}, %HostContext{}, %ActionRequest{}),
-    do: {:error, :unsupported_application_action}
+  defp failure(code, message, field \\ nil),
+    do: {:error, %ActionFailure{code: code, message: message, field: field}}
 
-  defp existing_definition(mission_id, point_id, limit_set_name) do
-    mission_id
-    |> Limits.list_limit_definitions()
-    |> Enum.find(fn definition ->
-      definition.point_id == point_id and definition.limit_set_name == limit_set_name
-    end)
+  @impl true
+  def result(%Definition{} = definition) do
+    %{
+      "definitionId" => definition.limit_definition_id,
+      "pointId" => definition.point_id,
+      "limitSetName" => definition.limit_set_name,
+      "thresholds" => definition.thresholds,
+      "version" => definition.version
+    }
   end
+
+  def result(value) when is_map(value), do: value
+  def result(_value), do: nil
 
   defp thresholds(params) do
     Enum.reduce_while(
@@ -64,9 +146,9 @@ defmodule Cadence.Applications.Limits.ActionProvider do
   end
 
   defp put_threshold(params, {key, atom_key}, {:ok, acc}) do
-    params
-    |> optional_param(key, atom_key)
-    |> parsed_threshold(key, acc)
+    value = Map.get(params, key, Map.get(params, atom_key))
+    value = if is_binary(value), do: String.trim(value), else: value
+    parsed_threshold(if(value == "", do: nil, else: value), key, acc)
   end
 
   defp parsed_threshold(nil, _key, acc), do: {:cont, {:ok, acc}}
@@ -126,12 +208,14 @@ defmodule Cadence.Applications.Limits.ActionProvider do
     end
   end
 
-  defp parse_number(value) do
+  defp parse_number(value) when is_binary(value) do
     case Float.parse(value) do
-      {number, ""} -> {:ok, number}
+      {number, ""} when abs(number) <= 9_007_199_254_740_991 -> {:ok, number}
       _other -> :error
     end
   end
+
+  defp parse_number(_), do: :error
 
   defp required_param(params, key, atom_key, label) do
     case optional_param(params, key, atom_key) do
@@ -148,6 +232,16 @@ defmodule Cadence.Applications.Limits.ActionProvider do
     end
   end
 
+  defp limit_set_name(params) do
+    case Map.get(params, "limit_set_name", Map.get(params, :limit_set_name)) do
+      value when is_nil(value) or is_binary(value) ->
+        {:ok, optional_param(params, "limit_set_name", :limit_set_name) || "DEFAULT"}
+
+      _ ->
+        failure("invalid_field", "Limit set must be a name.", "limit_set_name")
+    end
+  end
+
   defp optional_param(params, key, atom_key) do
     case Map.get(params, key, Map.get(params, atom_key)) do
       value when is_binary(value) ->
@@ -159,14 +253,6 @@ defmodule Cadence.Applications.Limits.ActionProvider do
       _other ->
         nil
     end
-  end
-
-  defp definition_id(point_id, limit_set_name) do
-    digest =
-      :crypto.hash(:sha256, point_id <> ":" <> limit_set_name)
-      |> Base.url_encode64(padding: false)
-
-    "limit_definition:#{binary_part(digest, 0, 16)}"
   end
 
   defp humanize_field(field) do

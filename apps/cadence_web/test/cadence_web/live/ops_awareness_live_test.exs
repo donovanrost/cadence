@@ -8,127 +8,59 @@ defmodule CadenceWeb.OpsAwarenessLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Commanding.{CommandRequest, CommandRequestRow}
-  alias Cadence.Limits.Event
-  alias Cadence.Limits.Store
-  alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
-  test "read-only alarm filters link each condition to evidence and its definition" do
-    {conn, _org, mission} = signed_in_org_and_mission()
+  test "alarms mount as the mission-scoped module contribution" do
+    {conn, mission} = signed_in()
 
-    assert {:ok, _rows} =
-             Store.persist_latest_states(Repo, [
-               limit_event(mission, "red", :red, true, "EPS.voltage"),
-               limit_event(mission, "green", :green, false, "EPS.current")
-             ])
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/alarms?state=nominal&ignored=stale")
 
-    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/alarms")
-
-    assert has_element?(view, "#ops-alarms-page")
-    assert has_element?(view, "#alarm-filter-form")
-    assert has_element?(view, ~s([data-alarm-condition="red"][data-alarm-severity="critical"]))
-    refute has_element?(view, ~s([data-alarm-condition="green"]))
-    assert has_element?(view, "#alarm-open-sample-red")
-    assert has_element?(view, "#alarm-open-definition-red")
-    refute has_element?(view, ~s(form[phx-submit]))
-
-    view
-    |> form("#alarm-filter-form", filters: %{state: "nominal"})
-    |> render_change()
-
-    assert has_element?(view, ~s([data-alarm-condition="green"][data-alarm-severity="nominal"]))
-    refute has_element?(view, ~s([data-alarm-condition="red"]))
+    assert_surface(view, "ops-alarms-component", "alarms", mission, %{"state" => "nominal"})
   end
 
-  test "a followed command is URL-scoped and remains visible on another Ops page" do
-    {conn, org, mission} = signed_in_org_and_mission()
-    persist_command_request!(org, mission, "command-1")
+  test "alarms preserve bounded URL filters in the contributed read" do
+    {conn, mission} = signed_in()
 
-    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/commands")
-
-    assert has_element?(view, "#ops-commands-page")
-    assert has_element?(view, ~s([data-command-request="command-1"]))
-    refute has_element?(view, ~s(button[phx-click="release_command"]))
-
-    view
-    |> element("#follow-command-command-1")
-    |> render_click()
-
-    assert has_element?(view, ~s(#followed-command-banner[data-followed-command="command-1"]))
-
-    assert has_element?(
-             view,
-             ~s(#ops-context-rail [data-ops-context-followed-command="command-1"])
-           )
-
-    assert has_element?(
-             view,
-             ~s(#ops-nav-rail a[href*="/ops/planning"][href*="focus_command_id=command-1"])
-           )
-
-    {:ok, planning_view, _html} =
+    {:ok, view, _html} =
       live(
         conn,
-        ~p"/missions/#{mission.mission_id}/ops/planning?#{%{focus_command_id: "command-1"}}"
+        ~p"/missions/#{mission.mission_id}/ops/alarms?severity=critical&state=active&spacecraft_id=mission&query=thermal&ignored=stale"
       )
 
-    assert has_element?(
-             planning_view,
-             ~s(#ops-context-rail [data-ops-context-followed-command="command-1"])
-           )
-
-    assert has_element?(
-             planning_view,
-             ~s(#ops-nav-rail a[href*="/ops/commands"][href*="focus_command_id=command-1"])
-           )
+    assert_surface(view, "ops-alarms-component", "alarms", mission, %{
+      "severity" => "critical",
+      "state" => "active",
+      "spacecraft_id" => "mission",
+      "query" => "thermal"
+    })
   end
 
-  defp signed_in_org_and_mission do
+  test "alarms remain authentication scoped" do
+    {_conn, _user, _organization, mission} = signed_in_user_org_and_mission()
+
+    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+             live(build_conn(), ~p"/missions/#{mission.mission_id}/ops/alarms")
+  end
+
+  defp signed_in do
+    {conn, _user, _organization, mission} = signed_in_user_org_and_mission()
+    {conn, mission}
+  end
+
+  defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org, slug: "ops", display_name: "Ops Mission")
-    {TestFixtures.member_conn(user), org, mission}
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    {TestFixtures.member_conn(user), user, organization, mission}
   end
 
-  defp limit_event(mission, id, normalized_state, violation, point_id) do
-    %Event{
-      limit_event_id: id,
-      mission_id: mission.mission_id,
-      point_id: point_id,
-      point_name: point_id,
-      source_sample_type: :telemetry_sample,
-      sample_id: "sample-#{id}",
-      limit_definition_id: "definition-#{id}",
-      limit_definition_version: 1,
-      limit_set_name: "DEFAULT",
-      evaluated_value: 42,
-      limit_state: normalized_state,
-      normalized_state: normalized_state,
-      violation: violation,
-      receipt_time: ~U[2026-08-01 12:00:00Z],
-      provenance: %{}
-    }
-  end
-
-  defp persist_command_request!(org, mission, command_request_id) do
-    request = %CommandRequest{
-      command_request_id: command_request_id,
-      organization_id: org.organization_id,
-      mission_id: mission.mission_id,
-      source_endpoint_ref: "uplink-primary",
-      mission_model_revision_id: "mission-model-1",
-      command_id: "NOOP",
-      command_name: "NOOP",
-      command_display_name: "No operation",
-      lifecycle_state: :approved,
-      requested_by: %{display_name: "Flight Director"},
-      requested_at: ~U[2026-08-01 12:00:00Z]
-    }
-
-    request
-    |> CommandRequestRow.changeset()
-    |> Repo.insert!()
+  defp assert_surface(view, _id, _surface_id, mission, query_params) do
+    snapshot = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]
+    assert snapshot["ops_page"]["id"] == "limits.alarm-conditions"
+    assert snapshot["ops_page"]["status"] == "ready"
+    assert snapshot["ops_page"]["context"]["missionId"] == mission.mission_id
+    assert Map.take(snapshot["ops_page"]["data"]["query"], Map.keys(query_params)) == query_params
   end
 end

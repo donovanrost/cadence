@@ -1,0 +1,44 @@
+{
+  "name": "@cadence/dashboards-and-exploration",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./exploration": "./src/exploration.ts",
+    "./execution-diagnostics": "./src/execution-diagnostics.ts",
+    "./charts": "./src/charts.ts",
+    "./sharing": "./src/sharing.ts",
+    "./settings": "./src/settings.ts",
+    "./playlists": "./src/playlists.ts",
+    "./library": "./src/library.ts",
+    "./activity": "./src/activity.ts",
+    "./workspace": "./src/workspace.ts",
+    "./workspace.css": "./src/workspace.css",
+    "./charts.css": "./src/charts.css",
+    "./creation": "./src/creation.ts",
+    "./directory": "./src/directory.ts",
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vp test --run",
+    "typecheck": "vue-tsc -b"
+  },
+  "dependencies": {
+    "@cadence/plugin-sdk": "workspace:*",
+    "@cadence/ui": "workspace:*",
+    "gridstack": "10.3.1",
+    "uplot": "1.6.32",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vue/test-utils": "catalog:",
+    "@vue/tsconfig": "catalog:",
+    "happy-dom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

@@ -3,7 +3,7 @@ defmodule Cadence.Dashboards.Documents do
   Application service for dashboard document lifecycle and persistence.
   """
 
-  alias Cadence.Dashboards.{Document, DocumentCodec, DocumentStore}
+  alias Cadence.Dashboards.{CurrentVersions, Document, DocumentCodec, DocumentStore}
 
   def clone(organization_id, mission_id, source_dashboard_id, opts \\ []) do
     with {:ok, %Document{} = source} <-
@@ -16,7 +16,9 @@ defmodule Cadence.Dashboards.Documents do
         source_dashboard_id: source.dashboard_id,
         actor_id: Keyword.get(opts, :actor_id)
       )
-      |> then(&persist(organization_id, &1))
+      |> then(
+        &CurrentVersions.create(organization_id, &1, created_by: Keyword.get(opts, :actor_id))
+      )
     end
   end
 
@@ -30,7 +32,9 @@ defmodule Cadence.Dashboards.Documents do
         source_dashboard_id: source.dashboard_id,
         actor_id: Keyword.get(opts, :actor_id)
       )
-      |> then(&persist(organization_id, &1))
+      |> then(
+        &CurrentVersions.create(organization_id, &1, created_by: Keyword.get(opts, :actor_id))
+      )
     end
   end
 
@@ -58,6 +62,10 @@ defmodule Cadence.Dashboards.Documents do
     to: DocumentStore,
     as: :list_dashboard_summaries
 
+  defdelegate fetch_summary(organization_id, mission_id, dashboard_id),
+    to: DocumentStore,
+    as: :fetch_dashboard_summary
+
   defdelegate list_archived_summaries(organization_id, mission_id),
     to: DocumentStore,
     as: :list_archived_dashboard_summaries
@@ -75,6 +83,11 @@ defmodule Cadence.Dashboards.Documents do
     as: :delete_document
 
   defdelegate list_versions(organization_id, mission_id, dashboard_id), to: DocumentStore
+
+  defdelegate history(organization_id, mission_id, dashboard_id, query),
+    to: Cadence.Dashboards.DocumentStore.History,
+    as: :load
+
   defdelegate fetch_version(organization_id, mission_id, dashboard_id, version), to: DocumentStore
 
   defdelegate publish(organization_id, mission_id, dashboard_id, version, opts),

@@ -8,92 +8,48 @@ defmodule CadenceWeb.OpsDashboardPlaylistsLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
-  alias Cadence.Dashboards.Management
   alias CadenceWeb.TestFixtures
 
-  test "playlist stores ordered dashboard references and presents without hiding health posture" do
-    {conn, user, org, mission} = signed_in_user_org_and_mission()
-    power = TestFixtures.persist_dashboard_document!(mission, name: "Power")
-    thermal = TestFixtures.persist_dashboard_document!(mission, name: "Thermal")
-
-    assert {:ok, playlist} =
-             Management.create_playlist(
-               org.organization_id,
-               mission.mission_id,
-               %{
-                 "name" => "Flight wallboard",
-                 "dashboard_ids" => [power.dashboard_id, thermal.dashboard_id],
-                 "dwell_seconds" => 30,
-                 "wallboard_mode" => true
-               },
-               created_by: user.user_id
-             )
-
-    assert playlist.dashboard_ids == [power.dashboard_id, thermal.dashboard_id]
-    refute Map.has_key?(Map.from_struct(playlist), :documents)
+  test "playlist routes forward only their bounded subject" do
+    {conn, mission} = signed_in()
 
     {:ok, present, _html} =
-      live(
-        conn,
-        ~p"/missions/#{mission.mission_id}/ops/dashboards/playlists/#{playlist.dashboard_playlist_id}/present"
-      )
+      live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/playlists/playlist-1/present")
 
-    assert has_element?(present, "#ops-context-rail")
-    assert has_element?(present, ~s(#dashboard-playlist-present-page[data-wallboard-mode="true"]))
-
-    assert has_element?(
-             present,
-             ~s(#dashboard-playlist-freshness-signal[data-freshness-visible="true"])
-           )
-
-    assert has_element?(
-             present,
-             ~s(#dashboard-playlist-frame[data-dashboard-id="#{power.dashboard_id}"])
-           )
-
-    present |> element("#dashboard-playlist-next") |> render_click()
-
-    assert_patch(
+    assert_surface(
       present,
-      ~p"/missions/#{mission.mission_id}/ops/dashboards/playlists/#{playlist.dashboard_playlist_id}/present?index=1"
-    )
-
-    assert has_element?(
-             present,
-             ~s(#dashboard-playlist-frame[data-dashboard-id="#{thermal.dashboard_id}"])
-           )
-  end
-
-  test "author page creates playlists through the dashboard-author session" do
-    {conn, _user, org, mission} = signed_in_user_org_and_mission()
-    power = TestFixtures.persist_dashboard_document!(mission, name: "Power")
-
-    {:ok, view, _html} =
-      live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/playlists")
-
-    assert has_element?(view, "#ops-context-rail")
-
-    view
-    |> form("#dashboard-playlist-form",
-      playlist: %{
-        name: "Console rotation",
-        description: "Primary display",
-        dashboard_ids: [power.dashboard_id],
-        dwell_seconds: "15",
-        wallboard_mode: "true"
+      "dashboard-playlist-present-component",
+      "dashboard_playlist_present",
+      mission,
+      %{
+        "playlist_id" => "playlist-1"
       }
     )
-    |> render_submit()
 
-    assert [playlist] = Management.list_playlists(org.organization_id, mission.mission_id)
-    assert has_element?(view, "#dashboard-playlist-#{playlist.dashboard_playlist_id}")
+    {:ok, index, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards/playlists")
+    assert_surface(index, "dashboard-playlists-component", "dashboard_playlists", mission, %{})
   end
 
-  defp signed_in_user_org_and_mission do
+  defp signed_in do
     user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org, slug: "dashboard-playlists")
-    {TestFixtures.member_conn(user), user, org, mission}
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    {TestFixtures.member_conn(user), mission}
+  end
+
+  defp assert_surface(view, _id, surface_id, mission, query_params) do
+    page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["slot"] == "ops.page"
+    assert page["context"]["missionId"] == mission.mission_id
+
+    if surface_id == "dashboard_playlist_present" do
+      assert page["id"] == "dashboards.playlist-present"
+      assert page["context"]["resourceId"] == query_params["playlist_id"]
+      assert page["status"] == "unavailable"
+    else
+      assert page["id"] == "dashboards.playlists"
+      assert page["status"] == "ready"
+    end
   end
 end

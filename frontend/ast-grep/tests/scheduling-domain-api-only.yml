@@ -1,0 +1,11 @@
+id: scheduling-domain-api-only
+valid:
+  - "await service.submit(command);"
+  - "await service.search(input, route);"
+  - "// port.execute('reserve', input)"
+  - "const text = 'port.protocol';"
+invalid:
+  - "await port.execute('reserve', input);"
+  - "await fetch('/actions');"
+  - "if (port.protocol === 'page-snapshot') send(input);"
+  - "if (port?.protocol === 'remote-query') send(input);"

@@ -8,139 +8,48 @@ defmodule CadenceWeb.SpacecraftShowLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  defp signed_in_org_and_mission do
-    user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _ = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org, slug: "primary", display_name: "Primary Mission")
-    {TestFixtures.member_conn(user), user, org, mission}
+  test "authenticated show route mounts the spacecraft configuration workspace" do
+    {conn, mission, spacecraft} = signed_in_spacecraft()
+
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}")
+
+    assert_surface(view, mission, spacecraft)
   end
 
-  describe "mount" do
-    test "renders spacecraft detail" do
-      {conn, _user, _org, mission} = signed_in_org_and_mission()
-      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1", scid: 42)
+  test "out-of-scope spacecraft redirects to the mission inventory" do
+    {conn, mission, _spacecraft} = signed_in_spacecraft()
+    path = ~p"/missions/#{mission.mission_id}/spacecraft"
 
-      {:ok, view, html} =
-        live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}")
+    assert {:error, {:redirect, %{to: ^path, flash: %{"error" => _message}}}} =
+             live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/missing-spacecraft")
+  end
 
-      assert html =~ "Nova-1"
-      assert html =~ spacecraft.spacecraft_id
-      assert html =~ "42"
-      assert html =~ mission.display_name
+  test "unauthenticated show requests redirect to sign in" do
+    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+             live(build_conn(), "/missions/mission-test/spacecraft/spacecraft-test")
+  end
 
-      assert html =~
-               ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/readiness"
+  defp assert_surface(view, mission, spacecraft) do
+    HostTransportTestSupport.assert_context(view, %{
+      "kind" => "spacecraft",
+      "spacecraft_page" => "spacecraft_configuration",
+      "host_scope" => "spacecraft",
+      "mission_id" => mission.mission_id,
+      "spacecraft_id" => spacecraft.spacecraft_id,
+      "query_params" => %{}
+    })
+  end
 
-      assert html =~
-               ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/identity"
-
-      assert html =~
-               ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
-
-      assert has_element?(view, "#spacecraft-interpretation-overview")
-      assert has_element?(view, "#spacecraft-overview-identity")
-      assert has_element?(view, "#spacecraft-overview-applications")
-      assert has_element?(view, "#spacecraft-overview-readiness")
-      assert has_element?(view, "#spacecraft-profile-binding")
-    end
-
-    test "renders profile applications from the host inventory contract" do
-      {conn, _user, _org, mission} = signed_in_org_and_mission()
-
-      profile =
-        TestFixtures.persist_spacecraft_profile!(mission,
-          display_name: "Extensible Bus",
-          applications: %{
-            "custom:thermal-alerting" => %{"display_name" => "Thermal Alerting"},
-            "telemetry_decom" => %{}
-          }
-        )
-
-      spacecraft =
-        TestFixtures.persist_spacecraft!(mission,
-          display_name: "Nova-1",
-          spacecraft_type_id: profile.spacecraft_type_id,
-          spacecraft_type_version: profile.version
-        )
-
-      {:ok, view, _html} =
-        live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}")
-
-      assert has_element?(
-               view,
-               "#spacecraft-profile-application-telemetry_decom",
-               "Not installed"
-             )
-
-      assert has_element?(
-               view,
-               "#spacecraft-profile-application-custom-thermal-alerting",
-               "Unavailable"
-             )
-
-      refute has_element?(view, "#spacecraft-profile-applications a", "Manage")
-      assert has_element?(view, "#spacecraft-overview-applications", "0 of 2 ready")
-    end
-
-    test "unknown spacecraft redirects to the mission's spacecraft list" do
-      {conn, _user, _org, mission} = signed_in_org_and_mission()
-
-      assert {:error, {:redirect, %{to: path, flash: %{"error" => _}}}} =
-               live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/missing-id")
-
-      assert path == ~p"/missions/#{mission.mission_id}/spacecraft"
-    end
-
-    test "spacecraft belonging to a sibling mission is not found" do
-      {conn, _user, org, mission} = signed_in_org_and_mission()
-
-      other_mission =
-        TestFixtures.persist_mission!(org, slug: "secondary", display_name: "Secondary")
-
-      other_spacecraft = TestFixtures.persist_spacecraft!(other_mission, display_name: "Sibling")
-
-      assert {:error, {:redirect, %{to: path, flash: %{"error" => _}}}} =
-               live(
-                 conn,
-                 ~p"/missions/#{mission.mission_id}/spacecraft/#{other_spacecraft.spacecraft_id}"
-               )
-
-      assert path == ~p"/missions/#{mission.mission_id}/spacecraft"
-    end
-
-    test "spacecraft belonging to another organization is not found" do
-      {conn, _user, _org, mission} = signed_in_org_and_mission()
-
-      other_org = TestFixtures.persist_org!(display_name: "Other", slug: "other-org")
-
-      other_mission =
-        TestFixtures.persist_mission!(other_org, slug: "remote", display_name: "Remote")
-
-      other_spacecraft = TestFixtures.persist_spacecraft!(other_mission, display_name: "Foreign")
-
-      assert {:error, {:redirect, %{to: path, flash: %{"error" => _}}}} =
-               live(
-                 conn,
-                 ~p"/missions/#{mission.mission_id}/spacecraft/#{other_spacecraft.spacecraft_id}"
-               )
-
-      assert path == ~p"/missions/#{mission.mission_id}/spacecraft"
-    end
-
-    test "sidebar highlights the Spacecraft nav entry" do
-      {conn, _user, _org, mission} = signed_in_org_and_mission()
-      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nav-Check")
-
-      list_url = ~p"/missions/#{mission.mission_id}/spacecraft"
-
-      {:ok, _view, html} =
-        live(conn, ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}")
-
-      assert html =~ list_url
-      assert html =~ "Spacecraft"
-    end
+  defp signed_in_spacecraft do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1")
+    {TestFixtures.member_conn(user), mission, spacecraft}
   end
 end

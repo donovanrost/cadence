@@ -1,5 +1,7 @@
 import Config
 
+config :cadence, :organization_invitation_delivery, CadenceWeb.UserNotifier
+
 # The web application is the Cadence server composition root. Load the core
 # application's owned defaults before applying web and release-specific policy.
 import_config "../../cadence/config/config.exs"
@@ -21,6 +23,22 @@ config :cadence_web, CadenceWeb.Mailer, adapter: Swoosh.Adapters.Local
 
 config :cadence_web, dashboard_live_refresh_ms: 1_000
 config :cadence_web, :admin_mode_ttl_seconds, 3_600
+
+config :live_vue, ssr: false, shared_props: []
+
+config :cadence_web, :frontend_release_publication,
+  trust_records: [],
+  allowed_origins: []
+
+config :cadence_web, :frontend_release_publisher, token_sha256: nil
+
+config :phoenix_vite, PhoenixVite.Npm,
+  assets: [args: [], cd: Path.expand("..", __DIR__)],
+  vite: [
+    args: ~w(exec -- vite),
+    cd: Path.expand("..", __DIR__),
+    env: %{"MIX_BUILD_PATH" => Mix.Project.build_path()}
+  ]
 
 config :tailwind,
   version: "4.1.12",

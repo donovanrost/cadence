@@ -1,0 +1,15 @@
+@import "../../../packages/ui/src/styles.css";
+@source "../..";
+@source "../../../modules";
+@source "../../../../apps/cadence_web/lib/cadence_web";
+@source "../../../../apps/cadence_web/deps/live_toast/lib";
+
+@custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
+@custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
+@custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
+[data-phx-session],
+[data-phx-teleported-src] {
+  display: contents;
+}
+
+@import "@cadence/dashboards-and-exploration/workspace.css";

@@ -8,94 +8,51 @@ defmodule CadenceWeb.SpacecraftReadinessLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  defp signed_in_org_and_mission do
-    user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _ = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org, slug: "primary", display_name: "Primary Mission")
-    {TestFixtures.member_conn(user), org, mission}
+  test "authenticated readiness route mounts the core spacecraft feature" do
+    {conn, mission, spacecraft} = signed_in_spacecraft()
+
+    {:ok, view, _html} = live(conn, readiness_path(mission, spacecraft.spacecraft_id))
+
+    assert_surface(view, mission, spacecraft)
   end
 
-  describe "mount" do
-    test "renders spacecraft readiness with missing setup state" do
-      {conn, _org, mission} = signed_in_org_and_mission()
-      spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1")
+  test "missing spacecraft redirects to the mission inventory" do
+    {conn, mission, _spacecraft} = signed_in_spacecraft()
+    path = ~p"/missions/#{mission.mission_id}/spacecraft"
 
-      {:ok, view, html} =
-        live(
-          conn,
-          ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/readiness"
-        )
+    assert {:error, {:redirect, %{to: ^path, flash: %{"error" => "Spacecraft not found."}}}} =
+             live(conn, readiness_path(mission, "missing-spacecraft"))
+  end
 
-      assert has_element?(view, "#spacecraft-readiness-page")
-      assert has_element?(view, "#spacecraft-readiness-identity")
-      assert has_element?(view, "#spacecraft-readiness-profile")
-      assert has_element?(view, "#spacecraft-readiness-applications")
-      assert has_element?(view, "#spacecraft-readiness-routing")
+  test "unauthenticated readiness requests redirect to sign in" do
+    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+             live(build_conn(), "/missions/mission-test/spacecraft/spacecraft-test/readiness")
+  end
 
-      assert html =~ "Identity, profile, and application setup"
-      assert html =~ "Missing SCID"
-      assert html =~ "No profile selected"
-      assert html =~ "Profile required"
-      assert html =~ "Tracked in Comms"
-      refute html =~ "Link Assignments"
-      refute html =~ "Needs downlink"
+  defp assert_surface(view, mission, spacecraft) do
+    HostTransportTestSupport.assert_context(view, %{
+      "kind" => "spacecraft",
+      "spacecraft_page" => "spacecraft_readiness",
+      "host_scope" => "spacecraft",
+      "mission_id" => mission.mission_id,
+      "spacecraft_id" => spacecraft.spacecraft_id,
+      "query_params" => %{}
+    })
+  end
 
-      assert html =~
-               ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/identity"
+  defp signed_in_spacecraft do
+    user = TestFixtures.persist_user!()
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    spacecraft = TestFixtures.persist_spacecraft!(mission, display_name: "Nova-1")
+    {TestFixtures.member_conn(user), mission, spacecraft}
+  end
 
-      assert html =~
-               ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications"
-
-      assert html =~
-               ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/routing"
-    end
-
-    test "lists every profile application through generic inventory status" do
-      {conn, _org, mission} = signed_in_org_and_mission()
-
-      profile =
-        TestFixtures.persist_spacecraft_profile!(mission,
-          applications: %{
-            "custom:thermal-alerting" => %{"display_name" => "Thermal Alerting"},
-            "telemetry_decom" => %{}
-          }
-        )
-
-      spacecraft =
-        TestFixtures.persist_spacecraft!(mission,
-          display_name: "Nova-1",
-          scid: 42,
-          spacecraft_type_id: profile.spacecraft_type_id,
-          spacecraft_type_version: profile.version
-        )
-
-      {:ok, view, _html} =
-        live(
-          conn,
-          ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/readiness"
-        )
-
-      assert has_element?(
-               view,
-               "#spacecraft-readiness-application-custom-thermal-alerting",
-               "Unavailable"
-             )
-
-      assert has_element?(
-               view,
-               "#spacecraft-readiness-application-telemetry_decom",
-               "Not installed"
-             )
-
-      assert has_element?(view, "#spacecraft-readiness-applications", "0 of 2 ready")
-
-      assert has_element?(
-               view,
-               "#spacecraft-readiness-applications a[href='/missions/#{mission.mission_id}/spacecraft/#{spacecraft.spacecraft_id}/applications']"
-             )
-    end
+  defp readiness_path(mission, spacecraft_id) do
+    ~p"/missions/#{mission.mission_id}/spacecraft/#{spacecraft_id}/readiness"
   end
 end

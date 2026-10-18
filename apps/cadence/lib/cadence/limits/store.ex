@@ -82,6 +82,59 @@ defmodule Cadence.Limits.Store do
     |> Enum.map(&LatestStateRow.to_domain/1)
   end
 
+  @doc "Scoped pages of latest evaluated states, with complete counts under the selected search and spacecraft scope."
+  def latest_states_page(organization_id, mission_id, opts \\ []) do
+    search = Keyword.get(opts, :search, "") |> String.downcase()
+    severity = Keyword.get(opts, :severity)
+
+    scope =
+      LatestStateRow
+      |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+      |> maybe_filter_latest_spacecraft(Keyword.get(opts, :spacecraft_id), opts)
+      |> where(
+        [row],
+        fragment("strpos(lower(?), ?) > 0", row.point_id, ^search) or
+          fragment("strpos(lower(?), ?) > 0", row.point_name, ^search) or
+          fragment("strpos(lower(?), ?) > 0", row.limit_set_name, ^search)
+      )
+
+    scope = maybe_filter(scope, :violation, Keyword.get(opts, :violation))
+
+    counts =
+      scope
+      |> group_by([row], row.normalized_state)
+      |> select([row], {row.normalized_state, count(row.id)})
+      |> Repo.all()
+      |> Map.new()
+
+    query = maybe_filter(scope, :normalized_state, severity)
+    total = Repo.aggregate(query, :count)
+    page = Keyword.get(opts, :page, 1) |> max(1) |> min(max(1, ceil(total / 25)))
+
+    items =
+      query
+      |> order_by([row],
+        asc:
+          fragment(
+            "CASE ? WHEN 'red' THEN 0 WHEN 'yellow' THEN 1 WHEN 'blue' THEN 2 ELSE 3 END",
+            row.normalized_state
+          ),
+        desc: row.receipt_time,
+        asc: row.limit_event_id
+      )
+      |> limit(25)
+      |> offset(^((page - 1) * 25))
+      |> Repo.all()
+      |> Enum.map(&LatestStateRow.to_domain/1)
+
+    %{
+      items: items,
+      total_count: total,
+      page: page,
+      counts: Map.merge(%{"red" => 0, "yellow" => 0, "blue" => 0, "green" => 0}, counts)
+    }
+  end
+
   @spec replace_latest_states(binary(), [Event.t()], keyword()) :: :ok | {:error, term()}
   def replace_latest_states(mission_id, events, opts \\ [])
       when is_binary(mission_id) and is_list(events) and is_list(opts) do

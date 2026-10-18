@@ -25,6 +25,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
     ProfileStore
   }
 
+  alias Cadence.Listing
   alias Cadence.Missions
   alias Cadence.Repo
   alias Cadence.SourceEndpoints
@@ -185,6 +186,39 @@ defmodule Cadence.Comms.RoutingRuleStore do
     |> Enum.map(&RoutingRuleRow.to_domain/1)
   end
 
+  @doc "Returns one bounded page of active mission routing rules."
+  @spec list_routing_rules_page(binary(), binary(), keyword()) :: Listing.Page.t()
+  def list_routing_rules_page(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
+    %{page: page, page_size: page_size, offset: offset} = Listing.page_opts(opts)
+    direction = if Keyword.get(opts, :direction) == :desc, do: :desc, else: :asc
+    sort = if Keyword.get(opts, :sort) == :display_name, do: :display_name, else: :purpose_label
+
+    filtered =
+      RoutingRuleRow
+      |> where(
+        [row],
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.lifecycle_state != "archived"
+      )
+      |> apply_routing_search(Keyword.get(opts, :search))
+
+    items =
+      filtered
+      |> order_by(^[{direction, sort}, {:asc, :routing_rule_id}])
+      |> limit(^page_size)
+      |> offset(^offset)
+      |> Repo.all()
+      |> Enum.map(&RoutingRuleRow.to_domain/1)
+
+    %Listing.Page{
+      items: items,
+      total_count: Repo.aggregate(filtered, :count),
+      page: page,
+      page_size: page_size
+    }
+  end
+
   @spec list_routing_rules_for_spacecraft(binary(), binary(), binary()) :: [RoutingRule.t()]
   def list_routing_rules_for_spacecraft(organization_id, mission_id, spacecraft_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) do
@@ -197,6 +231,22 @@ defmodule Cadence.Comms.RoutingRuleStore do
     |> order_by([row], asc: row.purpose_label, asc: row.direction)
     |> Repo.all()
     |> Enum.map(&RoutingRuleRow.to_domain/1)
+  end
+
+  defp apply_routing_search(query, nil), do: query
+  defp apply_routing_search(query, ""), do: query
+
+  defp apply_routing_search(query, search) when is_binary(search) do
+    pattern = "%" <> Listing.escape_like(search) <> "%"
+
+    where(
+      query,
+      [row],
+      ilike(row.routing_rule_id, ^pattern) or
+        ilike(row.purpose_label, ^pattern) or
+        ilike(row.spacecraft_id, ^pattern) or
+        ilike(row.transport_id, ^pattern)
+    )
   end
 
   @spec list_routing_rule_events(binary(), binary(), binary()) :: [RoutingRuleEvent.t()]

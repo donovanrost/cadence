@@ -9,19 +9,62 @@ defmodule CadenceWeb.ApplicationHostLive do
     ActionRequest,
     ApplicationInstallations,
     HostContext,
+    JSONBoundary,
     SurfaceDefinition
   }
 
   alias Cadence.Applications.Registry, as: ApplicationRegistry
   alias Cadence.ExtensionCatalog
-  alias CadenceWeb.ApplicationSurfaceRegistry
+  alias Cadence.Reads.ApplicationSurfaces
+  alias Phoenix.LiveView.JS
 
   alias CadenceWeb.ApplicationSurfaces.{
     Declarative,
-    DocumentState,
     ReferenceEvents,
     TableEvents
   }
+
+  defp fetch_installation(scope, host, key) do
+    if ApplicationRegistry.platform?(key, host.placement),
+      do: {:ok, nil},
+      else: ApplicationInstallations.fetch_installed(scope, host, key)
+  end
+
+  defp installation_id(nil), do: nil
+  defp installation_id(installation), do: installation.application_installation_id
+
+  defp surface_query_params(
+         %SurfaceDefinition{renderer: {:trusted, "cadence.telemetry_decom.packet_bindings"}},
+         params
+       ) do
+    Map.take(params, ~w(page endpoint_page resource_page q endpoint_q packet))
+  end
+
+  defp surface_query_params(
+         %SurfaceDefinition{renderer: {:trusted, "cadence.derived_telemetry.definitions"}},
+         params
+       ),
+       do:
+         Map.take(
+           params,
+           ~w(page history_page values_page sources_page spacecraft_page q values_q definition version spacecraft spacecraft_q)
+         )
+
+  defp surface_query_params(
+         %SurfaceDefinition{renderer: {:trusted, "cadence.limits.feature"}},
+         params
+       ),
+       do:
+         Map.take(
+           params,
+           ~w(page history_page activation_page points_page spacecraft_page q points_q spacecraft_q spacecraft definition point set severity version limit_definition_id limit_definition_version point_id)
+         )
+
+  defp surface_query_params(%SurfaceDefinition{renderer: {:trusted, _}}, params) do
+    if Map.has_key?(params, "page"), do: TableEvents.query_params(params), else: %{}
+  end
+
+  defp surface_query_params(_surface, params), do: TableEvents.query_params(params)
 
   @impl true
   def mount(params, _session, socket) do
@@ -31,7 +74,7 @@ defmodule CadenceWeb.ApplicationHostLive do
          {:ok, _known_definition} <-
            ExtensionCatalog.fetch_available_application(application_key),
          {:ok, installation} <-
-           ApplicationInstallations.fetch_installed(
+           fetch_installation(
              socket.assigns.current_scope,
              host_context,
              application_key
@@ -39,10 +82,16 @@ defmodule CadenceWeb.ApplicationHostLive do
          {:ok, definition} <-
            ExtensionCatalog.fetch_available_application(
              application_key,
-             installation.application_version
+             if(installation, do: installation.application_version, else: :latest)
            ),
          true <- host_context.placement in definition.installable_scopes,
          {:ok, surface} <- requested_surface(definition, host_context, params),
+         :ok <-
+           ApplicationInstallations.authorize_surface(
+             socket.assigns.current_scope,
+             host_context,
+             surface
+           ),
          {:ok, socket} <-
            socket
            |> assign(:application_installation, installation)
@@ -50,10 +99,18 @@ defmodule CadenceWeb.ApplicationHostLive do
            |> assign(:application_definition, definition)
            |> assign(:application_surface_definition, surface)
            |> assign(:application_action_feedback, nil)
-           |> assign(:application_surface_query_params, TableEvents.query_params(params))
+           |> assign(:application_surface_query_params, surface_query_params(surface, params))
            |> assign(
              :application_workspace_surfaces,
-             ApplicationRegistry.workspace_surfaces(definition, host_context.placement)
+             definition
+             |> ApplicationRegistry.workspace_surfaces(host_context.placement)
+             |> Enum.filter(
+               &(ApplicationInstallations.authorize_surface(
+                   socket.assigns.current_scope,
+                   host_context,
+                   &1
+                 ) == :ok)
+             )
            )
            |> mount_renderer(surface) do
       {:ok, socket}
@@ -85,22 +142,27 @@ defmodule CadenceWeb.ApplicationHostLive do
         %{assigns: %{application_renderer_kind: :declarative}} = socket
       ) do
     action_id = Map.get(params, "action-id", Map.get(params, "action_id"))
-    action_params = Map.get(params, "application_action", %{})
+    raw_action_params = Map.get(params, "application_action", %{})
+    action_params = if is_map(raw_action_params), do: raw_action_params, else: %{}
 
-    with true <- action_id in socket.assigns.application_surface_definition.actions,
+    with :ok <- validate_action_params(raw_action_params),
+         true <- action_id in socket.assigns.application_surface_definition.actions,
          request = %ActionRequest{
+           surface_id: socket.assigns.application_surface_definition.surface_id,
+           surface_version: socket.assigns.application_surface_definition.version,
            application_key: socket.assigns.application_definition.application_key,
            application_version: socket.assigns.application_definition.version,
            action_id: action_id,
            params: action_params
          },
-         {:ok, _result} <-
+         {:ok, result} <-
            ActionDispatcher.dispatch(
              socket.assigns.current_scope,
              socket.assigns.application_host_context,
              request
            ),
-         {:ok, socket} <- DocumentState.load(socket) do
+         :ok <- validate_action_output(request.application_key, result),
+         {:ok, socket} <- load_declarative_surface(socket) do
       {:noreply,
        assign_action_feedback(
          socket,
@@ -137,60 +199,66 @@ defmodule CadenceWeb.ApplicationHostLive do
     TableEvents.change(page, socket, surface_path)
   end
 
-  def handle_event(event, params, %{assigns: %{application_renderer_kind: :trusted}} = socket) do
-    socket.assigns.application_surface_module.handle_event(event, params, socket)
-  end
-
   @impl true
   def handle_params(
         params,
         _uri,
         %{assigns: %{application_renderer_kind: :declarative}} = socket
       ) do
-    TableEvents.handle_params(params, socket)
+    query_params = TableEvents.query_params(params)
+
+    if query_params == socket.assigns.application_surface_query_params do
+      {:noreply, socket}
+    else
+      case load_declarative_surface(socket, query_params) do
+        {:ok, socket} ->
+          {:noreply, socket}
+
+        {:error, _reason} ->
+          {:noreply,
+           assign(socket, :application_action_feedback, %{
+             kind: :error,
+             code: "surface_page_failed",
+             message: "The requested application page could not be loaded."
+           })}
+      end
+    end
   end
 
   def handle_params(_params, _uri, socket), do: {:noreply, socket}
 
   @impl true
-  def handle_info(message, socket) do
-    case socket.assigns do
-      %{application_renderer_kind: :trusted, application_surface_module: surface_module} ->
-        if function_exported?(surface_module, :handle_info, 2) do
-          surface_module.handle_info(message, socket)
-        else
-          {:noreply, socket}
-        end
-
-      _assigns ->
-        {:noreply, socket}
-    end
-  end
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
-  def render(
-        %{application_renderer_kind: :trusted, application_surface_module: surface_module} =
-          assigns
-      ) do
-    rendered_surface = surface_module.render(assigns)
-    assigns = assign(assigns, :rendered_application_surface, rendered_surface)
-
+  def render(%{application_renderer_kind: :federated} = assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div
         id={application_host_dom_id(@application_host_context)}
         data-application-key={@application_definition.application_key}
         data-application-version={@application_definition.version}
-        data-application-installation-id={@application_installation.application_installation_id}
+        data-application-installation-id={installation_id(@application_installation)}
         data-surface-id={@application_surface_definition.surface_id}
+        data-surface-version={@application_surface_definition.version}
+        data-renderer="federated"
       >
-        <.surface_navigation
-          surfaces={@application_workspace_surfaces}
-          current_surface={@application_surface_definition}
-          host_context={@application_host_context}
+        <.vue
+          id="application-surface-component"
+          v-component="FederatedFullPageSurface"
           application_key={@application_definition.application_key}
+          application_version={@application_definition.version}
+          surface_id={@application_surface_definition.surface_id}
+          surface_version={@application_surface_definition.version}
+          host_scope={Atom.to_string(@application_host_context.placement)}
+          organization_id={@application_host_context.organization_id}
+          user_id={@application_host_context.user_id}
+          mission_id={@application_host_context.mission_id}
+          spacecraft_id={@application_host_context.spacecraft_id}
+          query_params={@application_surface_query_params}
+          v-ssr={false}
+          class="contents"
         />
-        {@rendered_application_surface}
       </div>
     </Layouts.app>
     """
@@ -203,25 +271,32 @@ defmodule CadenceWeb.ApplicationHostLive do
         id={application_host_dom_id(@application_host_context)}
         data-application-key={@application_definition.application_key}
         data-application-version={@application_definition.version}
-        data-application-installation-id={@application_installation.application_installation_id}
+        data-application-installation-id={installation_id(@application_installation)}
         data-surface-id={@application_surface_definition.surface_id}
         data-renderer="declarative"
       >
-        <.surface_navigation
-          surfaces={@application_workspace_surfaces}
-          current_surface={@application_surface_definition}
-          host_context={@application_host_context}
-          application_key={@application_definition.application_key}
-        />
-        <Declarative.surface
-          document={@application_surface_document}
-          application_definition={@application_definition}
-          surface_definition={@application_surface_definition}
-          form={@application_surface_form}
-          action_feedback={@application_action_feedback}
-          rows={@streams.application_surface_rows}
-          activity_items={@streams.application_surface_activity}
-          packet_groups={@streams.application_surface_packet_groups}
+        <.vue
+          id="application-host-component"
+          v-component="ApplicationHost"
+          host={application_host_dto(assigns)}
+          navigation={surface_navigation_dto(assigns)}
+          declarative_surface={
+            Declarative.presentation(
+              @application_surface_document,
+              @application_definition,
+              @application_surface_definition,
+              @application_surface_form,
+              @application_action_feedback
+            )
+          }
+          application_surface_rows={@streams.application_surface_rows}
+          application_surface_activity={@streams.application_surface_activity}
+          application_surface_packet_groups={@streams.application_surface_packet_groups}
+          v-on:application_form_change={JS.push("application_form_change")}
+          v-on:application_action={JS.push("application_action")}
+          v-on:application_table_page={JS.push("application_table_page")}
+          v-ssr={false}
+          class="contents"
         />
       </div>
     </Layouts.app>
@@ -236,13 +311,8 @@ defmodule CadenceWeb.ApplicationHostLive do
     """
   end
 
-  defp mount_renderer(socket, %SurfaceDefinition{renderer: {:trusted, renderer_id}}) do
-    with {:ok, surface_module} <- ApplicationSurfaceRegistry.fetch(renderer_id) do
-      socket
-      |> assign(:application_renderer_kind, :trusted)
-      |> assign(:application_surface_module, surface_module)
-      |> surface_module.mount()
-    end
+  defp mount_renderer(socket, %SurfaceDefinition{renderer: {:trusted, _renderer_id}}) do
+    {:ok, assign(socket, :application_renderer_kind, :federated)}
   end
 
   defp mount_renderer(
@@ -251,18 +321,91 @@ defmodule CadenceWeb.ApplicationHostLive do
        ) do
     socket
     |> assign(:application_renderer_kind, :declarative)
-    |> stream_configure(:application_surface_rows, dom_id: &"application-surface-row-#{&1.id}")
+    |> stream_configure(:application_surface_rows, dom_id: &Declarative.table_row_dom_id/1)
     |> stream_configure(:application_surface_activity,
-      dom_id: &"application-surface-activity-#{&1.id}"
+      dom_id: &Declarative.activity_item_dom_id/1
     )
     |> stream_configure(:application_surface_packet_groups,
-      dom_id: &"packet-binding-group-#{&1.id}"
+      dom_id: &Declarative.packet_group_dom_id/1
     )
-    |> DocumentState.load()
+    |> load_declarative_surface()
   end
 
   defp mount_renderer(_socket, %SurfaceDefinition{}),
     do: {:error, :unsupported_application_renderer}
+
+  defp load_declarative_surface(socket, params \\ nil) do
+    params = params || socket.assigns.application_surface_query_params
+
+    with {:ok, document} <-
+           ApplicationSurfaces.load(
+             socket.assigns.current_scope,
+             socket.assigns.application_host_context,
+             socket.assigns.application_definition.application_key,
+             socket.assigns.application_definition.version,
+             socket.assigns.application_surface_definition,
+             params
+           ) do
+      {:ok,
+       socket
+       |> assign(:application_surface_document, document)
+       |> assign(:application_surface_form, declarative_surface_form(document))
+       |> assign(:application_surface_query_params, params)
+       |> present_declarative_streams(document)}
+    end
+  end
+
+  defp present_declarative_streams(socket, document) do
+    socket
+    |> stream(
+      :application_surface_rows,
+      bounded_collection(Declarative.table_row_dtos(document)),
+      reset: true
+    )
+    |> stream(
+      :application_surface_activity,
+      bounded_collection(Declarative.activity_item_dtos(document)),
+      reset: true
+    )
+    |> stream(
+      :application_surface_packet_groups,
+      bounded_collection(Declarative.packet_group_dtos(document)),
+      reset: true
+    )
+  end
+
+  defp declarative_surface_form(%{form: form}) when not is_nil(form) do
+    params =
+      Map.new(form.fields, fn field ->
+        {Atom.to_string(field.field), field.default}
+      end)
+
+    to_form(params, as: :application_action)
+  end
+
+  defp declarative_surface_form(%{packet_bindings: nil}), do: nil
+
+  defp declarative_surface_form(%{packet_bindings: packet_bindings}) do
+    selected_packet_ids =
+      packet_bindings.packet_groups
+      |> Enum.filter(& &1.selected)
+      |> Enum.map(& &1.packet_id)
+
+    to_form(
+      %{
+        "input_id" => packet_bindings.input_definition.input_id,
+        "input_version" => Integer.to_string(packet_bindings.input_definition.version),
+        "catalog_revision_id" => packet_bindings.catalog_revision_id || "",
+        "source_endpoint_ref" => packet_bindings.source_endpoint_ref || "",
+        "expected_configuration_version" => version_value(packet_bindings.configured_version),
+        "selected_packet_ids" => selected_packet_ids
+      },
+      as: :application_action
+    )
+  end
+
+  defp version_value(nil), do: ""
+  defp version_value(version), do: Integer.to_string(version)
 
   defp failed_surface_form(%{form: nil, packet_bindings: nil}, _params, _failure), do: nil
 
@@ -337,37 +480,67 @@ defmodule CadenceWeb.ApplicationHostLive do
   defp application_host_dom_id(%HostContext{placement: :mission}),
     do: "mission-application-host"
 
-  attr :surfaces, :list, required: true
-  attr :current_surface, :any, required: true
-  attr :host_context, :any, required: true
-  attr :application_key, :string, required: true
+  defp application_host_dto(assigns) do
+    dto = %{
+      dom_id: application_host_dom_id(assigns.application_host_context),
+      application_key: assigns.application_definition.application_key,
+      application_version: assigns.application_definition.version,
+      application_installation_id: installation_id(assigns.application_installation),
+      surface_id: assigns.application_surface_definition.surface_id,
+      renderer: Atom.to_string(assigns.application_renderer_kind)
+    }
 
-  defp surface_navigation(assigns) do
-    ~H"""
-    <nav
-      :if={length(@surfaces) > 1}
-      id="application-surface-navigation"
-      aria-label="Application surfaces"
-      class="mb-5 flex flex-wrap items-center gap-1 border-b border-base-300/70"
-    >
-      <.link
-        :for={surface <- @surfaces}
-        id={"application-surface-nav-#{surface.surface_id}"}
-        navigate={application_surface_path(@host_context, @application_key, surface.surface_id)}
-        aria-current={if(surface.surface_id == @current_surface.surface_id, do: "page", else: nil)}
-        class={[
-          "relative -mb-px border-b-2 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors",
-          surface.surface_id == @current_surface.surface_id &&
-            "border-primary text-primary",
-          surface.surface_id != @current_surface.surface_id &&
-            "border-transparent text-base-content/55 hover:border-base-content/30 hover:text-base-content"
-        ]}
-      >
-        {Map.get(surface.navigation, :label, surface.surface_id)}
-      </.link>
-    </nav>
-    """
+    bounded_dto(dto, %{
+      dom_id: application_host_dom_id(assigns.application_host_context),
+      application_key: "unavailable",
+      application_version: 0,
+      application_installation_id: "unavailable",
+      surface_id: "unavailable",
+      renderer: "unavailable"
+    })
   end
+
+  defp surface_navigation_dto(assigns) do
+    if length(assigns.application_workspace_surfaces) > 1 do
+      dto = %{
+        id: "application-surface-navigation",
+        label: "Application surfaces",
+        items:
+          Enum.map(assigns.application_workspace_surfaces, fn surface ->
+            %{
+              id: "application-surface-nav-#{surface.surface_id}",
+              surface_id: surface.surface_id,
+              label: Map.get(surface.navigation, :label, surface.surface_id),
+              href:
+                application_surface_path(
+                  assigns.application_host_context,
+                  assigns.application_definition.application_key,
+                  surface.surface_id
+                ),
+              current: surface.surface_id == assigns.application_surface_definition.surface_id
+            }
+          end)
+      }
+
+      bounded_dto(dto, nil)
+    end
+  end
+
+  defp bounded_dto(value, fallback) do
+    case JSONBoundary.validate(value) do
+      :ok -> value
+      {:error, _reason} -> fallback
+    end
+  end
+
+  defp bounded_collection(value) when is_list(value) do
+    case JSONBoundary.validate(value) do
+      :ok -> value
+      {:error, _reason} -> []
+    end
+  end
+
+  defp bounded_collection(_value), do: []
 
   defp application_surface_path(
          %HostContext{placement: :mission, mission_id: mission_id},
@@ -404,6 +577,30 @@ defmodule CadenceWeb.ApplicationHostLive do
       code: code,
       message: message
     })
+  end
+
+  defp validate_action_params(params) when is_map(params) do
+    case JSONBoundary.validate(params) do
+      :ok -> :ok
+      {:error, _reason} -> {:error, :application_surface_bounds_exceeded}
+    end
+  end
+
+  defp validate_action_params(_params),
+    do: {:error, :application_surface_bounds_exceeded}
+
+  defp validate_action_output(application_key, result) do
+    output = ActionDispatcher.result(application_key, result)
+
+    cond do
+      is_nil(output) -> {:error, :application_action_output_bounds_exceeded}
+      JSONBoundary.validate(output) == :ok -> :ok
+      true -> {:error, :application_action_output_bounds_exceeded}
+    end
+  rescue
+    _exception -> {:error, :application_action_output_bounds_exceeded}
+  catch
+    _kind, _value -> {:error, :application_action_output_bounds_exceeded}
   end
 
   defp action_success_message(socket, action_id) do

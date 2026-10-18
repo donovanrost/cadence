@@ -7,7 +7,7 @@ defmodule Cadence.Auth do
 
   alias Cadence.Accounts
   alias Cadence.Accounts.OrganizationMembership
-  alias Cadence.Auth.{Scope, ServiceIdentity, ServiceIdentityRow}
+  alias Cadence.Auth.{Policy, Scope, ServiceIdentity, ServiceIdentityRow}
   alias Cadence.Missions
   alias Cadence.Organizations
   alias Cadence.Repo
@@ -225,6 +225,64 @@ defmodule Cadence.Auth do
     |> Enum.map(&ServiceIdentityRow.to_domain/1)
   end
 
+  @doc "Bounded organization identity facts; token digests and metadata are not selected."
+  def page_organization_service_identities(organization_id, after_id) do
+    query =
+      ServiceIdentityRow
+      |> where([r], r.organization_id == ^organization_id)
+      |> order_by([r], asc: fragment(~s(? COLLATE "C"), r.service_identity_id))
+      |> limit(26)
+      |> select([r], %{
+        id: r.service_identity_id,
+        name: r.display_name,
+        mission_id: r.mission_id,
+        token_hint: r.token_hint,
+        lifecycle_state: r.lifecycle_state,
+        capabilities: r.capabilities
+      })
+
+    query =
+      if after_id,
+        do:
+          where(
+            query,
+            [r],
+            fragment(~s(? COLLATE "C" > ? COLLATE "C"), r.service_identity_id, ^after_id)
+          ),
+        else: query
+
+    rows = Repo.all(query)
+    entries = Enum.take(rows, 25)
+    %{entries: entries, next_after: if(length(rows) > 25, do: List.last(entries).id, else: nil)}
+  end
+
+  @doc "Bounded active mission identity choices; credential material is never projected."
+  def list_service_identity_choices(%Scope{} = scope, mission_id, page)
+      when is_integer(page) and page in 1..1_000_000 do
+    with :ok <-
+           Policy.authorize(scope, :manage_automation_grants, %{
+             organization_id: scope.organization_id
+           }),
+         true <- is_nil(scope.mission_id) or scope.mission_id == mission_id do
+      rows =
+        ServiceIdentityRow
+        |> where(
+          [r],
+          r.organization_id == ^scope.organization_id and r.mission_id == ^mission_id and
+            r.lifecycle_state == "active"
+        )
+        |> order_by([r], asc: r.display_name, asc: r.service_identity_id)
+        |> offset(^((page - 1) * 25))
+        |> limit(26)
+        |> select([r], %{id: r.service_identity_id, name: r.display_name})
+        |> Repo.all()
+
+      {:ok, %{page: page, more: length(rows) > 25, entries: Enum.take(rows, 25)}}
+    else
+      _ -> {:error, :forbidden}
+    end
+  end
+
   defp validate_service_identity_scope(%ServiceIdentity{} = service_identity) do
     with {:ok, _organization} <-
            Organizations.fetch_organization(service_identity.organization_id),
@@ -241,10 +299,7 @@ defmodule Cadence.Auth do
 
   defp insert_service_identity(repo, %ServiceIdentity{} = service_identity, api_token) do
     with :ok <- validate_service_identity_scope(service_identity) do
-      case repo.insert(ServiceIdentityRow.changeset(service_identity, api_token),
-             on_conflict: :nothing,
-             conflict_target: [:service_identity_id]
-           ) do
+      case repo.insert(ServiceIdentityRow.changeset(service_identity, api_token)) do
         {:ok, %ServiceIdentityRow{} = row} ->
           {:ok, ServiceIdentityRow.to_domain(row)}
 

@@ -1,0 +1,195 @@
+import type { WorkspaceSnapshot } from "../workspace/contracts";
+
+/** Server-authored widget form values; every value is the form's string encoding. */
+export const widgetDefaults = {
+  type: "value_tile",
+  title: "",
+  mode: "context",
+  spacecraft_id: "",
+  scope_kind: "",
+  scope_id: "",
+  section_id: "",
+  binding_source: "telemetry",
+  precision: "2",
+  window_seconds: "300",
+  show_unit: "true",
+  show_min_max_band: "true",
+  legend_mode: "auto",
+  line_width: "normal",
+  fill_opacity: "0",
+  span_gaps: "false",
+  show_points: "false",
+  axis_mode: "unit",
+  shared_tooltip: "true",
+  repeat_over: "spacecraft",
+  repeat_layout: "wrap_grid",
+  repeat_max_instances: "12",
+};
+export type WidgetFields = typeof widgetDefaults;
+
+export type OutlineSection = Readonly<{
+  id: string;
+  title: string;
+  description: string;
+  collapsed_by_default: boolean;
+}>;
+
+export type OutlinePlacement = Readonly<{
+  id: string;
+  section_id: string | null;
+  title: string;
+  editable: boolean;
+  fields: WidgetFields | null;
+  observables: readonly string[];
+  layout: Readonly<{ x: number | null; y: number | null; w: number; h: number }>;
+  constraints: Readonly<{
+    min_w: number;
+    min_h: number;
+    max_w: number;
+    max_h: number;
+    max_y: number;
+  }>;
+}>;
+
+/** The staged document as an editable outline (the canvas shows its resolved preview). */
+export type DashboardOutline = Readonly<{
+  version: 3;
+  organization_id: string;
+  mission_id: string;
+  dashboard_id: string;
+  document_version: number;
+  name: string;
+  description: string;
+  defaults: WidgetFields;
+  runtime_defaults_json: string;
+  grid: Readonly<{ columns: number; row_height_px: number; gap_px: number }>;
+  sections: readonly OutlineSection[];
+  placements: readonly OutlinePlacement[];
+}>;
+
+/** One readable difference between two dashboard versions (server-computed). */
+export type VersionChange = Readonly<{
+  kind: "added" | "removed" | "changed";
+  subject: "dashboard" | "section" | "widget" | "layout";
+  label: string;
+  detail: string | null;
+}>;
+
+export type EditSession = Readonly<{
+  revision: number;
+  dirty: boolean;
+  /** Someone else saved a newer version; saving will fail until this candidate is discarded. */
+  conflict: boolean;
+  /** The saved version this staging transaction will replace. */
+  document_version: number;
+  /** What a save would change, relative to the saved version. */
+  changes: readonly VersionChange[];
+  outline: DashboardOutline;
+}>;
+
+/** The current version: every save makes one, there is no separate publish. */
+export type SavedVersion = Readonly<{ version: number; updated_at: string | null }>;
+
+export type ScopeOption = Readonly<{ id: string; name: string }>;
+
+type PageBase = Readonly<{
+  version: 2;
+  /** The last confirmed action sequence; the next action must use sequence + 1. */
+  sequence: number;
+  author: boolean;
+  saved: SavedVersion;
+  scope_options: readonly ScopeOption[];
+  live: Readonly<{ active: boolean; refresh_ms: number | null }>;
+  resolved_at: string;
+}>;
+
+/**
+ * A viewer page has a snapshot unless the dashboard was never published and the
+ * reader is not an author. An edit page always resolves its staged candidate.
+ */
+export type DashboardPageData =
+  | (PageBase & { mode: "view"; snapshot: WorkspaceSnapshot | null; edit: null })
+  | (PageBase & { mode: "edit"; snapshot: WorkspaceSnapshot; edit: EditSession });
+
+export const stageActions = [
+  "rename",
+  "add_section",
+  "update_section",
+  "remove_section",
+  "move_section",
+  "add_widget",
+  "update_widget",
+  "remove_widget",
+  "layout",
+  "runtime_defaults",
+] as const;
+export type StageAction = (typeof stageActions)[number];
+export const pageActions = [
+  ...stageActions,
+  "save",
+  "discard",
+  "rebase",
+  "save_as_copy",
+  "restore",
+  "search_observables",
+  "versions",
+  "compare",
+  "compare_staged",
+];
+
+export type LayoutEdit = { placement_id: string; x: number; y: number; w: number; h: number };
+export type SectionInput = { title: string; description: string; collapsed_by_default: boolean };
+export type WidgetInput = { fields: WidgetFields; observables: string[] };
+
+/** Each staged action's input; the composable adds the observed version and revision. */
+export type StageInputs = {
+  rename: { name: string; description: string };
+  add_section: SectionInput;
+  update_section: SectionInput & { section_id: string };
+  remove_section: { section_id: string };
+  move_section: { section_id: string; direction: "up" | "down" };
+  add_widget: WidgetInput;
+  update_widget: WidgetInput & { placement_id: string };
+  remove_widget: { placement_id: string };
+  layout: { layouts: LayoutEdit[] };
+  runtime_defaults: { defaults_json: string };
+};
+
+export type ActionStatus = "ok" | "invalid" | "conflict" | "rejected" | "unknown";
+/** Effect-specific results: skipped edits after a rebase, a copy's id, a restored version. */
+export type ActionResult = Readonly<{
+  skipped?: readonly string[];
+  dashboard_id?: string;
+  version?: number;
+}>;
+
+export type ActionOutcome =
+  | { status: "ok"; page: DashboardPageData; result: ActionResult | null }
+  | { status: "invalid"; code: string; page: DashboardPageData | null }
+  | { status: "conflict" | "rejected" | "unknown"; page: DashboardPageData | null };
+
+export type VersionRow = Readonly<{
+  version: number;
+  saved_at: string | null;
+  saved_by: string | null;
+  message: string | null;
+  restored_from: number | null;
+  current: boolean;
+}>;
+
+export type VersionList = Readonly<{ current_version: number; versions: readonly VersionRow[] }>;
+
+/** Two versions (or the saved version and the staged candidate when `to` is null). */
+export type VersionComparison = Readonly<{
+  from: number;
+  to: number | null;
+  changes: readonly VersionChange[];
+  from_json: string;
+  to_json: string;
+}>;
+
+/** The dashboard details sheet stages a rename and/or new runtime defaults, in order. */
+export type DetailsChange = {
+  rename: { name: string; description: string } | null;
+  defaults: string | null;
+};

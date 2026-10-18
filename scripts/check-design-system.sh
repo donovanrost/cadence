@@ -2,8 +2,8 @@
 # Design-system conformance lint — WARN-ONLY (Phase 2).
 #
 # Promotes design-system rules into checks. Non-blocking while the migration
-# (Phases 3-5) is in flight; Phase 6 flips these to errors and retires the
-# blunt check-css-frozen.sh guard. Run from the repo root.
+# (Phases 3-5) is in flight; Phase 6 flips these to errors. Run from the repo
+# root.
 
 WEB="apps/cadence_web/lib/cadence_web"
 warn=0

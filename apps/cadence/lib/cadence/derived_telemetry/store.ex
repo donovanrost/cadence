@@ -85,6 +85,37 @@ defmodule Cadence.DerivedTelemetry.Store do
     |> Enum.map(&LatestValueRow.to_domain/1)
   end
 
+  def latest_values_page(organization_id, mission_id, opts) do
+    search = Keyword.get(opts, :search, "") |> String.downcase()
+
+    query =
+      LatestValueRow
+      |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+      |> where([row], fragment("strpos(lower(?), ?) > 0", row.point_id, ^search))
+      |> maybe_filter(:point_id, Keyword.get(opts, :point_id))
+      |> maybe_filter_latest_spacecraft(
+        spacecraft_scope_id(Keyword.get(opts, :spacecraft_id)),
+        opts
+      )
+
+    total = Repo.aggregate(query, :count)
+    page = min(Keyword.get(opts, :page, 1), max(1, ceil(total / 25)))
+
+    items =
+      query
+      |> order_by([row],
+        asc: row.point_id,
+        asc: row.spacecraft_scope_id,
+        asc: row.derived_sample_id
+      )
+      |> limit(25)
+      |> offset(^((page - 1) * 25))
+      |> Repo.all()
+      |> Enum.map(&LatestValueRow.to_domain/1)
+
+    %{items: items, total_count: total, page: page}
+  end
+
   @spec replace_latest_values(binary(), [Sample.t()], keyword()) :: :ok | {:error, term()}
   def replace_latest_values(mission_id, samples, opts \\ [])
       when is_binary(mission_id) and is_list(samples) and is_list(opts) do

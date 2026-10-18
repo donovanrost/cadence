@@ -58,6 +58,45 @@ defmodule Cadence.Contacts.ScheduledContactRevisions do
     |> Enum.map(&ScheduledContactRevisionRow.to_domain/1)
   end
 
+  @doc "Fetch one revision inside an explicit organization and mission."
+  def fetch_scoped(org, mission, contact, revision) do
+    case Repo.get_by(ScheduledContactRevisionRow,
+           organization_id: org,
+           mission_id: mission,
+           scheduled_contact_id: contact,
+           revision: revision
+         ) do
+      nil -> {:error, :scheduled_contact_revision_not_found}
+      row -> {:ok, ScheduledContactRevisionRow.to_domain(row)}
+    end
+  end
+
+  @doc "Bounded revision history at or below the reviewed revision, with a strict seek cursor."
+  def list_page(org, mission, contact, reviewed_revision, before_revision \\ nil)
+      when is_integer(reviewed_revision) and reviewed_revision in 1..2_147_483_647 do
+    query =
+      where(
+        ScheduledContactRevisionRow,
+        [r],
+        r.organization_id == ^org and
+          r.mission_id == ^mission and r.scheduled_contact_id == ^contact and
+          r.revision <= ^reviewed_revision
+      )
+
+    with {:ok, query} <- seek(query, before_revision) do
+      rows = query |> order_by([r], desc: r.revision) |> limit(26) |> Repo.all()
+      entries = rows |> Enum.take(25) |> Enum.map(&ScheduledContactRevisionRow.to_domain/1)
+      {:ok, %{entries: entries, next: if(length(rows) > 25, do: List.last(entries).revision)}}
+    end
+  end
+
+  defp seek(query, nil), do: {:ok, query}
+
+  defp seek(query, revision) when is_integer(revision) and revision in 1..2_147_483_647,
+    do: {:ok, where(query, [r], r.revision < ^revision)}
+
+  defp seek(_, _), do: {:error, :invalid_contact_revision_cursor}
+
   @spec snapshot(ScheduledContact.t()) :: map()
   def snapshot(%ScheduledContact{} = contact) do
     %{

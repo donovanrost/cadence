@@ -18,6 +18,8 @@ defmodule Cadence.SpacecraftTypeStore do
   alias Cadence.SpacecraftType
   alias Cadence.SpacecraftTypeStore.SpacecraftTypeRow
 
+  @max_batch_size 100
+
   @spec persist_spacecraft_type(binary(), SpacecraftType.t()) ::
           {:ok, SpacecraftType.t()} | {:error, term()}
   def persist_spacecraft_type(organization_id, %SpacecraftType{} = type)
@@ -75,6 +77,60 @@ defmodule Cadence.SpacecraftTypeStore do
     end
   end
 
+  @doc "Fetches explicit spacecraft type versions for one bounded batch in one query."
+  @spec fetch_spacecraft_type_versions(binary(), binary(), [{binary(), pos_integer()}]) ::
+          {:ok, %{optional({binary(), pos_integer()}) => SpacecraftType.t()}}
+          | {:error, :batch_bounds_exceeded}
+  def fetch_spacecraft_type_versions(organization_id, mission_id, references)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(references) do
+    case bounded_references(references) do
+      {:error, reason} ->
+        {:error, reason}
+
+      {:ok, []} ->
+        {:ok, %{}}
+
+      {:ok, references} ->
+        predicate =
+          Enum.reduce(references, dynamic(false), fn {type_id, version}, acc ->
+            dynamic(
+              [row],
+              ^acc or
+                (row.spacecraft_type_id == ^type_id and row.version == ^version)
+            )
+          end)
+
+        rows =
+          SpacecraftTypeRow
+          |> where(
+            [row],
+            row.organization_id == ^organization_id and row.mission_id == ^mission_id
+          )
+          |> where(^predicate)
+          |> Repo.all()
+
+        {:ok,
+         Map.new(rows, fn row ->
+           {{row.spacecraft_type_id, row.version}, SpacecraftTypeRow.to_domain(row)}
+         end)}
+    end
+  end
+
+  defp bounded_references(references) do
+    references = Enum.take(references, @max_batch_size + 1)
+
+    cond do
+      length(references) > @max_batch_size ->
+        {:error, :batch_bounds_exceeded}
+
+      not Enum.all?(references, &valid_reference?/1) ->
+        {:error, :batch_bounds_exceeded}
+
+      true ->
+        {:ok, Enum.uniq(references)}
+    end
+  end
+
   @spec list_spacecraft_types(binary(), binary()) :: [SpacecraftType.t()]
   def list_spacecraft_types(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
@@ -118,6 +174,11 @@ defmodule Cadence.SpacecraftTypeStore do
     |> limit(1)
     |> Repo.one()
   end
+
+  defp valid_reference?({type_id, version}),
+    do: is_binary(type_id) and type_id != "" and is_integer(version) and version > 0
+
+  defp valid_reference?(_reference), do: false
 
   defp put_organization_scope(%SpacecraftType{} = type, organization_id)
        when is_binary(organization_id) and organization_id != "" do

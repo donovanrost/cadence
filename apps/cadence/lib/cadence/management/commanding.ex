@@ -69,6 +69,16 @@ defmodule Cadence.Management.Commanding do
     to: RequestStore,
     as: :persist_request
 
+  @doc "Persists one exact server-reviewed request without enqueueing or releasing it."
+  defdelegate persist_reviewed_request(
+                organization_id,
+                request,
+                expected_basis,
+                expected_target,
+                before_insert
+              ),
+              to: RequestStore
+
   @spec fetch_command_request(binary(), binary(), binary()) ::
           {:ok, CommandRequest.t()} | {:error, term()}
   defdelegate fetch_command_request(organization_id, mission_id, command_request_id),

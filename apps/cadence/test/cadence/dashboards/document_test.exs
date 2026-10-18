@@ -7,6 +7,27 @@ defmodule Cadence.Dashboards.DocumentTest do
   @fixture_dir Path.expand("../../fixtures/dashboards", __DIR__)
 
   describe "golden dashboard documents" do
+    test "published layout constraints match persistence clamping" do
+      document = load_fixture!("time_series_with_limits.v1.json")
+      [placement] = document.placements
+
+      assert %{min_w: 4, min_h: 3, max_w: 12, max_h: 24, max_y: 23} =
+               Document.layout_constraints(document, placement)
+
+      updated =
+        Document.apply_layouts(document, [
+          %{
+            "placement_id" => placement.placement_id,
+            "x" => 100,
+            "y" => 100,
+            "w" => 1,
+            "h" => 100
+          }
+        ])
+
+      assert [%{layout: %{x: 8, y: 23, w: 4, h: 24}}] = updated.placements
+    end
+
     test "loads and validates Tier 0 dashboard fixtures" do
       for fixture <- [
             "value_tile_latest.v1.json",

@@ -103,4 +103,52 @@ defmodule Cadence.Notifications do
   end
 
   defp topic(user_id), do: "notifications:#{user_id}"
+
+  @doc "A recipient-owned, bounded page ordered by timestamp and binary identity."
+  def page_for_user(user_id, opts \\ []) when is_binary(user_id) do
+    query = NotificationRow |> where([n], n.user_id == ^user_id)
+
+    query =
+      if Keyword.get(opts, :unread, false), do: where(query, [n], is_nil(n.read_at)), else: query
+
+    query =
+      case Keyword.get(opts, :cursor) do
+        %{at: at, id: id} ->
+          where(
+            query,
+            [n],
+            n.inserted_at < ^at or
+              (n.inserted_at == ^at and
+                 fragment(~s(? COLLATE "C" < ? COLLATE "C"), n.notification_id, ^id))
+          )
+
+        nil ->
+          query
+      end
+
+    rows =
+      query
+      |> order_by([n], desc: n.inserted_at, desc: fragment("? COLLATE \"C\"", n.notification_id))
+      |> limit(51)
+      |> Repo.all()
+
+    entries = Enum.take(rows, 50) |> Enum.map(&NotificationRow.to_domain/1)
+
+    next_cursor =
+      if length(rows) > 50 do
+        last = List.last(entries)
+        %{at: last.inserted_at, id: last.notification_id}
+      end
+
+    %{entries: entries, next_cursor: next_cursor}
+  end
+
+  @doc "Fetches a notification only inside its recipient boundary."
+  def fetch_notification_for_user(user_id, notification_id)
+      when is_binary(user_id) and is_binary(notification_id) do
+    case Repo.get_by(NotificationRow, user_id: user_id, notification_id: notification_id) do
+      nil -> {:error, :not_found}
+      row -> {:ok, NotificationRow.to_domain(row)}
+    end
+  end
 end

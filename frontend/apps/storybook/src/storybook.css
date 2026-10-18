@@ -1,0 +1,185 @@
+.sb-show-main.sb-main-centered {
+  padding: var(--space-12);
+}
+
+.sb-show-main.sb-main-fullscreen {
+  min-height: 100vh;
+}
+
+#storybook-root {
+  color: var(--color-base-content);
+  font-family: var(--font-sans);
+}
+
+.story-symbol-reference {
+  min-height: 100vh;
+  padding: clamp(32px, 7vw, 96px);
+  color: var(--color-base-content);
+  background:
+    linear-gradient(var(--border-subtle) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px), var(--surface-base);
+  background-size: 48px 48px;
+}
+
+.story-symbol-reference__header {
+  display: grid;
+  max-width: 760px;
+  margin-bottom: var(--space-12);
+  gap: var(--space-3);
+}
+
+.story-symbol-reference__header h1 {
+  max-width: 620px;
+  margin: 0;
+  color: var(--text-bright);
+  font-family: var(--font-display);
+  font-size: var(--type-title-lg);
+  font-weight: 660;
+  letter-spacing: var(--tracking-display);
+  line-height: var(--leading-tight);
+}
+
+.story-symbol-reference__header > p:last-child {
+  max-width: 600px;
+  margin: 0;
+  color: var(--text-subtle);
+  font-size: var(--type-body-lg);
+  line-height: var(--leading-copy);
+}
+
+.story-symbol-grid {
+  display: grid;
+  border-top: 1px solid var(--border-default);
+  border-left: 1px solid var(--border-default);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.story-symbol-card {
+  display: grid;
+  min-height: 160px;
+  padding: var(--space-6);
+  border-right: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
+  background: color-mix(in srgb, var(--surface-base) 94%, transparent);
+  grid-template-columns: 64px 1fr;
+  gap: var(--space-5);
+}
+
+.story-symbol-card__mark {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--border-default);
+  place-items: center;
+}
+
+.story-symbol-card__copy {
+  align-self: end;
+}
+
+.story-symbol-card__title {
+  display: flex;
+  margin-bottom: var(--space-5);
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.story-symbol-card__title span,
+.story-symbol-card__copy p,
+.story-symbol-card__copy small,
+.story-symbol-reference__footer,
+.story-symbol-verification__row > span {
+  font-family: var(--font-mono);
+}
+
+.story-symbol-card__title span {
+  color: var(--text-muted);
+  font-size: var(--type-label);
+}
+
+.story-symbol-card__title strong {
+  color: var(--text-bright);
+  font-size: var(--type-title-md);
+  font-weight: 650;
+  text-transform: capitalize;
+}
+
+.story-symbol-card__copy p {
+  margin: 0 0 var(--space-2);
+  color: var(--color-base-content);
+  font-size: var(--type-body-sm);
+}
+
+.story-symbol-card__copy small {
+  color: var(--text-muted);
+  font-size: var(--type-label);
+  line-height: 1.4;
+}
+
+.story-symbol-reference__footer {
+  display: flex;
+  padding-top: var(--space-4);
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  color: var(--text-subtle);
+  font-size: var(--type-label);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+
+.story-symbol-reference__footer span::before {
+  content: "/";
+  margin-right: var(--space-2);
+  color: var(--color-action);
+}
+
+.story-symbol-verification {
+  display: grid;
+  min-width: min(560px, calc(100vw - 48px));
+  border-top: 1px solid var(--border-default);
+  border-left: 1px solid var(--border-default);
+}
+
+.story-symbol-verification__row {
+  display: grid;
+  min-height: 56px;
+  padding: var(--space-3) var(--space-4);
+  align-items: center;
+  border-right: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
+  grid-template-columns: 72px repeat(6, 1fr);
+  justify-items: center;
+}
+
+.story-symbol-verification__row > span {
+  justify-self: start;
+  color: var(--text-muted);
+  font-size: var(--type-label);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+
+.story-symbol-verification__row--mono {
+  --status-critical: var(--color-base-content);
+  --status-serious: var(--color-base-content);
+  --status-warning: var(--color-base-content);
+  --status-success: var(--color-base-content);
+  --status-info: var(--color-base-content);
+  --text-muted: var(--color-base-content);
+}
+
+@media (max-width: 900px) {
+  .story-symbol-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 580px) {
+  .story-symbol-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .story-symbol-card {
+    min-height: 168px;
+  }
+}

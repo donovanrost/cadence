@@ -34,6 +34,18 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
           | {:error, term()}
   def create(%Scope{} = current_scope, mission_id, attrs, opts \\ [])
       when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
+    with {:ok, template, version} <- prepare_create(current_scope, mission_id, attrs, opts) do
+      Multi.new()
+      |> Multi.insert(:template, ContactRequirementTemplateRow.changeset(template))
+      |> Multi.insert(:version, ContactRequirementTemplateVersionRow.changeset(version))
+      |> Repo.transaction()
+      |> normalize_create_result()
+    end
+  end
+
+  @doc "Validate and normalize an authorized recurring need without persisting rows."
+  def prepare_create(%Scope{} = current_scope, mission_id, attrs, opts \\ [])
+      when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
     now = now(opts)
 
     with :ok <- authorize_admin(current_scope, mission_id),
@@ -69,11 +81,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
           lifecycle_reason: "created"
         })
 
-      Multi.new()
-      |> Multi.insert(:template, ContactRequirementTemplateRow.changeset(template))
-      |> Multi.insert(:version, ContactRequirementTemplateVersionRow.changeset(version))
-      |> Repo.transaction()
-      |> normalize_create_result()
+      {:ok, template, version}
     end
   end
 
@@ -166,6 +174,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
     |> maybe_filter_lifecycle(opts[:lifecycle_state])
     |> order_by([template], asc: template.contact_requirement_template_id)
     |> select([template, version], {template, version})
+    |> maybe_page(opts[:page])
     |> Repo.all()
     |> Enum.map(fn {template, version} ->
       {ContactRequirementTemplateRow.to_domain(template),
@@ -279,6 +288,10 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
       summarize_materialization(results, length(templates))
     end
   end
+
+  @doc "Pure occurrence review using the same catch-up bounds as materialization."
+  def preview_occurrences(version, from, until),
+    do: due_occurrences(version, from, until, limit: 10_001)
 
   defp due_occurrences(version, from, until, opts) do
     policy = version.catch_up_policy_document
@@ -564,7 +577,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
         state,
         reason,
         actor_id,
-        now
+        Keyword.put(opts, :now, now)
       )
     end
   end
@@ -577,11 +590,14 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
          state,
          reason,
          actor_id,
-         now
+         opts
        ) do
+    now = now(opts)
+
     Repo.transaction(fn ->
       with {:ok, row} <- lock_template(organization_id, mission_id, template_id),
            :ok <- expected_version(row, expected_version),
+           :ok <- reviewed_evidence(row, opts[:reviewed_evidence]),
            :ok <- allowed_transition(row.lifecycle_state, state),
            {:ok, updated} <- update_lifecycle(row, state, reason, actor_id, now) do
         ContactRequirementTemplateRow.to_domain(updated)
@@ -698,6 +714,36 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
 
   defp require_reason(""), do: {:error, :contact_requirement_template_transition_reason_required}
   defp require_reason(_reason), do: :ok
+
+  @doc "Exact immutable-version and mutable-lifecycle evidence for a reviewed template."
+  def reference(template, version) do
+    %{
+      "organization_id" => template.organization_id,
+      "mission_id" => template.mission_id,
+      "template_id" => template.contact_requirement_template_id,
+      "version" => template.current_version,
+      "content_sha256" => version.content_sha256,
+      "lifecycle_state" => to_string(template.lifecycle_state),
+      "lifecycle_changed_at" => DateTime.to_iso8601(template.lifecycle_changed_at),
+      "lifecycle_changed_by" => template.lifecycle_changed_by
+    }
+  end
+
+  defp reviewed_evidence(_row, nil), do: :ok
+
+  defp reviewed_evidence(row, evidence) do
+    with {:ok, version} <- fetch_version_row(row, row.current_version),
+         true <- reference(row, version) == evidence do
+      :ok
+    else
+      _ -> {:error, :stale_contact_requirement_template_evidence}
+    end
+  end
+
+  defp maybe_page(query, nil), do: query
+
+  defp maybe_page(query, page) when is_integer(page) and page in 1..1_000_000,
+    do: query |> limit(26) |> offset(^((page - 1) * 25))
 
   defp maybe_filter_lifecycle(query, nil), do: query
 

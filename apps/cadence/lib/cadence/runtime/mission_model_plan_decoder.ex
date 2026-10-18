@@ -150,6 +150,9 @@ defmodule Cadence.Runtime.MissionModelPlanDecoder do
     })
   end
 
+  @doc "Decoded command definitions and bindings for bounded authoring discovery."
+  def command_authoring_catalog(plans) when is_map(plans), do: command_catalog(plans)
+
   defp command_catalog(plans) do
     case Map.get(plans, :command) do
       nil ->

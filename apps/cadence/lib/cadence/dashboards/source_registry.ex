@@ -35,6 +35,7 @@ defmodule Cadence.Dashboards.SourceRegistry do
     FactsAggregation,
     HealthMerge,
     Provenance,
+    SampleInspection,
     SegmentResultMerge,
     SourceHealthLookup,
     SourceIdentity,
@@ -49,6 +50,16 @@ defmodule Cadence.Dashboards.SourceRegistry do
           capabilities: SourceCapabilities.t(),
           provenance: map()
         }
+
+  @doc "Inspects a selection using the exact binding already admitted for its planned request."
+  defdelegate inspect_sample(request, resolved_binding, selection, opts \\ []),
+    to: SampleInspection,
+    as: :fetch
+
+  @doc "Inspects a selection across the exact binding segments retained from its query."
+  defdelegate inspect_samples(request, resolved_bindings, selection, opts \\ []),
+    to: SampleInspection,
+    as: :fetch_many
 
   @spec capability_fingerprint(keyword()) :: binary()
   def capability_fingerprint(opts \\ []) when is_list(opts) do

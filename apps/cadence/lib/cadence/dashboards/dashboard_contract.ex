@@ -23,6 +23,7 @@ defmodule Cadence.Dashboards.DashboardContract do
     LimitContext,
     PlacementFrames,
     PlannedSourceRequest,
+    ResolvedSourceBinding,
     ResolveWarning,
     RuntimeCacheKey,
     ScopeContext,
@@ -173,6 +174,7 @@ defmodule Cadence.Dashboards.DashboardContract do
     |> validate_annotations([:annotations], result.annotations)
     |> validate_warnings([:warnings], result.warnings)
     |> validate_watermarks([:watermarks], result.watermarks)
+    |> validate_resolved_bindings([:resolved_bindings], result.resolved_bindings)
     |> require_map([:meta], result.meta)
     |> validate_metadata_refs([:meta], result.meta)
     |> finish()
@@ -236,9 +238,55 @@ defmodule Cadence.Dashboards.DashboardContract do
     |> validate_watermarks([:watermarks], result.watermarks)
     |> require_list([:subscriptions], result.subscriptions)
     |> validate_planned_requests(result.planned_source_requests)
+    |> validate_binding_receipts(
+      result.resolved_bindings_by_request_id,
+      result.planned_source_requests
+    )
     |> validate_plan_metadata(result.plan_metadata, metadata_keys, phase)
     |> finish()
   end
+
+  defp validate_binding_receipts(errors, receipts, requests)
+       when is_map(receipts) and is_list(requests) do
+    ids = Enum.map(requests, & &1.request_id)
+
+    Enum.reduce(receipts, errors, fn {id, bindings}, errors ->
+      errors
+      |> require_in([:resolved_bindings_by_request_id, id], id, ids)
+      |> validate_resolved_bindings([:resolved_bindings_by_request_id, id], bindings)
+    end)
+  end
+
+  defp validate_binding_receipts(errors, _receipts, _requests),
+    do:
+      error(
+        errors,
+        [:resolved_bindings_by_request_id],
+        :invalid_map,
+        "expected execution binding map"
+      )
+
+  defp validate_resolved_bindings(errors, path, bindings) when is_list(bindings) do
+    bindings
+    |> Enum.with_index()
+    |> Enum.reduce(errors, fn
+      {%ResolvedSourceBinding{} = resolved, index}, errors ->
+        errors
+        |> require_struct(path ++ [index, :binding], resolved.binding, DataBinding)
+        |> require_struct(path ++ [index, :data_source], resolved.data_source, DataSource)
+
+      {_other, index}, errors ->
+        error(
+          errors,
+          path ++ [index],
+          :invalid_resolved_binding,
+          "expected captured source binding"
+        )
+    end)
+  end
+
+  defp validate_resolved_bindings(errors, path, _bindings),
+    do: error(errors, path, :invalid_list, "expected captured source binding list")
 
   defp validate_frames_by_placement(errors, frames_by_placement)
        when is_map(frames_by_placement) do

@@ -1,0 +1,9 @@
+@import "@cadence/ui/styles.css";
+@source "./";
+@source "../../../modules/commanding/src";
+@source "../../host/src/shell";
+@source "../../host/src/auth-and-navigation";
+@source "../../host/src/ops-workspace";
+@source "../../host/src/mission-and-spacecraft";
+@source "../../../modules/dashboards-and-exploration/src";
+@import "@cadence/dashboards-and-exploration/workspace.css";

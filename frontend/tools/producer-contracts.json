@@ -1,0 +1,152 @@
+[
+  {
+    "consumer": "apps/host/src/administration/features/organization-create/organization-create.test.ts",
+    "environment": "CADENCE_PLATFORM_DOCUMENT",
+    "producer": "apps/cadence/test/cadence/reads/administration/platform_organizations_test.exs"
+  },
+  {
+    "consumer": "apps/host/src/administration/features/organization-detail/organization-detail.test.ts",
+    "environment": "CADENCE_PLATFORM_DETAIL_DOCUMENT",
+    "producer": "apps/cadence/test/cadence/administration/organization_invitations_test.exs"
+  },
+  {
+    "consumer": "apps/host/src/administration/features/organization-home/organization-home.test.ts",
+    "environment": "CADENCE_ORGANIZATION_HOME_DOCUMENT",
+    "producer": "apps/cadence/test/cadence/reads/administration/organization_home_test.exs"
+  },
+  {
+    "consumer": "apps/host/src/auth-and-navigation/features/notifications/notifications.test.ts",
+    "environment": "CADENCE_NOTIFICATIONS_DOCUMENT",
+    "producer": "apps/cadence/test/cadence/reads/notifications/inbox_test.exs"
+  },
+  {
+    "consumer": "apps/host/src/auth-and-navigation/features/sign-in/native-forms-probe.test.ts",
+    "environment": "CADENCE_AUTH_DOCUMENT",
+    "producer": "apps/cadence_web/test/cadence_web/auth_navigation_contract_test.exs"
+  },
+  {
+    "consumer": "apps/host/src/ops-workspace/features/timeline/timeline.test.ts",
+    "environment": "CADENCE_TIMELINE_DOCUMENT",
+    "producer": "apps/cadence/test/cadence/reads/ops_workspace/timeline_test.exs"
+  },
+  {
+    "consumer": "modules/commanding/src/features/command-authoring/CommandAuthoring.test.ts",
+    "environment": "CADENCE_COMMAND_AUTHORING_DOCUMENT",
+    "producer": "apps/cadence_web/test/cadence_web/ops_command_authoring_page_test.exs"
+  },
+  {
+    "consumer": "modules/commanding/src/features/command-review/CommandReview.test.ts",
+    "environment": "CADENCE_COMMAND_REVIEW_DOCUMENT",
+    "producer": "apps/cadence_web/test/cadence_web/ops_command_review_page_test.exs"
+  },
+  {
+    "consumer": "modules/commanding/src/features/queue-submission/QueueSubmission.test.ts",
+    "environment": "CADENCE_COMMAND_QUEUE_DOCUMENT",
+    "producer": "apps/cadence_web/test/cadence_web/ops_command_queue_page_test.exs"
+  },
+  {
+    "consumer": "modules/commanding/src/features/stage-create/StageCreate.test.ts",
+    "environment": "CADENCE_COMMAND_STAGES_DOCUMENT",
+    "producer": "apps/cadence_web/test/cadence_web/ops_command_stages_page_test.exs"
+  },
+  {
+    "consumer": "modules/commanding/src/features/stage-workbench/StageWorkbench.test.ts",
+    "environment": "CADENCE_COMMAND_STAGES_DOCUMENT",
+    "producer": "apps/cadence_web/test/cadence_web/ops_command_stages_page_test.exs"
+  },
+  {
+    "consumer": "modules/data-operations/src/features/data-sources/native-workflow.test.ts",
+    "environment": "CADENCE_SOURCES",
+    "producer": "apps/cadence_web/test/cadence_web/ops_data_sources_page_test.exs"
+  },
+  {
+    "consumer": "modules/data-operations/src/features/historical-workflows/native-workflow.test.ts",
+    "environment": "CADENCE_HISTORY",
+    "producer": "apps/cadence_web/test/cadence_web/ops_historical_workflows_page_test.exs"
+  },
+  {
+    "consumer": "modules/derived-telemetry/src/features/definitions/definitions.test.ts",
+    "environment": "CADENCE_DERIVED_PAGE",
+    "producer": "apps/cadence/test/cadence/reads/application_surfaces/derived_telemetry_workflow_test.exs"
+  },
+  {
+    "consumer": "modules/planning-and-contacts/src/features/contact-plans/contact-plans.test.ts",
+    "environment": "CADENCE_PLAN_REVIEW_MODEL",
+    "producer": "apps/cadence/test/cadence/reads/application_surfaces/contact_plan_show_test.exs"
+  },
+  {
+    "consumer": "modules/planning-and-contacts/src/features/contact-plans/plan-review.test.ts",
+    "environment": "CADENCE_PLAN_WORKFLOW",
+    "producer": "apps/cadence_web/test/cadence_web/ops_plan_review_page_test.exs"
+  },
+  {
+    "consumer": "modules/planning-and-contacts/src/features/contact-requirements/declaration.test.ts",
+    "environment": "CADENCE_DECLARATION",
+    "producer": "apps/cadence_web/test/cadence_web/ops_requirement_declaration_page_test.exs"
+  },
+  {
+    "consumer": "modules/planning-and-contacts/src/features/contact-requirements/requirement-workflow.test.ts",
+    "environment": "CADENCE_REQUIREMENT_WORKFLOW",
+    "producer": "apps/cadence_web/test/cadence_web/ops_requirement_page_test.exs"
+  },
+  {
+    "consumer": "modules/planning-and-contacts/src/features/contact-requirements/templates.test.ts",
+    "environment": "CADENCE_TEMPLATE_WORKFLOW",
+    "producer": "apps/cadence_web/test/cadence_web/ops_requirement_template_page_test.exs"
+  },
+  {
+    "consumer": "modules/planning-and-contacts/src/features/contact-scheduling/contact-scheduling.test.ts",
+    "environment": "CADENCE_SCHEDULE_MODEL",
+    "producer": "apps/cadence/test/cadence/applications/ops_console/actions/contact_schedule_workflow_test.exs"
+  },
+  {
+    "consumer": "modules/planning-and-contacts/src/features/contact-scheduling/contact-workflow.test.ts",
+    "environment": "CADENCE_CONTACT_WORKFLOW",
+    "producer": "apps/cadence_web/test/cadence_web/ops_contact_review_page_test.exs"
+  },
+  {
+    "consumer": "modules/planning-and-contacts/src/features/contact-scheduling/reservation.test.ts",
+    "environment": "CADENCE_RESERVATION_REVIEW_MODEL",
+    "producer": "apps/cadence/test/cadence/reads/application_surfaces/contact_detail_test.exs"
+  },
+  {
+    "consumer": "modules/planning-and-contacts/src/features/fleet-planning/directory.contribution.test.ts",
+    "environment": "CADENCE_FLEET_CONTRIBUTION",
+    "producer": "apps/cadence_web/test/cadence_web/ops_fleet_directory_page_test.exs"
+  },
+  {
+    "consumer": "modules/planning-and-contacts/src/features/fleet-planning/fleet-run.test.ts",
+    "environment": "CADENCE_FLEET_RUN",
+    "producer": "apps/cadence/test/cadence/reads/application_surfaces/fleet_run_test.exs"
+  },
+  {
+    "consumer": "modules/planning-and-contacts/src/features/fleet-planning/fleet-start.test.ts",
+    "environment": "CADENCE_FLEET_START",
+    "producer": "apps/cadence/test/cadence/reads/application_surfaces/trusted_surface_contract_test.exs"
+  },
+  {
+    "consumer": "modules/planning-and-contacts/src/features/fleet-planning/policy-workflow.test.ts",
+    "environment": "CADENCE_POLICY_WORKFLOW",
+    "producer": "apps/cadence_web/test/cadence_web/ops_fleet_policy_page_test.exs"
+  },
+  {
+    "consumer": "modules/planning-and-contacts/src/features/fleet-planning/workflow.contribution.test.ts",
+    "environment": "CADENCE_FLEET_WORKFLOW",
+    "producer": "apps/cadence_web/test/cadence_web/ops_fleet_workflow_page_test.exs"
+  },
+  {
+    "consumer": "modules/telemetry-decom/src/features/configuration/configuration.test.ts",
+    "environment": "CADENCE_DECOM",
+    "producer": "apps/cadence/test/cadence/reads/application_surfaces/telemetry_decom_configuration_test.exs"
+  },
+  {
+    "consumer": "modules/telemetry-decom/src/features/packet-bindings/packet-bindings.test.ts",
+    "environment": "CADENCE_PACKET_PAGE",
+    "producer": "apps/cadence_web/test/cadence_web/controllers/application_host_telemetry_controller_test.exs"
+  },
+  {
+    "consumer": "modules/commanding/src/features/workspace/CommandWorkspace.test.ts",
+    "environment": "CADENCE_COMMAND_WORKSPACE_DOCUMENT",
+    "producer": "apps/cadence_web/test/cadence_web/ops_command_workspace_page_test.exs"
+  }
+]

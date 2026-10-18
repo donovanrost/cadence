@@ -1,18 +1,5 @@
 defmodule CadenceWeb.Layouts do
-  @moduledoc false
-
+  @moduledoc "Host document and LiveVue shell transport. Presentation belongs to the frontend host."
   use CadenceWeb, :html
-
-  import CadenceWeb.Components.OpsShell
-  import CadenceWeb.Components.OpsApplicationDock
-  import CadenceWeb.Components.Sidebar
-
-  embed_templates "layouts/*"
-
-  defp provider_accounts_visible?(%{capabilities: capabilities}) do
-    MapSet.member?(capabilities, :organization_admin) or
-      MapSet.member?(capabilities, :platform_admin)
-  end
-
-  defp provider_accounts_visible?(_scope), do: false
+  embed_templates("layouts/*")
 end

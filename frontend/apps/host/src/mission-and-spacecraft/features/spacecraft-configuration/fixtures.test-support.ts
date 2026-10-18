@@ -1,0 +1,68 @@
+import type { ConfigurationSnapshot } from "./contracts";
+export function configurationFixture(spacecraftId = "spacecraft-1"): ConfigurationSnapshot {
+  const mission = "mission-1",
+    base = `/missions/${mission}/spacecraft/${spacecraftId}`;
+  return {
+    organization_id: "org-1",
+    mission_id: mission,
+    spacecraft_id: spacecraftId,
+    mission_name: "Kestrel",
+    name: spacecraftId,
+    scid: 1,
+    section: "overview",
+    base_href: base,
+    token: "a".repeat(64),
+    saved_version: null,
+    document: {
+      catalog_revision_id: null,
+      telemetry_enabled: false,
+      commanding_enabled: false,
+      telemetry_source_endpoint_id: null,
+      handled_apids: [],
+      protocol: null,
+    },
+    external_changes: false,
+    active: null,
+    review: null,
+    approval: {
+      requirement: "independent",
+      token: "b".repeat(64),
+      source: "inherited",
+      actor_id: "actor-1",
+      can_request: true,
+      can_review: true,
+    },
+    catalogs: [
+      {
+        id: "catalog-1",
+        name: "Kestrel FSW",
+        label: "r3.4",
+        declarations: 12,
+        packets: 1,
+        commands: 2,
+        href: `/missions/${mission}/catalog/revisions/catalog-1`,
+      },
+    ],
+    fleet: ["spacecraft-1", "spacecraft-2"].map((id) => ({
+      id,
+      name: id,
+      scid: 1,
+      active_catalog_id: null,
+      has_changes: false,
+      href: `/missions/${mission}/spacecraft/${id}?section=overview`,
+    })),
+    fleet_total: 2,
+    sources: [{ id: "endpoint-1", name: "OBC" }],
+    presets: [],
+    links: {
+      catalog: `/missions/${mission}/catalog`,
+      identity: `${base}/identity`,
+      applications: `${base}/applications`,
+      readiness: `${base}/readiness`,
+      communications: `/missions/${mission}/comms`,
+      approvals: `/missions/${mission}/ops/activations`,
+      settings: `/missions/${mission}/settings/cadence.governance`,
+      ops: null,
+    },
+  };
+}

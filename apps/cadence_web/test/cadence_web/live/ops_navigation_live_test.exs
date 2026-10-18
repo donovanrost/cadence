@@ -8,27 +8,87 @@ defmodule CadenceWeb.OpsNavigationLiveTest do
     router: CadenceWeb.Router,
     statics: CadenceWeb.static_paths()
 
+  alias CadenceWeb.HostTransportTestSupport
   alias CadenceWeb.TestFixtures
 
-  test "groups Ops navigation and gives Explore its own active canonical route" do
-    {conn, _user, _org, mission} = signed_in_user_org_and_mission()
+  test "Explore mounts a compiled contribution and preserves admitted query context" do
+    {conn, mission} = signed_in()
 
-    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/explore")
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/explore?point_id=HK.temp&logical_source=operational_observables&time_mode=last_1h"
+      )
 
-    for group <- ~w(observe act plan system) do
-      assert has_element?(view, ~s([data-ops-nav-group="#{group}"]))
-    end
+    snapshot = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]
+    page = snapshot["ops_page"]
+    assert page["id"] == "dashboards.exploration"
+    assert page["context"]["missionId"] == mission.mission_id
+    assert page["status"] == "ready"
+    assert page["data"]["status"] == "unsupported_exploration_source"
 
-    refute has_element?(view, "#ops-application-dock")
+    assert page["data"]["query"] == %{
+             "point_id" => "HK.temp",
+             "logical_source" => "operational_observables",
+             "time_mode" => "last_1h"
+           }
 
-    assert has_element?(
-             view,
-             ~s([data-ops-nav-item="explore"][href="/missions/#{mission.mission_id}/ops/explore"])
-           )
+    assert has_element?(view, "#application-shell")
   end
 
-  test "legacy Explore bookmarks preserve their complete query string" do
-    {conn, _user, _org, mission} = signed_in_user_org_and_mission()
+  test "Explore without a point renders a query-ready state rather than fake empty results" do
+    {conn, mission} = signed_in()
+    {:ok, view, _} = live(conn, ~p"/missions/#{mission.mission_id}/ops/explore")
+    page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["status"] == "ready"
+    assert page["data"]["status"] == "point_required"
+  end
+
+  test "unknown Explore selectors are contained rather than silently removed" do
+    {conn, mission} = signed_in()
+    {:ok, view, _} = live(conn, ~p"/missions/#{mission.mission_id}/ops/explore?ignored=stale")
+    page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["status"] == "unavailable"
+    refute Map.has_key?(page, "data")
+    assert has_element?(view, "#application-shell")
+  end
+
+  test "unknown Commands selectors are contained rather than silently removed" do
+    {conn, mission} = signed_in()
+    {:ok, view, _} = live(conn, ~p"/missions/#{mission.mission_id}/ops/commands?ignored=stale")
+    page = LiveVue.Test.get_vue(view, id: "application-shell").props["snapshot"]["ops_page"]
+    assert page["status"] == "unavailable"
+    refute Map.has_key?(page, "data")
+    assert has_element?(view, "#application-shell")
+  end
+
+  test "Commands mount the mission-scoped compiled contribution" do
+    {conn, mission} = signed_in()
+
+    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/commands")
+
+    assert_surface(view, "ops-commands-component", "commands", mission, %{})
+  end
+
+  test "Commands retain their admitted URL query in the compiled contribution" do
+    {conn, mission} = signed_in()
+
+    {:ok, view, _html} =
+      live(
+        conn,
+        ~p"/missions/#{mission.mission_id}/ops/commands?status=queued&target=sc-1&query=deploy&focus_command_id=cmd-1"
+      )
+
+    assert_surface(view, "ops-commands-component", "commands", mission, %{
+      "status" => "queued",
+      "target" => "sc-1",
+      "query" => "deploy",
+      "focus_command_id" => "cmd-1"
+    })
+  end
+
+  test "legacy Explore bookmarks retain their complete query string" do
+    {conn, mission} = signed_in()
 
     conn =
       get(
@@ -43,68 +103,43 @@ defmodule CadenceWeb.OpsNavigationLiveTest do
            ]
   end
 
-  test "navigation exposes no more than five starred and five recent dashboards" do
-    {conn, user, org, mission} = signed_in_user_org_and_mission()
-    observed_at = ~U[2026-08-01 12:00:00Z]
+  test "Explore remains authentication scoped" do
+    {_conn, _user, _organization, mission} = signed_in_user_org_and_mission()
 
-    dashboards =
-      for index <- 1..12 do
-        TestFixtures.persist_dashboard_document!(mission, name: "Dashboard #{index}")
-      end
+    assert {:error, {:redirect, %{to: "/sign-in"}}} =
+             live(build_conn(), ~p"/missions/#{mission.mission_id}/ops/explore")
+  end
 
-    dashboards
-    |> Enum.take(6)
-    |> Enum.each(fn dashboard ->
-      assert {:ok, _preference} =
-               Cadence.Dashboards.set_dashboard_starred(
-                 org.organization_id,
-                 mission.mission_id,
-                 user.user_id,
-                 dashboard.dashboard_id,
-                 true,
-                 observed_at: observed_at
-               )
-    end)
-
-    dashboards
-    |> Enum.drop(6)
-    |> Enum.with_index()
-    |> Enum.each(fn {dashboard, index} ->
-      assert {:ok, _preference} =
-               Cadence.Dashboards.record_dashboard_view(
-                 org.organization_id,
-                 mission.mission_id,
-                 user.user_id,
-                 dashboard.dashboard_id,
-                 observed_at: DateTime.add(observed_at, index, :second)
-               )
-    end)
-
-    {:ok, view, _html} = live(conn, ~p"/missions/#{mission.mission_id}/ops/dashboards")
-    document = view |> render() |> LazyHTML.from_fragment()
-
-    assert 5 ==
-             document
-             |> LazyHTML.query(
-               ~s([data-ops-dashboard-nav-group="starred"] [data-ops-dashboard-nav-item])
-             )
-             |> LazyHTML.attribute("data-ops-dashboard-nav-item")
-             |> length()
-
-    assert 5 ==
-             document
-             |> LazyHTML.query(
-               ~s([data-ops-dashboard-nav-group="recent"] [data-ops-dashboard-nav-item])
-             )
-             |> LazyHTML.attribute("data-ops-dashboard-nav-item")
-             |> length()
+  defp signed_in do
+    {conn, _user, _organization, mission} = signed_in_user_org_and_mission()
+    {conn, mission}
   end
 
   defp signed_in_user_org_and_mission do
     user = TestFixtures.persist_user!()
-    org = TestFixtures.persist_org!()
-    _membership = TestFixtures.grant_membership!(user, org)
-    mission = TestFixtures.persist_mission!(org, slug: "ops-nav", display_name: "Ops Nav")
-    {TestFixtures.member_conn(user), user, org, mission}
+    organization = TestFixtures.persist_org!()
+    TestFixtures.grant_membership!(user, organization)
+    mission = TestFixtures.persist_mission!(organization)
+    {TestFixtures.member_conn(user), user, organization, mission}
+  end
+
+  defp assert_surface(view, _id, "commands", mission, query_params) do
+    snapshot =
+      HostTransportTestSupport.assert_context(view, %{
+        "kind" => "ops_module",
+        "contribution" => "commanding.monitor",
+        "host_scope" => "mission",
+        "mission_id" => mission.mission_id,
+        "query_params" => query_params
+      })
+
+    assert snapshot["ops_page"]["id"] == "commanding.monitor"
+    assert snapshot["ops_page"]["status"] == "ready"
+
+    assert snapshot["ops_page"]["data"]["query"] ==
+             Map.merge(
+               %{"status" => "all", "target" => "all", "query" => "", "page" => "1"},
+               query_params
+             )
   end
 end

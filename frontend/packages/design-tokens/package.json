@@ -1,0 +1,10 @@
+{
+  "name": "@cadence/design-tokens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./base.css": "./src/base.css",
+    "./theme.css": "./src/theme.css"
+  }
+}

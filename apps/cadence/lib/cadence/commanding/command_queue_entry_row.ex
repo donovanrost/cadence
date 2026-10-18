@@ -23,6 +23,7 @@ defmodule Cadence.Commanding.CommandQueueEntryRow do
     field(:not_before, :utc_datetime_usec)
     field(:expires_at, :utc_datetime_usec)
     field(:lifecycle_state, :string)
+    field(:active_release_attempt_id, :string)
     field(:enqueued_by_document, :map, default: %{})
     field(:enqueued_at, :utc_datetime_usec)
     field(:metadata_document, :map, default: %{})
@@ -53,10 +54,10 @@ defmodule Cadence.Commanding.CommandQueueEntryRow do
     |> validate_number(:priority, greater_than_or_equal_to: 0)
     |> validate_number(:queue_sequence, greater_than: 0)
     |> unique_constraint([:mission_id, :command_queue_entry_id],
-      name: :command_queue_entries_scope_idx
+      name: :command_queue_entries_scope_idx_uniq
     )
     |> unique_constraint([:organization_id, :mission_id, :command_request_id],
-      name: :command_queue_entries_request_org_scope_idx
+      name: :command_queue_entries_request_org_scope_idx_uniq
     )
   end
 

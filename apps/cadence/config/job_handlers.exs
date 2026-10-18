@@ -4,6 +4,7 @@ import Config
 # composition roots. Keep this registration independently importable for
 # applications that exercise Cadence jobs without loading the full web config.
 config :cadence, :job_handlers, %{
+  contact_schedule_operation: {Cadence.Contacts.ScheduleOperations, :execute_enqueued_run},
   replay_telemetry_scope: {Cadence.Replay, :execute_enqueued_run},
   telemetry_latest_value_rebuild:
     {Cadence.Projections.TelemetryLatestValues, :execute_enqueued_run},

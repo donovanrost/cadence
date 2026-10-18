@@ -40,6 +40,7 @@ defmodule Cadence.Auth.ServiceIdentityRow do
     %__MODULE__{}
     |> cast(domain_attrs(service_identity, api_token), all_fields())
     |> validate_required(@required_fields)
+    |> unique_constraint([:service_identity_id], name: :service_identities_pkey)
     |> unique_constraint([:token_digest], name: :service_identities_token_digest_idx)
   end
 

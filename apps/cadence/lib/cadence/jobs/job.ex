@@ -7,7 +7,8 @@ defmodule Cadence.Jobs.Job do
 
   @type status :: :queued | :running | :completed | :failed
   @type job_type ::
-          :replay_telemetry_scope
+          :contact_schedule_operation
+          | :replay_telemetry_scope
           | :telemetry_latest_value_rebuild
           | :derived_telemetry_evaluation
           | :derived_telemetry_latest_value_rebuild

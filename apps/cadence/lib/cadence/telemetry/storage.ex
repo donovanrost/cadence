@@ -233,6 +233,18 @@ defmodule Cadence.Telemetry.Storage do
     BackfillLifecycleEvents.list_events(mission_id, opts)
   end
 
+  defdelegate list_backfill_lifecycle_groups(mission_id, opts),
+    to: BackfillLifecycleEvents,
+    as: :list_groups
+
+  defdelegate fetch_backfill_lifecycle_group_events(mission_id, group_id, opts),
+    to: BackfillLifecycleEvents,
+    as: :fetch_group_events
+
+  defdelegate backfill_lifecycle_event_corrected?(event_id, opts),
+    to: BackfillLifecycleEvents,
+    as: :corrected?
+
   @spec fetch_backfill_lifecycle_event(binary(), keyword()) :: BackfillLifecycleEvent.t() | nil
   def fetch_backfill_lifecycle_event(backfill_lifecycle_event_id, opts \\ [])
       when is_binary(backfill_lifecycle_event_id) and is_list(opts) do

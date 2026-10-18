@@ -1,0 +1,23 @@
+{
+  "include": [
+    "vite*.config.*",
+    "module-federation.config.ts",
+    "../../tools/demo-host-service.ts",
+    "../../tools/publication-metadata.ts",
+    "../../tools/dev-services.ts"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "extends": ["../../tsconfig.strict.json"]
+}

@@ -6,6 +6,7 @@ defmodule Cadence.Reads.Commands do
 
   alias Cadence.Commanding
   alias Cadence.Commanding.{CommandQueueEntry, CommandReleaseAttempt, CommandRequest}
+  alias Cadence.SourceEndpoints
 
   def fetch_command_request(organization_id, mission_id, command_request_id) do
     Commanding.fetch_command_request(organization_id, mission_id, command_request_id)
@@ -57,7 +58,15 @@ defmodule Cadence.Reads.Commands do
     release_attempts = records(:release_attempts, organization_id, mission_id, opts)
     verifier_instances = records(:verifier_instances, organization_id, mission_id, opts)
 
-    all_rows = compose_rows(requests, queue_entries, release_attempts, verifier_instances)
+    names = Keyword.get(opts, :target_names, &SourceEndpoints.display_names/3)
+
+    target_names =
+      names.(organization_id, mission_id, Enum.map(requests, & &1.source_endpoint_ref))
+
+    all_rows =
+      requests
+      |> compose_rows(queue_entries, release_attempts, verifier_instances)
+      |> Enum.map(&Map.put(&1, :target_name, Map.get(target_names, &1.target)))
 
     %{
       mission_id: mission_id,
@@ -65,7 +74,11 @@ defmodule Cadence.Reads.Commands do
       freshness: :current,
       rows: all_rows |> filter_rows(filters) |> Enum.sort_by(&sort_key/1),
       targets:
-        all_rows |> Enum.map(& &1.target) |> Enum.reject(&is_nil/1) |> Enum.uniq() |> Enum.sort(),
+        all_rows
+        |> Enum.reject(&is_nil(&1.target))
+        |> Enum.uniq_by(& &1.target)
+        |> Enum.sort_by(& &1.target)
+        |> Enum.map(&%{id: &1.target, name: &1.target_name}),
       summary: summary_from_rows(mission_id, all_rows, observed_at)
     }
   end
@@ -148,6 +161,9 @@ defmodule Cadence.Reads.Commands do
     if failed_verification?(request, release_attempt, verifiers), do: :failed
   end
 
+  defp release_transition_status(%CommandReleaseAttempt{lifecycle_state: :release_uncertain}),
+    do: :indeterminate
+
   defp release_transition_status(%CommandReleaseAttempt{lifecycle_state: :release_failed}),
     do: :failed
 
@@ -225,7 +241,14 @@ defmodule Cadence.Reads.Commands do
     query = String.downcase(query)
 
     Enum.any?(
-      [row.command_name, row.command_id, row.command_request_id, row.target, row.requested_by],
+      [
+        row.command_name,
+        row.command_id,
+        row.command_request_id,
+        row.target,
+        row.target_name,
+        row.requested_by
+      ],
       fn value ->
         is_binary(value) and String.contains?(String.downcase(value), query)
       end
