@@ -500,7 +500,7 @@
     "contribution": "comms.validation",
     "scope": "mission",
     "mountId": "comms-validation-component",
-    "queryKeys": [],
+    "queryKeys": ["page"],
     "queryAliases": {},
     "viewClass": "",
     "metadata": {

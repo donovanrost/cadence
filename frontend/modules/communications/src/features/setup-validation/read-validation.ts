@@ -33,9 +33,16 @@ export function readValidation(value: unknown, context: ReadContext) {
   const nav = navigation(input.navigation, context, missionPath(context) + "/comms/validation");
   const count = integer(data.finding_count, 0, 20),
     empty = boolean(data.empty);
+  const total = integer(data.total_count, 0),
+    page = integer(data.page, 1, 10000),
+    pageSize = integer(data.page_size, 20, 20),
+    pageCount = integer(data.page_count, 1);
   const status = choice(data.status, ["ready", "attention"]);
   if (
-    empty !== (count === 0) ||
+    pageCount !== Math.max(Math.ceil(total / pageSize), 1) ||
+    page > pageCount ||
+    count !== Math.min(pageSize, Math.max(total - (page - 1) * pageSize, 0)) ||
+    empty !== (total === 0) ||
     (status === "ready") !== empty ||
     !Array.isArray(data.findings) ||
     data.findings.length !== count ||
@@ -70,7 +77,7 @@ export function readValidation(value: unknown, context: ReadContext) {
       title: text(data.title),
       subtitle: "Checks on saved communications setup; not a runtime readiness guarantee.",
       breadcrumbs: nav.breadcrumbs,
-      finding_count_suffix: count + (count === 1 ? " finding" : " findings"),
+      finding_count_suffix: total + (total === 1 ? " finding" : " findings"),
       status: { tone: status, label: empty ? "No findings" : "Needs review" },
       empty,
       empty_state: {
@@ -80,6 +87,15 @@ export function readValidation(value: unknown, context: ReadContext) {
       },
       findings_id: "comms-validation-findings",
       finding_groups: groups,
+      pagination: {
+        label:
+          total === 0
+            ? "0 findings"
+            : `${(page - 1) * pageSize + 1}–${(page - 1) * pageSize + count} of ${total}`,
+        previousHref: page > 1 ? `${missionPath(context)}/comms/validation?page=${page - 1}` : null,
+        nextHref:
+          page < pageCount ? `${missionPath(context)}/comms/validation?page=${page + 1}` : null,
+      },
     },
   };
 }

@@ -9,11 +9,25 @@ defmodule Cadence.Control.SpacecraftModelBindings do
   alias Cadence.SpacecraftStore
 
   def validate(organization_id, mission_id, metadata) do
-    with {:ok, entries} <- ModelBindings.entries(metadata) do
-      Enum.reduce_while(entries, :ok, fn {spacecraft_id, entry}, :ok ->
-        validate_entry(organization_id, mission_id, spacecraft_id, entry)
-      end)
+    with {:ok, entries} <- ModelBindings.entries(metadata),
+         :ok <-
+           Enum.reduce_while(entries, :ok, fn {spacecraft_id, entry}, :ok ->
+             validate_entry(organization_id, mission_id, spacecraft_id, entry)
+           end) do
+      validate_models(organization_id, mission_id, entries)
     end
+  end
+
+  defp validate_models(organization_id, mission_id, entries) do
+    entries
+    |> Enum.map(fn {_id, entry} -> entry["mission_model"] end)
+    |> Enum.uniq()
+    |> Enum.reduce_while(:ok, fn manifest, :ok ->
+      case MissionModelPromotion.runtime_basis(organization_id, mission_id, manifest) do
+        {:ok, _} -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
   end
 
   defp validate_entry(organization_id, mission_id, spacecraft_id, entry) do
@@ -22,13 +36,7 @@ defmodule Cadence.Control.SpacecraftModelBindings do
          {:ok, catalog} <-
            Catalog.fetch_revision(organization_id, mission_id, entry["catalog_revision_id"]),
          true <- catalog.mission_model_revision_id == entry["mission_model"]["revision_id"],
-         :ok <- validate_endpoints(organization_id, mission_id, spacecraft_id, entry),
-         {:ok, _basis} <-
-           MissionModelPromotion.runtime_basis(
-             organization_id,
-             mission_id,
-             entry["mission_model"]
-           ) do
+         :ok <- validate_endpoints(organization_id, mission_id, spacecraft_id, entry) do
       {:cont, :ok}
     else
       false -> {:halt, {:error, :spacecraft_catalog_model_mismatch}}
@@ -82,10 +90,19 @@ defmodule Cadence.Control.SpacecraftModelBindings do
   defp command_entry(metadata, source), do: ModelBindings.entry_for_source(metadata, source)
 
   defp resolve_entries(activation, entries) do
-    Enum.reduce_while(entries, {:ok, %{}}, fn {_id, entry}, {:ok, bases} ->
-      case MissionModelPromotion.runtime_basis(%{activation | metadata: entry}) do
+    entries
+    |> Enum.group_by(fn {_id, entry} -> entry["mission_model"] end)
+    |> Enum.reduce_while({:ok, %{}}, fn {manifest, grouped}, {:ok, bases} ->
+      case MissionModelPromotion.runtime_basis(%{
+             activation
+             | metadata: %{"mission_model" => manifest}
+           }) do
         {:ok, basis} ->
-          additions = Map.new(entry["source_endpoint_ids"], &{&1, basis})
+          additions =
+            grouped
+            |> Enum.flat_map(&Map.fetch!(elem(&1, 1), "source_endpoint_ids"))
+            |> Map.new(&{&1, basis})
+
           {:cont, {:ok, Map.merge(bases, additions)}}
 
         {:error, reason} ->

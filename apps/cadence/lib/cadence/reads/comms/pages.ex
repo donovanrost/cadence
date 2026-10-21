@@ -32,7 +32,7 @@ defmodule Cadence.Reads.Comms.Pages do
   @default_page_size 50
   @max_page_size 100
   @validation_page_size 100
-  @max_resource_items 100
+  @max_resource_items 10_000
   @max_findings 20
   @max_text_bytes 240
   @max_map_keys 64
@@ -66,14 +66,16 @@ defmodule Cadence.Reads.Comms.Pages do
          :ok <- validate_read_scope(scope, mission_id),
          {:ok, resources} <- read_validation_resources(scope, mission_id),
          :ok <- validate_resource_identifiers(resources, mission_id),
-         {:ok, findings} <- validation_findings(scope, mission_id, resources),
-         :ok <- validate_findings_bounds(findings) do
+         {:ok, findings} <- validation_findings(scope, mission_id, resources) do
+      preview = overview_findings(findings, mission_id)
+
       {:ok,
        %{
          transports: Enum.take(resources.transports, 6),
          transport_count: length(resources.transports),
-         findings: findings,
-         finding_groups: finding_groups(findings)
+         findings: preview,
+         finding_count: length(findings),
+         finding_groups: finding_groups(preview)
        }}
     end
   end
@@ -133,16 +135,14 @@ defmodule Cadence.Reads.Comms.Pages do
 
   def overview_presentation(_scope, _mission), do: {:error, :invalid_application_request}
 
-  @doc "Returns bounded findings for the dedicated legacy validation page."
+  @doc "Returns findings from the bounded mission scan; page payloads paginate these results."
   @spec validation(Scope.t(), binary()) :: {:ok, [map()]} | {:error, atom()}
   def validation(%Scope{} = scope, mission_id) when is_binary(mission_id) do
     with :ok <- authorize_read(scope, mission_id),
          :ok <- validate_read_scope(scope, mission_id),
          {:ok, resources} <- read_validation_resources(scope, mission_id),
-         :ok <- validate_resource_identifiers(resources, mission_id),
-         {:ok, findings} <- validation_findings(scope, mission_id, resources),
-         :ok <- validate_findings_bounds(findings) do
-      {:ok, findings}
+         :ok <- validate_resource_identifiers(resources, mission_id) do
+      validation_findings(scope, mission_id, resources)
     end
   end
 
@@ -198,9 +198,10 @@ defmodule Cadence.Reads.Comms.Pages do
     end
   end
 
-  defp dispatch_surface(scope, mission, "validation", _params) do
-    with {:ok, findings} <- validation(scope, mission.mission_id),
-         {:ok, data} <- validation_data(findings, mission.mission_id) do
+  defp dispatch_surface(scope, mission, "validation", params) do
+    with {:ok, page} <- page_param(params, "page", 1),
+         {:ok, findings} <- validation(scope, mission.mission_id),
+         {:ok, data} <- validation_data(findings, mission.mission_id, page) do
       trusted_payload("validation", mission.mission_id, nil, data)
     end
   end
@@ -944,6 +945,9 @@ defmodule Cadence.Reads.Comms.Pages do
       surface_id in @list_surfaces ->
         MapSet.new(~w(mission_id q sort dir page pageSize))
 
+      surface_id == "validation" ->
+        MapSet.new(~w(mission_id page))
+
       surface_id == "routing_new" ->
         MapSet.new(~w(mission_id spacecraft_id))
 
@@ -1202,65 +1206,65 @@ defmodule Cadence.Reads.Comms.Pages do
 
     readers = [
       {:spacecraft,
-       fn ->
+       fn page ->
          Cadence.SpacecraftStore.list_spacecraft_page(organization_id, mission_id,
-           page: 1,
+           page: page,
            page_size: @validation_page_size
          )
        end},
       {:source_endpoints,
-       fn ->
+       fn page ->
          Cadence.SourceEndpoints.list_source_endpoints_page(organization_id, mission_id,
-           page: 1,
+           page: page,
            page_size: @validation_page_size
          )
        end},
       {:path_templates,
-       fn ->
+       fn page ->
          PathTemplateStore.list_page(organization_id, mission_id,
-           page: 1,
+           page: page,
            page_size: @validation_page_size
          )
        end},
       {:provider_profiles,
-       fn ->
+       fn page ->
          ProfileStore.list_provider_profiles_page(organization_id, mission_id,
-           page: 1,
+           page: page,
            page_size: @validation_page_size
          )
        end},
       {:transport_profiles,
-       fn ->
+       fn page ->
          ProfileStore.list_transport_profiles_page(organization_id, mission_id,
-           page: 1,
+           page: page,
            page_size: @validation_page_size
          )
        end},
       {:transports,
-       fn ->
+       fn page ->
          TransportStore.list_transports_page(organization_id, mission_id,
-           page: 1,
+           page: page,
            page_size: @validation_page_size
          )
        end},
       {:routing_rules,
-       fn ->
+       fn page ->
          RoutingRuleStore.list_routing_rules_page(organization_id, mission_id,
-           page: 1,
+           page: page,
            page_size: @validation_page_size
          )
        end},
       {:link_assignments,
-       fn ->
+       fn page ->
          LinkAssignmentStore.list_page(organization_id, mission_id,
-           page: 1,
+           page: page,
            page_size: @validation_page_size
          )
        end},
       {:installations,
-       fn ->
+       fn page ->
          ApplicationInstallations.list_for_mission_page(scope, mission_id,
-           page: 1,
+           page: page,
            page_size: @validation_page_size,
            max_total: @max_resource_items
          )
@@ -1274,30 +1278,41 @@ defmodule Cadence.Reads.Comms.Pages do
 
   defp read_bounded_resources(readers) do
     Enum.reduce_while(readers, %{}, fn {key, reader}, acc ->
-      case normalize_resource_page(reader.()) do
+      case read_resource_pages(reader) do
         {:ok, items} -> {:cont, Map.put(acc, key, items)}
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
   end
 
-  defp normalize_resource_page(%Page{items: items, total_count: total}),
-    do: normalize_resource_items(items, total)
+  defp read_resource_pages(reader, page \\ 1, expected_total \\ nil, batches \\ []) do
+    with {:ok, %Page{} = result} <- normalize_resource_page(reader.(page)),
+         :ok <- validate_resource_page(result, page, expected_total) do
+      batches = [result.items | batches]
 
-  defp normalize_resource_page({:ok, %Page{items: items, total_count: total}}),
-    do: normalize_resource_items(items, total)
+      if page * @validation_page_size >= result.total_count do
+        {:ok, batches |> Enum.reverse() |> List.flatten()}
+      else
+        read_resource_pages(reader, page + 1, result.total_count, batches)
+      end
+    end
+  end
 
+  defp normalize_resource_page(%Page{} = page), do: {:ok, page}
+  defp normalize_resource_page({:ok, %Page{}} = result), do: result
   defp normalize_resource_page({:error, reason}), do: {:error, reason}
+  defp normalize_resource_page(_invalid), do: {:error, :unsupported_application_surface_query}
 
-  defp normalize_resource_page(_invalid),
-    do: {:error, :unsupported_application_surface_query}
+  defp validate_resource_page(%Page{items: items, total_count: total}, page, expected_total)
+       when is_list(items) and is_integer(total) and total in 0..@max_resource_items do
+    expected_size = min(max(total - (page - 1) * @validation_page_size, 0), @validation_page_size)
 
-  defp normalize_resource_items(items, total)
-       when is_list(items) and is_integer(total) and total <= @max_resource_items and
-              length(items) <= @max_resource_items,
-       do: {:ok, items}
+    if length(items) == expected_size and (is_nil(expected_total) or total == expected_total),
+      do: :ok,
+      else: {:error, :application_surface_bounds_exceeded}
+  end
 
-  defp normalize_resource_items(_items, _total),
+  defp validate_resource_page(_result, _page, _total),
     do: {:error, :application_surface_bounds_exceeded}
 
   defp finalize_validation_resources({:error, _reason} = error), do: error
@@ -1376,9 +1391,7 @@ defmodule Cadence.Reads.Comms.Pages do
         |> Kernel.++(spacecraft_findings(resources.spacecraft, mission_id))
         |> Kernel.++(application_findings)
 
-      if length(findings) <= @max_findings,
-        do: {:ok, findings},
-        else: {:error, :application_surface_bounds_exceeded}
+      {:ok, Enum.sort_by(findings, &{&1.severity != :blocked, &1.owner, &1.title, &1.body})}
     end
   end
 
@@ -1800,7 +1813,8 @@ defmodule Cadence.Reads.Comms.Pages do
   defp preloaded_statuses(%Scope{} = scope, mission_id, spacecraft) do
     spacecraft_ids = Enum.map(spacecraft, & &1.spacecraft_id)
 
-    with {:ok, statuses} <- TelemetryDecomStatus.load_many(scope, mission_id, spacecraft_ids) do
+    with {:ok, statuses} <-
+           read_batches(spacecraft_ids, &TelemetryDecomStatus.load_many(scope, mission_id, &1)) do
       {:ok,
        Map.new(statuses, fn {spacecraft_id, status} ->
          {{"telemetry_decom", spacecraft_id}, status}
@@ -1816,7 +1830,20 @@ defmodule Cadence.Reads.Comms.Pages do
         is_binary(type_id) and is_integer(version) and version > 0
       end)
 
-    SpacecraftTypeStore.fetch_spacecraft_type_versions(organization_id, mission_id, references)
+    read_batches(Enum.uniq(references), fn batch ->
+      SpacecraftTypeStore.fetch_spacecraft_type_versions(organization_id, mission_id, batch)
+    end)
+  end
+
+  defp read_batches(items, reader) do
+    items
+    |> Enum.chunk_every(@validation_page_size)
+    |> Enum.reduce_while({:ok, %{}}, fn batch, {:ok, acc} ->
+      case reader.(batch) do
+        {:ok, values} -> {:cont, {:ok, Map.merge(acc, values)}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
   end
 
   defp status_placement_findings(%InventoryItem{definition: nil}, _spacecraft, _mission_id),
@@ -1941,13 +1968,21 @@ defmodule Cadence.Reads.Comms.Pages do
         "Diagnostics for internal execution artifacts derived from spacecraft routing setup."
     }
 
-  defp validation_data(findings, mission_id) do
+  defp validation_data(all_findings, mission_id, requested_page) do
+    total = length(all_findings)
+    page = normalized_page(total, requested_page, @max_findings)
+    findings = Enum.slice(all_findings, (page - 1) * @max_findings, @max_findings)
+
     with :ok <- validate_findings_bounds(findings) do
       {:ok,
        %{
          "id" => "comms-validation-page",
          "title" => "Validation",
          "finding_count" => length(findings),
+         "total_count" => total,
+         "page" => page,
+         "page_size" => @max_findings,
+         "page_count" => max(ceil(total / @max_findings), 1),
          "empty" => findings == [],
          "href" => fallback_href(mission_id, "validation"),
          "findings" => Enum.with_index(findings) |> Enum.map(&finding_data(&1, mission_id)),
@@ -1957,6 +1992,27 @@ defmodule Cadence.Reads.Comms.Pages do
          "status" => if(findings == [], do: "ready", else: "attention")
        }}
     end
+  end
+
+  defp overview_findings(findings, _mission_id) when length(findings) <= @max_findings,
+    do: findings
+
+  defp overview_findings(findings, mission_id) do
+    shown = @max_findings - 1
+
+    Enum.take(findings, shown) ++
+      [
+        %{
+          id: "comms-validation-more-findings",
+          owner: :advanced_runtime_identity,
+          severity: :attention,
+          title: "#{length(findings) - shown} additional findings",
+          body:
+            "Showing the first #{shown} findings, with blocking issues first. Open Validation to review every finding.",
+          action_label: "View all findings",
+          action_navigate: fallback_href(mission_id, "validation")
+        }
+      ]
   end
 
   defp finding_group_data({group, index}, mission_id) do
@@ -2029,7 +2085,7 @@ defmodule Cadence.Reads.Comms.Pages do
           "label" =>
             if(summary.findings == [],
               do: "No Findings",
-              else: "#{length(summary.findings)} Findings"
+              else: "#{summary.finding_count} Findings"
             )
         },
         "empty" => summary.findings == [],

@@ -5,6 +5,7 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
   alias Cadence.Applications.SpacecraftConfiguration.Active, as: ConfigurationActive
   alias Cadence.Applications.SpacecraftConfiguration.Drafts, as: ConfigurationDrafts
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
+  alias Cadence.Catalog.SpacecraftModelBindings
   alias Cadence.Missions
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftType
@@ -18,19 +19,12 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
       )
       when is_binary(org) do
     ConfigurationLock.run(attrs.organization_id, attrs.mission_id, fn ->
-      with %{
-             "spacecraft_id" => id,
-             "configuration_revision_id" => _revision_id,
-             "configuration_token" => _token,
-             "base_activation_id" => _base
-           } <- metadata["configuration_review"],
-           {:ok, mission} <- Missions.fetch_mission(attrs.organization_id, attrs.mission_id) do
-        SpacecraftStore.with_locked_spacecraft(
-          org,
-          attrs.mission_id,
-          id,
-          &admit_current(mission, &1, metadata)
-        )
+      with {:ok, ids} <- SpacecraftModelBindings.reviewed_spacecraft_ids(metadata),
+           {:ok, entries} <- SpacecraftModelBindings.entries(metadata),
+           {:ok, mission} <- Missions.fetch_mission(attrs.organization_id, attrs.mission_id),
+           {:ok, active} <- ConfigurationActive.load(mission),
+           true <- Map.drop(entries, ids) == Map.drop(active.entries, ids) do
+        admit_spacecraft(mission, ids, metadata, active)
       else
         {:error, reason} -> {:error, reason}
         _ -> {:error, :spacecraft_configuration_review_stale}
@@ -58,15 +52,31 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
     end)
   end
 
-  defp admit_current(mission, spacecraft, metadata) do
-    %{
-      "spacecraft_id" => id,
-      "configuration_revision_id" => revision_id,
-      "configuration_token" => token,
-      "base_activation_id" => base
-    } = metadata["configuration_review"]
+  defp admit_spacecraft(mission, ids, metadata, active) do
+    Enum.reduce_while(ids, {:ok, :admitted}, fn id, _result ->
+      result =
+        SpacecraftStore.with_locked_spacecraft(
+          mission.organization_id,
+          mission.mission_id,
+          id,
+          &admit_current(mission, &1, metadata, active)
+        )
 
-    with {:ok, active} <- ConfigurationActive.load(mission),
+      case result do
+        {:ok, :admitted} -> {:cont, result}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp admit_current(mission, spacecraft, metadata, active) do
+    with %{
+           "spacecraft_id" => id,
+           "configuration_revision_id" => revision_id,
+           "configuration_token" => token,
+           "base_activation_id" => base
+         } <- SpacecraftModelBindings.review_for(metadata, spacecraft.spacecraft_id),
+         true <- id == spacecraft.spacecraft_id,
          true <- base == (active.activation && active.activation.activation_id),
          current = ConfigurationDrafts.snapshot(mission, spacecraft),
          :ok <- ConfigurationDrafts.exact_token(current.token, token),
@@ -78,8 +88,6 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
              entry["configuration_version"] == current.row.version,
          {:ok, sources} <- ConfigurationActive.source_ids(mission, id),
          true <- sources == entry["source_endpoint_ids"],
-         true <-
-           Map.delete(metadata["spacecraft_configurations"], id) == Map.delete(active.entries, id),
          :ok <- apply_protocol(mission, spacecraft, current.row) do
       {:ok, :admitted}
     else

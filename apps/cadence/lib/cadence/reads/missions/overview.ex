@@ -2,6 +2,8 @@ defmodule Cadence.Reads.Missions.Overview do
   @moduledoc "Core mission overview and spacecraft readiness presentation."
   alias Cadence.{Missions, SpacecraftStore}
 
+  @readiness_preview_size 25
+
   def load(organization_id, mission_id) do
     with {:ok, mission} <- Missions.fetch_mission(organization_id, mission_id) do
       spacecraft = SpacecraftStore.list_spacecraft(organization_id, mission_id)
@@ -48,8 +50,7 @@ defmodule Cadence.Reads.Missions.Overview do
            "setup" => %{
              "eyebrow" => "Spacecraft Readiness",
              "title" => "Configure spacecraft identity and select a spacecraft profile",
-             "description" =>
-               "Each row shows whether a spacecraft can be identified from incoming frames and has a profile that defines its byte-interpretation contract.",
+             "description" => readiness_description(length(readiness)),
              "issue_count" => issues,
              "status" => status_dto(if(issues == 0, do: "ready", else: "attention")),
              "empty" => readiness == [],
@@ -60,9 +61,18 @@ defmodule Cadence.Reads.Missions.Overview do
              }
            }
          },
-         "spacecraft_readiness" => readiness
+         "spacecraft_readiness" => Enum.take(readiness, @readiness_preview_size)
        }}
     end
+  end
+
+  defp readiness_description(count) when count > @readiness_preview_size do
+    "Showing the first #{@readiness_preview_size} of #{count} spacecraft. " <>
+      "Readiness totals cover the entire mission. Open Spacecraft to browse and filter the full fleet."
+  end
+
+  defp readiness_description(_count) do
+    "Each row shows whether a spacecraft can be identified from incoming frames and has a profile that defines its byte-interpretation contract."
   end
 
   defp readiness_card(title, value, tone, description),
@@ -76,12 +86,17 @@ defmodule Cadence.Reads.Missions.Overview do
   defp readiness_row(spacecraft, endpoints, templates, assignments, mission_id) do
     endpoint = Enum.find(endpoints, &(&1.spacecraft_id == spacecraft.spacecraft_id))
     endpoint_id = endpoint && endpoint.source_endpoint_id
-    assigned = Enum.filter(assignments, &(&1.source_endpoint_ref == endpoint_id))
+    assigned = Enum.filter(assignments, &(&1.spacecraft_id == spacecraft.spacecraft_id))
 
     available = available_template_count(templates)
     provider_paths = provider_path_count(assigned)
     status = readiness_status(spacecraft, endpoint, provider_paths)
-    issue = readiness_issue(spacecraft, endpoint, available)
+
+    issue =
+      if status == "ready",
+        do: "Spacecraft identity and downlink routes are configured.",
+        else: readiness_issue(spacecraft, endpoint, available)
+
     path_label = readiness_path_label(endpoint, provider_paths, available)
 
     %{

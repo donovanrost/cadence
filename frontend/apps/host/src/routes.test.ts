@@ -149,6 +149,15 @@ test("shared viewers are compiled, read-only and derive identities only from the
   }
 });
 
+test("COMMS validation preserves its bounded findings page in the URL", () => {
+  const route = required(routes.find((r) => r.path === "/missions/:mission_id/comms/validation"));
+  expect(route).toMatchObject({
+    kind: "mission_module",
+    contribution: "comms.validation",
+    queryKeys: ["page"],
+  });
+});
+
 test("settings is a resource-bound compiled contribution with finite actions and cursors", () => {
   const route = required(
     routes.find((r) => r.path === "/missions/:mission_id/ops/dashboards/:dashboard_id/settings"),

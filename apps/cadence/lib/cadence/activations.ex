@@ -5,6 +5,7 @@ defmodule Cadence.Activations do
 
   alias Cadence.Activations.ApprovalAdmission
   alias Cadence.Activations.SpacecraftConfiguration, as: ConfigurationActivation
+  alias Cadence.Catalog.SpacecraftModelBindings
   alias Cadence.Platform.ScopedReadUpdates
 
   import Ecto.Query
@@ -82,7 +83,13 @@ defmodule Cadence.Activations do
       row =
         ActiveBindingSetRow
         |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
-        |> where([row], fragment("octet_length(?::text)", row.metadata) <= 65_536)
+        |> where(
+          [row],
+          fragment("octet_length(?::text)", row.metadata) <= 65_536 or
+            (fragment("? #>> '{value,spacecraft_configuration_version}'", row.metadata) == "1" and
+               fragment("octet_length(?::text)", row.metadata) <=
+                 ^SpacecraftModelBindings.max_metadata_bytes())
+        )
         |> lock("FOR SHARE")
         |> Repo.one()
 

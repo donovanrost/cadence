@@ -3,53 +3,11 @@ import { findingDomId } from "../../shared/finding-dom-id";
 import { useManagementHeader } from "@cadence/plugin-sdk/page-header";
 import CadenceCard from "@cadence/ui/CadenceCard.vue";
 import CadencePanel from "@cadence/ui/CadencePanel.vue";
+import CadencePaginationFrame from "@cadence/ui/CadencePaginationFrame.vue";
+import type { readValidation } from "./read-validation";
 import StatusBadge from "../../shared/StatusBadge.vue";
 
-type StatusTone = "ready" | "attention" | "blocked" | "info";
-
-type Status = {
-  tone: StatusTone;
-  label: string;
-};
-
-type Breadcrumb = {
-  label: string;
-  href: string | null;
-};
-
-type Finding = {
-  id: string | null;
-  title: string;
-  body: string;
-  action_label: string | null;
-  action_href: string | null;
-  status: Status;
-};
-
-type FindingGroup = {
-  id: string;
-  title: string;
-  description: string;
-  findings: Finding[];
-};
-
-type Validation = {
-  id: string;
-  title: string;
-  subtitle: string;
-  breadcrumbs: Breadcrumb[];
-  finding_count_suffix: string;
-  status: Status;
-  empty: boolean;
-  empty_state: {
-    id: string;
-    title: string;
-    description: string;
-  };
-  findings_id: string;
-  finding_groups: FindingGroup[];
-};
-
+type Validation = ReturnType<typeof readValidation>["validation"];
 const props = defineProps<{ validation: Validation }>();
 useManagementHeader("/missions/:mission_id/comms/validation", () => ({
   description: props.validation.subtitle,
@@ -115,5 +73,27 @@ useManagementHeader("/missions/:mission_id/comms/validation", () => ({
         </div>
       </CadencePanel>
     </div>
+    <CadencePaginationFrame
+      v-if="validation.pagination.previousHref || validation.pagination.nextHref"
+      id="comms-validation-pagination"
+    >
+      <span class="font-mono text-xs text-base-content/70">{{ validation.pagination.label }}</span>
+      <div class="flex items-center gap-2">
+        <a
+          v-if="validation.pagination.previousHref"
+          id="comms-validation-previous"
+          :href="validation.pagination.previousHref"
+          class="btn btn-ghost btn-xs"
+          >Previous</a
+        >
+        <a
+          v-if="validation.pagination.nextHref"
+          id="comms-validation-next"
+          :href="validation.pagination.nextHref"
+          class="btn btn-ghost btn-xs"
+          >Next</a
+        >
+      </div>
+    </CadencePaginationFrame>
   </div>
 </template>

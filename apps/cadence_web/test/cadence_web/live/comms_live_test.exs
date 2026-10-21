@@ -27,6 +27,23 @@ defmodule CadenceWeb.CommsLiveTest do
     assert_surface(view, "comms-validation-component", "validation", mission, %{})
   end
 
+  test "Comms validation retains the findings page in the authenticated host URL" do
+    {conn, _organization, mission} = signed_in_org_and_mission()
+
+    for index <- 1..25 do
+      TestFixtures.persist_spacecraft!(mission, display_name: "Needs setup #{index}")
+    end
+
+    {:ok, view, _html} =
+      live(conn, ~p"/missions/#{mission.mission_id}/comms/validation?page=2")
+
+    assert_surface(view, "comms-validation-component", "validation", mission, %{"page" => "2"})
+    vue = LiveVue.Test.get_vue(view, id: "application-shell")
+    page = vue.props["snapshot"]["mission_module_page"]
+    assert page["status"] == "ready"
+    assert page["data"]["data"]["page"] == 2
+  end
+
   test "Comms routes redirect unauthenticated users to sign in", %{conn: conn} do
     assert {:error, {:redirect, %{to: "/sign-in"}}} =
              live(conn, "/missions/mission-test/comms")

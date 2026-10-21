@@ -38,7 +38,12 @@ defmodule CadenceWeb.MissionModulePage do
       context: context
     }
 
-    keys = if page in @collections, do: @query_keys, else: List.wrap(resource_key)
+    keys =
+      cond do
+        page in @collections -> @query_keys
+        page == "validation" -> ["page"]
+        true -> List.wrap(resource_key)
+      end
 
     case Pages.load(scope, params["mission_id"], page, Map.take(params, keys)) do
       {:ok, data} -> Map.merge(envelope, %{status: "ready", data: data})

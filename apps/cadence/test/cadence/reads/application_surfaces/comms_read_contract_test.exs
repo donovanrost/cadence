@@ -107,6 +107,22 @@ defmodule Cadence.Reads.ApplicationSurfaces.CommsReadContractTest do
     end
   end
 
+  test "validation pagination preserves the typed feature contract", context do
+    for index <- 1..25 do
+      {:ok, _} =
+        SpacecraftStore.persist_spacecraft(
+          @org,
+          Spacecraft.new(%{mission_id: @mission, display_name: "Needs setup #{index}"})
+        )
+    end
+
+    for page <- ["1", "2", "999"] do
+      payload = load!(context.scope, "validation", %{"page" => page})
+      assert payload["data"]["total_count"] > 20
+      assert_consumer(payload, "setup-validation", "readValidation")
+    end
+  end
+
   test "collection ordering is applied before pagination, including descending URLs", context do
     transport!("Zulu TCP")
 

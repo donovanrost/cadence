@@ -19,6 +19,10 @@ export function missionSnapshots() {
         data: {
           title: "Validation",
           finding_count: 0,
+          total_count: 0,
+          page: 1,
+          page_size: 20,
+          page_count: 1,
           empty: true,
           status: "ready",
           findings: [],

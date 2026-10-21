@@ -461,7 +461,7 @@ export const routeCatalog = {
     layer: "management",
     scope: "mission",
     title: "Setup Validation",
-    queryKeys: [],
+    queryKeys: ["page"],
     header: {
       kind: "collection",
       breadcrumbs: true,

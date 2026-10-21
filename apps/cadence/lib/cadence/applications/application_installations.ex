@@ -329,7 +329,7 @@ defmodule Cadence.Applications.ApplicationInstallations do
         )
         |> maybe_filter_lifecycle_state(Keyword.get(opts, :lifecycle_state))
 
-      bounded_installation_page(query, opts)
+      bounded_installation_page(query, opts, 10_000)
     else
       false -> {:error, :application_installation_scope_required}
       {:error, reason} -> {:error, reason}
@@ -629,10 +629,11 @@ defmodule Cadence.Applications.ApplicationInstallations do
     where(query, [row], row.lifecycle_state == ^Atom.to_string(lifecycle_state))
   end
 
-  defp bounded_installation_page(query, opts) do
+  defp bounded_installation_page(query, opts, hard_limit \\ 100) do
     max_total = Keyword.get(opts, :max_total, 100)
 
-    if valid_page_opts?(opts) and is_integer(max_total) and max_total > 0 and max_total <= 100 do
+    if valid_page_opts?(opts) and is_integer(max_total) and max_total > 0 and
+         max_total <= hard_limit do
       total_count = Repo.aggregate(query, :count)
 
       if total_count <= max_total do

@@ -77,6 +77,31 @@ defmodule CadenceWeb.MissionPageTest do
     refute mission.mission_id == "forged"
   end
 
+  test "a 500-spacecraft mission keeps fleet totals and a bounded overview", %{
+    conn: conn,
+    org: org
+  } do
+    mission = TestFixtures.persist_mission!(org)
+
+    for index <- 1..500 do
+      TestFixtures.persist_spacecraft!(mission,
+        display_name: "EARENDIL-#{String.pad_leading(Integer.to_string(index), 3, "0")}",
+        scid: if(index == 500, do: nil, else: index)
+      )
+    end
+
+    {:ok, view, _} = live(conn, "/missions/#{mission.mission_id}")
+    assert has_element?(view, "#application-shell")
+    data = assert_page(view, "mission_overview", "mission-overview", "assertOverview")
+    cards = Map.new(data["overview"]["readiness_cards"], &{&1["title"], &1["value"]})
+
+    assert cards["Need SCID"] == 1
+    assert cards["Ready Spacecraft"] == 0
+    assert data["overview"]["setup"]["issue_count"] == 500
+    assert length(data["spacecraft_readiness"]) == 25
+    assert data["overview"]["setup"]["description"] =~ "25 of 500"
+  end
+
   test "invalid fields, stale paths and unsupported events cannot create missions", %{
     conn: conn,
     org: org

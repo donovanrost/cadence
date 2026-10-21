@@ -92,7 +92,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
 
     for {endpoint, revision} <- [{c.endpoint, c.revision}, {c.other_endpoint, c.other_revision}] do
       assert {:ok, partition} =
-               MissionRuntimeSpec.for_partition(
+               MissionRuntimeSpec.partition_input(
                  spec,
                  %PartitionKey{
                    affinity: :source_endpoint,
@@ -101,6 +101,13 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
                )
 
       assert partition.mission_model_revision_id == revision.mission_model_revision_id
+      assert Map.keys(partition.source_runtime_bases) == [endpoint.source_endpoint_id]
+      assert MissionRuntimeSpec.identity(partition) == MissionRuntimeSpec.identity(spec)
+
+      assert Enum.all?(partition.binding_set.capability_instances, fn instance ->
+               instance.target_scope == :mission or
+                 instance.source_endpoint_ref == endpoint.source_endpoint_id
+             end)
 
       assert Enum.all?(partition.runtime_plans, fn {_, plan} ->
                plan.mission_model_revision_id == revision.mission_model_revision_id

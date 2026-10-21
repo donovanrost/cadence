@@ -140,7 +140,12 @@ defmodule Cadence.Management.Activations do
             "? #>> '{value,configuration_review,spacecraft_id}' = ?",
             request.metadata,
             ^spacecraft_id
-          ),
+          ) or
+            fragment(
+              "jsonb_exists(? #> '{value,configuration_review,spacecraft_reviews}', ?)",
+              request.metadata,
+              ^spacecraft_id
+            ),
         order_by: [desc: request.requested_at, desc: request.activation_request_id],
         limit: 1
       )

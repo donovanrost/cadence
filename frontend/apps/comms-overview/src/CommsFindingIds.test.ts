@@ -33,6 +33,7 @@ const validation = {
   empty_state: { id: "empty", title: "All clear", description: "No findings" },
   findings_id: "comms-validation-findings",
   finding_groups: groups,
+  pagination: { label: "1–4 of 4", previousHref: null, nextHref: null },
 };
 
 const overview: Overview = {
@@ -72,6 +73,10 @@ const renderers = {
             ...validation,
             status: "attention",
             finding_count: 4,
+            total_count: 4,
+            page: 1,
+            page_size: 20,
+            page_count: 1,
             findings: groups.flatMap((group) => group.findings),
           },
         },
