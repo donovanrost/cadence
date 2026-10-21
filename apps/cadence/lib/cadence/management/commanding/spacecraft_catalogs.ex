@@ -17,39 +17,46 @@ defmodule Cadence.Management.Commanding.SpacecraftCatalogs do
     with {:ok, entries} <- SpacecraftModelBindings.entries(metadata) do
       entries
       |> Enum.sort()
-      |> Enum.reduce_while({:ok, []}, fn {_id, entry}, {:ok, bases} ->
-        append_target_basis(entry, bases, snapshot, command_id, reference)
+      |> Enum.filter(fn {_id, entry} -> entry["commanding_enabled"] end)
+      |> Enum.group_by(fn {_id, entry} -> entry["mission_model"] end)
+      |> Enum.sort()
+      |> Enum.reduce_while({:ok, []}, fn {_manifest, entries}, {:ok, bases} ->
+        append_target_basis(entries, bases, snapshot, command_id, reference)
       end)
     end
   end
 
   def load(_snapshot, _command_id), do: {:ok, nil}
 
-  defp append_target_basis(entry, bases, snapshot, command_id, reference) do
-    if entry["commanding_enabled"] do
-      [source | _] = entry["source_endpoint_ids"]
+  defp append_target_basis(entries, bases, snapshot, command_id, reference) do
+    sources = Enum.flat_map(entries, fn {_id, entry} -> entry["source_endpoint_ids"] end)
+    [source | _] = sources
 
-      case ActiveBasis.for_target(snapshot, %{source_endpoint_id: source}) do
-        {:ok, target} ->
-          compatible =
-            is_nil(reference) or
-              (match?({:ok, _}, reference) and
-                 reference == fingerprint(target, command_id))
+    # The active generation stays locked throughout discovery. Admit each exact
+    # manifest once, then share its immutable evidence across its enabled sources.
+    case ActiveBasis.for_target(snapshot, %{source_endpoint_id: source}) do
+      {:ok, target} ->
+        compatible =
+          is_nil(reference) or
+            (match?({:ok, _}, reference) and
+               reference == fingerprint(target, command_id))
 
-          basis = %{
-            "sources" => entry["source_endpoint_ids"],
-            "revision_id" => target.basis.mission_model_revision_id,
-            "plan_id" => target.catalog.plan_id,
-            "compatible" => compatible
-          }
+        grouped =
+          sources
+          |> Enum.chunk_every(100)
+          |> Enum.map(fn sources ->
+            %{
+              "sources" => sources,
+              "revision_id" => target.basis.mission_model_revision_id,
+              "plan_id" => target.catalog.plan_id,
+              "compatible" => compatible
+            }
+          end)
 
-          {:cont, {:ok, [basis | bases]}}
+        {:cont, {:ok, bases ++ grouped}}
 
-        error ->
-          {:halt, error}
-      end
-    else
-      {:cont, {:ok, bases}}
+      error ->
+        {:halt, error}
     end
   end
 

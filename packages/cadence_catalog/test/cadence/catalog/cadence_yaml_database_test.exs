@@ -74,13 +74,15 @@ defmodule Cadence.Catalog.CadenceYamlDatabaseTest do
     assert runtime_definition["name"] == "SET_MODE"
     assert runtime_definition["apid"] == 77
     assert runtime_definition["mission_model_revision_id"] == compilation.revision.revision_id
+    assert [argument] = runtime_definition["argument_specs"]
+    assert argument["name"] == "mode"
 
     assert [state_effect] = runtime_definition["state_effects"]
     assert String.starts_with?(state_effect["target_ref"], "semantic:parameter:")
     assert state_effect["operation"] == "set"
 
     assert state_effect["argument_id"] ==
-             runtime_definition["argument_specs"] |> hd() |> Map.fetch!("argument_id")
+             argument["argument_id"]
   end
 
   test "rejects command APIDs outside the Space Packet field" do

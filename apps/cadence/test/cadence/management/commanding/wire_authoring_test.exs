@@ -32,6 +32,61 @@ defmodule Cadence.Management.Commanding.WireAuthoringTest do
     Map.put(c, :target, CommandAuthoringFixtures.target!(c.org, c.mission))
   end
 
+  test "the full demo database supports command arguments also used by state effects", c do
+    path =
+      Path.expand(
+        "../../../../../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml",
+        __DIR__
+      )
+
+    source =
+      Source.new(%{
+        artifact_id: Ids.new("demo_commands"),
+        organization_id: c.org,
+        mission_id: c.mission,
+        catalog_family: :combined,
+        artifact_name: "demo_spacecraft.yaml",
+        format_key: "cadence_yaml",
+        media_type: "application/yaml",
+        source_artifact: File.read!(path)
+      })
+
+    assert {:ok, imported} =
+             CadenceYamlDatabase.import(source, %{import_run_id: Ids.new("demo_import")})
+
+    assert {:ok, compilation} = MissionModels.compile_layers(imported.bundle.declaration_layers)
+
+    model =
+      MissionModelFixtures.activate_imported_model!(c.org, c.mission, %{
+        "mission_model" => %{"revision_id" => compilation.revision.revision_id}
+      })
+
+    assert map_size(model.commands_by_name) == 27
+
+    for {name, command} <- model.commands_by_name do
+      assert {:ok, catalog} = RequestAuthoring.load(c.scope, c.mission, %{"command" => command})
+      assert catalog["selected_command"]["supported"], "#{name} must support wire encoding"
+    end
+
+    command = model.commands_by_name["SET_MODE"]
+    assert {:ok, catalog} = RequestAuthoring.load(c.scope, c.mission, %{"command" => command})
+    assert [%{"name" => "mode", "choices" => choices}] = catalog["selected_command"]["arguments"]
+    assert length(choices) == 7
+
+    assert {:ok, held} =
+             RequestAuthoring.preview(c.scope, c.mission, %{
+               "expected_basis" => catalog["basis"]["token"],
+               "source_endpoint_ref" => c.target.source_endpoint_id,
+               "command_id" => command,
+               "argument_values_json" => ~s({"mode":3}),
+               "priority" => 3,
+               "not_before" => nil,
+               "expires_at" => nil
+             })
+
+    assert held.request.resolved_argument_values == %{"mode" => 3}
+  end
+
   test "native string model rejects truncation in direct and staged previews before persistence",
        c do
     c = activate(c, "string", 16)

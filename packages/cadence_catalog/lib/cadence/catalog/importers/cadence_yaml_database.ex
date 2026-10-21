@@ -396,8 +396,10 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
           import_run_id,
           ["commands", command["name"]],
           references:
-            [reference(:command_encoding, encoding_path, :encoding)] ++
-              argument_references ++ effect_references
+            Enum.uniq(
+              [reference(:command_encoding, encoding_path, :encoding)] ++
+                argument_references ++ effect_references
+            )
         )
 
       verifiers = verifier_declarations(command, command_path, source, import_run_id)
