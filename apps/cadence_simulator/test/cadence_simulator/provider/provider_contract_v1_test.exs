@@ -357,7 +357,8 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
       spawn_link(fn ->
         {:ok, socket} = :gen_tcp.accept(listener, 2_000)
         {:ok, bytes} = :gen_tcp.recv(socket, 0, 2_000)
-        send(parent, {:provider_v1_telemetry, byte_size(bytes)})
+        <<0::2, scid::10, vcid::3, _rest::bitstring>> = bytes
+        send(parent, {:provider_v1_telemetry, byte_size(bytes), scid, vcid})
         drain_socket(socket)
       end)
 
@@ -370,7 +371,11 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
       Provider.create_scenario(%{
         "spacecraft_count" => 1,
         "provider_behavior" => %{"idempotency" => "native"},
-        "telemetry_profile" => %{"definitions_path" => @definitions, "rate_hz" => 50.0}
+        "telemetry_profile" => %{
+          "definitions_path" => @definitions,
+          "rate_hz" => 50.0,
+          "spacecraft_frames" => %{"SC-001" => %{"scid" => 500, "vcid" => 3}}
+        }
       })
 
     {:ok, run} = Provider.create_run(scenario["id"], %{"seed" => 101, "speed" => 100.0})
@@ -405,7 +410,7 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
     :ok = Orchestrator.reconcile(DateTime.add(starts_at, -2))
     :ok = Orchestrator.reconcile(starts_at)
 
-    assert_receive {:provider_v1_telemetry, received_bytes}, 2_000
+    assert_receive {:provider_v1_telemetry, received_bytes, 500, 3}, 2_000
     assert received_bytes > 0
 
     Process.sleep(50)

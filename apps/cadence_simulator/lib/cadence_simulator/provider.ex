@@ -15,6 +15,7 @@ defmodule CadenceSimulator.Provider do
     OrbitReadiness,
     RouteProfiles,
     ServiceProfiles,
+    SpacecraftFrames,
     Store
   }
 
@@ -37,6 +38,7 @@ defmodule CadenceSimulator.Provider do
     spacecraft_count = integer(attrs, "spacecraft_count", 500)
 
     with :ok <- validate_range(spacecraft_count, 1, 10_000, "spacecraft_count"),
+         :ok <- SpacecraftFrames.validate(Map.get(attrs, "telemetry_profile", %{})),
          {:ok, stations} <-
            normalize_stations(Map.get(attrs, "ground_stations", @default_stations)),
          {:ok, behavior} <-

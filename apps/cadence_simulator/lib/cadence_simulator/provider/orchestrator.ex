@@ -9,7 +9,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   use GenServer
 
   alias CadenceSimulator.Provider
-  alias CadenceSimulator.Provider.{ContactLifecycle, ContactResults, Contacts}
+  alias CadenceSimulator.Provider.{ContactLifecycle, ContactResults, Contacts, SpacecraftFrames}
   alias CadenceSimulator.Providers.DatabaseDynamics
 
   @tick_ms 100
@@ -475,6 +475,11 @@ defmodule CadenceSimulator.Provider.Orchestrator do
 
   defp stream_options(data_plane, reservation, run, provider_defaults) do
     telemetry_profile = run["scenario_snapshot"]["telemetry_profile"]
+    spacecraft_ref = reservation["spacecraft_id"] || reservation["spacecraft_ref"]
+
+    data_plane =
+      Map.merge(SpacecraftFrames.for_spacecraft(telemetry_profile, spacecraft_ref), data_plane)
+
     definitions_path = resolve_definitions_path(data_plane, telemetry_profile, provider_defaults)
 
     with definitions_path when is_binary(definitions_path) <- definitions_path,
