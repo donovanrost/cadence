@@ -31,6 +31,30 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
     refute mission_id in Runtime.running_mission_ids()
   end
 
+  test "reconciliation preserves exact generation identity and reapplies after a runtime restart",
+       %{mission_id: mission_id} do
+    binding_set = persisted_binding_set(mission_id, 1, "HK")
+
+    assert {:ok, _} =
+             Cadence.ActivationFixtures.activate_binding_set(
+               mission_id,
+               binding_set.binding_set_id,
+               binding_set.version
+             )
+
+    assert {:ok, spec} = Runtime.Missions.applied_spec(mission_id)
+    assert {:ok, observation} = Runtime.Missions.apply(spec)
+    assert {:ok, ^observation} = Runtime.Missions.apply(spec)
+
+    assert {:error, {:generation_conflict, 1}} =
+             Runtime.Missions.apply(%{spec | runtime_basis_sha256: "different-basis"})
+
+    assert :ok = Runtime.stop_mission(mission_id)
+    assert {:ok, recovered} = Runtime.Missions.apply(spec)
+    assert recovered.activation_id == observation.activation_id
+    assert recovered.generation == observation.generation
+  end
+
   test "processes ingress against the active mission runtime and reconciles partition owners on activation changes",
        %{mission_id: mission_id} do
     source_endpoint = persist_source_endpoint(mission_id)
@@ -54,6 +78,8 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
     assert {:ok, result_v1} = Cadence.process_telemetry_ingress(raw_evidence)
     assert Enum.map(result_v1.outputs, & &1.point_name) == ["HK.counter"]
     assert result_v1.raw_evidence.source_endpoint_ref == source_endpoint.source_endpoint_id
+    assert result_v1.observation_context.mission_id == mission_id
+    refute Map.has_key?(result_v1, :runtime_spec)
 
     assert {:ok, partition_snapshot_v1} =
              Runtime.partition_snapshot(mission_id, source_endpoint.source_endpoint_id)
@@ -160,6 +186,62 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
              Runtime.partition_snapshot(mission_id, source_endpoint_beta.source_endpoint_id)
 
     assert beta_snapshot.rule_count == 2
+
+    # A slow source must preserve its own ordering without blocking other sources.
+    key = %Runtime.PartitionKey{
+      affinity: :source_endpoint,
+      value: source_endpoint_alpha.source_endpoint_id
+    }
+
+    {:ok, alpha_owner} = Runtime.PartitionOwner.lookup(mission_id, key)
+    coordinator = Runtime.MissionRuntime.coordinator_name(mission_id)
+    :ok = :sys.suspend(alpha_owner)
+
+    request =
+      :gen_server.send_request(
+        coordinator,
+        {:process_telemetry_ingress, alpha_result.raw_evidence}
+      )
+
+    try do
+      assert {:ok, independent_result} = Cadence.process_telemetry_ingress(beta_evidence)
+      assert Enum.map(independent_result.outputs, & &1.point_name) == ["BETA.counter"]
+    after
+      :sys.resume(alpha_owner)
+    end
+
+    assert {:reply, {:ok, _}} = :gen_server.wait_response(request, 1_000)
+  end
+
+  test "existing telemetry partitions keep processing while partition startup is busy",
+       %{mission_id: mission_id} do
+    _source_endpoint = persist_source_endpoint(mission_id)
+    binding_set = persisted_binding_set(mission_id, 1, "HK")
+
+    assert {:ok, _activation} =
+             Cadence.ActivationFixtures.activate_binding_set(
+               mission_id,
+               binding_set.binding_set_id,
+               binding_set.version
+             )
+
+    evidence =
+      RawEvidence.new(%{
+        mission_id: mission_id,
+        source_ref: "provider/station-a",
+        raw: build_space_packet(42, 1, <<0, 7>>)
+      })
+
+    assert {:ok, _first_result} = Cadence.process_telemetry_ingress(evidence)
+    supervisor = GenServer.whereis(Runtime.MissionRuntime.partition_supervisor_name(mission_id))
+    :ok = :sys.suspend(supervisor)
+
+    try do
+      assert {:ok, result} = Cadence.process_telemetry_ingress(evidence)
+      assert Enum.map(result.outputs, & &1.point_name) == ["HK.counter"]
+    after
+      :sys.resume(supervisor)
+    end
   end
 
   test "reassembles TM transfer frames across ingress calls inside the active partition",

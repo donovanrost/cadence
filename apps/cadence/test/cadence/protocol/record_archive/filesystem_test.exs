@@ -226,6 +226,45 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
     assert 2 == archive_entry_count(entries)
   end
 
+  test "large archive segments stay within the database parameter limit and remain idempotent", %{
+    mission_id: mission_id
+  } do
+    receipt_time = ~U[2026-10-19 12:00:00Z]
+
+    evidence =
+      RawEvidence.new(%{
+        evidence_id: "large-segment-evidence",
+        mission_id: mission_id,
+        raw: <<1, 2>>,
+        receipt_time: receipt_time
+      })
+
+    packets =
+      Enum.map(1..4_000, fn index ->
+        %PacketRecord{
+          packet_id: "large-segment-packet-#{index}",
+          evidence_id: evidence.evidence_id,
+          mission_id: mission_id,
+          protocol_family: :tm,
+          packet_kind: :space_packet,
+          apid: 42,
+          sequence_flags: 3,
+          sequence_count: index,
+          secondary_header?: false,
+          packet_data: <<1, 2>>,
+          receipt_time: receipt_time,
+          provenance: %{}
+        }
+      end)
+
+    entries = FileSystem.build_entries(evidence, [], packets)
+    opts = [object_key: "#{mission_id}/large-segment.bin"]
+
+    assert :ok = FileSystem.persist_segment("large-segment", entries, opts)
+    assert :ok = FileSystem.persist_segment("large-segment", entries, opts)
+    assert archive_entry_count(entries) == 4_000
+  end
+
   test "stats and flush tolerate legacy writer state without buffer sizes", %{
     mission_id: mission_id,
     archive_policy: archive_policy

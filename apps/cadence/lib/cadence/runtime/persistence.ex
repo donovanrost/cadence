@@ -164,7 +164,7 @@ defmodule Cadence.Runtime.Persistence do
       raw_evidence: evidence,
       telemetry_samples: samples,
       semantic_result: result,
-      runtime_spec: runtime_spec
+      observation_context: MissionRuntimeSpec.observation_context(runtime_spec)
     }
 
     case Storage.persist_prepared_results(policy.telemetry_storage, [prepared], recorded_at: at) do
@@ -478,6 +478,7 @@ defmodule Cadence.Runtime.Persistence do
                   protocol_anomalies: protocol_anomalies,
                   telemetry_samples: telemetry_samples,
                   semantic_result: Map.get(processing_result, :semantic_result),
+                  observation_context: Map.get(processing_result, :observation_context),
                   runtime_spec: Map.get(processing_result, :runtime_spec)
                 }
                 | acc

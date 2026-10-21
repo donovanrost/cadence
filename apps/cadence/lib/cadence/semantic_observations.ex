@@ -19,13 +19,25 @@ defmodule Cadence.SemanticObservations do
 
   @spec persist_many([map()]) :: :ok | {:error, term()}
   def persist_many(prepared_results) when is_list(prepared_results) do
-    prepared_results
-    |> Enum.reduce(Multi.new(), &add_result/2)
+    {transitions, evaluations} = Enum.reduce(prepared_results, {Multi.new(), []}, &add_result/2)
+
+    evaluations
+    |> evaluation_multi(transitions)
     |> Repo.transaction()
     |> case do
       {:ok, _changes} -> :ok
       {:error, _operation, reason, _changes} -> {:error, reason}
     end
+  end
+
+  defp evaluation_multi([], transitions), do: transitions
+
+  defp evaluation_multi(evaluations, transitions) do
+    Multi.new()
+    |> Multi.run(:semantic_monitoring_evaluations, fn repo, _changes ->
+      persist_evaluations(repo, Enum.reverse(evaluations))
+    end)
+    |> Multi.append(transitions)
   end
 
   @spec acknowledge(binary(), binary(), binary(), map(), keyword()) ::
@@ -79,29 +91,48 @@ defmodule Cadence.SemanticObservations do
 
   defp add_result(%{semantic_result: %Result{monitoring_results: []}}, multi), do: multi
 
-  defp add_result(%{semantic_result: %Result{} = result} = prepared, multi) do
+  defp add_result(%{semantic_result: %Result{} = result} = prepared, accumulator) do
     updates = Map.new(result.parameter_updates, &{&1.update_id, &1})
     context = semantic_context(prepared)
 
     result.monitoring_results
     |> Enum.with_index()
-    |> Enum.reduce(multi, fn {monitoring_result, index}, acc ->
+    |> Enum.reduce(accumulator, fn {monitoring_result, index}, {multi, evaluations} ->
       update = Map.fetch!(updates, monitoring_result.update_id)
       evaluation_attrs = MonitoringEvaluationRow.attrs(monitoring_result, update, context)
 
-      acc =
-        Multi.insert(
-          acc,
-          {:semantic_monitoring_evaluation, prepared.raw_evidence.evidence_id, index},
-          MonitoringEvaluationRow.changeset(evaluation_attrs),
-          on_conflict: :nothing
-        )
-
-      add_transition(acc, prepared, index, monitoring_result, evaluation_attrs)
+      {add_transition(multi, prepared, index, monitoring_result, evaluation_attrs),
+       [MonitoringEvaluationRow.changeset(evaluation_attrs) | evaluations]}
     end)
   end
 
   defp add_result(_prepared, multi), do: multi
+
+  defp persist_evaluations(repo, changesets) do
+    with {:ok, rows} <- evaluation_rows(changesets) do
+      rows
+      |> Enum.reverse()
+      |> Enum.chunk_every(1_000)
+      |> Enum.each(&repo.insert_all(MonitoringEvaluationRow, &1, on_conflict: :nothing))
+
+      {:ok, length(rows)}
+    end
+  end
+
+  defp evaluation_rows(changesets) do
+    now = DateTime.utc_now()
+
+    Enum.reduce_while(changesets, {:ok, []}, fn changeset, {:ok, rows} ->
+      case Ecto.Changeset.apply_action(changeset, :insert) do
+        {:ok, row} ->
+          attrs = row |> Map.from_struct() |> Map.delete(:__meta__) |> Map.put(:inserted_at, now)
+          {:cont, {:ok, [attrs | rows]}}
+
+        {:error, changeset} ->
+          {:halt, {:error, changeset}}
+      end
+    end)
+  end
 
   defp add_transition(multi, _prepared, _index, %{transition: nil}, _evaluation_attrs), do: multi
 
@@ -135,6 +166,8 @@ defmodule Cadence.SemanticObservations do
       allow_stale: true
     )
   end
+
+  defp semantic_context(%{observation_context: context}) when is_map(context), do: context
 
   defp semantic_context(prepared) do
     monitoring_plan = Map.get(prepared.runtime_spec.runtime_plans, :monitoring)

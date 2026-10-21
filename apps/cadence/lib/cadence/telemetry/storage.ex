@@ -111,7 +111,27 @@ defmodule Cadence.Telemetry.Storage do
   @spec persist_prepared_results(policy(), [map()], keyword()) :: :ok | {:error, term()}
   def persist_prepared_results(%{} = policy, prepared_results, opts)
       when is_list(prepared_results) and is_list(opts) do
-    Enum.reduce_while(prepared_results, :ok, fn prepared_result, :ok ->
+    opts = with_event_bus(opts, policy.event_bus)
+
+    with {:ok, envelopes} <- prepared_envelopes(policy, prepared_results, opts) do
+      persist_envelope_groups(policy, envelopes, opts)
+    end
+  end
+
+  defp persist_envelope_groups(policy, envelopes, opts) do
+    envelopes
+    |> Enum.group_by(& &1.mission_id)
+    |> Enum.reduce_while(:ok, fn {_mission_id, mission_envelopes}, :ok ->
+      case persist_envelopes_and_publish(policy, mission_envelopes, opts) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp prepared_envelopes(policy, prepared_results, opts) do
+    prepared_results
+    |> Enum.reduce_while({:ok, []}, fn prepared_result, {:ok, batches} ->
       samples = Map.get(prepared_result, :telemetry_samples, [])
 
       write_opts =
@@ -119,8 +139,25 @@ defmodule Cadence.Telemetry.Storage do
         |> Keyword.put_new(:source_endpoint_id, source_endpoint_id(prepared_result))
         |> Keyword.put_new(:recorded_at, recorded_at(prepared_result))
 
-      case persist_samples(policy, samples, write_opts) do
-        :ok -> {:cont, :ok}
+      case envelopes_for_samples(policy, samples, write_opts) do
+        {:ok, envelopes} -> {:cont, {:ok, [envelopes | batches]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, batches} -> {:ok, batches |> Enum.reverse() |> List.flatten()}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp envelopes_for_samples(policy, samples, opts) do
+    samples
+    |> Enum.group_by(& &1.mission_id)
+    |> Enum.reduce_while({:ok, []}, fn {_mission_id, samples}, {:ok, acc} ->
+      with {:ok, context} <- write_context(policy, List.first(samples), opts),
+           {:ok, envelopes} <- ObservationEnvelope.batch_from_samples(context, samples, opts) do
+        {:cont, {:ok, acc ++ envelopes}}
+      else
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
@@ -287,8 +324,13 @@ defmodule Cadence.Telemetry.Storage do
 
   defp persist_mission_samples(policy, [%Sample{} | _rest] = samples, opts) do
     with {:ok, context} <- write_context(policy, List.first(samples), opts),
-         {:ok, envelopes} <- ObservationEnvelope.batch_from_samples(context, samples, opts),
-         :ok <- persist_mission_envelopes_or_record_failure(policy, envelopes, opts),
+         {:ok, envelopes} <- ObservationEnvelope.batch_from_samples(context, samples, opts) do
+      persist_envelopes_and_publish(policy, envelopes, opts)
+    end
+  end
+
+  defp persist_envelopes_and_publish(policy, envelopes, opts) do
+    with :ok <- persist_mission_envelopes_or_record_failure(policy, envelopes, opts),
          :ok <- record_backfill_lifecycle_events(envelopes, opts) do
       publish_observation_facts(policy, envelopes, opts)
     end
@@ -350,17 +392,18 @@ defmodule Cadence.Telemetry.Storage do
   end
 
   defp record_data_source_watermark_groups(envelopes, opts) do
-    envelopes
-    |> Enum.group_by(&invalidation_group_key/1)
-    |> Enum.reduce_while(:ok, fn {_group_key, group}, :ok ->
-      case SourceWatermarks.maybe_record_source_watermark(
-             source_watermark_attrs(group),
-             Keyword.put(opts, :invalidate_runtime_cache?, false)
-           ) do
-        :ok -> {:cont, :ok}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
+    attributes =
+      envelopes
+      |> Enum.group_by(&source_watermark_group_key/1)
+      |> Enum.map(fn {_group_key, group} -> source_watermark_attrs(group) end)
+
+    case SourceWatermarks.record_source_watermarks(
+           attributes,
+           Keyword.put(opts, :invalidate_runtime_cache?, false)
+         ) do
+      {:ok, _results} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp record_backfill_lifecycle_events([], _opts), do: :ok
@@ -489,6 +532,17 @@ defmodule Cadence.Telemetry.Storage do
       envelope.realm,
       envelope.replay_run_id,
       envelope.observable_id
+    }
+  end
+
+  defp source_watermark_group_key(%ObservationEnvelope{} = envelope) do
+    {
+      envelope.organization_id,
+      envelope.mission_id,
+      envelope.data_source_id,
+      envelope.binding_id,
+      envelope.realm,
+      envelope.replay_run_id
     }
   end
 

@@ -9,6 +9,10 @@ defmodule CadenceWeb.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
+      # The dev code reloader compiles the :cadence path dep on every request, and
+      # Mix wipes our consolidation dir whenever it compiles a dep, forcing a full
+      # re-consolidation per request. Skip consolidation in dev to break that loop.
+      consolidate_protocols: Mix.env() != :dev,
       listeners: [Phoenix.CodeReloader],
       deps: deps(),
       aliases: aliases()

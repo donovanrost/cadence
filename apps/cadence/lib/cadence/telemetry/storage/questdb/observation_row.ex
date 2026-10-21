@@ -58,17 +58,19 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationRow do
     "INSERT INTO telemetry_observations (#{column_sql}) VALUES(#{value_sql})"
   end
 
-  @spec insert_sql(ObservationEnvelope.t()) :: binary()
-  def insert_sql(%ObservationEnvelope{} = envelope) do
+  @spec insert_sql(ObservationEnvelope.t() | [ObservationEnvelope.t()]) :: binary()
+  def insert_sql(%ObservationEnvelope{} = envelope), do: insert_sql([envelope])
+
+  def insert_sql([%ObservationEnvelope{} | _] = envelopes) do
     column_sql =
       Enum.map_join(@columns, ", ", &Atom.to_string/1)
 
     value_sql =
-      envelope
-      |> params()
-      |> Enum.map_join(", ", &SQL.literal/1)
+      Enum.map_join(envelopes, ", ", fn envelope ->
+        "(" <> Enum.map_join(params(envelope), ", ", &SQL.literal/1) <> ")"
+      end)
 
-    "INSERT INTO telemetry_observations (#{column_sql}) VALUES(#{value_sql})"
+    "INSERT INTO telemetry_observations (#{column_sql}) VALUES#{value_sql}"
   end
 
   @spec params(ObservationEnvelope.t()) :: [term()]
@@ -123,6 +125,14 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationRow do
   end
 
   defp typed_value(value) when is_float(value), do: {"double", value, nil, nil, nil}
+
+  # QuestDB LONG is signed and reserves its minimum value for NULL. Preserve
+  # wider spacecraft counters losslessly through the existing JSON term path.
+  defp typed_value(value)
+       when is_integer(value) and
+              (value <= -9_223_372_036_854_775_808 or value > 9_223_372_036_854_775_807),
+       do: {"term", nil, nil, nil, Integer.to_string(value)}
+
   defp typed_value(value) when is_integer(value), do: {"long", nil, value, nil, nil}
   defp typed_value(value) when is_boolean(value), do: {"bool", nil, nil, value, nil}
   defp typed_value(value) when is_binary(value), do: {"string", nil, nil, nil, value}

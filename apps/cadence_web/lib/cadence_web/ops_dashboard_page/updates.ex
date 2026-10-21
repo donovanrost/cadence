@@ -3,10 +3,12 @@ defmodule CadenceWeb.OpsDashboardPage.Updates do
   Live delivery for the Ops dashboard page.
 
   While a dashboard is viewed in live time it is refreshed by runtime
-  invalidations and by a refresh tick. A refresh re-prepares the host context,
+  refresh ticks. A refresh re-prepares the host context,
   which reauthorizes the page and re-resolves the dashboard; LiveVue delivers
-  the changed snapshot to the browser as a props diff. Bursts of invalidations
-  coalesce into one refresh. Frozen time ranges are not live. Edit mode has no
+  the changed snapshot to the browser as a props diff. The next tick is scheduled
+  after resolution finishes. Live viewers do not subscribe to per-packet
+  invalidations; their scheduled tick reads the independently invalidated cache.
+  Frozen time ranges are not live. Edit mode has no
   refresh tick but still listens for invalidations, so a save by someone else
   re-prepares the page and surfaces the conflict while the author is editing.
   """
@@ -46,23 +48,30 @@ defmodule CadenceWeb.OpsDashboardPage.Updates do
 
   defp start(socket, %{token: token, identity: {org, _, mission, dashboard, _path}}, ms) do
     case socket.assigns[:ops_dashboard_updates] do
+      %{token: ^token, refresh_ms: ^ms, timer: nil} = updates when is_integer(ms) ->
+        Component.assign(socket, :ops_dashboard_updates, %{
+          updates
+          | timer: schedule(token, ms)
+        })
+
       %{token: ^token, refresh_ms: ^ms} ->
         socket
 
-      %{token: ^token} = updates ->
-        cancel(updates.timer)
-        timer = schedule(token, ms)
-
-        Component.assign(socket, :ops_dashboard_updates, %{updates | timer: timer, refresh_ms: ms})
-
       _ ->
         socket = stop(socket)
-        filters = %{organization_id: org, mission_id: mission, dashboard_id: dashboard}
-        :ok = RuntimeInvalidation.subscribe(filters)
+
+        subscriptions =
+          if is_nil(ms) do
+            filters = %{organization_id: org, mission_id: mission, dashboard_id: dashboard}
+            :ok = RuntimeInvalidation.subscribe(filters)
+            topics(org, mission, dashboard)
+          else
+            []
+          end
 
         Component.assign(socket, :ops_dashboard_updates, %{
           token: token,
-          topics: topics(org, mission, dashboard),
+          topics: subscriptions,
           scope: {org, mission, dashboard},
           refresh_ms: ms,
           timer: schedule(token, ms),
@@ -89,8 +98,8 @@ defmodule CadenceWeb.OpsDashboardPage.Updates do
     case socket.assigns[:ops_dashboard_updates] do
       %{token: ^token, refresh_ms: ms, pending: pending} = updates when is_integer(ms) ->
         cancel(pending)
-        timer = schedule(token, ms)
-        updates = %{updates | timer: timer, pending: nil}
+        cancel(updates.timer)
+        updates = %{updates | timer: nil, pending: nil}
         {:refresh, Component.assign(socket, :ops_dashboard_updates, updates)}
 
       _ ->
@@ -98,9 +107,12 @@ defmodule CadenceWeb.OpsDashboardPage.Updates do
     end
   end
 
-  @doc "A runtime invalidation; relevant ones coalesce into a single refresh."
+  @doc "Coalesces edit-mode invalidations; live viewers use their scheduled tick."
   def invalidated(socket, event) do
     case socket.assigns[:ops_dashboard_updates] do
+      %{refresh_ms: ms} when is_integer(ms) ->
+        socket
+
       %{pending: nil, scope: scope, token: token} = updates ->
         if relevant?(event, scope) do
           timer = Process.send_after(self(), {:dashboard_live_flush, token}, @coalesce_ms)
@@ -117,7 +129,8 @@ defmodule CadenceWeb.OpsDashboardPage.Updates do
   @doc "A coalesced invalidation. Returns `{:refresh, socket}` when still current."
   def flush(socket, token) do
     case socket.assigns[:ops_dashboard_updates] do
-      %{token: ^token} = updates ->
+      %{token: ^token, refresh_ms: nil, pending: pending} = updates when not is_nil(pending) ->
+        cancel(pending)
         {:refresh, Component.assign(socket, :ops_dashboard_updates, %{updates | pending: nil})}
 
       _ ->

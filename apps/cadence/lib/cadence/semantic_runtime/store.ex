@@ -95,27 +95,41 @@ defmodule Cadence.SemanticRuntime.Store do
           {:ok, State.t()} | {:error, term()}
   def recover(%MissionRuntimeSpec{} = spec, %PartitionKey{} = partition_key, plan)
       when is_map(plan) do
-    rows =
+    query =
       CommitRow
       |> where([row], row.organization_scope_id == ^organization_scope(spec.organization_id))
       |> where([row], row.mission_id == ^spec.mission_id)
       |> where([row], row.partition_id == ^PartitionKey.identifier(partition_key))
       |> where([row], row.runtime_basis_sha256 == ^spec.runtime_basis_sha256)
       |> order_by([row], asc: row.commit_sequence)
-      |> Repo.all()
 
-    Enum.reduce_while(rows, {:ok, %State{}}, fn row, {:ok, state} ->
-      with {:ok, input} <- decode(row.input_term),
-           {:ok, expected_result} <- decode(row.result_term),
-           {:ok, expected_state} <- decode(row.state_term),
-           {:ok, actual_result, actual_state} <- replay(input, state, plan),
-           :ok <- verify_replay(row, expected_result, expected_state, actual_result, actual_state) do
-        {:cont, {:ok, actual_state}}
-      else
-        {:error, reason} -> {:halt, {:error, reason}}
-        other -> {:halt, {:error, {:semantic_runtime_commit_invalid, row.commit_id, other}}}
-      end
+    # A long rehearsal can retain hundreds of megabytes of compressed states.
+    # Keep one consistent ordered cursor without transferring the entire log at once.
+    case Repo.transaction(fn -> recover_rows(query, plan) end, timeout: :infinity) do
+      {:ok, result} -> result
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp recover_rows(query, plan) do
+    query
+    |> Repo.stream(max_rows: 100)
+    |> Enum.reduce_while({:ok, %State{}}, fn row, {:ok, state} ->
+      replay_row(row, state, plan)
     end)
+  end
+
+  defp replay_row(row, state, plan) do
+    with {:ok, input} <- decode(row.input_term),
+         {:ok, expected_result} <- decode(row.result_term),
+         {:ok, expected_state} <- decode(row.state_term),
+         {:ok, actual_result, actual_state} <- replay(input, state, plan),
+         :ok <- verify_replay(row, expected_result, expected_state, actual_result, actual_state) do
+      {:cont, {:ok, actual_state}}
+    else
+      {:error, reason} -> {:halt, {:error, reason}}
+      other -> {:halt, {:error, {:semantic_runtime_commit_invalid, row.commit_id, other}}}
+    end
   end
 
   @spec timer_cursors(MissionRuntimeSpec.t(), PartitionKey.t()) ::
@@ -128,6 +142,7 @@ defmodule Cadence.SemanticRuntime.Store do
       |> where([row], row.partition_id == ^PartitionKey.identifier(partition_key))
       |> where([row], row.runtime_basis_sha256 == ^spec.runtime_basis_sha256)
       |> order_by([row], asc: row.commit_sequence)
+      |> select([row], %{input_term: row.input_term})
       |> Repo.all()
 
     Enum.reduce_while(rows, {:ok, %{}}, fn row, {:ok, cursors} ->
@@ -156,6 +171,7 @@ defmodule Cadence.SemanticRuntime.Store do
       |> where([row], row.runtime_basis_sha256 == ^spec.runtime_basis_sha256)
       |> where([row], is_nil(row.projected_at))
       |> order_by([row], asc: row.commit_sequence)
+      |> select([row], %{input_term: row.input_term, result_term: row.result_term})
       |> Repo.all()
 
     Enum.reduce_while(rows, {:ok, %{}}, fn row, {:ok, groups} ->
@@ -217,6 +233,7 @@ defmodule Cadence.SemanticRuntime.Store do
       |> where([row], row.partition_id == ^PartitionKey.identifier(partition_key))
       |> where([row], row.runtime_basis_sha256 == ^spec.runtime_basis_sha256)
       |> where([row], is_nil(row.projected_at))
+      |> select([row], %{commit_sequence: row.commit_sequence, input_term: row.input_term})
       |> Repo.all()
 
     with {:ok, sequences} <- timer_sequences(rows, timer_key, at) do

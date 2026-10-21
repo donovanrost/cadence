@@ -41,20 +41,17 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
   def record_envelopes(envelopes, opts \\ []) when is_list(envelopes) and is_list(opts) do
     opts = Keyword.put_new(opts, :event_bus, EventBus)
 
-    envelopes
-    |> Enum.reduce(Multi.new(), fn %ObservationEnvelope{} = envelope, multi ->
-      Multi.run(multi, {:observation_identity_state, envelope.observation_id}, fn repo,
-                                                                                  _changes ->
-        upsert_state(repo, envelope)
-      end)
+    Repo.transaction(fn ->
+      inserted = insert_initial_states(envelopes)
+
+      Enum.reduce(envelopes, inserted, &record_existing_state/2)
     end)
-    |> Repo.transaction()
     |> case do
       {:ok, _changes} ->
         publish_envelope_state_changes(envelopes, opts)
         :ok
 
-      {:error, _operation, reason, _changes_so_far} ->
+      {:error, reason} ->
         {:error, reason}
     end
   end
@@ -215,8 +212,68 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
     |> Enum.map(&TelemetryObservationIdentityStateRow.to_domain/1)
   end
 
+  # Most incoming identities are new. Seed them in bounded batches, then retain
+  # ordered revision handling for existing identities and later batch entries.
+  # ON CONFLICT leaves concurrent writes and operator decisions intact.
+  defp insert_initial_states(envelopes) do
+    now = DateTime.utc_now()
+
+    envelopes
+    |> Enum.uniq_by(& &1.observation_identity_id)
+    |> Enum.sort_by(& &1.observation_identity_id)
+    |> Enum.map(fn envelope ->
+      changeset =
+        TelemetryObservationIdentityStateRow.changeset(
+          %TelemetryObservationIdentityStateRow{},
+          initial_attrs(envelope)
+        )
+
+      case Ecto.Changeset.apply_action(changeset, :insert) do
+        {:ok, row} ->
+          row
+          |> Map.from_struct()
+          |> Map.take(schema_fields())
+          |> Map.merge(%{inserted_at: now, updated_at: now})
+
+        {:error, changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
+    |> Enum.chunk_every(1_000)
+    |> Enum.flat_map(fn rows ->
+      {_count, inserted} =
+        Repo.insert_all(TelemetryObservationIdentityStateRow, rows,
+          on_conflict: :nothing,
+          conflict_target: [:observation_identity_id],
+          returning: [:observation_identity_id]
+        )
+
+      Enum.map(inserted, & &1.observation_identity_id)
+    end)
+    |> MapSet.new()
+  end
+
+  defp record_existing_state(envelope, pending) do
+    identity = envelope.observation_identity_id
+
+    if MapSet.member?(pending, identity) do
+      MapSet.delete(pending, identity)
+    else
+      case upsert_state(Repo, envelope) do
+        {:ok, _row} -> pending
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end
+  end
+
   defp upsert_state(repo, %ObservationEnvelope{} = envelope) do
-    case repo.get(TelemetryObservationIdentityStateRow, envelope.observation_identity_id) do
+    row =
+      TelemetryObservationIdentityStateRow
+      |> where([row], row.observation_identity_id == ^envelope.observation_identity_id)
+      |> lock("FOR UPDATE")
+      |> repo.one()
+
+    case row do
       nil ->
         insert_state(repo, envelope)
 

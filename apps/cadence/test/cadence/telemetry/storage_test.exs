@@ -52,6 +52,35 @@ defmodule Cadence.Telemetry.StorageTest do
     assert envelope.raw_value == 42
   end
 
+  test "batches prepared packets while preserving their source and receipt context" do
+    first_at = ~U[2026-06-17 12:00:05Z]
+    second_at = ~U[2026-06-17 12:00:06Z]
+
+    prepared =
+      for {id, source, at} <- [
+            {"packet-a", "station-a", first_at},
+            {"packet-b", "station-b", second_at}
+          ] do
+        %{
+          telemetry_samples: [sample(id, "mission-storage", "HK.#{id}", 42)],
+          raw_evidence:
+            struct!(Cadence.Ingress.RawEvidence, source_endpoint_ref: source, receipt_time: at)
+        }
+      end
+
+    assert :ok =
+             Storage.persist_prepared_results(storage_policy(), prepared,
+               organization_id: "org-storage"
+             )
+
+    assert_receive {:telemetry_storage_envelopes, [first, second]}
+    assert first.source_endpoint_id == "station-a"
+    assert second.source_endpoint_id == "station-b"
+    assert DateTime.compare(first.ingested_at, first_at) == :eq
+    assert DateTime.compare(second.ingested_at, second_at) == :eq
+    refute_receive {:telemetry_storage_envelopes, _envelopes}
+  end
+
   test "records backfill lifecycle events for identified historical writes" do
     sample = sample("sample-backfill", "mission-storage-backfill", "HK.counter", 42)
 
@@ -271,6 +300,29 @@ defmodule Cadence.Telemetry.StorageTest do
                [sample("sample-1", "mission-storage", "HK.counter", 42)],
                organization_id: "org-storage"
              )
+  end
+
+  test "a multi-point batch records one watermark with the complete source sample count" do
+    samples = [
+      sample("batch-counter", "mission-batch-watermark", "HK.counter", 42),
+      sample("batch-voltage", "mission-batch-watermark", "EPS.voltage", 28)
+    ]
+
+    assert :ok =
+             Storage.persist_samples(storage_policy(), samples,
+               organization_id: "org-storage",
+               source_watermark_events?: true,
+               dashboard_runtime_invalidation?: false
+             )
+
+    assert [event] =
+             SourceWatermarks.list_source_watermark_events(
+               "org-storage",
+               "mission-batch-watermark"
+             )
+
+    assert event.sample_count == 2
+    assert Enum.sort(event.payload["sample_ids"]) == ["batch-counter", "batch-voltage"]
   end
 
   test "replay telemetry writes record replay-scoped source watermarks" do

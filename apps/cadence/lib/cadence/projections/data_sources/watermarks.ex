@@ -41,30 +41,49 @@ defmodule Cadence.Projections.DataSources.Watermarks do
 
   @spec record_source_watermark(map(), keyword()) :: record_result()
   def record_source_watermark(attrs, opts \\ []) when is_map(attrs) and is_list(opts) do
+    case record_source_watermarks([attrs], opts) do
+      {:ok, [result]} -> result
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "Records an ingestion batch atomically and publishes its facts only after commit."
+  def record_source_watermarks(attributes, opts \\ [])
+      when is_list(attributes) and is_list(opts) do
     event_bus = Keyword.get(opts, :event_bus, EventBus)
-    seed = SourceWatermarkEvent.new(attrs)
+
+    entries =
+      attributes
+      |> Enum.map(&{&1, SourceWatermarkEvent.new(&1)})
+      |> Enum.sort_by(fn {_, seed} -> seed.source_watermark_key end)
 
     Repo.transaction(fn ->
-      current_row = Repo.get(StatusRow, seed.source_watermark_key)
-      current_status = current_row && StatusRow.to_domain(current_row)
-
-      if same_watermark?(current_status, seed) do
-        touch_status!(current_row, seed)
-      else
-        record_transition!(attrs, seed, current_status)
-      end
+      Enum.map(entries, &record_watermark_entry/1)
     end)
     |> case do
-      {:ok, {:changed, event, status}} ->
-        maybe_publish_fact(event_bus, event, opts)
-        {:ok, event, status}
+      {:ok, results} ->
+        {:ok,
+         Enum.map(results, fn
+           {:changed, event, status} ->
+             maybe_publish_fact(event_bus, event, opts)
+             {:ok, event, status}
 
-      {:ok, {:unchanged, status}} ->
-        {:ok, :unchanged, status}
+           {:unchanged, status} ->
+             {:ok, :unchanged, status}
+         end)}
 
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  defp record_watermark_entry({attrs, seed}) do
+    current_row = Repo.get(StatusRow, seed.source_watermark_key)
+    current_status = current_row && StatusRow.to_domain(current_row)
+
+    if same_watermark?(current_status, seed),
+      do: touch_status!(current_row, seed),
+      else: record_transition!(attrs, seed, current_status)
   end
 
   @spec maybe_record_source_watermark(map(), keyword()) :: :ok | {:error, term()}

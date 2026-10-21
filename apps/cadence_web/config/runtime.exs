@@ -1,5 +1,11 @@
 import Config
 
+if config_env() == :dev do
+  config :cadence, Cadence.Repo,
+    pool_size: String.to_integer(System.get_env("POOL_SIZE", "10")),
+    queue_target: String.to_integer(System.get_env("DB_QUEUE_TARGET_MS", "50"))
+end
+
 # The web application is the production composition root. It owns runtime
 # configuration for both the Cadence core and its web endpoint.
 

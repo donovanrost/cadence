@@ -205,6 +205,24 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
         }
       end)
 
+    # A backlog can produce a large segment. Bound each statement below
+    # PostgreSQL's 65,535 parameter limit while keeping the index write atomic.
+    case repo.transaction(fn ->
+           rows
+           |> Enum.chunk_every(1_000)
+           |> Enum.each(fn chunk ->
+             case persist_index_rows(repo, chunk, opts) do
+               :ok -> :ok
+               {:error, reason} -> repo.rollback(reason)
+             end
+           end)
+         end) do
+      {:ok, :ok} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp persist_index_rows(repo, rows, opts) do
     case repo.insert_all(
            ProtocolArchiveRecordEntryRow,
            rows,

@@ -28,6 +28,28 @@ defmodule Cadence.Dashboards.SourceWatermarksTest do
     :ok
   end
 
+  test "a failed batch rolls back earlier watermark and operational event writes" do
+    first = Map.merge(@source_identity, %{source_watermark_key: "a-first", sample_count: 1})
+
+    invalid =
+      Map.merge(@source_identity, %{
+        source_watermark_key: "z-invalid",
+        source_watermark_event_id: ""
+      })
+
+    assert {:error, %Ecto.Changeset{}} =
+             SourceWatermarks.record_source_watermarks([invalid, first],
+               invalidate_runtime_cache?: false
+             )
+
+    assert SourceWatermarks.list_source_watermark_events(@organization_id, @mission_id) == []
+    assert SourceWatermarks.list_source_watermark_statuses(@organization_id, @mission_id) == []
+
+    assert Cadence.OperationalEvents.list_events(@organization_id, @mission_id,
+             category: :data_source
+           ) == []
+  end
+
   test "records source watermark transitions and maintains latest status projection" do
     assert {:ok, observed_event, observed_status} =
              @source_identity

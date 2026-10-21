@@ -81,6 +81,43 @@ defmodule Cadence.SemanticRuntimeStoreTest do
     assert {:ok, []} = Store.pending_timer_results(runtime_spec, partition_key)
   end
 
+  test "recovers across cursor batches and still rejects a divergent later commit" do
+    {runtime_spec, input_id} = runtime_spec()
+    partition_key = PartitionKey.new(%{affinity: :source_endpoint, value: "paged-recovery"})
+    plan = PlanDecoder.decode(runtime_spec.runtime_plans)
+    at = ~U[2026-08-12 12:00:00Z]
+
+    final_state =
+      Enum.reduce(1..205, %State{}, fn index, state ->
+        input = update("paged:#{index}", input_id, index, DateTime.add(at, index, :second))
+        assert {:ok, result, next_state} = SemanticRuntime.process(state, [input], plan)
+
+        assert {:ok, ^result, ^next_state} =
+                 Store.commit(runtime_spec, partition_key, [input], result, next_state)
+
+        next_state
+      end)
+
+    assert {:ok, ^final_state} = Store.recover(runtime_spec, partition_key, plan)
+    assert {:ok, %{}} = Store.timer_cursors(runtime_spec, partition_key)
+    assert {:ok, []} = Store.pending_timer_results(runtime_spec, partition_key)
+
+    last =
+      Cadence.SemanticRuntime.CommitRow
+      |> order_by([row], desc: row.commit_sequence)
+      |> limit(1)
+      |> Repo.one!()
+
+    last
+    |> Ecto.Changeset.change(state_term: :erlang.term_to_binary(%State{}))
+    |> Repo.update!()
+
+    assert {:error, {:semantic_runtime_replay_diverged, commit_id}} =
+             Store.recover(runtime_spec, partition_key, plan)
+
+    assert commit_id == last.commit_id
+  end
+
   defp runtime_spec do
     input = Declaration.new(%{kind: :parameter, qualified_name: "/parameters/input"})
     output = Declaration.new(%{kind: :parameter, qualified_name: "/parameters/output"})

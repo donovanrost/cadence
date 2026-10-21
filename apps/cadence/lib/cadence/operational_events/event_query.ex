@@ -37,6 +37,23 @@ defmodule Cadence.OperationalEvents.EventQuery do
     |> Enum.map(&OperationalEventRow.to_domain/1)
   end
 
+  @doc false
+  @spec list_binding_set_interval_events(binary() | nil, binary(), pos_integer()) :: [Event.t()]
+  def list_binding_set_interval_events(organization_id, mission_id, event_limit) do
+    # Activation metadata can contain an entire constellation's compiled model.
+    # Interval projection only needs the envelope and small activation payload.
+    fields = OperationalEventRow.__schema__(:fields) -- [:metadata_document]
+
+    OperationalEventRow
+    |> where([row], row.mission_id == ^mission_id and row.kind == "binding_set_activated")
+    |> maybe_filter_equals(:organization_id, organization_id)
+    |> order_by([row], asc: row.occurred_at, asc: row.event_id)
+    |> limit(^event_limit)
+    |> select([row], struct(row, ^fields))
+    |> Repo.all()
+    |> Enum.map(&OperationalEventRow.to_domain/1)
+  end
+
   @spec list_events(binary(), keyword()) :: [Event.t()]
   def list_events(mission_id, opts \\ []) when is_binary(mission_id) and is_list(opts) do
     limit = Keyword.get(opts, :limit, 100)

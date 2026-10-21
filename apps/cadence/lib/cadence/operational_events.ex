@@ -195,19 +195,11 @@ defmodule Cadence.OperationalEvents do
 
   defp build_binding_set_intervals(organization_id, mission_id, opts) do
     events =
-      if is_binary(organization_id) do
-        list_events(organization_id, mission_id,
-          kind: :binding_set_activated,
-          order: :asc,
-          limit: Keyword.get(opts, :event_limit, 1_000)
-        )
-      else
-        list_events(mission_id,
-          kind: :binding_set_activated,
-          order: :asc,
-          limit: Keyword.get(opts, :event_limit, 1_000)
-        )
-      end
+      EventQuery.list_binding_set_interval_events(
+        organization_id,
+        mission_id,
+        Keyword.get(opts, :event_limit, 1_000)
+      )
 
     events
     |> Enum.with_index()

@@ -6,6 +6,26 @@ defmodule Cadence.Telemetry.Storage.QuestDB.RestClient do
   during startup, so Cadence uses the REST SQL API for now.
   """
 
+  @spec write(binary(), keyword()) :: :ok | {:error, term()}
+  def write(lines, opts \\ []) when is_binary(lines) and is_list(opts) do
+    with {:ok, _started} <- Application.ensure_all_started(:req) do
+      opts
+      |> endpoint()
+      |> String.replace_suffix("/exec", "/write")
+      |> Req.post(
+        body: lines,
+        headers: [{"content-type", "text/plain"} | Keyword.get(opts, :headers, [])],
+        receive_timeout: Keyword.get(opts, :timeout, 15_000),
+        retry: false
+      )
+      |> case do
+        {:ok, %Req.Response{status: 204}} -> :ok
+        {:ok, %Req.Response{status: status, body: body}} -> {:error, {:http_error, status, body}}
+        {:error, reason} -> {:error, reason}
+      end
+    end
+  end
+
   @spec exec(binary(), keyword()) :: {:ok, map()} | {:error, term()}
   def exec(sql, opts \\ []) when is_binary(sql) and is_list(opts) do
     with {:ok, _started} <- Application.ensure_all_started(:req) do

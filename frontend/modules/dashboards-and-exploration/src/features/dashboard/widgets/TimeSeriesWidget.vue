@@ -37,10 +37,10 @@ const annotations = computed(() =>
     ...(a.kind === "point" ? { timestamp_ms: a.starts_at_ms } : {}),
   })),
 );
-// A live chart slides its own window between server refreshes; a paused or
-// frozen view must not, or it would scroll data out of a fixed range.
+// The dashboard supplies complete server snapshots, including the moving window.
+// Append-stream mode waits for a separate heartbeat this viewer does not emit.
 const timeMode = computed(() =>
-  props.context.time_mode === "live" ? (props.live ? "live" : "snapshot") : props.context.time_mode,
+  props.context.time_mode === "live" ? "snapshot" : props.context.time_mode,
 );
 </script>
 

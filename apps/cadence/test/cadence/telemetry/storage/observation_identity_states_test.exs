@@ -43,6 +43,72 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
     assert state.conflict_count == 0
   end
 
+  test "records more than one insert batch without losing identities" do
+    envelopes =
+      for index <- 1..1_001 do
+        envelope(sample_id: "sample-batch-#{index}", point_id: "HK.point_#{index}")
+      end
+
+    assert :ok = ObservationIdentityStates.record_envelopes(envelopes, publish_facts?: false)
+
+    states = ObservationIdentityStates.list_for_selection("mission-identity")
+    assert length(states) == 1_001
+    assert Enum.all?(states, &(&1.canonical_count == 1))
+  end
+
+  test "keeps existing decisions and ordered revisions when mixing new and existing identities" do
+    existing = envelope(sample_id: "sample-existing", point_id: "HK.existing")
+    fresh = envelope(sample_id: "sample-new", point_id: "HK.new")
+
+    duplicate =
+      envelope(sample_id: "sample-new-duplicate", point_id: "HK.new", validity_state: :duplicate)
+
+    correction = envelope(sample_id: "sample-new-correction", point_id: "HK.new", revision: 2)
+
+    assert :ok = ObservationIdentityStates.record_envelopes([existing])
+
+    assert {:ok, decided} =
+             ObservationIdentityStates.apply_decision(
+               existing.observation_identity_id,
+               :mark_advisory,
+               organization_id: existing.organization_id,
+               mission_id: existing.mission_id,
+               decision_reason: "operator_review",
+               refresh_latest_value?: false
+             )
+
+    assert :ok =
+             ObservationIdentityStates.record_envelopes([
+               fresh,
+               existing,
+               duplicate,
+               correction,
+               correction
+             ])
+
+    assert {:ok, preserved} = ObservationIdentityStates.fetch(existing.observation_identity_id)
+    assert preserved == decided
+    assert {:ok, revised} = ObservationIdentityStates.fetch(fresh.observation_identity_id)
+    assert revised.canonical_observation_id == correction.observation_id
+    assert revised.canonical_count == 2
+    assert revised.duplicate_count == 1
+  end
+
+  test "invalid batches roll back and publish no state facts" do
+    event_bus = start_event_bus()
+    assert :ok = TelemetryFacts.subscribe(event_bus, self())
+    valid = envelope(sample_id: "sample-rollback", point_id: "HK.valid")
+    invalid = %{envelope(sample_id: "sample-invalid", point_id: "HK.invalid") | revision: 0}
+
+    assert {:error, %Ecto.Changeset{}} =
+             ObservationIdentityStates.record_envelopes([valid, invalid], event_bus: event_bus)
+
+    assert {:error, :observation_identity_state_not_found} =
+             ObservationIdentityStates.fetch(valid.observation_identity_id)
+
+    refute_receive {:"$gen_cast", {:cadence_fact, {:cadence, :telemetry, :facts}, _fact}}
+  end
+
   test "keeps canonical selection while counting alternate-path duplicates" do
     canonical = envelope(sample_id: "sample-primary", data_source_id: "ds-primary")
 

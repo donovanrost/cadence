@@ -61,6 +61,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.SmokeTest do
 
     assert {:ok, result} =
              Smoke.run(
+               write_protocol: :sql,
                exec_fun: exec_fun,
                timestamp: @timestamp,
                value: 41,

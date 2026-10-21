@@ -3,7 +3,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationRowTest do
 
   alias Cadence.Telemetry.Sample
   alias Cadence.Telemetry.Storage.{ObservationEnvelope, WriteContext}
-  alias Cadence.Telemetry.Storage.QuestDB.{ObservationRow, ObservationWriter}
+  alias Cadence.Telemetry.Storage.QuestDB.{ObservationLine, ObservationRow, ObservationWriter}
 
   test "insert statement targets telemetry observations with positional params" do
     statement = ObservationRow.insert_statement()
@@ -64,6 +64,16 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationRowTest do
     assert value_columns(envelope(engineering_value: nil)) == {"nil", nil, nil, nil, nil}
   end
 
+  test "preserves unsigned 64-bit counters and reserved LONG null as JSON integers" do
+    for value <- [18_446_744_073_709_551_615, -9_223_372_036_854_775_808] do
+      assert {"term", nil, nil, nil, encoded} = value_columns(envelope(engineering_value: value))
+      assert Jason.decode!(encoded) == value
+    end
+
+    assert {"long", nil, 9_223_372_036_854_775_807, nil, nil} =
+             value_columns(envelope(engineering_value: 9_223_372_036_854_775_807))
+  end
+
   test "empty QuestDB writes do not open a connection" do
     assert :ok = ObservationWriter.persist_envelopes([])
   end
@@ -81,6 +91,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationRowTest do
     assert :ok =
              ObservationWriter.persist_envelopes(
                [envelope(sample_id: "sample-1"), retry, next_sample],
+               write_protocol: :sql,
                exec_fun: exec_fun
              )
 
@@ -88,10 +99,102 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationRowTest do
     assert retry_sql =~ retry.idempotency_key
     assert retry_sql =~ ~s("attempt":"retry")
 
-    assert_receive {:questdb_exec, next_sample_sql}
-    assert next_sample_sql =~ next_sample.idempotency_key
+    assert retry_sql =~ next_sample.idempotency_key
 
     refute_receive {:questdb_exec, _sql}
+  end
+
+  test "writer bounds encoded batch requests and stops after the first failure" do
+    parent = self()
+    envelopes = Enum.map(1..100, &envelope(sample_id: "sample-#{&1}", raw_value: &1))
+
+    exec_fun = fn sql, _opts ->
+      send(parent, {:batch, sql})
+      {:error, :unavailable}
+    end
+
+    assert {:error, :unavailable} =
+             ObservationWriter.persist_envelopes(envelopes,
+               write_protocol: :sql,
+               exec_fun: exec_fun
+             )
+
+    assert_receive {:batch, sql}
+    assert byte_size(URI.encode_www_form(sql)) <= 24_000
+    assert sql =~ "sample-1'"
+    assert sql =~ "sample-2'"
+    refute sql =~ "sample-100'"
+    refute_receive {:batch, _sql}
+  end
+
+  test "HTTP ingestion preserves typed fields, timestamps, nulls and escaped strings" do
+    timestamp = ~U[2026-06-17 12:00:03.123456Z]
+
+    line =
+      ObservationLine.encode(
+        envelope(
+          generation_time: nil,
+          receipt_time: timestamp,
+          engineering_value: "quoted \"value\"\\path\nnext\rline"
+        )
+      )
+
+    assert line =~ "receipt_time=#{DateTime.to_unix(timestamp, :microsecond)}t"
+    assert String.ends_with?(line, " #{DateTime.to_unix(timestamp, :nanosecond)}\n")
+    assert line =~ ~s(value_string="quoted \\"value\\"\\\\path\\)
+    assert line =~ "\\\nnext\\\rline"
+    refute line =~ "generation_time="
+    refute line =~ "value_long="
+    assert ObservationLine.encode(envelope(engineering_value: false)) =~ "value_bool=false"
+    assert ObservationLine.encode(envelope(engineering_value: 42)) =~ "value_long=42i"
+    assert ObservationLine.encode(envelope(engineering_value: 12.34)) =~ "value_double=12.34"
+  end
+
+  test "HTTP ingestion batches rows and keeps the last duplicate upsert key" do
+    parent = self()
+    original = envelope(sample_id: "sample-ilp")
+    retry = %{original | engineering_value: 42}
+    next_sample = envelope(sample_id: "sample-ilp-next")
+
+    assert :ok =
+             ObservationWriter.persist_envelopes([original, retry, next_sample],
+               write_fun: fn body, _opts ->
+                 send(parent, {:lines, body})
+                 :ok
+               end
+             )
+
+    assert_receive {:lines, body}
+    assert length(String.split(body, "\n", trim: true)) == 2
+    assert body =~ "value_long=42i"
+    refute_receive {:lines, _body}
+  end
+
+  test "HTTP ingestion bounds batch size and stops on errors" do
+    parent = self()
+
+    envelopes =
+      Enum.map(
+        1..100,
+        &envelope(
+          sample_id: "ilp-#{&1}",
+          engineering_value: String.duplicate("x", 20_000)
+        )
+      )
+
+    assert {:error, :unavailable} =
+             ObservationWriter.persist_envelopes(envelopes,
+               write_fun: fn body, _opts ->
+                 send(parent, {:lines, body})
+                 {:error, :unavailable}
+               end
+             )
+
+    assert_receive {:lines, body}
+    assert byte_size(body) <= 1_000_000
+    assert body =~ ~s(sample_id="ilp-1")
+    refute body =~ ~s(sample_id="ilp-100")
+    refute_receive {:lines, _body}
   end
 
   defp value_columns(envelope) do

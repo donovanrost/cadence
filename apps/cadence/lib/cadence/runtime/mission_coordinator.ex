@@ -44,10 +44,18 @@ defmodule Cadence.Runtime.MissionCoordinator do
   @spec apply_spec(ProcessNamespace.t(), MissionRuntimeSpec.t()) ::
           {:ok, GenerationApplied.t()} | {:error, term()}
   def apply_spec(%ProcessNamespace{} = process_namespace, %MissionRuntimeSpec{} = spec) do
-    GenServer.call(
-      MissionRuntime.coordinator_name(process_namespace, spec.mission_id),
-      {:apply_spec, spec}
-    )
+    coordinator = MissionRuntime.coordinator_name(process_namespace, spec.mission_id)
+
+    # Safety reconciliation usually repeats the active generation. Check its
+    # identity before copying a potentially large fleet model across processes.
+    case GenServer.call(
+           coordinator,
+           {:applied_identity, MissionRuntimeSpec.identity(spec)},
+           :infinity
+         ) do
+      {:ok, observation} -> {:ok, observation}
+      :apply_required -> GenServer.call(coordinator, {:apply_spec, spec}, :infinity)
+    end
   end
 
   @spec binding_set_for_partition(binary(), PartitionKey.t()) ::
@@ -131,6 +139,13 @@ defmodule Cadence.Runtime.MissionCoordinator do
   end
 
   @impl true
+  def code_change(_old_version, %{runtime_spec: %MissionRuntimeSpec{} = spec} = state, _extra) do
+    {:ok, %{state | runtime_spec: MissionRuntimeSpec.share_source_models(spec)}}
+  end
+
+  def code_change(_old_version, state, _extra), do: {:ok, state}
+
+  @impl true
   def init(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
 
@@ -146,9 +161,24 @@ defmodule Cadence.Runtime.MissionCoordinator do
   end
 
   @impl true
+  def handle_call({:applied_identity, identity}, _from, state) do
+    reply =
+      case state.runtime_spec do
+        %MissionRuntimeSpec{} = spec ->
+          if MissionRuntimeSpec.identity(spec) == identity,
+            do: {:ok, GenerationApplied.new(spec, state.applied_at)},
+            else: :apply_required
+
+        nil ->
+          :apply_required
+      end
+
+    {:reply, reply, state}
+  end
+
   def handle_call({:apply_spec, %MissionRuntimeSpec{} = spec}, _from, state) do
     case apply_runtime_spec(state, spec) do
-      {:ok, observation, new_state} -> {:reply, {:ok, observation}, new_state}
+      {:ok, observation, new_state} -> {:reply, {:ok, observation}, new_state, :hibernate}
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
@@ -185,20 +215,16 @@ defmodule Cadence.Runtime.MissionCoordinator do
     end
   end
 
-  def handle_call({:process_telemetry_ingress, %RawEvidence{} = raw_evidence}, _from, state) do
-    TelemetryProfiler.with_ingress_context(state.profiler, raw_evidence, fn ->
-      TelemetryProfiler.with_stage(:runtime, fn ->
-        partition_key = PartitionKey.from_raw_evidence(raw_evidence)
+  def handle_call({:process_telemetry_ingress, %RawEvidence{} = raw_evidence}, from, state) do
+    partition_key = PartitionKey.from_raw_evidence(raw_evidence)
 
-        with {:ok, state} <- ensure_active_state(state),
-             {:ok, partition_pid, state} <- ensure_partition_owner(state, partition_key) do
-          {:reply, PartitionOwner.process_raw_evidence(partition_pid, raw_evidence), state}
-        else
-          {:error, reason} ->
-            {:reply, {:error, reason}, state}
-        end
-      end)
-    end)
+    with {:ok, state} <- ensure_active_state(state),
+         {:ok, partition_pid, state} <- ensure_partition_owner(state, partition_key) do
+      :ok = PartitionOwner.submit_raw_evidence(partition_pid, raw_evidence, from)
+      {:noreply, state}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
   end
 
   defp ensure_active_state(%{runtime_spec: %MissionRuntimeSpec{}} = state),
@@ -208,8 +234,7 @@ defmodule Cadence.Runtime.MissionCoordinator do
 
   defp ensure_partition_owner(
          %{
-           runtime_spec:
-             %MissionRuntimeSpec{binding_set: %BindingSet{} = binding_set} = runtime_spec
+           runtime_spec: %MissionRuntimeSpec{} = runtime_spec
          } =
            state,
          %PartitionKey{} = partition_key
@@ -219,7 +244,6 @@ defmodule Cadence.Runtime.MissionCoordinator do
            state.mission_id,
            partition_key,
            runtime_spec,
-           binding_set,
            state.profiler
          ) do
       {:ok, partition_pid} ->
@@ -235,47 +259,72 @@ defmodule Cadence.Runtime.MissionCoordinator do
          mission_id,
          %PartitionKey{} = partition_key,
          runtime_spec,
-         binding_set,
          profiler
        ) do
-    child_spec =
-      {PartitionOwner,
-       mission_id: mission_id,
-       process_namespace: process_namespace,
-       partition_key: partition_key,
-       active_activation: runtime_spec,
-       binding_set: binding_set,
-       profiler: profiler}
-
-    case DynamicSupervisor.start_child(
-           MissionRuntime.partition_supervisor_name(process_namespace, mission_id),
-           child_spec
-         ) do
+    case PartitionOwner.lookup(process_namespace, mission_id, partition_key) do
       {:ok, partition_pid} ->
         {:ok, partition_pid}
 
-      {:error, {:already_started, partition_pid}} ->
-        {:ok, partition_pid}
+      {:error, :partition_not_running} ->
+        start_new_partition_owner(
+          process_namespace,
+          mission_id,
+          partition_key,
+          runtime_spec,
+          profiler
+        )
+    end
+  end
 
-      {:error, {:already_present, _child_spec}} ->
-        PartitionOwner.lookup(process_namespace, mission_id, partition_key)
+  defp start_new_partition_owner(
+         process_namespace,
+         mission_id,
+         partition_key,
+         runtime_spec,
+         profiler
+       ) do
+    with {:ok, runtime_spec} <- MissionRuntimeSpec.partition_input(runtime_spec, partition_key) do
+      child_spec =
+        {PartitionOwner,
+         mission_id: mission_id,
+         process_namespace: process_namespace,
+         partition_key: partition_key,
+         active_activation: runtime_spec,
+         binding_set: runtime_spec.binding_set,
+         profiler: profiler}
 
-      {:error, reason} ->
-        {:error, reason}
+      case DynamicSupervisor.start_child(
+             MissionRuntime.partition_supervisor_name(process_namespace, mission_id),
+             child_spec
+           ) do
+        {:ok, partition_pid} ->
+          {:ok, partition_pid}
+
+        {:error, {:already_started, partition_pid}} ->
+          {:ok, partition_pid}
+
+        {:error, {:already_present, _child_spec}} ->
+          PartitionOwner.lookup(process_namespace, mission_id, partition_key)
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   end
 
   defp reconcile_partitions(
          %{
-           runtime_spec:
-             %MissionRuntimeSpec{binding_set: %BindingSet{} = binding_set} = runtime_spec
+           runtime_spec: %MissionRuntimeSpec{} = runtime_spec
          } =
            state
        ) do
     Enum.each(state.partitions, fn %PartitionKey{} = partition_key ->
       case PartitionOwner.lookup(state.process_namespace, state.mission_id, partition_key) do
         {:ok, partition_pid} ->
-          :ok = PartitionOwner.reconcile(partition_pid, runtime_spec, binding_set)
+          {:ok, partition_spec} = MissionRuntimeSpec.partition_input(runtime_spec, partition_key)
+
+          :ok =
+            PartitionOwner.reconcile(partition_pid, partition_spec, partition_spec.binding_set)
 
         {:error, :partition_not_running} ->
           :ok
@@ -294,7 +343,15 @@ defmodule Cadence.Runtime.MissionCoordinator do
 
   defp apply_runtime_spec(%{runtime_spec: nil} = state, %MissionRuntimeSpec{} = spec) do
     applied_at = DateTime.utc_now()
-    new_state = %{state | runtime_spec: spec, applied_at: applied_at} |> reconcile_partitions()
+
+    new_state =
+      %{
+        state
+        | runtime_spec: MissionRuntimeSpec.share_source_models(spec),
+          applied_at: applied_at
+      }
+      |> reconcile_partitions()
+
     {:ok, GenerationApplied.new(spec, applied_at), new_state}
   end
 
@@ -322,7 +379,15 @@ defmodule Cadence.Runtime.MissionCoordinator do
 
   defp apply_runtime_spec(state, %MissionRuntimeSpec{} = spec) do
     applied_at = DateTime.utc_now()
-    new_state = %{state | runtime_spec: spec, applied_at: applied_at} |> reconcile_partitions()
+
+    new_state =
+      %{
+        state
+        | runtime_spec: MissionRuntimeSpec.share_source_models(spec),
+          applied_at: applied_at
+      }
+      |> reconcile_partitions()
+
     {:ok, GenerationApplied.new(spec, applied_at), new_state}
   end
 

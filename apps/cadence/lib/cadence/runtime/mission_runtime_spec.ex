@@ -7,7 +7,7 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
   artifact from an id and version.
   """
 
-  alias Cadence.ApplicationDispatch.BindingSet
+  alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Catalog.MissionModel.RuntimePlan
   alias Cadence.Platform.ContentHash
   alias Cadence.Runtime.MissionModelPlanDecoder
@@ -133,6 +133,60 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
   end
 
   def for_partition(%__MODULE__{}, _), do: {:error, :spacecraft_model_partition_required}
+
+  @doc "Restores sharing of identical source models after an OTP message copies a fleet specification."
+  def share_source_models(%__MODULE__{source_runtime_bases: nil} = spec), do: spec
+
+  def share_source_models(%__MODULE__{} = spec) do
+    {sources, _models} =
+      Enum.reduce(spec.source_runtime_bases, {%{}, %{}}, fn {source, basis}, {sources, models} ->
+        shared_basis = Map.get(models, basis, basis)
+        {Map.put(sources, source, shared_basis), Map.put_new(models, basis, shared_basis)}
+      end)
+
+    %{spec | source_runtime_bases: sources}
+  end
+
+  @doc "Identifies monitoring observations without copying executable plans into every result."
+  def observation_context(%__MODULE__{} = spec) do
+    monitoring_plan = Map.get(spec.runtime_plans, :monitoring)
+
+    %{
+      organization_id: spec.organization_id,
+      mission_id: spec.mission_id,
+      mission_model_revision_id: spec.mission_model_revision_id,
+      runtime_plan_id: if(monitoring_plan, do: monitoring_plan.plan_id)
+    }
+  end
+
+  @doc "Projects an admitted specification before copying it to a partition process."
+  def partition_input(%__MODULE__{} = spec, %Cadence.Runtime.PartitionKey{} = partition) do
+    with {:ok, selected} <- for_partition(spec, partition) do
+      instances =
+        Enum.filter(selected.binding_set.capability_instances, fn instance ->
+          instance.target_scope == :mission or
+            (partition.affinity == :source_endpoint and
+               instance.source_endpoint_ref == partition.value)
+        end)
+
+      instance_ids = MapSet.new(instances, & &1.capability_instance_id)
+
+      rules =
+        Enum.filter(selected.binding_set.rules, fn rule ->
+          partition.affinity == :source_endpoint and
+            BindingRule.source_endpoint_ref(rule) in [nil, partition.value] and
+            MapSet.member?(instance_ids, BindingRule.capability_instance_id(rule))
+        end)
+
+      binding_set = %{selected.binding_set | capability_instances: instances, rules: rules}
+
+      source_bases =
+        if selected.source_runtime_bases,
+          do: Map.take(selected.source_runtime_bases, [partition.value])
+
+      {:ok, %{selected | binding_set: binding_set, source_runtime_bases: source_bases}}
+    end
+  end
 
   defp fetch_source_bases(%{source_runtime_bases: sources})
        when is_map(sources) and map_size(sources) in 1..1000 do

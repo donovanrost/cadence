@@ -126,6 +126,11 @@ defmodule Cadence.Runtime.PartitionOwner do
     GenServer.call(partition_owner, {:process_raw_evidence, raw_evidence})
   end
 
+  @doc "Processes ordered partition work and replies directly to the original ingress caller."
+  def submit_raw_evidence(partition_owner, %RawEvidence{} = raw_evidence, from) do
+    GenServer.cast(partition_owner, {:process_raw_evidence, raw_evidence, from})
+  end
+
   @spec drain_runtime_records(pid()) :: {:ok, map()} | {:error, term()}
   def drain_runtime_records(partition_owner) do
     GenServer.call(partition_owner, :drain_runtime_records)
@@ -358,6 +363,13 @@ defmodule Cadence.Runtime.PartitionOwner do
     end)
   end
 
+  @impl true
+  def handle_cast({:process_raw_evidence, %RawEvidence{} = raw_evidence, from}, state) do
+    {:reply, result, next_state} = handle_call({:process_raw_evidence, raw_evidence}, from, state)
+    GenServer.reply(from, result)
+    {:noreply, next_state}
+  end
+
   defp process_raw_evidence_reply(%RawEvidence{} = raw_evidence, state) do
     with {:ok, prepared_state, pre_runtime_records} <-
            TelemetryProfiler.with_runtime_component(
@@ -418,7 +430,8 @@ defmodule Cadence.Runtime.PartitionOwner do
          dispatch_decisions: dispatch_decisions,
          outputs: outputs,
          semantic_result: semantic_result,
-         runtime_spec: next_state.active_activation,
+         observation_context:
+           MissionRuntimeSpec.observation_context(next_state.active_activation),
          runtime_records: all_runtime_records
        }, %{next_state | pending_runtime_records: pending_runtime_records}}
     end

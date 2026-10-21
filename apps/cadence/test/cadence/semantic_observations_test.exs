@@ -91,7 +91,11 @@ defmodule Cadence.SemanticObservationsTest do
         raw: <<0>>
       })
 
-    prepared = %{raw_evidence: evidence, semantic_result: result, runtime_spec: runtime_spec}
+    prepared = %{
+      raw_evidence: evidence,
+      semantic_result: result,
+      observation_context: MissionRuntimeSpec.observation_context(runtime_spec)
+    }
 
     assert :ok = SemanticObservations.persist_many([prepared])
     assert :ok = SemanticObservations.persist_many([prepared])
@@ -170,5 +174,61 @@ defmodule Cadence.SemanticObservationsTest do
                "missing-transition",
                %{"kind" => "user", "id" => "operator-1"}
              )
+  end
+
+  test "bulk evaluations remain complete, idempotent and atomic across insert chunks" do
+    persist_mission_scope("org-monitoring-batch", "mission-monitoring-batch")
+    prepared = Enum.map(1..1_001, &prepared_evaluation/1)
+
+    assert :ok = SemanticObservations.persist_many(prepared)
+    assert :ok = SemanticObservations.persist_many(prepared)
+    assert Repo.aggregate(Cadence.SemanticObservations.MonitoringEvaluationRow, :count) == 1_001
+
+    invalid = put_in(prepared_evaluation(1_003).observation_context.runtime_plan_id, nil)
+
+    assert {:error, %Ecto.Changeset{}} =
+             SemanticObservations.persist_many([prepared_evaluation(1_002), invalid])
+
+    assert Repo.aggregate(Cadence.SemanticObservations.MonitoringEvaluationRow, :count) == 1_001
+  end
+
+  defp prepared_evaluation(index) do
+    update =
+      Update.new(%{
+        update_id: "update-batch-#{index}",
+        parameter_id: "parameter-batch",
+        qualified_name: "/parameters/batch",
+        value: index,
+        raw_value: index,
+        quality: :good,
+        receipt_time: ~U[2026-08-11 12:00:01.000000Z],
+        producer_kind: :container,
+        producer_id: "container-batch",
+        metadata: %{}
+      })
+
+    %{
+      observation_context: %{
+        organization_id: "org-monitoring-batch",
+        mission_id: "mission-monitoring-batch",
+        mission_model_revision_id: "model-batch",
+        runtime_plan_id: "plan-batch"
+      },
+      semantic_result: %Result{
+        parameter_updates: [update],
+        monitoring_results: [
+          %MonitoringResult{
+            policy_id: "policy-batch",
+            parameter_id: update.parameter_id,
+            update_id: update.update_id,
+            evaluated_state: :normal,
+            effective_state: :normal,
+            previous_state: :normal,
+            violation_count: 0,
+            conformance_count: 1
+          }
+        ]
+      }
+    }
   end
 end
