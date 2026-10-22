@@ -439,19 +439,35 @@ defmodule Cadence.Runtime.Persistence do
              policy.record_archive,
              archive_records_batch(prepared_results)
            ),
+         :ok <- flush_archives(RecordArchive, policy.record_archive, prepared_results),
          :ok <- Storage.persist_prepared_results(policy.telemetry_storage, prepared_results, opts),
          :ok <- SemanticObservations.persist_many(prepared_results) do
       publish_processing_results(policy.event_bus, prepared_results)
     end
   end
 
+  defp flush_archives(archive_module, archive_policy, prepared_results) do
+    prepared_results
+    |> Enum.map(& &1.raw_evidence.mission_id)
+    |> Enum.uniq()
+    |> Enum.reduce_while(:ok, fn mission_id, :ok ->
+      case archive_module.flush(archive_policy, mission_id) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
   defp maybe_archive_raw_evidence(_archive_policy, _prepared_results, false), do: :ok
 
   defp maybe_archive_raw_evidence(archive_policy, prepared_results, true) do
-    IngressArchive.persist_raw_evidences(
-      archive_policy,
-      Enum.map(prepared_results, & &1.raw_evidence)
-    )
+    with :ok <-
+           IngressArchive.persist_raw_evidences(
+             archive_policy,
+             Enum.map(prepared_results, & &1.raw_evidence)
+           ) do
+      flush_archives(IngressArchive, archive_policy, prepared_results)
+    end
   end
 
   defp prepare_processing_results(processing_results) do

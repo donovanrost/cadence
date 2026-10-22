@@ -38,6 +38,14 @@ defmodule CadenceWeb.Router do
     plug(:accepts, ["json"])
   end
 
+  # Kubelet probes do not carry browser sessions or API credentials.
+  # Only coarse process/database readiness is exposed here.
+  scope "/health", CadenceWeb do
+    pipe_through(:api)
+    get("/live", HealthController, :live)
+    get("/ready", HealthController, :ready)
+  end
+
   pipeline :frontend_release_publisher do
     plug(CadenceWeb.Plugs.FrontendReleasePublisher)
   end

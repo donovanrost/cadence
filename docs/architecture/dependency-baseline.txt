@@ -1,5 +1,6 @@
 # owner: Cadence core architecture
-# review-by: 2026-10-18
+# review-by: 2026-11-20
+# reviewed: 2026-10-20 — chaos-lab release work; zero baseline entries and zero boundary violations
 # rationale: Ratchet plane direction, root facade, shared schema, cross-context row, and prevent API adapter regression
 #
 # Each entry is an existing dependency, not permission for new code. Remove an entry

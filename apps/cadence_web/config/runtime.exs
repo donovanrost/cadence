@@ -1,5 +1,18 @@
 import Config
 
+config :cadence_web, :drain_file, System.get_env("CADENCE_DRAIN_FILE")
+
+case System.get_env("CADENCE_STORAGE_PATH") do
+  path when is_binary(path) and path != "" ->
+    config :cadence, :ingress_archive, base_path: Path.join(path, "ingress_archive")
+
+    config :cadence, :protocol_record_archive,
+      base_path: Path.join(path, "protocol_record_archive")
+
+  _unset ->
+    :ok
+end
+
 if config_env() == :dev do
   config :cadence, Cadence.Repo,
     pool_size: String.to_integer(System.get_env("POOL_SIZE", "10")),
@@ -283,7 +296,11 @@ if config_env() == :prod do
       """
 
   config :cadence_web, CadenceWeb.Endpoint,
-    url: [host: host, port: 443, scheme: "https"],
+    url: [
+      host: host,
+      port: String.to_integer(System.get_env("PHX_URL_PORT", "443")),
+      scheme: System.get_env("PHX_URL_SCHEME", "https")
+    ],
     http: [ip: {0, 0, 0, 0}, port: port],
     secret_key_base: secret_key_base,
     server: true

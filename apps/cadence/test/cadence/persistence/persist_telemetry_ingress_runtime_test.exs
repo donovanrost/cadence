@@ -117,20 +117,6 @@ defmodule Cadence.Persistence.PersistTelemetryIngressRuntimeTest do
 
     assert {:ok, first_result} = Cadence.process_telemetry_ingress(raw_evidence_one)
 
-    handler_id = "persistence-empty-multi-#{System.unique_integer([:positive])}"
-
-    :ok =
-      :telemetry.attach(
-        handler_id,
-        [:cadence, :repo, :query],
-        fn _event, _measurements, metadata, test_pid ->
-          send(test_pid, {:unexpected_persistence_query, metadata})
-        end,
-        self()
-      )
-
-    on_exit(fn -> _ = :telemetry.detach(handler_id) end)
-
     assert :ok =
              RuntimePersistence.persist_processing_results(
                persistence_policy,
@@ -139,8 +125,9 @@ defmodule Cadence.Persistence.PersistTelemetryIngressRuntimeTest do
                record_current_values?: false
              )
 
-    refute_receive {:unexpected_persistence_query, _metadata}, 100
-    :ok = :telemetry.detach(handler_id)
+    # Even an empty output batch must durably archive its protocol records
+    # before the processing cursor may advance.
+    assert Repo.aggregate(Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow, :count) > 0
 
     assert {:ok, second_result} = Cadence.process_telemetry_ingress(raw_evidence_two)
 

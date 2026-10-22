@@ -256,10 +256,10 @@ defmodule Cadence.Dashboards.SourceExecutionSemanticsTest do
         data_bindings: [telemetry_binding("flight-questdb")],
         source_opts: %{
           telemetry: [
-            sleep_ms_by_sampling: %{latest: 200}
+            sleep_ms_by_sampling: %{latest: 5_000}
           ]
         },
-        source_execution_timeout_ms: 50,
+        source_execution_timeout_ms: 500,
         source_execution_max_concurrency: 2,
         source_circuit_breaker: breaker,
         source_circuit_failure_threshold: 1

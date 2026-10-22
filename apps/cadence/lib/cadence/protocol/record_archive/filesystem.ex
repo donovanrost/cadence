@@ -14,6 +14,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
 
   alias Cadence.Ids
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Platform.DurableFile
   alias Cadence.Protocol.{PacketRecord, TransferFrameRecord}
 
   alias Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow,
@@ -178,6 +179,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
           entry_id: entry_id(entry, record_id),
           record_kind: Map.fetch!(entry, "record_kind"),
           record_id: record_id,
+          content_sha256: content_hash(entry),
           segment_id: segment_id,
           object_key: object_key,
           archive_backend: archive_backend,
@@ -236,7 +238,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
         if archived_record_ids?(rows, opts) do
           :ok
         else
-          {:error, {:protocol_archive_index_insert_mismatch, length(rows)}}
+          {:error, {:protocol_archive_record_identity_conflict, Enum.map(rows, & &1.record_id)}}
         end
     end
   end
@@ -263,16 +265,13 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
       ])
 
     absolute_path = Path.join(base_path, object_key)
-    temp_path = absolute_path <> ".tmp"
     payload = :erlang.term_to_binary(%{version: 1, entries: entries}, compressed: 6)
 
-    with :ok <- File.mkdir_p(Path.dirname(absolute_path)),
-         :ok <- File.write(temp_path, payload, [:binary]),
-         :ok <- File.rename(temp_path, absolute_path) do
-      {:ok, object_key, byte_size(payload)}
-    else
+    case DurableFile.write_new(absolute_path, payload) do
+      :ok ->
+        {:ok, object_key, byte_size(payload)}
+
       {:error, reason} ->
-        _ = File.rm(temp_path)
         {:error, {:protocol_archive_segment_write_failed, absolute_path, reason}}
     end
   end
@@ -299,6 +298,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
   def build_entries(%RawEvidence{} = raw_evidence, transfer_frame_records, packet_records)
       when is_list(transfer_frame_records) and is_list(packet_records) do
     metadata = normalize_metadata(raw_evidence.metadata)
+    evidence_sha256 = Base.encode16(:crypto.hash(:sha256, raw_evidence.raw), case: :lower)
 
     frame_entries =
       Enum.map(transfer_frame_records, fn %TransferFrameRecord{} = frame_record ->
@@ -306,6 +306,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
           "record_kind" => @transfer_frame_record_kind,
           "record_id" => frame_record.frame_record_id,
           "evidence_id" => frame_record.evidence_id,
+          "evidence_sha256" => evidence_sha256,
           "mission_id" => frame_record.mission_id,
           "source_endpoint_ref" => frame_record.source_endpoint_ref,
           "spacecraft_id" => frame_record.spacecraft_id,
@@ -334,6 +335,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
           "record_kind" => @packet_record_kind,
           "record_id" => packet_record.packet_id,
           "evidence_id" => packet_record.evidence_id,
+          "evidence_sha256" => evidence_sha256,
           "mission_id" => packet_record.mission_id,
           "source_endpoint_ref" => packet_record.source_endpoint_ref,
           "spacecraft_id" => packet_record.spacecraft_id,
@@ -630,26 +632,40 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
 
     expected_pairs =
       rows
-      |> Enum.map(&{Map.fetch!(&1, :record_kind), Map.fetch!(&1, :record_id)})
+      |> Enum.map(&{&1.record_kind, &1.record_id, &1.content_sha256})
       |> Enum.uniq()
 
     expected_set = MapSet.new(expected_pairs)
     record_kinds = expected_pairs |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
     record_ids = expected_pairs |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
 
-    found_pairs =
+    found_rows =
       ProtocolArchiveRecordEntryRow
       |> where(
         [row],
         row.archive_backend == ^archive_backend and row.record_kind in ^record_kinds and
           row.record_id in ^record_ids
       )
-      |> select([row], {row.record_kind, row.record_id})
+      |> select([row], {row.record_kind, row.record_id, row.content_sha256, row.object_key})
       |> repo.all()
+
+    found_pairs =
+      found_rows
+      |> Enum.map(fn {kind, id, hash, _key} -> {kind, id, hash} end)
       |> Enum.filter(&MapSet.member?(expected_set, &1))
       |> MapSet.new()
 
-    MapSet.equal?(found_pairs, expected_set)
+    MapSet.equal?(found_pairs, expected_set) and
+      Enum.all?(found_rows, fn {_kind, _id, _hash, key} ->
+        case Keyword.fetch(opts, :base_path) do
+          {:ok, base_path} -> File.regular?(Path.join(base_path, key))
+          :error -> true
+        end
+      end)
+  end
+
+  defp content_hash(entry) do
+    entry |> :erlang.term_to_binary([:deterministic]) |> then(&:crypto.hash(:sha256, &1))
   end
 
   defp instance_archive_backend(nil), do: @archive_backend

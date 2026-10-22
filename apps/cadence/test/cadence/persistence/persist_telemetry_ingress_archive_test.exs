@@ -53,6 +53,14 @@ defmodule Cadence.Persistence.PersistTelemetryIngressArchiveTest do
              RuntimePersistence.persist_processing_result(persistence_policy, result, [])
 
     assert result.outputs == []
+    # Completion is the journal processing acknowledgement boundary. Files and
+    # index rows must already exist before the periodic writer timer fires.
+    [entry] = Repo.all(Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow)
+    assert File.regular?(Path.join(protocol_base_path, entry.object_key))
+
+    assert RecordArchive.stats(persistence_policy.record_archive, raw_evidence.mission_id).queue_depth ==
+             0
+
     assert count_for_mission(RawEvidenceRow, :evidence_id, "mission-dispatch-archive") == 0
     assert count_for_mission(PacketRecordRow, :packet_id, "mission-dispatch-archive") == 0
     assert count_dispatch_decisions_for_evidence(raw_evidence.evidence_id) == 0
@@ -62,6 +70,36 @@ defmodule Cadence.Persistence.PersistTelemetryIngressArchiveTest do
     assert dispatch_decision.evidence_id == raw_evidence.evidence_id
     assert dispatch_decision.status == :unmatched
     assert dispatch_decision.work_items == []
+  end
+
+  @tag :tmp_dir
+  test "archive write failure prevents processing completion", %{tmp_dir: tmp_dir} do
+    protocol_path = Path.join(tmp_dir, "blocked")
+    File.write!(protocol_path, "not a directory")
+    policy = filesystem_persistence_policy(Path.join(tmp_dir, "raw"), protocol_path)
+    persist_mission_scope("org-archive-failure", "mission-archive-failure")
+
+    evidence =
+      RawEvidence.new(%{
+        mission_id: "mission-archive-failure",
+        raw: build_space_packet(42, 1, <<0, 7>>)
+      })
+
+    bindings =
+      BindingSet.new(%{
+        mission_id: evidence.mission_id,
+        binding_set_id: "empty",
+        version: 1,
+        rules: []
+      })
+
+    assert {:ok, result} = Cadence.process_telemetry_ingress(evidence, bindings)
+
+    assert {:error, {:protocol_archive_segment_write_failed, _, _}} =
+             RuntimePersistence.persist_semantic_processing_results(policy, [result], [])
+
+    assert Repo.aggregate(Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow, :count) == 0
+    assert RecordArchive.stats(policy.record_archive, evidence.mission_id).queue_depth > 0
   end
 
   defp count_for_mission(schema, field, mission_id) do

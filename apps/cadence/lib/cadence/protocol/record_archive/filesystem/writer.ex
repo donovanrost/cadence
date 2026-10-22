@@ -269,6 +269,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
                FileSystem.store_segment_object(segment_id, entries, base_path: state.base_path),
              :ok <-
                FileSystem.persist_segment(segment_id, entries,
+                 base_path: state.base_path,
                  object_key: object_key,
                  organization_id: organization_id,
                  archive_backend: state.archive_backend,

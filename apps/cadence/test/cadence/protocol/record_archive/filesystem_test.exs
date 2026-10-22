@@ -224,6 +224,59 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
              )
 
     assert 2 == archive_entry_count(entries)
+
+    changed_bytes =
+      FileSystem.build_entries(%{raw_evidence | raw: <<9, 9, 9, 9>>}, [transfer_frame_record], [])
+
+    assert {:error, {:protocol_archive_record_identity_conflict, ["frame-idempotent"]}} =
+             FileSystem.persist_segment("changed-frame-bytes", changed_bytes,
+               object_key: "mission-alpha/changed-frame-bytes.bin"
+             )
+
+    [frame, packet] = entries
+    changed = Map.put(packet, "packet_data_base64", Base.encode64(<<99, 99>>))
+
+    assert {:error, {:protocol_archive_record_identity_conflict, _ids}} =
+             FileSystem.persist_segment("segment-collision", [frame, changed],
+               object_key: "mission-alpha/segment-collision.bin"
+             )
+
+    assert Repo.get!(ProtocolArchiveRecordEntryRow, "packet_record:packet-idempotent").object_key ==
+             "mission-alpha/segment-alpha.bin"
+
+    # Legacy writers can still populate the nullable column during a rollout,
+    # but their rows are not evidence of content equality for a new writer.
+    ProtocolArchiveRecordEntryRow
+    |> where([row], row.record_id == "packet-idempotent")
+    |> Repo.update_all(set: [content_sha256: nil])
+
+    assert {:error, {:protocol_archive_record_identity_conflict, _ids}} =
+             FileSystem.persist_segment("segment-legacy", entries,
+               object_key: "mission-alpha/segment-legacy.bin"
+             )
+  end
+
+  test "segment objects cannot be overwritten with different records", %{
+    mission_id: mission_id,
+    archive_policy: policy
+  } do
+    entry = %{
+      "mission_id" => mission_id,
+      "receipt_time" => "2026-10-21T12:00:00Z",
+      "record_id" => "immutable"
+    }
+
+    assert {:ok, key, _} = FileSystem.store_segment_object("fixed", [entry], policy.backend_opts)
+    assert {:ok, ^key, _} = FileSystem.store_segment_object("fixed", [entry], policy.backend_opts)
+
+    assert {:error, {:protocol_archive_segment_write_failed, _, {:immutable_file_collision, _}}} =
+             FileSystem.store_segment_object(
+               "fixed",
+               [Map.put(entry, "record_id", "changed")],
+               policy.backend_opts
+             )
+
+    assert {:ok, [^entry]} = FileSystem.load_segment_object(key, policy.backend_opts)
   end
 
   test "large archive segments stay within the database parameter limit and remain idempotent", %{

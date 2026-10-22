@@ -8,8 +8,9 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
   alias Cadence.Runtime.{MissionModelPlanDecoder, MissionRuntimeSpec, PartitionKey}
 
   def run(single_operator?) do
-    if Application.get_env(:cadence_web, CadenceWeb.Endpoint, [])[:code_reloader] != true,
-      do: raise("Earendil activation is restricted to the development server")
+    unless F.chaos_lab?() or
+             Application.get_env(:cadence_web, CadenceWeb.Endpoint, [])[:code_reloader] == true,
+           do: raise("Earendil activation requires development mode or the isolated chaos lab")
 
     scope = scope()
     {:ok, mission} = Cadence.Missions.fetch_mission(F.organization_id(), F.mission_id())
@@ -52,6 +53,20 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
           snapshot.row.configuration_revision_id
       end)
 
+    if already_active? do
+      # A killed executor can leave the generation committed before its applied
+      # projections and execution receipt are finished. Resume the same approval.
+      request_id = active.activation.activation_request_id
+      {:ok, execution} = Cadence.Control.Activations.fetch_execution(request_id)
+
+      unless execution.status == :succeeded do
+        IO.puts("Resuming interrupted fleet activation #{request_id}")
+        {:ok, approved} = Cadence.Management.Activations.fetch_approved(request_id)
+        {:ok, execution} = Cadence.Control.Activations.execute(approved)
+        :succeeded = execution.status
+      end
+    end
+
     unless already_active? do
       policy = ActivationPolicy.load(F.organization_id(), F.mission_id())
       tokens = Map.new(snapshots, fn {id, snapshot} -> {id, snapshot.token} end)
@@ -78,7 +93,15 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
   defp verify(mission, fleet, revision) do
     {:ok, active} = Active.load(mission)
     500 = map_size(active.entries)
-    {:ok, spec} = Cadence.Runtime.Missions.applied_spec(F.mission_id())
+    # The complete 500-spacecraft specification can exceed the ordinary five-
+    # second observation timeout while a release is recovering the fleet.
+    {:ok, spec} =
+      GenServer.call(
+        Cadence.Runtime.MissionRuntime.coordinator_name(F.mission_id()),
+        :active_spec,
+        600_000
+      )
+
     true = spec.generation == active.activation.generation
     5_000 = length(spec.binding_set.capability_instances)
     verify_routes(fleet, active.entries)
@@ -129,7 +152,7 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
       telemetry_packet_bindings: length(spec.binding_set.capability_instances),
       commands_per_spacecraft: 27,
       catalog_revision_id: revision.catalog_revision_id,
-      source_runtime_bases: map_size(spec.source_runtime_bases)
+      source_runtime_bases: Cadence.Runtime.SourceRuntimeBases.count(spec.source_runtime_bases)
     }
   end
 

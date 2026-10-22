@@ -24,6 +24,7 @@ defmodule Cadence.IngressArchive.FileSystem do
   alias Cadence.IngressArchive.FileSystem.EvidenceEntryRow, as: IngressArchiveEvidenceEntryRow
   alias Cadence.IngressArchive.FileSystem.Writer
   alias Cadence.Persistence.OrganizationScope
+  alias Cadence.Platform.DurableFile
   alias Cadence.Replay.Scope
   alias Cadence.Repo
 
@@ -64,24 +65,20 @@ defmodule Cadence.IngressArchive.FileSystem do
     mission_id = batch.raw_evidences |> List.first() |> Map.fetch!(:mission_id)
     organization_id = OrganizationScope.organization_id_for_mission(mission_id)
 
-    if archived_evidence_ids?(batch.raw_evidences, backend_opts) do
+    with {:ok, object_key, _segment_size_bytes} <-
+           store_segment_object(batch.batch_id, batch.raw_evidences,
+             base_path: Keyword.fetch!(backend_opts, :base_path)
+           ),
+         :ok <-
+           persist_segment(
+             batch.batch_id,
+             batch.raw_evidences,
+             Keyword.merge(backend_opts,
+               object_key: object_key,
+               organization_id: organization_id
+             )
+           ) do
       {:ok, Receipt.for_batch(batch, :durable)}
-    else
-      with {:ok, object_key, _segment_size_bytes} <-
-             store_segment_object(batch.batch_id, batch.raw_evidences,
-               base_path: Keyword.fetch!(backend_opts, :base_path)
-             ),
-           :ok <-
-             persist_segment(
-               batch.batch_id,
-               batch.raw_evidences,
-               Keyword.merge(backend_opts,
-                 object_key: object_key,
-                 organization_id: organization_id
-               )
-             ) do
-        {:ok, Receipt.for_batch(batch, :durable)}
-      end
     end
   end
 
@@ -195,6 +192,7 @@ defmodule Cadence.IngressArchive.FileSystem do
         %{
           evidence_id: database_evidence_id(raw_evidence.evidence_id, opts),
           segment_id: segment_id,
+          content_sha256: content_hash(raw_evidence),
           object_key: object_key,
           archive_backend: archive_backend,
           mission_id: raw_evidence.mission_id,
@@ -228,7 +226,7 @@ defmodule Cadence.IngressArchive.FileSystem do
         if archived_evidence_ids?(raw_evidences, opts) do
           :ok
         else
-          {:error, {:archive_index_insert_mismatch, length(rows)}}
+          {:error, {:archive_evidence_identity_conflict, Enum.map(rows, & &1.evidence_id)}}
         end
     end
   end
@@ -251,7 +249,6 @@ defmodule Cadence.IngressArchive.FileSystem do
       ])
 
     absolute_path = Path.join(base_path, object_key)
-    temp_path = absolute_path <> ".tmp"
 
     payload =
       raw_evidences
@@ -261,18 +258,21 @@ defmodule Cadence.IngressArchive.FileSystem do
 
     case File.read(absolute_path) do
       {:ok, ^payload} ->
-        {:ok, object_key, byte_size(payload)}
+        # A previous publication may have linked the object but failed the
+        # directory sync. Retrying must establish durability before receipt.
+        with :ok <- DurableFile.sync_directory(Path.dirname(absolute_path)) do
+          {:ok, object_key, byte_size(payload)}
+        end
 
       {:ok, _different_payload} ->
         {:error, {:archive_segment_identity_collision, absolute_path}}
 
       {:error, :enoent} ->
-        with :ok <- File.mkdir_p(Path.dirname(absolute_path)),
-             :ok <- write_synced_segment(temp_path, absolute_path, payload) do
-          {:ok, object_key, byte_size(payload)}
-        else
+        case DurableFile.write_new(absolute_path, payload) do
+          :ok ->
+            {:ok, object_key, byte_size(payload)}
+
           {:error, reason} ->
-            _ = File.rm(temp_path)
             {:error, {:archive_segment_write_failed, absolute_path, reason}}
         end
 
@@ -489,22 +489,29 @@ defmodule Cadence.IngressArchive.FileSystem do
     expected_ids =
       raw_evidences
       |> Enum.map(fn %RawEvidence{} = raw_evidence ->
-        database_evidence_id(raw_evidence.evidence_id, backend_opts)
+        {database_evidence_id(raw_evidence.evidence_id, backend_opts), content_hash(raw_evidence)}
       end)
       |> Enum.uniq()
 
     archive_backend = archive_backend(backend_opts)
     repo = repo(backend_opts)
 
-    found_ids =
+    found_rows =
       IngressArchiveEvidenceEntryRow
-      |> where([row], row.evidence_id in ^expected_ids)
+      |> where([row], row.evidence_id in ^Enum.map(expected_ids, &elem(&1, 0)))
       |> where([row], row.archive_backend == ^archive_backend)
-      |> select([row], row.evidence_id)
+      |> select([row], {row.evidence_id, row.content_sha256, row.object_key})
       |> repo.all()
-      |> MapSet.new()
 
-    MapSet.equal?(found_ids, MapSet.new(expected_ids))
+    found_ids = MapSet.new(found_rows, fn {id, hash, _key} -> {id, hash} end)
+
+    MapSet.equal?(found_ids, MapSet.new(expected_ids)) and
+      Enum.all?(found_rows, fn {_id, _hash, key} ->
+        case Keyword.fetch(backend_opts, :base_path) do
+          {:ok, base_path} -> File.regular?(Path.join(base_path, key))
+          :error -> true
+        end
+      end)
   end
 
   @spec new_segment_id() :: binary()
@@ -557,16 +564,10 @@ defmodule Cadence.IngressArchive.FileSystem do
     Base.url_encode64(instance_id, padding: false)
   end
 
-  defp write_synced_segment(temp_path, absolute_path, payload) do
-    with :ok <- File.write(temp_path, payload, [:binary]),
-         {:ok, file} <- :file.open(temp_path, [:read, :write, :binary, :raw]) do
-      sync_result = :file.sync(file)
-      close_result = :file.close(file)
-
-      with :ok <- sync_result,
-           :ok <- close_result do
-        File.rename(temp_path, absolute_path)
-      end
-    end
+  defp content_hash(raw_evidence) do
+    raw_evidence
+    |> encode_raw_evidence()
+    |> :erlang.term_to_binary([:deterministic])
+    |> then(&:crypto.hash(:sha256, &1))
   end
 end

@@ -44,6 +44,7 @@ defmodule Cadence.Runtime.MissionCoordinator do
   @spec apply_spec(ProcessNamespace.t(), MissionRuntimeSpec.t()) ::
           {:ok, GenerationApplied.t()} | {:error, term()}
   def apply_spec(%ProcessNamespace{} = process_namespace, %MissionRuntimeSpec{} = spec) do
+    spec = MissionRuntimeSpec.compact_source_models(spec)
     coordinator = MissionRuntime.coordinator_name(process_namespace, spec.mission_id)
 
     # Safety reconciliation usually repeats the active generation. Check its
@@ -140,7 +141,7 @@ defmodule Cadence.Runtime.MissionCoordinator do
 
   @impl true
   def code_change(_old_version, %{runtime_spec: %MissionRuntimeSpec{} = spec} = state, _extra) do
-    {:ok, %{state | runtime_spec: MissionRuntimeSpec.share_source_models(spec)}}
+    {:ok, %{state | runtime_spec: MissionRuntimeSpec.compact_source_models(spec)}}
   end
 
   def code_change(_old_version, state, _extra), do: {:ok, state}
@@ -347,7 +348,7 @@ defmodule Cadence.Runtime.MissionCoordinator do
     new_state =
       %{
         state
-        | runtime_spec: MissionRuntimeSpec.share_source_models(spec),
+        | runtime_spec: MissionRuntimeSpec.compact_source_models(spec),
           applied_at: applied_at
       }
       |> reconcile_partitions()
@@ -383,7 +384,7 @@ defmodule Cadence.Runtime.MissionCoordinator do
     new_state =
       %{
         state
-        | runtime_spec: MissionRuntimeSpec.share_source_models(spec),
+        | runtime_spec: MissionRuntimeSpec.compact_source_models(spec),
           applied_at: applied_at
       }
       |> reconcile_partitions()

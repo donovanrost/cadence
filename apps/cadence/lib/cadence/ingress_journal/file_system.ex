@@ -16,6 +16,7 @@ defmodule Cadence.IngressJournal.FileSystem do
   require Logger
 
   alias Cadence.IngressJournal.{Entry, Identity}
+  alias Cadence.Platform.DurableFile
 
   @record_magic "CIJR"
   @record_version 1
@@ -173,8 +174,8 @@ defmodule Cadence.IngressJournal.FileSystem do
       |> Map.fetch!(:file_system_opts)
 
     base_path = Keyword.get_lazy(opts, :base_path, fn -> Keyword.fetch!(config, :base_path) end)
-    stream_id = stream_id(context)
-    stream_path = Path.join(base_path, stream_id)
+    context_id = stream_id(context)
+    stream_path = Path.join(base_path, context_id)
     durability = Keyword.get(opts, :durability, Keyword.get(config, :durability, :sync))
     consumers = Keyword.get(opts, :consumers, Keyword.get(config, :consumers, @default_consumers))
 
@@ -187,8 +188,8 @@ defmodule Cadence.IngressJournal.FileSystem do
 
     with :ok <- validate_durability(durability),
          :ok <- validate_positive_integer(:capture_record_bytes, capture_record_bytes),
-         :ok <- File.mkdir_p(stream_path),
-         :ok <- ensure_stream_metadata(stream_path, stream_id, context),
+         :ok <- DurableFile.mkdir_p(stream_path),
+         {:ok, stream_id} <- ensure_stream_metadata(stream_path, context_id, context),
          {:ok, checkpoint} <- load_checkpoint(stream_path, consumers),
          {:ok, recovered} <- recover_segments(stream_path, stream_id, checkpoint),
          {:ok, file} <- open_active_segment(stream_path, recovered.active_segment_start) do
@@ -746,15 +747,8 @@ defmodule Cadence.IngressJournal.FileSystem do
         next_sequence: next_sequence
       })
 
-    temp_path = Path.join(stream_path, "cursors.tmp")
     cursor_path = Path.join(stream_path, "cursors.term")
-
-    with :ok <- File.write(temp_path, contents, [:binary]),
-         {:ok, file} <- :file.open(temp_path, [:read, :write, :binary, :raw]),
-         :ok <- :file.sync(file),
-         :ok <- :file.close(file) do
-      File.rename(temp_path, cursor_path)
-    end
+    DurableFile.replace(cursor_path, contents)
   end
 
   defp cancel_checkpoint_worker(nil), do: :ok
@@ -1223,24 +1217,52 @@ defmodule Cadence.IngressJournal.FileSystem do
     ArgumentError -> {:error, :invalid_ingress_journal_cursor_checkpoint}
   end
 
-  defp ensure_stream_metadata(stream_path, stream_id, context) do
+  defp ensure_stream_metadata(stream_path, context_id, context) do
     path = Path.join(stream_path, "stream.term")
-    expected = %{version: 1, stream_id: stream_id, context: context}
 
     case File.read(path) do
       {:ok, binary} ->
-        if :erlang.binary_to_term(binary, [:safe]) == expected,
-          do: :ok,
-          else: {:error, :ingress_journal_stream_identity_mismatch}
+        read_stream_metadata(binary, context_id, context)
 
       {:error, :enoent} ->
-        File.write(path, :erlang.term_to_binary(expected), [:binary, :exclusive])
+        if Path.wildcard(Path.join(stream_path, "*.cij")) != [] or
+             File.exists?(Path.join(stream_path, "cursors.term")) do
+          {:error, :ingress_journal_stream_metadata_missing}
+        else
+          create_stream_metadata(path, context)
+        end
 
       {:error, reason} ->
         {:error, reason}
     end
   rescue
     ArgumentError -> {:error, :invalid_ingress_journal_stream_metadata}
+  end
+
+  defp read_stream_metadata(binary, context_id, context) do
+    case :erlang.binary_to_term(binary, [:safe]) do
+      %{version: 1, stream_id: ^context_id, context: ^context} ->
+        # Existing journal bytes retain their original replay identities.
+        {:ok, context_id}
+
+      %{version: 2, stream_id: stream_id, context: ^context}
+      when is_binary(stream_id) and byte_size(stream_id) > 0 ->
+        {:ok, stream_id}
+
+      _other ->
+        {:error, :ingress_journal_stream_identity_mismatch}
+    end
+  end
+
+  defp create_stream_metadata(path, context) do
+    # Context selects the directory; the persisted incarnation selects the
+    # identity. An empty replacement disk must never reuse old byte IDs.
+    stream_id = "stream-" <> Base.encode16(:crypto.strong_rand_bytes(32), case: :lower)
+    metadata = %{version: 2, stream_id: stream_id, context: context}
+
+    with :ok <- DurableFile.write_new(path, :erlang.term_to_binary(metadata)) do
+      {:ok, stream_id}
+    end
   end
 
   defp stream_id(context) do
@@ -1259,7 +1281,17 @@ defmodule Cadence.IngressJournal.FileSystem do
   end
 
   defp open_active_segment(stream_path, start_offset) do
-    :file.open(segment_path(stream_path, start_offset), [:append, :binary, :raw])
+    with {:ok, file} <-
+           :file.open(segment_path(stream_path, start_offset), [:append, :binary, :raw]) do
+      case DurableFile.sync_directory(stream_path) do
+        :ok ->
+          {:ok, file}
+
+        error ->
+          :file.close(file)
+          error
+      end
+    end
   end
 
   defp segment_path(stream_path, start_offset) do

@@ -43,6 +43,24 @@ try {
     const entry = components[component];
     assert.ok(entry);
     const app = createSSRApp(entry, props);
+    let headerRoute = "";
+    /** @type {unknown} */
+    let publishedHeader;
+    /** @type {import("@cadence/plugin-sdk/page-header").PageHeaderHost} */
+    const headerHost = {
+      route: () => headerRoute,
+      claim(_owner, routes) {
+        assert.equal(routes.length, 1);
+        const route = routes[0];
+        assert.ok(typeof route === "string");
+        headerRoute = route;
+      },
+      update(_owner, header) {
+        publishedHeader = header;
+      },
+      release() {},
+    };
+    app.provide(Symbol.for("cadence.page-header.v1"), headerHost);
     /** @type {string[]} */
     const warnings = [];
     app.config.warnHandler = (message) => {
@@ -76,7 +94,9 @@ try {
           value,
         );
       }
-      assert.ok(doc.querySelector("h1,h2"));
+      // Routed pages publish their title/header data to the host. This domain
+      // producer harness does not mount the host shell that renders that title.
+      assert.ok(doc.querySelector("h1,h2") || (headerRoute !== "" && record(publishedHeader)));
       const rootId =
         (record(props.page) ? props.page.id : undefined) ??
         (record(props.header) ? props.header.id : undefined) ??

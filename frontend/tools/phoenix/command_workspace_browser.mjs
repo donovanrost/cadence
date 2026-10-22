@@ -98,7 +98,7 @@ try {
       .waitFor({ timeout: 5000 });
     await queuedCount.getByText("2", { exact: true }).waitFor({ timeout: 5000 });
     await contextObserver.screenshot({ path: `${out}/command-context-live.png` });
-    await contextObserver.locator("#command-monitor-refresh").click();
+    await contextObserver.locator("#host-page-refresh").click();
     await contextObserver.locator("[data-command-review]").nth(1).waitFor();
     const directlyQueued = await contextObserver
       .locator("[data-command-review]")

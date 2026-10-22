@@ -4868,7 +4868,7 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
             ${sidebar ? "probe.sidebar === shell?.querySelector('[data-sidebar-collapsible]') &&" : ""}
             shell.querySelectorAll(${JSON.stringify(coreContent)}).length === 1 &&
             document.querySelectorAll('#cadence-federation-root').length === 0 &&
-            header?.dataset.pageHeadingSource === 'application' && title?.textContent.trim() &&
+            header?.dataset.pageHeadingSource === 'page' && title?.textContent.trim() &&
             document.querySelectorAll('h1').length === 1 &&
             getComputedStyle(title).fontSize === ${JSON.stringify(path === `${root}/ops/dashboards` ? "20px" : "24px")};
         })()`,
@@ -4917,7 +4917,7 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, si
           const header = document.querySelector('#host-page-heading');
           const title = header?.querySelector('h1');
           const body = document.querySelector('#host-page-content');
-          return header?.dataset.pageHeadingSource === 'application' && title?.textContent.trim() && document.querySelectorAll('h1').length === 1 &&
+          return header?.dataset.pageHeadingSource === 'page' && title?.textContent.trim() && document.querySelectorAll('h1').length === 1 &&
             !body?.querySelector('h1') && header.querySelector('nav[aria-label="Breadcrumb"]') &&
             getComputedStyle(title).fontSize === '24px';
         })()`,

@@ -11,6 +11,7 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
   alias Cadence.Catalog.MissionModel.RuntimePlan
   alias Cadence.Platform.ContentHash
   alias Cadence.Runtime.MissionModelPlanDecoder
+  alias Cadence.Runtime.SourceRuntimeBases
   alias Cadence.SemanticRuntime.PlanDecoder
 
   @type t :: %__MODULE__{
@@ -26,7 +27,7 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
           mission_model_revision_id: binary(),
           mission_model_content_sha256: binary(),
           runtime_plans: %{required(atom()) => RuntimePlan.t()},
-          source_runtime_bases: map() | nil,
+          source_runtime_bases: SourceRuntimeBases.t() | nil,
           runtime_basis_sha256: binary(),
           activated_at: DateTime.t(),
           metadata: map()
@@ -117,7 +118,7 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
         affinity: :source_endpoint,
         value: id
       }) do
-    case Map.fetch(spec.source_runtime_bases, id) do
+    case SourceRuntimeBases.fetch(spec.source_runtime_bases, id) do
       {:ok, basis} ->
         {:ok,
          %{
@@ -134,17 +135,15 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
 
   def for_partition(%__MODULE__{}, _), do: {:error, :spacecraft_model_partition_required}
 
-  @doc "Restores sharing of identical source models after an OTP message copies a fleet specification."
-  def share_source_models(%__MODULE__{source_runtime_bases: nil} = spec), do: spec
+  @doc "Normalizes legacy specifications before they cross a process boundary."
+  def compact_source_models(%__MODULE__{source_runtime_bases: nil} = spec), do: spec
 
-  def share_source_models(%__MODULE__{} = spec) do
-    {sources, _models} =
-      Enum.reduce(spec.source_runtime_bases, {%{}, %{}}, fn {source, basis}, {sources, models} ->
-        shared_basis = Map.get(models, basis, basis)
-        {Map.put(sources, source, shared_basis), Map.put_new(models, basis, shared_basis)}
-      end)
+  def compact_source_models(%__MODULE__{source_runtime_bases: %SourceRuntimeBases{}} = spec),
+    do: spec
 
-    %{spec | source_runtime_bases: sources}
+  def compact_source_models(%__MODULE__{} = spec) do
+    {:ok, index} = SourceRuntimeBases.new(spec.source_runtime_bases)
+    %{spec | source_runtime_bases: index}
   end
 
   @doc "Identifies monitoring observations without copying executable plans into every result."
@@ -182,51 +181,41 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
 
       source_bases =
         if selected.source_runtime_bases,
-          do: Map.take(selected.source_runtime_bases, [partition.value])
+          do: SourceRuntimeBases.take(selected.source_runtime_bases, [partition.value])
 
       {:ok, %{selected | binding_set: binding_set, source_runtime_bases: source_bases}}
     end
   end
 
-  defp fetch_source_bases(%{source_runtime_bases: sources})
-       when is_map(sources) and map_size(sources) in 1..1000 do
-    Enum.reduce_while(sources, {:ok, %{}}, fn {source, basis}, {:ok, result} ->
-      with true <- is_binary(source) and byte_size(source) in 1..255 and is_map(basis),
-           {:ok, _model} <- fetch_mission_model(basis) do
-        {:cont,
-         {:ok,
-          Map.put(
-            result,
-            source,
-            Map.take(basis, [
-              :mission_model_revision_id,
-              :mission_model_content_sha256,
-              :runtime_plans
-            ])
-          )}}
-      else
-        _ -> {:halt, {:error, {:invalid_mission_runtime_spec, :source_runtime_bases}}}
-      end
-    end)
+  defp fetch_source_bases(%{source_runtime_bases: sources}) when not is_nil(sources) do
+    with {:ok, index} <- SourceRuntimeBases.new(sources),
+         true <-
+           Enum.all?(index.models, fn {_key, basis} ->
+             match?({:ok, _}, fetch_mission_model(basis))
+           end) do
+      {:ok, index}
+    else
+      _ -> {:error, {:invalid_mission_runtime_spec, :source_runtime_bases}}
+    end
   end
-
-  defp fetch_source_bases(%{source_runtime_bases: sources}) when not is_nil(sources),
-    do: {:error, {:invalid_mission_runtime_spec, :source_runtime_bases}}
 
   defp fetch_source_bases(_), do: {:ok, nil}
 
   defp runtime_basis_sha256(content, model, nil), do: runtime_basis_sha256(content, model)
 
-  defp runtime_basis_sha256(content, _model, sources) do
-    identities =
-      Enum.map(sources, fn {source, basis} ->
-        {source,
+  defp runtime_basis_sha256(content, _model, %SourceRuntimeBases{} = index) do
+    model_hashes =
+      Map.new(index.models, fn {key, basis} ->
+        {key,
          runtime_basis_sha256(content, %{
            revision_id: basis.mission_model_revision_id,
            content_sha256: basis.mission_model_content_sha256,
            plans: basis.runtime_plans
          })}
       end)
+
+    identities =
+      Enum.map(index.sources, fn {source, key} -> {source, Map.fetch!(model_hashes, key)} end)
 
     ContentHash.term_sha256({:spacecraft_models_v1, content, Enum.sort(identities)})
   end

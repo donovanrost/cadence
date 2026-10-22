@@ -3,9 +3,9 @@ title: Cadence Context Dependency Policy
 tags: [developer, architecture, boundaries, xref]
 status: active
 created: 2026-07-18
-updated: 2026-09-10
+updated: 2026-10-20
 owner: Cadence core architecture
-review_by: 2026-10-18
+review_by: 2026-11-20
 ---
 
 # Cadence Context Dependency Policy
@@ -251,9 +251,13 @@ contracts: `Contacts.Scheduler -> Control.Missions` ensures its mission owner
 exists, and `Control.MissionRecovery -> Control.Missions` restores approved active
 missions after restart. Both retain Control-plane authority; other contexts do
 not receive a general composition dependency. Owner: Cadence core architecture.
-Review by: 2026-10-18. Remove each exact entry when its caller is removed or moved
+Review by: 2026-11-20. Remove each exact entry when its caller is removed or moved
 into the mission composition owner. Events cannot replace these calls because
 the caller needs the concrete startup result before continuing.
+
+The 2026-10-20 chaos-lab review confirmed both startup calls still serve this
+purpose and the dependency baseline remains empty. These are node-local startup
+contracts; they do not establish exclusive mission ownership across replicas.
 
 ## Dependency exceptions
 
