@@ -1,5 +1,9 @@
 # Fleet model memory and rolling restart rehearsal — 2026-10-22 UTC
 
+Implemented in commit `6e117a41` on `codex/fleet-model-memory`. The
+[follow-up investigation](runtime-improvement-opportunities-2026-10-22.md) ranks
+the next memory, scale, and ownership changes.
+
 The model-copy amplification is removed from runtime specifications. A fleet now
 stores source-to-model references plus one entry per distinct executable model.
 This remains compact across coordinator calls, replies, and partition handoff;
@@ -117,6 +121,21 @@ a mixed-version upgrade, prove lossless delivery, or certify continuous delivery
 The one-node archive volume also does not establish storage availability after
 node loss. Source reconnection and retained-journal/partition ownership need
 separate work, with the failed evidence retained for comparison.
+
+## State left after the experiment
+
+The traffic generator was manually restarted after the failed rollout, without
+replacing or clearing the database. After diagnostics and the Git commit checks
+finished, `var/chaos/runs/20261022T053823Z-baseline` passed a further 60-second run:
+23 samples, three Ready replicas, zero HTTP/freshness failures, zero reported
+drops, zero semantic regressions, and all 30 retained raw/protocol archive objects
+unchanged and readable on every replica. Artifact collection had no errors.
+The three application replicas remained at zero restarts. This demonstrates a
+healthy manually recovered baseline, not automatic continuity through the fault.
+
+The Git hook also reran the affected suites successfully. Its only source rewrite
+was formatting `dev/reflect_orbital/seed.exs`; application runtime sources stayed
+unchanged from the tested image.
 
 ## Validation
 
