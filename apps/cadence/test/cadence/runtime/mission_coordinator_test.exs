@@ -244,6 +244,135 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
     end
   end
 
+  test "cold recovery and partition queries do not block warm or other cold partitions",
+       %{mission_id: mission_id} do
+    %{coordinator: coordinator, alpha_evidence: alpha_evidence, beta: beta} =
+      recovery_fixture(mission_id)
+
+    gamma = persist_source_endpoint(mission_id, "endpoint-gamma", "sc-gamma", "provider/gamma")
+    gamma_key = partition_key(gamma)
+    handler = gate_recovery(mission_id, beta)
+    snapshot = :gen_server.send_request(coordinator, {:partition_snapshot, beta})
+    assert_receive {:recovery_started, owner}, 1_000
+
+    try do
+      binding = :gen_server.send_request(coordinator, {:binding_set_for_partition, beta})
+      assert {:ok, spec} = GenServer.call(coordinator, :active_spec, 1_000)
+      identity = Runtime.MissionRuntimeSpec.identity(spec)
+      assert {:ok, _} = GenServer.call(coordinator, {:applied_identity, identity}, 1_000)
+      assert {:ok, result} = Cadence.process_telemetry_ingress(alpha_evidence)
+      assert Enum.map(result.outputs, & &1.point_name) == ["HK.counter"]
+      assert {:ok, _} = GenServer.call(coordinator, {:partition_snapshot, gamma_key}, 1_000)
+      assert :timeout = :gen_server.wait_response(snapshot, 0)
+      assert :timeout = :gen_server.wait_response(binding, 0)
+
+      send(owner, :release_recovery)
+      assert {:reply, {:ok, recovered}} = :gen_server.wait_response(snapshot, 1_000)
+      assert recovered.partition_key == Runtime.PartitionKey.identifier(beta)
+      assert {:reply, {:ok, _}} = :gen_server.wait_response(binding, 1_000)
+    after
+      :telemetry.detach(handler)
+      send(owner, :release_recovery)
+    end
+  end
+
+  test "recovery admission is bounded and owner death releases pending callers for retry",
+       %{mission_id: mission_id} do
+    %{coordinator: coordinator, alpha_evidence: evidence, beta: beta} =
+      recovery_fixture(mission_id)
+
+    handler = gate_recovery(mission_id, beta)
+
+    requests =
+      for _ <- 1..32, do: :gen_server.send_request(coordinator, {:partition_snapshot, beta})
+
+    assert_receive {:recovery_started, owner}, 1_000
+
+    try do
+      assert {:error, {:partition_busy, _}} =
+               GenServer.call(coordinator, {:partition_snapshot, beta}, 1_000)
+
+      assert {:ok, _} = Cadence.process_telemetry_ingress(evidence)
+      :telemetry.detach(handler)
+      Process.exit(owner, {:shutdown, :recovery_interrupted})
+
+      for request <- requests do
+        assert {:reply, {:error, {:partition_unavailable, {:shutdown, :recovery_interrupted}}}} =
+                 :gen_server.wait_response(request, 1_000)
+      end
+
+      assert {:ok, _} = GenServer.call(coordinator, {:partition_snapshot, beta}, 1_000)
+      assert {:ok, _} = Cadence.process_telemetry_ingress(evidence)
+    after
+      :telemetry.detach(handler)
+      send(owner, :release_recovery)
+    end
+  end
+
+  test "generation application waits for recovering owners while the coordinator stays responsive",
+       %{mission_id: mission_id} do
+    %{coordinator: coordinator, beta: beta} = recovery_fixture(mission_id)
+    assert {:ok, original} = Runtime.Missions.applied_spec(mission_id)
+    next = %{original | generation: original.generation + 1, activation_id: "next-activation"}
+    handler = gate_recovery(mission_id, beta)
+    snapshot = :gen_server.send_request(coordinator, {:partition_snapshot, beta})
+    assert_receive {:recovery_started, owner}, 1_000
+
+    try do
+      application = :gen_server.send_request(coordinator, {:apply_spec, next})
+      assert {:ok, ^original} = GenServer.call(coordinator, :active_spec, 1_000)
+
+      duplicate =
+        :gen_server.send_request(
+          coordinator,
+          {:applied_identity, Runtime.MissionRuntimeSpec.identity(next)}
+        )
+
+      assert {:error, {:generation_applying, 2}} =
+               GenServer.call(coordinator, {:partition_snapshot, beta}, 1_000)
+
+      assert :timeout = :gen_server.wait_response(application, 0)
+      assert :timeout = :gen_server.wait_response(duplicate, 0)
+      send(owner, :release_recovery)
+      assert {:reply, {:ok, %{generation: 1}}} = :gen_server.wait_response(snapshot, 1_000)
+      assert {:reply, {:ok, observation}} = :gen_server.wait_response(application, 1_000)
+      assert observation.generation == 2
+      assert {:reply, {:ok, ^observation}} = :gen_server.wait_response(duplicate, 1_000)
+      assert {:ok, ^next} = Runtime.Missions.applied_spec(mission_id)
+
+      assert {:ok, %{generation: 2}} =
+               Runtime.MissionCoordinator.partition_snapshot(mission_id, beta)
+    after
+      :telemetry.detach(handler)
+      send(owner, :release_recovery)
+    end
+  end
+
+  test "reconciliation failure retires a partially applied mission instead of acknowledging it",
+       %{mission_id: mission_id} do
+    %{coordinator: coordinator, beta: beta} = recovery_fixture(mission_id)
+    assert {:ok, original} = Runtime.Missions.applied_spec(mission_id)
+    next = %{original | generation: original.generation + 1, activation_id: "next-activation"}
+    handler = gate_recovery(mission_id, beta)
+    _snapshot = :gen_server.send_request(coordinator, {:partition_snapshot, beta})
+    assert_receive {:recovery_started, owner}, 1_000
+
+    try do
+      monitor = Process.monitor(GenServer.whereis(coordinator))
+      application = :gen_server.send_request(coordinator, {:apply_spec, next})
+      assert {:ok, ^original} = GenServer.call(coordinator, :active_spec, 1_000)
+      Process.exit(owner, {:shutdown, :recovery_interrupted})
+
+      assert {:reply, {:error, {:partition_unavailable, {:shutdown, :recovery_interrupted}}}} =
+               :gen_server.wait_response(application, 1_000)
+
+      assert_receive {:DOWN, ^monitor, :process, _, {:partition_reconciliation_failed, _}}, 1_000
+    after
+      :telemetry.detach(handler)
+      send(owner, :release_recovery)
+    end
+  end
+
   test "reassembles TM transfer frames across ingress calls inside the active partition",
        %{mission_id: mission_id} do
     source_endpoint = persist_source_endpoint(mission_id)
@@ -305,6 +434,66 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
 
     assert second_snapshot.tm_packet_buffer_vcid_count == 0
     assert second_snapshot.tm_frame_remainder_bytes == 0
+  end
+
+  defp recovery_fixture(mission_id) do
+    persist_source_endpoint(mission_id)
+    beta = persist_source_endpoint(mission_id, "endpoint-beta", "sc-beta", "provider/beta")
+    binding_set = persisted_binding_set(mission_id, 1, "HK")
+
+    assert {:ok, _} =
+             Cadence.ActivationFixtures.activate_binding_set(
+               mission_id,
+               binding_set.binding_set_id,
+               binding_set.version
+             )
+
+    evidence =
+      RawEvidence.new(%{
+        mission_id: mission_id,
+        source_ref: "provider/station-a",
+        raw: build_space_packet(42, 1, <<0, 7>>)
+      })
+
+    assert {:ok, _} = Cadence.process_telemetry_ingress(evidence)
+
+    %{
+      coordinator: Runtime.MissionRuntime.coordinator_name(mission_id),
+      alpha_evidence: evidence,
+      beta: partition_key(beta)
+    }
+  end
+
+  defp partition_key(endpoint) do
+    %Runtime.PartitionKey{affinity: :source_endpoint, value: endpoint.source_endpoint_id}
+  end
+
+  defp gate_recovery(mission_id, key) do
+    handler = {__MODULE__, make_ref()}
+
+    :ok =
+      :telemetry.attach(
+        handler,
+        [:cadence, :runtime, :partition, :recovery, :start],
+        &__MODULE__.block_recovery/4,
+        {self(), mission_id, Runtime.PartitionKey.identifier(key)}
+      )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+    handler
+  end
+
+  @doc false
+  def block_recovery(_event, _measurements, metadata, {test, mission_id, partition_id}) do
+    if metadata.mission_id == mission_id and metadata.partition_id == partition_id do
+      send(test, {:recovery_started, self()})
+
+      receive do
+        :release_recovery -> :ok
+      after
+        10_000 -> raise "test did not release partition recovery"
+      end
+    end
   end
 
   defp persisted_binding_set(mission_id, version, packet_name) do

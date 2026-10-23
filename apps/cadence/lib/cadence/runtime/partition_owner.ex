@@ -6,6 +6,8 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   use GenServer
 
+  require Logger
+
   alias Cadence.ApplicationDispatch.{
     BindingSet,
     CapabilityInstance,
@@ -143,6 +145,48 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   @impl true
   def init(opts) do
+    if Keyword.get(opts, :defer_init?, false) do
+      # A DynamicSupervisor waits for init/1. Replay belongs to this partition,
+      # after that handshake, so other partitions can start independently.
+      {:ok, %{initialization_options: opts}, {:continue, :initialize}}
+    else
+      initialize(opts)
+    end
+  end
+
+  @impl true
+  def handle_continue(:initialize, %{initialization_options: opts} = initial_state) do
+    metadata = %{
+      mission_id: Keyword.fetch!(opts, :mission_id),
+      partition_id: opts |> Keyword.fetch!(:partition_key) |> PartitionKey.identifier(),
+      generation: Keyword.fetch!(opts, :active_activation).generation
+    }
+
+    started = System.monotonic_time(:millisecond)
+    Logger.info("Partition recovery started", Map.to_list(metadata))
+
+    result =
+      :telemetry.span([:cadence, :runtime, :partition, :recovery], metadata, fn ->
+        result = initialize(opts)
+        {result, Map.put(metadata, :status, elem(result, 0))}
+      end)
+
+    Logger.info(
+      "Partition recovery completed",
+      Map.to_list(metadata) ++
+        [duration_ms: System.monotonic_time(:millisecond) - started, status: elem(result, 0)]
+    )
+
+    case result do
+      {:ok, state} ->
+        {:noreply, state}
+
+      {:stop, reason} ->
+        {:stop, {:shutdown, {:partition_initialization_failed, reason}}, initial_state}
+    end
+  end
+
+  defp initialize(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
     process_namespace = process_namespace(opts)
     partition_key = Keyword.fetch!(opts, :partition_key)

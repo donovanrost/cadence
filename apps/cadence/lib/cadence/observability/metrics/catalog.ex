@@ -74,6 +74,37 @@ defmodule Cadence.Observability.Metrics.Catalog do
   @spec definitions() :: [Definition.t()]
   def definitions do
     [
+      counter(
+        "cadence.runtime.partition.recovery.started",
+        [:cadence, :runtime, :partition, :recovery, :start],
+        fn _measurements, _metadata -> 1 end,
+        "{recovery}",
+        "Partition recovery attempts started after the supervisor handshake.",
+        [],
+        []
+      ),
+      histogram(
+        "cadence.runtime.partition.recovery.duration",
+        [:cadence, :runtime, :partition, :recovery, :stop],
+        :duration,
+        "s",
+        "Duration of partition initialization including semantic replay.",
+        ["outcome"],
+        [0.01, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0],
+        measurement: &native_time_to_seconds/2,
+        tag_values: &recovery_tags/1
+      ),
+      histogram(
+        "cadence.runtime.partition.recovery.duration",
+        [:cadence, :runtime, :partition, :recovery, :exception],
+        :duration,
+        "s",
+        "Duration of partition initialization including semantic replay.",
+        ["outcome"],
+        [0.01, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0],
+        measurement: &native_time_to_seconds/2,
+        tag_values: &recovery_tags/1
+      ),
       histogram(
         "http.server.request.duration",
         [:phoenix, :router_dispatch, :stop],
@@ -1136,6 +1167,10 @@ defmodule Cadence.Observability.Metrics.Catalog do
 
   defp valid_buckets?(%Definition{buckets: []}), do: true
   defp valid_buckets?(%Definition{}), do: false
+
+  defp recovery_tags(%{status: :ok}), do: %{"outcome" => "ok"}
+  defp recovery_tags(%{status: :stop}), do: %{"outcome" => "error"}
+  defp recovery_tags(_metadata), do: %{"outcome" => "exception"}
 
   defp ingress_tags(metadata) do
     %{

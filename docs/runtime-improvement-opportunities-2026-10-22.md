@@ -21,7 +21,33 @@ regressed. A receiving mission coordinator blocked on partition initialization
 while its child replayed semantic history. Prioritize recovery/admission and
 ownership fencing next; the table below retains the original measurements.
 
-## Recommended work order
+## Recovery isolation follow-up — 2026-10-23
+
+The [asynchronous recovery change and rehearsal](chaos-async-recovery-2026-10-23.md)
+remove replay from the coordinator's blocking path. A live coordinator answered
+in 1.866 ms with five partition owners replaying concurrently. Startup and both
+healthy three-replica baselines passed; the extended baseline audited 820 commits
+without regressions. Memory remained below the earlier OOM range.
+
+The subsequent rolling restart still failed: 25/49 freshness violations, maximum
+age 66.86 s, and four durable sequence regressions across three feeds. Those feeds
+then returned `semantic_runtime_replay_diverged`; other partitions kept processing.
+Successful individual recoveries took 17.1–24.6 seconds, exceeding the freshness
+budget even with a responsive coordinator. Six retired streams retained 86,970 B
+past processing checkpoints, including 14,495 B past an archive checkpoint.
+
+The current correctness priority is **ownership epochs, conditional predecessor
+checks, and logical-stream journal handoff**. Existing warm owners must not accept
+work based on stale local state. Then add verified replay checkpoints and bounded
+timer queries, plus backoff/quarantine for deterministic recovery failures. A
+separate sampled one-second coordinator timeout before owners existed showed
+`gen_server.loop_wakeup`; profile that startup/hibernation cost alongside the
+remaining full-specification copies.
+
+All evidence and the failed database were retained. Cadence and synthetic traffic
+were scaled to zero after diagnosis to stop repeated replay of divergent history.
+
+## Original work order and measurements
 
 | Priority | Opportunity | Evidence | Next change and acceptance check |
 | --- | --- | --- | --- |
