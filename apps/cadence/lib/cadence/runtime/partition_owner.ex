@@ -60,7 +60,8 @@ defmodule Cadence.Runtime.PartitionOwner do
           persistence_policy: Persistence.policy(),
           pending_runtime_records: map(),
           async_outputs: [term()],
-          semantic_state: State.t()
+          semantic_state: State.t(),
+          semantic_writer: Cadence.SemanticRuntime.Writer.t() | nil
         }
 
   def start_link(opts) when is_list(opts) do
@@ -216,7 +217,7 @@ defmodule Cadence.Runtime.PartitionOwner do
              clock_mode,
              initial_time
            ),
-         {:ok, semantic_state, semantic_timer_cursors, pending_semantic_timers} <-
+         {:ok, semantic_state, semantic_writer, semantic_timer_cursors, pending_semantic_timers} <-
            recover_semantic_runtime(
              persist_runtime_records?,
              active_activation,
@@ -253,7 +254,8 @@ defmodule Cadence.Runtime.PartitionOwner do
              persist_runtime_records?: persist_runtime_records?,
              pending_runtime_records: pending_runtime_records,
              async_outputs: [],
-             semantic_state: semantic_state
+             semantic_state: semantic_state,
+             semantic_writer: semantic_writer
            }}
 
         {:error, reason} ->
@@ -341,7 +343,8 @@ defmodule Cadence.Runtime.PartitionOwner do
           {:ok, runtime_binding_set, managed_application_states, timer_service, runtime_records} ->
             previous_timer_events = build_timer_cancellation_records(state)
 
-            with {:ok, semantic_state, semantic_timer_cursors, pending_semantic_timers} <-
+            with {:ok, semantic_state, semantic_writer, semantic_timer_cursors,
+                  pending_semantic_timers} <-
                    recover_semantic_runtime(
                      state.persist_runtime_records?,
                      activation,
@@ -380,7 +383,8 @@ defmodule Cadence.Runtime.PartitionOwner do
                    semantic_timers: semantic_timers,
                    pending_runtime_records: pending_runtime_records,
                    async_outputs: [],
-                   semantic_state: semantic_state
+                   semantic_state: semantic_state,
+                   semantic_writer: semantic_writer
                }}
             else
               {:error, reason} ->
@@ -490,58 +494,56 @@ defmodule Cadence.Runtime.PartitionOwner do
     else
       updates = Enum.flat_map(annotated_outputs, &sample_update/1)
 
-      with {:ok, %Result{} = result, semantic_state} <-
-             SemanticRuntime.process(state.semantic_state, updates, plan),
-           {:ok, %Result{} = result, semantic_state} <-
-             commit_semantic_state(state, updates, result, semantic_state) do
-        derived_samples =
-          result.parameter_updates
-          |> Enum.filter(&(&1.producer_kind == :algorithm))
-          |> Enum.map(&derived_sample(&1, activation))
+      case evaluate_semantic_updates(state, updates, plan) do
+        {:ok, %Result{} = result, semantic_state, semantic_writer} ->
+          derived_samples =
+            result.parameter_updates
+            |> Enum.filter(&(&1.producer_kind == :algorithm))
+            |> Enum.map(&derived_sample(&1, activation))
 
-        {:ok, annotated_outputs ++ derived_samples, result,
-         %{state | semantic_state: semantic_state}}
-      else
+          {:ok, annotated_outputs ++ derived_samples, result,
+           %{state | semantic_state: semantic_state, semantic_writer: semantic_writer}}
+
         {:error, reason} ->
           {:error, {:semantic_runtime_failed, reason}}
       end
     end
   end
 
-  defp commit_semantic_state(_state, [], result, semantic_state),
-    do: {:ok, result, semantic_state}
+  defp evaluate_semantic_updates(state, [], _plan),
+    do: {:ok, %Result{}, state.semantic_state, state.semantic_writer}
 
-  defp commit_semantic_state(
-         %{persist_runtime_records?: true} = state,
-         updates,
-         result,
-         semantic_state
-       ) do
-    Store.commit(
+  defp evaluate_semantic_updates(%{persist_runtime_records?: true} = state, updates, plan) do
+    Store.process(
       state.active_activation,
       state.partition_key,
+      state.semantic_writer,
+      state.semantic_state,
       updates,
-      result,
-      semantic_state
+      plan
     )
   end
 
-  defp commit_semantic_state(_state, _updates, result, semantic_state),
-    do: {:ok, result, semantic_state}
+  defp evaluate_semantic_updates(state, updates, plan) do
+    with {:ok, result, semantic_state} <-
+           SemanticRuntime.process(state.semantic_state, updates, plan) do
+      {:ok, result, semantic_state, nil}
+    end
+  end
 
   defp recover_semantic_runtime(false, _activation, _partition_key),
-    do: {:ok, SemanticRuntime.new(), %{}, []}
+    do: {:ok, SemanticRuntime.new(), nil, %{}, []}
 
   defp recover_semantic_runtime(true, activation, partition_key) do
     plan = PlanDecoder.decode(activation.runtime_plans)
 
     if plan.algorithms == [] and plan.monitoring == [] do
-      {:ok, SemanticRuntime.new(), %{}, []}
+      {:ok, SemanticRuntime.new(), nil, %{}, []}
     else
-      with {:ok, semantic_state} <- Store.recover(activation, partition_key, plan),
+      with {:ok, semantic_state, writer} <- Store.recover_writer(activation, partition_key, plan),
            {:ok, cursors} <- Store.timer_cursors(activation, partition_key),
            {:ok, pending_timers} <- Store.pending_timer_results(activation, partition_key) do
-        {:ok, semantic_state, cursors, pending_timers}
+        {:ok, semantic_state, writer, cursors, pending_timers}
       end
     end
   end
@@ -745,7 +747,7 @@ defmodule Cadence.Runtime.PartitionOwner do
         scoped -> scoped
       end
 
-    with {:ok, result, semantic_state} <-
+    with {:ok, result, semantic_state, semantic_writer} <-
            evaluate_semantic_timer_scopes(scopes, entry, plan, state, %Result{}),
          derived_samples <-
            result.parameter_updates
@@ -760,6 +762,7 @@ defmodule Cadence.Runtime.PartitionOwner do
       {:ok,
        state
        |> Map.put(:semantic_state, semantic_state)
+       |> Map.put(:semantic_writer, semantic_writer)
        |> Map.put(
          :semantic_timers,
          Map.put(state.semantic_timers, entry.timer_key, next_entry)
@@ -769,52 +772,46 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   defp evaluate_semantic_timer_scopes(scopes, entry, plan, state, result) do
-    Enum.reduce_while(scopes, {:ok, result, state.semantic_state}, fn scope,
-                                                                      {:ok, acc, semantic_state} ->
-      with {:ok, scoped_result, next_semantic_state} <-
-             SemanticRuntime.timer(
-               semantic_state,
-               scope,
-               entry.algorithm_id,
-               entry.due_at,
-               plan
-             ),
-           {:ok, scoped_result, next_semantic_state} <-
-             commit_semantic_timer(
-               state,
-               scope,
-               entry,
-               scoped_result,
-               next_semantic_state
-             ) do
-        {:cont, {:ok, merge_semantic_results(acc, scoped_result), next_semantic_state}}
-      else
-        {:error, reason} -> {:halt, {:error, {:semantic_runtime_timer_failed, reason}}}
-      end
-    end)
-  end
+    Enum.reduce_while(
+      scopes,
+      {:ok, result, state.semantic_state, state.semantic_writer},
+      fn scope, {:ok, acc, semantic_state, writer} ->
+        current = %{state | semantic_state: semantic_state, semantic_writer: writer}
 
-  defp commit_semantic_timer(
-         %{persist_runtime_records?: true} = state,
-         scope,
-         entry,
-         result,
-         semantic_state
-       ) do
-    Store.commit_timer(
-      state.active_activation,
-      state.partition_key,
-      scope,
-      entry.algorithm_id,
-      entry.due_at,
-      entry.timer_key,
-      result,
-      semantic_state
+        case evaluate_semantic_timer(current, scope, entry, plan) do
+          {:ok, result, next_state, next_writer} ->
+            {:cont, {:ok, merge_semantic_results(acc, result), next_state, next_writer}}
+
+          {:error, reason} ->
+            {:halt, {:error, {:semantic_runtime_timer_failed, reason}}}
+        end
+      end
     )
   end
 
-  defp commit_semantic_timer(_state, _scope, _entry, result, semantic_state),
-    do: {:ok, result, semantic_state}
+  defp evaluate_semantic_timer(%{persist_runtime_records?: true} = state, scope, entry, plan) do
+    Store.timer(
+      state.active_activation,
+      state.partition_key,
+      state.semantic_writer,
+      state.semantic_state,
+      {scope, entry.algorithm_id, entry.due_at, entry.timer_key},
+      plan
+    )
+  end
+
+  defp evaluate_semantic_timer(state, scope, entry, plan) do
+    with {:ok, result, semantic_state} <-
+           SemanticRuntime.timer(
+             state.semantic_state,
+             scope,
+             entry.algorithm_id,
+             entry.due_at,
+             plan
+           ) do
+      {:ok, result, semantic_state, nil}
+    end
+  end
 
   defp maybe_persist_semantic_timer(
          %{persist_runtime_records?: true} = state,

@@ -6,11 +6,13 @@ defmodule Cadence.SemanticRuntimeStoreTest do
   alias Cadence.Runtime.{MissionRuntimeSpec, PartitionKey}
   alias Cadence.SemanticRuntime
   alias Cadence.SemanticRuntime.{PlanDecoder, Scope, State, Store, Update}
+  alias Ecto.Adapters.SQL.Sandbox
 
   test "commits idempotently and reconstructs state from ordered durable inputs" do
     {runtime_spec, input_id} = runtime_spec()
     partition_key = PartitionKey.new(%{affinity: :source_endpoint, value: "pobc"})
     plan = PlanDecoder.decode(runtime_spec.runtime_plans)
+    assert {:ok, %State{}, writer} = Store.recover_writer(runtime_spec, partition_key, plan)
     at = ~U[2026-08-12 12:00:00Z]
 
     first = update("update:1", input_id, 10, at)
@@ -19,17 +21,28 @@ defmodule Cadence.SemanticRuntimeStoreTest do
     assert {:ok, first_result, first_state} =
              SemanticRuntime.process(%State{}, [first], plan)
 
-    assert {:ok, ^first_result, ^first_state} =
-             Store.commit(runtime_spec, partition_key, [first], first_result, first_state)
+    assert {:ok, ^first_result, ^first_state, writer} =
+             Store.commit(runtime_spec, partition_key, writer, [first], first_result, first_state)
 
-    assert {:ok, ^first_result, ^first_state} =
-             Store.commit(runtime_spec, partition_key, [first], first_result, first_state)
+    assert {:ok, ^first_result, ^first_state, writer} =
+             Store.commit(runtime_spec, partition_key, writer, [first], first_result, first_state)
 
     assert {:ok, second_result, second_state} =
              SemanticRuntime.process(first_state, [second], plan)
 
-    assert {:ok, ^second_result, ^second_state} =
-             Store.commit(runtime_spec, partition_key, [second], second_result, second_state)
+    assert {:ok, ^second_result, ^second_state, writer} =
+             Store.commit(
+               runtime_spec,
+               partition_key,
+               writer,
+               [second],
+               second_result,
+               second_state
+             )
+
+    # Retrying an older input must preserve the latest state and durable head.
+    assert {:ok, ^first_result, ^second_state, ^writer} =
+             Store.commit(runtime_spec, partition_key, writer, [first], first_result, first_state)
 
     assert {:ok, ^second_state} = Store.recover(runtime_spec, partition_key, plan)
   end
@@ -38,10 +51,13 @@ defmodule Cadence.SemanticRuntimeStoreTest do
     {runtime_spec, input_id} = runtime_spec()
     partition_key = PartitionKey.new(%{affinity: :source_endpoint, value: "pobc-timer"})
     plan = PlanDecoder.decode(runtime_spec.runtime_plans)
+    assert {:ok, %State{}, writer} = Store.recover_writer(runtime_spec, partition_key, plan)
     at = ~U[2026-08-12 12:00:00Z]
     input = update("update:timer", input_id, 10, at)
 
-    assert {:ok, _result, state} = SemanticRuntime.process(%State{}, [input], plan)
+    assert {:ok, _, state, writer} =
+             Store.process(runtime_spec, partition_key, writer, %State{}, [input], plan)
+
     algorithm_id = plan.algorithms |> hd() |> Map.fetch!(:algorithm_id)
     timer_at = DateTime.add(at, 5, :second)
 
@@ -54,14 +70,13 @@ defmodule Cadence.SemanticRuntimeStoreTest do
                plan
              )
 
-    assert {:ok, ^timer_result, ^timer_state} =
+    assert {:ok, ^timer_result, ^timer_state, _writer} =
              Store.commit_timer(
                runtime_spec,
                partition_key,
-               Scope.new("semantic-store-mission", "spacecraft-a"),
-               algorithm_id,
-               timer_at,
-               "periodic:" <> algorithm_id,
+               writer,
+               {Scope.new("semantic-store-mission", "spacecraft-a"), algorithm_id, timer_at,
+                "periodic:" <> algorithm_id},
                timer_result,
                timer_state
              )
@@ -85,17 +100,18 @@ defmodule Cadence.SemanticRuntimeStoreTest do
     {runtime_spec, input_id} = runtime_spec()
     partition_key = PartitionKey.new(%{affinity: :source_endpoint, value: "paged-recovery"})
     plan = PlanDecoder.decode(runtime_spec.runtime_plans)
+    assert {:ok, %State{}, writer} = Store.recover_writer(runtime_spec, partition_key, plan)
     at = ~U[2026-08-12 12:00:00Z]
 
-    final_state =
-      Enum.reduce(1..205, %State{}, fn index, state ->
+    {final_state, _writer} =
+      Enum.reduce(1..205, {%State{}, writer}, fn index, {state, writer} ->
         input = update("paged:#{index}", input_id, index, DateTime.add(at, index, :second))
         assert {:ok, result, next_state} = SemanticRuntime.process(state, [input], plan)
 
-        assert {:ok, ^result, ^next_state} =
-                 Store.commit(runtime_spec, partition_key, [input], result, next_state)
+        assert {:ok, ^result, ^next_state, writer} =
+                 Store.commit(runtime_spec, partition_key, writer, [input], result, next_state)
 
-        next_state
+        {next_state, writer}
       end)
 
     assert {:ok, ^final_state} = Store.recover(runtime_spec, partition_key, plan)
@@ -116,6 +132,224 @@ defmodule Cadence.SemanticRuntimeStoreTest do
              Store.recover(runtime_spec, partition_key, plan)
 
     assert commit_id == last.commit_id
+  end
+
+  test "an old epoch cannot append even at the same predecessor, and recovers before retrying" do
+    {spec, input_id} = runtime_spec()
+    key = PartitionKey.new(%{affinity: :source_endpoint, value: "fenced"})
+    plan = PlanDecoder.decode(spec.runtime_plans)
+    assert {:ok, empty, old_writer} = Store.recover_writer(spec, key, plan)
+    assert {:ok, ^empty, writer} = Store.recover_writer(spec, key, plan)
+    input = update("fenced:1", input_id, 10, ~U[2026-08-12 12:00:00Z])
+    assert {:ok, result, state} = SemanticRuntime.process(empty, [input], plan)
+
+    assert {:error, :semantic_runtime_fenced} =
+             Store.commit(spec, key, old_writer, [input], result, state)
+
+    assert Repo.aggregate(Cadence.SemanticRuntime.CommitRow, :count) == 0
+
+    assert {:ok, ^result, ^state, writer} =
+             Store.commit(spec, key, writer, [input], result, state)
+
+    second = update("fenced:2", input_id, 15, ~U[2026-08-12 12:00:01Z])
+    assert {:ok, expected_result, expected_state} = SemanticRuntime.process(state, [second], plan)
+
+    assert {:ok, ^expected_result, ^expected_state, replacement} =
+             Store.process(spec, key, old_writer, empty, [second], plan)
+
+    assert replacement.epoch > writer.epoch
+    assert {:ok, ^expected_state} = Store.recover(spec, key, plan)
+
+    assert {:error, :semantic_runtime_fenced} =
+             Store.commit(spec, key, writer, [input], result, state)
+  end
+
+  test "a current epoch cannot append from an outdated predecessor, including timers" do
+    {spec, input_id} = runtime_spec()
+    key = PartitionKey.new(%{affinity: :source_endpoint, value: "predecessor"})
+    plan = PlanDecoder.decode(spec.runtime_plans)
+    assert {:ok, empty, writer} = Store.recover_writer(spec, key, plan)
+    input = update("predecessor:1", input_id, 10, ~U[2026-08-12 12:00:00Z])
+
+    assert {:ok, result, state, next_writer} =
+             Store.process(spec, key, writer, empty, [input], plan)
+
+    assert {:error, :semantic_runtime_stale_predecessor} =
+             Store.commit(spec, key, writer, [input], result, state)
+
+    assert {:error, :semantic_runtime_stale_predecessor} =
+             Store.commit_timer(
+               spec,
+               key,
+               writer,
+               {Scope.new(spec.mission_id, nil), "algorithm", ~U[2026-08-12 12:00:05Z], "timer"},
+               result,
+               state
+             )
+
+    assert next_writer.epoch == writer.epoch
+    assert Repo.aggregate(Cadence.SemanticRuntime.CommitRow, :count) == 1
+  end
+
+  test "a fenced timer recovers missing inputs and duplicate timers preserve later state" do
+    {spec, input_id} = runtime_spec()
+    key = PartitionKey.new(%{affinity: :source_endpoint, value: "timer-transfer"})
+    plan = PlanDecoder.decode(spec.runtime_plans)
+    assert {:ok, empty, old_writer} = Store.recover_writer(spec, key, plan)
+    assert {:ok, ^empty, writer} = Store.recover_writer(spec, key, plan)
+    first = update("timer-transfer:1", input_id, 10, ~U[2026-08-12 12:00:00Z])
+    assert {:ok, _, state, _} = Store.process(spec, key, writer, empty, [first], plan)
+    algorithm_id = hd(plan.algorithms).algorithm_id
+    scope = Scope.new(spec.mission_id, "spacecraft-a")
+    at = ~U[2026-08-12 12:00:05Z]
+
+    assert {:ok, expected, expected_state} =
+             SemanticRuntime.timer(state, scope, algorithm_id, at, plan)
+
+    assert {:ok, ^expected, ^expected_state, timer_writer} =
+             Store.timer(spec, key, old_writer, empty, {scope, algorithm_id, at, "timer"}, plan)
+
+    second = update("timer-transfer:2", input_id, 15, ~U[2026-08-12 12:00:06Z])
+
+    assert {:ok, _, latest, latest_writer} =
+             Store.process(spec, key, timer_writer, expected_state, [second], plan)
+
+    assert {:ok, ^expected, ^latest, ^latest_writer} =
+             Store.timer(
+               spec,
+               key,
+               latest_writer,
+               latest,
+               {scope, algorithm_id, at, "timer"},
+               plan
+             )
+
+    assert {:ok, ^latest} = Store.recover(spec, key, plan)
+  end
+
+  test "ownership tokens cannot cross partitions with coincident epochs and empty heads" do
+    {spec, input_id} = runtime_spec()
+    first = PartitionKey.new(%{affinity: :source_endpoint, value: "first"})
+    second = PartitionKey.new(%{affinity: :source_endpoint, value: "second"})
+    plan = PlanDecoder.decode(spec.runtime_plans)
+    assert {:ok, empty, first_writer} = Store.recover_writer(spec, first, plan)
+    assert {:ok, ^empty, second_writer} = Store.recover_writer(spec, second, plan)
+    assert first_writer.epoch == second_writer.epoch
+    input = update("cross-partition", input_id, 10, ~U[2026-08-12 12:00:00Z])
+    assert {:ok, result, state} = SemanticRuntime.process(empty, [input], plan)
+
+    assert {:error, :semantic_runtime_fenced} =
+             Store.commit(spec, second, first_writer, [input], result, state)
+
+    assert Repo.aggregate(Cadence.SemanticRuntime.CommitRow, :count) == 0
+  end
+
+  test "a newer generation fences an old basis and cannot be claimed by an old generation" do
+    {spec, _} = runtime_spec()
+    key = PartitionKey.new(%{affinity: :source_endpoint, value: "generation"})
+    plan = PlanDecoder.decode(spec.runtime_plans)
+    assert {:ok, _, writer} = Store.recover_writer(spec, key, plan)
+    next = %{spec | generation: spec.generation + 1, runtime_basis_sha256: "new-basis"}
+    assert {:ok, %State{}, next_writer} = Store.recover_writer(next, key, plan)
+    assert next_writer.epoch > writer.epoch
+    assert {:error, :semantic_runtime_stale_generation} = Store.recover_writer(spec, key, plan)
+
+    assert {:error, :semantic_runtime_generation_conflict} =
+             Store.recover_writer(%{next | runtime_basis_sha256: "conflicting-basis"}, key, plan)
+  end
+
+  test "the database rejects legacy inserts that omit ownership, even outside Store" do
+    {spec, input_id} = runtime_spec()
+    key = PartitionKey.new(%{affinity: :source_endpoint, value: "legacy"})
+    plan = PlanDecoder.decode(spec.runtime_plans)
+    assert {:ok, empty, writer} = Store.recover_writer(spec, key, plan)
+    input = update("legacy:1", input_id, 10, ~U[2026-08-12 12:00:00Z])
+    assert {:ok, _, _, _} = Store.process(spec, key, writer, empty, [input], plan)
+    row = Repo.one!(Cadence.SemanticRuntime.CommitRow)
+
+    legacy = %{
+      row
+      | commit_sequence: nil,
+        commit_id: "legacy-write",
+        ownership_epoch: nil,
+        predecessor_sequence: nil
+    }
+
+    assert_raise Ecto.ConstraintError, ~r/semantic_runtime_writer_fence/, fn ->
+      Repo.insert!(Ecto.put_meta(legacy, state: :built), mode: :savepoint)
+    end
+
+    assert Repo.aggregate(Cadence.SemanticRuntime.CommitRow, :count) == 1
+  end
+
+  test "concurrent database transactions can append only one successor to a head" do
+    {spec, input_id} = runtime_spec()
+
+    key =
+      PartitionKey.new(%{
+        affinity: :source_endpoint,
+        value: "concurrent-#{System.unique_integer([:positive])}"
+      })
+
+    plan = PlanDecoder.decode(spec.runtime_plans)
+    sandbox = Sandbox
+
+    on_exit(fn ->
+      sandbox.unboxed_run(Repo, fn ->
+        id = PartitionKey.identifier(key)
+
+        Repo.delete_all(
+          from(row in Cadence.SemanticRuntime.CommitRow, where: row.partition_id == ^id)
+        )
+
+        Repo.delete_all(
+          from(row in Cadence.SemanticRuntime.HeadRow, where: row.partition_id == ^id)
+        )
+      end)
+    end)
+
+    {:ok, empty, writer} =
+      independent(fn -> Store.recover_writer(spec, key, plan) end) |> Task.await()
+
+    parent = self()
+
+    tasks =
+      for index <- 1..2 do
+        Task.async(fn ->
+          sandbox.unboxed_run(Repo, fn ->
+            input = update("concurrent:#{index}", input_id, index, ~U[2026-08-12 12:00:00Z])
+            {:ok, result, state} = SemanticRuntime.process(empty, [input], plan)
+            send(parent, {:ready, self()})
+
+            receive do
+              :commit -> Store.commit(spec, key, writer, [input], result, state)
+            after
+              5_000 -> raise "commit barrier not released"
+            end
+          end)
+        end)
+      end
+
+    ready =
+      for _ <- tasks do
+        assert_receive {:ready, pid}
+        pid
+      end
+
+    Enum.each(ready, &send(&1, :commit))
+
+    outcomes = Enum.map(tasks, &Task.await/1)
+    assert Enum.count(outcomes, &match?({:ok, _, _, _}, &1)) == 1, inspect(outcomes)
+    assert Enum.count(outcomes, &match?({:error, :semantic_runtime_stale_predecessor}, &1)) == 1
+
+    assert {:ok, %State{sequence: sequence}} =
+             independent(fn -> Store.recover(spec, key, plan) end) |> Task.await()
+
+    assert sequence > 0
+  end
+
+  defp independent(operation) do
+    Task.async(fn -> Sandbox.unboxed_run(Repo, operation) end)
   end
 
   defp runtime_spec do

@@ -144,6 +144,44 @@ defmodule Cadence.Observability.Metrics.ReporterTest do
     assert Enum.sort(outcomes) == ["error", "exception", "ok"]
   end
 
+  test "ownership events export bounded outcomes without partition or epoch labels", %{
+    handler_id: id
+  } do
+    parent = self()
+    name = "cadence.runtime.partition.ownership"
+
+    {:ok, reporter} =
+      start_supervised(
+        {Reporter,
+         endpoint: "http://collector.invalid/v1/metrics",
+         definitions: Enum.filter(Catalog.definitions(), &(&1.name == name)),
+         export_interval_ms: 60_000,
+         export_fun: fn payload ->
+           send(parent, {:metric_payload, payload})
+           :ok
+         end,
+         handler_id: id,
+         name: nil}
+      )
+
+    for outcome <- [:acquired, :semantic_runtime_fenced, :semantic_runtime_stale_predecessor] do
+      :telemetry.execute([:cadence, :runtime, :partition, :ownership], %{count: 1}, %{
+        outcome: outcome,
+        partition_id: "unbounded",
+        ownership_epoch: 123
+      })
+    end
+
+    assert :ok = Reporter.flush(reporter)
+    assert_receive {:metric_payload, payload}
+    assert [%{data: {:sum, %{data_points: points}}}] = decode_metrics(payload)
+    assert length(points) == 3
+
+    assert Enum.all?(points, fn point ->
+             match?({:as_int, 1}, point.value) and match?([%{key: "outcome"}], point.attributes)
+           end)
+  end
+
   test "retains points after export failure and bounds series cardinality", %{
     handler_id: handler_id
   } do

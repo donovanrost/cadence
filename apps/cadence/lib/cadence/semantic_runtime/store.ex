@@ -3,66 +3,219 @@ defmodule Cadence.SemanticRuntime.Store do
 
   import Ecto.Query
 
+  require Logger
+
   alias Cadence.Platform.ContentHash
   alias Cadence.Repo
   alias Cadence.Runtime.{MissionRuntimeSpec, PartitionKey}
   alias Cadence.SemanticRuntime
-  alias Cadence.SemanticRuntime.{CommitRow, Result, State, Update}
+  alias Cadence.SemanticRuntime.{CommitRow, HeadRow, Result, State, Writer}
 
-  @conflict_target [
-    :organization_scope_id,
-    :mission_id,
-    :partition_id,
-    :runtime_basis_sha256,
-    :commit_id
-  ]
-
-  @spec commit(
-          MissionRuntimeSpec.t(),
-          PartitionKey.t(),
-          [Update.t()],
-          Result.t(),
-          State.t()
-        ) :: {:ok, Result.t(), State.t()} | {:error, term()}
+  @doc "Commits only if this ownership epoch still holds the exact recovered predecessor."
   def commit(
-        %MissionRuntimeSpec{} = spec,
-        %PartitionKey{} = partition_key,
+        spec,
+        partition_key,
+        %Writer{} = writer,
         updates,
         %Result{} = result,
         %State{} = state
       )
       when is_list(updates) do
-    input = {:updates, updates}
-    commit_input(spec, partition_key, input, result, state)
+    commit_input(spec, partition_key, writer, {:updates, updates}, result, state)
   end
 
-  @spec commit_timer(
-          MissionRuntimeSpec.t(),
-          PartitionKey.t(),
-          term(),
-          binary(),
-          DateTime.t(),
-          binary(),
-          Result.t(),
-          State.t()
-        ) :: {:ok, Result.t(), State.t()} | {:error, term()}
   def commit_timer(
-        %MissionRuntimeSpec{} = spec,
-        %PartitionKey{} = partition_key,
-        scope,
-        algorithm_id,
-        %DateTime{} = at,
-        timer_key,
+        spec,
+        partition_key,
+        %Writer{} = writer,
+        {scope, algorithm_id, %DateTime{} = at, timer_key},
         %Result{} = result,
         %State{} = state
       ) do
-    input = {:timer, scope, algorithm_id, at, timer_key}
-    commit_input(spec, partition_key, input, result, state)
+    commit_input(
+      spec,
+      partition_key,
+      writer,
+      {:timer, scope, algorithm_id, at, timer_key},
+      result,
+      state
+    )
   end
 
-  defp commit_input(spec, partition_key, input, result, state) do
+  @doc "Fences previous writers, then replays a bounded durable prefix outside the ownership lock."
+  def recover_writer(spec, partition_key, plan) do
+    with {:ok, writer} <- acquire(spec, partition_key),
+         {:ok, state} <- recover_to(spec, partition_key, plan, writer.commit_sequence) do
+      {:ok, state, writer}
+    end
+  end
+
+  @doc "Evaluates and conditionally commits, recovering a missing suffix on ownership contention."
+  def process(spec, key, writer, state, updates, plan) do
+    evaluate(spec, key, writer, state, {:updates, updates}, plan, 2)
+  end
+
+  def timer(spec, key, writer, state, {scope, algorithm_id, at, timer_key}, plan) do
+    evaluate(spec, key, writer, state, {:timer, scope, algorithm_id, at, timer_key}, plan, 2)
+  end
+
+  defp evaluate(spec, key, writer, state, input, plan, retries) do
+    with {:ok, result, next_state} <- replay(input, state, plan) do
+      spec
+      |> commit_input(key, writer, input, result, next_state)
+      |> maybe_retry(spec, key, writer, state, input, plan, retries)
+    end
+  end
+
+  defp maybe_retry({:error, reason}, spec, key, writer, state, input, plan, retries)
+       when reason in [:semantic_runtime_fenced, :semantic_runtime_stale_predecessor] and
+              retries > 0 do
+    with {:ok, next_writer} <- acquire(spec, key),
+         {:ok, recovered} <- recover_suffix(spec, key, plan, state, writer, next_writer) do
+      evaluate(spec, key, next_writer, recovered, input, plan, retries - 1)
+    end
+  end
+
+  defp maybe_retry(result, _spec, _key, _writer, _state, _input, _plan, _retries), do: result
+
+  defp recover_suffix(
+         spec,
+         key,
+         plan,
+         state,
+         %Writer{identity: identity} = writer,
+         %Writer{identity: identity} = next_writer
+       ) do
+    query =
+      commits(spec, key)
+      |> where([row], row.commit_sequence > ^writer.commit_sequence)
+      |> where([row], row.commit_sequence <= ^next_writer.commit_sequence)
+      |> order_by([row], asc: row.commit_sequence)
+
+    case Repo.transaction(fn -> recover_rows(query, plan, state) end, timeout: :infinity) do
+      {:ok, result} -> result
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp recover_suffix(_spec, _key, _plan, _state, _writer, _next_writer),
+    do: {:error, :semantic_runtime_fenced}
+
+  defp acquire(spec, partition_key) do
+    result =
+      Repo.transaction(fn ->
+        identity = %{
+          organization_scope_id: organization_scope(spec.organization_id),
+          mission_id: spec.mission_id,
+          partition_id: PartitionKey.identifier(partition_key)
+        }
+
+        Repo.insert!(
+          struct!(
+            HeadRow,
+            Map.merge(identity, %{
+              runtime_basis_sha256: spec.runtime_basis_sha256,
+              generation: spec.generation
+            })
+          ),
+          on_conflict: :nothing
+        )
+
+        head = lock_head(spec, partition_key)
+        validate_generation!(head, spec)
+
+        sequence =
+          commits(spec, partition_key)
+          |> select([row], max(row.commit_sequence))
+          |> Repo.one() || 0
+
+        head =
+          head
+          |> Ecto.Changeset.change(
+            ownership_epoch: head.ownership_epoch + 1,
+            commit_sequence: sequence,
+            runtime_basis_sha256: spec.runtime_basis_sha256,
+            generation: spec.generation
+          )
+          |> Repo.update!()
+
+        %Writer{
+          epoch: head.ownership_epoch,
+          commit_sequence: head.commit_sequence,
+          identity: writer_identity(spec, partition_key)
+        }
+      end)
+
+    case result do
+      {:ok, writer} ->
+        emit(:acquired, spec, partition_key, writer)
+        {:ok, writer}
+
+      error ->
+        error
+    end
+  end
+
+  defp validate_generation!(head, spec) do
+    cond do
+      head.generation > spec.generation ->
+        Repo.rollback(:semantic_runtime_stale_generation)
+
+      head.generation == spec.generation and
+          head.runtime_basis_sha256 != spec.runtime_basis_sha256 ->
+        Repo.rollback(:semantic_runtime_generation_conflict)
+
+      true ->
+        :ok
+    end
+  end
+
+  defp commit_input(spec, partition_key, writer, input, result, state) do
     commit_id = commit_id(spec, partition_key, input)
 
+    outcome =
+      Repo.transaction(fn ->
+        head = lock_head(spec, partition_key)
+        validate_writer!(head, spec, partition_key, writer)
+
+        existing =
+          commits(spec, partition_key) |> where([row], row.commit_id == ^commit_id) |> Repo.one()
+
+        case existing do
+          nil -> insert_commit(spec, partition_key, writer, commit_id, input, result, state)
+          row -> existing_commit(row, head, spec, partition_key, input, writer)
+        end
+      end)
+
+    case outcome do
+      {:ok, response} ->
+        response
+
+      {:error, reason} ->
+        emit(reason, spec, partition_key, writer)
+        {:error, reason}
+    end
+  end
+
+  defp validate_writer!(nil, _spec, _key, _writer), do: Repo.rollback(:semantic_runtime_fenced)
+
+  defp validate_writer!(head, spec, partition_key, writer) do
+    cond do
+      writer.identity != writer_identity(spec, partition_key) or
+        head.ownership_epoch != writer.epoch or
+        head.runtime_basis_sha256 != spec.runtime_basis_sha256 or
+          head.generation != spec.generation ->
+        Repo.rollback(:semantic_runtime_fenced)
+
+      head.commit_sequence != writer.commit_sequence ->
+        Repo.rollback(:semantic_runtime_stale_predecessor)
+
+      true ->
+        :ok
+    end
+  end
+
+  defp insert_commit(spec, partition_key, writer, commit_id, input, result, state) do
     attrs = %{
       commit_id: commit_id,
       organization_id: spec.organization_id,
@@ -70,38 +223,88 @@ defmodule Cadence.SemanticRuntime.Store do
       partition_id: PartitionKey.identifier(partition_key),
       mission_model_revision_id: spec.mission_model_revision_id,
       runtime_basis_sha256: spec.runtime_basis_sha256,
+      ownership_epoch: writer.epoch,
+      predecessor_sequence: writer.commit_sequence,
       input_term: encode(input),
       result_term: encode(result),
       state_term: encode(state)
     }
 
-    case Repo.insert(CommitRow.changeset(attrs),
-           on_conflict: :nothing,
-           conflict_target: @conflict_target,
-           returning: true
-         ) do
-      {:ok, %CommitRow{commit_sequence: sequence}} when is_integer(sequence) ->
-        {:ok, result, state}
-
-      {:ok, %CommitRow{}} ->
-        fetch_existing(spec, partition_key, commit_id, input)
-
-      {:error, reason} ->
-        {:error, reason}
+    case Repo.insert(CommitRow.changeset(attrs)) do
+      {:ok, row} -> {:ok, result, state, %{writer | commit_sequence: row.commit_sequence}}
+      {:error, reason} -> Repo.rollback(reason)
     end
+  end
+
+  # A retried old input still returns its original result, but NEVER its historical state.
+  # The current head and ownership remain unchanged, including for multi-scope timer retries.
+  defp existing_commit(row, head, spec, partition_key, input, writer) do
+    latest =
+      commits(spec, partition_key)
+      |> where([row], row.commit_sequence == ^head.commit_sequence)
+      |> Repo.one!()
+
+    with {:ok, ^input} <- decode(row.input_term),
+         {:ok, %Result{} = result} <- decode(row.result_term),
+         {:ok, %State{} = state} <- decode(latest.state_term) do
+      {:ok, result, state, writer}
+    else
+      _other -> Repo.rollback(:semantic_runtime_commit_conflict)
+    end
+  end
+
+  defp writer_identity(spec, partition_key),
+    do:
+      {organization_scope(spec.organization_id), spec.mission_id,
+       PartitionKey.identifier(partition_key), spec.runtime_basis_sha256, spec.generation}
+
+  defp lock_head(spec, partition_key) do
+    HeadRow
+    |> where([row], row.organization_scope_id == ^organization_scope(spec.organization_id))
+    |> where([row], row.mission_id == ^spec.mission_id)
+    |> where([row], row.partition_id == ^PartitionKey.identifier(partition_key))
+    |> lock("FOR UPDATE")
+    |> Repo.one()
+  end
+
+  defp commits(spec, partition_key) do
+    CommitRow
+    |> where([row], row.organization_scope_id == ^organization_scope(spec.organization_id))
+    |> where([row], row.mission_id == ^spec.mission_id)
+    |> where([row], row.partition_id == ^PartitionKey.identifier(partition_key))
+    |> where([row], row.runtime_basis_sha256 == ^spec.runtime_basis_sha256)
+  end
+
+  defp emit(outcome, spec, partition_key, writer) do
+    metadata = %{
+      mission_id: spec.mission_id,
+      partition_id: PartitionKey.identifier(partition_key),
+      generation: spec.generation,
+      outcome: outcome,
+      ownership_epoch: writer.epoch,
+      commit_sequence: writer.commit_sequence
+    }
+
+    :telemetry.execute([:cadence, :runtime, :partition, :ownership], %{count: 1}, metadata)
+
+    Logger.info(
+      "Semantic runtime ownership #{inspect(outcome)} epoch=#{writer.epoch} predecessor=#{writer.commit_sequence}",
+      Map.to_list(metadata)
+    )
   end
 
   @spec recover(MissionRuntimeSpec.t(), PartitionKey.t(), map()) ::
           {:ok, State.t()} | {:error, term()}
   def recover(%MissionRuntimeSpec{} = spec, %PartitionKey{} = partition_key, plan)
       when is_map(plan) do
+    recover_to(spec, partition_key, plan, nil)
+  end
+
+  defp recover_to(spec, partition_key, plan, sequence) do
+    query = commits(spec, partition_key) |> order_by([row], asc: row.commit_sequence)
+
     query =
-      CommitRow
-      |> where([row], row.organization_scope_id == ^organization_scope(spec.organization_id))
-      |> where([row], row.mission_id == ^spec.mission_id)
-      |> where([row], row.partition_id == ^PartitionKey.identifier(partition_key))
-      |> where([row], row.runtime_basis_sha256 == ^spec.runtime_basis_sha256)
-      |> order_by([row], asc: row.commit_sequence)
+      if is_nil(sequence), do: query, else: where(query, [row], row.commit_sequence <= ^sequence)
 
     # A long rehearsal can retain hundreds of megabytes of compressed states.
     # Keep one consistent ordered cursor without transferring the entire log at once.
@@ -111,10 +314,10 @@ defmodule Cadence.SemanticRuntime.Store do
     end
   end
 
-  defp recover_rows(query, plan) do
+  defp recover_rows(query, plan, initial_state \\ %State{}) do
     query
     |> Repo.stream(max_rows: 100)
-    |> Enum.reduce_while({:ok, %State{}}, fn row, {:ok, state} ->
+    |> Enum.reduce_while({:ok, initial_state}, fn row, {:ok, state} ->
       replay_row(row, state, plan)
     end)
   end
@@ -258,27 +461,6 @@ defmodule Cadence.SemanticRuntime.Store do
 
   defp replay(input, _state, _plan),
     do: {:error, {:semantic_runtime_commit_input_unsupported, input}}
-
-  defp fetch_existing(spec, partition_key, commit_id, input) do
-    row =
-      CommitRow
-      |> where([row], row.organization_scope_id == ^organization_scope(spec.organization_id))
-      |> where([row], row.mission_id == ^spec.mission_id)
-      |> where([row], row.partition_id == ^PartitionKey.identifier(partition_key))
-      |> where([row], row.runtime_basis_sha256 == ^spec.runtime_basis_sha256)
-      |> where([row], row.commit_id == ^commit_id)
-      |> Repo.one()
-
-    with %CommitRow{} <- row,
-         {:ok, ^input} <- decode(row.input_term),
-         {:ok, %Result{} = result} <- decode(row.result_term),
-         {:ok, %State{} = state} <- decode(row.state_term) do
-      {:ok, result, state}
-    else
-      nil -> {:error, :semantic_runtime_commit_not_found}
-      _other -> {:error, :semantic_runtime_commit_conflict}
-    end
-  end
 
   defp verify_replay(row, expected_result, expected_state, actual_result, actual_state) do
     if expected_result == actual_result and expected_state == actual_state do

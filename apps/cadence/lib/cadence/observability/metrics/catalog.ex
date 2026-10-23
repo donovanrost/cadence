@@ -75,6 +75,15 @@ defmodule Cadence.Observability.Metrics.Catalog do
   def definitions do
     [
       counter(
+        "cadence.runtime.partition.ownership",
+        [:cadence, :runtime, :partition, :ownership],
+        :count,
+        "{event}",
+        "Semantic writer acquisitions and rejected conditional commits.",
+        ["outcome"],
+        tag_values: &ownership_tags/1
+      ),
+      counter(
         "cadence.runtime.partition.recovery.started",
         [:cadence, :runtime, :partition, :recovery, :start],
         fn _measurements, _metadata -> 1 end,
@@ -1167,6 +1176,16 @@ defmodule Cadence.Observability.Metrics.Catalog do
 
   defp valid_buckets?(%Definition{buckets: []}), do: true
   defp valid_buckets?(%Definition{}), do: false
+
+  defp ownership_tags(%{outcome: outcome})
+       when outcome in [
+              :acquired,
+              :semantic_runtime_fenced,
+              :semantic_runtime_stale_predecessor
+            ],
+       do: %{"outcome" => Atom.to_string(outcome)}
+
+  defp ownership_tags(_metadata), do: %{"outcome" => "error"}
 
   defp recovery_tags(%{status: :ok}), do: %{"outcome" => "ok"}
   defp recovery_tags(%{status: :stop}), do: %{"outcome" => "error"}

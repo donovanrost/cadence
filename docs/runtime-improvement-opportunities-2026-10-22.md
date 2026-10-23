@@ -47,6 +47,38 @@ remaining full-specification copies.
 All evidence and the failed database were retained. Cadence and synthetic traffic
 were scaled to zero after diagnosis to stop repeated replay of divergent history.
 
+## Ownership fencing follow-up — 2026-10-23
+
+The [ownership fencing change and rehearsal](chaos-ownership-fencing-2026-10-23.md)
+add durable epochs and conditional predecessor checks, with a PostgreSQL insert
+fence. Stale writers recover before recomputing, and duplicate inputs retain the
+current durable state. All ten partitions passed full deterministic replay; the
+final audit covered 2,037 commits with no unfenced writes, broken predecessors,
+regressed epochs, or incorrect heads.
+
+The healthy three-replica baseline passed 68 samples and audited 1,124 commits.
+The subsequent rolling restart retained a valid semantic history (zero
+regressions across 1,707 commits), but failed 32/53 freshness samples, reaching
+63.35 seconds. Individual recoveries took 10.82–34.92 seconds. Feed 2 then retried
+`{:tm, {:unsupported_tm_sdu_kind, :vca_sdu}}` over 11,000 times with a 1,100-byte
+frame remainder. Its semantic state replayed successfully. Investigate framing
+at reconnection and failed-record handling before interpreting this as another
+semantic ownership failure.
+
+Logical-stream journal handoff remains a correctness priority: the retired
+rollout pods retained 333,385 B beyond processing and 72,475 B beyond archive
+checkpoints. Verified replay checkpoints and recovery-aware admission remain
+necessary for the freshness budget. Projection acknowledgements and managed
+capability side effects still need a separate transactional audit.
+
+The rehearsal also exposed a lab capacity issue: retained PVCs occupied 55.6 GiB,
+and disk pressure evicted the entire lab during an earlier extended baseline.
+Unused build cache was reclaimed; no database, archive, journal, or failed run
+was deleted. Recovery and the subsequent passing baseline used the same database.
+Add guest-storage preflight and a retention policy that preserves verified
+recovery points and evidence. Cadence and traffic were stopped after validation
+to halt the protocol retry loop; supporting services and retained data remain.
+
 ## Original work order and measurements
 
 | Priority | Opportunity | Evidence | Next change and acceptance check |

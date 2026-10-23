@@ -19,6 +19,8 @@ defmodule Cadence.SemanticRuntime.CommitRow do
     field(:input_term, :binary)
     field(:result_term, :binary)
     field(:state_term, :binary)
+    field(:ownership_epoch, :integer)
+    field(:predecessor_sequence, :integer)
     field(:projected_at, :utc_datetime_usec)
 
     timestamps()
@@ -33,7 +35,7 @@ defmodule Cadence.SemanticRuntime.CommitRow do
       )
 
     %__MODULE__{}
-    |> cast(attrs, Map.keys(attrs))
+    |> change(attrs)
     |> validate_required(Map.keys(attrs) -- [:organization_id])
     |> unique_constraint(
       [:organization_scope_id, :mission_id, :partition_id, :runtime_basis_sha256, :commit_id],
