@@ -1,6 +1,14 @@
 defmodule CadenceSimulator.SendBuffer do
   @moduledoc """
   Batching buffer that decouples packet generation from network I/O.
+
+  Internally owned TCP sockets observe peer closure and reconnect independently
+  of packet generation. Unsent packets are retained during an outage up to
+  `:max_buffer_bytes` (1 MiB by default); overflow is counted and logged. A failed
+  send has ambiguous delivery, so that batch is counted as dropped, not replayed.
+  Sent counters measure socket acceptance, not application acknowledgement.
+
+  Attached sockets remain owned and monitored by their caller.
   """
 
   use GenServer
@@ -13,7 +21,10 @@ defmodule CadenceSimulator.SendBuffer do
   @default_batch_size 32_768
   @default_batch_size_multiplier 4
   @default_tcp_socket_buffer 1_048_576
-  @default_send_timeout 30_000
+  @default_send_timeout 1_000
+  @default_connect_timeout 1_000
+  @default_reconnect_interval 250
+  @default_max_buffer_bytes 1_048_576
 
   defstruct [
     :output,
@@ -33,6 +44,18 @@ defmodule CadenceSimulator.SendBuffer do
     :packet_loss_rate,
     :latency_ms,
     :jitter_ms,
+    :connect_timeout,
+    :send_timeout,
+    :reconnect_interval,
+    :reconnect_timer_ref,
+    :max_buffer_bytes,
+    connection_stats: %{
+      attempts: 0,
+      connections: 0,
+      disconnects: 0,
+      disconnected_at: nil,
+      last_error: nil
+    },
     buffer: [],
     buffer_bytes: 0,
     packets_buffered: 0,
@@ -124,12 +147,16 @@ defmodule CadenceSimulator.SendBuffer do
       mode: Keyword.get(opts, :mode, :connect),
       coordinator_pid: Keyword.get(opts, :coordinator_pid),
       socket_owner: nil,
+      connect_timeout: Keyword.get(opts, :connect_timeout, @default_connect_timeout),
+      send_timeout: Keyword.get(opts, :send_timeout, @default_send_timeout),
+      reconnect_interval: Keyword.get(opts, :reconnect_interval, @default_reconnect_interval),
+      max_buffer_bytes: Keyword.get(opts, :max_buffer_bytes, @default_max_buffer_bytes),
       packet_loss_rate: Map.get(fault_profile, "packet_loss_rate", 0.0),
       latency_ms: Map.get(fault_profile, "latency_ms", 0),
       jitter_ms: Map.get(fault_profile, "jitter_ms", 0)
     }
 
-    {:ok, connect_output(state)}
+    {:ok, state |> connect_output() |> schedule_reconnect()}
   end
 
   @impl true
@@ -152,7 +179,15 @@ defmodule CadenceSimulator.SendBuffer do
   end
 
   def handle_cast({:attach_socket, socket}, state) do
-    {:noreply, %{state | socket: socket, socket_owner: :external}}
+    close_socket(state)
+
+    new_state =
+      state
+      |> cancel_reconnect_timer()
+      |> Map.merge(%{socket: socket, socket_owner: :external})
+      |> schedule_flush()
+
+    {:noreply, new_state}
   end
 
   def handle_cast(:detach_socket, state) do
@@ -183,6 +218,13 @@ defmodule CadenceSimulator.SendBuffer do
     {:reply,
      %{
        output: format_output(state.output),
+       connected?: state.socket != nil,
+       reconnect_pending?: state.reconnect_timer_ref != nil,
+       connection_attempts: state.connection_stats.attempts,
+       connections: state.connection_stats.connections,
+       disconnects: state.connection_stats.disconnects,
+       last_connection_error: state.connection_stats.last_error,
+       max_buffer_bytes: state.max_buffer_bytes,
        base_batch_timeout: state.base_batch_timeout,
        base_batch_size: state.base_batch_size,
        batch_timeout: state.batch_timeout,
@@ -210,10 +252,50 @@ defmodule CadenceSimulator.SendBuffer do
     {:noreply, new_state}
   end
 
+  def handle_info({:timeout, ref, :reconnect}, %{reconnect_timer_ref: ref} = state) do
+    new_state =
+      %{state | reconnect_timer_ref: nil}
+      |> maybe_refresh_output()
+      |> connect_output()
+      |> schedule_reconnect()
+      |> cancel_flush_timer()
+      |> do_flush(:reconnect)
+      |> maybe_publish_status(state)
+
+    {:noreply, new_state}
+  end
+
+  def handle_info({:tcp, socket, _data}, %{socket: socket, socket_owner: :internal} = state) do
+    # This sender has no inbound protocol, but must rearm after any peer data
+    # so a subsequent FIN/error is still observed without unbounded delivery.
+    case :inet.setopts(socket, active: :once) do
+      :ok -> {:noreply, state}
+      {:error, reason} -> {:noreply, disconnect_output(state, reason)}
+    end
+  end
+
+  def handle_info({:tcp_closed, socket}, %{socket: socket, socket_owner: :internal} = state) do
+    {:noreply, disconnect_output(state, :closed)}
+  end
+
+  def handle_info(
+        {:tcp_error, socket, reason},
+        %{socket: socket, socket_owner: :internal} = state
+      ) do
+    {:noreply, disconnect_output(state, reason)}
+  end
+
+  # Closing/replacing a socket may leave notifications queued for the old one.
+  def handle_info({:tcp, _socket, _data}, state), do: {:noreply, state}
+  def handle_info({:tcp_closed, _socket}, state), do: {:noreply, state}
+  def handle_info({:tcp_error, _socket, _reason}, state), do: {:noreply, state}
+  def handle_info({:timeout, _ref, :reconnect}, state), do: {:noreply, state}
+
   @impl true
   def terminate(_reason, state) do
     state
     |> cancel_flush_timer()
+    |> cancel_reconnect_timer()
     |> do_flush(:manual)
 
     close_socket(state)
@@ -221,6 +303,9 @@ defmodule CadenceSimulator.SendBuffer do
   end
 
   defp do_flush(%{buffer: []} = state, _reason), do: state
+
+  defp do_flush(%{socket: nil, output: {:tcp, _, _}} = state, _reason),
+    do: schedule_reconnect(state)
 
   defp do_flush(state, flush_reason) do
     send_sample? =
@@ -258,11 +343,12 @@ defmodule CadenceSimulator.SendBuffer do
 
       {:error, reason} ->
         Logger.warning(
-          "SendBuffer flush failed: #{inspect(reason)}, dropping #{state.packets_buffered} packets; attempting reconnect"
+          "SendBuffer flush failed for #{format_output(state.output)}: #{inspect(reason)}, " <>
+            "dropping #{state.packets_buffered} packets with uncertain delivery; attempting reconnect"
         )
 
         state
-        |> reconnect_output()
+        |> disconnect_output(reason)
         |> Map.merge(%{
           buffer: [],
           buffer_bytes: 0,
@@ -295,21 +381,47 @@ defmodule CadenceSimulator.SendBuffer do
   defp do_connect_output(%{output: {:tcp, host, port}} = state, allow_refresh?) do
     opts = [
       :binary,
-      active: false,
+      active: :once,
       nodelay: true,
       sndbuf: @default_tcp_socket_buffer,
       recbuf: @default_tcp_socket_buffer,
-      send_timeout: @default_send_timeout
+      send_timeout: state.send_timeout,
+      send_timeout_close: true
     ]
 
-    case :gen_tcp.connect(String.to_charlist(host), port, opts) do
+    state = update_in(state.connection_stats.attempts, &(&1 + 1))
+
+    case :gen_tcp.connect(String.to_charlist(host), port, opts, state.connect_timeout) do
       {:ok, socket} ->
-        %{state | socket: socket, socket_owner: :internal}
+        downtime_ms =
+          if state.connection_stats.disconnected_at,
+            do: System.monotonic_time(:millisecond) - state.connection_stats.disconnected_at,
+            else: 0
+
+        Logger.info(
+          "SendBuffer connected to TCP #{host}:#{port} " <>
+            "attempt=#{state.connection_stats.attempts} downtime_ms=#{downtime_ms} " <>
+            "buffered_packets=#{state.packets_buffered}"
+        )
+
+        %{
+          state
+          | socket: socket,
+            socket_owner: :internal,
+            connection_stats: %{
+              state.connection_stats
+              | connections: state.connection_stats.connections + 1,
+                disconnected_at: nil,
+                last_error: nil
+            }
+        }
 
       {:error, reason} ->
         Logger.warning("SendBuffer failed to connect to TCP #{host}:#{port}: #{inspect(reason)}")
 
-        maybe_refresh_output_and_retry(state, allow_refresh?)
+        state
+        |> record_connection_error(reason)
+        |> maybe_refresh_output_and_retry(allow_refresh?)
     end
   end
 
@@ -330,17 +442,53 @@ defmodule CadenceSimulator.SendBuffer do
 
   defp do_connect_output(state, _allow_refresh?), do: state
 
-  defp reconnect_output(%{mode: :listen} = state), do: %{state | socket: nil}
-  defp reconnect_output(%{socket_owner: :external} = state), do: %{state | socket: nil}
-
-  defp reconnect_output(state) do
+  defp disconnect_output(state, reason) do
     close_socket(state)
 
+    Logger.info("SendBuffer disconnected from #{format_output(state.output)}: #{inspect(reason)}")
+
     state
-    |> Map.put(:socket, nil)
-    |> Map.put(:socket_owner, nil)
-    |> maybe_refresh_output()
-    |> connect_output()
+    |> Map.merge(%{
+      socket: nil,
+      connection_stats: %{
+        state.connection_stats
+        | disconnects: state.connection_stats.disconnects + 1
+      }
+    })
+    |> record_connection_error(reason)
+    |> schedule_reconnect()
+  end
+
+  defp record_connection_error(state, reason) do
+    %{
+      state
+      | connection_stats: %{
+          state.connection_stats
+          | last_error: reason,
+            disconnected_at:
+              state.connection_stats.disconnected_at || System.monotonic_time(:millisecond)
+        }
+    }
+  end
+
+  defp schedule_reconnect(%{mode: :listen} = state), do: state
+  defp schedule_reconnect(%{socket_owner: :external} = state), do: state
+
+  defp schedule_reconnect(%{socket: nil, reconnect_timer_ref: nil, output: output} = state)
+       when not is_nil(output) do
+    %{
+      state
+      | reconnect_timer_ref: :erlang.start_timer(state.reconnect_interval, self(), :reconnect)
+    }
+  end
+
+  defp schedule_reconnect(state), do: state
+
+  defp cancel_reconnect_timer(%{reconnect_timer_ref: nil} = state), do: state
+
+  defp cancel_reconnect_timer(state) do
+    Process.cancel_timer(state.reconnect_timer_ref)
+    %{state | reconnect_timer_ref: nil}
   end
 
   defp close_socket(%{socket: nil}), do: :ok
@@ -361,6 +509,15 @@ defmodule CadenceSimulator.SendBuffer do
   end
 
   defp do_enqueue_packets(state, [], _packet_count, _total_bytes), do: state
+
+  defp do_enqueue_packets(%{socket: nil, output: {:tcp, _, _}} = state, _packets, count, bytes)
+       when state.buffer_bytes + bytes > state.max_buffer_bytes do
+    Logger.warning(
+      "SendBuffer disconnected buffer full for #{format_output(state.output)}, dropping #{count} packets"
+    )
+
+    %{state | packets_dropped: state.packets_dropped + count}
+  end
 
   defp do_enqueue_packets(state, packets, packet_count, total_bytes) do
     was_empty = state.buffer == []
@@ -433,6 +590,7 @@ defmodule CadenceSimulator.SendBuffer do
     new_state.packets_buffered != previous_state.packets_buffered or
       new_state.buffer_bytes != previous_state.buffer_bytes or
       new_state.packets_sent != previous_state.packets_sent or
+      new_state.packets_dropped != previous_state.packets_dropped or
       new_state.bytes_sent != previous_state.bytes_sent or
       new_state.flushes != previous_state.flushes
   end
@@ -449,6 +607,7 @@ defmodule CadenceSimulator.SendBuffer do
       packets_buffered: state.packets_buffered,
       buffer_bytes: state.buffer_bytes,
       packets_sent: state.packets_sent,
+      packets_dropped: state.packets_dropped,
       bytes_sent: state.bytes_sent,
       flushes: state.flushes
     }

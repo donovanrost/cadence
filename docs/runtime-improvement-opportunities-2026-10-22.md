@@ -11,6 +11,16 @@ that action is recovery between experiments, not successful continuous delivery.
 The subsequent `20261022T053823Z-baseline` passed all 23 samples with three Ready
 replicas, no freshness/errors/drops/regressions, and 30 intact archive objects.
 
+## TCP follow-up — 2026-10-23
+
+The [simulator reconnect fix and new rehearsal](chaos-tcp-reconnect-2026-10-23.md)
+validate close detection and timed reconnect: eleven reconnects took 253–334 ms,
+with no source drops or remaining `CLOSE_WAIT` sockets. Full application continuity
+still failed: 28/47 freshness samples violated the limit and one semantic sequence
+regressed. A receiving mission coordinator blocked on partition initialization
+while its child replayed semantic history. Prioritize recovery/admission and
+ownership fencing next; the table below retains the original measurements.
+
 ## Recommended work order
 
 | Priority | Opportunity | Evidence | Next change and acceptance check |
