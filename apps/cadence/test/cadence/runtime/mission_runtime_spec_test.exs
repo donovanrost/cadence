@@ -1,7 +1,9 @@
 defmodule Cadence.Runtime.MissionRuntimeSpecTest do
   use ExUnit.Case, async: true
 
+  alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Runtime.MissionRuntimeSpec
+  alias Cadence.Runtime.PartitionKey
   alias Cadence.Runtime.SourceRuntimeBases
 
   test "fleet models stay compact across real process messages, including replies" do
@@ -73,6 +75,34 @@ defmodule Cadence.Runtime.MissionRuntimeSpecTest do
                sources: %{"source" => 1},
                models: %{1 => nil}
              })
+  end
+
+  test "partition input is independent of unrelated fleet metadata and preserves semantic identity" do
+    bindings = BindingSet.new(%{mission_id: "mission", rules: []})
+
+    configurations =
+      Map.new(1..500, fn id ->
+        {"craft-#{id}",
+         %{"source_endpoint_ids" => ["source-#{id}"], "document" => Enum.to_list(1..100)}}
+      end)
+
+    spec =
+      struct(MissionRuntimeSpec,
+        binding_set: bindings,
+        metadata: %{"spacecraft_configurations" => configurations},
+        activation_id: "admitted",
+        generation: 3,
+        runtime_basis_sha256: "unchanged"
+      )
+
+    compact = MissionRuntimeSpec.compact(spec)
+    partition = %PartitionKey{affinity: :source_endpoint, value: "source-1"}
+    assert {:ok, selected} = MissionRuntimeSpec.partition_input(compact, partition)
+    assert map_size(selected.metadata["spacecraft_configurations"]) == 1
+    assert selected.metadata["spacecraft_configurations"]["craft-1"] == configurations["craft-1"]
+    assert MissionRuntimeSpec.identity(selected) == MissionRuntimeSpec.identity(spec)
+    assert MissionRuntimeSpec.expand(compact) == spec
+    assert :erts_debug.flat_size(selected) < div(:erts_debug.flat_size(spec), 100)
   end
 
   defp basis(id, fields) do

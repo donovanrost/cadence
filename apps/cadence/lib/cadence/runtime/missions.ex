@@ -8,6 +8,7 @@ defmodule Cadence.Runtime.Missions do
   alias Cadence.Runtime
   alias Cadence.Runtime.GenerationApplied
   alias Cadence.Runtime.MissionCoordinator
+  alias Cadence.Runtime.MissionRuntime
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Runtime.ProcessNamespace
 
@@ -26,6 +27,21 @@ defmodule Cadence.Runtime.Missions do
       end
     else
       {:error, :data_plane_not_running}
+    end
+  end
+
+  @doc "Observes the applied generation without materializing the fleet specification."
+  def applied_summary(mission_id) when is_binary(mission_id),
+    do: applied_summary(ProcessNamespace.default(), mission_id)
+
+  def applied_summary(%ProcessNamespace{} = process_namespace, mission_id) do
+    if mission_id in Runtime.running_mission_ids(process_namespace) do
+      GenServer.call(
+        MissionRuntime.coordinator_name(process_namespace, mission_id),
+        :applied_summary
+      )
+    else
+      {:error, :mission_runtime_not_running}
     end
   end
 

@@ -48,7 +48,7 @@ defmodule Cadence.Runtime.MissionCoordinator do
   @spec apply_spec(ProcessNamespace.t(), MissionRuntimeSpec.t()) ::
           {:ok, GenerationApplied.t()} | {:error, term()}
   def apply_spec(%ProcessNamespace{} = process_namespace, %MissionRuntimeSpec{} = spec) do
-    spec = MissionRuntimeSpec.compact_source_models(spec)
+    spec = MissionRuntimeSpec.compact(spec)
     coordinator = MissionRuntime.coordinator_name(process_namespace, spec.mission_id)
 
     # Safety reconciliation usually repeats the active generation. Check its
@@ -152,7 +152,7 @@ defmodule Cadence.Runtime.MissionCoordinator do
   def code_change(_old_version, %{runtime_spec: %MissionRuntimeSpec{} = spec} = state, _extra) do
     {:ok,
      state
-     |> Map.put(:runtime_spec, MissionRuntimeSpec.compact_source_models(spec))
+     |> Map.put(:runtime_spec, MissionRuntimeSpec.compact(spec))
      |> with_request_state()}
   end
 
@@ -215,9 +215,33 @@ defmodule Cadence.Runtime.MissionCoordinator do
   def handle_call(:active_spec, _from, state) do
     reply =
       case state.runtime_spec do
-        %MissionRuntimeSpec{} = spec -> {:ok, spec}
+        %MissionRuntimeSpec{} = spec -> {:ok, MissionRuntimeSpec.expand(spec)}
         nil -> {:error, :no_active_binding_set}
       end
+
+    {:reply, reply, state}
+  end
+
+  def handle_call(:applied_summary, _from, state) do
+    reply =
+      case state.runtime_spec do
+        %MissionRuntimeSpec{} = spec -> {:ok, MissionRuntimeSpec.summary(spec)}
+        nil -> {:error, :no_active_binding_set}
+      end
+
+    {:reply, reply, state}
+  end
+
+  # This is an already admitted immutable generation, never a lookup of mutable
+  # governed configuration. A restarted child must not retain its birth generation.
+  def handle_call({:partition_spec, %PartitionKey{} = key}, _from, state) do
+    spec =
+      if state.pending_application, do: state.pending_application.spec, else: state.runtime_spec
+
+    reply =
+      if spec,
+        do: MissionRuntimeSpec.partition_input(spec, key),
+        else: {:error, :no_active_binding_set}
 
     {:reply, reply, state}
   end
@@ -405,14 +429,13 @@ defmodule Cadence.Runtime.MissionCoordinator do
          runtime_spec,
          profiler
        ) do
-    with {:ok, runtime_spec} <- MissionRuntimeSpec.partition_input(runtime_spec, partition_key) do
+    with {:ok, _selected} <- MissionRuntimeSpec.for_partition(runtime_spec, partition_key) do
       child_spec =
         {PartitionOwner,
          mission_id: mission_id,
          process_namespace: process_namespace,
          partition_key: partition_key,
-         active_activation: runtime_spec,
-         binding_set: runtime_spec.binding_set,
+         spec_source: MissionRuntime.coordinator_name(process_namespace, mission_id),
          profiler: profiler,
          defer_init?: true}
 
@@ -474,7 +497,7 @@ defmodule Cadence.Runtime.MissionCoordinator do
     new_state =
       %{
         state
-        | runtime_spec: MissionRuntimeSpec.compact_source_models(spec),
+        | runtime_spec: MissionRuntimeSpec.compact(spec),
           applied_at: applied_at
       }
 
@@ -509,7 +532,7 @@ defmodule Cadence.Runtime.MissionCoordinator do
     new_state =
       %{
         state
-        | runtime_spec: MissionRuntimeSpec.compact_source_models(spec),
+        | runtime_spec: MissionRuntimeSpec.compact(spec),
           applied_at: applied_at
       }
 

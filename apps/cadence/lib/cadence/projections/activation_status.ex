@@ -9,7 +9,6 @@ defmodule Cadence.Projections.ActivationStatus do
   alias Cadence.Control.Activations.ActivationExecution
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Management.Activations.ActivationRequest
-  alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Runtime.Missions, as: RuntimeMissions
 
   @type t :: %{
@@ -73,8 +72,8 @@ defmodule Cadence.Projections.ActivationStatus do
   end
 
   defp applied_basis(mission_id) do
-    case RuntimeMissions.applied_spec(mission_id) do
-      {:ok, %MissionRuntimeSpec{} = spec} ->
+    case RuntimeMissions.applied_summary(mission_id) do
+      {:ok, spec} ->
         %{
           activation_request_id: spec.activation_request_id,
           activation_id: spec.activation_id,

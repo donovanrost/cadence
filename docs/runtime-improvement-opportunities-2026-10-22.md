@@ -208,6 +208,137 @@ snapshots, allocator statistics, binary ownership, targeted GC, and field sizes.
 The diagnostic replica was stopped afterward. No production source, memory limit,
 or traffic configuration was changed during this investigation.
 
+## Runtime representation implementation (2026-10-24 UTC)
+
+The first redesign slice normalizes admitted runtime configuration. It retains
+existing durable governed artifacts and semantic identities; it does not yet
+introduce a distributed artifact cache or change partition placement.
+
+- `BindingSetIndex` interns rule and instance configurations into one immutable
+  value before the coordinator message boundary. Integer references are local
+  storage details. Materialization restores the exact original binding set,
+  including distinct legacy and capability configuration fields, order and nils.
+  Governed content hashes and checkpoint runtime-basis hashes remain unchanged.
+- Partition selection materializes only matching and mission-default bindings.
+  Known fleet configuration/review collections contain only the selected
+  spacecraft. Arbitrary capability metadata remains intact. Complete admission
+  evidence stays on the mission specification. Owners retain the selected model
+  without also keeping its redundant source-model index.
+- DynamicSupervisor child arguments contain mission, namespace and partition
+  references rather than executable specifications. After the nonblocking init
+  handshake, the owner requests the exact generation already admitted by its
+  coordinator. During application this is the pending admitted generation; after
+  application it is the applied generation. No mutable Management artifact is
+  queried. The existing one-for-all failure boundary retires partially reconciled
+  owners. A crash after generation two must recover generation two, rather than
+  retaining the generation-one arguments from initial startup.
+- Activation-status reads use a small applied-generation summary. Explicit
+  full-specification reads remain available for replay and inspection.
+
+Regression coverage exercises actual process copies, exact round trips and
+hashes, distinct instance/rule configuration, mission defaults, fleet metadata
+projection, namespace isolation, generation application with blocked recovery,
+owner death after a generation change, and bounded supervisor arguments even
+when admission metadata is large.
+
+The next representation change should avoid unchanged-generation materialization
+in the 30-second reconciler. Its fast path must account for durable activation
+identity, runtime loss or incomplete application, and registered executable code
+and allowlist changes. A generation-only cache would miss execution-contract
+changes. Distributed placement, durable artifact distribution, pinning and
+retention, and logical-stream journal handoff remain separate architecture work.
+
+### Measured representation and startup results
+
+Image `cadence-chaos:9fa20550-memory-normalized-1792818529`
+(`sha256:d5f52da85c03e32971869fff08a00e7d5bb7ab0c6abce306b84e411881c9e349`)
+was built after the full `mix precommit` passed: 4,140 workspace tests, one
+excluded browser test, plus 42 plane checks. The focused set passed 35 tests.
+The build source fingerprints are retained in
+`var/chaos/checks/memory-normalized-source-hashes.json`.
+
+The same `cadence_chaos_20261023_233753` database was retained, with 500 configured
+spacecraft and ten partitions warmed on each of three replicas. Simultaneous
+startup passed in `var/chaos/runs/20261024T051340Z-startup`: Kubernetes readiness
+17.0 seconds; all 30 partitions recovered by 18.9 seconds; zero restarts and zero
+container OOM kills. All 30 checkpoint restores were hits, replayed zero rows,
+and took at most 32 ms. Runtime semantic identities therefore continued to select
+the preexisting checkpoint streams.
+
+BEAM flat-copy inspection, performed after the baseline memory snapshots:
+
+| Retained value | Previous bytes | New bytes |
+| --- | ---: | ---: |
+| Mission specification | 62,359,784 | 9,325,656 |
+| Admitted binding representation | 58,048,288 | 5,014,160 |
+| One source's specification | 4,342,232 | 989,656 |
+| Source metadata within that specification | 2,490,728 | 5,376 |
+| One sampled owner's complete state | 4,852,824 | approximately 1,500,300 |
+| Supervisor arguments for ten children | 44,593,232 | 7,872 |
+
+The mission specification is 85% smaller across message copies. All three
+replicas returned the same specification, binding and supervisor sizes. These
+are representation measurements, not estimates of process RSS.
+
+Immediately after warming, ordinary container memory was 453–516 MiB and BEAM
+memory 279–323 MiB. The earlier single-pod warm snapshot was 748 MiB container
+and 447 MiB BEAM. Separate diagnostic GC brought the new BEAM allocations to
+184–186 MiB, compared with the prior 405 MiB; ten owner heaps fell from roughly
+59 MiB to 24 MiB. No automatic GC policy was introduced. After the diagnostics,
+three quiet samples spanning further 30-second reconciliation cycles ranged
+473–607 MiB container and 235–310 MiB BEAM. This continuing churn and allocator
+retention mean the immediate warm snapshot is not a steady-state memory bound.
+The old and new snapshots also have different replica counts; they are evidence
+of improvement on this machine, not a controlled fleet-capacity benchmark.
+
+The normalized coordinator retained about 9.2 MiB of process memory after GC.
+Sampled small supervisor groups can fall outside the top-30 diagnostic list;
+their absence is not zero memory. The explicit supervisor state inspection above
+measures the retained children directly. Evidence and read-only scripts are under
+`var/chaos/checks/memory-normalized-*`.
+
+Startup leaves reclaimable allocations in idle owners. After eliminating repeated
+materialization, measure whether an initialization-time hibernation policy or a
+smaller decoder working set improves that cost without hurting queued ingress
+latency. Forced diagnostic GC alone is not an operating-memory solution.
+
+### Live baseline and rolling restart
+
+The measured baseline (`var/chaos/runs/20261024T051747Z-baseline`) passed with
+three Ready replicas, 16 samples, zero HTTP/freshness failures, zero source
+output drops, all 103 checked archive objects unchanged and available from every
+replica, and zero regressions across 6,659 semantic commits.
+
+The subsequent same-image rolling restart
+(`var/chaos/runs/20261024T052051Z-rollout`) also passed those harness checks:
+44 samples over 180 seconds, zero HTTP/freshness failures, maximum observed feed
+age 6.453 seconds against the unchanged 10-second threshold, no source output
+drops, all 103 checked archive objects preserved, and zero regressions across
+7,261 commits. All replacement pods became Ready without container restarts.
+PostgreSQL and QuestDB had no new OOM events/kills during this rehearsal. Their
+memory-limit charge counters did increase, so this does not establish spare
+capacity at higher load. HTTP p95 was 1,516 ms in the baseline and 737 ms in the
+rolling run on the actively swapping laptop.
+
+Additional retired-journal inspection found five streams (spacecraft 1, 3, 5, 6
+and 10) with processing cursors totaling 72,475 bytes behind their complete tails.
+Their archive cursors were caught up and there were no unscanned bytes. An exact
+journal-evidence identity audit found matching durable semantic commits for all
+five ranges, with 144 updates each. This is cursor lag after semantic execution,
+not evidence of missing semantic commits. It does not establish completion of
+every downstream projection or durable processing acknowledgement. Logical-stream
+handoff and end-to-end delivery accounting remain required before certifying
+lossless deployment. The harness's passing resilience verdict is explicitly
+limited to its sampled freshness, archive and sequence checks.
+
+After stopping the generator, a final audit found 7,413 commits, no unfenced
+commits, broken predecessors or regressed epochs, ten correct heads, and ten
+matching checkpoints. The checkpoint table remained 120 KiB. Traffic is paused;
+the three replacement Cadence pods remain available for inspection. All databases,
+archives, journals and diagnostic evidence are retained. This validation used
+500 configured spacecraft and ten live feeds at 0.2 Hz on a single physical node;
+it is not a full-fleet throughput or node-failure certification.
+
 ## Original work order and measurements
 
 | Priority | Opportunity | Evidence | Next change and acceptance check |

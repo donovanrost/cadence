@@ -106,6 +106,28 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
 
     assert partition_snapshot_v2.binding_set_version == 2
     assert partition_snapshot_v2.handler_keys == [:definition_bound_telemetry]
+
+    # The supervisor must keep a small admission reference, not the specification
+    # from the owner's birth generation. A crash after activation must recover v2.
+    key = partition_key(source_endpoint)
+    assert {:ok, original_owner} = Runtime.PartitionOwner.lookup(mission_id, key)
+    handler = gate_recovery(mission_id, key)
+    Process.exit(original_owner, :kill)
+    assert_receive {:recovery_started, replacement}, 1_000
+
+    try do
+      refute replacement == original_owner
+      send(replacement, :release_recovery)
+
+      assert {:ok, %{generation: 2, binding_set_version: 2}} =
+               Runtime.MissionCoordinator.partition_snapshot(mission_id, key)
+
+      assert {:ok, result_after_restart} = Cadence.process_telemetry_ingress(raw_evidence)
+      assert Enum.map(result_after_restart.outputs, & &1.point_name) == ["THERMAL.counter"]
+    after
+      :telemetry.detach(handler)
+      send(replacement, :release_recovery)
+    end
   end
 
   test "instantiates only mission-default and matching endpoint-scoped rules in each partition",
@@ -346,6 +368,25 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
       :telemetry.detach(handler)
       send(owner, :release_recovery)
     end
+  end
+
+  test "supervisor restart arguments remain small while mission inspection stays exact",
+       %{mission_id: mission_id} do
+    %{coordinator: coordinator, beta: key} = recovery_fixture(mission_id)
+    assert {:ok, original} = Runtime.Missions.applied_spec(mission_id)
+    metadata = %{payload: Enum.map(1..10_000, &%{field: &1, value: &1 * 10})}
+    next = %{original | generation: 2, activation_id: "compact-restart", metadata: metadata}
+    assert {:ok, _} = Runtime.Missions.apply(next)
+    assert {:ok, _} = GenServer.call(coordinator, {:partition_snapshot, key})
+    supervisor = Runtime.MissionRuntime.partition_supervisor_name(mission_id)
+    children = :sys.get_state(supervisor).children
+    assert map_size(children) == 2
+    assert :erts_debug.flat_size(children) * :erlang.system_info(:wordsize) < 8_192
+    assert {:ok, ^next} = Runtime.Missions.applied_spec(mission_id)
+    assert {:ok, summary} = Runtime.Missions.applied_summary(mission_id)
+    assert summary == Runtime.MissionRuntimeSpec.summary(next)
+    refute Map.has_key?(summary, :metadata)
+    refute Map.has_key?(summary, :binding_set)
   end
 
   test "reconciliation failure retires a partially applied mission instead of acknowledging it",

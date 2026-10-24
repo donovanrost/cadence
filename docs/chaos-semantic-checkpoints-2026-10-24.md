@@ -297,3 +297,15 @@ The lab was paused after the integrity audit. A subsequent memory investigation
 briefly started one replica without traffic, then stopped it again; all durable
 data remains retained. See the memory follow-up in the
 [opportunity report](runtime-improvement-opportunities-2026-10-22.md).
+
+## Subsequent validation after runtime memory normalization
+
+The later runtime-representation change established a healthy three-replica
+baseline on the same retained database and passed the sampled rolling-restart
+checks. All 30 startup recoveries hit the existing checkpoints, replayed zero
+historical commits and completed checkpoint restoration within 32 ms. The final
+fencing audit covered 7,413 commits with ten correct heads/checkpoints and no
+regressions. See [the memory implementation and rehearsal results](runtime-improvement-opportunities-2026-10-22.md#runtime-representation-implementation-2026-10-24-utc)
+for measurements, exact run directories, and the remaining processing-cursor and
+journal-handoff limitations. This follow-up supersedes the earlier blocked
+validation status without changing the observations recorded above.

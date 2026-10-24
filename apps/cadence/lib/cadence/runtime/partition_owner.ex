@@ -157,6 +157,41 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   @impl true
   def handle_continue(:initialize, %{initialization_options: opts} = initial_state) do
+    case resolve_initialization_options(opts) do
+      {:ok, resolved} ->
+        finish_initialization(resolved, initial_state)
+
+      {:error, reason} ->
+        {:stop, {:shutdown, {:partition_initialization_failed, reason}}, initial_state}
+    end
+  end
+
+  defp resolve_initialization_options(opts) do
+    case Keyword.fetch(opts, :spec_source) do
+      {:ok, coordinator} ->
+        key = Keyword.fetch!(opts, :partition_key)
+        mission_id = Keyword.fetch!(opts, :mission_id)
+
+        case GenServer.call(coordinator, {:partition_spec, key}, :infinity) do
+          {:ok, %MissionRuntimeSpec{mission_id: ^mission_id} = spec} ->
+            {:ok,
+             opts
+             |> Keyword.put(:active_activation, spec)
+             |> Keyword.put(:binding_set, spec.binding_set)}
+
+          {:ok, _} ->
+            {:error, {:mission_runtime_spec_mismatch, :mission_id}}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      :error ->
+        {:ok, opts}
+    end
+  end
+
+  defp finish_initialization(opts, initial_state) do
     metadata = %{
       mission_id: Keyword.fetch!(opts, :mission_id),
       partition_id: opts |> Keyword.fetch!(:partition_key) |> PartitionKey.identifier(),
@@ -206,7 +241,7 @@ defmodule Cadence.Runtime.PartitionOwner do
       end)
 
     with {:ok, active_activation} <-
-           MissionRuntimeSpec.for_partition(active_activation, partition_key),
+           MissionRuntimeSpec.execution_input(active_activation, partition_key),
          {:ok, tm_pipeline_state} <- TMFrameIngress.init(),
          {:ok, runtime_binding_set, managed_application_states, timer_service, runtime_records} <-
            build_runtime_partition_state(
@@ -330,7 +365,7 @@ defmodule Cadence.Runtime.PartitionOwner do
       ) do
     state = refresh_live_clock(state)
 
-    case MissionRuntimeSpec.for_partition(activation, state.partition_key) do
+    case MissionRuntimeSpec.execution_input(activation, state.partition_key) do
       {:ok, activation} ->
         case build_runtime_partition_state(
                state.process_namespace,

@@ -7,10 +7,12 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
   artifact from an id and version.
   """
 
-  alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
+  alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Catalog.MissionModel.RuntimePlan
   alias Cadence.Platform.ContentHash
+  alias Cadence.Runtime.BindingSetIndex
   alias Cadence.Runtime.MissionModelPlanDecoder
+  alias Cadence.Runtime.PartitionMetadata
   alias Cadence.Runtime.SourceRuntimeBases
   alias Cadence.SemanticRuntime.PlanDecoder
 
@@ -23,7 +25,7 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
           binding_set_id: binary(),
           binding_set_version: pos_integer(),
           binding_set_content_sha256: binary(),
-          binding_set: BindingSet.t(),
+          binding_set: BindingSet.t() | BindingSetIndex.t(),
           mission_model_revision_id: binary(),
           mission_model_content_sha256: binary(),
           runtime_plans: %{required(atom()) => RuntimePlan.t()},
@@ -146,6 +148,36 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
     %{spec | source_runtime_bases: index}
   end
 
+  @doc "Normalizes admitted configuration before copying it into mission process state."
+  def compact(%__MODULE__{} = spec) do
+    %{compact_source_models(spec) | binding_set: BindingSetIndex.new(spec.binding_set)}
+  end
+
+  @doc "Restores the exact admitted binding value for explicit inspection and replay."
+  def expand(%__MODULE__{} = spec) do
+    %{spec | binding_set: BindingSetIndex.materialize(spec.binding_set)}
+  end
+
+  @doc "Returns generation identity without copying fleet configuration or executable plans."
+  def summary(%__MODULE__{} = spec) do
+    Map.take(spec, [
+      :activation_request_id,
+      :activation_id,
+      :generation,
+      :binding_set_id,
+      :binding_set_version,
+      :binding_set_content_sha256,
+      :runtime_basis_sha256
+    ])
+  end
+
+  @doc "Keeps only the selected model in a partition's private execution state."
+  def execution_input(%__MODULE__{} = spec, partition) do
+    with {:ok, selected} <- for_partition(spec, partition) do
+      {:ok, %{selected | source_runtime_bases: nil}}
+    end
+  end
+
   @doc "Identifies monitoring observations without copying executable plans into every result."
   def observation_context(%__MODULE__{} = spec) do
     monitoring_plan = Map.get(spec.runtime_plans, :monitoring)
@@ -161,29 +193,17 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
   @doc "Projects an admitted specification before copying it to a partition process."
   def partition_input(%__MODULE__{} = spec, %Cadence.Runtime.PartitionKey{} = partition) do
     with {:ok, selected} <- for_partition(spec, partition) do
-      instances =
-        Enum.filter(selected.binding_set.capability_instances, fn instance ->
-          instance.target_scope == :mission or
-            (partition.affinity == :source_endpoint and
-               instance.source_endpoint_ref == partition.value)
-        end)
-
-      instance_ids = MapSet.new(instances, & &1.capability_instance_id)
-
-      rules =
-        Enum.filter(selected.binding_set.rules, fn rule ->
-          partition.affinity == :source_endpoint and
-            BindingRule.source_endpoint_ref(rule) in [nil, partition.value] and
-            MapSet.member?(instance_ids, BindingRule.capability_instance_id(rule))
-        end)
-
-      binding_set = %{selected.binding_set | capability_instances: instances, rules: rules}
-
       source_bases =
         if selected.source_runtime_bases,
           do: SourceRuntimeBases.take(selected.source_runtime_bases, [partition.value])
 
-      {:ok, %{selected | binding_set: binding_set, source_runtime_bases: source_bases}}
+      {:ok,
+       %{
+         selected
+         | binding_set: BindingSetIndex.select(selected.binding_set, partition),
+           metadata: PartitionMetadata.project(selected.metadata, partition),
+           source_runtime_bases: source_bases
+       }}
     end
   end
 
