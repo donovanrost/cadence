@@ -79,6 +79,27 @@ Add guest-storage preflight and a retention policy that preserves verified
 recovery points and evidence. Cadence and traffic were stopped after validation
 to halt the protocol retry loop; supporting services and retained data remain.
 
+## TM framing and retry follow-up — 2026-10-24
+
+The [framing/retry fix and rehearsal](chaos-tm-framing-2026-10-23.md) reproduce
+feed 2's VCA error from its retained journal. All 52 records are valid and decode
+into 500 packets in order. Five-second ingress timeouts left owner work queued;
+growing retries then fed overlapping byte ranges into a decoder retaining a
+1,100-byte partial frame. Ingress now waits for a definitive response, retries
+retain their original batch, exact journal retries reuse the last result, and
+acknowledgement retries do not re-decode. Failures use capped backoff.
+
+Startup and both healthy three-replica baselines passed. The rolling restart
+reported zero framing errors, zero executor/consumer failures, and zero protocol
+anomalies; all ten feeds recovered. Overall continuity still failed 13/52 samples
+with a maximum age of 34.79 seconds. Successful owner recoveries took
+6.08–23.41 seconds. The 1,223-commit rollout audit found no sequence regressions.
+
+Prioritize verified replay checkpoints and recovery-aware traffic admission for
+the freshness budget. Journal handoff remains a separate correctness blocker:
+retired rollout pods retained 130,455 bytes beyond processing checkpoints and
+28,990 bytes beyond archive checkpoints. No retained data was discarded.
+
 ## Original work order and measurements
 
 | Priority | Opportunity | Evidence | Next change and acceptance check |

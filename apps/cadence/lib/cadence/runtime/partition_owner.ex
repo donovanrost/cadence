@@ -126,7 +126,7 @@ defmodule Cadence.Runtime.PartitionOwner do
   @spec process_raw_evidence(pid(), RawEvidence.t()) ::
           {:ok, Cadence.processing_result()} | {:error, term()}
   def process_raw_evidence(partition_owner, %RawEvidence{} = raw_evidence) do
-    GenServer.call(partition_owner, {:process_raw_evidence, raw_evidence})
+    GenServer.call(partition_owner, {:process_raw_evidence, raw_evidence}, :infinity)
   end
 
   @doc "Processes ordered partition work and replies directly to the original ingress caller."
@@ -417,6 +417,15 @@ defmodule Cadence.Runtime.PartitionOwner do
     GenServer.reply(from, result)
     {:noreply, next_state}
   end
+
+  # Retain one result for the ordered journal consumer. A downstream failure or
+  # lost acknowledgement may retry this exact range after the decoder advanced.
+  # Reuse its result without applying the bytes or managed applications twice.
+  defp process_raw_evidence_reply(
+         %RawEvidence{} = raw_evidence,
+         %{last_journal_result: %{raw_evidence: raw_evidence} = result} = state
+       ),
+       do: {:ok, result, state}
 
   defp process_raw_evidence_reply(%RawEvidence{} = raw_evidence, state) do
     with {:ok, prepared_state, pre_runtime_records} <-
@@ -849,6 +858,15 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   defp handle_processing_reply({:ok, processing_result, next_state}, _state) do
+    metadata = processing_result.raw_evidence.metadata || %{}
+
+    next_state =
+      if Map.has_key?(metadata, "journal_stream_id") or Map.has_key?(metadata, :journal_stream_id) do
+        Map.put(next_state, :last_journal_result, processing_result)
+      else
+        Map.delete(next_state, :last_journal_result)
+      end
+
     {:reply, {:ok, processing_result}, next_state}
   end
 

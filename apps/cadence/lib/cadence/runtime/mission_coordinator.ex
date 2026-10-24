@@ -140,7 +140,11 @@ defmodule Cadence.Runtime.MissionCoordinator do
       when is_binary(mission_id) do
     GenServer.call(
       MissionRuntime.coordinator_name(process_namespace, mission_id),
-      {:process_telemetry_ingress, raw_evidence}
+      # A timeout does not cancel queued owner work. Retrying it while recovery
+      # is running can apply overlapping byte ranges to the frame reassembler.
+      # Owner death is reported through the coordinator's monitored request.
+      {:process_telemetry_ingress, raw_evidence},
+      :infinity
     )
   end
 

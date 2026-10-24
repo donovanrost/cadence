@@ -436,6 +436,88 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
     assert second_snapshot.tm_frame_remainder_bytes == 0
   end
 
+  test "ingress waits beyond the former timeout without resubmitting recovering owner work",
+       %{mission_id: mission_id} do
+    %{coordinator: coordinator, beta: beta, alpha_evidence: alpha} = recovery_fixture(mission_id)
+    handler = gate_recovery(mission_id, beta)
+
+    evidence = %{
+      alpha
+      | source_ref: "provider/beta",
+        source_endpoint_ref: nil,
+        spacecraft_id: nil
+    }
+
+    task = Task.async(fn -> Cadence.process_telemetry_ingress(evidence) end)
+    assert_receive {:recovery_started, owner}, 1_000
+
+    try do
+      assert Task.yield(task, 5_100) == nil
+      assert {:ok, _} = GenServer.call(coordinator, :active_spec, 1_000)
+      send(owner, :release_recovery)
+      assert {:ok, result} = Task.await(task, 2_000)
+      assert Enum.map(result.outputs, & &1.point_name) == ["HK.counter"]
+    after
+      :telemetry.detach(handler)
+      send(owner, :release_recovery)
+    end
+  end
+
+  test "retrying a journal range preserves partial TM framing and its original result",
+       %{mission_id: mission_id} do
+    source_endpoint = persist_source_endpoint(mission_id)
+    binding_set = persisted_binding_set(mission_id, 1, "TMHK")
+
+    assert {:ok, _} =
+             Cadence.ActivationFixtures.activate_binding_set(
+               mission_id,
+               binding_set.binding_set_id,
+               binding_set.version
+             )
+
+    frames = build_tm_space_packet_frames(42, 5, <<0, 11>>, 10) |> IO.iodata_to_binary()
+    # A socket read ends inside a transfer frame, just as feed 2's 14,480-byte read did.
+    <<prefix::binary-size(7), suffix::binary>> = frames
+
+    evidence = fn bytes, offset ->
+      RawEvidence.new(%{
+        mission_id: mission_id,
+        protocol_family: :tm,
+        source_ref: "provider/station-a",
+        raw: bytes,
+        metadata: %{
+          "journal_stream_id" => "retry-stream",
+          "journal_start_offset" => offset,
+          "journal_end_offset" => offset + byte_size(bytes),
+          frame_size: 10,
+          ocf_length: 0
+        }
+      })
+    end
+
+    first = evidence.(prefix, 0)
+    assert {:ok, first_result} = Cadence.process_telemetry_ingress(first)
+    assert {:ok, ^first_result} = Cadence.process_telemetry_ingress(first)
+
+    assert {:ok, snapshot} =
+             Runtime.partition_snapshot(mission_id, source_endpoint.source_endpoint_id)
+
+    assert snapshot.tm_frame_remainder_bytes == 7
+    assert first_result.packet_records == []
+
+    second = evidence.(suffix, 7)
+    assert {:ok, second_result} = Cadence.process_telemetry_ingress(second)
+    assert {:ok, ^second_result} = Cadence.process_telemetry_ingress(second)
+    assert Enum.map(second_result.outputs, & &1.point_name) == ["TMHK.counter"]
+    assert second_result.protocol_anomalies == []
+
+    assert {:ok, snapshot} =
+             Runtime.partition_snapshot(mission_id, source_endpoint.source_endpoint_id)
+
+    assert snapshot.tm_frame_remainder_bytes == 0
+    assert snapshot.tm_packet_buffer_vcid_count == 0
+  end
+
   defp recovery_fixture(mission_id) do
     persist_source_endpoint(mission_id)
     beta = persist_source_endpoint(mission_id, "endpoint-beta", "sc-beta", "provider/beta")

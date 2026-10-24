@@ -496,6 +496,9 @@ def capture_observability(directory, since):
         "otel-ownership.json": (metrics + "/v1/prometheus/api/v1/query_range", {
             "query": 'cadence_runtime_partition_ownership_total{service_name="cadence-chaos"}',
             "start": start, "end": end, "step": "5s"}),
+        "otel-journal-retries.json": (metrics + "/v1/prometheus/api/v1/query_range", {
+            "query": 'cadence_telemetry_ingress_journal_processing_retry_total{service_name="cadence-chaos"}',
+            "start": start, "end": end, "step": "5s"}),
         "otel-freshness.json": (metrics + "/v1/prometheus/api/v1/query_range", {
             "query": 'cadence_telemetry_freshness_seconds{service_name="cadence-chaos"}',
             "start": start, "end": end, "step": "5s"}),

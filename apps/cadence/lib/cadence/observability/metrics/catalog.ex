@@ -470,6 +470,15 @@ defmodule Cadence.Observability.Metrics.Catalog do
         []
       ),
       counter(
+        "cadence.telemetry.ingress.journal.processing.retry",
+        [:cadence, :ingress_journal, :processing_retry],
+        :count,
+        "{retry}",
+        "Failed journal processing or acknowledgement attempts scheduled with backoff.",
+        ["phase"],
+        tag_values: &journal_retry_tags/1
+      ),
+      counter(
         "cadence.telemetry.ingress.journal.capacity.exhaustion",
         [:cadence, :ingress_journal, :capacity_exhausted],
         nil,
@@ -1205,6 +1214,11 @@ defmodule Cadence.Observability.Metrics.Catalog do
       "cadence.telemetry.protocol_family" => metadata[:protocol_family]
     }
   end
+
+  defp journal_retry_tags(%{phase: phase}) when phase in [:read, :retry, :acknowledge],
+    do: %{"phase" => to_string(phase)}
+
+  defp journal_retry_tags(_metadata), do: %{"phase" => "unknown"}
 
   defp journal_tags(metadata) do
     %{"durability" => metadata[:durability]}

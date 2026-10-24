@@ -17,6 +17,13 @@ COPY frontend /workspace/frontend
 WORKDIR /workspace/apps/cadence_web
 RUN mix deps.get --only prod && ln -s /workspace/apps/cadence_web/deps /workspace/deps && mix compile
 RUN npm ci --no-audit --no-fund --foreground-scripts && corepack pnpm@11.22.0 --dir ../../frontend install --frozen-lockfile
+# Match config/config.exs. Fetch with curl because the Tailwind wrapper's
+# downloader rejects GitHub redirect responses with headers larger than 10 KiB.
+RUN case "$(uname -m)" in aarch64) target=arm64 ;; x86_64) target=x64 ;; *) exit 1 ;; esac && \
+    mkdir -p _build && \
+    curl --fail --location --retry 3 "https://github.com/tailwindlabs/tailwindcss/releases/download/v4.1.12/tailwindcss-linux-${target}" \
+      --output "_build/tailwind-linux-${target}-4.1.12" && \
+    chmod +x "_build/tailwind-linux-${target}-4.1.12"
 # Invoke Vite directly: phoenix_vite.npm loads runtime.exs, which correctly
 # requires deployment secrets that must never be supplied to an image build.
 RUN mix tailwind cadence_web --minify && npm run build && node ../../frontend/tools/build-first-party-publication.mjs
