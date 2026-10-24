@@ -5,7 +5,7 @@ defmodule Cadence.SemanticRuntimeStoreTest do
   alias Cadence.Catalog.MissionModel.{Compiler, Declaration, Layer}
   alias Cadence.Runtime.{MissionRuntimeSpec, PartitionKey}
   alias Cadence.SemanticRuntime
-  alias Cadence.SemanticRuntime.{PlanDecoder, Scope, State, Store, Update}
+  alias Cadence.SemanticRuntime.{Checkpoint, CommitRow, PlanDecoder, Scope, State, Store, Update}
   alias Ecto.Adapters.SQL.Sandbox
 
   test "commits idempotently and reconstructs state from ordered durable inputs" do
@@ -84,6 +84,18 @@ defmodule Cadence.SemanticRuntimeStoreTest do
     assert {:ok, [pending]} = Store.pending_timer_results(runtime_spec, partition_key)
     assert pending.at == timer_at
     assert pending.result == timer_result
+    assert {:ok, ^timer_state, _} = Store.recover_writer(runtime_spec, partition_key, plan)
+    assert {:ok, cursors} = Store.timer_cursors(runtime_spec, partition_key)
+    assert cursors[pending.timer_key] == timer_at
+
+    # Legacy metadata is decoded correctly, then backfilled during bootstrap.
+    Repo.delete_all(Checkpoint)
+    Repo.update_all(CommitRow, set: [input_kind: nil, timer_key: nil, timer_at: nil])
+    assert {:ok, ^cursors} = Store.timer_cursors(runtime_spec, partition_key)
+    assert {:ok, [^pending]} = Store.pending_timer_results(runtime_spec, partition_key)
+    assert {:ok, ^timer_state, _} = Store.recover_writer(runtime_spec, partition_key, plan)
+    assert {:ok, ^cursors} = Store.timer_cursors(runtime_spec, partition_key)
+    assert {:ok, [^pending]} = Store.pending_timer_results(runtime_spec, partition_key)
 
     assert :ok =
              Store.mark_timer_projected(
@@ -153,10 +165,12 @@ defmodule Cadence.SemanticRuntimeStoreTest do
 
     second = update("fenced:2", input_id, 15, ~U[2026-08-12 12:00:01Z])
     assert {:ok, expected_result, expected_state} = SemanticRuntime.process(state, [second], plan)
+    observe_checkpoints()
 
     assert {:ok, ^expected_result, ^expected_state, replacement} =
              Store.process(spec, key, old_writer, empty, [second], plan)
 
+    assert_receive {:checkpoint, %{replayed_commits: 0}, %{outcome: :hit}}
     assert replacement.epoch > writer.epoch
     assert {:ok, ^expected_state} = Store.recover(spec, key, plan)
 
@@ -206,9 +220,12 @@ defmodule Cadence.SemanticRuntimeStoreTest do
     assert {:ok, expected, expected_state} =
              SemanticRuntime.timer(state, scope, algorithm_id, at, plan)
 
+    observe_checkpoints()
+
     assert {:ok, ^expected, ^expected_state, timer_writer} =
              Store.timer(spec, key, old_writer, empty, {scope, algorithm_id, at, "timer"}, plan)
 
+    assert_receive {:checkpoint, %{replayed_commits: 0}, %{outcome: :hit}}
     second = update("timer-transfer:2", input_id, 15, ~U[2026-08-12 12:00:06Z])
 
     assert {:ok, _, latest, latest_writer} =
@@ -242,6 +259,13 @@ defmodule Cadence.SemanticRuntimeStoreTest do
              Store.commit(spec, second, first_writer, [input], result, state)
 
     assert Repo.aggregate(Cadence.SemanticRuntime.CommitRow, :count) == 0
+
+    assert {:error, :semantic_runtime_fenced} =
+             Store.process(spec, second, first_writer, empty, [input], plan)
+
+    # Reject the foreign token before acquiring an epoch in the second partition.
+    assert {:ok, ^result, ^state, _} =
+             Store.commit(spec, second, second_writer, [input], result, state)
   end
 
   test "a newer generation fences an old basis and cannot be claimed by an old generation" do
@@ -350,6 +374,201 @@ defmodule Cadence.SemanticRuntimeStoreTest do
 
   defp independent(operation) do
     Task.async(fn -> Sandbox.unboxed_run(Repo, operation) end)
+  end
+
+  test "restart restores a durable checkpoint without replay and still audits the entire history" do
+    {spec, key, plan, state, writer} = checkpoint_history()
+    observe_checkpoints()
+    assert Repo.one!(Checkpoint).commit_sequence == writer.commit_sequence
+    assert {:ok, ^state, _} = Store.recover_writer(spec, key, plan)
+    assert_receive {:checkpoint, %{replayed_commits: 0}, %{outcome: :hit}}
+
+    first = CommitRow |> order_by([r], r.commit_sequence) |> limit(1) |> Repo.one!()
+    Repo.update!(Ecto.Changeset.change(first, result_term: :erlang.term_to_binary(%{})))
+    assert {:error, {:semantic_runtime_replay_diverged, id}} = Store.recover(spec, key, plan)
+    assert id == first.commit_id
+  end
+
+  test "an older checkpoint verifies and backfills the suffix before publishing the new head" do
+    {spec, key, plan, state, writer} = checkpoint_history()
+    observe_checkpoints()
+    checkpoint = Repo.one!(Checkpoint)
+    first = CommitRow |> order_by([r], r.commit_sequence) |> limit(1) |> Repo.one!()
+    # Model an older binary appending after the checkpoint, including NULL metadata.
+    Checkpoint.publish(first)
+
+    from(r in CommitRow, where: r.commit_sequence == ^writer.commit_sequence)
+    |> Repo.update_all(set: [input_kind: nil])
+
+    assert {:ok, ^state, _} = Store.recover_writer(spec, key, plan)
+    assert_receive {:checkpoint, %{replayed_commits: 1}, %{outcome: :hit}}
+    assert Repo.one!(Checkpoint) == checkpoint
+    assert Repo.get!(CommitRow, writer.commit_sequence).input_kind == "updates"
+  end
+
+  test "missing, incompatible and corrupt checkpoints fall back to verified full recovery" do
+    {spec, key, plan, state, _} = checkpoint_history()
+    observe_checkpoints()
+    Repo.delete_all(Checkpoint)
+    Repo.update_all(CommitRow, set: [input_kind: nil])
+    assert {:ok, ^state, _} = Store.recover_writer(spec, key, plan)
+    assert_receive {:checkpoint, %{replayed_commits: 2}, %{outcome: :missing}}
+    assert Repo.aggregate(from(r in CommitRow, where: is_nil(r.input_kind)), :count) == 0
+
+    Repo.update_all(Checkpoint, set: [version: 999])
+    assert {:ok, ^state, _} = Store.recover_writer(spec, key, plan)
+    assert_receive {:checkpoint, %{replayed_commits: 2}, %{outcome: :incompatible}}
+
+    Repo.update_all(Checkpoint, set: [integrity_sha256: "corrupt"])
+    assert {:ok, ^state, _} = Store.recover_writer(spec, key, plan)
+    assert_receive {:checkpoint, %{replayed_commits: 2}, %{outcome: :invalid}}
+  end
+
+  test "warm ownership transfer verifies history when its checkpoint is missing" do
+    {spec, key, plan, state, old_writer} = checkpoint_history()
+    assert {:ok, ^state, writer} = Store.recover_writer(spec, key, plan)
+    Repo.delete_all(Checkpoint)
+    observe_checkpoints()
+    input = update("warm-fallback", elem(runtime_spec(), 1), 3, ~U[2026-08-12 12:00:03Z])
+    assert {:ok, result, expected} = SemanticRuntime.process(state, [input], plan)
+
+    assert {:ok, ^result, ^expected, replacement} =
+             Store.process(spec, key, old_writer, state, [input], plan)
+
+    assert_receive {:checkpoint, %{replayed_commits: 2}, %{outcome: :missing}}
+    assert replacement.epoch > writer.epoch
+    assert {:ok, ^expected} = Store.recover(spec, key, plan)
+  end
+
+  test "a concurrent append after acquisition does not move the captured recovery checkpoint" do
+    {spec, key, plan, state, old_writer} = checkpoint_history()
+    observe_checkpoints()
+    id = {:append_after_acquisition, self()}
+    input = update("concurrent-checkpoint", elem(runtime_spec(), 1), 3, ~U[2026-08-12 12:00:03Z])
+
+    :telemetry.attach(
+      id,
+      [:cadence, :runtime, :partition, :ownership],
+      fn _, _, metadata, _ ->
+        :telemetry.detach(id)
+        writer = %{old_writer | epoch: metadata.ownership_epoch}
+        assert {:ok, _, _, _} = Store.process(spec, key, writer, state, [input], plan)
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(id) end)
+
+    assert {:ok, ^state, writer} = Store.recover_writer(spec, key, plan)
+    assert writer.commit_sequence == old_writer.commit_sequence
+    assert Repo.one!(Checkpoint).commit_sequence > writer.commit_sequence
+    assert_receive {:checkpoint, %{replayed_commits: 0}, %{outcome: :hit}}
+
+    # The stale predecessor is still fenced, then the missing suffix is recovered.
+    assert {:ok, _, latest, _} = Store.process(spec, key, writer, state, [input], plan)
+    assert {:ok, ^latest} = Store.recover(spec, key, plan)
+  end
+
+  test "corrupt checkpoint state and divergent suffixes cannot become new checkpoints" do
+    {spec, key, plan, _, writer} = checkpoint_history()
+    latest = Repo.get!(CommitRow, writer.commit_sequence)
+    first = CommitRow |> order_by([r], r.commit_sequence) |> limit(1) |> Repo.one!()
+    Repo.update!(Ecto.Changeset.change(latest, state_term: :erlang.term_to_binary(%State{})))
+    checkpoint = Repo.one!(Checkpoint)
+
+    assert {:error, {:semantic_runtime_replay_diverged, _}} =
+             Store.recover_writer(spec, key, plan)
+
+    assert Repo.one!(Checkpoint) == checkpoint
+
+    Checkpoint.publish(first)
+    checkpoint = Repo.one!(Checkpoint)
+
+    assert {:error, {:semantic_runtime_replay_diverged, _}} =
+             Store.recover_writer(spec, key, plan)
+
+    assert Repo.one!(Checkpoint) == checkpoint
+  end
+
+  test "checkpoints cannot cross tenant, partition or runtime basis boundaries" do
+    {spec, key, plan, _, _} = checkpoint_history()
+    other = PartitionKey.new(%{affinity: :source_endpoint, value: "other-checkpoint"})
+    assert {:ok, %State{sequence: 0}, _} = Store.recover_writer(spec, other, plan)
+
+    assert {:ok, %State{sequence: 0}, _} =
+             Store.recover_writer(%{spec | organization_id: "other"}, key, plan)
+
+    assert {:ok, %State{sequence: 0}, _} =
+             Store.recover_writer(
+               %{spec | generation: 2, runtime_basis_sha256: "other"},
+               key,
+               plan
+             )
+
+    assert Repo.aggregate(Checkpoint, :count) == 1
+
+    # Even a mismatched pointer cannot restore another partition's state.
+    Repo.update_all(Checkpoint, set: [partition_id: PartitionKey.identifier(other)])
+    assert {:invalid, %State{sequence: 0}, 0} = Checkpoint.load(spec, other, 1_000_000_000)
+  end
+
+  test "commit rollback and stale writers cannot advance a checkpoint" do
+    {spec, key, plan, state, writer} = checkpoint_history()
+    checkpoint = Repo.one!(Checkpoint)
+    input = update("rollback", elem(runtime_spec(), 1), 3, ~U[2026-08-12 12:00:03Z])
+
+    assert {:error, :abort} =
+             Repo.transaction(fn ->
+               assert {:ok, _, _, _} = Store.process(spec, key, writer, state, [input], plan)
+               Repo.rollback(:abort)
+             end)
+
+    assert Repo.one!(Checkpoint) == checkpoint
+    assert Repo.aggregate(CommitRow, :count) == 2
+
+    assert {:ok, ^state, _} = Store.recover_writer(spec, key, plan)
+    assert {:ok, result, next} = SemanticRuntime.process(state, [input], plan)
+
+    assert {:error, :semantic_runtime_fenced} =
+             Store.commit(spec, key, writer, [input], result, next)
+
+    assert Repo.one!(Checkpoint) == checkpoint
+  end
+
+  defp checkpoint_history do
+    {spec, input_id} = runtime_spec()
+    key = PartitionKey.new(%{affinity: :source_endpoint, value: "checkpoint"})
+    plan = PlanDecoder.decode(spec.runtime_plans)
+    {:ok, empty, writer} = Store.recover_writer(spec, key, plan)
+
+    {state, writer} =
+      Enum.reduce(1..2, {empty, writer}, fn index, {state, writer} ->
+        input =
+          update(
+            "checkpoint:#{index}",
+            input_id,
+            index,
+            DateTime.add(~U[2026-08-12 12:00:00Z], index)
+          )
+
+        {:ok, _, next, writer} = Store.process(spec, key, writer, state, [input], plan)
+        {next, writer}
+      end)
+
+    {spec, key, plan, state, writer}
+  end
+
+  defp observe_checkpoints do
+    id = {__MODULE__, self()}
+
+    :telemetry.attach(
+      id,
+      [:cadence, :runtime, :partition, :checkpoint],
+      fn _, measurements, metadata, pid -> send(pid, {:checkpoint, measurements, metadata}) end,
+      self()
+    )
+
+    on_exit(fn -> :telemetry.detach(id) end)
   end
 
   defp runtime_spec do

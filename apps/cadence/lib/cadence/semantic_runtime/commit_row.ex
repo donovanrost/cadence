@@ -22,6 +22,9 @@ defmodule Cadence.SemanticRuntime.CommitRow do
     field(:ownership_epoch, :integer)
     field(:predecessor_sequence, :integer)
     field(:projected_at, :utc_datetime_usec)
+    field(:input_kind, :string)
+    field(:timer_key, :string)
+    field(:timer_at, :utc_datetime_usec)
 
     timestamps()
   end
@@ -36,7 +39,7 @@ defmodule Cadence.SemanticRuntime.CommitRow do
 
     %__MODULE__{}
     |> change(attrs)
-    |> validate_required(Map.keys(attrs) -- [:organization_id])
+    |> validate_required(Map.keys(attrs) -- [:organization_id, :timer_key, :timer_at])
     |> unique_constraint(
       [:organization_scope_id, :mission_id, :partition_id, :runtime_basis_sha256, :commit_id],
       name: :semantic_runtime_commits_identity_idx

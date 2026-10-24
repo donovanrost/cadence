@@ -75,6 +75,25 @@ defmodule Cadence.Observability.Metrics.Catalog do
   def definitions do
     [
       counter(
+        "cadence.runtime.partition.checkpoint.recovery",
+        [:cadence, :runtime, :partition, :checkpoint],
+        :count,
+        "{recovery}",
+        "Semantic recovery by checkpoint validation outcome.",
+        ["outcome"],
+        tag_values: &checkpoint_tags/1
+      ),
+      histogram(
+        "cadence.runtime.partition.checkpoint.replayed_commits",
+        [:cadence, :runtime, :partition, :checkpoint],
+        :replayed_commits,
+        "{commit}",
+        "Durable commits replayed after checkpoint selection.",
+        ["outcome"],
+        [0, 1, 10, 100, 1_000, 10_000, 100_000],
+        tag_values: &checkpoint_tags/1
+      ),
+      counter(
         "cadence.runtime.partition.ownership",
         [:cadence, :runtime, :partition, :ownership],
         :count,
@@ -1195,6 +1214,12 @@ defmodule Cadence.Observability.Metrics.Catalog do
        do: %{"outcome" => Atom.to_string(outcome)}
 
   defp ownership_tags(_metadata), do: %{"outcome" => "error"}
+
+  defp checkpoint_tags(%{outcome: outcome})
+       when outcome in [:hit, :missing, :incompatible, :ahead, :invalid],
+       do: %{"outcome" => Atom.to_string(outcome)}
+
+  defp checkpoint_tags(_), do: %{"outcome" => "error"}
 
   defp recovery_tags(%{status: :ok}), do: %{"outcome" => "ok"}
   defp recovery_tags(%{status: :stop}), do: %{"outcome" => "error"}

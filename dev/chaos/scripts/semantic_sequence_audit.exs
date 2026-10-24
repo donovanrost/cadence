@@ -58,7 +58,9 @@ query =
         }
       end)
     end,
-    timeout: 120_000
+    # Full-history audits grow with retained history. This is outside the timed
+    # continuity window; keep the streaming audit instead of skipping old rows.
+    timeout: 600_000
   )
 
 IO.puts("LAB_SEMANTIC_AUDIT=" <> Jason.encode!(Map.delete(audit, :last)))

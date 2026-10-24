@@ -9,7 +9,7 @@ defmodule Cadence.SemanticRuntime.Store do
   alias Cadence.Repo
   alias Cadence.Runtime.{MissionRuntimeSpec, PartitionKey}
   alias Cadence.SemanticRuntime
-  alias Cadence.SemanticRuntime.{CommitRow, HeadRow, Result, State, Writer}
+  alias Cadence.SemanticRuntime.{Checkpoint, CommitRow, HeadRow, Result, State, Writer}
 
   @doc "Commits only if this ownership epoch still holds the exact recovered predecessor."
   def commit(
@@ -42,12 +42,107 @@ defmodule Cadence.SemanticRuntime.Store do
     )
   end
 
-  @doc "Fences previous writers, then replays a bounded durable prefix outside the ownership lock."
+  @doc "Fences previous writers, restores a checkpoint, and verifies the remaining durable suffix."
   def recover_writer(spec, partition_key, plan) do
-    with {:ok, writer} <- acquire(spec, partition_key),
-         {:ok, state} <- recover_to(spec, partition_key, plan, writer.commit_sequence) do
+    with {:ok, {writer, checkpoint}} <- acquire(spec, partition_key),
+         {:ok, state} <- recover_checkpoint(spec, partition_key, plan, writer, checkpoint) do
       {:ok, state, writer}
     end
+  end
+
+  defp recover_checkpoint(spec, key, plan, writer, checkpoint) do
+    started = System.monotonic_time()
+
+    outcome =
+      Repo.transaction(
+        fn ->
+          {status, initial, sequence} = Checkpoint.restore(checkpoint, writer.commit_sequence)
+
+          query =
+            commits(spec, key)
+            |> where([row], row.commit_sequence > ^sequence)
+            |> where([row], row.commit_sequence <= ^writer.commit_sequence)
+            |> order_by([row], asc: row.commit_sequence)
+
+          case recover_rows_counted(query, plan, initial, true) do
+            {:ok, state, count} -> {state, status, sequence, count}
+            {:error, reason} -> Repo.rollback(reason)
+          end
+        end,
+        timeout: :infinity
+      )
+
+    case outcome do
+      {:ok, {state, status, sequence, count}} ->
+        with :ok <- maybe_checkpoint_recovered_head(spec, key, writer, state, status, count) do
+          emit_checkpoint_recovery(spec, key, writer, status, sequence, count, started)
+          {:ok, state}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp emit_checkpoint_recovery(spec, key, writer, status, sequence, count, started) do
+    metadata = %{
+      mission_id: spec.mission_id,
+      partition_id: PartitionKey.identifier(key),
+      outcome: status,
+      checkpoint_sequence: sequence,
+      commit_sequence: writer.commit_sequence
+    }
+
+    measurements = %{
+      count: 1,
+      replayed_commits: count,
+      duration: System.monotonic_time() - started
+    }
+
+    :telemetry.execute([:cadence, :runtime, :partition, :checkpoint], measurements, metadata)
+
+    Logger.info(
+      "Semantic checkpoint recovery #{status} replayed_commits=#{count} " <>
+        "duration_ms=#{System.convert_time_unit(measurements.duration, :native, :millisecond)}",
+      Map.to_list(metadata)
+    )
+  end
+
+  defp maybe_checkpoint_recovered_head(_spec, _key, _writer, _state, :hit, 0), do: :ok
+
+  defp maybe_checkpoint_recovered_head(spec, key, writer, state, _status, _count) do
+    # A new replica may claim ownership during replay. It publishes its own
+    # checkpoint; the recovered stale writer remains subject to the normal fence.
+    case checkpoint_recovered_head(spec, key, writer, state) do
+      {:ok, :ok} ->
+        :ok
+
+      {:error, reason}
+      when reason in [:semantic_runtime_fenced, :semantic_runtime_stale_predecessor] ->
+        :ok
+
+      error ->
+        error
+    end
+  end
+
+  defp checkpoint_recovered_head(_spec, _key, %{commit_sequence: 0}, _state), do: {:ok, :ok}
+
+  defp checkpoint_recovered_head(spec, key, writer, state) do
+    Repo.transaction(fn ->
+      validate_writer!(lock_head(spec, key), spec, key, writer)
+
+      row =
+        commits(spec, key)
+        |> where([row], row.commit_sequence == ^writer.commit_sequence)
+        |> Repo.one!()
+
+      # Anchor only the exact state that was restored/verified, never a newer head.
+      case decode(row.state_term) do
+        {:ok, ^state} -> Checkpoint.publish(row)
+        _ -> Repo.rollback(:semantic_runtime_checkpoint_conflict)
+      end
+    end)
   end
 
   @doc "Evaluates and conditionally commits, recovering a missing suffix on ownership contention."
@@ -67,39 +162,21 @@ defmodule Cadence.SemanticRuntime.Store do
     end
   end
 
-  defp maybe_retry({:error, reason}, spec, key, writer, state, input, plan, retries)
+  defp maybe_retry({:error, reason}, spec, key, writer, _state, input, plan, retries)
        when reason in [:semantic_runtime_fenced, :semantic_runtime_stale_predecessor] and
               retries > 0 do
-    with {:ok, next_writer} <- acquire(spec, key),
-         {:ok, recovered} <- recover_suffix(spec, key, plan, state, writer, next_writer) do
-      evaluate(spec, key, next_writer, recovered, input, plan, retries - 1)
+    if writer.identity == writer_identity(spec, key) do
+      # A warm standby may be far behind. Use the same captured checkpoint and
+      # verified suffix as a new owner instead of replaying from its stale state.
+      with {:ok, recovered, next_writer} <- recover_writer(spec, key, plan) do
+        evaluate(spec, key, next_writer, recovered, input, plan, retries - 1)
+      end
+    else
+      {:error, :semantic_runtime_fenced}
     end
   end
 
   defp maybe_retry(result, _spec, _key, _writer, _state, _input, _plan, _retries), do: result
-
-  defp recover_suffix(
-         spec,
-         key,
-         plan,
-         state,
-         %Writer{identity: identity} = writer,
-         %Writer{identity: identity} = next_writer
-       ) do
-    query =
-      commits(spec, key)
-      |> where([row], row.commit_sequence > ^writer.commit_sequence)
-      |> where([row], row.commit_sequence <= ^next_writer.commit_sequence)
-      |> order_by([row], asc: row.commit_sequence)
-
-    case Repo.transaction(fn -> recover_rows(query, plan, state) end, timeout: :infinity) do
-      {:ok, result} -> result
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp recover_suffix(_spec, _key, _plan, _state, _writer, _next_writer),
-    do: {:error, :semantic_runtime_fenced}
 
   defp acquire(spec, partition_key) do
     result =
@@ -139,17 +216,21 @@ defmodule Cadence.SemanticRuntime.Store do
           )
           |> Repo.update!()
 
-        %Writer{
+        writer = %Writer{
           epoch: head.ownership_epoch,
           commit_sequence: head.commit_sequence,
           identity: writer_identity(spec, partition_key)
         }
+
+        # Capture the small reference under the same head lock. Loading it later
+        # could see a checkpoint ahead of this writer and force a full replay.
+        {writer, Checkpoint.fetch(spec, partition_key)}
       end)
 
     case result do
-      {:ok, writer} ->
+      {:ok, {writer, checkpoint}} ->
         emit(:acquired, spec, partition_key, writer)
-        {:ok, writer}
+        {:ok, {writer, checkpoint}}
 
       error ->
         error
@@ -230,9 +311,13 @@ defmodule Cadence.SemanticRuntime.Store do
       state_term: encode(state)
     }
 
-    case Repo.insert(CommitRow.changeset(attrs)) do
-      {:ok, row} -> {:ok, result, state, %{writer | commit_sequence: row.commit_sequence}}
-      {:error, reason} -> Repo.rollback(reason)
+    case Repo.insert(CommitRow.changeset(Map.merge(attrs, input_metadata(input)))) do
+      {:ok, row} ->
+        Checkpoint.publish(row)
+        {:ok, result, state, %{writer | commit_sequence: row.commit_sequence}}
+
+      {:error, reason} ->
+        Repo.rollback(reason)
     end
   end
 
@@ -295,6 +380,7 @@ defmodule Cadence.SemanticRuntime.Store do
 
   @spec recover(MissionRuntimeSpec.t(), PartitionKey.t(), map()) ::
           {:ok, State.t()} | {:error, term()}
+  @doc "Read-only full-history audit. Deliberately ignores checkpoints and verifies every result/state."
   def recover(%MissionRuntimeSpec{} = spec, %PartitionKey{} = partition_key, plan)
       when is_map(plan) do
     recover_to(spec, partition_key, plan, nil)
@@ -315,12 +401,44 @@ defmodule Cadence.SemanticRuntime.Store do
   end
 
   defp recover_rows(query, plan, initial_state \\ %State{}) do
+    case recover_rows_counted(query, plan, initial_state, false) do
+      {:ok, state, _count} -> {:ok, state}
+      error -> error
+    end
+  end
+
+  defp recover_rows_counted(query, plan, initial_state, backfill?) do
     query
     |> Repo.stream(max_rows: 100)
-    |> Enum.reduce_while({:ok, initial_state}, fn row, {:ok, state} ->
-      replay_row(row, state, plan)
+    |> Enum.reduce_while({:ok, initial_state, 0}, fn row, {:ok, state, count} ->
+      case replay_row(row, state, plan) do
+        {:cont, {:ok, next}} ->
+          backfill_input_metadata(row, backfill?)
+          {:cont, {:ok, next, count + 1}}
+
+        {:halt, error} ->
+          {:halt, error}
+      end
     end)
   end
+
+  defp backfill_input_metadata(%{input_kind: nil} = row, true) do
+    {:ok, input} = decode(row.input_term)
+
+    from(c in CommitRow, where: c.commit_sequence == ^row.commit_sequence)
+    |> Repo.update_all(set: Map.to_list(input_metadata(input)))
+  end
+
+  defp backfill_input_metadata(_row, _backfill?), do: :ok
+
+  defp input_metadata({:updates, _}), do: %{input_kind: "updates"}
+
+  defp input_metadata({:timer, _scope, _algorithm, at, key}),
+    do: %{
+      input_kind: "timer",
+      timer_key: key,
+      timer_at: DateTime.from_unix!(DateTime.to_unix(at, :microsecond), :microsecond)
+    }
 
   defp replay_row(row, state, plan) do
     with {:ok, input} <- decode(row.input_term),
@@ -338,15 +456,23 @@ defmodule Cadence.SemanticRuntime.Store do
   @spec timer_cursors(MissionRuntimeSpec.t(), PartitionKey.t()) ::
           {:ok, %{binary() => DateTime.t()}} | {:error, term()}
   def timer_cursors(%MissionRuntimeSpec{} = spec, %PartitionKey{} = partition_key) do
-    rows =
-      CommitRow
-      |> where([row], row.organization_scope_id == ^organization_scope(spec.organization_id))
-      |> where([row], row.mission_id == ^spec.mission_id)
-      |> where([row], row.partition_id == ^PartitionKey.identifier(partition_key))
-      |> where([row], row.runtime_basis_sha256 == ^spec.runtime_basis_sha256)
-      |> order_by([row], asc: row.commit_sequence)
-      |> select([row], %{input_term: row.input_term})
+    # DISTINCT ON bounds the normal query to one row per timer. Older binaries
+    # can still append NULL metadata during rollout; only that suffix is decoded.
+    latest =
+      commits(spec, partition_key)
+      |> where([row], row.input_kind == "timer")
+      |> distinct([row], row.timer_key)
+      |> order_by([row], asc: row.timer_key, desc: row.commit_sequence)
+      |> select([row], %{commit_sequence: row.commit_sequence, input_term: row.input_term})
       |> Repo.all()
+
+    legacy =
+      commits(spec, partition_key)
+      |> where([row], is_nil(row.input_kind))
+      |> select([row], %{commit_sequence: row.commit_sequence, input_term: row.input_term})
+      |> Repo.all()
+
+    rows = Enum.sort_by(latest ++ legacy, & &1.commit_sequence)
 
     Enum.reduce_while(rows, {:ok, %{}}, fn row, {:ok, cursors} ->
       case decode(row.input_term) do
@@ -367,11 +493,8 @@ defmodule Cadence.SemanticRuntime.Store do
           | {:error, term()}
   def pending_timer_results(%MissionRuntimeSpec{} = spec, %PartitionKey{} = partition_key) do
     rows =
-      CommitRow
-      |> where([row], row.organization_scope_id == ^organization_scope(spec.organization_id))
-      |> where([row], row.mission_id == ^spec.mission_id)
-      |> where([row], row.partition_id == ^PartitionKey.identifier(partition_key))
-      |> where([row], row.runtime_basis_sha256 == ^spec.runtime_basis_sha256)
+      commits(spec, partition_key)
+      |> where([row], row.input_kind == "timer" or is_nil(row.input_kind))
       |> where([row], is_nil(row.projected_at))
       |> order_by([row], asc: row.commit_sequence)
       |> select([row], %{input_term: row.input_term, result_term: row.result_term})
@@ -430,12 +553,13 @@ defmodule Cadence.SemanticRuntime.Store do
       )
       when is_binary(timer_key) do
     rows =
-      CommitRow
-      |> where([row], row.organization_scope_id == ^organization_scope(spec.organization_id))
-      |> where([row], row.mission_id == ^spec.mission_id)
-      |> where([row], row.partition_id == ^PartitionKey.identifier(partition_key))
-      |> where([row], row.runtime_basis_sha256 == ^spec.runtime_basis_sha256)
+      commits(spec, partition_key)
       |> where([row], is_nil(row.projected_at))
+      |> where(
+        [row],
+        (row.input_kind == "timer" and row.timer_key == ^timer_key and
+           row.timer_at == ^at) or is_nil(row.input_kind)
+      )
       |> select([row], %{commit_sequence: row.commit_sequence, input_term: row.input_term})
       |> Repo.all()
 

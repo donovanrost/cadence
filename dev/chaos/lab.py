@@ -496,6 +496,9 @@ def capture_observability(directory, since):
         "otel-ownership.json": (metrics + "/v1/prometheus/api/v1/query_range", {
             "query": 'cadence_runtime_partition_ownership_total{service_name="cadence-chaos"}',
             "start": start, "end": end, "step": "5s"}),
+        "otel-checkpoints.json": (metrics + "/v1/prometheus/api/v1/query_range", {
+            "query": 'cadence_runtime_partition_checkpoint_recovery_total{service_name="cadence-chaos"}',
+            "start": start, "end": end, "step": "5s"}),
         "otel-journal-retries.json": (metrics + "/v1/prometheus/api/v1/query_range", {
             "query": 'cadence_telemetry_ingress_journal_processing_retry_total{service_name="cadence-chaos"}',
             "start": start, "end": end, "step": "5s"}),
@@ -564,7 +567,7 @@ def capture_artifacts(directory, since):
 
 def semantic_sequence_audit():
     result = kube("exec", pod_names()[0], "--", "bin/cadence_web", "rpc",
-                  'Code.eval_file("/lab/scripts/semantic_sequence_audit.exs")', timeout=150)
+                  'Code.eval_file("/lab/scripts/semantic_sequence_audit.exs")', timeout=630)
     return json.loads(next(line.removeprefix("LAB_SEMANTIC_AUDIT=") for line in result.stdout.splitlines()
                            if line.startswith("LAB_SEMANTIC_AUDIT=")))
 
@@ -583,8 +586,9 @@ def journal_snapshot():
 def run_experiment(args):
     if args.seconds < 60:
         raise ValueError("Use at least 60 seconds to include a baseline and recovery window")
-    initial = sample()
     initial_audit = semantic_sequence_audit()
+    # Retained-history audits can take minutes; gate on fresh health afterward.
+    initial = sample()
     initially_healthy = healthy(initial, args.freshness) and initial_audit["regressions"] == 0
     ready_replicas = len(pod_names())
     if ready_replicas < args.minimum_ready_replicas and not args.diagnostic:

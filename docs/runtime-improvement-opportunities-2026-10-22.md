@@ -100,6 +100,114 @@ the freshness budget. Journal handoff remains a separate correctness blocker:
 retired rollout pods retained 130,455 bytes beyond processing checkpoints and
 28,990 bytes beyond archive checkpoints. No retained data was discarded.
 
+## Durable checkpoint follow-up — 2026-10-24
+
+The [checkpoint change and rehearsal](chaos-semantic-checkpoints-2026-10-24.md)
+publish an integrity-checked checkpoint atomically with every fenced commit.
+Initial recovery and warm-owner reacquisition restore that checkpoint and verify
+only the suffix through the captured head. Full-history replay remains available
+as an independent, read-only audit. Indexed timer metadata removes normal
+telemetry inputs from timer recovery queries; cursors select the latest commit
+per timer key. Missing or incompatible checkpoints require verified bootstrap.
+
+On the same retained 1,598-commit history, initial checkpoint recovery took
+2–23 ms rather than 2.73–11.84 seconds, and all 30 owners became ready in
+19.21 rather than 69.00 seconds. The report retains failed extended baselines,
+the host sleep interruption, and subsequent final-build validation separately.
+These results do not certify continuous delivery. Logical-stream journal
+handoff, recovery-aware admission, and transactional projection/side-effect
+auditing remain priorities. Pending timer results can still grow with an
+unacknowledged backlog; test that case separately from ordinary telemetry.
+
+A final-build baseline also exposed 15-second database timeouts in
+`ObservationIdentityStates.record_existing_state/2`, `upsert_state/2`, and
+`record_envelopes/2` on a replica receiving six of ten streams. Checkpoint hits
+replayed zero commits, but observation persistence failed and feed age reached
+44.53 seconds. Profile transaction duration, pool waits, and per-observation
+query volume before changing timeouts. Consider batched identity-state updates
+while preserving canonical-selection, duplicate-counting, and retry semantics.
+Include uneven contact distribution in the next capacity test.
+
+The last preflight then encountered a PostgreSQL backend OOM at its 1 GiB cgroup
+limit. PostgreSQL performed crash recovery while the Kubernetes container
+restart count remained zero. Include database cgroup OOM counters and backend
+crash logs in lab health gates, and budget connection/query concurrency alongside
+memory. Rolling validation for the checkpoint change remains blocked by these
+persistence failures; no fault was injected into the unhealthy final baseline.
+
+The rehearsal also demonstrates the need for capacity preflight and storage
+retention design. Reversible compression of two inactive QuestDB partitions
+reclaimed about 19.5 GiB with identical complete CSV hashes before and after.
+No historical rows, databases, archives, or journals were discarded.
+
+## BEAM memory investigation — October 23, 2026, evening MDT
+
+The checkpoint image was examined through its release RPC shell on one replica
+with synthetic traffic stopped. The retained fixture still contains 500
+spacecraft. A snapshot before explicitly warming ten source partitions measured
+297.4 MiB of BEAM allocations and 540.4 MiB charged to the container. Immediately
+after warm-up, those values were 447.3 and 748.2 MiB. These are distinct accounting
+surfaces: container memory also includes allocator reservations, native memory,
+code mappings and file-backed pages; it is not all live Elixir data. The post-warm
+container statistics reported 660.6 MiB anonymous and 86.6 MiB file memory.
+
+| Post-warm allocation | MiB |
+| --- | ---: |
+| Process heaps and process memory | 246.4 |
+| Binary allocations | 83.8 |
+| Loaded code | 72.3 |
+| ETS | 5.8 |
+| Other BEAM allocations | 39.0 |
+
+The largest process groups were the mission coordinator (64.3 MiB), ten partition
+owners (63.7 MiB combined), and their DynamicSupervisor (47.2 MiB). Diagnostic GC
+of processes over 1 MiB reduced total BEAM memory to 405.5 MiB, but the partition
+owners still occupied 63.6 MiB and the supervisor 56.7 MiB. Container memory did
+not immediately fall. Forced GC is a diagnostic, not a proposed production fix;
+timed background reconciliation also continued during these snapshots.
+
+State was copied from one selected process at a time into a short-lived diagnostic
+worker, which emitted only sizes and exited. This later inspection is excluded
+from the baseline snapshots above. It confirmed:
+
+- The fleet specification's flat copy size remains 62,359,784 B. Its binding set
+  accounts for 58,048,288 B. Configurations repeated across 5,000 rules and 5,000
+  instances account for 49,968,000 B, despite only ten distinct configurations
+  totaling 49,968 B. Index immutable configurations by content/identity in the
+  admitted runtime representation while preserving governed hashes.
+- A one-source specification copies 4,342,232 B, including 2,490,728 B of fleet
+  metadata. The sampled owner's semantic state was only 274,664 B. Narrowing
+  metadata to the partition's needs should precede scaling active partitions.
+- The supervisor retains 44,593,232 B of child specifications for ten children,
+  approximately 4.46 MB each. Start children with compact immutable references
+  and resolve the required specification during initialization, preserving
+  restart correctness and generation identity.
+- The 30-second reconciler rebuilds the binding set and runtime specification
+  before the unchanged-generation check. A live sample found a single 60,290,264 B
+  binary referenced by that reconciler. This is allocation churn to investigate,
+  not proof of a permanent leak. Check durable identity and runtime liveness
+  before materialization. The existing status projection also retrieves the
+  entire specification to select six small fields.
+
+A separate settled reconciler inspection found only 1,232 B of retained state;
+targeted GC reduced its process allocation from 17,556,008 B to 4,064 B. This
+supports avoiding repeated materialization and its leftover allocations, rather
+than treating that process's entire heap as required persistent runtime state.
+
+Binary ownership was deduplicated by binary address within each process. Raw
+reference-size sums are invalid because many references point to the same
+backing binary; even the deduplicated per-process totals overlap across processes.
+ETS was small and `persistent_term` used about 1.05 MiB in this sample. The earlier
+source-model indexing fix remains effective; the remaining costs are primarily
+binding configuration, partition metadata, retained child arguments, and periodic
+materialization. In this lab all three replicas load the mission and are explicitly
+warmed for ten partitions each; adding replicas does not divide these fixed costs.
+
+Evidence is retained under `var/chaos/checks/memory-pivot-*`, including pre/post-warm
+snapshots, allocator statistics, binary ownership, targeted GC, and field sizes.
+The diagnostic replica was stopped afterward. No production source, memory limit,
+or traffic configuration was changed during this investigation.
+
 ## Original work order and measurements
 
 | Priority | Opportunity | Evidence | Next change and acceptance check |

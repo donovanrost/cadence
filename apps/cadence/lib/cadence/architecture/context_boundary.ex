@@ -52,6 +52,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/runtime/mission_model_plan_decoder.ex" => :catalog,
     "lib/cadence/semantic_runtime/store.ex" => :runtime,
     "lib/cadence/semantic_runtime/commit_row.ex" => :runtime,
+    "lib/cadence/semantic_runtime/checkpoint.ex" => :runtime,
     "lib/cadence/control/mission_model_promotion.ex" => :catalog,
     "lib/cadence/extensions/registry.ex" => :composition,
     "lib/cadence/applications/registry.ex" => :composition,
