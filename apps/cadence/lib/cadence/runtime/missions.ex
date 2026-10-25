@@ -5,6 +5,7 @@ defmodule Cadence.Runtime.Missions do
 
   import Kernel, except: [apply: 2]
 
+  alias Cadence.Platform.Drain
   alias Cadence.Runtime
   alias Cadence.Runtime.GenerationApplied
   alias Cadence.Runtime.MissionCoordinator
@@ -20,13 +21,18 @@ defmodule Cadence.Runtime.Missions do
   @spec apply(ProcessNamespace.t(), MissionRuntimeSpec.t()) ::
           {:ok, GenerationApplied.t()} | {:error, term()}
   def apply(%ProcessNamespace{} = process_namespace, %MissionRuntimeSpec{} = spec) do
-    if Process.whereis(process_namespace.mission_supervisor) do
-      with {:ok, _mission_runtime} <-
-             Runtime.ensure_mission_started(process_namespace, spec.mission_id) do
-        MissionCoordinator.apply_spec(process_namespace, spec)
-      end
-    else
-      {:error, :data_plane_not_running}
+    cond do
+      Drain.draining?() ->
+        {:error, :cadence_draining}
+
+      Process.whereis(process_namespace.mission_supervisor) ->
+        with {:ok, _mission_runtime} <-
+               Runtime.ensure_mission_started(process_namespace, spec.mission_id) do
+          MissionCoordinator.apply_spec(process_namespace, spec)
+        end
+
+      true ->
+        {:error, :data_plane_not_running}
     end
   end
 

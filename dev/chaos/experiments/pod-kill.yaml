@@ -5,6 +5,7 @@ metadata:
   namespace: cadence-chaos
 spec:
   action: pod-kill
+  gracePeriod: 0
   mode: one
   selector:
     namespaces: [cadence-chaos]

@@ -323,6 +323,10 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
                  :gen_server.wait_response(request, 1_000)
       end
 
+      # The coordinator's DOWN reply can precede Registry's independent cleanup.
+      # Retry after that cleanup, without treating another transient :noproc as
+      # a failure to release the coordinator's admission slots.
+      await_partition_unregistered(mission_id, beta)
       assert {:ok, _} = GenServer.call(coordinator, {:partition_snapshot, beta}, 1_000)
       assert {:ok, _} = Cadence.process_telemetry_ingress(evidence)
     after
@@ -565,6 +569,20 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
 
     assert snapshot.tm_frame_remainder_bytes == 0
     assert snapshot.tm_packet_buffer_vcid_count == 0
+  end
+
+  defp await_partition_unregistered(mission_id, partition, attempts \\ 100) do
+    case Runtime.PartitionOwner.lookup(mission_id, partition) do
+      {:error, :partition_not_running} ->
+        :ok
+
+      {:ok, _owner} when attempts > 0 ->
+        Process.sleep(10)
+        await_partition_unregistered(mission_id, partition, attempts - 1)
+
+      {:ok, owner} ->
+        flunk("Terminated partition owner is still registered: #{inspect(owner)}")
+    end
   end
 
   defp recovery_fixture(mission_id) do

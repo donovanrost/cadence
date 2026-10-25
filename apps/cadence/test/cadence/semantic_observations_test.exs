@@ -4,12 +4,19 @@ defmodule Cadence.SemanticObservationsTest do
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Catalog.MissionModel.{Compiler, Layer}
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.SemanticObservations
-  alias Cadence.SemanticObservations.AlarmTransitionRow
+
+  alias Cadence.SemanticObservations.{
+    AlarmTransitionRow,
+    LatestAlarmStateRow,
+    MonitoringEvaluationRow
+  }
+
   alias Cadence.SemanticRuntime.{MonitoringResult, Result, Update}
 
-  test "persists every evaluation, transition, latest state, and acknowledgement" do
+  test "preserves transition evidence, latest state, acknowledgements and late-arrival ordering" do
     organization_id = "org-semantic-observations"
     mission_id = "mission-semantic-observations"
     persist_mission_scope(organization_id, mission_id)
@@ -105,6 +112,9 @@ defmodule Cadence.SemanticObservationsTest do
     assert latest.effective_state == "critical"
 
     assert %AlarmTransitionRow{} = transition = Repo.one!(AlarmTransitionRow)
+    assert evaluation = Repo.get!(MonitoringEvaluationRow, transition.evaluation_id)
+    assert evaluation.update_id == update.update_id
+    assert evaluation.evaluation_document == JsonDocument.wrap_value(monitoring)
 
     assert {:ok, acknowledgement} =
              SemanticObservations.acknowledge(
@@ -176,23 +186,117 @@ defmodule Cadence.SemanticObservationsTest do
              )
   end
 
-  test "bulk evaluations remain complete, idempotent and atomic across insert chunks" do
-    persist_mission_scope("org-monitoring-batch", "mission-monitoring-batch")
+  test "routine normal and unchanged alarm evaluations require no database queries" do
     prepared = Enum.map(1..1_001, &prepared_evaluation/1)
+    unchanged_alarm = prepared_evaluation(1_002)
 
-    assert :ok = SemanticObservations.persist_many(prepared)
-    assert :ok = SemanticObservations.persist_many(prepared)
-    assert Repo.aggregate(Cadence.SemanticObservations.MonitoringEvaluationRow, :count) == 1_001
+    [monitoring] = unchanged_alarm.semantic_result.monitoring_results
 
-    invalid = put_in(prepared_evaluation(1_003).observation_context.runtime_plan_id, nil)
+    unchanged_alarm =
+      put_in(unchanged_alarm.semantic_result.monitoring_results, [
+        %{
+          monitoring
+          | evaluated_state: :critical,
+            effective_state: :critical,
+            previous_state: :critical,
+            violation_count: 12,
+            conformance_count: 0
+        }
+      ])
 
-    assert {:error, %Ecto.Changeset{}} =
-             SemanticObservations.persist_many([prepared_evaluation(1_002), invalid])
+    handler = {__MODULE__, make_ref()}
 
-    assert Repo.aggregate(Cadence.SemanticObservations.MonitoringEvaluationRow, :count) == 1_001
+    :ok =
+      :telemetry.attach(handler, [:cadence, :repo, :query], &__MODULE__.capture_query/4, self())
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+
+    assert :ok = SemanticObservations.persist_many([unchanged_alarm | prepared])
+    refute_received {:monitoring_query, _}
+    :telemetry.detach(handler)
+
+    assert Repo.aggregate(MonitoringEvaluationRow, :count) == 0
+    assert Repo.aggregate(AlarmTransitionRow, :count) == 0
+    assert Repo.aggregate(LatestAlarmStateRow, :count) == 0
   end
 
-  defp prepared_evaluation(index) do
+  test "mixed batches retain only transition evaluations, including alarm clearance" do
+    persist_mission_scope("org-monitoring-batch", "mission-monitoring-batch")
+    raised = prepared_evaluation(1, {:normal, :critical})
+    routine = prepared_evaluation(2)
+    cleared = prepared_evaluation(3, {:critical, :normal})
+
+    prepared = %{
+      raised
+      | semantic_result: %Result{
+          parameter_updates:
+            Enum.flat_map([raised, routine, cleared], & &1.semantic_result.parameter_updates),
+          monitoring_results:
+            Enum.flat_map([raised, routine, cleared], & &1.semantic_result.monitoring_results)
+        }
+    }
+
+    assert :ok = SemanticObservations.persist_many([prepared])
+    assert :ok = SemanticObservations.persist_many([prepared])
+
+    evaluations = Repo.all(MonitoringEvaluationRow)
+
+    assert Enum.sort(Enum.map(evaluations, & &1.update_id)) == [
+             "update-batch-1",
+             "update-batch-3"
+           ]
+
+    assert Enum.all?(evaluations, & &1.transitioned)
+
+    for transition <- Repo.all(AlarmTransitionRow) do
+      evaluation = Repo.get!(MonitoringEvaluationRow, transition.evaluation_id)
+
+      assert evaluation.evaluation_document["value"]["transition"] ==
+               JsonDocument.unwrap_value(transition.transition_document)
+    end
+
+    assert Repo.aggregate(AlarmTransitionRow, :count) == 2
+
+    assert [latest] =
+             SemanticObservations.list_latest("org-monitoring-batch", "mission-monitoring-batch")
+
+    assert latest.effective_state == "normal"
+    assert Repo.get!(AlarmTransitionRow, latest.transition_id).to_state == "normal"
+  end
+
+  test "transition evidence remains complete, idempotent and atomic across insert chunks" do
+    persist_mission_scope("org-monitoring-batch", "mission-monitoring-batch")
+    prepared = Enum.map(1..1_001, &prepared_evaluation(&1, {:normal, :critical}))
+
+    assert :ok = SemanticObservations.persist_many(prepared)
+    assert :ok = SemanticObservations.persist_many(prepared)
+    assert Repo.aggregate(MonitoringEvaluationRow, :count) == 1_001
+    assert Repo.aggregate(AlarmTransitionRow, :count) == 1_001
+
+    invalid =
+      put_in(
+        prepared_evaluation(1_003, {:normal, :critical}).observation_context.runtime_plan_id,
+        nil
+      )
+
+    assert {:error, %Ecto.Changeset{}} =
+             SemanticObservations.persist_many([
+               prepared_evaluation(1_002, {:normal, :critical}),
+               invalid
+             ])
+
+    assert Repo.aggregate(MonitoringEvaluationRow, :count) == 1_001
+    assert Repo.aggregate(AlarmTransitionRow, :count) == 1_001
+  end
+
+  def capture_query(_event, _measurements, metadata, owner) do
+    if self() == owner, do: send(owner, {:monitoring_query, metadata.query})
+  end
+
+  defp prepared_evaluation(index, transition \\ nil) do
+    at = DateTime.add(~U[2026-08-11 12:00:01.000000Z], index, :second)
+    {previous, effective} = transition || {:normal, :normal}
+
     update =
       Update.new(%{
         update_id: "update-batch-#{index}",
@@ -201,13 +305,21 @@ defmodule Cadence.SemanticObservationsTest do
         value: index,
         raw_value: index,
         quality: :good,
-        receipt_time: ~U[2026-08-11 12:00:01.000000Z],
+        generation_time: at,
+        receipt_time: at,
         producer_kind: :container,
         producer_id: "container-batch",
-        metadata: %{}
+        metadata: %{spacecraft_id: "spacecraft-batch"}
       })
 
     %{
+      raw_evidence:
+        RawEvidence.new(%{
+          evidence_id: "evidence-batch-#{index}",
+          mission_id: "mission-monitoring-batch",
+          receipt_time: at,
+          raw: <<0>>
+        }),
       observation_context: %{
         organization_id: "org-monitoring-batch",
         mission_id: "mission-monitoring-batch",
@@ -221,9 +333,10 @@ defmodule Cadence.SemanticObservationsTest do
             policy_id: "policy-batch",
             parameter_id: update.parameter_id,
             update_id: update.update_id,
-            evaluated_state: :normal,
-            effective_state: :normal,
-            previous_state: :normal,
+            evaluated_state: effective,
+            effective_state: effective,
+            previous_state: previous,
+            transition: if(transition, do: %{from: previous, to: effective}),
             violation_count: 0,
             conformance_count: 1
           }

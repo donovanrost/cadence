@@ -228,6 +228,9 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
     case repo.insert_all(
            ProtocolArchiveRecordEntryRow,
            rows,
+           # A backlog-sized VALUES plan can retain megabytes in every pool
+           # connection after the flush. These variable-size batches are transient.
+           cache_statement: false,
            on_conflict: :nothing,
            conflict_target: [:record_kind, :record_id]
          ) do

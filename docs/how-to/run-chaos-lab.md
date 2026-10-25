@@ -124,12 +124,53 @@ Do not use `:sys.get_state` to inspect fleet state: inspection itself copies it.
 
 ## Experiments and evidence
 
+### Planned shutdown and crash exposure
+
+The Deployment's `preStop` hook invokes `CadenceWeb.Release.drain()` through
+release RPC. Draining immediately withdraws readiness and rejects new lifecycle
+admissions. After ten seconds for endpoint propagation, it stops local control
+workers, closes provider sockets, waits for accepted ingress to finish processing
+and archival, and settles the persistence projectors. Each journal then syncs its
+data and saves both consumer positions at the captured tail before local mission
+runtimes stop. The operation has a 65-second deadline within the pod's 90-second
+termination grace period. Ordinary OTP application shutdown uses the same drain
+with a 60-second deadline and no propagation delay.
+
+The operation is irreversible and concurrent requests share its result. A timeout
+or consumer/storage error is logged as a failed drain and causes the release RPC
+to fail; readiness remains withdrawn. Kubernetes can still terminate the pod.
+Look for `Cadence drain drained` or `Cadence drain failed` in the retiring pod's
+logs. The `[:cadence, :lifecycle, :drain]` telemetry event reports duration and
+outcome. Capture logs before deletion when investigating a rollout.
+
+The `pod-kill` experiment explicitly uses `gracePeriod: 0` to bypass this path.
+`retired-journal-exposure.json` totals complete journal bytes beyond each durable
+consumer checkpoint for only the pods retired during that experiment. These are
+exposed bytes, not a packet-loss count: checkpoints can lag work already committed.
+Compare journal ranges with semantic commit evidence before classifying missing
+processing. Torn record bytes are reported separately. Bytes still in the sender,
+socket buffers, or protocol reassembly are outside this measurement.
+
+Planned rollout validation requires both consumer checkpoints to reach every
+retired journal's complete tail, as well as the existing continuity and archive
+checks. Sudden termination reports exposure without imposing a zero-byte crash
+loss budget. Old pod journals remain retained for investigation; replacement pods
+do not automatically claim or replay them. This design uses an ordinary Deployment
+and does not require stable pod identities or a StatefulSet.
+
 `warm` recovers the ten source partitions on each Ready replica before traffic.
 Allow all ten feeds to become fresh before running an experiment. The runner
 refuses to inject a fault without that baseline. Each experiment samples HTTP
 readiness and the persisted transfer-frame index for each of the ten SCIDs.
 It requires at least three Ready replicas initially; use
 `--minimum-ready-replicas 1` only for an explicitly single-replica comparison.
+
+Freshness samples query recent archive records using the existing receipt-time
+index, with a fixed lower time bound for each experiment. Frame-count deltas
+therefore measure newly archived recent frames without rescanning all retained
+history or aging rows out of the count. `sampling_since` records that boundary,
+and each sample includes database query duration. The semantic sequence audit
+still checks all retained commits outside the timed continuity window.
 
 If the deployment cannot establish a healthy baseline, `--diagnostic` permits an
 explicitly diagnostic injection to troubleshoot the lab and application. Such a

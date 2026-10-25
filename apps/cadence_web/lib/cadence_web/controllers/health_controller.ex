@@ -1,6 +1,7 @@
 defmodule CadenceWeb.HealthController do
   use CadenceWeb, :controller
 
+  alias Cadence.Platform.Drain
   alias Ecto.Adapters.SQL
 
   @moduledoc "Infrastructure probes. Readiness covers HTTP/database access, not mission ownership."
@@ -10,7 +11,7 @@ defmodule CadenceWeb.HealthController do
   def live(conn, _params), do: json(conn, %{status: "alive"})
 
   def ready(conn, _params) do
-    if draining?() or not database_ready?() do
+    if Drain.draining?() or draining?() or not database_ready?() do
       conn |> put_status(:service_unavailable) |> json(%{status: "unavailable"})
     else
       json(conn, %{status: "ready"})

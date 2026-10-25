@@ -140,7 +140,8 @@ def manifests(images):
     app["startupProbe"] = {"httpGet": {"path": "/health/live", "port": 4001}, "failureThreshold": 120, "periodSeconds": 5}
     app["livenessProbe"] = {"httpGet": {"path": "/health/live", "port": 4001}, "periodSeconds": 10, "timeoutSeconds": 3}
     app["readinessProbe"] = {"httpGet": {"path": "/health/ready", "port": 4001}, "periodSeconds": 2, "timeoutSeconds": 2, "failureThreshold": 1}
-    app["lifecycle"] = {"preStop": {"exec": {"command": ["sh", "-c", "touch /tmp/cadence-draining; sleep 10"]}}}
+    app["lifecycle"] = {"preStop": {"exec": {"command": [
+        "/app/bin/cadence_web", "rpc", "CadenceWeb.Release.drain()"]}}}
     traffic = container("traffic", images["simulator"])
     traffic["env"] = env({"CADENCE_CHAOS_LAB": "true", "ERL_FLAGS": "+S 2:2", "LAB_RATE_HZ": os.getenv("LAB_RATE_HZ", "1.0")}) + [field_env("POD_NAMESPACE", "metadata.namespace")]
     traffic["command"] = ["bin/cadence_simulator", "eval", 'Code.eval_file("/lab/scripts/traffic.exs")']
@@ -385,7 +386,10 @@ def new_dataset():
     print(json.dumps(dataset))
 
 
-def sample():
+def sample(since=None):
+    # Old retained frames do not inform live freshness. Use the existing
+    # mission/kind/receipt-time index instead of rescanning all archive history.
+    since = since or dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=5)
     result = {"at": dt.datetime.now(dt.timezone.utc).isoformat()}
     start = time.monotonic()
     try:
@@ -396,6 +400,7 @@ def sample():
         result["http_status"] = getattr(error, "code", 0)
         result["http_error"] = str(error)
     result["http_ms"] = round((time.monotonic() - start) * 1000, 2)
+    database_start = time.monotonic()
     try:
         result["telemetry"] = json.loads(sql(f"""
           SELECT coalesce(json_agg(t), '[]') FROM (
@@ -403,12 +408,14 @@ def sample():
                    extract(epoch from now() - max(receipt_time)) AS age_seconds
             FROM protocol_archive_record_entries WHERE mission_id = '{MISSION}'
               AND record_kind = 'transfer_frame_record' AND scid BETWEEN 1 AND 10
+              AND receipt_time >= '{since.isoformat()}'
             GROUP BY scid ORDER BY scid
           ) t;
         """))
     except Exception as error:
         result["telemetry"] = []
         result["database_error"] = str(error)
+    result["database_ms"] = round((time.monotonic() - database_start) * 1000, 2)
     return result
 
 
@@ -437,6 +444,7 @@ def archive_locations(keys=None, checksums=None):
           SELECT coalesce(json_agg(object_key), '[]') FROM (
             SELECT DISTINCT ON (scid) 'protocol_record_archive/' || object_key AS object_key FROM protocol_archive_record_entries
             WHERE mission_id = '{MISSION}' AND record_kind = 'transfer_frame_record'
+              AND receipt_time >= now() - interval '5 minutes'
               AND scid BETWEEN 1 AND 10 ORDER BY scid, receipt_time DESC
           ) t;
         """))
@@ -583,14 +591,28 @@ def journal_snapshot():
     return snapshot
 
 
+def journal_exposure(snapshot, pod_uids):
+    """Durable checkpoint lag, not proof of missing semantic work or packet loss."""
+    streams = [stream for stream in snapshot["streams"] if stream["pod_uid"] in pod_uids]
+    return {"pod_uids": sorted(pod_uids), "streams": len(streams),
+            "bytes_after_checkpoint": {
+                consumer: sum(stream["bytes_after_checkpoint"].get(consumer, 0) for stream in streams)
+                for consumer in ("processing", "archive")},
+            "unscanned_bytes": sum(stream["unscanned_bytes"] for stream in streams)}
+
+
 def run_experiment(args):
     if args.seconds < 60:
         raise ValueError("Use at least 60 seconds to include a baseline and recovery window")
     initial_audit = semantic_sequence_audit()
     # Retained-history audits can take minutes; gate on fresh health afterward.
-    initial = sample()
+    # Keep this lower bound fixed so count deltas measure newly archived recent
+    # frames without older rows aging out during the observation window.
+    sampling_since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=5)
+    initial = sample(sampling_since)
     initially_healthy = healthy(initial, args.freshness) and initial_audit["regressions"] == 0
-    ready_replicas = len(pod_names())
+    initial_ready_names = set(pod_names())
+    ready_replicas = len(initial_ready_names)
     if ready_replicas < args.minimum_ready_replicas and not args.diagnostic:
         raise RuntimeError(f"Need {args.minimum_ready_replicas} Ready replicas before measuring; found {ready_replicas}")
     if not initially_healthy and args.experiment != "baseline" and not args.diagnostic:
@@ -599,6 +621,10 @@ def run_experiment(args):
     directory = STATE / "runs" / f"{stamp}-{args.experiment}"
     directory.mkdir(parents=True)
     (directory / "initial.json").write_text(json.dumps(initial, indent=2))
+    initial_pods = json.loads(kube("get", "pods", "-l", "app=cadence", "-o", "json").stdout)
+    (directory / "pods-before.json").write_text(json.dumps(initial_pods, indent=2))
+    initial_uids = {pod["metadata"]["name"]: pod["metadata"]["uid"] for pod in initial_pods["items"]
+                    if pod["metadata"]["name"] in initial_ready_names}
     (directory / "semantic-sequence-audit-before.json").write_text(json.dumps(initial_audit, indent=2))
     (directory / "journals-before.json").write_text(json.dumps(journal_snapshot(), indent=2))
     for pod in pod_names():
@@ -640,8 +666,9 @@ def run_experiment(args):
                         apply([experiment])
                         action = f"Requested {args.experiment} on {target_pod}"
                     (directory / "action.json").write_text(json.dumps({"at_seconds": elapsed, "result": action,
-                        "target_pod": target_pod, "target_holds_archive": target_holds_archive}, indent=2))
-                current = sample()
+                        "target_pod": target_pod, "target_uid": initial_uids.get(target_pod),
+                        "target_holds_archive": target_holds_archive}, indent=2))
+                current = sample(sampling_since)
                 current["elapsed_seconds"] = round(time.monotonic() - start, 2)
                 current["continuity_ok"] = healthy(current, args.freshness)
                 samples.append(current)
@@ -679,8 +706,19 @@ def run_experiment(args):
         (directory / "semantic-sequence-audit.json").write_text(json.dumps(audit, indent=2))
     except Exception as error:
         artifact_errors.append(f"Could not audit semantic sequence history: {error}")
+    exposure = None
+    drain_passed = None
     try:
-        (directory / "journals-after.json").write_text(json.dumps(journal_snapshot(), indent=2))
+        journals_after = journal_snapshot()
+        (directory / "journals-after.json").write_text(json.dumps(journals_after, indent=2))
+        remaining_names = set(pod_names())
+        retired_uids = {uid for name, uid in initial_uids.items() if name not in remaining_names}
+        exposure = journal_exposure(journals_after, retired_uids)
+        (directory / "retired-journal-exposure.json").write_text(json.dumps(exposure, indent=2))
+        if args.experiment == "rollout":
+            drain_passed = (len(retired_uids) == ready_replicas and
+                            not any(exposure["bytes_after_checkpoint"].values()) and
+                            exposure["unscanned_bytes"] == 0)
         (directory / "receivers-after.json").write_text(json.dumps(active_receivers(), indent=2))
     except Exception as error:
         artifact_errors.append(f"Could not capture journal/receiver handoff state: {error}")
@@ -693,6 +731,7 @@ def run_experiment(args):
     frames = lambda value: sum(row["records"] for row in value["telemetry"])
     frame_rate = (frames(samples[-1]) - frames(samples[0])) / observed_seconds if observed_seconds > 0 else None
     summary = {"experiment": args.experiment, "samples": len(samples),
+               "sampling_since": sampling_since.isoformat(),
                "initial_ready_replicas": ready_replicas,
                "final_ready_replicas": final_ready_replicas,
                "semantic_sequence_audit": audit,
@@ -708,8 +747,10 @@ def run_experiment(args):
                "changed_archive_objects": changed_objects,
                "archive_objects_not_on_every_replica": unshared_objects,
                "source_dropped_outputs": source_drops,
+               "retired_journal_exposure": exposure,
+               "graceful_drain_passed": drain_passed,
                "artifact_errors": artifact_errors,
-               "resilience_passed": passed and bool(archive_after) and not missing_objects and not unshared_objects and not changed_objects and source_drops == 0 and audit is not None and audit["regressions"] == 0 and not artifact_errors,
+               "resilience_passed": passed and bool(archive_after) and not missing_objects and not unshared_objects and not changed_objects and source_drops == 0 and audit is not None and audit["regressions"] == 0 and not artifact_errors and drain_passed is not False,
                "archived_frames_per_second": frame_rate,
                "http_p95_ms": latency[min(int(len(latency) * 0.95), len(latency) - 1)] if latency else None,
                "production_delivery_certified": False,

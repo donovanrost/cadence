@@ -29,6 +29,46 @@ defmodule Cadence.IngressJournal.FileSystemTest do
   end
 
   @tag :tmp_dir
+  test "sealing requires both consumers, persists their positions, and closes admission", ctx do
+    start_supervised!({FileSystem, Keyword.put(ctx.opts, :checkpoint_interval_ms, 60_000)})
+    assert {:ok, entry} = FileSystem.append(ctx.name, "captured", DateTime.utc_now())
+    assert :ok = FileSystem.acknowledge(ctx.name, :processing, entry.end_offset)
+    assert {:error, {:journal_not_drained, _, _}} = FileSystem.seal(ctx.name)
+    assert :ok = FileSystem.acknowledge(ctx.name, :archive, entry.end_offset)
+    assert {:ok, %{tail: tail, cursors: cursors}} = FileSystem.seal(ctx.name)
+    assert tail == 8
+    assert cursors == %{processing: 8, archive: 8}
+    assert {:ok, snapshot} = FileSystem.snapshot(ctx.name)
+
+    checkpoint =
+      snapshot.stream_path
+      |> Path.join("cursors.term")
+      |> File.read!()
+      |> :erlang.binary_to_term([:safe])
+
+    assert checkpoint.cursors == cursors
+    assert checkpoint.next_offset == tail
+
+    assert {:error, :ingress_journal_sealed} =
+             FileSystem.append_stream(ctx.name, "later", DateTime.utc_now())
+  end
+
+  @tag :tmp_dir
+  test "failed final checkpoint is not a successful drain", ctx do
+    opts =
+      Keyword.merge(ctx.opts,
+        checkpoint_interval_ms: 60_000,
+        checkpoint_writer: fn _, _, _, _ -> {:error, :enospc} end
+      )
+
+    start_supervised!({FileSystem, opts})
+    assert {:error, {:journal_seal_failed, :enospc}} = FileSystem.seal(ctx.name)
+
+    assert {:error, :ingress_journal_sealed} =
+             FileSystem.append(ctx.name, "later", DateTime.utc_now())
+  end
+
+  @tag :tmp_dir
   test "fresh storage never reuses identities for the same contact and byte positions", ctx do
     start_supervised!({FileSystem, ctx.opts})
     assert {:ok, original} = FileSystem.append(ctx.name, "first", DateTime.utc_now())

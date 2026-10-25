@@ -206,6 +206,21 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
              measurements.byte_count > 0 and measurements.duration_us >= 0
            end)
 
+    captured_bytes = byte_size(frame_one <> frame_two)
+
+    assert_eventually(fn ->
+      {:ok, snapshot} =
+        Cadence.path_runtime_snapshot(
+          organization_id,
+          mission_id,
+          realized_contact.realized_contact_id,
+          downlink_path_id
+        )
+
+      [provider] = snapshot.provider_runtimes
+      provider.ingress_journal.cursors == %{processing: captured_bytes, archive: captured_bytes}
+    end)
+
     assert {:ok, refreshed_snapshot} =
              Cadence.path_runtime_snapshot(
                organization_id,
@@ -219,8 +234,6 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
 
     semantic_batch_count =
       refreshed_provider_runtime_snapshot.ingress_journal_consumer.acknowledged_batches
-
-    captured_bytes = byte_size(frame_one <> frame_two)
 
     assert count_for_mission(RawEvidenceRow, :evidence_id, mission_id) == semantic_batch_count
 
@@ -275,8 +288,32 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
 
     on_exit(fn -> :telemetry.detach(append_handler_id) end)
 
+    blocked_read_handler_id = "tcp-drain-in-flight-read-#{System.unique_integer([:positive])}"
+
+    :ok =
+      :telemetry.attach(
+        blocked_read_handler_id,
+        TCPSocketInstrumentation.receive_event(),
+        fn _event, _measurements, _metadata, test_pid ->
+          send(test_pid, {:read_before_append, self()})
+
+          receive do
+            :finish_read -> :ok
+          after
+            5_000 -> raise "Test did not release the pending read"
+          end
+        end,
+        self()
+      )
+
+    on_exit(fn -> :telemetry.detach(blocked_read_handler_id) end)
+
     [frame_three, frame_four] = build_tm_space_packet_frames(42, 5, <<0, 22>>, frame_size)
     assert :ok = :gen_tcp.send(socket, frame_three <> frame_four)
+    assert_receive {:read_before_append, receiver}
+    drain = Task.async(fn -> Cadence.Runtime.drain() end)
+    assert {:error, :closed} = :gen_tcp.recv(socket, 0, 1_000)
+    send(receiver, :finish_read)
 
     assert_receive {:ingress_journal_append, [:cadence, :ingress_journal, :append],
                     %{bytes: accepted_bytes}, %{provider_binding_id: ^provider_binding_id}},
@@ -284,11 +321,18 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
 
     assert accepted_bytes == byte_size(frame_three <> frame_four)
 
-    assert :ok =
-             Cadence.Runtime.stop_realized_contact_sync(
-               mission_id,
-               realized_contact.realized_contact_id
-             )
+    assert {:ok, %{contacts: 1, journals: [journal]}} = Task.await(drain)
+    assert journal.tail == captured_bytes + accepted_bytes
+    assert journal.cursors == %{processing: journal.tail, archive: journal.tail}
+    assert Cadence.Runtime.running_mission_ids() == []
+
+    checkpoint =
+      refreshed_provider_runtime_snapshot.ingress_journal.stream_path
+      |> Elixir.Path.join("cursors.term")
+      |> File.read!()
+      |> :erlang.binary_to_term([:safe])
+
+    assert checkpoint.cursors == journal.cursors
 
     refute Cadence.Runtime.realized_contact_running?(
              mission_id,

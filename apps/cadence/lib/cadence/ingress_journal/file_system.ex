@@ -123,6 +123,9 @@ defmodule Cadence.IngressJournal.FileSystem do
   @spec snapshot(GenServer.server()) :: {:ok, map()} | {:error, term()}
   def snapshot(journal), do: call_if_running(journal, :snapshot)
 
+  @doc "Seals a drained journal and durably saves every consumer's final position."
+  def seal(journal), do: GenServer.call(journal, :seal, :infinity)
+
   @spec lookup(GenServer.server()) :: {:ok, pid()} | {:error, term()}
   def lookup(server)
 
@@ -201,6 +204,7 @@ defmodule Cadence.IngressJournal.FileSystem do
         )
 
       state = %{
+        sealed?: false,
         context: context,
         stream_id: stream_id,
         stream_path: stream_path,
@@ -248,6 +252,10 @@ defmodule Cadence.IngressJournal.FileSystem do
   end
 
   @impl true
+  def handle_call({operation, _, _, _, _}, _from, %{sealed?: true} = state)
+      when operation in [:append, :append_stream],
+      do: {:reply, {:error, :ingress_journal_sealed}, state}
+
   def handle_call({:append, payload, receipt_time, metadata, queued_at}, _from, state) do
     started_at = System.monotonic_time()
     metadata = put_capture_batch_metadata(metadata, state, byte_size(payload))
@@ -358,6 +366,40 @@ defmodule Cadence.IngressJournal.FileSystem do
     end
   end
 
+  def handle_call(:seal, _from, state) do
+    if Enum.all?(state.cursors, fn {_consumer, offset} -> offset == state.next_offset end) do
+      state = %{state | sealed?: true}
+
+      with :ok <- cancel_checkpoint_worker(state.checkpoint_in_flight),
+           :ok <- :file.datasync(state.active_file),
+           :ok <-
+             state.checkpoint_writer.(
+               state.stream_path,
+               state.cursors,
+               state.next_offset,
+               state.next_sequence
+             ) do
+        summary = %{
+          stream_id: state.stream_id,
+          tail: state.next_offset,
+          cursors: state.cursors
+        }
+
+        {:reply, {:ok, summary},
+         %{
+           state
+           | checkpoint_in_flight: nil,
+             durable_cursors: state.cursors,
+             cursors_dirty?: false
+         }}
+      else
+        {:error, reason} -> {:reply, {:error, {:journal_seal_failed, reason}}, state}
+      end
+    else
+      {:reply, {:error, {:journal_not_drained, state.cursors, state.next_offset}}, state}
+    end
+  end
+
   def handle_call(:snapshot, _from, state) do
     min_cursor = minimum_cursor(state.cursors)
 
@@ -365,6 +407,7 @@ defmodule Cadence.IngressJournal.FileSystem do
      {:ok,
       Map.merge(state.context, %{
         stream_id: state.stream_id,
+        sealed?: state.sealed?,
         stream_path: state.stream_path,
         durability: state.durability,
         max_bytes: state.max_bytes,
@@ -762,11 +805,8 @@ defmodule Cadence.IngressJournal.FileSystem do
         :ok
     after
       1_000 ->
-        Process.demonitor(checkpoint.monitor_ref, [:flush])
-        :ok
+        {:error, :checkpoint_worker_stop_timeout}
     end
-
-    :ok
   end
 
   defp reclaim_segments(state) do

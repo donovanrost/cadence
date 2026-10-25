@@ -216,6 +216,7 @@ defmodule Cadence.IngressArchive.FileSystem do
     case repo.insert_all(
            IngressArchiveEvidenceEntryRow,
            rows,
+           cache_statement: false,
            on_conflict: :nothing,
            conflict_target: [:evidence_id]
          ) do

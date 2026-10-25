@@ -11,11 +11,13 @@ defmodule Cadence.Application do
   alias Cadence.Control.DataSources.TSDBBackendLifecycleJobs
   alias Cadence.Jobs.Runner, as: JobRunner
   alias Cadence.Management.DataSources
+  alias Cadence.Platform.Drain
   alias Cadence.Platform.RootComposition
   alias Cadence.Telemetry.DataManagement
 
   @impl true
   def start(_type, _args) do
+    Drain.reset()
     Cadence.Observability.setup_repo_tracing()
     root_composition = RootComposition.from_application()
 
@@ -37,7 +39,8 @@ defmodule Cadence.Application do
         {Cadence.Control.Supervisor, control_supervisor_opts},
         {Cadence.Projections.Supervisor, root_composition: root_composition}
       ] ++
-        background_job_children(root_composition)
+        background_job_children(root_composition) ++
+        [{Drain, callback: fn -> drain_runtime(root_composition) end}]
 
     opts = [strategy: :one_for_one, name: Cadence.Supervisor]
 
@@ -54,6 +57,24 @@ defmodule Cadence.Application do
 
       other ->
         other
+    end
+  end
+
+  @impl true
+  def prep_stop(state) do
+    if Process.whereis(Drain), do: Drain.run()
+    state
+  end
+
+  defp drain_runtime(composition) do
+    # Stop reconcilers, schedulers and provider-control callbacks before closing
+    # data-plane admission. Database and archive resources stay alive to drain.
+    with :ok <-
+           Supervisor.terminate_child(
+             Cadence.Supervisor,
+             composition.control_process_namespace.root_supervisor
+           ) do
+      Cadence.Runtime.drain(composition.runtime_process_namespace)
     end
   end
 

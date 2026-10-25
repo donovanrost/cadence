@@ -9,6 +9,17 @@ import lab
 
 
 class LabTest(unittest.TestCase):
+    def test_journal_exposure_excludes_historical_and_surviving_pods(self):
+        snapshot = {"streams": [
+            {"pod_uid": uid, "bytes_after_checkpoint": {"processing": processing, "archive": archive},
+             "unscanned_bytes": unscanned}
+            for uid, processing, archive, unscanned in [
+                ("retired", 20, 10, 3), ("retired", 5, 0, 0), ("historical", 999, 999, 99),
+                ("surviving", 300, 300, 30)]]}
+        self.assertEqual(lab.journal_exposure(snapshot, {"retired"}), {
+            "pod_uids": ["retired"], "streams": 2,
+            "bytes_after_checkpoint": {"processing": 25, "archive": 10}, "unscanned_bytes": 3})
+
     def test_startup_command_dispatches_requested_replica_count(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch.object(lab, "STATE", Path(directory)), patch.object(lab, "settings", return_value={}):
@@ -85,6 +96,9 @@ class LabTest(unittest.TestCase):
         container = app["template"]["spec"]["containers"][0]
         self.assertEqual(container["readinessProbe"]["httpGet"]["path"], "/health/ready")
         self.assertEqual(container["livenessProbe"]["httpGet"]["path"], "/health/live")
+        self.assertEqual(container["lifecycle"]["preStop"]["exec"]["command"], [
+            "/app/bin/cadence_web", "rpc", "CadenceWeb.Release.drain()"])
+        self.assertGreater(app["template"]["spec"]["terminationGracePeriodSeconds"], 65)
         self.assertEqual(manifests["traffic"][0]["spec"]["strategy"], {"type": "Recreate"})
         self.assertEqual(app["template"]["spec"]["volumes"], [
             {"name": "data", "persistentVolumeClaim": {"claimName": "cadence-archives"}}])

@@ -5,6 +5,7 @@ defmodule Cadence.Control.Missions do
   alias Cadence.Control.MissionRuntime
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.ProcessNamespace
+  alias Cadence.Platform.Drain
 
   @spec ensure_started(binary()) :: {:ok, pid()} | {:error, term()}
   def ensure_started(mission_id) when is_binary(mission_id),
@@ -13,6 +14,14 @@ defmodule Cadence.Control.Missions do
   @spec ensure_started(ProcessNamespace.t(), binary()) :: {:ok, pid()} | {:error, term()}
   def ensure_started(%ProcessNamespace{} = process_namespace, mission_id)
       when is_binary(mission_id) do
+    if Drain.draining?() do
+      {:error, :cadence_draining}
+    else
+      do_ensure_started(process_namespace, mission_id)
+    end
+  end
+
+  defp do_ensure_started(process_namespace, mission_id) do
     child_spec =
       Supervisor.child_spec({MissionRuntime, mission_id},
         id: {:mission_control_runtime, mission_id}

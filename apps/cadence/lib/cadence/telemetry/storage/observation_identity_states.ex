@@ -243,6 +243,7 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStates do
     |> Enum.flat_map(fn rows ->
       {_count, inserted} =
         Repo.insert_all(TelemetryObservationIdentityStateRow, rows,
+          cache_statement: false,
           on_conflict: :nothing,
           conflict_target: [:observation_identity_id],
           returning: [:observation_identity_id]

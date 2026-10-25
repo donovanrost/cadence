@@ -456,6 +456,21 @@ pressure before attributing the excursion to another Elixir hot path.
 Migration steps 5 and 7 remain open. Step 6 is complete for raw archive but
 remains open for the generic semantic projector and its derived sinks.
 
+### Sparse Monitoring Evaluation Persistence
+
+`Cadence.SemanticObservations.persist_many/1` now writes evaluation rows only
+when they support an alarm transition. A batch of normal or unchanged alarm
+evaluations performs no database operations at this boundary. Evaluation
+evidence, the transition, and the latest alarm state remain in one transaction;
+retry idempotency, acknowledgements, and late-arrival ordering are preserved.
+Existing evaluation history is retained without a destructive migration.
+
+This removes mandatory exhaustive evaluation history from this relational
+projection. It does not skip monitoring execution or alter its state, counters,
+or transitions. The separate semantic recovery log still contains full results;
+observation identity and archive indexing remain additional sources of
+per-record Postgres work. Those migrations remain open.
+
 ## Acceptance Criteria
 
 Implementation of this ADR is complete only when:

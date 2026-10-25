@@ -54,6 +54,15 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityStatesTest do
     states = ObservationIdentityStates.list_for_selection("mission-identity")
     assert length(states) == 1_001
     assert Enum.all?(states, &(&1.canonical_count == 1))
+
+    assert %{rows: [[0]]} =
+             Repo.query!(
+               """
+               SELECT count(*) FROM pg_prepared_statements
+               WHERE name = $1 AND cardinality(parameter_types) >= 1000
+               """,
+               ["ecto_insert_all_telemetry_observation_identity_states"]
+             )
   end
 
   test "keeps existing decisions and ordered revisions when mixing new and existing identities" do

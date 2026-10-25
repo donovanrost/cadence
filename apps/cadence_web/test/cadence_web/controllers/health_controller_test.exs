@@ -28,4 +28,12 @@ defmodule CadenceWeb.HealthControllerTest do
     assert %{"status" => "unavailable"} = conn |> get("/health/ready") |> json_response(503)
     assert %{"status" => "alive"} = build_conn() |> get("/health/live") |> json_response(200)
   end
+
+  test "process drain removes readiness without a deployment-specific marker", %{conn: conn} do
+    key = {Cadence.Platform.Drain, Cadence.Platform.Drain}
+    :persistent_term.put(key, true)
+    on_exit(fn -> :persistent_term.erase(key) end)
+    assert %{"status" => "unavailable"} = conn |> get("/health/ready") |> json_response(503)
+    assert %{"status" => "alive"} = build_conn() |> get("/health/live") |> json_response(200)
+  end
 end
