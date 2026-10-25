@@ -245,7 +245,12 @@ defmodule Cadence.IngressJournal.FileSystemTest do
   test "recovers bounded stream records with stable range identity and provenance", ctx do
     opts = Keyword.put(ctx.opts, :capture_record_bytes, 4)
     start_supervised!({FileSystem, opts})
-    metadata = %{mission_id: "mission-journal-test", protocol_family: :tm}
+
+    metadata = %{
+      mission_id: "mission-journal-test",
+      protocol_family: :tm,
+      ingress_metadata: %{"transport_session_id" => "socket-before-restart"}
+    }
 
     assert {:ok, entries} =
              FileSystem.append_stream(
@@ -269,6 +274,20 @@ defmodule Cadence.IngressJournal.FileSystemTest do
 
     assert recovered_evidence.evidence_id == original_evidence.evidence_id
     assert recovered_evidence.raw == original_evidence.raw
+    assert recovered_evidence.metadata["transport_session_id"] == "socket-before-restart"
+
+    assert {:ok, [next_entry]} =
+             FileSystem.append_stream(
+               ctx.name,
+               <<10, 11>>,
+               DateTime.utc_now(),
+               %{metadata | ingress_metadata: %{"transport_session_id" => "socket-after-restart"}}
+             )
+
+    refute Evidence.compatible_entries?(List.last(recovered_entries), next_entry)
+
+    assert {:error, :non_contiguous_ingress_journal_evidence_batch} =
+             Evidence.from_contiguous_entries(recovered_entries ++ [next_entry])
 
     assert recovered_evidence.metadata["journal_capture_batch_id"] ==
              original_evidence.metadata["journal_capture_batch_id"]

@@ -245,7 +245,7 @@ defmodule Cadence.Runtime.IngressJournalConsumerTest do
     metadata = %{mission_id: "retry", protocol_family: :tm}
     {:ok, first} = IngressJournal.append(journal, <<1, 2, 3>>, DateTime.utc_now(), metadata)
     test = self()
-    executor = spawn(fn -> executor_loop(test) end)
+    executor = spawn(fn -> executor_loop(test, true) end)
     on_exit(fn -> Process.exit(executor, :kill) end)
 
     consumer =
@@ -264,6 +264,7 @@ defmodule Cadence.Runtime.IngressJournalConsumerTest do
 
     assert_receive {:processing_enqueued, raw, {^consumer, ref}}, 1_000
     {:ok, last} = IngressJournal.append(journal, <<4, 5, 6>>, DateTime.utc_now(), metadata)
+    failed_at = System.monotonic_time(:millisecond)
     send(consumer, {:provider_ingress_failed, executor, ref, :bad_frame})
     # Neither polling nor quiescence may bypass the backoff.
     send(consumer, :consume)
@@ -273,8 +274,11 @@ defmodule Cadence.Runtime.IngressJournalConsumerTest do
     assert {:ok, %{retry_delay_ms: 100, consecutive_failures: 1}} =
              IngressJournalConsumer.snapshot(consumer)
 
-    refute_receive {:processing_enqueued, _, _}, 40
     assert_receive {:processing_enqueued, ^raw, {^consumer, retry_ref}}, 1_000
+    # Measure when the executor received the retry. A busy scheduler may resume
+    # this test after the whole backoff has elapsed, making refute_receive race.
+    assert_receive {:processing_enqueued_at, {^consumer, ^retry_ref}, retried_at}
+    assert retried_at - failed_at >= 100
     send(consumer, {:provider_ingress_persisted, executor, ref})
     send(consumer, {:provider_ingress_failed, executor, retry_ref, :bad_frame})
 
@@ -380,11 +384,18 @@ defmodule Cadence.Runtime.IngressJournalConsumerTest do
     end
   end
 
-  defp executor_loop(test_pid) do
+  defp executor_loop(test_pid, timestamp? \\ false) do
     receive do
       {:"$gen_cast", {:enqueue, {:telemetry, raw_evidence, _async_context, completion}}} ->
+        if timestamp? do
+          send(
+            test_pid,
+            {:processing_enqueued_at, completion, System.monotonic_time(:millisecond)}
+          )
+        end
+
         send(test_pid, {:processing_enqueued, raw_evidence, completion})
-        executor_loop(test_pid)
+        executor_loop(test_pid, timestamp?)
     end
   end
 

@@ -7,6 +7,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact}
   alias Cadence.IngressArchive.Postgres.RawEvidenceRow
+  alias Cadence.Protocol.RecordArchive.Postgres.ProtocolAnomalyRow
   alias Cadence.Protocol.RecordArchive.Postgres.TransferFrameRecordRow
   alias Cadence.ProviderAdapters.TCPSocket.Instrumentation, as: TCPSocketInstrumentation
   alias Cadence.Runtime.MissionRuntime
@@ -505,6 +506,16 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
     receiver_pid = provider_name |> :sys.get_state() |> Map.fetch!(:socket_receiver_pid)
     assert is_pid(receiver_pid)
 
+    [frame_one, frame_two] = build_tm_space_packet_frames(42, 4, <<0, 21>>, frame_size)
+    partial_bytes = frame_one <> binary_part(frame_two, 0, 7)
+    assert :ok = :gen_tcp.send(socket, partial_bytes)
+
+    assert_eventually(fn ->
+      count_for_mission(TransferFrameRecordRow, :frame_record_id, mission_id) == 1
+    end)
+
+    assert count_for_mission(TelemetrySampleRow, :sample_id, mission_id) == 0
+
     log =
       capture_log(fn ->
         Process.exit(receiver_pid, :kill)
@@ -536,7 +547,6 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
       :gen_tcp.close(replacement_socket)
     end)
 
-    [frame_one, frame_two] = build_tm_space_packet_frames(42, 4, <<0, 21>>, frame_size)
     assert :ok = :gen_tcp.send(replacement_socket, frame_one <> frame_two)
 
     assert_eventually(fn ->
@@ -553,7 +563,7 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
 
     [recovered_provider_runtime_snapshot] = recovered_snapshot.provider_runtimes
     assert recovered_provider_runtime_snapshot.connected? == true
-    assert recovered_provider_runtime_snapshot.downlink_message_count == 2
+    assert recovered_provider_runtime_snapshot.downlink_message_count == 3
 
     assert recovered_provider_runtime_snapshot.ingress_executor.processed_count ==
              recovered_provider_runtime_snapshot.ingress_journal_consumer.acknowledged_batches
@@ -572,9 +582,23 @@ defmodule Cadence.Runtime.TCPSocketProviderTest do
 
       [provider_snapshot] = snapshot.provider_runtimes
 
-      provider_snapshot.ingress_journal.cursors.processing == byte_size(frame_one <> frame_two) and
-        provider_snapshot.ingress_journal.cursors.archive == byte_size(frame_one <> frame_two)
+      captured_bytes = byte_size(partial_bytes <> frame_one <> frame_two)
+
+      provider_snapshot.ingress_journal.cursors.processing == captured_bytes and
+        provider_snapshot.ingress_journal.cursors.archive == captured_bytes
     end)
+
+    assert count_for_mission(ProtocolAnomalyRow, :anomaly_id, mission_id) == 0
+
+    sessions =
+      RawEvidenceRow
+      |> where([row], row.mission_id == ^mission_id)
+      |> Repo.all()
+      |> Enum.map(& &1.metadata["transport_session_id"])
+      |> Enum.uniq()
+
+    assert length(sessions) == 2
+    assert Enum.all?(sessions, &is_binary/1)
 
     assert :ok =
              Cadence.Runtime.stop_realized_contact_sync(

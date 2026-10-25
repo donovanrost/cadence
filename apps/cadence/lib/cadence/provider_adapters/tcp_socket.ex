@@ -615,7 +615,12 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       fixed_message_bytes: state.fixed_message_bytes,
       ingress_transport_binding_id: state.ingress_transport_binding_id,
       source_ref: state.source_ref,
-      ingress_metadata: state.ingress_metadata,
+      # A journal can span multiple sockets. Persist the connection boundary so
+      # replay and batching cannot join bytes from different TCP byte streams.
+      ingress_metadata:
+        (state.ingress_metadata || %{})
+        |> Map.delete(:transport_session_id)
+        |> Map.put("transport_session_id", Cadence.Ids.new("tcp")),
       socket: nil,
       receive_buffer: <<>>,
       message_remainder_bytes: 0,

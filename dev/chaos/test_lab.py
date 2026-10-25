@@ -9,6 +9,57 @@ import lab
 
 
 class LabTest(unittest.TestCase):
+    def test_process_kill_verifies_sigkill_before_retiring_the_pod(self):
+        pod = {"metadata": {"namespace": lab.NAMESPACE, "uid": "uid", "labels": lab.labels("cadence")},
+               "status": {"containerStatuses": [{"name": "cadence", "containerID": "docker://container",
+                                                  "state": {"running": {}}}]}}
+        stopped = {"Running": False, "ExitCode": 137, "OOMKilled": False}
+        calls = []
+        def kube(*args, **kwargs):
+            calls.append(args)
+            return SimpleNamespace(stdout=json.dumps(pod))
+        def command(args, **kwargs):
+            calls.append(tuple(args))
+            return SimpleNamespace(stdout=json.dumps(stopped))
+        with patch.object(lab, "kube", side_effect=kube), patch.object(lab, "command", side_effect=command):
+            result = lab.kill_pod_process("pod")
+        self.assertEqual(result["signal"], "SIGKILL")
+        self.assertEqual(calls[1], ("docker", "--context", "orbstack", "kill", "--signal", "KILL", "container"))
+        self.assertEqual(calls[3][:3], ("delete", "pod", "pod"))
+        calls.clear()
+        stopped["ExitCode"] = 0
+        with patch.object(lab, "kube", side_effect=kube), patch.object(lab, "command", side_effect=command):
+            with self.assertRaisesRegex(RuntimeError, "Unexpected container state"):
+                lab.kill_pod_process("pod")
+        self.assertFalse(any(call[0] == "delete" for call in calls))
+        pod["metadata"]["labels"] = {}
+        with patch.object(lab, "kube", side_effect=kube), patch.object(lab, "command") as command:
+            with self.assertRaisesRegex(RuntimeError, "outside"):
+                lab.kill_pod_process("pod")
+            command.assert_not_called()
+
+    def test_archive_counters_cross_connections_and_wrap_without_hiding_gaps(self):
+        batches = [{"scid": i, "vcid": 0, "receipt_time": "first", "sequences": [255, 254],
+                    "transport_session_id": "old"} for i in range(1, 11)]
+        batches.append({"scid": 1, "vcid": 0, "receipt_time": "next", "sequences": [1, 0],
+                        "transport_session_id": "new"})
+        result = lab.frame_counter_continuity(batches)
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["session_changes_checked"], 1)
+        batches[-1]["sequences"] = [2, 3]
+        result = lab.frame_counter_continuity(batches)
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["issues"][0]["expected"], 0)
+        self.assertTrue(result["issues"][0]["session_changed"])
+
+    def test_archive_counter_audit_rejects_duplicates_ambiguous_batches_and_missing_feeds(self):
+        for sequences in ([1, 1], [1, 3], list(range(256)), []):
+            result = lab.frame_counter_continuity([
+                {"scid": 1, "vcid": 0, "receipt_time": "now", "sequences": sequences}])
+            self.assertFalse(result["passed"])
+            self.assertEqual(len(result["issues"]), 1)
+        self.assertFalse(lab.frame_counter_continuity([])["passed"])
+
     def test_journal_exposure_excludes_historical_and_surviving_pods(self):
         snapshot = {"streams": [
             {"pod_uid": uid, "bytes_after_checkpoint": {"processing": processing, "archive": archive},

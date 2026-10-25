@@ -425,6 +425,76 @@ def healthy(sample_value, freshness):
         0 <= row["age_seconds"] <= freshness for row in rows)
 
 
+def frame_counter_continuity(batches):
+    """Audit the lab's small, unordered frame batches across receiver boundaries.
+
+    This deliberately compares archived counters across sessions even though a
+    receiver cannot do so locally. The fixture uses one VC per spacecraft and
+    fewer than 256 frames per receipt; ambiguous batches fail closed.
+    """
+    previous = {}
+    issues = []
+    frames = 0
+    session_changes = 0
+    for batch in batches:
+        key = (batch["scid"], batch["vcid"])
+        sequences = batch["sequences"]
+        frames += len(sequences)
+        values = set(sequences)
+        starts = [value for value in values if (value - 1) % 256 not in values]
+        if (not values or len(values) != len(sequences) or len(starts) != 1 or
+                values != {(starts[0] + i) % 256 for i in range(len(values))}):
+            issues.append({"kind": "invalid_or_ambiguous_batch", **batch})
+            previous.pop(key, None)
+            continue
+        first = starts[0]
+        session = batch.get("transport_session_id")
+        if key in previous:
+            last, last_session = previous[key]
+            session_changes += session != last_session
+            if first != (last + 1) % 256:
+                issues.append({"kind": "frame_counter_gap", "scid": key[0], "vcid": key[1],
+                               "at": batch["receipt_time"], "expected": (last + 1) % 256,
+                               "observed": first, "session_changed": session != last_session})
+        previous[key] = ((first + len(values) - 1) % 256, session)
+    spacecraft = {batch["scid"] for batch in batches}
+    return {"frames_checked": frames, "batches": len(batches), "spacecraft": len(spacecraft),
+            "session_changes_checked": session_changes, "issues": issues,
+            "passed": spacecraft == set(range(1, 11)) and not issues,
+            "limitation": "Modulo-256 counters cannot rule out whole-cycle loss or prove exactly-once delivery."}
+
+
+def protocol_continuity_audit(directory, start, end):
+    start = dt.datetime.fromisoformat(start).isoformat()
+    end = dt.datetime.fromisoformat(end).isoformat()
+    batches = json.loads(sql(f"""
+      SELECT coalesce(json_agg(t), '[]') FROM (
+        SELECT scid, vcid, receipt_time, metadata->>'transport_session_id' AS transport_session_id,
+               array_agg(frame_seq) AS sequences
+        FROM protocol_archive_record_entries
+        WHERE mission_id = '{MISSION}' AND record_kind = 'transfer_frame_record'
+          AND scid BETWEEN 1 AND 10 AND receipt_time BETWEEN '{start}' AND '{end}'
+        GROUP BY scid, vcid, receipt_time, metadata->>'transport_session_id'
+        ORDER BY scid, vcid, receipt_time
+      ) t
+    """))
+    anomalies = json.loads(sql(f"""
+      SELECT coalesce(json_agg(t), '[]') FROM (
+        SELECT anomaly_kind, scid, vcid, frame_seq, recorded_at, metadata
+        FROM protocol_anomalies WHERE mission_id = '{MISSION}'
+          AND recorded_at BETWEEN '{start}' AND '{end}' ORDER BY recorded_at
+      ) t
+    """))
+    summary = {"start": start, "end": end, **frame_counter_continuity(batches),
+               "protocol_anomalies": len(anomalies),
+               "batches_missing_session_id": sum(not b.get("transport_session_id") for b in batches)}
+    summary["passed"] = summary["passed"] and not anomalies and summary["batches_missing_session_id"] == 0
+    (directory / "archive-frame-batches.json").write_text(json.dumps(batches, indent=2))
+    (directory / "protocol-anomalies.json").write_text(json.dumps(anomalies, indent=2))
+    (directory / "protocol-continuity.json").write_text(json.dumps(summary, indent=2))
+    return summary
+
+
 def injection_observed(experiment):
     status = experiment.get("status", {})
     return any(condition["type"] == "AllInjected" and condition["status"] == "True"
@@ -601,6 +671,32 @@ def journal_exposure(snapshot, pod_uids):
             "unscanned_bytes": sum(stream["unscanned_bytes"] for stream in streams)}
 
 
+def kill_pod_process(pod_name):
+    """OrbStack-only abrupt death, without giving the BEAM its SIGTERM drain.
+
+    Zero-grace Kubernetes deletion can still deliver SIGTERM. Kill the exact
+    running container first, verify its exit, then retire its pod so recovery
+    uses a replacement pod's journal directory.
+    """
+    pod = json.loads(kube("get", "pod", pod_name, "-o", "json").stdout)
+    if (CONTEXT != "orbstack" or pod["metadata"]["namespace"] != NAMESPACE or
+            any(pod["metadata"].get("labels", {}).get(k) != v for k, v in labels("cadence").items())):
+        raise RuntimeError("Refusing to kill a container outside the Cadence OrbStack lab")
+    status = next(c for c in pod["status"]["containerStatuses"] if c["name"] == "cadence")
+    container = status["containerID"]
+    if not container.startswith("docker://") or "running" not in status["state"]:
+        raise RuntimeError("Process kill requires the running OrbStack Docker container")
+    container_id = container.removeprefix("docker://")
+    command(["docker", "--context", CONTEXT, "kill", "--signal", "KILL", container_id])
+    state = json.loads(command(["docker", "--context", CONTEXT, "inspect", "--format",
+                                "{{json .State}}", container_id]).stdout)
+    if state["Running"] or state["ExitCode"] != 137 or state["OOMKilled"]:
+        raise RuntimeError(f"Unexpected container state after SIGKILL: {state}")
+    kube("delete", "pod", pod_name, "--grace-period=0", "--force", "--wait=true")
+    return {"signal": "SIGKILL", "container_id": container_id, "exit_state": state,
+            "retired_pod_uid": pod["metadata"]["uid"]}
+
+
 def run_experiment(args):
     if args.seconds < 60:
         raise ValueError("Use at least 60 seconds to include a baseline and recovery window")
@@ -659,6 +755,8 @@ def run_experiment(args):
                     injected = True
                     if args.experiment == "rollout":
                         action = kube("rollout", "restart", "deployment/cadence").stdout
+                    elif args.experiment == "process-kill":
+                        action = kill_pod_process(target_pod)
                     elif args.experiment != "baseline":
                         kube("delete", "-f", str(fault_path), "--ignore-not-found", "--wait=true")
                         experiment = json.loads(kube("create", "--dry-run=client", "-f", str(fault_path), "-o", "json").stdout)
@@ -706,6 +804,13 @@ def run_experiment(args):
         (directory / "semantic-sequence-audit.json").write_text(json.dumps(audit, indent=2))
     except Exception as error:
         artifact_errors.append(f"Could not audit semantic sequence history: {error}")
+    protocol_audit = None
+    try:
+        protocol_audit = protocol_continuity_audit(directory, started_at, samples[-1]["at"])
+        if args.experiment in ("rollout", "pod-kill", "process-kill") and not protocol_audit["session_changes_checked"]:
+            artifact_errors.append("No archived TCP connection boundary observed during the fault window")
+    except Exception as error:
+        artifact_errors.append(f"Could not audit protocol continuity: {error}")
     exposure = None
     drain_passed = None
     try:
@@ -735,6 +840,7 @@ def run_experiment(args):
                "initial_ready_replicas": ready_replicas,
                "final_ready_replicas": final_ready_replicas,
                "semantic_sequence_audit": audit,
+               "protocol_continuity_audit": protocol_audit,
                "initially_healthy": initially_healthy, "diagnostic_only": args.diagnostic,
                "http_failures": sum(s["http_status"] != 200 for s in samples),
                "continuity_failures": sum(not s["continuity_ok"] for s in samples),
@@ -750,7 +856,7 @@ def run_experiment(args):
                "retired_journal_exposure": exposure,
                "graceful_drain_passed": drain_passed,
                "artifact_errors": artifact_errors,
-               "resilience_passed": passed and bool(archive_after) and not missing_objects and not unshared_objects and not changed_objects and source_drops == 0 and audit is not None and audit["regressions"] == 0 and not artifact_errors and drain_passed is not False,
+               "resilience_passed": passed and bool(archive_after) and not missing_objects and not unshared_objects and not changed_objects and source_drops == 0 and audit is not None and audit["regressions"] == 0 and protocol_audit is not None and protocol_audit["passed"] and not artifact_errors and drain_passed is not False,
                "archived_frames_per_second": frame_rate,
                "http_p95_ms": latency[min(int(len(latency) * 0.95), len(latency) - 1)] if latency else None,
                "production_delivery_certified": False,
@@ -779,7 +885,7 @@ def main():
     rollout = sub.add_parser("deploy")
     rollout.add_argument("image", help="An already-built immutable image tag; migration runs first")
     run = sub.add_parser("run")
-    run.add_argument("experiment", choices=["baseline", "rollout", "pod-kill", "pod-failure", "network-delay", "database-partition"])
+    run.add_argument("experiment", choices=["baseline", "rollout", "pod-kill", "process-kill", "pod-failure", "network-delay", "database-partition"])
     run.add_argument("--seconds", type=int, default=180)
     run.add_argument("--freshness", type=float, default=10)
     run.add_argument("--minimum-ready-replicas", type=int, choices=range(1, 7), default=3)
