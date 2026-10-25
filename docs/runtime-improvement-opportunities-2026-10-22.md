@@ -339,6 +339,147 @@ archives, journals and diagnostic evidence are retained. This validation used
 500 configured spacecraft and ten live feeds at 0.2 Hz on a single physical node;
 it is not a full-fleet throughput or node-failure certification.
 
+## Unchanged reconciliation implementation (2026-10-24 UTC)
+
+Safety reconciliation now reads only the durable activation identity columns
+before resolving governed bindings or Mission Model plans. Each reconciler keeps
+one small record from its last successful apply: the immutable activation
+identity, exact runtime identity, and distinct registered implementation
+identities. It retains no additional fleet model or binding set.
+
+Reuse also requires a live coordinator to confirm the exact activation,
+generation, and runtime-basis hash. The confirmation uses the application barrier:
+a matching pending apply must finish; a different pending generation cannot be
+acknowledged as converged. Runtime loss, changed durable identity, failed apply,
+and removal of the active basis invalidate reuse and cause the normal full
+materialization path to run when an active basis is available.
+
+Registered implementation references come from the same execution-basis values
+used to compute the runtime hash, across every distinct source model. Polls
+recheck authorization and BEAM artifact hashes without decoding the model plans.
+An allowlist removal still fails validation; a changed executable still produces
+a same-generation conflict. Runtime-basis hashing is unchanged, preserving
+existing checkpoint identities. This relies on the activation and governed
+artifacts being immutable; direct out-of-band database edits are not a supported
+configuration update mechanism.
+
+The coordinator also delays binding normalization until an apply is actually
+required. Regression tests cover the identity-only SQL query, stable application
+timestamps, runtime loss and mismatch, new generations, failed applies, missing
+active basis, registered authorization/code changes, fleet-wide executable guards,
+and the pending-application barrier.
+
+The lab image is
+`cadence-chaos:ec509128-reconcile-identity-1792883934`
+(`sha256:1a38572455d1c8508c10490bc6d17f8a907719a605bc74f919b9febedf9994a5`).
+The full `mix precommit` passed: 4,149 workspace tests, one existing exclusion,
+and 42 additional plane checks. Modified source fingerprints are retained in
+`var/chaos/checks/reconcile-identity-source-hashes.json`.
+
+The expired fixture contacts were renewed before the measured startup, then
+traffic and Cadence were stopped. Startup
+(`var/chaos/runs/20261024T232429Z-startup`) brought all three replicas Ready in
+17.1 seconds and all 30 warmed source partitions ready in 18.0 seconds, with
+zero restarts or OOM kills. OTEL recorded ten checkpoint hits on each measured
+replica. The existing database `cadence_chaos_20261023_233753` was retained.
+
+Five direct BEAM measurements on each replica showed one identity query per poll,
+4,147–4,558 reductions, and 0.234–1.297 ms elapsed. Each replica returned its
+unchanged application timestamp. The earlier diagnostic used 11 queries and
+22.4–23.2 million reductions per unchanged poll; these were taken on different
+runs, so elapsed times are not a controlled capacity comparison. The reconciler's
+retained state measured 2,336 bytes. Its process heap allocation was still about
+13–17 MiB immediately after startup; a small retained state does not mean the
+allocator has released all startup memory.
+
+Three ordinary quiet poll cycles, without forced garbage collection, showed
+280–338 MiB of BEAM memory and 445–523 MiB of cgroup memory. These remove the
+periodic full-model rebuild, not all startup/allocator retention. The preceding
+implementation's quiet measurements followed diagnostic GC, so their resident
+memory ranges are not a direct A/B comparison. Profiles and snapshots are retained
+as `var/chaos/checks/reconcile-identity-*`.
+
+The first no-fault baseline (`var/chaos/runs/20261024T232722Z-baseline`)
+passed with three Ready replicas, 13 samples, no HTTP/freshness failures, no
+source drops, 135 checked archive objects preserved on all replicas, and no
+regressions across 7,746 semantic commits. HTTP p95 was 4,314 ms.
+
+The following same-image rolling restart
+(`var/chaos/runs/20261024T233048Z-rollout`) **failed freshness**: one of 39 samples
+had spacecraft 1, 5, 6, and 10 above the unchanged 10-second threshold, with a
+maximum age of 13.216 seconds. The next sample was fresh. There were no HTTP
+failures or source drops; all 133 checked archive objects survived and no
+regressions were found across 8,417 commits. All three replacements became Ready
+without restarts. PostgreSQL and QuestDB had zero new OOM events/kills, although
+both memory-limit charge counters increased.
+
+The slow traces locate 10.8–12.0-second ingress persistence batches on the existing
+`cadence-5cd66f8f8c-4q64q` pod, before the first old pod's SIGTERM. Three inspected
+batches each contained twelve SQL spans totaling 4.9–6.8 seconds, including
+observation-identity and semantic-monitoring writes. The remaining span time is
+not fully attributed. These observations identify the persistence path, not an
+unchanged-configuration rebuild, as the immediate delay; they do not by themselves
+establish swap as the cause. Trace details are retained in
+`reconcile-identity-slow-trace-analysis.json` and the associated trace files.
+
+One retired stream, spacecraft 9, had a 14,495-byte processing-cursor lag. Its
+archive cursor and scanned tail were complete, and its exact evidence identity
+matched durable semantic commit 8,184 with 144 updates. As in the preceding run,
+this does not certify all downstream projections or processing acknowledgments.
+
+A fresh repeat baseline (`var/chaos/runs/20261024T233737Z-baseline`) passed:
+12 samples, three Ready replicas, zero HTTP/freshness failures or source drops,
+144 checked archive objects preserved, and no regressions across 9,007 commits.
+HTTP p95 was 677 ms. Image, traffic, limits, and thresholds were unchanged.
+
+The repeat rolling restart (`var/chaos/runs/20261024T234138Z-rollout`) also
+**failed freshness**: four of 26 samples failed, with a maximum feed age of
+17.143 seconds. HTTP had zero failures and p95 was 1,034 ms. All 145 checked
+archive objects survived, source drops remained zero, and 9,743 commits had no
+sequence regressions. All replacement pods became Ready without restarts or new
+OOMs; PostgreSQL and QuestDB also had no new OOM events/kills.
+
+Additional observation during the repeat captured PostgreSQL data-file read,
+write, and extension waits during the freshness spike. One observer round trip
+(kubectl plus SQL) took 13.0 seconds; that whole duration must not be attributed
+to SQL execution alone. Host `vm_stat` showed active paging during this run.
+Slow ingress persistence traces reached 12.7 seconds, while replacement partition
+recovery completed in under one second with checkpoint hits and no suffix replay.
+The evidence identifies persistence/I/O pressure as the next latency investigation;
+it does not isolate swap as the sole cause. Diagnostics are retained under
+`var/chaos/checks/reconcile-repeat-*`.
+
+The repeat also exposed incomplete journal handoff. Fifteen retired streams had
+318,890 bytes after their durable processing cursors; archive cursors were caught
+up and unscanned bytes were zero. A read-only audit verified payload checksums,
+enumerated possible contiguous work-item ranges from physical record boundaries,
+and matched their exact evidence IDs against durable semantic commits. Fourteen
+matching commits covered 231,920 bytes. Six remaining ranges, totaling **86,970
+bytes**, had no matching semantic commit: spacecraft 3, 4, 6, 7, and two distinct
+streams for spacecraft 8. These bytes remain retained in journals and archives;
+replacement-pod replay has not completed them. The coverage results are in
+`reconcile-repeat-coverage.json`. This is more than processing-acknowledgment lag,
+and prevents a lossless-delivery claim even though sequence and archive checks
+passed.
+
+After traffic was paused, a final audit found 9,917 commits, zero unfenced commits,
+broken predecessors or regressed epochs, ten correct heads, and ten matching
+checkpoints (120 KiB). The retained database's observation-identity and monitoring
+evaluation relations occupied about 1.66 GiB and 1.63 GiB including indexes;
+these are useful targets for examining the persistence working set and write
+amplification, not proof of a single cause for the stalls. Final checks on all
+three replacement BEAMs still showed one query and 4,147–4,558 reductions per
+unchanged poll (1.273–5.623 ms), with stable application observations.
+
+**Reconciliation validation and remaining blockers:** unit, architecture, startup,
+and no-fault checks pass. The reconciliation optimization is being committed at
+the user's explicit request despite both failed rolling acceptance checks; it
+does not resolve the persistence stalls or replacement-pod journal replay gap.
+No freshness threshold, memory limit, or traffic rate was relaxed; no journal
+cursors were advanced manually. Three replacement pods remain Ready with traffic
+paused, and all datasets, images, archives, journals, traces, and failed-run
+evidence are retained.
+
 ## Original work order and measurements
 
 | Priority | Opportunity | Evidence | Next change and acceptance check |

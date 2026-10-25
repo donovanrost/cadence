@@ -48,7 +48,6 @@ defmodule Cadence.Runtime.MissionCoordinator do
   @spec apply_spec(ProcessNamespace.t(), MissionRuntimeSpec.t()) ::
           {:ok, GenerationApplied.t()} | {:error, term()}
   def apply_spec(%ProcessNamespace{} = process_namespace, %MissionRuntimeSpec{} = spec) do
-    spec = MissionRuntimeSpec.compact(spec)
     coordinator = MissionRuntime.coordinator_name(process_namespace, spec.mission_id)
 
     # Safety reconciliation usually repeats the active generation. Check its
@@ -58,9 +57,14 @@ defmodule Cadence.Runtime.MissionCoordinator do
            {:applied_identity, MissionRuntimeSpec.identity(spec)},
            :infinity
          ) do
-      {:ok, observation} -> {:ok, observation}
-      {:error, _reason} = error -> error
-      :apply_required -> GenServer.call(coordinator, {:apply_spec, spec}, :infinity)
+      {:ok, observation} ->
+        {:ok, observation}
+
+      {:error, _reason} = error ->
+        error
+
+      :apply_required ->
+        GenServer.call(coordinator, {:apply_spec, MissionRuntimeSpec.compact(spec)}, :infinity)
     end
   end
 

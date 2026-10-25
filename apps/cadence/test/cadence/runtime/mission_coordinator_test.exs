@@ -355,6 +355,14 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
 
       assert :timeout = :gen_server.wait_response(application, 0)
       assert :timeout = :gen_server.wait_response(duplicate, 0)
+
+      assert {:error, {:generation_applying, 2}} =
+               Runtime.Missions.confirm_applied(
+                 Runtime.ProcessNamespace.default(),
+                 mission_id,
+                 Runtime.MissionRuntimeSpec.identity(original)
+               )
+
       send(owner, :release_recovery)
       assert {:reply, {:ok, %{generation: 1}}} = :gen_server.wait_response(snapshot, 1_000)
       assert {:reply, {:ok, observation}} = :gen_server.wait_response(application, 1_000)

@@ -45,6 +45,21 @@ defmodule Cadence.Runtime.Missions do
     end
   end
 
+  @doc "Confirms exact application, waiting for matching work and detecting runtime loss."
+  def confirm_applied(%ProcessNamespace{} = process_namespace, mission_id, identity) do
+    if Process.whereis(process_namespace.registry) do
+      GenServer.call(
+        MissionRuntime.coordinator_name(process_namespace, mission_id),
+        {:applied_identity, identity},
+        :infinity
+      )
+    else
+      :apply_required
+    end
+  catch
+    :exit, {reason, _details} when reason in [:noproc, :normal, :shutdown] -> :apply_required
+  end
+
   @spec applied_spec(binary()) :: {:ok, MissionRuntimeSpec.t()} | {:error, term()}
   def applied_spec(mission_id) when is_binary(mission_id) do
     applied_spec(ProcessNamespace.default(), mission_id)

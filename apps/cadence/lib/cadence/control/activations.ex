@@ -72,6 +72,11 @@ defmodule Cadence.Control.Activations do
   end
 
   @doc false
+  def fetch_active_identity_for_reconciliation(mission_id) when is_binary(mission_id) do
+    Activations.fetch_active_identity(mission_id)
+  end
+
+  @doc false
   def list_active_bases, do: Activations.list_active_activations()
 
   defp execute_activation(organization_id, mission_id, %BindingSet{} = binding_set, opts) do

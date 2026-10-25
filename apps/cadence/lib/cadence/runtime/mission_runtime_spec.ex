@@ -15,6 +15,7 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
   alias Cadence.Runtime.PartitionMetadata
   alias Cadence.Runtime.SourceRuntimeBases
   alias Cadence.SemanticRuntime.PlanDecoder
+  alias Cadence.SemanticRuntime.RegisteredRegistry
 
   @type t :: %__MODULE__{
           activation_id: binary(),
@@ -31,6 +32,7 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
           runtime_plans: %{required(atom()) => RuntimePlan.t()},
           source_runtime_bases: SourceRuntimeBases.t() | nil,
           runtime_basis_sha256: binary(),
+          registered_execution_basis: [map()] | nil,
           activated_at: DateTime.t(),
           metadata: map()
         }
@@ -54,6 +56,7 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
                 activation_request_id: nil,
                 organization_id: nil,
                 source_runtime_bases: nil,
+                registered_execution_basis: nil,
                 metadata: %{}
               ]
 
@@ -79,7 +82,13 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
          :ok <- validate_content_hash(attrs, content_sha256),
          {:ok, mission_model} <- fetch_mission_model(attrs),
          {:ok, source_bases} <- fetch_source_bases(attrs),
-         runtime_basis_sha256 <- runtime_basis_sha256(content_sha256, mission_model, source_bases),
+         {runtime_basis_sha256, execution_basis} <-
+           runtime_basis(
+             content_sha256,
+             mission_model,
+             source_bases,
+             RegisteredRegistry.configured()
+           ),
          :ok <- validate_runtime_basis_hash(attrs, runtime_basis_sha256) do
       {:ok,
        %__MODULE__{
@@ -97,6 +106,8 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
          runtime_plans: mission_model.plans,
          source_runtime_bases: source_bases,
          runtime_basis_sha256: runtime_basis_sha256,
+         registered_execution_basis:
+           execution_basis |> Enum.map(&Map.delete(&1, :algorithm_id)) |> Enum.uniq(),
          activated_at: activated_at,
          metadata: metadata
        }}
@@ -112,6 +123,19 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
   def identity(%__MODULE__{} = spec) do
     {spec.activation_id, spec.generation, spec.runtime_basis_sha256}
   end
+
+  @doc "Small reconciliation guard captured from the same executable basis as the runtime hash."
+  def reconciliation_guard(%__MODULE__{registered_execution_basis: nil}), do: nil
+
+  def reconciliation_guard(%__MODULE__{} = spec) do
+    %{identity: identity(spec), execution_basis: spec.registered_execution_basis}
+  end
+
+  @doc "Checks for registered code or authorization changes without rebuilding configuration."
+  def reconciliation_guard_current?(%{execution_basis: basis}),
+    do: PlanDecoder.registered_execution_basis_current?(basis)
+
+  def reconciliation_guard_current?(nil), do: false
 
   @doc "Selects the admitted source model before a runtime partition starts."
   def for_partition(%__MODULE__{source_runtime_bases: nil} = spec, _partition), do: {:ok, spec}
@@ -221,27 +245,46 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
 
   defp fetch_source_bases(_), do: {:ok, nil}
 
-  defp runtime_basis_sha256(content, model, nil), do: runtime_basis_sha256(content, model)
+  defp runtime_basis(content, model, nil, registry) do
+    basis = PlanDecoder.registered_execution_basis(model.plans, registry)
+    {runtime_basis_hash(content, model, basis), basis}
+  end
 
-  defp runtime_basis_sha256(content, _model, %SourceRuntimeBases{} = index) do
-    model_hashes =
+  defp runtime_basis(content, _model, %SourceRuntimeBases{} = index, registry) do
+    models =
       Map.new(index.models, fn {key, basis} ->
         {key,
-         runtime_basis_sha256(content, %{
-           revision_id: basis.mission_model_revision_id,
-           content_sha256: basis.mission_model_content_sha256,
-           plans: basis.runtime_plans
-         })}
+         runtime_basis(
+           content,
+           %{
+             revision_id: basis.mission_model_revision_id,
+             content_sha256: basis.mission_model_content_sha256,
+             plans: basis.runtime_plans
+           },
+           nil,
+           registry
+         )}
       end)
 
     identities =
-      Enum.map(index.sources, fn {source, key} -> {source, Map.fetch!(model_hashes, key)} end)
+      Enum.map(index.sources, fn {source, key} -> {source, elem(Map.fetch!(models, key), 0)} end)
 
-    ContentHash.term_sha256({:spacecraft_models_v1, content, Enum.sort(identities)})
+    execution_basis = models |> Enum.flat_map(fn {_, {_, basis}} -> basis end) |> Enum.uniq()
+
+    {ContentHash.term_sha256({:spacecraft_models_v1, content, Enum.sort(identities)}),
+     execution_basis}
   end
 
   @spec runtime_basis_sha256(binary(), map()) :: binary()
   def runtime_basis_sha256(binding_set_content_sha256, mission_model) do
+    runtime_basis_hash(
+      binding_set_content_sha256,
+      mission_model,
+      PlanDecoder.registered_execution_basis(mission_model.plans)
+    )
+  end
+
+  defp runtime_basis_hash(binding_set_content_sha256, mission_model, execution_basis) do
     plan_hashes =
       mission_model.plans
       |> Enum.map(fn {target, plan} -> {target, plan.content_sha256} end)
@@ -252,7 +295,7 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
       mission_model.revision_id,
       mission_model.content_sha256,
       plan_hashes,
-      PlanDecoder.registered_execution_basis(mission_model.plans)
+      execution_basis
     })
   end
 

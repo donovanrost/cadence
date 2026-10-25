@@ -62,6 +62,20 @@ defmodule Cadence.SemanticRuntime.PlanDecoder do
     |> Enum.sort_by(& &1.algorithm_id)
   end
 
+  @doc "Rechecks admitted executable identities without decoding the model plans."
+  def registered_execution_basis_current?(basis) when is_list(basis) do
+    registry = RegisteredRegistry.configured()
+
+    basis
+    |> Enum.uniq_by(&{&1.key, &1.version, &1.artifact_sha256, &1.authorization_error})
+    |> Enum.all?(fn expected ->
+      current = RegisteredRegistry.bind(Map.put(expected, :kind, :registered), registry)
+
+      current[:artifact_sha256] == expected.artifact_sha256 and
+        current[:authorization_error] == expected.authorization_error
+    end)
+  end
+
   defp plan_items(nil, _string_key, _atom_key), do: []
 
   defp plan_items(%RuntimePlan{status: :ready, plan: plan}, string_key, atom_key),
