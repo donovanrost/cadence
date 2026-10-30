@@ -306,6 +306,20 @@ defmodule Cadence.Runtime.CapabilityRegistry do
     )
   end
 
+  def export_protocol_checkpoint(server, family, transport_state, context),
+    do:
+      GenServer.call(
+        server,
+        {:protocol_checkpoint, :export_checkpoint, family, [transport_state, context]}
+      )
+
+  def restore_protocol_checkpoint(server, family, document, fresh_state, context),
+    do:
+      GenServer.call(
+        server,
+        {:protocol_checkpoint, :restore_checkpoint, family, [document, fresh_state, context]}
+      )
+
   @spec snapshot_transport_state(atom(), term(), ExecutionContext.t()) ::
           {:ok, term()} | {:error, term()}
   def snapshot_transport_state(
@@ -527,6 +541,21 @@ defmodule Cadence.Runtime.CapabilityRegistry do
       end
 
     {:reply, reply, state}
+  end
+
+  def handle_call({:protocol_checkpoint, operation, family, args}, _from, state)
+      when operation in [:export_checkpoint, :restore_checkpoint] do
+    result =
+      with {:ok, module} <- fetch_family_reply(state, family),
+           :ok <- validate_transport_extension_family(module),
+           true <- function_exported?(module, operation, length(args)) do
+        apply(module, operation, args)
+      else
+        false -> {:error, :unsupported_protocol_restoration}
+        error -> error
+      end
+
+    {:reply, result, state}
   end
 
   defp fetch_family_reply(%{families: families}, family_key) do

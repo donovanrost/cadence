@@ -8,6 +8,7 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
   alias Cadence.Catalog.Artifact
   alias Cadence.Commanding.CommandRequest
   alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact, TransportBinding}
+  alias Cadence.SessionTestSupport
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias CadenceSimulator.COP1.LoopbackPeer
@@ -28,11 +29,14 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
     source_endpoint: source_endpoint,
     command_model: command_model
   } do
+    SessionTestSupport.install_default_policy!()
+
     provider_binding =
       ProviderBinding.new(%{
         provider_binding_id: "tcp-uplink-provider-alpha",
         adapter_key: :tcp_socket,
         configuration: %{
+          uplink_resource_id: "test-loopback-session",
           mode: :listen,
           port: 0,
           ingress_protocol_family: :cop1_clcw,
@@ -77,6 +81,13 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
     end)
 
     assert_eventually(fn -> LoopbackPeer.snapshot(loopback_peer).connected? end)
+
+    SessionTestSupport.ready!(
+      @mission_id,
+      realized_contact.realized_contact_id,
+      "uplink-path-alpha",
+      "uplink-gateway-alpha"
+    )
 
     command_request =
       CommandRequest.new(%{

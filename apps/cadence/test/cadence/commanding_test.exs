@@ -29,6 +29,7 @@ defmodule Cadence.CommandingTest do
   alias Cadence.Repo
   alias Cadence.Runtime.TransportRecords
   alias Cadence.Runtime.TransportRecords.TransportActionRequestRow
+  alias Cadence.SessionTestSupport
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.Sample
@@ -538,10 +539,69 @@ defmodule Cadence.CommandingTest do
     assert command_packet.data == <<0x01>>
   end
 
+  test "a blocked TCP session leaves the command queued without creating a release attempt", c do
+    {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false])
+    {:ok, {_, port}} = :inet.sockname(listener)
+    on_exit(fn -> :gen_tcp.close(listener) end)
+    request = persist_safe_command_request(c.command_model, c.source_endpoint, 1, %{})
+
+    {:ok, %{queue_entry: queue}} =
+      Cadence.Commanding.enqueue_command_request(
+        @organization_id,
+        @mission_id,
+        request.command_request_id,
+        %{}
+      )
+
+    provider =
+      ProviderBinding.new(%{
+        provider_binding_id: "blocked-provider",
+        adapter_key: :tcp_socket,
+        configuration: %{
+          mode: :connect,
+          host: "127.0.0.1",
+          port: port,
+          uplink_resource_id: "blocked-resource"
+        }
+      })
+
+    contact =
+      persist_active_uplink_contact(
+        c.source_endpoint.source_endpoint_id,
+        %{
+          "service_name" => "gateway",
+          "provider_binding_id" => provider.provider_binding_id,
+          "provider_adapter_key" => "tcp_socket"
+        },
+        [provider]
+      )
+
+    {:ok, socket} = :gen_tcp.accept(listener)
+    on_exit(fn -> :gen_tcp.close(socket) end)
+
+    assert {:error, {:uplink_session_blocked, _}} =
+             Cadence.Commanding.release_command_queue_entry(
+               @organization_id,
+               @mission_id,
+               queue.command_queue_entry_id,
+               contact.realized_contact_id,
+               %{}
+             )
+
+    row = Repo.get!(CommandQueueEntryRow, queue.command_queue_entry_id)
+    assert row.lifecycle_state == "pending"
+    assert is_nil(row.active_release_attempt_id)
+    assert {:error, :timeout} = :gen_tcp.recv(socket, 0, 25)
+
+    assert :ok =
+             Cadence.Runtime.stop_realized_contact_sync(@mission_id, contact.realized_contact_id)
+  end
+
   test "delivers framed uplink bytes through the configured tcp provider adapter", %{
     source_endpoint: source_endpoint,
     command_model: command_model
   } do
+    SessionTestSupport.install_default_policy!()
     {:ok, listener} = :gen_tcp.listen(0, [:binary, packet: 0, active: false, reuseaddr: true])
     {:ok, {_address, port}} = :inet.sockname(listener)
 
@@ -567,6 +627,7 @@ defmodule Cadence.CommandingTest do
         provider_binding_id: "tcp-uplink-provider-alpha",
         adapter_key: :tcp_socket,
         configuration: %{
+          uplink_resource_id: "test-command-tcp-session",
           mode: :connect,
           host: "127.0.0.1",
           port: port
@@ -585,6 +646,13 @@ defmodule Cadence.CommandingTest do
       )
 
     {:ok, provider_socket} = :gen_tcp.accept(listener)
+
+    SessionTestSupport.ready!(
+      @mission_id,
+      realized_contact.realized_contact_id,
+      "uplink-path-alpha",
+      "uplink-gateway-alpha"
+    )
 
     on_exit(fn ->
       :ok =
@@ -648,6 +716,7 @@ defmodule Cadence.CommandingTest do
     source_endpoint: source_endpoint,
     command_model: command_model
   } do
+    SessionTestSupport.install_default_policy!()
     {:ok, listener} = :gen_tcp.listen(0, [:binary, packet: 0, active: false, reuseaddr: true])
     {:ok, {_address, port}} = :inet.sockname(listener)
 
@@ -673,6 +742,7 @@ defmodule Cadence.CommandingTest do
         provider_binding_id: "tcp-uplink-provider-alpha",
         adapter_key: :tcp_socket,
         configuration: %{
+          uplink_resource_id: "test-command-tcp-session",
           mode: :connect,
           host: "127.0.0.1",
           port: port
@@ -691,6 +761,13 @@ defmodule Cadence.CommandingTest do
       )
 
     {:ok, provider_socket} = :gen_tcp.accept(listener)
+
+    SessionTestSupport.ready!(
+      @mission_id,
+      realized_contact.realized_contact_id,
+      "uplink-path-alpha",
+      "uplink-gateway-alpha"
+    )
 
     on_exit(fn ->
       :ok =
@@ -711,7 +788,8 @@ defmodule Cadence.CommandingTest do
     Repo.query!("""
     CREATE FUNCTION pg_temp.reject_command_recovery_record() RETURNS trigger AS $$
     BEGIN
-      IF NEW.command_request_id = current_setting('cadence.recovery_test_request', true) THEN
+      IF NEW.command_request_id = current_setting('cadence.recovery_test_request', true)
+         AND NEW.action_kind <> 'provider_send_prepared' THEN
         RAISE EXCEPTION 'command recovery persistence failure';
       END IF;
       RETURN NEW;
@@ -753,13 +831,22 @@ defmodule Cadence.CommandingTest do
     assert Cadence.Commanding.requeue_release_pending_queue_entries() == 0
     assert {:error, _} = RequestQueueStore.claim_for_release(current)
 
-    assert [] ==
-             TransportRecords.for_command_release_attempt(
-               @organization_id,
-               @mission_id,
-               attempt_id
-             )
-             |> elem(1)
+    {_, [preparation]} =
+      TransportRecords.for_command_release_attempt(
+        @organization_id,
+        @mission_id,
+        attempt_id
+      )
+
+    assert preparation.action_kind == :provider_send_prepared
+    assert preparation.signal_phase == nil
+    assert preparation.metadata["send_status"] == "local_write_completed"
+
+    assert preparation.request_document["frames"] |> hd() |> Map.fetch!("bytes_base64") ==
+             Base.encode64(delivered_frame)
+
+    assert {:error, :unresolved_transport_send} =
+             TransportRecords.clear?("test-command-tcp-session")
 
     assert {:error, ended} = :gen_tcp.recv(provider_socket, 0, 100)
     assert ended in [:timeout, :closed]

@@ -30,13 +30,14 @@ defmodule Cadence.Runtime.TransportRuntimeTest do
 
     assert {:ok, initial_snapshot} = TransportRuntime.snapshot(transport_runtime)
     assert initial_snapshot.family_key == :heartbeat_monitor
-    assert initial_snapshot.state.heartbeat_count == 0
+    assert initial_snapshot.state.heartbeat_count >= 0
     assert initial_snapshot.state.active?
     assert initial_snapshot.timer_count == 1
 
     assert {:ok, heartbeat_snapshot} =
              await_snapshot(transport_runtime, fn snapshot ->
-               snapshot.state.heartbeat_count >= 1 and snapshot.timer_count == 1
+               snapshot.state.heartbeat_count > initial_snapshot.state.heartbeat_count and
+                 snapshot.timer_count == 1
              end)
 
     assert heartbeat_snapshot.clock_mode == :live

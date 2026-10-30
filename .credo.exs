@@ -10,7 +10,8 @@
           "apps/*/test/",
           "packages/*/mix.exs",
           "packages/*/lib/",
-          "packages/*/test/"
+          "packages/*/test/",
+          "dev/otp_cluster/"
         ],
         excluded: [~r"/_build/", ~r"/deps/", ~r"/node_modules/", ~r"/cover/"]
       }

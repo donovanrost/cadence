@@ -54,6 +54,14 @@ defmodule Cadence.ProviderAdapters do
     end
   end
 
+  @doc "Returns a provider connection incarnation; it conveys no send authority."
+  def uplink_session(namespace, mission, contact, path, binding, adapter_key) do
+    with {:ok, adapter} <- ProviderRegistry.fetch_module(adapter_key),
+         {:ok, runtime} <- provider_runtime(namespace, mission, contact, path, binding) do
+      adapter.uplink_session(runtime)
+    end
+  end
+
   @spec snapshot(binary(), binary(), binary(), binary(), atom()) ::
           {:ok, map()} | {:error, term()}
   def snapshot(mission_id, realized_contact_id, path_id, provider_binding_id, adapter_key)

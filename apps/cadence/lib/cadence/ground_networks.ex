@@ -15,12 +15,18 @@ defmodule Cadence.GroundNetworks do
     ProviderCapabilities,
     ProviderContext,
     ProviderError,
+    ProviderEvidenceStore,
     ServiceProfile,
     Validation
   }
 
   @inventory_limit 500
   @profile_limit 100
+
+  @doc "Fetches sanitized provider evidence through the organization-scoped context boundary."
+  defdelegate fetch_provider_evidence(organization_id, evidence_id),
+    to: ProviderEvidenceStore,
+    as: :fetch
 
   @spec persist_provider(Scope.t() | binary(), MissionProvider.t()) ::
           {:ok, MissionProvider.t()} | {:error, term()}

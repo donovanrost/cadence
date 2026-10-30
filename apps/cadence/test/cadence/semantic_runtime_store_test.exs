@@ -160,6 +160,10 @@ defmodule Cadence.SemanticRuntimeStoreTest do
 
     assert Repo.aggregate(Cadence.SemanticRuntime.CommitRow, :count) == 0
 
+    # Cluster owners cannot take authority back from the writer that fenced them.
+    assert {:error, :semantic_runtime_fenced} =
+             Store.process(spec, key, old_writer, empty, [input], plan, reclaim?: false)
+
     assert {:ok, ^result, ^state, writer} =
              Store.commit(spec, key, writer, [input], result, state)
 

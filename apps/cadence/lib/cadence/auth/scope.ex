@@ -41,6 +41,13 @@ defmodule Cadence.Auth.Scope do
     capabilities: MapSet.new()
   ]
 
+  @doc "Server-derived actor reference for durable audit records."
+  def audit_actor(%__MODULE__{actor_kind: :user, user: user}),
+    do: %{"kind" => "user", "id" => user.user_id}
+
+  def audit_actor(%__MODULE__{actor_kind: :service, service_identity: service}),
+    do: %{"kind" => "service", "id" => service.service_identity_id}
+
   @spec new(map()) :: t()
   def new(attrs) when is_map(attrs) do
     if Map.has_key?(attrs, :user) do

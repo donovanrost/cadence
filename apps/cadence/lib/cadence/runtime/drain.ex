@@ -3,9 +3,11 @@ defmodule Cadence.Runtime.Drain do
 
   alias Cadence.IngressJournal.FileSystem
   alias Cadence.Runtime
-  alias Cadence.Runtime.{ContactCoordinator, ProcessNamespace}
+  alias Cadence.Runtime.{ContactCoordinator, ExecutionAgent, ProcessNamespace}
 
   def run(%ProcessNamespace{} = namespace) do
+    :ok = ExecutionAgent.withdraw(namespace)
+
     contacts =
       registered(namespace, {:realized_contact_coordinator, :_, :_})
 
@@ -16,9 +18,13 @@ defmodule Cadence.Runtime.Drain do
              &FileSystem.seal/1
            ),
          {:ok, _missions} <-
-           parallel(Runtime.running_mission_ids(namespace), &stop_mission(namespace, &1)) do
+           parallel(local_mission_ids(namespace), &stop_mission(namespace, &1)) do
       {:ok, %{contacts: length(settlements), journals: journals}}
     end
+  end
+
+  defp local_mission_ids(namespace) do
+    Registry.select(namespace.registry, [{{{:mission_runtime, :"$1"}, :_, :_}, [], [:"$1"]}])
   end
 
   defp stop_mission(namespace, mission) do

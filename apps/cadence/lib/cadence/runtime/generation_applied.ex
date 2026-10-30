@@ -1,6 +1,9 @@
 defmodule Cadence.Runtime.GenerationApplied do
   @moduledoc """
-  Data-plane observation that an exact mission generation is active.
+  Observation that every partition required by a rollout admitted its exact basis.
+
+  Partitions converge independently. During an incomplete rollout, processing
+  results identify their own admitted generation; no aggregate receipt is issued.
   """
 
   alias Cadence.Runtime.MissionRuntimeSpec

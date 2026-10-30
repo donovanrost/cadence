@@ -22,6 +22,8 @@ defmodule Cadence.Commanding.VerifierTransportSignals do
     capability_signals ++ action_request_signals
   end
 
+  defp build_signal(%TransportActionRequest{action_kind: :provider_send_prepared}), do: nil
+
   defp build_signal(%TransportActionRequest{} = transport_action_request) do
     with command_release_attempt_id when is_binary(command_release_attempt_id) <-
            transport_action_request.command_release_attempt_id,
@@ -56,6 +58,9 @@ defmodule Cadence.Commanding.VerifierTransportSignals do
       _other -> nil
     end
   end
+
+  defp build_signal(%TransportCapabilityRecord{event_kind: kind})
+       when kind in [:protocol_checkpoint, :protocol_restored], do: nil
 
   defp build_signal(%TransportCapabilityRecord{} = transport_capability_record) do
     state_snapshot = unwrap_document(transport_capability_record.state_snapshot)

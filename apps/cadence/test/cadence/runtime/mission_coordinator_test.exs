@@ -401,9 +401,11 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
     refute Map.has_key?(summary, :binding_set)
   end
 
-  test "reconciliation failure retires a partially applied mission instead of acknowledging it",
+  test "reconciliation failure reports incomplete rollout without retiring healthy execution",
        %{mission_id: mission_id} do
-    %{coordinator: coordinator, beta: beta} = recovery_fixture(mission_id)
+    %{coordinator: coordinator, beta: beta, alpha_evidence: evidence} =
+      recovery_fixture(mission_id)
+
     assert {:ok, original} = Runtime.Missions.applied_spec(mission_id)
     next = %{original | generation: original.generation + 1, activation_id: "next-activation"}
     handler = gate_recovery(mission_id, beta)
@@ -411,15 +413,27 @@ defmodule Cadence.Runtime.MissionCoordinatorTest do
     assert_receive {:recovery_started, owner}, 1_000
 
     try do
-      monitor = Process.monitor(GenServer.whereis(coordinator))
+      coordinator_pid = GenServer.whereis(coordinator)
       application = :gen_server.send_request(coordinator, {:apply_spec, next})
       assert {:ok, ^original} = GenServer.call(coordinator, :active_spec, 1_000)
       Process.exit(owner, {:shutdown, :recovery_interrupted})
 
-      assert {:reply, {:error, {:partition_unavailable, {:shutdown, :recovery_interrupted}}}} =
+      assert {:reply, {:error, {:generation_incomplete, 2, failed}}} =
                :gen_server.wait_response(application, 1_000)
 
-      assert_receive {:DOWN, ^monitor, :process, _, {:partition_reconciliation_failed, _}}, 1_000
+      assert failed[beta] ==
+               {:error, {:partition_unavailable, {:shutdown, :recovery_interrupted}}}
+
+      assert GenServer.whereis(coordinator) == coordinator_pid
+
+      assert {:ok, %{observation_context: %{generation: 2}}} =
+               Cadence.process_telemetry_ingress(evidence)
+
+      assert {:error, {:partition_generation_unavailable, 2, _}} =
+               Runtime.MissionCoordinator.partition_snapshot(mission_id, beta)
+
+      :telemetry.detach(handler)
+      assert {:ok, %{generation: 2}} = Runtime.Missions.apply(next)
     after
       :telemetry.detach(handler)
       send(owner, :release_recovery)

@@ -146,12 +146,23 @@ defmodule Cadence.SemanticRuntime.Store do
   end
 
   @doc "Evaluates and conditionally commits, recovering a missing suffix on ownership contention."
-  def process(spec, key, writer, state, updates, plan) do
-    evaluate(spec, key, writer, state, {:updates, updates}, plan, 2)
+  def process(spec, key, writer, state, updates, plan, opts \\ []) do
+    retries = if Keyword.get(opts, :reclaim?, true), do: 2, else: 0
+    evaluate(spec, key, writer, state, {:updates, updates}, plan, retries)
   end
 
-  def timer(spec, key, writer, state, {scope, algorithm_id, at, timer_key}, plan) do
-    evaluate(spec, key, writer, state, {:timer, scope, algorithm_id, at, timer_key}, plan, 2)
+  def timer(spec, key, writer, state, {scope, algorithm_id, at, timer_key}, plan, opts \\ []) do
+    retries = if Keyword.get(opts, :reclaim?, true), do: 2, else: 0
+
+    evaluate(
+      spec,
+      key,
+      writer,
+      state,
+      {:timer, scope, algorithm_id, at, timer_key},
+      plan,
+      retries
+    )
   end
 
   defp evaluate(spec, key, writer, state, input, plan, retries) do

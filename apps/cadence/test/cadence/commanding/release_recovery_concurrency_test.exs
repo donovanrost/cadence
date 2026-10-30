@@ -12,6 +12,7 @@ defmodule Cadence.Commanding.ReleaseRecoveryConcurrencyTest do
   }
 
   alias Cadence.CommandReviewFixtures
+  alias Cadence.Control.Commanding, as: ControlCommanding
   alias Cadence.Missions.MissionRow
   alias Cadence.OperationalEvents.EventRow
   alias Cadence.Organizations.OrganizationRow
@@ -137,6 +138,128 @@ defmodule Cadence.Commanding.ReleaseRecoveryConcurrencyTest do
     after
       send(holder, :complete)
       Enum.each([winner, late], &Task.shutdown(&1, :brutal_kill))
+    end
+  end
+
+  test "independent resolvers serialize audit append and idempotent replay without releasing an unknown lane",
+       c do
+    {queue, attempt, attrs} =
+      independent(fn ->
+        {:ok, %{queue_entry: entry}} = enqueue(c)
+        queue = Repo.get!(CommandQueueEntryRow, entry.command_queue_entry_id)
+        request = Repo.get!(CommandRequestRow, c.request.command_request_id)
+
+        attempt =
+          CommandReleaseAttempt.new(%{
+            organization_id: c.org,
+            mission_id: c.mission,
+            command_queue_entry_id: queue.command_queue_entry_id,
+            command_request_id: request.command_request_id,
+            source_endpoint_ref: request.source_endpoint_ref,
+            realized_contact_id: "resolution-concurrency",
+            mission_model_revision_id: request.mission_model_revision_id,
+            command_id: request.command_id,
+            encoded_binary_base64: Base.encode64(<<1>>),
+            encoded_size_bytes: 1,
+            released_by: actor(c),
+            attempted_at: DateTime.utc_now()
+          })
+
+        {:ok, %{attempt: attempt}} = ReleaseStore.claim(queue, request, attempt)
+
+        {:ok, review} =
+          ControlCommanding.review_release_resolution(
+            c.scope,
+            c.mission,
+            attempt.command_release_attempt_id
+          )
+
+        attrs = %{
+          "resolution_id" => "same-resolution",
+          "basis_sha256" => review.basis_sha256,
+          "outcome" => "unknown",
+          "source" => "operator_evidence",
+          "reference" => "incident/123",
+          "observed_at" => "2026-10-26T00:00:00Z",
+          "session_ref" => "original-session"
+        }
+
+        {queue, attempt, attrs}
+      end)
+      |> Task.await(10_000)
+
+    parent = self()
+
+    first =
+      independent(fn ->
+        Repo.transaction(fn ->
+          result =
+            ControlCommanding.resolve_release_attempt(
+              c.scope,
+              c.mission,
+              attempt.command_release_attempt_id,
+              attrs
+            )
+
+          send(parent, {:resolution_held, self()})
+
+          receive do
+            :commit -> result
+          after
+            10_000 -> raise "resolution was not committed"
+          end
+        end)
+      end)
+
+    assert_receive {:resolution_held, holder}, 5_000
+
+    second =
+      independent(fn ->
+        %{rows: [[pid]]} = SQL.query!(Repo, "SELECT pg_backend_pid()", [])
+        send(parent, {:resolver_backend, pid})
+
+        ControlCommanding.resolve_release_attempt(
+          c.scope,
+          c.mission,
+          attempt.command_release_attempt_id,
+          attrs
+        )
+      end)
+
+    try do
+      assert_receive {:resolver_backend, backend}, 5_000
+      assert wait_for_lock(backend, 300)
+      send(holder, :commit)
+      assert {:ok, {:ok, %{lane_held?: true}}} = Task.await(first, 10_000)
+      assert {:ok, replay} = Task.await(second, 10_000)
+      assert replay.lane_held?
+      assert [_] = replay.release_attempt.resolution_evidence["entries"]
+
+      independent(fn ->
+        assert {:error, {:command_queue_lane_release_pending, _}} =
+                 RequestQueueStore.ensure_lane_not_in_flight(
+                   c.org,
+                   c.mission,
+                   queue.queue_lane_key
+                 )
+
+        definitive =
+          attrs |> Map.put("resolution_id", "non-delivery") |> Map.put("outcome", "not_sent")
+
+        assert {:ok, closed} =
+                 ControlCommanding.resolve_release_attempt(
+                   c.scope,
+                   c.mission,
+                   attempt.command_release_attempt_id,
+                   definitive
+                 )
+
+        refute closed.lane_held?
+        assert length(closed.release_attempt.resolution_evidence["entries"]) == 2
+      end)
+      |> Task.await(10_000)
+    after
+      send(holder, :commit)
     end
   end
 

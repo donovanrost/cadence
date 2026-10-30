@@ -18,4 +18,9 @@ defmodule Cadence.Capabilities.TransportExtension do
               {:ok, ExecutionResult.t()} | {:error, term()}
 
   @callback snapshot_state(term(), ExecutionContext.t()) :: {:ok, term()} | {:error, term()}
+  @callback export_checkpoint(term(), ExecutionContext.t()) :: {:ok, map()} | {:error, term()}
+  @callback restore_checkpoint(map(), term(), ExecutionContext.t()) ::
+              {:ok, ExecutionResult.t()} | {:error, term()}
+
+  @optional_callbacks export_checkpoint: 2, restore_checkpoint: 3
 end

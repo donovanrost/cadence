@@ -208,6 +208,7 @@ defmodule Cadence.Commanding.ReleaseStore do
   defp immutable_attempt(attempt),
     do:
       Map.drop(Map.from_struct(attempt), [
+        :resolution_evidence,
         :lifecycle_state,
         :verification_state,
         :failure_reason,

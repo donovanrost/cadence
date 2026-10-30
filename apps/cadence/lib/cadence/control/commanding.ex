@@ -3,13 +3,99 @@ defmodule Cadence.Control.Commanding do
   Control-plane boundary for command queueing, release, and verification.
   """
 
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Commanding, as: LegacyCommanding
   alias Cadence.Commanding.CommandReleaseAttempt
   alias Cadence.Commanding.ProcessNamespace
+  alias Cadence.GroundNetworks
   alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.Management.Commanding.ApprovedCommand
+  alias Cadence.Platform.{PreparedSendEvidence, ResolutionEvidence}
   alias Cadence.Runtime.Commanding, as: RuntimeCommanding
-  alias Cadence.Runtime.TransmitCommand
+  alias Cadence.Runtime.{TransmitCommand, TransportRecords}
+
+  @doc "Reviews the complete durable stream basis for a prepared physical send."
+  def review_prepared_send(%Scope{} = scope, mission, id) do
+    with :ok <- authorize_reconciliation(scope, mission) do
+      TransportRecords.review_prepared_send(
+        scope.organization_id,
+        mission,
+        id,
+        reconciliation_options(scope.organization_id, mission)
+      )
+    end
+  end
+
+  @doc "Audits exact-frame evidence without releasing lane/stream holds or granting readiness."
+  def reconcile_prepared_send(%Scope{} = scope, mission, id, attrs) do
+    with :ok <- authorize_reconciliation(scope, mission),
+         {:ok, evidence} <-
+           PreparedSendEvidence.new(Scope.audit_actor(scope), attrs),
+         :ok <- validate_prepared_provider_evidence(scope.organization_id, evidence) do
+      TransportRecords.reconcile_prepared_send(
+        scope.organization_id,
+        mission,
+        id,
+        evidence,
+        reconciliation_options(scope.organization_id, mission)
+      )
+    end
+  end
+
+  defp reconciliation_options(organization, mission) do
+    [
+      attempt_basis: fn ids ->
+        Map.new(ids, fn id ->
+          {id, LegacyCommanding.fetch_command_release_attempt(organization, mission, id)}
+        end)
+      end
+    ]
+  end
+
+  defp validate_prepared_provider_evidence(
+         organization,
+         %{"provider_evidence_id" => id} = evidence
+       )
+       when is_binary(id) do
+    with {:ok, stored} <- GroundNetworks.fetch_provider_evidence(organization, id),
+         true <- stored.content_sha256 == evidence["evidence_sha256"] do
+      :ok
+    else
+      _ -> {:error, :provider_evidence_mismatch}
+    end
+  end
+
+  defp validate_prepared_provider_evidence(_organization, _evidence), do: :ok
+
+  defp authorize_reconciliation(scope, mission) do
+    Policy.authorize(scope, :reconcile_prepared_send, %{
+      organization_id: scope.organization_id,
+      mission_id: mission
+    })
+  end
+
+  @doc "Returns the immutable basis token and current evidence for release resolution."
+  def review_release_resolution(%Scope{} = scope, mission, id) do
+    with :ok <-
+           Policy.authorize(scope, :resolve_command_release, %{
+             organization_id: scope.organization_id,
+             mission_id: mission
+           }) do
+      LegacyCommanding.review_release_resolution(scope.organization_id, mission, id)
+    end
+  end
+
+  @doc "Records scoped evidence and resolves the original claim; unknown outcomes keep the lane held."
+  def resolve_release_attempt(%Scope{} = scope, mission, id, attrs) do
+    with :ok <-
+           Policy.authorize(scope, :resolve_command_release, %{
+             organization_id: scope.organization_id,
+             mission_id: mission
+           }),
+         {:ok, evidence} <- ResolutionEvidence.new(Scope.audit_actor(scope), attrs) do
+      LegacyCommanding.resolve_release_attempt(scope.organization_id, mission, id, evidence)
+    end
+  end
 
   @doc """
   Checks the approved basis under the request and lane locks before admission.
@@ -139,6 +225,16 @@ defmodule Cadence.Control.Commanding do
     RuntimeCommanding.encode(immutable_runtime_definition, resolved_argument_values)
   end
 
+  @doc false
+  def admit_release(context) do
+    RuntimeCommanding.admit(
+      context.mission_id,
+      context.realized_contact.realized_contact_id,
+      context.path.path_id,
+      context.transport_binding.transport_binding_id
+    )
+  end
+
   @spec transmit_release_attempt(map(), CommandReleaseAttempt.t()) ::
           {:ok, [term()]} | {:error, term()}
   def transmit_release_attempt(release_context, %CommandReleaseAttempt{} = attempt)
@@ -146,6 +242,7 @@ defmodule Cadence.Control.Commanding do
     with {:ok, %TransmitCommand{} = request} <-
            TransmitCommand.new(%{
              transmit_request_id: attempt.command_release_attempt_id,
+             session_admission: release_context.uplink_admission,
              mission_id: release_context.mission_id,
              realized_contact_id: release_context.realized_contact.realized_contact_id,
              path_id: release_context.path.path_id,

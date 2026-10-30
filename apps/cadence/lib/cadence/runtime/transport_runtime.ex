@@ -10,6 +10,7 @@ defmodule Cadence.Runtime.TransportRuntime do
   alias Cadence.Capabilities.{Descriptor, ExecutionContext, ExecutionResult}
   alias Cadence.Contacts.{CombinedDownlinkRecord, DownlinkDiagnostic, DownlinkObservation}
   alias Cadence.Ids
+  alias Cadence.Platform.EventBus
   alias Cadence.Runtime.Persistence
 
   alias Cadence.Runtime.{
@@ -18,13 +19,15 @@ defmodule Cadence.Runtime.TransportRuntime do
     MissionRuntime,
     PartitionKey,
     ProcessNamespace,
+    ProtocolCheckpoint,
+    SessionReadiness,
     TimerService,
     TransportActionRequest,
     TransportCapabilityRecord,
+    TransportRecords,
+    TransportSession,
     TransportTimerEvent
   }
-
-  alias Cadence.ProviderAdapters
 
   alias Cadence.Runtime.CapabilityRegistry
   alias Cadence.Telemetry.Sample
@@ -83,8 +86,57 @@ defmodule Cadence.Runtime.TransportRuntime do
 
   @spec handle_control_input(pid(), term(), keyword()) :: {:ok, [term()]} | {:error, term()}
   def handle_control_input(transport_runtime, control_input, opts \\ []) when is_list(opts) do
-    GenServer.call(transport_runtime, {:handle_control_input, control_input, opts})
+    with {:ok, permit} <- input_admission(transport_runtime, control_input) do
+      GenServer.call(
+        transport_runtime,
+        {:handle_control_input, control_input, Keyword.put(opts, :session_admission, permit)}
+      )
+    end
   end
+
+  @doc false
+  def admit_uplink(runtime), do: GenServer.call(runtime, :uplink_admission)
+
+  @doc false
+  def handle_admitted_control_input(runtime, input, permit, opts) do
+    GenServer.call(
+      runtime,
+      {:handle_control_input, input, Keyword.put(opts, :session_admission, permit)}
+    )
+  end
+
+  defp input_admission(runtime, %UplinkRequest{}), do: GenServer.call(runtime, :uplink_admission)
+  defp input_admission(_runtime, _input), do: {:ok, nil}
+
+  @doc "Exports a durable versioned checkpoint without granting send authority."
+  def export_protocol_checkpoint(runtime),
+    do: GenServer.call(runtime, {:protocol_checkpoint, :export}, :infinity)
+
+  @doc "Reviews the latest complete durable checkpoint without installing it or granting authority."
+  def latest_protocol_checkpoint(runtime),
+    do: GenServer.call(runtime, {:protocol_checkpoint, :latest}, :infinity)
+
+  @doc "Installs a compatible durable checkpoint while keeping uplink and timers blocked."
+  def restore_protocol_checkpoint(runtime, checkpoint_id) when is_binary(checkpoint_id),
+    do: GenServer.call(runtime, {:protocol_checkpoint, {:restore, checkpoint_id}}, :infinity)
+
+  @doc "Reviews the exact connection and transport basis; this does not grant readiness."
+  def session_review(runtime), do: GenServer.call(runtime, {:session_action, :review, []})
+
+  def begin_session_recovery(runtime, evidence),
+    do: GenServer.call(runtime, {:session_action, :begin_recovery, [evidence]})
+
+  def complete_session_recovery(runtime, evidence),
+    do: GenServer.call(runtime, {:session_action, :complete_recovery, [evidence]})
+
+  def permit_recovery_exchange(runtime, exchange, evidence),
+    do: GenServer.call(runtime, {:session_action, :permit_recovery, [exchange, evidence]})
+
+  def recovery_exchange(runtime, exchange, permit),
+    do: GenServer.call(runtime, {:session_action, :exchange, [exchange, permit]})
+
+  def block_session(runtime, reason),
+    do: GenServer.call(runtime, {:session_action, :block, [reason]})
 
   @spec advance_time(pid(), DateTime.t()) :: :ok | {:error, term()}
   def advance_time(transport_runtime, %DateTime{} = target_time) do
@@ -165,6 +217,11 @@ defmodule Cadence.Runtime.TransportRuntime do
         extension_state: execution_result.state,
         persist_runtime_records?: persist_runtime_records?,
         lifecycle_status: :active,
+        protocol_restoration: nil,
+        session_handle: nil,
+        session_admission: nil,
+        uplink_generation: nil,
+        send_runtime_id: Ids.new("send_runtime"),
         outputs: execution_result.records
       }
 
@@ -192,6 +249,7 @@ defmodule Cadence.Runtime.TransportRuntime do
 
   @impl true
   def handle_call(:quiesce, _from, state) do
+    if state.session_handle, do: SessionReadiness.block(state.session_handle, :quiescing)
     canceled_timer_count = TimerService.count(state.timer_service)
 
     state = %{
@@ -207,6 +265,41 @@ defmodule Cadence.Runtime.TransportRuntime do
         capability_instance_id: state.capability_instance_id,
         canceled_timer_count: canceled_timer_count
       }}, state}
+  end
+
+  def handle_call(:uplink_admission, _from, %{lifecycle_status: :quiesced} = state),
+    do: {:reply, {:error, :transport_runtime_quiesced}, state}
+
+  def handle_call(:uplink_admission, _from, state) do
+    case TransportSession.admit(state) do
+      {:ok, permit, next} -> {:reply, {:ok, permit}, next}
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call(
+        {:session_action, _operation, _args},
+        _from,
+        %{lifecycle_status: :quiesced} = state
+      ),
+      do: {:reply, {:error, :transport_runtime_quiesced}, state}
+
+  def handle_call({:session_action, operation, args}, _from, state) do
+    {reply, next} = TransportSession.action(state, operation, args)
+    {:reply, reply, next}
+  end
+
+  def handle_call(
+        {:protocol_checkpoint, _operation},
+        _from,
+        %{lifecycle_status: :quiesced} = state
+      ),
+      do: {:reply, {:error, :transport_runtime_quiesced}, state}
+
+  def handle_call({:protocol_checkpoint, operation}, _from, state) do
+    state = refresh_live_clock(state)
+    {result, next} = ProtocolCheckpoint.handle(operation, state, execution_context(state))
+    {:reply, result, next}
   end
 
   def handle_call(:snapshot, _from, state) do
@@ -229,6 +322,8 @@ defmodule Cadence.Runtime.TransportRuntime do
            capability_instance_id: state.capability_instance_id,
            family_key: state.family_key,
            lifecycle_status: state.lifecycle_status,
+           uplink_session: session_snapshot(state),
+           protocol_restoration: state.protocol_restoration,
            scope_ref: state.scope_ref,
            partition_key: PartitionKey.identifier(state.partition_key),
            clock_mode: state.timer_service.clock.mode,
@@ -252,9 +347,16 @@ defmodule Cadence.Runtime.TransportRuntime do
     {:reply, {:error, :transport_runtime_quiesced}, state}
   end
 
+  def handle_call({operation, _, _}, _from, %{protocol_restoration: restoration} = state)
+      when operation in [:handle_transport_event, :handle_control_input] and
+             not is_nil(restoration),
+      do: {:reply, {:error, :protocol_recovery_unqualified}, state}
+
   def handle_call({:handle_transport_event, event, opts}, _from, state) do
+    {state, preparation} = interaction_state(state, opts)
+
     reply =
-      with {:ok, state} <- prepare_for_interaction(state, opts),
+      with :ok <- preparation,
            {:ok, %ExecutionResult{} = execution_result} <-
              CapabilityRegistry.handle_transport_event(
                state.process_namespace.capability_registry,
@@ -288,8 +390,11 @@ defmodule Cadence.Runtime.TransportRuntime do
   end
 
   def handle_call({:handle_control_input, control_input, opts}, _from, state) do
+    {state, preparation} = interaction_state(state, opts)
+
     reply =
-      with {:ok, state} <- prepare_for_interaction(state, opts),
+      with :ok <- preparation,
+           {:ok, state} <- authorize_input(state, control_input, opts),
            {:ok, %ExecutionResult{} = execution_result} <-
              CapabilityRegistry.handle_transport_control_input(
                state.process_namespace.capability_registry,
@@ -308,6 +413,8 @@ defmodule Cadence.Runtime.TransportRuntime do
         {:ok, execution_result.records, state}
       end
 
+    TransportSession.finish_admission(state, Keyword.get(opts, :session_admission))
+
     case reply do
       {:ok, outputs, next_state} -> {:reply, {:ok, outputs}, next_state}
       {:error, reason} -> {:reply, {:error, reason}, state}
@@ -322,10 +429,13 @@ defmodule Cadence.Runtime.TransportRuntime do
     {:reply, {:error, :transport_runtime_quiesced}, state}
   end
 
+  def handle_call({:advance_time, _time}, _from, %{protocol_restoration: restoration} = state)
+      when not is_nil(restoration), do: {:reply, {:error, :protocol_recovery_unqualified}, state}
+
   def handle_call({:advance_time, %DateTime{} = target_time}, _from, state) do
     case advance_to(state, target_time) do
       {:ok, next_state} -> {:reply, :ok, next_state}
-      {:error, reason} -> {:reply, {:error, reason}, state}
+      {:error, reason, next_state} -> {:reply, {:error, reason}, next_state}
     end
   end
 
@@ -352,6 +462,30 @@ defmodule Cadence.Runtime.TransportRuntime do
 
       {:error, :stale_timer} ->
         {:noreply, state}
+    end
+  end
+
+  defp session_snapshot(%{session_handle: nil}),
+    do: %{status: :blocked, reason: :session_not_attached}
+
+  defp session_snapshot(state) do
+    case SessionReadiness.review(state.session_handle) do
+      {:ok, snapshot} -> snapshot
+      {:error, reason} -> %{status: :blocked, reason: reason}
+    end
+  end
+
+  defp authorize_input(state, %UplinkRequest{}, opts),
+    do: TransportSession.input(state, Keyword.get(opts, :session_admission))
+
+  defp authorize_input(state, _input, _opts), do: {:ok, state}
+
+  # Timer interactions commit independently. A later input failure must retain
+  # their protocol state, counters and consumed timers rather than roll them back.
+  defp interaction_state(state, opts) do
+    case prepare_for_interaction(state, opts) do
+      {:ok, next_state} -> {next_state, :ok}
+      {:error, reason, next_state} -> {next_state, {:error, reason}}
     end
   end
 
@@ -387,7 +521,7 @@ defmodule Cadence.Runtime.TransportRuntime do
 
         case execute_timer(state, timer_entry.timer_key, timer_entry) do
           {:ok, next_state} -> fire_due_timers_until(next_state, target_time)
-          {:error, reason} -> {:error, reason}
+          {:error, reason} -> {:error, reason, state}
         end
     end
   end
@@ -438,57 +572,73 @@ defmodule Cadence.Runtime.TransportRuntime do
          metadata,
          timer_event_prefix \\ []
        ) do
-    case ActionExecutor.execute_many(
-           execution_result.action_requests,
-           state.capability_instance_id,
-           state.timer_service
-         ) do
-      {:ok, %{timer_service: timer_service, timer_events: timer_events}} ->
-        with {:ok, provider_delivery_metadata} <-
-               deliver_provider_requests(state, execution_result.action_requests) do
-          next_state = %{
-            state
-            | extension_state: execution_result.state,
-              timer_service: timer_service,
-              outputs: append_outputs(state.outputs, execution_result.records)
-          }
-
-          all_timer_events = timer_event_prefix ++ timer_events
-
-          merged_metadata =
-            metadata
-            |> Map.new()
-            |> Map.merge(Map.new(execution_result.metadata || %{}))
-            |> Map.merge(provider_delivery_metadata)
-
-          case persist_runtime_records(
-                 next_state,
-                 event_kind,
-                 execution_result,
-                 all_timer_events,
-                 merged_metadata
+    with {:ok, admission} <-
+           TransportSession.authorize_actions(state, execution_result.action_requests) do
+      result =
+        with {:ok, actions} <-
+               TransportRecords.prepare(
+                 state,
+                 execution_result.action_requests,
+                 execution_result.state
                ) do
-            :ok -> {:ok, next_state}
-            {:error, reason} -> {:error, reason}
+          case ActionExecutor.execute_many(
+                 actions,
+                 state.capability_instance_id,
+                 state.timer_service
+               ) do
+            {:ok, %{timer_service: timer_service, timer_events: timer_events}} ->
+              with {:ok, provider_delivery_metadata} <-
+                     deliver_provider_requests(state, actions, admission) do
+                next_state = %{
+                  state
+                  | extension_state: execution_result.state,
+                    session_admission: nil,
+                    timer_service: timer_service,
+                    outputs: append_outputs(state.outputs, execution_result.records)
+                }
+
+                all_timer_events = timer_event_prefix ++ timer_events
+
+                merged_metadata =
+                  metadata
+                  |> Map.new()
+                  |> Map.merge(Map.new(execution_result.metadata || %{}))
+                  |> Map.merge(provider_delivery_metadata)
+
+                case persist_runtime_records(
+                       next_state,
+                       event_kind,
+                       %{execution_result | action_requests: actions},
+                       all_timer_events,
+                       merged_metadata
+                     ) do
+                  :ok ->
+                    {:ok, next_state}
+
+                  {:error, reason} ->
+                    block_after_delivery(state, execution_result.action_requests)
+                    {:error, reason}
+                end
+              end
+
+            {:error, reason} ->
+              {:error, reason}
           end
         end
 
-      {:error, reason} ->
-        {:error, reason}
+      if match?({:error, _}, result),
+        do: block_after_delivery(state, execution_result.action_requests)
+
+      TransportSession.finish_admission(state, admission)
+      result
     end
   end
 
-  defp deliver_provider_requests(state, action_requests) do
+  defp deliver_provider_requests(state, action_requests, admission) do
     action_requests
     |> Enum.filter(&match?(%ProviderRequest{}, &1))
     |> Enum.reduce_while({:ok, []}, fn %ProviderRequest{} = provider_request, {:ok, acc} ->
-      case ProviderAdapters.deliver_uplink(
-             state.process_namespace,
-             state.mission_id,
-             state.realized_contact_id,
-             state.path_id,
-             provider_request
-           ) do
+      case TransportSession.deliver(state, provider_request, admission) do
         {:ok, delivery_metadata} ->
           {:cont, {:ok, acc ++ [delivery_metadata]}}
 
@@ -504,8 +654,14 @@ defmodule Cadence.Runtime.TransportRuntime do
         {:ok, %{provider_delivery_results: delivery_results}}
 
       {:error, reason} ->
+        block_after_delivery(state, action_requests)
         {:error, reason}
     end
+  end
+
+  defp block_after_delivery(state, actions) do
+    if state.session_handle && Enum.any?(actions, &match?(%ProviderRequest{}, &1)),
+      do: SessionReadiness.block(state.session_handle, :send_outcome_unknown)
   end
 
   defp execution_context(state, metadata \\ %{}) do
@@ -553,11 +709,11 @@ defmodule Cadence.Runtime.TransportRuntime do
   defp persist_runtime_records(
          %{persist_runtime_records?: false},
          _event_kind,
-         %ExecutionResult{},
+         %ExecutionResult{action_requests: actions},
          _timer_events,
          _metadata
        ),
-       do: :ok
+       do: TransportRecords.confirm(actions)
 
   defp persist_runtime_records(
          %{
@@ -641,11 +797,15 @@ defmodule Cadence.Runtime.TransportRuntime do
         }
       end)
 
-    Persistence.persist_transport_runtime_records(
-      [capability_record],
-      action_requests,
-      timer_events
-    )
+    with {:ok, checkpoint} <- ProtocolCheckpoint.automatic(state, execution_context(state)) do
+      Persistence.persist_transport_runtime_records(
+        EventBus,
+        [capability_record],
+        action_requests,
+        timer_events,
+        checkpoint
+      )
+    end
   end
 
   defp current_time(state), do: TimerService.current_time(state.timer_service)
@@ -747,6 +907,7 @@ defmodule Cadence.Runtime.TransportRuntime do
 
   defp action_request_document(%ProviderRequest{} = action_request) do
     %{
+      preparation_id: action_request.preparation_id,
       provider_binding_id: action_request.provider_binding_id,
       provider_adapter_key: Atom.to_string(action_request.provider_adapter_key),
       command_release_attempt_id: action_request.command_release_attempt_id,

@@ -24,7 +24,8 @@ defmodule Cadence.Runtime.TransportActionRequest do
           action_kind: atom(),
           request_document: map(),
           requested_at: DateTime.t(),
-          metadata: map()
+          metadata: map(),
+          reconciliation_evidence: map()
         }
 
   defstruct [
@@ -47,6 +48,7 @@ defmodule Cadence.Runtime.TransportActionRequest do
     :action_kind,
     :request_document,
     :requested_at,
-    metadata: %{}
+    metadata: %{},
+    reconciliation_evidence: %{}
   ]
 end

@@ -40,6 +40,8 @@ defmodule Cadence.Commanding.CommandReleaseAttemptRow do
     field(:released_at, :utc_datetime_usec)
     field(:metadata_document, :map, default: %{})
 
+    field(:resolution_evidence, :map, default: %{})
+
     timestamps()
   end
 
@@ -93,6 +95,7 @@ defmodule Cadence.Commanding.CommandReleaseAttemptRow do
   @spec to_domain(struct()) :: CommandReleaseAttempt.t()
   def to_domain(%__MODULE__{} = row) do
     CommandReleaseAttempt.new(%{
+      resolution_evidence: row.resolution_evidence,
       command_release_attempt_id: row.command_release_attempt_id,
       organization_id: row.organization_id,
       mission_id: row.mission_id,

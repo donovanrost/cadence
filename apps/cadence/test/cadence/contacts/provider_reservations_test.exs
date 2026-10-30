@@ -3,8 +3,10 @@ defmodule Cadence.Contacts.ProviderReservationsTest do
 
   alias Cadence.Management.Transports
 
+  alias Cadence.Auth.{Scope, ServiceIdentity}
   alias Cadence.Comms.Transport
   alias Cadence.Contacts.{PathTemplate, ProviderReservations}
+  alias Cadence.Control.Contacts, as: ControlContacts
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.MissionProvider
 
@@ -292,6 +294,280 @@ defmodule Cadence.Contacts.ProviderReservationsTest do
     assert due_first.provider_reservation_id == first.provider_reservation_id
     assert due_second.provider_reservation_id == second.provider_reservation_id
   end
+
+  test "uncertain reservation evidence is scoped, audited and idempotent", c do
+    {:ok, reservation} = ProviderReservations.create_attempt(c.organization_id, attempt_attrs(c))
+    scope = resolution_scope(c)
+
+    {:ok, review} =
+      ControlContacts.review_provider_reservation_resolution(
+        scope,
+        c.mission_id,
+        reservation.provider_reservation_id
+      )
+
+    attrs = resolution_evidence(review, "unknown")
+
+    assert {:ok, result} =
+             ControlContacts.resolve_provider_reservation(
+               scope,
+               c.mission_id,
+               reservation.provider_reservation_id,
+               attrs
+             )
+
+    assert result.reservation.lifecycle_state == :unknown
+
+    assert {:ok, replay} =
+             ControlContacts.resolve_provider_reservation(
+               scope,
+               c.mission_id,
+               reservation.provider_reservation_id,
+               attrs
+             )
+
+    assert [entry] = replay.reservation.resolution_evidence["entries"]
+    assert entry["actor"] == %{"kind" => "service", "id" => "resolution-service"}
+    assert entry["reference"] == "provider-case/123"
+
+    assert {:error, :resolution_id_conflict} =
+             ControlContacts.resolve_provider_reservation(
+               scope,
+               c.mission_id,
+               reservation.provider_reservation_id,
+               %{attrs | "outcome" => "not_sent"}
+             )
+
+    assert {:error, :provider_resolution_basis_changed} =
+             ControlContacts.resolve_provider_reservation(
+               scope,
+               c.mission_id,
+               reservation.provider_reservation_id,
+               %{attrs | "basis_sha256" => String.duplicate("0", 64)}
+             )
+
+    assert {:error, :forbidden} =
+             ControlContacts.resolve_provider_reservation(
+               %{scope | capabilities: MapSet.new()},
+               c.mission_id,
+               reservation.provider_reservation_id,
+               attrs
+             )
+
+    assert {:error, :provider_reservation_not_found} =
+             ControlContacts.resolve_provider_reservation(
+               scope,
+               c.mission_id,
+               "absent",
+               attrs
+             )
+  end
+
+  test "accepted reservation evidence materializes once and contradictory evidence preserves it",
+       c do
+    {:ok, reservation} = ProviderReservations.create_attempt(c.organization_id, attempt_attrs(c))
+    scope = resolution_scope(c)
+
+    {:ok, review} =
+      ControlContacts.review_provider_reservation_resolution(
+        scope,
+        c.mission_id,
+        reservation.provider_reservation_id
+      )
+
+    response =
+      provider_response(reservation, "resolved-provider-contact", "confirmed")
+      |> Map.put("client_reference", reservation.idempotency_key)
+
+    attrs = resolution_evidence(review, "accepted") |> Map.put("provider_response", response)
+
+    assert {:ok, result} =
+             ControlContacts.resolve_provider_reservation(
+               scope,
+               c.mission_id,
+               reservation.provider_reservation_id,
+               attrs
+             )
+
+    assert result.reservation.lifecycle_state == :confirmed
+
+    assert {:ok, _} =
+             Cadence.Contacts.fetch_scheduled_contact(
+               c.organization_id,
+               c.mission_id,
+               reservation.scheduled_contact_id
+             )
+
+    assert {:ok, _} =
+             ControlContacts.resolve_provider_reservation(
+               scope,
+               c.mission_id,
+               reservation.provider_reservation_id,
+               attrs
+             )
+
+    contradictory =
+      resolution_evidence(review, "not_sent") |> Map.put("resolution_id", "contradictory")
+
+    assert {:ok, retained} =
+             ControlContacts.resolve_provider_reservation(
+               scope,
+               c.mission_id,
+               reservation.provider_reservation_id,
+               contradictory
+             )
+
+    assert retained.disposition == "contradictory"
+    assert retained.reservation.lifecycle_state == :confirmed
+    assert length(retained.reservation.resolution_evidence["entries"]) == 2
+  end
+
+  test "unconfirmed non-delivery closes the original reservation without another provider call",
+       c do
+    attrs = attempt_attrs(c)
+    {:ok, reservation} = ProviderReservations.create_attempt(c.organization_id, attrs)
+    scope = resolution_scope(c)
+
+    {:ok, review} =
+      ControlContacts.review_provider_reservation_resolution(
+        scope,
+        c.mission_id,
+        reservation.provider_reservation_id
+      )
+
+    assert {:ok, resolved} =
+             ControlContacts.resolve_provider_reservation(
+               scope,
+               c.mission_id,
+               reservation.provider_reservation_id,
+               resolution_evidence(review, "not_sent")
+             )
+
+    assert resolved.reservation.lifecycle_state == :failed
+
+    assert {:ok, existing, :existing} =
+             ProviderReservations.create_attempt_with_outcome(c.organization_id, attrs)
+
+    assert existing.provider_reservation_id == reservation.provider_reservation_id
+    assert existing.lifecycle_state == :failed
+
+    assert {:ok, retained} =
+             ControlContacts.resolve_provider_reservation(
+               scope,
+               c.mission_id,
+               reservation.provider_reservation_id,
+               resolution_evidence(review, "accepted")
+               |> Map.put("resolution_id", "late-acceptance")
+             )
+
+    assert retained.disposition == "contradictory"
+    assert retained.reservation.lifecycle_state == :failed
+  end
+
+  test "provider evidence must correlate to the original booking and cannot forge audit history",
+       c do
+    {:ok, reservation} = ProviderReservations.create_attempt(c.organization_id, attempt_attrs(c))
+    scope = resolution_scope(c)
+
+    {:ok, review} =
+      ControlContacts.review_provider_reservation_resolution(
+        scope,
+        c.mission_id,
+        reservation.provider_reservation_id
+      )
+
+    attrs =
+      resolution_evidence(review, "accepted")
+      |> Map.put("provider_response", %{
+        "id" => "other-contact",
+        "client_reference" => "other-booking"
+      })
+
+    assert {:error, :provider_resolution_correlation_mismatch} =
+             ControlContacts.resolve_provider_reservation(
+               scope,
+               c.mission_id,
+               reservation.provider_reservation_id,
+               attrs
+             )
+
+    assert {:ok, unchanged} =
+             ProviderReservations.fetch(
+               c.organization_id,
+               c.mission_id,
+               reservation.provider_reservation_id
+             )
+
+    assert unchanged.resolution_evidence == %{}
+    assert unchanged.lifecycle_state == :requesting
+
+    assert {:ok, _} =
+             ProviderReservations.record_provider_response(
+               c.organization_id,
+               c.mission_id,
+               reservation.provider_reservation_id,
+               provider_response(reservation, "known-contact", "pending")
+             )
+
+    assert {:ok, held} =
+             ControlContacts.resolve_provider_reservation(
+               scope,
+               c.mission_id,
+               reservation.provider_reservation_id,
+               resolution_evidence(review, "not_sent")
+             )
+
+    assert held.disposition == "held_provider_status_required"
+    assert held.reservation.lifecycle_state == :pending
+
+    for response <- [
+          %{"client_reference" => reservation.idempotency_key, "id" => "different-contact"},
+          %{"client_reference" => "different-booking", "id" => "known-contact"}
+        ] do
+      conflicting =
+        resolution_evidence(review, "accepted")
+        |> Map.put("resolution_id", "conflicting-identifiers")
+        |> Map.put("provider_response", Map.put(response, "status", "confirmed"))
+
+      assert {:error, :provider_resolution_correlation_mismatch} =
+               ControlContacts.resolve_provider_reservation(
+                 scope,
+                 c.mission_id,
+                 reservation.provider_reservation_id,
+                 conflicting
+               )
+    end
+  end
+
+  defp resolution_scope(c) do
+    identity =
+      ServiceIdentity.new(%{
+        service_identity_id: "resolution-service",
+        organization_id: c.organization_id,
+        mission_id: c.mission_id,
+        display_name: "Resolution",
+        capabilities: [:mission_admin]
+      })
+
+    %Scope{
+      actor_kind: :service,
+      organization_id: c.organization_id,
+      mission_id: c.mission_id,
+      service_identity: identity,
+      capabilities: MapSet.new([:mission_admin])
+    }
+  end
+
+  defp resolution_evidence(review, outcome),
+    do: %{
+      "resolution_id" => "resolution-1",
+      "basis_sha256" => review.basis_sha256,
+      "outcome" => outcome,
+      "source" => "provider_receipt",
+      "reference" => "provider-case/123",
+      "observed_at" => "2026-10-26T00:00:00Z",
+      "acceptance_stage" => "provider_acceptance"
+    }
 
   defp attempt_attrs(context, suffix \\ "alpha") do
     starts_at = DateTime.utc_now() |> DateTime.add(300) |> DateTime.truncate(:microsecond)

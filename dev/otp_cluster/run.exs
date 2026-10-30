@@ -1,0 +1,7 @@
+ExUnit.start(autorun: false)
+Code.require_file("cluster.ex", __DIR__)
+Code.require_file("otp_cluster_test.exs", __DIR__)
+Code.require_file("runtime.ex", __DIR__)
+Code.require_file("runtime_cluster_test.exs", __DIR__)
+result = ExUnit.run()
+if result.failures > 0, do: Mix.raise("OTP cluster spike failed")

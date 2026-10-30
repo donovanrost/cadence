@@ -208,6 +208,9 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
 
     %{
       organization_id: spec.organization_id,
+      activation_id: spec.activation_id,
+      generation: spec.generation,
+      runtime_basis_sha256: spec.runtime_basis_sha256,
       mission_id: spec.mission_id,
       mission_model_revision_id: spec.mission_model_revision_id,
       runtime_plan_id: if(monitoring_plan, do: monitoring_plan.plan_id)

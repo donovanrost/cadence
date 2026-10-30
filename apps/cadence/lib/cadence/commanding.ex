@@ -23,6 +23,7 @@ defmodule Cadence.Commanding do
     LifecyclePolicy,
     ProcessNamespace,
     ReleaseArtifacts,
+    ReleaseResolution,
     ReleaseStore,
     ReleaseTargetSelection,
     RequestQueueStore,
@@ -38,8 +39,15 @@ defmodule Cadence.Commanding do
   alias Cadence.Contacts
   alias Cadence.Contacts.{Path, RealizedContact, TransportBinding}
   alias Cadence.Control.Commanding, as: ControlCommanding
+  alias Cadence.MissionModels
   alias Cadence.Persistence.JsonDocument
-  alias Cadence.Runtime.{TransportActionRequest, TransportCapabilityRecord}
+
+  alias Cadence.Runtime.{
+    MissionModelPlanDecoder,
+    TransportActionRequest,
+    TransportCapabilityRecord
+  }
+
   alias Cadence.Telemetry.Sample
 
   alias Cadence.Runtime.TransportRecords
@@ -59,6 +67,77 @@ defmodule Cadence.Commanding do
   end
 
   defp publish_verifier_changes(result), do: result
+
+  @doc "Reviews the exact durable claim before an evidence-backed resolution."
+  defdelegate review_release_resolution(org, mission, id),
+    to: ReleaseResolution,
+    as: :review
+
+  @doc "Resolves an existing attempt without transmitting or automatically requeueing it."
+  def resolve_release_attempt(org, mission, id, evidence) do
+    result = ReleaseResolution.resolve(org, mission, id, evidence)
+
+    case result do
+      {:ok, %{disposition: "accepted", release_attempt: attempt}} ->
+        VerifierScheduler.notify_verifier_instances_changed(
+          VerifierStore.pending_timeout_instances(
+            Repo,
+            org,
+            mission,
+            attempt.command_release_attempt_id
+          )
+        )
+
+      _ ->
+        :ok
+    end
+
+    result
+  end
+
+  @doc false
+  def complete_release_resolution(queue, request, attempt, at) do
+    true = Repo.in_transaction?()
+
+    with {:ok, plan} <-
+           MissionModels.fetch_plan(
+             attempt.organization_id,
+             attempt.mission_id,
+             attempt.mission_model_revision_id,
+             :command
+           ),
+         {:ok, basis} <-
+           MissionModelPlanDecoder.command_basis(
+             %{command: plan},
+             attempt.command_id
+           ) do
+      stored = CommandReleaseAttemptRow.to_domain(attempt)
+      verification = ReleaseArtifacts.initial_verification_state(basis.verifier_plans)
+
+      completed = %{
+        stored
+        | lifecycle_state: :released,
+          verification_state: verification,
+          released_at: at,
+          failure_reason: nil
+      }
+
+      instances =
+        ReleaseArtifacts.verifier_instances(
+          CommandQueueEntryRow.to_domain(queue),
+          CommandRequestRow.to_domain(request),
+          completed,
+          basis.verifier_plans,
+          at
+        )
+
+      attempt
+      |> release_success_multi(queue, request, completed, instances, verification)
+      |> Repo.transaction()
+    else
+      {:error, _} -> {:error, :verification_basis_unavailable}
+    end
+  end
 
   @spec persist_command_stage(binary(), CommandStage.t()) ::
           {:ok, CommandStage.t()} | {:error, term()}
@@ -652,14 +731,18 @@ defmodule Cadence.Commanding do
         release_context.metadata
       )
 
-    with {:ok, %{queue: claimed, attempt: persisted}} <-
+    with {:ok, admission} <- ControlCommanding.admit_release(release_context),
+         {:ok, %{queue: claimed, attempt: persisted}} <-
            ReleaseStore.claim(
              release_context.queue_entry_row,
              release_context.request_row,
              pending_attempt,
              attempted_at: release_context.attempted_at
            ) do
-      dispatch_release_attempt(%{release_context | queue_entry_row: claimed}, persisted)
+      release_context
+      |> Map.put(:queue_entry_row, claimed)
+      |> Map.put(:uplink_admission, admission)
+      |> dispatch_release_attempt(persisted)
     end
   end
 
