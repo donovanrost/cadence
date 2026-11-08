@@ -1,6 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import ApButton from "./ApButton.vue";
+import ApField from "./ApField.vue";
 import ApSegmented from "./ApSegmented.vue";
 import ApStatTile from "./ApStatTile.vue";
 
@@ -57,5 +58,13 @@ describe("ApStatTile caption", () => {
     expect(wrapper.find(".shadow-\\[inset_0_2px_0_var\\(--color-caution\\)\\]").exists()).toBe(
       false,
     );
+  });
+});
+
+describe("ApField", () => {
+  it("emits the raw string even for type=number", async () => {
+    const wrapper = mount(ApField, { props: { label: "Count", type: "number", modelValue: "" } });
+    await wrapper.get("input").setValue("50");
+    expect(wrapper.emitted("update:modelValue")).toEqual([["50"]]);
   });
 });

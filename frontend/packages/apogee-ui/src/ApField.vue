@@ -26,6 +26,11 @@ const props = withDefaults(
 );
 const model = defineModel<string>({ required: true });
 
+/** Always emit the raw text: v-model on a dynamic `type="number"` would cast to a Number. */
+function onInput(event: Event) {
+  if (event.target instanceof HTMLInputElement) model.value = event.target.value;
+}
+
 const id = fieldId("ap-field");
 const describedBy = computed(
   () =>
@@ -44,8 +49,9 @@ const describedBy = computed(
     >
       <input
         :id="id"
-        v-model="model"
+        :value="model"
         :type="type"
+        @input="onInput"
         :name="name"
         :placeholder="placeholder"
         :required="required"
