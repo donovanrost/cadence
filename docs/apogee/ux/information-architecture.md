@@ -39,7 +39,7 @@ org and mission (decision U1): `O = /console/:orgId`, `M = O/:missionId` (e.g.
 | | replan | `M/contacts/replan/:stationId` | Replan (K2) | Entered from a station outage (action queue, station row, ⌘K). |
 | | review | `M/contacts/review?day=…` | PassReview (K3) | Planned vs flown; reading view, scrolls. |
 | | contact | `M/contacts/:contactId` | – | One contact with its state trail; drawer over the Gantt, deep-linkable. |
-| 06 | **Telemetry** | `M/telemetry` (Explore) · `M/telemetry/dashboards[/:id]` | – | Point search + plots with the ApTimePicker range. Dashboards keep their existing engine (see §4). |
+| 06 | **Telemetry** | `M/telemetry` (Explore) | – | Point search + plots with the ApTimePicker range. `Dashboards ↗` links to the existing pages (DECISIONS #11, last). |
 | 07 | **Timeline** | `M/timeline` | – | Fleet-wide event log (ApEventLine), filter by spacecraft/plane/kind, time-picker range. |
 | ·· | Setup | → `M/setup` | | Cross-mode link at the rail foot. |
 | ·· | Organization | → `O/org/people` | | |
@@ -162,7 +162,7 @@ stations, profiles, pages. Results are **actions**: open, plot, "Command EARENDI
 
 | Feature | Proposal | Needs decision? |
 | --- | --- | --- |
-| **Dashboards** (authoring, playlists, sharing, snapshots, diagnostics) | Lives under Ops › Telemetry › Dashboards. List dashboards in Apogee style, link into the existing dashboard engine for view/edit (it has its own overhaul). | Decided: DECISIONS #11 |
+| **Dashboards** (authoring, playlists, sharing, snapshots, diagnostics) | **Last, after everything else ships.** For now Ops › Telemetry has a plain `Dashboards ↗` link to the existing pages; no Apogee design or build work. | Decided: DECISIONS #11 |
 | **Telemetry explore** | Ops › Telemetry, built on ApTimeSeries + ApTimePicker range. | No |
 | **Data operations** (backfill/replay) | Setup › Data sources › Operations tab. | No |
 | **Activation approvals** | Setup › Changes as approvals; Now action-queue item when it awaits *your* GO. | No |
