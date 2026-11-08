@@ -64,8 +64,9 @@ freshness to the second; at 1 Hz feeds, throttle that to about 10 s client-side)
   each point (`red` = critical, `yellow` = caution, `green`/`blue` = nominal). A critical
   spacecraft stays critical even when its data is stale, because the last known condition was
   critical. `stale` is still `true` on that row, so you can show both.
-- `last_received_at`: the newest receipt time across the spacecraft's current telemetry values
-  and limit evaluations. `stale` = `now − last_received_at > stale_after_s` (server-decided, U9).
+- `last_received_at`: the newest receipt time across the spacecraft's current telemetry values,
+  limit evaluations and the **durable history store** (U15). Once heard, a spacecraft stays
+  heard across restarts; it can only be fresh or stale. `stale` = `now − last_received_at > stale_after_s` (server-decided, U9).
 - `counts.fresh`: spacecraft heard within `stale_after_s` (the "TLM FRESH 488/500" meta).
 - `worst_point`: the most severe violating point, newest first among equals. It is `null` when
   nothing violates.
@@ -152,8 +153,9 @@ slashes).
 ## `GET /api/console/v1/missions/:mission_id/telemetry/points/:point_id/history`
 
 Decimated history by **generation time** (it falls back to receipt time for samples without one).
-The data is fixed-width buckets aligned to `from`, holding at most `max_points` buckets; empty
-buckets are omitted.
+The data is fixed-width buckets on a UTC-day grid (multiples of `bucket_width_ms` from midnight UTC of
+the window's first day, the same as QuestDB `ALIGN TO CALENDAR`); there are at most about
+`max_points` buckets, and empty buckets are omitted.
 
 ```json
 {"data": {

@@ -87,6 +87,18 @@ defmodule Cadence.Reads.FleetStatusTest do
     assert result.last_received_at == DateTime.add(@now, -1)
   end
 
+  test "a spacecraft heard only in the durable history store is stale, never never_heard" do
+    [row] =
+      build(%{
+        spacecraft: [craft("old")],
+        durable_receipts: %{"old" => DateTime.add(@now, -86_400)}
+      }).spacecraft
+
+    assert row.state == :stale
+    assert row.stale
+    assert row.last_received_at == DateTime.add(@now, -86_400)
+  end
+
   test "reports the worst violating point and freshness per spacecraft" do
     [row] =
       build(%{

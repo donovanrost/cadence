@@ -32,7 +32,7 @@ defmodule Cadence.Reads.PointHistoryTest do
           sample(12, 10, generation?: false),
           sample(25, true)
         ],
-        @from,
+        DateTime.add(@from, 3),
         10_000
       )
 

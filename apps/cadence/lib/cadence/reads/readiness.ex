@@ -1,0 +1,140 @@
+defmodule Cadence.Reads.Readiness do
+  @moduledoc """
+  Mission setup readiness: six area tiles (fleet, catalog, comms, stations,
+  data sources, apps) and findings grouped by cause, each with a typed fix
+  target. The rules live in `Cadence.Reads.Readiness.Rules`.
+
+  `evaluate/2` is unscoped and does Repo reads only (no PubSub, processes or
+  caches) through each context's public read functions, so it can run inside a sandboxed change-set preview. `mission/2`
+  authorizes first.
+  """
+
+  alias Cadence.Applications.ApplicationDefinition
+  alias Cadence.Applications.ApplicationInstallations
+  alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Comms.{GroundStationStore, RoutingRule, RoutingRuleStore, TransportStore}
+  alias Cadence.DataSources.SourceHealthStatus
+  alias Cadence.Projections.DataSources.Health
+  alias Cadence.Reads.Readiness.Rules
+
+  @spec mission(Scope.t(), binary()) :: {:ok, map()} | {:error, term()}
+  def mission(%Scope{organization_id: organization_id} = scope, mission_id)
+      when is_binary(organization_id) and is_binary(mission_id) do
+    with :ok <-
+           Policy.authorize(scope, :operate_mission, %{
+             organization_id: organization_id,
+             mission_id: mission_id
+           }),
+         {:ok, _mission} <- Cadence.Missions.fetch_mission(organization_id, mission_id) do
+      {:ok, evaluate(organization_id, mission_id)}
+    end
+  end
+
+  def mission(%Scope{}, _mission_id), do: {:error, :forbidden}
+
+  @spec evaluate(binary(), binary()) :: map()
+  def evaluate(organization_id, mission_id) do
+    rules = RoutingRuleStore.list_routing_rules(organization_id, mission_id)
+
+    organization_id
+    |> facts(mission_id, rules)
+    |> Rules.build()
+    |> Map.put(:evaluated_at, DateTime.utc_now())
+  end
+
+  defp facts(organization_id, mission_id, rules) do
+    %{
+      fleet: fleet(organization_id, mission_id, rules),
+      catalog: catalog(organization_id, mission_id),
+      comms: %{
+        transport_count: length(TransportStore.list_transports(organization_id, mission_id)),
+        routing_rule_count: Enum.count(rules, &usable?/1)
+      },
+      stations: %{
+        count: length(GroundStationStore.list_ground_stations(organization_id, mission_id))
+      },
+      data_sources: %{statuses: data_source_statuses(organization_id, mission_id)},
+      apps: apps(organization_id, mission_id)
+    }
+  end
+
+  defp fleet(organization_id, mission_id, rules) do
+    summary = Cadence.SpacecraftStore.fleet_summary(organization_id, mission_id)
+    profiles = Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id)
+    latest = Map.new(profiles, &{&1.spacecraft_type_id, &1.version})
+
+    covered =
+      rules |> Enum.filter(&usable?/1) |> MapSet.new(& &1.spacecraft_id)
+
+    spacecraft = Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id)
+
+    drifted =
+      Enum.filter(summary.profile_version_counts, fn count ->
+        version = latest[count.spacecraft_type_id]
+        is_integer(version) and count.spacecraft_type_version < version
+      end)
+
+    %{
+      total: summary.total,
+      missing_scid: summary.missing_scid,
+      missing_profile: summary.missing_profile,
+      without_routing: Enum.count(spacecraft, &(not MapSet.member?(covered, &1.spacecraft_id))),
+      drifted: drifted |> Enum.map(& &1.count) |> Enum.sum(),
+      drifted_profile_ids: drifted |> Enum.map(& &1.spacecraft_type_id) |> Enum.uniq(),
+      profile_count: length(profiles)
+    }
+  end
+
+  defp catalog(organization_id, mission_id) do
+    databases = Cadence.Catalog.list_databases(organization_id, mission_id)
+    revisions = Cadence.Catalog.list_revisions(organization_id, mission_id)
+
+    %{
+      database_count: length(databases),
+      revision_count: length(revisions),
+      latest_label: revisions |> List.first() |> revision_label()
+    }
+  end
+
+  defp revision_label(nil), do: nil
+  # "rev N" for catalog revisions; "rN" is reserved for mission config revisions.
+  defp revision_label(%{revision_number: n, revision_label: nil}), do: "Latest rev #{n}"
+
+  defp revision_label(%{revision_number: n, revision_label: label}),
+    do: "Latest rev #{n} · #{label}"
+
+  defp data_source_statuses(organization_id, mission_id) do
+    organization_id
+    |> Health.list_source_health_statuses(mission_id)
+    |> Enum.filter(fn %SourceHealthStatus{replay_run_id: replay} -> is_nil(replay) end)
+    |> Enum.map(&%{data_source_id: &1.data_source_id, health: &1.source_health})
+  end
+
+  defp apps(organization_id, mission_id) do
+    installed =
+      organization_id
+      |> ApplicationInstallations.settings_application_keys(mission_id)
+      |> MapSet.new()
+
+    optional =
+      :mission
+      |> Cadence.ExtensionCatalog.available_applications_for_scope()
+      |> Enum.filter(fn %ApplicationDefinition{} = app ->
+        app.installation_policy == :optional and :mission in app.installable_scopes
+      end)
+
+    %{
+      installed_count: Enum.count(optional, &MapSet.member?(installed, &1.application_key)),
+      available_count: length(optional),
+      missing:
+        optional
+        |> Enum.reject(&MapSet.member?(installed, &1.application_key))
+        |> Enum.map(
+          &%{key: &1.application_key, name: &1.display_name, description: &1.description}
+        )
+    }
+  end
+
+  defp usable?(%RoutingRule{lifecycle_state: :active, enabled?: true}), do: true
+  defp usable?(_rule), do: false
+end

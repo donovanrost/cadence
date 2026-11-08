@@ -85,6 +85,31 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     assert row["catalog_revision"] == nil
   end
 
+  test "readiness for an empty mission blocks on spacecraft and catalog", c do
+    data =
+      c.user
+      |> TestFixtures.member_conn()
+      |> get("/api/console/v1/missions/#{c.mission.mission_id}/readiness")
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert Enum.map(data["areas"], & &1["key"]) ==
+             ~w(fleet catalog comms stations data_sources apps)
+
+    fleet = Enum.find(data["areas"], &(&1["key"] == "fleet"))
+    assert fleet["status"] == "blocker"
+    assert fleet["count"] == 0
+    assert data["verdict"]["blocker"] >= 2
+    assert data["recent_changes"] == nil
+
+    causes = Enum.map(data["findings"], & &1["cause"])
+    assert "no_spacecraft" in causes
+    assert "no_catalog" in causes
+
+    assert %{"kind" => "spacecraft_new", "id" => nil, "label" => nil} =
+             Enum.find(data["findings"], &(&1["cause"] == "no_spacecraft"))["fix"]
+  end
+
   test "is not available for another organization's mission", c do
     stranger = TestFixtures.persist_org!() |> TestFixtures.persist_mission!()
 

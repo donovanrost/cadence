@@ -63,10 +63,18 @@ defmodule Cadence.Reads.PointHistory do
     max(div(span_ms + max_points - 1, max_points), 1)
   end
 
-  @doc "Buckets samples by generation time (receipt time when absent), numeric values only."
+  @doc """
+  Buckets samples by generation time (receipt time when absent), numeric values
+  only. Buckets sit on the same grid as QuestDB's `ALIGN TO CALENDAR`: multiples
+  of the width from UTC midnight of the window's first day.
+  """
   @spec bucket_samples([Sample.t()], DateTime.t(), pos_integer()) :: [bucket()]
   def bucket_samples(samples, from, width_ms) do
-    origin = DateTime.to_unix(from, :millisecond)
+    origin =
+      from
+      |> DateTime.to_date()
+      |> DateTime.new!(~T[00:00:00], "Etc/UTC")
+      |> DateTime.to_unix(:millisecond)
 
     samples
     |> Enum.flat_map(fn %Sample{} = sample ->

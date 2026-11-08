@@ -761,6 +761,7 @@ defmodule CadenceWeb.Router do
       get("/spacecraft", SpacecraftController, :index)
       get("/spacecraft/:spacecraft_id", SpacecraftDetailController, :show)
       get("/profiles", ProfileController, :index)
+      get("/readiness", ReadinessController, :show)
       get("/telemetry/points/:point_id/history", PointController, :history)
       get("/limits/points/:point_id/intervals", PointController, :limit_intervals)
     end

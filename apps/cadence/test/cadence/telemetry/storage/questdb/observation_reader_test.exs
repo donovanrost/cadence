@@ -305,7 +305,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReaderTest do
     assert sql =~ "receipt_time >= $9"
     assert sql =~ "receipt_time <= $10"
     assert sql =~ "value_kind IN ('double', 'long')"
-    assert sql =~ "SAMPLE BY 60000ms ALIGN TO CALENDAR"
+    assert sql =~ "SAMPLE BY 60000T ALIGN TO CALENDAR"
 
     assert params == [
              "mission-1",
@@ -336,7 +336,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReaderTest do
 
     assert sql_text =~ "mission_id = 'mission-1'"
     assert sql_text =~ "organization_id = 'org-1'"
-    assert sql_text =~ "SAMPLE BY 1000ms ALIGN TO CALENDAR"
+    assert sql_text =~ "SAMPLE BY 1000T ALIGN TO CALENDAR"
   end
 
   test "builds watermark query with tenant and source filters" do
@@ -584,7 +584,7 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReaderTest do
              )
 
     assert_receive {:questdb_exec, sql, opts}
-    assert sql =~ "SAMPLE BY 60000ms"
+    assert sql =~ "SAMPLE BY 60000T"
     assert opts[:exec_fun] == exec_fun
   end
 

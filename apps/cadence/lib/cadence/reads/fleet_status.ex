@@ -20,7 +20,7 @@ defmodule Cadence.Reads.FleetStatus do
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftType
-  alias Cadence.Telemetry.Sample
+  alias Cadence.Telemetry.{Sample, SpacecraftReceipts}
 
   @default_stale_after_s 900
   @limit_rank %{critical: 2, caution: 1, nominal: 0}
@@ -54,18 +54,31 @@ defmodule Cadence.Reads.FleetStatus do
       profiles: Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id),
       limit_states: LimitReads.latest_states_for_mission(organization_id, mission_id, []),
       samples: TelemetryReads.latest_values_for_mission(organization_id, mission_id, []),
+      durable_receipts: durable_receipts(organization_id, mission_id),
       now: Keyword.get_lazy(opts, :now, &DateTime.utc_now/0),
       stale_after_s: Keyword.get_lazy(opts, :stale_after_s, &stale_after_s/0)
     })
   end
 
-  @doc "Newest receipt time per spacecraft id (telemetry values and limit evaluations)."
+  @doc """
+  Newest receipt time per spacecraft id: live telemetry values, limit
+  evaluations, and the durable history store, so a spacecraft once heard is
+  never reported as never heard after a restart.
+  """
   @spec last_received_by_spacecraft(binary(), binary()) :: %{binary() => DateTime.t()}
   def last_received_by_spacecraft(organization_id, mission_id) do
     latest_receipts(
       TelemetryReads.latest_values_for_mission(organization_id, mission_id, []),
-      LimitReads.latest_states_for_mission(organization_id, mission_id, [])
+      LimitReads.latest_states_for_mission(organization_id, mission_id, []),
+      durable_receipts(organization_id, mission_id)
     )
+  end
+
+  defp durable_receipts(organization_id, mission_id) do
+    case SpacecraftReceipts.latest_by_spacecraft(organization_id, mission_id) do
+      {:ok, receipts} -> receipts
+      {:error, _unavailable} -> %{}
+    end
   end
 
   @doc "Configured staleness threshold in seconds (`config :cadence, :fleet_stale_after_s`)."
@@ -78,7 +91,13 @@ defmodule Cadence.Reads.FleetStatus do
   def build(%{spacecraft: spacecraft, now: now, stale_after_s: stale_after_s} = input) do
     profiles = Map.new(Map.get(input, :profiles, []), &{&1.spacecraft_type_id, &1})
     limit_states = Enum.group_by(Map.get(input, :limit_states, []), & &1.spacecraft_id)
-    received = latest_receipts(Map.get(input, :samples, []), Map.get(input, :limit_states, []))
+
+    received =
+      latest_receipts(
+        Map.get(input, :samples, []),
+        Map.get(input, :limit_states, []),
+        Map.get(input, :durable_receipts, %{})
+      )
 
     rows =
       spacecraft
@@ -167,11 +186,11 @@ defmodule Cadence.Reads.FleetStatus do
     }
   end
 
-  defp latest_receipts(samples, limit_states) do
+  defp latest_receipts(samples, limit_states, durable) do
     sample_times = Enum.map(samples, fn %Sample{} = s -> {s.spacecraft_id, s.receipt_time} end)
     limit_times = Enum.map(limit_states, fn %Event{} = e -> {e.spacecraft_id, e.receipt_time} end)
 
-    (sample_times ++ limit_times)
+    (sample_times ++ limit_times ++ Map.to_list(durable))
     |> Enum.reject(fn {id, at} -> is_nil(id) or is_nil(at) end)
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
     |> Map.new(fn {id, times} -> {id, max_datetime(times)} end)

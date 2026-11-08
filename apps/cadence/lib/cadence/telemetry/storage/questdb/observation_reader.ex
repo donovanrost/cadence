@@ -607,8 +607,10 @@ defmodule Cadence.Telemetry.Storage.QuestDB.ObservationReader do
     end
   end
 
+  # QuestDB's millisecond unit is `T`; `ms` is not a SAMPLE BY unit and is
+  # silently read as one-second buckets.
   defp sample_by_bucket(opts) do
-    "#{bucket_width_ms(opts)}ms"
+    "#{bucket_width_ms(opts)}T"
   end
 
   defp bucket_end(nil, _bucket_width_ms), do: nil
