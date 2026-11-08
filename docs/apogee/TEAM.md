@@ -37,10 +37,10 @@ Live pane IDs are in `docs/apogee/ROSTER.md` (written by the director after hiri
 
 ## Communicating (herdr)
 
-Send a teammate a message with:
+Send a teammate a message with (`herdr` may not be on PATH in agent shells; use `$HERDR_BIN_PATH`):
 
 ```bash
-herdr pane run <pane_id> "[from <your-name>] <message>"
+"$HERDR_BIN_PATH" pane run <pane_id> "[from <your-name>] <message>"
 ```
 
 - Keep messages to a few lines. Put anything longer in a file under `docs/apogee/` and send the path.
@@ -83,10 +83,19 @@ herdr pane run <pane_id> "[from <your-name>] <message>"
 
 ## Git
 
-- Commit small and often on `ui/apogee-spa`. Stage **only your own paths** (`git add <paths>`, never
-  `git add -A`) because others are working in the same tree.
-- Conventional commit messages (`feat(console): …`, `feat(api): …`).
-- Never push, rebase, reset, or stash. Never commit others' files. The director handles PRs.
+- Commit small and often on `ui/apogee-spa`. Never push, rebase, reset, or stash. The director handles PRs.
+- **Always commit by path, with the hook off:** `HK=0 git commit -m "…" -- <your paths>`.
+  The shared worktree makes the hk precommit hook unusable: it runs for minutes over everyone's
+  uncommitted files and the test database. You run the checks yourself instead (below).
+- Never `git add -A` / `git commit -a`, never commit others' files. If `index.lock` exists, another
+  commit is in flight: wait and retry; never delete the lock.
+- Checks to run before committing:
+  - Docs only: none.
+  - Frontend: typecheck + lint (+ tests) for the console app (see `docs/apogee/ARCHITECTURE.md`).
+  - Elixir (api only): `mix format`, `mix compile --warnings-as-errors`, `mix credo --strict` on touched
+    files, and the tests for the touched area. **Only api runs Elixir tests**, since parallel runs fight
+    over the `cadence_test` database. qa runs the dev server against the dev database.
+- Conventional commit messages (`feat(console): …`, `feat(api): …`) with the Co-Authored-By trailer.
 
 ## Phases
 
