@@ -37,3 +37,14 @@ Not a bug: a blank white `/setup` frame at 900 didn't reproduce (HMR reload duri
 
 ## Resolved (re-checked 2026-11-08 22:12Z, 390px)
 Items 6-7: tabs are `Now · Alarms · GO polls` (Search joins with the palette), landmark "On-call tabs". Items 1 and 4 also visible: U13 dashes, 2×3 stat grid, queue stacked first.
+
+## Second look at 7cd1e7a4 (2026-11-08 22:19Z)
+Verified: U13 dashes, 2×3 strip under 768 / 3×2 at 900, page scroll below 1100 (900 looks right),
+A2-first stack, live-status callout (hidden now because the socket is live; copy checked in code).
+
+**New regression at 1440×900 (fe-ops):** the 16px-capped matrix makes A3 ~420px tall for 20
+planes, so the A1/A2 row shrinks to ~160px: the constellation is a thumbnail and the **action
+queue, the screen's main job, shows 1.5 rows**. Rule: A1/A2 get the remaining height, with a
+floor of 55% of it; A3/A4 take the rest. Size matrix cells to fit A3's height:
+`cell = clamp(8px, (A3 body height − gaps) / planes, 16px)`. Below 8px the matrix scrolls inside
+its panel (U8). At 1440×900 with 20 planes that's about 10px cells, close to the first build.
