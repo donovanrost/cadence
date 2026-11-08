@@ -4,16 +4,16 @@ import { RouterLink, type RouteLocationRaw } from "vue-router";
 
 const props = withDefaults(
   defineProps<{
-    variant?: "primary" | "secondary" | "ghost" | "danger";
-    size?: "compact" | "standard" | "commit";
+    variant?: "primary" | "secondary" | "ghost" | "danger" | undefined;
+    size?: "compact" | "standard" | "commit" | undefined;
     /** Renders a RouterLink when set. */
-    to?: RouteLocationRaw;
+    to?: RouteLocationRaw | undefined;
     /** Renders a plain anchor (outside the SPA) when set. */
-    href?: string;
-    type?: "button" | "submit" | "reset";
-    disabled?: boolean;
+    href?: string | undefined;
+    type?: "button" | "submit" | "reset" | undefined;
+    disabled?: boolean | undefined;
     /** Why it's disabled; required in spirit: never disable a commit action silently. */
-    disabledReason?: string;
+    disabledReason?: string | undefined;
   }>(),
   { variant: "secondary", size: "standard", type: "button", disabled: false },
 );

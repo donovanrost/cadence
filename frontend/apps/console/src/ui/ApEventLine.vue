@@ -3,7 +3,7 @@ import ApStatusMark from "./ApStatusMark.vue";
 import type { OpState } from "./status.ts";
 
 /** One event: time | mark | text. Use inside <ol class="m-0 list-none p-0">, newest first. */
-defineProps<{ time: string; datetime?: string; state: OpState }>();
+defineProps<{ time: string; datetime?: string | undefined; state: OpState }>();
 </script>
 
 <template>

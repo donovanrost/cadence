@@ -12,7 +12,7 @@ const props = withDefaults(
     options: readonly ApSegment<Value>[];
     modelValue: Value;
     label: string;
-    variant?: "choice" | "tabs" | "micro";
+    variant?: "choice" | "tabs" | "micro" | undefined;
   }>(),
   { variant: "choice" },
 );

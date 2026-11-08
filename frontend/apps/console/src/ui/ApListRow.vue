@@ -8,13 +8,13 @@ import type { OpState } from "./status.ts";
  * Title link goes in the `title` slot; the single action in `action`.
  */
 defineProps<{
-  priority?: string;
-  state?: OpState;
-  title?: string;
-  sentence?: string;
-  meta?: string;
+  priority?: string | undefined;
+  state?: OpState | undefined;
+  title?: string | undefined;
+  sentence?: string | undefined;
+  meta?: string | undefined;
   /** Meta in readout (it's live, e.g. IN CONTACT · LOS T−03:20). */
-  metaLive?: boolean;
+  metaLive?: boolean | undefined;
 }>();
 </script>
 

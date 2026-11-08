@@ -9,18 +9,18 @@ import { fieldId } from "./field-id.ts";
 const props = withDefaults(
   defineProps<{
     label: string;
-    type?: "text" | "email" | "password" | "search" | "number" | "url";
-    mono?: boolean;
-    unit?: string;
-    hint?: string;
-    error?: string | null;
-    placeholder?: string;
-    required?: boolean;
-    disabled?: boolean;
-    name?: string;
-    autocomplete?: string;
-    inputmode?: "text" | "numeric" | "decimal" | "search" | "email" | "url";
-    hiddenLabel?: boolean;
+    type?: "text" | "email" | "password" | "search" | "number" | "url" | undefined;
+    mono?: boolean | undefined;
+    unit?: string | undefined;
+    hint?: string | undefined;
+    error?: string | null | undefined;
+    placeholder?: string | undefined;
+    required?: boolean | undefined;
+    disabled?: boolean | undefined;
+    name?: string | undefined;
+    autocomplete?: string | undefined;
+    inputmode?: "text" | "numeric" | "decimal" | "search" | "email" | "url" | undefined;
+    hiddenLabel?: boolean | undefined;
   }>(),
   { type: "text", mono: false, required: false, disabled: false, hiddenLabel: false },
 );

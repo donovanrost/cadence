@@ -4,9 +4,9 @@ import ApStatusMark from "./ApStatusMark.vue";
 /** States the fact, then one sentence on why / what next. Never an illustration. */
 defineProps<{
   headline: string;
-  sentence?: string;
+  sentence?: string | undefined;
   /** `off` = not set up (dashed mark). */
-  state?: "off" | "stale";
+  state?: "off" | "stale" | undefined;
 }>();
 </script>
 

@@ -16,9 +16,9 @@ defineProps<{
   columns: readonly ApColumn[];
   rows: readonly Row[];
   rowKey: (row: Row) => string;
-  caption?: string;
+  caption?: string | undefined;
   /** Wash + tint for problem rows. */
-  rowState?: (row: Row) => "crit" | "caution" | "stale" | null;
+  rowState?: (row: Row) => "crit" | "caution" | "stale" | null | undefined;
 }>();
 
 function cellText(row: Row, key: string): string {

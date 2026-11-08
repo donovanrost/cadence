@@ -6,16 +6,16 @@
 withDefaults(
   defineProps<{
     /** Index code in reading order, e.g. `A1`. */
-    index?: string;
-    title?: string;
+    index?: string | undefined;
+    title?: string | undefined;
     /** Right-aligned mono meta, e.g. `6 OPEN · SORTED BY URGENCY`. Use the `meta` slot for links. */
-    meta?: string;
-    variant?: "default" | "emphasized";
-    alert?: "crit" | "caution";
-    pane?: boolean;
+    meta?: string | undefined;
+    variant?: "default" | "emphasized" | undefined;
+    alert?: "crit" | "caution" | undefined;
+    pane?: boolean | undefined;
     /** Drop body padding (tables, lists). */
-    flush?: boolean;
-    headingLevel?: 2 | 3;
+    flush?: boolean | undefined;
+    headingLevel?: 2 | 3 | undefined;
   }>(),
   { variant: "default", pane: false, flush: false, headingLevel: 2 },
 );

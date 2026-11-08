@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** Tile grid: 1px hairline gaps form the dividers. Put ApStatTile (or ApFact) children inside. */
-withDefaults(defineProps<{ columns?: number; label?: string }>(), { columns: 6 });
+withDefaults(defineProps<{ columns?: number | undefined; label?: string }>(), { columns: 6 });
 </script>
 
 <template>

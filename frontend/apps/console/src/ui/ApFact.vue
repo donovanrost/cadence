@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** One fact tile for an ApStatStrip used as a fact strip: label + mono value. */
-defineProps<{ label: string; value?: string; next?: boolean }>();
+defineProps<{ label: string; value?: string | undefined; next?: boolean }>();
 </script>
 
 <template>

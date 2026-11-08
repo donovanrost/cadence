@@ -30,13 +30,13 @@ const targetName = computed(() => (route.meta.mode === "setup" ? "setup.readines
   <div v-if="organization" ref="root" class="relative flex border-r border-hairline">
     <button
       type="button"
-      class="flex cursor-pointer items-center gap-2.5 border-0 bg-transparent px-[18px] font-display text-base font-semibold tracking-tag text-readout uppercase hover:bg-raised"
+      class="flex cursor-pointer items-center gap-2.5 border-0 bg-transparent min-w-0 px-4 md:px-[18px] font-display text-base font-semibold tracking-tag text-readout uppercase hover:bg-raised"
       :aria-expanded="open"
       aria-haspopup="true"
       aria-controls="mission-switcher"
       @click="toggle"
     >
-      <span class="text-text-4">{{ organization.name }} /</span>
+      <span class="text-text-4 max-md:sr-only">{{ organization.name }} /</span>
       <span>{{ missionName ?? "Choose mission" }}</span>
       <svg
         width="10"

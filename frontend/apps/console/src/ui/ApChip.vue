@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** Mono chip. `name` renders a key in text-4 before the value; `removable` adds a labelled × button. */
-defineProps<{ name?: string; removable?: boolean; removeLabel?: string }>();
+defineProps<{ name?: string | undefined; removable?: boolean | undefined; removeLabel?: string }>();
 defineEmits<{ remove: [] }>();
 </script>
 

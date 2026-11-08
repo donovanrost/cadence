@@ -6,7 +6,7 @@ const now = useNow();
 </script>
 
 <template>
-  <div class="flex items-center gap-[22px] px-[18px] font-mono text-md">
+  <div class="flex items-center gap-[22px] px-3 font-mono text-md md:px-[18px]">
     <slot />
     <span class="flex gap-[0.6em]">
       <span class="text-text-4">UTC</span>

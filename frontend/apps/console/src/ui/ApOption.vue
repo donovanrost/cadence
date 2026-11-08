@@ -4,8 +4,8 @@ defineProps<{
   value: Value;
   name: string;
   title: string;
-  description?: string;
-  disabled?: boolean;
+  description?: string | undefined;
+  disabled?: boolean | undefined;
 }>();
 const model = defineModel<Value | null>({ required: true });
 </script>

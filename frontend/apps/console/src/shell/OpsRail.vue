@@ -19,7 +19,7 @@ const items = [
 <template>
   <nav
     aria-label="Ops"
-    class="flex w-[var(--apogee-rail-w)] flex-none flex-col gap-0.5 overflow-auto border-r border-hairline bg-chrome py-3.5"
+    class="hidden w-14 flex-none md:flex min-[1100px]:w-[var(--apogee-rail-w)] flex-col gap-0.5 overflow-auto border-r border-hairline bg-chrome py-3.5"
   >
     <RailLink
       v-for="(item, i) in items"

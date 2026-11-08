@@ -6,10 +6,10 @@ import { stateTextClass, stateWord, type OpState } from "./status.ts";
 const props = withDefaults(
   defineProps<{
     /** Omit for a neutral tag. */
-    state?: OpState;
+    state?: OpState | undefined;
     /** Defaults to the state's word; slot content overrides both. */
-    label?: string;
-    size?: "standard" | "tile";
+    label?: string | undefined;
+    size?: "standard" | "tile" | undefined;
   }>(),
   { size: "standard" },
 );

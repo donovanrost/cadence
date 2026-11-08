@@ -7,8 +7,8 @@ defineProps<{
   index: string;
   label: string;
   active: boolean;
-  count?: string;
-  countTone?: "crit" | "live";
+  count?: string | undefined;
+  countTone?: "crit" | "live" | undefined;
 }>();
 </script>
 
@@ -16,6 +16,7 @@ defineProps<{
   <RouterLink
     :to="to"
     :aria-current="active ? 'page' : undefined"
+    :title="label"
     class="flex h-[38px] items-center gap-2.5 border-l-2 px-3 font-display text-base font-semibold tracking-tag uppercase no-underline"
     :class="
       active
@@ -24,10 +25,10 @@ defineProps<{
     "
   >
     <span class="w-4 font-mono text-2xs font-medium text-text-4">{{ index }}</span>
-    {{ label }}
+    <span class="max-[1100px]:sr-only">{{ label }}</span>
     <span
       v-if="count"
-      class="ml-auto font-mono text-xs font-medium tracking-normal"
+      class="ml-auto font-mono max-[1100px]:hidden text-xs font-medium tracking-normal"
       :class="
         countTone === 'crit'
           ? 'text-crit-text'

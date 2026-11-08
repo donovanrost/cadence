@@ -12,13 +12,13 @@ const props = withDefaults(
   defineProps<{
     label: string;
     options: readonly ApSelectOption<Value>[];
-    hint?: string;
-    error?: string | null;
-    disabled?: boolean;
-    name?: string;
-    hiddenLabel?: boolean;
+    hint?: string | undefined;
+    error?: string | null | undefined;
+    disabled?: boolean | undefined;
+    name?: string | undefined;
+    hiddenLabel?: boolean | undefined;
     /** Shown as a disabled first option when nothing is chosen. */
-    placeholder?: string;
+    placeholder?: string | undefined;
   }>(),
   { disabled: false, hiddenLabel: false },
 );

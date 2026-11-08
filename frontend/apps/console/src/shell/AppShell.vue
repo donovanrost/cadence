@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
 import { useRoute } from "vue-router";
+import MobileTabBar from "./MobileTabBar.vue";
 import NotFoundScreen from "./NotFoundScreen.vue";
 import OpsRail from "./OpsRail.vue";
 import SetupRail from "./SetupRail.vue";
@@ -74,12 +75,19 @@ watch(
         tabindex="-1"
         class="flex min-w-0 flex-1 flex-col"
         :class="
-          consoleLayout ? 'gap-3 overflow-hidden px-5 py-3.5' : 'gap-4 overflow-auto px-6 pt-5 pb-6'
+          consoleLayout
+            ? 'gap-3 overflow-auto px-4 py-3 md:px-5 md:py-3.5 min-[1100px]:overflow-hidden'
+            : 'gap-4 overflow-auto px-4 pt-4 pb-6 md:px-6 md:pt-5'
         "
       >
         <NotFoundScreen v-if="unknownScope" :sentence="unknownScope" />
         <RouterView v-else />
       </main>
     </div>
+    <MobileTabBar
+      v-if="mode === 'ops' && missionScope"
+      :org="missionScope.organization.slug"
+      :mission="missionScope.mission.slug"
+    />
   </div>
 </template>

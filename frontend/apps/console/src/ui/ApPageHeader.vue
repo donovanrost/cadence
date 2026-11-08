@@ -1,8 +1,11 @@
 <script setup lang="ts">
 /** Screen heading: label line + the screen's single h1 + optional right side (meta / actions). */
-withDefaults(defineProps<{ label?: string; title: string; size?: "console" | "reading" }>(), {
-  size: "console",
-});
+withDefaults(
+  defineProps<{ label?: string | undefined; title: string; size?: "console" | "reading" }>(),
+  {
+    size: "console",
+  },
+);
 </script>
 
 <template>

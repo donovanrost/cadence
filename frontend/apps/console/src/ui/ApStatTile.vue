@@ -11,12 +11,12 @@ const props = withDefaults(
   defineProps<{
     label: string;
     value: number | string | null;
-    denominator?: number;
-    caption?: string;
-    state?: OpState;
+    denominator?: number | undefined;
+    caption?: string | undefined;
+    state?: OpState | undefined;
     /** Tint the caption with the state (it's the call to action). */
-    captionTinted?: boolean;
-    compact?: boolean;
+    captionTinted?: boolean | undefined;
+    compact?: boolean | undefined;
   }>(),
   { state: "neutral", captionTinted: false, compact: true },
 );
