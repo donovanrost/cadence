@@ -29,7 +29,7 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
   {
     path: "setup/spacecraft/:scId",
     name: "setup.spacecraft.one",
-    component: pending,
+    component: () => import("@/features/spacecraft/SpacecraftDetailScreen.vue"),
     meta: { mode: "setup", nav: "spacecraft", title: "Spacecraft" },
   },
   {
