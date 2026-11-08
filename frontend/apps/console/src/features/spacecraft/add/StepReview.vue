@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApPanel, ApTag } from "@/ui";
+import { ApPanel } from "@/ui";
+import CheckRows from "../CheckRows.vue";
 import BatchPreview from "./BatchPreview.vue";
-import { batchChecks, checksMeta, type CheckVerdict } from "./checks.ts";
+import { batchChecks, checksMeta } from "./checks.ts";
 import { useDraft } from "./context.ts";
 
 /** A2 Checks + A3 batch preview (the board's step 04). */
@@ -18,31 +19,23 @@ const checks = computed(() => {
   return batchChecks(p.report, profile);
 });
 
-const tag = (verdict: CheckVerdict) =>
-  verdict === "pass"
-    ? ({ state: "nominal", label: "Pass" } as const)
-    : verdict === "note"
-      ? ({ state: "caution", label: "Note" } as const)
-      : ({ state: "crit", label: "NO-GO" } as const);
+const rows = computed(() =>
+  checks.value.map((check) => ({
+    key: check.key,
+    label: check.label,
+    sentence: check.sentence,
+    ...(check.verdict === "pass"
+      ? { state: "nominal" as const, verdict: "Pass" }
+      : check.verdict === "note"
+        ? { state: "caution" as const, verdict: "Note" }
+        : { state: "crit" as const, verdict: "NO-GO" }),
+  })),
+);
 </script>
 
 <template>
   <ApPanel index="A2" title="Checks" :meta="checksMeta(checks)" flush>
-    <ul class="m-0 list-none p-0">
-      <li
-        v-for="check in checks"
-        :key="check.key"
-        class="grid grid-cols-[110px_minmax(0,1fr)_auto] items-center gap-3 border-t border-hairline px-4 py-2.5 first:border-t-0"
-        :class="{
-          'bg-[var(--apogee-wash-caution)]': check.verdict === 'note',
-          'bg-[var(--apogee-wash-crit)]': check.verdict === 'nogo',
-        }"
-      >
-        <span class="ap-label">{{ check.label }}</span>
-        <span class="text-md text-readout">{{ check.sentence }}</span>
-        <ApTag v-bind="tag(check.verdict)" />
-      </li>
-    </ul>
+    <CheckRows :rows="rows" />
     <p class="m-0 border-t border-hairline px-4 py-2.5 text-sm text-text-3">
       Checked against this mission's spacecraft in the browser. Cadence checks again when the batch
       is created.

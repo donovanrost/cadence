@@ -22,6 +22,12 @@ const blockedAt = computed(() => {
   const p = proposal();
   return p.status === "incomplete" ? steps.indexOf(p.step) : steps.length;
 });
+const continueReason = computed(() => {
+  const p = proposal();
+  if (p.status !== "incomplete" || steps.indexOf(p.step) > index.value) return null;
+  const first = Object.values(p.errors).find((message) => message !== undefined);
+  return first ?? "Complete this step first.";
+});
 const commitLabel = computed(() =>
   count.value === null
     ? "Create spacecraft"
@@ -61,10 +67,13 @@ const commitLabel = computed(() =>
         variant="primary"
         size="commit"
         :disabled="blockedAt <= index"
-        disabled-reason="Complete this step first."
+        :disabled-reason="continueReason ?? 'Complete this step first.'"
         @click="emit('go', next)"
         >Continue to {{ stepLabels[next].toLowerCase() }}</ApButton
       >
+      <p v-if="next && blockedAt <= index" class="m-0 font-mono text-xs text-text-4 uppercase">
+        {{ continueReason }}
+      </p>
       <ApButton
         v-else
         variant="primary"

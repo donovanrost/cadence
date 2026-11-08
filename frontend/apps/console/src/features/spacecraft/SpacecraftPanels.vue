@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ApButton, ApEmptyState, ApKeyValue, ApPanel } from "@/ui";
+import { ApButton, ApEmptyState, ApKeyValue, ApPanel, useNow } from "@/ui";
 import ChecksPanel from "./ChecksPanel.vue";
 import RoutingRulesPanel from "./RoutingRulesPanel.vue";
 import { identityFacts, type SpacecraftDetail } from "./detail.ts";
 
 /** Readiness, identity, pinned profile, routing and configuration for one spacecraft. */
 defineProps<{ detail: SpacecraftDetail }>();
+const now = useNow();
 </script>
 
 <template>
@@ -13,7 +14,7 @@ defineProps<{ detail: SpacecraftDetail }>();
     <ChecksPanel :checks="detail.readiness.checks" />
     <div class="flex flex-col gap-4">
       <ApPanel index="D2" title="Identity">
-        <ApKeyValue :items="identityFacts(detail)" :columns="2" />
+        <ApKeyValue :items="identityFacts(detail, now)" :columns="2" />
       </ApPanel>
       <ApPanel index="D3" title="Profile & version">
         <ApEmptyState

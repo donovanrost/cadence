@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { ApButton, ApPanel, ApStatusMark, ApTable, formatCount, type ApColumn } from "@/ui";
+import { orbitLabel } from "../format.ts";
 import { rangeLabel, type ProposedSpacecraft } from "./batch.ts";
 
 /** A3 Batch preview: first 8 rows, then all on request. Rows with problems get a caution wash. */
@@ -17,10 +18,6 @@ const columns: readonly ApColumn[] = [
   { key: "problems", label: "Check" },
   { key: "first", label: "First state" },
 ];
-const orbit = (r: ProposedSpacecraft) =>
-  r.plane === null
-    ? "—"
-    : `P${String(r.plane).padStart(2, "0")}${r.slot === null ? "" : ` · ${String(r.slot).padStart(2, "0")}`}`;
 </script>
 
 <template>
@@ -45,7 +42,7 @@ const orbit = (r: ProposedSpacecraft) =>
         <span v-if="row.norad !== null">{{ row.norad }}</span>
         <span v-else class="text-caution-text">not set</span>
       </template>
-      <template #cell-orbit="{ row }">{{ orbit(row) }}</template>
+      <template #cell-orbit="{ row }">{{ orbitLabel(row.plane, row.slot) ?? "—" }}</template>
       <template #cell-problems="{ row }">
         <span v-if="row.problems.length === 0" class="text-text-3">OK</span>
         <span v-else class="text-caution-text">{{ row.problems.join("; ") }}</span>

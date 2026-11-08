@@ -1,5 +1,7 @@
 import { decoders, request, type ApiResult, type Reader } from "@/api";
-import { formatShort, type ApKeyValueItem, type OpState } from "@/ui";
+import type { ApKeyValueItem } from "@/ui";
+import type { CheckRow } from "./CheckRows.vue";
+import { heardLabel, orbitLabel } from "./format.ts";
 
 /** Contract: docs/apogee/api/setup.md, `GET /missions/:mission_id/spacecraft/:spacecraft_id`. */
 const { array, boolean, integer, nullable, object, oneOf, string, timestamp, token } = decoders;
@@ -74,19 +76,6 @@ export function fetchSpacecraftDetail(
   );
 }
 
-export function checkState(status: CheckStatus): OpState {
-  switch (status) {
-    case "ready":
-      return "nominal";
-    case "blocker":
-      return "crit";
-    case "caution":
-      return "caution";
-    case "not_set_up":
-      return "off";
-  }
-}
-
 export function directionLabel(direction: Direction): string {
   switch (direction) {
     case "inbound":
@@ -98,7 +87,7 @@ export function directionLabel(direction: Direction): string {
   }
 }
 
-export function identityFacts(detail: SpacecraftDetail): readonly ApKeyValueItem[] {
+export function identityFacts(detail: SpacecraftDetail, now: Date): readonly ApKeyValueItem[] {
   const sc = detail.spacecraft;
   return [
     {
@@ -116,19 +105,47 @@ export function identityFacts(detail: SpacecraftDetail): readonly ApKeyValueItem
     {
       key: "orbit",
       label: "Orbit",
-      value:
-        sc.plane === null
-          ? "Not set"
-          : `Plane ${sc.plane}${sc.slot === null ? "" : ` · slot ${sc.slot}`}`,
+      value: orbitLabel(sc.plane, sc.slot) ?? "Not set",
+      mono: sc.plane !== null,
     },
     {
       key: "heard",
       label: "Last heard",
       value:
-        sc.last_received_at === null
-          ? "Awaiting first AOS"
-          : formatShort(new Date(sc.last_received_at)),
+        sc.last_received_at === null ? "Awaiting first AOS" : heardLabel(sc.last_received_at, now),
       mono: sc.last_received_at !== null,
     },
   ];
+}
+
+const checkLabels: Readonly<Record<string, string>> = {
+  identity: "Identity",
+  profile: "Profile",
+  routing: "Routing",
+  telemetry: "Telemetry",
+};
+
+/** Server checks as check rows: the title is the sentence, the body its detail. */
+export function checkRows(checks: readonly ReadinessCheck[]): readonly CheckRow[] {
+  return checks.map((check) => {
+    const verdict = ((): Pick<CheckRow, "state" | "verdict"> => {
+      switch (check.status) {
+        case "ready":
+          return { state: "nominal", verdict: "Pass" };
+        case "blocker":
+          return { state: "crit", verdict: "Blocker" };
+        case "caution":
+          return { state: "caution", verdict: "Caution" };
+        case "not_set_up":
+          return { state: "caution", verdict: "Note" };
+      }
+    })();
+    return {
+      key: check.key,
+      label: checkLabels[check.key] ?? check.key,
+      sentence: check.title,
+      detail: check.body,
+      ...verdict,
+    };
+  });
 }

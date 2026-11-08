@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApButton, ApEmptyState, ApPanel, ApTable, type ApColumn } from "@/ui";
+import { ApEmptyState, ApPanel, ApTable, type ApColumn } from "@/ui";
 import { directionLabel, type RoutingRule } from "./detail.ts";
 
 /** D4 Routing rules for this spacecraft (per spacecraft until DECISIONS #3 moves them to the profile). */
@@ -16,9 +16,12 @@ const columns: readonly ApColumn[] = [
 </script>
 
 <template>
-  <ApPanel index="D4" title="Routing" :meta="`${active.length} active`" flush>
-    <template #header>
-      <ApButton size="compact" :to="{ name: 'setup.comms' }">Comms &amp; routing</ApButton>
+  <ApPanel index="D4" title="Routing" flush>
+    <template #meta>
+      {{ active.length }} active ·
+      <RouterLink :to="{ name: 'setup.comms' }" class="text-readout no-underline hover:text-bright"
+        >Comms &amp; routing →</RouterLink
+      >
     </template>
     <ApEmptyState
       v-if="active.length === 0"

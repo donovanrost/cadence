@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { formatShort, ApStatusMark, ApTable, ApTag, type ApColumn } from "@/ui";
 import type { SpacecraftRow } from "./api.ts";
+import { orbitLabel } from "./format.ts";
 
 /** Directory rows. The Name cell is the row link (setup spacecraft detail). */
 defineProps<{ rows: readonly SpacecraftRow[] }>();
@@ -15,11 +16,6 @@ const columns: readonly ApColumn[] = [
   { key: "setup", label: "Setup" },
   { key: "heard", label: "Last heard", mono: true },
 ];
-
-const orbit = (row: SpacecraftRow) =>
-  row.plane === null
-    ? "—"
-    : `P${String(row.plane).padStart(2, "0")}${row.slot === null ? "" : ` · ${String(row.slot).padStart(2, "0")}`}`;
 </script>
 
 <template>
@@ -57,7 +53,9 @@ const orbit = (row: SpacecraftRow) =>
       <span v-else class="text-caution-text">No profile</span>
     </template>
     <template #cell-orbit="{ row }">
-      <span :class="row.plane === null ? 'text-text-4' : ''">{{ orbit(row) }}</span>
+      <span :class="row.plane === null ? 'text-text-4' : ''">{{
+        orbitLabel(row.plane, row.slot) ?? "—"
+      }}</span>
     </template>
     <template #cell-heard="{ row }">
       <time v-if="row.lastReceivedAt" :datetime="row.lastReceivedAt" class="text-text-3">{{

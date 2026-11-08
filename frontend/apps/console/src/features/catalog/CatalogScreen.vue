@@ -2,16 +2,14 @@
 import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
-import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented } from "@/ui";
+import { useMissionScope } from "@/shell";
+import { ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented } from "@/ui";
 import ImportRunsPanel from "./ImportRunsPanel.vue";
 import RevisionsPanel from "./RevisionsPanel.vue";
 import { fetchCatalogIndex, revisionSummary } from "./api.ts";
 
 /** Setup › Catalog (rail 04). Spec: docs/apogee/ux/screens/Catalog.md § A. */
 const scope = useMissionScope();
-const session = useSession();
-const canManage = computed(() => canAdministerOrganization(session, scope.value.organization));
 const databaseId = ref<string | null>(null);
 const key = computed(() => ({ missionId: scope.value.mission.id, databaseId: databaseId.value }));
 const { state, refetch } = useRemoteQuery(key, fetchCatalogIndex);
@@ -46,9 +44,6 @@ const selected = computed({
           revisionSummary(state.value.database.current_revision)
         }}</span>
       </template>
-      <ApButton v-if="canManage" variant="primary" :to="{ name: 'setup.catalog.import' }"
-        >Import a new revision</ApButton
-      >
     </ApPageHeader>
     <ApPanel v-if="notProvided" index="A1" title="Revisions" flush>
       <ApEmptyState
@@ -70,11 +65,7 @@ const selected = computed({
             state="off"
             headline="No catalog yet"
             sentence="Commands and telemetry come from an XTCE or CSV export of your flight software database."
-          >
-            <ApButton v-if="canManage" variant="primary" :to="{ name: 'setup.catalog.import' }"
-              >Import a catalog</ApButton
-            >
-          </ApEmptyState>
+          />
         </ApPanel>
         <template v-else>
           <RevisionsPanel :revisions="value.database.revisions" />

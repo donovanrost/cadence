@@ -133,7 +133,11 @@ export function propose(
   profiles: readonly ProfileSummary[],
 ): Proposal {
   if (!profiles.some((p) => p.id === draft.profileId))
-    return { status: "incomplete", step: "source", errors: { profileId: "Choose a profile." } };
+    return {
+      status: "incomplete",
+      step: "source",
+      errors: { profileId: "Pick a profile or a manifest." },
+    };
 
   if (draft.source === "manifest") {
     const m = draft.manifest;

@@ -37,6 +37,12 @@ watch(directory, (value) => {
   if (value && draft.scidStart === "") draft.scidStart = String(nextFreeScid(value.spacecraft));
 });
 
+// One profile: preselect it so step 01 isn't a formality (still visible and changeable).
+watch(profiles, (list) => {
+  const only = list.length === 1 ? list[0] : undefined;
+  if (only && draft.profileId === "") draft.profileId = only.id;
+});
+
 const empty: SpacecraftDirectory = { spacecraft: [] };
 const proposal = computed(() => propose(draft, directory.value ?? empty, profiles.value));
 provideDraft({
