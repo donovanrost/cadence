@@ -6,6 +6,7 @@ import BootScreen from "@/shell/BootScreen.vue";
 import { useBootstrap } from "@/shell/bootstrap.ts";
 import SessionProvider from "@/shell/SessionProvider.vue";
 import PaletteRoot from "@/features/palette/PaletteRoot.vue";
+import { ConfigStatus, StagedBar } from "@/features/changes/index.ts";
 
 const { state, load } = useBootstrap();
 onMounted(() => void load());
@@ -23,10 +24,10 @@ watch(state, (current) => {
     <AppShell>
       <!-- fe-ops: <FleetStatusTag /> from @/features/fleet goes here (Ops top bar). -->
       <template #topbar-status />
-      <!-- fe-setup: <ConfigStatus /> (CONFIG rN · n STAGED) for the Setup top bar. -->
-      <template #topbar-setup-status />
-      <!-- fe-setup: <StagedBar /> under Setup screens. -->
-      <template #setup-footer />
+      <!-- fe-setup: CONFIG rN · n STAGED (renders nothing until the mission has change sets). -->
+      <template #topbar-setup-status><ConfigStatus /></template>
+      <!-- fe-setup: staged bar under Setup screens (hidden while nothing is staged). -->
+      <template #setup-footer><StagedBar /></template>
     </AppShell>
     <PaletteRoot />
   </SessionProvider>

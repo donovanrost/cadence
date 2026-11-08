@@ -63,6 +63,18 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "catalog", title: "Catalog" },
   },
   {
+    path: "setup/changes",
+    name: "setup.changes",
+    component: () => import("@/features/changes/ChangesScreen.vue"),
+    meta: { mode: "setup", nav: "readiness", title: "Staged changes" },
+  },
+  {
+    path: "setup/revisions",
+    name: "setup.revisions",
+    component: () => import("@/features/changes/RevisionsScreen.vue"),
+    meta: { mode: "setup", nav: "readiness", title: "Revisions" },
+  },
+  {
     path: "setup/comms",
     name: "setup.comms",
     component: pending,

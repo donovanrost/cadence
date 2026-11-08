@@ -1,0 +1,55 @@
+<script setup lang="ts">
+import { ApTable, ApTag, formatAbsolute, plural, type ApColumn } from "@/ui";
+import type { RevisionSummary } from "./shapes.ts";
+
+/** Mission configuration revisions, newest first; the live one is marked. */
+defineProps<{ rows: readonly RevisionSummary[] }>();
+
+const columns: readonly ApColumn[] = [
+  { key: "revision", label: "Revision", mono: true },
+  { key: "applied", label: "Applied", mono: true },
+  { key: "by", label: "By" },
+  { key: "why", label: "Why" },
+  { key: "changes", label: "Changes", mono: true, align: "end" },
+  { key: "kind", label: "Kind" },
+];
+
+function kindLabel(row: RevisionSummary): string {
+  switch (row.kind) {
+    case "baseline":
+      return "Baseline";
+    case "change_set":
+      return "Change set";
+    case "rollback":
+      return row.rolls_back_to === null ? "Rollback" : `Rollback to r${row.rolls_back_to}`;
+    case "legacy_activation":
+      return "Legacy activation";
+  }
+}
+</script>
+
+<template>
+  <ApTable
+    :columns="columns"
+    :rows="rows"
+    :row-key="(r) => String(r.revision)"
+    caption="Configuration revisions"
+  >
+    <template #cell-revision="{ row }">
+      <span class="inline-flex items-center gap-2"
+        >r{{ row.revision }}<ApTag v-if="row.live" state="live" label="Live"
+      /></span>
+    </template>
+    <template #cell-applied="{ row }">{{ formatAbsolute(new Date(row.applied_at)) }}</template>
+    <template #cell-by="{ row }">{{ row.applied_by?.name ?? "—" }}</template>
+    <template #cell-why="{ row }">
+      <span class="block max-w-[48ch] truncate text-text-2" :title="row.reason ?? undefined">{{
+        row.reason ?? row.summary ?? "—"
+      }}</span>
+    </template>
+    <template #cell-changes="{ row }">{{ plural(row.entry_count, "entry", "entries") }}</template>
+    <template #cell-kind="{ row }"
+      ><span class="text-text-3">{{ kindLabel(row) }}</span></template
+    >
+  </ApTable>
+</template>
