@@ -6,8 +6,8 @@ Conventions: [README.md](README.md). Asks are tracked by their IDs in `docs/apog
 | --- | --- | --- |
 | M1 M2 M3 M5 | `GET /missions/:mission_id/fleet` | **implemented** |
 | M9 | `GET /missions/:mission_id/alarms` | **implemented** |
-| M10 | `GET /missions/:mission_id/telemetry/points/:point_id/history` | planned |
-| M11 | `GET /missions/:mission_id/limits/points/:point_id/intervals` | planned |
+| M10 | `GET /missions/:mission_id/telemetry/points/:point_id/history` | **implemented** |
+| M11 | `GET /missions/:mission_id/limits/points/:point_id/intervals` | **implemented** |
 | M6 | `GET /missions/:mission_id/action-queue` | planned |
 | M8 | channel events: see [realtime.md](realtime.md) | `invalidate` live, `fleet` delta planned |
 
@@ -140,3 +140,58 @@ values get `422 invalid_params` with `details`.
 - Sorting: severity (critical first), then newest received first.
 - **Not yet:** point `unit` and `description` (they need the catalog point join; planned with M23
   point search), and the D6 alarm lifecycle (ack/assign/hand-off).
+
+## Time windows (shared by M10 and M11)
+
+Query: `from` and `to` are ISO-8601 (default: the last hour ending now); `spacecraft_id` is
+optional but you almost always want it; for M10, `max_points` is 1–2000 (default 500). History
+windows are capped at 31 days; intervals are not. Bad values get `422 invalid_params` with
+`details` keyed by parameter. URL-encode `point_id` (ids contain dots, and some may contain
+slashes).
+
+## `GET /api/console/v1/missions/:mission_id/telemetry/points/:point_id/history`
+
+Decimated history by **generation time** (it falls back to receipt time for samples without one).
+The data is fixed-width buckets aligned to `from`, holding at most `max_points` buckets; empty
+buckets are omitted.
+
+```json
+{"data": {
+  "point_id": "EPS.VBAT", "spacecraft_id": "spacecraft-earendil-312",
+  "from": "2026-11-08T01:41:17.000Z", "to": "2026-11-08T02:41:17.000Z",
+  "bucket_width_ms": 7200, "truncated": false,
+  "buckets": [{"t": "2026-11-08T01:41:17.000Z", "t_end": "2026-11-08T01:41:24.200Z",
+               "min": 23.4, "max": 23.6, "mean": 23.5, "count": 7}]
+}}
+```
+
+- Only numeric values are bucketed (booleans count as 0/1). Enum and text points return no
+  buckets for now; a state-timeline shape will come if a screen needs it.
+- `truncated: true` means the raw-sample fallback (used on backends without native decimation)
+  hit its 20,000-sample cap. Narrow the window if you see it.
+- `503 history_unavailable`: the history store can't be reached (in this worktree's dev env,
+  QuestDB isn't running; see the qa runbook). Show the chart's unavailable state.
+- Refetch on `invalidate` with `telemetry`, throttled. For a live tail, prefer the planned
+  `spacecraft:<id>` `points` push.
+
+## `GET /api/console/v1/missions/:mission_id/limits/points/:point_id/intervals`
+
+The limit-definition bands in effect over the window, for drawing bands behind the history chart.
+
+```json
+{"data": {
+  "point_id": "EPS.VBAT", "spacecraft_id": null, "from": "…", "to": "…",
+  "intervals": [{
+    "from": "2026-10-19T00:00:00Z", "to": null,
+    "limit_set_name": "DEFAULT", "limit_definition_id": "…", "limit_definition_version": 3,
+    "scope": {"type": "mission", "ref": null},
+    "thresholds": {"red_low": 24.0, "yellow_low": 25.0, "yellow_high": 33.0, "red_high": 34.0}
+  }]
+}}
+```
+
+- `to: null` means the definition is still active. Missing bands are `null`.
+- Intervals come from governed limit-definition lifecycle events. A definition persisted without a
+  lifecycle event (some fixtures) has no interval, but the alarm row's `thresholds` still shows
+  its bands.
+- Refetch on `invalidate` with `limits`.

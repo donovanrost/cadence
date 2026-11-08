@@ -16,7 +16,8 @@ defmodule CadenceWeb.Console.Problem do
     not_found: {404, "Not found."},
     mission_not_found: {404, "Mission not found."},
     organization_not_found: {404, "Organization not found."},
-    invalid_params: {422, "The request parameters are invalid."}
+    invalid_params: {422, "The request parameters are invalid."},
+    history_unavailable: {503, "Telemetry history is unavailable right now."}
   }
 
   @doc "Sends the error envelope for a known reason atom and halts."

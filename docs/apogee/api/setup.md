@@ -6,7 +6,8 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | --- | --- | --- |
 | S | `GET /missions/:mission_id/spacecraft` | **implemented** |
 | R | `GET /missions/:mission_id/readiness` | planned. Backed by domain's `Cadence.Reads.Readiness.mission/2`; the shape in setup-shapes.md is the target |
-| (2) | spacecraft detail, profiles list/detail/versions | planned |
+| P | `GET /missions/:mission_id/profiles` | **implemented** |
+| SD, PD | spacecraft detail, profile detail + versions | next |
 | (3) | catalog databases/revisions/import runs, upload, import-run channel | planned |
 | (4) | batch spacecraft validate + create | planned |
 | (5) | org members, invitations, service identities | planned (`/organizations/:organization_id/...`) |
@@ -43,3 +44,26 @@ The Setup spacecraft directory. It is unpaginated (the client filters) and sorte
   to change.
 
 Errors: `404 mission_not_found`.
+
+## `GET /api/console/v1/missions/:mission_id/profiles`
+
+Active spacecraft profiles, each at its latest version, sorted by name. Refetch on `invalidate`
+with `spacecraft`.
+
+```json
+{"data": {"profiles": [
+  {"id": "profile-…", "name": "Earendil Block 1", "version": 4,
+   "downlink_protocol": {"value": "tm", "label": "CCSDS TM"},
+   "uplink_protocol": {"value": "tc", "label": "CCSDS TC"},
+   "packet_protocol": {"value": "space_packet", "label": "CCSDS Space Packet"},
+   "catalog_revision": null,
+   "spacecraft_count": 500, "spacecraft_on_older_versions": 3}
+]}}
+```
+
+- `spacecraft_count`: spacecraft pinned to any version of this profile. `spacecraft_on_older_versions`
+  is the subset pinned below `version`.
+- `catalog_revision`: always `null` for now, because profiles don't carry a catalog yet (it moves
+  onto the profile with domain's profile work, profile-routing.md §3).
+- **Not in v1:** `updated_at`. The profile model has no update timestamp; the History view gets
+  version timestamps from PD.
