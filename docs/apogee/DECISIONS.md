@@ -14,3 +14,5 @@ Decided by the user (U) or the director (D). Newest last. Ask the director befor
 | 8 | **Command waves/gates (ops D5): phase 3+.** Not in the first commanding flow. | D | fe-ops |
 | 9 | **Catalog impact/used-by: phase 2.** v1 diff shows added/changed/removed/breaking from the catalog revisions alone. Cross-references to queued commands/limits/dashboards come later. | D | api, fe-setup |
 | 10 | **Hook policy:** css-frozen guard removed repo-wide; pre-commit `stash = "none"`; team commits with `HK=0 … -- <paths>` after their own checks (see TEAM.md section Git). | U/D | everyone |
+| 11 | **Dashboards stay on the existing engine** (it has its own Vue overhaul in flight). The console lists them under Ops > Telemetry > Dashboards and links into the existing pages; it doesn't rebuild them. | D | ux, fe-ops |
+| 12 | **Platform admin (`/admin`) stays on the existing host**, linked from the account menu for users with the `platform_admin` capability. | D | ux, lead |
