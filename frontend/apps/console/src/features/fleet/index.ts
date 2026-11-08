@@ -13,6 +13,7 @@ export {
 export {
   FLEET_POLL_OFFLINE_S,
   FLEET_REFETCH_GAP_MS,
+  FLEET_TELEMETRY_GAP_MS,
   throttle,
   useFleet,
   type FleetHandle,

@@ -86,7 +86,7 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "telemetry",
     name: "ops.telemetry",
-    component: pending,
+    component: () => import("@/features/telemetry/TelemetryScreen.vue"),
     meta: { mode: "ops", nav: "telemetry", title: "Telemetry" },
   },
   {
