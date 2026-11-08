@@ -139,8 +139,9 @@ defmodule Cadence.Configuration.Ledger do
         reason: @baseline_summary,
         summary: @baseline_summary
       },
-      on_conflict: :nothing,
-      conflict_target: [:mission_id, :revision_number]
+      # Two first requests race here; the baseline id is deterministic, so any conflict (primary
+      # key or revision number) means the other one already wrote it.
+      on_conflict: :nothing
     )
 
     Repo.insert(
