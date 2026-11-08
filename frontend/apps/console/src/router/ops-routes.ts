@@ -21,7 +21,7 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "fleet/:scId(\\d+)/:tab(investigate|telemetry|uplink|passes|configuration|history)?",
     name: "ops.spacecraft",
-    component: pending,
+    component: () => import("@/features/investigate/SpacecraftScreen.vue"),
     meta: { mode: "ops", nav: "fleet", title: "Spacecraft", board: "Investigate (J2)" },
   },
   {

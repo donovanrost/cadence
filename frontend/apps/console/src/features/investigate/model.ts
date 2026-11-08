@@ -1,0 +1,134 @@
+import type { Alarm, Thresholds } from "@/features/alarms/index.ts";
+import type { FleetSpacecraft } from "@/features/fleet/index.ts";
+import type { History, LimitIntervals } from "./api.ts";
+import type { LimitSegment, SeriesPoint, TimeWindow } from "./chart/scale.ts";
+
+/** Pure logic for Investigate (J2). Spec: docs/apogee/ux/screens/Investigate.md. */
+
+export const RANGES = [
+  { value: "1h", label: "1H", ms: 3_600_000 },
+  { value: "6h", label: "6H", ms: 6 * 3_600_000 },
+  { value: "24h", label: "24H", ms: 24 * 3_600_000 },
+] as const;
+export type RangeKey = (typeof RANGES)[number]["value"];
+/** `6 ORB` needs an orbit period, which the backend doesn't have yet, so the default is 6H. */
+export const DEFAULT_RANGE: RangeKey = "6h";
+
+export function rangeWindow(range: RangeKey, now: Date): TimeWindow {
+  const ms = RANGES.find((r) => r.value === range)?.ms ?? 6 * 3_600_000;
+  return { from: now.getTime() - ms, to: now.getTime() };
+}
+
+/** The alarm B1 shows: the one named in the URL if present, else the worst (server order). */
+export function pickAlarm(alarms: readonly Alarm[], alarmId: string | null): Alarm | null {
+  if (alarmId !== null) {
+    const named = alarms.find((alarm) => alarm.id === alarmId);
+    if (named) return named;
+  }
+  return alarms.find((alarm) => alarm.active) ?? null;
+}
+
+export const toSeries = (history: History): SeriesPoint[] =>
+  history.buckets.map((b) => ({ t: Date.parse(b.t), min: b.min, mean: b.mean, max: b.max }));
+
+const BANDS = [
+  { key: "red_low", kind: "crit", side: "low" },
+  { key: "yellow_low", kind: "caution", side: "low" },
+  { key: "yellow_high", kind: "caution", side: "high" },
+  { key: "red_high", kind: "crit", side: "high" },
+] as const satisfies readonly {
+  key: keyof Thresholds;
+  kind: LimitSegment["kind"];
+  side: LimitSegment["side"];
+}[];
+
+function segmentsFor(thresholds: Thresholds, from: number, to: number): LimitSegment[] {
+  return BANDS.flatMap(({ key, kind, side }) => {
+    const value = thresholds[key];
+    return value === null ? [] : [{ from, to, value, kind, side }];
+  });
+}
+
+/**
+ * Limit segments over the window from the definition intervals (bands can change mid-window).
+ * Without intervals, the alarm's own thresholds span the window: some definitions have no
+ * lifecycle interval but still carry bands (api M11 note).
+ */
+export function limitSegments(
+  intervals: LimitIntervals | null,
+  window: TimeWindow,
+  fallback: Thresholds | null,
+): LimitSegment[] {
+  const list = intervals?.intervals ?? [];
+  if (list.length === 0) return fallback ? segmentsFor(fallback, window.from, window.to) : [];
+  return list.flatMap((interval) => {
+    const from = Math.max(window.from, Date.parse(interval.from));
+    const to = Math.min(window.to, interval.to === null ? window.to : Date.parse(interval.to));
+    return to > from ? segmentsFor(interval.thresholds, from, to) : [];
+  });
+}
+
+/** A rate over less data than this would be extrapolation, not a measurement. */
+export const MIN_RATE_SPAN_MS = 15 * 60_000;
+
+/** Change per hour across the series' means; null over less than MIN_RATE_SPAN_MS of data. */
+export function ratePerHour(series: readonly SeriesPoint[]): number | null {
+  const first = series[0];
+  const last = series.at(-1);
+  if (!first || !last || last.t - first.t < MIN_RATE_SPAN_MS) return null;
+  return ((last.mean - first.mean) / (last.t - first.t)) * 3_600_000;
+}
+
+const num = (v: number) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2).replace(/\.?0+$/, ""));
+
+/** Chart sentence from first/last/min and crossings (spec B1 aria-label); never a finding. */
+export function trendSentence(
+  pointName: string,
+  rangeLabel: string,
+  series: readonly SeriesPoint[],
+  limits: readonly LimitSegment[],
+): string {
+  const first = series[0];
+  const last = series.at(-1);
+  if (!first || !last) return `${pointName} over ${rangeLabel}: no data in this window.`;
+  const direction = last.mean > first.mean ? "rising" : last.mean < first.mean ? "falling" : "flat";
+  const lo = Math.min(...series.map((p) => p.min));
+  const hi = Math.max(...series.map((p) => p.max));
+  const crit = limits.filter((l) => l.kind === "crit");
+  const crossed = crit.find((l) => (l.side === "low" ? lo < l.value : hi > l.value));
+  return `${pointName} over ${rangeLabel}, ${direction} from ${num(first.mean)} to ${num(last.mean)}, range ${num(lo)} to ${num(hi)}${
+    crossed ? `, crossing the ${num(crossed.value)} red limit` : ""
+  }.`;
+}
+
+/** Previous/next spacecraft for `[` `]`: same plane by slot, else the whole fleet by SCID. */
+export function neighbours(
+  fleet: readonly FleetSpacecraft[],
+  sc: FleetSpacecraft,
+): { prev: FleetSpacecraft | null; next: FleetSpacecraft | null } {
+  const peers =
+    sc.plane === null
+      ? [...fleet].sort((a, b) => a.scid - b.scid)
+      : fleet
+          .filter((other) => other.plane === sc.plane)
+          .sort((a, b) => (a.slot ?? a.scid) - (b.slot ?? b.scid) || a.scid - b.scid);
+  const i = peers.findIndex((other) => other.id === sc.id);
+  return { prev: peers[i - 1] ?? null, next: peers[i + 1] ?? null };
+}
+
+/** B4 v1: same plane, same point, currently caution or critical (U10 naming: "same point in limits"). */
+export function sisters(
+  alarms: readonly Alarm[],
+  fleet: readonly FleetSpacecraft[],
+  sc: FleetSpacecraft,
+  pointId: string,
+): { sc: FleetSpacecraft; alarm: Alarm }[] {
+  if (sc.plane === null) return [];
+  const inPlane = new Map(
+    fleet.filter((o) => o.plane === sc.plane && o.id !== sc.id).map((o) => [o.id, o]),
+  );
+  return alarms.flatMap((alarm) => {
+    const other = alarm.spacecraft_id ? inPlane.get(alarm.spacecraft_id) : undefined;
+    return other && alarm.active && alarm.point.id === pointId ? [{ sc: other, alarm }] : [];
+  });
+}
