@@ -15,10 +15,10 @@ Status: **implemented** (`CadenceWeb.Console.*`, tests in `apps/cadence_web/test
 - **Built mode** (prod and test): reads `apps/cadence_web/priv/static/console/index.html`, the
   output of `vite build` (gitignored). If it is missing, the answer is `503` with a plain-text hint.
 - **Dev mode** (`config/dev.exs`): Phoenix fetches `index.html` from the console Vite dev server
-  (`CONSOLE_VITE_ORIGIN`, default `http://127.0.0.1:5180`) and rewrites root-relative
+  (`CONSOLE_VITE_ORIGIN`, default `http://127.0.0.1:5181`) and rewrites root-relative
   `src="/console/..."` and `href="/console/..."` URLs to absolute dev-server URLs. Phoenix stays
   the page origin, so cookies, CSRF and the websocket are same-origin. Vite needs
-  `base: '/console/'`, `server.port: 5180`, `strictPort`, `server.origin: 'http://127.0.0.1:5180'`
+  `base: '/console/'`, `server.port: 5181`, `strictPort`, `server.origin: 'http://127.0.0.1:5181'`
   and `cors: true`. Set `CONSOLE_VITE_ORIGIN=""` to serve the built output in dev.
 
 ## `GET /api/console/v1/session`

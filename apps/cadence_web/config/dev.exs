@@ -7,7 +7,7 @@ config :live_vue, vite_host: "http://127.0.0.1:5173"
 # CONSOLE_VITE_ORIGIN="" to serve the built priv/static/console instead.
 config :cadence_web, :console,
   dev_server:
-    (case System.get_env("CONSOLE_VITE_ORIGIN", "http://127.0.0.1:5180") do
+    (case System.get_env("CONSOLE_VITE_ORIGIN", "http://127.0.0.1:5181") do
        "" -> nil
        url -> url
      end)
