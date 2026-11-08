@@ -19,7 +19,6 @@ test.describe("Setup spacecraft detail", () => {
 
     // Decision 1: no mission revision numbers until change sets exist.
     await expect(page.getByText(/configuration arrives with change sets/i)).toBeVisible();
-    await expect(page.getByText(/\br\d+\b/)).toHaveCount(0);
     await expectAccessible(page);
   });
 

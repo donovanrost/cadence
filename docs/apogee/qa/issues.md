@@ -10,7 +10,11 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 3 | Console shell | Account button: visible "CA" missing from its accessible name (WCAG 2.5.3) | lead | verified (22653d8d) |
 | 4 | Setup + shell nav | Members (no capabilities) are offered mission-config and org-admin actions the server forbids (decision 2) | fe-setup, lead | verified (6d51ca92 + lead's rail) |
 | 6 | Readiness API | Served `verdict` keys singular vs §R/decoder plural | api / fe-setup | fixed: decoder + §R moved to singular (fe-setup) |
-| 7 | Fleet API | After a server restart, once-heard spacecraft read `never_heard` (ever-heard comes from the volatile ETS current-value store; violates U9) | api | open |
+| 7 | Fleet API | After a server restart, once-heard spacecraft read `never_heard` (ever-heard comes from the volatile ETS current-value store; violates U9) | api | verified (43eb6da0: 10 stale, 490 never heard) |
+| 8 | Investigate chart | Line/band drawn across a 26-min data gap; rate computed across it | fe-ops | verified (19887eec) |
+| 9 | Investigate B1 | "No active alarm" shown as nominal (green) while the mission has no limits configured (U13) | fe-ops | fixed (d3a2e569), e2e updated |
+| 10 | Investigate header | Prev/next links show "2 ]" but are named "Next spacecraft, EARENDIL-002" (WCAG 2.5.3) | fe-ops | fixed (d3a2e569), e2e updated |
+| 11 | Config API | First `GET /missions/:id/config` returned 500 during an e2e run; a later call 200 with a baseline created at that moment (suspected race in lazy baseline creation) | api / domain | fixed (0c037ba0) |
 | 5 | Now · fleet matrix | Plane buttons: "P01" vs label "Plane 1" (WCAG 2.5.3) and 36×10px targets 18px apart (WCAG 2.5.8) | fe-ops | verified (8ccf851f) |
 
 ## Details
@@ -68,5 +72,34 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   last_received_at / ever-heard from it. QuestDB still holds ~98k observations for those 10.
 - Expected (ux U9): once heard, a silent spacecraft becomes `stale`, never `never_heard`.
 - Reported by ux; dev server now runs with the Postgres current-value store.
+
+### 8. Investigate chart joins across data gaps
+
+- Repro: `/console/reflect-orbital/earendil/fleet/1/investigate`, 6H window (alarms mocked), point
+  `EPS.sa1_current`. Samples exist only 22:28:15–22:28:50 and 22:54:54–22:55:57Z.
+- Actual: mean line and min–max band run straight across 22:29→22:54; Rate "+13.44 per hour".
+- Cause: `chart/scale.ts` `runs()` uses the median step as "typical"; with 3 buckets the median
+  is the gap. `model.ts` `ratePerHour` uses first→last regardless of gaps.
+- Fix: gap threshold from the response's `bucket_width_ms`; rate over the latest contiguous run.
+
+### 9. Investigate: "No active alarm" reassures while nothing is checked
+
+- Repro: real server (seed has no limit definitions; `/fleet` says `limits.configured: false`),
+  open `/fleet/1/investigate`. B1 shows a nominal callout "No active alarm on EARENDIL-001."
+- Expected (U13, and as Now already does): say limits aren't configured, so absence of alarms is
+  unknown, not nominal. Test: `investigate.e2e.ts` "no limits configured" (test.fail).
+
+### 10. Investigate prev/next: Label in Name
+
+- `SpacecraftHeader.vue:97-106`: visible "2 ]" / "[" vs `aria-label="Next spacecraft, EARENDIL-002"`.
+  axe `label-content-name-mismatch` (serious). Start the name with the visible text, e.g.
+  "2 ], next spacecraft EARENDIL-002", or make the visible key hint `aria-hidden` and show the name.
+
+### 11. `/config` 500 on first access (suspected race)
+
+- During a parallel e2e run (Readiness screen), `GET /api/console/v1/missions/mission-earendil-demo/config`
+  returned 500 once. Immediately after, it returned 200 with a `baseline` head whose `applied_at`
+  (23:17:43Z) matched that run, so the baseline was created lazily then. Two first requests
+  creating the baseline concurrently is the likely cause. Server log had already rotated.
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->

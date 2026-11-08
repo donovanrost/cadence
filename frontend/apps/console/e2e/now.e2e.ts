@@ -64,7 +64,7 @@ test.describe("Now (J1)", () => {
       for (const label of ["Caution", "Critical", "Stale"]) {
         // A zero we couldn't have observed is unknown (ux U13), never a reassuring 0.
         await expect(statTile(page, label)).toContainText("unknown");
-        await expect(statTile(page, label)).toContainText("no telemetry yet");
+        await expect(statTile(page, label)).toContainText(/no telemetry yet|limits not configured/);
       }
       await expect(statTile(page, "In contact")).toContainText("not tracked yet");
 

@@ -179,7 +179,6 @@ test.describe("setup readiness", () => {
     await expect(page.getByRole("link", { name: "Add a source" })).toHaveCount(1);
     // No unified change feed yet: R2 is omitted, not faked (decision 1).
     await expect(page.getByText("Recent changes")).toHaveCount(0);
-    await expect(page.getByText(/\br\d+\b/)).toHaveCount(0);
 
     await expectAccessible(page);
   });

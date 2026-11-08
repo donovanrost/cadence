@@ -22,7 +22,12 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [
-    { name: "setup", testMatch: /.*\.setup\.ts/ },
+    {
+      name: "setup",
+      testMatch: /.*\.setup\.ts/,
+      // The LiveView sign-in page can take 10–20 s to connect on the loaded laptop; retry once.
+      retries: 1,
+    },
     {
       name: "desktop",
       testMatch: /.*\.e2e\.ts/,
