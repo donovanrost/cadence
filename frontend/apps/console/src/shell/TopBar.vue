@@ -25,7 +25,7 @@ const placeholder = computed(() =>
 
 <template>
   <header
-    class="flex min-h-[52px] flex-none flex-wrap items-stretch border-b border-hairline bg-chrome"
+    class="flex h-[56px] flex-none flex-nowrap items-stretch border-b border-hairline bg-chrome md:h-auto md:min-h-[52px] md:flex-wrap"
   >
     <BrandMark />
     <ScopeSwitcher :scope="scope" />
