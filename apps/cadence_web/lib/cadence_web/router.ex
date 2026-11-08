@@ -756,6 +756,7 @@ defmodule CadenceWeb.Router do
       pipe_through(:console_mission)
 
       get("/", MissionController, :show)
+      get("/fleet", FleetController, :show)
     end
 
     match(:*, "/*path", NotFoundController, :show)
