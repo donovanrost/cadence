@@ -34,3 +34,6 @@ palette registers: agreed, better than a stub.
    tree).
 
 Not a bug: a blank white `/setup` frame at 900 didn't reproduce (HMR reload during capture).
+
+## Resolved (re-checked 2026-11-08 22:12Z, 390px)
+Items 6-7: tabs are `Now · Alarms · GO polls` (Search joins with the palette), landmark "On-call tabs". Items 1 and 4 also visible: U13 dashes, 2×3 stat grid, queue stacked first.

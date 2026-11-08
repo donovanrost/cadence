@@ -21,3 +21,6 @@ right-aligned tabular SCID, profile + `v1` in `text-4`, `off` mark + "Awaiting f
    concept). My fixture used it as a placeholder and Setup.md now notes it.
 5. Spacecraft list (later, when /spacecraft lands): add `Routes` and `Configuration` (`active v3 ·
    draft pending review`) columns from the S shape; keep `Last heard`.
+
+## Resolved (re-checked 2026-11-08 22:12Z)
+Items 1-3 fixed in d53a554e. Directory now on /spacecraft with Routing rules + Setup columns. "Ready" as a quiet nominal mark + word (not 500 tags) accepted: it reads as earned setup state without shouting. Item 5 done.
