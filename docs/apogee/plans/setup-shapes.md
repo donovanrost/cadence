@@ -120,3 +120,66 @@ return them empty without that flag.
   "readiness": {"ready": true, "checks": [{"key", "status": "ready|blocker|caution|not_set_up", "title", "body"}]}
 }}
 ```
+
+## C · Catalog (S3, `ux/screens/Catalog.md`)
+
+### C1 · `GET /missions/:mission_id/catalog`
+
+The index: databases, then the selected one's revisions and recent import runs.
+
+```json
+{"data": {
+  "databases": [{"id": "db_…", "name": "Earendil FSW", "slug": "earendil-fsw"}],
+  "database": {
+    "id": "db_…",
+    "current_revision": {"id": "rev_…", "number": 14, "label": "FSW 3.1.0",
+                         "declaration_count": 547, "command_count": 212, "telemetry_count": 335,
+                         "spacecraft_count": 500} | null,
+    "revisions": [{"id", "number", "label", "notes", "artifact": {"id", "file_name", "format_label", "size_bytes"},
+                   "declaration_count", "spacecraft_count", "imported_at", "actor": {"name"}|null}],
+    "import_runs": [{"id", "file_name", "status": "pending|running|succeeded|failed",
+                     "diagnostic_counts": {"error": 0, "warning": 2, "info": 0},
+                     "revision_number": 15|null, "started_at", "completed_at"|null}]
+  } | null
+}}
+```
+- `?database_id=` selects a database, defaulting to the first. `database` is null when the mission
+  has none, which the UI shows as "No catalog yet".
+- `current_revision`: the latest revision. `command_count`/`telemetry_count` may be null until the
+  importer reports per-kind counts. In that case the UI shows one `Declarations` number.
+- `spacecraft_count`: spacecraft whose active configuration uses that revision.
+- `revisions` newest first, at most 50. `import_runs` newest first, at most 20.
+
+### C2 · `POST /missions/:mission_id/catalog/imports` (multipart)
+
+Fields `file` (≤ 50 MiB), `database_id` (optional; when absent, `name` creates a database),
+`revision_label`, `revision_notes`. Returns `{"data": {"import_run_id": "run_…"}}` (202). Errors:
+`422 invalid_params`, `422 unsupported_format` (with `details.accepted: [{format_key, label,
+extensions}]`), `413 file_too_large`.
+
+`GET /missions/:mission_id/catalog/importers` → `{"data": {"importers": [{"key": "xtce_1_3",
+"label": "XTCE 1.3", "extensions": [".xml"]}], "max_bytes": 52428800}}` for the accepted-format
+chips.
+
+### C3 · `GET /missions/:mission_id/catalog/imports/:import_run_id`
+
+```json
+{"data": {
+  "id", "status": "pending|running|succeeded|failed", "started_at", "completed_at"|null,
+  "file": {"name", "format_label", "size_bytes"},
+  "failure_reason": null | "…",
+  "diagnostics": [{"severity": "error|warning|info", "code", "message", "path"|null}],
+  "revision": {"id", "number", "label"} | null,
+  "base_revision": {"id", "number"} | null,
+  "diff": null | {
+    "summary": {"commands": {"before", "after", "added", "changed", "removed"},
+                "telemetry": {…same…}, "unchanged", "total_before", "breaking"},
+    "changes": [{"op": "added|changed|removed", "kind": "command|telemetry|other", "name",
+                 "change": "arg duration: u16 seconds → u32 milliseconds", "breaking": true}]
+  }
+}}
+```
+- `diff` is null until the diff exists (DECISIONS #9 v1: added/changed/removed/breaking from the
+  two revisions, without impact). The UI then shows validation and diagnostics only.
+- Live status: an `import_run` event on the `mission:<id>` channel (`{import_run_id, status}`),
+  or an `invalidate` with `catalog`. Either works; the UI refetches C3.
