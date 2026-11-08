@@ -1,7 +1,7 @@
 import { expectAccessible } from "./support/accessibility.ts";
 import { openConsole } from "./support/console.ts";
 import { DEMO } from "./support/env.ts";
-import { expect, test } from "./support/fixtures.ts";
+import { allow, expect, test } from "./support/fixtures.ts";
 
 // Shell contract: docs/apogee/ARCHITECTURE.md "Shell contract", docs/apogee/qa/e2e.md.
 test.describe("console shell", () => {
@@ -39,7 +39,7 @@ test.describe("console shell, signed out", () => {
   test.use({
     storageState: { cookies: [], origins: [] },
     // The LiveView /sign-in page has no favicon (outside the console); see qa issues #2.
-    allowedDiagnostics: [/\/favicon\.ico/],
+    allowedDiagnostics: allow(/\/favicon\.ico/),
   });
 
   test("redirects to the Phoenix sign-in page", async ({ page }) => {

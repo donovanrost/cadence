@@ -9,8 +9,12 @@ export interface BrowserDiagnostics {
 }
 
 interface DiagnosticsFixtures {
-  /** Patterns for diagnostics a test expects (e.g. a deliberate 404 in an error-state test). */
-  allowedDiagnostics: readonly RegExp[];
+  /**
+   * Diagnostics a test expects (e.g. a deliberate 404 in an error-state test), as one RegExp.
+   * Build it with `allow(...)`. A single value, not an array: Playwright reads an array option
+   * as a `[value, fixtureOptions]` tuple.
+   */
+  allowedDiagnostics: RegExp | null;
   diagnostics: BrowserDiagnostics;
 }
 
@@ -51,8 +55,13 @@ function collect(page: Page): BrowserDiagnostics {
   return diagnostics;
 }
 
-function unexpected(entries: readonly string[], allowed: readonly RegExp[]): string[] {
-  return entries.filter((entry) => !allowed.some((pattern) => pattern.test(entry)));
+function unexpected(entries: readonly string[], allowed: RegExp | null): string[] {
+  return allowed === null ? [...entries] : entries.filter((entry) => !allowed.test(entry));
+}
+
+/** Combines patterns into the single RegExp `allowedDiagnostics` takes. */
+export function allow(...patterns: readonly RegExp[]): RegExp {
+  return new RegExp(patterns.map((pattern) => `(?:${pattern.source})`).join("|"));
 }
 
 /**
@@ -60,7 +69,7 @@ function unexpected(entries: readonly string[], allowed: readonly RegExp[]): str
  * app request fail (network error or HTTP >= 400), unless the test allows it explicitly.
  */
 export const test = base.extend<DiagnosticsFixtures>({
-  allowedDiagnostics: [[], { option: true }],
+  allowedDiagnostics: [null, { option: true }],
   diagnostics: [
     async ({ page, allowedDiagnostics }, use) => {
       const diagnostics = collect(page);

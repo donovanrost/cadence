@@ -7,6 +7,11 @@ export default defineConfig({
   testDir: "./e2e",
   outputDir: "./test-results",
   fullyParallel: true,
+  // The dev stack shares one laptop with the whole team (Vite dev, Phoenix code reloader, mix
+  // builds), so keep parallelism and timeouts conservative. Raise with E2E_WORKERS when idle.
+  workers: Number(process.env["E2E_WORKERS"] ?? "2"),
+  timeout: 60_000,
+  expect: { timeout: 15_000 },
   forbidOnly: Boolean(process.env["CI"]),
   retries: 0,
   reporter: [["list"], ["html", { open: "never", outputFolder: "./playwright-report" }]],

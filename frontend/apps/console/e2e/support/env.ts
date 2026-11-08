@@ -41,6 +41,9 @@ export const ADMIN_STORAGE_STATE = storageStateFor("admin");
 export const DEMO = {
   organizationName: process.env["E2E_ORG_NAME"] ?? "Reflect Orbital",
   organizationId: process.env["E2E_ORG_ID"] ?? "org-reflect-orbital-demo",
+  organizationSlug: process.env["E2E_ORG_SLUG"] ?? "reflect-orbital",
   missionName: process.env["E2E_MISSION_NAME"] ?? "Earendil",
   missionId: process.env["E2E_MISSION_ID"] ?? "mission-earendil-demo",
+  missionSlug: process.env["E2E_MISSION_SLUG"] ?? "earendil",
+  spacecraftCount: Number(process.env["E2E_SPACECRAFT_COUNT"] ?? "500"),
 } as const;

@@ -8,6 +8,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 1 | Console build | `@import "tailwindcss"` unresolved: SPA never boots | lead | verified (9d7790ea) |
 | 2 | Favicon | `/favicon.ico` 404 logged as console error | lead / api | console verified (9d7790ea); LiveView `/sign-in` still 404s (low, api) |
 | 3 | Console shell | Account button: visible "CA" missing from its accessible name (WCAG 2.5.3) | lead | verified (22653d8d) |
+| 4 | Setup + shell nav | Members (no capabilities) are offered mission-config and org-admin actions the server forbids (decision 2) | fe-setup, lead | open |
 
 ## Details
 
@@ -31,5 +32,18 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   "Account menu for Cadence Administrator". Voice-control users can't say "click CA".
   axe `label-content-name-mismatch` (serious) in `shell.e2e.ts`.
 - Fix: `aria-label` starts with the visible initials. Shell e2e passes with it.
+
+### 4. Capability gating missing for members (decision 2)
+
+- Repro: sign in as `qa-operator@example.com` (member; session `capabilities: []`), open
+  `/console/reflect-orbital/earendil/setup/spacecraft` and `/setup`.
+- Actual: same UI as an org admin: **Add spacecraft**, **Import catalog**, and the Organization
+  nav section (People & access, Missions, Provider accounts, Settings, Audit log).
+- Server policy (`apps/cadence/lib/cadence/auth/policy.ex`): `manage_mission`,
+  `manage_missions`, `read_organization`, `manage_provider_accounts` need `organization_admin`
+  (or `platform_admin`). A member clicking through gets a refusal instead of a hidden/disabled action.
+- Expected: gate on session `capabilities` (not role names); hide or disable with a reason.
+- Tests: `setup-spacecraft.e2e.ts` / `setup-readiness.e2e.ts` "organization member" cases are
+  marked `test.fail` and will flip (and fail loudly) once gating lands.
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
