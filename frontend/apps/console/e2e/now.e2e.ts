@@ -24,6 +24,12 @@ const badShift: Degradation = {
 
 const allNominal: Degradation = {};
 
+/** Before the first AOS: nothing ever received, no ground limits (the bare seed). */
+const nothingYet: Degradation = {
+  neverHeard: Array.from({ length: DEMO.spacecraftCount }, (_, i) => i + 1),
+  limitsConfigured: false,
+};
+
 function statTile(page: Page, label: string): Locator {
   return page
     .getByRole("region", { name: "Fleet status" })
@@ -40,7 +46,11 @@ function queue(page: Page): Locator {
 }
 
 test.describe("Now (J1)", () => {
-  test.describe("real server: nothing received yet", () => {
+  test.describe("nothing received yet", () => {
+    test.beforeEach(async ({ page }) => {
+      await routeDegradedFleet(page, nothingYet);
+    });
+
     test("is honest: no telemetry yet, unknowns shown as unknown", async ({ page }) => {
       await openConsole(page, screen);
       await expect(page.getByRole("heading", { level: 1 })).toHaveText(/no telemetry yet/i);
@@ -124,7 +134,6 @@ test.describe("Now (J1)", () => {
     });
 
     test("is accessible with alarms showing", async ({ page }) => {
-      test.fail(true, "qa issue #5: fleet matrix plane buttons fail Label in Name (WCAG 2.5.3)");
       await expect(page.getByRole("heading", { level: 1 })).toHaveText(/need you/i);
       await expectAccessible(page);
     });
