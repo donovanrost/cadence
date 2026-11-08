@@ -107,7 +107,6 @@ test.describe("setup spacecraft directory, organization member", () => {
   });
 
   test("is not offered Add spacecraft (no manage_mission capability)", async ({ page }) => {
-    test.fail(true, "qa issue #4: mission-config actions are not gated on session capabilities");
     await openConsole(page, screen);
     await expect(directory(page)).toBeVisible();
     await expect(page.getByRole("link", { name: "Add spacecraft" })).toHaveCount(0);

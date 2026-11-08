@@ -8,7 +8,8 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 1 | Console build | `@import "tailwindcss"` unresolved: SPA never boots | lead | verified (9d7790ea) |
 | 2 | Favicon | `/favicon.ico` 404 logged as console error | lead / api | console verified (9d7790ea); LiveView `/sign-in` still 404s (low, api) |
 | 3 | Console shell | Account button: visible "CA" missing from its accessible name (WCAG 2.5.3) | lead | verified (22653d8d) |
-| 4 | Setup + shell nav | Members (no capabilities) are offered mission-config and org-admin actions the server forbids (decision 2) | fe-setup, lead | open |
+| 4 | Setup + shell nav | Members (no capabilities) are offered mission-config and org-admin actions the server forbids (decision 2) | fe-setup, lead | verified (6d51ca92 + lead's rail) |
+| 5 | Now · fleet matrix | Plane buttons: "P01" vs label "Plane 1" (WCAG 2.5.3) and 36×10px targets 18px apart (WCAG 2.5.8) | fe-ops | open |
 
 ## Details
 
@@ -45,5 +46,16 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 - Expected: gate on session `capabilities` (not role names); hide or disable with a reason.
 - Tests: `setup-spacecraft.e2e.ts` / `setup-readiness.e2e.ts` "organization member" cases are
   marked `test.fail` and will flip (and fail loudly) once gating lands.
+
+### 5. Fleet matrix plane buttons: Label in Name + target size
+
+- `src/features/fleet/FleetMatrix.vue:78-88`. Visible text "P01", `aria-label="Plane 1"`: axe
+  `label-content-name-mismatch` (serious). Voice users can't say "click P01".
+- Measured at 1512×1000: each button is **36×10 px**, centres 18 px apart. WCAG 2.2 AA 2.5.8
+  needs 24×24 px or enough spacing that 24 px circles don't overlap.
+- Fix: label that starts with the visible text (e.g. drop `aria-label` and add sr-only
+  " · plane 1" after "P01", or `aria-label="P01, plane 1"`) and give the button the full row
+  height with a ≥24 px hit area (padding or a taller row).
+- Test: `now.e2e.ts` "is accessible with alarms showing" is `test.fail` until fixed.
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->

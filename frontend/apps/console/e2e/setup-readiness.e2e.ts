@@ -210,7 +210,6 @@ test.describe("setup readiness, organization member", () => {
   });
 
   test("is not offered Add spacecraft / Import catalog", async ({ page }) => {
-    test.fail(true, "qa issue #4: mission-config actions are not gated on session capabilities");
     await openConsole(page, screen);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(page.getByRole("link", { name: "Add spacecraft" })).toHaveCount(0);
