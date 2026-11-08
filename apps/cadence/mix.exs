@@ -42,6 +42,7 @@ defmodule Cadence.MixProject do
       {:ecto_sql, "~> 3.13"},
       # grpcbox currently constrains gproc to 1.2.x, which does not compile cleanly on OTP 29.
       {:gproc, "~> 1.3", override: true},
+      {:libcluster, "~> 3.5"},
       {:jason, "~> 1.4"},
       {:nimble_parsec, "~> 1.4"},
       {:opentelemetry, "~> 1.7"},

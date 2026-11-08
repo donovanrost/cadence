@@ -6,7 +6,7 @@ defmodule Cadence.Runtime.Supervisor do
   alias Cadence.IngressArchive
   alias Cadence.Platform.RootComposition
   alias Cadence.Protocol.RecordArchive
-  alias Cadence.Runtime.ProcessNamespace
+  alias Cadence.Runtime.{ProcessNamespace, SessionQualification, SessionReadiness}
   alias Cadence.Telemetry.{CurrentValueStore, HistoryStore, Storage}
 
   def child_spec(opts) do
@@ -33,19 +33,50 @@ defmodule Cadence.Runtime.Supervisor do
     policies = persistence_policies(opts, composition)
     process_namespace = process_namespace(opts, composition)
 
+    cluster = composition.runtime_cluster || nil
+
+    if cluster do
+      id = Keyword.fetch!(cluster, :id)
+      scope = Keyword.fetch!(cluster, :scope)
+
+      unless is_atom(id) or is_binary(id),
+        do: raise(ArgumentError, "runtime cluster id must be an atom or string")
+
+      unless is_atom(scope) and not is_nil(scope),
+        do: raise(ArgumentError, "runtime cluster scope must be a named atom")
+
+      unless Node.alive?(),
+        do: raise(ArgumentError, "runtime clustering requires a named BEAM node")
+    end
+
     children =
       resource_children(opts, policies, composition) ++
         [
           {Cadence.Runtime.CapabilityRegistry, name: process_namespace.capability_registry},
-          {Registry, keys: :unique, name: process_namespace.registry},
+          {Registry, keys: :unique, name: process_namespace.registry, meta: [cluster: cluster]},
+          {SessionReadiness,
+           name: SessionReadiness.name(process_namespace), policy: session_policy(composition)},
           {DynamicSupervisor,
            strategy: :one_for_one,
            name: process_namespace.mission_supervisor,
            extra_arguments: [runtime_child_opts(opts, policies, process_namespace, composition)]}
         ]
 
-    Supervisor.init(children, strategy: :one_for_all)
+    cluster_children =
+      if cluster do
+        [
+          {Cadence.Runtime.ClusterSupervisor,
+           process_namespace: process_namespace,
+           runtime_opts: runtime_child_opts(opts, policies, process_namespace, composition)}
+        ]
+      else
+        []
+      end
+
+    Supervisor.init(children ++ cluster_children, strategy: :one_for_all)
   end
+
+  defp session_policy(composition), do: composition.uplink_session_policy || SessionQualification
 
   defp resource_children(opts, policies, composition) do
     case Keyword.fetch(opts, :resource_children) do
@@ -139,6 +170,8 @@ defmodule Cadence.Runtime.Supervisor do
           )
           |> copy_ingress_journal_policy(opts, mission_runtime_opts)
           |> copy_profiler(opts, mission_runtime_opts)
+          |> copy_option(opts, :cluster, :runtime_cluster)
+          |> copy_option(opts, :uplink_session_policy)
           |> copy_option(opts, :profiler_child_opts)
           |> copy_option(opts, :current_value_store_policy)
           |> copy_option(opts, :telemetry_storage_policy)

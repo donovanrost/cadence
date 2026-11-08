@@ -19,6 +19,35 @@ defmodule Cadence.Runtime.TransportRecords do
 
   alias Ecto.Multi
 
+  # Physical-send evidence shares the transport record boundary and tables.
+  defdelegate review_prepared_send(organization, mission, id, opts \\ []),
+    to: __MODULE__.Reconciliation,
+    as: :review
+
+  defdelegate reconcile_prepared_send(organization, mission, id, evidence, opts \\ []),
+    to: __MODULE__.Reconciliation,
+    as: :reconcile
+
+  defdelegate prepare(state, actions, next_state), to: __MODULE__.Send
+  defdelegate begin_send(provider, request), to: __MODULE__.Send
+  defdelegate finish_send(request, outcome), to: __MODULE__.Send
+  defdelegate add_send_confirmations(multi, actions), to: __MODULE__.Send
+  defdelegate confirm(actions), to: __MODULE__.Send
+  defdelegate review(resource), to: __MODULE__.Send
+  defdelegate clear?(resource), to: __MODULE__.Send
+  defdelegate clear?(resource, runtime_id), to: __MODULE__.Send
+
+  defdelegate save_protocol_checkpoint(state, document), to: __MODULE__.Checkpoints, as: :save
+  defdelegate load_protocol_checkpoint(state, id), to: __MODULE__.Checkpoints, as: :load
+
+  defdelegate record_protocol_restoration(state, document, review),
+    to: __MODULE__.Checkpoints,
+    as: :install
+
+  defdelegate add_protocol_checkpoint(multi, checkpoint, records, actions, timers),
+    to: __MODULE__.Checkpoints,
+    as: :add
+
   @spec add_timer_event_inserts(Multi.t(), [TransportTimerEvent.t()]) :: Multi.t()
   def add_timer_event_inserts(%Multi{} = multi, timer_events) when is_list(timer_events) do
     Enum.reduce(timer_events, multi, fn %TransportTimerEvent{} = timer_event, %Multi{} = acc ->

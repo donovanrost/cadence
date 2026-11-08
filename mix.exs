@@ -29,6 +29,7 @@ defmodule CadenceWorkspace.MixProject do
         "test.projections": :test,
         "test.planes": :test,
         "test.integration": :test,
+        "test.cluster": :test,
         "test.browser": :test,
         "test.browser.full": :test,
         "test.browser.federation": :test
@@ -41,6 +42,7 @@ defmodule CadenceWorkspace.MixProject do
       {:cadence_simulator, path: "apps/cadence_simulator", env: Mix.env(), runtime: false},
       {:cadence_web, path: "apps/cadence_web", env: Mix.env(), runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:libcluster, "~> 3.5"},
       {:workspace, "~> 0.3", only: [:dev, :test], runtime: false}
     ]
   end
@@ -55,6 +57,7 @@ defmodule CadenceWorkspace.MixProject do
           task_args: ["--exclude", "runtime", "--exclude", "config", "--exclude", "integration"]
         )
       ],
+      "test.cluster": ["run --no-start dev/otp_cluster/run.exs"],
       "test.runtime": [
         workspace_test_command(projects: [:cadence], task_args: ["--only", "runtime"])
       ],
@@ -107,6 +110,7 @@ defmodule CadenceWorkspace.MixProject do
       ],
       precommit: [
         "precommit.checks",
+        "test.cluster",
         "test.planes",
         "test"
       ],

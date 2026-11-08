@@ -21,14 +21,15 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   alias Cadence.ActionRequests.ProviderRequest
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressJournal.FileSystem, as: IngressJournal
-  alias Cadence.ProviderAdapters.TCPSocket.Instrumentation
+  alias Cadence.ProviderAdapters.TCPSocket.{Instrumentation, Session}
 
   alias Cadence.Runtime.{
     IngressArchiveConsumer,
     IngressJournalConsumer,
     IngressPersistenceProjector,
     MissionRuntime,
-    ProviderIngressExecutor
+    ProviderIngressExecutor,
+    TransportRecords
   }
 
   @tcp_socket_buffer 1_048_576
@@ -66,6 +67,9 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       shutdown: 5_000
     }
   end
+
+  @impl true
+  def uplink_session(provider_runtime), do: GenServer.call(provider_runtime, :uplink_session)
 
   @impl true
   def snapshot(provider_runtime) do
@@ -135,6 +139,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       lifecycle_status: :active
     }
 
+    base_state = Session.initialize(base_state, opts)
+
     case ensure_ingress_dependencies(base_state) do
       {:ok, base_state} ->
         start_socket_provider(configuration, base_state, provider_binding_id)
@@ -150,6 +156,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         state =
           base_state
           |> Map.put(:socket, socket)
+          |> Session.connected()
           |> start_socket_receiver!(socket)
 
         log_provider_started(state)
@@ -174,6 +181,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   end
 
   @impl true
+  def handle_call(:uplink_session, _from, state), do: {:reply, Session.handle(state), state}
+
   def handle_call(:quiesce, _from, %{lifecycle_status: :quiesced} = state) do
     {:reply, {:ok, quiescence_settlement(state)}, state}
   end
@@ -218,6 +227,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         provider_binding_id: state.provider_binding_id,
         adapter_key: :tcp_socket,
         lifecycle_status: state.lifecycle_status,
+        uplink_session: Session.snapshot(state),
         direction: state.direction,
         source_endpoint_ref: state.source_endpoint_ref,
         source_endpoint_spacecraft_id: state.source_endpoint_spacecraft_id,
@@ -265,8 +275,9 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     reply =
       with {:ok, socket} <- current_socket(state),
            {:ok, payloads, total_bytes} <- decode_payloads(provider_request.payloads_base64),
-           :ok <- send_payloads(socket, payloads) do
+           :ok <- deliver_payloads(state, provider_request, socket, payloads) do
         delivery_metadata = %{
+          preparation_id: provider_request.preparation_id,
           provider_binding_id: state.provider_binding_id,
           provider_adapter_key: :tcp_socket,
           host: state.host,
@@ -310,6 +321,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       "TCP provider #{state.provider_binding_id} terminating: #{inspect(reason)}"
     )
 
+    Session.block(state, :provider_stopped)
     maybe_stop_socket_receiver(state)
     :ok
   end
@@ -328,6 +340,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         {:noreply,
          state
          |> Map.put(:socket, socket)
+         |> Session.connected()
          |> Map.put(:accept_ref, nil)
          |> start_socket_receiver!(socket)}
     end
@@ -416,6 +429,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         )
 
         state
+        |> Session.block(:connection_lost)
         |> maybe_demonitor_socket_receiver()
         |> Map.put(:socket_receiver_pid, nil)
         |> Map.put(:socket, nil)
@@ -434,6 +448,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       ) do
     next_state =
       state
+      |> Session.block(:connection_lost)
       |> Map.put(:socket_receiver_pid, nil)
       |> Map.put(:socket_receiver_monitor_ref, nil)
       |> Map.put(:socket, nil)
@@ -554,9 +569,26 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     end)
   end
 
-  defp send_payloads(socket, payloads) when is_list(payloads) do
+  defp deliver_payloads(state, request, socket, payloads) do
+    with {:ok, delivery} <- Session.begin_delivery(state, request) do
+      result =
+        with :ok <- TransportRecords.begin_send(state, request) do
+          record_send_outcome(request, send_payloads(state, delivery, socket, payloads))
+        end
+
+      Session.finish(state, delivery, result)
+    end
+  end
+
+  defp record_send_outcome(request, outcome) do
+    with :ok <- TransportRecords.finish_send(request, outcome), do: outcome
+  end
+
+  defp send_payloads(state, delivery, socket, payloads) when is_list(payloads) do
     Enum.reduce_while(payloads, :ok, fn payload, :ok ->
-      case :gen_tcp.send(socket, payload) do
+      result = with :ok <- Session.check(state, delivery), do: :gen_tcp.send(socket, payload)
+
+      case result do
         :ok -> {:cont, :ok}
         {:error, reason} -> {:halt, {:error, {:tcp_provider_send_failed, reason}}}
       end
@@ -1015,6 +1047,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   defp maybe_demonitor_socket_receiver(state), do: state
 
   defp quiesce_socket_io(state) do
+    state = Session.block(state, :quiescing)
     close_socket(state.listener)
     close_socket(state.socket)
 

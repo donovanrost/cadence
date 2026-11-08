@@ -58,6 +58,8 @@ defmodule Cadence.Control.Contacts.Store.ProviderReservationRow do
     field(:last_reconciled_at, :utc_datetime_usec)
     field(:metadata, :map, default: %{})
 
+    field(:resolution_evidence, :map, default: %{})
+
     timestamps()
   end
 
@@ -176,6 +178,7 @@ defmodule Cadence.Control.Contacts.Store.ProviderReservationRow do
   @spec to_domain(struct()) :: ProviderReservation.t()
   def to_domain(%__MODULE__{} = row) do
     ProviderReservation.new(%{
+      resolution_evidence: row.resolution_evidence,
       provider_reservation_id: row.provider_reservation_id,
       organization_id: row.organization_id,
       mission_id: row.mission_id,

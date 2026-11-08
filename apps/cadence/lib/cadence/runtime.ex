@@ -5,6 +5,7 @@ defmodule Cadence.Runtime do
 
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Ingress.RawEvidence
+  alias Cadence.Runtime.Cluster
   alias Cadence.Runtime.ContactCoordinator
   alias Cadence.Runtime.MissionCoordinator
   alias Cadence.Runtime.MissionRuntime
@@ -29,20 +30,38 @@ defmodule Cadence.Runtime do
         pid -> {:ok, pid}
       end
     else
-      do_ensure_mission_started(process_namespace, mission_id)
+      case runtime_pid(process_namespace, mission_id) do
+        nil -> do_ensure_mission_started(process_namespace, mission_id)
+        pid -> ready_mission_runtime(process_namespace, pid)
+      end
     end
   end
 
+  defp ready_mission_runtime(_process_namespace, pid) do
+    # Global registration precedes supervisor initialization. The supervisor
+    # handles this call only after admission and coordinator startup completes.
+    Supervisor.which_children(pid)
+    {:ok, pid}
+  catch
+    :exit, reason -> {:error, {:mission_runtime_unavailable, reason}}
+  end
+
   defp do_ensure_mission_started(process_namespace, mission_id) do
+    restart =
+      if Cluster.config(process_namespace), do: :temporary, else: :permanent
+
     child_spec =
-      Supervisor.child_spec({MissionRuntime, mission_id}, id: {:mission_runtime, mission_id})
+      Supervisor.child_spec({MissionRuntime, mission_id},
+        id: {:mission_runtime, mission_id},
+        restart: restart
+      )
 
     case DynamicSupervisor.start_child(process_namespace.mission_supervisor, child_spec) do
       {:ok, mission_runtime} ->
-        {:ok, mission_runtime}
+        ready_mission_runtime(process_namespace, mission_runtime)
 
       {:error, {:already_started, mission_runtime}} ->
-        {:ok, mission_runtime}
+        ready_mission_runtime(process_namespace, mission_runtime)
 
       {:error, {:already_present, _child_spec}} ->
         case runtime_pid(process_namespace, mission_id) do
@@ -80,11 +99,13 @@ defmodule Cadence.Runtime do
   def running_mission_ids(%ProcessNamespace{} = process_namespace) do
     case Process.whereis(process_namespace.registry) do
       registry when is_pid(registry) ->
-        process_namespace.registry
-        |> Registry.select([
+        process_namespace
+        |> Cluster.select([
           {{{:mission_runtime, :"$1"}, :"$2", :_}, [], [{{:"$1", :"$2"}}]}
         ])
-        |> Enum.filter(fn {_mission_id, mission_runtime} -> Process.alive?(mission_runtime) end)
+        |> Enum.filter(fn {_mission_id, mission_runtime} ->
+          node(mission_runtime) != node() or Process.alive?(mission_runtime)
+        end)
         |> Enum.map(fn {mission_id, _mission_runtime} -> mission_id end)
         |> Enum.uniq()
         |> Enum.sort()
@@ -569,9 +590,11 @@ defmodule Cadence.Runtime do
   end
 
   defp runtime_pid(process_namespace, mission_id) do
-    case Registry.lookup(process_namespace.registry, {:mission_runtime, mission_id}) do
+    case Cluster.lookup(process_namespace, {:mission_runtime, mission_id}) do
       [{mission_runtime, _value}] when is_pid(mission_runtime) ->
-        if Process.alive?(mission_runtime), do: mission_runtime, else: nil
+        if node(mission_runtime) != node() or Process.alive?(mission_runtime),
+          do: mission_runtime,
+          else: nil
 
       [] ->
         nil
@@ -580,18 +603,18 @@ defmodule Cadence.Runtime do
 
   defp stop_mission_runtime(process_namespace, mission_id, mission_runtime) do
     stop_registered_child(
-      process_namespace.mission_supervisor,
+      {process_namespace.mission_supervisor, node(mission_runtime)},
       mission_runtime,
       fn ->
-        Registry.lookup(process_namespace.registry, {:mission_runtime, mission_id}) != []
+        Cluster.lookup(process_namespace, {:mission_runtime, mission_id}) != []
       end,
       :mission_runtime_stop_timeout
     )
   end
 
   defp realized_contact_runtime(process_namespace, mission_id, realized_contact_id) do
-    case Registry.lookup(
-           process_namespace.registry,
+    case Cluster.lookup(
+           process_namespace,
            {:realized_contact_runtime, mission_id, realized_contact_id}
          ) do
       [{realized_contact_runtime, _value}] -> {:ok, realized_contact_runtime}
@@ -647,11 +670,13 @@ defmodule Cadence.Runtime do
   end
 
   defp realized_contact_coordinators(mission_id, process_namespace) do
-    process_namespace.registry
-    |> Registry.select([
+    process_namespace
+    |> Cluster.select([
       {{{:realized_contact_coordinator, mission_id, :"$1"}, :"$2", :_}, [], [{{:"$1", :"$2"}}]}
     ])
-    |> Enum.filter(fn {_realized_contact_id, coordinator} -> Process.alive?(coordinator) end)
+    |> Enum.filter(fn {_realized_contact_id, coordinator} ->
+      node(coordinator) != node() or Process.alive?(coordinator)
+    end)
   rescue
     ArgumentError -> []
   catch
@@ -716,8 +741,8 @@ defmodule Cadence.Runtime do
   end
 
   defp realized_contact_coordinator(process_namespace, mission_id, realized_contact_id) do
-    case Registry.lookup(
-           process_namespace.registry,
+    case Cluster.lookup(
+           process_namespace,
            {:realized_contact_coordinator, mission_id, realized_contact_id}
          ) do
       [{realized_contact_runtime, _value}] -> {:ok, realized_contact_runtime}

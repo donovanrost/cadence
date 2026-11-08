@@ -8,6 +8,8 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   require Logger
 
+  alias Cadence.Runtime.Cluster
+
   alias Cadence.ApplicationDispatch.{
     BindingSet,
     CapabilityInstance,
@@ -26,6 +28,7 @@ defmodule Cadence.Runtime.PartitionOwner do
     ActionExecutor,
     CapabilityRegistry,
     Clock,
+    MissionAdmission,
     MissionModelPlanDecoder,
     MissionRuntime,
     MissionRuntimeSpec,
@@ -95,8 +98,8 @@ defmodule Cadence.Runtime.PartitionOwner do
         %PartitionKey{} = partition_key
       )
       when is_binary(mission_id) do
-    case Registry.lookup(
-           process_namespace.registry,
+    case Cluster.lookup(
+           process_namespace,
            {:partition_owner, mission_id, PartitionKey.registry_key(partition_key)}
          ) do
       [{partition_pid, _value}] -> {:ok, partition_pid}
@@ -146,12 +149,32 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   @impl true
   def init(opts) do
+    monitor =
+      case Keyword.get(opts, :spec_source) do
+        pid when is_pid(pid) -> Process.monitor(pid)
+        _ -> nil
+      end
+
     if Keyword.get(opts, :defer_init?, false) do
       # A DynamicSupervisor waits for init/1. Replay belongs to this partition,
       # after that handshake, so other partitions can start independently.
-      {:ok, %{initialization_options: opts}, {:continue, :initialize}}
+      {:ok,
+       %{
+         initialization_options: opts,
+         admission_monitor: monitor,
+         admission_source: Keyword.get(opts, :spec_source)
+       }, {:continue, :initialize}}
     else
-      initialize(opts)
+      case initialize(opts) do
+        {:ok, state} ->
+          {:ok,
+           state
+           |> Map.put(:admission_monitor, monitor)
+           |> Map.put(:admission_source, Keyword.get(opts, :spec_source))}
+
+        error ->
+          error
+      end
     end
   end
 
@@ -189,6 +212,8 @@ defmodule Cadence.Runtime.PartitionOwner do
       :error ->
         {:ok, opts}
     end
+  catch
+    :exit, reason -> {:error, {:admission_unavailable, reason}}
   end
 
   defp finish_initialization(opts, initial_state) do
@@ -215,7 +240,10 @@ defmodule Cadence.Runtime.PartitionOwner do
 
     case result do
       {:ok, state} ->
-        {:noreply, state}
+        {:noreply,
+         state
+         |> Map.put(:admission_monitor, initial_state.admission_monitor)
+         |> Map.put(:admission_source, initial_state.admission_source)}
 
       {:stop, reason} ->
         {:stop, {:shutdown, {:partition_initialization_failed, reason}}, initial_state}
@@ -329,6 +357,7 @@ defmodule Cadence.Runtime.PartitionOwner do
           mission_id: state.mission_id,
           activation_id: state.active_activation.activation_id,
           generation: state.active_activation.generation,
+          runtime_basis_sha256: state.active_activation.runtime_basis_sha256,
           binding_set_content_sha256: state.active_activation.binding_set_content_sha256,
           binding_set_id: state.runtime_binding_set.binding_set_id,
           binding_set_version: state.runtime_binding_set.version,
@@ -363,6 +392,47 @@ defmodule Cadence.Runtime.PartitionOwner do
         _from,
         state
       ) do
+    current = state.active_activation
+
+    cond do
+      MissionRuntimeSpec.identity(activation) == MissionRuntimeSpec.identity(current) ->
+        {:reply, :ok, state}
+
+      activation.generation < current.generation ->
+        {:reply, {:error, {:stale_generation, current.generation}}, state}
+
+      activation.generation == current.generation ->
+        {:reply, {:error, {:generation_conflict, current.generation}}, state}
+
+      true ->
+        reconcile_partition(state, activation, binding_set)
+    end
+  end
+
+  def handle_call({:process_raw_evidence, %RawEvidence{} = raw_evidence}, _from, state) do
+    TelemetryProfiler.with_ingress_context(state.profiler, raw_evidence, fn ->
+      TelemetryProfiler.with_stage(:runtime, fn ->
+        raw_evidence
+        |> process_raw_evidence_reply(state)
+        |> handle_processing_reply(state)
+      end)
+    end)
+  end
+
+  @impl true
+  def handle_cast({:process_raw_evidence, %RawEvidence{} = raw_evidence, from}, state) do
+    case handle_call({:process_raw_evidence, raw_evidence}, from, state) do
+      {:reply, result, next_state} ->
+        GenServer.reply(from, result)
+        {:noreply, next_state}
+
+      {:stop, reason, result, next_state} ->
+        GenServer.reply(from, result)
+        {:stop, reason, next_state}
+    end
+  end
+
+  defp reconcile_partition(state, activation, binding_set) do
     state = refresh_live_clock(state)
 
     case MissionRuntimeSpec.execution_input(activation, state.partition_key) do
@@ -434,23 +504,6 @@ defmodule Cadence.Runtime.PartitionOwner do
       {:error, reason} ->
         {:stop, reason, {:error, reason}, state}
     end
-  end
-
-  def handle_call({:process_raw_evidence, %RawEvidence{} = raw_evidence}, _from, state) do
-    TelemetryProfiler.with_ingress_context(state.profiler, raw_evidence, fn ->
-      TelemetryProfiler.with_stage(:runtime, fn ->
-        raw_evidence
-        |> process_raw_evidence_reply(state)
-        |> handle_processing_reply(state)
-      end)
-    end)
-  end
-
-  @impl true
-  def handle_cast({:process_raw_evidence, %RawEvidence{} = raw_evidence, from}, state) do
-    {:reply, result, next_state} = handle_call({:process_raw_evidence, raw_evidence}, from, state)
-    GenServer.reply(from, result)
-    {:noreply, next_state}
   end
 
   # Retain one result for the ordered journal consumer. A downstream failure or
@@ -564,7 +617,8 @@ defmodule Cadence.Runtime.PartitionOwner do
       state.semantic_writer,
       state.semantic_state,
       updates,
-      plan
+      plan,
+      reclaim?: is_nil(Cluster.config(state.process_namespace))
     )
   end
 
@@ -719,6 +773,14 @@ defmodule Cadence.Runtime.PartitionOwner do
     do: Map.get(update.metadata, key, Map.get(update.metadata, Atom.to_string(key)))
 
   @impl true
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{admission_monitor: ref} = state) do
+    {:stop, {:shutdown, {:admission_lost, reason}}, state}
+  end
+
+  def handle_info({:global_name_conflict, _name}, state) do
+    {:stop, {:shutdown, :name_conflict}, state}
+  end
+
   def handle_info({:semantic_algorithm_timer, timer_key, timer_id}, state) do
     state = refresh_live_clock(state)
 
@@ -731,7 +793,7 @@ defmodule Cadence.Runtime.PartitionOwner do
 
         case execute_semantic_timer(entry, timer_state) do
           {:ok, next_state} -> {:noreply, next_state}
-          {:error, reason} -> {:stop, reason, state}
+          {:error, reason} -> {:stop, retirement_reason(reason, state), state}
         end
 
       _other ->
@@ -840,7 +902,8 @@ defmodule Cadence.Runtime.PartitionOwner do
       state.semantic_writer,
       state.semantic_state,
       {scope, entry.algorithm_id, entry.due_at, entry.timer_key},
-      plan
+      plan,
+      reclaim?: is_nil(Cluster.config(state.process_namespace))
     )
   end
 
@@ -906,7 +969,37 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   defp handle_processing_reply({:error, reason}, state) do
-    {:reply, {:error, reason}, state}
+    case retirement_reason(reason, state) do
+      {:shutdown, _} = stop -> {:stop, stop, {:error, reason}, state}
+      _ -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  defp retirement_reason({kind, reason} = failure, state)
+       when kind in [:semantic_runtime_failed, :semantic_runtime_timer_failed] and
+              reason in [:semantic_runtime_fenced, :semantic_runtime_stale_predecessor] do
+    if Cluster.config(state.process_namespace) do
+      # Persist rejection in supervised admission before unregistering. Otherwise
+      # the next ingress could lazily start a new contender and steal the epoch.
+      fence_admission(state)
+      {:shutdown, failure}
+    else
+      failure
+    end
+  end
+
+  defp retirement_reason(reason, _state), do: reason
+
+  defp fence_admission(state) do
+    MissionAdmission.fence(
+      state.admission_source,
+      state.partition_key,
+      MissionRuntimeSpec.identity(state.active_activation)
+    )
+  catch
+    # Admission loss already invalidates every owner tied to that PID. A
+    # replacement admission starts empty and requires explicit generation apply.
+    :exit, _reason -> :ok
   end
 
   defp persist_timer_runtime_records(next_state, runtime_records, state) do

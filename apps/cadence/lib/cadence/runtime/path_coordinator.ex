@@ -24,7 +24,8 @@ defmodule Cadence.Runtime.PathCoordinator do
     ProviderBindingSpec,
     ProviderIngressExecutor,
     TransportBindingSpec,
-    TransportRuntime
+    TransportRuntime,
+    UplinkAdmission
   }
 
   alias Cadence.Telemetry.{CurrentValueStore, Profiler, Storage}
@@ -105,6 +106,9 @@ defmodule Cadence.Runtime.PathCoordinator do
       {:handle_control_input, transport_binding_id, control_input, opts}
     )
   end
+
+  @doc false
+  def admit_uplink(runtime, binding), do: GenServer.call(runtime, {:admit_uplink, binding})
 
   @spec advance_time(pid(), DateTime.t()) :: :ok | {:error, term()}
   def advance_time(path_runtime, %DateTime{} = target_time) do
@@ -217,6 +221,25 @@ defmodule Cadence.Runtime.PathCoordinator do
       {:error, _reason} = error ->
         {:reply, error, state}
     end
+  end
+
+  def handle_call({:admit_uplink, _binding}, _from, %{lifecycle_status: status} = state)
+      when status in [:quiescing, :quiesced],
+      do: {:reply, {:error, :path_runtime_quiesced}, state}
+
+  def handle_call({:admit_uplink, binding}, _from, state) do
+    result =
+      with {:ok, runtime} <- transport_runtime(state, binding),
+           {:ok, permit} <- TransportRuntime.admit_uplink(runtime) do
+        {:ok,
+         %UplinkAdmission{
+           runtime: runtime,
+           permit: permit,
+           target: {state.mission_id, state.realized_contact_id, state.path.path_id, binding}
+         }}
+      end
+
+    {:reply, result, state}
   end
 
   def handle_call(:snapshot, _from, state) do
@@ -526,6 +549,7 @@ defmodule Cadence.Runtime.PathCoordinator do
         realized_contact_id: state.realized_contact_id,
         path_id: state.path.path_id,
         provider_binding_id: provider_binding.provider_binding_id,
+        process_namespace: state.process_namespace,
         source_endpoint_ref: state.path.source_endpoint_ref,
         source_endpoint_spacecraft_id: state.path.source_endpoint_spacecraft_id,
         direction: state.path.direction,

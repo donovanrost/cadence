@@ -4,7 +4,12 @@ defmodule Cadence.Runtime.TransportCapabilityRecord do
   """
 
   @type event_kind ::
-          :initialized | :transport_event_handled | :control_input_handled | :timer_handled
+          :initialized
+          | :transport_event_handled
+          | :control_input_handled
+          | :timer_handled
+          | :protocol_checkpoint
+          | :protocol_restored
 
   @type t :: %__MODULE__{
           transport_record_id: binary(),

@@ -47,7 +47,8 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
     "reconnect_policy" => :reconnect_policy,
     "state" => :state,
     "tls" => :tls,
-    "tls_enabled" => :tls_enabled
+    "tls_enabled" => :tls_enabled,
+    "uplink_resource_id" => :uplink_resource_id
   }
 
   @impl true
@@ -188,7 +189,8 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
          {:ok, tls_enabled} <- boolean(value(config, "tls_enabled", tls_value(config))),
          {:ok, ingress_protocol_family} <-
            ingress_protocol_family(value(config, "ingress_protocol_family")),
-         {:ok, ingress_metadata} <- ingress_metadata(value(config, "ingress_metadata", %{})) do
+         {:ok, ingress_metadata} <- ingress_metadata(value(config, "ingress_metadata", %{})),
+         {:ok, resource_id} <- uplink_resource_id(value(config, "uplink_resource_id")) do
       {:ok,
        %{
          "adapter" => "tcp_socket",
@@ -200,6 +202,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
          "tls" => %{"enabled" => tls_enabled},
          "reconnect" => reconnect_configuration(mode, reconnect_policy)
        }
+       |> maybe_put_uplink_resource(resource_id)
        |> maybe_put_fixed_message_bytes(frame_size)
        |> maybe_put_ingress_protocol_family(ingress_protocol_family)
        |> maybe_put_ingress_metadata(ingress_metadata)}
@@ -383,6 +386,18 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
 
   defp reconnect_configuration("connect", policy), do: %{"policy" => policy}
   defp reconnect_configuration("listen", _policy), do: %{"policy" => "on_disconnect"}
+
+  defp uplink_resource_id(nil), do: {:ok, nil}
+
+  defp uplink_resource_id(value) when is_binary(value) and byte_size(value) in 1..255 do
+    required_text(value, "Uplink resource identity must be nonempty.")
+  end
+
+  defp uplink_resource_id(_),
+    do: {:error, "Uplink resource identity must be a string of at most 255 bytes."}
+
+  defp maybe_put_uplink_resource(config, nil), do: config
+  defp maybe_put_uplink_resource(config, value), do: Map.put(config, "uplink_resource_id", value)
 
   defp maybe_put_fixed_message_bytes(configuration, nil), do: configuration
 

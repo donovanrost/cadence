@@ -126,6 +126,7 @@ defmodule Cadence.Contacts.ProviderReservation do
     last_error_document: %{},
     operator_review_document: %{},
     attempt_count: 0,
+    resolution_evidence: %{},
     metadata: %{}
   ]
 
@@ -200,6 +201,7 @@ defmodule Cadence.Contacts.ProviderReservation do
         attrs |> get(:operator_review_document, %{}) |> JsonDocument.encode(),
       attempt_count: get(attrs, :attempt_count, 0),
       last_reconciled_at: get(attrs, :last_reconciled_at),
+      resolution_evidence: get(attrs, :resolution_evidence, %{}) |> JsonDocument.encode(),
       metadata: attrs |> get(:metadata, %{}) |> JsonDocument.encode(),
       inserted_at: get(attrs, :inserted_at),
       updated_at: get(attrs, :updated_at)

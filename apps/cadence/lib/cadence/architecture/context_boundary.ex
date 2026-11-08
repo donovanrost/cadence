@@ -349,6 +349,10 @@ defmodule Cadence.Architecture.ContextBoundary do
   # points the other way. These are named vertical handoffs through a public
   # service, not permission for arbitrary reverse dependencies.
   @public_orchestration_edges MapSet.new([
+                                # Audited send reconciliation verifies sanitized receipt hashes
+                                # through the provider context's public evidence boundary.
+                                {"lib/cadence/control/commanding.ex",
+                                 "lib/cadence/ground_networks.ex"},
                                 {"lib/cadence/contacts/scheduler.ex",
                                  "lib/cadence/control/missions.ex"},
                                 {"lib/cadence/control/mission_recovery.ex",

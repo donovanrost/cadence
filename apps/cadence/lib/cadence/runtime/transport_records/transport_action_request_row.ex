@@ -33,6 +33,7 @@ defmodule Cadence.Runtime.TransportRecords.TransportActionRequestRow do
     field(:request_document, :map, default: %{})
     field(:metadata, :map, default: %{})
     field(:requested_at, :utc_datetime_usec)
+    field(:reconciliation_evidence, :map, default: %{})
 
     timestamps(updated_at: false)
   end
@@ -89,7 +90,8 @@ defmodule Cadence.Runtime.TransportRecords.TransportActionRequestRow do
       action_kind: String.to_existing_atom(row.action_kind),
       request_document: JsonDocument.unwrap_value(row.request_document),
       requested_at: row.requested_at,
-      metadata: JsonDocument.unwrap_value(row.metadata)
+      metadata: JsonDocument.unwrap_value(row.metadata),
+      reconciliation_evidence: row.reconciliation_evidence
     }
   end
 

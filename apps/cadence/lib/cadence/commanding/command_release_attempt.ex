@@ -67,6 +67,7 @@ defmodule Cadence.Commanding.CommandReleaseAttempt do
     :released_at,
     released_by: %{},
     lifecycle_state: :release_pending,
+    resolution_evidence: %{},
     metadata: %{}
   ]
 
@@ -115,6 +116,7 @@ defmodule Cadence.Commanding.CommandReleaseAttempt do
       released_by: Map.get(attrs, :released_by, Map.get(attrs, "released_by", %{})),
       attempted_at: Map.get(attrs, :attempted_at, Map.get(attrs, "attempted_at")),
       released_at: Map.get(attrs, :released_at, Map.get(attrs, "released_at")),
+      resolution_evidence: Map.get(attrs, :resolution_evidence, %{}),
       metadata: Map.get(attrs, :metadata, Map.get(attrs, "metadata", %{}))
     }
   end

@@ -6,6 +6,7 @@ defmodule Cadence.ProviderAdapters.Adapter do
   alias Cadence.ActionRequests.ProviderRequest
 
   @callback child_spec(keyword()) :: Supervisor.child_spec()
+  @callback uplink_session(pid()) :: {:ok, map()} | {:error, term()}
   @callback snapshot(pid()) :: {:ok, map()} | {:error, term()}
   @callback quiesce(pid()) :: {:ok, map()} | {:error, term()}
   @callback deliver_uplink(pid(), ProviderRequest.t()) :: {:ok, map()} | {:error, term()}

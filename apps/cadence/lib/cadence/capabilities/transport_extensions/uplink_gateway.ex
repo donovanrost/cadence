@@ -13,7 +13,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
 
   alias Cadence.ActionRequests.{CancelTimer, ProviderRequest, ScheduleTimer, UplinkRequest}
   alias Cadence.Capabilities.Definitions.UplinkGateway, as: Definition
-  alias Cadence.Capabilities.TransportExtensions.UplinkGateway.Configuration
+  alias Cadence.Capabilities.TransportExtensions.UplinkGateway.{Checkpoint, Configuration}
   alias CCSDS.Core.SDUOctets
   alias CCSDS.SpacePacket
   alias CCSDS.SpacePacket.{Codec, Sequence}
@@ -184,6 +184,12 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
   def snapshot_state(app_state, %ExecutionContext{}) do
     {:error, {:invalid_uplink_gateway_state, app_state}}
   end
+
+  @impl true
+  defdelegate export_checkpoint(state, context), to: Checkpoint, as: :export
+
+  @impl true
+  defdelegate restore_checkpoint(document, fresh_state, context), to: Checkpoint, as: :restore
 
   defp build_cop1_state(%{cop1_mode: :fop} = configuration) do
     state =

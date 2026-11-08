@@ -240,13 +240,21 @@ defmodule Cadence.Runtime.Persistence do
         event_bus,
         capability_records,
         action_requests,
-        timer_events
+        timer_events,
+        protocol_checkpoint \\ nil
       )
       when is_list(capability_records) and is_list(action_requests) and is_list(timer_events) do
     Multi.new()
     |> add_transport_capability_record_inserts(capability_records)
     |> add_transport_action_request_inserts(action_requests)
     |> add_transport_timer_event_inserts(timer_events)
+    |> TransportRecords.add_send_confirmations(action_requests)
+    |> TransportRecords.add_protocol_checkpoint(
+      protocol_checkpoint,
+      capability_records,
+      action_requests,
+      timer_events
+    )
     |> Multi.run(:transport_capability_operational_events, fn repo, _changes ->
       capability_records
       |> Enum.map(&OperationalEvent.from_transport_capability_record/1)

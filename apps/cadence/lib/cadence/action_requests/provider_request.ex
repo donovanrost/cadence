@@ -4,6 +4,8 @@ defmodule Cadence.ActionRequests.ProviderRequest do
   logic and executed by a path-local provider runtime.
   """
 
+  alias Cadence.Platform.ContentHash
+
   @type t :: %__MODULE__{
           provider_binding_id: binary(),
           provider_adapter_key: atom(),
@@ -35,8 +37,18 @@ defmodule Cadence.ActionRequests.ProviderRequest do
     :payloads_base64,
     :payload_count,
     :payload_size_bytes,
+    session_permit: nil,
+    preparation_id: nil,
+    recovery_exchange: nil,
     metadata: %{}
   ]
+
+  def digest(%__MODULE__{} = request) do
+    request
+    |> Map.from_struct()
+    |> Map.drop([:session_permit, :preparation_id])
+    |> ContentHash.term_sha256()
+  end
 
   @spec new(map()) :: t()
   def new(attrs) when is_map(attrs) do
@@ -54,6 +66,9 @@ defmodule Cadence.ActionRequests.ProviderRequest do
       payloads_base64: Map.get(attrs, :payloads_base64, []),
       payload_count: Map.get(attrs, :payload_count, 0),
       payload_size_bytes: Map.get(attrs, :payload_size_bytes),
+      session_permit: Map.get(attrs, :session_permit),
+      preparation_id: Map.get(attrs, :preparation_id),
+      recovery_exchange: Map.get(attrs, :recovery_exchange),
       metadata: Map.get(attrs, :metadata, %{})
     }
   end

@@ -15,6 +15,16 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(current_scope, organization_id, :organization_admin)
   end
 
+  def authorize(%Scope{} = scope, action, params)
+      when action in [
+             :resolve_command_release,
+             :resolve_provider_reservation,
+             :reconcile_prepared_send
+           ] do
+    with :ok <- authorize(scope, :operate_mission, params),
+         do: authorize(scope, :manage_mission, params)
+  end
+
   # Settings and activation review use named policy actions. The initial policy
   # admits active human members; customer approval requirements never assign a
   # built-in role. These action boundaries are the future Cedar integration.

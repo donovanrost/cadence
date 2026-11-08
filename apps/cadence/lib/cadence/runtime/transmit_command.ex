@@ -47,6 +47,7 @@ defmodule Cadence.Runtime.TransmitCommand do
   ]
   defstruct @enforce_keys ++
               [
+                :session_admission,
                 :command_name,
                 :layout_kind,
                 :preferred_uplink_service,

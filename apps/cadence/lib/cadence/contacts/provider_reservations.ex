@@ -27,6 +27,8 @@ defmodule Cadence.Contacts.ProviderReservations do
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
 
+  alias Cadence.Platform.{ContentHash, ResolutionEvidence}
+
   @document_byte_limit 65_536
   @nonterminal_states ~w(requesting pending confirmed active unknown canceling)
   @materialized_states [:confirmed, :active, :completed]
@@ -83,6 +85,168 @@ defmodule Cadence.Contacts.ProviderReservations do
     canceled: [:canceled],
     failed: [:failed]
   }
+
+  @doc "Reviews the original reservation identity and recorded resolution evidence."
+  def review_resolution(org, mission, id) do
+    with {:ok, reservation} <- fetch(org, mission, id) do
+      {:ok, resolution_summary(reservation, "review")}
+    end
+  end
+
+  @doc "Resolves durable reservation evidence without making a provider mutation."
+  def resolve_attempt(org, mission, id, evidence) do
+    Repo.transaction(fn -> resolve_attempt_locked(org, mission, id, evidence) end)
+  end
+
+  defp resolve_attempt_locked(org, mission, id, evidence) do
+    row =
+      Repo.one(
+        from(r in ProviderReservationRow,
+          where:
+            r.organization_id == ^org and r.mission_id == ^mission and
+              r.provider_reservation_id == ^id,
+          lock: "FOR UPDATE"
+        )
+      )
+
+    if is_nil(row), do: Repo.rollback(:provider_reservation_not_found)
+    reservation = ProviderReservationRow.to_domain(row)
+
+    if resolution_basis(reservation) != evidence["basis_sha256"],
+      do: Repo.rollback(:provider_resolution_basis_changed)
+
+    case ResolutionEvidence.existing(row.resolution_evidence, evidence) do
+      {:ok, entry} ->
+        resolution_summary(reservation, entry["disposition"])
+
+      {:error, reason} ->
+        Repo.rollback(reason)
+
+      :new ->
+        disposition = resolve_reservation_outcome(reservation, evidence)
+        row = reservation_row(id, org, mission)
+
+        with {:ok, log} <-
+               ResolutionEvidence.append(row.resolution_evidence, evidence, disposition),
+             {:ok, row} <- Repo.update(Changeset.change(row, resolution_evidence: log)) do
+          resolution_summary(ProviderReservationRow.to_domain(row), disposition)
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+    end
+  end
+
+  defp resolution_summary(reservation, disposition),
+    do: %{
+      basis_sha256: resolution_basis(reservation),
+      reservation: reservation,
+      disposition: disposition
+    }
+
+  defp resolution_basis(reservation) do
+    reservation
+    |> Map.from_struct()
+    |> Map.drop([
+      :lifecycle_state,
+      :provider_status,
+      :provider_contact_ref,
+      :provider_revision,
+      :pass_phase,
+      :delivery_state,
+      :delivery_descriptor_document,
+      :response_document,
+      :provider_confirmed_snapshot_document,
+      :cadence_accepted_snapshot_document,
+      :last_error_document,
+      :operator_review_document,
+      :attempt_count,
+      :last_reconciled_at,
+      :metadata,
+      :resolution_evidence,
+      :inserted_at,
+      :updated_at
+    ])
+    |> ContentHash.term_sha256()
+  end
+
+  defp resolve_reservation_outcome(%{lifecycle_state: state}, evidence)
+       when state in [:confirmed, :active, :completed, :canceled, :rejected, :failed] do
+    positive? = state in [:confirmed, :active, :completed]
+
+    contradiction? =
+      (positive? and evidence["outcome"] in ~w(not_sent rejected)) or
+        (not positive? and evidence["outcome"] == "accepted")
+
+    if contradiction?, do: "contradictory", else: "retained_terminal"
+  end
+
+  defp resolve_reservation_outcome(reservation, %{"outcome" => "unknown"}) do
+    if reservation.lifecycle_state == :requesting,
+      do: checked_resolution(transition(reservation, :unknown, %{}))
+
+    "held_unknown"
+  end
+
+  defp resolve_reservation_outcome(reservation, %{"outcome" => "accepted"} = evidence) do
+    response = evidence["provider_response"] || %{}
+
+    unless correlated_provider_response?(reservation, response),
+      do: Repo.rollback(:provider_resolution_correlation_mismatch)
+
+    unless response["status"] in ~w(pending confirmed scheduled acquiring active completed canceled),
+      do: Repo.rollback(:provider_resolution_status_mismatch)
+
+    checked_resolution(
+      apply_provider_status(
+        reservation.organization_id,
+        reservation.mission_id,
+        reservation.provider_reservation_id,
+        response
+      )
+    )
+
+    "accepted"
+  end
+
+  defp resolve_reservation_outcome(reservation, evidence) do
+    # A failed cancellation is not a failed booking. Existing provider contact
+    # evidence requires a correlated provider status before changing its state.
+    if reservation.provider_contact_ref || reservation.lifecycle_state in [:pending, :canceling] ||
+         reservation.provider_confirmed_snapshot_document["status"] in ~w(pending confirmed active completed canceling canceled) do
+      "held_provider_status_required"
+    else
+      state = if evidence["outcome"] == "rejected", do: :rejected, else: :failed
+
+      checked_resolution(
+        transition(reservation, state, %{
+          last_error_document:
+            JsonDocument.wrap_value(%{
+              "source" => "attempt_resolution",
+              "reason" => evidence["outcome"]
+            })
+        })
+      )
+
+      "closed_without_resend"
+    end
+  end
+
+  defp correlated_provider_response?(reservation, response) do
+    references = [
+      {response["client_reference"], reservation.idempotency_key},
+      {response["provider_contact_ref"] || response["id"], reservation.provider_contact_ref}
+    ]
+
+    Enum.any?(references, fn {observed, expected} ->
+      is_binary(observed) and is_binary(expected) and observed == expected
+    end) and
+      Enum.all?(references, fn {observed, expected} ->
+        is_nil(observed) or is_nil(expected) or observed == expected
+      end)
+  end
+
+  defp checked_resolution({:ok, result}), do: result
+  defp checked_resolution({:error, reason}), do: Repo.rollback(reason)
 
   @spec create_attempt(binary(), ProviderReservation.t() | map()) ::
           {:ok, ProviderReservation.t()} | {:error, term()}
@@ -497,20 +661,46 @@ defmodule Cadence.Contacts.ProviderReservations do
   defp transition(%ProviderReservation{} = reservation, requested_state, attrs) do
     requested_state = normalize_state(requested_state)
 
-    if requested_state in Map.fetch!(@allowed_transitions, reservation.lifecycle_state) do
-      reservation.provider_reservation_id
-      |> reservation_row(reservation.organization_id, reservation.mission_id)
-      |> ProviderReservationRow.transition_changeset(
-        Map.put(attrs, :lifecycle_state, Atom.to_string(requested_state))
+    Repo.transaction(fn -> transition_locked(reservation, requested_state, attrs) end)
+  end
+
+  defp transition_locked(reservation, requested_state, attrs) do
+    row =
+      Repo.one!(
+        from(r in ProviderReservationRow,
+          where:
+            r.organization_id == ^reservation.organization_id and
+              r.mission_id == ^reservation.mission_id and
+              r.provider_reservation_id == ^reservation.provider_reservation_id,
+          lock: "FOR UPDATE"
+        )
       )
-      |> Repo.update()
-      |> case do
-        {:ok, row} -> {:ok, ProviderReservationRow.to_domain(row)}
-        {:error, reason} -> {:error, reason}
-      end
-    else
-      {:error,
-       {:invalid_provider_reservation_transition, reservation.lifecycle_state, requested_state}}
+
+    current = ProviderReservationRow.to_domain(row)
+
+    stable = fn value ->
+      Map.drop(Map.from_struct(value), [:resolution_evidence, :inserted_at, :updated_at])
+    end
+
+    cond do
+      stable.(current) != stable.(reservation) ->
+        Repo.rollback(:provider_reservation_changed)
+
+      requested_state not in Map.fetch!(@allowed_transitions, current.lifecycle_state) ->
+        Repo.rollback(
+          {:invalid_provider_reservation_transition, current.lifecycle_state, requested_state}
+        )
+
+      true ->
+        case Repo.update(
+               ProviderReservationRow.transition_changeset(
+                 row,
+                 Map.put(attrs, :lifecycle_state, Atom.to_string(requested_state))
+               )
+             ) do
+          {:ok, row} -> ProviderReservationRow.to_domain(row)
+          {:error, reason} -> Repo.rollback(reason)
+        end
     end
   end
 

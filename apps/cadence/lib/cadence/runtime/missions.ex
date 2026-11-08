@@ -36,7 +36,7 @@ defmodule Cadence.Runtime.Missions do
     end
   end
 
-  @doc "Observes the applied generation without materializing the fleet specification."
+  @doc "Observes the last fully applied generation; use rollout_status/2 for current convergence."
   def applied_summary(mission_id) when is_binary(mission_id),
     do: applied_summary(ProcessNamespace.default(), mission_id)
 
@@ -49,6 +49,13 @@ defmodule Cadence.Runtime.Missions do
     else
       {:error, :mission_runtime_not_running}
     end
+  end
+
+  @doc "Reports desired generation and partition convergence without implying atomic cutover."
+  def rollout_status(mission_id), do: rollout_status(ProcessNamespace.default(), mission_id)
+
+  def rollout_status(%ProcessNamespace{} = namespace, mission_id) do
+    GenServer.call(MissionRuntime.coordinator_name(namespace, mission_id), :rollout_status)
   end
 
   @doc "Confirms exact application, waiting for matching work and detecting runtime loss."

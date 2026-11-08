@@ -3,7 +3,8 @@ defmodule Cadence.Runtime.MissionRuntime do
 
   use Supervisor
 
-  alias Cadence.Runtime.{PartitionKey, ProcessNamespace}
+  alias Cadence.Runtime.Cluster
+  alias Cadence.Runtime.{MissionAdmission, MissionExecution, PartitionKey, ProcessNamespace}
 
   def start_link(mission_id) when is_binary(mission_id) do
     start_link([], mission_id)
@@ -23,14 +24,9 @@ defmodule Cadence.Runtime.MissionRuntime do
 
     children =
       [
-        {DynamicSupervisor,
-         strategy: :one_for_one,
-         name: realized_contact_supervisor_name(process_namespace, mission_id),
-         extra_arguments: [runtime_opts]},
-        {DynamicSupervisor,
-         strategy: :one_for_one,
-         name: partition_supervisor_name(process_namespace, mission_id),
-         extra_arguments: [runtime_opts]},
+        {MissionAdmission, mission_id: mission_id, process_namespace: process_namespace},
+        {MissionExecution,
+         mission_id: mission_id, process_namespace: process_namespace, runtime_opts: runtime_opts},
         {Cadence.Runtime.MissionCoordinator,
          mission_id: mission_id,
          process_namespace: process_namespace,
@@ -38,10 +34,24 @@ defmodule Cadence.Runtime.MissionRuntime do
       ]
       |> Enum.reject(&is_nil/1)
 
-    Supervisor.init(children, strategy: :one_for_all)
+    Supervisor.init(children, strategy: :rest_for_one)
   end
 
   def init(mission_id) when is_binary(mission_id), do: init({mission_id, []})
+
+  def admission_name(process_namespace, mission_id),
+    do: via(process_namespace, {:mission_admission, mission_id})
+
+  def execution_name(process_namespace, mission_id),
+    do: via(process_namespace, {:mission_execution, mission_id})
+
+  def partition_keys(%ProcessNamespace{} = process_namespace, mission_id) do
+    process_namespace
+    |> Cluster.select([
+      {{{:partition_owner, mission_id, :"$1"}, :_, :_}, [], [:"$1"]}
+    ])
+    |> Enum.map(fn {affinity, value} -> PartitionKey.new(%{affinity: affinity, value: value}) end)
+  end
 
   @spec runtime_name(binary()) :: {:via, Registry, {module(), term()}}
   def runtime_name(mission_id), do: runtime_name(ProcessNamespace.default(), mission_id)
@@ -460,5 +470,5 @@ defmodule Cadence.Runtime.MissionRuntime do
   end
 
   defp via(%ProcessNamespace{} = process_namespace, key),
-    do: ProcessNamespace.via(process_namespace, key)
+    do: Cluster.via(process_namespace, key)
 end

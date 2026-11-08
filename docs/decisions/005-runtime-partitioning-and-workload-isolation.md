@@ -148,6 +148,12 @@ Cadence should lean on OTP-native distribution features including:
 Cadence should avoid using cluster-wide mutable registries as the primary source
 of runtime truth for hot-path ownership.
 
+The proposed [OTP-native multi-node runtime plan](../multi-node-runtime-plan.md)
+uses BEAM membership, naming, local supervision, and reconstructible placement,
+with libcluster as the connectivity candidate. PostgreSQL retains durable state
+and writer fencing rather than placement assignments or execution leases. The
+plan records supervision changes and validation gates before runtime adoption.
+
 ### 8. Cluster Trust Boundary
 
 OTP distribution is an internal trusted platform boundary, not a tenant

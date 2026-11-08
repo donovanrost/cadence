@@ -5,8 +5,15 @@ defmodule Cadence.Runtime.Commanding do
 
   alias Cadence.ActionRequests.UplinkRequest
   alias Cadence.Commanding.Encoder
-  alias Cadence.Runtime
-  alias Cadence.Runtime.TransmitCommand
+
+  alias Cadence.Runtime.{
+    MissionRuntime,
+    PathCoordinator,
+    ProcessNamespace,
+    TransmitCommand,
+    TransportRuntime,
+    UplinkAdmission
+  }
 
   @spec encode(term(), map()) :: {:ok, map()} | {:error, term()}
   def encode(immutable_runtime_definition, resolved_argument_values)
@@ -14,17 +21,36 @@ defmodule Cadence.Runtime.Commanding do
     Encoder.encode(immutable_runtime_definition, resolved_argument_values)
   end
 
-  @spec transmit(TransmitCommand.t()) :: {:ok, [term()]} | {:error, term()}
-  def transmit(%TransmitCommand{} = request) do
-    Runtime.handle_path_control_input(
-      request.mission_id,
-      request.realized_contact_id,
-      request.path_id,
-      request.transport_binding_id,
-      to_uplink_request(request),
-      occurred_at: request.occurred_at
-    )
+  @doc "Admits the exact transport and session before a durable release claim is created."
+  def admit(mission, contact, path, binding) do
+    name =
+      MissionRuntime.path_coordinator_name(ProcessNamespace.default(), mission, contact, path)
+
+    case GenServer.whereis(name) do
+      nil -> {:error, :path_runtime_not_running}
+      runtime -> PathCoordinator.admit_uplink(runtime, binding)
+    end
+  catch
+    :exit, _ -> {:error, :uplink_admission_unavailable}
   end
+
+  @spec transmit(TransmitCommand.t()) :: {:ok, [term()]} | {:error, term()}
+  def transmit(%TransmitCommand{session_admission: %UplinkAdmission{} = admission} = request) do
+    if admission.target ==
+         {request.mission_id, request.realized_contact_id, request.path_id,
+          request.transport_binding_id} do
+      TransportRuntime.handle_admitted_control_input(
+        admission.runtime,
+        to_uplink_request(request),
+        admission.permit,
+        occurred_at: request.occurred_at
+      )
+    else
+      {:error, :uplink_admission_target_mismatch}
+    end
+  end
+
+  def transmit(%TransmitCommand{}), do: {:error, :uplink_admission_required}
 
   defp to_uplink_request(%TransmitCommand{} = request) do
     UplinkRequest.new(%{

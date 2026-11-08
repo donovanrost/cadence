@@ -58,7 +58,7 @@ defmodule Cadence.Platform.RootComposition do
     :mission_health_observability_children
   ]
 
-  defstruct @enforce_keys
+  defstruct @enforce_keys ++ [:runtime_cluster, :uplink_session_policy]
 
   @type t :: %__MODULE__{}
 
@@ -230,6 +230,9 @@ defmodule Cadence.Platform.RootComposition do
       event_bus: event_bus,
       event_bus_child_opts: event_bus_child_opts,
       runtime_process_namespace: runtime_process_namespace,
+      runtime_cluster: Keyword.get(opts, :runtime_cluster),
+      uplink_session_policy:
+        Keyword.get(opts, :uplink_session_policy, Cadence.Runtime.SessionQualification),
       control_process_namespace: control_process_namespace,
       command_process_namespace: command_process_namespace,
       projections_supervisor_name:
@@ -362,6 +365,7 @@ defmodule Cadence.Platform.RootComposition do
       end
 
     captured_opts = [
+      runtime_cluster: Application.get_env(:cadence, :runtime_cluster),
       event_bus: event_bus,
       event_bus_child_opts: Application.get_env(:cadence, :event_bus, []),
       ingress_archive_config: Application.get_env(:cadence, :ingress_archive, []),

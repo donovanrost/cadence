@@ -1,7 +1,7 @@
 defmodule Cadence.Control.Contacts do
   @moduledoc "Control-plane executor for exact realized Contact runtime handoffs."
 
-  alias Cadence.Auth.Scope
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.ContactPlanning.{ContactPlanExecutionItem, ContactPlanExecutions}
 
   alias Cadence.Contacts.{
@@ -15,9 +15,33 @@ defmodule Cadence.Control.Contacts do
 
   alias Cadence.Management.Contacts, as: ManagementContacts
   alias Cadence.Management.Contacts.ApprovedContactPlan
+  alias Cadence.Platform.ResolutionEvidence
   alias Cadence.Runtime.Contacts, as: RuntimeContacts
   alias Cadence.Runtime.RealizedContactRuntimeSpec
   alias Cadence.SourceEndpoints
+
+  @doc "Reviews a scoped provider reservation before resolving its uncertain outcome."
+  def review_provider_reservation_resolution(%Scope{} = scope, mission, id) do
+    with :ok <-
+           Policy.authorize(scope, :resolve_provider_reservation, %{
+             organization_id: scope.organization_id,
+             mission_id: mission
+           }) do
+      ProviderReservations.review_resolution(scope.organization_id, mission, id)
+    end
+  end
+
+  @doc "Records evidence on the original reservation without resubmitting to the provider."
+  def resolve_provider_reservation(%Scope{} = scope, mission, id, attrs) do
+    with :ok <-
+           Policy.authorize(scope, :resolve_provider_reservation, %{
+             organization_id: scope.organization_id,
+             mission_id: mission
+           }),
+         {:ok, evidence} <- ResolutionEvidence.new(Scope.audit_actor(scope), attrs) do
+      ProviderReservations.resolve_attempt(scope.organization_id, mission, id, evidence)
+    end
+  end
 
   @doc "Waits for in-flight contact scheduling before mission shutdown or reconfiguration."
   @spec await_scheduler_settled(GenServer.server()) :: {:ok, term()} | {:error, :noproc}
