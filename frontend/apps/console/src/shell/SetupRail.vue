@@ -3,7 +3,7 @@ import { useRoute } from "vue-router";
 import RailLink from "./RailLink.vue";
 
 /** `mission` is null on org pages reached without a mission in the URL. */
-defineProps<{ org: string; mission: string | null }>();
+defineProps<{ org: string; mission: string | null; canAdminOrg: boolean }>();
 const route = useRoute();
 
 const missionItems = [
@@ -45,14 +45,17 @@ const groupClass =
         :active="route.meta.nav === item.nav"
       />
     </template>
-    <p :class="groupClass">Organization</p>
-    <RailLink
-      v-for="item in orgItems"
-      :key="item.nav"
-      :to="{ name: item.to, params: { org } }"
-      index="··"
-      :label="item.label"
-      :active="route.meta.nav === item.nav"
-    />
+    <!-- Organization administration needs organization_admin (decision 2; server enforces). -->
+    <template v-if="canAdminOrg">
+      <p :class="groupClass">Organization</p>
+      <RailLink
+        v-for="item in orgItems"
+        :key="item.nav"
+        :to="{ name: item.to, params: { org } }"
+        index="··"
+        :label="item.label"
+        :active="route.meta.nav === item.nav"
+      />
+    </template>
   </nav>
 </template>

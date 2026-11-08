@@ -10,9 +10,17 @@ import TopBar from "./TopBar.vue";
 import { rememberMission } from "./last-mission.ts";
 import { bindPaletteShortcut } from "./palette.ts";
 import { useConsoleScope } from "./scope.ts";
+import { canAdministerOrganization, useSession } from "./session.ts";
 
 const route = useRoute();
 const scope = useConsoleScope();
+const session = useSession();
+const canAdminOrg = computed(() => {
+  const s = scope.value;
+  return s.kind === "mission" || s.kind === "organization"
+    ? canAdministerOrganization(session, s.organization)
+    : false;
+});
 bindPaletteShortcut();
 
 const mode = computed(() => route.meta.mode ?? "account");
@@ -65,11 +73,13 @@ watch(
         v-if="mode === 'ops' && missionScope"
         :org="missionScope.organization.slug"
         :mission="missionScope.mission.slug"
+        :can-admin-org="canAdminOrg"
       />
       <SetupRail
         v-else-if="mode === 'setup' && orgSlug"
         :org="orgSlug"
         :mission="missionScope?.mission.slug ?? null"
+        :can-admin-org="canAdminOrg"
       />
       <main
         id="main"

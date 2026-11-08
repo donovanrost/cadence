@@ -2,7 +2,7 @@
 import { useRoute } from "vue-router";
 import RailLink from "./RailLink.vue";
 
-defineProps<{ org: string; mission: string }>();
+defineProps<{ org: string; mission: string; canAdminOrg: boolean }>();
 const route = useRoute();
 
 const items = [
@@ -37,6 +37,7 @@ const items = [
       :active="false"
     />
     <RailLink
+      v-if="canAdminOrg"
       :to="{ name: 'org.people', params: { org } }"
       index="··"
       label="Organization"
