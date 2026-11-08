@@ -16,3 +16,7 @@ Decided by the user (U) or the director (D). Newest last. Ask the director befor
 | 10 | **Hook policy:** css-frozen guard removed repo-wide; pre-commit `stash = "none"`; team commits with `HK=0 … -- <paths>` after their own checks (see TEAM.md section Git). | U/D | everyone |
 | 11 | **Dashboards come last.** No dashboard work until everything else ships. Until then the console just links to the existing dashboard pages under Ops > Telemetry > Dashboards. Revisit at the end (rebuild in the console vs. keep the existing engine). | U | ux, fe-ops |
 | 12 | **Platform admin (`/admin`) stays on the existing host**, linked from the account menu for users with the `platform_admin` capability. | D | ux, lead |
+| 13 | **Change sets: freeze while in review**; one shared set per mission. | U | domain |
+| 14 | **Change-set reviewer must be distinct from every author** in the set. | U | domain, api |
+| 15 | **Profile limits and VC/FEC/randomizer framing fields are out** of this phase. Limits are read-only with a note; framing fields only appear if the pipeline uses them. | U | domain, fe-setup |
+| 16 | **domain designs approved; build change-sets P1.** Review notes: `docs/apogee/domain/review-director-1.md`. | U | domain |
