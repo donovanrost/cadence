@@ -5,7 +5,7 @@ Conventions: [README.md](README.md). Asks are tracked by their IDs in `docs/apog
 | Ask | Endpoint | Status |
 | --- | --- | --- |
 | M1 M2 M3 M5 | `GET /missions/:mission_id/fleet` | **implemented** |
-| M9 | `GET /missions/:mission_id/alarms` | next |
+| M9 | `GET /missions/:mission_id/alarms` | **implemented** |
 | M10 | `GET /missions/:mission_id/telemetry/points/:point_id/history` | planned |
 | M11 | `GET /missions/:mission_id/limits/points/:point_id/intervals` | planned |
 | M6 | `GET /missions/:mission_id/action-queue` | planned |
@@ -14,7 +14,8 @@ Conventions: [README.md](README.md). Asks are tracked by their IDs in `docs/apog
 ## `GET /api/console/v1/missions/:mission_id/fleet`
 
 The fleet's operational state, one row per spacecraft, with the Now stat-strip counts.
-Refetch on `invalidate` with `telemetry`, `limits`, `spacecraft` or `commanding`.
+Refetch on `invalidate` with `alarms`, `spacecraft` or `commanding` (and `telemetry` if you show
+freshness to the second; at 1 Hz feeds, throttle that to about 10 s client-side).
 
 ```json
 {
@@ -89,3 +90,53 @@ Errors: `404 mission_not_found`.
 
 Size: about 600 bytes per row, roughly 300 KB for 500 spacecraft before gzip. It is unpaginated
 by design (the matrix needs every row). The planned `fleet` channel delta sends only changed rows.
+
+## `GET /api/console/v1/missions/:mission_id/alarms`
+
+Limit alarms from the latest limit-state projection, one row per (spacecraft, point, limit set).
+Refetch on `invalidate` with `alarms` (limit-state *transitions* only) or `limits` (definition
+changes).
+
+Query: `state` = `active` (default) | `nominal` | `all`; `severity` = `critical` | `caution`;
+`spacecraft_id`; `q` (substring of point id/name/subsystem/limit set). Unknown `state`/`severity`
+values get `422 invalid_params` with `details`.
+
+```json
+{
+  "data": {
+    "observed_at": "2026-11-08T02:41:17Z",
+    "summary": {"active": 4, "critical": 3, "caution": 1, "latest_transition_at": "2026-11-08T02:35:02Z"},
+    "alarms": [
+      {
+        "id": "limit_event_…",
+        "spacecraft_id": "spacecraft-earendil-312",
+        "point": {"id": "EPS.VBAT", "name": "VBAT", "subsystem": "EPS"},
+        "severity": "critical",
+        "active": true,
+        "condition": "red_low",
+        "value": 23.1,
+        "limit_set_name": "DEFAULT",
+        "thresholds": {"red_low": 24.0, "yellow_low": 25.0, "yellow_high": 33.0, "red_high": 34.0},
+        "first_crossed_at": "2026-11-08T02:35:02Z",
+        "generation_time": "2026-11-08T02:41:14Z",
+        "received_at": "2026-11-08T02:41:15Z"
+      }
+    ]
+  }
+}
+```
+
+- `severity`: `critical | caution | nominal`, the same vocabulary as the fleet `limit_state`
+  (`red` = critical, `yellow` = caution, `green`/`blue` = nominal).
+- `condition`: the raw limit state (`red_low`, `yellow_high`, …). It tells you which side was crossed.
+- `summary` counts **all** active alarms in the mission, ignoring the filters.
+- `thresholds`: the bands of the limit definition version that produced this state. A missing band
+  is `null`. The whole object is `null` if the definition can't be found.
+- `first_crossed_at`: when the point entered its current state. It is the oldest evaluation in the
+  current unbroken run of that state, by generation time (falling back to receipt time). The
+  server looks back up to 200 evaluations, so for a state held longer than that it is the oldest
+  one in the window. Only the first 200 rows are enriched; later rows have `null`.
+- `value`: the evaluated engineering value, as a number, string or boolean.
+- Sorting: severity (critical first), then newest received first.
+- **Not yet:** point `unit` and `description` (they need the catalog point join; planned with M23
+  point search), and the D6 alarm lifecycle (ack/assign/hand-off).

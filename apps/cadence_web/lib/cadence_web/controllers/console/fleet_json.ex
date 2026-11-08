@@ -1,6 +1,8 @@
 defmodule CadenceWeb.Console.FleetJSON do
   @moduledoc "Wire shape of the console fleet read. Contract: docs/apogee/api/ops.md."
 
+  alias CadenceWeb.Console.WireValue
+
   @spec fleet(map(), map(), boolean()) :: map()
   def fleet(fleet, commands, limits_configured?) do
     %{
@@ -48,16 +50,10 @@ defmodule CadenceWeb.Console.FleetJSON do
     %{
       point_id: point.point_id,
       point_name: point.point_name,
-      value: json_value(point.value),
+      value: WireValue.encode(point.value),
       limit_state: Atom.to_string(point.limit_state),
       raw_limit_state: point.raw_limit_state,
       received_at: point.received_at
     }
   end
-
-  defp json_value(value)
-       when is_number(value) or is_binary(value) or is_boolean(value) or is_nil(value),
-       do: value
-
-  defp json_value(value), do: inspect(value)
 end

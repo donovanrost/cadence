@@ -15,6 +15,7 @@ defmodule CadenceWeb.Console.MissionChannel do
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Platform.ScopedReadUpdates
   alias CadenceWeb.Console.Access
+  alias CadenceWeb.Console.LimitTransitions
 
   @flush_ms 500
 
@@ -40,7 +41,7 @@ defmodule CadenceWeb.Console.MissionChannel do
   @doc "Resource names the channel can emit in `invalidate` payloads."
   @spec resources() :: [binary()]
   def resources do
-    (Map.values(@read_update_resources) ++ Map.values(@runtime_resources))
+    (["alarms"] ++ Map.values(@read_update_resources) ++ Map.values(@runtime_resources))
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -73,6 +74,12 @@ defmodule CadenceWeb.Console.MissionChannel do
        else: {:noreply, socket}
   end
 
+  def handle_info({:console_limit_transition, mission_id, _spacecraft_id}, socket) do
+    if mission_id == socket.assigns.mission_id,
+      do: {:noreply, mark(socket, "alarms")},
+      else: {:noreply, socket}
+  end
+
   def handle_info({:dashboard_runtime_invalidated, %{boundary: boundary}}, socket) do
     resource = Map.get(@runtime_resources, boundary, to_string(boundary))
     {:noreply, mark(socket, resource)}
@@ -100,6 +107,7 @@ defmodule CadenceWeb.Console.MissionChannel do
       :ok = ScopedReadUpdates.subscribe(event, organization_id, mission_id)
     end)
 
+    :ok = LimitTransitions.subscribe(mission_id)
     RuntimeInvalidation.subscribe(%{organization_id: organization_id, mission_id: mission_id})
   end
 end

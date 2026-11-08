@@ -26,7 +26,7 @@ organization). A refused join returns `{"reason": "mission_not_found"}` (or `"un
 Join reply:
 
 ```json
-{"mission_id": "mission_…", "resources": ["catalog", "commanding", "dashboards", "data_sources",
+{"mission_id": "mission_…", "resources": ["alarms", "catalog", "commanding", "dashboards", "data_sources",
   "events", "limits", "settings", "spacecraft", "telemetry"]}
 ```
 
@@ -43,9 +43,10 @@ pushes are not replayed.
 
 | resource | fires on |
 | --- | --- |
+| `alarms` | a point's limit state **changed** (transitions only, not every evaluation). Use this for the alarm list, the action queue and fleet state |
 | `commanding` | command stages, requests, approvals, queue, release attempts, verifiers |
 | `spacecraft` | spacecraft and profile configuration, packet bindings, app installations |
-| `telemetry` | new samples committed (source watermark), backfills, revision-state changes |
+| `telemetry` | new samples committed (source watermark), backfills, revision-state changes. This fires about every 500 ms on live feeds, so throttle telemetry-driven refetches client-side |
 | `limits` | limit definition changes |
 | `events` | mission event changes |
 | `catalog` | catalog revision changes |
@@ -58,14 +59,15 @@ trigger its refetch.
 
 ## Planned (with fe-ops, for M8)
 
-These are the shapes I plan to build. Comment in your plan doc if they don't fit.
+These are the shapes I plan to build, revised with fe-ops' comments (plans/ops.md).
 
-- `fleet` event on `mission:<id>`: `{"spacecraft": [{"id", "state", "worst_state", "last_received_at",
-  "stale"}], "observed_at"}`, sending only spacecraft whose row changed since the last push. It is
-  throttled to at most 1 per second and computed from the same read as `GET .../fleet`, so a
-  delta can always be reconciled with a refetch.
+- `fleet` event on `mission:<id>`: `{"seq", "observed_at", "counts", "commands", "spacecraft": [<full
+  GET /fleet row>]}`, containing only rows that changed since the previous push. `seq` increases
+  by one per push on the channel. `GET /fleet` will return the channel's current `seq`, so the
+  client can drop older pushes and refetch on a gap. Throttled to at most 1 per second.
 - Topic `spacecraft:<spacecraft_id>`, joined while one spacecraft is open (Investigate):
-  `points` event `{"samples": [{"point_id", "value", "received_at", "limit_state"}]}` for that
-  spacecraft's subscribed points, throttled. The join payload `{"point_ids": [...]}` selects the
-  points, capped at 200.
+  `points` event `{"samples": [{"point_id", "value", "generation_time", "received_at", "limit_state"}]}`
+  for that spacecraft's subscribed points, throttled. `value` keeps its exact type and
+  `limit_state` uses the alarm vocabulary. The join payload `{"point_ids": [...]}` selects the
+  points (capped at 200), and the join reply carries each point's `unit`.
 - Topic `uplink:<command_request_id>` for live uplink and verify progress (Commanding flow).

@@ -6,6 +6,7 @@ defmodule CadenceWeb.Console.MissionChannelTest do
 
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Platform.ScopedReadUpdates
+  alias CadenceWeb.Console.LimitTransitions
   alias CadenceWeb.ConsoleSocket
   alias CadenceWeb.TestFixtures
 
@@ -79,6 +80,27 @@ defmodule CadenceWeb.Console.MissionChannelTest do
       assert "commanding" in resources
       assert "catalog" in resources
       refute_push("invalidate", _payload, 700)
+    end
+
+    test "pushes alarms only when a point's limit state changes", c do
+      {:ok, _reply, _socket} =
+        subscribe_and_join(c.socket, "mission:" <> c.mission.mission_id, %{})
+
+      event = %Cadence.Limits.Event{
+        mission_id: c.mission.mission_id,
+        spacecraft_id: "sc-1",
+        point_id: "vbat",
+        normalized_state: :green
+      }
+
+      states = LimitTransitions.observe(event, %{})
+      assert_push("invalidate", %{resources: ["alarms"]}, 2_000)
+
+      states = LimitTransitions.observe(event, states)
+      refute_push("invalidate", _payload, 700)
+
+      _states = LimitTransitions.observe(%{event | normalized_state: :red}, states)
+      assert_push("invalidate", %{resources: ["alarms"]}, 2_000)
     end
 
     test "ignores changes to other missions", c do
