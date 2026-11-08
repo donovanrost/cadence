@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ApStatStrip, ApStatTile } from "@/ui";
-import type { Fleet } from "@/features/fleet/index.ts";
+import type { Fleet } from "./api.ts";
 import { statTiles } from "./stats.ts";
 
 /** Six stat tiles (Now spec, Stat strip). Counts partition the fleet; unknowns render `—`. */

@@ -18,6 +18,10 @@ const props = defineProps<{
   fitHeight?: boolean;
   /** Show the "View as table" link to the Fleet screen. */
   tableLink?: boolean;
+  /** Hide the footer plane picker when the owner already offers one (Fleet filter row). */
+  noPlanePicker?: boolean;
+  /** Filter: non-matching cells are drawn at 25% opacity, never hidden (fleet first). */
+  matches?: ((sc: FleetSpacecraft) => boolean) | undefined;
 }>();
 const emit = defineEmits<{ open: [sc: FleetSpacecraft]; selectPlane: [plane: number | null] }>();
 
@@ -71,10 +75,11 @@ const CELL: Readonly<Record<FleetSpacecraft["state"], string>> = {
 
 function cellClass(sc: FleetSpacecraft | null): readonly string[] {
   if (sc === null) return ["bg-cell-empty"];
+  const dim = props.matches && !props.matches(sc) ? "opacity-25" : "";
   // In contact: the white ring replaces any other ring (a crit cell keeps its red fill).
   if (sc.in_contact === true)
-    return [CELL[sc.state].replace(/outline\S*/g, "").trim(), LIVE_RING, "cursor-pointer"];
-  return [CELL[sc.state], "cursor-pointer"];
+    return [CELL[sc.state].replace(/outline\S*/g, "").trim(), LIVE_RING, "cursor-pointer", dim];
+  return [CELL[sc.state], "cursor-pointer", dim];
 }
 
 function target(event: Event): FleetSpacecraft | null {
@@ -144,7 +149,7 @@ const inspector = computed(() => {
     </div>
     <div class="flex flex-none flex-wrap items-center gap-3">
       <PlanePicker
-        v-if="planes.length > 0"
+        v-if="planes.length > 0 && !noPlanePicker"
         :planes="planes"
         :selected-plane="selectedPlane"
         @select-plane="emit('selectPlane', $event)"

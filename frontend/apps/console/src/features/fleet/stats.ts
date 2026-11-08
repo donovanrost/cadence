@@ -1,7 +1,7 @@
 import { plural, type OpState } from "@/ui";
-import type { Fleet } from "@/features/fleet/index.ts";
+import type { Fleet, FleetSpacecraft } from "./api.ts";
 
-/** Now stat strip (Now spec + ux U10/U13). A count is a number only when it could be non-zero. */
+/** Fleet stat strip, shared by Now and Fleet (Now spec + ux U10/U13). A count is a number only when it could be non-zero. */
 
 export type StatTile = Readonly<{
   label: string;
@@ -83,4 +83,26 @@ export function statTiles(fleet: Fleet): StatTile[] {
       ...(cmd.awaiting_viewer > 0 ? { captionState: "caution" as const } : {}),
     },
   ];
+}
+
+/**
+ * A fleet snapshot narrowed to `rows`, with the per-spacecraft counts recomputed so the stat strip
+ * describes the filtered set. Mission-wide figures (commands, limits, contact totals) are kept.
+ */
+export function fleetSubset(fleet: Fleet, rows: readonly FleetSpacecraft[]): Fleet {
+  const n = (state: FleetSpacecraft["state"]) => rows.filter((sc) => sc.state === state).length;
+  return {
+    ...fleet,
+    counts: {
+      ...fleet.counts,
+      total: rows.length,
+      critical: n("critical"),
+      caution: n("caution"),
+      stale: n("stale"),
+      nominal: n("nominal"),
+      never_heard: n("never_heard"),
+      fresh: rows.filter((sc) => !sc.stale && sc.state !== "never_heard").length,
+    },
+    spacecraft: rows,
+  };
 }

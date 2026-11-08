@@ -15,7 +15,7 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "fleet",
     name: "ops.fleet",
-    component: pending,
+    component: () => import("@/features/fleet/FleetScreen.vue"),
     meta: { mode: "ops", nav: "fleet", title: "Fleet" },
   },
   {

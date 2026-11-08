@@ -4,6 +4,15 @@ import { fleetReader } from "./api.ts";
 import { fleetOf, spacecraftRow } from "./fixtures.ts";
 import { fitCell, fitMatrix, layoutMatrix, splitRows } from "./matrix.ts";
 import { throttle } from "./useFleet.ts";
+import {
+  byStateThenName,
+  describeFilter,
+  filterQuery,
+  matches,
+  NO_FILTER,
+  parseFilter,
+} from "./filters.ts";
+import { fleetSubset } from "./stats.ts";
 
 const range = (from: number, to: number) =>
   Array.from({ length: to - from + 1 }, (_, i) => from + i);
@@ -149,5 +158,54 @@ describe("fitMatrix (U14)", () => {
       [1, 2, 3],
       [4, 5],
     ]);
+  });
+});
+
+describe("fleet filters", () => {
+  it("round-trips through the URL and keeps unrelated keys", () => {
+    const filter = parseFilter({
+      plane: "7",
+      state: "critical,bogus,caution",
+      q: " 31 ",
+      view: "matrix",
+    });
+    expect(filter).toEqual({ plane: 7, states: ["critical", "caution"], profile: null, q: "31" });
+    expect(filterQuery(filter, { view: "matrix", plane: "3" })).toEqual({
+      view: "matrix",
+      plane: "7",
+      state: "critical,caution",
+      q: "31",
+    });
+    expect(filterQuery(NO_FILTER, { plane: "3", view: "matrix" })).toEqual({ view: "matrix" });
+  });
+
+  it("matches plane, state, profile and name or SCID prefix", () => {
+    const sc = spacecraftRow(312, { plane: 7, state: "critical" });
+    expect(matches(sc, { ...NO_FILTER, plane: 7, states: ["critical"] })).toBe(true);
+    expect(matches(sc, { ...NO_FILTER, q: "31" })).toBe(true);
+    expect(matches(sc, { ...NO_FILTER, q: "99" })).toBe(false);
+    expect(matches(sc, { ...NO_FILTER, q: "earendil-312" })).toBe(true);
+    expect(matches(sc, { ...NO_FILTER, profile: "other" })).toBe(false);
+  });
+
+  it("describes the filter and sorts by state precedence then name", () => {
+    expect(describeFilter({ ...NO_FILTER, plane: 7, states: ["critical"] }, (id) => id)).toBe(
+      "plane 07 + critical",
+    );
+    const rows = [
+      spacecraftRow(2),
+      spacecraftRow(1, { state: "stale" }),
+      spacecraftRow(3, { state: "critical" }),
+    ];
+    expect([...rows].sort(byStateThenName).map((sc) => sc.scid)).toEqual([3, 1, 2]);
+  });
+
+  it("recomputes counts for a subset", () => {
+    const fleet = fleetOf([spacecraftRow(1), spacecraftRow(2, { state: "critical" })]);
+    const subset = fleetSubset(
+      fleet,
+      fleet.spacecraft.filter((sc) => sc.state === "critical"),
+    );
+    expect(subset.counts).toMatchObject({ total: 1, critical: 1, nominal: 0 });
   });
 });

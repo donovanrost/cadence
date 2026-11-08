@@ -5,6 +5,7 @@ import { useMissionScope } from "@/shell/index.ts";
 import { ApPanel, ApRemote } from "@/ui";
 import {
   FleetMatrix,
+  FleetStatStrip,
   layoutMatrix,
   matrixNaturalHeight,
   useFleet,
@@ -14,7 +15,6 @@ import ActionQueuePanel from "./ActionQueuePanel.vue";
 import ConstellationPanel from "./ConstellationPanel.vue";
 import LiveStatusCallout from "./LiveStatusCallout.vue";
 import NowHeader from "./NowHeader.vue";
-import NowStats from "./NowStats.vue";
 import PassesPanel from "./PassesPanel.vue";
 import { deriveQueue, nowHeadline } from "./queue.ts";
 
@@ -75,7 +75,7 @@ function openById(id: string) {
     <LiveStatusCallout />
     <ApRemote :state="fleet.state.value" loading-label="LOADING FLEET…" @retry="fleet.refetch">
       <template #default="{ value }">
-        <NowStats :fleet="value" />
+        <FleetStatStrip :fleet="value" />
         <div
           class="grid grid-cols-1 gap-3 md:grid-cols-[1.2fr_1fr] console:min-h-0 console:flex-1 console:grid-rows-[minmax(0,1fr)_min(var(--a3-need),45%)]"
           :style="{ '--a3-need': a3Need }"

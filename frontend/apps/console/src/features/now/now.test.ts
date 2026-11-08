@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
-import { fleetOf, spacecraftRow } from "@/features/fleet/index.ts";
+import { fleetOf, spacecraftRow, statTiles } from "@/features/fleet/index.ts";
 import { constellation } from "./constellation.ts";
 import { deriveQueue, GROUP_AT, nowHeadline } from "./queue.ts";
-import { statTiles } from "./stats.ts";
 
 const vbat = (raw: string) =>
   ({

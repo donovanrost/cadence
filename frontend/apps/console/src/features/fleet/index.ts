@@ -25,5 +25,7 @@ export {
   type MatrixLayout,
 } from "./matrix.ts";
 export { default as FleetMatrix } from "./FleetMatrix.vue";
+export { default as FleetStatStrip } from "./FleetStatStrip.vue";
+export { fleetSubset, statTiles, type StatTile } from "./stats.ts";
 /** Typed test builders for fleet snapshots (used by other features' tests). */
 export { fleetOf, spacecraftRow } from "./fixtures.ts";
