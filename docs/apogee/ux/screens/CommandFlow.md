@@ -1,0 +1,131 @@
+# Commanding flow: Compose → Approve → Uplink & verify (phase 3)
+
+Boards `CommandFlow`, `Compose`, `Approve`, `Uplink`. Owner: fe-ops. Data: `docs/apogee/plans/ops.md`
+(M15–M26). Scope: DECISIONS #7 (two-person is policy-driven), #8 (**no waves or gates in the first
+flow**), #6 (alarm lifecycle). J3 "Command a group" (`Command.md`) is the contingency entry into the
+same request model.
+
+**Principle: sent is not done.** A request passes seven stations: Compose (operator) → Check
+(Cadence) → Approve (second operator) → Release (Cadence) → Radiate (station) → Acknowledge
+(spacecraft) → Verify (telemetry). Only Verify turns it green. All three screens share a
+**takeover header**: back/close · mono request line (`REQ-0421 · DRAFT · DONOVAN R.`) over a title ·
+**ApStepBar of the stations** (current `●`, done `✓`, future `○`; `05 · 06 · 07` collapsed until
+release) · clocks. Progress states are gray; outcomes carry status (ApStateTrail, CommandFlow M1).
+
+Rules on every commanding screen (CommandFlow R01–R06): identity on every line (name + SCID +
+profile; never `SCID —`); target by query; the catalog writes the form (types, ranges, units,
+enums, and out-of-range can't be staged); show what will radiate; two people for anything the policy
+marks; waves later (R06 deferred by #8).
+
+---
+
+## C1 · Compose (`M/commands/new`, routine entry)
+Console takeover, three columns + a footer action bar:
+```
+┌ A Catalog (300, pane) ┐ ┌ B Command form ──────────────┐ ┌ D Targets (360, pane) ────┐
+│ search · list ↑↓ ↵    │ │ B2 Per-target values (pane)  │ │ query · presets · matrix  │
+└───────────────────────┘ └──────────────────────────────┘ └───────────────────────────┘
+footer: Stack · N chips │ Release (choice) │ check summary GO/HOLD │ "NOTHING RADIATES WITHOUT A GO" [Send for GO]
+```
+- **A Catalog:** header meta `rev 15 · 61 CMDS`; search (name, subsystem, verb); `listbox` rows:
+  mnemonic (mono 13/600), subsystem (mono `text-4`), classification tag (`HAZ`/`CRIT` short),
+  one-line description (ellipsis). ↑↓ selects, ↵ adds to the stack with the current form values.
+  No hits: `No commands match "x".`
+- **B Command form:** header meta `SUBSYSTEM · OPCODE 0x4A1 · VERIFY WITHIN 60 s`; mnemonic +
+  classification + description; one `arg` row per argument: name (mono 600) + type (`f32 · °C`),
+  input by type (enum → `opt` buttons as a radiogroup; number → ApNumberField with unit + a range bar
+  showing min…max and the value tick; out of range → caution border + message, Add disabled), and
+  for numbers a `Same for all │ Per target` micro switch. Verifier line (`THERM.batt_setpoint =
+  value ±0.1 within 60 s`) when the catalog defines one, else `No verifier: this command can't turn
+  green` in stale text **[decision]**. Primary `Add to stack ↵`.
+- **B2 Per-target values:** only when an arg is Per target. Fill buttons (`All from form · 8.0`,
+  `Current + 2.0`, `Paste CSV`, `Clear`), table rows: mark + name (mono) · value cell(s) with unit
+  (inherited = `text-4`, out of range = caution) · Now (current telemetry value) · context (mono
+  ellipsis). CSV format hint `SCID OR NAME, THEN ONE COLUMN PER ARGUMENT`. Otherwise an info block
+  explaining Per target.
+- **D Targets:** search (`name, SCID, plane 07, stale…`) with hits list (`Add` / `Added` toggles) and
+  `Add all N`; preset query buttons (`Planes 03–04`, `Block 1`, `All nominal`…) as `tp` tiles;
+  picked chips (removable) when custom; clickable 500-cell matrix (selected `text-2` fill,
+  stale hatched, caution amber, in contact white ring). Footer counts: `96 READY · ◇ 1 STALE · ▲ 1
+  SAFE MODE · 2 EXCLUDED`, where excluded targets are listed with the reason in the Check results.
+- **Footer action bar:** stack chips (`01 HEATER_SET zone=BATT setpoint=8.0 ✕`, empty hint), Release
+  `choice` (`Next AOS · At time · Manual`; `At time` opens ApTimePicker), live check summary
+  (`IDENTITY GO · CATALOG GO · CONFLICTS GO · TWO-PERSON HOLD`, from the server preflight), next-step
+  caption (`NEXT: SECOND GO FROM AN OPERATOR` when policy requires it, else `NEXT: RELEASE AT AOS`),
+  primary `Send for GO · 96 targets` or `Release · 1 target` when no approval is needed. Plus a
+  required **reason** (one line, prefilled from context) in a popover before sending.
+
+## C2 · Approve (`M/commands/:requestId/review`)
+Console takeover:
+```
+┌ Q Waiting on you (280) ┐ ┌ main (scrolls): request header · A1 What changes · A2 Re-checked ┐ ┌ D Your call (340) ┐
+│ queue of requests      │ │ A3 What will radiate · (A4 Release plan)                          │ │ decision · note   │
+└────────────────────────┘ └───────────────────────────────────────────────────────────────────┘ └───────────────────┘
+```
+- **Q Waiting on you:** requests where *you* can give the GO, oldest first: mono `REQ-0419 ·
+  DONOVAN R.` + age, mnemonic (mono 600, `HAZ` tag), scope sentence. Your own requests appear at
+  the end as a non-clickable note: "You can't approve your own request. Waiting on Ana or Owen."
+  Also reachable from Now (P2 "awaits your GO").
+- **Request header:** title = the author's reason as a headline, classification tag, the author's
+  justification quoted with mono byline.
+- **A1 What changes:** for set-value commands: `5.0 → 8.0 °C · ON 98 SPACECRAFT` (readout 34px),
+  histogram of current values across targets, and callouts for targets whose value was hand-set
+  before ("EARENDIL-117 and -144 were hand-set to 6.0 °C on 14 Sep (REQ-0302). This overwrites
+  that."). For non-value commands: the stack as mono lines.
+- **A2 Re-checked at review:** the preflight re-run at open time (`ck` rows, GO/HOLD/NO-GO), incl.
+  `Excluded · 163 stale · 188 safe mode · GO −2`. Header meta `6 GO` in nominal text.
+- **A3 What will radiate:** the encoded packet as byte boxes (`by`: hex 15px mono, field name,
+  decoded value), header meta `19 BYTES · CCSDS TC · SAME FOR ALL 98 EXCEPT SEQ AND CRC`.
+  **Depends on encode preview (M24):** until then show the decoded stack only and the header meta
+  `ENCODED PREVIEW NOT AVAILABLE` (CommandFlow R04 is then unmet; flag in qa).
+- **A4 Release plan:** **omitted in v1** (#8, waves). Show instead a one-line release summary
+  ("Each target at its next AOS · first 03:10Z FBK").
+- **D Your call:** ApOption radios: `GO as requested` · `GO, excluding 117 and 144` (only when the
+  checks flagged targets) · `Send back` (returns to Compose with your note) · `NO-GO` (closes and
+  logs why). Note to author (required for send back / NO-GO / exclusions). Request log (event rows).
+  Primary `Sign GO · 96 targets` (commit size); caption `RE-AUTHENTICATES · ABORT STAYS OPEN TO BOTH
+  OF YOU` (re-auth only if the backend requires it).
+
+## C3 · Uplink & verify (`M/commands/:requestId/uplink`, live)
+Console takeover. Header right adds `Pause` and `Abort remaining` (danger), both only when the
+backend supports them (M20).
+```
+lbl "BATTERY HEATER SETPOINT · 5.0 → 8.0 °C"   h1 "34 of 96 verified · 2 need you"
+pipeline tiles ×6: Queued for AOS · Radiating · Executed · Verified · No ACK · retry · Verify failed
+┌ U1 Targets matrix ┐ ┌ N Needs you (aside, pane) ┐
+├ U2 Verifier plot  ┤ │                           │
+├ U3 Event stream   ┤ │                           │
+└───────────────────┘ └───────────────────────────┘
+```
+- **h1:** `<verified> of <targets> verified`, then ` · N need you` in caution when > 0. All verified:
+  `96 of 96 verified` + nominal tag `■ VERIFIED`. Commands without a verifier: `96 executed · not
+  verifiable` (stale tint); never green.
+- **Pipeline:** ApStatTiles with a 3px bar under each value (share of targets); Verified gets the
+  nominal fill, No ACK caution, Verify failed crit; the rest gray (progress is gray). Captions are
+  specific: `Next 4 at FBK 04:39Z`, `EARENDIL-171 · AWA`, `Verifier window open`,
+  `THERM.batt_setpoint = 8.0`, `Retry 1 of 3 queued`.
+- **U1 Targets:** one cell per target in plane rows (`um` grid): verified `nominal-dim`, executed
+  `text-3` fill, radiating white + ring, queued `text-3` outline, no ACK caution fill, failed crit +
+  ring, excluded dashed. Legend with every state word. (Wave states return with #8.)
+- **U2 Verifier:** the verifier point over the request window, one faint line per target, commanded
+  value as a dashed white line, the tolerance band; header meta `34 STEPPED TO 8.0 · 1 DID NOT`.
+- **U3 Event stream:** mono log rows `time · target · event` newest first (RADIATING, EXECUTED with
+  command counter, VERIFIED with latency in nominal text, VERIFY FAILED with read vs expected in crit,
+  NO ACK with the retry plan).
+- **N Needs you:** one card per target that needs a human: mark, name link, state tag, a plain
+  explanation of what happened ("The command arrived and executed (counter +1), but the setpoint still
+  reads 5.0 °C a minute later."), actions (`Re-send at 04:47Z AWA`, `Open 152`). Automatic recoveries
+  are listed with "Nothing to do unless it fails again." Empty: nominal callout "Nothing needs you."
+- **Gate panel G:** omitted until waves (#8).
+
+## States
+Draft autosave (Compose), preflight `CHECKING…`, approval pending (Uplink reachable read-only:
+"Waiting for a second GO"), rejected/sent back (callout with the note, `Edit and resend`), expired,
+aborted (per-target trail ends in gray `ABORTED`). Live screens follow the connection-lost rule (stale
+callout, stale tint on live values).
+
+## Acceptance (for qa)
+- Out-of-range values can't reach the stack; enums only offer catalog values.
+- You can never approve your own request; the policy decides when a GO is needed and the UI says so.
+- Nothing turns green without a verifier reading; unverifiable stays stale-tinted.
+- Approver sees the encoded packet once M24 exists; until then the header says it's unavailable.
