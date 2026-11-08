@@ -124,9 +124,9 @@ ux's `information-architecture.md` may rename or regroup screens; lead updates t
   with `cache-control: no-store`. If the file is missing (dev without a build) it renders a short
   page pointing to the Vite dev server.
 - Dev (agreed with api): **Phoenix stays the origin**, no proxy. In dev the `/console/*` catch-all
-  emits a shell that loads `http://localhost:5180/console/@vite/client` and
-  `http://localhost:5180/console/src/main.ts`, so cookies, CSRF and the socket stay same-origin with
-  Phoenix while Vite serves modules + HMR cross-origin (`server.origin`, `cors: true`, port 5180
+  emits a shell that loads `http://127.0.0.1:5181/console/@vite/client` and
+  `http://127.0.0.1:5181/console/src/main.ts`, so cookies, CSRF and the socket stay same-origin with
+  Phoenix while Vite serves modules + HMR cross-origin (`server.origin`, `cors: true`, port 5181
   strict). Run Phoenix for this worktree (qa runs it on `http://127.0.0.1:4011`, see
   `docs/apogee/qa/runbook.md`) and `corepack pnpm --filter @cadence/console dev`, sign in at
   `/sign-in`, open `/console/`.
