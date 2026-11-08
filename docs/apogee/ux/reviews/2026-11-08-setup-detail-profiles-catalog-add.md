@@ -37,3 +37,6 @@ has a clean not-available state. Add spacecraft's takeover header + step bar + A
    formality.
 10. **Disabled `Continue to identity`** needs its reason visible, not only in `title`: a caption under
     the button (mono 11, `text-4`): `PICK A PROFILE OR A MANIFEST`.
+
+## Closed (2026-11-08 22:37Z, 2a8685b3 + lead)
+All 10 items verified on screen: D1 check rows with PASS tags, D4 meta link, `P01 · slot 01`, last heard `· T+19s`, catalog import hidden, sole profile preselected, visible reasons under disabled Continue/Create ("the batch create endpoint is being built"), SETUP lit, numbered current step, hollow radio. Review closed.
