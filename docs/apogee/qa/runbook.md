@@ -68,8 +68,9 @@ mise exec -- mix ecto.migrate -r Cadence.Repo
 mise exec -- mix cadence.questdb.migrate
 
 # 4. Phoenix (leave running; boot creates the env admin user). Same exports as step 3, plus
-#    OTEL off (mise.toml points at a collector on :4318 that isn't running):
-OTEL_EXPORTER_OTLP_ENDPOINT= POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 PORT=4011 \
+#    OTEL off (mise.toml points at a collector on :4318 that isn't running) and durable current
+#    values (the default ETS store forgets every last_received_at on restart; qa #7):
+CADENCE_TELEMETRY_CURRENT_VALUE_STORE=postgres OTEL_EXPORTER_OTLP_ENDPOINT= POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 PORT=4011 \
   mise exec -- iex --sname cadence_apogee --cookie cadence -S mix phx.server
 
 # 5. Seed (once; both are rerunnable)
@@ -114,8 +115,9 @@ migrations behind and belongs to the main checkout).
 
 - **Live telemetry saturates the shared laptop.** On 2026-11-08, ten 1 Hz feeds plus team builds
   pushed load to ~50: ingest stalled after ~5 min (receivers timing out) and sign-in took 34 s.
-  Run feeds briefly, then stop them (Ctrl-C, `a`). Captured history: ~98k rows for
-  EARENDIL-001…010, 2026-11-08 22:26–22:31Z.
+  Run feeds briefly, then stop them (Ctrl-C, `a`): after short contacts end the script keeps
+  reconnecting instead of exiting. Captured history: ~174k rows for EARENDIL-001…010,
+  2026-11-08 22:26–22:31Z and 22:55–22:56Z; those 10 have durable current values (heard 22:55Z).
 - **Live telemetry** covers EARENDIL-001…010 only; the other 490 stay `never_heard`. The feeds
   stop when their contacts end (2 h); rerun step 7. `dev/reflect_orbital_{live,activate}.exs`
   take `EARENDIL_CADENCE_NODE` (default `cadence`, i.e. the main checkout).
