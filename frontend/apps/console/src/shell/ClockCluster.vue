@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatClock, useNow } from "@/lib/index.ts";
+import { formatClock, useNow } from "@/ui";
 
 /** UTC always. AOS and MET join only when real data exists (decisions U7 / D4); CONFIG rN with change sets (D1). */
 const now = useNow();

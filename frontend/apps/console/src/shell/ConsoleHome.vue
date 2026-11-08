@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ApPageHeader, ApPanel } from "@/ui/index.ts";
+import { ApPageHeader, ApPanel } from "@/ui";
 import { defaultMission } from "./last-mission.ts";
 import { useSession } from "./session.ts";
 

@@ -1,44 +1,4 @@
 @import "tailwindcss";
-@import "./tokens.css";
-
-@layer base {
-  html,
-  body {
-    background-color: var(--color-vacuum);
-    color: var(--color-readout);
-    font-family: var(--font-sans);
-    font-size: var(--text-base);
-  }
-  body {
-    margin: 0;
-    background-image: var(--apogee-grid);
-    background-size: var(--apogee-grid-size);
-  }
-  a {
-    color: var(--color-readout);
-  }
-  a:hover {
-    color: var(--color-bright);
-  }
-  :focus-visible {
-    outline: var(--apogee-focus);
-    outline-offset: 2px;
-  }
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-line) transparent;
-  }
-}
-
-@utility tabular {
-  font-variant-numeric: tabular-nums;
-}
-
-/* Label role (`lbl`): display 600 12px, .2em, uppercase, text-4. */
-@utility ap-label {
-  font: 600 var(--text-sm) / 1.2 var(--font-display);
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--color-text-4);
-  margin: 0;
-}
+@import "@cadence/apogee-ui/apogee.css";
+/* Tailwind does not scan workspace packages under node_modules by itself. */
+@source "../../../../packages/apogee-ui/src";

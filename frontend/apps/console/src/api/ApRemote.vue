@@ -1,8 +1,7 @@
 <script setup lang="ts" generic="T">
-import { describeApiError } from "@/api/http.ts";
-import type { RemoteState } from "@/api/remote-state.ts";
-import ApButton from "./ApButton.vue";
-import ApCallout from "./ApCallout.vue";
+import { describeApiError } from "./http.ts";
+import type { RemoteState } from "./remote-state.ts";
+import { ApButton, ApCallout } from "@cadence/apogee-ui";
 
 /**
  * Renders a RemoteState: loading line, failure callout with retry, or the default slot with the

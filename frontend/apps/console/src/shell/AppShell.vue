@@ -2,7 +2,7 @@
 import { computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import MobileTabBar from "./MobileTabBar.vue";
-import { ApCallout } from "@/ui/index.ts";
+import { ApCallout } from "@/ui";
 import NotFoundScreen from "./NotFoundScreen.vue";
 import OpsRail from "./OpsRail.vue";
 import SetupRail from "./SetupRail.vue";

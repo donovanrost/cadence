@@ -56,6 +56,9 @@
       "path": "./modules/telemetry-decom"
     },
     {
+      "path": "./packages/apogee-ui"
+    },
+    {
       "path": "./packages/plugin-sdk"
     },
     {

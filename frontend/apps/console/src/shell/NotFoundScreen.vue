@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ApButton, ApPageHeader, ApPanel } from "@/ui/index.ts";
+import { ApButton, ApPageHeader, ApPanel } from "@/ui";
 
 withDefaults(defineProps<{ sentence?: string }>(), {
   sentence: "Nothing lives at this address in the console. Check the link, or start from Now.",

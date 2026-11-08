@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { initials } from "@/lib/format.ts";
+import { initials } from "@/ui";
 import { useDisclosure } from "./disclosure.ts";
 import { hasCapability, useSession } from "./session.ts";
 

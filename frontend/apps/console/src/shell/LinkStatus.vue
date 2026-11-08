@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useConnection } from "@/live/socket.ts";
-import { ApTag } from "@/ui/index.ts";
+import { ApTag } from "@/ui";
 
 /** Visible only when the live socket is down: live values on screen are no longer fresh. */
 const connection = useConnection();

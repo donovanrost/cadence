@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { formatCount } from "@/lib/format.ts";
+import { formatCount } from "./lib/format.ts";
 import { stateInsetClass, stateTextClass, type OpState } from "./status.ts";
 
 /**

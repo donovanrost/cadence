@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { describeApiError, type ApiError } from "@/api/http.ts";
-import { ApButton, ApCallout } from "@/ui/index.ts";
+import { ApButton, ApCallout } from "@/ui";
 
 defineProps<{ error?: ApiError }>();
 defineEmits<{ retry: [] }>();

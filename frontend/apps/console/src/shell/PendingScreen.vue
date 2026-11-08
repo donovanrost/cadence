@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute } from "vue-router";
-import { ApEmptyState, ApPageHeader, ApPanel } from "@/ui/index.ts";
+import { ApEmptyState, ApPageHeader, ApPanel } from "@/ui";
 import { useConsoleScope } from "./scope.ts";
 
 /** Honest placeholder for routes whose screen isn't built yet. */

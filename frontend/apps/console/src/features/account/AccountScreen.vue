@@ -1,14 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useSession } from "@/shell/index.ts";
-import {
-  ApEmptyState,
-  ApKeyValue,
-  ApPageHeader,
-  ApPanel,
-  ApTable,
-  type ApColumn,
-} from "@/ui/index.ts";
+import { ApEmptyState, ApKeyValue, ApPageHeader, ApPanel, ApTable, type ApColumn } from "@/ui";
 
 /** Your account: facts from the session bootstrap. Password and sessions have no API yet. */
 const session = useSession();
