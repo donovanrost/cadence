@@ -1,39 +1,35 @@
 # Apogee QA runbook — local backend for the console
 
-Owner: qa (`w0R:p6`). The shared dev server for this worktree runs in herdr pane
-**`w0R:p7` ("qa-server")**. Don't start a second server from this worktree; ask qa to
-restart this one if you need it (e.g. after a config or dependency change — code changes
-hot-reload).
+Owner: qa (`w0R:p6`). This worktree's dev stack runs in qa's tab. Don't start a second
+server, Vite or simulator from this worktree; ask qa to restart one if you need it (after a
+config, dependency or `dev.exs` change; code changes hot-reload).
 
 ## What's running
 
-| Thing | Where | Notes |
-| --- | --- | --- |
-| **Apogee worktree Phoenix** | **http://127.0.0.1:4011** | node `cadence_apogee`, pane `w0R:p7` |
-| Main-checkout Phoenix (not ours) | http://127.0.0.1:4001 | `~/projects/cadence/cadence` on `develop`. Don't touch it. |
-| Postgres | localhost:5432, db `cadence_dev` | **Shared** with the main checkout (see Migrations) |
-| Earendil simulator (not ours) | 127.0.0.1:4101 | started from the main checkout; serves both servers |
+| Thing | Where | Pane | Notes |
+| --- | --- | --- | --- |
+| **Phoenix (this worktree)** | **http://127.0.0.1:4011** | `w0R:p7` qa-server | node `cadence_apogee` |
+| **Console Vite dev server** | http://127.0.0.1:5181/console/ | `w0R:p9` qa-console-vite | Phoenix fetches `index.html` from it in dev |
+| **Earendil simulator (this worktree)** | http://127.0.0.1:4111 | `w0R:pA` qa-simulator | DETS under this worktree's `var/reflect_orbital/` |
+| Postgres | localhost:5432, db **`cadence_apogee_dev`** | | this worktree only |
+| Main checkout (not ours) | Phoenix :4001, simulator :4101, db `cadence_dev` | | `~/projects/cadence/cadence`. Don't touch. |
+| User's ex-orbital-dynamics demo (not ours) | :4000, Vite :5180 | | why the console moved to 5181 |
 
-Port 4011 because 4001 is taken by the main checkout's long-lived server. `config/dev.exs`
-reads `PORT`, and `check_origin` follows it, so websockets work on 4011.
+The worktree is fully isolated from the main checkout: its own DB (so our migrations never alter
+`cadence_dev`), its own simulator (so reservations don't collide), and its own ports.
 
 ## Login
 
 - URL: http://127.0.0.1:4011/sign-in (prefer `127.0.0.1`: the endpoint binds IPv4 only,
   and `localhost` can resolve to `::1`; cookies don't carry across the two hostnames either)
 - Email `admin@example.com`, password `change-me` (from `mise.toml`
-  `CADENCE_ADMIN_EMAIL` / `CADENCE_ADMIN_PASSWORD`; the env administrator, enters admin mode)
-- After sign-in it lands on `/admin`.
+  `CADENCE_ADMIN_EMAIL` / `CADENCE_ADMIN_PASSWORD`; the env administrator, created on server
+  boot, enters admin mode)
+- Console: http://127.0.0.1:4011/console
 
-The admin is an org member of:
-
-| Organization | org id | Mission | mission id |
-| --- | --- | --- | --- |
-| **Reflect Orbital** (use this) | `org-reflect-orbital-demo` | **Earendil** — 500 spacecraft, 10 ground sites | `mission-earendil-demo` |
-| SRE Observability Demo | `org-sre-demo-1791500936` | SRE Telemetry Exercise | `mission-sre-demo-1791500936` |
-| asd | `org_gn6u4yiwj4_20` | asd | `mission_gn6u4yiwj4_3E` |
-
-Earendil is the realistic dataset (see `docs/how-to/run-reflect-orbital-demo.md`).
+Demo data: **Reflect Orbital** (`org-reflect-orbital-demo`) → **Earendil**
+(`mission-earendil-demo`): 500 spacecraft, 20 planes, 10 sites, 38 antennas. See
+`docs/how-to/run-reflect-orbital-demo.md`.
 
 ### QA personas (non-admin users)
 
@@ -46,56 +42,61 @@ and the two-person rule, use these Reflect Orbital users (password `apogee-qa-pa
 | `qa-second@example.com` | `member` (second operator / approver) |
 | `qa-org-admin@example.com` | `organization_admin` (no platform admin) |
 
-Seed (idempotent; already run on `cadence_dev` 2026-11-08):
+## Start everything from scratch
+
+From the repo root of this worktree, each long-running command in its own pane:
 
 ```sh
+# 1. Simulator (leave running)
+cd apps/cadence_simulator
+EARENDIL_SIMULATOR_PORT=4111 mise exec -- mix run --no-start --no-halt ../../dev/reflect_orbital_simulator.exs
+
+# 2. Database (once)
 cd apps/cadence_web
-mix run --no-start ../../dev/apogee_qa_personas.exs
+export CADENCE_DEV_DATABASE=cadence_apogee_dev
+mise exec -- mix ecto.create -r Cadence.Repo
+mise exec -- mix ecto.migrate -r Cadence.Repo
+
+# 3. Phoenix (leave running; boot creates the env admin user)
+CADENCE_DEV_DATABASE=cadence_apogee_dev PORT=4011 \
+  mise exec -- iex --sname cadence_apogee --cookie cadence -S mix phx.server
+
+# 4. Seed (once; both are rerunnable)
+CADENCE_DEV_DATABASE=cadence_apogee_dev EARENDIL_PROVIDER_URL=http://127.0.0.1:4111 \
+  mise exec -- mix run --no-start ../../dev/reflect_orbital_demo.exs
+CADENCE_DEV_DATABASE=cadence_apogee_dev \
+  mise exec -- mix run --no-start ../../dev/apogee_qa_personas.exs
+
+# 5. Console Vite (leave running)
+cd frontend && corepack pnpm --filter @cadence/console dev
 ```
 
-## Start / restart the server
+Notes:
 
-```sh
-cd apps/cadence_web
-PORT=4011 mise exec -- iex --sname cadence_apogee --cookie cadence -S mix phx.server
-```
+- **Every** `mix` command for this worktree needs `CADENCE_DEV_DATABASE=cadence_apogee_dev`;
+  without it you hit the main checkout's `cadence_dev`.
+- From `apps/cadence_web`, Ecto tasks need `-r Cadence.Repo` (otherwise they silently do nothing).
+- Don't use `mise run cadence`: it hard-codes `--sname cadence`, which collides with the main
+  checkout's node.
+- `Waiting for lock on the build directory` means a teammate is compiling; it continues after.
+- Use `System.halt()` in the qa-server iex to stop it.
+- No global `node`: use `mise exec node@24 -- …`, or run `corepack pnpm …` from `frontend/`.
 
-- Don't use `mise run cadence`: it hard-codes `--sname cadence`, which collides with the
-  main checkout's node.
-- If boot stalls on `Waiting for lock on the build directory`, another teammate is compiling
-  in this worktree; it continues when they finish.
-- The dev endpoint also starts a Vite watcher (port 5173) for the LiveVue assets. That's
-  unrelated to the console SPA's own dev server.
+## Migrations
 
-## Migrations (shared DB)
+New migrations (from domain/api) only need: stop qa-server → `mix ecto.migrate -r Cadence.Repo`
+with the env var → restart. Tell qa and I'll do it. `cadence_dev` is left alone (it is 8 upstream
+migrations behind and belongs to the main checkout).
 
-As of 2026-11-08 this branch has **no pending migrations** against `cadence_dev`
-(`mix ecto.migrations` shows nothing `down`). The main checkout runs on the same base commit.
+## Known limits
 
-**If api adds a migration:** running it alters the DB the main checkout also uses. Prefer
-additive, reversible migrations, and tell qa before migrating so we can decide whether to
-move the console to its own database (`cadence_apogee_dev`) instead.
+- **Live telemetry:** `mise run earendil-live` attaches to node `cadence@…` (the main checkout). Not
+  wired to this worktree yet. QuestDB (history) isn't running, so history views may be empty.
+- **Ingress ports:** the Earendil seed binds delivery transports on 127.0.0.1:42100–42109. If the
+  main checkout realizes contacts at the same time, one side gets `eaddrinuse`.
 
-Both servers run background workers (provider event inbox, contact scheduler) against the
-same DB. Rows are claimed with `FOR UPDATE SKIP LOCKED`, so this is safe, but either node
-may be the one that processes a given event.
+## Playwright
 
-## Live telemetry (optional)
-
-`mise run earendil-live` (from `apps/cadence_simulator`) drives ten 1 Hz feeds. It attaches
-to node `cadence@…`, i.e. the **main checkout's** server, not ours. Live channel pushes therefore
-won't reach the 4011 node until we run feeds against it; persisted values in Postgres are
-visible to both. QuestDB (telemetry history) isn't running locally right now, so
-history-backed views may be empty or error. qa will set this up when Now / Uplink are ready
-to test.
-
-## Node / Playwright
-
-- No global `node`; use `mise exec node@24 -- node …` or `corepack pnpm …` from `frontend/`.
-- Playwright `1.62.1` is in the frontend catalog and Chrome is installed. Existing
-  browser scripts launch `chromium.launch({ channel: "chrome" })`.
+- Playwright `1.62.1`, system Chrome (`channel: "chrome"`).
 - Sign-in selectors: `#user_email`, `#user_password`, `#sign-in-form button[type="submit"]`.
-
-## Console e2e suite
-
-See `docs/apogee/qa/e2e.md` (once the scaffold lands).
+- Console e2e suite: `docs/apogee/qa/e2e.md`.
