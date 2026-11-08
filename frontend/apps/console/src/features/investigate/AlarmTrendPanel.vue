@@ -38,6 +38,8 @@ const props = defineProps<{
   sc: FleetSpacecraft;
   alarms: RemoteState<Alarms>;
   alarm: Alarm | null;
+  /** U13: without ground limits, "no active alarm" is unknown, not nominal (qa #9). */
+  limitsConfigured: boolean;
 }>();
 defineEmits<{ retry: [] }>();
 const range = defineModel<RangeKey>("range", { required: true });
@@ -97,7 +99,10 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
       >
     </template>
     <ApRemote :state="alarms" loading-label="LOADING ALARMS…" @retry="$emit('retry')">
-      <ApCallout v-if="!alarm" tone="nominal">No active alarm on {{ sc.name }}.</ApCallout>
+      <ApCallout v-if="!alarm && !limitsConfigured" tone="off">
+        Ground limits aren't configured, so no point on {{ sc.name }} is checked against limits.
+      </ApCallout>
+      <ApCallout v-else-if="!alarm" tone="nominal">No active alarm on {{ sc.name }}.</ApCallout>
       <div v-else class="flex flex-col gap-3">
         <div class="flex flex-wrap items-end justify-between gap-3">
           <ApStatStrip :columns="3" label="Readouts" class="min-w-[360px] flex-1">

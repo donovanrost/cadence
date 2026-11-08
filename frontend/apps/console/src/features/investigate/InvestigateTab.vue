@@ -15,6 +15,7 @@ const props = defineProps<{
   sc: FleetSpacecraft;
   fleet: readonly FleetSpacecraft[];
   alarms: RemoteState<Alarms>;
+  limitsConfigured: boolean;
 }>();
 defineEmits<{ retry: [] }>();
 const route = useRoute();
@@ -49,6 +50,7 @@ const details = computed(() => [
         v-model:range="range"
         :sc="sc"
         :alarms="alarms"
+        :limits-configured="limitsConfigured"
         :alarm="alarm"
         @retry="$emit('retry')"
       />

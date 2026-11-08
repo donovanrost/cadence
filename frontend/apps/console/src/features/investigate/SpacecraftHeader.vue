@@ -94,8 +94,10 @@ const tabs = computed(() =>
           :to="prev ? at(prev) : undefined"
           :disabled="!prev"
           :disabled-reason="`First in ${sc.plane === null ? 'the fleet' : 'its plane'}`"
-          :aria-label="prev ? `Previous spacecraft, ${prev.name}` : 'Previous spacecraft'"
-          >[ {{ prev?.scid ?? "" }}</ApButton
+          :aria-label="
+            prev ? `${prev.scid}, previous spacecraft ${prev.name}` : 'Previous spacecraft'
+          "
+          ><span aria-hidden="true">[</span> {{ prev?.scid ?? "" }}</ApButton
         >
         <ApButton
           size="compact"
@@ -103,8 +105,8 @@ const tabs = computed(() =>
           :to="next ? at(next) : undefined"
           :disabled="!next"
           :disabled-reason="`Last in ${sc.plane === null ? 'the fleet' : 'its plane'}`"
-          :aria-label="next ? `Next spacecraft, ${next.name}` : 'Next spacecraft'"
-          >{{ next?.scid ?? "" }} ]</ApButton
+          :aria-label="next ? `${next.scid}, next spacecraft ${next.name}` : 'Next spacecraft'"
+          >{{ next?.scid ?? "" }} <span aria-hidden="true">]</span></ApButton
         >
       </div>
     </div>

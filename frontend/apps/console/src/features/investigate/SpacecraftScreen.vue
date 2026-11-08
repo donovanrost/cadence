@@ -60,6 +60,9 @@ const lookup = computed(() => {
             :key="lookup.sc.id"
             :sc="lookup.sc"
             :alarms="alarms.state.value"
+            :limits-configured="
+              fleet.state.value.status !== 'ready' || fleet.state.value.value.limits.configured
+            "
             :fleet="fleet.state.value.status === 'ready' ? fleet.state.value.value.spacecraft : []"
             @retry="alarms.refetch"
           />
