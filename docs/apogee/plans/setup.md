@@ -8,6 +8,22 @@ Owner: **fe-setup**. Status: draft 1 (2026-11-08). Boards: `Setup` (S1), `AddSpa
 breadcrumbs, tone strings), so the plan asks **api** for purpose-built `/api/console/v1` JSON,
 reusing the underlying `L/reads/*` and stores. "Missing" means no backend data exists today.
 
+## Build status (2026-11-08)
+
+| Screen | Route | State | Data |
+| --- | --- | --- | --- |
+| S1 Readiness | `setup` | built; not-available state until R | R (planned, domain `Reads.Readiness`) |
+| Spacecraft list | `setup/spacecraft` | **live** | S |
+| Spacecraft detail | `setup/spacecraft/:id` | **live** (configuration placeholder) | SD |
+| S2 Add spacecraft | `setup/spacecraft/new/:step` | built; create disabled until batch | S, P; batch (4) planned |
+| Profiles list | `setup/profiles` | **live** | P |
+| S4 Profile | `setup/profiles/:id` | waiting on PD | PD (next) |
+| S3 Catalog index | `setup/catalog` | built; not-available state until C1 | C1 (planned) |
+| S3 Import + diff | `setup/catalog/import/:id` | not started | C2, C3 |
+| S5 People | `org/people` | not started | (5) planned |
+
+Shapes requested from api: `setup-shapes.md`. Contracts: `docs/apogee/api/setup.md`.
+
 ---
 
 ## 0. The cross-cutting gap: one mission revision and staged changes
