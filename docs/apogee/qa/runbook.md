@@ -11,8 +11,10 @@ config, dependency or `dev.exs` change; code changes hot-reload).
 | **Phoenix (this worktree)** | **http://127.0.0.1:4011** | `w0R:p7` qa-server | node `cadence_apogee` |
 | **Console Vite dev server** | http://127.0.0.1:5181/console/ | `w0R:p9` qa-console-vite | Phoenix fetches `index.html` from it in dev |
 | **Earendil simulator (this worktree)** | http://127.0.0.1:4111 | `w0R:pA` qa-simulator | DETS under this worktree's `var/reflect_orbital/` |
+| **Live telemetry feeds** | 10 spacecraft (EARENDIL-001…010) at 1 Hz | `w0R:pB` qa-live-feeds | 2 h contacts; rerun to extend |
+| **QuestDB (history)** | REST http://127.0.0.1:9200 · PG wire 8822 · ILP 9209 | docker `cadence-apogee-questdb` | volume `var/questdb-apogee/` (gitignored) |
 | Postgres | localhost:5432, db **`cadence_apogee_dev`** | | this worktree only |
-| Main checkout (not ours) | Phoenix :4001, simulator :4101, db `cadence_dev` | | `~/projects/cadence/cadence`. Don't touch. |
+| Main checkout (not ours) | Phoenix :4001, simulator :4101, db `cadence_dev`, QuestDB :9000/:9009/:8812 (compose, `var/questdb`) | | `~/projects/cadence/cadence`. Don't touch. |
 | User's ex-orbital-dynamics demo (not ours) | :4000, Vite :5180 | | why the console moved to 5181 |
 
 The worktree is fully isolated from the main checkout: its own DB (so our migrations never alter
@@ -51,23 +53,42 @@ From the repo root of this worktree, each long-running command in its own pane:
 cd apps/cadence_simulator
 EARENDIL_SIMULATOR_PORT=4111 mise exec -- mix run --no-start --no-halt ../../dev/reflect_orbital_simulator.exs
 
-# 2. Database (once)
+# 2. QuestDB (once; it keeps running across reboots of the shell, not of OrbStack)
+docker run -d --name cadence-apogee-questdb \
+  -p 127.0.0.1:9200:9000 -p 127.0.0.1:9209:9009 -p 127.0.0.1:8822:8812 -p 127.0.0.1:9203:9003 \
+  -v "$PWD/var/questdb-apogee:/var/lib/questdb" questdb/questdb:9.4.3
+# later: docker start cadence-apogee-questdb
+
+# 3. Database + QuestDB schema (once)
 cd apps/cadence_web
-export CADENCE_DEV_DATABASE=cadence_apogee_dev
+export CADENCE_DEV_DATABASE=cadence_apogee_dev CADENCE_QUESTDB_HTTP_ENDPOINT=http://127.0.0.1:9200 \
+  CADENCE_QUESTDB_HOST=127.0.0.1 CADENCE_QUESTDB_PORT=8822
 mise exec -- mix ecto.create -r Cadence.Repo
 mise exec -- mix ecto.migrate -r Cadence.Repo
+mise exec -- mix cadence.questdb.migrate
 
-# 3. Phoenix (leave running; boot creates the env admin user)
-CADENCE_DEV_DATABASE=cadence_apogee_dev PORT=4011 \
+# 4. Phoenix (leave running; boot creates the env admin user). Same exports as step 3, plus:
+POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 PORT=4011 \
   mise exec -- iex --sname cadence_apogee --cookie cadence -S mix phx.server
 
-# 4. Seed (once; both are rerunnable)
+# 5. Seed (once; both are rerunnable)
 CADENCE_DEV_DATABASE=cadence_apogee_dev EARENDIL_PROVIDER_URL=http://127.0.0.1:4111 \
   mise exec -- mix run --no-start ../../dev/reflect_orbital_demo.exs
 CADENCE_DEV_DATABASE=cadence_apogee_dev \
   mise exec -- mix run --no-start ../../dev/apogee_qa_personas.exs
 
-# 5. Console Vite (leave running)
+# 6. Activate the fleet (once; rerunnable). From the repo root. --single-operator sets
+#    Earendil's *configuration activation* policy to direct, in this DB only (not commanding).
+EARENDIL_CADENCE_NODE=cadence_apogee \
+  mise exec -- elixir --sname earendil_setup_apogee --cookie cadence dev/reflect_orbital_activate.exs --single-operator
+
+# 7. Live feeds (leave running; 2 h of contacts, EARENDIL_DEMO_CONTACT_SECONDS to change)
+cd apps/cadence_simulator
+CADENCE_DEV_DATABASE=cadence_apogee_dev EARENDIL_CADENCE_NODE=cadence_apogee \
+  mise exec -- elixir --hidden --sname earendil_tm_apogee --cookie cadence \
+  -S mix run --no-start ../../dev/reflect_orbital_live.exs
+
+# 8. Console Vite (leave running)
 cd frontend && corepack pnpm --filter @cadence/console dev
 ```
 
@@ -90,8 +111,11 @@ migrations behind and belongs to the main checkout).
 
 ## Known limits
 
-- **Live telemetry:** `mise run earendil-live` attaches to node `cadence@…` (the main checkout). Not
-  wired to this worktree yet. QuestDB (history) isn't running, so history views may be empty.
+- **Live telemetry** covers EARENDIL-001…010 only; the other 490 stay `never_heard`. The feeds
+  stop when their contacts end (2 h); rerun step 7. `dev/reflect_orbital_{live,activate}.exs`
+  take `EARENDIL_CADENCE_NODE` (default `cadence`, i.e. the main checkout).
+- **No limits configured** in the seed, so nothing goes critical/caution on its own. Specs use
+  fixtures over the real `/fleet` read (`e2e/support/fleet.ts`).
 - **Ingress ports:** the Earendil seed binds delivery transports on 127.0.0.1:42100–42109. If the
   main checkout realizes contacts at the same time, one side gets `eaddrinuse`.
 

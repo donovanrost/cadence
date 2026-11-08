@@ -2,7 +2,8 @@
 if Mix.env() != :dev, do: raise("Earendil live telemetry is a local development demo")
 
 {:ok, hostname} = :inet.gethostname()
-peer = :"cadence@#{hostname}"
+# EARENDIL_CADENCE_NODE targets another worktree's server (its iex --sname); default `cadence`.
+peer = :"#{System.get_env("EARENDIL_CADENCE_NODE", "cadence")}@#{hostname}"
 unless Node.connect(peer), do: raise("Start mise run cadence before the live demo")
 
 # Per-packet SQL debug output overwhelms an interactive development terminal.
