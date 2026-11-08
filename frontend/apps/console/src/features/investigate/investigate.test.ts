@@ -118,6 +118,12 @@ describe("investigate model", () => {
     expect(ratePerHour([p(0, 25), p(2 * hour, 24)])).toBeCloseTo(-0.5);
     expect(ratePerHour([p(0, 25)])).toBeNull();
     expect(ratePerHour([p(0, 25), p(60_000, 30)])).toBeNull();
+    // qa #8: a run before a gap doesn't count; 2 min after the gap is too short for a rate.
+    expect(ratePerHour([p(0, 0), p(26 * 60_000, 5), p(28 * 60_000, 6)], 60_000)).toBeNull();
+    // 15-min buckets: the 30-min gap splits; the last run (30..50 min) gives (7 − 5) / 20 min.
+    expect(
+      ratePerHour([p(0, 0), p(30 * 60_000, 5), p(31 * 60_000, 5), p(50 * 60_000, 7)], 15 * 60_000),
+    ).toBeCloseTo(6);
   });
 
   it("describes the trend and a red crossing in words", () => {

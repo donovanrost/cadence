@@ -8,7 +8,7 @@ import {
   ApTable,
   type ApColumn,
 } from "@/ui";
-import { conditionWords } from "./api.ts";
+import { conditionWords, crossedCondition } from "./api.ts";
 import type { AlarmListRow } from "./list.ts";
 
 /** L1 · Alarm table. The Spacecraft cell links to Investigate for that alarm (rule: name-cell link). */
@@ -66,7 +66,7 @@ const state = (row: AlarmListRow) =>
     <template #cell-point="{ row }">
       <span class="text-readout">{{ row.alarm.point.name }}</span>
       <span class="text-text-3">
-        · {{ conditionWords(row.alarm.condition) ?? row.alarm.condition ?? "out of limits" }}</span
+        · {{ conditionWords(crossedCondition(row.alarm)) ?? "out of limits" }}</span
       >
     </template>
     <template #cell-value="{ row }">

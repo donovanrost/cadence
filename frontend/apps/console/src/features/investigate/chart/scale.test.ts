@@ -49,3 +49,18 @@ describe("isolated buckets", () => {
     expect(envelopePath(lone, id, id)).toBe("M98.5 6H101.5V4H98.5Z");
   });
 });
+
+describe("gaps with few buckets (qa #8)", () => {
+  it("splits on the bucket width where the median can't see the gap", () => {
+    const t = (iso: string) => Date.parse(iso);
+    const points = [
+      p(t("2026-11-08T22:28:00Z"), 1),
+      p(t("2026-11-08T22:54:54Z"), 2),
+      p(t("2026-11-08T22:55:48Z"), 3),
+    ];
+    expect(runs(points)).toHaveLength(1); // median fallback: the gap is the median
+    expect(runs(points, 54_000)).toHaveLength(2);
+    const id = (n: number) => n;
+    expect(linePath(points, id, id, 54_000).match(/M/g)).toHaveLength(2);
+  });
+});

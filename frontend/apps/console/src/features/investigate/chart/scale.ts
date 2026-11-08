@@ -43,18 +43,28 @@ export const scale =
     rangeFrom + ((value - domainFrom) / (domainTo - domainFrom || 1)) * (rangeTo - rangeFrom);
 
 /**
- * Splits the series where a gap is wider than 2.5× the typical spacing: the server omits empty
- * buckets, and a line across a gap would claim data that doesn't exist.
+ * Splits the series where consecutive points are further apart than a bucket allows: the
+ * server omits empty buckets, and a line across a gap would claim data that doesn't exist.
+ * With `stepMs` (the server's bucket width) a gap is > 1.5 buckets; without it, > 2.5× the
+ * median spacing (which can't detect a gap in a 3-point series, hence prefer `stepMs`).
  */
-export function runs(points: readonly SeriesPoint[]): SeriesPoint[][] {
+export function runs(
+  points: readonly SeriesPoint[],
+  stepMs: number | null = null,
+): SeriesPoint[][] {
   if (points.length < 2) return points.length ? [[...points]] : [];
-  const steps = points.slice(1).map((p, i) => p.t - (points[i]?.t ?? p.t));
-  const sorted = [...steps].sort((a, b) => a - b);
-  const typical = sorted[Math.floor(sorted.length / 2)] ?? 0;
+  let limit: number;
+  if (stepMs !== null && stepMs > 0) {
+    limit = stepMs * 1.5;
+  } else {
+    const steps = points.slice(1).map((p, i) => p.t - (points[i]?.t ?? p.t));
+    const sorted = [...steps].sort((a, b) => a - b);
+    limit = (sorted[Math.floor(sorted.length / 2)] ?? 0) * 2.5;
+  }
   const out: SeriesPoint[][] = [[]];
   points.forEach((p, i) => {
     const prev = points[i - 1];
-    if (prev && typical > 0 && p.t - prev.t > typical * 2.5) out.push([]);
+    if (prev && limit > 0 && p.t - prev.t > limit) out.push([]);
     out.at(-1)?.push(p);
   });
   return out;
@@ -67,8 +77,9 @@ export function linePath(
   points: readonly SeriesPoint[],
   x: (t: number) => number,
   y: (v: number) => number,
+  stepMs: number | null = null,
 ): string {
-  return runs(points)
+  return runs(points, stepMs)
     .map((run) => {
       const only = run.length === 1 ? run[0] : undefined;
       if (only) return `M${f(x(only.t) - LONE)} ${f(y(only.mean))}H${f(x(only.t) + LONE)}`;
@@ -82,8 +93,9 @@ export function envelopePath(
   points: readonly SeriesPoint[],
   x: (t: number) => number,
   y: (v: number) => number,
+  stepMs: number | null = null,
 ): string {
-  return runs(points)
+  return runs(points, stepMs)
     .map((run) => {
       const only = run.length === 1 ? run[0] : undefined;
       if (only) {

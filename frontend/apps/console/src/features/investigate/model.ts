@@ -2,7 +2,7 @@ import type { OpState } from "@/ui";
 import type { Alarm, Thresholds } from "@/features/alarms/index.ts";
 import { fleetOpState, fleetStateWord, type FleetSpacecraft } from "@/features/fleet/index.ts";
 import type { History, LimitIntervals } from "./api.ts";
-import type { LimitSegment, SeriesPoint, TimeWindow } from "./chart/scale.ts";
+import { runs, type LimitSegment, type SeriesPoint, type TimeWindow } from "./chart/scale.ts";
 
 /** Pure logic for Investigate (J2). Spec: docs/apogee/ux/screens/Investigate.md. */
 
@@ -72,10 +72,17 @@ export function limitSegments(
 /** A rate over less data than this would be extrapolation, not a measurement. */
 export const MIN_RATE_SPAN_MS = 15 * 60_000;
 
-/** Change per hour across the series' means; null over less than MIN_RATE_SPAN_MS of data. */
-export function ratePerHour(series: readonly SeriesPoint[]): number | null {
-  const first = series[0];
-  const last = series.at(-1);
+/**
+ * Change per hour over the latest contiguous run (no gaps, qa #8), and only when that run spans
+ * at least MIN_RATE_SPAN_MS; otherwise null (the tile shows a dash).
+ */
+export function ratePerHour(
+  series: readonly SeriesPoint[],
+  stepMs: number | null = null,
+): number | null {
+  const run = runs(series, stepMs).at(-1) ?? [];
+  const first = run[0];
+  const last = run.at(-1);
   if (!first || !last || last.t - first.t < MIN_RATE_SPAN_MS) return null;
   return ((last.mean - first.mean) / (last.t - first.t)) * 3_600_000;
 }

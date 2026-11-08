@@ -63,7 +63,8 @@ const view = computed(() => {
     window,
     series,
     limits,
-    rate: ratePerHour(series),
+    rate: ratePerHour(series, h.value.bucket_width_ms),
+    stepMs: h.value.bucket_width_ms,
     sentence: trendSentence(a.point.name, rangeLabel.value, series, limits),
   };
 });
@@ -89,7 +90,7 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
 <template>
   <ApPanel index="B1" :title="title" v-bind="tone ? { alert: tone } : {}" class="flex-none">
     <template v-if="alarm" #meta>
-      <span class="font-mono normal-case">{{ alarm.point.id }}</span
+      <span class="font-mono normal-case">{{ alarm.point.name }}</span
       ><template v-if="alarm.first_crossed_at">
         · first crossed {{ formatAbsolute(new Date(alarm.first_crossed_at)) }}</template
       >

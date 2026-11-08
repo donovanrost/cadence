@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import {
-  formatDuration,
+  formatCountdown,
   useNow,
   ApBreadcrumb,
   ApButton,
@@ -67,7 +67,7 @@ const facts = computed(() => {
   if (sc.last_received_at)
     list.push({
       label: "Last TLM",
-      value: `${formatDuration((now.value.getTime() - Date.parse(sc.last_received_at)) / 1000)} ago`,
+      value: formatCountdown(new Date(sc.last_received_at), now.value),
     });
   return list;
 });

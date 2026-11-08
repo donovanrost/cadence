@@ -29,8 +29,10 @@ const props = withDefaults(
     formatTick: (t: number) => string;
     formatValue: (v: number) => string;
     height?: number;
+    /** Bucket width of the series; consecutive points further apart than 1.5× are a gap. */
+    stepMs?: number | null;
   }>(),
-  { comparison: () => [], limits: () => [], now: null, height: 250 },
+  { comparison: () => [], limits: () => [], now: null, height: 250, stepMs: null },
 );
 
 const W = 1000;
@@ -41,9 +43,11 @@ const y = computed(() => scale(domain.value[0], domain.value[1], props.height, 0
 const clampX = (t: number) => Math.min(W, Math.max(0, x.value(t)));
 const pct = (n: number, of: number) => `${(n / of) * 100}%`;
 
-const mean = computed(() => linePath(props.series, x.value, y.value));
-const envelope = computed(() => envelopePath(props.series, x.value, y.value));
-const others = computed(() => props.comparison.map((s) => linePath(s, x.value, y.value)));
+const mean = computed(() => linePath(props.series, x.value, y.value, props.stepMs));
+const envelope = computed(() => envelopePath(props.series, x.value, y.value, props.stepMs));
+const others = computed(() =>
+  props.comparison.map((s) => linePath(s, x.value, y.value, props.stepMs)),
+);
 
 const limitLines = computed(() =>
   props.limits.map((l, i) => {

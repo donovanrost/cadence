@@ -17,6 +17,7 @@ const props = defineProps<{
     series: readonly SeriesPoint[];
     limits: readonly LimitSegment[];
     sentence: string;
+    stepMs: number;
   } | null;
 }>();
 defineEmits<{ retry: [] }>();
@@ -48,6 +49,7 @@ const value = (v: number) => formatValue(v) ?? "";
         :format-tick="tick"
         :format-value="value"
         :height="220"
+        :step-ms="view.stepMs"
       >
         {{ pointName }} mean with min–max band · dashed: limits
       </TrendChart>

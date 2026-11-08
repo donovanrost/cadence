@@ -71,7 +71,7 @@ const rows = computed(() => {
           :state="fleetOpState(row.alarm.severity === 'critical' ? 'critical' : 'caution')"
         >
           <template #sentence>
-            <span class="font-mono text-text-3 normal-case">{{ alarm.point.id }}</span>
+            <span class="font-mono text-text-3 normal-case">{{ alarm.point.name }}</span>
             {{ formatValue(row.alarm.value) ?? "—" }}
           </template>
           <template #title>
