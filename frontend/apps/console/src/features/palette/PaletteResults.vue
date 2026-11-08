@@ -11,6 +11,7 @@ const emit = defineEmits<{ open: [to: RouteLocationRaw]; expand: [group: Group] 
 </script>
 
 <template>
+  <p class="sr-only" aria-live="polite">{{ total === 1 ? "1 result" : `${total} results` }}</p>
   <div
     id="palette-results"
     role="listbox"
