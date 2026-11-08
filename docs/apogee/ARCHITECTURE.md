@@ -148,3 +148,25 @@ secondary / danger, sizes, renders `<button>` or `<RouterLink>`), `ApTag` + `ApS
 `ApTable`, `ApSegmented`, `ApLabel`, `ApEmptyState`, `ApCallout`. Tokens live in
 `src/styles/tokens.css` as Tailwind v4 `@theme` variables (from ux's `design-language.md`).
 Feature engineers compose these; ask lead before adding a new shared primitive.
+
+## Working in the console (feature engineers)
+
+- Run: Phoenix on `http://127.0.0.1:4011` (qa runbook) + `corepack pnpm --filter @cadence/console dev`
+  (from `frontend/`). Open `http://127.0.0.1:4011/console/`. Checks before commit, from `frontend/`:
+  `node_modules/.bin/vp fmt apps/console && node_modules/.bin/vp check apps/console`,
+  `cd apps/console && npx vue-tsc -b && corepack pnpm test`. (Use `mise exec --` if node isn't on PATH.)
+- A screen: `src/features/<area>/<Name>Screen.vue`, swap `pending` for it in
+  `src/router/ops-routes.ts` (fe-ops) or `src/router/setup-routes.ts` (fe-setup). Route names are
+  stable; link with `{ name: "ops.now" }` (org/mission params are inherited inside a mission).
+- Exactly one `<h1>` per screen, via `<ApPageHeader>`. Ops screens get a fixed-height `main`
+  (use `ApPanel pane` for scrolling regions); Setup screens scroll `main`.
+- Scope: `useMissionScope()` from `@/shell` → `{ organization, mission }` (ids for API calls,
+  slugs for links). Session + capabilities: `useSession()`, `hasCapability()`.
+- Data: `features/<area>/api.ts` declares readers (`@/api` `decoders`) and one function per endpoint
+  using `request(path, reader)`; expose `RemoteState<T>` from a composable that owns the fetch,
+  aborts on scope change/unmount, and refetches via `useMissionInvalidation(missionId, [...], refetch)`.
+- Live: `useConnection()` → `connecting | live | offline`; show data as stale when not `live`.
+- Formatting: only `@/lib` (`formatAbsolute`, `formatCountdown`, `formatCount`, `plural`, `useNow`).
+- UI: compose `@/ui`. Need a new shared primitive (ApListRow, ApFactStrip, ApEventLine, ApKeyValue,
+  ApStepBar, ApStateTrail, ApChip, ApField, ApBreadcrumb, …)? Ask lead; don't build a local copy.
+  Feature-only components stay in the feature dir.

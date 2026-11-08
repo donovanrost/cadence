@@ -8,9 +8,9 @@ const now = useNow();
 <template>
   <div class="flex items-center gap-[22px] px-[18px] font-mono text-md">
     <slot />
-    <span>
+    <span class="flex gap-[0.6em]">
       <span class="text-text-4">UTC</span>
-      <time class="tabular" :datetime="now.toISOString()"> {{ formatClock(now) }}</time>
+      <time class="tabular" :datetime="now.toISOString()">{{ formatClock(now) }}</time>
     </span>
   </div>
 </template>

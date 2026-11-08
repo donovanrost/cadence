@@ -22,7 +22,7 @@ const itemClass =
     <button
       type="button"
       class="w-[52px] cursor-pointer border-0 bg-transparent font-display text-base font-semibold tracking-[.1em] text-readout hover:bg-raised"
-      :aria-label="`Account menu for ${name}`"
+      :aria-label="`${initials(name)}, account menu for ${name}`"
       :aria-expanded="open"
       aria-haspopup="true"
       aria-controls="account-menu"
