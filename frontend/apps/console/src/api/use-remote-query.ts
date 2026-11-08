@@ -1,4 +1,11 @@
-import { onScopeDispose, shallowRef, toValue, watch, type MaybeRefOrGetter, type ShallowRef } from "vue";
+import {
+  onScopeDispose,
+  shallowRef,
+  toValue,
+  watch,
+  type MaybeRefOrGetter,
+  type ShallowRef,
+} from "vue";
 import type { ApiResult } from "./http.ts";
 import type { RemoteState } from "./remote-state.ts";
 
