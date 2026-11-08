@@ -2,6 +2,16 @@ import Config
 
 config :live_vue, vite_host: "http://127.0.0.1:5173"
 
+# Apogee console SPA: in dev, Phoenix serves /console by fetching index.html
+# from the console's Vite dev server (frontend/apps/console). Set
+# CONSOLE_VITE_ORIGIN="" to serve the built priv/static/console instead.
+config :cadence_web, :console,
+  dev_server:
+    (case System.get_env("CONSOLE_VITE_ORIGIN", "http://127.0.0.1:5180") do
+       "" -> nil
+       url -> url
+     end)
+
 config :cadence_web,
   dashboard_engine_source_execution: [
     source_execution_max_concurrency: 4,

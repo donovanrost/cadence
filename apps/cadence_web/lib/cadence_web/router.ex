@@ -38,6 +38,19 @@ defmodule CadenceWeb.Router do
     plug(:accepts, ["json"])
   end
 
+  # Apogee console SPA JSON API: same-origin browser session cookie, CSRF
+  # token in the x-csrf-token header on writes, JSON problems on failure.
+  pipeline :console_api do
+    plug(:accepts, ["json"])
+    plug(:fetch_session)
+    plug(:put_secure_browser_headers)
+    plug(CadenceWeb.Console.Plugs.APISession)
+  end
+
+  pipeline :console_mission do
+    plug(CadenceWeb.Console.Plugs.MissionScope)
+  end
+
   # Kubelet probes do not carry browser sessions or API credentials.
   # Only coarse process/database readiness is exposed here.
   scope "/health", CadenceWeb do
@@ -77,6 +90,15 @@ defmodule CadenceWeb.Router do
     end
 
     post("/sign-in", UserSessionController, :create)
+  end
+
+  # Apogee console SPA document. Every client-side route returns the same
+  # shell; unauthenticated GETs redirect to /sign-in and come back here.
+  scope "/console", CadenceWeb.Console do
+    pipe_through([:browser, :require_authenticated_scope])
+
+    get("/", SPAController, :index)
+    get("/*path", SPAController, :index)
   end
 
   scope "/", CadenceWeb do
@@ -722,6 +744,21 @@ defmodule CadenceWeb.Router do
     pipe_through(:api)
 
     get("/health", HealthController, :show)
+  end
+
+  scope "/api/console/v1", CadenceWeb.Console do
+    pipe_through(:console_api)
+
+    get("/session", SessionController, :show)
+    put("/session/organization", SessionController, :update_organization)
+
+    scope "/missions/:mission_id" do
+      pipe_through(:console_mission)
+
+      get("/", MissionController, :show)
+    end
+
+    match(:*, "/*path", NotFoundController, :show)
   end
 
   scope "/api/cadence/frontend-release/v1", CadenceWeb do

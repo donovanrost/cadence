@@ -28,6 +28,7 @@ cadence-*.tar
 # Ignore assets that are produced by build tools.
 /priv/static/assets/
 /apps/*/priv/static/assets/
+/apps/cadence_web/priv/static/console/
 
 # Ignore digested assets cache.
 /priv/static/cache_manifest.json

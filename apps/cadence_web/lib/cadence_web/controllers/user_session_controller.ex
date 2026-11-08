@@ -113,6 +113,12 @@ defmodule CadenceWeb.UserSessionController do
   defp revoke_session_token(conn) do
     case get_session(conn, :user_session_token) do
       session_token when is_binary(session_token) ->
+        CadenceWeb.Endpoint.broadcast(
+          CadenceWeb.ConsoleSocket.id_for_session_token(session_token),
+          "disconnect",
+          %{}
+        )
+
         Cadence.Auth.revoke_user_session(session_token)
 
       _other ->
