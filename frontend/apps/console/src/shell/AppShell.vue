@@ -2,6 +2,7 @@
 import { computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import MobileTabBar from "./MobileTabBar.vue";
+import { ApCallout } from "@/ui/index.ts";
 import NotFoundScreen from "./NotFoundScreen.vue";
 import OpsRail from "./OpsRail.vue";
 import SetupRail from "./SetupRail.vue";
@@ -80,6 +81,9 @@ watch(
             : 'gap-4 overflow-auto px-4 pt-4 pb-6 md:px-6 md:pt-5'
         "
       >
+        <ApCallout v-if="mode === 'setup'" tone="info" class="md:hidden">
+          Setup is designed for a larger screen. You can read here; editing works best on a desktop.
+        </ApCallout>
         <NotFoundScreen v-if="unknownScope" :sentence="unknownScope" />
         <RouterView v-else />
       </main>

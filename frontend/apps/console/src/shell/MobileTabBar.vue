@@ -1,32 +1,52 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { useRoute } from "vue-router";
+import { usePalette } from "./palette.ts";
 
-/** Below 768px: Ops on-call tabs at the bottom (J6). Setup is desktop-only. */
+/** Below 768px: on-call tabs (Mobile.md, J6). Counts join when their live data exists. */
 defineProps<{ org: string; mission: string }>();
 const route = useRoute();
-const items = [
-  { nav: "now", to: "ops.now", label: "Now" },
-  { nav: "alarms", to: "ops.alarms", label: "Alarms" },
-  { nav: "fleet", to: "ops.fleet", label: "Fleet" },
-  { nav: "contacts", to: "ops.contacts", label: "Contacts" },
-  { nav: "commands", to: "ops.commands", label: "Commands" },
-] as const;
+const palette = usePalette();
+
+const goPolls = computed(() => route.name === "ops.commands" && route.query.awaiting === "me");
+const tabClass = (active: boolean) => [
+  "flex min-h-12 flex-1 cursor-pointer items-center justify-center border-0 bg-transparent font-display text-xs font-semibold tracking-btn uppercase no-underline",
+  active
+    ? "bg-raised text-readout shadow-[inset_0_2px_0_var(--color-readout)]"
+    : "text-text-3 hover:text-readout",
+];
 </script>
 
 <template>
-  <nav aria-label="Ops" class="flex h-14 flex-none border-t border-hairline bg-chrome md:hidden">
+  <nav
+    aria-label="On-call tabs"
+    class="flex flex-none border-t border-hairline bg-chrome pb-[env(safe-area-inset-bottom)] md:hidden"
+  >
     <RouterLink
-      v-for="item in items"
-      :key="item.nav"
-      :to="{ name: item.to, params: { org, mission } }"
-      :aria-current="route.meta.nav === item.nav ? 'page' : undefined"
-      class="flex flex-1 items-center justify-center font-display text-sm font-semibold tracking-btn uppercase no-underline"
-      :class="
-        route.meta.nav === item.nav
-          ? 'bg-raised text-readout shadow-[inset_0_2px_0_var(--color-readout)]'
-          : 'text-text-3 hover:text-readout'
-      "
-      >{{ item.label }}</RouterLink
+      :to="{ name: 'ops.now', params: { org, mission } }"
+      :aria-current="route.meta.nav === 'now' ? 'page' : undefined"
+      :class="tabClass(route.meta.nav === 'now')"
+      >Now</RouterLink
     >
+    <RouterLink
+      :to="{ name: 'ops.alarms', params: { org, mission } }"
+      :aria-current="route.meta.nav === 'alarms' ? 'page' : undefined"
+      :class="tabClass(route.meta.nav === 'alarms')"
+      >Alarms</RouterLink
+    >
+    <RouterLink
+      :to="{ name: 'ops.commands', params: { org, mission }, query: { awaiting: 'me' } }"
+      :aria-current="goPolls ? 'page' : undefined"
+      :class="tabClass(goPolls)"
+      >GO polls</RouterLink
+    >
+    <button
+      v-if="palette.available.value"
+      type="button"
+      :class="tabClass(palette.open.value)"
+      @click="palette.show"
+    >
+      Search
+    </button>
   </nav>
 </template>
