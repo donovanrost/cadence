@@ -277,6 +277,11 @@ border + caution-text message beneath (a value out of range can't be staged). **
 shows the unit inside, right-aligned, mono `text-4`. Inherited values (Profile overrides) render in
 `text-4` until edited; edited cells get an inset 3px white left bar + `raised` bg.
 
+**ApSelect.** Same box as ApField (32px compact / 38px standard, `well` bg, `line` border, radius
+0), value in mono 12 (ids, planes) or sans 14 (words), custom chevron in `text-4`, white border on
+focus/open. Native `<select>` underneath is fine if fully restyled (`appearance: none`); never ship
+the browser default look. Always has a visible or `aria-label` label.
+
 **ApOption** (radio card). Full-width label, `line` border, 12px padding, native radio
 (`accent-color: readout`), title 14/600 + description 13 `text-3`. Selected = white border +
 `--apogee-wash-action`. Recommended option says "Recommended." in its description.

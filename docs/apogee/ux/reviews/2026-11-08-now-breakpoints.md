@@ -48,3 +48,18 @@ queue, the screen's main job, shows 1.5 rows**. Rule: A1/A2 get the remaining he
 floor of 55% of it; A3/A4 take the rest. Size matrix cells to fit A3's height:
 `cell = clamp(8px, (A3 body height − gaps) / planes, 16px)`. Below 8px the matrix scrolls inside
 its panel (U8). At 1440×900 with 20 planes that's about 10px cells, close to the first build.
+
+## Third look at 8ccf851f (2026-11-08 22:28Z, 1440×900)
+A1/A2 now get the height they need: good. Two items:
+
+1. **Matrix hides planes while the panel is two-thirds empty (fe-ops).** At 8px cells, P16–P20
+   scroll out of view, but the 25-slot grid only uses ~250px of a ~630px panel. J1 step 02 is "see
+   all 500". → when `planes × cell` overflows the height and width allows, **wrap plane rows into
+   columns** (P01–P10 | P11–P20, a 24px gutter, each column with its own plane labels). Pick the
+   column count that maximizes cell size within 8–16px. Scroll only when even that can't fit.
+   (Recorded as U14.)
+2. **The plane picker is a raw native `<select>`** (rounded, browser chevron, sentence case).
+   That's off-language next to everything else. → use a kit select (lead: add **ApSelect** to the
+   kit per design-language §7 ApField: 32px compact / 38px standard, `well` bg, `line` border,
+   radius 0, mono 12 value, custom chevron in `text-4`, white border on focus). Label it for
+   assistive tech ("Plane"), value `ALL PLANES` / `PLANE 07`. Keep it synced with `?plane=`.

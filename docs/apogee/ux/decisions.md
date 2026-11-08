@@ -112,3 +112,9 @@ screens are built against them.
 fresh, Caution / Critical / Stale tiles show `—` + `no telemetry yet`. When ground limits aren't
 configured, Caution / Critical show `—` + `limits not configured` (flight-event criticals, if that
 source exists, still count). Same rule for any summary tile elsewhere (Fleet, Alarms, Readiness).
+
+### U14 · Fleet matrix wraps planes into columns (Now third look)
+**Decision:** when the plane rows overflow the matrix panel's height but the width has room, the
+matrix lays the planes out in 2+ columns (each with its own plane labels, 24px gutter), choosing
+the column count that gives the largest cell within 8–16px. It scrolls inside the panel only when
+no column count fits at 8px. The goal is the whole fleet visible at a glance (J1).
