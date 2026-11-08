@@ -97,8 +97,8 @@ Send a teammate a message with (`herdr` may not be on PATH in agent shells; use 
   - Docs only: none.
   - Frontend: typecheck + lint (+ tests) for the console app (see `docs/apogee/ARCHITECTURE.md`).
   - Elixir (api only): `mix format`, `mix compile --warnings-as-errors`, `mix credo --strict` on touched
-    files, and the tests for the touched area. **Only api and domain run Elixir tests**, since parallel runs fight
-    over the `cadence_test` database (domain uses `MIX_TEST_PARTITION=2`). qa runs the dev server against the dev database.
+    files, and the tests for the touched area. **Only api, api-ops and domain run Elixir tests**, since parallel runs fight
+    over the `cadence_test` database (domain uses `MIX_TEST_PARTITION=2`, api-ops uses `3`). qa runs the dev server against the dev database.
 - Conventional commit messages (`feat(console): …`, `feat(api): …`) with the Co-Authored-By trailer.
 
 ## Phases

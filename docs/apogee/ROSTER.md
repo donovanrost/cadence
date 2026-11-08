@@ -10,5 +10,6 @@
 | fe-setup | Feature engineer, Setup mode | `w0R:p5` |
 | qa | QA & accessibility | `w0R:p6` |
 | domain | Domain-model engineer (apps/cadence) | `w0R:p8` |
+| api-ops | Backend engineer, Ops + commanding endpoints | `w0R:pC` |
 
 Message someone: `herdr pane run <pane> "[from <you>] <message>"`
