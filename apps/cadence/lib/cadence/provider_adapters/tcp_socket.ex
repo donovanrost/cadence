@@ -615,7 +615,12 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       fixed_message_bytes: state.fixed_message_bytes,
       ingress_transport_binding_id: state.ingress_transport_binding_id,
       source_ref: state.source_ref,
-      ingress_metadata: state.ingress_metadata,
+      # A journal can span multiple sockets. Persist the connection boundary so
+      # replay and batching cannot join bytes from different TCP byte streams.
+      ingress_metadata:
+        (state.ingress_metadata || %{})
+        |> Map.delete(:transport_session_id)
+        |> Map.put("transport_session_id", Cadence.Ids.new("tcp")),
       socket: nil,
       receive_buffer: <<>>,
       message_remainder_bytes: 0,
@@ -1032,16 +1037,21 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
   defp stop_socket_receiver_and_wait(%{socket_receiver_pid: pid} = state) when is_pid(pid) do
     monitor_ref = state.socket_receiver_monitor_ref || Process.monitor(pid)
-    Process.exit(pid, :shutdown)
+
+    # The socket is already closed. Let an in-flight append finish instead of
+    # killing the receiver between recv and durable capture.
 
     receive do
-      {:DOWN, ^monitor_ref, :process, ^pid, _reason} ->
+      {:DOWN, ^monitor_ref, :process, ^pid, :normal} ->
         {:ok,
          %{
            state
            | socket_receiver_pid: nil,
              socket_receiver_monitor_ref: nil
          }}
+
+      {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
+        {:error, {:tcp_provider_receiver_failed, reason}, state}
     after
       5_000 ->
         {:error, :tcp_provider_receiver_stop_timeout, state}

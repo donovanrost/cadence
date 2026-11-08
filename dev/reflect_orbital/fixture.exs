@@ -14,7 +14,18 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
   def frame_size, do: 1115
 
   def database_path,
-    do: Path.expand("../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml", __DIR__)
+    do:
+      System.get_env("EARENDIL_DATABASE_PATH") ||
+        Path.expand("../../legacy/cadence_legacy/priv/databases/demo_spacecraft.yaml", __DIR__)
+
+  def chaos_lab? do
+    System.get_env("CADENCE_CHAOS_LAB") == "true" and
+      System.get_env("POD_NAMESPACE") == "cadence-chaos"
+  end
+
+  def provider_url, do: System.get_env("EARENDIL_PROVIDER_URL", "http://127.0.0.1:4101")
+  def ingress_host, do: System.get_env("EARENDIL_INGRESS_HOST", "127.0.0.1")
+  def bind_host, do: System.get_env("EARENDIL_BIND_HOST", "127.0.0.1")
 
   def metadata, do: %{"synthetic" => true, "fixture" => "reflect-orbital-v1"}
 
@@ -131,7 +142,7 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
       "target" => %{
         "protocol" => "tcp",
         "mode" => "provider_connects",
-        "host" => "127.0.0.1",
+        "host" => ingress_host(),
         "port" => site["ingress_port"]
       },
       "framing" => %{

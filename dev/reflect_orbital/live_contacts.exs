@@ -108,7 +108,7 @@ defmodule Cadence.Dev.ReflectOrbital.LiveContacts do
                 adapter_key: :tcp_socket,
                 configuration: %{
                   mode: :listen,
-                  host: "127.0.0.1",
+                  host: F.bind_host(),
                   port: site["ingress_port"],
                   ingress_protocol_family: :tm,
                   frame_size: F.frame_size(),

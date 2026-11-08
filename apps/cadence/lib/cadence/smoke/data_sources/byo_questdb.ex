@@ -542,6 +542,7 @@ defmodule Cadence.Smoke.DataSources.BYOQuestDB do
     |> SourceCredentialMaterial.adapter_options()
     |> put_storage_auth_headers()
     |> Keyword.merge(exec_opts(opts))
+    |> Keyword.merge(Keyword.take(opts, [:write_fun, :write_protocol]))
   end
 
   defp put_storage_auth_headers(material_opts) do

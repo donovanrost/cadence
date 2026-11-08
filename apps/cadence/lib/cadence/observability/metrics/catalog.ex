@@ -74,6 +74,65 @@ defmodule Cadence.Observability.Metrics.Catalog do
   @spec definitions() :: [Definition.t()]
   def definitions do
     [
+      counter(
+        "cadence.runtime.partition.checkpoint.recovery",
+        [:cadence, :runtime, :partition, :checkpoint],
+        :count,
+        "{recovery}",
+        "Semantic recovery by checkpoint validation outcome.",
+        ["outcome"],
+        tag_values: &checkpoint_tags/1
+      ),
+      histogram(
+        "cadence.runtime.partition.checkpoint.replayed_commits",
+        [:cadence, :runtime, :partition, :checkpoint],
+        :replayed_commits,
+        "{commit}",
+        "Durable commits replayed after checkpoint selection.",
+        ["outcome"],
+        [0, 1, 10, 100, 1_000, 10_000, 100_000],
+        tag_values: &checkpoint_tags/1
+      ),
+      counter(
+        "cadence.runtime.partition.ownership",
+        [:cadence, :runtime, :partition, :ownership],
+        :count,
+        "{event}",
+        "Semantic writer acquisitions and rejected conditional commits.",
+        ["outcome"],
+        tag_values: &ownership_tags/1
+      ),
+      counter(
+        "cadence.runtime.partition.recovery.started",
+        [:cadence, :runtime, :partition, :recovery, :start],
+        fn _measurements, _metadata -> 1 end,
+        "{recovery}",
+        "Partition recovery attempts started after the supervisor handshake.",
+        [],
+        []
+      ),
+      histogram(
+        "cadence.runtime.partition.recovery.duration",
+        [:cadence, :runtime, :partition, :recovery, :stop],
+        :duration,
+        "s",
+        "Duration of partition initialization including semantic replay.",
+        ["outcome"],
+        [0.01, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0],
+        measurement: &native_time_to_seconds/2,
+        tag_values: &recovery_tags/1
+      ),
+      histogram(
+        "cadence.runtime.partition.recovery.duration",
+        [:cadence, :runtime, :partition, :recovery, :exception],
+        :duration,
+        "s",
+        "Duration of partition initialization including semantic replay.",
+        ["outcome"],
+        [0.01, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0],
+        measurement: &native_time_to_seconds/2,
+        tag_values: &recovery_tags/1
+      ),
       histogram(
         "http.server.request.duration",
         [:phoenix, :router_dispatch, :stop],
@@ -428,6 +487,15 @@ defmodule Cadence.Observability.Metrics.Catalog do
         [],
         @queue_buckets,
         []
+      ),
+      counter(
+        "cadence.telemetry.ingress.journal.processing.retry",
+        [:cadence, :ingress_journal, :processing_retry],
+        :count,
+        "{retry}",
+        "Failed journal processing or acknowledgement attempts scheduled with backoff.",
+        ["phase"],
+        tag_values: &journal_retry_tags/1
       ),
       counter(
         "cadence.telemetry.ingress.journal.capacity.exhaustion",
@@ -1137,6 +1205,26 @@ defmodule Cadence.Observability.Metrics.Catalog do
   defp valid_buckets?(%Definition{buckets: []}), do: true
   defp valid_buckets?(%Definition{}), do: false
 
+  defp ownership_tags(%{outcome: outcome})
+       when outcome in [
+              :acquired,
+              :semantic_runtime_fenced,
+              :semantic_runtime_stale_predecessor
+            ],
+       do: %{"outcome" => Atom.to_string(outcome)}
+
+  defp ownership_tags(_metadata), do: %{"outcome" => "error"}
+
+  defp checkpoint_tags(%{outcome: outcome})
+       when outcome in [:hit, :missing, :incompatible, :ahead, :invalid],
+       do: %{"outcome" => Atom.to_string(outcome)}
+
+  defp checkpoint_tags(_), do: %{"outcome" => "error"}
+
+  defp recovery_tags(%{status: :ok}), do: %{"outcome" => "ok"}
+  defp recovery_tags(%{status: :stop}), do: %{"outcome" => "error"}
+  defp recovery_tags(_metadata), do: %{"outcome" => "exception"}
+
   defp ingress_tags(metadata) do
     %{
       "cadence.telemetry.direction" => metadata[:direction],
@@ -1151,6 +1239,11 @@ defmodule Cadence.Observability.Metrics.Catalog do
       "cadence.telemetry.protocol_family" => metadata[:protocol_family]
     }
   end
+
+  defp journal_retry_tags(%{phase: phase}) when phase in [:read, :retry, :acknowledge],
+    do: %{"phase" => to_string(phase)}
+
+  defp journal_retry_tags(_metadata), do: %{"phase" => "unknown"}
 
   defp journal_tags(metadata) do
     %{"durability" => metadata[:durability]}

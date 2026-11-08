@@ -1,7 +1,7 @@
 defmodule Cadence.IngressJournal.FileSystemTest do
   use ExUnit.Case, async: true
 
-  alias Cadence.IngressJournal.{Entry, Evidence, FileSystem}
+  alias Cadence.IngressJournal.{Entry, Evidence, FileSystem, Identity}
 
   @context [
     mission_id: "mission-journal-test",
@@ -26,6 +26,117 @@ defmodule Cadence.IngressJournal.FileSystemTest do
         ]
 
     %{name: name, opts: opts}
+  end
+
+  @tag :tmp_dir
+  test "sealing requires both consumers, persists their positions, and closes admission", ctx do
+    start_supervised!({FileSystem, Keyword.put(ctx.opts, :checkpoint_interval_ms, 60_000)})
+    assert {:ok, entry} = FileSystem.append(ctx.name, "captured", DateTime.utc_now())
+    assert :ok = FileSystem.acknowledge(ctx.name, :processing, entry.end_offset)
+    assert {:error, {:journal_not_drained, _, _}} = FileSystem.seal(ctx.name)
+    assert :ok = FileSystem.acknowledge(ctx.name, :archive, entry.end_offset)
+    assert {:ok, %{tail: tail, cursors: cursors}} = FileSystem.seal(ctx.name)
+    assert tail == 8
+    assert cursors == %{processing: 8, archive: 8}
+    assert {:ok, snapshot} = FileSystem.snapshot(ctx.name)
+
+    checkpoint =
+      snapshot.stream_path
+      |> Path.join("cursors.term")
+      |> File.read!()
+      |> :erlang.binary_to_term([:safe])
+
+    assert checkpoint.cursors == cursors
+    assert checkpoint.next_offset == tail
+
+    assert {:error, :ingress_journal_sealed} =
+             FileSystem.append_stream(ctx.name, "later", DateTime.utc_now())
+  end
+
+  @tag :tmp_dir
+  test "failed final checkpoint is not a successful drain", ctx do
+    opts =
+      Keyword.merge(ctx.opts,
+        checkpoint_interval_ms: 60_000,
+        checkpoint_writer: fn _, _, _, _ -> {:error, :enospc} end
+      )
+
+    start_supervised!({FileSystem, opts})
+    assert {:error, {:journal_seal_failed, :enospc}} = FileSystem.seal(ctx.name)
+
+    assert {:error, :ingress_journal_sealed} =
+             FileSystem.append(ctx.name, "later", DateTime.utc_now())
+  end
+
+  @tag :tmp_dir
+  test "fresh storage never reuses identities for the same contact and byte positions", ctx do
+    start_supervised!({FileSystem, ctx.opts})
+    assert {:ok, original} = FileSystem.append(ctx.name, "first", DateTime.utc_now())
+    child_id = {:ingress_journal, Keyword.fetch!(ctx.opts, :provider_binding_id)}
+    assert :ok = stop_supervised(child_id)
+
+    start_supervised!({FileSystem, ctx.opts})
+    assert {:ok, replay} = FileSystem.next_entry(ctx.name, :processing)
+    assert Identity.evidence_id(replay) == Identity.evidence_id(original)
+    assert {:ok, next} = FileSystem.append(ctx.name, "later", DateTime.utc_now())
+    assert next.start_offset == original.end_offset
+    assert next.stream_id == original.stream_id
+    assert :ok = stop_supervised(child_id)
+
+    fresh_opts = Keyword.update!(ctx.opts, :base_path, &Path.join(&1, "replacement"))
+    start_supervised!({FileSystem, fresh_opts})
+    assert {:ok, replacement} = FileSystem.append(ctx.name, "other", DateTime.utc_now())
+    assert replacement.start_offset == original.start_offset
+    refute replacement.stream_id == original.stream_id
+    refute Identity.evidence_id(replacement) == Identity.evidence_id(original)
+
+    refute Identity.frame_record_id(replacement.stream_id, 0, 5) ==
+             Identity.frame_record_id(original.stream_id, 0, 5)
+  end
+
+  @tag :tmp_dir
+  test "legacy journal metadata retains its replay identity", ctx do
+    context =
+      Map.new(
+        Keyword.take(ctx.opts, [:mission_id, :realized_contact_id, :path_id, :provider_binding_id])
+      )
+
+    digest =
+      [
+        context.mission_id,
+        context.realized_contact_id,
+        context.path_id,
+        context.provider_binding_id
+      ]
+      |> Enum.join("\0")
+      |> then(&:crypto.hash(:sha256, &1))
+      |> Base.encode16(case: :lower)
+
+    stream_id = "stream-" <> digest
+    path = Path.join(Keyword.fetch!(ctx.opts, :base_path), stream_id)
+    File.mkdir_p!(path)
+
+    File.write!(
+      Path.join(path, "stream.term"),
+      :erlang.term_to_binary(%{version: 1, stream_id: stream_id, context: context})
+    )
+
+    start_supervised!({FileSystem, ctx.opts})
+    assert {:ok, entry} = FileSystem.append(ctx.name, "legacy", DateTime.utc_now())
+    assert entry.stream_id == stream_id
+  end
+
+  @tag :tmp_dir
+  test "missing identity metadata cannot silently relabel existing bytes", ctx do
+    start_supervised!({FileSystem, ctx.opts})
+    assert {:ok, entry} = FileSystem.append(ctx.name, "captured", DateTime.utc_now())
+
+    assert :ok =
+             stop_supervised({:ingress_journal, Keyword.fetch!(ctx.opts, :provider_binding_id)})
+
+    File.rm!(Path.join(Path.dirname(entry.segment_path), "stream.term"))
+    Process.flag(:trap_exit, true)
+    assert {:error, :ingress_journal_stream_metadata_missing} = FileSystem.start_link(ctx.opts)
   end
 
   @tag :tmp_dir
@@ -134,7 +245,12 @@ defmodule Cadence.IngressJournal.FileSystemTest do
   test "recovers bounded stream records with stable range identity and provenance", ctx do
     opts = Keyword.put(ctx.opts, :capture_record_bytes, 4)
     start_supervised!({FileSystem, opts})
-    metadata = %{mission_id: "mission-journal-test", protocol_family: :tm}
+
+    metadata = %{
+      mission_id: "mission-journal-test",
+      protocol_family: :tm,
+      ingress_metadata: %{"transport_session_id" => "socket-before-restart"}
+    }
 
     assert {:ok, entries} =
              FileSystem.append_stream(
@@ -158,6 +274,20 @@ defmodule Cadence.IngressJournal.FileSystemTest do
 
     assert recovered_evidence.evidence_id == original_evidence.evidence_id
     assert recovered_evidence.raw == original_evidence.raw
+    assert recovered_evidence.metadata["transport_session_id"] == "socket-before-restart"
+
+    assert {:ok, [next_entry]} =
+             FileSystem.append_stream(
+               ctx.name,
+               <<10, 11>>,
+               DateTime.utc_now(),
+               %{metadata | ingress_metadata: %{"transport_session_id" => "socket-after-restart"}}
+             )
+
+    refute Evidence.compatible_entries?(List.last(recovered_entries), next_entry)
+
+    assert {:error, :non_contiguous_ingress_journal_evidence_batch} =
+             Evidence.from_contiguous_entries(recovered_entries ++ [next_entry])
 
     assert recovered_evidence.metadata["journal_capture_batch_id"] ==
              original_evidence.metadata["journal_capture_batch_id"]

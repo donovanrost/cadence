@@ -30,6 +30,10 @@ defmodule Cadence.Smoke.DataSources.BYOQuestDBTest do
     assert {:ok, result} =
              BYOQuestDB.run(
                exec_fun: exec_fun,
+               write_fun: fn lines, opts ->
+                 send(parent, {:questdb_write, lines, opts})
+                 :ok
+               end,
                http_endpoint: @http_endpoint,
                organization_id: @organization_id,
                mission_id: @mission_id,
@@ -58,7 +62,10 @@ defmodule Cadence.Smoke.DataSources.BYOQuestDBTest do
 
     assert_sql_executed(received, "CREATE TABLE IF NOT EXISTS cadence_schema_migrations")
     assert_sql_executed(received, "CREATE TABLE IF NOT EXISTS telemetry_observations")
-    assert_sql_executed(received, "INSERT INTO telemetry_observations")
+    assert_receive {:questdb_write, lines, write_opts}
+    assert String.starts_with?(lines, "telemetry_observations ")
+    assert lines =~ @sample_id
+    assert write_opts[:http_endpoint] == @http_endpoint
     assert_sql_executed(received, "SELECT 1")
     assert_sql_executed(received, "FROM telemetry_observations LIMIT 0")
     assert_sql_executed(received, "SELECT sample_id, mission_id, spacecraft_id")
@@ -75,6 +82,7 @@ defmodule Cadence.Smoke.DataSources.BYOQuestDBTest do
              BYOQuestDB.run(
                cleanup?: true,
                exec_fun: exec_fun,
+               write_fun: fn _lines, _opts -> :ok end,
                http_endpoint: @http_endpoint,
                organization_id: @organization_id,
                mission_id: @mission_id,
@@ -118,6 +126,7 @@ defmodule Cadence.Smoke.DataSources.BYOQuestDBTest do
     assert {:ok, result} =
              BYOQuestDB.run(
                exec_fun: exec_fun,
+               write_fun: fn _lines, _opts -> :ok end,
                http_endpoint: @http_endpoint,
                organization_id: @organization_id,
                mission_id: @mission_id,

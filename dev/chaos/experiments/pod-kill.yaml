@@ -1,0 +1,14 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: cadence-pod-kill
+  namespace: cadence-chaos
+spec:
+  action: pod-kill
+  gracePeriod: 0
+  mode: one
+  selector:
+    namespaces: [cadence-chaos]
+    labelSelectors:
+      app: cadence
+      cadence-lab: "true"

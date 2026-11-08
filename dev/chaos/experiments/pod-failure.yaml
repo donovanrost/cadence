@@ -1,0 +1,14 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: cadence-pod-failure
+  namespace: cadence-chaos
+spec:
+  action: pod-failure
+  mode: one
+  selector:
+    namespaces: [cadence-chaos]
+    labelSelectors:
+      app: cadence
+      cadence-lab: "true"
+  duration: "30s"

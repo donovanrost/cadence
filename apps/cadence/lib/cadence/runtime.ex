@@ -13,6 +13,9 @@ defmodule Cadence.Runtime do
   alias Cadence.Runtime.RealizedContactRuntime
   alias Cadence.Runtime.RealizedContactRuntimeSpec
 
+  @doc "Drains local contacts and journals while database and archive resources remain available."
+  def drain(namespace \\ ProcessNamespace.default()), do: Cadence.Runtime.Drain.run(namespace)
+
   @spec ensure_mission_started(binary()) :: {:ok, pid()} | {:error, term()}
   def ensure_mission_started(mission_id) when is_binary(mission_id),
     do: ensure_mission_started(ProcessNamespace.default(), mission_id)
@@ -20,6 +23,17 @@ defmodule Cadence.Runtime do
   @spec ensure_mission_started(ProcessNamespace.t(), binary()) :: {:ok, pid()} | {:error, term()}
   def ensure_mission_started(%ProcessNamespace{} = process_namespace, mission_id)
       when is_binary(mission_id) do
+    if Cadence.Platform.Drain.draining?() do
+      case runtime_pid(process_namespace, mission_id) do
+        nil -> {:error, :cadence_draining}
+        pid -> {:ok, pid}
+      end
+    else
+      do_ensure_mission_started(process_namespace, mission_id)
+    end
+  end
+
+  defp do_ensure_mission_started(process_namespace, mission_id) do
     child_spec =
       Supervisor.child_spec({MissionRuntime, mission_id}, id: {:mission_runtime, mission_id})
 
@@ -193,6 +207,14 @@ defmodule Cadence.Runtime do
         %ProcessNamespace{} = process_namespace,
         %RealizedContactRuntimeSpec{} = realized_contact
       ) do
+    if Cadence.Platform.Drain.draining?() do
+      {:error, :cadence_draining}
+    else
+      do_start_realized_contact(process_namespace, realized_contact)
+    end
+  end
+
+  defp do_start_realized_contact(process_namespace, realized_contact) do
     with {:ok, _mission_runtime} <-
            ensure_mission_started(process_namespace, realized_contact.mission_id) do
       child_spec =

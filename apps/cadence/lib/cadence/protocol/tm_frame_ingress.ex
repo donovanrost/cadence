@@ -1,7 +1,14 @@
 defmodule Cadence.Protocol.TMFrameIngress do
   @moduledoc """
   Shared TM transfer-frame ingress processing for direct and runtime-backed paths.
+
+  Decoder state belongs to one continuous receive stream, not to a partition's
+  lifetime. Connection/journal boundaries establish a new counter baseline and
+  discard partial data. They cannot establish whether frames were lost while
+  this receiver was disconnected. Within a stream, protocol gaps remain anomalies.
   """
+
+  require Logger
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressJournal.Identity
@@ -34,6 +41,8 @@ defmodule Cadence.Protocol.TMFrameIngress do
   def process(%RawEvidence{} = raw_evidence, pipeline_state, continuity_state, frame_remainder)
       when is_map(continuity_state) and is_binary(frame_remainder) do
     with {:ok, codec_opts} <- frame_codec_opts(raw_evidence),
+         {:ok, pipeline_state, frame_remainder, next_continuity_state} <-
+           prepare_receive_stream(raw_evidence, pipeline_state, continuity_state, frame_remainder),
          {:ok, sdu_octets, frame_infos, decode_anomalies, rest, next_pipeline_state} <-
            TMFramePipeline.decode_sdu_octets_detailed(
              frame_remainder <> raw_evidence.raw,
@@ -58,13 +67,64 @@ defmodule Cadence.Protocol.TMFrameIngress do
          packet_records: packet_records,
          transfer_frame_records: transfer_frame_records,
          protocol_anomalies: protocol_anomalies
-       }, rest, next_pipeline_state, continuity_state}
+       }, rest, next_pipeline_state, next_continuity_state}
     else
       {:error, reason, next_pipeline_state} ->
         {:error, reason, next_pipeline_state, continuity_state}
 
       {:error, reason} ->
         {:error, reason, pipeline_state, continuity_state}
+    end
+  end
+
+  defp prepare_receive_stream(evidence, pipeline, previous, remainder) do
+    metadata = evidence.metadata || %{}
+
+    current = %{
+      source: {evidence.source_endpoint_ref, evidence.source_ref, evidence.direction},
+      journal_stream_id: metadata_value(metadata, :journal_stream_id),
+      transport_session_id: metadata_value(metadata, :transport_session_id)
+    }
+
+    reason = receive_boundary(previous, current)
+
+    if reason do
+      with {:ok, fresh_pipeline} <- init() do
+        stats = TMFramePipeline.stats(pipeline)
+
+        Logger.info(
+          "TM receive continuity reset: #{reason}; " <>
+            "discarded_frame_bytes=#{byte_size(remainder)} " <>
+            "discarded_packet_bytes=#{stats.buffered_octets}",
+          mission_id: evidence.mission_id,
+          source_endpoint_id: evidence.source_endpoint_ref,
+          previous_transport_session_id: previous.transport_session_id,
+          transport_session_id: current.transport_session_id,
+          journal_stream_id: current.journal_stream_id
+        )
+
+        {:ok, fresh_pipeline, <<>>, current}
+      end
+    else
+      {:ok, pipeline, remainder, current}
+    end
+  end
+
+  defp receive_boundary(previous, _current) when map_size(previous) == 0, do: nil
+
+  defp receive_boundary(previous, current) do
+    cond do
+      previous.source != current.source ->
+        :source_changed
+
+      previous.journal_stream_id != current.journal_stream_id ->
+        :journal_changed
+
+      previous.transport_session_id != current.transport_session_id ->
+        :connection_changed
+
+      true ->
+        nil
     end
   end
 

@@ -227,11 +227,175 @@ defmodule Cadence.Runtime.IngressJournalConsumerTest do
     end)
   end
 
-  defp executor_loop(test_pid) do
+  @tag :tmp_dir
+  test "failures back off without rebatching, losing custody, or accepting stale completions", %{
+    tmp_dir: path
+  } do
+    journal =
+      start_supervised!(
+        {IngressJournal,
+         mission_id: "retry",
+         realized_contact_id: "contact",
+         path_id: "path",
+         provider_binding_id: "provider",
+         base_path: path,
+         durability: :sync}
+      )
+
+    metadata = %{mission_id: "retry", protocol_family: :tm}
+    {:ok, first} = IngressJournal.append(journal, <<1, 2, 3>>, DateTime.utc_now(), metadata)
+    test = self()
+    executor = spawn(fn -> executor_loop(test, true) end)
+    on_exit(fn -> Process.exit(executor, :kill) end)
+
+    consumer =
+      start_supervised!(
+        {IngressJournalConsumer,
+         mission_id: "retry",
+         realized_contact_id: "contact",
+         path_id: "path",
+         provider_binding_id: "provider",
+         journal_name: journal,
+         executor_name: executor,
+         poll_interval_ms: 5,
+         retry_initial_ms: 100,
+         retry_max_ms: 200}
+      )
+
+    assert_receive {:processing_enqueued, raw, {^consumer, ref}}, 1_000
+    {:ok, last} = IngressJournal.append(journal, <<4, 5, 6>>, DateTime.utc_now(), metadata)
+    failed_at = System.monotonic_time(:millisecond)
+    send(consumer, {:provider_ingress_failed, executor, ref, :bad_frame})
+    # Neither polling nor quiescence may bypass the backoff.
+    send(consumer, :consume)
+    quiesce = Task.async(fn -> IngressJournalConsumer.quiesce(consumer) end)
+    assert Task.yield(quiesce, 0) == nil
+
+    assert {:ok, %{retry_delay_ms: 100, consecutive_failures: 1}} =
+             IngressJournalConsumer.snapshot(consumer)
+
+    assert_receive {:processing_enqueued, ^raw, {^consumer, retry_ref}}, 1_000
+    # Measure when the executor received the retry. A busy scheduler may resume
+    # this test after the whole backoff has elapsed, making refute_receive race.
+    assert_receive {:processing_enqueued_at, {^consumer, ^retry_ref}, retried_at}
+    assert retried_at - failed_at >= 100
+    send(consumer, {:provider_ingress_persisted, executor, ref})
+    send(consumer, {:provider_ingress_failed, executor, retry_ref, :bad_frame})
+
+    assert {:ok, %{retry_delay_ms: 200, consecutive_failures: 2}} =
+             IngressJournalConsumer.snapshot(consumer)
+
+    assert {:ok, %{cursors: %{processing: 0, archive: 0}}} = IngressJournal.snapshot(journal)
+    assert_receive {:processing_enqueued, ^raw, {^consumer, final_ref}}, 1_000
+    send(consumer, {:provider_ingress_failed, executor, final_ref, :bad_frame})
+
+    assert {:ok, %{retry_delay_ms: 200, consecutive_failures: 3}} =
+             IngressJournalConsumer.snapshot(consumer)
+
+    assert_receive {:processing_enqueued, ^raw, {^consumer, capped_ref}}, 1_000
+    send(consumer, {:provider_ingress_persisted, executor, capped_ref})
+    assert_receive {:processing_enqueued, next, {^consumer, next_ref}}, 1_000
+    assert Task.yield(quiesce, 0) == nil
+    assert next.raw == <<4, 5, 6>>
+    assert next.metadata["journal_start_offset"] == first.end_offset
+
+    assert {:ok, %{consecutive_failures: 0, retry_delay_ms: 0}} =
+             IngressJournalConsumer.snapshot(consumer)
+
+    send(consumer, {:provider_ingress_persisted, executor, next_ref})
+    assert {:ok, %{status: :quiesced}} = Task.await(quiesce)
+
+    assert_eventually(fn ->
+      assert {:ok, %{cursors: %{processing: offset, archive: 0}}} =
+               IngressJournal.snapshot(journal)
+
+      assert offset == last.end_offset
+    end)
+  end
+
+  @tag :tmp_dir
+  test "an acknowledgement failure retries custody without decoding the bytes again", %{
+    tmp_dir: path
+  } do
+    journal =
+      start_supervised!(
+        {IngressJournal,
+         mission_id: "ack-retry",
+         realized_contact_id: "contact",
+         path_id: "path",
+         provider_binding_id: "provider",
+         base_path: path,
+         durability: :sync}
+      )
+
+    {:ok, entry} =
+      IngressJournal.append(journal, <<1, 2, 3>>, DateTime.utc_now(), %{
+        mission_id: "ack-retry",
+        protocol_family: :tm
+      })
+
+    test = self()
+    executor = spawn(fn -> executor_loop(test) end)
+    proxy = spawn(fn -> journal_proxy(journal, test, true) end)
+    on_exit(fn -> Enum.each([executor, proxy], &Process.exit(&1, :kill)) end)
+
+    consumer =
+      start_supervised!(
+        {IngressJournalConsumer,
+         mission_id: "ack-retry",
+         realized_contact_id: "contact",
+         path_id: "path",
+         provider_binding_id: "provider",
+         journal_name: proxy,
+         executor_name: executor,
+         poll_interval_ms: 5,
+         retry_initial_ms: 100}
+      )
+
+    assert_receive {:processing_enqueued, _, {^consumer, ref}}, 1_000
+    send(consumer, {:provider_ingress_persisted, executor, ref})
+    assert_receive :ack_failed, 1_000
+
+    assert {:ok, %{phase: :acknowledge, failed_count: 1}} =
+             IngressJournalConsumer.snapshot(consumer)
+
+    assert_receive :ack_retried, 1_000
+
+    assert_eventually(fn ->
+      assert {:ok, %{cursors: %{processing: offset}}} = IngressJournal.snapshot(journal)
+      assert offset == entry.end_offset
+    end)
+
+    refute_receive {:processing_enqueued, _, _}, 50
+  end
+
+  defp journal_proxy(journal, test, fail?) do
+    receive do
+      {:"$gen_call", from, {:acknowledge, _, _}} when fail? ->
+        GenServer.reply(from, {:error, :injected_custody_failure})
+        send(test, :ack_failed)
+        journal_proxy(journal, test, false)
+
+      {:"$gen_call", from, request} ->
+        result = GenServer.call(journal, request)
+        GenServer.reply(from, result)
+        if match?({:acknowledge, _, _}, request), do: send(test, :ack_retried)
+        journal_proxy(journal, test, fail?)
+    end
+  end
+
+  defp executor_loop(test_pid, timestamp? \\ false) do
     receive do
       {:"$gen_cast", {:enqueue, {:telemetry, raw_evidence, _async_context, completion}}} ->
+        if timestamp? do
+          send(
+            test_pid,
+            {:processing_enqueued_at, completion, System.monotonic_time(:millisecond)}
+          )
+        end
+
         send(test_pid, {:processing_enqueued, raw_evidence, completion})
-        executor_loop(test_pid)
+        executor_loop(test_pid, timestamp?)
     end
   end
 

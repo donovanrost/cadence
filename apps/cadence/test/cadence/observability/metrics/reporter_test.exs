@@ -3,7 +3,7 @@ defmodule Cadence.Observability.Metrics.ReporterTest do
 
   import ExUnit.CaptureLog
 
-  alias Cadence.Observability.Metrics.{Definition, Reporter}
+  alias Cadence.Observability.Metrics.{Catalog, Definition, Reporter}
 
   @protobuf_module :opentelemetry_exporter_metrics_service_pb
   @event [:cadence, :test, :metric]
@@ -91,6 +91,95 @@ defmodule Cadence.Observability.Metrics.ReporterTest do
                 }
               ]
             }} = cumulative_histogram.data
+  end
+
+  test "recovery spans export attempt counts and bounded success and failure durations", %{
+    handler_id: handler_id
+  } do
+    parent = self()
+    prefix = "cadence.runtime.partition.recovery."
+
+    {:ok, reporter} =
+      start_supervised(
+        {Reporter,
+         endpoint: "http://collector.invalid/v1/metrics",
+         definitions: Enum.filter(Catalog.definitions(), &String.starts_with?(&1.name, prefix)),
+         export_interval_ms: 60_000,
+         export_fun: fn payload ->
+           send(parent, {:metric_payload, payload})
+           :ok
+         end,
+         handler_id: handler_id,
+         name: nil}
+      )
+
+    event = [:cadence, :runtime, :partition, :recovery]
+    metadata = %{mission_id: "mission-test", partition_id: "must-stay-in-logs"}
+
+    for status <- [:ok, :stop] do
+      :telemetry.span(event, metadata, fn -> {:result, Map.put(metadata, :status, status)} end)
+    end
+
+    assert_raise RuntimeError, "recovery failed", fn ->
+      :telemetry.span(event, metadata, fn -> raise "recovery failed" end)
+    end
+
+    assert :ok = Reporter.flush(reporter)
+    assert_receive {:metric_payload, payload}
+    metrics = decode_metrics(payload)
+    counter = Enum.find(metrics, &(&1.name == prefix <> "started"))
+    histogram = Enum.find(metrics, &(&1.name == prefix <> "duration"))
+    assert {:sum, %{data_points: [%{value: {:as_int, 3}, attributes: []}]}} = counter.data
+    assert {:histogram, %{data_points: points}} = histogram.data
+    assert histogram.unit == "s"
+    assert length(points) == 3
+
+    outcomes =
+      Enum.map(points, fn point ->
+        assert point.count == 1
+        assert [%{key: "outcome", value: %{value: {:string_value, outcome}}}] = point.attributes
+        outcome
+      end)
+
+    assert Enum.sort(outcomes) == ["error", "exception", "ok"]
+  end
+
+  test "ownership events export bounded outcomes without partition or epoch labels", %{
+    handler_id: id
+  } do
+    parent = self()
+    name = "cadence.runtime.partition.ownership"
+
+    {:ok, reporter} =
+      start_supervised(
+        {Reporter,
+         endpoint: "http://collector.invalid/v1/metrics",
+         definitions: Enum.filter(Catalog.definitions(), &(&1.name == name)),
+         export_interval_ms: 60_000,
+         export_fun: fn payload ->
+           send(parent, {:metric_payload, payload})
+           :ok
+         end,
+         handler_id: id,
+         name: nil}
+      )
+
+    for outcome <- [:acquired, :semantic_runtime_fenced, :semantic_runtime_stale_predecessor] do
+      :telemetry.execute([:cadence, :runtime, :partition, :ownership], %{count: 1}, %{
+        outcome: outcome,
+        partition_id: "unbounded",
+        ownership_epoch: 123
+      })
+    end
+
+    assert :ok = Reporter.flush(reporter)
+    assert_receive {:metric_payload, payload}
+    assert [%{data: {:sum, %{data_points: points}}}] = decode_metrics(payload)
+    assert length(points) == 3
+
+    assert Enum.all?(points, fn point ->
+             match?({:as_int, 1}, point.value) and match?([%{key: "outcome"}], point.attributes)
+           end)
   end
 
   test "retains points after export failure and bounds series cardinality", %{

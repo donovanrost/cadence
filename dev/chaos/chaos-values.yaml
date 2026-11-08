@@ -1,0 +1,12 @@
+# OrbStack reports docker:// in nodeInfo.containerRuntimeVersion.
+chaosDaemon:
+  runtime: docker
+  socketPath: /var/run/docker.sock
+controllerManager:
+  replicaCount: 1
+  enableFilterNamespace: true
+dashboard:
+  create: true
+  securityMode: true
+dnsServer:
+  create: false

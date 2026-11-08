@@ -5,6 +5,18 @@ defmodule Cadence.Activations.BindingSetActivation do
 
   alias Cadence.Ids
 
+  @identity_fields [
+    :activation_id,
+    :activation_request_id,
+    :organization_id,
+    :mission_id,
+    :generation,
+    :binding_set_id,
+    :binding_set_version,
+    :binding_set_content_sha256,
+    :activated_at
+  ]
+
   @type t :: %__MODULE__{
           activation_id: binary(),
           activation_request_id: binary() | nil,
@@ -30,6 +42,12 @@ defmodule Cadence.Activations.BindingSetActivation do
     :activated_at,
     metadata: %{}
   ]
+
+  @doc "Identity of an immutable activation, without its potentially large metadata."
+  def identity(%__MODULE__{} = activation), do: Map.take(activation, @identity_fields)
+
+  @doc false
+  def identity_fields, do: @identity_fields
 
   @spec new(map()) :: t()
   def new(attrs) when is_map(attrs) do

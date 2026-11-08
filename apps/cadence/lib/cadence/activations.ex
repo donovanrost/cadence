@@ -117,6 +117,22 @@ defmodule Cadence.Activations do
     end
   end
 
+  @doc "Reads the durable activation identity without loading fleet configuration metadata."
+  def fetch_active_identity(mission_id) when is_binary(mission_id) do
+    fields = BindingSetActivation.identity_fields()
+
+    query =
+      from(row in ActiveBindingSetRow,
+        where: row.mission_id == ^mission_id,
+        select: map(row, ^fields)
+      )
+
+    case Repo.one(query) do
+      nil -> {:error, :no_active_binding_set}
+      identity -> {:ok, identity}
+    end
+  end
+
   @spec fetch_active_activation(binary(), binary()) ::
           {:ok, BindingSetActivation.t()} | {:error, term()}
   def fetch_active_activation(organization_id, mission_id)

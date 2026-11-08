@@ -9,11 +9,18 @@ config :logger, :default_formatter,
     :otel_span_id,
     :cadence_event,
     :mission_id,
+    :partition_id,
+    :generation,
+    :duration_ms,
+    :status,
     :spacecraft_id,
     :source_endpoint_id,
     :realized_contact_id,
     :path_id,
     :provider_binding_id,
+    :journal_stream_id,
+    :transport_session_id,
+    :previous_transport_session_id,
     :error_class
   ]
 

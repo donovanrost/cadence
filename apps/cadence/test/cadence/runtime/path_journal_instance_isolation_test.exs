@@ -19,7 +19,7 @@ defmodule Cadence.Runtime.PathJournalInstanceIsolationTest do
   @alpha_archive_writer __MODULE__.AlphaArchiveWriter
   @bravo_archive_writer __MODULE__.BravoArchiveWriter
 
-  test "same-identity path journals and archives remain isolated after one runtime stops" do
+  test "same-contact journals have distinct incarnations and remain isolated after one runtime stops" do
     unique = System.unique_integer([:positive])
     test_root = Path.join(System.tmp_dir!(), "cadence_path_journal_instances_#{unique}")
     mission_id = "shared-journal-mission-#{unique}"
@@ -94,7 +94,7 @@ defmodule Cadence.Runtime.PathJournalInstanceIsolationTest do
 
     assert {:ok, alpha_first} = FileSystem.append(alpha_journal, "alpha", receipt_time, metadata)
     assert {:ok, bravo_first} = FileSystem.append(bravo_journal, "bravo", receipt_time, metadata)
-    assert Identity.evidence_id(alpha_first) == Identity.evidence_id(bravo_first)
+    refute Identity.evidence_id(alpha_first) == Identity.evidence_id(bravo_first)
 
     second_receipt_time = DateTime.add(receipt_time, 1, :second)
 
@@ -114,7 +114,7 @@ defmodule Cadence.Runtime.PathJournalInstanceIsolationTest do
 
     assert {:ok, alpha_snapshot} = FileSystem.snapshot(alpha_journal)
     assert {:ok, bravo_snapshot} = FileSystem.snapshot(bravo_journal)
-    assert alpha_snapshot.stream_id == bravo_snapshot.stream_id
+    refute alpha_snapshot.stream_id == bravo_snapshot.stream_id
     assert alpha_snapshot.stream_path != bravo_snapshot.stream_path
     assert alpha_snapshot.next_offset == 10
     assert bravo_snapshot.next_offset == 5
@@ -161,7 +161,7 @@ defmodule Cadence.Runtime.PathJournalInstanceIsolationTest do
     assert {:ok, bravo_second} =
              FileSystem.append(bravo_journal, "alive", second_receipt_time, metadata)
 
-    assert Identity.evidence_id(alpha_second) == Identity.evidence_id(bravo_second)
+    refute Identity.evidence_id(alpha_second) == Identity.evidence_id(bravo_second)
 
     assert {:ok,
             %{
@@ -182,22 +182,22 @@ defmodule Cadence.Runtime.PathJournalInstanceIsolationTest do
              IngressArchive.fetch_raw_evidence(
                bravo.archive_policy,
                mission_id,
-               first_evidence_id
+               Identity.evidence_id(bravo_first)
              )
 
     assert {:ok, bravo_second_evidence} =
              IngressArchive.fetch_raw_evidence(
                bravo.archive_policy,
                mission_id,
-               second_evidence_id
+               Identity.evidence_id(bravo_second)
              )
 
     assert {:ok, [alpha_second_journal_evidence]} = Evidence.from_entries([alpha_second])
-    assert alpha_first_evidence.evidence_id == bravo_first_evidence.evidence_id
+    refute alpha_first_evidence.evidence_id == bravo_first_evidence.evidence_id
     assert alpha_first_evidence.raw == "alpha"
     assert bravo_first_evidence.raw == "bravo"
     assert alpha_second_journal_evidence.evidence_id == alpha_second_evidence.evidence_id
-    assert alpha_second_evidence.evidence_id == bravo_second_evidence.evidence_id
+    refute alpha_second_evidence.evidence_id == bravo_second_evidence.evidence_id
     assert alpha_second_evidence.raw == "extra"
     assert bravo_second_evidence.raw == "alive"
     assert length(Path.wildcard(Path.join(bravo.archive_root, "**/*.bin"))) == 2

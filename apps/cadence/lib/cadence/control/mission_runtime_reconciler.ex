@@ -105,6 +105,10 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   end
 
   @impl true
+  def code_change(_old_version, state, _extra),
+    do: {:ok, Map.put(state, :applied_basis, nil)}
+
+  @impl true
   def init(opts) do
     state = %{
       mission_id: Keyword.fetch!(opts, :mission_id),
@@ -114,6 +118,7 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
       applied_generation: nil,
       last_observation: nil,
       last_error: nil,
+      applied_basis: nil,
       safety_poll_interval_ms:
         Keyword.get(opts, :safety_poll_interval_ms, @default_safety_poll_interval_ms),
       safety_poll?: Keyword.get(opts, :safety_poll?, true),
@@ -163,17 +168,51 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   end
 
   defp reconcile_state(state) do
+    case Activations.fetch_active_identity_for_reconciliation(state.mission_id) do
+      {:ok, identity} ->
+        case confirm_unchanged(state, identity) do
+          {:ok, observation} ->
+            {{:ok, observation}, %{state | last_observation: observation, last_error: nil}}
+
+          :rebuild ->
+            materialize_and_apply(state)
+        end
+
+      {:error, reason} = error ->
+        reconciliation_error(state, error, reason)
+    end
+  end
+
+  defp confirm_unchanged(%{applied_basis: %{durable: identity, runtime: guard}} = state, identity) do
+    if MissionRuntimeSpec.reconciliation_guard_current?(guard) do
+      case RuntimeMissions.confirm_applied(
+             state.runtime_process_namespace,
+             state.mission_id,
+             guard.identity
+           ) do
+        {:ok, observation} -> {:ok, observation}
+        _other -> :rebuild
+      end
+    else
+      :rebuild
+    end
+  end
+
+  defp confirm_unchanged(_state, _identity), do: :rebuild
+
+  defp materialize_and_apply(state) do
     with {:ok, %BindingSetActivation{} = activation} <-
            Activations.fetch_active_basis_for_reconciliation(state.mission_id),
          {:ok, %BindingSet{} = binding_set} <- fetch_binding_set(activation) do
       apply_state(state, activation, binding_set)
     else
-      {:error, :no_active_binding_set} = error ->
-        {error, %{state | last_error: nil}}
-
-      {:error, reason} = error ->
-        {error, %{state | last_error: reason}}
+      {:error, reason} = error -> reconciliation_error(state, error, reason)
     end
+  end
+
+  defp reconciliation_error(state, error, reason) do
+    last_error = if reason == :no_active_binding_set, do: nil, else: reason
+    {error, %{state | last_error: last_error, applied_basis: nil}}
   end
 
   defp apply_state(state, activation, binding_set) do
@@ -187,7 +226,11 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
          | desired_generation: activation.generation,
            applied_generation: observation.generation,
            last_observation: observation,
-           last_error: nil
+           last_error: nil,
+           applied_basis: %{
+             durable: BindingSetActivation.identity(activation),
+             runtime: MissionRuntimeSpec.reconciliation_guard(runtime_spec)
+           }
        }}
     else
       {:error, reason} = error ->
@@ -195,6 +238,7 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
          %{
            state
            | desired_generation: activation.generation,
+             applied_basis: nil,
              last_error: reason
          }}
     end
@@ -256,6 +300,7 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
     |> Map.drop([
       :process_namespace,
       :runtime_process_namespace,
+      :applied_basis,
       :safety_poll?,
       :safety_timer
     ])

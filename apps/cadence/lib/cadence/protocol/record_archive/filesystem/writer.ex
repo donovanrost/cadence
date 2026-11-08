@@ -108,6 +108,8 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
        flush_interval_ms: Keyword.get(opts, :flush_interval_ms, @default_flush_interval_ms),
        flush_count: Keyword.get(opts, :flush_count, @default_flush_count),
        buffers: %{},
+       segment_ids: %{},
+       retry_counts: %{},
        buffer_sizes: %{},
        timer_refs: %{},
        buffer_started_at_ms: %{},
@@ -127,7 +129,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
     if entries == [] do
       {:reply, :ok, state}
     else
-      {:reply, :ok, enqueue_entries(state, [{raw_evidence.mission_id, entries}])}
+      enqueue_reply(state, [{raw_evidence.mission_id, entries}])
     end
   end
 
@@ -136,7 +138,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
 
     case normalize_records_batch(records_batch) do
       {:ok, mission_entries} ->
-        {:reply, :ok, enqueue_entries(state, mission_entries)}
+        enqueue_reply(state, mission_entries)
 
       {:error, reason} ->
         {:reply, {:error, reason}, state}
@@ -152,7 +154,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
 
       {:error, mission_id, reason, next_state} ->
         {:reply, {:error, reason},
-         reschedule_flush(next_state, mission_id, next_state.flush_interval_ms)}
+         reschedule_flush(next_state, mission_id, retry_delay_ms(next_state, mission_id))}
     end
   end
 
@@ -165,7 +167,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
 
       {:error, reason, next_state} ->
         {:reply, {:error, reason},
-         reschedule_flush(next_state, mission_id, next_state.flush_interval_ms)}
+         reschedule_flush(next_state, mission_id, retry_delay_ms(next_state, mission_id))}
     end
   end
 
@@ -187,6 +189,8 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
      %{
        state
        | buffers: %{},
+         segment_ids: %{},
+         retry_counts: %{},
          buffer_sizes: %{},
          timer_refs: %{},
          buffer_started_at_ms: %{},
@@ -211,16 +215,18 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
   def handle_info({:flush_mission, mission_id, flush_ref}, state) do
     state = normalize_state(state)
 
-    state =
-      case Map.get(state.timer_refs, mission_id) do
-        {timer_ref, ^flush_ref} ->
-          _ = Process.cancel_timer(timer_ref)
-          update_in(state.timer_refs, &Map.delete(&1, mission_id))
+    case Map.get(state.timer_refs, mission_id) do
+      {timer_ref, ^flush_ref} ->
+        _ = Process.cancel_timer(timer_ref)
+        state = update_in(state.timer_refs, &Map.delete(&1, mission_id))
+        flush_scheduled_mission(state, mission_id)
 
-        _other ->
-          state
-      end
+      _other ->
+        {:noreply, state}
+    end
+  end
 
+  defp flush_scheduled_mission(state, mission_id) do
     case flush_mission(state, mission_id) do
       {:ok, next_state} ->
         {:noreply, next_state}
@@ -228,8 +234,15 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
       {:error, reason, next_state} ->
         Logger.error("protocol record archive flush failed for #{mission_id}: #{inspect(reason)}")
 
-        {:noreply, reschedule_flush(next_state, mission_id, next_state.flush_interval_ms)}
+        {:noreply,
+         reschedule_flush(next_state, mission_id, retry_delay_ms(next_state, mission_id))}
     end
+  end
+
+  defp retry_delay_ms(state, mission_id) do
+    failures = Map.get(state.retry_counts, mission_id, 0)
+    multiplier = Integer.pow(2, min(max(failures - 1, 0), 5))
+    min(max(state.flush_interval_ms, 250) * multiplier, 5_000)
   end
 
   defp maybe_schedule_flush(state, mission_id) do
@@ -259,47 +272,51 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
         {:ok, cancel_flush_timer(state, mission_id)}
 
       queue ->
-        state = cancel_flush_timer(state, mission_id)
+        state =
+          state
+          |> cancel_flush_timer(mission_id)
+          |> update_in([:segment_ids], fn ids ->
+            Map.put_new_lazy(ids, mission_id, &FileSystem.new_segment_id/0)
+          end)
+
         entries = :queue.to_list(queue)
-        segment_id = FileSystem.new_segment_id()
-        organization_id = OrganizationScope.organization_id_for_mission(mission_id)
         flush_started_us = System.monotonic_time(:microsecond)
 
-        with {:ok, object_key, segment_size_bytes} <-
-               FileSystem.store_segment_object(segment_id, entries, base_path: state.base_path),
-             :ok <-
-               FileSystem.persist_segment(segment_id, entries,
-                 object_key: object_key,
-                 organization_id: organization_id,
-                 archive_backend: state.archive_backend,
-                 repo: state.repo
-               ) do
-          flush_duration_us = System.monotonic_time(:microsecond) - flush_started_us
+        case persist_entries(state, mission_id, entries) do
+          {:ok, segment_size_bytes} ->
+            flush_duration_us = System.monotonic_time(:microsecond) - flush_started_us
 
-          completed_at = DateTime.utc_now()
+            completed_at = DateTime.utc_now()
 
-          next_state =
-            state
-            |> update_in([:buffers], &Map.delete(&1, mission_id))
-            |> update_in([:buffer_sizes], &Map.delete(&1, mission_id))
-            |> update_in([:buffer_started_at_ms], &Map.delete(&1, mission_id))
-            |> update_in([:metrics, mission_id], fn metrics ->
-              metrics
-              |> ensure_metrics()
-              |> Map.update!(:flush_count, &(&1 + 1))
-              |> Map.update!(:flushed_count, &(&1 + length(entries)))
-              |> Map.update!(:segment_count, &(&1 + 1))
-              |> Map.update!(:flushed_bytes_total, &(&1 + segment_size_bytes))
-              |> Map.update!(:flush_total_us, &(&1 + flush_duration_us))
-              |> Map.put(:last_completed_at, completed_at)
-              |> Map.put(:last_flush_error, nil)
-            end)
+            next_state =
+              state
+              |> update_in([:buffers], &Map.delete(&1, mission_id))
+              |> update_in([:segment_ids], &Map.delete(&1, mission_id))
+              |> update_in([:retry_counts], &Map.delete(&1, mission_id))
+              |> update_in([:buffer_sizes], &Map.delete(&1, mission_id))
+              |> update_in([:buffer_started_at_ms], &Map.delete(&1, mission_id))
+              |> update_in([:metrics, mission_id], fn metrics ->
+                metrics
+                |> ensure_metrics()
+                |> Map.update!(:flush_count, &(&1 + 1))
+                |> Map.update!(:flushed_count, &(&1 + length(entries)))
+                |> Map.update!(:segment_count, &(&1 + 1))
+                |> Map.update!(:flushed_bytes_total, &(&1 + segment_size_bytes))
+                |> Map.update!(:flush_total_us, &(&1 + flush_duration_us))
+                |> Map.put(:last_completed_at, completed_at)
+                |> Map.put(:last_flush_error, nil)
+              end)
 
-          {:ok, next_state}
-        else
+            {:ok, next_state}
+
           {:error, reason} ->
             next_state =
-              update_in(state.metrics[mission_id], fn metrics ->
+              state
+              |> update_in(
+                [:retry_counts],
+                &Map.update(&1, mission_id, 1, fn count -> count + 1 end)
+              )
+              |> update_in([:metrics, mission_id], fn metrics ->
                 metrics
                 |> ensure_metrics()
                 |> Map.update!(:flush_failure_count, &(&1 + 1))
@@ -309,6 +326,32 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
             {:error, reason, next_state}
         end
     end
+  end
+
+  defp persist_entries(state, mission_id, entries) do
+    # Backpressure keeps this batch unchanged until indexing succeeds. Reuse its
+    # immutable object on retry instead of leaking a new segment on every error.
+    segment_id = Map.fetch!(state.segment_ids, mission_id)
+    organization_id = OrganizationScope.organization_id_for_mission(mission_id)
+
+    with {:ok, object_key, segment_size_bytes} <-
+           FileSystem.store_segment_object(segment_id, entries, base_path: state.base_path),
+         :ok <-
+           FileSystem.persist_segment(segment_id, entries,
+             base_path: state.base_path,
+             object_key: object_key,
+             organization_id: organization_id,
+             archive_backend: state.archive_backend,
+             repo: state.repo
+           ) do
+      {:ok, segment_size_bytes}
+    end
+  rescue
+    exception in [DBConnection.ConnectionError, Postgrex.Error] ->
+      # Ecto raises on checkout/connection/query failures. Keep the buffer and
+      # use the same retry path as an explicit persistence error; never report
+      # archival success or restart the writer after an unavailable database.
+      {:error, {:archive_database_error, Exception.message(exception)}}
   end
 
   defp cancel_flush_timer(state, mission_id) do
@@ -344,7 +387,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
     %{
       queue_depth: queue_depth,
       processing?: Map.has_key?(state.timer_refs, mission_id),
-      backpressured?: false,
+      backpressured?: Map.has_key?(state.retry_counts, mission_id),
       oldest_buffered_age_ms: oldest_buffered_age_ms,
       flush_count: metrics.flush_count,
       flush_failure_count: metrics.flush_failure_count,
@@ -383,6 +426,8 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
     state
     |> Map.put(:buffers, buffers)
     |> Map.put(:buffer_sizes, buffer_sizes)
+    |> Map.put_new(:segment_ids, %{})
+    |> Map.put_new(:retry_counts, %{})
   end
 
   defp normalize_buffer(buffer) when is_list(buffer), do: :queue.from_list(buffer)
@@ -411,6 +456,20 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Writer do
     |> case do
       {:ok, mission_entries} -> {:ok, Enum.reverse(mission_entries)}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp enqueue_reply(state, mission_entries) do
+    case Enum.find(mission_entries, fn {mission_id, _entries} ->
+           Map.has_key?(state.retry_counts, mission_id)
+         end) do
+      nil ->
+        {:reply, :ok, enqueue_entries(state, mission_entries)}
+
+      {mission_id, _entries} ->
+        # The journal still owns unacknowledged work. A failed flush must not
+        # let its caller's retries append another copy of that same batch.
+        {:reply, {:error, {:protocol_archive_backpressured, mission_id}}, state}
     end
   end
 

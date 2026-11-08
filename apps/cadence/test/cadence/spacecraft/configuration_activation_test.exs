@@ -10,11 +10,13 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModels
   alias Cadence.MissionModels.{ComparisonReportRow, QualificationCaseRow}
+  alias Cadence.Platform.ContentHash
   alias Cadence.Reads.Catalog.{Databases, Revisions}
   alias Cadence.Reads.Spacecraft.Configuration, as: ConfigurationRead
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Runtime.Missions, as: RuntimeMissions
   alias Cadence.Runtime.PartitionKey
+  alias Cadence.Runtime.SourceRuntimeBases
   alias Cadence.Spacecraft.Identity
   alias Cadence.SpacecraftStore
 
@@ -90,6 +92,30 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
         })
       )
 
+    # Preserve the persisted identity from the former source-to-full-model representation.
+    source_hashes =
+      Enum.map(basis.source_runtime_bases, fn {source, model} ->
+        {source,
+         MissionRuntimeSpec.runtime_basis_sha256(spec.binding_set_content_sha256, %{
+           revision_id: model.mission_model_revision_id,
+           content_sha256: model.mission_model_content_sha256,
+           plans: model.runtime_plans
+         })}
+      end)
+
+    assert spec.runtime_basis_sha256 ==
+             ContentHash.term_sha256(
+               {:spacecraft_models_v1, spec.binding_set_content_sha256, Enum.sort(source_hashes)}
+             )
+
+    assert {:ok, ^spec} = MissionRuntimeSpec.new(Map.from_struct(spec))
+
+    [key | _] = Map.keys(spec.source_runtime_bases.models)
+    broken = put_in(spec.source_runtime_bases.models[key].runtime_plans, %{})
+
+    assert {:error, {:invalid_mission_runtime_spec, :source_runtime_bases}} =
+             MissionRuntimeSpec.new(Map.from_struct(broken))
+
     for {endpoint, revision} <- [{c.endpoint, c.revision}, {c.other_endpoint, c.other_revision}] do
       assert {:ok, partition} =
                MissionRuntimeSpec.partition_input(
@@ -101,7 +127,8 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
                )
 
       assert partition.mission_model_revision_id == revision.mission_model_revision_id
-      assert Map.keys(partition.source_runtime_bases) == [endpoint.source_endpoint_id]
+      assert Map.keys(partition.source_runtime_bases.sources) == [endpoint.source_endpoint_id]
+      assert map_size(partition.source_runtime_bases.models) == 1
       assert MissionRuntimeSpec.identity(partition) == MissionRuntimeSpec.identity(spec)
 
       assert Enum.all?(partition.binding_set.capability_instances, fn instance ->
@@ -239,10 +266,10 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
     assert {:ok, spec} = RuntimeMissions.applied_spec(c.mission.mission_id)
     assert spec.generation == 2
 
-    assert spec.source_runtime_bases[c.endpoint.source_endpoint_id].mission_model_revision_id ==
+    assert source_model(spec, c.endpoint.source_endpoint_id).mission_model_revision_id ==
              c.revision.mission_model_revision_id
 
-    assert spec.source_runtime_bases[c.other_endpoint.source_endpoint_id].mission_model_revision_id ==
+    assert source_model(spec, c.other_endpoint.source_endpoint_id).mission_model_revision_id ==
              c.other_revision.mission_model_revision_id
   end
 
@@ -361,7 +388,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
 
     assert {:ok, spec} = RuntimeMissions.applied_spec(c.mission.mission_id)
 
-    assert spec.source_runtime_bases[c.endpoint.source_endpoint_id].mission_model_revision_id ==
+    assert source_model(spec, c.endpoint.source_endpoint_id).mission_model_revision_id ==
              c.revision.mission_model_revision_id
 
     assert {:ok, %{status: :candidate}} =
@@ -634,5 +661,10 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
       metadata: request.metadata,
       binding_set_content_sha256: MissionRuntimeSpec.content_sha256(binding_set)
     )
+  end
+
+  defp source_model(spec, source) do
+    {:ok, basis} = SourceRuntimeBases.fetch(spec.source_runtime_bases, source)
+    basis
   end
 end

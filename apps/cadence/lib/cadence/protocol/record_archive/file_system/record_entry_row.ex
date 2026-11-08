@@ -9,6 +9,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.RecordEntryRow do
   schema "protocol_archive_record_entries" do
     field(:record_kind, :string)
     field(:record_id, :string)
+    field(:content_sha256, :binary)
     field(:segment_id, :string)
     field(:object_key, :string)
     field(:archive_backend, :string)

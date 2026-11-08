@@ -10,6 +10,8 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
 
   use GenServer
 
+  require Logger
+
   alias Cadence.IngressJournal.{Entry, Evidence, FileSystem}
   alias Cadence.Runtime.ProviderIngressExecutor
 
@@ -93,6 +95,11 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
         ),
       max_batch_bytes:
         positive_option(opts, config, :processing_max_batch_bytes, @default_max_batch_bytes),
+      retry_initial_ms: positive_option(opts, config, :retry_initial_ms, 250),
+      retry_max_ms: positive_option(opts, config, :retry_max_ms, 30_000),
+      retry_ref: nil,
+      retry_delay_ms: 0,
+      consecutive_failures: 0,
       lifecycle_status: :active,
       quiesce_waiters: [],
       in_flight: nil,
@@ -163,6 +170,9 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
         max_delivered_batch_entries: state.max_delivered_batch_entries,
         max_delivered_batch_bytes: state.max_delivered_batch_bytes,
         failed_count: state.failed_count,
+        consecutive_failures: state.consecutive_failures,
+        retry_delay_ms: state.retry_delay_ms,
+        phase: if(state.in_flight, do: state.in_flight.phase, else: :idle),
         last_completed_at: state.last_completed_at,
         last_error: state.last_error
       }}, state}
@@ -171,6 +181,15 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
   @impl true
   def handle_info(:consume, %{lifecycle_status: :quiesced} = state),
     do: {:noreply, state}
+
+  def handle_info(:consume, %{retry_ref: ref} = state) when not is_nil(ref),
+    do: {:noreply, state}
+
+  def handle_info(:consume, %{in_flight: %{phase: :retry, entries: entries}} = state),
+    do: consume_entries(state, entries)
+
+  def handle_info(:consume, %{in_flight: %{phase: :acknowledge}} = state),
+    do: acknowledge_batch(state)
 
   def handle_info(:consume, %{in_flight: nil} = state) do
     case FileSystem.next_entries(
@@ -186,43 +205,24 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
         settle_or_schedule(state)
 
       {:error, reason} ->
-        schedule_consume(state.poll_interval_ms)
-        {:noreply, record_failure(state, reason)}
+        {:noreply, retry_after_failure(state, reason)}
     end
   end
 
   def handle_info(:consume, state), do: {:noreply, state}
 
+  def handle_info({:retry, ref}, %{retry_ref: ref} = state) do
+    send(self(), :consume)
+    {:noreply, %{state | retry_ref: nil}}
+  end
+
+  def handle_info({:retry, _stale_ref}, state), do: {:noreply, state}
+
   def handle_info(
         {:provider_ingress_persisted, _projector_pid, ref},
-        %{
-          in_flight: %{
-            ref: ref,
-            last: last,
-            entry_count: entry_count,
-            byte_count: byte_count
-          }
-        } = state
+        %{in_flight: %{ref: ref, phase: :processing} = batch} = state
       ) do
-    case FileSystem.acknowledge(state.journal_name, :processing, last.end_offset) do
-      :ok ->
-        send(self(), :consume)
-
-        {:noreply,
-         %{
-           state
-           | in_flight: nil,
-             acknowledged_batches: state.acknowledged_batches + 1,
-             acknowledged_entries: state.acknowledged_entries + entry_count,
-             acknowledged_bytes: state.acknowledged_bytes + byte_count,
-             last_completed_at: DateTime.utc_now(),
-             last_error: nil
-         }}
-
-      {:error, reason} ->
-        schedule_consume(state.poll_interval_ms)
-        {:noreply, record_failure(%{state | in_flight: nil}, reason)}
-    end
+    acknowledge_batch(%{state | in_flight: %{batch | phase: :acknowledge}})
   end
 
   def handle_info({:provider_ingress_persisted, _projector_pid, _stale_ref}, state),
@@ -230,10 +230,9 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
 
   def handle_info(
         {:provider_ingress_failed, _executor_pid, ref, reason},
-        %{in_flight: %{ref: ref}} = state
+        %{in_flight: %{ref: ref, phase: :processing} = batch} = state
       ) do
-    schedule_consume(state.poll_interval_ms)
-    {:noreply, record_failure(%{state | in_flight: nil}, reason)}
+    {:noreply, retry_after_failure(%{state | in_flight: %{batch | phase: :retry}}, reason)}
   end
 
   def handle_info({:provider_ingress_failed, _executor_pid, _stale_ref, _reason}, state),
@@ -243,6 +242,18 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
     last = List.last(entries)
     entry_count = length(entries)
     byte_count = Enum.sum(Enum.map(entries, & &1.payload_length))
+
+    batch = %{
+      first: first,
+      last: last,
+      entries: entries,
+      entry_count: entry_count,
+      byte_count: byte_count,
+      phase: :retry,
+      ref: nil
+    }
+
+    state = %{state | in_flight: batch}
 
     with {:ok, raw_evidence} <- Evidence.from_contiguous_entries(entries),
          ref <- make_ref(),
@@ -259,24 +270,16 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
       {:noreply,
        %{
          state
-         | in_flight: %{
-             first: first,
-             last: last,
-             entry_count: entry_count,
-             byte_count: byte_count,
-             ref: ref
-           },
+         | in_flight: %{batch | ref: ref, phase: :processing},
            delivered_batches: state.delivered_batches + 1,
            delivered_entries: state.delivered_entries + entry_count,
            delivered_bytes: state.delivered_bytes + byte_count,
            max_delivered_batch_entries: max(state.max_delivered_batch_entries, entry_count),
-           max_delivered_batch_bytes: max(state.max_delivered_batch_bytes, byte_count),
-           last_error: nil
+           max_delivered_batch_bytes: max(state.max_delivered_batch_bytes, byte_count)
        }}
     else
       {:error, reason} ->
-        schedule_consume(state.poll_interval_ms)
-        {:noreply, record_failure(state, reason)}
+        {:noreply, retry_after_failure(state, reason)}
     end
   end
 
@@ -303,8 +306,64 @@ defmodule Cadence.Runtime.IngressJournalConsumer do
     end
   end
 
-  defp record_failure(state, reason) do
-    %{state | failed_count: state.failed_count + 1, last_error: inspect(reason)}
+  defp acknowledge_batch(%{in_flight: batch} = state) do
+    case FileSystem.acknowledge(state.journal_name, :processing, batch.last.end_offset) do
+      :ok ->
+        send(self(), :consume)
+
+        {:noreply,
+         %{
+           state
+           | in_flight: nil,
+             acknowledged_batches: state.acknowledged_batches + 1,
+             acknowledged_entries: state.acknowledged_entries + batch.entry_count,
+             acknowledged_bytes: state.acknowledged_bytes + batch.byte_count,
+             last_completed_at: DateTime.utc_now(),
+             consecutive_failures: 0,
+             retry_delay_ms: 0,
+             last_error: nil
+         }}
+
+      {:error, reason} ->
+        # Processing has completed. Retry custody acknowledgement, not decoding.
+        {:noreply, retry_after_failure(state, reason)}
+    end
+  end
+
+  defp retry_after_failure(state, reason) do
+    delay =
+      if state.consecutive_failures == 0,
+        do: min(state.retry_initial_ms, state.retry_max_ms),
+        else: min(state.retry_delay_ms * 2, state.retry_max_ms)
+
+    ref = make_ref()
+    Process.send_after(self(), {:retry, ref}, delay)
+    phase = if state.in_flight, do: state.in_flight.phase, else: :read
+
+    range =
+      if state.in_flight,
+        do: {state.in_flight.first.start_offset, state.in_flight.last.end_offset}
+
+    Logger.warning(
+      "Ingress journal retry (#{phase}) in #{delay}ms at #{inspect(range)}: " <>
+        inspect(reason, limit: 10, printable_limit: 300),
+      provider_binding_id: state.provider_binding_id
+    )
+
+    :telemetry.execute(
+      [:cadence, :ingress_journal, :processing_retry],
+      %{count: 1, delay_ms: delay},
+      %{phase: phase}
+    )
+
+    %{
+      state
+      | failed_count: state.failed_count + 1,
+        consecutive_failures: state.consecutive_failures + 1,
+        retry_ref: ref,
+        retry_delay_ms: delay,
+        last_error: inspect(reason, limit: 10, printable_limit: 300)
+    }
   end
 
   defp settle_or_schedule(%{lifecycle_status: :quiescing} = state) do

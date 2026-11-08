@@ -1,0 +1,18 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: cadence-network-delay
+  namespace: cadence-chaos
+spec:
+  action: delay
+  mode: one
+  selector:
+    namespaces: [cadence-chaos]
+    labelSelectors:
+      app: cadence
+      cadence-lab: "true"
+  delay:
+    latency: "200ms"
+    jitter: "50ms"
+    correlation: "25"
+  duration: "30s"

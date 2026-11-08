@@ -26,11 +26,12 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.{Repo, Spacecraft, SpacecraftType}
 
-  @url "http://127.0.0.1:4101"
   @token_key "EARENDIL_DEMO_PROVIDER_TOKEN"
 
   def run do
-    if Mix.env() != :dev, do: raise("The Earendil fixture may only seed the development database")
+    unless F.chaos_lab?() or (Code.ensure_loaded?(Mix) and Mix.env() == :dev),
+      do: raise("The Earendil fixture requires development mode or the isolated chaos lab")
+
     Logger.configure(level: :warning)
     System.put_env(@token_key, "earendil-local-provider")
     {:ok, _apps} = Application.ensure_all_started(:cadence)
@@ -139,7 +140,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
               provider_account_id: F.account_id(),
               display_name: "Earendil Demo Ground Network",
               provider_type: :simulator,
-              base_url: @url,
+              base_url: F.provider_url(),
               region: "local",
               environment_ref: F.run_id(),
               credential_ref: F.credential_ref(),
@@ -150,7 +151,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
           version
       end
 
-    true = version.environment_ref == F.run_id() and version.base_url == @url
+    true = version.environment_ref == F.run_id() and version.base_url == F.provider_url()
     {:ok, _account} = ProviderAccounts.validate(scope, F.account_id())
 
     grant =
@@ -398,7 +399,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
 
     opts = [
       method: method,
-      url: @url <> path,
+      url: F.provider_url() <> path,
       headers: headers,
       retry: false,
       receive_timeout: 30_000
@@ -417,7 +418,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
         raise "Simulator #{method} #{path}: HTTP #{response.status} #{inspect(response.body)}"
 
       {:error, _reason} ->
-        raise "Simulator unavailable at #{@url}; start dev/reflect_orbital_simulator.exs first"
+        raise "Simulator unavailable at #{F.provider_url()}; start the simulator first"
     end
   end
 end

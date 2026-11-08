@@ -6,6 +6,8 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   use GenServer
 
+  require Logger
+
   alias Cadence.ApplicationDispatch.{
     BindingSet,
     CapabilityInstance,
@@ -58,7 +60,8 @@ defmodule Cadence.Runtime.PartitionOwner do
           persistence_policy: Persistence.policy(),
           pending_runtime_records: map(),
           async_outputs: [term()],
-          semantic_state: State.t()
+          semantic_state: State.t(),
+          semantic_writer: Cadence.SemanticRuntime.Writer.t() | nil
         }
 
   def start_link(opts) when is_list(opts) do
@@ -123,7 +126,7 @@ defmodule Cadence.Runtime.PartitionOwner do
   @spec process_raw_evidence(pid(), RawEvidence.t()) ::
           {:ok, Cadence.processing_result()} | {:error, term()}
   def process_raw_evidence(partition_owner, %RawEvidence{} = raw_evidence) do
-    GenServer.call(partition_owner, {:process_raw_evidence, raw_evidence})
+    GenServer.call(partition_owner, {:process_raw_evidence, raw_evidence}, :infinity)
   end
 
   @doc "Processes ordered partition work and replies directly to the original ingress caller."
@@ -143,6 +146,83 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   @impl true
   def init(opts) do
+    if Keyword.get(opts, :defer_init?, false) do
+      # A DynamicSupervisor waits for init/1. Replay belongs to this partition,
+      # after that handshake, so other partitions can start independently.
+      {:ok, %{initialization_options: opts}, {:continue, :initialize}}
+    else
+      initialize(opts)
+    end
+  end
+
+  @impl true
+  def handle_continue(:initialize, %{initialization_options: opts} = initial_state) do
+    case resolve_initialization_options(opts) do
+      {:ok, resolved} ->
+        finish_initialization(resolved, initial_state)
+
+      {:error, reason} ->
+        {:stop, {:shutdown, {:partition_initialization_failed, reason}}, initial_state}
+    end
+  end
+
+  defp resolve_initialization_options(opts) do
+    case Keyword.fetch(opts, :spec_source) do
+      {:ok, coordinator} ->
+        key = Keyword.fetch!(opts, :partition_key)
+        mission_id = Keyword.fetch!(opts, :mission_id)
+
+        case GenServer.call(coordinator, {:partition_spec, key}, :infinity) do
+          {:ok, %MissionRuntimeSpec{mission_id: ^mission_id} = spec} ->
+            {:ok,
+             opts
+             |> Keyword.put(:active_activation, spec)
+             |> Keyword.put(:binding_set, spec.binding_set)}
+
+          {:ok, _} ->
+            {:error, {:mission_runtime_spec_mismatch, :mission_id}}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      :error ->
+        {:ok, opts}
+    end
+  end
+
+  defp finish_initialization(opts, initial_state) do
+    metadata = %{
+      mission_id: Keyword.fetch!(opts, :mission_id),
+      partition_id: opts |> Keyword.fetch!(:partition_key) |> PartitionKey.identifier(),
+      generation: Keyword.fetch!(opts, :active_activation).generation
+    }
+
+    started = System.monotonic_time(:millisecond)
+    Logger.info("Partition recovery started", Map.to_list(metadata))
+
+    result =
+      :telemetry.span([:cadence, :runtime, :partition, :recovery], metadata, fn ->
+        result = initialize(opts)
+        {result, Map.put(metadata, :status, elem(result, 0))}
+      end)
+
+    Logger.info(
+      "Partition recovery completed",
+      Map.to_list(metadata) ++
+        [duration_ms: System.monotonic_time(:millisecond) - started, status: elem(result, 0)]
+    )
+
+    case result do
+      {:ok, state} ->
+        {:noreply, state}
+
+      {:stop, reason} ->
+        {:stop, {:shutdown, {:partition_initialization_failed, reason}}, initial_state}
+    end
+  end
+
+  defp initialize(opts) do
     mission_id = Keyword.fetch!(opts, :mission_id)
     process_namespace = process_namespace(opts)
     partition_key = Keyword.fetch!(opts, :partition_key)
@@ -161,7 +241,7 @@ defmodule Cadence.Runtime.PartitionOwner do
       end)
 
     with {:ok, active_activation} <-
-           MissionRuntimeSpec.for_partition(active_activation, partition_key),
+           MissionRuntimeSpec.execution_input(active_activation, partition_key),
          {:ok, tm_pipeline_state} <- TMFrameIngress.init(),
          {:ok, runtime_binding_set, managed_application_states, timer_service, runtime_records} <-
            build_runtime_partition_state(
@@ -172,7 +252,7 @@ defmodule Cadence.Runtime.PartitionOwner do
              clock_mode,
              initial_time
            ),
-         {:ok, semantic_state, semantic_timer_cursors, pending_semantic_timers} <-
+         {:ok, semantic_state, semantic_writer, semantic_timer_cursors, pending_semantic_timers} <-
            recover_semantic_runtime(
              persist_runtime_records?,
              active_activation,
@@ -209,7 +289,8 @@ defmodule Cadence.Runtime.PartitionOwner do
              persist_runtime_records?: persist_runtime_records?,
              pending_runtime_records: pending_runtime_records,
              async_outputs: [],
-             semantic_state: semantic_state
+             semantic_state: semantic_state,
+             semantic_writer: semantic_writer
            }}
 
         {:error, reason} ->
@@ -284,7 +365,7 @@ defmodule Cadence.Runtime.PartitionOwner do
       ) do
     state = refresh_live_clock(state)
 
-    case MissionRuntimeSpec.for_partition(activation, state.partition_key) do
+    case MissionRuntimeSpec.execution_input(activation, state.partition_key) do
       {:ok, activation} ->
         case build_runtime_partition_state(
                state.process_namespace,
@@ -297,7 +378,8 @@ defmodule Cadence.Runtime.PartitionOwner do
           {:ok, runtime_binding_set, managed_application_states, timer_service, runtime_records} ->
             previous_timer_events = build_timer_cancellation_records(state)
 
-            with {:ok, semantic_state, semantic_timer_cursors, pending_semantic_timers} <-
+            with {:ok, semantic_state, semantic_writer, semantic_timer_cursors,
+                  pending_semantic_timers} <-
                    recover_semantic_runtime(
                      state.persist_runtime_records?,
                      activation,
@@ -336,7 +418,8 @@ defmodule Cadence.Runtime.PartitionOwner do
                    semantic_timers: semantic_timers,
                    pending_runtime_records: pending_runtime_records,
                    async_outputs: [],
-                   semantic_state: semantic_state
+                   semantic_state: semantic_state,
+                   semantic_writer: semantic_writer
                }}
             else
               {:error, reason} ->
@@ -369,6 +452,15 @@ defmodule Cadence.Runtime.PartitionOwner do
     GenServer.reply(from, result)
     {:noreply, next_state}
   end
+
+  # Retain one result for the ordered journal consumer. A downstream failure or
+  # lost acknowledgement may retry this exact range after the decoder advanced.
+  # Reuse its result without applying the bytes or managed applications twice.
+  defp process_raw_evidence_reply(
+         %RawEvidence{} = raw_evidence,
+         %{last_journal_result: %{raw_evidence: raw_evidence} = result} = state
+       ),
+       do: {:ok, result, state}
 
   defp process_raw_evidence_reply(%RawEvidence{} = raw_evidence, state) do
     with {:ok, prepared_state, pre_runtime_records} <-
@@ -446,58 +538,56 @@ defmodule Cadence.Runtime.PartitionOwner do
     else
       updates = Enum.flat_map(annotated_outputs, &sample_update/1)
 
-      with {:ok, %Result{} = result, semantic_state} <-
-             SemanticRuntime.process(state.semantic_state, updates, plan),
-           {:ok, %Result{} = result, semantic_state} <-
-             commit_semantic_state(state, updates, result, semantic_state) do
-        derived_samples =
-          result.parameter_updates
-          |> Enum.filter(&(&1.producer_kind == :algorithm))
-          |> Enum.map(&derived_sample(&1, activation))
+      case evaluate_semantic_updates(state, updates, plan) do
+        {:ok, %Result{} = result, semantic_state, semantic_writer} ->
+          derived_samples =
+            result.parameter_updates
+            |> Enum.filter(&(&1.producer_kind == :algorithm))
+            |> Enum.map(&derived_sample(&1, activation))
 
-        {:ok, annotated_outputs ++ derived_samples, result,
-         %{state | semantic_state: semantic_state}}
-      else
+          {:ok, annotated_outputs ++ derived_samples, result,
+           %{state | semantic_state: semantic_state, semantic_writer: semantic_writer}}
+
         {:error, reason} ->
           {:error, {:semantic_runtime_failed, reason}}
       end
     end
   end
 
-  defp commit_semantic_state(_state, [], result, semantic_state),
-    do: {:ok, result, semantic_state}
+  defp evaluate_semantic_updates(state, [], _plan),
+    do: {:ok, %Result{}, state.semantic_state, state.semantic_writer}
 
-  defp commit_semantic_state(
-         %{persist_runtime_records?: true} = state,
-         updates,
-         result,
-         semantic_state
-       ) do
-    Store.commit(
+  defp evaluate_semantic_updates(%{persist_runtime_records?: true} = state, updates, plan) do
+    Store.process(
       state.active_activation,
       state.partition_key,
+      state.semantic_writer,
+      state.semantic_state,
       updates,
-      result,
-      semantic_state
+      plan
     )
   end
 
-  defp commit_semantic_state(_state, _updates, result, semantic_state),
-    do: {:ok, result, semantic_state}
+  defp evaluate_semantic_updates(state, updates, plan) do
+    with {:ok, result, semantic_state} <-
+           SemanticRuntime.process(state.semantic_state, updates, plan) do
+      {:ok, result, semantic_state, nil}
+    end
+  end
 
   defp recover_semantic_runtime(false, _activation, _partition_key),
-    do: {:ok, SemanticRuntime.new(), %{}, []}
+    do: {:ok, SemanticRuntime.new(), nil, %{}, []}
 
   defp recover_semantic_runtime(true, activation, partition_key) do
     plan = PlanDecoder.decode(activation.runtime_plans)
 
     if plan.algorithms == [] and plan.monitoring == [] do
-      {:ok, SemanticRuntime.new(), %{}, []}
+      {:ok, SemanticRuntime.new(), nil, %{}, []}
     else
-      with {:ok, semantic_state} <- Store.recover(activation, partition_key, plan),
+      with {:ok, semantic_state, writer} <- Store.recover_writer(activation, partition_key, plan),
            {:ok, cursors} <- Store.timer_cursors(activation, partition_key),
            {:ok, pending_timers} <- Store.pending_timer_results(activation, partition_key) do
-        {:ok, semantic_state, cursors, pending_timers}
+        {:ok, semantic_state, writer, cursors, pending_timers}
       end
     end
   end
@@ -701,7 +791,7 @@ defmodule Cadence.Runtime.PartitionOwner do
         scoped -> scoped
       end
 
-    with {:ok, result, semantic_state} <-
+    with {:ok, result, semantic_state, semantic_writer} <-
            evaluate_semantic_timer_scopes(scopes, entry, plan, state, %Result{}),
          derived_samples <-
            result.parameter_updates
@@ -716,6 +806,7 @@ defmodule Cadence.Runtime.PartitionOwner do
       {:ok,
        state
        |> Map.put(:semantic_state, semantic_state)
+       |> Map.put(:semantic_writer, semantic_writer)
        |> Map.put(
          :semantic_timers,
          Map.put(state.semantic_timers, entry.timer_key, next_entry)
@@ -725,52 +816,46 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   defp evaluate_semantic_timer_scopes(scopes, entry, plan, state, result) do
-    Enum.reduce_while(scopes, {:ok, result, state.semantic_state}, fn scope,
-                                                                      {:ok, acc, semantic_state} ->
-      with {:ok, scoped_result, next_semantic_state} <-
-             SemanticRuntime.timer(
-               semantic_state,
-               scope,
-               entry.algorithm_id,
-               entry.due_at,
-               plan
-             ),
-           {:ok, scoped_result, next_semantic_state} <-
-             commit_semantic_timer(
-               state,
-               scope,
-               entry,
-               scoped_result,
-               next_semantic_state
-             ) do
-        {:cont, {:ok, merge_semantic_results(acc, scoped_result), next_semantic_state}}
-      else
-        {:error, reason} -> {:halt, {:error, {:semantic_runtime_timer_failed, reason}}}
-      end
-    end)
-  end
+    Enum.reduce_while(
+      scopes,
+      {:ok, result, state.semantic_state, state.semantic_writer},
+      fn scope, {:ok, acc, semantic_state, writer} ->
+        current = %{state | semantic_state: semantic_state, semantic_writer: writer}
 
-  defp commit_semantic_timer(
-         %{persist_runtime_records?: true} = state,
-         scope,
-         entry,
-         result,
-         semantic_state
-       ) do
-    Store.commit_timer(
-      state.active_activation,
-      state.partition_key,
-      scope,
-      entry.algorithm_id,
-      entry.due_at,
-      entry.timer_key,
-      result,
-      semantic_state
+        case evaluate_semantic_timer(current, scope, entry, plan) do
+          {:ok, result, next_state, next_writer} ->
+            {:cont, {:ok, merge_semantic_results(acc, result), next_state, next_writer}}
+
+          {:error, reason} ->
+            {:halt, {:error, {:semantic_runtime_timer_failed, reason}}}
+        end
+      end
     )
   end
 
-  defp commit_semantic_timer(_state, _scope, _entry, result, semantic_state),
-    do: {:ok, result, semantic_state}
+  defp evaluate_semantic_timer(%{persist_runtime_records?: true} = state, scope, entry, plan) do
+    Store.timer(
+      state.active_activation,
+      state.partition_key,
+      state.semantic_writer,
+      state.semantic_state,
+      {scope, entry.algorithm_id, entry.due_at, entry.timer_key},
+      plan
+    )
+  end
+
+  defp evaluate_semantic_timer(state, scope, entry, plan) do
+    with {:ok, result, semantic_state} <-
+           SemanticRuntime.timer(
+             state.semantic_state,
+             scope,
+             entry.algorithm_id,
+             entry.due_at,
+             plan
+           ) do
+      {:ok, result, semantic_state, nil}
+    end
+  end
 
   defp maybe_persist_semantic_timer(
          %{persist_runtime_records?: true} = state,
@@ -808,6 +893,15 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   defp handle_processing_reply({:ok, processing_result, next_state}, _state) do
+    metadata = processing_result.raw_evidence.metadata || %{}
+
+    next_state =
+      if Map.has_key?(metadata, "journal_stream_id") or Map.has_key?(metadata, :journal_stream_id) do
+        Map.put(next_state, :last_journal_result, processing_result)
+      else
+        Map.delete(next_state, :last_journal_result)
+      end
+
     {:reply, {:ok, processing_result}, next_state}
   end
 

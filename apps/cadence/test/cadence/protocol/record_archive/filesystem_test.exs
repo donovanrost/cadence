@@ -13,18 +13,27 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
   alias Cadence.Replay.Scope
   alias Cadence.Repo
 
-  setup do
+  setup context do
     base_path =
       Path.join(
         System.tmp_dir!(),
         "cadence_protocol_record_archive_#{System.unique_integer([:positive])}"
       )
 
+    repo =
+      if context[:archive_fault] do
+        start_supervised!({Cadence.ProtocolArchiveFaultRepo, owner: self()})
+        Cadence.ProtocolArchiveFaultRepo
+      else
+        Repo
+      end
+
     archive_policy =
       RecordArchive.policy(
         module: FileSystem,
         base_path: base_path,
-        flush_interval_ms: 5_000,
+        repo: repo,
+        flush_interval_ms: if(context[:archive_fault], do: 50, else: 5_000),
         flush_count: 10
       )
 
@@ -224,6 +233,59 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
              )
 
     assert 2 == archive_entry_count(entries)
+
+    changed_bytes =
+      FileSystem.build_entries(%{raw_evidence | raw: <<9, 9, 9, 9>>}, [transfer_frame_record], [])
+
+    assert {:error, {:protocol_archive_record_identity_conflict, ["frame-idempotent"]}} =
+             FileSystem.persist_segment("changed-frame-bytes", changed_bytes,
+               object_key: "mission-alpha/changed-frame-bytes.bin"
+             )
+
+    [frame, packet] = entries
+    changed = Map.put(packet, "packet_data_base64", Base.encode64(<<99, 99>>))
+
+    assert {:error, {:protocol_archive_record_identity_conflict, _ids}} =
+             FileSystem.persist_segment("segment-collision", [frame, changed],
+               object_key: "mission-alpha/segment-collision.bin"
+             )
+
+    assert Repo.get!(ProtocolArchiveRecordEntryRow, "packet_record:packet-idempotent").object_key ==
+             "mission-alpha/segment-alpha.bin"
+
+    # Legacy writers can still populate the nullable column during a rollout,
+    # but their rows are not evidence of content equality for a new writer.
+    ProtocolArchiveRecordEntryRow
+    |> where([row], row.record_id == "packet-idempotent")
+    |> Repo.update_all(set: [content_sha256: nil])
+
+    assert {:error, {:protocol_archive_record_identity_conflict, _ids}} =
+             FileSystem.persist_segment("segment-legacy", entries,
+               object_key: "mission-alpha/segment-legacy.bin"
+             )
+  end
+
+  test "segment objects cannot be overwritten with different records", %{
+    mission_id: mission_id,
+    archive_policy: policy
+  } do
+    entry = %{
+      "mission_id" => mission_id,
+      "receipt_time" => "2026-10-21T12:00:00Z",
+      "record_id" => "immutable"
+    }
+
+    assert {:ok, key, _} = FileSystem.store_segment_object("fixed", [entry], policy.backend_opts)
+    assert {:ok, ^key, _} = FileSystem.store_segment_object("fixed", [entry], policy.backend_opts)
+
+    assert {:error, {:protocol_archive_segment_write_failed, _, {:immutable_file_collision, _}}} =
+             FileSystem.store_segment_object(
+               "fixed",
+               [Map.put(entry, "record_id", "changed")],
+               policy.backend_opts
+             )
+
+    assert {:ok, [^entry]} = FileSystem.load_segment_object(key, policy.backend_opts)
   end
 
   test "large archive segments stay within the database parameter limit and remain idempotent", %{
@@ -263,6 +325,98 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
     assert :ok = FileSystem.persist_segment("large-segment", entries, opts)
     assert :ok = FileSystem.persist_segment("large-segment", entries, opts)
     assert archive_entry_count(entries) == 4_000
+
+    assert %{rows: [[0]]} =
+             Repo.query!(
+               """
+               SELECT count(*) FROM pg_prepared_statements
+               WHERE name = $1 AND cardinality(parameter_types) >= 1000
+               """,
+               ["ecto_insert_all_protocol_archive_record_entries"]
+             )
+  end
+
+  @tag archive_fault: true
+  test "retains buffered records and retries database exceptions without restarting", %{
+    mission_id: mission_id,
+    archive_policy: policy
+  } do
+    writer = Process.whereis(FileSystem.Writer)
+
+    failures = [
+      %DBConnection.ConnectionError{message: "database checkout unavailable"},
+      %Postgrex.Error{message: "temporary database query failure"}
+    ]
+
+    for {failure, index} <- Enum.with_index(failures, 1) do
+      Cadence.ProtocolArchiveFaultRepo.fail_with(failure)
+
+      evidence =
+        RawEvidence.new(%{
+          evidence_id: "retry-evidence-#{index}",
+          mission_id: mission_id,
+          raw: <<1, 2>>,
+          receipt_time: ~U[2026-10-24 12:00:00Z]
+        })
+
+      packet = %PacketRecord{
+        packet_id: "retry-packet-#{index}",
+        evidence_id: evidence.evidence_id,
+        mission_id: mission_id,
+        protocol_family: :tm,
+        packet_kind: :space_packet,
+        packet_data: <<1, 2>>,
+        receipt_time: evidence.receipt_time,
+        provenance: %{}
+      }
+
+      assert :ok = RecordArchive.persist_records(policy, evidence, [], [packet])
+
+      assert {:error, {:archive_database_error, _message}} =
+               RecordArchive.flush(policy, mission_id)
+
+      assert_receive :archive_write_failed
+      # The timer retries without another enqueue or flush request.
+      assert_receive :archive_write_failed, 1_000
+
+      assert %{queue_depth: 1, backpressured?: true, flush_failure_count: count} =
+               RecordArchive.stats(policy, mission_id)
+
+      assert count >= 2
+      assert Process.whereis(FileSystem.Writer) == writer
+      refute Repo.get(ProtocolArchiveRecordEntryRow, "packet_record:#{packet.packet_id}")
+
+      if index == 1 do
+        assert :ok = RecordArchive.reset_stats(policy, mission_id)
+        assert %{backpressured?: true} = RecordArchive.stats(policy, mission_id)
+      end
+
+      for _ <- 1..10 do
+        assert {:error, {:protocol_archive_backpressured, ^mission_id}} =
+                 RecordArchive.persist_records(policy, evidence, [], [packet])
+
+        assert {:error, {:protocol_archive_backpressured, ^mission_id}} =
+                 RecordArchive.persist_records_many(policy, [{evidence, [], [packet]}])
+      end
+
+      assert %{queue_depth: 1} = RecordArchive.stats(policy, mission_id)
+
+      Cadence.ProtocolArchiveFaultRepo.recover()
+      assert_receive {:archive_write_completed, {:ok, :ok}}, 2_000
+
+      assert %{queue_depth: 0, backpressured?: false, flushed_count: ^index} =
+               RecordArchive.stats(policy, mission_id)
+
+      base_path = Keyword.fetch!(policy.backend_opts, :base_path)
+      assert length(Path.wildcard(Path.join(base_path, "**/*.bin"))) == index
+
+      assert {:ok, [^packet]} =
+               RecordArchive.fetch_packet_records(
+                 policy,
+                 mission_id,
+                 Scope.new(%{evidence_ids: [evidence.evidence_id]})
+               )
+    end
   end
 
   test "stats and flush tolerate legacy writer state without buffer sizes", %{

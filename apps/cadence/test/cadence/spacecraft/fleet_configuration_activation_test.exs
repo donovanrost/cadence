@@ -10,6 +10,7 @@ defmodule Cadence.Activations.FleetConfigurationTest do
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
   alias Cadence.Reads.Spacecraft.Configuration, as: ConfigurationRead
+  alias Cadence.Runtime.SourceRuntimeBases
 
   setup do
     org = "org-fleet-activation"
@@ -77,7 +78,7 @@ defmodule Cadence.Activations.FleetConfigurationTest do
 
     assert basis.mission_model_revision_id == c.revision.mission_model_revision_id
     assert {:ok, spec} = Cadence.Runtime.Missions.applied_spec(c.mission.mission_id)
-    assert map_size(spec.source_runtime_bases) >= 500
+    assert SourceRuntimeBases.count(spec.source_runtime_bases) >= 500
 
     assert {:ok, %{review: %{state: "active"}}} =
              ConfigurationRead.load(c.scope, c.mission, last.spacecraft_id, "changes")

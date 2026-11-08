@@ -159,6 +159,11 @@ defmodule Cadence.IngressArchive.FileSystemTest do
              )
 
     assert 1 == Repo.aggregate(IngressArchiveEvidenceEntryRow, :count, :evidence_id)
+
+    assert {:error, {:archive_evidence_identity_conflict, ["evidence-idempotent"]}} =
+             FileSystem.persist_segment("segment-collision", [%{raw_evidence | raw: <<9, 9, 9>>}],
+               object_key: "mission-alpha/segment-collision.bin"
+             )
   end
 
   test "batch archive receipt is durable only after deterministic object and index exist", %{

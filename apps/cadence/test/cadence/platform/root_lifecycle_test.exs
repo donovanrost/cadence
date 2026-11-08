@@ -67,10 +67,10 @@ defmodule Cadence.Platform.RootLifecycleTest do
     {bravo_journal, bravo_journal_pid, bravo_entry} =
       start_and_append_path(bravo, mission_id, "bravo")
 
-    assert Identity.evidence_id(alpha_entry) == Identity.evidence_id(bravo_entry)
+    refute Identity.evidence_id(alpha_entry) == Identity.evidence_id(bravo_entry)
     assert {:ok, alpha_snapshot} = FileSystem.snapshot(alpha_journal)
     assert {:ok, bravo_snapshot} = FileSystem.snapshot(bravo_journal)
-    assert alpha_snapshot.stream_id == bravo_snapshot.stream_id
+    refute alpha_snapshot.stream_id == bravo_snapshot.stream_id
     refute alpha_snapshot.stream_path == bravo_snapshot.stream_path
 
     assert_archived(alpha, mission_id, alpha_entry, "alpha")

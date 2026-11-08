@@ -10,6 +10,7 @@ defmodule Cadence.IngressArchive.FileSystem.EvidenceEntryRow do
 
   schema "ingress_archive_evidence_entries" do
     field(:segment_id, :string)
+    field(:content_sha256, :binary)
     field(:object_key, :string)
     field(:archive_backend, :string)
     field(:mission_id, :string)

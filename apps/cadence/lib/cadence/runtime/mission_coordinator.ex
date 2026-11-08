@@ -23,7 +23,11 @@ defmodule Cadence.Runtime.MissionCoordinator do
           profiler: TelemetryProfiler.dependency(),
           runtime_spec: MissionRuntimeSpec.t() | nil,
           applied_at: DateTime.t() | nil,
-          partitions: MapSet.t(PartitionKey.t())
+          partitions: MapSet.t(PartitionKey.t()),
+          requests: term(),
+          request_counts: map(),
+          pending_application: map() | nil,
+          max_partition_requests: pos_integer()
         }
 
   def start_link(opts) when is_list(opts) do
@@ -53,8 +57,14 @@ defmodule Cadence.Runtime.MissionCoordinator do
            {:applied_identity, MissionRuntimeSpec.identity(spec)},
            :infinity
          ) do
-      {:ok, observation} -> {:ok, observation}
-      :apply_required -> GenServer.call(coordinator, {:apply_spec, spec}, :infinity)
+      {:ok, observation} ->
+        {:ok, observation}
+
+      {:error, _reason} = error ->
+        error
+
+      :apply_required ->
+        GenServer.call(coordinator, {:apply_spec, MissionRuntimeSpec.compact(spec)}, :infinity)
     end
   end
 
@@ -134,16 +144,23 @@ defmodule Cadence.Runtime.MissionCoordinator do
       when is_binary(mission_id) do
     GenServer.call(
       MissionRuntime.coordinator_name(process_namespace, mission_id),
-      {:process_telemetry_ingress, raw_evidence}
+      # A timeout does not cancel queued owner work. Retrying it while recovery
+      # is running can apply overlapping byte ranges to the frame reassembler.
+      # Owner death is reported through the coordinator's monitored request.
+      {:process_telemetry_ingress, raw_evidence},
+      :infinity
     )
   end
 
   @impl true
   def code_change(_old_version, %{runtime_spec: %MissionRuntimeSpec{} = spec} = state, _extra) do
-    {:ok, %{state | runtime_spec: MissionRuntimeSpec.share_source_models(spec)}}
+    {:ok,
+     state
+     |> Map.put(:runtime_spec, MissionRuntimeSpec.compact(spec))
+     |> with_request_state()}
   end
 
-  def code_change(_old_version, state, _extra), do: {:ok, state}
+  def code_change(_old_version, state, _extra), do: {:ok, with_request_state(state)}
 
   @impl true
   def init(opts) do
@@ -156,11 +173,18 @@ defmodule Cadence.Runtime.MissionCoordinator do
        profiler: Keyword.get(opts, :profiler, TelemetryProfiler),
        runtime_spec: nil,
        applied_at: nil,
-       partitions: MapSet.new()
+       partitions: MapSet.new(),
+       requests: :gen_server.reqids_new(),
+       request_counts: %{},
+       pending_application: nil,
+       max_partition_requests: Keyword.get(opts, :max_partition_requests, 32)
      }}
   end
 
   @impl true
+  def handle_call({:applied_identity, identity}, from, %{pending_application: pending} = state)
+      when not is_nil(pending), do: await_application(state, identity, from)
+
   def handle_call({:applied_identity, identity}, _from, state) do
     reply =
       case state.runtime_spec do
@@ -176,9 +200,18 @@ defmodule Cadence.Runtime.MissionCoordinator do
     {:reply, reply, state}
   end
 
-  def handle_call({:apply_spec, %MissionRuntimeSpec{} = spec}, _from, state) do
+  def handle_call(
+        {:apply_spec, %MissionRuntimeSpec{} = spec},
+        from,
+        %{pending_application: pending} = state
+      )
+      when not is_nil(pending) do
+    await_application(state, MissionRuntimeSpec.identity(spec), from)
+  end
+
+  def handle_call({:apply_spec, %MissionRuntimeSpec{} = spec}, from, state) do
     case apply_runtime_spec(state, spec) do
-      {:ok, observation, new_state} -> {:reply, {:ok, observation}, new_state, :hibernate}
+      {:ok, observation, new_state} -> begin_application(state, new_state, observation, from)
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
@@ -186,51 +219,168 @@ defmodule Cadence.Runtime.MissionCoordinator do
   def handle_call(:active_spec, _from, state) do
     reply =
       case state.runtime_spec do
-        %MissionRuntimeSpec{} = spec -> {:ok, spec}
+        %MissionRuntimeSpec{} = spec -> {:ok, MissionRuntimeSpec.expand(spec)}
         nil -> {:error, :no_active_binding_set}
       end
 
     {:reply, reply, state}
   end
 
-  def handle_call({:binding_set_for_partition, %PartitionKey{} = partition_key}, _from, state) do
-    with {:ok, state} <- ensure_active_state(state),
-         {:ok, partition_pid, state} <- ensure_partition_owner(state, partition_key),
-         {:ok, runtime_binding_set} <- PartitionOwner.binding_set(partition_pid) do
-      {:reply, {:ok, runtime_binding_set}, state}
-    else
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
+  def handle_call(:applied_summary, _from, state) do
+    reply =
+      case state.runtime_spec do
+        %MissionRuntimeSpec{} = spec -> {:ok, MissionRuntimeSpec.summary(spec)}
+        nil -> {:error, :no_active_binding_set}
+      end
+
+    {:reply, reply, state}
+  end
+
+  # This is an already admitted immutable generation, never a lookup of mutable
+  # governed configuration. A restarted child must not retain its birth generation.
+  def handle_call({:partition_spec, %PartitionKey{} = key}, _from, state) do
+    spec =
+      if state.pending_application, do: state.pending_application.spec, else: state.runtime_spec
+
+    reply =
+      if spec,
+        do: MissionRuntimeSpec.partition_input(spec, key),
+        else: {:error, :no_active_binding_set}
+
+    {:reply, reply, state}
+  end
+
+  def handle_call({:binding_set_for_partition, %PartitionKey{} = key}, from, state) do
+    request_partition(state, key, :binding_set, from)
+  end
+
+  def handle_call({:partition_snapshot, %PartitionKey{} = key}, from, state) do
+    request_partition(state, key, :snapshot, from)
+  end
+
+  def handle_call({:process_telemetry_ingress, %RawEvidence{} = evidence}, from, state) do
+    request_partition(
+      state,
+      PartitionKey.from_raw_evidence(evidence),
+      {:process_raw_evidence, evidence},
+      from
+    )
+  end
+
+  @impl true
+  def handle_info(message, state) do
+    case :gen_server.check_response(message, state.requests, true) do
+      {response, label, requests} ->
+        handle_partition_response(response, label, %{state | requests: requests})
+
+      _ ->
+        {:noreply, state}
     end
   end
 
-  def handle_call({:partition_snapshot, %PartitionKey{} = partition_key}, _from, state) do
-    with {:ok, state} <- ensure_active_state(state),
-         {:ok, partition_pid, state} <- ensure_partition_owner(state, partition_key),
-         {:ok, snapshot} <- PartitionOwner.snapshot(partition_pid) do
-      {:reply, {:ok, snapshot}, state}
+  defp await_application(%{pending_application: pending} = state, identity, from) do
+    if identity == MissionRuntimeSpec.identity(pending.spec) and
+         length(pending.waiters) < state.max_partition_requests do
+      {:noreply, %{state | pending_application: %{pending | waiters: [from | pending.waiters]}}}
     else
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
+      {:reply, {:error, {:generation_applying, pending.spec.generation}}, state}
     end
   end
 
-  def handle_call({:process_telemetry_ingress, %RawEvidence{} = raw_evidence}, from, state) do
-    partition_key = PartitionKey.from_raw_evidence(raw_evidence)
-
-    with {:ok, state} <- ensure_active_state(state),
-         {:ok, partition_pid, state} <- ensure_partition_owner(state, partition_key) do
-      :ok = PartitionOwner.submit_raw_evidence(partition_pid, raw_evidence, from)
-      {:noreply, state}
+  defp request_partition(state, key, request, from) do
+    with :ok <- admit_partition_request(state, key),
+         {:ok, pid, state} <- ensure_partition_owner(state, key) do
+      requests = :gen_server.send_request(pid, request, {:partition, key, from}, state.requests)
+      counts = Map.update(state.request_counts, key, 1, &(&1 + 1))
+      {:noreply, %{state | requests: requests, request_counts: counts}}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
 
-  defp ensure_active_state(%{runtime_spec: %MissionRuntimeSpec{}} = state),
-    do: {:ok, state}
+  defp admit_partition_request(%{runtime_spec: nil}, _key), do: {:error, :no_active_binding_set}
 
-  defp ensure_active_state(_state), do: {:error, :no_active_binding_set}
+  defp admit_partition_request(%{pending_application: pending}, _key) when not is_nil(pending),
+    do: {:error, {:generation_applying, pending.spec.generation}}
+
+  defp admit_partition_request(state, key) do
+    if Map.get(state.request_counts, key, 0) < state.max_partition_requests,
+      do: :ok,
+      else: {:error, {:partition_busy, PartitionKey.identifier(key)}}
+  end
+
+  defp handle_partition_response(response, {:partition, key, from}, state) do
+    reply = partition_reply(response)
+    GenServer.reply(from, reply)
+    counts = Map.update!(state.request_counts, key, &(&1 - 1))
+    counts = if counts[key] == 0, do: Map.delete(counts, key), else: counts
+    {:noreply, %{state | request_counts: counts}}
+  end
+
+  defp handle_partition_response(response, :reconcile, state) do
+    case partition_reply(response) do
+      :ok ->
+        pending = %{
+          state.pending_application
+          | remaining: state.pending_application.remaining - 1
+        }
+
+        finish_application(%{state | pending_application: pending})
+
+      error ->
+        Enum.each(state.pending_application.waiters, &GenServer.reply(&1, error))
+        # Preserve the previous fail-closed generation contract. The mission's
+        # one-for-all supervisor retires every partially reconciled owner.
+        {:stop, {:partition_reconciliation_failed, error}, state}
+    end
+  end
+
+  defp partition_reply({:reply, reply}), do: reply
+
+  defp partition_reply({:error, {reason, _server}}),
+    do: {:error, {:partition_unavailable, reason}}
+
+  defp begin_application(state, new_state, observation, from) do
+    if state.runtime_spec &&
+         MissionRuntimeSpec.identity(new_state.runtime_spec) ==
+           MissionRuntimeSpec.identity(state.runtime_spec) do
+      {:reply, {:ok, observation}, state}
+    else
+      {requests, count} = reconcile_partitions(state, new_state.runtime_spec)
+
+      pending = %{
+        spec: new_state.runtime_spec,
+        applied_at: new_state.applied_at,
+        observation: observation,
+        waiters: [from],
+        remaining: count
+      }
+
+      finish_application(%{state | requests: requests, pending_application: pending})
+    end
+  end
+
+  defp finish_application(%{pending_application: %{remaining: 0} = pending} = state) do
+    Enum.each(pending.waiters, &GenServer.reply(&1, {:ok, pending.observation}))
+
+    {:noreply,
+     %{
+       state
+       | runtime_spec: pending.spec,
+         applied_at: pending.applied_at,
+         pending_application: nil
+     }, :hibernate}
+  end
+
+  defp finish_application(state), do: {:noreply, state}
+
+  defp with_request_state(state) do
+    state
+    |> Map.put_new(:requests, :gen_server.reqids_new())
+    |> Map.put_new(:request_counts, %{})
+    |> Map.put_new(:pending_application, nil)
+    |> Map.put_new(:max_partition_requests, 32)
+  end
 
   defp ensure_partition_owner(
          %{
@@ -283,15 +433,19 @@ defmodule Cadence.Runtime.MissionCoordinator do
          runtime_spec,
          profiler
        ) do
-    with {:ok, runtime_spec} <- MissionRuntimeSpec.partition_input(runtime_spec, partition_key) do
+    with {:ok, _selected} <- MissionRuntimeSpec.for_partition(runtime_spec, partition_key) do
       child_spec =
         {PartitionOwner,
          mission_id: mission_id,
          process_namespace: process_namespace,
          partition_key: partition_key,
-         active_activation: runtime_spec,
-         binding_set: runtime_spec.binding_set,
-         profiler: profiler}
+         spec_source: MissionRuntime.coordinator_name(process_namespace, mission_id),
+         profiler: profiler,
+         defer_init?: true}
+
+      # Failed initialization is returned to waiting callers, without a restart
+      # storm. Unexpected owner crashes still restart and recover under supervision.
+      child_spec = Supervisor.child_spec(child_spec, restart: :transient)
 
       case DynamicSupervisor.start_child(
              MissionRuntime.partition_supervisor_name(process_namespace, mission_id),
@@ -312,26 +466,26 @@ defmodule Cadence.Runtime.MissionCoordinator do
     end
   end
 
-  defp reconcile_partitions(
-         %{
-           runtime_spec: %MissionRuntimeSpec{} = runtime_spec
-         } =
-           state
-       ) do
-    Enum.each(state.partitions, fn %PartitionKey{} = partition_key ->
-      case PartitionOwner.lookup(state.process_namespace, state.mission_id, partition_key) do
-        {:ok, partition_pid} ->
-          {:ok, partition_spec} = MissionRuntimeSpec.partition_input(runtime_spec, partition_key)
+  defp reconcile_partitions(state, runtime_spec) do
+    Enum.reduce(state.partitions, {state.requests, 0}, fn key, {requests, count} ->
+      case PartitionOwner.lookup(state.process_namespace, state.mission_id, key) do
+        {:ok, pid} ->
+          {:ok, spec} = MissionRuntimeSpec.partition_input(runtime_spec, key)
 
-          :ok =
-            PartitionOwner.reconcile(partition_pid, partition_spec, partition_spec.binding_set)
+          requests =
+            :gen_server.send_request(
+              pid,
+              {:reconcile, spec, spec.binding_set},
+              :reconcile,
+              requests
+            )
+
+          {requests, count + 1}
 
         {:error, :partition_not_running} ->
-          :ok
+          {requests, count}
       end
     end)
-
-    state
   end
 
   defp apply_runtime_spec(%{mission_id: mission_id}, %MissionRuntimeSpec{
@@ -347,10 +501,9 @@ defmodule Cadence.Runtime.MissionCoordinator do
     new_state =
       %{
         state
-        | runtime_spec: MissionRuntimeSpec.share_source_models(spec),
+        | runtime_spec: MissionRuntimeSpec.compact(spec),
           applied_at: applied_at
       }
-      |> reconcile_partitions()
 
     {:ok, GenerationApplied.new(spec, applied_at), new_state}
   end
@@ -383,10 +536,9 @@ defmodule Cadence.Runtime.MissionCoordinator do
     new_state =
       %{
         state
-        | runtime_spec: MissionRuntimeSpec.share_source_models(spec),
+        | runtime_spec: MissionRuntimeSpec.compact(spec),
           applied_at: applied_at
       }
-      |> reconcile_partitions()
 
     {:ok, GenerationApplied.new(spec, applied_at), new_state}
   end
