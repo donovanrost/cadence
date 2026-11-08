@@ -1,0 +1,16 @@
+# Scope decisions
+
+Decided by the user (U) or the director (D). Newest last. Ask the director before reversing one.
+
+| # | Decision | By | Owner |
+| --- | --- | --- | --- |
+| 1 | **Mission change sets: build them.** One mission-wide config revision (`rN`), staged changes, diff, atomic apply as `rN+1`, audit (who/when/why), rollback. Setup ships v1 on per-entity versions (option B), behind a seam so it switches to change sets when the model lands. Don't fake `rN` or the staged bar before then. | U | domain (model), api (endpoints), fe-setup (UI) |
+| 2 | **Roles: keep `organization_admin` / `member` for now.** A Cedar-based role system is planned for later. Don't build a roles model. UI shows real roles, and permission checks go through capabilities from the session bootstrap so Cedar can replace them later. | U | api, fe-setup |
+| 3 | **Routing rules move to the Spacecraft Profile** and are materialized per spacecraft, with per-spacecraft overrides. Model change in `apps/cadence`, including migrating existing per-spacecraft rules. | U | domain, api, fe-setup |
+| 4 | **Propagation (ops D1): defer.** Ground track, umbra, eclipse and AOS-prediction panels show an honest "not available" state for now. Later: server-side propagation (the user's `ex-orbital-dynamics` project is the candidate). No flight dynamics in the browser. | D | fe-ops |
+| 5 | **Procedures (ops D2): defer.** Omit the recommended-procedure panel. | D | fe-ops |
+| 6 | **Alarm lifecycle (ops D3): build a minimal one** (ack, assign, hand-off note, auto-clear when back in limits), because J2 and J6 depend on it. Ships after the Now/Investigate read endpoints. | D | domain (model), api, fe-ops |
+| 7 | **Two-person rule (ops D4): policy-driven.** Default: second GO required for hazardous/critical commands and for fleet-wide (multi-target over a threshold) requests; non-hazardous single-target commands don't need one. Mission-configurable later (it will become a Cedar policy). | D | api, fe-ops |
+| 8 | **Command waves/gates (ops D5): phase 3+.** Not in the first commanding flow. | D | fe-ops |
+| 9 | **Catalog impact/used-by: phase 2.** v1 diff shows added/changed/removed/breaking from the catalog revisions alone. Cross-references to queued commands/limits/dashboards come later. | D | api, fe-setup |
+| 10 | **Hook policy:** css-frozen guard removed repo-wide; pre-commit `stash = "none"`; team commits with `HK=0 … -- <paths>` after their own checks (see TEAM.md section Git). | U/D | everyone |
