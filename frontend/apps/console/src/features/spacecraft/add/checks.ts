@@ -1,6 +1,6 @@
 import { formatCount, plural } from "@/ui";
 import type { ClashReport } from "./batch.ts";
-import type { ProfileChoice } from "./draft.ts";
+import type { ProfileSummary } from "@/features/profiles/index.ts";
 
 export type CheckVerdict = "pass" | "note" | "nogo";
 export type BatchCheck = Readonly<{
@@ -16,7 +16,7 @@ export type BatchCheck = Readonly<{
  */
 export function batchChecks(
   report: ClashReport,
-  profile: ProfileChoice | null,
+  profile: ProfileSummary | null,
 ): readonly BatchCheck[] {
   const rows = report.rows;
   const n = rows.length;

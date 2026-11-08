@@ -1,4 +1,5 @@
 import { inject, provide, type InjectionKey } from "vue";
+import type { ProfileSummary } from "@/features/profiles/index.ts";
 import type { SpacecraftDirectory } from "../api.ts";
 import type { Draft, Proposal } from "./draft.ts";
 
@@ -7,6 +8,7 @@ export type DraftContext = Readonly<{
   draft: Readonly<Draft>;
   set: <K extends keyof Draft>(key: K, value: Draft[K]) => void;
   directory: () => SpacecraftDirectory;
+  profiles: () => readonly ProfileSummary[];
   proposal: () => Proposal;
 }>;
 

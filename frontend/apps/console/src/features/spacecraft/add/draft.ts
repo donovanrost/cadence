@@ -1,4 +1,5 @@
 import { decode, decoders, type Reader } from "@/api";
+import type { ProfileSummary } from "@/features/profiles/index.ts";
 import type { SpacecraftDirectory } from "../api.ts";
 import { checkClashes, generateRows, manifestRows, MAX_BATCH, type ClashReport } from "./batch.ts";
 import { manifestFields, readRows, type ColumnMapping } from "./manifest.ts";
@@ -126,9 +127,12 @@ export type Proposal =
   | Readonly<{ status: "ready"; report: ClashReport; profileId: string }>;
 
 /** Validates the draft step by step and builds the proposed batch with clash checks. */
-export function propose(draft: Draft, directory: SpacecraftDirectory): Proposal {
-  const profiles = new Set(directory.spacecraft.flatMap((r) => (r.profile ? [r.profile.id] : [])));
-  if (!profiles.has(draft.profileId))
+export function propose(
+  draft: Draft,
+  directory: SpacecraftDirectory,
+  profiles: readonly ProfileSummary[],
+): Proposal {
+  if (!profiles.some((p) => p.id === draft.profileId))
     return { status: "incomplete", step: "source", errors: { profileId: "Choose a profile." } };
 
   if (draft.source === "manifest") {
@@ -137,7 +141,16 @@ export function propose(draft: Draft, directory: SpacecraftDirectory): Proposal 
       return { status: "incomplete", step: "source", errors: { manifest: "Add a manifest." } };
     if (m.mapping.name === null)
       return { status: "incomplete", step: "source", errors: { manifest: "Map the Name column." } };
-    const rows = manifestRows(readRows(m.header, m.rows, m.mapping));
+    // A row may name another profile; it must be one of this mission's profiles.
+    const names = new Set(profiles.map((p) => p.name.toLowerCase()));
+    const rows = manifestRows(readRows(m.header, m.rows, m.mapping)).map((row) =>
+      row.profileName === null || names.has(row.profileName.toLowerCase())
+        ? row
+        : {
+            ...row,
+            problems: [...row.problems, `Profile “${row.profileName}” is not in this mission`],
+          },
+    );
     return {
       status: "ready",
       report: checkClashes(rows, directory.spacecraft),
@@ -183,25 +196,3 @@ export function propose(draft: Draft, directory: SpacecraftDirectory): Proposal 
 }
 
 export const mappableFields = manifestFields;
-
-export type ProfileChoice = Readonly<{ id: string; name: string; version: number; count: number }>;
-
-/**
- * Profiles in use by the mission, from the directory, until the profiles endpoint lands
- * (setup-shapes.md §P). A profile no spacecraft uses yet can't be picked here.
- */
-export function profileChoices(directory: SpacecraftDirectory): readonly ProfileChoice[] {
-  const byId = new Map<string, ProfileChoice>();
-  for (const row of directory.spacecraft) {
-    const p = row.profile;
-    if (!p) continue;
-    const seen = byId.get(p.id);
-    byId.set(p.id, {
-      id: p.id,
-      name: p.name ?? "Deleted profile",
-      version: Math.max(seen?.version ?? 0, p.version),
-      count: (seen?.count ?? 0) + 1,
-    });
-  }
-  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
-}

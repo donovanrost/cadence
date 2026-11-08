@@ -2,12 +2,11 @@
 import { computed } from "vue";
 import { ApButton, ApPanel, ApStatTile, plural } from "@/ui";
 import { useDraft, stepLabels, steps, type Step } from "./context.ts";
-import { profileChoices } from "./draft.ts";
 
 /** A4 What happens: counts, what creating does (option B wording, U2), and the step actions. */
 const props = defineProps<{ step: Step; canManage: boolean }>();
 const emit = defineEmits<{ go: [step: Step] }>();
-const { proposal, directory } = useDraft();
+const { proposal, directory, profiles } = useDraft();
 
 const ready = computed(() => {
   const p = proposal();
@@ -15,9 +14,7 @@ const ready = computed(() => {
 });
 const count = computed(() => ready.value?.report.rows.length ?? null);
 const fleet = computed(() => directory().spacecraft.length);
-const profile = computed(() =>
-  profileChoices(directory()).find((c) => c.id === ready.value?.profileId),
-);
+const profile = computed(() => profiles().find((c) => c.id === ready.value?.profileId));
 const index = computed(() => steps.indexOf(props.step));
 const next = computed(() => steps[index.value + 1] ?? null);
 const previous = computed(() => (index.value > 0 ? steps[index.value - 1] : null));

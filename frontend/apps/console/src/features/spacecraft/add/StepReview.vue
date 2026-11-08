@@ -4,10 +4,9 @@ import { ApPanel, ApTag } from "@/ui";
 import BatchPreview from "./BatchPreview.vue";
 import { batchChecks, checksMeta, type CheckVerdict } from "./checks.ts";
 import { useDraft } from "./context.ts";
-import { profileChoices } from "./draft.ts";
 
 /** A2 Checks + A3 batch preview (the board's step 04). */
-const { proposal, directory } = useDraft();
+const { proposal, profiles } = useDraft();
 const ready = computed(() => {
   const p = proposal();
   return p.status === "ready" ? p : null;
@@ -15,7 +14,7 @@ const ready = computed(() => {
 const checks = computed(() => {
   const p = ready.value;
   if (!p) return [];
-  const profile = profileChoices(directory()).find((c) => c.id === p.profileId) ?? null;
+  const profile = profiles().find((c) => c.id === p.profileId) ?? null;
   return batchChecks(p.report, profile);
 });
 
