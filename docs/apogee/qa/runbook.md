@@ -35,6 +35,24 @@ The admin is an org member of:
 
 Earendil is the realistic dataset (see `docs/how-to/run-reflect-orbital-demo.md`).
 
+### QA personas (non-admin users)
+
+The env admin runs in platform admin mode, which can hide capability-gating bugs. For gated UI
+and the two-person rule, use these Reflect Orbital users (password `apogee-qa-password`):
+
+| Email | Role |
+| --- | --- |
+| `qa-operator@example.com` | `member` |
+| `qa-second@example.com` | `member` (second operator / approver) |
+| `qa-org-admin@example.com` | `organization_admin` (no platform admin) |
+
+Seed (idempotent; already run on `cadence_dev` 2026-11-08):
+
+```sh
+cd apps/cadence_web
+mix run --no-start ../../dev/apogee_qa_personas.exs
+```
+
 ## Start / restart the server
 
 ```sh
