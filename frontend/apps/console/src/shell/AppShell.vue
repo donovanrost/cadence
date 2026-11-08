@@ -55,7 +55,9 @@ watch(
       class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-action focus:px-3 focus:py-2 focus:text-on-action"
       >Skip to content</a
     >
-    <TopBar :scope="scope" />
+    <TopBar :scope="scope">
+      <template #status><slot name="topbar-status" /></template>
+    </TopBar>
     <div class="flex min-h-0 flex-1">
       <OpsRail
         v-if="mode === 'ops' && missionScope"

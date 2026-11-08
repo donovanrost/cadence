@@ -19,7 +19,10 @@ watch(state, (current) => {
   <BootScreen v-if="state.status === 'loading'" />
   <BootScreen v-else-if="state.status === 'failed'" :error="state.error" @retry="load" />
   <SessionProvider v-else :session="state.session">
-    <AppShell />
+    <AppShell>
+      <!-- fe-ops: <FleetStatusTag /> from @/features/fleet goes here (Ops top bar). -->
+      <template #topbar-status />
+    </AppShell>
     <!-- fe-ops: mount the ⌘K palette here (it reads usePalette() from @/shell). -->
   </SessionProvider>
 </template>

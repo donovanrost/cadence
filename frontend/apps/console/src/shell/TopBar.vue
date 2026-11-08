@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import AccountMenu from "./AccountMenu.vue";
 import BrandMark from "./BrandMark.vue";
 import ClockCluster from "./ClockCluster.vue";
+import LinkStatus from "./LinkStatus.vue";
 import ModeSwitch from "./ModeSwitch.vue";
 import QueryTrigger from "./QueryTrigger.vue";
 import ScopeSwitcher from "./ScopeSwitcher.vue";
@@ -33,8 +34,9 @@ const placeholder = computed(() =>
       :mission="mission.mission.slug"
     />
     <QueryTrigger v-if="mission" :placeholder="placeholder" />
-    <!-- Ops fleet status tag and next-AOS countdown mount here once their live data exists. -->
-    <slot name="status" />
+    <LinkStatus />
+    <!-- Ops fleet status tag / next AOS: provided by features through App.vue's topbar-status slot. -->
+    <slot v-if="mode === 'ops' && mission" name="status" />
     <ClockCluster />
     <AccountMenu />
   </header>
