@@ -183,3 +183,49 @@ chips.
   two revisions, without impact). The UI then shows validation and diagnostics only.
 - Live status: an `import_run` event on the `mission:<id>` channel (`{import_run_id, status}`),
   or an `invalidate` with `catalog`. Either works; the UI refetches C3.
+
+## K · Change sets (`ux/screens/Changes.md`, facade `docs/apogee/api/domain.md`)
+
+The facade can be passed through almost one to one. The JSON is the facade shapes in snake_case,
+with these conventions:
+- atoms become lowercase strings;
+- `actor` is `{kind, id, name}`;
+- times are ISO-8601;
+- revision numbers are integers (the UI renders `rN`);
+- `doc`/`payload`/`value` stay raw JSON.
+
+All routes sit under `/api/console/v1/missions/:mission_id/config`.
+
+| Route | Facade | Notes |
+| --- | --- | --- |
+| `GET /config` | `current/2` + `permissions/2` | `{head: revision_summary, change_set: change_set \| null, permissions: ["config.stage", …]}`. Drives the staged bar and `CONFIG rN · N STAGED`. |
+| `GET /config/change-sets/:id` | `change_set/3` | |
+| `POST /config/stage` | `stage/4` | body `{summary, source, ops: [op]}`, returns the stage result |
+| `POST /config/changes/:change_id/withdraw` | `withdraw/3` | |
+| `POST /config/change-sets/:id/discard` | `discard/4` | body `{expected_version}` |
+| `POST /config/change-sets/:id/preview` | `preview/3` | |
+| `POST /config/preview` | `preview(…, {:ops, ops})` | body `{ops}`; the Profile P4 aside |
+| `POST /config/ops/:op_id/rebase` | `rebase/4` | body `{choice: "keep_mine" \| "take_live"}` |
+| `POST /config/change-sets/:id/submit` | `submit/4` | body `{reason, expected_version, acknowledged_holds}` |
+| `POST /config/change-sets/:id/review` | `review/5` | body `{decision: "approve" \| "send_back", comment, expected_version}` |
+| `GET /config/revisions?before=&limit=` | `list_revisions/3` | `{revisions: [revision_summary]}` |
+| `GET /config/revisions/:n` | `get_revision/3` | |
+| `GET /config/compare?from=&to=` | `compare/4` | |
+
+**Errors.** Use the README envelope, with `code` = the facade tag:
+- `409`: `frozen_in_review`, `change_set_changed`, `path_already_staged` (details = the map),
+  `reviewer_is_author`, `activation_policy_changed`, `entity_gone`.
+- `422`: `invalid_op` (details `{index, errors: [{path, message}]}`), `reason_required`,
+  `comment_required`, `nothing_staged`, `not_in_review`, `checks_failed` and
+  `holds_not_acknowledged` (details = the preview).
+- `403`: `forbidden`.
+- `404`: `change_set_not_found`, `revision_not_found`, `change_not_found`, `op_not_found`.
+
+The UI switches on `code`, so please keep the facade's distinct tags. Don't fold them into a
+generic 409/422.
+
+**Live, on the existing `mission:<id>` channel:**
+- `invalidate` with resource `configuration` after every mutation (`configuration_changed`).
+- `change_set_progress` `{change_set_id, key, label, state, at}` (relayed from
+  `change-sets:<id>`).
+- `config_runtime` `{revision, activation_id, generation, runtime, degraded_partitions}`.
