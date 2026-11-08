@@ -126,7 +126,12 @@ lazily on the first stage.
 4. Insert the change + ops, and recompute `content_sha256`. Publish
    `read-updates:config_staged:<org>:<mission>`.
 
-Returns `%{change_set_id, change_id, staged_count, base_revision}`.
+Returns `%{change_set_id, change_id, staged_count, base_revision}`. Errors stay distinct so the UI
+can map each one to its own state:
+- `{:error, :change_set_in_review}`
+- `{:error, {:staged_by_other, %{change_id, author, value}}}`
+- `{:error, {:invalid, [%{path, message}]}}`
+- `{:error, :forbidden}`
 
 - `withdraw(scope, change_id)`: the author (or `config.discard_any`) sets it to `withdrawn`. Ops
   are kept so the surface can rehydrate the author's edits
@@ -202,6 +207,13 @@ fe-setup's P4 aside calls `preview` with *unstaged* ops (the same function, no c
    completion. If routes/transports changed: `Contacts.Scheduler.notify_contact_changed`. Then
    publish `read-updates:config_applied`, and a timeline event `Config r6 applied · 2 changes ·
    actor`.
+6. **Runtime settle signal:** the domain publishes
+   `{:config_runtime, %{revision, activation_id, generation, runtime, degraded_partitions}}` on
+   PubSub topic `config:<org>:<mission>`, once when apply returns and again when the reconciler
+   reports `GenerationApplied` (or gives up into degraded). `runtime` is one of
+   `converging | applied | degraded`, and `not_applicable` for revisions with no generation. api
+   relays it on the console channel. `current/1` also returns the latest runtime state, so a page
+   that loads late doesn't depend on the event.
 
 **Atomicity, stated honestly.** Steps 4.1–4.5 are all-or-nothing: a failure there means
 **nothing changed** and the set returns to `open`. Step 5 runs after commit. If the runtime fails
@@ -282,7 +294,10 @@ preview(scope, change_set_id | [op])            → {:ok, %{checks: [check], eff
 current(scope)                                  → {:ok, %{head: rN, change_set: set | nil}}   # bar + CONFIG r5 · 2 STAGED
 withdraw(scope, change_id) / discard(scope, set_id)
 rebase(scope, op_id, :keep_mine | :take_live)
-submit(scope, set_id, %{reason, acknowledged_holds}) → {:ok, %{state: :applied, revision: 6, staged_count: 2}}
+submit(scope, set_id, %{reason, acknowledged_holds}) → {:ok, %{state: :applied, revision: 6, staged_count: 2,
+                                                          activation_id, generation,
+                                                          runtime: :converging | :applied | :degraded | :not_applicable,
+                                                          degraded_partitions: []}}
                                                     | {:ok, %{state: :in_review, activation_request_id}}
 review(scope, set_id, :approve | :send_back, comment) → same shapes
 stage_rollback(scope, n)                         → like stage

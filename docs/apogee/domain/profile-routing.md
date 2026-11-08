@@ -113,6 +113,8 @@ spacecraft_config_overrides
   1 SC"). If an override ends up equal to the new profile value, the read flags it
   (`redundant: true`) so P3 can offer Reset. It is not auto-deleted, because the user pinned it.
 - Reset is a `spacecraft_override` op `reset` (delete the row). `since rN` = `set_in_revision`.
+  Overrides set before change sets land (or by the migration) have `set_in_revision: nil` and
+  `set_at`, and the UI shows "since <date>".
 - Kinds: `spacecraft_override` (set/reset) and `spacecraft_route`.
 
 ### 2.4 Profile versions under change sets (answers Profile.md P4 "v5 / pinned spacecraft")
@@ -140,6 +142,8 @@ sugar for "profile catalog update with rollout" or "override on a subset". This 
 `Cadence.SpacecraftType.Schema.sections/0` returns, per section, a list of
 `%{path, label, type, unit, enum, range, default, overridable, runtime_impact, help}`:
 - `type`: `integer | boolean | enum | string | reference`
+- `enum`: `[%{value, label}]` (e.g. `%{value: "tm", label: "CCSDS TM"}`), so the UI never
+  hard-codes protocol names
 - `runtime_impact`: `generation | routes | none`
 
 It is backed by the fields that the profile form, `ConfigurationInput.from_profile` and the decoders
