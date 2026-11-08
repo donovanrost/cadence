@@ -50,6 +50,9 @@ Send a teammate a message with (`herdr` may not be on PATH in agent shells; use 
   Messages to a working agent are queued, so sending is fine either way.
 - Report to the director (`w0Q:p1`) on: milestone done, blocker, or a decision that's above your pay grade.
   Don't report routine progress.
+- **Delivery check:** a message sent to an *idle* agent can land in its input box without being submitted.
+  After sending, run `"$HERDR_BIN_PATH" pane get <pane_id>`: if it's still `idle`/`done` a few seconds later,
+  run `"$HERDR_BIN_PATH" pane send-keys <pane_id> Enter`.
 - Never close, kill or rename another person's pane. Never run `herdr server stop`.
 
 ## Architecture defaults (lead may refine; record changes in `docs/apogee/ARCHITECTURE.md`)
