@@ -27,3 +27,25 @@ min–max band. Fixes:
    add `point.unit` to alarms (M9) and history (M10). UI: unit after values (13px `text-4`) and on
    the y-axis label.
 6. Consistency: orbit `P01 · slot 1` → `P01 · slot 01` (as in Setup).
+
+## Second look at 975d9756 (2026-11-08 ~23:05Z; server went flaky mid-review)
+Verified: hero tag `CRITICAL · POWER`, B1 title in words (`POWER · OUT OF LIMITS`), RATE tile
+(`−0.43` per hour), `P01 · slot 01`. The `LIMIT —` I saw came from my mock sending
+`condition: below_low`, which isn't in the contract (`red_low`, `yellow_low`, …), so re-check pending.
+New small items:
+7. B1 meta shows the point **id** (`point-hk-vbat`); show the point **name** (`HK.battery_voltage`,
+   mono, untransformed). Ids stay in Technical details.
+8. `LAST TLM 13m 10s ago`: "ago" phrasing is out (design-language §4) → `T+13m` (or
+   `22:38:02Z · T+13m`).
+
+## Alarms (31e77d5a), first look
+Live (no limits): h1 `GROUND LIMITS OFF` + sentence + `SET UP`. That's exactly the OpsLists rule,
+never "0 active". With injected alarms: `3 ALARMS ACTIVE` plus the limits-off callout, table sorted
+severity then oldest, L2 By point. Items:
+9. The Point column shows the raw condition token (`HK.battery_voltage · below_low`). → words:
+   `below red low` / `below yellow low` / `above red high`… (map from `red_low` etc.).
+10. `NOW / LIMIT` shows `/ —` with my invalid mock; re-check with valid conditions.
+
+## Fleet (a59f5110)
+Not reviewed yet: it stayed on `LOADING FLEET…` for 4.5 s in both views while the server was
+struggling. Re-check when :4011 is stable.
