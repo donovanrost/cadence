@@ -276,3 +276,38 @@ Original questions:
    `limit_state` vocabulary as the alarms read.
 6. `uplink:<command_request_id>` is fine. With DECISIONS #7 fleet-wide requests, I'll want a topic per
    group request, not per single-target request, once M16 exists.
+
+## Proposed read shapes for api-ops (2026-11-08, DECISIONS #21)
+
+Same conventions as `docs/apogee/api/README.md`. These are what the SPA will decode; adjust and tell me.
+
+### Events (Investigate B2, Timeline): `GET /missions/:id/events`
+Query: `from`, `to` (ISO, default last 24 h), `spacecraft_id`, `plane`, `kind` (comma list), `limit`
+(≤ 500, default 200), `cursor`. Newest first. Invalidate resource: `events`.
+```json
+{"data": {"from": "…", "to": "…", "events": [{
+  "id": "evt_…", "at": "2026-11-08T02:08:11Z",
+  "kind": "limit | flight_event | contact | command | config | operator",
+  "severity": "critical | caution | nominal | info",
+  "text": "VBAT crossed red low 24.0",
+  "spacecraft": {"id": "spacecraft-earendil-312", "name": "EARENDIL-312", "scid": 312} ,
+  "refs": {"alarm_id": null, "point_id": "EPS.VBAT", "command_request_id": null, "contact_id": null}
+}]}, "meta": {"next_cursor": null}}
+```
+`spacecraft` is null for mission-scope events; `severity` says how to mark the row (crit/caution
+for limit events; nominal for verified/cleared; info for plan/operator events).
+
+### Event density (Timeline E1): `GET /missions/:id/events/density`
+Query: `from`, `to`, `bucket_s` (≥ 60), same filters as events.
+`{"data": {"bucket_s": 900, "buckets": [{"t": "…", "critical": 1, "caution": 3, "nominal": 0, "info": 5}]}}`
+
+### Point search (M23; Telemetry explore T1, ⌘K Telemetry): `GET /missions/:id/telemetry/points`
+Query: `spacecraft_id` (optional), `q` (name / description / id substring), `limit` (≤ 200).
+```json
+{"data": {"points": [{
+  "id": "EPS.VBAT", "name": "VBAT", "description": "Battery voltage", "unit": "V",
+  "subsystem": "EPS", "type": "numeric | enum | text",
+  "latest": {"value": 23.1, "received_at": "…", "limit_state": "critical | caution | nominal | no_data"}
+}]}}
+```
+`latest` is present only when `spacecraft_id` is given (null if never received).
