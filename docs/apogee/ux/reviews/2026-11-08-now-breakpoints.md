@@ -63,3 +63,6 @@ A1/A2 now get the height they need: good. Two items:
    kit per design-language §7 ApField: 32px compact / 38px standard, `well` bg, `line` border,
    radius 0, mono 12 value, custom chevron in `text-4`, white border on focus). Label it for
    assistive tech ("Plane"), value `ALL PLANES` / `PLANE 07`. Keep it synced with `?plane=`.
+
+## Closed (2026-11-08 22:32Z)
+U14 verified at 1440×900: P01–P10 | P11–P20, all 20 planes visible. Plane picker is the kit ApSelect. Data is consistent with Setup (10 reporting, 490 not heard). Now review closed.
