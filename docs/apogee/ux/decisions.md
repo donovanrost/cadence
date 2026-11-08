@@ -136,3 +136,9 @@ carrying #17's "evaluated 3m ago" intent. Ground-limit values never pulse or upd
 the Now tile caption for ground-limit-only states says `evaluated T+3m`. When an escalation clears
 an ack (ISA-18.2), the row shows the owner chip struck through plus `ACK CLEARED · ESCALATED TO
 CRITICAL` in caution text until someone acks again. Assign lists all mission members.
+
+### U17 · Revision numbers keep their case (fe-setup question)
+**Decision:** `r6` is an identifier, so it's never uppercased. Inside display-type headings, buttons
+and tags, wrap it in a mono `normal-case` span: `APPLY r6 · 2 CHANGES`, `REVIEW & APPLY AS r6`,
+`REVISIONS · r5 LIVE`. Same for other literal ids inside display text (`SCID 312`, `HK.battery_voltage`).
+Words like `rev 14` (catalog revision) are words and may uppercase.
