@@ -163,8 +163,10 @@ Feature engineers compose these; ask lead before adding a new shared primitive.
 - Scope: `useMissionScope()` from `@/shell` → `{ organization, mission }` (ids for API calls,
   slugs for links). Session + capabilities: `useSession()`, `hasCapability()`.
 - Data: `features/<area>/api.ts` declares readers (`@/api` `decoders`) and one function per endpoint
-  using `request(path, reader)`; expose `RemoteState<T>` from a composable that owns the fetch,
-  aborts on scope change/unmount, and refetches via `useMissionInvalidation(missionId, [...], refetch)`.
+  using `request(path, reader, { signal })`. A composable owns each read with
+  `useRemoteQuery(() => scope.value.mission.id, (id, signal) => fetchX(id, signal))` (aborts on key
+  change/unmount, drops stale responses, refetch keeps the last value) and refetches via
+  `useMissionInvalidation(missionId, [...], refetch)`. Render with `<ApRemote :state @retry>`.
 - Live: `useConnection()` → `connecting | live | offline`; show data as stale when not `live`.
 - Formatting: only `@/lib` (`formatAbsolute`, `formatCountdown`, `formatCount`, `plural`, `useNow`).
 - UI: compose `@/ui`. Need a new shared primitive (ApListRow, ApFactStrip, ApEventLine, ApKeyValue,
