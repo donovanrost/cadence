@@ -15,6 +15,7 @@ defmodule CadenceWeb.Console.MissionChannel do
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Platform.ScopedReadUpdates
   alias CadenceWeb.Console.Access
+  alias CadenceWeb.Console.ConfigLive
   alias CadenceWeb.Console.LimitTransitions
 
   @flush_ms 500
@@ -23,7 +24,8 @@ defmodule CadenceWeb.Console.MissionChannel do
     commanding_changed: "commanding",
     spacecraft_configuration_changed: "spacecraft",
     dashboards_changed: "dashboards",
-    settings_changed: "settings"
+    settings_changed: "settings",
+    configuration_changed: "configuration"
   }
 
   @runtime_resources %{
@@ -53,12 +55,15 @@ defmodule CadenceWeb.Console.MissionChannel do
         :ok = subscribe(scope.organization_id, mission.mission_id)
 
         {:ok, %{mission_id: mission.mission_id, resources: resources()},
-         assign(socket,
+         socket
+         |> assign(
+           scope: scope,
            organization_id: scope.organization_id,
            mission_id: mission.mission_id,
            pending: MapSet.new(),
            flush_timer: nil
-         )}
+         )
+         |> ConfigLive.join()}
 
       {:error, reason} ->
         {:error, %{reason: Atom.to_string(reason)}}
@@ -69,9 +74,28 @@ defmodule CadenceWeb.Console.MissionChannel do
   def handle_info({event, organization_id, mission_id}, socket)
       when is_map_key(@read_update_resources, event) do
     if {organization_id, mission_id} ==
-         {socket.assigns.organization_id, socket.assigns.mission_id},
-       do: {:noreply, mark(socket, Map.fetch!(@read_update_resources, event))},
-       else: {:noreply, socket}
+         {socket.assigns.organization_id, socket.assigns.mission_id} do
+      socket = mark(socket, Map.fetch!(@read_update_resources, event))
+
+      socket =
+        if event == :configuration_changed,
+          do: ConfigLive.follow_current_set(socket),
+          else: socket
+
+      {:noreply, socket}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info({:change_set_progress, set_id, step}, socket) do
+    push(socket, "change_set_progress", ConfigLive.progress_payload(set_id, step))
+    {:noreply, socket}
+  end
+
+  def handle_info({:config_runtime, runtime}, socket) do
+    push(socket, "config_runtime", ConfigLive.runtime_payload(runtime))
+    {:noreply, socket}
   end
 
   def handle_info({:console_limit_transition, mission_id, _spacecraft_id}, socket) do

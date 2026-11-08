@@ -756,14 +756,35 @@ defmodule CadenceWeb.Router do
       pipe_through(:console_mission)
 
       get("/", MissionController, :show)
+
+      # -- Ops (owner: api-ops). Contracts: docs/apogee/api/ops.md
       get("/fleet", FleetController, :show)
       get("/alarms", AlarmController, :index)
+      get("/telemetry/points/:point_id/history", PointController, :history)
+      get("/limits/points/:point_id/intervals", PointController, :limit_intervals)
+
+      # -- Setup (owner: api). Contracts: docs/apogee/api/setup.md
       get("/spacecraft", SpacecraftController, :index)
       get("/spacecraft/:spacecraft_id", SpacecraftDetailController, :show)
       get("/profiles", ProfileController, :index)
       get("/readiness", ReadinessController, :show)
-      get("/telemetry/points/:point_id/history", PointController, :history)
-      get("/limits/points/:point_id/intervals", PointController, :limit_intervals)
+
+      # -- Change sets (owner: api). Contract: docs/apogee/api/changes.md
+      scope "/config" do
+        get("/", ConfigController, :show)
+        post("/stage", ConfigController, :stage)
+        post("/preview", ConfigController, :preview_ops)
+        get("/change-sets/:change_set_id", ConfigController, :change_set)
+        post("/change-sets/:change_set_id/discard", ConfigController, :discard)
+        post("/change-sets/:change_set_id/preview", ConfigController, :preview_set)
+        post("/change-sets/:change_set_id/submit", ConfigController, :submit)
+        post("/change-sets/:change_set_id/review", ConfigController, :review)
+        post("/changes/:change_id/withdraw", ConfigController, :withdraw)
+        post("/ops/:op_id/rebase", ConfigController, :rebase)
+        get("/revisions", ConfigController, :revisions)
+        get("/revisions/:revision", ConfigController, :revision)
+        get("/compare", ConfigController, :compare)
+      end
     end
 
     match(:*, "/*path", NotFoundController, :show)

@@ -1,6 +1,13 @@
 # Ops endpoints (Now, Investigate, Contacts, Command)
 
+Owner: **api-ops** (from 2026-11-08, DECISIONS #21); api built the first four endpoints below.
 Conventions: [README.md](README.md). Asks are tracked by their IDs in `docs/apogee/plans/ops.md`.
+
+**Handover (api → api-ops):** M1–M3, M5, M9, M10 and M11 are implemented and tested. Still open from
+the threads: point `unit`/`description` on M9 and M10 (ux, fe-ops, via the M23 catalog join); the
+`fleet` channel push (shape in realtime.md, with fe-ops' seq/counts/full-row comments); and an
+events read for Investigate B2 and Timeline. The `LimitTransitions` relay (`alarms` invalidations)
+is yours too.
 
 | Ask | Endpoint | Status |
 | --- | --- | --- |

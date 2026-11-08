@@ -1,0 +1,108 @@
+defmodule CadenceWeb.Console.ConfigJSON do
+  @moduledoc """
+  Wire encoding for change sets and configuration revisions (fe-setup's §K):
+  the facade shapes with string keys, atoms as lowercase strings, times as
+  ISO-8601, and documents/values passed through as JSON. Also maps facade
+  error tags to the console error envelope, keeping each tag as its `code`.
+  """
+
+  import Plug.Conn
+
+  @status %{
+    frozen_in_review: 409,
+    change_set_changed: 409,
+    path_already_staged: 409,
+    reviewer_is_author: 409,
+    activation_policy_changed: 409,
+    entity_gone: 409,
+    invalid_op: 422,
+    reason_required: 422,
+    comment_required: 422,
+    nothing_staged: 422,
+    not_in_review: 422,
+    checks_failed: 422,
+    holds_not_acknowledged: 422,
+    invalid_range: 422,
+    forbidden: 403,
+    change_set_not_found: 404,
+    revision_not_found: 404,
+    change_not_found: 404,
+    op_not_found: 404,
+    mission_not_found: 404
+  }
+
+  @messages %{
+    frozen_in_review: "The change set is in review; staging is paused until it is decided.",
+    change_set_changed: "The change set changed since you loaded it. Reload and try again.",
+    path_already_staged: "Someone else already staged a change to this field.",
+    reviewer_is_author: "You can't review a change set you submitted or contributed to.",
+    activation_policy_changed: "The approval policy changed; the change set was reopened.",
+    entity_gone: "The item no longer exists.",
+    invalid_op: "A staged change is invalid.",
+    reason_required: "Enter a reason (10 to 2000 characters).",
+    comment_required: "Enter a comment.",
+    nothing_staged: "Nothing is staged.",
+    not_in_review: "The change set isn't in review.",
+    checks_failed: "Checks failed; nothing was applied.",
+    holds_not_acknowledged: "Acknowledge the holds to apply.",
+    invalid_range: "Choose an older revision first.",
+    forbidden: "You do not have permission to do that.",
+    change_set_not_found: "Change set not found.",
+    revision_not_found: "Revision not found.",
+    change_not_found: "Change not found.",
+    op_not_found: "Change not found.",
+    mission_not_found: "Mission not found."
+  }
+
+  @doc "Deep-encodes a facade value for JSON."
+  @spec encode(term()) :: term()
+  def encode(%DateTime{} = value), do: value
+  def encode(%Date{} = value), do: value
+  def encode(%Decimal{} = value), do: Decimal.to_float(value)
+
+  def encode(value) when is_struct(value),
+    do: value |> Map.from_struct() |> Map.delete(:__meta__) |> encode()
+
+  def encode(value) when is_map(value), do: Map.new(value, fn {k, v} -> {key(k), encode(v)} end)
+  def encode(value) when is_list(value), do: Enum.map(value, &encode/1)
+  def encode(value) when is_tuple(value), do: value |> Tuple.to_list() |> encode()
+  def encode(value) when is_boolean(value) or is_nil(value), do: value
+  def encode(value) when is_atom(value), do: Atom.to_string(value)
+  def encode(value), do: value
+
+  @doc "Sends the envelope for a facade error and halts."
+  @spec error(Plug.Conn.t(), term()) :: Plug.Conn.t()
+  def error(conn, {:invalid_op, index, errors}),
+    do: respond(conn, :invalid_op, %{index: index, errors: encode(errors)})
+
+  def error(conn, {tag, details}) when is_map_key(@status, tag),
+    do: respond(conn, tag, encode(details))
+
+  def error(conn, tag) when is_map_key(@status, tag), do: respond(conn, tag, nil)
+
+  def error(conn, {:invalid_params, details}),
+    do: CadenceWeb.Console.Problem.respond(conn, :invalid_params, details)
+
+  def error(conn, _unknown),
+    do: respond_raw(conn, 422, "unprocessable", "The request could not be completed.", nil)
+
+  defp respond(conn, tag, details),
+    do:
+      respond_raw(
+        conn,
+        Map.fetch!(@status, tag),
+        Atom.to_string(tag),
+        Map.fetch!(@messages, tag),
+        details
+      )
+
+  defp respond_raw(conn, status, code, message, details) do
+    conn
+    |> put_status(status)
+    |> Phoenix.Controller.json(CadenceWeb.Console.Problem.body(code, message, details))
+    |> halt()
+  end
+
+  defp key(key) when is_atom(key), do: Atom.to_string(key)
+  defp key(key), do: key
+end

@@ -6,6 +6,10 @@ Owner: **api**. Every contract the console SPA uses is documented in this folder
 | --- | --- |
 | [session.md](session.md) | SPA hosting, auth, bootstrap, organization switch |
 | [realtime.md](realtime.md) | `/socket/console`, `mission:<id>` channel |
+| [ops.md](ops.md) | Now / Investigate reads (owner: api-ops) |
+| [setup.md](setup.md) | Readiness, spacecraft, profiles, catalog, people |
+| [changes.md](changes.md) | Mission change sets and configuration revisions |
+| [domain.md](domain.md) | domain's facade contracts (owner: domain) |
 | [inventory.md](inventory.md) | What existed before the console API, and the gaps |
 
 ## Base and auth

@@ -103,6 +103,25 @@ defmodule CadenceWeb.Console.MissionChannelTest do
       assert_push("invalidate", %{resources: ["alarms"]}, 2_000)
     end
 
+    test "relays configuration changes, apply progress and runtime", c do
+      {:ok, _reply, _socket} =
+        subscribe_and_join(c.socket, "mission:" <> c.mission.mission_id, %{})
+
+      org_id = c.org.organization_id
+      mission_id = c.mission.mission_id
+
+      :ok = ScopedReadUpdates.publish(:configuration_changed, org_id, mission_id)
+      assert_push("invalidate", %{resources: ["configuration"]}, 2_000)
+
+      Phoenix.PubSub.broadcast(
+        Cadence.PubSub,
+        Cadence.Control.Configuration.runtime_topic(org_id, mission_id),
+        {:config_runtime, %{revision: 3, runtime: :not_applicable, degraded_partitions: []}}
+      )
+
+      assert_push("config_runtime", %{"revision" => 3, "runtime" => "not_applicable"})
+    end
+
     test "ignores changes to other missions", c do
       {:ok, _reply, _socket} =
         subscribe_and_join(c.socket, "mission:" <> c.mission.mission_id, %{})

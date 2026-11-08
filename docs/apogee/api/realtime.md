@@ -53,6 +53,7 @@ pushes are not replayed.
 | `data_sources` | data-source bindings and health |
 | `dashboards` | dashboard documents and versions |
 | `settings` | mission settings |
+| `configuration` | mission change sets and revisions (see changes.md, which also covers `change_set_progress` and `config_runtime`) |
 
 Map these to the endpoint docs: each endpoint doc lists the `invalidate` resources that should
 trigger its refetch.
