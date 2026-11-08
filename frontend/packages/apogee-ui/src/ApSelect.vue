@@ -17,10 +17,14 @@ const props = withDefaults(
     disabled?: boolean | undefined;
     name?: string | undefined;
     hiddenLabel?: boolean | undefined;
+    /** compact = 32px (panel headers, filters), standard = 38px (forms). */
+    size?: "compact" | "standard" | undefined;
+    /** Mono 12 for ids and planes; sans 14 for words. */
+    mono?: boolean | undefined;
     /** Shown as a disabled first option when nothing is chosen. */
     placeholder?: string | undefined;
   }>(),
-  { disabled: false, hiddenLabel: false },
+  { disabled: false, hiddenLabel: false, size: "standard", mono: false },
 );
 const model = defineModel<Value | "">({ required: true });
 const id = fieldId("ap-select");
@@ -35,26 +39,44 @@ const describedBy = computed(
 <template>
   <div class="flex flex-col gap-1.5">
     <label :for="id" class="ap-label" :class="hiddenLabel ? 'sr-only' : ''">{{ label }}</label>
-    <select
-      :id="id"
-      v-model="model"
-      :name="name"
-      :disabled="disabled"
-      :aria-invalid="error ? 'true' : undefined"
-      :aria-describedby="describedBy"
-      class="h-[38px] border bg-well px-3 text-base text-readout focus:border-readout"
-      :class="error ? 'border-caution' : 'border-line'"
-    >
-      <option v-if="placeholder" value="" disabled>{{ placeholder }}</option>
-      <option
-        v-for="option in options"
-        :key="option.value"
-        :value="option.value"
-        :disabled="option.disabled"
+    <div class="relative flex">
+      <select
+        :id="id"
+        v-model="model"
+        :name="name"
+        :disabled="disabled"
+        :aria-invalid="error ? 'true' : undefined"
+        :aria-describedby="describedBy"
+        class="w-full cursor-pointer appearance-none rounded-none [color-scheme:dark] border bg-well pr-8 pl-3 text-readout focus:border-readout disabled:cursor-not-allowed disabled:text-text-off"
+        :class="[
+          error ? 'border-caution' : 'border-line',
+          size === 'compact' ? 'h-8' : 'h-[38px]',
+          mono ? 'font-mono text-sm' : 'font-sans text-base',
+        ]"
       >
-        {{ option.label }}
-      </option>
-    </select>
+        <option v-if="placeholder" value="" disabled>{{ placeholder }}</option>
+        <option
+          v-for="option in options"
+          :key="option.value"
+          :value="option.value"
+          :disabled="option.disabled"
+        >
+          {{ option.label }}
+        </option>
+      </select>
+      <svg
+        aria-hidden="true"
+        width="10"
+        height="10"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="3"
+        class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-text-4"
+      >
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+    </div>
     <p v-if="hint" :id="`${id}-hint`" class="m-0 text-sm text-text-3">{{ hint }}</p>
     <p v-if="error" :id="`${id}-error`" class="m-0 text-sm text-caution-text">{{ error }}</p>
   </div>
