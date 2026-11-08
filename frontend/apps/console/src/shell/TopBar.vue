@@ -47,8 +47,10 @@ const placeholder = computed(() =>
     />
     <div v-else class="flex-1" />
     <LinkStatus />
-    <!-- Ops fleet status tag / next AOS: provided by features through App.vue's topbar-status slot. -->
+    <!-- Mode-specific status from features, composed in App.vue: Ops fleet tag / next AOS,
+         Setup config revision. -->
     <slot v-if="mode === 'ops' && mission" name="status" />
+    <slot v-if="mode === 'setup' && mission" name="setup-status" />
     <ClockCluster />
     <AccountMenu />
   </header>

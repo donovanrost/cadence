@@ -67,6 +67,7 @@ watch(
     >
     <TopBar :scope="scope">
       <template #status><slot name="topbar-status" /></template>
+      <template #setup-status><slot name="topbar-setup-status" /></template>
     </TopBar>
     <div class="flex min-h-0 flex-1">
       <OpsRail
@@ -81,22 +82,27 @@ watch(
         :mission="missionScope?.mission.slug ?? null"
         :can-admin-org="canAdminOrg"
       />
-      <main
-        id="main"
-        tabindex="-1"
-        class="flex min-w-0 flex-1 flex-col"
-        :class="
-          consoleLayout
-            ? 'gap-3 overflow-auto px-4 py-3 md:px-5 md:py-3.5 console:overflow-hidden'
-            : 'gap-4 overflow-auto px-4 pt-4 pb-6 md:px-6 md:pt-5'
-        "
-      >
-        <ApCallout v-if="mode === 'setup'" tone="info" class="md:hidden">
-          Setup is designed for a larger screen. You can read here; editing works best on a desktop.
-        </ApCallout>
-        <NotFoundScreen v-if="unknownScope" :sentence="unknownScope" />
-        <RouterView v-else />
-      </main>
+      <div class="flex min-w-0 flex-1 flex-col">
+        <main
+          id="main"
+          tabindex="-1"
+          class="flex min-h-0 flex-1 flex-col"
+          :class="
+            consoleLayout
+              ? 'gap-3 overflow-auto px-4 py-3 md:px-5 md:py-3.5 console:overflow-hidden'
+              : 'gap-4 overflow-auto px-4 pt-4 pb-6 md:px-6 md:pt-5'
+          "
+        >
+          <ApCallout v-if="mode === 'setup'" tone="info" class="md:hidden">
+            Setup is designed for a larger screen. You can read here; editing works best on a
+            desktop.
+          </ApCallout>
+          <NotFoundScreen v-if="unknownScope" :sentence="unknownScope" />
+          <RouterView v-else />
+        </main>
+        <!-- Setup bottom bar (staged changes), composed in App.vue; stays put while main scrolls. -->
+        <slot v-if="mode === 'setup' && missionScope" name="setup-footer" />
+      </div>
     </div>
     <MobileTabBar
       v-if="mode === 'ops' && missionScope"

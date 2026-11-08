@@ -6,6 +6,7 @@ export const missionResources = [
   "alarms",
   "catalog",
   "commanding",
+  "configuration",
   "dashboards",
   "data_sources",
   "events",

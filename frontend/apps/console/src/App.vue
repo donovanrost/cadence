@@ -23,6 +23,10 @@ watch(state, (current) => {
     <AppShell>
       <!-- fe-ops: <FleetStatusTag /> from @/features/fleet goes here (Ops top bar). -->
       <template #topbar-status />
+      <!-- fe-setup: <ConfigStatus /> (CONFIG rN · n STAGED) for the Setup top bar. -->
+      <template #topbar-setup-status />
+      <!-- fe-setup: <StagedBar /> under Setup screens. -->
+      <template #setup-footer />
     </AppShell>
     <PaletteRoot />
   </SessionProvider>
