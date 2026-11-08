@@ -164,6 +164,20 @@ No new data beyond the above.
 
 ## Decisions needed (director / ux / api)
 
+**Resolved** in [`docs/apogee/DECISIONS.md`](../DECISIONS.md) #4–8 (2026-11-08):
+
+- **D1** Propagation is deferred. Its panels show "not available", with no flight dynamics in the browser.
+- **D2** Procedures are deferred. B3 is omitted.
+- **D3** A minimal alarm lifecycle (ack, assign, hand-off note, auto-clear) will be built by domain + api after the
+  Now/Investigate reads. Acknowledge and Assign stay hidden until then.
+- **D4** Two-person rule is policy-driven: hazardous, critical, or fleet-wide requests need a second GO.
+- **D5** Waves are phase 3+.
+
+ux decided B4's title is "Plane NN · same point in limits" unless the backend computes real similarity.
+Screen specs: `docs/apogee/ux/screens/{Now,Investigate}.md`.
+
+Original options:
+
 - **D1 Propagation.** Ground tracks, umbra, next eclipse, max elevation and AOS predictions
   need a propagator. Options: (a) server-side Keplerian/SGP4 from typed orbit elements, (b) a
   client-side Keplerian helper for the schematic views only, (c) defer and show honest
