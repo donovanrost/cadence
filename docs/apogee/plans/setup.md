@@ -70,7 +70,7 @@ Import catalog).
 | Revisions R2 | last N revisions: number, at, summary, actor | — | **Missing** (see §0). Under option B, show a "recent changes" feed from `OperationalEvents` + routing-rule events + app install events if api can unify them, or drop the panel. |
 | Verdict | "Ready for operations" / "N blockers" | derived from findings | Derive in the client from the decoded findings (blocker count). |
 
-**Proposed endpoint:** `GET /api/console/v1/orgs/:org/missions/:mission/readiness` →
+**Proposed endpoint:** `GET /api/console/v1/missions/:mission_id/readiness` (api conventions: `docs/apogee/api/README.md`; contracts in `docs/apogee/api/setup.md`) →
 `{areas: [{key, status, count, unit, detail}], findings: [{id, severity, cause, title, body,
 affected_count, fix: {kind, id} | null}], verdict: {blockers, cautions, suggestions}}`.
 
