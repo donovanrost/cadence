@@ -1,6 +1,76 @@
 # Mission change sets (DECISIONS #1)
 
-Owner: **domain**. Status: **draft 1 for review** (2026-11-08). Reviewers: director, api, fe-setup, ux.
+Owner: **domain**. Status: **draft 2, P1 built** (2026-11-08). Reviewers: director, api, fe-setup, ux.
+Decisions: DECISIONS #13 (freeze while in review), #14 (reviewer ≠ every author), #16 (build P1).
+Facade contract: `docs/apogee/api/domain.md`.
+
+## Draft 2: what P1 built and what changed since draft 1
+
+**Built:**
+- Migration `20261108100000`: heads, revisions, entries, change sets, changes, ops, reviews.
+- `Cadence.Configuration.*` is the core.
+- `Cadence.Control.Configuration` is the facade, a composition root.
+- `Cadence.Platform.ConfigKind` is the contract.
+- Kinds: `ground_station`, `transport` (comms) and `spacecraft`, `spacecraft_profile` (spacecraft).
+- Tests: `test/cadence/configuration/` (20).
+
+**Changed from draft 1:**
+1. **Review records live with the change set in P1** (`mission_config_reviews`), not in
+   `activation_requests`. The approval *policy* is still ADR-004's: `ActivationPolicy.evidence`
+   is captured at submit and re-validated at apply, and `activation_policy_changed` reopens the
+   set. `activation_requests` can't carry a change set, because its `binding_set_*` columns are
+   NOT NULL. P1 kinds produce no binding set. When P2 kinds change the runtime generation, the
+   apply will create the activation request **pre-approved with the change set's review
+   evidence**. That needs a small `Management.Activations` extension, and it keeps one
+   decision per change.
+2. **`config.stage` = `operate_mission`** (active members), not `manage_mission`. That matches
+   who can save configuration today. `config.discard_any` = `manage_mission` (org admins).
+3. **Staging validates fields only.** Cross-entity checks (SCID taken, pin exists, profile in
+   use) run in preview. A set can therefore hold, say, a spacecraft pinned to a profile created
+   earlier in the same set.
+4. **Op `options`** carry per-op settings that aren't fields: a profile edit's `rollout`
+   (`all` | `none` | `{spacecraft: [ids]}`). Moved spacecraft enter the revision as their own
+   entries.
+5. **Runtime impact in P1:** `transport` → contact scheduler notified after commit (booked and
+   running contacts keep their route). `ground_station`, `spacecraft` and `spacecraft_profile`
+   have no direct runtime effect; spacecraft configuration still reaches the runtime through
+   activation (profile-routing.md §4, P2).
+
+**Director review notes (`review-director-1.md`):**
+1. *Sandbox side effects.* The rule is in the `ConfigKind` moduledoc: `validate/6` and
+   `write/7` only use `Repo`. `ScopedReadUpdates` already skips publishing inside a transaction.
+   The test `preview … publishes nothing` subscribes to `:configuration_changed` and
+   `:spacecraft_configuration_changed` while previewing a station and a spacecraft. Because
+   stores skip invalidations inside the apply transaction too, the facade re-publishes
+   `:spacecraft_configuration_changed` after commit.
+2. *Preview locks.* Preview takes no head lock and no advisory lock. It runs under
+   `SET LOCAL statement_timeout = 15000`.
+3. *Fleet snapshot cap.* P1 composes no fleet snapshot, so the cap doesn't affect P1. **But
+   the existing per-spacecraft activation path is capped at 500 spacecraft / 4 MiB today**
+   (`L/catalog/spacecraft_model_bindings.ex:5-6`), so a 550-spacecraft mission can't be
+   activated through today's review either. P2 prerequisite: move per-spacecraft entries out of
+   the activation `metadata` blob into a child table keyed by `activation_id` (one row per
+   spacecraft, content hash in metadata), and compose by streaming. I'll do that before the
+   first P2 kind that produces a generation.
+4. *Outside changes.* A conflict reports `changed_in: :outside` when no revision after the base
+   touched the path. The UI wording is "changed outside a change set" (api/domain.md, Preview).
+5. *Rollback across legacy activations.* P2 rollback will **refuse a range that contains a
+   `legacy_activation` revision**. Its entries are derived from activation snapshot diffs, and
+   reversing them means re-activating an old configuration, which isn't a ledger inverse. The
+   error names the newest legacy revision; you can roll back to it, not past it. Values changed
+   outside change sets since the target are shown in the rollback preview and overwritten only
+   with an explicit HOLD acknowledgement.
+6. *Facade.* `docs/apogee/api/domain.md`.
+
+**New finding (DECISIONS #15 follow-up, director):** profile `frame_parameters` are **not read
+by the decode path today.** Downlink frame size comes from the transport's tcp_socket
+configuration (`L/comms/transport_kinds/tcp_socket.ex:263-267`, `ingress_metadata`), and the
+profile values only feed the spacecraft configuration document. Strictly, "framing fields only
+appear if the pipeline uses them" leaves the Framing section empty. I recommend fixing the model
+in P2 instead: the profile is the byte-interpretation owner (wire/bytes split), so the
+materialized spacecraft configuration should supply framing to ingress. Until then, show the
+Framing section read-only with "applied through spacecraft configuration".
+
 UX contract: `docs/apogee/ux/screens/Changes.md`. Companion: `profile-routing.md` (routing rules and
 overrides are change-set kinds). `L` = `apps/cadence/lib/cadence`.
 
@@ -330,9 +400,9 @@ commit, a runtime convergence problem is "applied, runtime degraded" (§7).
 
 ## 14. Phasing
 
-- **P1 (model):** tables, staging, ledger, baseline r1, kinds `spacecraft_profile`, `spacecraft`,
-  `transport`, `ground_station`; submit/execute with direct + independent policy; revisions
-  read; preview with validation + conflicts + effect.
+- **P1 (model) — built:** tables, staging, ledger, baseline r1, kinds `spacecraft_profile`,
+  `spacecraft`, `transport`, `ground_station`; submit/execute with direct + independent policy;
+  revisions read; preview with validation + conflicts + effect.
 - **P2:** `profile_routing_rule` + `spacecraft_override` + `catalog_assignment` (profile-routing.md),
   readiness-after and in-flight checks, rollback, legacy-activation revisions, synthetic-profile
   migration.
