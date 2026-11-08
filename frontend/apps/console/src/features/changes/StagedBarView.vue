@@ -43,15 +43,21 @@ const authors = computed(() => {
     aria-label="Staged changes"
   >
     <span class="font-mono text-sm text-text-3 uppercase">
-      {{ set.set.state === "in_review" ? `r${next} in review` : "Staged · not applied" }}
+      <template v-if="set.set.state === 'in_review'"
+        ><span class="normal-case">r{{ next }}</span> in review</template
+      >
+      <template v-else>Staged · not applied</template>
     </span>
     <span class="min-w-0 flex-1 text-base text-readout">
       <b>{{ plural(set.set.staged_count, "change") }}:</b> {{ summary }}
       <span v-if="authors" class="text-text-3"> by {{ authors }}</span>
       <span v-if="set.set.state === 'in_review'" class="text-text-3"> · staging is paused</span>
     </span>
-    <ApButton variant="primary" :to="{ name: 'setup.changes' }">{{
-      set.set.state === "in_review" ? "Open review" : `Review & apply as r${next}`
-    }}</ApButton>
+    <ApButton variant="primary" :to="{ name: 'setup.changes' }">
+      <template v-if="set.set.state === 'in_review'">Open review</template>
+      <template v-else
+        >Review &amp; apply as <span class="font-mono normal-case">r{{ next }}</span></template
+      >
+    </ApButton>
   </div>
 </template>

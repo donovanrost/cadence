@@ -6,6 +6,7 @@ import { useMissionScope } from "@/shell";
 import { ApEmptyState, ApPageHeader, ApPanel, ApRemote, formatShort, plural } from "@/ui";
 import ApplyAside from "./ApplyAside.vue";
 import ChangeList from "./ChangeList.vue";
+import ChecksPanel from "./ChecksPanel.vue";
 import { fetchConfigState } from "./api.ts";
 import type { ConfigState } from "./shapes.ts";
 
@@ -39,6 +40,12 @@ function meta(config: ConfigState): string | null {
 <template>
   <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
     <ApPageHeader :label="`${scope.mission.name} · staged changes`" :title="title" size="reading">
+      <template
+        v-if="state.status === 'ready' && (state.value.change_set?.staged_count ?? 0) > 0"
+        #title
+        >Apply <span class="font-mono normal-case">r{{ state.value.head.revision + 1 }}</span> ·
+        {{ plural(state.value.change_set?.staged_count ?? 0, "change") }}</template
+      >
       <template v-if="state.status === 'ready' && meta(state.value)" #subtitle>
         <span class="font-mono text-sm text-text-3">{{ meta(state.value) }}</span>
       </template>
@@ -64,7 +71,10 @@ function meta(config: ConfigState): string | null {
           />
         </ApPanel>
         <div v-else class="flex flex-wrap items-start gap-4">
-          <ChangeList :changes="value.change_set.changes" class="min-w-0 flex-[999_1_560px]" />
+          <div class="flex min-w-0 flex-[999_1_560px] flex-col gap-4">
+            <ChangeList :changes="value.change_set.changes" />
+            <ChecksPanel />
+          </div>
           <ApplyAside
             :config="value"
             :change-set="value.change_set"

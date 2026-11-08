@@ -50,5 +50,9 @@ function toggle(id: string) {
         </ul>
       </li>
     </ul>
+    <p class="m-0 border-t border-hairline px-4 py-2.5 text-sm text-text-3">
+      Withdraw and Discard arrive with the change-set write endpoints. Until then, changes are
+      withdrawn where they were made.
+    </p>
   </ApPanel>
 </template>

@@ -43,9 +43,12 @@ function kindLabel(row: RevisionSummary): string {
     <template #cell-applied="{ row }">{{ formatAbsolute(new Date(row.applied_at)) }}</template>
     <template #cell-by="{ row }">{{ row.applied_by?.name ?? "—" }}</template>
     <template #cell-why="{ row }">
-      <span class="block max-w-[48ch] truncate text-text-2" :title="row.reason ?? undefined">{{
-        row.reason ?? row.summary ?? "—"
-      }}</span>
+      <span
+        class="block max-w-[48ch] truncate"
+        :class="row.reason ? 'text-text-2' : 'text-text-3'"
+        :title="row.reason ?? row.summary ?? undefined"
+        >{{ row.reason ?? row.summary ?? "—" }}</span
+      >
     </template>
     <template #cell-changes="{ row }">{{ plural(row.entry_count, "entry", "entries") }}</template>
     <template #cell-kind="{ row }"

@@ -28,6 +28,9 @@ const live = computed(() =>
       :title="live ? `Revisions · r${live.revision} live` : 'Revisions'"
       size="reading"
     >
+      <template v-if="live" #title
+        >Revisions · <span class="font-mono normal-case">r{{ live.revision }}</span> live</template
+      >
       <template #subtitle>
         <span class="text-md text-text-3"
           >Every apply makes a revision. History is append-only; rolling back makes a new one.</span
