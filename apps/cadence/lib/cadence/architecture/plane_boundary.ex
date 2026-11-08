@@ -28,6 +28,8 @@ defmodule Cadence.Architecture.PlaneBoundary do
       "lib/cadence/catalog.ex",
       "lib/cadence/catalog/",
       "lib/cadence/comms/",
+      "lib/cadence/configuration.ex",
+      "lib/cadence/configuration/",
       "lib/cadence/contact_planning/",
       "lib/cadence/governance.ex",
       "lib/cadence/governance/",

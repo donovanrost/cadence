@@ -1,0 +1,333 @@
+defmodule Cadence.Configuration.Staging do
+  @moduledoc """
+  Stages changes into the mission's one shared change set.
+
+  Staging validates each op's shape and fields through its kind (no cross-entity checks; those
+  run in the preview), records the live values of the paths it touches as its base, and refuses
+  a path another author already staged. A re-stage by the same author replaces that author's
+  earlier value.
+  """
+
+  import Ecto.Query
+
+  alias Cadence.Configuration.{ChangeRow, ChangeSetStore, Document, Kinds, OpRow}
+  alias Cadence.Ids
+  alias Cadence.Repo
+
+  @actions ~w(create update delete)
+  @max_ops 1_000
+
+  @type op_input :: %{
+          required(:kind) => String.t(),
+          required(:action) => String.t() | atom(),
+          optional(:entity_id) => String.t(),
+          optional(:document) => map(),
+          optional(:changes) => [%{path: String.t(), value: term()}]
+        }
+
+  @spec stage(String.t(), String.t(), integer(), map(), map(), [op_input()]) ::
+          {:ok, map()} | {:error, term()}
+  def stage(organization_id, mission_id, head_revision, actor, attrs, ops)
+      when is_list(ops) and length(ops) in 1..@max_ops do
+    with {:ok, summary} <- summary(attrs),
+         {:ok, prepared} <- prepare_all(organization_id, mission_id, ops) do
+      Repo.transaction(fn ->
+        organization_id
+        |> ChangeSetStore.lock_or_open(mission_id, head_revision, actor)
+        |> stage_locked(actor, summary, Map.get(attrs, :source, %{}), prepared)
+      end)
+    end
+  end
+
+  def stage(_organization_id, _mission_id, _head, _actor, _attrs, _ops),
+    do: {:error, {:invalid_op, 0, [%{path: "", message: "Stage between 1 and #{@max_ops} ops"}]}}
+
+  defp stage_locked(set, actor, summary, source, prepared) do
+    with :ok <- not_frozen(set),
+         :ok <- resolve_overlaps(set, actor, prepared) do
+      insert_change(set, actor, summary, source, prepared)
+    else
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
+
+  @doc "Prepares unstaged ops for a preview, in pipeline form."
+  @spec prepare_ops(String.t(), String.t(), [op_input()]) :: {:ok, [map()]} | {:error, term()}
+  def prepare_ops(organization_id, mission_id, ops)
+      when is_list(ops) and length(ops) in 1..@max_ops do
+    with {:ok, prepared} <- prepare_all(organization_id, mission_id, ops) do
+      {:ok,
+       prepared
+       |> Enum.with_index()
+       |> Enum.map(fn {op, index} ->
+         Map.merge(op, %{op_id: "unstaged:#{index}", change_id: "unstaged"})
+       end)}
+    end
+  end
+
+  def prepare_ops(_organization_id, _mission_id, _ops),
+    do:
+      {:error, {:invalid_op, 0, [%{path: "", message: "Preview between 1 and #{@max_ops} ops"}]}}
+
+  defp summary(%{summary: summary}) when is_binary(summary) do
+    case String.trim(summary) do
+      trimmed when byte_size(trimmed) in 1..500 -> {:ok, trimmed}
+      _ -> {:error, {:invalid_op, 0, [%{path: "summary", message: "Enter a short summary"}]}}
+    end
+  end
+
+  defp summary(_attrs),
+    do: {:error, {:invalid_op, 0, [%{path: "summary", message: "Enter a short summary"}]}}
+
+  defp prepare_all(organization_id, mission_id, ops) do
+    ops
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, []}, fn {op, index}, {:ok, acc} ->
+      case prepare(organization_id, mission_id, op) do
+        {:ok, prepared} -> {:cont, {:ok, [prepared | acc]}}
+        {:error, errors} -> {:halt, {:error, {:invalid_op, index, errors}}}
+      end
+    end)
+    |> case do
+      {:ok, prepared} -> {:ok, Enum.reverse(prepared)}
+      error -> error
+    end
+  end
+
+  defp prepare(organization_id, mission_id, op) do
+    with {:ok, kind} <- kind(op),
+         {:ok, action} <- action(op) do
+      prepare(kind, action, organization_id, mission_id, op)
+    end
+  end
+
+  defp prepare(kind, "create", _organization_id, _mission_id, op) do
+    entity_id = Map.get(op, :entity_id) || Ids.new(kind.id_prefix())
+
+    with {:ok, document} <- kind.normalize(:create, entity_id, Document.normalize(op[:document])) do
+      {:ok, op_attrs(kind, "create", entity_id, %{"document" => document}, %{}, [])}
+    end
+  end
+
+  defp prepare(kind, action, organization_id, mission_id, op) do
+    entity_id = Map.get(op, :entity_id)
+
+    with {:ok, current} <- current(kind, organization_id, mission_id, entity_id) do
+      prepare_existing(kind, action, entity_id, current, op)
+    end
+  end
+
+  defp prepare_existing(kind, "delete", entity_id, current, _op) do
+    with {:ok, _} <- kind.normalize(:delete, entity_id, nil) do
+      {:ok, op_attrs(kind, "delete", entity_id, %{}, %{"sha256" => Document.sha256(current)}, [])}
+    end
+  end
+
+  defp prepare_existing(kind, "update", entity_id, current, op) do
+    with {:ok, changes} <- changes(op, current),
+         {:ok, proposed} <- kind.normalize(:update, entity_id, Document.patch(current, changes)) do
+      changes = Enum.map(changes, &%{&1 | "value" => Document.get(proposed, &1["path"])})
+      paths = Enum.map(changes, & &1["path"])
+      base = %{"values" => Map.new(paths, &{&1, Document.get(current, &1)})}
+
+      {:ok, op_attrs(kind, "update", entity_id, %{"changes" => changes}, base, paths)}
+    end
+  end
+
+  defp changes(op, current) do
+    changes =
+      op
+      |> Map.get(:changes, [])
+      |> Enum.map(&%{"path" => to_string(&1[:path] || &1["path"]), "value" => change_value(&1)})
+      |> Enum.reject(&(Document.get(current, &1["path"]) == Document.normalize(&1["value"])))
+
+    case changes do
+      [] -> {:error, [%{path: "", message: "Nothing to change"}]}
+      changes -> {:ok, changes}
+    end
+  end
+
+  defp change_value(change), do: Map.get(change, :value, Map.get(change, "value"))
+
+  defp current(_kind, _organization_id, _mission_id, nil),
+    do: {:error, [%{path: "entity_id", message: "Choose what to change"}]}
+
+  defp current(kind, organization_id, mission_id, entity_id) do
+    case Map.get(kind.load(organization_id, mission_id, [entity_id]), entity_id) do
+      nil -> {:error, [%{path: "entity_id", message: "This no longer exists"}]}
+      document -> {:ok, Document.normalize(document)}
+    end
+  end
+
+  defp kind(%{kind: kind}) do
+    case Kinds.fetch(to_string(kind)) do
+      {:ok, module} -> {:ok, module}
+      {:error, :unknown_kind} -> {:error, [%{path: "kind", message: "Unknown kind"}]}
+    end
+  end
+
+  defp kind(_op), do: {:error, [%{path: "kind", message: "Unknown kind"}]}
+
+  defp action(%{action: action}) do
+    action = to_string(action)
+
+    if action in @actions,
+      do: {:ok, action},
+      else: {:error, [%{path: "action", message: "Unknown action"}]}
+  end
+
+  defp action(_op), do: {:error, [%{path: "action", message: "Unknown action"}]}
+
+  defp op_attrs(kind, action, entity_id, payload, base, paths) do
+    %{
+      kind: kind.kind(),
+      action: action,
+      entity_id: entity_id,
+      payload: payload,
+      base: base,
+      touched_paths: paths
+    }
+  end
+
+  defp not_frozen(%{state: "in_review"}), do: {:error, :frozen_in_review}
+  defp not_frozen(_set), do: :ok
+
+  # Another author's staged op on the same entity and path blocks the stage. The same author's
+  # earlier value for a path is replaced by the new one.
+  defp resolve_overlaps(set, actor, prepared) do
+    actor_key = actor_key(actor)
+    staged = ChangeSetStore.staged_ops(set.change_set_id)
+
+    case Enum.find_value(prepared, &foreign_overlap(&1, staged, actor_key)) do
+      nil ->
+        Enum.each(prepared, &replace_own(&1, staged, actor_key))
+        withdraw_emptied(set, actor_key)
+        :ok
+
+      overlap ->
+        {:error, {:path_already_staged, overlap}}
+    end
+  end
+
+  defp foreign_overlap(op, staged, actor_key) do
+    Enum.find_value(staged, fn other ->
+      with true <- other.author_key != actor_key,
+           true <- same_entity?(op, other),
+           [path | _] <- overlapping_paths(op, other) do
+        %{
+          change_id: other.change_id,
+          author: other.author,
+          kind: op.kind,
+          entity_id: op.entity_id,
+          path: path,
+          value: staged_value(other, path)
+        }
+      else
+        _ -> nil
+      end
+    end)
+  end
+
+  defp replace_own(op, staged, actor_key) do
+    for other <- staged,
+        other.author_key == actor_key,
+        same_entity?(op, other),
+        other.action == "update",
+        overlapping_paths(op, other) != [] do
+      remaining = other.touched_paths -- op.touched_paths
+      shrink_op(other, remaining)
+    end
+  end
+
+  defp shrink_op(%{op_id: op_id}, []), do: Repo.delete_all(op_query(op_id))
+
+  defp shrink_op(other, remaining) do
+    changes = Enum.filter(other.payload["changes"], &(&1["path"] in remaining))
+    values = Map.take(other.base["values"], remaining)
+
+    Repo.update_all(op_query(other.op_id),
+      set: [
+        touched_paths: remaining,
+        payload: %{"changes" => changes},
+        base: %{"values" => values}
+      ]
+    )
+  end
+
+  defp op_query(op_id), do: where(OpRow, [op], op.op_id == ^op_id)
+
+  defp withdraw_emptied(set, actor_key) do
+    ids =
+      from(change in ChangeRow,
+        as: :change,
+        where:
+          change.change_set_id == ^set.change_set_id and change.state == "staged" and
+            change.author_key == ^actor_key,
+        where: not exists(from(op in OpRow, where: op.change_id == parent_as(:change).change_id)),
+        select: change.change_id
+      )
+      |> Repo.all()
+
+    ChangeSetStore.set_change_states(set.change_set_id, ids, "withdrawn")
+  end
+
+  defp same_entity?(op, other), do: op.kind == other.kind and op.entity_id == other.entity_id
+
+  defp overlapping_paths(%{action: action}, _other) when action in ["create", "delete"], do: [""]
+  defp overlapping_paths(_op, %{action: action}) when action in ["create", "delete"], do: [""]
+
+  defp overlapping_paths(op, other),
+    do: Enum.filter(op.touched_paths, &(&1 in other.touched_paths))
+
+  defp staged_value(%{payload: %{"changes" => changes}}, path),
+    do: changes |> Enum.find(%{}, &(&1["path"] == path)) |> Map.get("value")
+
+  defp staged_value(_other, _path), do: nil
+
+  defp insert_change(set, actor, summary, source, prepared) do
+    now = DateTime.utc_now()
+    change_id = Ids.new("config_change")
+
+    Repo.insert!(%ChangeRow{
+      change_id: change_id,
+      change_set_id: set.change_set_id,
+      organization_id: set.organization_id,
+      mission_id: set.mission_id,
+      author: actor,
+      author_key: actor_key(actor),
+      staged_at: now,
+      summary: summary,
+      source: Document.normalize(source),
+      state: "staged",
+      position: ChangeSetStore.next_change_position(set.change_set_id)
+    })
+
+    rows =
+      prepared
+      |> Enum.with_index()
+      |> Enum.map(fn {op, index} ->
+        Map.merge(op, %{
+          op_id: Ids.new("config_op"),
+          change_id: change_id,
+          change_set_id: set.change_set_id,
+          organization_id: set.organization_id,
+          mission_id: set.mission_id,
+          position: index
+        })
+      end)
+
+    rows |> Enum.chunk_every(500) |> Enum.each(&Repo.insert_all(OpRow, &1))
+    updated = ChangeSetStore.update_set(set, [])
+
+    %{
+      change_set_id: set.change_set_id,
+      change_id: change_id,
+      version: updated.version,
+      staged_count: length(ChangeSetStore.changes(set.change_set_id)),
+      base_revision: set.base_revision_number,
+      entity_ids: Enum.map(prepared, & &1.entity_id)
+    }
+  end
+
+  defp actor_key(%{"kind" => kind, "id" => id}), do: kind <> ":" <> id
+end

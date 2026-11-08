@@ -14,6 +14,7 @@ defmodule Cadence.Architecture.ContextBoundary do
   @contexts [
     :identity,
     :catalog,
+    :configuration,
     :comms,
     :ground_networks,
     :contact_planning,
@@ -35,6 +36,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/contact_planning/fleet_run_actions.ex" => :contacts,
     "lib/cadence/contact_planning/fleet_run_repairs.ex" => :contacts,
     "lib/cadence/control/missions.ex" => :composition,
+    "lib/cadence/control/configuration.ex" => :composition,
     "lib/cadence/applications/telemetry_decom_catalog_contribution.ex" => :composition,
     "lib/cadence/semantic_runtime.ex" => :catalog,
     "lib/cadence/semantic_runtime/algorithm_plan.ex" => :catalog,
@@ -216,6 +218,10 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/mission_models.ex",
       "lib/cadence/mission_models/"
     ],
+    configuration: [
+      "lib/cadence/configuration.ex",
+      "lib/cadence/configuration/"
+    ],
     comms: [
       "lib/cadence/comms/",
       "lib/cadence/source_endpoints.ex",
@@ -323,6 +329,7 @@ defmodule Cadence.Architecture.ContextBoundary do
   @allowed %{
     identity: [:platform],
     catalog: [:identity, :platform],
+    configuration: [:identity, :catalog, :platform],
     comms: [:identity, :catalog, :platform],
     ground_networks: [:identity, :comms, :platform],
     contact_planning: [:identity, :catalog, :comms, :ground_networks, :platform],

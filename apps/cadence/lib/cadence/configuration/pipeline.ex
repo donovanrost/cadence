@@ -1,0 +1,250 @@
+defmodule Cadence.Configuration.Pipeline do
+  @moduledoc """
+  Applies staged ops, in order, to the current database state. It is the shared core of
+  `Preview` (inside a rolled-back transaction) and of an apply (inside the committing one).
+
+  For each op it loads the live document, detects conflicts by value against the op's base,
+  computes the proposed document, validates the transition through its kind and writes it.
+  Validation problems are collected so a preview reports all of them. The first failed write
+  stops the run, because Postgres aborts the transaction after any SQL error.
+
+  Must run inside a transaction.
+  """
+
+  alias Cadence.Configuration.{Document, Kinds, Ledger}
+
+  @type op :: %{
+          required(:op_id) => String.t(),
+          required(:change_id) => String.t(),
+          required(:kind) => String.t(),
+          required(:entity_id) => String.t(),
+          required(:action) => String.t(),
+          required(:payload) => map(),
+          required(:base) => map(),
+          required(:touched_paths) => [String.t()]
+        }
+
+  @type result :: %{
+          entries: [map()],
+          conflicts: [map()],
+          errors: [map()],
+          effects: [map()],
+          diffs: [map()],
+          impacts: MapSet.t(),
+          halted?: boolean()
+        }
+
+  @spec run(String.t(), String.t(), integer(), [op()]) :: result()
+  def run(organization_id, mission_id, base_revision, ops) do
+    initial = %{
+      entries: [],
+      conflicts: [],
+      errors: [],
+      effects: [],
+      diffs: [],
+      impacts: MapSet.new(),
+      halted?: false
+    }
+
+    ops
+    |> Enum.reduce_while(initial, fn op, acc ->
+      case step(organization_id, mission_id, base_revision, op, acc) do
+        {:halt, acc} -> {:halt, %{acc | halted?: true}}
+        acc -> {:cont, acc}
+      end
+    end)
+    |> Map.update!(:entries, &Enum.reverse/1)
+    |> Map.update!(:conflicts, &Enum.reverse/1)
+    |> Map.update!(:errors, &Enum.reverse/1)
+    |> Map.update!(:effects, &Enum.reverse/1)
+    |> Map.update!(:diffs, &Enum.reverse/1)
+  end
+
+  @doc "Computes the proposed document for an op from the live document."
+  @spec propose(String.t(), Document.t() | nil, map()) ::
+          {:ok, Document.t() | nil} | {:conflict, atom()}
+  def propose("create", nil, %{"document" => document}), do: {:ok, document}
+  def propose("create", _current, _payload), do: {:conflict, :entity_exists}
+  def propose(_action, nil, _payload), do: {:conflict, :entity_gone}
+
+  def propose("update", current, %{"changes" => changes}),
+    do: {:ok, Document.patch(current, changes)}
+
+  def propose("delete", _current, _payload), do: {:ok, nil}
+
+  defp step(organization_id, mission_id, base_revision, op, acc) do
+    kind = Kinds.fetch!(op.kind)
+    action = String.to_existing_atom(op.action)
+    current = load_current(kind, organization_id, mission_id, op.entity_id)
+
+    with {:ok, proposed} <- propose(op.action, current, op.payload),
+         [] <- value_conflicts(mission_id, base_revision, op, current) do
+      acc
+      |> Map.update!(:diffs, &[diff(op, current, proposed) | &1])
+      |> add_effect(kind, organization_id, mission_id, action, op, current, proposed)
+      |> validate_and_write(kind, organization_id, mission_id, action, op, current, proposed)
+    else
+      {:conflict, reason} ->
+        Map.update!(acc, :conflicts, &[conflict(op, reason, []) | &1])
+
+      conflicts when is_list(conflicts) ->
+        Map.update!(acc, :conflicts, &[conflict(op, :value_changed, conflicts) | &1])
+    end
+  end
+
+  defp validate_and_write(acc, kind, org, mission_id, action, op, current, proposed) do
+    case kind.validate(org, mission_id, action, current, proposed) do
+      :ok ->
+        write(acc, kind, org, mission_id, action, op, current, proposed)
+
+      {:error, field_errors} ->
+        Map.update!(acc, :errors, &[error(op, field_errors) | &1])
+    end
+  end
+
+  defp write(acc, kind, org, mission_id, action, op, current, proposed) do
+    case kind.write(org, mission_id, action, op.entity_id, current, proposed) do
+      {:ok, stored, extra} ->
+        entry = %{
+          kind: op.kind,
+          entity_id: op.entity_id,
+          op: action,
+          previous: current,
+          proposed: Document.normalize(stored)
+        }
+
+        acc
+        |> Map.update!(:entries, &(Enum.reverse(extra, [entry]) ++ &1))
+        |> Map.update!(:impacts, &MapSet.put(&1, kind.runtime_impact(action, current, proposed)))
+
+      {:error, reason} ->
+        {:halt,
+         Map.update!(
+           acc,
+           :errors,
+           &[error(op, [%{path: "", message: "Could not save: " <> describe(reason)}]) | &1]
+         )}
+    end
+  end
+
+  defp add_effect(acc, kind, org, mission_id, action, op, current, proposed) do
+    if function_exported?(kind, :effect, 5) do
+      case kind.effect(org, mission_id, action, current, proposed) do
+        nil -> acc
+        effect -> Map.update!(acc, :effects, &[Map.put(effect, :op_id, op.op_id) | &1])
+      end
+    else
+      acc
+    end
+  end
+
+  defp load_current(kind, organization_id, mission_id, entity_id) do
+    organization_id
+    |> kind.load(mission_id, [entity_id])
+    |> Map.get(entity_id)
+    |> Document.normalize()
+  end
+
+  defp value_conflicts(_mission_id, _base_revision, %{action: "create"}, _current), do: []
+
+  defp value_conflicts(mission_id, base_revision, op, current) do
+    values = Map.get(op.base, "values", %{})
+
+    stale =
+      for path <- op.touched_paths,
+          Map.get(values, path) != Document.get(current, path),
+          do: path
+
+    stale = stale_document(op, current, stale)
+
+    case stale do
+      [] ->
+        []
+
+      paths ->
+        changed_in = changed_in(mission_id, op, base_revision, paths)
+
+        Enum.map(paths, fn path ->
+          %{
+            path: path,
+            base: Map.get(values, path),
+            live: Document.get(current, path),
+            staged: staged_value(op, path),
+            changed_in: Map.get(changed_in, path, :outside)
+          }
+        end)
+    end
+  end
+
+  # A delete conflicts when anything about the entity changed since it was staged.
+  defp stale_document(%{action: "delete", base: %{"sha256" => sha}}, current, stale) do
+    if Document.sha256(current) == sha, do: stale, else: Enum.uniq(["" | stale])
+  end
+
+  defp stale_document(_op, _current, stale), do: stale
+
+  defp changed_in(mission_id, op, base_revision, paths) do
+    mission_id
+    |> Ledger.entity_entries(op.kind, op.entity_id)
+    |> Enum.filter(&(&1.revision_number > base_revision))
+    |> Enum.reverse()
+    |> Enum.reduce(%{}, &record_changed_in(&1, &2, paths))
+  end
+
+  defp record_changed_in(entry, acc, paths) do
+    paths
+    |> Enum.filter(&(&1 in entry.paths or &1 == ""))
+    |> Enum.reduce(acc, &Map.put_new(&2, &1, entry.revision_number))
+  end
+
+  defp staged_value(%{payload: %{"changes" => changes}}, path) do
+    changes
+    |> Enum.find(%{}, &(&1["path"] == path))
+    |> Map.get("value")
+  end
+
+  defp staged_value(_op, _path), do: nil
+
+  defp diff(op, current, proposed) do
+    %{
+      op_id: op.op_id,
+      change_id: op.change_id,
+      kind: op.kind,
+      entity_id: op.entity_id,
+      action: op.action,
+      fields: Document.diff(current, proposed)
+    }
+  end
+
+  defp conflict(op, reason, paths) do
+    %{
+      op_id: op.op_id,
+      change_id: op.change_id,
+      kind: op.kind,
+      entity_id: op.entity_id,
+      reason: reason,
+      paths: paths
+    }
+  end
+
+  defp error(op, field_errors) do
+    %{
+      op_id: op.op_id,
+      change_id: op.change_id,
+      kind: op.kind,
+      entity_id: op.entity_id,
+      errors: field_errors
+    }
+  end
+
+  defp describe(%Ecto.Changeset{} = changeset) do
+    changeset
+    |> Ecto.Changeset.traverse_errors(fn {message, _opts} -> message end)
+    |> Enum.map_join("; ", fn {field, messages} -> "#{field} #{Enum.join(messages, ", ")}" end)
+  end
+
+  defp describe(reason) when is_atom(reason),
+    do: reason |> Atom.to_string() |> String.replace("_", " ")
+
+  defp describe(reason), do: inspect(reason)
+end
