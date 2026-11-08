@@ -74,7 +74,7 @@ defmodule Cadence.Configuration.Pipeline do
 
   defp step(organization_id, mission_id, base_revision, op, acc) do
     kind = Kinds.fetch!(op.kind)
-    action = String.to_existing_atom(op.action)
+    action = action_atom(op.action)
     current = load_current(kind, organization_id, mission_id, op.entity_id)
 
     with {:ok, proposed} <- propose(op.action, current, op.payload),
@@ -93,7 +93,7 @@ defmodule Cadence.Configuration.Pipeline do
   end
 
   defp validate_and_write(acc, kind, org, mission_id, action, op, current, proposed) do
-    case kind.validate(org, mission_id, action, current, proposed) do
+    case kind.validate(org, mission_id, action, op.entity_id, current, proposed) do
       :ok ->
         write(acc, kind, org, mission_id, action, op, current, proposed)
 
@@ -103,7 +103,7 @@ defmodule Cadence.Configuration.Pipeline do
   end
 
   defp write(acc, kind, org, mission_id, action, op, current, proposed) do
-    case kind.write(org, mission_id, action, op.entity_id, current, proposed) do
+    case kind.write(org, mission_id, action, op.entity_id, current, proposed, options(op)) do
       {:ok, stored, extra} ->
         entry = %{
           kind: op.kind,
@@ -128,8 +128,8 @@ defmodule Cadence.Configuration.Pipeline do
   end
 
   defp add_effect(acc, kind, org, mission_id, action, op, current, proposed) do
-    if function_exported?(kind, :effect, 5) do
-      case kind.effect(org, mission_id, action, current, proposed) do
+    if function_exported?(kind, :effect, 7) do
+      case kind.effect(org, mission_id, action, op.entity_id, current, proposed, options(op)) do
         nil -> acc
         effect -> Map.update!(acc, :effects, &[Map.put(effect, :op_id, op.op_id) | &1])
       end
@@ -137,6 +137,12 @@ defmodule Cadence.Configuration.Pipeline do
       acc
     end
   end
+
+  defp action_atom("create"), do: :create
+  defp action_atom("update"), do: :update
+  defp action_atom("delete"), do: :delete
+
+  defp options(op), do: Map.get(op.payload, "options", %{})
 
   defp load_current(kind, organization_id, mission_id, entity_id) do
     organization_id

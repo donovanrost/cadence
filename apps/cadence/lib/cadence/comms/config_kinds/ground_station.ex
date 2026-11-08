@@ -57,10 +57,10 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
   def normalize(_action, _id, _document), do: {:error, [F.error("", "Enter the station details")]}
 
   @impl true
-  def validate(_organization_id, _mission_id, _action, _previous, _proposed), do: :ok
+  def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
 
   @impl true
-  def write(organization_id, mission_id, :create, id, nil, proposed) do
+  def write(organization_id, mission_id, :create, id, nil, proposed, _options) do
     station =
       GroundStation.new(%{
         ground_station_id: id,
@@ -75,7 +75,7 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
     stored(GroundStationStore.persist_ground_station(organization_id, station))
   end
 
-  def write(organization_id, mission_id, :update, id, _previous, proposed) do
+  def write(organization_id, mission_id, :update, id, _previous, proposed, _options) do
     attrs = %{
       display_name: proposed["display_name"],
       provider: proposed["provider"],
@@ -86,7 +86,7 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
     stored(GroundStationStore.update_ground_station(organization_id, mission_id, id, attrs))
   end
 
-  def write(organization_id, mission_id, :delete, id, _previous, nil) do
+  def write(organization_id, mission_id, :delete, id, _previous, nil, _options) do
     case GroundStationStore.archive_ground_station(organization_id, mission_id, id) do
       {:ok, _station} -> {:ok, nil, []}
       {:error, reason} -> {:error, reason}

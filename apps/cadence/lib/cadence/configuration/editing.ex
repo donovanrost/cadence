@@ -105,7 +105,8 @@ defmodule Cadence.Configuration.Editing do
   defp shrink(op, keep) do
     update_op(op,
       touched_paths: keep,
-      payload: %{"changes" => Enum.filter(op.payload["changes"], &(&1["path"] in keep))},
+      payload:
+        Map.put(op.payload, "changes", Enum.filter(op.payload["changes"], &(&1["path"] in keep))),
       base: %{"values" => Map.take(op.base["values"], keep)}
     )
   end

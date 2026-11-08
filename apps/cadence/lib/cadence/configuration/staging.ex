@@ -96,10 +96,29 @@ defmodule Cadence.Configuration.Staging do
 
   defp prepare(organization_id, mission_id, op) do
     with {:ok, kind} <- kind(op),
-         {:ok, action} <- action(op) do
-      prepare(kind, action, organization_id, mission_id, op)
+         {:ok, action} <- action(op),
+         {:ok, options} <- options(kind, action, Map.get(op, :options)),
+         {:ok, prepared} <- prepare(kind, action, organization_id, mission_id, op) do
+      {:ok, put_options(prepared, options)}
     end
   end
+
+  defp options(_kind, _action, nil), do: {:ok, %{}}
+  defp options(_kind, _action, options) when options == %{}, do: {:ok, %{}}
+
+  defp options(kind, action, %{} = options) do
+    if function_exported?(kind, :normalize_options, 2),
+      do: kind.normalize_options(action_atom(action), Document.normalize(options)),
+      else: {:error, [%{path: "options", message: "This change takes no options"}]}
+  end
+
+  defp options(_kind, _action, _options),
+    do: {:error, [%{path: "options", message: "Options must be an object"}]}
+
+  defp put_options(prepared, options) when options == %{}, do: prepared
+
+  defp put_options(prepared, options),
+    do: %{prepared | payload: Map.put(prepared.payload, "options", options)}
 
   defp prepare(kind, "create", _organization_id, _mission_id, op) do
     entity_id = Map.get(op, :entity_id) || Ids.new(kind.id_prefix())
@@ -178,6 +197,10 @@ defmodule Cadence.Configuration.Staging do
 
   defp action(_op), do: {:error, [%{path: "action", message: "Unknown action"}]}
 
+  defp action_atom("create"), do: :create
+  defp action_atom("update"), do: :update
+  defp action_atom("delete"), do: :delete
+
   defp op_attrs(kind, action, entity_id, payload, base, paths) do
     %{
       kind: kind.kind(),
@@ -248,7 +271,7 @@ defmodule Cadence.Configuration.Staging do
     Repo.update_all(op_query(other.op_id),
       set: [
         touched_paths: remaining,
-        payload: %{"changes" => changes},
+        payload: Map.put(other.payload, "changes", changes),
         base: %{"values" => values}
       ]
     )

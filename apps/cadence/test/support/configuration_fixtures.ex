@@ -52,5 +52,39 @@ defmodule Cadence.ConfigurationFixtures do
     }
   end
 
+  def transport_doc(name) do
+    %{
+      "display_name" => name,
+      "configuration" => %{
+        "mode" => "listen",
+        "direction_capability" => "inbound",
+        "host" => "0.0.0.0",
+        "port" => "5000",
+        "framing_mode" => "raw",
+        "tls_enabled" => "false"
+      }
+    }
+  end
+
+  def profile_doc(name, frame \\ %{}) do
+    %{
+      "display_name" => name,
+      "downlink_protocol" => "tm",
+      "uplink_protocol" => "tc",
+      "frame_parameters" => Map.merge(%{"frame_size" => 1115, "ocf_length" => 4}, frame)
+    }
+  end
+
+  def spacecraft_doc(name, scid, pin \\ nil) do
+    {type_id, version} = pin || {nil, nil}
+
+    %{
+      "display_name" => name,
+      "scid" => scid,
+      "spacecraft_type_id" => type_id,
+      "spacecraft_type_version" => version
+    }
+  end
+
   def unique(prefix), do: "#{prefix}-#{System.unique_integer([:positive])}"
 end

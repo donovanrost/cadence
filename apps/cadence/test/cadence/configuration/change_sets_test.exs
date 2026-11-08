@@ -273,9 +273,17 @@ defmodule Cadence.Configuration.ChangeSetsTest do
     test "runs in a rolled-back sandbox and publishes nothing",
          %{alice: alice, org: org, mission: mission} = ctx do
       ScopedReadUpdates.subscribe(:configuration_changed, org, mission)
+      ScopedReadUpdates.subscribe(:spacecraft_configuration_changed, org, mission)
 
-      assert {:ok, %{verdict: :go, diffs: [%{action: "create", entity_id: id, fields: fields}]}} =
-               Configuration.preview(alice, mission, {:ops, [station_op("Inuvik")]})
+      spacecraft = %{
+        kind: "spacecraft",
+        action: :create,
+        document: %{"display_name" => "EARENDIL-001", "scid" => 1}
+      }
+
+      assert {:ok,
+              %{verdict: :go, diffs: [%{action: "create", entity_id: id, fields: fields}, _]}} =
+               Configuration.preview(alice, mission, {:ops, [station_op("Inuvik"), spacecraft]})
 
       assert %{path: "display_name", before: nil, after: "Inuvik"} in fields
       assert {:error, :ground_station_not_found} = fetch_station(ctx, id)

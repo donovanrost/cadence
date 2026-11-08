@@ -193,7 +193,8 @@ defmodule Cadence.Control.Configuration do
     progress(change_set_id, "notify_runtime", :done)
     progress(change_set_id, "verify", :done)
     broadcast_runtime(mission, result)
-    changed({:ok, Map.delete(result, :impacts)}, mission)
+    publish_entity_updates(mission, result.kinds)
+    changed({:ok, Map.drop(result, [:impacts, :kinds])}, mission)
   end
 
   defp after_apply({:ok, _result} = ok, mission, change_set_id) do
@@ -210,6 +211,18 @@ defmodule Cadence.Control.Configuration do
   defp reopened?({:checks_failed, _}), do: true
   defp reopened?(:activation_policy_changed), do: true
   defp reopened?(_reason), do: false
+
+  # Stores skip their own read invalidations inside the apply transaction; re-announce them
+  # after commit so existing pages that listen for them refresh.
+  defp publish_entity_updates(mission, kinds) do
+    if Enum.any?(kinds, &(&1 in ["spacecraft", "spacecraft_profile"])) do
+      ScopedReadUpdates.publish(
+        :spacecraft_configuration_changed,
+        mission.organization_id,
+        mission.mission_id
+      )
+    end
+  end
 
   defp notify_runtime(mission, impacts) do
     if :contacts in impacts, do: Scheduler.notify_contact_changed(mission.mission_id)

@@ -245,6 +245,46 @@ defmodule Cadence.SpacecraftStore do
     |> Enum.map(&SpacecraftRow.to_domain/1)
   end
 
+  @doc "Whether another spacecraft of the mission already uses `scid`."
+  @spec scid_taken?(binary(), binary(), non_neg_integer()) :: boolean()
+  def scid_taken?(organization_id, mission_id, scid)
+      when is_binary(organization_id) and is_binary(mission_id) and is_integer(scid) do
+    SpacecraftRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.scid == ^scid
+    )
+    |> Repo.exists?()
+  end
+
+  @doc """
+  Spacecraft pinned to a profile, ordered by name. Options: `version:` (only that version),
+  `spacecraft_ids:` (only those spacecraft).
+  """
+  @spec list_pinned_to_profile(binary(), binary(), binary(), keyword()) :: [Spacecraft.t()]
+  def list_pinned_to_profile(organization_id, mission_id, spacecraft_type_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(spacecraft_type_id) and is_list(opts) do
+    SpacecraftRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.spacecraft_type_id == ^spacecraft_type_id
+    )
+    |> pinned_filter(opts)
+    |> order_by([row], asc: row.display_name, asc: row.spacecraft_id)
+    |> Repo.all()
+    |> Enum.map(&SpacecraftRow.to_domain/1)
+  end
+
+  defp pinned_filter(query, opts) do
+    Enum.reduce(opts, query, fn
+      {:version, version}, query -> where(query, [row], row.spacecraft_type_version == ^version)
+      {:spacecraft_ids, ids}, query -> where(query, [row], row.spacecraft_id in ^ids)
+    end)
+  end
+
   @doc "Counts spacecraft across an organization's missions without loading their records."
   def count_organization_spacecraft(organization_id) when is_binary(organization_id) do
     SpacecraftRow

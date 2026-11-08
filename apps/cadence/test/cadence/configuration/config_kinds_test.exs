@@ -1,0 +1,174 @@
+defmodule Cadence.Configuration.ConfigKindsTest do
+  use Cadence.DataCase, async: false
+
+  import Cadence.ConfigurationFixtures
+
+  alias Cadence.Comms.TransportStore
+  alias Cadence.Control.Configuration
+  alias Cadence.SpacecraftStore
+  alias Cadence.SpacecraftTypeStore
+
+  setup do
+    on_exit(with_approval_required(false))
+    %{organization_id: org, mission_id: mission} = configuration_mission("kinds")
+    %{org: org, mission: mission, alice: member_scope(org, :member, "Alice")}
+  end
+
+  describe "transport" do
+    test "create, edit and archive keep the transport's own versions", ctx do
+      [id] = apply_ops(ctx, "Add transport", [create("transport", transport_doc("Lab TCP"))])
+      assert {:ok, %{version: 1, display_name: "Lab TCP"}} = fetch_transport(ctx, id)
+
+      apply_ops(ctx, "Rename", [update("transport", id, "display_name", "Lab TCP 2")])
+      assert {:ok, %{version: 2, display_name: "Lab TCP 2"}} = fetch_transport(ctx, id)
+
+      apply_ops(ctx, "Archive", [%{kind: "transport", action: :delete, entity_id: id}])
+      assert {:error, :transport_not_found} = fetch_transport(ctx, id)
+      assert [%{version: 3, lifecycle_state: :archived} | _] = versions(ctx, id)
+    end
+
+    test "invalid settings are a NO-GO in preview", %{alice: alice, mission: mission} do
+      doc = put_in(transport_doc("Bad")["configuration"]["port"], "not-a-port")
+
+      assert {:ok, %{verdict: :no_go, checks: checks}} =
+               Configuration.preview(alice, mission, {:ops, [create("transport", doc)]})
+
+      assert %{verdict: :no_go, items: [%{errors: [%{path: "configuration"}]}]} =
+               Enum.find(checks, &(&1.key == "validation"))
+    end
+  end
+
+  describe "spacecraft and profiles" do
+    test "a profile and its first spacecraft apply together", ctx do
+      profile_id = "profile-" <> unique("block1")
+
+      [^profile_id, sc_id] =
+        apply_ops(ctx, "Block 1", [
+          create("spacecraft_profile", profile_doc("Block 1"), profile_id),
+          create("spacecraft", spacecraft_doc("EARENDIL-001", 1, {profile_id, 1}))
+        ])
+
+      assert {:ok, %{spacecraft_type_id: ^profile_id, spacecraft_type_version: 1, scid: 1}} =
+               SpacecraftStore.fetch_spacecraft(ctx.org, ctx.mission, sc_id)
+    end
+
+    test "a profile edit writes v2 and moves pinned spacecraft", ctx do
+      %{alice: alice, mission: mission} = ctx
+      {profile_id, [sc_a, sc_b]} = block(ctx, 2)
+      edit = update("spacecraft_profile", profile_id, "frame_parameters.frame_size", 1279)
+
+      assert {:ok, %{effects: [%{changes: 2, keeps: []}]}} =
+               Configuration.preview(alice, mission, {:ops, [edit]})
+
+      apply_ops(ctx, "Longer frames", [edit])
+
+      assert {:ok, %{version: 2, frame_parameters: %{"frame_size" => 1279}}} =
+               SpacecraftTypeStore.fetch_spacecraft_type(ctx.org, mission, profile_id)
+
+      for id <- [sc_a, sc_b] do
+        assert {:ok, %{spacecraft_type_version: 2}} =
+                 SpacecraftStore.fetch_spacecraft(ctx.org, mission, id)
+      end
+
+      {:ok, %{head: %{revision: head}}} = Configuration.current(alice, mission)
+      {:ok, %{entries: entries}} = Configuration.get_revision(alice, mission, head)
+      assert Enum.map(entries, & &1.kind) == ["spacecraft_profile", "spacecraft", "spacecraft"]
+    end
+
+    test "rollout none keeps every pin", ctx do
+      {profile_id, [sc]} = block(ctx, 1)
+      edit = update("spacecraft_profile", profile_id, "display_name", "Block 1b")
+
+      apply_ops(ctx, "Rename only", [Map.put(edit, :options, %{rollout: "none"})])
+
+      assert {:ok, %{spacecraft_type_version: 1}} =
+               SpacecraftStore.fetch_spacecraft(ctx.org, ctx.mission, sc)
+    end
+
+    test "spacecraft governed by configuration review are kept", ctx do
+      {profile_id, [sc]} = block(ctx, 1)
+      {:ok, spacecraft} = SpacecraftStore.fetch_spacecraft(ctx.org, ctx.mission, sc)
+      governed = %{spacecraft | metadata: %{"spacecraft_configuration_revision_id" => "rev-1"}}
+      {:ok, _} = SpacecraftStore.update_spacecraft(ctx.org, governed)
+
+      edit = update("spacecraft_profile", profile_id, "frame_parameters.frame_size", 1000)
+
+      assert {:ok, %{effects: [%{changes: 0, keeps: [%{reason: reason}]}]}} =
+               Configuration.preview(ctx.alice, ctx.mission, {:ops, [edit]})
+
+      assert reason =~ "configuration review"
+    end
+
+    test "framing and SCIDs are validated", ctx do
+      %{alice: alice, mission: mission} = ctx
+      {profile_id, _} = block(ctx, 1)
+
+      assert {:error, {:invalid_op, 0, [%{path: "frame_parameters.frame_size"}]}} =
+               Configuration.stage(alice, mission, %{summary: "x"}, [
+                 update("spacecraft_profile", profile_id, "frame_parameters.frame_size", 5000)
+               ])
+
+      assert {:ok, %{verdict: :no_go, checks: checks}} =
+               Configuration.preview(
+                 alice,
+                 mission,
+                 {:ops, [create("spacecraft", spacecraft_doc("Dup", 1))]}
+               )
+
+      assert %{items: [%{errors: [%{path: "scid"}]}]} =
+               Enum.find(checks, &(&1.key == "validation"))
+    end
+
+    test "a profile in use can't be deleted", ctx do
+      {profile_id, _} = block(ctx, 1)
+      delete = %{kind: "spacecraft_profile", action: :delete, entity_id: profile_id}
+
+      assert {:ok, %{verdict: :no_go, checks: checks}} =
+               Configuration.preview(ctx.alice, ctx.mission, {:ops, [delete]})
+
+      assert %{items: [%{errors: [%{message: "1 spacecraft use this profile"}]}]} =
+               Enum.find(checks, &(&1.key == "validation"))
+    end
+  end
+
+  defp block(ctx, count) do
+    profile_id = "profile-" <> unique("block")
+
+    spacecraft =
+      for n <- 1..count,
+          do: create("spacecraft", spacecraft_doc("SC-#{n}", n, {profile_id, 1}))
+
+    [^profile_id | ids] =
+      apply_ops(ctx, "Block", [
+        create("spacecraft_profile", profile_doc("Block"), profile_id) | spacecraft
+      ])
+
+    {profile_id, ids}
+  end
+
+  defp apply_ops(%{alice: alice, mission: mission}, summary, ops) do
+    {:ok, staged} = Configuration.stage(alice, mission, %{summary: summary}, ops)
+
+    {:ok, %{state: :applied}} =
+      Configuration.submit(alice, mission, staged.change_set_id, %{
+        reason: "Test change: " <> summary,
+        expected_version: staged.version
+      })
+
+    staged.entity_ids
+  end
+
+  defp create(kind, document, id \\ nil) do
+    %{kind: kind, action: :create, document: document}
+    |> then(&if id, do: Map.put(&1, :entity_id, id), else: &1)
+  end
+
+  defp update(kind, id, path, value),
+    do: %{kind: kind, action: :update, entity_id: id, changes: [%{path: path, value: value}]}
+
+  defp fetch_transport(%{org: org, mission: mission}, id),
+    do: TransportStore.fetch_transport(org, mission, id)
+
+  defp versions(%{org: org, mission: mission}, id),
+    do: TransportStore.list_transport_versions(org, mission, id)
+end

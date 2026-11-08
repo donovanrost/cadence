@@ -8,7 +8,7 @@ defmodule Cadence.Platform.ConfigKind do
 
   ## Side-effect rule
 
-  `validate/5` and `write/6` run inside a database transaction. During a preview that transaction
+  `validate/6` and `write/7` run inside a database transaction. During a preview that transaction
   is rolled back, so they must only read and write through `Cadence.Repo`. They must not
   broadcast, call processes, spawn tasks or emit telemetry. Everything observable outside the
   database happens in the change set's after-commit tail, driven by `runtime_impact/3`.
@@ -47,6 +47,7 @@ defmodule Cadence.Platform.ConfigKind do
               organization_id :: String.t(),
               mission_id :: String.t(),
               action(),
+              entity_id :: String.t(),
               previous :: document() | nil,
               proposed :: document() | nil
             ) :: :ok | {:error, [field_error()]}
@@ -61,7 +62,8 @@ defmodule Cadence.Platform.ConfigKind do
               action(),
               entity_id :: String.t(),
               previous :: document() | nil,
-              proposed :: document() | nil
+              proposed :: document() | nil,
+              options :: map()
             ) :: {:ok, document() | nil, [entry()]} | {:error, term()}
 
   @doc "One-line human summary of the change."
@@ -77,9 +79,17 @@ defmodule Cadence.Platform.ConfigKind do
               organization_id :: String.t(),
               mission_id :: String.t(),
               action(),
+              entity_id :: String.t(),
               previous :: document() | nil,
-              proposed :: document() | nil
+              proposed :: document() | nil,
+              options :: map()
             ) :: %{changes: non_neg_integer(), keeps: [map()]} | nil
 
-  @optional_callbacks effect: 5
+  @doc """
+  Validates op options that are not part of the document (e.g. a profile edit's rollout).
+  Kinds without options don't implement it, and staging refuses options for them.
+  """
+  @callback normalize_options(action(), map()) :: {:ok, map()} | {:error, [field_error()]}
+
+  @optional_callbacks effect: 7, normalize_options: 2
 end

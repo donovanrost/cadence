@@ -144,7 +144,8 @@ defmodule Cadence.Configuration.Submission do
         generation: nil,
         runtime: :not_applicable,
         degraded_partitions: [],
-        impacts: MapSet.to_list(result.impacts)
+        impacts: MapSet.to_list(result.impacts),
+        kinds: result.entries |> Enum.map(& &1.kind) |> Enum.uniq()
       }
     else
       {:error, reason} -> Repo.rollback(reason)
