@@ -20,3 +20,4 @@ Decided by the user (U) or the director (D). Newest last. Ask the director befor
 | 14 | **Change-set reviewer must be distinct from every author** in the set. | U | domain, api |
 | 15 | **Profile limits and VC/FEC/randomizer framing fields are out** of this phase. Limits are read-only with a note; framing fields only appear if the pipeline uses them. | U | domain, fe-setup |
 | 16 | **domain designs approved; build change-sets P1.** Review notes: `docs/apogee/domain/review-director-1.md`. | U | domain |
+| 17 | **Alarm episodes come from both sources, labeled by source:** catalog monitoring (live) and ground limits (batch). Ground-limit episodes show when they were last evaluated ("evaluated 3m ago"), and the UI never implies they're live. Escalation clears the ack (ISA-18.2). Assign to any mission member. Live ground-limit evaluation is a later item. | D | domain, api, fe-ops |
