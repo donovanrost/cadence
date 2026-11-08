@@ -9,6 +9,8 @@ import { fetchFleet, type Fleet } from "./api.ts";
  * refetch, so the last change is never dropped.
  */
 export const FLEET_REFETCH_GAP_MS = 2_000;
+/** Telemetry hints only move freshness (last heard, stale), so they refetch at most this often (api ops.md). */
+export const FLEET_TELEMETRY_GAP_MS = 10_000;
 
 /** Without a live socket there are no invalidation hints, so the snapshot is polled instead. */
 export const FLEET_POLL_OFFLINE_S = 30;
@@ -49,11 +51,15 @@ export function throttle(run: () => void, gapMs: number, clock: () => number = D
 export function useFleet(missionId: Readonly<Ref<string | null>>): FleetHandle {
   const query = useRemoteQuery(missionId, (id, signal) => fetchFleet(id, signal));
   const throttled = throttle(query.refetch, FLEET_REFETCH_GAP_MS);
+  // State changes (limit transitions, configuration, commanding) refetch promptly; telemetry,
+  // which fires every 500 ms under live feeds, only refreshes freshness every 10 s.
   useMissionInvalidation(
     missionId,
-    ["telemetry", "limits", "spacecraft", "commanding"],
+    ["alarms", "limits", "spacecraft", "commanding"],
     throttled.call,
   );
+  const telemetry = throttle(throttled.call, FLEET_TELEMETRY_GAP_MS);
+  useMissionInvalidation(missionId, ["telemetry"], telemetry.call);
   const connection = useConnection();
   let poll: ReturnType<typeof setInterval> | null = null;
   const stopPoll = () => {
@@ -72,6 +78,7 @@ export function useFleet(missionId: Readonly<Ref<string | null>>): FleetHandle {
   );
   onScopeDispose(() => {
     throttled.cancel();
+    telemetry.cancel();
     stopPoll();
   });
   return { state: query.state, refetch: query.refetch };
