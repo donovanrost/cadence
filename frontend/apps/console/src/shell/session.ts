@@ -19,21 +19,12 @@ export function hasCapability(session: Readonly<Session>, capability: string): b
   return session.capabilities.includes(capability);
 }
 
-/**
- * Capabilities effective in `organization` (the URL's org). The bootstrap's `capabilities` are
- * for the session's current organization only; for any other org they are derived from the
- * membership role until the API sends per-organization capabilities. UI gating only: the server
- * enforces every action.
- */
+/** Capabilities effective in `organization` (the URL's org), as computed by the server. */
 export function organizationCapabilities(
-  session: Readonly<Session>,
+  _session: Readonly<Session>,
   organization: Readonly<SessionOrganization>,
 ): ReadonlySet<string> {
-  if (organization.id === session.current_organization_id) return new Set(session.capabilities);
-  const derived = new Set<string>();
-  if (organization.role === "organization_admin") derived.add("organization_admin");
-  if (session.capabilities.includes("platform_admin")) derived.add("platform_admin");
-  return derived;
+  return new Set(organization.capabilities);
 }
 
 /** Org administration (people, missions, provider accounts, settings, audit). */

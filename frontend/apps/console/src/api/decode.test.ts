@@ -57,6 +57,7 @@ describe("session contract", () => {
         slug: "reflect-orbital",
         name: "Reflect Orbital",
         role: "member",
+        capabilities: [],
         missions: [{ id: "mission_1", slug: "earendil", name: "Earendil" }],
       },
     ],

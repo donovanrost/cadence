@@ -8,6 +8,7 @@ const organization = object({
   slug: token,
   name: string,
   role: nullable(token),
+  capabilities: array(token),
   missions: array(mission),
 });
 

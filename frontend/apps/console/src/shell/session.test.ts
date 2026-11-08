@@ -2,40 +2,34 @@ import { describe, expect, it } from "vite-plus/test";
 import type { Session, SessionOrganization } from "@/api/session.ts";
 import { canAdministerOrganization } from "./session.ts";
 
-const org = (id: string, role: string | null): SessionOrganization => ({
+const org = (id: string, capabilities: string[]): SessionOrganization => ({
   id,
   slug: id,
   name: id,
-  role,
+  role: "member",
+  capabilities,
   missions: [],
 });
 
-const session = (capabilities: string[], current: string | null): Session => ({
+const session = (current: readonly string[]): Session => ({
   user: { id: "u", email: "u@example.com", display_name: null },
-  current_organization_id: current,
+  current_organization_id: "a",
   admin_mode: false,
   platform_admin_eligible: false,
-  capabilities,
-  organizations: [org("a", "organization_admin"), org("b", "member")],
+  capabilities: current,
+  organizations: [],
   csrf_token: "t",
   socket: { path: "/socket/console" },
 });
 
 describe("canAdministerOrganization", () => {
-  it("uses session capabilities for the current organization", () => {
-    expect(canAdministerOrganization(session([], "a"), org("a", "organization_admin"))).toBe(false);
-    expect(
-      canAdministerOrganization(session(["organization_admin"], "a"), org("a", "member")),
-    ).toBe(true);
+  it("uses the URL organization's own capabilities, not the session's current org", () => {
+    const s = session(["organization_admin"]);
+    expect(canAdministerOrganization(s, org("b", []))).toBe(false);
+    expect(canAdministerOrganization(session([]), org("b", ["organization_admin"]))).toBe(true);
   });
 
-  it("derives from the membership role for another organization", () => {
-    const s = session(["organization_admin"], "a");
-    expect(canAdministerOrganization(s, org("b", "member"))).toBe(false);
-    expect(canAdministerOrganization(s, org("c", "organization_admin"))).toBe(true);
-  });
-
-  it("lets a platform admin in admin mode administer any organization", () => {
-    expect(canAdministerOrganization(session(["platform_admin"], "a"), org("b", null))).toBe(true);
+  it("accepts platform_admin", () => {
+    expect(canAdministerOrganization(session([]), org("b", ["platform_admin"]))).toBe(true);
   });
 });
