@@ -14,7 +14,11 @@ import type { ConsoleScope } from "./scope.ts";
 const props = defineProps<{ scope: ConsoleScope }>();
 const route = useRoute();
 const palette = usePalette();
-const mode = computed(() => route.meta.mode ?? "ops");
+/** Takeover screens (multi-step wizards) belong to Setup: the switch keeps SETUP lit. */
+const mode = computed(() => {
+  const raw = route.meta.mode ?? "ops";
+  return raw === "takeover" ? "setup" : raw;
+});
 const mission = computed(() => (props.scope.kind === "mission" ? props.scope : null));
 const placeholder = computed(() =>
   mode.value === "setup"

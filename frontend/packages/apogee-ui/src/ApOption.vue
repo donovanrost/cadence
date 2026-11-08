@@ -25,7 +25,7 @@ const model = defineModel<Value | null>({ required: true });
       :name="name"
       :value="value"
       :disabled="disabled"
-      class="mt-1 accent-[var(--color-readout)]"
+      class="mt-1 accent-[var(--color-readout)] [color-scheme:dark]"
     />
     <span class="flex flex-col gap-1">
       <span class="text-base font-semibold text-readout">{{ title }}</span>

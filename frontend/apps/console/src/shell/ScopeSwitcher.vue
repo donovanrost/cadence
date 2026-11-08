@@ -23,7 +23,9 @@ const currentSlug = computed(() =>
   props.scope.kind === "mission" ? props.scope.mission.slug : null,
 );
 /** Switching mission keeps the mode: Setup goes to the other mission's Readiness. */
-const targetName = computed(() => (route.meta.mode === "setup" ? "setup.readiness" : "ops.now"));
+const targetName = computed(() =>
+  route.meta.mode === "setup" || route.meta.mode === "takeover" ? "setup.readiness" : "ops.now",
+);
 </script>
 
 <template>

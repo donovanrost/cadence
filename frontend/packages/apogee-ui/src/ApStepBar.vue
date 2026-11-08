@@ -20,7 +20,11 @@ defineProps<{ steps: readonly string[]; current: number; label: string }>();
         "
       >
         <span class="font-mono text-xs" aria-hidden="true">{{
-          i < current ? "✓" : i === current ? "●" : String(i + 1).padStart(2, "0")
+          i < current
+            ? "✓"
+            : i === current
+              ? `● ${String(i + 1).padStart(2, "0")}`
+              : String(i + 1).padStart(2, "0")
         }}</span>
         <span>{{ step }}<span v-if="i < current" class="sr-only"> (done)</span></span>
       </li>
