@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useRemoteQuery } from "@/api/index.ts";
-import { useMissionInvalidation } from "@/live/index.ts";
-import { useMissionScope } from "@/shell/index.ts";
+import { useRemoteQuery } from "@/api";
+import { useMissionInvalidation } from "@/live";
+import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
 import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApTag } from "@/ui";
 import AreaTile from "./AreaTile.vue";
 import FindingsPanel from "./FindingsPanel.vue";
@@ -19,6 +19,10 @@ useMissionInvalidation(
   ["spacecraft", "catalog", "data_sources", "settings", "limits"],
   refetch,
 );
+
+// Setup writes need manage_mission, which the server grants to organization admins (qa #4).
+const session = useSession();
+const canManage = computed(() => canAdministerOrganization(session, scope.value.organization));
 
 const label = computed(() => `${scope.value.mission.name} · mission readiness`);
 const title = computed(() => {
@@ -44,7 +48,7 @@ const notProvided = computed(
       <template v-if="state.status === 'ready' && verdictSubline(state.value)" #subtitle>
         <span class="text-md text-text-3">{{ verdictSubline(state.value) }}</span>
       </template>
-      <div class="flex flex-wrap gap-2">
+      <div v-if="canManage" class="flex flex-wrap gap-2">
         <ApButton :to="{ name: 'setup.spacecraft.new' }">Add spacecraft</ApButton>
         <ApButton :to="{ name: 'setup.catalog.import' }">Import catalog</ApButton>
       </div>

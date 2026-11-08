@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useRemoteQuery } from "@/api/index.ts";
+import { useRemoteQuery } from "@/api";
 import {
   formatCount,
   plural,
@@ -11,8 +11,8 @@ import {
   ApPanel,
   ApRemote,
 } from "@/ui";
-import { useMissionInvalidation } from "@/live/index.ts";
-import { useMissionScope } from "@/shell/index.ts";
+import { useMissionInvalidation } from "@/live";
+import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
 import SpacecraftTable from "./SpacecraftTable.vue";
 import {
   fetchSpacecraftDirectory,
@@ -26,6 +26,10 @@ const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
 const { state, refetch } = useRemoteQuery(missionId, fetchSpacecraftDirectory);
 useMissionInvalidation(missionId, ["spacecraft"], refetch);
+
+// Setup writes need manage_mission, which the server grants to organization admins (qa #4).
+const session = useSession();
+const canManage = computed(() => canAdministerOrganization(session, scope.value.organization));
 
 const query = ref("");
 const filtered = (directory: SpacecraftDirectory) =>
@@ -53,7 +57,7 @@ const summary = computed(() => {
       <template v-if="summary" #subtitle>
         <span class="text-md text-text-3">{{ summary }}</span>
       </template>
-      <ApButton :to="{ name: 'setup.spacecraft.new' }">Add spacecraft</ApButton>
+      <ApButton v-if="canManage" :to="{ name: 'setup.spacecraft.new' }">Add spacecraft</ApButton>
     </ApPageHeader>
 
     <ApPanel index="A1" title="Directory" flush>
@@ -78,9 +82,13 @@ const summary = computed(() => {
             v-if="value.spacecraft.length === 0"
             state="off"
             headline="No spacecraft yet"
-            sentence="Add one spacecraft or a whole launch batch from a profile or a manifest."
+            :sentence="
+              canManage
+                ? 'Add one spacecraft or a whole launch batch from a profile or a manifest.'
+                : 'An organization admin adds spacecraft to this mission.'
+            "
           >
-            <ApButton variant="primary" :to="{ name: 'setup.spacecraft.new' }"
+            <ApButton v-if="canManage" variant="primary" :to="{ name: 'setup.spacecraft.new' }"
               >Add spacecraft</ApButton
             >
           </ApEmptyState>

@@ -16,9 +16,9 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "spacecraft", title: "Spacecraft" },
   },
   {
-    path: "setup/spacecraft/new",
+    path: "setup/spacecraft/new/:step(source|identity|orbit|review)?",
     name: "setup.spacecraft.new",
-    component: pending,
+    component: () => import("@/features/spacecraft/add/AddSpacecraftScreen.vue"),
     meta: {
       mode: "takeover",
       nav: "spacecraft",
