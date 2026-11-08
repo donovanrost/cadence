@@ -2,6 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import ApButton from "./ApButton.vue";
 import ApField from "./ApField.vue";
+import ApPageHeader from "./ApPageHeader.vue";
 import ApSegmented from "./ApSegmented.vue";
 import ApStatTile from "./ApStatTile.vue";
 
@@ -66,5 +67,16 @@ describe("ApField", () => {
     const wrapper = mount(ApField, { props: { label: "Count", type: "number", modelValue: "" } });
     await wrapper.get("input").setValue("50");
     expect(wrapper.emitted("update:modelValue")).toEqual([["50"]]);
+  });
+});
+
+describe("ApPageHeader", () => {
+  it("renders the title slot inside the single h1", () => {
+    const wrapper = mount(ApPageHeader, {
+      props: { title: "Apply r6 · 2 changes" },
+      slots: { title: 'Apply <span class="font-mono normal-case">r6</span> · 2 changes' },
+    });
+    expect(wrapper.findAll("h1")).toHaveLength(1);
+    expect(wrapper.get("h1 span.font-mono").text()).toBe("r6");
   });
 });

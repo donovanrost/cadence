@@ -1,5 +1,8 @@
 <script setup lang="ts">
-/** Screen heading: label line + the screen's single h1 + optional right side (meta / actions). */
+/**
+ * Screen heading: label line + the screen's single h1 + optional right side (meta / actions).
+ * `title` is required (plain text for fallbacks); the `title` slot may enrich the h1, e.g. a mono id.
+ */
 withDefaults(
   defineProps<{ label?: string | undefined; title: string; size?: "console" | "reading" }>(),
   {
@@ -17,7 +20,7 @@ withDefaults(
           class="m-0 font-display leading-none font-semibold tracking-head uppercase"
           :class="size === 'console' ? 'text-3xl' : 'text-4xl'"
         >
-          {{ title }}
+          <slot name="title">{{ title }}</slot>
         </h1>
         <slot name="status" />
       </div>
