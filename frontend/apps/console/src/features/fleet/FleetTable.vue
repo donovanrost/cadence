@@ -19,7 +19,7 @@ const columns: readonly ApColumn[] = [
 const orbit = (sc: FleetSpacecraft) =>
   sc.plane === null
     ? "—"
-    : `P${String(sc.plane).padStart(2, "0")}${sc.slot === null ? "" : ` · ${sc.slot}`}`;
+    : `P${String(sc.plane).padStart(2, "0")}${sc.slot === null ? "" : ` · ${String(sc.slot).padStart(2, "0")}`}`;
 const age = (sc: FleetSpacecraft) =>
   sc.last_received_at
     ? formatDuration((now.value.getTime() - Date.parse(sc.last_received_at)) / 1000)

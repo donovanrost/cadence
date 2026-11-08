@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
-import type { Alarm } from "@/features/alarms/index.ts";
+import { formatLimitLike, formatValue, type Alarm } from "@/features/alarms/index.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import { historyReader, type LimitIntervals } from "./api.ts";
-import { formatValue } from "./format.ts";
 import {
   formatRate,
   heroStatus,
@@ -166,6 +165,10 @@ describe("investigate model", () => {
     expect(formatValue(-0.4)).toBe("−0.4");
     expect(formatValue(4812)).toBe("4,812");
     expect(formatValue("SAFE")).toBe("SAFE");
+    expect(formatLimitLike(24, 23.1)).toBe("24.0");
+    expect(formatLimitLike(-5.5, -6.12)).toBe("−5.50");
+    expect(formatLimitLike(24.25, 23)).toBe("24.3");
+    expect(formatLimitLike(null, 23.1)).toBeNull();
   });
 });
 

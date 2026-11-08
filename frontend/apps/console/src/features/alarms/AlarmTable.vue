@@ -9,6 +9,7 @@ import {
   type ApColumn,
 } from "@/ui";
 import { conditionWords, crossedCondition } from "./api.ts";
+import { formatLimitLike, formatValue } from "./format.ts";
 import type { AlarmListRow } from "./list.ts";
 
 /** L1 · Alarm table. The Spacecraft cell links to Investigate for that alarm (rule: name-cell link). */
@@ -23,7 +24,6 @@ const columns: readonly ApColumn[] = [
   { key: "crossed", label: "First crossed", mono: true },
 ];
 
-const text = (v: number | string | boolean | null) => (v === null ? "—" : String(v));
 const tint = (row: AlarmListRow) =>
   row.alarm.severity === "critical"
     ? "text-crit-text"
@@ -70,8 +70,8 @@ const state = (row: AlarmListRow) =>
       >
     </template>
     <template #cell-value="{ row }">
-      <span :class="tint(row)">{{ text(row.alarm.value) }}</span>
-      <span class="text-text-4"> / {{ text(row.limit) }}</span>
+      <span :class="tint(row)">{{ formatValue(row.alarm.value) ?? "—" }}</span>
+      <span class="text-text-4"> / {{ formatLimitLike(row.limit, row.alarm.value) ?? "—" }}</span>
     </template>
     <template #cell-crossed="{ row }">
       <time

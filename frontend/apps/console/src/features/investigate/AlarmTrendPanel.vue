@@ -12,6 +12,8 @@ import {
   ApStatTile,
 } from "@/ui";
 import {
+  formatLimitLike,
+  formatValue,
   conditionWords,
   crossedCondition,
   crossedLimit,
@@ -20,7 +22,6 @@ import {
 } from "@/features/alarms/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import TrendBlock from "./TrendBlock.vue";
-import { formatValue } from "./format.ts";
 import {
   formatRate,
   limitSegments,
@@ -103,7 +104,7 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
             <ApStatTile label="Now" :value="formatValue(alarm.value)" :state="tone ?? 'neutral'" />
             <ApStatTile
               :label="condition?.startsWith('red') ? 'Red limit' : 'Limit'"
-              :value="limit === null ? null : formatValue(limit)"
+              :value="formatLimitLike(limit, alarm.value)"
             />
             <ApStatTile
               label="Rate"

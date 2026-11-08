@@ -15,6 +15,7 @@ export type StatTile = Readonly<{
 
 const NOT_TRACKED = "not tracked yet";
 const NO_TLM = "no telemetry yet";
+const NO_FRESH = "no fresh telemetry";
 const NO_LIMITS = "limits not configured";
 
 const accent = (n: number | null, state: OpState): OpState =>
@@ -33,8 +34,11 @@ function knowable(value: number, unknownBecause: string | null, caption: string)
 export function statTiles(fleet: Fleet): StatTile[] {
   const c = fleet.counts;
   const cmd = fleet.commands;
-  const noTlm = c.fresh === 0 ? NO_TLM : null;
-  const limitsUnknown = noTlm ?? (fleet.limits.configured ? null : NO_LIMITS);
+  // U13 refined: nothing ever heard → "no telemetry yet"; heard but none fresh → "no fresh
+  // telemetry"; for limit counts, "limits not configured" wins over both.
+  const neverHeard = c.total > 0 && c.never_heard === c.total;
+  const noTlm = neverHeard ? NO_TLM : c.fresh === 0 ? NO_FRESH : null;
+  const limitsUnknown = fleet.limits.configured ? noTlm : NO_LIMITS;
   const minutes = Math.round(fleet.stale_after_s / 60);
   const delta = c.critical_delta_1h;
   const critCaption =
@@ -63,7 +67,11 @@ export function statTiles(fleet: Fleet): StatTile[] {
     },
     {
       label: "Stale",
-      ...knowable(c.stale, noTlm, `no TLM over ${plural(minutes, "min", "min")}`),
+      ...knowable(
+        c.stale,
+        neverHeard ? NO_TLM : null,
+        `no TLM over ${plural(minutes, "min", "min")}`,
+      ),
       state: accent(c.stale, "stale"),
     },
     {

@@ -13,3 +13,4 @@ export {
   type AlarmSeverity,
   type Thresholds,
 } from "./api.ts";
+export { formatLimitLike, formatValue } from "./format.ts";

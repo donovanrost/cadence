@@ -113,6 +113,23 @@ describe("statTiles (U13)", () => {
     expect(tile(fleet, "Stale")).toMatchObject({ value: null, caption: "no telemetry yet" });
   });
 
+  it("says 'no fresh telemetry' when spacecraft were heard but none is fresh", () => {
+    const fleet = fleetOf([spacecraftRow(1, { state: "stale", stale: true })]);
+    expect(tile(fleet, "Caution")).toMatchObject({ value: null, caption: "no fresh telemetry" });
+    expect(tile(fleet, "Stale")).toMatchObject({ value: 1 });
+  });
+
+  it("lets 'limits not configured' win over missing telemetry", () => {
+    const fleet = fleetOf([spacecraftRow(1, { state: "never_heard", last_received_at: null })], {
+      limits: { configured: false },
+    });
+    expect(tile(fleet, "Critical")).toMatchObject({
+      value: null,
+      caption: "limits not configured",
+    });
+    expect(tile(fleet, "Stale")).toMatchObject({ value: null, caption: "no telemetry yet" });
+  });
+
   it("shows unknown limit counts when ground limits aren't configured", () => {
     const fleet = fleetOf([spacecraftRow(1)], { limits: { configured: false } });
     expect(tile(fleet, "Caution")).toMatchObject({ value: null, caption: "limits not configured" });

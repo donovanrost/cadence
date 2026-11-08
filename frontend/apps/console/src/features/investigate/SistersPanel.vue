@@ -3,9 +3,8 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
 import { ApCallout, ApEmptyState, ApListRow, ApPanel, ApRemote } from "@/ui";
-import type { Alarm } from "@/features/alarms/index.ts";
+import { formatValue, type Alarm } from "@/features/alarms/index.ts";
 import { fleetOpState, type FleetSpacecraft } from "@/features/fleet/index.ts";
-import { formatValue } from "./format.ts";
 import { sisters } from "./model.ts";
 import { usePointAlarms } from "./useInvestigate.ts";
 

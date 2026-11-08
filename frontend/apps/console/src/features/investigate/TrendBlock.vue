@@ -1,11 +1,11 @@
 <script setup lang="ts">
+import { formatValue } from "@/features/alarms/index.ts";
 import { computed } from "vue";
 import type { RemoteState } from "@/api/index.ts";
 import { formatClock, ApEmptyState, ApRemote } from "@/ui";
 import type { History } from "./api.ts";
 import TrendChart from "./chart/TrendChart.vue";
 import type { LimitSegment, SeriesPoint, TimeWindow } from "./chart/scale.ts";
-import { formatValue } from "./format.ts";
 
 /** The chart area of B1: history unavailable (503), loading/failed, or the chart + legend. */
 const props = defineProps<{
