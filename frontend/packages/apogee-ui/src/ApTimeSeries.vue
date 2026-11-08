@@ -11,12 +11,12 @@ import {
   type LimitSegment,
   type SeriesPoint,
   type TimeWindow,
-} from "./scale.ts";
+} from "./time-series.ts";
 
 /**
  * Time series in a plot well (design-language §7 ApTimeSeries): min–max envelope + mean line,
  * dashed limit segments (they may change across the window) with a crit wash beyond red, and a
- * now-line. Plain-data props only, so it can move to @cadence/apogee-ui unchanged. The caller
+ * now-line. Plain-data props only. The caller
  * passes the accessible sentence (`label`) and renders the legend as text in the slot.
  */
 const props = withDefaults(

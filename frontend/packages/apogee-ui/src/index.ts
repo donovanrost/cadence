@@ -22,5 +22,19 @@ export { default as ApStepBar } from "./ApStepBar.vue";
 export { default as ApTable, type ApColumn } from "./ApTable.vue";
 export { default as ApTabLinks, type ApTabLink } from "./ApTabLinks.vue";
 export { default as ApTag } from "./ApTag.vue";
+export { default as ApTimeSeries } from "./ApTimeSeries.vue";
 export { stateInsetClass, stateTextClass, stateWord, type OpState } from "./status.ts";
 export * from "./lib/index.ts";
+export {
+  envelopePath,
+  linePath,
+  runs,
+  scale,
+  timeTicks,
+  valueTicks,
+  yDomain,
+  type ComparisonSeries,
+  type LimitSegment,
+  type SeriesPoint,
+  type TimeWindow,
+} from "./time-series.ts";

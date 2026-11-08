@@ -2,7 +2,7 @@ import type { OpState } from "@/ui";
 import type { Alarm, Thresholds } from "@/features/alarms/index.ts";
 import { fleetOpState, fleetStateWord, type FleetSpacecraft } from "@/features/fleet/index.ts";
 import type { History, LimitIntervals } from "./api.ts";
-import { runs, type LimitSegment, type SeriesPoint, type TimeWindow } from "./chart/scale.ts";
+import { runs, type LimitSegment, type SeriesPoint, type TimeWindow } from "@/ui";
 
 /** Pure logic for Investigate (J2). Spec: docs/apogee/ux/screens/Investigate.md. */
 

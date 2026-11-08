@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
-import { envelopePath, linePath, runs, scale, timeTicks, valueTicks, yDomain } from "./scale.ts";
+import {
+  envelopePath,
+  linePath,
+  runs,
+  scale,
+  timeTicks,
+  valueTicks,
+  yDomain,
+} from "./time-series.ts";
 
 const p = (t: number, mean: number) => ({ t, min: mean - 1, mean, max: mean + 1 });
 

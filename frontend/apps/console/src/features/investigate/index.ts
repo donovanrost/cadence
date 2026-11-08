@@ -1,8 +1,19 @@
 /**
  * Public API of the investigate feature used by other ops screens (Telemetry explore). The chart
- * moves to @cadence/apogee-ui as ApTimeSeries when lead promotes it.
+ * now lives in @cadence/apogee-ui as ApTimeSeries; TrendChart stays as an alias for existing callers.
  */
-export { fetchHistory, fetchLimitIntervals, type History, type HistoryWindow } from "./api.ts";
-export { default as TrendChart } from "./chart/TrendChart.vue";
-export type { ComparisonSeries, LimitSegment, SeriesPoint, TimeWindow } from "./chart/scale.ts";
+export {
+  fetchHistory,
+  fetchLimitIntervals,
+  type History,
+  type HistoryWindow,
+  type LimitIntervals,
+} from "./api.ts";
+export {
+  ApTimeSeries as TrendChart,
+  type ComparisonSeries,
+  type LimitSegment,
+  type SeriesPoint,
+  type TimeWindow,
+} from "@/ui";
 export { limitSegments, RANGES, rangeWindow, toSeries, type RangeKey } from "./model.ts";
