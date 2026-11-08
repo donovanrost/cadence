@@ -7,7 +7,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | --- | --- | --- | --- | --- |
 | 1 | Console build | `@import "tailwindcss"` unresolved: SPA never boots | lead | verified (9d7790ea) |
 | 2 | Favicon | `/favicon.ico` 404 logged as console error | lead / api | console verified (9d7790ea); LiveView `/sign-in` still 404s (low, api) |
-| 3 | Console shell | Account button: visible "CA" missing from its accessible name (WCAG 2.5.3) | lead | verified in working tree; awaiting commit |
+| 3 | Console shell | Account button: visible "CA" missing from its accessible name (WCAG 2.5.3) | lead | verified (22653d8d) |
 
 ## Details
 
