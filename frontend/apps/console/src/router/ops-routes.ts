@@ -27,7 +27,7 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "alarms",
     name: "ops.alarms",
-    component: pending,
+    component: () => import("@/features/alarms/AlarmsScreen.vue"),
     meta: { mode: "ops", nav: "alarms", title: "Alarms" },
   },
   {
