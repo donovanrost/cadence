@@ -99,3 +99,10 @@ not stale.
   secondary line). Priority label mono 11 in the underlying state's text tint, next to that state's
   mark. Only the top P1 row's action is primary. The queue scrolls; nothing is truncated without a
   count.
+
+### U12 · Breakpoints (shell review)
+**Decision:** ≥ 1100px full console (rail 200/220px). 768–1099px: rail collapses to the index
+column only (56px; labels as `aria-label` + tooltip); console screens may page-scroll and stack
+panes as each spec's "below 1100px" note says. < 768px: Mobile layout (`screens/Mobile.md`), no
+rail, one 56px top row, bottom tab bar. The shell carries these breakpoints from now on, so feature
+screens are built against them.
