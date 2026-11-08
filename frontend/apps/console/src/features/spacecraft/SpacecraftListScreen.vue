@@ -1,10 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
-import { formatCount, plural } from "@/lib/index.ts";
+import {
+  formatCount,
+  plural,
+  ApButton,
+  ApEmptyState,
+  ApField,
+  ApPageHeader,
+  ApPanel,
+  ApRemote,
+} from "@/ui";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
-import { ApButton, ApEmptyState, ApField, ApPageHeader, ApPanel, ApRemote } from "@/ui/index.ts";
 import SpacecraftTable from "./SpacecraftTable.vue";
 import {
   fetchSpacecraftDirectory,

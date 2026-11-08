@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { formatShort } from "@/lib/index.ts";
-import { ApEmptyState, ApPanel } from "@/ui/index.ts";
+import { formatShort, ApEmptyState, ApPanel } from "@/ui";
 import type { RecentChange } from "./api.ts";
 
 /** R2 (ux U2): replaces the canvas's mission revisions until change sets exist. */

@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
-import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApTag } from "@/ui/index.ts";
+import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApTag } from "@/ui";
 import AreaTile from "./AreaTile.vue";
 import FindingsPanel from "./FindingsPanel.vue";
 import RecentChangesPanel from "./RecentChangesPanel.vue";

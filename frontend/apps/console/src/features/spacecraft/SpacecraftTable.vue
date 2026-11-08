@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { formatShort } from "@/lib/index.ts";
-import { ApStatusMark, ApTable, ApTag, type ApColumn } from "@/ui/index.ts";
+import { formatShort, ApStatusMark, ApTable, ApTag, type ApColumn } from "@/ui";
 import type { SpacecraftRow } from "./api.ts";
 
 /** Directory rows. The Name cell is the row link (setup spacecraft detail). */

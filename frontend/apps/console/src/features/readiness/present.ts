@@ -1,6 +1,6 @@
 import type { RouteLocationRaw } from "vue-router";
-import { formatShort, plural } from "@/lib/index.ts";
-import type { OpState } from "@/ui/index.ts";
+import { formatShort, plural } from "@/ui";
+import type { OpState } from "@/ui";
 import type { AreaKey, AreaStatus, FindingFix, Readiness, Severity } from "./api.ts";
 
 /** Severity grammar (ux U3): blocker = crit diamond, optional = gray dash. */

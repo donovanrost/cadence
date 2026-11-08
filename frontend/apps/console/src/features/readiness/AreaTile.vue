@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { formatCount } from "@/lib/index.ts";
-import { ApTag, stateInsetClass } from "@/ui/index.ts";
+import { formatCount, ApTag, stateInsetClass } from "@/ui";
 import type { ReadinessArea } from "./api.ts";
 import { areaName, areaRoute, areaState, areaWord } from "./present.ts";
 
