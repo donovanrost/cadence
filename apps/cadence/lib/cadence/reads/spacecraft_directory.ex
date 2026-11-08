@@ -11,6 +11,7 @@ defmodule Cadence.Reads.SpacecraftDirectory do
   alias Cadence.Comms.RoutingRule
   alias Cadence.Reads.FleetStatus
   alias Cadence.Reads.OperationalState
+  alias Cadence.Reads.SpacecraftMetadata
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftType
 
@@ -46,9 +47,9 @@ defmodule Cadence.Reads.SpacecraftDirectory do
         id: craft.spacecraft_id,
         name: craft.display_name,
         scid: craft.scid,
-        norad_id: integer_field(metadata, "norad_id"),
-        plane: integer_field(metadata, "plane"),
-        slot: integer_field(metadata, "slot"),
+        norad_id: SpacecraftMetadata.integer(metadata, "norad_id"),
+        plane: SpacecraftMetadata.integer(metadata, "plane"),
+        slot: SpacecraftMetadata.integer(metadata, "slot"),
         profile: profile,
         routing_rule_count: rule_count,
         ready: not is_nil(craft.scid) and not is_nil(profile) and rule_count > 0,
@@ -71,21 +72,5 @@ defmodule Cadence.Reads.SpacecraftDirectory do
       end
 
     %{id: craft.spacecraft_type_id, name: name, version: craft.spacecraft_type_version}
-  end
-
-  defp integer_field(metadata, key) do
-    case Map.get(metadata, key) do
-      value when is_integer(value) ->
-        value
-
-      value when is_binary(value) ->
-        case Integer.parse(value) do
-          {integer, ""} -> integer
-          _other -> nil
-        end
-
-      _other ->
-        nil
-    end
   end
 end

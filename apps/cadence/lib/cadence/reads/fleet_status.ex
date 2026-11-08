@@ -16,6 +16,7 @@ defmodule Cadence.Reads.FleetStatus do
 
   alias Cadence.Limits.Event
   alias Cadence.Reads.Limits, as: LimitReads
+  alias Cadence.Reads.SpacecraftMetadata
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftType
@@ -113,10 +114,10 @@ defmodule Cadence.Reads.FleetStatus do
       name: craft.display_name,
       scid: craft.scid,
       profile: profile(craft, profiles),
-      plane: integer_field(metadata, "plane"),
-      slot: integer_field(metadata, "slot"),
-      phase_deg: phase_deg(metadata),
-      operational_phase: string_field(metadata, "operational_phase"),
+      plane: SpacecraftMetadata.integer(metadata, "plane"),
+      slot: SpacecraftMetadata.integer(metadata, "slot"),
+      phase_deg: SpacecraftMetadata.phase_deg(metadata),
+      operational_phase: SpacecraftMetadata.string(metadata, "operational_phase"),
       state: state(limit_state, last_received_at, stale),
       limit_state: limit_state,
       violating_points: length(violating),
@@ -211,29 +212,4 @@ defmodule Cadence.Reads.FleetStatus do
 
   defp sort_key(row),
     do: {row.plane || :infinity, row.slot || :infinity, row.scid || :infinity, row.name}
-
-  defp integer_field(metadata, key) do
-    case Map.get(metadata, key) do
-      value when is_integer(value) -> value
-      value when is_binary(value) -> parse_integer(value)
-      _other -> nil
-    end
-  end
-
-  defp parse_integer(value) do
-    case Integer.parse(value) do
-      {integer, ""} -> integer
-      _other -> nil
-    end
-  end
-
-  defp string_field(metadata, key) do
-    case Map.get(metadata, key) do
-      value when is_binary(value) -> value
-      _other -> nil
-    end
-  end
-
-  defp phase_deg(%{"orbit" => %{"mean_anomaly_deg" => value}}) when is_number(value), do: value
-  defp phase_deg(_metadata), do: nil
 end

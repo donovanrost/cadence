@@ -31,6 +31,42 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     assert Map.has_key?(row, "plane")
   end
 
+  test "shows one spacecraft with profile, routing rules and readiness checks", c do
+    profile = TestFixtures.persist_spacecraft_profile!(c.mission, display_name: "Block 1")
+
+    craft =
+      TestFixtures.persist_spacecraft!(c.mission,
+        display_name: "EARENDIL-009",
+        spacecraft_type_id: profile.spacecraft_type_id,
+        spacecraft_type_version: profile.version
+      )
+
+    data =
+      c.user
+      |> TestFixtures.member_conn()
+      |> get("/api/console/v1/missions/#{c.mission.mission_id}/spacecraft/#{craft.spacecraft_id}")
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert data["spacecraft"]["name"] == "EARENDIL-009"
+    assert data["routing_rules"] == []
+    assert data["configuration"] == nil
+    assert data["readiness"]["ready"] == false
+
+    checks = Map.new(data["readiness"]["checks"], &{&1["key"], &1["status"]})
+    assert checks["routing"] == "blocker"
+    assert checks["telemetry"] == "not_set_up"
+  end
+
+  test "an unknown spacecraft is not found", c do
+    conn =
+      c.user
+      |> TestFixtures.member_conn()
+      |> get("/api/console/v1/missions/#{c.mission.mission_id}/spacecraft/nope")
+
+    assert json_response(conn, 404)["error"]["code"] == "spacecraft_not_found"
+  end
+
   test "lists profiles with protocol labels and pinned counts", c do
     profile = TestFixtures.persist_spacecraft_profile!(c.mission, display_name: "Block 1")
 
