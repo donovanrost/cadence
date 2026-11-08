@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import { decode } from "@/api/index.ts";
 import { fleetReader } from "./api.ts";
 import { fleetOf, spacecraftRow } from "./fixtures.ts";
-import { fitCell, layoutMatrix } from "./matrix.ts";
+import { fitCell, fitMatrix, layoutMatrix, splitRows } from "./matrix.ts";
 import { throttle } from "./useFleet.ts";
 
 const range = (from: number, to: number) =>
@@ -125,5 +125,29 @@ describe("fitCell (ux: clamp(8px, available / planes, 16px))", () => {
 
   it("respects width when no height is given", () => {
     expect(fitCell(44 + 25 * 12, null, 20, 25).cell).toBe(10);
+  });
+});
+
+describe("fitMatrix (U14)", () => {
+  it("wraps rows into blocks when that gives larger cells", () => {
+    // 20 planes x 25 slots in a wide, short box: one block would be 8px cells.
+    const fit = fitMatrix(900, 180, 20, 25);
+    expect(fit.blocks).toBe(2);
+    expect(fit.cell).toBeGreaterThan(8);
+  });
+
+  it("wraps to stop overflowing even when the cell can't grow", () => {
+    expect(fitMatrix(630, 180, 20, 25)).toMatchObject({ blocks: 2, overflows: false });
+  });
+
+  it("keeps one block when there is height to spare", () => {
+    expect(fitMatrix(630, 1000, 20, 25)).toEqual({ cell: 16, overflows: false, blocks: 1 });
+  });
+
+  it("splits rows into consecutive groups", () => {
+    expect(splitRows([1, 2, 3, 4, 5], 2)).toEqual([
+      [1, 2, 3],
+      [4, 5],
+    ]);
   });
 });

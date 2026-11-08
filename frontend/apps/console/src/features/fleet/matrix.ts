@@ -150,3 +150,41 @@ export function fitCell(
 
 /** Height the matrix rows need at the largest cell size (for the Now grid's row cap). */
 export const matrixNaturalHeight = (rows: number) => rows * (CELL_MAX + CELL_GAP);
+
+/** Space between side-by-side row blocks (U14). */
+export const BLOCK_GAP = 16;
+
+export type MatrixFit = Readonly<{ cell: number; overflows: boolean; blocks: number }>;
+
+/**
+ * U14: when height is the limit, wrap rows into side-by-side blocks (P01–P10 | P11–P20) and
+ * pick the block count that gives the largest cell within 8–16px. At equal size, a layout that
+ * doesn't overflow wins; otherwise fewer blocks win.
+ */
+export function fitMatrix(
+  width: number,
+  height: number | null,
+  rows: number,
+  columns: number,
+  maxBlocks = 4,
+): MatrixFit {
+  let best: MatrixFit = { ...fitCell(width, height, rows, columns), blocks: 1 };
+  if (height === null) return best;
+  for (let blocks = 2; blocks <= Math.min(maxBlocks, rows); blocks++) {
+    const blockWidth = (width - (blocks - 1) * BLOCK_GAP) / blocks;
+    const fit = fitCell(blockWidth, height, Math.ceil(rows / blocks), columns);
+    const fits = blockWidth >= LABEL_W + columns * (CELL_MIN + CELL_GAP);
+    const better =
+      fit.cell > best.cell || (fit.cell === best.cell && best.overflows && !fit.overflows);
+    if (fits && better) best = { ...fit, blocks };
+  }
+  return best;
+}
+
+/** Splits rows into `blocks` consecutive groups of near-equal size. */
+export function splitRows<T>(rows: readonly T[], blocks: number): T[][] {
+  const size = Math.ceil(rows.length / Math.max(blocks, 1));
+  const out: T[][] = [];
+  for (let i = 0; i < rows.length; i += size) out.push(rows.slice(i, i + size));
+  return out;
+}

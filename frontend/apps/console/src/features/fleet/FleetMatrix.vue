@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from
 import { RouterLink } from "vue-router";
 import { formatDuration, plural, useNow, ApStatusMark } from "@/ui";
 import type { FleetSpacecraft } from "./api.ts";
-import { fitCell, fleetOpState, fleetStateWord, layoutMatrix } from "./matrix.ts";
+import { fitMatrix, fleetOpState, fleetStateWord, layoutMatrix, splitRows } from "./matrix.ts";
 import PlanePicker from "./PlanePicker.vue";
 
 /**
@@ -40,13 +40,14 @@ const planes = computed(() =>
   layout.value.rows.flatMap((row) => (row.plane === null ? [] : [row.plane])),
 );
 const fit = computed(() =>
-  fitCell(
+  fitMatrix(
     box.value.width,
     props.fitHeight ? box.value.height : null,
     layout.value.rows.length,
     layout.value.columns,
   ),
 );
+const blocks = computed(() => splitRows(layout.value.rows, fit.value.blocks));
 const byId = computed(() => new Map(props.spacecraft.map((sc) => [sc.id, sc])));
 const hovered = shallowRef<FleetSpacecraft | null>(null);
 
@@ -106,36 +107,38 @@ const inspector = computed(() => {
     <div
       ref="area"
       aria-hidden="true"
-      class="flex min-h-0 flex-col gap-[2px]"
+      class="flex min-h-0 flex-wrap content-start gap-x-4 gap-y-[2px]"
       :class="fitHeight ? 'flex-1 overflow-auto' : ''"
       @mouseleave="hovered = null"
     >
-      <div v-for="row in layout.rows" :key="row.key" class="flex items-center gap-2">
-        <span
-          class="w-9 flex-none font-mono text-[10px] leading-none"
-          :class="[
-            row.plane !== null && row.plane === selectedPlane ? 'text-readout' : 'text-text-4',
-            row.plane !== null ? 'cursor-pointer hover:text-readout' : '',
-          ]"
-          @click="
-            row.plane !== null &&
-            emit('selectPlane', row.plane === selectedPlane ? null : row.plane)
-          "
-          >{{ row.label }}</span
-        >
-        <div
-          class="grid flex-none gap-[2px]"
-          :style="{ gridTemplateColumns: `repeat(${layout.columns}, ${fit.cell}px)` }"
-          @click="onClick"
-          @mouseover="hovered = target($event)"
-        >
+      <div v-for="(block, b) in blocks" :key="b" class="flex flex-col gap-[2px]">
+        <div v-for="row in block" :key="row.key" class="flex items-center gap-2">
           <span
-            v-for="(sc, i) in row.cells"
-            :key="sc?.id ?? `empty-${i}`"
-            :data-sc="sc?.id"
-            class="box-border aspect-square"
-            :class="cellClass(sc)"
-          />
+            class="w-9 flex-none font-mono text-[10px] leading-none"
+            :class="[
+              row.plane !== null && row.plane === selectedPlane ? 'text-readout' : 'text-text-4',
+              row.plane !== null ? 'cursor-pointer hover:text-readout' : '',
+            ]"
+            @click="
+              row.plane !== null &&
+              emit('selectPlane', row.plane === selectedPlane ? null : row.plane)
+            "
+            >{{ row.label }}</span
+          >
+          <div
+            class="grid flex-none gap-[2px]"
+            :style="{ gridTemplateColumns: `repeat(${layout.columns}, ${fit.cell}px)` }"
+            @click="onClick"
+            @mouseover="hovered = target($event)"
+          >
+            <span
+              v-for="(sc, i) in row.cells"
+              :key="sc?.id ?? `empty-${i}`"
+              :data-sc="sc?.id"
+              class="box-border aspect-square"
+              :class="cellClass(sc)"
+            />
+          </div>
         </div>
       </div>
     </div>

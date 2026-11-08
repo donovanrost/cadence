@@ -21,5 +21,5 @@ const model = computed({
 </script>
 
 <template>
-  <ApSelect v-model="model" label="Plane" hidden-label :options="options" />
+  <ApSelect v-model="model" label="Plane" hidden-label size="compact" mono :options="options" />
 </template>
