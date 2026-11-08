@@ -8,13 +8,13 @@ Confirms the TEAM.md defaults, with the refinements below.
 | What | Where |
 | --- | --- |
 | SPA source | `frontend/apps/console` (package `@cadence/console`) |
-| Shared Apogee components | `frontend/apps/console/src/ui/**` (lead owns; promote to a package only if a second app needs them) |
+| Apogee design system | `frontend/packages/apogee-ui` (`@cadence/apogee-ui`: tokens + base css, `Ap*` components, formatting, shared clock; lead owns, ux owns token values). A separate package because `packages/ui`'s boundary test forbids an app-local UI kit (`apps/*/src/ui`). |
 | Feature code | `frontend/apps/console/src/features/<area>/**` (fe-ops: `now`, `fleet`, `alarms`, `commands`, `contacts`, `palette`; fe-setup: `readiness`, `spacecraft`, `catalog`, `profiles`, `people`) |
 | App shell, router, API client, live socket | `frontend/apps/console/src/{shell,router,api,live}/**` (lead) |
 | Build output | `apps/cadence_web/priv/static/console/` (gitignored) |
 | Phoenix glue | `CadenceWeb.ConsoleController`, `/api/console/v1` scope, `CadenceWeb.ConsoleSocket` (api) |
 
-Feature directories import shared code only through `@/ui`, `@/api`, `@/live`, `@/shell` index files.
+Feature directories import shared code only through `@/ui` (`src/ui.ts`: the package + `ApRemote`), `@/api`, `@/live`, `@/shell`.
 A feature never imports another feature's internals; if two features need the same thing, ask lead to
 promote it.
 
@@ -146,7 +146,7 @@ app request ≥400 on load; axe WCAG 2.1 AA clean.
 secondary / danger, sizes, renders `<button>` or `<RouterLink>`), `ApTag` + `ApStatusMark`
 (nominal / caution / critical / stale / off: shape + color + word), `ApStatStrip` + `ApReadout`,
 `ApTable`, `ApSegmented`, `ApLabel`, `ApEmptyState`, `ApCallout`. Tokens live in
-`src/styles/tokens.css` as Tailwind v4 `@theme` variables (from ux's `design-language.md`).
+`packages/apogee-ui/src/styles/tokens.css` as Tailwind v4 `@theme` variables (from ux's `design-language.md`).
 Feature engineers compose these; ask lead before adding a new shared primitive.
 
 ## Working in the console (feature engineers)
@@ -168,7 +168,8 @@ Feature engineers compose these; ask lead before adding a new shared primitive.
   change/unmount, drops stale responses, refetch keeps the last value) and refetches via
   `useMissionInvalidation(missionId, [...], refetch)`. Render with `<ApRemote :state @retry>`.
 - Live: `useConnection()` → `connecting | live | offline`; show data as stale when not `live`.
-- Formatting: only `@/lib` (`formatAbsolute`, `formatCountdown`, `formatCount`, `plural`, `useNow`).
+- Formatting: only from `@/ui` (`formatAbsolute`, `formatCountdown`, `formatCount`, `plural`, `useNow`).
+  Old `@/ui/index.ts` / `@/lib/*` paths resolve through a transitional alias; use `@/ui` in new code.
 - UI: compose `@/ui`. Need a new shared primitive (ApListRow, ApFactStrip, ApEventLine, ApKeyValue,
   ApStepBar, ApStateTrail, ApChip, ApField, ApBreadcrumb, …)? Ask lead; don't build a local copy.
   Feature-only components stay in the feature dir.
