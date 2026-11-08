@@ -45,7 +45,8 @@ export function throttle(run: () => void, gapMs: number, clock: () => number = D
 }
 
 /** The fleet snapshot for one mission, refetched (throttled) on mission invalidations. */
-export function useFleet(missionId: Readonly<Ref<string>>): FleetHandle {
+/** `missionId: null` pauses (e.g. the palette outside a mission). */
+export function useFleet(missionId: Readonly<Ref<string | null>>): FleetHandle {
   const query = useRemoteQuery(missionId, (id, signal) => fetchFleet(id, signal));
   const throttled = throttle(query.refetch, FLEET_REFETCH_GAP_MS);
   useMissionInvalidation(

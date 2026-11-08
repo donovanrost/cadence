@@ -5,6 +5,7 @@ import AppShell from "@/shell/AppShell.vue";
 import BootScreen from "@/shell/BootScreen.vue";
 import { useBootstrap } from "@/shell/bootstrap.ts";
 import SessionProvider from "@/shell/SessionProvider.vue";
+import PaletteRoot from "@/features/palette/PaletteRoot.vue";
 
 const { state, load } = useBootstrap();
 onMounted(() => void load());
@@ -23,6 +24,6 @@ watch(state, (current) => {
       <!-- fe-ops: <FleetStatusTag /> from @/features/fleet goes here (Ops top bar). -->
       <template #topbar-status />
     </AppShell>
-    <!-- fe-ops: mount the ⌘K palette here (it reads usePalette() from @/shell). -->
+    <PaletteRoot />
   </SessionProvider>
 </template>
