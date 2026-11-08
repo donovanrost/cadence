@@ -4,6 +4,7 @@ defmodule CadenceWeb.Console.MissionChannelTest do
   import Phoenix.ChannelTest, except: [connect: 2, connect: 3]
   require Phoenix.ChannelTest
 
+  alias Cadence.Control.Configuration
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Platform.ScopedReadUpdates
   alias CadenceWeb.Console.LimitTransitions
@@ -115,7 +116,7 @@ defmodule CadenceWeb.Console.MissionChannelTest do
 
       Phoenix.PubSub.broadcast(
         Cadence.PubSub,
-        Cadence.Control.Configuration.runtime_topic(org_id, mission_id),
+        Configuration.runtime_topic(org_id, mission_id),
         {:config_runtime, %{revision: 3, runtime: :not_applicable, degraded_partitions: []}}
       )
 

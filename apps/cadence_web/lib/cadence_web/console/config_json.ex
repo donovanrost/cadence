@@ -8,6 +8,8 @@ defmodule CadenceWeb.Console.ConfigJSON do
 
   import Plug.Conn
 
+  alias CadenceWeb.Console.Problem
+
   @status %{
     frozen_in_review: 409,
     change_set_changed: 409,
@@ -81,7 +83,7 @@ defmodule CadenceWeb.Console.ConfigJSON do
   def error(conn, tag) when is_map_key(@status, tag), do: respond(conn, tag, nil)
 
   def error(conn, {:invalid_params, details}),
-    do: CadenceWeb.Console.Problem.respond(conn, :invalid_params, details)
+    do: Problem.respond(conn, :invalid_params, details)
 
   def error(conn, _unknown),
     do: respond_raw(conn, 422, "unprocessable", "The request could not be completed.", nil)
@@ -99,7 +101,7 @@ defmodule CadenceWeb.Console.ConfigJSON do
   defp respond_raw(conn, status, code, message, details) do
     conn
     |> put_status(status)
-    |> Phoenix.Controller.json(CadenceWeb.Console.Problem.body(code, message, details))
+    |> Phoenix.Controller.json(Problem.body(code, message, details))
     |> halt()
   end
 
