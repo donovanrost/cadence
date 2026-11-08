@@ -11,3 +11,4 @@ export {
 } from "./http.ts";
 export type { Session, SessionMission, SessionOrganization } from "./session.ts";
 export { type RemoteState } from "./remote-state.ts";
+export { useRemoteQuery } from "./use-remote-query.ts";
