@@ -11,7 +11,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: "/account",
     name: "account",
-    component: pending,
+    component: () => import("@/features/account/AccountScreen.vue"),
     meta: { mode: "account", title: "Your account" },
   },
   {
