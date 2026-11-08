@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scheduling journeys · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{position:relative;background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530;flex-wrap:wrap}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD;margin:0}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.tag{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 9px;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.b{height:32px;padding:0 12px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none}
+.b.pri{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.s-nom{width:8px;height:8px;background:#2FD08A;flex:none}
+.s-cau{width:10px;height:9px;background:#FFB020;clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+.s-crit{width:8px;height:8px;background:#FF4D57;transform:rotate(45deg);flex:none}
+.s-stale{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1.5px,transparent 1.5px 4px)}
+.s-off{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px dashed #9DAAB8}
+.rail a{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;color:#9DAAB8;text-decoration:none;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border-left:2px solid transparent}
+.rail a:hover{color:#E6EDF3;background:#0F141B}
+.rail a.on{color:#E6EDF3;background:#0F141B;border-left-color:#E6EDF3}
+.rail .n{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;width:16px}
+.rail .c{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99;letter-spacing:0}
+.cell{aspect-ratio:1;background:#164E37}
+.c-cau{background:#FFB020}
+.c-crit{background:#FF4D57;outline:1px solid #FF4D57;outline-offset:1.5px}
+.c-stale{background-color:#140F26;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1px,transparent 1px 3.5px)}
+.c-live{outline:1px solid #E6EDF3;outline-offset:1.5px}
+.ro{background:#0A0E13;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.ro .v{font:500 30px Saira,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;line-height:1}
+.ro .s{font:400 12px 'Saira',sans-serif;color:#9DAAB8}
+
+.p{margin:0;font-size:15px;line-height:1.55;color:#9DAAB8}
+.stg{background:#0A0E13;padding:18px 18px 20px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.stg .k{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.stg .h{font:700 20px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;margin:0}
+.stg .w{font:500 11px 'Azeret Mono',monospace;color:#C9D3DD;text-transform:uppercase}
+.stg .d{font-size:13px;line-height:1.5;color:#9DAAB8;margin:0}
+.st{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border:1px solid #2A3644;background:#0F141B;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#C9D3DD;white-space:nowrap}
+.arw{color:#3A4654;font:500 12px 'Azeret Mono',monospace}
+.jc{display:flex;flex-direction:column;min-width:0}
+.jc .bd{padding:18px;display:flex;flex-direction:column;gap:14px;flex:1}
+.jc .sc{font:600 22px 'Saira Condensed',sans-serif;letter-spacing:.06em;text-transform:uppercase;margin:0;line-height:1.15}
+.kv{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px 12px;font-size:13px}
+.kv dt{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#7D8A99}
+.kv dd{margin:0;color:#C9D3DD}
+.rule{display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;padding:14px 18px;border-top:1px solid #1C2530}
+.rule:first-of-type{border-top:0}
+.rule .n2{font:500 11px 'Azeret Mono',monospace;color:#7D8A99;padding-top:3px}
+.rule b{display:block;font:600 15px 'Saira Condensed',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#E6EDF3;margin-bottom:3px;font-weight:600}
+.rule span{font-size:13px;line-height:1.5;color:#9DAAB8}
+.fx{display:grid;grid-template-columns:64px minmax(0,1fr) minmax(0,1fr);gap:16px;padding:12px 18px;border-top:1px solid #1C2530;font-size:13px;line-height:1.5}
+.fx:first-of-type{border-top:0}
+</style>
+</helmet>
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; min-height: 100vh; box-sizing: border-box; padding: 56px 64px 64px; display: flex; flex-direction: column; gap: 40px; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 40px 40px">
+
+<section style="display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-end; justify-content: space-between">
+<div style="display: flex; flex-direction: column; gap: 12px; max-width: 840px">
+<p class="lbl" style="color: #E6EDF3">Contact scheduling · end to end</p>
+<h1 style="margin: 0; font: 600 52px 'Saira Condensed'; letter-spacing: .06em; text-transform: uppercase; line-height: 1">Schedule the fleet, not a spacecraft</h1>
+<p class="p" style="font-size: 17px">Today you pick one spacecraft from a grid of 500 cards, and the schedule sits 4,000 px further down. In the new flow, you start from demand. Each profile says how often its spacecraft must be heard from. Cadence drafts the fleet's whole day against every provider's opportunities, and the planner only works the exceptions.</p>
+</div>
+<div class="m" style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #7D8A99; text-align: right">
+<span>BOARDS IN THIS ROW</span>
+<span style="color: #E6EDF3">K-PLAN · K-REPLAN · K-REVIEW</span>
+<span>LIVE VIEW · J4 CONTACTS</span>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 14px">
+<p class="lbl">The six stations</p>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; background: #1C2530; border: 1px solid #1C2530">
+<div class="stg"><span class="k">01 · PROFILE RULES</span><h2 class="h">Demand</h2><p class="d">Each profile sets its contacts per day, the longest gap allowed, and how many passes must be able to uplink.</p><span class="w">Exit: a need per spacecraft</span></div>
+<div class="stg"><span class="k">02 · PROVIDERS</span><h2 class="h">Opportunities</h2><p class="d">Visibility windows from each provider's antennas, with price, elevation and uplink capability.</p><span class="w">Exit: a pool of windows</span></div>
+<div class="stg"><span class="k">03 · CADENCE + PLANNER</span><h2 class="h">Draft</h2><p class="d">The scheduler fills demand at the lowest cost. The planner fixes only the spacecraft it couldn't satisfy.</p><span class="w">Exit: every rule met</span></div>
+<div class="stg"><span class="k">04 · PROVIDERS</span><h2 class="h">Reserve</h2><p class="d">One submit sends every booking. Confirmations, rejections and price changes come back on the same plan.</p><span class="w">Exit: confirmed at freeze</span></div>
+<div class="stg"><span class="k">05 · NETWORK</span><h2 class="h">Fly</h2><p class="d">Passes run on the live view. If a station drops, the affected passes are re-planned as a single revision.</p><span class="w">Exit: realized</span></div>
+<div class="stg" style="box-shadow: inset 0 2px 0 #2FD08A"><span class="k" style="color: #4FDB9E">06 · PLANNER + FINANCE</span><h2 class="h">Reconcile</h2><p class="d">Planned against realized: bytes, minutes and money. Missed passes that weren't our fault become disputes.</p><span class="w" style="color: #4FDB9E">Exit: billed = flown</span></div>
+</div>
+</section>
+
+<section class="pnl">
+<div class="ph"><span class="i">M1</span><h2 class="t">Contact state model</h2><span class="r">PROGRESS IS GRAY · OUTCOMES CARRY STATUS COLOR</span></div>
+<div style="padding: 20px 18px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span class="st" style="border-style: dashed; color: #9DAAB8">Opportunity</span><span class="arw">→</span>
+<span class="st">Drafted</span><span class="arw">→</span>
+<span class="st">Requested</span><span class="arw">→</span>
+<span class="st">Confirmed</span><span class="arw">→</span>
+<span class="st" style="background: #E6EDF3; color: #05070A; border-color: #E6EDF3">In contact</span><span class="arw">→</span>
+<span class="st" style="color: #4FDB9E; border-color: #2FD08A"><span class="s-nom"></span>Realized</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span class="m" style="font-size: 11px; color: #7D8A99; width: 120px">OFF-RAMPS</span>
+<span class="st" style="color: #FFC24D; border-color: #FFB020"><span class="s-cau"></span>Partial</span>
+<span class="st" style="color: #FFC24D; border-color: #FFB020"><span class="s-cau"></span>Rejected by provider</span>
+<span class="st" style="color: #FF6B73; border-color: #FF4D57"><span class="s-crit"></span>Missed</span>
+<span class="st" style="color: #BDB3FF; border-color: #A497FF"><span class="s-stale"></span>Unknown · no report</span>
+<span class="st" style="color: #9DAAB8">Cancelled</span>
+</div>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 14px">
+<p class="lbl">Three ways into the flow</p>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+<article class="pnl jc">
+<div class="ph"><span class="i">K1</span><h3 class="t">Plan tomorrow</h3><span class="r" style="color: #E6EDF3">DRAWN →</span></div>
+<div class="bd">
+<p class="sc">Book Friday's 1,500 passes before the 18:00Z provider freeze</p>
+<dl class="kv"><dt>Who</dt><dd>Mission planner, once a day</dd><dt>Scale</dt><dd>500 spacecraft, 8 stations, 18 antennas</dd><dt>Pace</dt><dd>About 20 minutes. Cadence drafts it, and the planner clears six exceptions.</dd><dt>Board</dt><dd><a href="SchedulePlan.dc.html">Plan</a></dd></dl>
+</div>
+</article>
+<article class="pnl jc">
+<div class="ph"><span class="i">K2</span><h3 class="t">A station goes down</h3><span class="r" style="color: #E6EDF3">DRAWN →</span></div>
+<div class="bd">
+<p class="sc">Svalbard degrades at 01:52Z. Move its next 8 hours somewhere else.</p>
+<dl class="kv"><dt>Who</dt><dd>Operator on console</dd><dt>Scale</dt><dd>64 passes, 61 spacecraft</dd><dt>Pace</dt><dd>Minutes. The first affected pass is 12 minutes out.</dd><dt>Board</dt><dd><a href="Replan.dc.html">Re-plan</a></dd></dl>
+</div>
+</article>
+<article class="pnl jc">
+<div class="ph"><span class="i">K3</span><h3 class="t">Close the books</h3><span class="r" style="color: #E6EDF3">DRAWN →</span></div>
+<div class="bd">
+<p class="sc">Check yesterday's planned passes against the ones that flew, and dispute the misses</p>
+<dl class="kv"><dt>Who</dt><dd>Planner, finance on monthly close</dd><dt>Scale</dt><dd>1,512 passes, 3 providers</dd><dt>Pace</dt><dd>Daily skim, monthly sign-off. It's a reading view, so it scrolls.</dd><dt>Board</dt><dd><a href="PassReview.dc.html">Review</a></dd></dl>
+</div>
+</article>
+</div>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+<section class="pnl" style="flex: 1 1 520px; min-width: 0">
+<div class="ph"><span class="i">R</span><h2 class="t">Rules on every scheduling screen</h2></div>
+<div class="rule"><span class="n2">01</span><div><b>Start from demand</b><span>The question is never "pick a spacecraft". It's "who isn't covered", and the answer is a short list.</span></div></div>
+<div class="rule"><span class="n2">02</span><div><b>Time runs left to right, stations top to bottom</b><span>One Gantt for the fleet. Searching for a spacecraft highlights its passes in place instead of opening another page.</span></div></div>
+<div class="rule"><span class="n2">03</span><div><b>Show the gap, not just the pass</b><span>The longest silence per spacecraft is the number that matters, so it's drawn and measured.</span></div></div>
+<div class="rule"><span class="n2">04</span><div><b>Cost is part of the plan</b><span>Minutes and money against budget sit in the action bar, next to Submit.</span></div></div>
+<div class="rule"><span class="n2">05</span><div><b>Every change is a revision</b><span>Re-plans diff against the live plan and apply as a single revision, with provider requests batched.</span></div></div>
+</section>
+<section class="pnl" style="flex: 1 1 520px; min-width: 0">
+<div class="ph"><span class="i">F</span><h2 class="t">What this fixes from the review</h2></div>
+<div class="fx"><span class="m" style="color: #FF6B73">#05</span><span style="color: #C9D3DD">Results hidden under a 500-card picker</span><span style="color: #9DAAB8">A fleet Gantt is the default. The spacecraft is a filter, not a gate.</span></div>
+<div class="fx"><span class="m" style="color: #FF6B73">#05</span><span style="color: #C9D3DD">Picker stays open after a choice</span><span style="color: #9DAAB8">There's no picker. Search highlights a spacecraft on the same screen.</span></div>
+<div class="fx"><span class="m" style="color: #FFC24D">#05</span><span style="color: #C9D3DD">Opportunities, scheduled, realized and reservations as four separate lists</span><span style="color: #9DAAB8">One contact with one state model, drawn on one timeline.</span></div>
+<div class="fx"><span class="m" style="color: #FFC24D">#08</span><span style="color: #C9D3DD">Requirements live in their own workspace</span><span style="color: #9DAAB8">Requirements are the scheduler's input, shown as the demand list.</span></div>
+<div class="fx"><span class="m" style="color: #7D8A99">#28</span><span style="color: #C9D3DD">Ground stations have no online status</span><span style="color: #9DAAB8">Station health is drawn on the Gantt rows as outage bands.</span></div>
+</section>
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cadence design language: Apogee</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{position:relative;background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.tag{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 9px;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border:1px solid currentColor}
+.b{height:38px;padding:0 18px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap}
+.s-nom{width:8px;height:8px;background:#2FD08A;flex:none}
+.s-cau{width:10px;height:9px;background:#FFB020;clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+.s-crit{width:8px;height:8px;background:#FF4D57;transform:rotate(45deg);flex:none}
+.s-stale{width:8px;height:8px;flex:none;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1.5px,transparent 1.5px 4px)}
+.s-off{width:8px;height:8px;flex:none;border:1px dashed #7D8A99}
+.p{margin:0;font:400 14px/1.55 'Saira',sans-serif;color:#9DAAB8}
+</style>
+</helmet>
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; min-height: 100vh; box-sizing: border-box; padding: 0 0 96px; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.03) 1px, transparent 1px); background-size: 40px 40px">
+
+<section style="position: relative; overflow: hidden; border-bottom: 1px solid #1C2530; padding: 72px 24px 64px">
+<svg viewBox="0 0 1440 520" preserveAspectRatio="xMidYMid slice" style="position: absolute; inset: 0; width: 100%; height: 100%" aria-hidden="true">
+<circle cx="1120" cy="300" r="170" fill="#0D1116" stroke="#1C2530"></circle>
+<ellipse cx="1120" cy="300" rx="170" ry="56" fill="none" stroke="#1A2028"></ellipse>
+<ellipse cx="1120" cy="300" rx="60" ry="170" fill="none" stroke="#1A2028"></ellipse>
+<ellipse cx="1120" cy="300" rx="120" ry="170" fill="none" stroke="#1A2028"></ellipse>
+<path d="{{ringsDim}}" fill="none" stroke="#232B34" stroke-width="1"></path>
+<path d="{{ringSel}}" fill="none" stroke="{{accent}}" stroke-width="1.2"></path>
+<circle cx="1360" cy="262" r="4" fill="{{accent}}"></circle>
+<circle cx="1360" cy="262" r="12" fill="none" stroke="{{accent}}" opacity=".5"></circle>
+</svg>
+<div style="position: relative; max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; align-items: center; gap: 14px">
+<svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path d="M15 2 28 15 15 28 2 15Z" fill="none" stroke="{{accent}}" stroke-width="1.5"></path><path d="M15 9 21 15 15 21 9 15Z" fill="{{accent}}"></path></svg>
+<span style="font: 700 18px 'Saira Condensed'; letter-spacing: .4em">CADENCE</span>
+<span class="m" style="font-size: 12px; color: #7D8A99">// GROUND SEGMENT OPERATIONS</span>
+</div>
+<p class="lbl" style="color: {{accent}}">Design language · rev A · 2026-10-23</p>
+<h1 style="margin: 0; font: 700 120px/0.9 'Saira Condensed', sans-serif; letter-spacing: .02em; text-transform: uppercase">Apogee</h1>
+<p style="margin: 0; max-width: 620px; font-size: 19px; line-height: 1.55; color: #9DAAB8">An instrument panel, not a web page. Sharp edges, hairline grids and real mission vocabulary, built for an operator flying 500 spacecraft from one seat.</p>
+<div class="m" style="display: flex; flex-wrap: wrap; gap: 32px; font-size: 13px; color: #9DAAB8; margin-top: 8px">
+<span><span style="color: #7D8A99">UTC</span> 2026-10-23 02:41:17</span>
+<span><span style="color: #7D8A99">MET</span> 412:07:14:05</span>
+<span><span style="color: #7D8A99">FLEET</span> 500 SC · 10 PLANES</span>
+</div>
+</div>
+</section>
+
+<div style="max-width: 1280px; margin: 0 auto; padding: 64px 24px 0; display: flex; flex-direction: column; gap: 56px">
+
+<section style="display: flex; flex-direction: column; gap: 18px">
+<p class="lbl">01 // Principles</p>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: #1C2530; border: 1px solid #1C2530">
+<div style="background: #0A0E13; padding: 22px; display: flex; flex-direction: column; gap: 10px"><span style="font: 600 20px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">Truth before calm</span><p class="p">No data is a state. Stale is hatched and outranks nominal. Green is earned, never assumed.</p></div>
+<div style="background: #0A0E13; padding: 22px; display: flex; flex-direction: column; gap: 10px"><span style="font: 600 20px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">Fleet first</span><p class="p">Every view opens on the constellation and narrows to a plane, a group, a spacecraft.</p></div>
+<div style="background: #0A0E13; padding: 22px; display: flex; flex-direction: column; gap: 10px"><span style="font: 600 20px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">The clock is king</span><p class="p">UTC, MET and countdowns to AOS sit in the frame at all times. Time runs left to right.</p></div>
+<div style="background: #0A0E13; padding: 22px; display: flex; flex-direction: column; gap: 10px"><span style="font: 600 20px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">Speak flight</span><p class="p">AOS, LOS, uplink, GO / NO-GO. Operators already think in these words, so the UI uses them.</p></div>
+<div style="background: #0A0E13; padding: 22px; display: flex; flex-direction: column; gap: 10px"><span style="font: 600 20px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">Shape carries meaning</span><p class="p">State is coded by shape and color, so it reads in grayscale, at a glance, on a wall screen.</p></div>
+<div style="background: #0A0E13; padding: 22px; display: flex; flex-direction: column; gap: 10px"><span style="font: 600 20px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">The console holds still</span><p class="p">An ops screen you act from or watch live fits the viewport. Panes scroll, the page never does, and the commit action sits beside the state that justifies it. Reading views, setup and admin can scroll.</p></div>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 18px">
+<p class="lbl">02 // State: shape plus color, never color alone</p>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px">
+<div class="pnl" style="padding: 20px; display: flex; flex-direction: column; gap: 14px"><div style="display: flex; justify-content: space-between; align-items: center"><span class="tag" style="color: #FF6B73"><span class="s-crit"></span>Critical</span><span class="m" style="font-size: 11px; color: #7D8A99">#FF4D57</span></div><div style="height: 4px; background: #FF4D57"></div><p class="p">Diamond. Out of limits, a human acts now. Flashes once on arrival.</p></div>
+<div class="pnl" style="padding: 20px; display: flex; flex-direction: column; gap: 14px"><div style="display: flex; justify-content: space-between; align-items: center"><span class="tag" style="color: #FFC24D"><span class="s-cau"></span>Caution</span><span class="m" style="font-size: 11px; color: #7D8A99">#FFB020</span></div><div style="height: 4px; background: #FFB020"></div><p class="p">Triangle. Trending to a limit, or a soft limit crossed.</p></div>
+<div class="pnl" style="padding: 20px; display: flex; flex-direction: column; gap: 14px"><div style="display: flex; justify-content: space-between; align-items: center"><span class="tag" style="color: #BDB3FF"><span class="s-stale"></span>Stale</span><span class="m" style="font-size: 11px; color: #7D8A99">#A497FF</span></div><div style="height: 4px; background-image: repeating-linear-gradient(90deg, #A497FF 0 6px, transparent 6px 10px)"></div><p class="p">Hatched square. No fresh telemetry. Outranks nominal everywhere.</p></div>
+<div class="pnl" style="padding: 20px; display: flex; flex-direction: column; gap: 14px"><div style="display: flex; justify-content: space-between; align-items: center"><span class="tag" style="color: #4FDB9E"><span class="s-nom"></span>Nominal</span><span class="m" style="font-size: 11px; color: #7D8A99">#2FD08A</span></div><div style="height: 4px; background: #1B6E4B"></div><p class="p">Square. Fresh and in limits. Drawn dim in bulk so problems stand out.</p></div>
+<div class="pnl" style="padding: 20px; display: flex; flex-direction: column; gap: 14px"><div style="display: flex; justify-content: space-between; align-items: center"><span class="tag" style="color: #9DAAB8"><span class="s-off"></span>Not set up</span><span class="m" style="font-size: 11px; color: #7D8A99">dashed</span></div><div style="height: 4px; border-top: 1px dashed #7D8A99"></div><p class="p">Dashed. App or source not installed. Offer to install, never imply clean.</p></div>
+</div>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px">
+<div class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">03</span><span class="t">Color</span></div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: #1C2530">
+<div style="background: #05070A; padding: 16px; height: 90px; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px"><span style="font: 600 14px 'Saira Condensed'; letter-spacing: .14em">VACUUM</span><span class="m" style="font-size: 11px; color: #7D8A99">#05070A</span></div>
+<div style="background: #0A0E13; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px"><span style="font: 600 14px 'Saira Condensed'; letter-spacing: .14em">PANEL</span><span class="m" style="font-size: 11px; color: #7D8A99">#0A0E13</span></div>
+<div style="background: #0F141B; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px"><span style="font: 600 14px 'Saira Condensed'; letter-spacing: .14em">RAISED</span><span class="m" style="font-size: 11px; color: #7D8A99">#0F141B</span></div>
+<div style="background: #1C2530; padding: 16px; height: 90px; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px"><span style="font: 600 14px 'Saira Condensed'; letter-spacing: .14em">HAIRLINE</span><span class="m" style="font-size: 11px; color: #9DAAB8">#1C2530</span></div>
+<div style="background: #E6EDF3; color: #05070A; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px"><span style="font: 600 14px 'Saira Condensed'; letter-spacing: .14em">READOUT</span><span class="m" style="font-size: 11px">#E6EDF3</span></div>
+<div style="background: {{accent}}; color: #05070A; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px"><span style="font: 600 14px 'Saira Condensed'; letter-spacing: .14em">SIGNAL WHITE · ACTION</span><span class="m" style="font-size: 11px">{{accent}}</span></div>
+</div>
+<p class="p" style="padding: 14px 16px">The interface is grayscale. White marks what you can act on and what is live. The only color on screen is operational state, so color always means something is wrong or stale.</p>
+</div>
+
+<div class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">04</span><span class="t">Type</span></div>
+<div style="padding: 20px 16px; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 4px"><span class="lbl">Saira Condensed · labels and headings, always uppercase</span><span style="font: 600 34px 'Saira Condensed'; letter-spacing: .1em; text-transform: uppercase">Plane 7 · uplink armed</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span class="lbl">Saira, tabular figures · every live number and time</span><span class="n" style="font-size: 30px; font-weight: 500">23.14 V  T−00:38:10</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span class="lbl">Azeret Mono · literal ids, commands and console meta</span><span class="m" style="font-size: 18px">SCID 312 · HK.battery_voltage · SET_POWER_MODE</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span class="lbl">Saira · sentences</span><span style="font-size: 16px; color: #9DAAB8">Solar array current fell 18% since orbit 4,808, so the battery isn't recharging in sunlight.</span></div>
+</div>
+</div>
+</section>
+
+<section class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">05</span><span class="t">Vocabulary and time</span><span class="m" style="margin-left: auto; font-size: 11px; color: #7D8A99">one format everywhere</span></div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1px; background: #1C2530">
+<div style="background: #0A0E13; padding: 18px 16px; display: flex; flex-direction: column; gap: 6px"><span class="lbl">Absolute</span><span class="m" style="font-size: 16px">2026-10-23 02:41:17Z</span></div>
+<div style="background: #0A0E13; padding: 18px 16px; display: flex; flex-direction: column; gap: 6px"><span class="lbl">Countdown</span><span class="m" style="font-size: 16px; color: {{accent}}">AOS T−00:04:12</span></div>
+<div style="background: #0A0E13; padding: 18px 16px; display: flex; flex-direction: column; gap: 6px"><span class="lbl">Elapsed</span><span class="m" style="font-size: 16px">LOS T+00:06:41</span></div>
+<div style="background: #0A0E13; padding: 18px 16px; display: flex; flex-direction: column; gap: 6px"><span class="lbl">Mission elapsed</span><span class="m" style="font-size: 16px">MET 412:07:14:05</span></div>
+<div style="background: #0A0E13; padding: 18px 16px; display: flex; flex-direction: column; gap: 6px"><span class="lbl">Readiness</span><span style="display: flex; gap: 8px"><span class="tag" style="color: #4FDB9E">GO</span><span class="tag" style="color: #FFC24D">HOLD</span><span class="tag" style="color: #FF6B73">NO-GO</span></span></div>
+<div style="background: #0A0E13; padding: 18px 16px; display: flex; flex-direction: column; gap: 6px"><span class="lbl">Identity</span><span class="m" style="font-size: 16px">EARENDIL-312 <span style="color: #7D8A99">SCID 312</span></span></div>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 18px">
+<p class="lbl">06 // Components</p>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px">
+
+<div class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">06.1</span><span class="t">Panel</span><span class="m" style="margin-left: auto; font-size: 11px; color: #7D8A99">LIVE · 2s</span></div>
+<div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 12px"><p class="p">Every surface is a panel: zero radius, a hairline border and an indexed header with live meta on the right. No rounded cards, no shadows.</p></div>
+</div>
+
+<div class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">06.2</span><span class="t">Controls</span></div>
+<div style="padding: 18px 16px; display: flex; flex-wrap: wrap; gap: 10px">
+<button class="b" style="background: {{accent}}; color: #05070A; border-color: {{accent}}">Arm uplink · 4 SC</button>
+<button class="b">Save draft</button>
+<button class="b" style="background: transparent; border-color: transparent; color: #9DAAB8">Cancel</button>
+<button class="b" style="color: #FF6B73; border-color: #6B2A30; background: #160A0C">Abort pass</button>
+</div>
+</div>
+
+<div class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">06.3</span><span class="t">Readout</span></div>
+<div style="padding: 18px 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px; border-left: 2px solid #FF4D57; padding-left: 10px"><span class="lbl">VBAT</span><span class="n" style="font-size: 26px; color: #FF6B73">23.1<span style="font-size: 13px; color: #7D8A99"> V</span></span></div>
+<div style="display: flex; flex-direction: column; gap: 4px; border-left: 2px solid #2A3644; padding-left: 10px"><span class="lbl">Limit</span><span class="n" style="font-size: 26px">24.0<span style="font-size: 13px; color: #7D8A99"> V</span></span></div>
+<div style="display: flex; flex-direction: column; gap: 4px; border-left: 2px solid #2A3644; padding-left: 10px"><span class="lbl">Rate</span><span class="n" style="font-size: 26px">−0.4<span style="font-size: 13px; color: #7D8A99"> V/orb</span></span></div>
+</div>
+</div>
+
+<div class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">06.4</span><span class="t">Pass strip</span></div>
+<div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 6px">
+<div style="position: relative; height: 34px; background: #05070A; border: 1px solid #1C2530">
+<span class="m" style="position: absolute; left: 6%; width: 18%; top: 6px; bottom: 6px; border: 1px solid #3A4654; background: rgba(230,237,243,.06); color: #C9D3DD; font-size: 10px; display: flex; align-items: center; padding-left: 6px">118</span>
+<span class="m" style="position: absolute; left: 32%; width: 22%; top: 6px; bottom: 6px; background: {{accent}}; color: #05070A; font-size: 10px; font-weight: 600; display: flex; align-items: center; padding-left: 6px">312 · AOS</span>
+<span class="m" style="position: absolute; left: 60%; width: 16%; top: 6px; bottom: 6px; border: 1px dashed #FFB020; color: #FFC24D; font-size: 10px; display: flex; align-items: center; padding-left: 6px">CONFLICT</span>
+<span style="position: absolute; left: 44%; top: -4px; bottom: -4px; width: 1px; background: #E6EDF3"></span>
+</div>
+<div style="height: 8px; background-image: repeating-linear-gradient(90deg, #2A3644 0 1px, transparent 1px 10%), repeating-linear-gradient(90deg, #1C2530 0 1px, transparent 1px 2.5%)"></div>
+</div>
+</div>
+
+<div class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">06.5</span><span class="t">Fleet matrix</span></div>
+<div style="padding: 18px 16px; display: flex; gap: 4px; flex-wrap: wrap">
+<span style="width: 16px; height: 16px; background: #164E37"></span><span style="width: 16px; height: 16px; background: #164E37"></span><span style="width: 16px; height: 16px; background: #FFB020"></span><span style="width: 16px; height: 16px; background: #164E37"></span>
+<span style="width: 16px; height: 16px; border: 1px solid #A497FF; box-sizing: border-box; background-image: repeating-linear-gradient(135deg, #A497FF 0 1.5px, transparent 1.5px 4px)"></span>
+<span style="width: 16px; height: 16px; background: #FF4D57; outline: 1px solid #FF4D57; outline-offset: 2px"></span>
+<span style="width: 16px; height: 16px; background: #164E37; outline: 1px solid {{accent}}; outline-offset: 2px"></span>
+<span style="width: 16px; height: 16px; background: #164E37"></span>
+</div>
+<p class="p" style="padding: 0 16px 16px">One cell per spacecraft. Ringed red is critical, a white ring means in contact now.</p>
+</div>
+
+<div class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">06.6</span><span class="t">Event line</span></div>
+<div style="padding: 14px 16px; display: grid; grid-template-columns: 82px 14px minmax(0, 1fr); gap: 10px; align-items: center; font-size: 14px">
+<span class="m" style="font-size: 12px; color: #7D8A99">02:08:11Z</span><span class="s-crit"></span><span>VBAT below limit on <a href="#" style="text-decoration: none">EARENDIL-312</a></span>
+<span class="m" style="font-size: 12px; color: #7D8A99">01:52:40Z</span><span class="s-stale"></span><span>Svalbard downlink degraded</span>
+<span class="m" style="font-size: 12px; color: #7D8A99">01:12:40Z</span><span style="width: 8px; height: 8px; background: {{accent}}"></span><span>AOS Fairbanks · 9m 12s · 4.1 MB</span>
+</div>
+</div>
+
+</div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#E6EDF3","options":["#E6EDF3","#C9D3DD","#9DAAB8"]},"$preview":{"width":1440,"height":2600}}'>
+class Component extends DCLogic {
+renderVals() {
+const accent = this.props.accent ?? '#E6EDF3';
+const ring = (deg) => { const a = deg * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a); let d = ''; for (let k = 0; k <= 72; k++) { const t = k / 72 * 2 * Math.PI, x = 260 * Math.cos(t), y = 70 * Math.sin(t); d += (k ? 'L' : 'M') + (1120 + x * ca - y * sa).toFixed(1) + ' ' + (300 + x * sa + y * ca).toFixed(1); } return d; };
+const ringsDim = [-12, 18, 78, 108, 138].map(ring).join('');
+return { accent: accent, ringsDim: ringsDim, ringSel: ring(48) };
+}
+}
+</script>
+</body>
+</html>

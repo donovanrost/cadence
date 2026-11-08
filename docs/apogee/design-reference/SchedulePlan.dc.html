@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Contact plan · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{position:relative;background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530;flex-wrap:wrap}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD;margin:0}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.tag{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 9px;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.b{height:32px;padding:0 12px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none}
+.b.pri{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.s-nom{width:8px;height:8px;background:#2FD08A;flex:none}
+.s-cau{width:10px;height:9px;background:#FFB020;clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+.s-crit{width:8px;height:8px;background:#FF4D57;transform:rotate(45deg);flex:none}
+.s-stale{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1.5px,transparent 1.5px 4px)}
+.s-off{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px dashed #9DAAB8}
+.rail a{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;color:#9DAAB8;text-decoration:none;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border-left:2px solid transparent}
+.rail a:hover{color:#E6EDF3;background:#0F141B}
+.rail a.on{color:#E6EDF3;background:#0F141B;border-left-color:#E6EDF3}
+.rail .n{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;width:16px}
+.rail .c{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99;letter-spacing:0}
+.cell{aspect-ratio:1;background:#164E37}
+.c-cau{background:#FFB020}
+.c-crit{background:#FF4D57;outline:1px solid #FF4D57;outline-offset:1.5px}
+.c-stale{background-color:#140F26;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1px,transparent 1px 3.5px)}
+.c-live{outline:1px solid #E6EDF3;outline-offset:1.5px}
+.ro{background:#0A0E13;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.ro .v{font:500 30px Saira,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;line-height:1}
+.ro .s{font:400 12px 'Saira',sans-serif;color:#9DAAB8}
+
+.pane{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.pane>.ph{flex:none}
+.scr{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#2A3644 transparent}
+.step{display:flex;align-items:center;gap:8px;height:52px;padding:0 14px;border-right:1px solid #1C2530;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#7D8A99}
+.step.on{color:#E6EDF3;background:#0F141B;box-shadow:inset 0 -2px 0 #E6EDF3}
+.inp{display:flex;align-items:center;gap:10px;height:36px;padding:0 12px;border:1px solid #2A3644;background:#05070A}
+.inp input{flex:1;min-width:0;background:transparent;border:0;outline:none;color:#E6EDF3;font:500 14px 'Azeret Mono',monospace}
+.dm{display:grid;grid-template-columns:12px minmax(0,1fr);gap:10px;width:100%;padding:10px 14px;border:0;border-top:1px solid #141B24;background:transparent;color:#E6EDF3;text-align:left;cursor:pointer;box-sizing:border-box}
+.dm:hover{background:#0F141B}
+.dm.on{background:#0F141B;box-shadow:inset 2px 0 0 #E6EDF3}
+.lg{display:inline-flex;align-items:center;gap:6px;font:500 10px 'Azeret Mono',monospace;color:#9DAAB8;text-transform:uppercase}
+.lg i{display:inline-block;width:14px;height:8px;box-sizing:border-box}
+.mtk,.mt{background-image:repeating-linear-gradient(135deg,rgba(255,176,32,.55) 0 2px,transparent 2px 5px);border:1px solid rgba(255,176,32,.7)}
+.mt{position:absolute;height:14px;box-sizing:border-box;pointer-events:none}
+.rl{height:22px;display:flex;align-items:center;justify-content:space-between;font:500 11px 'Azeret Mono',monospace;border-bottom:1px solid transparent}
+.rl .rs{font-size:9px;color:#7D8A99}
+.hr{position:absolute;top:2px;font-size:10px;color:#7D8A99;transform:translateX(-50%)}
+.mk{position:absolute;height:16px;min-width:5px;border:0;padding:0;cursor:pointer;box-sizing:border-box;background:transparent}
+.mk.own{background:#E6EDF3}
+.mk.new{background:#E6EDF3;box-shadow:0 0 0 2px #05070A,0 0 0 3px #4FDB9E}
+.mk.opp{border:1px dashed #E6EDF3;background:rgba(230,237,243,.06)}
+.mk.opp.clash{border-color:#FFB020}
+.mk.bad{background:#FFB020}
+.mk.on{outline:2px solid #E6EDF3;outline-offset:3px}
+.rc{display:flex;flex-direction:column;gap:2px;padding:6px 10px;border:1px solid #2A3644;min-width:130px}
+.rc b{font-size:14px;font-weight:600}
+.rc.hold{border-color:rgba(255,176,32,.6);background:rgba(255,176,32,.05)}
+.rc.hold b{color:#FFC24D}
+.rc.go b{color:#4FDB9E}
+.cb{position:absolute;top:10px;height:16px;background:#E6EDF3;min-width:4px}
+.cb.up{box-shadow:inset 0 3px 0 #05070A}
+.gp{position:absolute;top:0;height:36px;background:linear-gradient(#3A4654,#3A4654) center/100% 1px no-repeat;display:flex;justify-content:center}
+.gp.long{background-image:linear-gradient(#FFB020,#FFB020);background-size:100% 2px}
+.gp span{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;line-height:1;margin-top:-2px;background:#0A0E13;padding:0 4px;height:10px}
+.gp.long span{color:#FFC24D}
+.kvs{display:grid;grid-template-columns:76px minmax(0,1fr);gap:6px 10px;font-size:13px;color:#C9D3DD}
+.kvs>span:nth-child(odd){font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#7D8A99;padding-top:2px}
+.alt{display:flex;align-items:center;gap:8px;padding:8px 16px 8px 0;border-top:1px solid #141B24}
+.alt:first-of-type{border-top:0}
+.alt.on{background:#0F141B;box-shadow:inset 2px 0 0 #E6EDF3}
+.alt-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;padding:2px 0 2px 16px;border:0;background:transparent;color:#E6EDF3;text-align:left;cursor:pointer}
+.tg{height:26px;padding:0 10px;border:1px solid #2A3644;background:transparent;color:#C9D3DD;font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+.ft{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:0 18px;border-right:1px solid #1C2530}
+.ft b{font-size:20px;font-weight:500}
+.go{color:#4FDB9E}.hold{color:#FFC24D}
+</style>
+</helmet>
+
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; height: 100vh; overflow: hidden; display: flex; flex-direction: column; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 40px 40px">
+
+<header style="flex: none; display: flex; align-items: stretch; height: 52px; border-bottom: 1px solid #1C2530; background: #070A0E">
+<a href="ScheduleFlow.dc.html" aria-label="Close" style="width: 52px; display: flex; align-items: center; justify-content: center; border-right: 1px solid #1C2530; color: #E6EDF3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></a>
+<div style="display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 0 18px; border-right: 1px solid #1C2530"><span class="m" style="font-size: 11px; color: #7D8A99">CONTACT PLAN · R41 DRAFT · MAYA T.</span><span style="font: 700 19px 'Saira Condensed'; letter-spacing: .14em; text-transform: uppercase">Friday 24 Oct</span></div>
+<ol aria-label="Stations" style="list-style: none; margin: 0; padding: 0; display: flex">
+<li class="step"><span class="m" style="color: #2FD08A">✓</span>01 Demand</li>
+<li class="step"><span class="m" style="color: #2FD08A">✓</span>02 Opportunities</li>
+<li class="step on"><span class="m">●</span>03 Draft</li>
+<li class="step"><span class="m">○</span>04 Reserve</li>
+<li class="step" style="color: #3A4654">05 · 06</li>
+</ol>
+<div class="m" style="margin-left: auto; display: flex; align-items: center; gap: 20px; padding: 0 18px; font-size: 13px"><span><span style="color: #7D8A99">UTC</span> 02:44:09</span><span><span style="color: #7D8A99">PROVIDER FREEZE</span> <span style="color: #E6EDF3">T−15:15:51</span></span></div>
+</header>
+
+<main style="flex: 1; min-height: 0; display: grid; grid-template-columns: 290px minmax(0, 1fr) 330px; gap: 12px; padding: 12px 14px">
+
+<section class="pnl pane" aria-label="Demand">
+<div class="ph"><span class="i">A</span><h2 class="t">Demand</h2><span class="r {{demandCls}}">{{demandHead}}</span></div>
+<div style="flex: none; padding: 10px 14px">
+<label class="inp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7D8A99" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Find a spacecraft</span><input value="{{tq}}" onChange="{{onTq}}" placeholder="any spacecraft · 140, 312…"></label>
+</div>
+<div class="scr">
+<sc-for list="{{demand}}" as="d" hint-placeholder-count="5">
+<button class="dm {{d.on}}" onClick="{{d.pick}}"><span class="{{d.shape}}" style="margin-top: 5px"></span><span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="m" style="font-size: 13px; font-weight: 600">{{d.name}}</span><span style="font-size: 12px; color: #9DAAB8">{{d.why}}</span><span class="m" style="font-size: 10px; color: #7D8A99">{{d.stat}}</span></span></button>
+</sc-for>
+</div>
+<div style="flex: none; padding: 12px 14px; border-top: 1px solid #1C2530; display: flex; flex-direction: column; gap: 6px">
+<span class="lbl">Rule · Earendil Block 1</span>
+<span class="m" style="font-size: 11px; color: #C9D3DD; line-height: 1.7">≥ 3 CONTACTS A DAY<br>NO GAP OVER 10h00<br>≥ 1 UPLINK-CAPABLE PASS</span>
+<a href="Profile.dc.html" class="m" style="font-size: 10px; color: #7D8A99; text-decoration: none">EDIT IN SETUP · PROFILE →</a>
+</div>
+</section>
+
+<div style="min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px">
+<section class="pnl pane" style="flex: 1" aria-label="Draft schedule">
+<div class="ph"><span class="i">B</span><h2 class="t">Draft · by station</h2><span class="r">{{tContacts}} PASSES · 18 ANTENNAS · 00–24Z</span></div>
+<div style="flex: none; display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 8px 16px; border-bottom: 1px solid #1C2530">
+<span class="lg"><i style="background: #2A3644"></i>Drafted</span>
+<span class="lg"><i style="background: #E6EDF3"></i>{{fname}}</span>
+<span class="lg"><i style="border: 1px dashed #E6EDF3"></i>Its other windows</span>
+<span class="lg"><i style="border: 1px dashed #FFB020"></i>Window taken</span>
+<span class="lg"><i class="mtk"></i>Station maintenance</span>
+</div>
+<div class="scr" style="padding: 10px 16px 6px">
+<div style="display: grid; grid-template-columns: 92px minmax(0, 1fr); column-gap: 10px">
+<div style="display: flex; flex-direction: column">
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="18"><span class="rl"><span style="color: {{r.hl}}">{{r.id}}</span><span class="rs">{{r.up}}</span></span></sc-for>
+</div>
+<div style="position: relative; height: {{gh}}px">
+<svg viewBox="0 0 1440 396" preserveAspectRatio="none" style="position: absolute; inset: 0; width: 100%; height: 100%; display: block" aria-hidden="true">
+<path d="{{rowLines}}" stroke="#141B24" stroke-width="1" fill="none" vector-effect="non-scaling-stroke"></path>
+<path d="{{grid}}" stroke="#11161D" stroke-width="1" fill="none" vector-effect="non-scaling-stroke"></path>
+<path d="{{bgPath}}" fill="#2A3644"></path>
+</svg>
+<div class="mt" style="left: {{maintLeft}}%; top: {{maintTop}}px; width: {{maintW}}%"></div>
+<sc-for list="{{marks}}" as="k" hint-placeholder-count="5"><button class="{{k.cls}}" style="left: {{k.left}}%; width: {{k.width}}%; top: {{k.top}}px" onClick="{{k.pick}}" aria-label="Pass {{k.id}}"></button></sc-for>
+</div>
+<span></span>
+<div style="position: relative; height: 18px">
+<sc-for list="{{hours}}" as="h" hint-placeholder-count="8"><span class="m hr" style="left: {{h.left}}%">{{h.t}}</span></sc-for>
+</div>
+</div>
+</div>
+</section>
+
+<section class="pnl" style="flex: none" aria-label="Focused spacecraft">
+<div class="ph"><span class="i">C</span><h2 class="t">{{fname}} · 24 h</h2><span class="m" style="font-size: 10px; color: #7D8A99">{{fsub}}</span><span class="r {{fmetCls}}">{{fmet}}</span></div>
+<div style="padding: 10px 16px 12px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; gap: 8px">
+<sc-for list="{{chips}}" as="c" hint-placeholder-count="3"><span class="rc {{c.cls}}"><span class="lbl">{{c.k}}</span><b class="m">{{c.v}}</b></span></sc-for>
+</div>
+<div style="position: relative; height: 36px; margin-top: 4px">
+<sc-for list="{{segs}}" as="g" hint-placeholder-count="6"><span class="{{g.cls}}" style="left: {{g.left}}%; width: {{g.width}}%"><span>{{g.label}}</span></span></sc-for>
+</div>
+<div class="m" style="display: flex; justify-content: space-between; font-size: 9px; color: #7D8A99; border-top: 1px solid #2A3644; padding-top: 3px"><span>00Z</span><span>06Z</span><span>12Z</span><span>18Z</span><span>24Z</span></div>
+</div>
+</section>
+</div>
+
+<section class="pnl pane" aria-label="Selection">
+<div class="ph"><span class="i">D</span><h2 class="t">Selected</h2></div>
+<sc-if value="{{hasSel}}" hint-placeholder-val="{{true}}">
+<div style="flex: none; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid #1C2530">
+<div style="display: flex; justify-content: space-between; align-items: center"><span style="font: 600 18px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">{{sel.title}}</span><span class="tag {{sel.tagCls}}" style="height: 22px; font-size: 12px">{{fname}}</span></div>
+<div class="kvs"><span>Window</span><span class="m">{{sel.win}}</span><span>Length</span><span class="m">{{sel.len}}</span><span>Antenna</span><span>{{sel.st}}</span><span>Link</span><span>{{sel.link}}</span><span>Max el</span><span class="m">{{sel.el}}</span><span>Cost</span><span class="m">{{sel.cost}}</span></div>
+<p style="margin: 0; font-size: 12px; line-height: 1.5; color: #FFC24D">{{sel.note}}</p>
+<button class="{{sel.actCls}}" style="height: 40px" onClick="{{sel.go}}">{{sel.act}}</button>
+</div>
+</sc-if>
+<sc-if value="{{noSel}}" hint-placeholder-val="{{false}}">
+<p style="flex: none; margin: 0; padding: 16px; font-size: 13px; color: #7D8A99; border-bottom: 1px solid #1C2530">Click a pass or a dashed window on the Gantt, or pick an option below.</p>
+</sc-if>
+<div class="m" style="flex: none; padding: 8px 16px; font-size: 10px; color: #7D8A99; border-bottom: 1px solid #1C2530">{{altHead}}</div>
+<div class="scr">
+<sc-for list="{{alts}}" as="a" hint-placeholder-count="3">
+<div class="alt {{a.on}}"><button class="alt-b" onClick="{{a.pick}}"><span class="m" style="font-size: 13px; font-weight: 600">{{a.when}} <span style="color: #9DAAB8; font-weight: 500">{{a.row}}</span></span><span class="m" style="font-size: 10px; color: #7D8A99">{{a.meta}}</span><span class="m" style="font-size: 10px"><span class="{{a.effCls}}">{{a.eff}}</span> <span style="color: #FFC24D">{{a.clash}}</span></span></button><button class="tg" onClick="{{a.add}}">Add</button></div>
+</sc-for>
+<sc-if value="{{noAlts}}" hint-placeholder-val="{{false}}"><p style="margin: 0; padding: 16px; font-size: 13px; color: #7D8A99">Nothing else is visible from the network that day.</p></sc-if>
+</div>
+</section>
+</main>
+
+<footer style="flex: none; height: 64px; display: flex; align-items: stretch; border-top: 1px solid #1C2530; background: #070A0E">
+<div class="ft"><span class="lbl">Passes</span><b class="n">{{tContacts}}</b></div>
+<div class="ft"><span class="lbl">Minutes</span><b class="n">{{tMins}} <span style="color: #7D8A99; font-size: 13px">/ 15,000</span></b></div>
+<div class="ft"><span class="lbl">Cost</span><b class="n">{{tCost}} <span style="color: #7D8A99; font-size: 13px">/ $190k day</span></b></div>
+<div class="ft"><span class="lbl">Rule met</span><b class="n {{tMetCls}}">{{tMet}}</b></div>
+<div class="ft"><span class="lbl">Conflicts</span><b class="n">0</b></div>
+<div style="margin-left: auto; display: flex; align-items: center; gap: 12px; padding: 0 16px">
+<span class="m" style="font-size: 10px; color: #7D8A99; text-align: right">{{submitSub}}</span>
+<a href="#" class="b pri" style="height: 42px; font-size: 14px">{{submit}}</a>
+</div>
+</footer>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+const ST = [
+{ c: 'FBK', n: 2, prov: 'Northlight', up: true, polar: true },
+{ c: 'INU', n: 2, prov: 'Northlight', up: false, polar: true },
+{ c: 'SVB', n: 4, prov: 'Northlight', up: true, polar: true },
+{ c: 'KIR', n: 2, prov: 'Northlight', up: false, polar: true },
+{ c: 'AWA', n: 3, prov: 'Austral Net', up: true, polar: false },
+{ c: 'PUQ', n: 2, prov: 'Austral Net', up: false, polar: false },
+{ c: 'HBK', n: 2, prov: 'Meridian', up: true, polar: false },
+{ c: 'MAU', n: 1, prov: 'Meridian', up: false, polar: false }
+];
+const PRICE = { 'Northlight': 14, 'Austral Net': 11, 'Meridian': 9 };
+const ROWS = [];
+ST.forEach((s) => { for (let i = 1; i <= s.n; i++) ROWS.push({ id: s.c + '-' + i, st: s }); });
+const RI = {};
+ROWS.forEach((r, i) => { RI[r.id] = i; });
+const RH = 22;
+const MAINT = { row: RI['SVB-3'], s: 360, e: 540 };
+const RULE = { n: 3, gap: 600, up: 1 };
+const D = [312, 47, 118, 233, 401];
+const DP = [
+{ id: 'p312a', sc: 312, row: 'FBK-1', s: 120, e: 129 }, { id: 'p312b', sc: 312, row: 'AWA-2', s: 830, e: 839 },
+{ id: 'p47a', sc: 47, row: 'KIR-1', s: 200, e: 209 }, { id: 'p47b', sc: 47, row: 'SVB-2', s: 520, e: 530 }, { id: 'p47c', sc: 47, row: 'PUQ-1', s: 1010, e: 1019 },
+{ id: 'p118a', sc: 118, row: 'INU-1', s: 300, e: 308 }, { id: 'p118b', sc: 118, row: 'KIR-2', s: 900, e: 908 }, { id: 'p118c', sc: 118, row: 'PUQ-2', s: 1200, e: 1209 },
+{ id: 'p233a', sc: 233, row: 'SVB-1', s: 60, e: 69 }, { id: 'p233b', sc: 233, row: 'AWA-3', s: 700, e: 709 },
+{ id: 'p401a', sc: 401, row: 'SVB-3', s: 400, e: 409 }, { id: 'p401b', sc: 401, row: 'AWA-1', s: 940, e: 949 }, { id: 'p401c', sc: 401, row: 'FBK-2', s: 1260, e: 1269 }
+];
+const DO = [
+{ id: 'o312a', sc: 312, row: 'SVB-1', s: 470, e: 479, el: 71 }, { id: 'o312b', sc: 312, row: 'HBK-1', s: 1150, e: 1158, el: 38 }, { id: 'o312c', sc: 312, row: 'INU-2', s: 1290, e: 1298, el: 22 },
+{ id: 'o47a', sc: 47, row: 'FBK-2', s: 1330, e: 1339, el: 54 }, { id: 'o47b', sc: 47, row: 'MAU-1', s: 1240, e: 1248, el: 31 },
+{ id: 'o118a', sc: 118, row: 'SVB-4', s: 610, e: 619, el: 66 }, { id: 'o118b', sc: 118, row: 'AWA-1', s: 1050, e: 1059, el: 47, bump: 'bx1' },
+{ id: 'o233a', sc: 233, row: 'FBK-1', s: 380, e: 389, el: 58 }, { id: 'o233b', sc: 233, row: 'HBK-2', s: 1080, e: 1089, el: 44 },
+{ id: 'o401a', sc: 401, row: 'SVB-2', s: 395, e: 404, el: 69 }
+];
+const DESC = { 312: 'VBAT watch · plane 07', 47: 'Long silence after the Puerto pass', 118: 'No uplink-capable pass', 233: 'Only two passes offered', 401: 'Booked into SVB-3 maintenance' };
+const hm = (m) => { m = ((Math.round(m) % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+const dur = (m) => Math.floor(m / 60) + 'h' + String(Math.round(m % 60)).padStart(2, '0');
+const nm = (s) => 'EARENDIL-' + String(s).padStart(3, '0');
+
+const BG = (() => {
+let seed = 11;
+const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+const res = {};
+DP.concat(DO).forEach((p) => { if (p.bump) return; (res[p.row] = res[p.row] || []).push([p.s - 3, p.e + 3]); });
+res['AWA-1'].push([1045, 1060]);
+const slots = [];
+ROWS.forEach((r, ri) => {
+let t = rnd() * 10;
+while (t < 1430) {
+const d = Math.round((7 + rnd() * 5) * 2) / 2;
+const s = t, e = t + d;
+const clash = (res[r.id] || []).some((x) => s < x[1] && e > x[0]) || (ri === MAINT.row && s < MAINT.e && e > MAINT.s);
+if (!clash && e < 1440) slots.push({ row: r.id, s: s, e: e, sc: 0 });
+t = e + 2 + rnd() * (r.st.polar ? 4 : 9);
+}
+});
+slots.sort((x, y) => x.s - y.s);
+const want = [];
+for (let sc = 1; sc <= 500; sc++) {
+if (D.indexOf(sc) >= 0) continue;
+const ph = (sc * 137) % 480;
+for (let k = 0; k < 3; k++) want.push({ sc: sc, t: ph + k * 480, up: k === 0 });
+}
+want.sort((x, y) => x.t - y.t);
+let lo = 0;
+want.forEach((w) => {
+while (lo < slots.length && slots[lo].s < w.t - 120) lo++;
+let best = -1, bd = 1e9;
+for (let i = lo; i < slots.length && slots[i].s < w.t + 240; i++) { if (slots[i].sc) continue; const d = Math.abs(slots[i].s - w.t); if (d < bd) { bd = d; best = i; } }
+if (best >= 0) slots[best].sc = w.sc;
+});
+const isUp = (x) => ROWS[RI[x.row]].st.up;
+const by = {};
+slots.forEach((x) => { if (x.sc) (by[x.sc] = by[x.sc] || []).push(x); });
+Object.keys(by).forEach((k) => {
+const mine = by[k];
+if (mine.some(isUp)) return;
+for (let a = 0; a < mine.length; a++) {
+const m = mine[a];
+const cand = slots.find((y) => y.sc && y.sc !== m.sc && isUp(y) && Math.abs(y.s - m.s) < 45 && by[y.sc].filter(isUp).length > 1);
+if (cand) {
+const o = cand.sc;
+by[o] = by[o].filter((z) => z !== cand).concat([m]);
+by[m.sc] = by[m.sc].filter((z) => z !== m).concat([cand]);
+cand.sc = m.sc; m.sc = o;
+return;
+}
+}
+});
+const out = [];
+slots.forEach((x) => { if (x.sc) out.push({ id: 'b' + out.length, sc: x.sc, row: x.row, s: x.s, e: x.e }); });
+out.push({ id: 'bx1', sc: 266, row: 'AWA-1', s: 1048, e: 1057 });
+return out;
+})();
+const OPPS = {};
+DO.forEach((o) => { OPPS[o.id] = o; });
+
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { focus: 312, sel: 'o312a', added: {}, dropped: {}, tq: '' };
+}
+renderVals() {
+const st = this.state;
+const dropped = Object.assign({}, st.dropped);
+Object.keys(st.added).forEach((k) => { if (st.added[k] && OPPS[k].bump) dropped[OPPS[k].bump] = true; });
+const live = (p) => !dropped[p.id];
+const inMaint = (p) => RI[p.row] === MAINT.row && p.s < MAINT.e && p.e > MAINT.s;
+const contactsOf = (sc) => {
+const a = BG.filter((p) => p.sc === sc && live(p)).map((p) => Object.assign({ kind: 'bg' }, p));
+const b = DP.filter((p) => p.sc === sc && live(p)).map((p) => Object.assign({ kind: 'dp' }, p));
+const c = DO.filter((o) => o.sc === sc && st.added[o.id]).map((o) => Object.assign({ kind: 'add' }, o));
+return a.concat(b, c).sort((x, y) => x.s - y.s);
+};
+const evalSc = (list) => {
+const ok = list.filter((p) => !inMaint(p));
+const n = ok.length;
+let gap = 1440;
+const gaps = [];
+for (let i = 0; i < n; i++) {
+const cur = ok[i], nx = ok[(i + 1) % n];
+const g = i < n - 1 ? nx.s - cur.e : 1440 - cur.e + ok[0].s;
+gaps.push({ from: cur.e, to: i < n - 1 ? nx.s : ok[0].s + 1440, g: g });
+}
+if (n) gap = Math.max.apply(null, gaps.map((x) => x.g));
+const up = ok.filter((p) => ROWS[RI[p.row]].st.up).length;
+const bad = list.length - ok.length;
+const reasons = [];
+if (bad) reasons.push(bad + ' pass in SVB-3 maintenance');
+if (n < RULE.n) reasons.push(n + ' of ' + RULE.n + ' contacts');
+if (gap > RULE.gap) reasons.push('gap ' + dur(gap) + ' > 10h00');
+if (up < RULE.up) reasons.push('no uplink pass');
+return { n: n, gap: gap, gaps: gaps, up: up, met: reasons.length === 0, reasons: reasons, ok: ok };
+};
+const touched = D.slice();
+Object.keys(dropped).forEach((id) => { const p = BG.find((x) => x.id === id) || DP.find((x) => x.id === id); if (p && touched.indexOf(p.sc) < 0) touched.push(p.sc); });
+const evals = {};
+touched.forEach((sc) => { evals[sc] = evalSc(contactsOf(sc)); });
+const unmet = touched.filter((sc) => !evals[sc].met);
+
+const focus = st.focus;
+const fl = contactsOf(focus);
+const fe = evals[focus] || evalSc(fl);
+const fOpps = DO.filter((o) => o.sc === focus && !st.added[o.id]);
+const selId = st.sel;
+const pct = (m) => (m / 1440 * 100).toFixed(3);
+
+// gantt background
+let bgPath = '';
+BG.forEach((p) => { if (!live(p) || p.sc === focus) return; const y = RI[p.row] * RH + 5; bgPath += 'M' + p.s.toFixed(1) + ' ' + y + 'h' + (p.e - p.s).toFixed(1) + 'v12h' + (-(p.e - p.s)).toFixed(1) + 'Z'; });
+DP.forEach((p) => { if (!live(p) || p.sc === focus) return; const y = RI[p.row] * RH + 5; bgPath += 'M' + p.s + ' ' + y + 'h' + (p.e - p.s) + 'v12h' + (p.s - p.e) + 'Z'; });
+DO.forEach((o) => { if (!st.added[o.id] || o.sc === focus) return; const y = RI[o.row] * RH + 5; bgPath += 'M' + o.s + ' ' + y + 'h' + (o.e - o.s) + 'v12h' + (o.s - o.e) + 'Z'; });
+let grid = '';
+for (let h = 0; h <= 24; h += 1) grid += 'M' + (h * 60) + ' 0V' + (ROWS.length * RH);
+let rowLines = '';
+for (let r = 0; r <= ROWS.length; r++) rowLines += 'M0 ' + (r * RH) + 'H1440';
+const maint = 'M' + MAINT.s + ' ' + (MAINT.row * RH + 1) + 'h' + (MAINT.e - MAINT.s) + 'v' + (RH - 2) + 'h' + (MAINT.s - MAINT.e) + 'Z';
+
+const marks = [];
+fl.forEach((p) => marks.push({ id: p.id, cls: 'mk ' + (inMaint(p) ? 'bad' : p.kind === 'add' ? 'new' : 'own') + (selId === p.id ? ' on' : ''), left: pct(p.s), width: pct(Math.max(p.e - p.s, 6)), top: RI[p.row] * RH + 3, label: '', pick: () => this.setState({ sel: p.id }) }));
+fOpps.forEach((o) => marks.push({ id: o.id, cls: 'mk opp' + (o.bump ? ' clash' : '') + (selId === o.id ? ' on' : ''), left: pct(o.s), width: pct(Math.max(o.e - o.s, 6)), top: RI[o.row] * RH + 3, label: '', pick: () => this.setState({ sel: o.id }) }));
+const rows = ROWS.map((r, i) => ({ id: r.id, prov: r.st.prov.split(' ')[0].toUpperCase(), up: r.st.up ? 'UP' : 'DN', hl: fl.some((p) => p.row === r.id) || fOpps.some((o) => o.row === r.id) ? '#E6EDF3' : '#9DAAB8' }));
+const hours = [];
+for (let h = 0; h < 24; h += 3) hours.push({ t: String(h).padStart(2, '0') + 'Z', left: pct(h * 60) });
+
+// focus strip
+const segs = [];
+fe.ok.forEach((p) => segs.push({ cls: 'cb' + (ROWS[RI[p.row]].st.up ? ' up' : ''), left: pct(p.s), width: pct(Math.max(p.e - p.s, 8)), label: '' }));
+fe.gaps.forEach((g) => {
+const long = g.g > RULE.gap;
+const parts = g.to <= 1440 ? [[g.from, g.to]] : [[g.from, 1440], [0, g.to - 1440]];
+parts.forEach((pr, j) => {
+const w = pr[1] - pr[0];
+const showLbl = parts.length === 1 || (j === 0 ? w >= (g.to - 1440) : w > 1440 - g.from);
+segs.push({ cls: 'gp' + (long ? ' long' : ''), left: pct(pr[0]), width: pct(Math.max(w, 0)), label: showLbl && w > 60 ? dur(g.g) + (parts.length > 1 ? ' ↺' : '') : '' });
+});
+});
+const chips = [
+{ k: 'Contacts', v: fe.n + ' / ' + RULE.n, cls: fe.n >= RULE.n ? 'go' : 'hold' },
+{ k: 'Longest gap', v: fe.n ? dur(fe.gap) + ' / 10h00' : '24h00 / 10h00', cls: fe.gap <= RULE.gap ? 'go' : 'hold' },
+{ k: 'Uplink passes', v: fe.up + ' / ' + RULE.up, cls: fe.up >= RULE.up ? 'go' : 'hold' }
+];
+
+// what-if per opportunity
+const ifAdd = (o) => { const ad = Object.assign({}, st.added, { [o.id]: true }); const l = contactsOf(focus).concat([Object.assign({ kind: 'add' }, o)]).sort((x, y) => x.s - y.s); return evalSc(l); };
+const alts = fOpps.map((o) => { const r = ifAdd(o); const row = ROWS[RI[o.row]]; return { id: o.id, when: hm(o.s) + 'Z', row: o.row, meta: (row.st.up ? 'UPLINK' : 'DOWNLINK ONLY') + ' · ' + o.el + '° · $' + Math.round((o.e - o.s) * PRICE[row.st.prov]), eff: r.met ? 'MEETS RULE' : 'GAP → ' + dur(r.gap), effCls: r.met ? 'go' : 'hold', clash: o.bump ? 'BUMPS ' + nm(BG.find((b) => b.id === o.bump).sc) : '', on: selId === o.id ? 'on' : '', pick: () => this.setState({ sel: o.id }), add: () => this.setState({ added: Object.assign({}, st.added, { [o.id]: true }), sel: o.id }) }; });
+
+// selected item
+let sel = null;
+const findSel = () => {
+if (!selId) return null;
+if (OPPS[selId]) return Object.assign({ kind: st.added[selId] ? 'add' : 'opp' }, OPPS[selId]);
+const p = fl.find((x) => x.id === selId);
+return p || null;
+};
+const si = findSel();
+if (si && si.sc === focus) {
+const row = ROWS[RI[si.row]];
+const cost = Math.round((si.e - si.s) * PRICE[row.st.prov]);
+const isOpp = si.kind === 'opp';
+const bad = inMaint(si);
+sel = {
+title: isOpp ? 'Opportunity' : si.kind === 'add' ? 'Added to draft' : bad ? 'In maintenance' : 'Drafted pass',
+tagCls: isOpp ? '' : bad ? 'hold' : 'go',
+win: hm(si.s) + ' – ' + hm(si.e) + 'Z', len: dur(si.e - si.s).replace('0h', '') + ' MIN',
+st: row.id + ' · ' + row.st.prov, link: row.st.up ? 'Uplink + downlink' : 'Downlink only', el: (si.el || 40 + (si.s % 37)) + '°', cost: '$' + cost + ' · $' + PRICE[row.st.prov] + '/MIN',
+note: bad ? 'Northlight moved SVB-3 maintenance to 06:00–09:00Z after this was drafted. It won’t count until it moves.' : si.bump && isOpp ? 'This window is drafted for ' + nm(BG.find((b) => b.id === si.bump).sc) + ', which has 4 other passes and still meets its rule if bumped.' : '',
+act: isOpp ? (si.bump ? 'Add · bump ' + nm(BG.find((b) => b.id === si.bump).sc) : 'Add to draft') : 'Drop from draft',
+actCls: isOpp ? 'b pri' : 'b',
+go: isOpp ? () => this.setState({ added: Object.assign({}, st.added, { [si.id]: true }) }) : () => {
+if (si.kind === 'add') this.setState({ added: Object.assign({}, st.added, { [si.id]: false }), sel: null });
+else this.setState({ dropped: Object.assign({}, st.dropped, { [si.id]: true }), sel: null });
+}
+};
+}
+
+// demand list
+const demand = touched.map((sc) => { const e = evals[sc]; return { name: nm(sc), sc: sc, shape: e.met ? 's-nom' : 's-cau', why: e.met ? 'Rule met' : (DESC[sc] && D.indexOf(sc) >= 0 ? DESC[sc] : 'Lost a pass to a bump'), stat: e.met ? 'MET · ' + e.n + ' · ' + dur(e.gap) : e.reasons[0].toUpperCase(), on: sc === focus ? 'on' : '', pick: () => this.setState({ focus: sc, sel: null }) }; });
+
+const onTq = (e) => {
+const v = e.target.value;
+const m = v.match(/(\d{1,3})\s*$/);
+const n = m ? Number(m[1]) : 0;
+if (n >= 1 && n <= 500 && v.trim().length >= 2) this.setState({ tq: v, focus: n, sel: null });
+else this.setState({ tq: v });
+};
+
+// totals
+const all = BG.filter(live).length + DP.filter(live).length + DO.filter((o) => st.added[o.id]).length;
+let mins = 0, cost = 0;
+const acc = (p) => { const r = ROWS[RI[p.row]]; mins += p.e - p.s; cost += (p.e - p.s) * PRICE[r.st.prov]; };
+BG.filter(live).forEach(acc); DP.filter(live).forEach(acc); DO.filter((o) => st.added[o.id]).forEach(acc);
+const met = 500 - unmet.length;
+return {
+tq: st.tq, onTq: onTq,
+demand: demand, demandHead: unmet.length ? unmet.length + ' OF 500 NOT COVERED' : 'ALL 500 COVERED', demandCls: unmet.length ? 'hold' : 'go',
+rows: rows, gh: ROWS.length * RH, bgPath: bgPath, grid: grid, rowLines: rowLines, maint: maint, marks: marks, hours: hours,
+maintLeft: pct(MAINT.s), maintTop: MAINT.row * RH + 4, maintW: pct(MAINT.e - MAINT.s),
+fname: nm(focus), fsub: D.indexOf(focus) >= 0 ? 'EARENDIL BLOCK 1 · ' + (DESC[focus] || '').toUpperCase() : 'EARENDIL BLOCK 1 · PLANE ' + String(Math.ceil(focus / 50)).padStart(2, '0'),
+fmet: fe.met ? 'RULE MET' : 'NOT COVERED', fmetCls: fe.met ? 'go' : 'hold', segs: segs, chips: chips,
+hasSel: !!sel, noSel: !sel, sel: sel || { title: '', tagCls: '', win: '', len: '', st: '', link: '', el: '', cost: '', note: '', act: '', actCls: 'b', go: () => {} },
+alts: alts, noAlts: alts.length === 0, altHead: alts.length ? alts.length + ' MORE WINDOW' + (alts.length === 1 ? '' : 'S') + ' FOR ' + nm(focus) : 'NO OTHER WINDOWS',
+tContacts: all.toLocaleString('en-US'), tMins: Math.round(mins).toLocaleString('en-US'), tCost: '$' + Math.round(cost / 1000) + 'k', tMet: met + ' / 500', tMetCls: unmet.length ? 'hold' : 'go',
+submit: unmet.length ? 'Submit · ' + unmet.length + ' uncovered' : 'Submit ' + all.toLocaleString('en-US') + ' bookings',
+submitSub: unmet.length ? 'YOU CAN SUBMIT WITH GAPS. THEY STAY ON THIS LIST.' : 'TO 3 PROVIDERS · FREEZE 18:00Z'
+};
+}
+}
+
+</script>
+</body>
+</html>

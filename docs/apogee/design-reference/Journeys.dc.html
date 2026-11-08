@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cadence operator journeys</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{position:relative;background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#4FDB9E}
+.step{display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px;font-size:14px;line-height:1.45}
+.step b{font:500 11px 'Azeret Mono',monospace;color:#E6EDF3;padding-top:3px}
+.ref{font:500 11px 'Azeret Mono',monospace;color:#9DAAB8;border:1px solid #2A3644;padding:0 5px}
+.go{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;text-decoration:none;margin-top:auto}
+.nav{border:1px solid #2A3644;background:#0F141B;padding:10px 14px;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase}
+</style>
+</helmet>
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; min-height: 100vh; box-sizing: border-box; padding: 64px 24px 80px; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.03) 1px, transparent 1px); background-size: 40px 40px">
+<div style="max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 36px">
+
+<header style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 32px; align-items: flex-end">
+<div style="display: flex; flex-direction: column; gap: 14px; max-width: 780px">
+<p class="lbl" style="color: #E6EDF3">Flight plan · from pages to journeys</p>
+<h1 style="margin: 0; font: 700 60px/0.95 'Saira Condensed'; letter-spacing: .04em; text-transform: uppercase">Six moments that make or break a shift</h1>
+<p style="margin: 0; font-size: 17px; color: #9DAAB8; line-height: 1.55">Cadence today is organized by data type. The new Cadence is organized by what the operator is trying to do, and each journey ends in a few moves.</p>
+</div>
+<span style="font-size: 13px; color: #9DAAB8"><span class="ref">#1</span> = UX review finding fixed</span>
+</header>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px">
+
+<article class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">J1</span><span class="t">Start of shift</span><span class="r">TARGET 5 s</span></div>
+<div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; flex: 1">
+<h2 style="margin: 0; font: 600 24px/1.15 'Saira Condensed'; letter-spacing: .06em; text-transform: uppercase">"Is my constellation OK, and what needs me?"</h2>
+<p style="margin: 0; font-size: 14px; color: #9DAAB8; line-height: 1.5"><b style="color: #FF6B73; font-weight: 600">Today:</b> NOMINAL over 18 empty charts and a setup checklist. <span class="ref">#1</span> <span class="ref">#7</span> <span class="ref">#35</span></p>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #1C2530; padding-top: 14px">
+<div class="step"><b>01</b><span>Land on Now: honest fleet state, with stale counted separately.</span></div>
+<div class="step"><b>02</b><span>See all 500 on the constellation view and the fleet matrix.</span></div>
+<div class="step"><b>03</b><span>Work the action queue, ranked P1 to P3.</span></div>
+</div>
+<a href="Now.dc.html" class="go">Open Now →</a>
+</div>
+</article>
+
+<article class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">J2</span><span class="t">Respond to an alarm</span><span class="r">TARGET 3 MOVES</span></div>
+<div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; flex: 1">
+<h2 style="margin: 0; font: 600 24px/1.15 'Saira Condensed'; letter-spacing: .06em; text-transform: uppercase">"What's wrong with 312, is it spreading, what do I do?"</h2>
+<p style="margin: 0; font-size: 14px; color: #9DAAB8; line-height: 1.5"><b style="color: #FF6B73; font-weight: 600">Today:</b> raw ids, ISO strings, a free-text point id, no path to a fix. <span class="ref">#14</span> <span class="ref">#16</span> <span class="ref">#17</span></p>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #1C2530; padding-top: 14px">
+<div class="step"><b>01</b><span>The alarm opens with VBAT plotted against limits and umbra.</span></div>
+<div class="step"><b>02</b><span>Cadence flags 3 sisters in plane 07 with the same signature.</span></div>
+<div class="step"><b>03</b><span>A recommended procedure pre-fills the uplink sequence.</span></div>
+</div>
+<a href="Investigate.dc.html" class="go">Open investigation →</a>
+</div>
+</article>
+
+<article class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">J3</span><span class="t">Command a group</span><span class="r">4 OR 400 · SAME FLOW</span></div>
+<div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; flex: 1">
+<h2 style="margin: 0; font: 600 24px/1.15 'Saira Condensed'; letter-spacing: .06em; text-transform: uppercase">"Shed load on 312 and its sisters before umbra."</h2>
+<p style="margin: 0; font-size: 14px; color: #9DAAB8; line-height: 1.5"><b style="color: #FF6B73; font-weight: 600">Today:</b> "SCID —" on every target, a 25 cap, four cramped columns. <span class="ref">#3</span> <span class="ref">#13</span></p>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #1C2530; padding-top: 14px">
+<div class="step"><b>01</b><span>Target by live query: plane, profile, telemetry condition.</span></div>
+<div class="step"><b>02</b><span>A GO / NO-GO poll checks identity, catalog, conflicts and umbra.</span></div>
+<div class="step"><b>03</b><span>Each uplink is armed for that spacecraft's own next AOS.</span></div>
+</div>
+<a href="Command.dc.html" class="go">Open uplink sequence →</a>
+</div>
+</article>
+
+<article class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">J4</span><span class="t">Plan contacts</span><span class="r">WHOLE FLEET · 1 VIEW</span></div>
+<div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; flex: 1">
+<h2 style="margin: 0; font: 600 24px/1.15 'Saira Condensed'; letter-spacing: .06em; text-transform: uppercase">"Who talks to which station, and where are the gaps?"</h2>
+<p style="margin: 0; font-size: 14px; color: #9DAAB8; line-height: 1.5"><b style="color: #FF6B73; font-weight: 600">Today:</b> pick 1 of 500 cards, then scroll 4,000 px for one spacecraft's passes. <span class="ref">#5</span></p>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #1C2530; padding-top: 14px">
+<div class="step"><b>01</b><span>A ground-track map with station masks shows where passes happen.</span></div>
+<div class="step"><b>02</b><span>A 6-hour schedule shows every pass by station, conflicts dashed.</span></div>
+<div class="step"><b>03</b><span>Fix a conflict or a coverage gap in one click.</span></div>
+</div>
+<a href="Contacts.dc.html" class="go">Open contacts →</a>
+</div>
+</article>
+
+<article class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">J5</span><span class="t">Find anything</span><span class="r">⌘K · TYPE · ↵</span></div>
+<div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; flex: 1">
+<h2 style="margin: 0; font: 600 24px/1.15 'Saira Condensed'; letter-spacing: .06em; text-transform: uppercase">"Take me to 312's VBAT." "Send SET_ADCS_MODE."</h2>
+<p style="margin: 0; font-size: 14px; color: #9DAAB8; line-height: 1.5"><b style="color: #FF6B73; font-weight: 600">Today:</b> no search, a switcher showing 7 of 500, unlabeled icons. <span class="ref">#9</span> <span class="ref">#10</span> <span class="ref">#11</span> <span class="ref">#37</span></p>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #1C2530; padding-top: 14px">
+<div class="step"><b>01</b><span>One query line for spacecraft, points, commands and stations.</span></div>
+<div class="step"><b>02</b><span>Results are actions: "Command EARENDIL-312", "Passes for 312".</span></div>
+<div class="step"><b>03</b><span>Console shortcuts: <span class="m">G N</span>, <span class="m">G C</span>, <span class="m">[ ]</span>.</span></div>
+</div>
+<a href="Palette.dc.html" class="go">Open query line →</a>
+</div>
+</article>
+
+<article class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">J6</span><span class="t">On call</span><span class="r">TRIAGE FROM ANYWHERE</span></div>
+<div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; flex: 1">
+<h2 style="margin: 0; font: 600 24px/1.15 'Saira Condensed'; letter-spacing: .06em; text-transform: uppercase">"I got paged at 3 a.m. Is this real?"</h2>
+<p style="margin: 0; font-size: 14px; color: #9DAAB8; line-height: 1.5"><b style="color: #FF6B73; font-weight: 600">Today:</b> at phone width Ops shrinks to a 90 px column. <span class="ref">#4</span></p>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #1C2530; padding-top: 14px">
+<div class="step"><b>01</b><span>The page opens on the alarm, its trend and the next AOS.</span></div>
+<div class="step"><b>02</b><span>Give your GO or NO-GO, acknowledge, or hand off.</span></div>
+<div class="step"><b>03</b><span>Building new uplinks stays on the console, on purpose.</span></div>
+</div>
+<a href="Mobile.dc.html" class="go">Open phone view →</a>
+</div>
+</article>
+</div>
+
+<section class="pnl" style="display: flex; flex-direction: column">
+<div class="ph"><span class="i">NAV</span><span class="t">One console, labeled</span><span class="r" style="color: #7D8A99">FIXES #7 #8 #9</span></div>
+<div style="padding: 16px; display: flex; flex-wrap: wrap; gap: 8px">
+<span class="nav"><span class="m" style="font-size: 10px; color: #E6EDF3">01 </span>Now</span>
+<span class="nav"><span class="m" style="font-size: 10px; color: #E6EDF3">02 </span>Fleet</span>
+<span class="nav"><span class="m" style="font-size: 10px; color: #E6EDF3">03 </span>Alarms</span>
+<span class="nav"><span class="m" style="font-size: 10px; color: #E6EDF3">04 </span>Commands</span>
+<span class="nav"><span class="m" style="font-size: 10px; color: #E6EDF3">05 </span>Contacts</span>
+<span class="nav"><span class="m" style="font-size: 10px; color: #E6EDF3">06 </span>Telemetry</span>
+<span class="nav"><span class="m" style="font-size: 10px; color: #E6EDF3">07 </span>Timeline</span>
+<span class="nav" style="background: transparent; border-style: dashed; color: #9DAAB8">Setup · profiles, routing, stations, catalog</span>
+<span class="nav" style="background: transparent; border-style: dashed; color: #9DAAB8">Org · people, missions, settings</span>
+</div>
+</section>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1200}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

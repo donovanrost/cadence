@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pass review · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{position:relative;background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530;flex-wrap:wrap}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD;margin:0}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.tag{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 9px;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.b{height:32px;padding:0 12px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none}
+.b.pri{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.s-nom{width:8px;height:8px;background:#2FD08A;flex:none}
+.s-cau{width:10px;height:9px;background:#FFB020;clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+.s-crit{width:8px;height:8px;background:#FF4D57;transform:rotate(45deg);flex:none}
+.s-stale{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1.5px,transparent 1.5px 4px)}
+.s-off{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px dashed #9DAAB8}
+.rail a{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;color:#9DAAB8;text-decoration:none;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border-left:2px solid transparent}
+.rail a:hover{color:#E6EDF3;background:#0F141B}
+.rail a.on{color:#E6EDF3;background:#0F141B;border-left-color:#E6EDF3}
+.rail .n{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;width:16px}
+.rail .c{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99;letter-spacing:0}
+.cell{aspect-ratio:1;background:#164E37}
+.c-cau{background:#FFB020}
+.c-crit{background:#FF4D57;outline:1px solid #FF4D57;outline-offset:1.5px}
+.c-stale{background-color:#140F26;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1px,transparent 1px 3.5px)}
+.c-live{outline:1px solid #E6EDF3;outline-offset:1.5px}
+.ro{background:#0A0E13;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.ro .v{font:500 30px Saira,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;line-height:1}
+.ro .s{font:400 12px 'Saira',sans-serif;color:#9DAAB8}
+
+.pane{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.pane>.ph{flex:none}
+.scr{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#2A3644 transparent}
+.step{display:flex;align-items:center;gap:8px;height:52px;padding:0 14px;border-right:1px solid #1C2530;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#7D8A99}
+.step.on{color:#E6EDF3;background:#0F141B;box-shadow:inset 0 -2px 0 #E6EDF3}
+.inp{display:flex;align-items:center;gap:10px;height:36px;padding:0 12px;border:1px solid #2A3644;background:#05070A}
+.inp input{flex:1;min-width:0;background:transparent;border:0;outline:none;color:#E6EDF3;font:500 14px 'Azeret Mono',monospace}
+.dm{display:grid;grid-template-columns:12px minmax(0,1fr);gap:10px;width:100%;padding:10px 14px;border:0;border-top:1px solid #141B24;background:transparent;color:#E6EDF3;text-align:left;cursor:pointer;box-sizing:border-box}
+.dm:hover{background:#0F141B}
+.dm.on{background:#0F141B;box-shadow:inset 2px 0 0 #E6EDF3}
+.lg{display:inline-flex;align-items:center;gap:6px;font:500 10px 'Azeret Mono',monospace;color:#9DAAB8;text-transform:uppercase}
+.lg i{display:inline-block;width:14px;height:8px;box-sizing:border-box}
+.mtk,.mt{background-image:repeating-linear-gradient(135deg,rgba(255,176,32,.55) 0 2px,transparent 2px 5px);border:1px solid rgba(255,176,32,.7)}
+.mt{position:absolute;height:14px;box-sizing:border-box;pointer-events:none}
+.rl{height:22px;display:flex;align-items:center;justify-content:space-between;font:500 11px 'Azeret Mono',monospace;border-bottom:1px solid transparent}
+.rl .rs{font-size:9px;color:#7D8A99}
+.hr{position:absolute;top:2px;font-size:10px;color:#7D8A99;transform:translateX(-50%)}
+.mk{position:absolute;height:16px;min-width:5px;border:0;padding:0;cursor:pointer;box-sizing:border-box;background:transparent}
+.mk.own{background:#E6EDF3}
+.mk.new{background:#E6EDF3;box-shadow:0 0 0 2px #05070A,0 0 0 3px #E6EDF3}
+.mk.opp{border:1px dashed #E6EDF3;background:rgba(230,237,243,.06)}
+.mk.opp.clash{border-color:#FFB020}
+.mk.bad{background:#FFB020}
+.mk.on{outline:2px solid #E6EDF3;outline-offset:3px}
+.rc{display:flex;flex-direction:column;gap:2px;padding:6px 10px;border:1px solid #2A3644;min-width:130px}
+.rc b{font-size:14px;font-weight:600}
+.rc.hold{border-color:rgba(255,176,32,.6);background:rgba(255,176,32,.05)}
+.rc.hold b{color:#FFC24D}
+.rc.go b{color:#4FDB9E}
+.cb{position:absolute;top:10px;height:16px;background:#E6EDF3;min-width:4px}
+.cb.up{box-shadow:inset 0 3px 0 #05070A}
+.gp{position:absolute;top:0;height:36px;background:linear-gradient(#3A4654,#3A4654) center/100% 1px no-repeat;display:flex;justify-content:center}
+.gp.long{background-image:linear-gradient(#FFB020,#FFB020);background-size:100% 2px}
+.gp span{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;line-height:1;margin-top:-2px;background:#0A0E13;padding:0 4px;height:10px}
+.gp.long span{color:#FFC24D}
+.kvs{display:grid;grid-template-columns:76px minmax(0,1fr);gap:6px 10px;font-size:13px;color:#C9D3DD}
+.kvs>span:nth-child(odd){font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#7D8A99;padding-top:2px}
+.alt{display:flex;align-items:center;gap:8px;padding:8px 16px 8px 0;border-top:1px solid #141B24}
+.alt:first-of-type{border-top:0}
+.alt.on{background:#0F141B;box-shadow:inset 2px 0 0 #E6EDF3}
+.alt-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;padding:2px 0 2px 16px;border:0;background:transparent;color:#E6EDF3;text-align:left;cursor:pointer}
+.tg{height:26px;padding:0 10px;border:1px solid #2A3644;background:transparent;color:#C9D3DD;font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+.ft{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:0 18px;border-right:1px solid #1C2530}
+.ft b{font-size:20px;font-weight:500}
+.go{color:#4FDB9E}.hold{color:#FFC24D}
+.seg2{display:inline-flex;border:1px solid #2A3644}
+.seg2 button{height:30px;padding:0 12px;border:0;border-left:1px solid #2A3644;background:transparent;color:#9DAAB8;font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+.seg2 button:first-child{border-left:0}
+.seg2 button.on{background:#E6EDF3;color:#05070A}
+.tb{font-size:13px}
+.tr{display:grid;gap:12px;align-items:center;padding:8px 16px;border-bottom:1px solid #141B24}
+.tr:last-child{border-bottom:0}
+.tr.th{font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#7D8A99;border-bottom:1px solid #1C2530;padding:9px 16px}
+.tr .nr{text-align:right}
+.g1{grid-template-columns:56px minmax(0,1fr) 64px 140px 54px 54px 76px 76px}
+.g2{grid-template-columns:64px 112px 70px 110px 70px 70px minmax(0,1fr) minmax(0,1fr) 90px}
+.mb{display:inline-block;width:80px;height:4px;background:#1C2530;position:relative}
+.mb i{position:absolute;left:0;top:0;bottom:0}
+.cbar{display:block;height:8px;background:#11161D;position:relative}
+.cbar i{position:absolute;left:0;top:0;bottom:0}
+.pv{background:#0A0E13;padding:16px;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+</style>
+</helmet>
+
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; min-height: 100vh; display: flex; flex-direction: column; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 40px 40px">
+
+<header style="display: flex; align-items: stretch; height: 52px; border-bottom: 1px solid #1C2530; background: #070A0E">
+<a href="ScheduleFlow.dc.html" aria-label="Back" style="width: 52px; display: flex; align-items: center; justify-content: center; border-right: 1px solid #1C2530; color: #E6EDF3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></a>
+<div style="display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 0 18px; border-right: 1px solid #1C2530"><span class="m" style="font-size: 11px; color: #7D8A99">PASS REVIEW · PLAN R39 · 3 PROVIDERS</span><span style="font: 700 19px 'Saira Condensed'; letter-spacing: .14em; text-transform: uppercase">Thursday 22 Oct</span></div>
+<div style="display: flex; align-items: center; padding: 0 16px; gap: 0"><span class="seg2"><button class="on">Day</button><button>Week</button><button>Month</button></span></div>
+<div style="margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 0 16px"><button class="b">Export CSV</button><button class="b">Monthly close</button></div>
+</header>
+
+<main style="box-sizing: border-box; width: 100%; max-width: 1360px; margin: 0 auto; padding: 24px 24px 40px; display: flex; flex-direction: column; gap: 18px">
+
+<section style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between">
+<div style="display: flex; flex-direction: column; gap: 6px"><p class="lbl" style="color: #E6EDF3">Planned against flown</p><h1 style="margin: 0; font: 600 34px 'Saira Condensed'; letter-spacing: .08em; text-transform: uppercase; line-height: 1"><span class="n">98.5%</span> realized · <span style="color: #9DAAB8">$1,180 to dispute</span></h1></div>
+<p class="m" style="margin: 0; font-size: 12px; color: #9DAAB8">REPORTS IN FROM ALL 3 PROVIDERS · LAST AT 01:12Z · 0 UNKNOWN</p>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; background: #1C2530; border: 1px solid #1C2530">
+<div class="ro"><span class="lbl">Planned</span><span class="v">1,512</span><span class="s">passes in r39</span></div>
+<div class="ro" style="box-shadow: inset 0 2px 0 #2FD08A"><span class="lbl" style="color: #4FDB9E">Realized</span><span class="v">1,489</span><span class="s">full AOS to LOS</span></div>
+<div class="ro" style="box-shadow: inset 0 2px 0 #FFB020"><span class="lbl" style="color: #FFC24D">Partial</span><span class="v">14</span><span class="s">late lock or early LOS</span></div>
+<div class="ro" style="box-shadow: inset 0 2px 0 #FF4D57"><span class="lbl" style="color: #FF6B73">Missed</span><span class="v">9</span><span class="s">5 provider · 3 us · 1 weather</span></div>
+<div class="ro"><span class="lbl">Downlink</span><span class="v">4.21<span style="font-size: 14px; color: #7D8A99"> TB</span></span><span class="s">plan 4.30 TB · 97.9%</span></div>
+<div class="ro"><span class="lbl">Minutes</span><span class="v">14,571</span><span class="s">billed 14,602 · +31</span></div>
+</section>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start">
+<section class="pnl">
+<div class="ph"><span class="i">R1</span><h2 class="t">By station</h2><span class="r">SORTED BY REALIZATION</span></div>
+<div class="tb">
+<div class="tr th g1"><span>Station</span><span>Provider</span><span class="nr">Planned</span><span>Realized</span><span class="nr">Partial</span><span class="nr">Missed</span><span class="nr">Min flown</span><span class="nr">Min billed</span></div>
+<sc-for list="{{stations}}" as="s" hint-placeholder-count="8">
+<div class="tr g1"><span class="m" style="font-weight: 600">{{s.c}}</span><span style="color: #9DAAB8">{{s.p}}</span><span class="nr n">{{s.plan}}</span><span style="display: flex; align-items: center; gap: 8px"><span class="mb"><i style="width: {{s.w}}%; background: {{s.col}}"></i></span><span class="n" style="color: {{s.tc}}">{{s.pct}}</span></span><span class="nr n">{{s.part}}</span><span class="nr n" style="color: {{s.mc}}">{{s.miss}}</span><span class="nr n">{{s.fl}}</span><span class="nr n" style="color: {{s.bc}}">{{s.bl}}</span></div>
+</sc-for>
+</div>
+</section>
+
+<div style="display: flex; flex-direction: column; gap: 16px">
+<section class="pnl">
+<div class="ph"><span class="i">R2</span><h2 class="t">Why passes were lost</h2><span class="r">9 MISSED · 14 PARTIAL</span></div>
+<div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+<sc-for list="{{causes}}" as="c" hint-placeholder-count="5">
+<div style="display: grid; grid-template-columns: 170px minmax(0, 1fr) 70px; gap: 12px; align-items: center"><span style="font-size: 13px; color: #C9D3DD">{{c.k}}</span><span class="cbar"><i style="width: {{c.w}}%; background: {{c.col}}"></i></span><span class="m" style="font-size: 11px; color: #9DAAB8; text-align: right">{{c.v}}</span></div>
+</sc-for>
+<p class="m" style="margin: 4px 0 0; font-size: 10px; color: #7D8A99">RED = MISSED · AMBER = PARTIAL · OWNER DECIDES WHO PAYS</p>
+</div>
+</section>
+<section class="pnl">
+<div class="ph"><span class="i">R3</span><h2 class="t">Realization · 30 days</h2><span class="r">TARGET 98.0%</span></div>
+<div style="padding: 12px 16px 10px">
+<svg viewBox="0 0 300 90" width="100%" style="display: block" aria-label="Daily realization over 30 days, all above target except two days">
+<line x1="0" x2="300" y1="{{ty}}" y2="{{ty}}" stroke="#7D8A99" stroke-dasharray="3 3" stroke-width="1"></line>
+<path d="{{okBars}}" fill="#1B6E4B"></path>
+<path d="{{lowBars}}" fill="#FFB020"></path>
+<path d="{{todayBar}}" fill="#2FD08A"></path>
+</svg>
+<div class="m" style="display: flex; justify-content: space-between; font-size: 9px; color: #7D8A99; margin-top: 4px"><span>23 SEP</span><span>8 OCT · AWA RAIN</span><span>22 OCT</span></div>
+</div>
+</section>
+</div>
+</div>
+
+<section class="pnl">
+<div class="ph"><span class="i">R4</span><h2 class="t">Missed and partial passes</h2><span class="r">SHOWING 10 OF 23 · 5 DISPUTABLE</span></div>
+<div class="tb">
+<div class="tr th g2"><span>AOS</span><span>Spacecraft</span><span>Antenna</span><span>Outcome</span><span class="nr">Planned</span><span class="nr">Flown</span><span>Cause</span><span>Owner</span><span></span></div>
+<sc-for list="{{misses}}" as="x" hint-placeholder-count="10">
+<div class="tr g2"><span class="m">{{x.t}}</span><span class="m" style="font-weight: 600">{{x.sc}}</span><span class="m" style="color: #9DAAB8">{{x.st}}</span><span><span class="tag" style="height: 22px; font-size: 12px; color: {{x.oc}}"><span class="{{x.shape}}"></span>{{x.o}}</span></span><span class="nr m">{{x.pl}}</span><span class="nr m">{{x.fl}}</span><span style="color: #C9D3DD">{{x.cause}}</span><span style="color: #9DAAB8">{{x.own}}</span><span style="text-align: right"><button class="tg">{{x.act}}</button></span></div>
+</sc-for>
+</div>
+</section>
+
+<section class="pnl">
+<div class="ph"><span class="i">R5</span><h2 class="t">Provider reconciliation</h2><span class="r">INVOICES CLOSE 31 OCT</span></div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: #1C2530">
+<div class="pv"><span style="font: 600 18px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">Northlight</span><div class="kvs"><span>Billed</span><span class="m">9,212 MIN · $128,968</span><span>Flown</span><span class="m">9,170 MIN</span><span>Dispute</span><span class="m" style="color: #FFC24D">4 PASSES · $588</span></div><button class="b">Draft dispute</button></div>
+<div class="pv"><span style="font: 600 18px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">Austral Net</span><div class="kvs"><span>Billed</span><span class="m">3,880 MIN · $42,680</span><span>Flown</span><span class="m">3,889 MIN</span><span>Dispute</span><span class="m" style="color: #FFC24D">1 PASS · $592</span></div><button class="b">Draft dispute</button></div>
+<div class="pv"><span style="font: 600 18px 'Saira Condensed'; letter-spacing: .12em; text-transform: uppercase">Meridian</span><div class="kvs"><span>Billed</span><span class="m">1,510 MIN · $13,590</span><span>Flown</span><span class="m">1,512 MIN</span><span>Dispute</span><span class="m" style="color: #4FDB9E">NONE</span></div><button class="b" style="color: #7D8A99">Matches</button></div>
+</div>
+</section>
+</main>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+renderVals() {
+const S = [
+['MAU', 'Meridian', 84, 84, 0, 0, 702, 702], ['HBK', 'Meridian', 172, 171, 1, 0, 808, 810], ['KIR', 'Northlight', 176, 175, 1, 0, 1640, 1642],
+['INU', 'Northlight', 182, 180, 1, 1, 1700, 1716], ['FBK', 'Northlight', 190, 187, 2, 1, 1810, 1820], ['SVB', 'Northlight', 404, 396, 4, 4, 4020, 4034],
+['AWA', 'Austral Net', 226, 222, 3, 1, 2210, 2196], ['PUQ', 'Austral Net', 78, 74, 2, 2, 681, 682]
+];
+const stations = S.map((r) => { const p = r[3] / r[2] * 100; return { c: r[0], p: r[1], plan: r[2], pct: p.toFixed(1) + '%', w: Math.max(0, (p - 90) * 10).toFixed(0), col: p >= 98 ? '#1B6E4B' : '#FFB020', tc: p >= 98 ? '#C9D3DD' : '#FFC24D', part: r[4], miss: r[5], mc: r[5] ? '#FF6B73' : '#7D8A99', fl: r[6].toLocaleString('en-US'), bl: r[7].toLocaleString('en-US'), bc: r[7] > r[6] + 5 ? '#FFC24D' : '#C9D3DD' }; }).sort((a, b) => parseFloat(b.pct) - parseFloat(a.pct));
+const C = [['Provider antenna fault', 5, 3, '#FF4D57'], ['Late lock · low elevation', 0, 8, '#FFB020'], ['Spacecraft no carrier', 3, 1, '#FF4D57'], ['Rain fade', 1, 2, '#FF4D57'], ['Early LOS · terrain mask', 0, 3, '#FFB020']];
+const causes = C.map((c) => ({ k: c[0], v: (c[1] ? c[1] + ' MISS' : '') + (c[1] && c[2] ? ' · ' : '') + (c[2] ? c[2] + ' PART' : ''), w: ((c[1] + c[2]) / 11 * 100).toFixed(0), col: c[1] ? c[3] : '#FFB020' }));
+const M = [
+['00:42Z', 312, 'PUQ-1', 'MISSED', '9m 10s', '0', 'Provider antenna fault', 'Austral Net', 'Dispute'],
+['03:17Z', 140, 'SVB-2', 'MISSED', '8m 40s', '0', 'Provider antenna fault', 'Northlight', 'Dispute'],
+['05:58Z', 227, 'SVB-4', 'MISSED', '10m 05s', '0', 'Provider antenna fault', 'Northlight', 'Dispute'],
+['07:21Z', 233, 'INU-1', 'MISSED', '9m 30s', '0', 'Spacecraft no carrier', 'Us · stale since 06:50Z', 'Open'],
+['09:04Z', 88, 'AWA-3', 'MISSED', '7m 50s', '0', 'Rain fade', 'Weather', 'Accept'],
+['11:46Z', 406, 'PUQ-2', 'PARTIAL', '11m 00s', '6m 12s', 'Late lock · low elevation', 'Austral Net', 'Review'],
+['13:30Z', 19, 'SVB-1', 'MISSED', '9m 45s', '0', 'Provider antenna fault', 'Northlight', 'Dispute'],
+['15:12Z', 455, 'FBK-2', 'MISSED', '8m 20s', '0', 'Spacecraft no carrier', 'Us · safe mode', 'Open'],
+['18:39Z', 351, 'KIR-1', 'PARTIAL', '10m 30s', '7m 55s', 'Early LOS · terrain mask', 'Us · mask in profile', 'Fix mask'],
+['21:05Z', 174, 'SVB-3', 'MISSED', '9m 15s', '0', 'Provider antenna fault', 'Northlight', 'Dispute']
+];
+const misses = M.map((m) => ({ t: m[0], sc: 'EARENDIL-' + String(m[1]).padStart(3, '0'), st: m[2], o: m[3], oc: m[3] === 'MISSED' ? '#FF6B73' : '#FFC24D', shape: m[3] === 'MISSED' ? 's-crit' : 's-cau', pl: m[4], fl: m[5], cause: m[6], own: m[7], act: m[8] }));
+const vals = [];
+let seed = 3;
+const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+for (let i = 0; i < 30; i++) vals.push(i === 15 ? 96.2 : i === 22 ? 97.6 : i === 29 ? 98.5 : 98.2 + rnd() * 1.5);
+const y = (v) => 90 - (v - 94) / 6 * 90;
+let okBars = '', lowBars = '', todayBar = '';
+vals.forEach((v, i) => { const x = i * 10 + 1, w = 8, top = y(v); const d = 'M' + x + ' ' + top.toFixed(1) + 'h' + w + 'V90h' + (-w) + 'Z'; if (i === 29) todayBar += d; else if (v < 98) lowBars += d; else okBars += d; });
+return { stations: stations, causes: causes, misses: misses, okBars: okBars, lowBars: lowBars, todayBar: todayBar, ty: y(98).toFixed(1) };
+}
+}
+
+</script>
+</body>
+</html>

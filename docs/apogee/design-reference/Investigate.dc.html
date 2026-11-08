@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>EARENDIL-312 · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{position:relative;background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530;flex-wrap:wrap}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD;margin:0}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.tag{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 10px;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.b{height:36px;padding:0 16px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none}
+.b.pri{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.s-cau{width:10px;height:9px;background:#FFB020;clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+.s-crit{width:8px;height:8px;background:#FF4D57;transform:rotate(45deg);flex:none}
+.s-stale{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1.5px,transparent 1.5px 4px)}
+.rail a{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;color:#9DAAB8;text-decoration:none;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border-left:2px solid transparent}
+.rail a:hover{color:#E6EDF3;background:#0F141B}
+.rail a.on{color:#E6EDF3;background:#0F141B;border-left-color:#E6EDF3}
+.rail .n{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;width:16px}
+.rail .c{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99;letter-spacing:0}
+.fact{background:#0A0E13;padding:10px 14px;display:flex;flex-direction:column;gap:4px}
+.fact .v{font:500 14px 'Azeret Mono',monospace}
+.tab{height:36px;padding:0 16px;border:0;border-right:1px solid #1C2530;background:transparent;color:#9DAAB8;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;cursor:pointer}
+.tab.on{background:#0F141B;color:#E6EDF3;box-shadow:inset 0 -2px 0 #E6EDF3}
+.chip{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 10px;border:1px solid #2A3644;background:#0F141B;font:500 12px 'Azeret Mono',monospace}
+.seg{height:26px;padding:0 10px;border:0;background:transparent;color:#9DAAB8;font:500 11px 'Azeret Mono',monospace;cursor:pointer}
+.seg.on{background:#1C2530;color:#E6EDF3}
+.scr{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:#2A3644 transparent}
+.pane{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.pane>.ph{flex:none}
+.fact{padding:8px 14px}
+.rail{overflow:auto}
+</style>
+</helmet>
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; height: 100vh; overflow: hidden; display: flex; flex-direction: column; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 40px 40px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: stretch; border-bottom: 1px solid #1C2530; background: #070A0E; min-height: 52px">
+<div style="display: flex; align-items: center; gap: 12px; padding: 0 18px; border-right: 1px solid #1C2530">
+<svg width="20" height="20" viewBox="0 0 30 30" aria-hidden="true"><path d="M15 2 28 15 15 28 2 15Z" fill="none" stroke="#E6EDF3" stroke-width="2"></path><path d="M15 9 21 15 15 21 9 15Z" fill="#E6EDF3"></path></svg>
+<span style="font: 700 16px 'Saira Condensed'; letter-spacing: .36em">CADENCE</span>
+</div>
+<button style="display: flex; align-items: center; gap: 10px; padding: 0 18px; border: 0; border-right: 1px solid #1C2530; background: transparent; color: #E6EDF3; cursor: pointer; font: 600 14px 'Saira Condensed'; letter-spacing: .16em; text-transform: uppercase"><span style="color: #7D8A99">Reflect Orbital /</span>Earendil</button>
+<button style="flex: 1 1 240px; display: flex; align-items: center; gap: 10px; padding: 0 18px; border: 0; border-right: 1px solid #1C2530; background: transparent; color: #7D8A99; cursor: pointer; font: 400 14px 'Saira'; text-align: left"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7D8A99" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><span style="flex: 1">Spacecraft, telemetry, commands…</span><span class="m" style="font-size: 11px; border: 1px solid #2A3644; padding: 1px 6px">⌘K</span></button>
+<div style="display: flex; align-items: center; padding: 0 18px; border-right: 1px solid #1C2530"><span class="tag" style="color: #FF6B73; height: 24px"><span class="s-crit"></span>Fleet · attention</span></div>
+<div class="m" style="display: flex; align-items: center; gap: 22px; padding: 0 18px; font-size: 13px">
+<span><span style="color: #7D8A99">UTC</span> 02:43:02</span>
+<span><span style="color: #7D8A99">MET</span> 412:07:16</span>
+</div>
+<button aria-label="Account menu for Donovan" style="width: 52px; border: 0; border-left: 1px solid #1C2530; background: transparent; color: #E6EDF3; font: 600 14px 'Saira Condensed'; letter-spacing: .1em; cursor: pointer">DR</button>
+</header>
+
+<div style="display: flex; flex: 1; min-height: 0">
+<nav class="rail" aria-label="Main" style="flex: 0 0 200px; box-sizing: border-box; padding: 14px 0; border-right: 1px solid #1C2530; display: flex; flex-direction: column; gap: 2px; background: #070A0E">
+<a href="Now.dc.html"><span class="n">01</span>Now</a>
+<a href="#" class="on"><span class="n">02</span>Fleet<span class="c">500</span></a>
+<a href="#"><span class="n">03</span>Alarms<span class="c" style="color: #FF6B73">17</span></a>
+<a href="Command.dc.html"><span class="n">04</span>Commands<span class="c">23</span></a>
+<a href="Contacts.dc.html"><span class="n">05</span>Contacts<span class="c" style="color: #E6EDF3">7 AOS</span></a>
+<a href="#"><span class="n">06</span>Telemetry</a>
+<a href="#"><span class="n">07</span>Timeline</a>
+<div style="height: 1px; background: #1C2530; margin: 12px 0"></div>
+<a href="#"><span class="n">··</span>Setup</a>
+<a href="#"><span class="n">··</span>Organization</a>
+</nav>
+
+<main style="flex: 1; min-width: 0; min-height: 0; overflow: hidden; box-sizing: border-box; padding: 12px 20px 14px; display: flex; flex-direction: column; gap: 10px">
+
+<div style="flex: none; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between">
+<nav aria-label="Breadcrumb" class="m" style="font-size: 12px; color: #7D8A99; display: flex; gap: 10px"><a href="#" style="text-decoration: none">FLEET</a><span>/</span><a href="#" style="text-decoration: none">PLANE 07</a><span>/</span><span style="color: #E6EDF3">EARENDIL-312</span></nav>
+<div style="display: flex; gap: 6px"><button class="b" style="height: 30px" aria-label="Previous spacecraft, EARENDIL-311"><span class="m">[</span> 311</button><button class="b" style="height: 30px" aria-label="Next spacecraft, EARENDIL-313">313 <span class="m">]</span></button></div>
+</div>
+
+<section style="flex: none; display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between">
+<div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+<h1 style="margin: 0; font: 700 36px/1 'Saira Condensed'; letter-spacing: .06em">EARENDIL-312</h1>
+<span class="tag" style="color: #FF6B73; background: rgba(255,77,87,.08)"><span class="s-crit"></span>Critical · power</span>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap"><button class="b">Acknowledge</button><button class="b">Assign</button><a href="Command.dc.html" class="b">Command</a></div>
+</section>
+
+<section style="flex: none; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; background: #1C2530; border: 1px solid #1C2530">
+<div class="fact"><span class="lbl">SCID</span><span class="v">312</span></div>
+<div class="fact"><span class="lbl">Profile</span><span class="v"><a href="#" style="text-decoration: none">Earendil Block 1</a></span></div>
+<div class="fact"><span class="lbl">Orbit</span><span class="v">P07 · slot 12 · #4,812</span></div>
+<div class="fact"><span class="lbl">Last LOS</span><span class="v">T+00:06:41 FBK</span></div>
+<div class="fact" style="box-shadow: inset 0 2px 0 #E6EDF3"><span class="lbl">Next AOS</span><span class="v" style="color: #E6EDF3">T−00:38:10 FBK</span></div>
+<div class="fact"><span class="lbl">Next eclipse</span><span class="v">T−00:59:30</span></div>
+</section>
+
+<div role="tablist" aria-label="Spacecraft sections" style="flex: none; display: flex; flex-wrap: wrap; border: 1px solid #1C2530; background: #0A0E13">
+<button role="tab" aria-selected="true" class="tab on">Investigate</button>
+<button role="tab" aria-selected="false" class="tab">Telemetry</button>
+<button role="tab" aria-selected="false" class="tab">Uplink</button>
+<button role="tab" aria-selected="false" class="tab">Passes</button>
+<button role="tab" aria-selected="false" class="tab">Configuration</button>
+<button role="tab" aria-selected="false" class="tab">History</button>
+</div>
+
+<div style="flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 12px">
+
+<div style="min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px">
+
+<section class="pnl red" style="flex: none; display: flex; flex-direction: column">
+<div class="ph"><span class="i" style="color: #FF6B73">B1</span><h2 class="t">VBAT · battery voltage below limit</h2><span class="r">FIRST CROSSED 2026-10-23 02:08:11Z · UMBRA</span></div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1px; background: #1C2530; border-bottom: 1px solid #1C2530">
+<div class="fact" style="box-shadow: inset 2px 0 0 #FF4D57"><span class="lbl">Now</span><span class="n" style="font-size: 24px; color: #FF6B73">23.1<span style="font-size: 13px; color: #7D8A99"> V</span></span></div>
+<div class="fact"><span class="lbl">Red limit</span><span class="n" style="font-size: 24px">24.0<span style="font-size: 13px; color: #7D8A99"> V</span></span></div>
+<div class="fact"><span class="lbl">Rate</span><span class="n" style="font-size: 24px; color: #FF6B73">−0.4<span style="font-size: 13px; color: #7D8A99"> V/orb</span></span></div>
+<div class="fact"><span class="lbl">Solar array</span><span class="n" style="font-size: 24px; color: #FFC24D">−18<span style="font-size: 13px; color: #7D8A99"> %</span></span></div>
+</div>
+<div style="padding: 10px 16px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+<span class="chip"><span style="width: 14px; height: 2px; background: #E6EDF3"></span>VBAT</span>
+<span class="chip"><span style="width: 14px; height: 2px; background: #7D8A99"></span>SA current</span>
+<label class="chip" style="border-style: dashed; color: #7D8A99">+ <input aria-label="Add a telemetry point" placeholder="add point · battery temp" style="background: transparent; border: 0; color: #E6EDF3; font: 12px 'Azeret Mono'; outline: none; width: 190px"></label>
+<span style="margin-left: auto; display: flex; border: 1px solid #1C2530"><button class="seg">1H</button><button class="seg on">6 ORB</button><button class="seg">24H</button></span>
+</div>
+<div style="display: flex; gap: 8px">
+<div class="m" style="display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: #7D8A99; height: 200px; text-align: right; width: 34px"><span>27.5</span><span>25.0</span><span>22.5</span></div>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<svg viewBox="0 0 800 250" preserveAspectRatio="none" style="width: 100%; height: 200px; display: block; background: #05070A; border: 1px solid #141B24" role="img" aria-label="Battery voltage over 6 orbits, falling from 26.8 to 23.4 volts and crossing the 24 volt red limit in the last orbit">
+<path d="{{umbra}}" fill="#11161C"></path>
+<path d="{{grid}}" fill="none" stroke="#141B24" stroke-width="1" vector-effect="non-scaling-stroke"></path>
+<rect x="0" y="175" width="800" height="75" fill="rgba(255,77,87,.06)"></rect>
+<line x1="0" y1="150" x2="800" y2="150" stroke="#FFB020" stroke-width="1" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"></line>
+<line x1="0" y1="175" x2="800" y2="175" stroke="#FF4D57" stroke-width="1" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"></line>
+<path d="{{solar}}" fill="none" stroke="#7D8A99" stroke-width="1.2" opacity=".85" vector-effect="non-scaling-stroke"></path>
+<path d="{{volts}}" fill="none" stroke="#E6EDF3" stroke-width="1.8" vector-effect="non-scaling-stroke"></path>
+<line x1="776" y1="0" x2="776" y2="250" stroke="#E6EDF3" stroke-width="1" vector-effect="non-scaling-stroke"></line>
+</svg>
+<div style="height: 6px; background-image: repeating-linear-gradient(90deg, #2A3644 0 1px, transparent 1px 16.129%)"></div>
+<div class="m" style="display: flex; justify-content: space-between; font-size: 10px; color: #7D8A99"><span>ORB 4,807</span><span>4,808</span><span>4,809</span><span>4,810</span><span>4,811</span><span>4,812</span><span style="color: #E6EDF3">NOW</span></div>
+</div>
+</div>
+<div class="m" style="display: flex; flex-wrap: wrap; gap: 18px; font-size: 11px; color: #9DAAB8">
+<span style="display: flex; gap: 6px; align-items: center"><span style="width: 14px; height: 10px; background: #11161C; border: 1px solid #2A3644"></span>UMBRA</span>
+<span style="display: flex; gap: 6px; align-items: center"><span style="width: 14px; border-top: 1px dashed #FFB020"></span>YELLOW 24.5 V</span>
+<span style="display: flex; gap: 6px; align-items: center"><span style="width: 14px; border-top: 1px dashed #FF4D57"></span>RED 24.0 V</span>
+<span style="color: #BDB3FF">SA CURRENT ↓18% SINCE ORB 4,808: BATTERY NOT RECHARGING IN SUN</span>
+</div>
+</div>
+</section>
+
+<section class="pnl pane" style="flex: 1">
+<div class="ph"><span class="i">B2</span><h2 class="t">Event log</h2><a href="#" class="r" style="color: #E6EDF3; text-decoration: none">FULL TIMELINE →</a></div>
+<div class="scr" style="flex: 1"><div style="padding: 10px 16px; display: grid; grid-template-columns: 92px 14px minmax(0, 1fr); gap: 10px 12px; font-size: 14px; align-items: center">
+<span class="m" style="font-size: 12px; color: #7D8A99">02:08:11Z</span><span class="s-crit"></span><span>VBAT crossed red limit 24.0 V</span>
+<span class="m" style="font-size: 12px; color: #7D8A99">01:41:03Z</span><span class="s-cau"></span><span>VBAT crossed yellow limit 24.5 V</span>
+<span class="m" style="font-size: 12px; color: #7D8A99">01:12:40Z</span><span style="width: 8px; height: 8px; background: #E6EDF3"></span><span>AOS Fairbanks · 9m 12s · 4.1 MB down</span>
+<span class="m" style="font-size: 12px; color: #7D8A99">22:31:57Z</span><span style="width: 8px; height: 8px; background: #7D8A99"></span><span>Imaging started by plan "Coastal sweep 14"</span>
+</div></div>
+</section>
+</div>
+
+<aside style="min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px">
+
+<section class="pnl" style="flex: none; display: flex; flex-direction: column; background: #0F141B; border-color: #2A3644">
+<div class="ph" style="border-color: #2A3644"><span class="i">B3</span><h2 class="t" style="color: #C9D3DD">Recommended procedure</h2></div>
+<div style="padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<span style="font: 600 24px 'Saira Condensed'; letter-spacing: .08em; text-transform: uppercase">Low power safe</span>
+<p style="margin: 0; font-size: 14px; color: #9DAAB8; line-height: 1.5">Pause imaging and drop to LOW power. Uplinks at the Fairbanks AOS in 38 minutes, 21 minutes before the next eclipse.</p>
+<div class="m" style="font-size: 12px; background: #05070A; border: 1px solid #1C2530; padding: 10px 12px; color: #C9D3DD; line-height: 1.8"><span style="color: #7D8A99">01</span> SET_POWER_MODE mode=LOW<br><span style="color: #7D8A99">02</span> PAYLOAD_PAUSE reason=POWER</div>
+<a href="Command.dc.html" class="b pri" style="height: 42px">Prepare · 312 + 3 sisters</a>
+<button class="b">Prepare · 312 only</button>
+</div>
+</section>
+
+<section class="pnl pane" style="flex: 1">
+<div class="ph"><span class="i">B4</span><h2 class="t">Plane 07 · same signature</h2><span class="r">3 OF 49</span></div>
+<div class="scr">
+<div style="padding: 12px 16px 4px; display: flex; justify-content: center">
+<svg viewBox="0 0 300 150" style="width: 100%; max-width: 320px; height: auto; display: block" role="img" aria-label="Plane 7 orbit ring: EARENDIL-312 critical and three neighbors in caution, all in adjacent slots">
+<ellipse cx="150" cy="75" rx="130" ry="52" fill="none" stroke="#E6EDF3" stroke-width="1" opacity=".6"></ellipse>
+<circle cx="150" cy="75" r="30" fill="#0D1116" stroke="#2E3742"></circle>
+<path d="{{ringNom}}" fill="#2FD08A" opacity=".5"></path>
+<path d="{{ringCau}}" fill="#FFB020"></path>
+<path d="{{ringCrit}}" fill="#FF4D57"></path>
+<text x="{{lab.x}}" y="{{lab.y}}" fill="#FF6B73" font-family="Azeret Mono" font-size="10" text-anchor="middle">312</text>
+</svg>
+</div>
+<sc-for list="{{sisters}}" as="s" hint-placeholder-count="3">
+<div style="display: grid; grid-template-columns: 12px minmax(0, 1fr) 80px; gap: 12px; align-items: center; padding: 10px 16px; border-top: 1px solid #1C2530">
+<span class="s-cau"></span>
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><a href="#" style="font: 600 15px 'Saira Condensed'; letter-spacing: .1em; text-decoration: none">{{s.name}}</a><span class="m" style="font-size: 11px; color: #7D8A99">{{s.v}} · AOS {{s.next}}</span></div>
+<svg width="80" height="24" viewBox="0 0 80 24" aria-hidden="true"><polyline points="{{s.spark}}" fill="none" stroke="#FFB020" stroke-width="1.5"></polyline></svg>
+</div>
+</sc-for>
+</div>
+</section>
+
+<details class="pnl" style="flex: none; padding: 10px 16px">
+<summary class="lbl" style="cursor: pointer">Technical details</summary>
+<div class="m" style="display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 12px; color: #9DAAB8; margin-top: 12px"><span>point</span><span>HK.battery_voltage</span><span>profile</span><span>profile-earendil-block-1</span><span>id</span><span>sc_01J9…F3Q</span></div>
+</details>
+</aside>
+</div>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+const H = 250;
+const y = (v) => ((27.5 - v) / 5 * H).toFixed(1);
+const orbit = 800 / 6.2;
+let volts = '', solar = '', umbra = '', grid = '';
+for (let i = 0; i <= 200; i++) {
+const x = i * 4;
+const t = x / orbit;
+const ph = t - Math.floor(t);
+const k = Math.floor(t);
+const peak = 26.8 - k * 0.3;
+const inEcl = ph > 0.62;
+const v = inEcl ? peak - (ph - 0.62) / 0.38 * 1.6 : peak - 1.6 + Math.min(ph / 0.35, 1) * 1.6;
+volts += (i ? 'L' : 'M') + x + ' ' + y(v);
+const s = inEcl ? 22.9 : 26.6 - k * 0.32 + Math.sin(ph * 9) * 0.06;
+solar += (i ? 'L' : 'M') + x + ' ' + y(s);
+}
+for (let k = 0; k < 7; k++) {
+const x0 = Math.round((k + 0.62) * orbit), w = Math.round(0.38 * orbit);
+umbra += 'M' + x0 + ' 0h' + w + 'v' + H + 'h-' + w + 'Z';
+}
+for (let g = 1; g < 10; g++) grid += 'M0 ' + (g * 25) + 'H800';
+const dot = (x, y0, r) => 'M' + (x - r).toFixed(1) + ' ' + y0.toFixed(1) + 'a' + r + ' ' + r + ' 0 1 0 ' + (2 * r) + ' 0a' + r + ' ' + r + ' 0 1 0 ' + (-2 * r) + ' 0';
+let ringNom = '', ringCau = '', ringCrit = '';
+let lab = { x: 0, y: 0 };
+for (let j = 0; j < 50; j++) {
+const t = 2 * Math.PI * j / 50 + 1.2;
+const px = 150 + 130 * Math.cos(t), py = 75 + 52 * Math.sin(t);
+if (Math.sin(t) < 0 && Math.hypot(px - 150, py - 75) < 32) continue;
+if (j === 11) { ringCrit += dot(px, py, 4.5); lab = { x: px.toFixed(1), y: (py + 18).toFixed(1) }; }
+else if (j === 8 || j === 13 || j === 17) ringCau += dot(px, py, 3.2);
+else ringNom += dot(px, py, 2);
+}
+const sisters = [
+{ name: 'EARENDIL-314', v: '24.6 V', next: 'T−52m SVB', spark: '0,6 13,7 26,9 39,10 52,12 65,14 80,15' },
+{ name: 'EARENDIL-309', v: '24.4 V', next: 'T−1h12m AWA', spark: '0,5 13,7 26,8 39,11 52,13 65,15 80,17' },
+{ name: 'EARENDIL-318', v: '24.8 V', next: 'T−2h05m PUQ', spark: '0,6 13,6 26,8 39,9 52,11 65,12 80,14' }
+];
+return { volts: volts, solar: solar, umbra: umbra, grid: grid, ringNom: ringNom, ringCau: ringCau, ringCrit: ringCrit, lab: lab, sisters: sisters };
+}
+}
+</script>
+</body>
+</html>

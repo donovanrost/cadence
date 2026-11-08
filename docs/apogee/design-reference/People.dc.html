@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>People and access · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530;flex-wrap:wrap}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD;margin:0}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.tag{display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 7px;font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.b{height:34px;padding:0 14px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none}
+.b.pri{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.s-cau{width:10px;height:9px;background:#FFB020;clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+.rail a{display:flex;align-items:center;gap:10px;height:36px;padding:0 12px;color:#9DAAB8;text-decoration:none;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border-left:2px solid transparent}
+.rail a:hover{color:#E6EDF3;background:#0F141B}
+.rail a.on{color:#E6EDF3;background:#0F141B;border-left-color:#E6EDF3}
+.rail .x{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;width:16px}
+.rail .c{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99;letter-spacing:0}
+.rail .g{font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.22em;text-transform:uppercase;color:#7D8A99;padding:14px 14px 6px}
+.mode{display:flex;align-items:center;border:1px solid #2A3644}
+.mode a,.mode span{height:30px;padding:0 12px;display:flex;align-items:center;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;text-decoration:none;color:#9DAAB8}
+.mode .on{background:#E6EDF3;color:#05070A}
+.seg{height:36px;padding:0 14px;border:0;border-right:1px solid #1C2530;background:transparent;color:#9DAAB8;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+.seg.on{background:#0F141B;color:#E6EDF3;box-shadow:inset 0 -2px 0 #E6EDF3}
+.th{font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#7D8A99;text-align:left;padding:10px 14px;border-bottom:1px solid #1C2530;white-space:nowrap}
+.td{padding:10px 14px;border-bottom:1px solid #141B24;font-size:13px;white-space:nowrap}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld input,.fld select{height:38px;background:#05070A;color:#E6EDF3;border:1px solid #2A3644;font:14px 'Saira';padding:0 10px}
+.si{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:11px 16px;border-top:1px solid #1C2530}
+</style>
+</helmet>
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; min-height: 100vh; display: flex; flex-direction: column; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 40px 40px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: stretch; border-bottom: 1px solid #1C2530; background: #070A0E; min-height: 52px">
+<div style="display: flex; align-items: center; gap: 12px; padding: 0 18px; border-right: 1px solid #1C2530">
+<svg width="20" height="20" viewBox="0 0 30 30" aria-hidden="true"><path d="M15 2 28 15 15 28 2 15Z" fill="none" stroke="#E6EDF3" stroke-width="2"></path><path d="M15 9 21 15 15 21 9 15Z" fill="#E6EDF3"></path></svg>
+<span style="font: 700 16px 'Saira Condensed'; letter-spacing: .36em">CADENCE</span>
+</div>
+<button style="display: flex; align-items: center; gap: 10px; padding: 0 18px; border: 0; border-right: 1px solid #1C2530; background: transparent; color: #E6EDF3; cursor: pointer; font: 600 14px 'Saira Condensed'; letter-spacing: .16em; text-transform: uppercase">Reflect Orbital</button>
+<div style="display: flex; align-items: center; padding: 0 18px; border-right: 1px solid #1C2530"><nav class="mode" aria-label="Mode"><a href="Now.dc.html">Ops</a><span class="on" aria-current="page">Setup</span></nav></div>
+<button style="flex: 1 1 240px; display: flex; align-items: center; gap: 10px; padding: 0 18px; border: 0; border-right: 1px solid #1C2530; background: transparent; color: #7D8A99; cursor: pointer; font: 400 14px 'Saira'; text-align: left"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7D8A99" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><span style="flex: 1">People, roles, keys, settings…</span><span class="m" style="font-size: 11px; border: 1px solid #2A3644; padding: 1px 6px">⌘K</span></button>
+<div class="m" style="display: flex; align-items: center; padding: 0 18px; font-size: 13px"><span><span style="color: #7D8A99">UTC</span> 03:58:30</span></div>
+<button aria-label="Account menu for Donovan: profile, password, sign out" style="width: 52px; border: 0; border-left: 1px solid #1C2530; background: transparent; color: #E6EDF3; font: 600 14px 'Saira Condensed'; letter-spacing: .1em; cursor: pointer">DR</button>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; flex: 1">
+<nav class="rail" aria-label="Setup" style="flex: 0 0 220px; box-sizing: border-box; padding: 6px 0 14px; border-right: 1px solid #1C2530; display: flex; flex-direction: column; background: #070A0E">
+<span class="g">Mission · Earendil</span>
+<a href="Setup.dc.html"><span class="x">01</span>Readiness</a>
+<a href="#"><span class="x">02</span>Spacecraft<span class="c">500</span></a>
+<a href="Profile.dc.html"><span class="x">03</span>Profiles<span class="c">2</span></a>
+<a href="Catalog.dc.html"><span class="x">04</span>Catalog<span class="c">v14</span></a>
+<a href="#"><span class="x">05</span>Comms &amp; routing</a>
+<a href="#"><span class="x">06</span>Ground stations<span class="c">6</span></a>
+<a href="#"><span class="x">07</span>Data sources<span class="c">4</span></a>
+<a href="#"><span class="x">08</span>Apps</a>
+<span class="g">Organization</span>
+<a href="#" class="on"><span class="x">··</span>People &amp; access</a>
+<a href="#"><span class="x">··</span>Missions<span class="c">2</span></a>
+<a href="#"><span class="x">··</span>Settings</a>
+<a href="#"><span class="x">··</span>Audit log</a>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 20px 24px 28px; display: flex; flex-direction: column; gap: 16px">
+
+<section style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<p class="lbl">Reflect Orbital · organization</p>
+<h1 style="margin: 0; font: 600 36px 'Saira Condensed'; letter-spacing: .08em; text-transform: uppercase">People &amp; access</h1>
+<span style="font-size: 14px; color: #9DAAB8">14 people · 2 pending invites · 3 service identities · 4 on console now</span>
+</div>
+</section>
+
+<div role="tablist" aria-label="Access sections" style="display: flex; flex-wrap: wrap; border: 1px solid #1C2530; background: #0A0E13">
+<button role="tab" aria-selected="true" class="seg on">People 14</button>
+<button role="tab" aria-selected="false" class="seg">Invitations 2</button>
+<button role="tab" aria-selected="false" class="seg">Service identities 3</button>
+<button role="tab" aria-selected="false" class="seg">Roles 5</button>
+<button role="tab" aria-selected="false" class="seg">Command policies 3</button>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+
+<section class="pnl" style="flex: 999 1 640px; min-width: 0">
+<div class="ph"><span class="i">U1</span><h2 class="t">People</h2>
+<label style="flex: 1; min-width: 160px; display: flex; align-items: center; gap: 8px; border: 1px solid #2A3644; background: #05070A; height: 30px; padding: 0 10px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7D8A99" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Filter people</span><input placeholder="Filter by name, role or mission" style="flex: 1; background: transparent; border: 0; outline: none; color: #E6EDF3; font: 13px 'Saira'"></label>
+<span class="r">14 OF 14</span></div>
+<div style="overflow-x: auto">
+<table style="width: 100%; border-collapse: collapse; min-width: 760px">
+<thead><tr><th class="th">Name</th><th class="th">Role</th><th class="th">Missions</th><th class="th">Command</th><th class="th">Second GO</th><th class="th">Status</th><th class="th">Last active</th></tr></thead>
+<tbody>
+<sc-for list="{{people}}" as="p" hint-placeholder-count="8">
+<tr>
+<td class="td"><span style="display: flex; flex-direction: column; gap: 1px"><a href="#" style="font-weight: 600; text-decoration: none">{{p.name}}</a><span class="m" style="font-size: 11px; color: #7D8A99">{{p.email}}</span></span></td>
+<td class="td">{{p.role}}</td>
+<td class="td" style="color: #C9D3DD">{{p.missions}}</td>
+<td class="td m" style="color: {{p.cc}}">{{p.cmd}}</td>
+<td class="td m" style="color: {{p.gc}}">{{p.go}}</td>
+<td class="td"><span class="tag" style="color: {{p.sc}}; border-color: {{p.sb}}">{{p.status}}</span></td>
+<td class="td m" style="font-size: 12px; color: #9DAAB8">{{p.last}}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+<div style="padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap"><span style="font-size: 13px; color: #9DAAB8">6 more, all viewers</span><button class="b">Show all 14</button></div>
+</section>
+
+<aside style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+
+<section class="pnl">
+<div class="ph"><span class="i">U2</span><h2 class="t">Invite</h2></div>
+<div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
+<label class="fld"><span class="lbl">Email</span><input value="ana.lindqvist@reflect-orbital.example"></label>
+<label class="fld"><span class="lbl">Role</span><select><option>Operator · can command, can give a second GO</option><option>Flight director</option><option>Engineer · setup, no commanding</option><option>Viewer</option><option>Org admin</option></select></label>
+<fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px"><legend class="lbl" style="margin-bottom: 8px">Missions</legend>
+<label style="display: flex; gap: 10px; align-items: center; font-size: 14px"><input type="checkbox" checked style="accent-color: #E6EDF3">Earendil</label>
+<label style="display: flex; gap: 10px; align-items: center; font-size: 14px"><input type="checkbox" style="accent-color: #E6EDF3">Earendil test bench</label>
+</fieldset>
+<button class="b pri" style="height: 40px">Send invite</button>
+</div>
+</section>
+
+<section class="pnl">
+<div class="ph"><span class="i">U3</span><h2 class="t">Service identities</h2><a href="#" class="r" style="color: #E6EDF3; text-decoration: none">NEW</a></div>
+<div class="si" style="border-top: 0"><span class="m" style="font-size: 13px">ingest-pipeline</span><span class="m" style="font-size: 11px; color: #9DAAB8">2s ago</span><span style="grid-column: 1 / -1; font-size: 12px; color: #9DAAB8">Telemetry write · Earendil</span></div>
+<div class="si"><span class="m" style="font-size: 13px">grafana-export</span><span class="m" style="font-size: 11px; color: #9DAAB8">12m ago</span><span style="grid-column: 1 / -1; font-size: 12px; color: #9DAAB8">Read only · Earendil</span></div>
+<div class="si" style="background: rgba(255,176,32,.04)"><span class="m" style="font-size: 13px">ci-catalog-import</span><span class="m" style="font-size: 11px; color: #9DAAB8">3d ago</span><span style="grid-column: 1 / -1; font-size: 12px; color: #FFC24D; display: flex; gap: 8px; align-items: center"><span class="s-cau"></span>Key is 104 days old, rotation policy is 90</span></div>
+</section>
+
+<section class="pnl">
+<div class="ph"><span class="i">U4</span><h2 class="t">Command policies</h2></div>
+<div style="padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; font-size: 13px">
+<div style="display: flex; flex-direction: column; gap: 3px"><span style="font: 600 15px 'Saira Condensed'; letter-spacing: .1em; text-transform: uppercase">Two-person power commands</span><span style="color: #9DAAB8">SET_POWER_MODE, SAFE_MODE_* need a second GO from an operator or flight director</span></div>
+<div style="display: flex; flex-direction: column; gap: 3px; border-top: 1px solid #1C2530; padding-top: 10px"><span style="font: 600 15px 'Saira Condensed'; letter-spacing: .1em; text-transform: uppercase">Fleet-wide reach</span><span style="color: #9DAAB8">Any uplink to more than 100 spacecraft needs a flight director</span></div>
+</div>
+</section>
+</aside>
+</div>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+renderVals() {
+const on = { status: 'On console', sc: '#E6EDF3', sb: '#E6EDF3' };
+const off = { status: 'Off shift', sc: '#9DAAB8', sb: '#2A3644' };
+const inv = { status: 'Invited', sc: '#9DAAB8', sb: '#2A3644' };
+const yes = '#E6EDF3', no = '#7D8A99';
+const rows = [
+Object.assign({ name: 'Donovan Rost', email: 'donovan@reflect-orbital.example', role: 'Org admin', missions: 'All', cmd: 'YES', go: 'YES', last: 'now' }, on),
+Object.assign({ name: 'Mira Kovac', email: 'mira@reflect-orbital.example', role: 'Flight director', missions: 'Earendil', cmd: 'YES', go: 'YES', last: 'now' }, on),
+Object.assign({ name: 'Tomás Reyes', email: 'tomas@reflect-orbital.example', role: 'Operator', missions: 'Earendil', cmd: 'YES', go: 'YES', last: 'now' }, on),
+Object.assign({ name: 'Priya Natarajan', email: 'priya@reflect-orbital.example', role: 'Operator', missions: 'Earendil', cmd: 'YES', go: 'YES', last: '4m ago' }, on),
+Object.assign({ name: 'Jonas Becker', email: 'jonas@reflect-orbital.example', role: 'Operator', missions: 'Earendil', cmd: 'YES', go: 'YES', last: '7h ago' }, off),
+Object.assign({ name: 'Lena Okafor', email: 'lena@reflect-orbital.example', role: 'Engineer', missions: 'Earendil, test bench', cmd: 'NO', go: 'NO', last: '1d ago' }, off),
+Object.assign({ name: 'Sam Whitaker', email: 'sam@reflect-orbital.example', role: 'Engineer', missions: 'Earendil', cmd: 'NO', go: 'NO', last: '3d ago' }, off),
+Object.assign({ name: 'Ana Lindqvist', email: 'ana.lindqvist@reflect-orbital.example', role: 'Operator', missions: 'Earendil', cmd: 'YES', go: 'YES', last: 'never' }, inv)
+];
+const people = rows.map((r) => Object.assign({}, r, { cc: r.cmd === 'YES' ? yes : no, gc: r.go === 'YES' ? yes : no }));
+return { people: people };
+}
+}
+</script>
+</body>
+</html>

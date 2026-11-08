@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>On call alarm · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{position:relative;background:#0A0E13;border:1px solid #1C2530}
+.b{height:48px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 15px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;flex:1}
+.tabb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;height:58px;border:0;background:transparent;color:#7D8A99;font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;cursor:pointer}
+.tabb.on{color:#E6EDF3;box-shadow:inset 0 2px 0 #E6EDF3}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; overflow: hidden; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 32px 32px">
+
+<header style="display: flex; align-items: stretch; border-bottom: 1px solid #1C2530; background: #070A0E">
+<a href="#" aria-label="Back to alarms" style="width: 52px; display: flex; align-items: center; justify-content: center; border-right: 1px solid #1C2530"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E6EDF3" stroke-width="2" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></a>
+<div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 10px 14px"><span class="m" style="font-size: 10px; color: #FF6B73">PAGED T+3m · EARENDIL</span><span style="font: 600 17px 'Saira Condensed'; letter-spacing: .14em; text-transform: uppercase">VBAT below limit</span></div>
+<span class="m" style="display: flex; align-items: center; padding: 0 14px; font-size: 12px; color: #9DAAB8; border-left: 1px solid #1C2530">02:23Z</span>
+</header>
+
+<main style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px">
+
+<section class="pnl red" style="padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; justify-content: space-between; align-items: center"><span style="font: 700 26px 'Saira Condensed'; letter-spacing: .08em">EARENDIL-312</span><span style="display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 1px solid #FF6B73; color: #FF6B73; font: 600 12px 'Saira Condensed'; letter-spacing: .16em"><span style="width: 7px; height: 7px; background: #FF4D57; transform: rotate(45deg)"></span>CRITICAL</span></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: #1C2530; border: 1px solid #1C2530">
+<div style="background: #0A0E13; padding: 10px; display: flex; flex-direction: column; gap: 2px; box-shadow: inset 2px 0 0 #FF4D57"><span class="lbl">VBAT</span><span class="n" style="font-size: 30px; color: #FF6B73">23.1<span style="font-size: 12px; color: #7D8A99"> V</span></span></div>
+<div style="background: #0A0E13; padding: 10px; display: flex; flex-direction: column; gap: 2px"><span class="lbl">Red limit</span><span class="n" style="font-size: 30px">24.0<span style="font-size: 12px; color: #7D8A99"> V</span></span></div>
+</div>
+<svg viewBox="0 0 340 70" style="width: 100%; height: 70px; display: block; background: #05070A; border: 1px solid #141B24" role="img" aria-label="Battery voltage falling over the last 6 orbits">
+<line x1="0" y1="44" x2="340" y2="44" stroke="#FF4D57" stroke-dasharray="5 4" stroke-width="1"></line>
+<polyline points="0,10 30,22 50,12 85,26 105,16 140,31 160,21 195,37 215,27 250,43 270,33 305,52 325,42 340,56" fill="none" stroke="#E6EDF3" stroke-width="1.8"></polyline>
+</svg>
+<span class="m" style="font-size: 11px; color: #9DAAB8">−0.4 V/ORB · 3 SISTERS IN P07 TRENDING</span>
+</section>
+
+<section class="pnl" style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="lbl">Next AOS · Fairbanks</span><span class="n" style="font-size: 26px; color: #E6EDF3">T−00:36:02</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px; text-align: right"><span class="lbl">Umbra</span><span class="m" style="font-size: 15px">T−00:57</span></div>
+</section>
+
+<section class="pnl" style="padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #0F141B; border-color: #2A3644">
+<p class="lbl" style="color: #C9D3DD">Your GO is requested</p>
+<span style="font: 600 20px 'Saira Condensed'; letter-spacing: .1em; text-transform: uppercase; line-height: 1.2">Low power safe · 4 SC</span>
+<span style="font-size: 13px; color: #9DAAB8">Donovan R. · poll 5 GO, 1 HOLD (yours). Uplinks at each next AOS.</span>
+<div class="m" style="font-size: 11px; color: #C9D3DD">SET_POWER_MODE LOW · PAYLOAD_PAUSE</div>
+<div style="display: flex; gap: 10px">
+<button class="b" style="background: #E6EDF3; color: #05070A; border-color: #E6EDF3">GO</button>
+<button class="b" style="color: #FF6B73; border-color: #6B2A30">NO-GO</button>
+</div>
+</section>
+
+<div style="display: flex; gap: 10px"><button class="b">Acknowledge</button><button class="b">Hand off</button></div>
+<span class="m" style="font-size: 10px; color: #7D8A99; text-align: center">NEW UPLINK SEQUENCES ARE DESKTOP ONLY, BY DESIGN</span>
+</main>
+
+<nav aria-label="Main" style="display: flex; border-top: 1px solid #1C2530; background: #070A0E; padding-bottom: 6px">
+<button class="tabb"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Now</button>
+<button class="tabb on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 2 20h20L12 3Z"></path><path d="M12 10v4M12 17v.5"></path></svg>Alarms 17</button>
+<button class="tabb"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>GO polls 2</button>
+<button class="tabb"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>Search</button>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Catalog import · Setup · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530;flex-wrap:wrap}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD;margin:0}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.tag{display:inline-flex;align-items:center;gap:7px;height:22px;padding:0 8px;font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.b{height:34px;padding:0 14px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none}
+.b.pri{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.s-cau{width:10px;height:9px;background:#FFB020;clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+.rail a{display:flex;align-items:center;gap:10px;height:36px;padding:0 12px;color:#9DAAB8;text-decoration:none;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border-left:2px solid transparent}
+.rail a:hover{color:#E6EDF3;background:#0F141B}
+.rail a.on{color:#E6EDF3;background:#0F141B;border-left-color:#E6EDF3}
+.rail .x{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;width:16px}
+.rail .c{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99;letter-spacing:0}
+.rail .g{font:600 11px 'Saira Condensed',sans-serif;letter-spacing:.22em;text-transform:uppercase;color:#7D8A99;padding:14px 14px 6px}
+.mode{display:flex;align-items:center;border:1px solid #2A3644}
+.mode a,.mode span{height:30px;padding:0 12px;display:flex;align-items:center;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;text-decoration:none;color:#9DAAB8}
+.mode .on{background:#E6EDF3;color:#05070A}
+.ro{background:#0A0E13;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.seg{height:32px;padding:0 12px;border:0;border-right:1px solid #1C2530;background:transparent;color:#9DAAB8;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+.seg.on{background:#0F141B;color:#E6EDF3;box-shadow:inset 0 -2px 0 #E6EDF3}
+.d{display:grid;grid-template-columns:22px 40px minmax(180px,1.1fr) minmax(0,1.6fr) minmax(0,1fr);gap:12px;align-items:start;padding:11px 16px;border-top:1px solid #1C2530;font-size:13px}
+.op{font:600 15px 'Azeret Mono',monospace;line-height:1.2}
+.kind{font:500 10px 'Azeret Mono',monospace;color:#9DAAB8;border:1px solid #2A3644;padding:2px 4px;text-align:center}
+.imp{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:12px 16px;border-top:1px solid #1C2530}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid #2A3644;cursor:pointer}
+</style>
+</helmet>
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; min-height: 100vh; display: flex; flex-direction: column; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 40px 40px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: stretch; border-bottom: 1px solid #1C2530; background: #070A0E; min-height: 52px">
+<div style="display: flex; align-items: center; gap: 12px; padding: 0 18px; border-right: 1px solid #1C2530">
+<svg width="20" height="20" viewBox="0 0 30 30" aria-hidden="true"><path d="M15 2 28 15 15 28 2 15Z" fill="none" stroke="#E6EDF3" stroke-width="2"></path><path d="M15 9 21 15 15 21 9 15Z" fill="#E6EDF3"></path></svg>
+<span style="font: 700 16px 'Saira Condensed'; letter-spacing: .36em">CADENCE</span>
+</div>
+<button style="display: flex; align-items: center; gap: 10px; padding: 0 18px; border: 0; border-right: 1px solid #1C2530; background: transparent; color: #E6EDF3; cursor: pointer; font: 600 14px 'Saira Condensed'; letter-spacing: .16em; text-transform: uppercase"><span style="color: #7D8A99">Reflect Orbital /</span>Earendil</button>
+<div style="display: flex; align-items: center; padding: 0 18px; border-right: 1px solid #1C2530"><nav class="mode" aria-label="Mode"><a href="Now.dc.html">Ops</a><span class="on" aria-current="page">Setup</span></nav></div>
+<button style="flex: 1 1 240px; display: flex; align-items: center; gap: 10px; padding: 0 18px; border: 0; border-right: 1px solid #1C2530; background: transparent; color: #7D8A99; cursor: pointer; font: 400 14px 'Saira'; text-align: left"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7D8A99" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><span style="flex: 1">Spacecraft, profiles, commands, settings…</span><span class="m" style="font-size: 11px; border: 1px solid #2A3644; padding: 1px 6px">⌘K</span></button>
+<div class="m" style="display: flex; align-items: center; gap: 22px; padding: 0 18px; font-size: 13px"><span><span style="color: #7D8A99">CONFIG</span> r5</span><span><span style="color: #7D8A99">UTC</span> 03:52:41</span></div>
+<button aria-label="Account menu for Donovan" style="width: 52px; border: 0; border-left: 1px solid #1C2530; background: transparent; color: #E6EDF3; font: 600 14px 'Saira Condensed'; letter-spacing: .1em; cursor: pointer">DR</button>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; flex: 1">
+<nav class="rail" aria-label="Setup" style="flex: 0 0 220px; box-sizing: border-box; padding: 6px 0 14px; border-right: 1px solid #1C2530; display: flex; flex-direction: column; background: #070A0E">
+<span class="g">Mission</span>
+<a href="Setup.dc.html"><span class="x">01</span>Readiness</a>
+<a href="#"><span class="x">02</span>Spacecraft<span class="c">500</span></a>
+<a href="Profile.dc.html"><span class="x">03</span>Profiles<span class="c">2</span></a>
+<a href="#" class="on"><span class="x">04</span>Catalog<span class="c">v14</span></a>
+<a href="#"><span class="x">05</span>Comms &amp; routing</a>
+<a href="#"><span class="x">06</span>Ground stations<span class="c">6</span></a>
+<a href="#"><span class="x">07</span>Data sources<span class="c">4</span></a>
+<a href="#"><span class="x">08</span>Apps</a>
+<span class="g">Organization</span>
+<a href="People.dc.html"><span class="x">··</span>People &amp; access</a>
+<a href="#"><span class="x">··</span>Missions</a>
+<a href="#"><span class="x">··</span>Settings</a>
+<a href="#"><span class="x">··</span>Audit log</a>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 20px 24px 28px; display: flex; flex-direction: column; gap: 16px">
+
+<section style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<nav aria-label="Breadcrumb" class="m" style="font-size: 12px; color: #7D8A99; display: flex; gap: 10px"><a href="#" style="text-decoration: none">CATALOG</a><span>/</span><span style="color: #E6EDF3">IMPORT v15</span></nav>
+<h1 style="margin: 0; font: 600 36px 'Saira Condensed'; letter-spacing: .08em; text-transform: uppercase">Catalog v14 → v15</h1>
+<span style="font-size: 14px; color: #9DAAB8"><span class="m" style="color: #E6EDF3">earendil_fsw_3.2.0.xtce.xml</span> · XTCE 1.2 · 1.8 MB · parsed and validated, no schema errors</span>
+</div>
+<button class="b">Replace file</button>
+</section>
+
+<section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1px; background: #1C2530; border: 1px solid #1C2530">
+<div class="ro"><span class="lbl">Commands</span><span class="n" style="font-size: 28px">212 → 218</span><span style="font-size: 12px; color: #9DAAB8">+7 · ~4 · −1</span></div>
+<div class="ro"><span class="lbl">Telemetry points</span><span class="n" style="font-size: 28px">335 → 341</span><span style="font-size: 12px; color: #9DAAB8">+9 · ~6 · −3</span></div>
+<div class="ro"><span class="lbl">Unchanged</span><span class="n" style="font-size: 28px">517</span><span style="font-size: 12px; color: #9DAAB8">of 547 declarations</span></div>
+<div class="ro" style="box-shadow: inset 0 2px 0 #FFB020"><span class="lbl">Breaking</span><span class="n" style="font-size: 28px; color: #FFC24D">3</span><span style="font-size: 12px; color: #9DAAB8">in use by live config</span></div>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+
+<section class="pnl" style="flex: 999 1 640px; min-width: 0">
+<div class="ph"><span class="i">C1</span><h2 class="t">Diff</h2><span class="r">SORTED BY RISK</span></div>
+<div role="tablist" aria-label="Filter changes" style="display: flex; flex-wrap: wrap; border-bottom: 1px solid #1C2530">
+<button role="tab" aria-selected="true" class="seg on">All 30</button>
+<button role="tab" aria-selected="false" class="seg">Breaking 3</button>
+<button role="tab" aria-selected="false" class="seg">Added 16</button>
+<button role="tab" aria-selected="false" class="seg">Changed 10</button>
+<button role="tab" aria-selected="false" class="seg">Removed 4</button>
+</div>
+<div class="d" style="border-top: 0; display: grid; font: 600 11px 'Saira Condensed'; letter-spacing: .18em; color: #7D8A99; text-transform: uppercase; padding-top: 10px; padding-bottom: 8px"><span></span><span>Kind</span><span>Name</span><span>Change</span><span>Used by</span></div>
+<sc-for list="{{diff}}" as="d" hint-placeholder-count="9">
+<div class="d" style="background: {{d.bg}}">
+<span class="op" style="color: {{d.oc}}">{{d.op}}</span>
+<span class="kind">{{d.kind}}</span>
+<span class="m" style="font-size: 13px; font-weight: 500; word-break: break-all">{{d.name}}</span>
+<span style="color: #C9D3DD">{{d.what}}</span>
+<span style="color: {{d.uc}}">{{d.used}}</span>
+</div>
+</sc-for>
+<div style="padding: 10px 16px; border-top: 1px solid #1C2530; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap"><span style="font-size: 13px; color: #9DAAB8">21 more, all additions or unused</span><button class="b">Show all 30</button></div>
+</section>
+
+<aside style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+<section class="pnl">
+<div class="ph"><span class="i">C2</span><h2 class="t">Impact on live config</h2></div>
+<div class="imp" style="border-top: 0"><span style="font-weight: 600">40 queued uplinks</span><span class="tag" style="color: #FFC24D"><span class="s-cau"></span>Breaks</span><span style="grid-column: 1 / -1; font-size: 13px; color: #9DAAB8">SET_ADCS_MODE × 40, waiting for AOS. The new duration unit would reject them.</span></div>
+<div class="imp"><span style="font-weight: 600">2 procedures</span><span class="tag" style="color: #FFC24D"><span class="s-cau"></span>Update</span><span style="grid-column: 1 / -1; font-size: 13px; color: #9DAAB8">"Fine pointing" and "Safe mode recovery" pass duration in seconds.</span></div>
+<div class="imp"><span style="font-weight: 600">2 limits · 1 dashboard</span><span class="tag" style="color: #FFC24D"><span class="s-cau"></span>Remap</span><span style="grid-column: 1 / -1; font-size: 13px; color: #9DAAB8">HK.sa_string3_v is removed. Map it to EPS.sa_current_string[3].</span></div>
+<div style="padding: 12px 16px; border-top: 1px solid #1C2530"><button class="b">Fix all 3 before staging</button></div>
+</section>
+
+<section class="pnl">
+<div class="ph"><span class="i">C3</span><h2 class="t">Roll out to</h2></div>
+<div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+<label class="opt" style="border-color: #E6EDF3; background: rgba(230,237,243,.04)"><input type="radio" name="rollout" checked style="accent-color: #E6EDF3; margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">Earendil Block 2 first · 50 SC</span><span style="font-size: 13px; color: #9DAAB8">Recommended. Runs v15 on the new batch while Block 1 stays on v14.</span></span></label>
+<label class="opt"><input type="radio" name="rollout" style="accent-color: #E6EDF3; margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 14px; font-weight: 600">All profiles · 550 SC</span><span style="font-size: 13px; color: #9DAAB8">Needs the 3 breaking items fixed first</span></span></label>
+<button class="b pri" style="height: 44px; margin-top: 8px; font-size: 15px">Stage v15 for Block 2</button>
+<span class="m" style="font-size: 11px; color: #7D8A99; text-align: center">APPLIES WITH THE NEXT REVISION · v14 KEPT FOR ROLLBACK</span>
+</div>
+</section>
+</aside>
+</div>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1200}}'>
+class Component extends DCLogic {
+renderVals() {
+const brk = 'rgba(255,176,32,.05)';
+const base = [
+{ op: '~', kind: 'CMD', name: 'SET_ADCS_MODE', what: 'arg duration: u16 seconds → u32 milliseconds', used: '40 queued uplinks · 1 procedure', b: true },
+{ op: '−', kind: 'TLM', name: 'HK.sa_string3_v', what: 'Removed, replaced by per-string current', used: '2 limits · 1 dashboard', b: true },
+{ op: '~', kind: 'CMD', name: 'SAFE_MODE_EXIT', what: 'new required arg confirm_code', used: '1 procedure', b: true },
+{ op: '~', kind: 'TLM', name: 'HK.battery_voltage', what: 'red limit 24.0 → 23.8 V, yellow unchanged', used: '1 limit · 500 SC' },
+{ op: '~', kind: 'CMD', name: 'PAYLOAD_PAUSE', what: 'new optional arg resume_after', used: '1 procedure · compatible' },
+{ op: '+', kind: 'TLM', name: 'EPS.sa_current_string[1..4]', what: '4 new points, A, 1 Hz', used: 'not used yet' },
+{ op: '+', kind: 'CMD', name: 'SET_HEATER_PROFILE', what: 'New command · profile, setpoint', used: 'not used yet' },
+{ op: '+', kind: 'TLM', name: 'THM.battery_temp_2', what: 'Second battery thermistor, °C', used: 'not used yet' },
+{ op: '−', kind: 'CMD', name: 'LEGACY_RESET', what: 'Removed', used: 'unused · safe' }
+];
+const diff = base.map((d) => ({
+op: d.op, kind: d.kind, name: d.name, what: d.what, used: d.used,
+oc: d.op === '+' ? '#9DAAB8' : d.b ? '#FFC24D' : '#E6EDF3',
+uc: d.b ? '#FFC24D' : '#9DAAB8',
+bg: d.b ? brk : 'transparent'
+}));
+return { diff: diff };
+}
+}
+</script>
+</body>
+</html>

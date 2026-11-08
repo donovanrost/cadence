@@ -1,0 +1,102 @@
+# Apogee UI team charter
+
+**Mission:** reinvent the Cadence UI as a Vue 3 single-page app built in the **Apogee** design
+language. The design canvas is the inspiration, not a spec to copy pixel for pixel.
+
+- Design canvas (live): https://claude.ai/artifact/3J6o3pyVdREHiXvxX8HVrw
+- Local copy of every board: `docs/apogee/design-reference/*.dc.html` (+ `canvas.json` for titles/grouping).
+  Each file is self-contained HTML; the `<script data-dc-script>` block holds sample data.
+- Branch / worktree: `ui/apogee-spa` at `/Users/donovanrost/.herdr/worktrees/cadence/ui-apogee-spa`.
+  Everyone works in this one worktree. Do not create other worktrees or branches.
+
+## Board map (from canvas.json)
+
+| Group | Boards |
+| --- | --- |
+| Design language | `Main` (Apogee language), `Fonts` (type study, **Saira + Saira Condensed + Azeret Mono chosen**), `TimePicker` (component) |
+| Operator shift | `Journeys`, `Now` (J1 start of shift), `Investigate` (J2 alarm), `Command` (J3 command a group), `Contacts` (J4 plan contacts), `Palette` (J5 ⌘K), `Mobile` (J6 on call) |
+| Setup | `SetupJourneys`, `Setup` (S1 readiness), `AddSpacecraft` (S2), `Catalog` (S3 XTCE import + diff), `Profile` (S4), `People` (S5) |
+| Commanding | `CommandFlow`, `Compose` (C1), `Approve` (second operator), `Uplink` (uplink & verify, live) |
+| Scheduling | `ScheduleFlow`, `PassPrediction` (K0), `SchedulePlan` (K1), `Replan` (K2 station down), `PassReview` (K3 planned vs flown) |
+
+## Roster
+
+The director is the session that hired you. Pane IDs are herdr pane IDs.
+
+| Name | Role | Pane | Owns (write access) |
+| --- | --- | --- | --- |
+| director | Orchestrator, priorities, final say on scope | `w0Q:p1` | `docs/apogee/TEAM.md`, `docs/apogee/STATUS.md` |
+| lead | Tech lead / frontend architect | see `docs/apogee/ROSTER.md` | SPA scaffold, shell, router, API client, shared components, build + Phoenix serving glue (with api) |
+| ux | UX & design-system designer | see ROSTER | `docs/apogee/ux/**`, design tokens spec, visual review |
+| api | Backend / Phoenix API engineer | see ROSTER | `apps/**` Elixir code, API contracts in `docs/apogee/api/**` |
+| fe-ops | Feature engineer, Ops mode | see ROSTER | SPA feature dirs for Now, alarms, contacts, commanding, palette |
+| fe-setup | Feature engineer, Setup mode | see ROSTER | SPA feature dirs for readiness, spacecraft, catalog, profiles, people |
+| qa | QA & accessibility | see ROSTER | e2e/browser tests, `docs/apogee/qa/**` |
+
+Live pane IDs are in `docs/apogee/ROSTER.md` (written by the director after hiring).
+
+## Communicating (herdr)
+
+Send a teammate a message with:
+
+```bash
+herdr pane run <pane_id> "[from <your-name>] <message>"
+```
+
+- Keep messages to a few lines. Put anything longer in a file under `docs/apogee/` and send the path.
+- Always prefix with `[from <name>]` so the receiver knows who to answer.
+- Before sending, you may check whether they're busy: `herdr pane get <pane_id>` (`agent_status`).
+  Messages to a working agent are queued, so sending is fine either way.
+- Report to the director (`w0Q:p1`) on: milestone done, blocker, or a decision that's above your pay grade.
+  Don't report routine progress.
+- Never close, kill or rename another person's pane. Never run `herdr server stop`.
+
+## Architecture defaults (lead may refine; record changes in `docs/apogee/ARCHITECTURE.md`)
+
+- **New SPA app** inside the existing pnpm workspace: `frontend/apps/console` (Vue 3 + TS + Vite,
+  `vue-router`, Pinia if needed, Tailwind v4). Follow `frontend/AGENTS.md` and
+  `frontend/docs/code-standard.md` (typed domain models, runtime decoding of API responses).
+- It is a **standalone SPA**, not a module-federation remote and not LiveVue. Do not modify the
+  existing federation host or `packages/ui`/`packages/design-tokens`; Apogee tokens/components
+  live in the new app (or a new `frontend/packages/apogee-ui` if the lead decides).
+- **Served by Phoenix** at a new path (default `/console/*`, catch-all returns the SPA index) behind
+  the existing browser session; the SPA calls JSON endpoints with the session cookie + CSRF token.
+  Existing LiveView pages keep working; we are building alongside, not deleting.
+- **Live data** via Phoenix Channels (the `phoenix` JS client) where the design shows live values
+  (Now, Uplink & verify, alarms).
+- **Modifying APIs is allowed.** Prefer clean, purpose-built JSON endpoints for the SPA over
+  contorting the UI around the old application-host query bridge. The api engineer owns the
+  contracts; document each in `docs/apogee/api/`.
+
+## Quality bar
+
+- Elixir: `mix compile --warnings-as-errors`, `mix credo --strict` (don't add violations),
+  `mix format`, per-app tests (`cd apps/cadence_web && mix test`).
+- Frontend: typecheck + lint for the new app pass; no file over 400 lines; no render
+  function/template block over ~50 lines without extraction.
+- Real data only. No invented stats in shipped UI; if the backend lacks something, the api
+  engineer adds it or the UI shows an honest empty state.
+- Accessibility per the canvas: real buttons/links/inputs, 4.5:1 text contrast, ≥44px targets on
+  primary actions, status never encoded by color alone (the canvas pairs shape + color + text).
+- The CLAUDE.md "UI rules" about `assets/css/components` and `<.button>` etc. govern the
+  LiveView/HEEx layer, not the new SPA.
+
+## Git
+
+- Commit small and often on `ui/apogee-spa`. Stage **only your own paths** (`git add <paths>`, never
+  `git add -A`) because others are working in the same tree.
+- Conventional commit messages (`feat(console): …`, `feat(api): …`).
+- Never push, rebase, reset, or stash. Never commit others' files. The director handles PRs.
+
+## Phases
+
+1. **Foundations (now):** ux writes the design spec + IA; lead scaffolds the SPA + shell + Phoenix
+   serving; api inventories endpoints, adds SPA session/bootstrap endpoints, and maps each screen to data.
+   fe-ops / fe-setup study their boards and the existing LiveView pages + APIs for their area and
+   draft a per-screen data plan; they start building when lead announces the scaffold is ready.
+   qa sets up the browser test harness and a seeded dev login.
+2. **Screens:** ops shift (Now → Investigate → Command → Contacts → Palette) and setup
+   (Readiness → Spacecraft → Catalog → Profiles → People) in parallel.
+3. **Flows:** commanding end to end (Compose → Approve → Uplink) and scheduling
+   (Prediction → Plan → Replan → Review).
+4. **Polish:** mobile on-call, accessibility pass, visual review against the canvas.

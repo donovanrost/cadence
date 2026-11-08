@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Commanding journeys · Cadence</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Saira:wght@400;500;600&amp;family=Saira+Condensed:wght@500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#05070A}
+a{color:#E6EDF3}a:hover{color:#FFFFFF}
+.m{font-family:'Azeret Mono',ui-monospace,monospace}
+.n{font-family:Saira,sans-serif;font-variant-numeric:tabular-nums}
+.lbl{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.2em;text-transform:uppercase;color:#7D8A99;margin:0}
+.pnl{position:relative;background:#0A0E13;border:1px solid #1C2530}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #1C2530;flex-wrap:wrap}
+.ph .t{font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#C9D3DD;margin:0}
+.ph .i{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.ph .r{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.tag{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 9px;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border:1px solid currentColor;white-space:nowrap}
+.b{height:32px;padding:0 12px;border:1px solid #2A3644;background:#0F141B;color:#E6EDF3;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none}
+.b.pri{background:#E6EDF3;color:#05070A;border-color:#E6EDF3}
+.s-nom{width:8px;height:8px;background:#2FD08A;flex:none}
+.s-cau{width:10px;height:9px;background:#FFB020;clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+.s-crit{width:8px;height:8px;background:#FF4D57;transform:rotate(45deg);flex:none}
+.s-stale{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1.5px,transparent 1.5px 4px)}
+.s-off{width:8px;height:8px;flex:none;box-sizing:border-box;border:1px dashed #9DAAB8}
+.rail a{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;color:#9DAAB8;text-decoration:none;font:600 14px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;border-left:2px solid transparent}
+.rail a:hover{color:#E6EDF3;background:#0F141B}
+.rail a.on{color:#E6EDF3;background:#0F141B;border-left-color:#E6EDF3}
+.rail .n{font:500 10px 'Azeret Mono',monospace;color:#7D8A99;width:16px}
+.rail .c{margin-left:auto;font:500 11px 'Azeret Mono',monospace;color:#7D8A99;letter-spacing:0}
+.cell{aspect-ratio:1;background:#164E37}
+.c-cau{background:#FFB020}
+.c-crit{background:#FF4D57;outline:1px solid #FF4D57;outline-offset:1.5px}
+.c-stale{background-color:#140F26;box-sizing:border-box;border:1px solid #A497FF;background-image:repeating-linear-gradient(135deg,#A497FF 0 1px,transparent 1px 3.5px)}
+.c-live{outline:1px solid #E6EDF3;outline-offset:1.5px}
+.ro{background:#0A0E13;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.ro .v{font:500 30px Saira,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;line-height:1}
+.ro .s{font:400 12px 'Saira',sans-serif;color:#9DAAB8}
+
+.p{margin:0;font-size:15px;line-height:1.55;color:#9DAAB8}
+.stg{background:#0A0E13;padding:18px 18px 20px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.stg .k{font:500 11px 'Azeret Mono',monospace;color:#7D8A99}
+.stg .h{font:700 20px 'Saira Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;margin:0}
+.stg .w{font:500 11px 'Azeret Mono',monospace;color:#C9D3DD;text-transform:uppercase}
+.stg .d{font-size:13px;line-height:1.5;color:#9DAAB8;margin:0}
+.st{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border:1px solid #2A3644;background:#0F141B;font:600 13px 'Saira Condensed',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#C9D3DD;white-space:nowrap}
+.arw{color:#3A4654;font:500 12px 'Azeret Mono',monospace}
+.jc{display:flex;flex-direction:column;min-width:0}
+.jc .bd{padding:18px;display:flex;flex-direction:column;gap:14px;flex:1}
+.jc .sc{font:600 22px 'Saira Condensed',sans-serif;letter-spacing:.06em;text-transform:uppercase;margin:0;line-height:1.15}
+.kv{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px 12px;font-size:13px}
+.kv dt{font:600 12px 'Saira Condensed',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#7D8A99}
+.kv dd{margin:0;color:#C9D3DD}
+.rule{display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;padding:14px 18px;border-top:1px solid #1C2530}
+.rule:first-of-type{border-top:0}
+.rule .n2{font:500 11px 'Azeret Mono',monospace;color:#7D8A99;padding-top:3px}
+.rule b{display:block;font:600 15px 'Saira Condensed',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#E6EDF3;margin-bottom:3px;font-weight:600}
+.rule span{font-size:13px;line-height:1.5;color:#9DAAB8}
+.fx{display:grid;grid-template-columns:64px minmax(0,1fr) minmax(0,1fr);gap:16px;padding:12px 18px;border-top:1px solid #1C2530;font-size:13px;line-height:1.5}
+.fx:first-of-type{border-top:0}
+</style>
+</helmet>
+<div style="font-family: 'Saira', system-ui, sans-serif; color: #E6EDF3; min-height: 100vh; box-sizing: border-box; padding: 56px 64px 64px; display: flex; flex-direction: column; gap: 40px; background-color: #05070A; background-image: linear-gradient(rgba(230,237,243,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(230,237,243,.025) 1px, transparent 1px); background-size: 40px 40px">
+
+<section style="display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-end; justify-content: space-between">
+<div style="display: flex; flex-direction: column; gap: 12px; max-width: 820px">
+<p class="lbl" style="color: #E6EDF3">Commanding · end to end</p>
+<h1 style="margin: 0; font: 600 52px 'Saira Condensed'; letter-spacing: .06em; text-transform: uppercase; line-height: 1">Sent is not done</h1>
+<p class="p" style="font-size: 17px">Today commanding is one cramped page. Its first step is unclear, it caps targets at 25, and every target reads SCID —. In the new flow a command passes through seven stations, each with one owner and one clear exit. It turns green only when telemetry proves the spacecraft did what was asked.</p>
+</div>
+<div class="m" style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #7D8A99; text-align: right">
+<span>BOARDS IN THIS ROW</span>
+<span style="color: #E6EDF3">C-COMPOSE · C-APPROVE · C-UPLINK</span>
+<span>CONTINGENCY VARIANT · J3</span>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 14px">
+<p class="lbl">The seven stations</p>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1px; background: #1C2530; border: 1px solid #1C2530">
+<div class="stg"><span class="k">01 · OPERATOR</span><h2 class="h">Compose</h2><p class="d">Pick commands from the catalog and a target group. The arguments, ranges and units come from the database.</p><span class="w">Exit: staged request</span></div>
+<div class="stg"><span class="k">02 · CADENCE</span><h2 class="h">Check</h2><p class="d">Identity, catalog version, argument ranges and constraints are checked per target, before anyone is asked.</p><span class="w">Exit: all checks GO</span></div>
+<div class="stg"><span class="k">03 · SECOND OPERATOR</span><h2 class="h">Approve</h2><p class="d">Review exactly what will radiate and why. Approve, approve with exclusions, or send it back.</p><span class="w">Exit: GO, signed</span></div>
+<div class="stg"><span class="k">04 · CADENCE</span><h2 class="h">Release</h2><p class="d">At each target's next AOS, at a time tag, or in waves with an automatic gate between them.</p><span class="w">Exit: queued at station</span></div>
+<div class="stg"><span class="k">05 · GROUND STATION</span><h2 class="h">Radiate</h2><p class="d">Bytes leave the antenna inside a pass. You can abort any uplink until it starts.</p><span class="w">Exit: radiated</span></div>
+<div class="stg"><span class="k">06 · SPACECRAFT</span><h2 class="h">Acknowledge</h2><p class="d">The spacecraft accepts the command and reports that it executed. No ACK schedules a retry at the next pass.</p><span class="w">Exit: executed</span></div>
+<div class="stg" style="box-shadow: inset 0 2px 0 #2FD08A"><span class="k" style="color: #4FDB9E">07 · TELEMETRY</span><h2 class="h">Verify</h2><p class="d">A verifier point reads the commanded value within its window. Only this turns the command green.</p><span class="w" style="color: #4FDB9E">Exit: verified</span></div>
+</div>
+</section>
+
+<section class="pnl">
+<div class="ph"><span class="i">M1</span><h2 class="t">Command state model</h2><span class="r">PROGRESS IS GRAY · OUTCOMES CARRY STATUS COLOR</span></div>
+<div style="padding: 20px 18px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span class="st" style="border-style: dashed; color: #9DAAB8">Draft</span><span class="arw">→</span>
+<span class="st">Staged</span><span class="arw">→</span>
+<span class="st">Approved</span><span class="arw">→</span>
+<span class="st">Queued</span><span class="arw">→</span>
+<span class="st" style="background: #E6EDF3; color: #05070A; border-color: #E6EDF3">Radiating</span><span class="arw">→</span>
+<span class="st">Executed</span><span class="arw">→</span>
+<span class="st" style="color: #4FDB9E; border-color: #2FD08A"><span class="s-nom"></span>Verified</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span class="m" style="font-size: 11px; color: #7D8A99; width: 120px">OFF-RAMPS</span>
+<span class="st" style="color: #FFC24D; border-color: #FFB020"><span class="s-cau"></span>No ACK · retry</span>
+<span class="st" style="color: #FF6B73; border-color: #FF4D57"><span class="s-crit"></span>Verify failed</span>
+<span class="st" style="color: #BDB3FF; border-color: #A497FF"><span class="s-stale"></span>Unverifiable · no TLM</span>
+<span class="st" style="color: #9DAAB8">Rejected</span>
+<span class="st" style="color: #9DAAB8">Expired</span>
+<span class="st" style="color: #9DAAB8">Aborted</span>
+</div>
+</div>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 14px">
+<p class="lbl">Three ways into the flow</p>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px">
+<article class="pnl jc">
+<div class="ph"><span class="i">C1</span><h3 class="t">Routine change to a group</h3><span class="r" style="color: #E6EDF3">DRAWN →</span></div>
+<div class="bd">
+<p class="sc">Raise the battery heater setpoint on planes 03 and 04 before eclipse season</p>
+<dl class="kv"><dt>Who</dt><dd>Donovan composes, Mira approves</dd><dt>Scale</dt><dd>100 spacecraft, 1 command, 3 waves</dd><dt>Pace</dt><dd>Hours. Nobody is in a hurry, so correctness wins.</dd><dt>Boards</dt><dd><a href="Compose.dc.html">Compose</a> · <a href="Approve.dc.html">Approve</a> · <a href="Uplink.dc.html">Uplink</a></dd></dl>
+</div>
+</article>
+<article class="pnl jc">
+<div class="ph"><span class="i">C2</span><h3 class="t">Contingency from an alarm</h3><span class="r" style="color: #E6EDF3">DRAWN →</span></div>
+<div class="bd">
+<p class="sc">Shed load on four plane 07 spacecraft after VBAT goes red on 312</p>
+<dl class="kv"><dt>Who</dt><dd>Operator on console, any second operator</dd><dt>Scale</dt><dd>4 spacecraft, 2 commands, each at its own AOS</dd><dt>Pace</dt><dd>Minutes. The flow is the same with a compressed GO/NO-GO poll.</dd><dt>Boards</dt><dd><a href="Investigate.dc.html">J2 Alarm</a> · <a href="Command.dc.html">J3 Command a group</a></dd></dl>
+</div>
+</article>
+<article class="pnl jc">
+<div class="ph"><span class="i">C3</span><h3 class="t">Pass-planned sequence</h3><span class="r">USES COMPOSE</span></div>
+<div class="bd">
+<p class="sc">Time-tag a payload calibration to run over the Awarua pass tonight</p>
+<dl class="kv"><dt>Who</dt><dd>Mission planner, approved by the shift lead</dd><dt>Scale</dt><dd>1 spacecraft, a 6-step stack with delays</dd><dt>Pace</dt><dd>Planned a day ahead, executes onboard at a time tag.</dd><dt>Boards</dt><dd><a href="Compose.dc.html">Compose</a> with the <a href="TimePicker.dc.html">time picker</a> · <a href="Contacts.dc.html">J4 Contacts</a></dd></dl>
+</div>
+</article>
+</div>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+<section class="pnl" style="flex: 1 1 520px; min-width: 0">
+<div class="ph"><span class="i">R</span><h2 class="t">Rules on every commanding screen</h2></div>
+<div class="rule"><span class="n2">01</span><div><b>Identity on every line</b><span>Name, SCID and profile on every target row, everywhere. A command screen never shows a dash where an identity belongs.</span></div></div>
+<div class="rule"><span class="n2">02</span><div><b>Target by query, not by card</b><span>Profile, plane, group or status, from 1 spacecraft up to the fleet. The query stays live until release.</span></div></div>
+<div class="rule"><span class="n2">03</span><div><b>The catalog writes the form</b><span>Types, ranges, units and enums come from the XTCE database. A value out of range can't be staged.</span></div></div>
+<div class="rule"><span class="n2">04</span><div><b>Show what will radiate</b><span>The approver sees the encoded packet, not a summary of it.</span></div></div>
+<div class="rule"><span class="n2">05</span><div><b>Two people for anything hazardous</b><span>You can't approve your own request. Hazardous commands also need the flight director.</span></div></div>
+<div class="rule"><span class="n2">06</span><div><b>Fleet changes go in waves</b><span>A canary wave first. Each later wave waits on a gate that the verifiers decide.</span></div></div>
+</section>
+<section class="pnl" style="flex: 1 1 520px; min-width: 0">
+<div class="ph"><span class="i">F</span><h2 class="t">What this fixes from the review</h2></div>
+<div class="fx"><span class="m" style="color: #FF6B73">#03</span><span style="color: #C9D3DD">Targets show SCID — for every spacecraft</span><span style="color: #9DAAB8">Identity is a check in station 02. A missing SCID is a NO-GO, not a blank.</span></div>
+<div class="fx"><span class="m" style="color: #FFC24D">#13</span><span style="color: #C9D3DD">First step unclear, stage picker at the bottom</span><span style="color: #9DAAB8">The stations are the page header. You always know where you are.</span></div>
+<div class="fx"><span class="m" style="color: #FFC24D">#13</span><span style="color: #C9D3DD">Up to 25 targets, as huge cards</span><span style="color: #9DAAB8">A query with a 500-cell matrix. Size is free.</span></div>
+<div class="fx"><span class="m" style="color: #FFC24D">#13</span><span style="color: #C9D3DD">Clicking a command only highlights it</span><span style="color: #9DAAB8">One click opens the form, and ↵ adds the command to the stack.</span></div>
+<div class="fx"><span class="m" style="color: #7D8A99">#13</span><span style="color: #C9D3DD">"1 targets", "1 arguments", names twice</span><span style="color: #9DAAB8">Plural rules and one name per row, set in the type system.</span></div>
+<div class="fx"><span class="m" style="color: #FFC24D">#11</span><span style="color: #C9D3DD">No way to jump to SET_ADCS_MODE</span><span style="color: #9DAAB8">Commands are in ⌘K and in Compose's catalog search.</span></div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
