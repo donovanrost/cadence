@@ -6,13 +6,13 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
   {
     path: "setup",
     name: "setup.readiness",
-    component: pending,
+    component: () => import("@/features/readiness/ReadinessScreen.vue"),
     meta: { mode: "setup", nav: "readiness", title: "Readiness", board: "Setup (S1)" },
   },
   {
     path: "setup/spacecraft",
     name: "setup.spacecraft",
-    component: pending,
+    component: () => import("@/features/spacecraft/SpacecraftListScreen.vue"),
     meta: { mode: "setup", nav: "spacecraft", title: "Spacecraft" },
   },
   {

@@ -1,0 +1,160 @@
+import type { RouteLocationRaw } from "vue-router";
+import { plural } from "@/lib/index.ts";
+import type { OpState } from "@/ui/index.ts";
+import type { AreaKey, AreaStatus, FindingFix, Readiness, Severity } from "./api.ts";
+
+/** Severity grammar (ux U3): blocker = crit diamond, optional = gray dash. */
+export function severityState(severity: Severity): OpState {
+  switch (severity) {
+    case "blocker":
+      return "crit";
+    case "caution":
+      return "caution";
+    case "stale":
+      return "stale";
+    case "not_set_up":
+      return "off";
+    case "optional":
+      return "optional";
+  }
+}
+
+export function areaState(status: AreaStatus): OpState {
+  switch (status) {
+    case "ready":
+      return "nominal";
+    case "blocker":
+      return "crit";
+    case "caution":
+      return "caution";
+    case "stale":
+      return "stale";
+    case "not_set_up":
+    case "unknown":
+      return "off";
+  }
+}
+
+export function areaWord(status: AreaStatus): string {
+  switch (status) {
+    case "ready":
+      return "Ready";
+    case "blocker":
+      return "Blocker";
+    case "caution":
+      return "Caution";
+    case "stale":
+      return "Stale";
+    case "not_set_up":
+      return "Not set up";
+    case "unknown":
+      return "Unknown";
+  }
+}
+
+export function areaName(key: AreaKey): string {
+  switch (key) {
+    case "fleet":
+      return "Fleet";
+    case "catalog":
+      return "Catalog";
+    case "comms":
+      return "Comms & routing";
+    case "stations":
+      return "Ground stations";
+    case "data_sources":
+      return "Data sources";
+    case "apps":
+      return "Apps";
+  }
+}
+
+export function areaRoute(key: AreaKey): RouteLocationRaw {
+  switch (key) {
+    case "fleet":
+      return { name: "setup.spacecraft" };
+    case "catalog":
+      return { name: "setup.catalog" };
+    case "comms":
+      return { name: "setup.comms" };
+    case "stations":
+      return { name: "setup.stations" };
+    case "data_sources":
+      return { name: "setup.data-sources" };
+    case "apps":
+      return { name: "setup.apps" };
+  }
+}
+
+export type FixLink = Readonly<{ label: string; to: RouteLocationRaw }>;
+
+/** The one action a finding offers: verb + object, or the server's label when it has a better one. */
+export function fixLink(fix: FindingFix): FixLink {
+  const link = ((): FixLink => {
+    switch (fix.kind) {
+      case "spacecraft_list":
+        return { label: "Open spacecraft", to: { name: "setup.spacecraft" } };
+      case "spacecraft_new":
+        return { label: "Add spacecraft", to: { name: "setup.spacecraft.new" } };
+      case "catalog":
+        return { label: "Open catalog", to: { name: "setup.catalog" } };
+      case "catalog_import":
+        return { label: "Import catalog", to: { name: "setup.catalog.import" } };
+      case "comms":
+        return { label: "Open routing", to: { name: "setup.comms" } };
+      case "spacecraft":
+        return {
+          label: "Open spacecraft",
+          to: { name: "setup.spacecraft.one", params: { scId: fix.id } },
+        };
+      case "profile":
+        return {
+          label: "Open profile",
+          to: { name: "setup.profile", params: { profileId: fix.id } },
+        };
+      case "station":
+        return {
+          label: "Open station",
+          to: { name: "setup.stations", params: { stationId: fix.id } },
+        };
+      case "data_source":
+        return {
+          label: "Open source",
+          to: { name: "setup.data-sources", params: { sourceId: fix.id } },
+        };
+      case "app":
+        return { label: "Open app", to: { name: "setup.apps", params: { appKey: fix.id } } };
+    }
+  })();
+  return fix.label ? { ...link, label: fix.label } : link;
+}
+
+/** The h1: blockers only (U3). */
+export function verdictTitle(readiness: Readiness): string {
+  const blockers = readiness.verdict.blocker;
+  return blockers === 0 ? "Ready for operations" : plural(blockers, "blocker");
+}
+
+/** Subline counts of the other severities, omitting zeros: "3 suggestions, 1 caution". */
+export function verdictSummary(readiness: Readiness): string | null {
+  const v = readiness.verdict;
+  const parts = [
+    v.caution > 0 ? plural(v.caution, "caution") : null,
+    v.stale > 0 ? `${v.stale} stale` : null,
+    v.not_set_up > 0 ? `${v.not_set_up} not set up` : null,
+    v.optional > 0 ? plural(v.optional, "suggestion") : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length > 0 ? parts.join(", ") : null;
+}
+
+/** Findings in the U3 severity order, stable within a severity. */
+export function orderedFindings(readiness: Readiness) {
+  const rank: Record<Severity, number> = {
+    blocker: 0,
+    caution: 1,
+    stale: 2,
+    not_set_up: 3,
+    optional: 4,
+  };
+  return [...readiness.findings].sort((a, b) => rank[a.severity] - rank[b.severity]);
+}
