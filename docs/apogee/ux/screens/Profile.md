@@ -41,9 +41,18 @@ subline: 500 spacecraft inherit this profile · 3 override it · catalog rev 14 
 
 ### P1 · Section form (Framing shown; Limits, Commanding, Catalog use the same pattern)
 Header meta: `INHERITED BY 500 · 1 EDIT STAGED`. Body is a 2-column **key/value tile grid** (1px
-hairline gaps): `lbl` + inline input (mono 14 for values). Fields come from the typed schema of
-`frame_parameters` / app defaults (plan gap): the server must provide label, type, unit, enum,
-range, so the form is generated, not hand-written per field. **Edited** = inset 3px white bar +
+hairline gaps): `lbl` + inline input (mono 14 for values). Fields come **only** from the server's
+section schema (`docs/apogee/domain/profile-routing.md` §3: path, label, type, unit, enum, range,
+default, overridable, runtime_impact, help), so the form is generated, never hand-written. Framing
+today = TM transfer frame, TC transfer frame, packet protocol, TM frame length, secondary header,
+insert zone, OCF, truncated primary header. **The canvas's spacecraft-id source, virtual channels,
+FEC, TC segment and randomizer have no model backing: don't render them.** Fields with
+`runtime_impact: generation` show a mono `RUNTIME` chip; changing one triggers a runtime
+generation on apply.
+- **Limits section:** read-only notice "Limits apply mission-wide per point; per-profile limits
+  aren't supported yet." + link to the Limits app (profile-routing §3). **Commanding section:** only
+  app-declared settings; omit the nav item when there are none. **Catalog section:** the
+  `catalog_revision_id` reference field. **Edited** = inset 3px white bar +
 `raised` bg + label `· edited` + old value struck mono `text-4` before the input. **Staged** (after
 Stage) = same, label `· staged`. Invalid = caution border + message under the field; can't stage.
 Fields where some spacecraft override the value show a mono chip `2 override` linking to P3
@@ -54,25 +63,29 @@ Header meta: `1 RULE → 3,000 ROUTES`. The rule reads as a sentence in mono, ke
 ```
 FOR EACH  spacecraft in Earendil Block 1
 AND EACH  station in [SVB, FBK, AWA, PUQ, HBK, INU]
-ROUTE     downlink → archive · uplink ← console
+ROUTE     downlink · primary   uplink · primary
 NAME      "{station} · {spacecraft}"
 ```
-Edit mode turns each line into controls: station multi-select chips (removable, `+ station`),
-direction/transport selects per leg, name template field with token chips (`{station}`,
+Legs are **direction + role** (`downlink|uplink` × `primary|candidate|contributing`); the canvas's
+"→ archive / ← console" destinations aren't a model concept (profile-routing §5). Transport comes
+from each station.
+Edit mode turns each line into controls: station multi-select chips (station `code`, removable,
+`+ station`), a direction + role select per leg (`+ leg`), name template field with token chips (`{station}`,
 `{spacecraft}`, `{scid}`) and live preview. **Generates**: three sample route names (mono chips) +
-`+ 2,997` (`text-3`). Optional line: "Protocol behavior: default. Optional, change it here once
-instead of on 1,000 routes." with the `optional` mark. Multiple rules on one profile stack as
+`+ 2,997` (`text-3`). (The canvas's "Protocol behavior" line is dropped: a retired concept.)
+A disabled rule renders dimmed with `DISABLED`. Multiple rules on one profile stack as
 separate rule blocks, each with its route count.
-- **Data:** `rules: [{id, stations: [{code}], legs: [{direction, transport}], name_template,
-  route_count, samples: [string], protocol_behavior}]`.
+- **Data:** `rules: [{id, stations: [{id, code, name, transport_id}], legs: [{direction, role}],
+  name_template, route_count, samples: [string], enabled}]` (profile-routing §5).
 
 ### P3 · Overrides
 Header meta `3 OF 500 DIFFER FROM THE PROFILE`. Rows `ov` (`150px | 1fr | auto`): spacecraft link
-(mono) · what differs, as a sentence ("Routing excludes SVB", "VBAT red limit 23.5 V instead of 24.0
-V", "TM frame length 1,115, pinned by an operator") + mono `since r3` / `since v2` · `Reset`
+(mono) · what differs, as a sentence ("Routing excludes SVB", "TM frame length 1,115 instead of
+1,279"; no limit overrides, which aren't backed) + mono `since r3` / `since v2` · `Reset`
 (compact; stages a reset). Grouped by section when > 10 rows, with a filter box.
 - **Data:** `overrides: [{spacecraft: {id, name}, section, path, profile_value, spacecraft_value,
-  reason?, since_revision | since_at, actor}]`.
+  reason, since_revision, set_at, actor, redundant}]`. `redundant: true` (override equals the
+  profile value) shows an `optional` row "Same as the profile now · Reset to inherit".
 - **Empty:** nominal callout "All 500 spacecraft match the profile."
 
 ### P4 · Staged edit (aside; only while there are dirty fields)

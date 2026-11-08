@@ -58,7 +58,8 @@ Header meta: `GROUPED BY CAUSE · 3,006 ITEMS → 4 LINES` (sum of affected → 
   `Optional ·`, title in `text-2`, gray dash mark. Affected count lives in the title or body ("4
   spacecraft in plane 02…", "3,000 routes use…"), never as a per-spacecraft list.
 - Action (compact secondary): verb + object from `fix.kind`: `Open station`, `Open source`,
-  `Install`, `Edit rule`, `Open profile`. No `fix` → no button (don't invent one).
+  `Install` (for `not set up` apps), `Edit rule`, `Open profile`. (The canvas's "3,000 routes use
+default protocol behavior" finding is dropped: protocol behavior is a retired concept.) No `fix` → no button (don't invent one).
 - **Data:** `findings: [{id, severity, cause, title, body, affected_count, fix: {kind, id, label?} |
   null}]`. Grouping by cause is **server-side**.
 - **Empty (no findings at all):** just the nominal callout, plus "No suggestions either."

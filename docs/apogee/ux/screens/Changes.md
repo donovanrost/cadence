@@ -1,8 +1,8 @@
 # Staged changes, apply, revisions (mission change sets)
 
 Scope decision: `docs/apogee/DECISIONS.md` #1 (build change sets; v1 ships on per-entity versions
-behind a seam; no fake `rN`). Model: **domain**. Endpoints: **api**. UI: **fe-setup**. This spec is
-the UX contract the model has to support; the questions for domain are at the end.
+behind a seam; no fake `rN`). Model: **domain** (`docs/apogee/domain/change-sets.md`, approved: DECISIONS #13–16). Endpoints:
+**api**. UI: **fe-setup**. The six model questions at the end are answered in change-sets.md §13.
 Boards: `Setup.dc.html` (staged bar, R2 revisions), `Profile.dc.html` (P4 staged edit, edited
 fields), `AddSpacecraft.dc.html` / `Catalog.dc.html` (stage CTAs), `SetupJourneys` ("stage, diff,
 apply · one revision number").
@@ -51,7 +51,12 @@ STAGED · NOT APPLIED   2 changes: 50 new spacecraft (Block 2), catalog rev 15 �
   - *Conflict* (live config moved since a change was staged): caution mark + `1 change conflicts with
     r6`; primary becomes `Review conflicts`.
   - *Applying*: summary replaced by mono `APPLYING r6 · 3 OF 5 STEPS` (live); buttons hidden.
-  - *Apply failed*: crit mark + `Apply failed · nothing changed`; primary `Review`.
+  - *In review* (the set is frozen while in review, change-sets §13.1): `r6 in review · staging is
+    paused` + `Open review`; stage CTAs elsewhere are disabled with that reason.
+  - *Apply failed before commit*: crit mark + `Apply failed · nothing changed`; primary `Review`.
+  - *Applied, runtime converging / degraded* (after commit, §7): bar is gone (the set is applied);
+    the top bar shows `CONFIG r6 · CONVERGING` (white) or `CONFIG r6 · RUNTIME DEGRADED` (caution,
+    links to the revision). Never "nothing changed" after commit.
   - *Awaiting review* (policy, §3): `r6 awaits review by an org admin · requested 14:02Z`; primary
     `Open review`.
   - *No apply capability*: primary reads `Review changes`; the review page explains who can apply.
@@ -72,8 +77,8 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
 └────────────────────────────────────────────────────┘ └─────────────────────────────────┘
 ```
 - **K1 Changes:** one row per change, collapsed by default: summary, author, staged time (mono),
-  remove `×` (`aria-label="Remove from r6"`; returns the change to its surface as unstaged edits
-  for the author). Expanded = the change's **diff**: field changes as `path  − old  + new` mono
+  `Withdraw` `×` (`aria-label="Withdraw from r6"`; the model's `withdraw`: the change returns to its
+  surface as unstaged edits for its author). Conflicting rows offer `Keep mine` / `Take live`. Expanded = the change's **diff**: field changes as `path  − old  + new` mono
   rows; entity additions as an ApTable (first 8 + `Show all`); per-spacecraft effect `changes 499 ·
   keeps 1 (EARENDIL-389 override)`. A link opens the surface where it was made.
 - **K2 Checks** (same `poll` rows as commanding, server-computed, each GO / HOLD / NO-GO with
@@ -89,13 +94,18 @@ h1 "Apply r6 · 2 changes"                                  base r5 · staged 14
 - **K3 Apply aside:** tiles (changes, resulting fleet size, routes delta); readiness delta line;
   **Why** textarea (required, 10+ chars; goes in the audit and the revision list); primary `Apply as
   r6`. If mission policy requires review (DECISIONS #7 pattern, policy-driven): primary becomes
-  `Request review`, and a reviewer (≠ any author, capability-gated) sees `Approve & apply as r6` /
+  `Request review`, and a reviewer (distinct from **every** author in the set, change-sets §7;
+  capability-gated) sees `Approve & apply as r6` /
   `Send back` with a required comment. Caption mono 11: `ATOMIC · ALL OR NOTHING · r5 KEPT FOR
   ROLLBACK`.
-- **Applying:** the page becomes a live step list (validate → write config → materialize routes →
-  notify runtime → verify), each step with a state mark; success = nominal callout "r6 applied ·
-  2 changes · 549 spacecraft" + `View r6`. Failure = crit callout "Nothing changed. Step 3 failed:
-  …" + the change set stays staged.
+- **Applying:** the page becomes a live step list in two parts.
+  *Commit* (all-or-nothing): freeze & check → compose → request approval (if policy) → write
+  revision. A failure here = crit callout "Nothing changed. <step> failed: …", and the set returns
+  to open. *Runtime* (after commit, from the `config_runtime` signal): `converging` → `applied` or
+  `degraded`. Success = nominal callout "r6 applied · 2 changes · 549 spacecraft · runtime applied"
+  + `View r6`. Degraded = caution callout "r6 is applied. The runtime hasn't converged on 2
+  partitions." + link to the revision's runtime detail. **Never say "nothing changed" after
+  commit** (change-sets §7).
 - **Empty:** "Nothing staged. Edits in Setup collect here before they reach the fleet."
 
 ## 4. Revisions (`M/setup/revisions`, reading layout)
