@@ -77,7 +77,7 @@ watch(
         class="flex min-w-0 flex-1 flex-col"
         :class="
           consoleLayout
-            ? 'gap-3 overflow-auto px-4 py-3 md:px-5 md:py-3.5 min-[1100px]:overflow-hidden'
+            ? 'gap-3 overflow-auto px-4 py-3 md:px-5 md:py-3.5 console:overflow-hidden'
             : 'gap-4 overflow-auto px-4 pt-4 pb-6 md:px-6 md:pt-5'
         "
       >

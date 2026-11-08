@@ -25,10 +25,10 @@ defineProps<{
     "
   >
     <span class="w-4 font-mono text-2xs font-medium text-text-4">{{ index }}</span>
-    <span class="max-[1100px]:sr-only">{{ label }}</span>
+    <span class="max-console:sr-only">{{ label }}</span>
     <span
       v-if="count"
-      class="ml-auto font-mono max-[1100px]:hidden text-xs font-medium tracking-normal"
+      class="ml-auto font-mono max-console:hidden text-xs font-medium tracking-normal"
       :class="
         countTone === 'crit'
           ? 'text-crit-text'

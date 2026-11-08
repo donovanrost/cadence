@@ -4,6 +4,15 @@
  */
 @import "./tokens.css";
 
+/*
+ * Layout breakpoints (design-language §5): md = 768px (mobile → desktop), console = 1100px (index
+ * rail → full rail, console layout holds still). A theme breakpoint sorts after md, unlike an
+ * arbitrary min-[1100px] variant, so `md:… console:…` on one property behaves as written.
+ */
+@theme {
+  --breakpoint-console: 68.75rem; /* 1100px; rem so it sorts against md (48rem) */
+}
+
 @layer base {
   html,
   body {

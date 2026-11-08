@@ -26,13 +26,13 @@ const orgItems = [
   { nav: "audit", to: "org.audit", label: "Audit log" },
 ] as const;
 const groupClass =
-  "max-[1100px]:sr-only font-display text-xs font-semibold tracking-[.22em] text-text-4 uppercase px-3.5 pt-3.5 pb-1.5 m-0";
+  "max-console:sr-only font-display text-xs font-semibold tracking-[.22em] text-text-4 uppercase px-3.5 pt-3.5 pb-1.5 m-0";
 </script>
 
 <template>
   <nav
     aria-label="Setup"
-    class="hidden w-14 flex-none flex-col md:flex min-[1100px]:w-[220px] overflow-auto border-r border-hairline bg-chrome pt-1.5 pb-3.5"
+    class="hidden w-14 flex-none flex-col md:flex console:w-[220px] overflow-auto border-r border-hairline bg-chrome pt-1.5 pb-3.5"
   >
     <template v-if="mission">
       <p :class="groupClass">Mission</p>

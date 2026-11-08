@@ -11,7 +11,7 @@ withDefaults(defineProps<{ columns?: number | undefined; label?: string | undefi
 <template>
   <section
     :aria-label="label"
-    class="grid grid-cols-2 gap-px border border-hairline bg-hairline md:grid-cols-3 min-[1100px]:grid-cols-[repeat(var(--ap-cols),minmax(0,1fr))]"
+    class="grid grid-cols-2 gap-px border border-hairline bg-hairline md:grid-cols-3 console:grid-cols-[repeat(var(--ap-cols),minmax(0,1fr))]"
     :style="{ '--ap-cols': columns }"
   >
     <slot />
