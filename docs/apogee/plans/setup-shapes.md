@@ -10,7 +10,7 @@ omitted, server-decided staleness). Sources are in `plans/setup.md`.
 ```json
 {"data": {
   "evaluated_at": "2026-11-08T02:41:17Z",
-  "verdict": {"blockers": 0, "cautions": 1, "stale": 1, "not_set_up": 1, "optional": 1},
+  "verdict": {"blocker": 0, "caution": 1, "stale": 1, "not_set_up": 1, "optional": 1},
   "areas": [
     {"key": "fleet", "status": "ready", "count": 500, "unit": "spacecraft",
      "secondary_count": 2, "secondary_unit": "profiles",
@@ -39,7 +39,7 @@ omitted, server-decided staleness). Sources are in `plans/setup.md`.
 - `findings[].fix`: null (no action), or `{kind, id, label}`. `kind`: `spacecraft_list | spacecraft |
   spacecraft_new | profile | catalog | catalog_import | comms | station | data_source | app`. `id` is
   null for list/new kinds. `label` overrides the default button verb, or null.
-- `verdict`: counts of findings per severity (rows, not affected items).
+- `verdict`: counts of findings per severity (rows, not affected items), keyed by the severity values.
 - `recent_changes`: null when there's no unified event feed (the UI then omits panel R2), else
   `[{"at", "kind", "version_label": "v4"|null, "summary", "actor": {"name"}|null}]`, newest first,
   at most 5.

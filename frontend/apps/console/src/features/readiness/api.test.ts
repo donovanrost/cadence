@@ -26,7 +26,7 @@ const finding = (id: string, severity: string, fix: unknown = null) => ({
 
 const valid = () => ({
   evaluated_at: "2026-11-08T02:41:17Z",
-  verdict: { blockers: 1, cautions: 0, stale: 0, not_set_up: 0, optional: 1 },
+  verdict: { blocker: 1, caution: 0, stale: 0, not_set_up: 0, optional: 1 },
   areas: areaKeys.map((key) => area(key)),
   findings: [
     finding("optional.default_protocol", "optional", null),
@@ -59,7 +59,7 @@ describe("readinessReader", () => {
 
   it("rejects a verdict that disagrees with the findings", () => {
     const body = valid();
-    body.verdict.blockers = 0;
+    body.verdict.blocker = 0;
     expect(decode(readinessReader, body).ok).toBe(false);
   });
 

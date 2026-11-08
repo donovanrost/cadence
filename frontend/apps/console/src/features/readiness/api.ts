@@ -169,9 +169,10 @@ const recentChange: Reader<RecentChange> = (value, path = "") => {
   };
 };
 
+// Keyed by severity (api ships the singular keys; setup-shapes.md §R updated to match).
 const verdict = object({
-  blockers: count,
-  cautions: count,
+  blocker: count,
+  caution: count,
   stale: count,
   not_set_up: count,
   optional: count,
@@ -200,13 +201,7 @@ export const readinessReader: Reader<Readiness> = (value, path = "") => {
     optional: 0,
   };
   for (const item of raw.findings) tally[item.severity] += 1;
-  const stated: Record<Severity, number> = {
-    blocker: raw.verdict.blockers,
-    caution: raw.verdict.cautions,
-    stale: raw.verdict.stale,
-    not_set_up: raw.verdict.not_set_up,
-    optional: raw.verdict.optional,
-  };
+  const stated: Record<Severity, number> = raw.verdict;
   for (const severity of severities)
     if (stated[severity] !== tally[severity])
       throw new decoders.DecodeError(
