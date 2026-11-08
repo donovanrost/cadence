@@ -8,7 +8,7 @@ config :cadence, Cadence.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
-  database: "cadence_dev",
+  database: System.get_env("CADENCE_DEV_DATABASE", "cadence_dev"),
   show_sensitive_data_on_connection_error: true,
   stacktrace: true,
   pool_size: 10
