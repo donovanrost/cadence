@@ -56,7 +56,7 @@ org and mission (decision U1): `O = /console/:orgId`, `M = O/:missionId` (e.g.
 | 07 | **Data sources** | `M/setup/data-sources[/:id]` · `M/setup/data-sources/operations` | – |
 | 08 | **Apps** | `M/setup/apps[/:appKey]` | – |
 | 09 | **Mission settings** **[decision]** | `M/setup/settings[/:section]` | – |
-| | staged changes | `M/setup/changes` (review & apply) · `M/setup/revisions[/:rev]` (history, compare, roll back). **Only if a mission change set exists (option A); see decision U2.** | Setup R2 + staged bar |
+| | staged changes | `M/setup/changes` (review & apply) · `M/setup/revisions[/:rev]` (history, compare, roll back). Target design: `screens/Changes.md` (DECISIONS #1); hidden in v1 (U2). | Setup R2 + staged bar |
 | Org | **People & access** | `O/org/people` · `O/org/people/invite` · service identities `O/org/people/services` | People (S5) |
 | Org | **Missions** | `O/org/missions` · `O/org/missions/new` (takeover wizard, U5) | – |
 | Org | **Provider accounts** **[decision]** | `O/org/provider-accounts[/:id]` | – |
@@ -162,7 +162,7 @@ stations, profiles, pages. Results are **actions**: open, plot, "Command EARENDI
 
 | Feature | Proposal | Needs decision? |
 | --- | --- | --- |
-| **Dashboards** (authoring, playlists, sharing, snapshots, diagnostics) | Lives under Ops › Telemetry › Dashboards. Phase 1: list dashboards in Apogee style, open the existing dashboard engine for view/edit. Restyle the engine later (it has its own overhaul plan from 2026-10-08). | **Yes, director:** confirm dashboards stay on the existing engine for this project. |
+| **Dashboards** (authoring, playlists, sharing, snapshots, diagnostics) | Lives under Ops › Telemetry › Dashboards. List dashboards in Apogee style, link into the existing dashboard engine for view/edit (it has its own overhaul). | Decided: DECISIONS #11 |
 | **Telemetry explore** | Ops › Telemetry, built on ApTimeSeries + ApTimePicker range. | No |
 | **Data operations** (backfill/replay) | Setup › Data sources › Operations tab. | No |
 | **Activation approvals** | Setup › Changes as approvals; Now action-queue item when it awaits *your* GO. | No |
@@ -171,7 +171,7 @@ stations, profiles, pages. Results are **actions**: open, plot, "Command EARENDI
 | **Notifications** | Account menu + `/console/notifications`; urgent ones already appear in the Now action queue. | No |
 | **Federated app surfaces** | Setup › Apps lists apps; their surfaces open in the existing host (↗) until rebuilt. | No |
 | **Mission creation** | Org › Missions › New. Not on the canvas; build as a reading-layout form. | No |
-| **Platform admin** | Stays on the existing host, linked from the account menu. | **Yes, director:** confirm out of scope. |
+| **Platform admin** | Stays on the existing host, linked from the account menu for `platform_admin`. | Decided: DECISIONS #12 |
 | **Fleet, Alarms list, Telemetry, Timeline, Spacecraft tabs other than Investigate** | In the canvas nav but not drawn. ux writes screen specs composed from existing components (stat strip, matrix, table, event line, time series) before they're built. | No |
 
 ---

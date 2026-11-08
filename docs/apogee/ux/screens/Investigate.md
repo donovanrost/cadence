@@ -31,7 +31,10 @@ spacecraft tabs; only the area below the tabs changes.
 - **Title**: entity title (name) + the hero status tag: worst active state + subsystem
   (`◆ CRITICAL · POWER`, with crit wash). No alarm: state word only (`■ NOMINAL`, hatched `STALE ·
   LAST TLM 47m`, dashed `AWAITING FIRST AOS`).
-- **Actions**: `Acknowledge`, `Assign` are **hidden** until the alarm lifecycle exists (U10).
+- **Actions**: `Acknowledge`, `Assign` (minimal alarm lifecycle, DECISIONS #6; hidden until its
+  endpoints ship, U10). Acknowledge = compact secondary, records who/when, tag gains `· ACK MIRA K.`;
+  Assign opens a popover: operator picker (on-shift first) + hand-off note (required on hand-off).
+  Auto-clear when back in limits shows a nominal callout in B1.
   `Command` (secondary) → `M/commands/new?targets=sc:<id>`.
 - **Fact strip** (ApFactStrip): SCID (mono) · Profile (link to Setup profile, name + version) ·
   Orbit (`P07 · slot 12 · #4,812` = plane, slot, orbit number; parts omitted if unknown) · Last LOS
@@ -72,7 +75,7 @@ crit/caution for limit events, `live` white square for AOS, `neutral` for plan/o
 - **Empty:** "No events in the last 24 h."
 
 ## B3 · Recommended procedure (emphasized panel)
-**Hidden until procedures exist (U10).** When present: procedure name (display 24px), one-sentence
+**Deferred (DECISIONS #5): omit this panel.** Spec kept for later. When present: procedure name (display 24px), one-sentence
 plan including the timing consequence ("Uplinks at the Fairbanks AOS in 38 minutes, 21 minutes before
 the next eclipse"), command preview (mono, numbered lines, well background), primary
 `Prepare · 312 + 3 sisters` (→ Compose with targets + procedure) and secondary `Prepare · 312 only`.
@@ -103,4 +106,4 @@ EARENDIL-999 in this mission" + `Back to fleet`.
 - J2 in ≤3 moves from Now: Engage → (look) → Prepare.
 - No page scroll at 1440×900; B2 and B4 scroll.
 - `[` / `]` move within the plane and keep the tab; disabled at the ends with a reason in the label.
-- No hidden-but-dead controls: Acknowledge/Assign/B3 absent until the backend supports them.
+- No hidden-but-dead controls: Acknowledge/Assign absent until their endpoints ship; B3 absent (deferred).

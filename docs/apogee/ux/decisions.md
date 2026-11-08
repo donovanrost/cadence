@@ -18,8 +18,9 @@ clock cluster = `UTC` only) and **hide the staged-changes bar**. Each entity sho
 in its page header (`EARENDIL BLOCK 1 · v4`, `Catalog revision 14`, spacecraft config `active v3 ·
 draft pending review`). Readiness R2 becomes **Recent changes** (who, when, what, from a unified
 event feed) if api can provide one; otherwise R2 is omitted.
-**Why:** truth before calm. A fake `rN` would lie about atomic applies. If the director chooses
-option A (a real change set), restore both as specified.
+**Why:** truth before calm. A fake `rN` would lie about atomic applies.
+**Update (DECISIONS #1):** change sets will be built. This entry is the v1 behavior behind the seam;
+the target design is `screens/Changes.md`.
 
 ### U3 · Finding severities (fe-setup Q2)
 **Decision:** blockers get their own shape. Order and grammar:
