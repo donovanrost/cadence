@@ -109,8 +109,9 @@ screens are built against them.
 
 ### U13 · Health counts we can't know (Now review)
 **Decision:** a count is only a number when it could have been non-zero. When no spacecraft is
-fresh, Caution / Critical / Stale tiles show `—` + `no telemetry yet`. When ground limits aren't
-configured, Caution / Critical show `—` + `limits not configured` (flight-event criticals, if that
+fresh, Caution / Critical / Stale tiles show `—` + `no fresh telemetry` (`no telemetry yet` only if
+nothing was ever heard). When ground limits aren't configured, Caution / Critical show `—` +
+`limits not configured`, and that caption wins over the telemetry one (flight-event criticals, if that
 source exists, still count). Same rule for any summary tile elsewhere (Fleet, Alarms, Readiness).
 
 ### U14 · Fleet matrix wraps planes into columns (Now third look)

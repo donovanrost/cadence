@@ -49,3 +49,21 @@ severity then oldest, L2 By point. Items:
 ## Fleet (a59f5110)
 Not reviewed yet: it stayed on `LOADING FLEET…` for 4.5 s in both views while the server was
 struggling. Re-check when :4011 is stable.
+
+## Third look (19887eec) + Fleet, Alarms, ⌘K (2026-11-08 23:15Z, :4011 stable, api #7 live)
+**Investigate:** closed except units (api). Verified `POWER · BELOW RED LIMIT`, point name in mono
+in the meta, `RED LIMIT 24`, `RATE −0.43 per hour`, `LAST TLM T+00:19:03`.
+**Alarms:** closed. Conditions read `below red limit` / `below yellow limit`, `23.1 / 24`, limits-off
+state right.
+**⌘K palette:** passes Palette.md. Combobox semantics with an active descendant; `31` → EARENDIL-031
+first (SCID match); state shown by mark + words; `SHOW ALL 15 SPACECRAFT`; key hints. Nice.
+**Fleet:** table + matrix, URL filters, state chips with marks, stale rows tinted, `never` for
+never heard. Good. Items:
+11. **Limit precision:** show a limit with the value's precision: `24.0` beside `23.1` (Investigate
+    tile, Alarms `23.1 / 24.0`).
+12. **Plane · slot** in the Fleet table reads `P01 · 1` → `P01 · 01` (zero-padded like Setup's
+    table; Investigate's fact keeps `P01 · slot 01`).
+13. **Caption truth (U13 refined):** with 10 stale spacecraft, Caution/Critical say `no telemetry
+    yet`, but telemetry *was* received. Captions in priority: `limits not configured` (when ground
+    limits are off, the real reason) → `no fresh telemetry` (when nothing is fresh) → the normal
+    caption. The same applies on Now.
