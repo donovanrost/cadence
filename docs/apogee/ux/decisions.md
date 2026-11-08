@@ -118,3 +118,11 @@ source exists, still count). Same rule for any summary tile elsewhere (Fleet, Al
 matrix lays the planes out in 2+ columns (each with its own plane labels, 24px gutter), choosing
 the column count that gives the largest cell within 8–16px. It scrolls inside the panel only when
 no column count fits at 8px. The goal is the whole fleet visible at a glance (J1).
+
+### U15 · "Ever heard" is durable (qa #7)
+**Decision:** `last_received_at` is the true last receipt and must survive node restarts and
+redeploys (persisted, not only in a node-local cache). A spacecraft that has ever been heard can only
+be fresh or stale, never "awaiting first contact" again. After a restart, before the live store
+warms, the console shows the persisted time (stale if it's past the threshold), not unknown.
+**Why:** a restart was turning heard spacecraft back into "awaiting first AOS", which hid silence
+as newness. Truth before calm.
