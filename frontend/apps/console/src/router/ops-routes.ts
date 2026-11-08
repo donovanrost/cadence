@@ -9,7 +9,7 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "now",
     name: "ops.now",
-    component: pending,
+    component: () => import("@/features/now/NowScreen.vue"),
     meta: { mode: "ops", nav: "now", title: "Now", board: "Now (J1)" },
   },
   {
@@ -19,7 +19,7 @@ export const opsRoutes: RouteRecordRaw[] = [
     meta: { mode: "ops", nav: "fleet", title: "Fleet" },
   },
   {
-    path: "fleet/:scId/:tab(investigate|telemetry|uplink|passes|configuration|history)?",
+    path: "fleet/:scId(\\d+)/:tab(investigate|telemetry|uplink|passes|configuration|history)?",
     name: "ops.spacecraft",
     component: pending,
     meta: { mode: "ops", nav: "fleet", title: "Spacecraft", board: "Investigate (J2)" },
