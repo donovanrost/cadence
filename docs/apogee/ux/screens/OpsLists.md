@@ -37,7 +37,7 @@ lbl "EARENDIL · ALARMS"   h1 "17 active"            tabs: Active 17 · Acknowle
   Spacecraft (link → `M/fleet/:id/investigate?alarm=…`) · Point (short name + description) · Now
   vs limit (`23.1 V / 24.0 V`, state-tinted) · First crossed (`T+34m`, abs in title) · Owner
   (`ACK MIRA K.` / `Unassigned`, DECISIONS #6; column absent until the lifecycle ships) · Next
-  contact. Group identical point+condition across many spacecraft into one expandable row
+  contact. Source tag per row (U16: `LIVE` / `GROUND LIMITS · EVALUATED T+3m`). Group identical point+condition across many spacecraft into one expandable row
   ("VBAT below limit · 3 spacecraft in plane 07").
 - **L2 By point:** count of active alarms per point (bar meter, `cell-empty` track, state fill),
   click filters L1. Helps spot "is it spreading".

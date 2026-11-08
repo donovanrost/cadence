@@ -47,7 +47,8 @@ spacecraft tabs; only the area below the tabs changes.
 ## B1 · Alarm trend (panel, alert-crit variant: index colored, panel neutral)
 Header: index `B1`, title `<POINT SHORT NAME> · <point description> <condition>` (e.g. `VBAT ·
 battery voltage below limit`), meta `FIRST CROSSED 2026-10-23 02:08:11Z · UMBRA` (eclipse state
-at crossing, only if known).
+at crossing, only if known), preceded by the source tag (U16): `LIVE`, or `GROUND LIMITS · EVALUATED
+T+3m` (then the Now readout is labeled `AT EVALUATION`, not `NOW`).
 - **Readouts** tile row: `Now` (value + unit, crit/caution tint + left inset bar when out of limits),
   `Red limit`, `Rate` (per orbit when orbit period is known, else per hour), plus up to one
   correlated point when the backend supplies one (e.g. `Solar array −18 %`).

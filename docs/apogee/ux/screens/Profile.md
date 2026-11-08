@@ -40,6 +40,9 @@ subline: 500 spacecraft inherit this profile · 3 override it · catalog rev 14 
   revisions touching this profile). Read-only without `config.stage` (Changes.md §5).
 
 ### P1 · Section form (Framing shown; Limits, Commanding, Catalog use the same pattern)
+**Until P2 (DECISIONS #19) Framing is read-only** with an `info` callout: "Decode uses each
+transport's frame settings today. Profile framing takes effect when the pipeline reads it." Values
+render as text, with no Stage aside.
 Header meta: `INHERITED BY 500 · 1 EDIT STAGED`. Body is a 2-column **key/value tile grid** (1px
 hairline gaps): `lbl` + inline input (mono 14 for values). Fields come **only** from the server's
 section schema (`docs/apogee/domain/profile-routing.md` §3: path, label, type, unit, enum, range,

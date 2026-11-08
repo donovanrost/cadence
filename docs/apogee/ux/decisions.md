@@ -127,3 +127,12 @@ be fresh or stale, never "awaiting first contact" again. After a restart, before
 warms, the console shows the persisted time (stale if it's past the threshold), not unknown.
 **Why:** a restart was turning heard spacecraft back into "awaiting first AOS", which hid silence
 as newness. Truth before calm.
+
+### U16 · Alarm source and evaluation time (applies DECISIONS #17)
+**Decision:** every alarm row and the Investigate B1 header carry a **source tag**: `LIVE`
+(catalog monitoring; readout outline tag) or `GROUND LIMITS` (batch; `text-3` outline tag),
+followed for ground limits by mono `EVALUATED 22:41Z · T+3m`. That's the one time format (§4)
+carrying #17's "evaluated 3m ago" intent. Ground-limit values never pulse or update as if live, and
+the Now tile caption for ground-limit-only states says `evaluated T+3m`. When an escalation clears
+an ack (ISA-18.2), the row shows the owner chip struck through plus `ACK CLEARED · ESCALATED TO
+CRITICAL` in caution text until someone acks again. Assign lists all mission members.
