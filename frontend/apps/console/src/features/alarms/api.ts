@@ -91,6 +91,22 @@ export function conditionWords(condition: string | null): string | null {
   return condition === null ? null : (CONDITION_WORDS[condition] ?? null);
 }
 
+/**
+ * The crossed condition: the row's own, or inferred from value vs thresholds when the server
+ * sent none (red before yellow, so the worst band wins).
+ */
+export function crossedCondition(alarm: Alarm): string | null {
+  if (alarm.condition !== null) return alarm.condition;
+  const t = alarm.thresholds;
+  const v = alarm.value;
+  if (t === null || typeof v !== "number") return null;
+  if (t.red_low !== null && v < t.red_low) return "red_low";
+  if (t.red_high !== null && v > t.red_high) return "red_high";
+  if (t.yellow_low !== null && v < t.yellow_low) return "yellow_low";
+  if (t.yellow_high !== null && v > t.yellow_high) return "yellow_high";
+  return null;
+}
+
 const CROSSED_BAND = {
   red_low: "red_low",
   red_high: "red_high",
@@ -98,11 +114,12 @@ const CROSSED_BAND = {
   yellow_high: "yellow_high",
 } as const satisfies Record<string, keyof Thresholds>;
 
-/** The band that was crossed, for the "Red limit" readout. */
+/** The band that was crossed, for the limit readout. */
 export function crossedLimit(alarm: Alarm): number | null {
+  const condition = crossedCondition(alarm);
   const band =
-    alarm.condition !== null && Object.hasOwn(CROSSED_BAND, alarm.condition)
-      ? CROSSED_BAND[alarm.condition as keyof typeof CROSSED_BAND]
+    condition !== null && Object.hasOwn(CROSSED_BAND, condition)
+      ? CROSSED_BAND[condition as keyof typeof CROSSED_BAND]
       : null;
   return band === null || alarm.thresholds === null ? null : alarm.thresholds[band];
 }

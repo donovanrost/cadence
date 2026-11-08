@@ -7,7 +7,8 @@ import { useFleet } from "@/features/fleet/index.ts";
 import InvestigateTab from "./InvestigateTab.vue";
 import NotBuiltTab from "./NotBuiltTab.vue";
 import SpacecraftHeader from "./SpacecraftHeader.vue";
-import { neighbours } from "./model.ts";
+import { heroStatus, neighbours } from "./model.ts";
+import { useSpacecraftAlarms } from "./useInvestigate.ts";
 
 /** Spacecraft detail (route ops.spacecraft): shared header + tabs; J2 Investigate is the first tab. */
 const scope = useMissionScope();
@@ -19,11 +20,25 @@ const scid = computed(() => Number(route.params.scId));
 const tab = computed(
   () => (typeof route.params.tab === "string" && route.params.tab) || "investigate",
 );
+const scId = computed(() => {
+  const s = fleet.state.value;
+  return s.status === "ready"
+    ? (s.value.spacecraft.find((row) => row.scid === scid.value)?.id ?? null)
+    : null;
+});
+/** Owned here so the header's status and the Investigate tab agree on one read. */
+const alarms = useSpacecraftAlarms(missionId, scId);
 const lookup = computed(() => {
   const state = fleet.state.value;
   if (state.status !== "ready") return null;
   const sc = state.value.spacecraft.find((row) => row.scid === scid.value) ?? null;
-  return sc ? { sc, ...neighbours(state.value.spacecraft, sc) } : null;
+  if (!sc) return null;
+  const a = alarms.state.value;
+  return {
+    sc,
+    ...neighbours(state.value.spacecraft, sc),
+    hero: heroStatus(sc, a.status === "ready" ? a.value.alarms : null),
+  };
 });
 </script>
 
@@ -33,12 +48,20 @@ const lookup = computed(() => {
     <ApRemote :state="fleet.state.value" loading-label="LOADING SPACECRAFT…" @retry="fleet.refetch">
       <template #default>
         <template v-if="lookup">
-          <SpacecraftHeader :sc="lookup.sc" :prev="lookup.prev" :next="lookup.next" :tab="tab" />
+          <SpacecraftHeader
+            :sc="lookup.sc"
+            :hero="lookup.hero"
+            :prev="lookup.prev"
+            :next="lookup.next"
+            :tab="tab"
+          />
           <InvestigateTab
             v-if="tab === 'investigate'"
             :key="lookup.sc.id"
             :sc="lookup.sc"
+            :alarms="alarms.state.value"
             :fleet="fleet.state.value.status === 'ready' ? fleet.state.value.value.spacecraft : []"
+            @retry="alarms.refetch"
           />
           <NotBuiltTab v-else :tab="tab" />
         </template>

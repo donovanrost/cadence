@@ -1,28 +1,27 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
-import { useMissionScope } from "@/shell/index.ts";
+import type { RemoteState } from "@/api/index.ts";
 import { ApKeyValue } from "@/ui";
+import type { Alarms } from "@/features/alarms/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import AlarmTrendPanel from "./AlarmTrendPanel.vue";
 import EventLogPanel from "./EventLogPanel.vue";
 import SistersPanel from "./SistersPanel.vue";
 import { DEFAULT_RANGE, pickAlarm, type RangeKey } from "./model.ts";
-import { useSpacecraftAlarms } from "./useInvestigate.ts";
 
 /** J2 · Investigate tab: B1 trend, B2 events, B4 same point in limits, technical details. */
-const props = defineProps<{ sc: FleetSpacecraft; fleet: readonly FleetSpacecraft[] }>();
-const scope = useMissionScope();
+const props = defineProps<{
+  sc: FleetSpacecraft;
+  fleet: readonly FleetSpacecraft[];
+  alarms: RemoteState<Alarms>;
+}>();
+defineEmits<{ retry: [] }>();
 const route = useRoute();
-const missionId = computed(() => scope.value.mission.id);
-const alarms = useSpacecraftAlarms(
-  missionId,
-  computed(() => props.sc.id),
-);
 const range = ref<RangeKey>(DEFAULT_RANGE);
 
 const alarm = computed(() => {
-  const state = alarms.state.value;
+  const state = props.alarms;
   const id = typeof route.query.alarm === "string" ? route.query.alarm : null;
   return state.status === "ready" ? pickAlarm(state.value.alarms, id) : null;
 });
@@ -49,14 +48,14 @@ const details = computed(() => [
       <AlarmTrendPanel
         v-model:range="range"
         :sc="sc"
-        :alarms="alarms.state.value"
+        :alarms="alarms"
         :alarm="alarm"
-        @retry="alarms.refetch"
+        @retry="$emit('retry')"
       />
-      <EventLogPanel class="min-h-[160px] flex-1" />
+      <EventLogPanel class="min-h-[120px] flex-1" />
     </div>
     <aside class="flex flex-col gap-2.5 console:min-h-0" aria-label="Context">
-      <SistersPanel class="min-h-[160px] flex-1" :sc="sc" :fleet="fleet" :alarm="alarm" />
+      <SistersPanel class="min-h-[120px] flex-1" :sc="sc" :fleet="fleet" :alarm="alarm" />
       <details class="flex-none border border-hairline bg-panel px-4 py-2.5">
         <summary class="ap-label cursor-pointer">Technical details</summary>
         <div class="pt-2.5"><ApKeyValue :items="details" /></div>

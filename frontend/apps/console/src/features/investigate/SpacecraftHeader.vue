@@ -11,13 +11,16 @@ import {
   ApStatStrip,
   ApTabLinks,
   ApTag,
+  type OpState,
 } from "@/ui";
-import { fleetOpState, fleetStateWord, type FleetSpacecraft } from "@/features/fleet/index.ts";
+import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { usePrevNextKeys } from "./usePrevNextKeys.ts";
 
 /** Shared spacecraft header (Investigate spec): breadcrumb, title + state, actions, facts, tabs. */
 const props = defineProps<{
   sc: FleetSpacecraft;
+  /** Worst active state (alarm first), computed by the owner from the alarms read. */
+  hero: { state: OpState; label: string };
   prev: FleetSpacecraft | null;
   next: FleetSpacecraft | null;
   tab: string;
@@ -48,13 +51,6 @@ const crumbs = computed(() => [
   { label: props.sc.name },
 ]);
 
-const stateLabel = computed(() => {
-  const point = props.sc.worst_point;
-  return point
-    ? `${fleetStateWord(props.sc.state)} · ${point.point_name}`
-    : fleetStateWord(props.sc.state);
-});
-
 const facts = computed(() => {
   const sc = props.sc;
   const list = [{ label: "SCID", value: String(sc.scid) }];
@@ -66,7 +62,7 @@ const facts = computed(() => {
   if (sc.plane !== null)
     list.push({
       label: "Orbit",
-      value: `P${String(sc.plane).padStart(2, "0")}${sc.slot === null ? "" : ` · slot ${sc.slot}`}`,
+      value: `P${String(sc.plane).padStart(2, "0")}${sc.slot === null ? "" : ` · slot ${String(sc.slot).padStart(2, "0")}`}`,
     });
   if (sc.last_received_at)
     list.push({
@@ -113,7 +109,7 @@ const tabs = computed(() =>
       </div>
     </div>
     <ApPageHeader :title="sc.name">
-      <template #status><ApTag :state="fleetOpState(sc.state)" :label="stateLabel" /></template>
+      <template #status><ApTag :state="hero.state" :label="hero.label" /></template>
       <ApButton size="compact" :to="{ name: 'ops.commands.new', query: { targets: `sc:${sc.id}` } }"
         >Command</ApButton
       >

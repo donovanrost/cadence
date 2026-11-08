@@ -2,6 +2,7 @@
 export {
   alarmSeverities,
   conditionWords,
+  crossedCondition,
   crossedLimit,
   engineeringValue,
   fetchAlarms,

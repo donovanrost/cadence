@@ -1,5 +1,6 @@
+import type { OpState } from "@/ui";
 import type { Alarm, Thresholds } from "@/features/alarms/index.ts";
-import type { FleetSpacecraft } from "@/features/fleet/index.ts";
+import { fleetOpState, fleetStateWord, type FleetSpacecraft } from "@/features/fleet/index.ts";
 import type { History, LimitIntervals } from "./api.ts";
 import type { LimitSegment, SeriesPoint, TimeWindow } from "./chart/scale.ts";
 
@@ -132,3 +133,29 @@ export function sisters(
     return other && alarm.active && alarm.point.id === pointId ? [{ sc: other, alarm }] : [];
   });
 }
+
+/**
+ * Hero status (ux review fix 1): the worst *active* alarm outranks the fleet state, including
+ * `never_heard` (alarm + never heard is a data race, not a state). Label: word · subsystem.
+ */
+export function heroStatus(
+  sc: FleetSpacecraft,
+  alarms: readonly Alarm[] | null,
+): { state: OpState; label: string } {
+  const active = (alarms ?? []).filter((a) => a.active);
+  const worst =
+    active.find((a) => a.severity === "critical") ?? active.find((a) => a.severity === "caution");
+  if (worst) {
+    const what = worst.point.subsystem ?? worst.point.name;
+    return worst.severity === "critical"
+      ? { state: "crit", label: `Critical · ${what}` }
+      : { state: "caution", label: `Caution · ${what}` };
+  }
+  const point = sc.worst_point;
+  const word = fleetStateWord(sc.state);
+  return { state: fleetOpState(sc.state), label: point ? `${word} · ${point.point_name}` : word };
+}
+
+/** `−0.43` per hour: two decimals, U+2212 for negatives. */
+export const formatRate = (perHour: number) =>
+  `${perHour < 0 ? "−" : perHour > 0 ? "+" : ""}${Math.abs(perHour).toFixed(2)}`;

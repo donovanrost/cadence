@@ -5,6 +5,8 @@ import { spacecraftRow } from "@/features/fleet/index.ts";
 import { historyReader, type LimitIntervals } from "./api.ts";
 import { formatValue } from "./format.ts";
 import {
+  formatRate,
+  heroStatus,
   limitSegments,
   neighbours,
   pickAlarm,
@@ -158,5 +160,26 @@ describe("investigate model", () => {
     expect(formatValue(-0.4)).toBe("−0.4");
     expect(formatValue(4812)).toBe("4,812");
     expect(formatValue("SAFE")).toBe("SAFE");
+  });
+});
+
+describe("hero status (ux review fix 1)", () => {
+  it("lets the worst active alarm outrank the fleet state, even never_heard", () => {
+    const sc = spacecraftRow(1, { state: "never_heard", last_received_at: null });
+    expect(
+      heroStatus(sc, [alarmRow("a", sc.id, { severity: "caution" }), alarmRow("b", sc.id)]),
+    ).toEqual({
+      state: "crit",
+      label: "Critical · EPS",
+    });
+  });
+
+  it("falls back to the fleet state without alarms", () => {
+    expect(heroStatus(spacecraftRow(1), [])).toEqual({ state: "nominal", label: "Nominal" });
+  });
+
+  it("formats a rate with two decimals and a real minus", () => {
+    expect(formatRate(-0.4271)).toBe("−0.43");
+    expect(formatRate(0.5)).toBe("+0.50");
   });
 });

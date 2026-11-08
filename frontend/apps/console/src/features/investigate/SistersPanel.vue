@@ -69,8 +69,11 @@ const rows = computed(() => {
           v-for="row in rows"
           :key="row.alarm.id"
           :state="fleetOpState(row.alarm.severity === 'critical' ? 'critical' : 'caution')"
-          :meta="`${alarm.point.name} ${formatValue(row.alarm.value) ?? '—'}`"
         >
+          <template #sentence>
+            <span class="font-mono text-text-3 normal-case">{{ alarm.point.id }}</span>
+            {{ formatValue(row.alarm.value) ?? "—" }}
+          </template>
           <template #title>
             <RouterLink
               :to="{

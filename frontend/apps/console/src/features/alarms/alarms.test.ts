@@ -65,5 +65,9 @@ describe("alarm rows", () => {
     expect(conditionWords("weird")).toBeNull();
     expect(crossedLimit(alarm("a", null, { condition: "red_high" }))).toBe(34);
     expect(crossedLimit(alarm("a", null, { thresholds: null }))).toBeNull();
+    // No condition from the server: inferred from value vs bands, worst band first.
+    expect(crossedLimit(alarm("a", null, { condition: null, value: 23.1 }))).toBe(24);
+    expect(crossedLimit(alarm("a", null, { condition: null, value: 24.5 }))).toBe(25);
+    expect(crossedLimit(alarm("a", null, { condition: null, value: 30 }))).toBeNull();
   });
 });
