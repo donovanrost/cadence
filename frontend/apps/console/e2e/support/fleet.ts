@@ -119,9 +119,15 @@ export function degradeFleet(data: Json, d: Degradation, now = new Date()): Json
 /** Routes the mission's `/fleet` read through `degradeFleet` (real response, synthetic state). */
 export async function routeDegradedFleet(page: Page, d: Degradation): Promise<void> {
   await page.route(missionApi("fleet"), async (route) => {
-    const response = await route.fetch();
-    const body: unknown = await response.json();
-    if (!isJson(body) || !isJson(body["data"])) throw new Error("fleet fixture: unexpected body");
-    await route.fulfill({ response, json: { data: degradeFleet(body["data"], d) } });
+    try {
+      const response = await route.fetch();
+      const body: unknown = await response.json();
+      if (!isJson(body) || !isJson(body["data"])) throw new Error("fleet fixture: unexpected body");
+      await route.fulfill({ response, json: { data: degradeFleet(body["data"], d) } });
+    } catch {
+      // A refetch still in flight when the test ends or the page navigates away. If the fixture
+      // itself were broken, the screen would show its error state and the test would fail there.
+      await route.abort().catch(() => undefined);
+    }
   });
 }

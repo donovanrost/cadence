@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { expectAccessible } from "./support/accessibility.ts";
 import { jsonData, jsonProblem, missionApi, missionPath, openConsole } from "./support/console.ts";
-import { storageStateFor } from "./support/env.ts";
+import { DEMO, storageStateFor } from "./support/env.ts";
 import { allow, expect, test } from "./support/fixtures.ts";
 
 // S1 · Readiness (fe-setup, 46f6c31c). Contract: docs/apogee/plans/setup-shapes.md §R.
@@ -38,7 +38,7 @@ const finding = (
 // Findings deliberately out of order: the screen must sort blockers first.
 const withBlockers = {
   evaluated_at: "2026-11-08T22:00:00Z",
-  verdict: { blockers: 2, cautions: 1, stale: 1, not_set_up: 1, optional: 1 },
+  verdict: { blocker: 2, caution: 1, stale: 1, not_set_up: 1, optional: 1 },
   areas: [
     {
       ...area("fleet", "ready", 500, "spacecraft", "Every spacecraft has a SCID and a profile"),
@@ -84,7 +84,7 @@ const withBlockers = {
 
 const allReady = {
   evaluated_at: "2026-11-08T22:00:00Z",
-  verdict: { blockers: 0, cautions: 0, stale: 0, not_set_up: 0, optional: 0 },
+  verdict: { blocker: 0, caution: 0, stale: 0, not_set_up: 0, optional: 0 },
   areas: ["fleet", "catalog", "comms", "stations", "data_sources", "apps"].map((key) =>
     area(key, "ready", 1, "item", "Ready"),
   ),
@@ -113,15 +113,27 @@ const findings = (page: Page) =>
     .last();
 
 test.describe("setup readiness", () => {
-  test.describe("against the real server (endpoint not built)", () => {
+  test.describe("against the real server", () => {
     test.use({ allowedDiagnostics: allow(/\/readiness -> 404/, /status of 404/) });
 
-    test("says readiness is not available instead of inventing a verdict", async ({ page }) => {
+    test("shows the server's verdict, or says readiness is unavailable; never invents one", async ({
+      page,
+    }) => {
+      const api = await page.request.get(`/api/console/v1/missions/${DEMO.missionId}/readiness`);
       await openConsole(page, screen);
-      await expect(page.getByRole("heading", { level: 1 })).toHaveText(/readiness not available/i);
-      await expect(page.getByText("Readiness checks not available yet")).toBeVisible();
-      await expect(page.getByText(/ready for operations/i)).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "Check again" })).toBeVisible();
+      const h1 = page.getByRole("heading", { level: 1 });
+      if (api.status() === 404) {
+        await expect(h1).toHaveText(/readiness not available/i);
+        await expect(page.getByText("Readiness checks not available yet")).toBeVisible();
+        await expect(page.getByRole("button", { name: "Check again" })).toBeVisible();
+      } else {
+        expect(api.status(), "readiness endpoint").toBe(200);
+        // qa #6: the served verdict must decode; a decode failure also shows "not available".
+        await expect(h1).not.toHaveText(/not available|loading/i);
+        await expect(
+          page.getByRole("region", { name: "Readiness areas" }).getByRole("link"),
+        ).toHaveCount(6);
+      }
       await expectAccessible(page);
     });
   });

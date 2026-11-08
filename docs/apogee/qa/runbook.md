@@ -11,7 +11,7 @@ config, dependency or `dev.exs` change; code changes hot-reload).
 | **Phoenix (this worktree)** | **http://127.0.0.1:4011** | `w0R:p7` qa-server | node `cadence_apogee` |
 | **Console Vite dev server** | http://127.0.0.1:5181/console/ | `w0R:p9` qa-console-vite | Phoenix fetches `index.html` from it in dev |
 | **Earendil simulator (this worktree)** | http://127.0.0.1:4111 | `w0R:pA` qa-simulator | DETS under this worktree's `var/reflect_orbital/` |
-| **Live telemetry feeds** | 10 spacecraft (EARENDIL-001…010) at 1 Hz | `w0R:pB` qa-live-feeds | 2 h contacts; rerun to extend |
+| Live telemetry feeds (**off by default**) | 10 spacecraft (EARENDIL-001…010) at 1 Hz | `w0R:pB` qa-live-feeds | run on request, short; see Known limits |
 | **QuestDB (history)** | REST http://127.0.0.1:9200 · PG wire 8822 · ILP 9209 | docker `cadence-apogee-questdb` | volume `var/questdb-apogee/` (gitignored) |
 | Postgres | localhost:5432, db **`cadence_apogee_dev`** | | this worktree only |
 | Main checkout (not ours) | Phoenix :4001, simulator :4101, db `cadence_dev`, QuestDB :9000/:9009/:8812 (compose, `var/questdb`) | | `~/projects/cadence/cadence`. Don't touch. |
@@ -67,8 +67,9 @@ mise exec -- mix ecto.create -r Cadence.Repo
 mise exec -- mix ecto.migrate -r Cadence.Repo
 mise exec -- mix cadence.questdb.migrate
 
-# 4. Phoenix (leave running; boot creates the env admin user). Same exports as step 3, plus:
-POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 PORT=4011 \
+# 4. Phoenix (leave running; boot creates the env admin user). Same exports as step 3, plus
+#    OTEL off (mise.toml points at a collector on :4318 that isn't running):
+OTEL_EXPORTER_OTLP_ENDPOINT= POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 PORT=4011 \
   mise exec -- iex --sname cadence_apogee --cookie cadence -S mix phx.server
 
 # 5. Seed (once; both are rerunnable)
@@ -82,7 +83,7 @@ CADENCE_DEV_DATABASE=cadence_apogee_dev \
 EARENDIL_CADENCE_NODE=cadence_apogee \
   mise exec -- elixir --sname earendil_setup_apogee --cookie cadence dev/reflect_orbital_activate.exs --single-operator
 
-# 7. Live feeds (leave running; 2 h of contacts, EARENDIL_DEMO_CONTACT_SECONDS to change)
+# 7. Live feeds (on request only; keep them short, e.g. EARENDIL_DEMO_CONTACT_SECONDS=600)
 cd apps/cadence_simulator
 CADENCE_DEV_DATABASE=cadence_apogee_dev EARENDIL_CADENCE_NODE=cadence_apogee \
   mise exec -- elixir --hidden --sname earendil_tm_apogee --cookie cadence \
@@ -111,6 +112,10 @@ migrations behind and belongs to the main checkout).
 
 ## Known limits
 
+- **Live telemetry saturates the shared laptop.** On 2026-11-08, ten 1 Hz feeds plus team builds
+  pushed load to ~50: ingest stalled after ~5 min (receivers timing out) and sign-in took 34 s.
+  Run feeds briefly, then stop them (Ctrl-C, `a`). Captured history: ~98k rows for
+  EARENDIL-001…010, 2026-11-08 22:26–22:31Z.
 - **Live telemetry** covers EARENDIL-001…010 only; the other 490 stay `never_heard`. The feeds
   stop when their contacts end (2 h); rerun step 7. `dev/reflect_orbital_{live,activate}.exs`
   take `EARENDIL_CADENCE_NODE` (default `cadence`, i.e. the main checkout).

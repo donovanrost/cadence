@@ -9,6 +9,8 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 2 | Favicon | `/favicon.ico` 404 logged as console error | lead / api | console verified (9d7790ea); LiveView `/sign-in` still 404s (low, api) |
 | 3 | Console shell | Account button: visible "CA" missing from its accessible name (WCAG 2.5.3) | lead | verified (22653d8d) |
 | 4 | Setup + shell nav | Members (no capabilities) are offered mission-config and org-admin actions the server forbids (decision 2) | fe-setup, lead | verified (6d51ca92 + lead's rail) |
+| 6 | Readiness API | Served `verdict` keys singular vs §R/decoder plural | api / fe-setup | fixed: decoder + §R moved to singular (fe-setup) |
+| 7 | Fleet API | After a server restart, once-heard spacecraft read `never_heard` (ever-heard comes from the volatile ETS current-value store; violates U9) | api | open |
 | 5 | Now · fleet matrix | Plane buttons: "P01" vs label "Plane 1" (WCAG 2.5.3) and 36×10px targets 18px apart (WCAG 2.5.8) | fe-ops | verified (8ccf851f) |
 
 ## Details
@@ -57,5 +59,14 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   " · plane 1" after "P01", or `aria-label="P01, plane 1"`) and give the button the full row
   height with a ≥24 px hit area (padding or a taller row).
 - Test: `now.e2e.ts` "is accessible with alarms showing" is `test.fail` until fixed.
+
+### 7. Restart turns heard spacecraft back into `never_heard` (U9)
+
+- Repro: run live feeds (EARENDIL-001…010 heard 22:26–22:31Z), restart Phoenix, GET `/fleet`.
+- Actual: all 500 `state: never_heard`, `last_received_at: null`; Now says "awaiting first contact".
+- Cause: `CADENCE_TELEMETRY_CURRENT_VALUE_STORE` defaults to `ets` (node-local); `/fleet` derives
+  last_received_at / ever-heard from it. QuestDB still holds ~98k observations for those 10.
+- Expected (ux U9): once heard, a silent spacecraft becomes `stale`, never `never_heard`.
+- Reported by ux; dev server now runs with the Postgres current-value store.
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
