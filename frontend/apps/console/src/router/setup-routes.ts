@@ -47,7 +47,7 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
   {
     path: "setup/catalog",
     name: "setup.catalog",
-    component: pending,
+    component: () => import("@/features/catalog/CatalogScreen.vue"),
     meta: { mode: "setup", nav: "catalog", title: "Catalog" },
   },
   {
