@@ -106,3 +106,9 @@ column only (56px; labels as `aria-label` + tooltip); console screens may page-s
 panes as each spec's "below 1100px" note says. < 768px: Mobile layout (`screens/Mobile.md`), no
 rail, one 56px top row, bottom tab bar. The shell carries these breakpoints from now on, so feature
 screens are built against them.
+
+### U13 · Health counts we can't know (Now review)
+**Decision:** a count is only a number when it could have been non-zero. When no spacecraft is
+fresh, Caution / Critical / Stale tiles show `—` + `no telemetry yet`. When ground limits aren't
+configured, Caution / Critical show `—` + `limits not configured` (flight-event criticals, if that
+source exists, still count). Same rule for any summary tile elsewhere (Fleet, Alarms, Readiness).
