@@ -251,3 +251,28 @@ Original questions:
   with a short reason for constellation and passes, and hide the procedure panel entirely.
 - **Q-ux-5** The action-queue priorities P1–P3: what is the rule? Proposal: P1 = critical alarm, or
   a missed pass; P2 = caution, a GO poll waiting on you, or a station degraded; P3 = setup gaps.
+
+## Comments on api's realtime shapes (`docs/apogee/api/realtime.md`, 2026-11-08)
+
+1. **`fleet` delta rows should be the full `GET …/fleet` row**, not a subset (`id, state, worst_state,
+   last_received_at, stale`). Then the client replaces rows by `id` and recomputes the tile counts
+   locally, with one row type and no partial-merge rules. Please include `in_contact` and
+   `never_heard` once those exist. Also: what is `state` vs. `worst_state`? One field is enough,
+   unless `state` is something else, such as lifecycle.
+2. **Add a monotonic `seq` (or the `observed_at` of the snapshot the delta is based on)** to both the
+   `GET …/fleet` response and each `fleet` push. If the client sees a gap, or a push older than its
+   snapshot, it refetches. Without it, a push that lands mid-refetch can be applied twice or lost.
+3. **Tile counts in the push.** If `GET …/fleet` returns mission counts that the server computes (e.g.
+   `critical_delta_1h`, uplinks awaiting me), the push needs them too, or they go stale between
+   refetches. Fine to send `counts` on every push, since it's small.
+4. **Limit-state transitions need their own invalidation.** `limits` currently fires on *definition*
+   changes and `telemetry` on every committed sample. With Earendil feeds at 1 Hz, `telemetry` will
+   fire every 500 ms. The Now action queue and the alarm list only care about transitions, so
+   please add an `alarms` resource (fires when any point's limit state changes) and I'll key the
+   alarms/action-queue refetch on that, not on `telemetry`.
+5. **`points` samples:** keep the value as the server's exact representation (number for numeric, string
+   for enum/text), plus `unit` on the join reply rather than per sample. Please include
+   `generation_time` as well as `received_at`, since the chart's x-axis is generation time. Use the same
+   `limit_state` vocabulary as the alarms read.
+6. `uplink:<command_request_id>` is fine. With DECISIONS #7 fleet-wide requests, I'll want a topic per
+   group request, not per single-target request, once M16 exists.
