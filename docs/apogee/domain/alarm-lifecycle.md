@@ -1,6 +1,6 @@
 # Minimal alarm lifecycle (DECISIONS #6)
 
-Owner: **domain**. Status: **draft 1 for review** (2026-11-08). Reviewers: director, api, fe-ops.
+Owner: **domain**. Status: **draft 2, decided** (2026-11-08; DECISIONS #17: both sources labeled, escalation clears ack, assign any mission member; live ground-limit evaluation later). Built after change-sets P1. Reviewers: director, api, fe-ops.
 Screens: Investigate (J2: Acknowledge / Assign), Mobile (J6: Acknowledge / Hand off), Now action
 queue. Scope: ack, assign, hand-off note, auto-clear when back in limits. Not in scope: shelving,
 suppression, escalation timers, paging. `L` = `apps/cadence/lib/cadence`.
@@ -123,6 +123,15 @@ everywhere; it has no callers.
   - first crossed (`opened_at`, `first_value`)
   - limit/threshold context: definition for ground limits, policy for catalog
 - `summary(scope)`: counts by severity × status for the rail and Now tiles.
+
+**Episode row shape** (one fetch renders the list; fe-ops):
+`%{id, source, status: new | acknowledged | cleared, cleared_unacknowledged, severity,
+peak_severity, source_state, opened_at, cleared_at, last_value, last_evaluated_at,
+spacecraft: %{id, name, scid} | nil, point: %{id, name, unit}, thresholds: %{red_low, yellow_low,
+yellow_high, red_high} | catalog policy summary, acknowledged_by: actor | nil,
+assignee: %{id, name} | nil}`. Ground-limit rows always carry `last_evaluated_at` (the UI says
+"evaluated 3m ago" and never implies live). On escalation, the `escalated` event is written
+**before** the ack is cleared, so the log shows why the episode is New again.
 
 `Reads.Alarms` / `Reads.LimitAlarmConditions` keep working for the LiveView pages. The SPA reads
 episodes.
