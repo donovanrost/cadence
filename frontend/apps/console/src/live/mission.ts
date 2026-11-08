@@ -3,6 +3,7 @@ import { array, object, token } from "@/api/decode.ts";
 import { useChannelEvent } from "./useChannelEvent.ts";
 
 export const missionResources = [
+  "alarms",
   "catalog",
   "commanding",
   "dashboards",

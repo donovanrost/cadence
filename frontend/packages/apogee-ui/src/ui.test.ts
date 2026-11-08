@@ -42,3 +42,20 @@ describe("ApStatTile", () => {
     expect(wrapper.text()).toContain("unknown");
   });
 });
+
+describe("ApStatTile caption", () => {
+  it("tints the caption with captionState independently of the value", () => {
+    const wrapper = mount(ApStatTile, {
+      props: {
+        label: "Uplinks queued",
+        value: 23,
+        caption: "2 await your GO",
+        captionState: "caution",
+      },
+    });
+    expect(wrapper.get("span.text-caution-text").text()).toBe("2 await your GO");
+    expect(wrapper.find(".shadow-\\[inset_0_2px_0_var\\(--color-caution\\)\\]").exists()).toBe(
+      false,
+    );
+  });
+});

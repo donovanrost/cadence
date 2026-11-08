@@ -14,8 +14,10 @@ const props = withDefaults(
     denominator?: number | undefined;
     caption?: string | undefined;
     state?: OpState | undefined;
-    /** Tint the caption with the state (it's the call to action). */
+    /** Tint the caption with the tile's own state (it's the call to action). */
     captionTinted?: boolean | undefined;
+    /** Tint the caption with a different state than the value, e.g. "2 await your GO" in caution. */
+    captionState?: OpState | undefined;
     compact?: boolean | undefined;
   }>(),
   { state: "neutral", captionTinted: false, compact: true },
@@ -55,7 +57,13 @@ const valueTone = computed(() =>
     <span
       v-if="caption"
       class="text-sm"
-      :class="captionTinted ? stateTextClass(state) : 'text-text-3'"
+      :class="
+        captionState
+          ? stateTextClass(captionState)
+          : captionTinted
+            ? stateTextClass(state)
+            : 'text-text-3'
+      "
       >{{ caption }}</span
     >
   </div>
