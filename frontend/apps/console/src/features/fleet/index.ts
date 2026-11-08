@@ -17,7 +17,13 @@ export {
   useFleet,
   type FleetHandle,
 } from "./useFleet.ts";
-export { fleetOpState, fleetStateWord, layoutMatrix, type MatrixLayout } from "./matrix.ts";
+export {
+  fleetOpState,
+  fleetStateWord,
+  layoutMatrix,
+  matrixNaturalHeight,
+  type MatrixLayout,
+} from "./matrix.ts";
 export { default as FleetMatrix } from "./FleetMatrix.vue";
 /** Typed test builders for fleet snapshots (used by other features' tests). */
 export { fleetOf, spacecraftRow } from "./fixtures.ts";

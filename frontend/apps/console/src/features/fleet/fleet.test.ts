@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import { decode } from "@/api/index.ts";
 import { fleetReader } from "./api.ts";
 import { fleetOf, spacecraftRow } from "./fixtures.ts";
-import { layoutMatrix } from "./matrix.ts";
+import { fitCell, layoutMatrix } from "./matrix.ts";
 import { throttle } from "./useFleet.ts";
 
 const range = (from: number, to: number) =>
@@ -107,5 +107,23 @@ describe("throttle", () => {
     t.cancel();
     vi.advanceTimersByTime(5000);
     expect(run).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("fitCell (ux: clamp(8px, available / planes, 16px))", () => {
+  it("fills the height between 8 and 16px", () => {
+    expect(fitCell(1000, 240, 20, 25)).toEqual({ cell: 10, overflows: false });
+  });
+
+  it("caps at 16px when there is room", () => {
+    expect(fitCell(1000, 1000, 20, 25).cell).toBe(16);
+  });
+
+  it("keeps 8px cells and reports overflow when the box is too small", () => {
+    expect(fitCell(1000, 100, 20, 25)).toEqual({ cell: 8, overflows: true });
+  });
+
+  it("respects width when no height is given", () => {
+    expect(fitCell(44 + 25 * 12, null, 20, 25).cell).toBe(10);
   });
 });

@@ -124,3 +124,29 @@ export function fleetStateWord(state: FleetState): string {
       return "Awaiting first contact";
   }
 }
+
+export const CELL_GAP = 2;
+export const CELL_MIN = 8;
+export const CELL_MAX = 16;
+/** Row label column (36px) + its gap (8px). */
+export const LABEL_W = 44;
+
+/**
+ * Cell size that fits `rows × columns` into the box (ux Now review, second look):
+ * clamp(8px, available / count, 16px). Below 8px the matrix keeps 8px cells and scrolls.
+ * `height: null` sizes by width only (the box grows with its content).
+ */
+export function fitCell(
+  width: number,
+  height: number | null,
+  rows: number,
+  columns: number,
+): Readonly<{ cell: number; overflows: boolean }> {
+  const byWidth = Math.floor((width - LABEL_W) / Math.max(columns, 1)) - CELL_GAP;
+  const byHeight = height === null ? Infinity : Math.floor(height / Math.max(rows, 1)) - CELL_GAP;
+  const ideal = Math.min(byWidth, byHeight, CELL_MAX);
+  return { cell: Math.max(CELL_MIN, ideal), overflows: ideal < CELL_MIN };
+}
+
+/** Height the matrix rows need at the largest cell size (for the Now grid's row cap). */
+export const matrixNaturalHeight = (rows: number) => rows * (CELL_MAX + CELL_GAP);

@@ -1,22 +1,52 @@
 <script setup lang="ts">
-import { computed, shallowRef } from "vue";
+import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from "vue";
+import { RouterLink } from "vue-router";
 import { formatDuration, plural, useNow, ApStatusMark } from "@/ui";
 import type { FleetSpacecraft } from "./api.ts";
-import { fleetOpState, fleetStateWord, layoutMatrix } from "./matrix.ts";
+import { fitCell, fleetOpState, fleetStateWord, layoutMatrix } from "./matrix.ts";
+import PlanePicker from "./PlanePicker.vue";
 
 /**
- * One cell per spacecraft, rows = planes (design-language §7 ApFleetMatrix, U8). Cells are
- * pointer-only and hidden from assistive tech; the plane buttons, the summary sentence and the
- * Fleet table are the accessible path. Always pair with a stat strip carrying the counts.
+ * One cell per spacecraft, rows = planes (design-language §7 ApFleetMatrix, U8). The cell grid
+ * (including row labels) is pointer-only and hidden from assistive tech; the summary sentence,
+ * the plane picker and the Fleet table are the accessible path (qa issue #5). With `fitHeight`
+ * the cells shrink to the box's height (8–16px) and scroll below 8px.
  */
 const props = defineProps<{
   spacecraft: readonly FleetSpacecraft[];
   selectedPlane: number | null;
+  fitHeight?: boolean;
+  /** Show the "View as table" link to the Fleet screen. */
+  tableLink?: boolean;
 }>();
 const emit = defineEmits<{ open: [sc: FleetSpacecraft]; selectPlane: [plane: number | null] }>();
 
+const area = useTemplateRef<HTMLDivElement>("area");
+const box = shallowRef({ width: 0, height: 0 });
+let observer: ResizeObserver | null = null;
+onMounted(() => {
+  const el = area.value;
+  if (!el) return;
+  observer = new ResizeObserver(() => {
+    box.value = { width: el.clientWidth, height: el.clientHeight };
+  });
+  observer.observe(el);
+});
+onBeforeUnmount(() => observer?.disconnect());
+
 const now = useNow();
 const layout = computed(() => layoutMatrix(props.spacecraft));
+const planes = computed(() =>
+  layout.value.rows.flatMap((row) => (row.plane === null ? [] : [row.plane])),
+);
+const fit = computed(() =>
+  fitCell(
+    box.value.width,
+    props.fitHeight ? box.value.height : null,
+    layout.value.rows.length,
+    layout.value.columns,
+  ),
+);
 const byId = computed(() => new Map(props.spacecraft.map((sc) => [sc.id, sc])));
 const hovered = shallowRef<FleetSpacecraft | null>(null);
 
@@ -71,31 +101,31 @@ const inspector = computed(() => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-2">
+  <div class="flex flex-col gap-2" :class="fitHeight ? 'h-full min-h-0' : ''">
     <p class="sr-only">{{ summary }}</p>
-    <div class="flex flex-col gap-[2px]" @mouseleave="hovered = null">
+    <div
+      ref="area"
+      aria-hidden="true"
+      class="flex min-h-0 flex-col gap-[2px]"
+      :class="fitHeight ? 'flex-1 overflow-auto' : ''"
+      @mouseleave="hovered = null"
+    >
       <div v-for="row in layout.rows" :key="row.key" class="flex items-center gap-2">
-        <button
-          v-if="row.plane !== null"
-          type="button"
-          class="w-9 flex-none cursor-pointer text-left font-mono text-[10px] leading-none hover:text-readout"
-          :class="row.plane === selectedPlane ? 'text-readout' : 'text-text-4'"
-          :aria-pressed="row.plane === selectedPlane"
-          :aria-label="`Plane ${row.plane}`"
-          @click="emit('selectPlane', row.plane === selectedPlane ? null : row.plane)"
+        <span
+          class="w-9 flex-none font-mono text-[10px] leading-none"
+          :class="[
+            row.plane !== null && row.plane === selectedPlane ? 'text-readout' : 'text-text-4',
+            row.plane !== null ? 'cursor-pointer hover:text-readout' : '',
+          ]"
+          @click="
+            row.plane !== null &&
+            emit('selectPlane', row.plane === selectedPlane ? null : row.plane)
+          "
+          >{{ row.label }}</span
         >
-          {{ row.label }}
-        </button>
-        <span v-else class="w-9 flex-none font-mono text-[10px] leading-none text-text-4">{{
-          row.label
-        }}</span>
         <div
-          aria-hidden="true"
-          class="grid min-w-0 flex-1 gap-[2px]"
-          :style="{
-            gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`,
-            maxWidth: `${layout.columns * 18}px`,
-          }"
+          class="grid flex-none gap-[2px]"
+          :style="{ gridTemplateColumns: `repeat(${layout.columns}, ${fit.cell}px)` }"
           @click="onClick"
           @mouseover="hovered = target($event)"
         >
@@ -109,10 +139,27 @@ const inspector = computed(() => {
         </div>
       </div>
     </div>
-    <p aria-hidden="true" class="m-0 flex h-4 items-center gap-2 font-mono text-xs text-text-3">
-      <template v-if="inspector"
-        ><ApStatusMark :state="inspector.state" />{{ inspector.text }}</template
+    <div class="flex flex-none flex-wrap items-center gap-3">
+      <PlanePicker
+        v-if="planes.length > 0"
+        :planes="planes"
+        :selected-plane="selectedPlane"
+        @select-plane="emit('selectPlane', $event)"
+      />
+      <p
+        aria-hidden="true"
+        class="m-0 flex min-w-0 flex-1 items-center gap-2 font-mono text-xs text-text-3"
       >
-    </p>
+        <template v-if="inspector"
+          ><ApStatusMark :state="inspector.state" />{{ inspector.text }}</template
+        >
+      </p>
+      <RouterLink
+        v-if="tableLink"
+        :to="{ name: 'ops.fleet' }"
+        class="font-mono text-xs text-text-3 uppercase no-underline hover:text-readout"
+        >View as table →</RouterLink
+      >
+    </div>
   </div>
 </template>

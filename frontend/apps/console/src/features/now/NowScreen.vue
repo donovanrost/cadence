@@ -3,7 +3,13 @@ import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
 import { ApPanel, ApRemote } from "@/ui";
-import { FleetMatrix, useFleet, type FleetSpacecraft } from "@/features/fleet/index.ts";
+import {
+  FleetMatrix,
+  layoutMatrix,
+  matrixNaturalHeight,
+  useFleet,
+  type FleetSpacecraft,
+} from "@/features/fleet/index.ts";
 import ActionQueuePanel from "./ActionQueuePanel.vue";
 import ConstellationPanel from "./ConstellationPanel.vue";
 import LiveStatusCallout from "./LiveStatusCallout.vue";
@@ -21,6 +27,13 @@ const fleet = useFleet(computed(() => scope.value.mission.id));
 const snapshot = computed(() =>
   fleet.state.value.status === "ready" ? fleet.state.value.value : null,
 );
+/** A3's panel chrome around the matrix rows: header, body padding, footer row, borders. */
+const A3_CHROME_PX = 124;
+/** Row 2 takes what the matrix needs at 16px cells, capped so A1/A2 keep ≥55% (ux review). */
+const a3Need = computed(() => {
+  const rows = snapshot.value ? layoutMatrix(snapshot.value.spacecraft).rows.length : 0;
+  return `${matrixNaturalHeight(rows) + A3_CHROME_PX}px`;
+});
 const queue = computed(() => (snapshot.value ? deriveQueue(snapshot.value) : []));
 const headline = computed(() => {
   if (snapshot.value) return nowHeadline(snapshot.value, queue.value);
@@ -56,40 +69,44 @@ function openById(id: string) {
 </script>
 
 <template>
-  <!-- Console layout from 1100px up (holds still); below, the page scrolls (Now spec, layout). -->
-  <div class="flex min-h-0 flex-1 flex-col gap-3 max-[1100px]:overflow-auto">
+  <!-- Console layout from the `console` breakpoint up (holds still); below, the page scrolls. -->
+  <div class="flex min-h-0 flex-1 flex-col gap-3 max-console:overflow-auto">
     <NowHeader :mission-name="scope.mission.name" :headline="headline" :fleet="snapshot" />
     <LiveStatusCallout />
     <ApRemote :state="fleet.state.value" loading-label="LOADING FLEET…" @retry="fleet.refetch">
       <template #default="{ value }">
         <NowStats :fleet="value" />
         <div
-          class="grid min-h-0 flex-1 grid-cols-[1.2fr_1fr] grid-rows-[minmax(0,1fr)_auto] gap-3 max-[1100px]:flex-none max-[1100px]:grid-rows-[minmax(320px,auto)_auto] max-[768px]:grid-cols-1 max-[768px]:grid-rows-none"
+          class="grid grid-cols-1 gap-3 md:grid-cols-[1.2fr_1fr] console:min-h-0 console:flex-1 console:grid-rows-[minmax(0,1fr)_min(var(--a3-need),45%)]"
+          :style="{ '--a3-need': a3Need }"
         >
           <ConstellationPanel
-            class="max-[1100px]:h-[360px]"
+            class="h-[360px] console:h-auto"
             :spacecraft="value.spacecraft"
             :selected-plane="selectedPlane"
             @open="openById"
             @select-plane="selectPlane"
           />
           <ActionQueuePanel
-            class="max-[1100px]:min-h-[320px] max-[768px]:order-first"
+            class="order-first min-h-[320px] md:order-none console:min-h-0"
             :items="queue"
             :nominal="value.counts.nominal"
           />
-          <ApPanel index="A3" title="Fleet matrix" :meta="`${value.counts.total} spacecraft`">
+          <ApPanel
+            index="A3"
+            title="Fleet matrix"
+            :meta="`${value.counts.total} spacecraft`"
+            pane
+            class="h-[460px] console:h-auto"
+          >
             <FleetMatrix
+              fit-height
+              table-link
               :spacecraft="value.spacecraft"
               :selected-plane="selectedPlane"
               @open="openSpacecraft"
               @select-plane="selectPlane"
             />
-            <RouterLink
-              :to="{ name: 'ops.fleet' }"
-              class="font-mono text-xs text-text-3 uppercase no-underline hover:text-readout"
-              >View as table →</RouterLink
-            >
           </ApPanel>
           <PassesPanel />
         </div>
