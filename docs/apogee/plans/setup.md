@@ -25,15 +25,29 @@ What exists instead is **per-entity versioning**:
 - Routing rules have a per-rule event log.
 
 **There is no mission change set, no mission revision number, and no cross-entity apply.**
-This is a scope decision (raised with the director; ux chose B for now, U2). Options:
-- **A. Build it.** A mission change-set model (stage ops → diff → apply as rN, atomic, audited).
-  Large backend work and the real fix for "stage, diff, apply".
-- **B. Honest v1.** No global `rN` and no staged bar. Show per-entity versions where they exist
-  ("Block 1 · v4", "catalog revision 14", spacecraft config "active v3, draft pending review").
-  Edits go through the existing draft/review/activate flows.
 
-Until that is decided, screens are built against **B**, with the staged bar and `rN` left out
-rather than faked.
+**Decided (DECISIONS.md #1):** change sets will be built (domain owns the model, api the
+endpoints). Setup v1 ships on per-entity versions (option B, ux U2) **behind a seam**, with no fake
+`rN` or staged bar before then.
+
+**The seam (frontend).** Every Setup write goes through one feature module, `setup/changes`, with
+typed operations (`createSpacecraftBatch`, `saveProfileVersion`, `requestActivation`,
+`setCatalogRevision`, …). Each returns a discriminated outcome:
+- v1: `{ kind: "applied", entity, version }` or `{ kind: "pending_review", entity, draftVersion }`.
+- Change sets add `{ kind: "staged", changeSetId, opCount }`.
+
+A `useMissionRevision()` composable returns `{ status: "unavailable" }` in v1, so the top bar and
+staged bar render nothing. When change sets land it returns `{ status: "available", revision,
+staged }`, and the bar and `rN` appear without touching screen code. Commit labels follow the
+outcome: v1 "Create 50 spacecraft" / "Request activation for 50 spacecraft", then "Stage 50
+spacecraft".
+
+**Other decisions that shape Setup:**
+- **#2 Roles:** stay `organization_admin` / `member`. UI gating uses session capabilities only,
+  never role names, so Cedar can replace it.
+- **#3 Routing rules move to the profile**, materialized per spacecraft, with overrides. This
+  unlocks S4 P2 and P3 once domain lands it.
+- **#9 Catalog impact:** phase 2. The v1 diff covers added, changed, removed and breaking.
 
 ---
 
@@ -163,7 +177,7 @@ Send); U3 service identities list (name, last used, scope, key age caution); U4 
 | Members (name, email, role, lifecycle) | `Accounts.page_organization_members/…` | JSON endpoint for org admins (today only via the platform-admin path?) |
 | Pending invitations | `page_pending_organization_invitations` | JSON |
 | Send invite | `Administration.OrganizationInvitations` (platform-admin path) | **Ask api:** an org-admin invite action. |
-| **Console roles** (Operator, Flight director, Engineer, Viewer, Org admin) | membership role is only `:organization_admin \| :member` | **Missing model:** roles + per-mission scope. `Auth.Policy` actions (`operate_mission`, `approve_activation`, …) are the hook. Above my pay grade → director. |
+| **Console roles** (Operator, Flight director, Engineer, Viewer, Org admin) | membership role is only `:organization_admin \| :member` | **Decided #2:** no roles model. Show the real role; derive Command / Second GO from session capabilities (`operate_mission`, `approve_activation`). |
 | Can command / can give second GO | derivable from policy actions if roles exist | depends on roles |
 | Status "On console" / last active | — | **Missing:** presence and last-seen. Could come from Phoenix Presence on the console socket. |
 | Service identities (name, scope, last used, key age) | REST `/api/organizations/:org/service_identities` (bearer) | session JSON; last-used and key-created timestamps? |
