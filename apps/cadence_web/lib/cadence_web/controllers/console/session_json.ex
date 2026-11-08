@@ -18,8 +18,7 @@ defmodule CadenceWeb.Console.SessionJSON do
       current_organization_id: scope.organization_id,
       admin_mode: Scope.admin_mode?(scope),
       platform_admin_eligible: Scope.platform_admin_eligible?(scope),
-      capabilities:
-        scope.capabilities |> MapSet.to_list() |> Enum.map(&Atom.to_string/1) |> Enum.sort(),
+      capabilities: capabilities(scope.capabilities),
       organizations: Enum.map(organizations, &organization/1),
       csrf_token: csrf_token,
       socket: %{path: @socket_path}
@@ -29,6 +28,7 @@ defmodule CadenceWeb.Console.SessionJSON do
   defp organization(%{
          organization: %Organization{} = organization,
          role: role,
+         capabilities: capabilities,
          missions: missions
        }) do
     %{
@@ -36,9 +36,13 @@ defmodule CadenceWeb.Console.SessionJSON do
       slug: organization.slug,
       name: organization.display_name,
       role: role && Atom.to_string(role),
+      capabilities: capabilities(capabilities),
       missions: Enum.map(missions, &mission/1)
     }
   end
+
+  defp capabilities(capabilities),
+    do: capabilities |> Enum.map(&Atom.to_string/1) |> Enum.sort()
 
   defp mission(%Mission{} = mission) do
     %{id: mission.mission_id, slug: mission.slug, name: mission.display_name}

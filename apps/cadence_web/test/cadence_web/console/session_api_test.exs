@@ -79,9 +79,9 @@ defmodule CadenceWeb.Console.SessionAPITest do
         |> json_response(200)
         |> get_in(["data", "organizations"])
 
-      assert Enum.map(orgs, &{&1["name"], &1["role"]}) == [
-               {"Another Org", "organization_admin"},
-               {"Reflect Orbital", "member"}
+      assert Enum.map(orgs, &{&1["name"], &1["role"], &1["capabilities"]}) == [
+               {"Another Org", "organization_admin", ["organization_admin"]},
+               {"Reflect Orbital", "member", []}
              ]
     end
   end

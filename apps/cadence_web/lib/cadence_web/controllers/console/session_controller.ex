@@ -49,11 +49,12 @@ defmodule CadenceWeb.Console.SessionController do
   end
 
   # Memberships, plus the current organization when a platform admin in admin
-  # mode is viewing one they are not a member of.
+  # mode is viewing one they are not a member of. Capabilities are computed per
+  # organization with the same Scope rules the server enforces there.
   defp organizations(%Scope{user: user} = scope) do
     memberships =
       Enum.map(Cadence.Accounts.list_user_memberships(user.user_id), fn entry ->
-        {entry.organization, entry.membership.role}
+        {entry.organization, entry.membership}
       end)
 
     entries =
@@ -62,17 +63,27 @@ defmodule CadenceWeb.Console.SessionController do
           memberships
 
         organization ->
-          if Enum.any?(memberships, fn {org, _role} ->
+          if Enum.any?(memberships, fn {org, _membership} ->
                org.organization_id == organization.organization_id
              end),
              do: memberships,
-             else: memberships ++ [{organization, scope.role}]
+             else: memberships ++ [{organization, nil}]
       end
 
-    Enum.map(entries, fn {organization, role} ->
+    Enum.map(entries, fn {organization, membership} ->
+      org_scope =
+        Scope.new(%{
+          user: user,
+          organization_id: organization.organization_id,
+          organization: organization,
+          organization_membership: membership,
+          admin_mode?: scope.admin_mode?
+        })
+
       %{
         organization: organization,
-        role: role,
+        role: membership && membership.role,
+        capabilities: org_scope.capabilities,
         missions: Cadence.Missions.list_missions(organization.organization_id)
       }
     end)

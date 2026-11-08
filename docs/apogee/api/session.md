@@ -37,6 +37,7 @@ The bootstrap payload.
       {
         "id": "org_…", "slug": "reflect-orbital", "name": "Reflect Orbital",
         "role": "organization_admin",
+        "capabilities": ["organization_admin"],
         "missions": [{"id": "mission_…", "slug": "earendil", "name": "Earendil"}]
       }
     ],
@@ -50,7 +51,11 @@ The bootstrap payload.
   also sees the current organization even without a membership (`role` is then `null`).
   `missions` holds every mission in that organization; members can operate all of them.
 - `role`: `organization_admin`, `member` or `null`.
-- `capabilities`: capabilities effective in the **current** organization: user capabilities
+- `organizations[].capabilities`: capabilities effective in **that** organization, computed with
+  the same scope rules the server enforces there (user capabilities, with `platform_admin` only in
+  admin mode, plus membership capabilities). Since the console scopes the organization by URL,
+  gate UI on the capabilities of the organization that owns the mission on screen.
+- `capabilities` (top level): the same, for `current_organization_id`: user capabilities
   (`platform_admin` only while in admin mode) plus membership capabilities
   (`organization_admin`). Gate UI on these (director decision 2). Every endpoint still enforces
   authorization on the server.
