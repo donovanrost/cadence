@@ -58,6 +58,15 @@ defmodule Cadence.Reads.FleetStatus do
     })
   end
 
+  @doc "Newest receipt time per spacecraft id (telemetry values and limit evaluations)."
+  @spec last_received_by_spacecraft(binary(), binary()) :: %{binary() => DateTime.t()}
+  def last_received_by_spacecraft(organization_id, mission_id) do
+    latest_receipts(
+      TelemetryReads.latest_values_for_mission(organization_id, mission_id, []),
+      LimitReads.latest_states_for_mission(organization_id, mission_id, [])
+    )
+  end
+
   @doc "Configured staleness threshold in seconds (`config :cadence, :fleet_stale_after_s`)."
   @spec stale_after_s() :: pos_integer()
   def stale_after_s,

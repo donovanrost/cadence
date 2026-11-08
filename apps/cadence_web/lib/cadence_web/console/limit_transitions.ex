@@ -13,7 +13,8 @@ defmodule CadenceWeb.Console.LimitTransitions do
 
   use GenServer
 
-  alias Cadence.Limits.Event
+  alias Cadence.Limits.{Event, Facts}
+  alias Cadence.Platform.EventBus
 
   @pubsub Cadence.PubSub
 
@@ -30,11 +31,7 @@ defmodule CadenceWeb.Console.LimitTransitions do
 
   @impl true
   def init(opts) do
-    :ok =
-      Cadence.Limits.Facts.subscribe(
-        Keyword.get(opts, :event_bus, Cadence.Platform.EventBus),
-        self()
-      )
+    :ok = Facts.subscribe(Keyword.get(opts, :event_bus, EventBus), self())
 
     {:ok, %{}}
   end
