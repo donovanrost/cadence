@@ -12,6 +12,16 @@ export type LimitSegment = Readonly<{
   side: "low" | "high";
 }>;
 export type TimeWindow = Readonly<{ from: number; to: number }>;
+
+/**
+ * Extra series drawn as lines without a band. Tones are grays (never status hues) and dashes
+ * tell series apart without color (OpsLists §Telemetry).
+ */
+export type ComparisonSeries = Readonly<{
+  points: readonly SeriesPoint[];
+  tone: "readout" | "text-2" | "text-3" | "text-4";
+  dash: "solid" | "dashed" | "dotted";
+}>;
 export type Domain = readonly [number, number];
 
 const f = (n: number) => (Math.round(n * 10) / 10).toString();

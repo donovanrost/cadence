@@ -7,6 +7,7 @@ import {
   timeTicks,
   valueTicks,
   yDomain,
+  type ComparisonSeries,
   type LimitSegment,
   type SeriesPoint,
   type TimeWindow,
@@ -21,7 +22,7 @@ import {
 const props = withDefaults(
   defineProps<{
     series: readonly SeriesPoint[];
-    comparison?: readonly (readonly SeriesPoint[])[];
+    comparison?: readonly ComparisonSeries[];
     limits?: readonly LimitSegment[];
     window: TimeWindow;
     now?: number | null;
@@ -36,7 +37,9 @@ const props = withDefaults(
 );
 
 const W = 1000;
-const domain = computed(() => yDomain([props.series, ...props.comparison], props.limits));
+const domain = computed(() =>
+  yDomain([props.series, ...props.comparison.map((c) => c.points)], props.limits),
+);
 const x = computed(() => scale(props.window.from, props.window.to, 0, W));
 const y = computed(() => scale(domain.value[0], domain.value[1], props.height, 0));
 
@@ -45,8 +48,19 @@ const pct = (n: number, of: number) => `${(n / of) * 100}%`;
 
 const mean = computed(() => linePath(props.series, x.value, y.value, props.stepMs));
 const envelope = computed(() => envelopePath(props.series, x.value, y.value, props.stepMs));
+const STROKE = {
+  readout: "stroke-readout",
+  "text-2": "stroke-text-2",
+  "text-3": "stroke-text-3",
+  "text-4": "stroke-text-4",
+} as const;
+const DASH = { solid: undefined, dashed: "8 5", dotted: "2 4" } as const;
 const others = computed(() =>
-  props.comparison.map((s) => linePath(s, x.value, y.value, props.stepMs)),
+  props.comparison.map((c) => ({
+    d: linePath(c.points, x.value, y.value, props.stepMs),
+    stroke: STROKE[c.tone],
+    dash: DASH[c.dash],
+  })),
 );
 
 const limitLines = computed(() =>
@@ -127,13 +141,14 @@ const nowX = computed(() =>
           />
         </template>
         <path
-          v-for="(d, i) in others"
+          v-for="(line, i) in others"
           :key="i"
-          :d="d"
+          :d="line.d"
           fill="none"
-          stroke-width="1.2"
+          stroke-width="1.4"
+          :stroke-dasharray="line.dash"
           vector-effect="non-scaling-stroke"
-          class="stroke-text-4"
+          :class="line.stroke"
         />
         <path :d="envelope" class="fill-readout/12" />
         <path
