@@ -23,11 +23,13 @@ defineProps<{ changes: readonly RecentChange[] }>();
       <li
         v-for="change in changes.slice(0, 5)"
         :key="`${change.at}-${change.kind}-${change.summary}`"
-        class="grid grid-cols-[44px_96px_minmax(0,1fr)] items-baseline gap-2 border-t border-hairline px-4 py-2.5 first:border-t-0"
+        class="grid grid-cols-[56px_96px_minmax(0,1fr)] items-baseline gap-2 border-t border-hairline px-4 py-2.5 first:border-t-0"
       >
-        <span class="font-mono text-[12px] text-text-2">{{
-          change.versionLabel ?? change.kind
-        }}</span>
+        <span
+          class="truncate font-mono text-[12px] text-text-2"
+          :title="change.versionLabel ?? change.kind"
+          >{{ change.versionLabel ?? change.kind }}</span
+        >
         <time :datetime="change.at" class="font-mono text-xs text-text-4">{{
           formatShort(new Date(change.at))
         }}</time>

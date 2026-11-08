@@ -1,5 +1,5 @@
 import type { RouteLocationRaw } from "vue-router";
-import { plural } from "@/lib/index.ts";
+import { formatShort, plural } from "@/lib/index.ts";
 import type { OpState } from "@/ui/index.ts";
 import type { AreaKey, AreaStatus, FindingFix, Readiness, Severity } from "./api.ts";
 
@@ -88,8 +88,11 @@ export function areaRoute(key: AreaKey): RouteLocationRaw {
 
 export type FixLink = Readonly<{ label: string; to: RouteLocationRaw }>;
 
-/** The one action a finding offers: verb + object, or the server's label when it has a better one. */
-export function fixLink(fix: FindingFix): FixLink {
+/**
+ * The one action a finding offers: verb + object, or the server's label when it has a better one.
+ * An app that isn't set up offers "Install" (ux review 2026-11-08).
+ */
+export function fixLink(fix: FindingFix, severity: Severity): FixLink {
   const link = ((): FixLink => {
     switch (fix.kind) {
       case "spacecraft_list":
@@ -123,7 +126,10 @@ export function fixLink(fix: FindingFix): FixLink {
           to: { name: "setup.data-sources", params: { sourceId: fix.id } },
         };
       case "app":
-        return { label: "Open app", to: { name: "setup.apps", params: { appKey: fix.id } } };
+        return {
+          label: severity === "not_set_up" ? "Install" : "Open app",
+          to: { name: "setup.apps", params: { appKey: fix.id } },
+        };
     }
   })();
   return fix.label ? { ...link, label: fix.label } : link;
@@ -135,7 +141,23 @@ export function verdictTitle(readiness: Readiness): string {
   return blockers === 0 ? "Ready for operations" : plural(blockers, "blocker");
 }
 
-/** Subline counts of the other severities, omitting zeros: "3 suggestions, 1 caution". */
+/** "Block 1 framing … · 11-08 02:29Z by Donovan R." for the subline, when a change feed exists. */
+export function latestChangeLine(readiness: Readiness): string | null {
+  const latest = readiness.recentChanges?.[0];
+  if (!latest) return null;
+  const by = latest.actorName ? ` by ${latest.actorName}` : "";
+  return `${latest.summary} · ${formatShort(new Date(latest.at))}${by}`;
+}
+
+/** Subline: counts of the other severities (zeros omitted), then the latest change. */
+export function verdictSubline(readiness: Readiness): string | null {
+  const parts = [verdictSummary(readiness), latestChangeLine(readiness)].filter(
+    (part): part is string => part !== null,
+  );
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/** Counts of the other severities, omitting zeros: "3 suggestions, 1 caution". */
 export function verdictSummary(readiness: Readiness): string | null {
   const v = readiness.verdict;
   const parts = [

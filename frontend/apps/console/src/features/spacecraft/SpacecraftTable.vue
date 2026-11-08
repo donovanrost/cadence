@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { formatShort } from "@/lib/index.ts";
-import { ApStatusMark, ApTable, type ApColumn } from "@/ui/index.ts";
+import { ApStatusMark, ApTable, ApTag, type ApColumn } from "@/ui/index.ts";
 import type { SpacecraftRow } from "./api.ts";
 
 /** Directory rows. The Name cell is the row link (setup spacecraft detail). */
@@ -9,8 +9,11 @@ defineProps<{ rows: readonly SpacecraftRow[] }>();
 const columns: readonly ApColumn[] = [
   { key: "name", label: "Name" },
   { key: "scid", label: "SCID", mono: true, align: "end" },
+  { key: "norad", label: "NORAD", mono: true, align: "end" },
   { key: "profile", label: "Profile" },
   { key: "orbit", label: "Plane · slot", mono: true },
+  { key: "routes", label: "Routing rules", mono: true, align: "end" },
+  { key: "setup", label: "Setup" },
   { key: "heard", label: "Last heard", mono: true },
 ];
 
@@ -32,6 +35,20 @@ const orbit = (row: SpacecraftRow) =>
     <template #cell-scid="{ row }">
       <span v-if="row.scid !== null">{{ row.scid }}</span>
       <span v-else class="text-caution-text">not set</span>
+    </template>
+    <template #cell-norad="{ row }">
+      <span v-if="row.noradId !== null">{{ row.noradId }}</span>
+      <span v-else class="text-text-4">—</span>
+    </template>
+    <template #cell-routes="{ row }">
+      <span v-if="row.routingRuleCount > 0">{{ row.routingRuleCount }}</span>
+      <span v-else class="text-caution-text">none</span>
+    </template>
+    <template #cell-setup="{ row }">
+      <span v-if="row.ready" class="inline-flex items-center gap-2 text-text-3"
+        ><ApStatusMark state="nominal" />Ready</span
+      >
+      <ApTag v-else state="caution" label="Incomplete" />
     </template>
     <template #cell-profile="{ row }">
       <span v-if="row.profile" class="text-text-2"

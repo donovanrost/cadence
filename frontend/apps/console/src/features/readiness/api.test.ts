@@ -107,10 +107,13 @@ describe("presentation", () => {
   });
 
   it("links a fix to the object that fixes it, honoring a server label", () => {
-    expect(fixLink({ kind: "profile", id: "type_1", label: null })).toEqual({
+    expect(fixLink({ kind: "profile", id: "type_1", label: null }, "blocker")).toEqual({
       label: "Open profile",
       to: { name: "setup.profile", params: { profileId: "type_1" } },
     });
-    expect(fixLink({ kind: "app", id: "limits", label: "Install" }).label).toBe("Install");
+    expect(fixLink({ kind: "app", id: "limits", label: null }, "not_set_up").label).toBe("Install");
+    expect(fixLink({ kind: "app", id: "limits", label: "Configure" }, "caution").label).toBe(
+      "Configure",
+    );
   });
 });

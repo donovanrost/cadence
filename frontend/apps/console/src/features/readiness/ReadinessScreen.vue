@@ -8,7 +8,7 @@ import AreaTile from "./AreaTile.vue";
 import FindingsPanel from "./FindingsPanel.vue";
 import RecentChangesPanel from "./RecentChangesPanel.vue";
 import { areaKeys, fetchReadiness } from "./api.ts";
-import { areaName, verdictSummary, verdictTitle } from "./present.ts";
+import { areaName, verdictSubline, verdictTitle } from "./present.ts";
 
 /** S1 · Is the mission ready? Spec: docs/apogee/ux/screens/Setup.md. */
 const scope = useMissionScope();
@@ -41,8 +41,8 @@ const notProvided = computed(
           :label="`${state.value.verdict.blocker} ${state.value.verdict.blocker === 1 ? 'blocker' : 'blockers'}`"
         />
       </template>
-      <template v-if="state.status === 'ready' && verdictSummary(state.value)" #subtitle>
-        <span class="text-md text-text-3">{{ verdictSummary(state.value) }}</span>
+      <template v-if="state.status === 'ready' && verdictSubline(state.value)" #subtitle>
+        <span class="text-md text-text-3">{{ verdictSubline(state.value) }}</span>
       </template>
       <div class="flex flex-wrap gap-2">
         <ApButton :to="{ name: 'setup.spacecraft.new' }">Add spacecraft</ApButton>

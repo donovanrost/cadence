@@ -42,8 +42,8 @@ const others = computed(() => findings.value.filter((f) => f.severity !== "block
           >
         </template>
         <template v-if="finding.fix" #action>
-          <ApButton size="compact" :to="fixLink(finding.fix).to">{{
-            fixLink(finding.fix).label
+          <ApButton size="compact" :to="fixLink(finding.fix, finding.severity).to">{{
+            fixLink(finding.fix, finding.severity).label
           }}</ApButton>
         </template>
       </ApListRow>

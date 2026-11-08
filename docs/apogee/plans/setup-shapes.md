@@ -70,3 +70,53 @@ thousand rows), and the client filters.
 - `ready`: the directory readiness flag (SCID + profile + at least one enabled routing rule).
 - `last_received_at`: timestamp or null (never heard: "Awaiting first AOS"). It comes from the same
   freshness read as `/fleet` (api, 2026-11-08).
+
+## P · `GET /api/console/v1/missions/:mission_id/profiles`
+
+The Profiles list (rail 03). Active profiles only. The latest version is the one shown, and the
+counts cover spacecraft pinned to any version.
+
+```json
+{"data": {"profiles": [
+  {"id": "type_…", "name": "Earendil Block 1", "version": 4,
+   "downlink_protocol": {"value": "tm", "label": "CCSDS TM"},
+   "uplink_protocol": {"value": "tc", "label": "CCSDS TC"},
+   "catalog_revision": {"id": "rev_…", "number": 14, "label": "FSW 3.1.0"} ,
+   "spacecraft_count": 500, "spacecraft_on_older_versions": 3,
+   "updated_at": "2026-10-19T02:29:00Z"}
+]}}
+```
+
+- `catalog_revision`: null when the profile names none. It may stay null until domain moves the
+  catalog onto the profile (profile-routing.md §3 lists it as a profile field).
+- `spacecraft_on_older_versions`: how many of `spacecraft_count` pin a version below `version`.
+
+## PD · `GET /api/console/v1/missions/:mission_id/profiles/:profile_id`
+
+Shape = domain `profile_detail` (`docs/apogee/domain/profile-routing.md` §5) in snake_case. Two
+things it adds:
+- enum fields carry `enum: [{value, label}]`;
+- `versions: [{version, created_at, actor: {name}|null}]` for the History view.
+
+Before profile routing and overrides land, return `rules: []` and `overrides: []`, plus
+`"routing_model": "per_spacecraft"`, so the UI can say routing is still per spacecraft. Don't
+return them empty without that flag.
+
+## SD · `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id`
+
+```json
+{"data": {
+  "spacecraft": {"id", "name", "scid", "norad_id", "plane", "slot", "last_received_at"},
+  "profile": {"id", "name", "version", "latest_version"} | null,
+  "configuration": {
+    "active": {"version": 3, "catalog_revision": {"id", "number", "label"} | null,
+               "telemetry_enabled": true, "commanding_enabled": true,
+               "activated_at": "…", "actor": {"name"} | null} | null,
+    "draft": {"version": 4, "status": "draft|pending_review|rejected",
+              "submitted_at": "…" | null, "actor": {"name"} | null} | null
+  },
+  "routing_rules": [{"id", "name", "direction": "downlink|uplink|both", "role": "primary|candidate|contributing",
+                     "enabled": true, "transport": {"id", "name"}}],
+  "readiness": {"ready": true, "checks": [{"key", "status": "ready|blocker|caution|not_set_up", "title", "body"}]}
+}}
+```

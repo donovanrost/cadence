@@ -31,6 +31,7 @@ const summary = computed(() => {
     plural(s.profiles, "profile"),
     s.withoutProfile > 0 ? `${formatCount(s.withoutProfile)} without a profile` : null,
     s.withoutScid > 0 ? `${formatCount(s.withoutScid)} without a SCID` : null,
+    s.withoutRoute > 0 ? `${formatCount(s.withoutRoute)} without a routing rule` : null,
     s.neverHeard > 0 ? `${formatCount(s.neverHeard)} awaiting first AOS` : null,
   ]
     .filter((part): part is string => part !== null)
