@@ -32,6 +32,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 25 | Uplink · abort | Pointer click on Abort hit the dev-only Tidewave toolbar (keyboard worked) | fe-ops | verified (e05d3790: real mouse clicks on Abort and its confirm, group aborted) |
 | 26 | K1 submit · gap reasons | Windows already past on today's draft read "Provider search unavailable" (printed twice per row) instead of saying the window has passed | domain / api | fixed (10ffd37d doubled text; d882ee70 `window_passed` "This window has already passed.", new drafts only); re-check on the next same-day draft |
 | 27 | K1 submit · gap reasons | Ticking "Same reason for all" still leaves one reason box per spacecraft; filling only the first keeps Submit disabled ("Every gap needs a reason first.") | lead | fixed (10ffd37d: one shared reason box); `planning-submit-race` e2e uses it |
+| 28 | Commands list · delivered group | A delivered group stays in the "Released" tab reading "GO given · released to the queue" (list rows carry no `progress`), indistinguishable from one still waiting for AOS | fe-ops / api | open |
 
 ## Details
 
@@ -220,5 +221,22 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   first "Reason for accepting this gap" box: all 10 boxes stay, Submit stays `aria-disabled` with
   "Every gap needs a reason first." Filling all 10 boxes enables it.
 - Expected: one reason box (or the first box's text applied to all) when the box is ticked.
+
+### 28. Delivered group still reads "released to the queue" in Commands
+
+- Ruling (director, 2026-11-09): group `state` is the approval lifecycle only; `queued` after
+  delivery is correct. Delivery comes from `progress` + member stage, and no list or row may show
+  a delivered group as only queued.
+- Repro: command_group_bp7lvyewsq_3MKNW (SET_MODE 4 → EARENDIL-004) delivered 18:26:36.8Z on
+  2026-11-09 (member `no_verifier`, HK.sc_mode 0 → 4). Commands › Released: the row reads
+  "GO GIVEN · RELEASED TO THE QUEUE", the same as fe-ops' NOOP on 001 (I2DO) that really is still
+  waiting for a contact. The group never leaves the Released tab.
+- Cause: `GET /command-groups` rows carry no `progress`, so `CommandTable` can only show
+  `GROUP_STATE_WORDS[state]` (`list.ts` tabs filter on `state` alone).
+- OK already: the Uplink page h1 derives from progress ("1 executed · not verifiable").
+- Expected: the row's state cell (and tab placement) reflects progress, e.g. "Executed · not
+  verifiable" / "Queued for AOS". Needs `progress` (or a summary stage) on list rows (api), then
+  the cell (fe-ops).
+- Evidence: scratchpad cmd-list-released.png, uplink-004.png.
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
