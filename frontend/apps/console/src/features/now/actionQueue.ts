@@ -26,6 +26,10 @@ const member = d.object({
   violating_points: d.nullable(d.integer),
   value: d.nullable(engineeringValue),
   first_crossed_at: d.nullable(d.timestamp),
+  // Alarm items only (episodes, bc3d602c); null elsewhere.
+  episode_id: d.nullable(d.token),
+  status: d.nullable(d.oneOf(["new", "acknowledged"] as const)),
+  assignee: d.nullable(d.object({ id: d.token, name: d.nullable(d.string) })),
 });
 type Member = Decoded<typeof member>;
 
@@ -50,6 +54,9 @@ const itemReader = d.object({
     "never_heard",
   ] as const),
   state: d.oneOf(["critical", "caution", "stale", "off"] as const),
+  source: d.nullable(d.oneOf(["catalog_monitoring", "ground_limit"] as const)),
+  /** Alarm items: how many members are acknowledged. */
+  acknowledged: d.nullable(d.integer),
   since: d.nullable(d.timestamp),
   count: d.integer,
   spacecraft: d.array(member, 1_000),
@@ -113,6 +120,16 @@ const base = (item: ServerItem) => ({
   spacecraftIds: item.spacecraft.map((m) => m.id),
 });
 
+/** "ACKNOWLEDGED · MIRA K." / "ASSIGNED TO …" / stale, for one spacecraft's alarm row. */
+function memberMeta(sc: Member): string | null {
+  const parts = [
+    sc.status === "acknowledged" ? "Acknowledged" : null,
+    sc.assignee ? `assigned to ${sc.assignee.name ?? "someone"}` : null,
+    sc.stale ? "last known · telemetry stale" : null,
+  ].filter((p): p is string => p !== null);
+  return parts.length ? parts.join(" · ").toUpperCase() : null;
+}
+
 /** Alarm groups under GROUP_AT members become one row per spacecraft (contract: UI's call). */
 function alarmRows(item: ServerItem): QueueItem[] {
   const point = item.point?.name ?? "Point";
@@ -125,6 +142,9 @@ function alarmRows(item: ServerItem): QueueItem[] {
         title: `${plural(item.spacecraft.length, "spacecraft", "spacecraft")} · ${why}`,
         titleTo: null,
         sentence: names(item.spacecraft),
+        meta: item.acknowledged
+          ? `${item.acknowledged} OF ${item.spacecraft.length} ACKNOWLEDGED`
+          : null,
         action: {
           label: "Alarms",
           to: { name: "ops.alarms", query: item.point ? { point: item.point.id } : {} },
@@ -137,7 +157,7 @@ function alarmRows(item: ServerItem): QueueItem[] {
     title: `${sc.name} · ${why}`,
     titleTo: investigate(sc),
     sentence: `${point} reads ${withUnit(formatValue(sc.value), item.point?.unit ?? null) ?? "—"}.`,
-    meta: sc.stale ? "LAST KNOWN · TELEMETRY STALE" : null,
+    meta: memberMeta(sc),
     action: { label: "Engage", to: investigate(sc) },
     spacecraftIds: [sc.id],
   }));

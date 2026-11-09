@@ -12,6 +12,9 @@ const member = (scid: number, extra: Record<string, unknown> = {}) => ({
   violating_points: 1,
   value: 23.1,
   first_crossed_at: "2026-11-08T02:35:02Z",
+  episode_id: null,
+  status: null,
+  assignee: null,
   ...extra,
 });
 const item = (overrides: Record<string, unknown>) => ({
@@ -19,6 +22,8 @@ const item = (overrides: Record<string, unknown>) => ({
   priority: 1,
   kind: "alarm",
   state: "critical",
+  source: null,
+  acknowledged: null,
   since: null,
   due_at: null,
   count: 1,
@@ -58,6 +63,25 @@ describe("action queue (M6)", () => {
       ["EARENDIL-312 · VBAT below red limit", "Engage", null],
       ["EARENDIL-047 · VBAT below red limit", "Engage", "LAST KNOWN · TELEMETRY STALE"],
     ]);
+    const owned = present([
+      item({
+        id: "alarm:c",
+        ...vbat,
+        acknowledged: 1,
+        spacecraft: [member(9, { status: "acknowledged", assignee: { id: "u", name: "Mira K." } })],
+      }),
+    ]);
+    expect(owned[0]?.meta).toBe("ACKNOWLEDGED · ASSIGNED TO MIRA K.");
+    expect(
+      present([
+        item({
+          id: "alarm:d",
+          ...vbat,
+          acknowledged: 2,
+          spacecraft: [member(1), member(2), member(3)],
+        }),
+      ])[0]?.meta,
+    ).toBe("2 OF 3 ACKNOWLEDGED");
     const big = present([
       item({ id: "alarm:b", ...vbat, spacecraft: [member(1), member(2), member(3)] }),
     ]);
