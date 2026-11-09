@@ -52,9 +52,12 @@ requirement. It becomes one row per `(template, version, occurrence_at, spacecra
   generated from an older template version are superseded (cause `template_versioned`) when a
   newer version materializes, so a re-seed doesn't leave the old rule active next to the new
   one (qa, 2026-11-11).
-- Bounds: `catch_up_policy.maximum_occurrences_per_run` still limits occurrences. A new
-  per-template cap of 10,000 spacecraft × occurrences per run fails the materialization with
-  `{:template_fan_out_exceeded, n}` instead of silently truncating.
+- Bounds: `catch_up_policy.maximum_occurrences_per_run` still limits occurrences. A cap on
+  spacecraft × occurrences fails the materialization with `{:template_fan_out_exceeded, n}`
+  instead of silently truncating; the fleet start review applies the same cap summed over its
+  templates. It's `:cadence, :template_fan_out_limit`, default **50,000**, sized for the 2,000-
+  spacecraft runtime target × 3 contacts/day × the default 7-day horizon (42,000). Console
+  drafts materialize one day.
 
 ## Migration
 

@@ -145,6 +145,17 @@ defmodule Cadence.ContactPlanning.TargetedTemplatesTest do
   end
 
   test "fan-out over the cap fails instead of truncating", c do
+    previous = Application.get_env(:cadence, :template_fan_out_limit)
+    Application.put_env(:cadence, :template_fan_out_limit, 10_000)
+
+    on_exit(fn ->
+      if previous,
+        do: Application.put_env(:cadence, :template_fan_out_limit, previous),
+        else: Application.delete_env(:cadence, :template_fan_out_limit)
+    end)
+
+    assert ContactRequirementTemplates.fan_out_limit() == 10_000
+
     ids =
       for n <- 1..11 do
         id = "sc-fan-#{n}"

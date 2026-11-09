@@ -152,7 +152,7 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
       # A template fans out per targeted spacecraft.
       total = count + length(occurrences) * length(targets)
 
-      if total > 10_000 do
+      if total > ContactRequirementTemplates.fan_out_limit() do
         {:halt, {:error, :fleet_planning_occurrence_limit_exceeded}}
       else
         entry = %{

@@ -288,15 +288,23 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
       do: TemplateSupersession.supersede(scope, version, targets, now)
   end
 
-  @fan_out_limit 10_000
+  # 2,000 spacecraft (the runtime target) × 3 contacts/day × a 7-day horizon = 42,000.
+  @default_fan_out_limit 50_000
 
-  @doc "Spacecraft × occurrences one materialization may create (fails instead of truncating)."
-  def fan_out_limit, do: @fan_out_limit
+  @doc """
+  Spacecraft × occurrences one template materialization (and one fleet start,
+  summed over templates) may generate; over it fails instead of truncating.
+  Config `:cadence, :template_fan_out_limit` (default 50,000).
+  """
+  @spec fan_out_limit() :: pos_integer()
+  def fan_out_limit,
+    do: Application.get_env(:cadence, :template_fan_out_limit, @default_fan_out_limit)
 
-  defp fan_out_bound(count) when count > @fan_out_limit,
-    do: {:error, {:template_fan_out_exceeded, count}}
-
-  defp fan_out_bound(_count), do: :ok
+  defp fan_out_bound(count) do
+    if count > fan_out_limit(),
+      do: {:error, {:template_fan_out_exceeded, count}},
+      else: :ok
+  end
 
   @spec materialize_active(
           Scope.t(),
