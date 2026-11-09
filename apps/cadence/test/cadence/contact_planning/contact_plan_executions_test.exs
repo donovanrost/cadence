@@ -15,8 +15,8 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
   }
 
   alias Cadence.Control.Contacts, as: ControlContacts
-  alias Cadence.Control.PlanConfirmation
   alias Cadence.Control.Contacts.Store.ContactPlanExecutionItemRow
+  alias Cadence.Control.PlanConfirmation
   alias Cadence.Control.Scheduling
   alias Cadence.Management.Contacts, as: ManagementContacts
 
