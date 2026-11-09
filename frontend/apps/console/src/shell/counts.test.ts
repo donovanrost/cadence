@@ -6,7 +6,7 @@ describe("counts contract", () => {
   it("accepts the documented payload with nulls for what can't be computed", () => {
     const result = decode(countsReader, {
       observed_at: "2026-11-08T02:41:17Z",
-      alarms: { active: 4, critical: 3, caution: 1, unacknowledged: 2 },
+      alarms: { active: 4, critical: 3, caution: 1, unacknowledged: 2, limits_configured: true },
       commands: { open: 25, awaiting_viewer: 2 },
       fleet: { total: 500 },
       contacts: null,

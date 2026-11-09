@@ -11,6 +11,7 @@ export const countsReader = d.object({
       critical: d.integer,
       caution: d.integer,
       unacknowledged: d.integer,
+      limits_configured: d.boolean,
     }),
   ),
   commands: d.nullable(d.object({ open: d.integer, awaiting_viewer: d.integer })),

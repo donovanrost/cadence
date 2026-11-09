@@ -32,14 +32,12 @@ function count(
     case "fleet":
       return c.fleet ? { text: formatCount(c.fleet.total) } : null;
     case "alarms":
-      // ux #18 / U13: a 0 is only meaningful when something can raise alarms; until /counts says
-      // whether ground limits are configured, show no count rather than a reassuring 0.
-      return c.alarms && c.alarms.active > 0
-        ? {
-            text: formatCount(c.alarms.active),
-            ...(c.alarms.critical > 0 ? { tone: "crit" as const } : {}),
-          }
-        : null;
+      // ux #18 / U13: 0 is only shown when something can raise alarms (ground limits configured).
+      if (!c.alarms || (c.alarms.active === 0 && !c.alarms.limits_configured)) return null;
+      return {
+        text: formatCount(c.alarms.active),
+        ...(c.alarms.critical > 0 ? { tone: "crit" as const } : {}),
+      };
     case "commands":
       return c.commands ? { text: formatCount(c.commands.open) } : null;
     case "contacts":
