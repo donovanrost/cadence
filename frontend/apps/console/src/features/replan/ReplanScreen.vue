@@ -82,11 +82,16 @@ const context = computed(() => {
     ? `Re-plan · live plan r${s.value.version} · ${s.value.state.replaceAll("_", " ")}`
     : "Re-plan";
 });
-const title = computed(() =>
-  station.stationId.value
+const title = computed(() => {
+  if (!station.stationId.value) return "Re-plan after provider changes";
+  const a = station.availability.value;
+  const state = a.status === "ready" ? a.value.status.state : null;
+  return state === "down"
     ? `${station.stationName.value} outage`
-    : "Re-plan after provider changes",
-);
+    : state === "degraded"
+      ? `${station.stationName.value} degraded`
+      : station.stationName.value;
+});
 async function onApply(acks: Acknowledgement[]) {
   const plan = proposal.value?.plan;
   if (!plan) return;
