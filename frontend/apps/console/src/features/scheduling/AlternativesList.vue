@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { RemoteState } from "@/api";
 import { ApButton, ApEmptyState, ApRemote, plural } from "@/ui";
-import { distinctWindows, type Alternative, type Alternatives } from "./api.ts";
+import { distinctWindows, stationCode, type Alternative, type Alternatives } from "./api.ts";
 
 /**
  * Other windows for the focused spacecraft (S4) with their effect from the server's evaluator.
@@ -35,7 +35,7 @@ const when = (a: Alternative) => `${a.starts_at.slice(11, 16)}–${a.ends_at.sli
               @click="$emit('select', alt.snapshot_id)"
             >
               <span class="block font-mono text-sm text-readout"
-                >{{ when(alt) }} · {{ alt.station ?? "?" }}</span
+                >{{ when(alt) }} · {{ stationCode(alt.station) }}</span
               >
               <span
                 class="block text-sm"

@@ -94,7 +94,7 @@ async function onKey(event: KeyboardEvent, id: string) {
         v-for="row in rows"
         :key="row.id"
         role="group"
-        :aria-label="row.label"
+        :aria-label="row.name ?? row.label"
         class="flex items-stretch"
       >
         <div
@@ -102,7 +102,7 @@ async function onKey(event: KeyboardEvent, id: string) {
           :style="{ width: `${labelWidth}px` }"
           :class="row.degraded ? 'text-caution-text' : 'text-text-2'"
         >
-          <span class="truncate" :title="row.label">{{ row.label }}</span>
+          <span class="truncate" :title="row.name ?? row.label">{{ row.label }}</span>
           <span v-if="row.tag" class="text-2xs text-text-4">{{ row.tag }}</span>
         </div>
         <div

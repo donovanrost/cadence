@@ -3,7 +3,7 @@ import { computed } from "vue";
 import type { RemoteState } from "@/api";
 import { ApButton, ApEmptyState, ApKeyValue, ApPanel, ApTag, formatDuration } from "@/ui";
 import AlternativesList from "./AlternativesList.vue";
-import type { Alternatives, PlanDetail } from "./api.ts";
+import { stationCode, stationName, type Alternatives, type PlanDetail } from "./api.ts";
 import type { SpacecraftName } from "./names.ts";
 
 /**
@@ -55,7 +55,12 @@ const items = computed(() => {
       label: "Length",
       value: formatDuration((Date.parse(p.ends_at) - Date.parse(p.starts_at)) / 1000),
     },
-    { key: "station", label: "Station", value: p.station ?? "Not reported", mono: true },
+    {
+      key: "station",
+      label: "Station",
+      value: p.station ? `${stationCode(p.station)} · ${stationName(p.station)}` : "Not reported",
+      mono: true,
+    },
     {
       key: "source",
       label: "Source",

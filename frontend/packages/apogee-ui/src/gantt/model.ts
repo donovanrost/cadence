@@ -6,6 +6,8 @@ export type GanttRow = Readonly<{
   id: string;
   /** Mono code, e.g. `SVB-1`. */
   label: string;
+  /** Full name for the accessible label and tooltip, e.g. `Svalbard`. */
+  name?: string | undefined;
   /** Small capability tag after the label, e.g. `UP`. */
   tag?: string | undefined;
   degraded?: boolean | undefined;

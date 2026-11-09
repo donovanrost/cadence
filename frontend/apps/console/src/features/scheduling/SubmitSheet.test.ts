@@ -123,6 +123,7 @@ describe("SubmitSheet dialog (ux K1 #8)", () => {
     expect(wrapper.get(`#${dialog.attributes("aria-labelledby") ?? "missing"}`).text()).toContain(
       "Accept 2 gaps",
     );
+    // oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-member-access -- vue-tsc checks the exposed open(); the lint type service can't resolve SFC instances.
     wrapper.vm.open();
     await new Promise((r) => setTimeout(r, 0));
     expect(document.activeElement?.tagName).toBe("TEXTAREA");

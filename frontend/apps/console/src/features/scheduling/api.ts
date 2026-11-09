@@ -18,6 +18,17 @@ export const planStates = [
 ] as const;
 export type PlanState = (typeof planStates)[number];
 
+/** Station identity joined by the server (Reads.StationRefs); ids/codes are null when unmatched. */
+export const stationReader = d.nullable(
+  d.object({
+    ref: d.nullable(d.string),
+    id: d.nullable(d.token),
+    code: d.nullable(d.string),
+    name: d.nullable(d.string),
+  }),
+);
+export type StationRef = Decoded<typeof stationReader>;
+
 const planRow = {
   id: d.token,
   version: d.integer,
@@ -43,7 +54,7 @@ export const planDetailReader = d.object({
     d.object({
       snapshot_id: d.token,
       spacecraft_id: d.nullable(d.token),
-      station: d.nullable(d.string),
+      station: stationReader,
       starts_at: d.timestamp,
       ends_at: d.timestamp,
       synthetic: d.boolean,
@@ -316,7 +327,7 @@ export const alternativesReader = d.object({
     d.object({
       snapshot_id: d.token,
       requirement_id: d.nullable(d.token),
-      station: d.nullable(d.string),
+      station: stationReader,
       starts_at: d.timestamp,
       ends_at: d.timestamp,
       synthetic: d.boolean,
@@ -352,7 +363,7 @@ export const editableStates: readonly PlanState[] = ["draft", "pending_approval"
 const repairPass = d.object({
   snapshot_id: d.token,
   spacecraft_id: d.nullable(d.token),
-  station: d.nullable(d.string),
+  station: stationReader,
   starts_at: d.timestamp,
   ends_at: d.timestamp,
 });
@@ -413,9 +424,16 @@ export function fetchRepair(
 export function distinctWindows(list: readonly Alternative[]): Alternative[] {
   const seen = new Set<string>();
   return list.filter((a) => {
-    const key = `${a.station ?? "?"}|${a.starts_at}|${a.ends_at}`;
+    const key = `${stationKey(a.station)}|${a.starts_at}|${a.ends_at}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 }
+
+/** Row identity for a station: Cadence id, else the provider ref. */
+export const stationKey = (s: StationRef) => s?.id ?? s?.ref ?? "?";
+/** Short label: Cadence code (FAI), else the provider ref. */
+export const stationCode = (s: StationRef) => s?.code ?? s?.ref ?? "?";
+/** Full name for screen readers and tooltips. */
+export const stationName = (s: StationRef) => s?.name ?? s?.code ?? s?.ref ?? "unknown station";

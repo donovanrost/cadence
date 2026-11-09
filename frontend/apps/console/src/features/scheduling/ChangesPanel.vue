@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ApListRow, ApPanel, ApStatStrip, ApStatTile, formatDuration, plural } from "@/ui";
-import { reasonText, type PlanDetail, type Repair } from "./api.ts";
+import { reasonText, stationCode, type PlanDetail, type Repair } from "./api.ts";
 import type { SpacecraftName } from "./names.ts";
 
 /** C · Changes (K2): what the repair keeps, moves, drops and adds, then what needs a person. */
@@ -57,8 +57,8 @@ const sign = (s: number) => (s >= 0 ? `+${formatDuration(s)}` : `−${formatDura
       >
         <span class="text-readout">{{ name(m.spacecraft_id) }}</span>
         <span class="text-text-3"
-          >{{ m.from.station ?? "?" }} {{ m.from.starts_at.slice(11, 16) }}Z →
-          {{ m.to.station ?? "?" }} {{ m.to.starts_at.slice(11, 16) }}Z</span
+          >{{ stationCode(m.from.station) }} {{ m.from.starts_at.slice(11, 16) }}Z →
+          {{ stationCode(m.to.station) }} {{ m.to.starts_at.slice(11, 16) }}Z</span
         >
         <span class="text-text-4">{{ sign(m.offset_s) }}</span>
       </li>

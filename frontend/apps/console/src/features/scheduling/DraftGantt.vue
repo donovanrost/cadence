@@ -2,7 +2,15 @@
 import { computed } from "vue";
 import { ApGantt, ApPanel, formatCount, useNow, type GanttBar, type GanttRow } from "@/ui";
 import type { RemoteState } from "@/api";
-import { distinctWindows, type Alternatives, type PlanDetail } from "./api.ts";
+import {
+  distinctWindows,
+  stationCode,
+  stationKey,
+  stationName,
+  type Alternatives,
+  type PlanDetail,
+  type StationRef,
+} from "./api.ts";
 import type { SpacecraftName } from "./names.ts";
 
 /** B · Draft by station: the plan's passes; the focused spacecraft ringed, conflicts dashed caution. */
@@ -34,19 +42,22 @@ const others = computed(() =>
     ? distinctWindows(props.alternatives.value.alternatives)
     : [],
 );
-const rows = computed<GanttRow[]>(() =>
-  [...new Set([...props.plan.passes, ...others.value].map((p) => p.station ?? "?"))]
-    .sort()
-    .map((s) => ({ id: s, label: s })),
-);
+const rows = computed<GanttRow[]>(() => {
+  const byKey = new Map<string, StationRef>();
+  for (const p of [...props.plan.passes, ...others.value])
+    byKey.set(stationKey(p.station), p.station);
+  return [...byKey.entries()]
+    .map(([id, st]) => ({ id, label: stationCode(st), name: stationName(st) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+});
 const windowBars = computed<GanttBar[]>(() =>
   others.value.map((a) => ({
     id: a.snapshot_id,
-    rowId: a.station ?? "?",
+    rowId: stationKey(a.station),
     from: Date.parse(a.starts_at),
     to: Date.parse(a.ends_at),
     kind: a.effect.clashes_with.length > 0 ? "clash" : "window",
-    description: `Other window · ${a.station ?? "unknown station"} · ${a.starts_at.slice(11, 16)}–${a.ends_at.slice(11, 16)}Z${a.effect.clashes_with.length > 0 ? " · clashes" : ""}`,
+    description: `Other window · ${stationName(a.station)} · ${a.starts_at.slice(11, 16)}–${a.ends_at.slice(11, 16)}Z${a.effect.clashes_with.length > 0 ? " · clashes" : ""}`,
   })),
 );
 const draftedBars = computed<GanttBar[]>(() =>
@@ -55,7 +66,7 @@ const draftedBars = computed<GanttBar[]>(() =>
     const who = sc ? `${sc.name} (SCID ${sc.scid})` : (p.spacecraft_id ?? "unknown spacecraft");
     return {
       id: p.snapshot_id,
-      rowId: p.station ?? "?",
+      rowId: stationKey(p.station),
       from: Date.parse(p.starts_at),
       to: Date.parse(p.ends_at),
       kind: clashing.value.has(p.snapshot_id)
@@ -64,7 +75,7 @@ const draftedBars = computed<GanttBar[]>(() =>
           ? "focused"
           : "own",
       label: sc ? String(sc.scid) : undefined,
-      description: `${who} · ${p.station ?? "unknown station"} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z${clashing.value.has(p.snapshot_id) ? " · conflict" : ""}`,
+      description: `${who} · ${stationName(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z${clashing.value.has(p.snapshot_id) ? " · conflict" : ""}`,
     };
   }),
 );
@@ -85,7 +96,6 @@ const rangeText = computed(() =>
   >
     <ApGantt
       label="Drafted passes by station"
-      :label-width="150"
       :rows="rows"
       :bars="bars"
       :window="window"
