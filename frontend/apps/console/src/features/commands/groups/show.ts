@@ -1,4 +1,11 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import {
+  decoders as d,
+  DecodeError,
+  request,
+  type ApiResult,
+  type Decoded,
+  type Reader,
+} from "@/api/index.ts";
 import {
   actor,
   groupsBase,
@@ -57,6 +64,17 @@ const reason = d.object({
   threshold: d.optional(d.integer),
 });
 
+/** `submitted` counts uplinks; `completed` (#51) tallies final outcomes `{verified: 3, …}`. */
+const eventMembers: Reader<number | Readonly<Record<string, number>>> = (value, path = "") => {
+  if (typeof value === "number") return d.integer(value, path);
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    throw new DecodeError(path, "integer or object");
+  const out: Record<string, number> = {};
+  for (const [key, count] of Object.entries(value))
+    out[d.token(key, `${path}.${key}`)] = d.integer(count, `${path}.${key}`);
+  return out;
+};
+
 const event = d.object({
   id: d.token,
   kind: d.token,
@@ -66,13 +84,17 @@ const event = d.object({
     d.object({
       note: d.optional(d.nullable(d.string)),
       reason: d.optional(d.nullable(d.string)),
-      members: d.optional(d.integer),
+      members: d.optional(eventMembers),
       approved: d.optional(d.integer),
       excluded: d.optional(d.array(d.token, 1_000)),
       /** A count; `already_started` lists the request ids that kept running. */
       canceled: d.optional(d.integer),
       already_started: d.optional(d.array(d.token, 5_000)),
       command_request_id: d.optional(d.token),
+      // member_failed (#51)
+      spacecraft_id: d.optional(d.token),
+      position: d.optional(d.integer),
+      later_members_stopped: d.optional(d.integer),
     }),
   ),
 });

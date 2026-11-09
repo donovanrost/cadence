@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { preflightReader, type Preflight } from "../groups/api.ts";
 import { groupOf, showBody } from "../groups/fixtures.ts";
-import { eventText, memberStageWord, statusTag } from "../groups/words.ts";
+import { eventState, eventText, memberStageWord, statusTag } from "../groups/words.ts";
 import { inTab } from "../list/list.ts";
 import type { GroupRow } from "../groups/api.ts";
 import { cannotDecide, decisionOptions, flaggedTargets, noGoAfter } from "./decision.ts";
@@ -191,6 +191,23 @@ describe("closed requests and exclusions (qa matrix nits)", () => {
   });
 });
 
+const rowOf = (progress: GroupRow["progress"]): GroupRow => ({
+  id: "g",
+  state: "queued",
+  title: "t",
+  requested_by: { actor_kind: "user", user_id: "u" },
+  requested_at: "2026-11-09T15:26:26Z",
+  requested_approver_user_id: null,
+  member_count: 1,
+  target_count: 1,
+  command_count: 1,
+  second_go_required: false,
+  awaiting_me: false,
+  operation_id: null,
+  progress,
+  finished: undefined,
+});
+
 describe("delivered requests stay 'queued' (approval-only state, qa #28)", () => {
   it("tags a released request by its delivery, never just queued", () => {
     expect(statusTag("queued", { queued_for_contact: 2 }, 2).label).toBe(
@@ -214,27 +231,68 @@ describe("delivered requests stay 'queued' (approval-only state, qa #28)", () =>
   });
 
   it("moves a finished run from Released to Closed", () => {
-    const row = (progress: GroupRow["progress"]): GroupRow => ({
-      id: "g",
-      state: "queued",
-      title: "t",
-      requested_by: { actor_kind: "user", user_id: "u" },
-      requested_at: "2026-11-09T15:26:26Z",
-      requested_approver_user_id: null,
-      member_count: 1,
-      target_count: 1,
-      command_count: 1,
-      second_go_required: false,
-      awaiting_me: false,
-      operation_id: null,
-      progress,
-      finished: undefined,
-    });
+    const row = rowOf;
     expect(inTab(row({ no_verifier: 1 }), "closed")).toBe(true);
     expect(inTab(row({ no_verifier: 1 }), "queued")).toBe(false);
     expect(inTab(row({ queued_for_contact: 1 }), "queued")).toBe(true);
     expect(inTab(row(undefined), "queued")).toBe(true);
     expect(inTab({ ...row(null), state: "rejected", finished: null }, "closed")).toBe(true);
     expect(inTab({ ...row({ queued_for_contact: 1 }), finished: true }, "closed")).toBe(true);
+  });
+});
+
+describe("#51 system events (b5d6ed6d)", () => {
+  const system = { actor_kind: "system", user_id: null };
+  const g = groupOf({
+    events: [
+      {
+        id: "e1",
+        kind: "member_failed",
+        actor: system,
+        at: "2026-11-09T18:27:00Z",
+        payload: {
+          command_request_id: "cr-1",
+          command_id: "c-1",
+          spacecraft_id: "sc-4",
+          target_index: 0,
+          position: 0,
+          reason: "verify_timed_out",
+          later_members_stopped: 2,
+        },
+      },
+      {
+        id: "e2",
+        kind: "completed",
+        actor: system,
+        at: "2026-11-09T18:28:00Z",
+        payload: { members: { verified: 3, verify_timed_out: 1 } },
+      },
+    ],
+  });
+  const targets = [
+    {
+      spacecraft_id: "sc-4",
+      name: "EARENDIL-004",
+      members: [{ position: 0, command_name: "SET_MODE" }],
+    },
+  ];
+  const [failed, completed] = g.events;
+
+  it("names the failed uplink and what it stopped", () => {
+    expect(failed && eventText(failed, () => "Cadence", targets)).toBe(
+      "SET_MODE on EARENDIL-004: verify timed out · 2 later uplinks stopped",
+    );
+    expect(failed && eventState(failed)).toBe("crit");
+  });
+
+  it("tallies the run's outcomes", () => {
+    expect(completed && eventText(completed, () => "Cadence")).toBe(
+      "Run complete · 3 verified · 1 verify timed out",
+    );
+  });
+
+  it("an uncertain release isn't final", () => {
+    expect(statusTag("queued", { indeterminate: 1 }, 1).state).toBe("crit");
+    expect(inTab(rowOf({ indeterminate: 1 }), "queued")).toBe(true);
   });
 });

@@ -12,7 +12,13 @@ import {
   ApTag,
 } from "@/ui";
 import type { Group } from "../groups/show.ts";
-import { eventText, memberStageWord, STAGE_STATE, type PersonName } from "../groups/words.ts";
+import {
+  eventState,
+  eventText,
+  memberStageWord,
+  STAGE_STATE,
+  type PersonName,
+} from "../groups/words.ts";
 import AbortPanel from "./AbortPanel.vue";
 import { abortable, pipeline } from "./uplink.ts";
 
@@ -104,9 +110,9 @@ const pos = (n: number) => String(n + 1).padStart(2, "0");
           :key="e.id"
           :time="formatClock(new Date(e.at))"
           :datetime="e.at"
-          state="neutral"
+          :state="eventState(e)"
           mono
-          >{{ eventText(e, nameOf) }}</ApEventLine
+          >{{ eventText(e, nameOf, group.targets) }}</ApEventLine
         >
       </ol>
     </ApPanel>
