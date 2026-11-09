@@ -83,13 +83,13 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
   {
     path: "setup/comms",
     name: "setup.comms",
-    component: pending,
+    component: () => import("@/features/comms/CommsScreen.vue"),
     meta: { mode: "setup", nav: "comms", title: "Comms & routing" },
   },
   {
     path: "setup/comms/transports/:transportId?",
     name: "setup.comms.transports",
-    component: pending,
+    component: () => import("@/features/comms/CommsScreen.vue"),
     meta: { mode: "setup", nav: "comms", title: "Transports" },
   },
   {
