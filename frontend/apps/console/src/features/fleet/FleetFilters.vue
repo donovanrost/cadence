@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { ApField, ApSelect } from "@/ui";
 import type { FleetSpacecraft, FleetState } from "./api.ts";
+import { fleetStateWord } from "./matrix.ts";
 import { isFiltered, NO_FILTER, type FleetFilter } from "./filters.ts";
 import PlanePicker from "./PlanePicker.vue";
 import StateToggles from "./StateToggles.vue";
@@ -29,6 +30,9 @@ const profile = computed({
   get: () => props.filter.profile ?? "all",
   set: (value: string) => set({ profile: value === "all" || value === "" ? null : value }),
 });
+const stateSummary = computed(() =>
+  props.filter.states.length ? props.filter.states.map(fleetStateWord).join(", ") : "all",
+);
 const q = computed({ get: () => props.filter.q, set: (value: string) => set({ q: value.trim() }) });
 </script>
 
@@ -48,8 +52,26 @@ const q = computed({ get: () => props.filter.q, set: (value: string) => set({ q:
       size="compact"
       :options="profiles"
     />
-    <StateToggles :selected="filter.states" @change="(states: FleetState[]) => set({ states })" />
-    <div class="w-56">
+    <StateToggles
+      class="max-md:hidden"
+      :selected="filter.states"
+      @change="(states: FleetState[]) => set({ states })"
+    />
+    <!-- Under 768 the five state toggles collapse into one disclosure (ux pass 1 #12). -->
+    <details class="w-full border border-line md:hidden">
+      <summary
+        class="flex h-11 cursor-pointer items-center px-3 font-display text-md font-semibold tracking-tag text-text-2 uppercase"
+      >
+        State: {{ stateSummary }}
+      </summary>
+      <div class="p-2">
+        <StateToggles
+          :selected="filter.states"
+          @change="(states: FleetState[]) => set({ states })"
+        />
+      </div>
+    </details>
+    <div class="w-56 max-md:w-full">
       <ApField
         v-model="q"
         label="Search name or SCID"

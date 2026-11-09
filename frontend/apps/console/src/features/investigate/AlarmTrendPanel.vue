@@ -118,6 +118,7 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
               :unit="alarm.point.unit ?? undefined"
             />
             <ApStatTile
+              class="max-md:col-span-2"
               label="Rate"
               :value="view?.rate == null ? null : formatRate(view.rate)"
               :caption="

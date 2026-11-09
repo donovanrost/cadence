@@ -7,6 +7,7 @@ import type { Fleet, FleetSpacecraft } from "./api.ts";
 import FleetFilters from "./FleetFilters.vue";
 import FleetMatrix from "./FleetMatrix.vue";
 import FleetStatStrip from "./FleetStatStrip.vue";
+import FleetRowList from "./FleetRowList.vue";
 import FleetTable from "./FleetTable.vue";
 import {
   byStateThenName,
@@ -89,11 +90,18 @@ const title = computed(() => {
               >Clear filters</ApButton
             >
           </ApEmptyState>
-          <FleetTable
-            v-else-if="view === 'table'"
-            :rows="narrowed(value).rows"
-            :total="value.counts.total"
-          />
+          <template v-else-if="view === 'table'">
+            <FleetTable
+              class="max-md:hidden"
+              :rows="narrowed(value).rows"
+              :total="value.counts.total"
+            />
+            <FleetRowList
+              class="md:hidden"
+              :rows="narrowed(value).rows"
+              :total="value.counts.total"
+            />
+          </template>
           <div v-else class="p-4">
             <FleetMatrix
               :spacecraft="value.spacecraft"

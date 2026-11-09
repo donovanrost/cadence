@@ -165,7 +165,7 @@ const inspector = computed(() => {
       <RouterLink
         v-if="tableLink"
         :to="{ name: 'ops.fleet' }"
-        class="font-mono text-xs text-text-3 uppercase no-underline hover:text-readout"
+        class="max-md:hit-44 font-mono text-xs text-text-3 uppercase no-underline hover:text-readout"
         >View as table →</RouterLink
       >
     </div>

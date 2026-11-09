@@ -35,7 +35,7 @@ defineEmits<{ retry: [] }>();
               <RouterLink
                 v-if="item.titleTo"
                 :to="item.titleTo"
-                class="text-readout no-underline hover:text-bright hover:underline"
+                class="max-md:hit-44 text-readout no-underline hover:text-bright hover:underline"
                 >{{ item.title }}</RouterLink
               >
               <template v-else>{{ item.title }}</template>

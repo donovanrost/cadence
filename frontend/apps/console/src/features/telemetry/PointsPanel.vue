@@ -85,6 +85,7 @@ function addManual() {
         :options="scOptions"
         @update:model-value="onPick"
       />
+      <ApField v-model="q" label="Search points" type="search" placeholder="Name or description" />
       <div v-if="scids.length" class="flex flex-wrap gap-1.5">
         <ApChip
           v-for="scid in scids"
@@ -105,25 +106,34 @@ function addManual() {
           ><span class="normal-case">{{ p }}</span></ApChip
         >
       </div>
-      <form class="flex items-end gap-2" @submit.prevent="addManual">
-        <div class="min-w-0 flex-1">
-          <ApField v-model="manual" label="Point id" mono placeholder="EPS.sa1_current" />
+      <details class="border border-hairline">
+        <summary class="ap-label flex min-h-11 cursor-pointer items-center px-3">
+          Technical · exact point id
+        </summary>
+        <div class="flex flex-col gap-2 px-3 pb-3">
+          <p v-if="searchMissing" class="m-0 text-md text-text-3">
+            Point search isn't available yet.
+          </p>
+          <form class="flex items-end gap-2" @submit.prevent="addManual">
+            <div class="min-w-0 flex-1">
+              <ApField v-model="manual" label="Point id" mono placeholder="EPS.sa1_current" />
+            </div>
+            <ApButton
+              size="compact"
+              type="submit"
+              :disabled="!manual.trim()"
+              disabled-reason="Enter a point id first"
+              >Add</ApButton
+            >
+          </form>
         </div>
-        <ApButton
-          size="compact"
-          type="submit"
-          :disabled="!manual.trim()"
-          disabled-reason="Enter a point id first"
-          >Add</ApButton
-        >
-      </form>
-      <ApField v-model="q" label="Search points" type="search" placeholder="Name or description" />
+      </details>
     </div>
     <ApEmptyState
       v-if="searchMissing"
       state="off"
       headline="Point search not available yet"
-      sentence="The catalog search read isn't connected to this console. Enter a point id above to plot it."
+      sentence="The catalog search read isn't connected to this console yet."
     />
     <ul v-else-if="search.state.value.status === 'ready'" class="m-0 list-none p-0">
       <li

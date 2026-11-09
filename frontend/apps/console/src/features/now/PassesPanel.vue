@@ -10,7 +10,9 @@ import { ApButton, ApEmptyState, ApPanel } from "@/ui";
 <template>
   <ApPanel index="A4" title="Passes · next 2 h" pane flush>
     <template #meta>
-      <RouterLink :to="{ name: 'ops.contacts' }" class="text-text-3 no-underline hover:text-readout"
+      <RouterLink
+        :to="{ name: 'ops.contacts' }"
+        class="max-md:hit-44 text-text-3 no-underline hover:text-readout"
         >Open contacts →</RouterLink
       >
     </template>

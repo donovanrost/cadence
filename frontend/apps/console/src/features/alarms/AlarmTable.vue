@@ -58,7 +58,7 @@ const state = (row: AlarmListRow) =>
           params: { scId: String(row.sc.scid), tab: 'investigate' },
           query: { alarm: row.alarm.id },
         }"
-        class="text-readout no-underline hover:text-bright hover:underline"
+        class="max-md:hit-44 whitespace-nowrap text-readout no-underline hover:text-bright hover:underline"
         >{{ row.sc.name }}</RouterLink
       >
       <span v-else class="text-text-3">Mission</span>

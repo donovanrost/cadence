@@ -7,7 +7,9 @@ import { ApEmptyState, ApPanel } from "@/ui";
 <template>
   <ApPanel index="B2" title="Event log" pane flush>
     <template #meta>
-      <RouterLink :to="{ name: 'ops.timeline' }" class="text-text-3 no-underline hover:text-readout"
+      <RouterLink
+        :to="{ name: 'ops.timeline' }"
+        class="max-md:hit-44 text-text-3 no-underline hover:text-readout"
         >Full timeline →</RouterLink
       >
     </template>
