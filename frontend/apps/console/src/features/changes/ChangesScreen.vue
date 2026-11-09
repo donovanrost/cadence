@@ -44,6 +44,11 @@ const previewKey = computed(() => {
 });
 const preview = useRemoteQuery(previewKey, previewChangeSet);
 
+function reloadAll() {
+  refetch();
+  preview.refetch();
+}
+
 // Kept here so the outcome survives the set closing (the aside unmounts on apply).
 const outcome = ref<SubmitResult | null>(null);
 function onResult(result: SubmitResult) {
@@ -135,7 +140,7 @@ function meta(config: ConfigState): string | null {
               :change-set="value.change_set"
               @changed="refetch"
             />
-            <ChecksPanel :preview="preview.state.value" @retry="preview.refetch" />
+            <ChecksPanel :preview="preview.state.value" @retry="reloadAll" />
           </div>
           <ReviewPanel
             v-if="reviewing(value)"

@@ -128,7 +128,7 @@ export function fixLink(fix: FindingFix, severity: Severity): FixLink {
         };
       case "app":
         return {
-          label: severity === "not_set_up" ? "Install" : "Open app",
+          label: severity === "not_set_up" || severity === "optional" ? "Install" : "Open app",
           to: { name: "setup.apps", params: { appKey: fix.id } },
         };
     }

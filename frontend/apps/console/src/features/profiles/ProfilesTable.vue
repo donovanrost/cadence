@@ -19,7 +19,7 @@ const columns: readonly ApColumn[] = [
     <template #cell-name="{ row }">
       <RouterLink
         :to="{ name: 'setup.profile', params: { profileId: row.id } }"
-        class="text-readout no-underline hover:text-bright hover:underline"
+        class="text-readout no-underline hover:text-bright hover:underline max-md:hit-44"
         >{{ row.name }}</RouterLink
       >
     </template>

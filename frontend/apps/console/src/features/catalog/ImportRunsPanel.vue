@@ -41,7 +41,7 @@ function diagnostics(run: ImportRun): string {
       <template #cell-file="{ row }">
         <RouterLink
           :to="{ name: 'setup.catalog.import', params: { importId: row.id } }"
-          class="font-mono text-readout no-underline hover:text-bright hover:underline"
+          class="font-mono text-readout no-underline hover:text-bright hover:underline max-md:hit-44"
           >{{ row.file_name }}</RouterLink
         >
         <span v-if="row.revision_number !== null" class="block text-xs text-text-4"

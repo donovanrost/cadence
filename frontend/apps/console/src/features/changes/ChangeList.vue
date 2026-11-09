@@ -65,7 +65,9 @@ function toggle(id: string) {
         :key="change.id"
         class="border-t border-hairline first:border-t-0"
       >
-        <div class="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 px-4 py-3">
+        <div
+          class="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 px-4 py-3 max-md:grid-cols-1 max-md:gap-1.5"
+        >
           <span class="text-base font-semibold text-readout">{{ change.summary }}</span>
           <span class="text-sm text-text-3"
             >{{ change.author.name }} ·

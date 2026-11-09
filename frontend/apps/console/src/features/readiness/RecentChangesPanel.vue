@@ -9,7 +9,9 @@ defineProps<{ changes: readonly RecentChange[] }>();
 <template>
   <ApPanel index="R2" title="Recent changes" flush>
     <template #meta>
-      <RouterLink :to="{ name: 'org.audit' }" class="text-text-3 no-underline hover:text-readout"
+      <RouterLink
+        :to="{ name: 'org.audit' }"
+        class="text-text-3 no-underline hover:text-readout max-md:hit-44"
         >Audit log →</RouterLink
       >
     </template>

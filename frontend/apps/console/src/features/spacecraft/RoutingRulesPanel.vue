@@ -19,7 +19,9 @@ const columns: readonly ApColumn[] = [
   <ApPanel index="D4" title="Routing" flush>
     <template #meta>
       {{ active.length }} active ·
-      <RouterLink :to="{ name: 'setup.comms' }" class="text-readout no-underline hover:text-bright"
+      <RouterLink
+        :to="{ name: 'setup.comms' }"
+        class="text-readout no-underline hover:text-bright max-md:hit-44"
         >Comms &amp; routing →</RouterLink
       >
     </template>

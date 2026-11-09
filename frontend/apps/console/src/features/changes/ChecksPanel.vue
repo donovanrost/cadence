@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { RemoteState } from "@/api";
-import { ApCheckRows, ApPanel, ApRemote, plural, type ApCheckRow } from "@/ui";
+import { ApButton, ApCallout, ApCheckRows, ApPanel, ApRemote, plural, type ApCheckRow } from "@/ui";
 import type { Preview } from "./actions.ts";
 
 /** K2 Checks: the server's dry run of the staged set (validation, conflicts; more kinds in P2). */
@@ -45,7 +45,13 @@ const meta = computed(() =>
 
 <template>
   <ApPanel index="K2" title="Checks" :meta="meta" flush>
-    <ApRemote :state="preview" loading-label="Running checks…" @retry="$emit('retry')">
+    <ApCallout v-if="preview.status === 'failed'" tone="caution">
+      Checks couldn't run. This change set may have been applied or discarded by someone else.
+      <template #action
+        ><ApButton size="compact" @click="$emit('retry')">Reload</ApButton></template
+      >
+    </ApCallout>
+    <ApRemote v-else :state="preview" loading-label="Running checks…" @retry="$emit('retry')">
       <template #default="{ value }"><ApCheckRows :rows="rows(value)" /></template>
     </ApRemote>
   </ApPanel>

@@ -39,7 +39,7 @@ function kindLabel(row: RevisionSummary): string {
       <span class="inline-flex items-center gap-2"
         ><RouterLink
           :to="{ name: 'setup.revision', params: { revision: String(row.revision) } }"
-          class="text-readout no-underline hover:text-bright hover:underline"
+          class="text-readout no-underline hover:text-bright hover:underline max-md:hit-44"
           >r{{ row.revision }}</RouterLink
         ><ApTag v-if="row.live" state="live" label="Live"
       /></span>

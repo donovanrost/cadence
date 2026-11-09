@@ -14,7 +14,7 @@ const state = computed(() => areaState(props.area.status));
     <div class="flex items-center justify-between gap-3">
       <RouterLink
         :to="areaRoute(area.key)"
-        class="font-display text-[17px] font-semibold tracking-title text-readout uppercase no-underline hover:text-bright hover:underline"
+        class="font-display text-[17px] font-semibold tracking-title text-readout uppercase no-underline hover:text-bright hover:underline max-md:hit-44"
         >{{ areaName(area.key) }}</RouterLink
       >
       <ApTag size="tile" :state="state" :label="areaWord(area.status)" />
