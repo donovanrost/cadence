@@ -97,6 +97,44 @@ Options:
 **Recommendation: (a).** (b) would put a fencing bypass in the tree, next to code that has to
 fail closed.
 
+### D2 as built: provider attestation (refines option a)
+
+Option (a) was a signed hello on the session. It is built as a **challenge–response over the
+provider API** instead, for two reasons:
+
+- an in-band hello would change the TCP stream's 4-byte CLCW framing, which lives in the data
+  plane;
+- attesting the peer address binds the evidence to the exact TCP connection.
+
+Here's the flow:
+
+1. **Basis.** When the provider connects, the TCP adapter registers the session. Its basis now
+   includes the connection's **peer address**. The session's `basis_sha256` changes with every
+   incarnation, so it serves as a fresh challenge.
+2. **Driver.** `Cadence.Control.UplinkQualification`, a composition-level process, finds blocked
+   provider-managed uplink sessions. For each one it calls the provider:
+
+   `POST /provider/v1/contacts/:id/uplink-attestation {challenge, purpose: fencing | protocol}`
+
+   The provider answers `{contact_ref, challenge, purpose, peer, farm, valid_until, signature}`.
+   The signature is HMAC-SHA256 under the provider API credential Cadence already holds, over a
+   canonical string. The simulator signs only for an active contact whose uplink leg is
+   included and whose COP-1 peer is connected. `peer` is that peer's own socket address;
+   `farm` is its FARM state, which `protocol` attestations report.
+3. **Recovery.** The driver runs `begin_recovery` (fencing) and then `complete_recovery`
+   (protocol), and re-qualifies before the 5-minute evidence window ends.
+4. **Policy.** `Cadence.GroundNetworks.ProviderSessionQualification` is the configured
+   `SessionQualification`. It accepts only when all of these hold:
+   - the signature verifies under the credential of the provider that booked the session's
+     contact;
+   - `challenge` equals the current `basis_sha256`;
+   - `contact_ref` is the provider contact of the session's realized contact;
+   - `peer` equals the peer in the basis;
+   - for protocol recovery, the FARM is unlocked.
+
+   Configuration alone can't qualify a session, and with no provider evidence the session
+   stays blocked. The policy is not dev-only, because it checks real evidence.
+
 ## Risks
 
 - **Port collisions.** One TCP listener per contact path per site port means two concurrent
