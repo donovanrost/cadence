@@ -6,17 +6,21 @@ import type { PlanDetail } from "./api.ts";
 import { bookingStopped, bookingWindow, type BookingStopped } from "./booking.ts";
 
 /**
- * The interrupted-execution reading for `plan` (null unless it's interrupted): reads the passes
- * over the plan's unlocked passes and refetches on `contacts` invalidations.
+ * The execution callout for `plan`, read from the passes over its unlocked passes (refetched on
+ * `contacts` invalidations). DECISIONS #52: `interrupted` means some requests never went out
+ * (stale line + Continue); `executing` with every request out is waiting on the provider and
+ * keeps the "All N went out · waiting for X to confirm" info line. Null otherwise.
  */
 export function useBookingStopped(
   missionId: Readonly<Ref<string>>,
   plan: Readonly<Ref<PlanDetail | null>>,
 ) {
-  const interrupted = computed(() => (plan.value?.state === "interrupted" ? plan.value : null));
+  const watched = computed(() =>
+    plan.value?.state === "interrupted" || plan.value?.state === "executing" ? plan.value : null,
+  );
   // A string key, so a refetched plan (a new object) doesn't reload the passes read.
   const key = computed(() => {
-    const w = interrupted.value ? bookingWindow(interrupted.value) : null;
+    const w = watched.value ? bookingWindow(watched.value) : null;
     return w ? `${missionId.value}|${w.from}|${w.to}` : null;
   });
   const passes = useRemoteQuery(key, (k, signal) => {
@@ -24,12 +28,14 @@ export function useBookingStopped(
     return fetchPasses(mission, { from: new Date(from), to: new Date(to) }, signal);
   });
   useMissionInvalidation(missionId, ["contacts"], passes.refetch);
-  return computed<BookingStopped | null>(() =>
-    interrupted.value
-      ? bookingStopped(
-          interrupted.value,
-          passes.state.value.status === "ready" ? passes.state.value.value : null,
-        )
-      : null,
-  );
+  return computed<BookingStopped | null>(() => {
+    const p = watched.value;
+    if (!p) return null;
+    const result = bookingStopped(
+      p,
+      passes.state.value.status === "ready" ? passes.state.value.value : null,
+    );
+    // Still sending: the footer's "Booking with the providers" note says it; no callout.
+    return p.state === "executing" && result.left !== 0 ? null : result;
+  });
 }
