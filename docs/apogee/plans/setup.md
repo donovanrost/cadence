@@ -8,24 +8,26 @@ Owner: **fe-setup**. Status: draft 1 (2026-11-08). Boards: `Setup` (S1), `AddSpa
 breadcrumbs, tone strings), so the plan asks **api** for purpose-built `/api/console/v1` JSON,
 reusing the underlying `L/reads/*` and stores. "Missing" means no backend data exists today.
 
-## Build status (2026-11-09, later)
+## Build status (2026-11-09, end of day)
 
 | Screen | Route | State | Data |
 | --- | --- | --- | --- |
 | S1 Readiness | `setup` | **live** (unknown fix kinds tolerated) | R |
 | Spacecraft list / detail | `setup/spacecraft[/:id]` | **live** | S, SD |
 | S2 Add spacecraft | `setup/spacecraft/new/:step` | **live**: server dry run at review, stages the batch | K preview + stage |
-| Profiles / S4 Profile | `setup/profiles[/:id/:section]` | **live**; profile read-only (#19), editing waits for domain P2 | P, PD |
+| Profiles / S4 Profile | `setup/profiles[/:id/:section]` | **live**; framing read-only (#19); routing rule editor + override reset stage live (domain P2) | P, PD, K |
 | S3 Catalog index / import run / upload | `setup/catalog[/import[/:id]]` | **live** (qa ran a real upload) | C1, C2, C3 |
 | Changes + Revisions | `setup/changes`, `setup/revisions[/:n]` | **live**; rollback waits for P2 | K |
 | Ground stations | `setup/stations[/:id\|new]` | **live**: edit and add through change sets | G1 + kind schema |
 | Comms & routing | `setup/comms[/transports[/:id]]` | **live**: transports editable, routing rules read-only (#3) | T1, T2, transport detail |
 | Data sources | `setup/data-sources` | built; not-available until D1 | D1 (api: after scheduling) |
-| Apps | `setup/apps` | built; not-available until A1; install model is domain's call | A1 |
+| Apps | `setup/apps` | built; actions behind the change seam (direct in v1, domain); not-available until A1 | A1 |
 | S5 People & access | `org/people` | **live** (members, invitations, invite, service identities) | O1, O2, O3; O4 with api-ops |
 | Org missions | `org/missions` | **live** (from the session) | session |
-| Contact planning (#27) | tbd | waiting on ux spec + api | tbd |
-| Mission/org settings, audit log, provider accounts | | not started | need specs + endpoints |
+| Contact planning (#27) | `setup/contact-planning[/policy]` | requirements built; policy/templates wait for CP2/CP3 | CP1-3 |
+| Mission / org settings | `setup/settings`, `org/settings` | built read-only; not-available until ST1 | ST1 |
+| Audit log | `org/audit` | built; not-available until AU1 | AU1 |
+| Provider accounts | `org/provider-accounts` | list built; not-available until PA1 | PA1 |
 
 Shapes requested from api: `setup-shapes.md`. Contracts: `docs/apogee/api/setup.md`.
 
