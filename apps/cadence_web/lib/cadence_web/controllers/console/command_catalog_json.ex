@@ -26,12 +26,20 @@ defmodule CadenceWeb.Console.CommandCatalogJSON do
     %{data: Map.merge(basis(result), %{command: detail(command)})}
   end
 
-  defp not_active, do: %{state: "not_active", revision_id: nil, plan_id: nil, activation_id: nil}
+  defp not_active,
+    do: %{
+      state: "not_active",
+      revision_id: nil,
+      catalog_revision: nil,
+      plan_id: nil,
+      activation_id: nil
+    }
 
   defp basis(result) do
     %{
       state: "active",
       revision_id: result.revision_id,
+      catalog_revision: result.catalog_revision,
       plan_id: result.plan_id,
       activation_id: result.activation_id
     }

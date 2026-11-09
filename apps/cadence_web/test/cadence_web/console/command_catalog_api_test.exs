@@ -31,6 +31,8 @@ defmodule CadenceWeb.Console.CommandCatalogAPITest do
 
       assert %{"state" => "active", "revision_id" => revision} = body["data"]
       assert is_binary(revision)
+      # The fixture composes its model without a catalog import, so no human revision exists.
+      assert Map.fetch!(body["data"], "catalog_revision") == nil
       assert length(body["data"]["commands"]) == 2
       assert is_binary(body["meta"]["next_cursor"])
 

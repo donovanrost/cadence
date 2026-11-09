@@ -46,7 +46,7 @@ defmodule Cadence.Reads.CommandCatalog do
       page = Enum.take(matching, limit)
 
       {:ok,
-       Map.merge(basis(snapshot), %{
+       Map.merge(basis(snapshot, organization_id, mission_id), %{
          commands: Enum.map(page, &entry(&1, Map.get(bindings, &1.command_id))),
          next_after: if(length(matching) > limit, do: List.last(page).command_id)
        })}
@@ -66,7 +66,7 @@ defmodule Cadence.Reads.CommandCatalog do
           binding = Map.get(bindings(snapshot.catalog), command_id)
 
           {:ok,
-           Map.merge(basis(snapshot), %{
+           Map.merge(basis(snapshot, organization_id, mission_id), %{
              command: detail(organization_id, mission_id, definition, binding, snapshot.catalog)
            })}
       end
@@ -81,12 +81,38 @@ defmodule Cadence.Reads.CommandCatalog do
     end
   end
 
-  defp basis(snapshot) do
+  defp basis(snapshot, organization_id, mission_id) do
     %{
       revision_id: snapshot.basis.mission_model_revision_id,
+      catalog_revision:
+        catalog_revision(organization_id, mission_id, snapshot.basis.mission_model_revision_id),
       plan_id: snapshot.catalog.plan_id,
       activation_id: snapshot.activation_id
     }
+  end
+
+  @doc """
+  The human catalog revision ("rev 14") that produced a mission-model revision,
+  as `%{id, number, label}`, or `nil` when no catalog revision records it.
+  """
+  @spec catalog_revision(binary(), binary(), binary() | nil) :: map() | nil
+  def catalog_revision(_org, _mission, nil), do: nil
+
+  def catalog_revision(org, mission, model_revision_id) do
+    org
+    |> Cadence.Catalog.list_revisions(mission)
+    |> Enum.find(&(&1.mission_model_revision_id == model_revision_id))
+    |> case do
+      nil ->
+        nil
+
+      revision ->
+        %{
+          id: revision.catalog_revision_id,
+          number: revision.revision_number,
+          label: revision.revision_label
+        }
+    end
   end
 
   defp bindings(catalog), do: Map.new(catalog.operational_bindings, &{&1.command_id, &1})

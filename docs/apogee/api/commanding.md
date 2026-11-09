@@ -17,8 +17,11 @@ uses, so the catalog matches what a request is validated against. Refetch on `in
 When nothing is active (no promoted mission model, or no command plan), both answer `200` with
 `state: "not_active"` and an empty result. Show "No active command catalog" with a link to Setup.
 
-Every response has the basis: `state` (`active | not_active`), `revision_id`, `plan_id` and
-`activation_id` (all `null` when not active).
+Every response has the basis: `state` (`active | not_active`), `revision_id`, `catalog_revision`,
+`plan_id` and `activation_id` (all `null` when not active). `catalog_revision` is
+`{id, number, label}`, the human catalog revision ("CATALOG rev 14") that produced the active
+model revision, or `null` when no catalog revision records it (for example a model composed by
+hand). The group show response has the same `catalog_revision` for its members' revision.
 
 ## `GET /api/console/v1/missions/:mission_id/commands`
 

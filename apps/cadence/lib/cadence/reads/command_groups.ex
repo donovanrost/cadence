@@ -19,7 +19,7 @@ defmodule Cadence.Reads.CommandGroups do
   """
 
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
-  alias Cadence.Reads.Commands
+  alias Cadence.Reads.{CommandCatalog, Commands}
 
   @finished ~w(verified no_verifier verify_failed release_failed indeterminate canceled rejected excluded)a
 
@@ -57,11 +57,15 @@ defmodule Cadence.Reads.CommandGroups do
 
       targets = targets(group, member_views)
 
+      revision_id = members |> List.first() |> then(&(&1 && &1.mission_model_revision_id))
+
       {:ok,
        group
        |> summary()
        |> Map.merge(%{
          awaiting_me: awaiting?(group, viewer_id),
+         catalog_revision:
+           Cadence.Reads.CommandCatalog.catalog_revision(org, mission, revision_id),
          group: group,
          targets: targets,
          progress: Enum.frequencies_by(targets, & &1.stage),
