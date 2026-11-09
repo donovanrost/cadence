@@ -42,6 +42,7 @@ export type Attention = Decoded<typeof attentionReader>;
 export const resolvedReader = d.object({
   id: d.token,
   resolved_by: who,
+  action: d.optional(d.nullable(d.string)),
   resolved_at: d.timestamp,
 });
 
@@ -88,6 +89,20 @@ export function attentionMeta(a: Attention): string | null {
 
 export type Resolved = Decoded<typeof resolvedReader>;
 
+/**
+ * What closed it (ops.md §resolved, U32): a person reads "Resolved by Mira K."; a provider
+ * "Resolved: Northlight confirmed"; the system its action alone ("Resolved: cancel confirmed").
+ * Never "by Cadence".
+ */
+export function resolvedWords(r: Resolved): string {
+  const action = r.action ? noStop(r.action.replaceAll("_", " ")) : null;
+  const name = r.resolved_by.name ? noStop(r.resolved_by.name) : null;
+  if (r.resolved_by.kind === "user") return `Resolved by ${name ?? "an operator"}.`;
+  if (r.resolved_by.kind === "provider")
+    return `Resolved: ${[name ?? "the provider", action].filter(Boolean).join(" ")}.`;
+  return action ? `Resolved: ${action}.` : "Resolved.";
+}
+
 /** How long a resolved row stays, faded, before it leaves (U31). */
 export const RESOLVED_FADE_MS = 5_000;
 
@@ -114,7 +129,7 @@ export function newlyResolved(
       ...prev,
       key: `${r.id}|resolved`,
       state: "off",
-      sentence: `Resolved by ${noStop(r.resolved_by.name ?? "an operator")}.`,
+      sentence: resolvedWords(r),
       meta: null,
       acknowledged: true,
     };

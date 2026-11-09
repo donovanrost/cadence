@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
-import { newlyResolved, withFading } from "./attention.ts";
+import { newlyResolved, resolvedWords, withFading } from "./attention.ts";
 
 const member = (scid: number, extra: Record<string, unknown> = {}) => ({
   id: `spacecraft-earendil-${String(scid).padStart(3, "0")}`,
@@ -227,6 +227,7 @@ describe("attention rows (U31, fafe581a)", () => {
       {
         id: "attention:pass_resolution:at-1",
         resolved_by: { kind: "user", id: "u-1", name: "Mira K." },
+        action: "resolved",
         resolved_at: "2026-11-09T11:00:00Z",
       },
     ];
@@ -239,5 +240,21 @@ describe("attention rows (U31, fafe581a)", () => {
       "attention:pass_resolution:at-1|resolved",
     ]);
     expect(newlyResolved(before, after, resolved, fading, 2_000)).toEqual([]);
+  });
+
+  it("says what closed it, never 'by Cadence'", () => {
+    const r = (kind: string, name: string | null, action: string | null) => ({
+      id: "x",
+      resolved_by: { kind, id: null, name },
+      action,
+      resolved_at: "2026-11-09T11:00:00Z",
+    });
+    expect(resolvedWords(r("provider", "Northlight", "confirmed"))).toBe(
+      "Resolved: Northlight confirmed.",
+    );
+    expect(resolvedWords(r("system", "Cadence", "cancel_confirmed"))).toBe(
+      "Resolved: cancel confirmed.",
+    );
+    expect(resolvedWords(r("user", "Mira K.", "resolved"))).toBe("Resolved by Mira K.");
   });
 });
