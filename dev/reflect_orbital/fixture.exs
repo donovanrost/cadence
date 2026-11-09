@@ -75,6 +75,22 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
     end)
   end
 
+  # Short station codes for console rows (ground_station `code`, ^[A-Z0-9]{2,8}$).
+  @station_codes %{
+    "earendil-svalbard" => "SVA",
+    "earendil-troll" => "TRL",
+    "earendil-fairbanks" => "FAI",
+    "earendil-kiruna" => "KIR",
+    "earendil-hawaii" => "HAW",
+    "earendil-santiago" => "SCL",
+    "earendil-punta-arenas" => "PUQ",
+    "earendil-hartebeesthoek" => "HBK",
+    "earendil-perth" => "PER",
+    "earendil-invercargill" => "INV"
+  }
+
+  def station_code(site_id), do: Map.fetch!(@station_codes, site_id)
+
   def sites do
     [
       {"svalbard", "Svalbard", "Norway / Arctic", 78.23, 15.41, 6},

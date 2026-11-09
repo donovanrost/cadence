@@ -210,6 +210,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
               Map.merge(
                 F.metadata(),
                 Map.merge(site, %{
+                  "code" => F.station_code(site["id"]),
                   "provider_ground_station_ref" => site["id"],
                   "bands" => ["S"],
                   "minimum_elevation_deg" => 10,
