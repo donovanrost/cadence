@@ -98,6 +98,9 @@ from the first. Footer: caption `AUDITED · VISIBLE TO THE APPROVER` + primary `
 count still missing under it ("2 gaps still need a reason"). Accepted gaps show in the plan as `GAP
 ACCEPTED · <reason>` rows, and in the revision history.
 
+**Repairs (U28):** K1 never opens a repair proposal as the day's plan. It shows the day's own plan + an info
+callout `A re-plan proposal is open for this day … Open in Re-plan →`.
+
 ## K2 · A station goes down (`M/contacts/replan/:stationId`)
 Entered from Now (P2 station degraded), the Contacts station row or ⌘K. Takeover header: close ·
 mono `RE-PLAN · LIVE PLAN R41 · 02:45–10:45Z` over `Svalbard outage` · step bar `01 Impact · 02

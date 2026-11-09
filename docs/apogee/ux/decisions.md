@@ -260,3 +260,12 @@ only, and text keeps its tier (≥ 4.5:1). The state is named in words. Also: **
 its inputs change, not when the next draft starts.** A plan read must compare the draft's rule/template
 versions with the current ones and report `superseded` immediately (api), so a stale draft can never be
 shown as current or submitted.
+
+### U28 · Repair proposals live in K2; K1 shows the day's plan (fe-setup / qa)
+**Decision:** K1 always opens the **day's own plan** (the latest non-repair plan: draft, pending or booked),
+never a repair proposal. When a repair proposal exists for that day (`repair_of` set, api), K1 shows an
+info callout under the header: "A re-plan proposal is open for this day: 4 passes move off HBK · proposed
+10:32Z by Mira K. · `Open in Re-plan →`". K2 owns the proposal: its header names both sides, `RE-PLAN ·
+R1 → R2 PROPOSAL · 4 MOVES`, with a mono context line `REPAIR OF R1 (BOOKED 1,512 PASSES)`, and its primary
+applies the repair (`Apply R2 · send 4 requests`). Counts on any screen come from one plan only: never a
+header from one plan and a footer from another.
