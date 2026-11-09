@@ -3,7 +3,7 @@ defmodule Cadence.Contacts.ScheduleCommands do
   alias Cadence.Applications.JSONBoundary
   alias Cadence.Auth.Policy
   alias Cadence.ContactPlanning.OpportunityCapability
-  alias Cadence.Contacts.{ProviderBooking, ProviderScheduling, ScheduleCancellations}
+  alias Cadence.Contacts.{ProviderBooking, ProviderScheduling, ScheduleCancellations, UplinkLegs}
   alias Cadence.Missions
 
   @search_fields ~w(spacecraft_id route_key starts_at ends_at)
@@ -54,6 +54,7 @@ defmodule Cadence.Contacts.ScheduleCommands do
          {:ok, route} <- token_route(payload, scope.organization_id, mission_id),
          :ok <- validate_token_route(route, payload["route"]),
          {:ok, attrs} <- reservation_attrs(payload, route),
+         attrs = put_uplink_leg(attrs, scope.organization_id, mission_id, route),
          {:ok, booking} <-
            ProviderBooking.reserve(scope.organization_id, mission_id, route.provider_id, attrs) do
       {:ok, booking_result(booking)}
@@ -193,6 +194,20 @@ defmodule Cadence.Contacts.ScheduleCommands do
   end
 
   def reservation_identity(_, _, _), do: {:error, :malformed_input}
+
+  # A single booking asks for the uplink leg exactly as plan execution does (#44, DECISIONS #46).
+  defp put_uplink_leg(attrs, organization_id, mission_id, route) do
+    case UplinkLegs.for_booking(
+           organization_id,
+           mission_id,
+           route.spacecraft_id,
+           attrs["ground_station_ref"],
+           route.provider_id
+         ) do
+      nil -> attrs
+      leg -> Map.put(attrs, "uplink", leg)
+    end
+  end
 
   defp reservation_attrs(payload, route) do
     with %{"id" => opportunity_id} = opportunity when is_binary(opportunity_id) <-
