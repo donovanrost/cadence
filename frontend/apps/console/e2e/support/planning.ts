@@ -37,6 +37,26 @@ export async function plansForDay(request: APIRequestContext, day: string): Prom
 }
 
 /**
+ * Days (today … today+horizon-1) other than `except` that hold a live draft: state `draft`, not
+ * superseded. A template version supersedes every such draft, not just the one under test.
+ */
+export async function liveDraftDays(
+  request: APIRequestContext,
+  except: string,
+  horizon = 8,
+): Promise<string[]> {
+  const days = Array.from({ length: horizon }, (_, i) => utcDay(i)).filter((d) => d !== except);
+  const live = await Promise.all(
+    days.map(async (day) =>
+      (await plansForDay(request, day)).some((p) => p["state"] === "draft" && !p["superseded"])
+        ? day
+        : null,
+    ),
+  );
+  return live.filter((day): day is string => day !== null);
+}
+
+/**
  * Saves a new version of the contact-rule template that applies to `spacecraftName`, changing only
  * its rationale. Every draft that took up the template's requirements becomes superseded
  * (`template_changed`). Permanent: adds a template version.

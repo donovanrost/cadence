@@ -71,7 +71,7 @@ The default is `admin`; switch with `test.use({ storageState: storageStateFor("o
 | `catalog-import` | S3 import | real (upload opt-in) |
 | `changes`, `setup-stations` | Change sets (decision 1), stations edit/add | real, staged then discarded (apply opt-in) |
 | `planning-requirements`, `planning-policy` | CP1 contact rules, CP2 planning policy | real (policy versions opt-in) |
-| `planning-submit-race` | K1 submit loses a race with a template change: 409 `plan_superseded`, nothing booked | real, opt-in (saves a template version; drafts today+4 if needed) |
+| `planning-submit-race` | K1 submit loses a race with a template change: 409 `plan_superseded`, nothing booked | real, opt-in (saves a template version, which supersedes every open draft, so it skips while another day has a live draft; drafts today+4 if needed) |
 
 ## Conventions
 

@@ -1,14 +1,16 @@
 import { expectAccessible } from "./support/accessibility.ts";
 import { missionPath, openConsole } from "./support/console.ts";
 import { allow, expect, test } from "./support/fixtures.ts";
-import { bumpTemplate, plansForDay, utcDay } from "./support/planning.ts";
+import { bumpTemplate, liveDraftDays, plansForDay, utcDay } from "./support/planning.ts";
 
 // K1 · Submit races a contact-rule change (lead, d212c8f1). The submit sheet is open on a draft;
 // another tab saves a new version of a template the draft took up; Submit answers 409
 // plan_superseded. Nothing may be booked: the sheet closes onto the superseded state.
 //
 // Writes permanently (a template version and, when the day has no draft, a draft), so opt-in.
-// Day: four days out, clear of today's bookings and of drafts teammates are reviewing.
+// Day: four days out, clear of today's bookings. The template version supersedes EVERY open draft
+// that took the template up (all days in the horizon), so the test skips while any other day holds
+// a live draft: someone may be reviewing it.
 const DAY = utcDay(4);
 const screen = missionPath(`contacts/plan?day=${DAY}`);
 const DRAFT_TIMEOUT = 8 * 60_000;
@@ -28,6 +30,8 @@ test.describe("K1 submit loses a race with a contact-rule change", () => {
       "saves a template version (and may draft a day); run with E2E_MUTATE=1",
     );
     test.setTimeout(DRAFT_TIMEOUT + 3 * 60_000);
+    const others = await liveDraftDays(request, DAY);
+    test.skip(others.length > 0, `live drafts on ${others.join(", ")} would be superseded too`);
     await openConsole(page, screen);
 
     const submit = page.getByRole("button", {
