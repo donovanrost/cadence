@@ -44,6 +44,7 @@ and the two-person rule, use these Reflect Orbital users (password `apogee-qa-pa
 | `qa-operator@example.com` | `member` |
 | `qa-second@example.com` | `member` (second operator / approver) |
 | `qa-org-admin@example.com` | `organization_admin` (no platform admin) |
+| `qa-org-admin-2@example.com` | `organization_admin` (second admin: approves what the first authored) |
 
 ## Start everything from scratch
 

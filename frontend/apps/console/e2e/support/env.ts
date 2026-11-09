@@ -10,7 +10,7 @@ export interface Persona {
   readonly password: string;
 }
 
-export type PersonaKey = "admin" | "operator" | "second" | "orgAdmin";
+export type PersonaKey = "admin" | "operator" | "second" | "orgAdmin" | "orgAdmin2";
 
 const personaPassword = process.env["E2E_PERSONA_PASSWORD"] ?? "apogee-qa-password";
 
@@ -28,6 +28,8 @@ export const PERSONAS: Readonly<Record<PersonaKey, Persona>> = {
   operator: { key: "operator", email: "qa-operator@example.com", password: personaPassword },
   second: { key: "second", email: "qa-second@example.com", password: personaPassword },
   orgAdmin: { key: "orgAdmin", email: "qa-org-admin@example.com", password: personaPassword },
+  /** A second organization admin, for approvals the author can't give (#38, policy versions). */
+  orgAdmin2: { key: "orgAdmin2", email: "qa-org-admin-2@example.com", password: personaPassword },
 };
 
 /** Saved browser session for a persona, written by auth.setup.ts. */

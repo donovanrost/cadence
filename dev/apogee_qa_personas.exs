@@ -29,7 +29,14 @@ defmodule Cadence.Dev.ApogeeQaPersonas do
   @personas [
     %{email: "qa-operator@example.com", display_name: "QA Operator", role: :member},
     %{email: "qa-second@example.com", display_name: "QA Second Operator", role: :member},
-    %{email: "qa-org-admin@example.com", display_name: "QA Org Admin", role: :organization_admin}
+    %{email: "qa-org-admin@example.com", display_name: "QA Org Admin", role: :organization_admin},
+    # A second organization admin: approvals that need "another admin" (policy versions,
+    # two-person commanding, #38) can't be given by the author.
+    %{
+      email: "qa-org-admin-2@example.com",
+      display_name: "QA Org Admin 2",
+      role: :organization_admin
+    }
   ]
 
   def run do

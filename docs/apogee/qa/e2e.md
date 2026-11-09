@@ -37,7 +37,8 @@ The default is `admin`; switch with `test.use({ storageState: storageStateFor("o
 | `admin` | env administrator (platform admin mode) | default |
 | `operator` | `qa-operator@example.com`, member | capability gating (no admin actions) |
 | `second` | `qa-second@example.com`, member | second operator / approver |
-| `orgAdmin` | `qa-org-admin@example.com`, organization admin | admin UI without platform admin |
+| `orgAdmin` | `qa-org-admin@example.com`, organization admin | admin UI without platform admin (default) |
+| `orgAdmin2` | `qa-org-admin-2@example.com`, organization admin | approvals the author can't give (#38, policy versions) |
 
 ## Layout
 
