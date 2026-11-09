@@ -63,6 +63,8 @@ const pos = (n: number) => String(n + 1).padStart(2, "0");
     <ApCallout v-else-if="group.state === 'aborted'" tone="off">
       Aborted by {{ nameOf(group.aborted_by?.user_id ?? null) }}: “{{ group.abort_reason }}”
     </ApCallout>
+    <!-- CommandFlow C3: Abort sits up top (header area), never below a long target list. -->
+    <AbortPanel v-if="canAbort && abortable(group)" :group="group" @done="$emit('changed')" />
     <ApStatStrip :columns="tiles.length" label="Uplink pipeline">
       <ApStatTile
         v-for="t in tiles"
@@ -108,6 +110,5 @@ const pos = (n: number) => String(n + 1).padStart(2, "0");
         >
       </ol>
     </ApPanel>
-    <AbortPanel v-if="canAbort && abortable(group)" :group="group" @done="$emit('changed')" />
   </div>
 </template>
