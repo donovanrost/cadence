@@ -14,8 +14,6 @@ const columns: readonly ApColumn[] = [
 
 function status(s: ImportStatus): { state: OpState; label: string } {
   switch (s) {
-    case "pending":
-      return { state: "neutral", label: "Queued" };
     case "running":
       return { state: "live", label: "Parsing" };
     case "succeeded":

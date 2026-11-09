@@ -23,7 +23,7 @@ const body = () => ({
         number: 14,
         label: null,
         notes: null,
-        artifact: { id: "a", file_name: "fsw.xml", format_label: "XTCE 1.3", size_bytes: 1800000 },
+        artifact: { id: "a", file_name: "fsw.xml", format_label: "XTCE 1.3", size_bytes: null },
         declaration_count: 547,
         spacecraft_count: 500,
         imported_at: "2026-10-14T18:02:00Z",
@@ -62,5 +62,23 @@ describe("catalogIndexReader", () => {
     expect(revisionSummary({ ...current, command_count: 212, telemetry_count: 335 })).toBe(
       "547 declarations · 212 commands · 335 telemetry points · applied to 500 spacecraft",
     );
+  });
+});
+
+describe("groupDiagnostics", () => {
+  it("collapses identical diagnostics, errors first", async () => {
+    const { groupDiagnostics } = await import("./importRun.ts");
+    const warn = { severity: "warning" as const, code: "W1", message: "same", path: null };
+    const groups = groupDiagnostics([
+      warn,
+      warn,
+      { severity: "error", code: "E1", message: "bad", path: "a / b" },
+      warn,
+    ]);
+    expect(groups.map((g) => [g.code, g.count])).toEqual([
+      ["E1", 1],
+      ["W1", 3],
+    ]);
+    expect(groups[0]?.paths).toEqual(["a / b"]);
   });
 });

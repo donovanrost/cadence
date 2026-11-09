@@ -28,14 +28,20 @@ const revision = object({
   number: count,
   label: nullable(string),
   notes: nullable(string),
-  artifact: object({ id: token, file_name: string, format_label: string, size_bytes: count }),
+  artifact: object({
+    id: token,
+    file_name: string,
+    format_label: string,
+    size_bytes: nullable(count),
+  }),
   declaration_count: count,
   spacecraft_count: count,
   imported_at: timestamp,
   actor: nullable(object({ name: string })),
 });
 
-export const importStatuses = ["pending", "running", "succeeded", "failed"] as const;
+// api: no separate "pending"; a queued run reads as running.
+export const importStatuses = ["running", "succeeded", "failed"] as const;
 export type ImportStatus = (typeof importStatuses)[number];
 
 const importRun = object({

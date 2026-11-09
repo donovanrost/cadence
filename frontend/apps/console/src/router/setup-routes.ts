@@ -53,7 +53,7 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
   {
     path: "setup/catalog/import/:importId?",
     name: "setup.catalog.import",
-    component: pending,
+    component: () => import("@/features/catalog/ImportScreen.vue"),
     meta: { mode: "setup", nav: "catalog", title: "Import catalog", board: "Catalog (S3)" },
   },
   {
