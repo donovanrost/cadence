@@ -89,7 +89,10 @@ change publishes both).
 - `POST /station-availability/windows/:window_id/clear` `{reason?}` → the window with `cleared_at`.
 - `GET /station-availability/:station_id/impact?from&to` → `{ground_station_id, from, to, passes_hit,
   reservation_ids, spacecraft_ids, plans: [{id, version}], truncated}`. `plans` are the contact plan
-  revisions that booked the hit passes (start a repair, S8, from them): live bookings at that station in the window (K2's
+  revisions that booked the hit passes (start a repair, S8, from them). `lost: {count, reservation_ids,
+  spacecraft_ids, plans}` lists bookings at the station in the window that already ended without a
+  pass (`canceled`, `rejected`, `failed`), for example ones a provider canceled because of the outage.
+  Those are the ones K2 re-plans: live bookings at that station in the window (K2's
   "passes hit"). Reservations that never named a station can't be attributed and aren't counted.
 
 ```json
