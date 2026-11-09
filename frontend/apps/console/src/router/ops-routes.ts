@@ -1,5 +1,6 @@
 import type { RouteRecordRaw } from "vue-router";
 import { pending } from "./pending.ts";
+import { responsive } from "./responsive.ts";
 
 /**
  * Ops mode, children of /console/:org/:mission. Owner: fe-ops (swap `pending` for your screen).
@@ -21,7 +22,11 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "fleet/:scId(\\d+)/:tab(investigate|telemetry|uplink|passes|configuration|history)?",
     name: "ops.spacecraft",
-    component: () => import("@/features/investigate/SpacecraftScreen.vue"),
+    // Under 768 the on-call paged view (Mobile.md J6) replaces the console layout.
+    component: responsive(
+      () => import("@/features/investigate/SpacecraftScreen.vue"),
+      () => import("@/features/mobile/MobileAlarmScreen.vue"),
+    ),
     meta: { mode: "ops", nav: "fleet", title: "Spacecraft", board: "Investigate (J2)" },
   },
   {
