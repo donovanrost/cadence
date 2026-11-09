@@ -229,3 +229,42 @@ generic 409/422.
 - `change_set_progress` `{change_set_id, key, label, state, at}` (relayed from
   `change-sets:<id>`).
 - `config_runtime` `{revision, activation_id, generation, runtime, degraded_partitions}`.
+
+## O · People & access (`ux/screens/People.md`), under `/api/console/v1/organizations/:organization_id`
+
+### O1 · `GET /people`
+
+```json
+{"data": {
+  "members": [{"user_id": "user_…", "display_name": "Mira K.", "email": "mira@…",
+               "role": "organization_admin|member",
+               "capabilities": ["command.request", "command.approve"],
+               "joined_at": "…"}],
+  "invitations": [{"id": "inv_…", "email": "ana@…", "role": "member", "invited_by": {"name"}|null,
+                   "sent_at": "…", "expires_at": "…", "status": "pending|expired"}],
+  "permissions": ["org.invite", "org.manage_members"]
+}}
+```
+- `capabilities` are evaluated per user on the server (DECISIONS #2). The UI shows Command / Second
+  GO from `command.request` / `command.approve` only, never from the role name.
+- No presence or last-seen fields until they exist (the UI drops those columns).
+- `permissions` covers the caller's org-level actions, to gate the invite panel.
+
+### O2 · `POST /invitations` `{email, role}` → the invitation (201)
+
+Errors: `422 invalid_params` (`details.email`), `409 already_member`, `409 already_invited`.
+`POST /invitations/:id/revoke` and `POST /invitations/:id/resend` can come later.
+
+### O3 · `GET /service-identities`
+
+```json
+{"data": {"service_identities": [{"id", "name", "scope_summary": "Telemetry write · Earendil",
+  "last_used_at": "…"|null, "key_created_at": "…"|null}],
+  "rotation_policy_days": null}}
+```
+`rotation_policy_days` stays null unless the org has a policy, so the UI never invents one.
+
+### O4 · `GET /missions/:mission_id/command-policies` (or org-level)
+
+`{"data": {"policies": [{"key", "title", "sentence"}]}}` gives the effective two-person and
+fleet-reach policy as text (DECISIONS #7).
