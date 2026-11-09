@@ -63,6 +63,13 @@ function toError(status: number, body: unknown): ApiError {
       return { kind: "not_found", code, message };
     case 409:
       return { kind: "conflict", code, message, details };
+    case 413:
+      return {
+        kind: "invalid",
+        code: parsed.ok ? code : "file_too_large",
+        message: parsed.ok ? message : "That file is too large to upload.",
+        details,
+      };
     case 400:
     case 422:
       return { kind: "invalid", code, message, details };
@@ -83,7 +90,9 @@ export async function request<T>(
 ): Promise<ApiResult<T>> {
   const method = options.method ?? "GET";
   const headers: Record<string, string> = { accept: "application/json" };
-  if (options.body !== undefined) headers["content-type"] = "application/json";
+  // FormData goes as-is so the browser sets the multipart boundary; anything else is JSON.
+  const multipart = options.body instanceof FormData;
+  if (options.body !== undefined && !multipart) headers["content-type"] = "application/json";
   const csrf = currentCsrfToken();
   if (method !== "GET" && csrf) headers["x-csrf-token"] = csrf;
 
@@ -93,7 +102,9 @@ export async function request<T>(
       method,
       headers,
       credentials: "same-origin",
-      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+      ...(options.body === undefined
+        ? {}
+        : { body: options.body instanceof FormData ? options.body : JSON.stringify(options.body) }),
       ...(options.signal ? { signal: options.signal } : {}),
     });
   } catch (error) {
