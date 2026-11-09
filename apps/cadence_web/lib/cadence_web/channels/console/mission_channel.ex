@@ -16,6 +16,7 @@ defmodule CadenceWeb.Console.MissionChannel do
   alias Cadence.Platform.ScopedReadUpdates
   alias CadenceWeb.Console.Access
   alias CadenceWeb.Console.ConfigLive
+  alias CadenceWeb.Console.FleetPush
   alias CadenceWeb.Console.LimitTransitions
 
   @flush_ms 500
@@ -63,7 +64,8 @@ defmodule CadenceWeb.Console.MissionChannel do
            pending: MapSet.new(),
            flush_timer: nil
          )
-         |> ConfigLive.join()}
+         |> ConfigLive.join()
+         |> FleetPush.join()}
 
       {:error, reason} ->
         {:error, %{reason: Atom.to_string(reason)}}
@@ -109,6 +111,9 @@ defmodule CadenceWeb.Console.MissionChannel do
     {:noreply, mark(socket, resource)}
   end
 
+  def handle_info(message, socket) when message in [:fleet_refresh, :fleet_tick],
+    do: {:noreply, FleetPush.handle(message, socket)}
+
   def handle_info(:flush, socket) do
     resources = socket.assigns.pending |> MapSet.to_list() |> Enum.sort()
     if resources != [], do: push(socket, "invalidate", %{resources: resources})
@@ -117,8 +122,19 @@ defmodule CadenceWeb.Console.MissionChannel do
 
   def handle_info(_other, socket), do: {:noreply, socket}
 
+  # Opt-in fleet push (api-ops). Contract: realtime.md, "fleet".
+  @impl true
+  def handle_in("fleet:subscribe", _payload, socket),
+    do: {:reply, :ok, FleetPush.subscribe(socket)}
+
+  def handle_in("fleet:unsubscribe", _payload, socket),
+    do: {:reply, :ok, FleetPush.unsubscribe(socket)}
+
   defp mark(socket, resource) do
-    socket = assign(socket, :pending, MapSet.put(socket.assigns.pending, resource))
+    socket =
+      socket
+      |> assign(:pending, MapSet.put(socket.assigns.pending, resource))
+      |> FleetPush.note(resource)
 
     case socket.assigns.flush_timer do
       nil -> assign(socket, :flush_timer, Process.send_after(self(), :flush, @flush_ms))
