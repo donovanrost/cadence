@@ -4,7 +4,7 @@ import { useRouter } from "vue-router";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApChip, ApField, ApPanel, ApSelect } from "@/ui";
 import type { CatalogIndex } from "./api.ts";
-import { precheck, uploadCatalog, type Importers } from "./upload.ts";
+import { formatMiB, precheck, uploadCatalog, type Importers } from "./upload.ts";
 
 /** B · Upload: one file, the database it revises (or a new one), label and notes. */
 const props = defineProps<{ missionId: string; index: CatalogIndex; importers: Importers }>();
@@ -71,9 +71,7 @@ async function upload() {
         <span class="text-base text-readout">{{
           file ? file.name : "Choose an XTCE or catalog export"
         }}</span>
-        <span class="text-sm text-text-3"
-          >Up to {{ Math.floor(importers.max_bytes / 1_000_000) }} MB</span
-        >
+        <span class="text-sm text-text-3">Up to {{ formatMiB(importers.max_bytes) }}</span>
         <input
           type="file"
           class="sr-only"

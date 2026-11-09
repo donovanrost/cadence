@@ -41,10 +41,16 @@ export function uploadCatalog(missionId: string, input: UploadInput) {
 /** Browser-side pre-checks (the server decides): extension and size. */
 export function precheck(file: File, importers: Importers): string | null {
   if (file.size > importers.max_bytes)
-    return `The file is ${Math.ceil(file.size / 1_000_000)} MB; the limit is ${Math.floor(importers.max_bytes / 1_000_000)} MB.`;
+    return `The file is ${formatMiB(file.size)}; the limit is ${formatMiB(importers.max_bytes)}.`;
   const name = file.name.toLowerCase();
   const known = importers.importers.flatMap((i) => i.extensions.map((e) => e.toLowerCase()));
   if (known.length > 0 && !known.some((ext) => name.endsWith(ext)))
     return `Cadence can't import ${file.name}. Accepted: ${known.join(", ")}.`;
   return null;
+}
+
+/** Limits are binary on the server (50 MiB = 52,428,800 bytes), so say MiB. */
+export function formatMiB(bytes: number): string {
+  const mib = bytes / 1_048_576;
+  return `${Number.isInteger(mib) ? mib : mib.toFixed(1)} MiB`;
 }
