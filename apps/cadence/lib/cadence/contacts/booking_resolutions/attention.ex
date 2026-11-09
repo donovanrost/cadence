@@ -124,6 +124,7 @@ defmodule Cadence.Contacts.BookingResolutions.Attention do
       acknowledged_by: row.conflict_acknowledged_by,
       spacecraft_id: row.spacecraft_id,
       contact_id: row.scheduled_contact_id,
+      provider_reservation_id: row.provider_reservation_id,
       provider_contact_ref: row.provider_contact_ref,
       ground_station_ref: row.ground_station_ref,
       provider_id: row.provider_id,

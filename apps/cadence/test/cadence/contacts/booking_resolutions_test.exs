@@ -150,8 +150,16 @@ defmodule Cadence.Contacts.BookingResolutionsTest do
                reservation.scheduled_contact_id
              )
 
-    assert [%{conflict: "late_confirmation", state: "open"}] =
+    assert [%{conflict: "late_confirmation", state: "open", provider_reservation_id: res_id}] =
              Attention.items(c.organization_id, c.mission_id)
+
+    assert res_id == c.second.provider_reservation_id
+
+    # A user can close it; the item comes back resolved.
+    [%{id: id}] = Attention.items(c.organization_id, c.mission_id)
+
+    assert {:ok, %{state: "resolved", id: ^id}} =
+             Attention.resolve(c.member_scope, c.mission_id, id, "re-planned")
   end
 
   test "the fresh provider read wins: an answer settles the item and nothing is attested", c do
