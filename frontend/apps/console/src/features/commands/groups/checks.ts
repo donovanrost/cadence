@@ -27,6 +27,8 @@ const LABELS: Readonly<Record<string, string>> = {
 };
 
 const IDENTITY_WORDS: Readonly<Record<string, string>> = {
+  no_uplink_route: "has no primary uplink route",
+  multiple_primary_uplink_routes: "has several primary uplink routes",
   no_source_endpoint: "has no uplink endpoint",
   ambiguous_source_endpoint: "has several uplink endpoints",
   source_endpoint_not_found: "endpoint not found",
@@ -42,6 +44,8 @@ export type CheckRow = Readonly<{
   sentence: string;
   state: OpState;
   verdict: string;
+  /** Where to fix it, when the check names one (identity → the profile's routing). */
+  profileId?: string;
 }>;
 
 /** A check the console doesn't know yet still shows, labelled from its key. */
@@ -118,14 +122,26 @@ function sentence(check: PreflightCheck, pf: Preflight, nameOf: TargetName): str
   }
 }
 
+/** The first profile whose routing an identity NO-GO points at. */
+export function routingProfile(check: PreflightCheck): string | null {
+  if (check.key !== "identity" || check.result === "go") return null;
+  for (const t of check.per_target)
+    for (const r of t.routes ?? []) if (r.profile_id) return r.profile_id;
+  return null;
+}
+
 export function checkRows(pf: Preflight, nameOf: TargetName): CheckRow[] {
-  return pf.checks.map((c) => ({
-    key: c.key,
-    label: LABELS[c.key] ?? words(c.key),
-    sentence: sentence(c, pf, nameOf),
-    state: RESULT_STATE[c.result],
-    verdict: RESULT_WORD[c.result],
-  }));
+  return pf.checks.map((c) => {
+    const profileId = routingProfile(c);
+    return {
+      key: c.key,
+      label: LABELS[c.key] ?? words(c.key),
+      sentence: sentence(c, pf, nameOf),
+      state: RESULT_STATE[c.result],
+      verdict: RESULT_WORD[c.result],
+      ...(profileId ? { profileId } : {}),
+    };
+  });
 }
 
 /** Header meta `5 GO · 1 HOLD`. */

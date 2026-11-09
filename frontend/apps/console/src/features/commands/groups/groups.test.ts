@@ -6,7 +6,7 @@ import { argumentValuesJson, buildDraft } from "../compose/draft.ts";
 import { newItem } from "../compose/stack.ts";
 import { EMPTY_QUERY } from "../compose/targets.ts";
 import { preflightReader, type Preflight } from "./api.ts";
-import { checkMeta, checkRows, noGoReason } from "./checks.ts";
+import { checkMeta, checkRows, noGoReason, routingProfile } from "./checks.ts";
 import { showBody } from "./fixtures.ts";
 import { groupReader } from "./show.ts";
 
@@ -189,5 +189,36 @@ describe("group show", () => {
     const ok = decode(groupReader, showBody);
     expect(ok.ok && ok.value.progress).toEqual({ awaiting_go: 2 });
     expect(decode(groupReader, { ...showBody, progress: { warping: 1 } }).ok).toBe(false);
+  });
+});
+
+describe("identity via routes (DECISIONS #41)", () => {
+  it("names the routing failure and links to the profile's routing", () => {
+    const decoded = decode(preflightReader, {
+      ...body,
+      checks: [
+        {
+          key: "identity",
+          result: "no_go",
+          per_target: [
+            {
+              spacecraft_id: "sc-1",
+              result: "no_go",
+              reason: "multiple_primary_uplink_routes",
+              routes: [
+                { id: "r1", name: "SVL S-band", direction: "outbound", profile_id: "prof-1" },
+                { id: "r2", name: "AWA S-band", direction: "bidirectional", profile_id: "prof-1" },
+              ],
+            },
+          ],
+          evidence: { count: 1 },
+        },
+      ],
+    });
+    if (!decoded.ok) throw decoded.error;
+    const [row] = checkRows(decoded.value, () => "SC-1 (SCID 7)");
+    expect(row?.sentence).toBe("SC-1 (SCID 7) has several primary uplink routes");
+    expect(row?.profileId).toBe("prof-1");
+    expect(decoded.value.checks[0] && routingProfile(decoded.value.checks[0])).toBe("prof-1");
   });
 });

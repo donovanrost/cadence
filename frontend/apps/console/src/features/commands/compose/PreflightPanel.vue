@@ -26,6 +26,8 @@ const rows = computed(() => {
     ? all.map((r) => ({ ...r, state: "neutral" as const, verdict: "CHECKING…" }))
     : all;
 });
+/** The slot hands back an ApCheckRow, so look the link up by key. */
+const rowProfile = (key: string) => rows.value.find((r) => r.key === key)?.profileId ?? null;
 const meta = computed(() =>
   props.checking ? "checking…" : last.value ? checkMeta(last.value) : undefined,
 );
@@ -48,6 +50,18 @@ const meta = computed(() =>
     <p v-else-if="rows.length === 0" class="m-0 px-4 py-3 font-mono text-sm text-text-3 uppercase">
       Checking…
     </p>
-    <ApCheckRows v-else :rows="rows" />
+    <ApCheckRows v-else :rows="rows">
+      <template v-if="rows.some((r) => r.profileId)" #action="{ row }">
+        <ApButton
+          v-if="rowProfile(row.key)"
+          size="compact"
+          :to="{
+            name: 'setup.profile',
+            params: { profileId: rowProfile(row.key), section: 'routing' },
+          }"
+          >Fix routing</ApButton
+        >
+      </template>
+    </ApCheckRows>
   </ApPanel>
 </template>

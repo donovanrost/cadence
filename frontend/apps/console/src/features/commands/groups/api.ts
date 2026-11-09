@@ -41,11 +41,21 @@ const failureReason: Reader<string | readonly MemberFailure[]> = (value, path = 
 const nextContact = d.object({ station_code: d.string, aos: d.timestamp, los: d.timestamp });
 export type NextContact = Decoded<typeof nextContact>;
 
+/** A route named by an identity NO-GO (DECISIONS #41), so the screen can link to its routing. */
+const route = d.object({
+  id: d.token,
+  name: d.nullable(d.string),
+  direction: d.nullable(d.token),
+  profile_id: d.nullable(d.token),
+});
+export type UplinkRoute = Decoded<typeof route>;
+
 const perTarget = d.object({
   spacecraft_id: d.token,
   result,
   reason: d.optional(failureReason),
   next_contact: d.optional(d.nullable(nextContact)),
+  routes: d.optional(d.array(route, 100)),
 });
 
 const twoPersonReason = d.object({
