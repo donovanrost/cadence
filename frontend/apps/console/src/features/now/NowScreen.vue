@@ -85,7 +85,7 @@ function openById(id: string) {
           :style="{ '--a3-need': a3Need }"
         >
           <ConstellationPanel
-            class="h-[360px] console:h-auto"
+            class="h-[360px] max-md:hidden console:h-auto"
             :spacecraft="value.spacecraft"
             :selected-plane="selectedPlane"
             @open="openById"
@@ -102,7 +102,7 @@ function openById(id: string) {
             title="Fleet matrix"
             :meta="`${value.counts.total} spacecraft`"
             pane
-            class="h-[460px] console:h-auto"
+            class="h-[460px] max-md:hidden console:h-auto"
           >
             <FleetMatrix
               fit-height
@@ -113,7 +113,7 @@ function openById(id: string) {
               @select-plane="selectPlane"
             />
           </ApPanel>
-          <PassesPanel />
+          <PassesPanel class="max-md:hidden" />
         </div>
       </template>
     </ApRemote>

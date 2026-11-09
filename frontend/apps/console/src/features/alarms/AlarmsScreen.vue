@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
 import { plural, ApButton, ApCallout, ApPageHeader, ApPanel, ApRemote } from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
+import AlarmRowList from "./AlarmRowList.vue";
 import AlarmTable from "./AlarmTable.vue";
 import ByPointPanel from "./ByPointPanel.vue";
 import { alarmRows, byPoint } from "./list.ts";
@@ -69,7 +70,8 @@ const headline = computed(() => {
             pane
             flush
           >
-            <AlarmTable :rows="alarmRows(value.alarms, fleetRows, point)" />
+            <AlarmTable class="max-md:hidden" :rows="alarmRows(value.alarms, fleetRows, point)" />
+            <AlarmRowList class="md:hidden" :rows="alarmRows(value.alarms, fleetRows, point)" />
           </ApPanel>
           <ByPointPanel :points="byPoint(value.alarms)" :selected="point" @select="selectPoint" />
         </div>

@@ -95,7 +95,7 @@ onBeforeUnmount(() => returnFocus?.focus());
       role="dialog"
       aria-modal="true"
       aria-label="Search and run commands"
-      class="mx-auto mt-[14vh] flex max-h-[70vh] w-[min(680px,calc(100vw-32px))] flex-col border border-line bg-panel"
+      class="mx-auto mt-[14vh] flex max-h-[70vh] w-[min(680px,calc(100vw-32px))] flex-col border border-line bg-panel max-md:mt-0 max-md:h-dvh max-md:max-h-none max-md:w-full max-md:border-0"
     >
       <p
         class="m-0 flex justify-between border-b border-hairline px-4 py-2 font-mono text-xs text-text-4 uppercase"
