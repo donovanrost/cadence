@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useMissionScope, useMobileHeader } from "@/shell";
 import { ApCallout, ApEmptyState, ApPanel, ApRemote, formatRelative, useNow } from "@/ui";
-import { conditionWords, crossedCondition } from "@/features/alarms/index.ts";
+import { conditionWords, crossedCondition, episodeFor } from "@/features/alarms/index.ts";
 import { useFleet } from "@/features/fleet/index.ts";
 import {
   DEFAULT_RANGE,
@@ -13,14 +13,17 @@ import {
   ratePerHour,
   toSeries,
   trendSentence,
+  EpisodeBar,
+  useEpisodeDetail,
   usePointTrend,
   useSpacecraftAlarms,
+  useSpacecraftEpisodes,
 } from "@/features/investigate/index.ts";
 import MobileAlarmPanel from "./MobileAlarmPanel.vue";
 
 /**
  * J6 paged view (Mobile.md), the ops.spacecraft route under 768px: is this real? Alarm, its trend
- * and timing first. GO polls (M16+) and Ack / Hand off (alarm lifecycle) join when they exist.
+ * and timing first, then Acknowledge / Hand off (fe-ops' EpisodeBar, stacked). GO polls wait on M16+.
  */
 const route = useRoute();
 const scope = useMissionScope();
@@ -43,6 +46,29 @@ const alarm = computed(() => {
   const id = typeof route.query.alarm === "string" ? route.query.alarm : null;
   return a.status === "ready" ? pickAlarm(a.value.alarms, id) : null;
 });
+
+/** The lifecycle episode behind the shown alarm (Acknowledge / Hand off; Mobile.md §4). */
+const episodes = useSpacecraftEpisodes(
+  missionId,
+  computed(() => sc.value?.id ?? null),
+);
+const episodeId = computed(() => {
+  const s = episodes.state.value;
+  return s.status === "ready" && alarm.value && sc.value
+    ? (episodeFor(s.value.episodes, sc.value.id, alarm.value.point.id)?.id ?? null)
+    : null;
+});
+const detail = useEpisodeDetail(missionId, episodeId);
+const episode = computed(() =>
+  episodeId.value && detail.state.value.status === "ready" ? detail.state.value.value : null,
+);
+const permissions = computed(() =>
+  episodes.state.value.status === "ready" ? episodes.state.value.value.permissions : [],
+);
+function refreshEpisode() {
+  episodes.refetch();
+  detail.refetch();
+}
 
 const range = computed(() => DEFAULT_RANGE);
 const rangeLabel = RANGES.find((r) => r.value === DEFAULT_RANGE)?.label ?? DEFAULT_RANGE;
@@ -113,6 +139,13 @@ useMobileHeader(() => {
             >
           </template>
         </ApRemote>
+        <EpisodeBar
+          v-if="episode"
+          :episode="episode"
+          :permissions="permissions"
+          layout="stacked"
+          @changed="refreshEpisode"
+        />
         <ApPanel index="T" title="Timing" flush>
           <ApEmptyState
             state="off"

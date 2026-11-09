@@ -1,6 +1,6 @@
 # Scheduling data plan (lead)
 
-Owner: lead. Status: draft 1, 2026-11-09. Scope (DECISIONS #24): ScheduleFlow, K0 Pass prediction,
+Owner: lead. Status: draft 2, 2026-11-09 (ux U22, DECISIONS #25/#26 folded in). Scope (DECISIONS #24): ScheduleFlow, K0 Pass prediction,
 K1 Plan, K2 Re-plan, K3 Review. Design: `docs/apogee/ux/screens/ScheduleFlow.md`. Reference:
 `frontend/docs/contact-scheduling-architecture.md`, `frontend/modules/planning-and-contacts`.
 Missing items are numbered **S1…** and collected in the [ask list](#ask-list-for-api-ops). Related
@@ -146,7 +146,21 @@ journal semantics. Please document each in `docs/apogee/api/scheduling.md`.
 - **S10 Push** a `contacts` resource on the `mission:<id>` invalidate event (reservations, plans,
   runs, availability changes).
 
-## Questions for ux
+## Decisions (2026-11-09)
+- **DECISIONS #25:** K2 v1 = "Re-plan after provider changes" on the existing repairs, entered from a
+  plan or a rejected reservation; the station-down entry waits for S7. K3 waits for S9 (tab hidden).
+  S7 and S9 are in domain's backlog after profile-routing P2. K1 proceeds on S1–S6.
+- **DECISIONS #26:** S2–S6 and S8 → api; S1 (+ stations read, S10) → api-ops with M7.
+- **api-ops shaping:** S3 is async (202 + draft id, progress via a channel event like
+  `change_set_progress`); S1 `cost` / `max_elevation_deg` null unless provider-supplied.
+- **ux U22:** Q1 plan day = 00–24Z. Q2 show the rule with its true source (`FROM REQUIREMENT TEMPLATE
+  … ↗` to the existing page). Q3 no budgets, no denominators. Q4 omit the freeze clock. Q5 yes (as
+  #25). Q6 hold K3, hide its tab. Q7 window source = `<SOURCE> · <KIND>`; the simulator always says
+  `SIMULATOR · SYNTHETIC WINDOW`, plus a stale callout when any window is synthetic. Q8 rows =
+  stations, antennas as sub-rows only when reported. Q9 follow server policy: one planner by default;
+  ApDecision with reviewer ≠ author when a plan is `pending_approval`.
+
+## Questions for ux (answered: U22)
 - **Q1** Day boundary: plan "tomorrow" = 00–24Z UTC, or the shift-aligned window?
 - **Q2** Rule source today is requirements/templates (not profile demand). Footer link: to a
   requirement-templates page (no home in the IA yet), or omit until profile demand exists?
