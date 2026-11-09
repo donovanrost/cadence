@@ -102,3 +102,67 @@ and 3 can lose or duplicate demand.
 - **Every new query is scoped by org and mission.** The routes sit behind `MissionScope`; writes
   are admin, materialize is operator, cancel is member.
 - **The legacy `spacecraft_id`** is derived from the target, not taken from input.
+
+## Re-review · 502d183c, 86fa159c (2026-11-09)
+
+The touched tests pass: targeted_templates 9/9 and template_supersession 4/4.
+`template_supersession.ex` no longer reads plan rows; the uptake query lives in `ContactPlans`.
+The architecture check couldn't complete at review time, because untracked point-search files
+were mid-write.
+
+| # | Verdict |
+| --- | --- |
+| 1, 2, 4, 5, 6, 7, 8, 9 | Fixed. For 4, the cancels join the claim transaction and roll back with it, but no test covers that rollback. |
+| 3 | **Partially fixed.** It works when the submit commits first; the concurrent case is still open (new A). |
+| 11, 12 | Decided or noted in contact-templates.md. |
+| U27 | **Partially correct** (new C, D, F). |
+
+### New, ranked
+
+- **A. High: the FOR SHARE re-check doesn't wait for an uncommitted submit.**
+  `requirements_taken_up/4` (contact_plans.ex:120) filters `plan.lifecycle_state in @taken_up`
+  in the locking query's WHERE.
+  - Under READ COMMITTED, a plan whose submit is in flight is still `draft` in the statement
+    snapshot. It is never a lock candidate, so supersession doesn't wait for it.
+  - Submit locks only the plan row.
+  - Result: R is cancelled, then the submit commits, and approval later fails with
+    `contact_plan_requirement_not_active`.
+  - Fix: share-lock every plan referencing R with no state filter, filter the states in Elixir
+    afterwards, and do it before locking R (this also fixes B).
+- **B. Medium: lock-order inversion with approval.**
+  - Approval locks the plan `FOR UPDATE`, then the requirements.
+  - Supersession locks R `FOR UPDATE`, then the plans `FOR SHARE`.
+  - The claim locks R `FOR SHARE` (fleet_start_inputs.ex:124), then the plans.
+
+  The result is a deadlock, raised as `Postgrex.Error`, which `cancel_unless_taken_up` doesn't
+  catch: it becomes a 500 from fleet start, or a worker exit in `materialize_active`. Use one
+  order everywhere (plans first). Also consider a mission-level lock for concurrent starts.
+- **C. High: U27's read rule is wider than the supersession rule.** `overtaken?`
+  (plan_supersession.ex:143) uses `TemplateSupersession.cause/3` with no "future" or
+  active-template filter. Supersession only cancels future requirements of active templates.
+  - Scenario: a template is bumped at noon. The re-drafted day still references v1's morning
+    requirements (kept because they aren't future), so it reads `superseded`, and every submit
+    returns 409.
+  - Fix: apply the same future and active-template conditions in `overtaken?`.
+- **D. Medium: the 409 is unlocked and enforced on one surface only.**
+  - `current/4` runs before the submit transaction (scheduling.ex:108-129), so it can race.
+  - The ops console (`plan_decisions.ex:13`) and fleet automation (`fleet_automation.ex:246`)
+    submit without checking.
+
+  Move the check into `submit_transaction` (and approval) under the plan lock, or document it as
+  a console-only hint.
+- **E. Medium: supersession can cancel beyond what v2 materialized.** It cancels every future
+  stale requirement of the template, while v2 only covered the horizon and catch-up window.
+  Requirements past it are left with no replacement. Limit cancels to the slots, or at least the
+  window, that v2 covered.
+- **F. Medium (cost): the read-time check in `ContactPlanOverview.list`** (up to 100 plans) does
+  per-plan, per-ref requirement fetches plus template and target resolution. That's on the order
+  of 10^5 or more queries per list at fleet scale. Batch the fetches, and cache templates and
+  targets per call.
+- **G. Low:**
+  - the review hash depends on wall-clock time (`without_superseded` uses `utc_now`), so a
+    requirement that starts between preview and create flips the hash;
+  - an inner `Repo.rollback` in `ContactRequirements.cancel` poisons the claim transaction, but
+    the warning path continues as if the start succeeded;
+  - a `pending_approval` plan reads as superseded through `except_plan_id`, so the console
+    approve returns 409 while the ops console approves.
