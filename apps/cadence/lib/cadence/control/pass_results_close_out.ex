@@ -33,16 +33,29 @@ defmodule Cadence.Control.PassResultsCloseOut do
     end)
   end
 
-  @doc "Cadence-received volume for one realized contact from the archives."
-  @spec received(binary(), binary()) :: %{bytes: non_neg_integer(), frames: non_neg_integer()}
+  @doc """
+  Cadence-received volume for one realized contact. Frames come from the protocol archive (0 when
+  it recorded none); bytes from the ingress index, nil when it has no entry for the contact
+  (unknown, not zero). Either is nil when its archive backend can't say.
+  """
+  @spec received(binary(), binary()) :: %{
+          bytes: non_neg_integer() | nil,
+          frames: non_neg_integer() | nil
+        }
   def received(mission_id, realized_contact_id) do
-    bytes = IngressArchive.received_bytes(mission_id, [realized_contact_id])
-    frames = RecordArchive.received_frames(mission_id, [realized_contact_id])
+    frames =
+      case RecordArchive.received_frames(mission_id, [realized_contact_id]) do
+        {:ok, counts} -> Map.get(counts, realized_contact_id, 0)
+        :unknown -> nil
+      end
 
-    %{
-      bytes: Map.get(bytes, realized_contact_id, 0),
-      frames: Map.get(frames, realized_contact_id, 0)
-    }
+    bytes =
+      case IngressArchive.received_bytes(mission_id, [realized_contact_id]) do
+        {:ok, sizes} -> Map.get(sizes, realized_contact_id)
+        :unknown -> nil
+      end
+
+    %{bytes: bytes, frames: frames}
   end
 
   @impl true

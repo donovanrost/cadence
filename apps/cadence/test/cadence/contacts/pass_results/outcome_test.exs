@@ -17,7 +17,7 @@ defmodule Cadence.Contacts.PassResults.OutcomeTest do
         status_reason: nil,
         station_window: nil,
         threshold: 0.95,
-        received_bytes: nil,
+        received_frames: nil,
         now: ~U[2026-11-09 13:00:00Z]
       },
       Map.new(overrides)
@@ -76,10 +76,10 @@ defmodule Cadence.Contacts.PassResults.OutcomeTest do
 
     test "delivered but nothing received by Cadence is partial, owned by us" do
       assert %{outcome: "partial", cause: "not_ingested", owner: "us"} =
-               Outcome.derive(input(result: result(0, 600), received_bytes: 0))
+               Outcome.derive(input(result: result(0, 600), received_frames: 0))
 
       assert %{outcome: "realized"} =
-               Outcome.derive(input(result: result(0, 600), received_bytes: nil))
+               Outcome.derive(input(result: result(0, 600), received_frames: nil))
     end
 
     test "no acquisition is missed; a named delivery failure is failed" do

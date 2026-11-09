@@ -27,7 +27,7 @@ defmodule Cadence.Contacts.PassResults.Outcome do
           required(:status_reason) => String.t() | nil,
           required(:station_window) => map() | nil,
           required(:threshold) => number(),
-          optional(:received_bytes) => non_neg_integer() | nil,
+          optional(:received_frames) => non_neg_integer() | nil,
           required(:now) => DateTime.t()
         }
 
@@ -80,10 +80,10 @@ defmodule Cadence.Contacts.PassResults.Outcome do
     verdict("partial", reason || fallback, "provider", owner_for_provider(reason))
   end
 
-  # The provider delivered bytes but Cadence's archives recorded none for the contact. Unknown
-  # received volume (nil) is not evidence of loss.
+  # The provider delivered but Cadence's protocol archive recorded no frames for the contact.
+  # Unknown received volume (nil) is not evidence of loss.
   defp not_ingested?(input, result),
-    do: (result["bytes_delivered"] || 0) > 0 and Map.get(input, :received_bytes) == 0
+    do: delivered?(result) and Map.get(input, :received_frames) == 0
 
   defp miss(input, result) do
     cond do

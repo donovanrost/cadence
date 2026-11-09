@@ -82,7 +82,7 @@ defmodule Cadence.Contacts.PassResults do
         status_reason: snapshot(reservation)["status_reason"],
         station_window: station_window(reservation),
         threshold: threshold,
-        received_bytes: received && received.bytes,
+        received_frames: received && received.frames,
         now: now
       })
 
