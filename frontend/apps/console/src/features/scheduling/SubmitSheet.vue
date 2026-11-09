@@ -9,6 +9,7 @@ import {
   type Acknowledgement,
   type PlanDetail,
 } from "./api.ts";
+import { contactsShortText, coverage } from "./coverage.ts";
 import type { SpacecraftName } from "./names.ts";
 
 /**
@@ -85,7 +86,9 @@ defineExpose({ open, close });
     <div class="flex max-h-[70vh] flex-col gap-3 overflow-auto p-5">
       <h2 class="m-0 font-display text-xl font-semibold tracking-tag uppercase">
         {{
-          plan.unmet.length > 0 ? `Accept ${plural(plan.unmet.length, "gap")}` : "Submit the plan"
+          plan.unmet.length > 0
+            ? `Accept ${plural(plan.unmet.length, "gap")} · ${contactsShortText(coverage(plan).contactsShort)}`
+            : "Submit the plan"
         }}
       </h2>
       <p v-if="plan.unmet.length === 0" class="m-0 text-base text-text-3">{{ confirm }}</p>

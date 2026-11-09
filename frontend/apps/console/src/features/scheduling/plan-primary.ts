@@ -1,5 +1,6 @@
 import type { RouteLocationRaw } from "vue-router";
 import { plural } from "@/ui";
+import { coverage, spacecraftNotCovered } from "./coverage.ts";
 import type { PlanDetail } from "./api.ts";
 
 /**
@@ -75,12 +76,11 @@ export function planPrimary(plan: PlanDetail, isAdmin: boolean): PlanPrimary {
 /** Header mono tail per plan state. */
 export function planHeaderTail(plan: PlanDetail): string {
   switch (plan.state) {
-    case "draft":
-      return plan.conflicts.length > 0
-        ? plural(plan.conflicts.length, "conflict")
-        : plan.unmet.length > 0
-          ? `${plan.unmet.length} not covered`
-          : "ready";
+    case "draft": {
+      if (plan.conflicts.length > 0) return plural(plan.conflicts.length, "conflict");
+      const c = coverage(plan);
+      return c.spacecraft > 0 ? spacecraftNotCovered(c.spacecraft) : "ready";
+    }
     case "pending_approval":
       return "waiting for an admin";
     case "approved":

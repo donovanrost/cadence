@@ -62,7 +62,10 @@ const elapsed = computed(() =>
         {{ formatCount(view.demand.spacecraft_with_rules) }} spacecraft have rules ·
         {{ formatCount(view.demand.contacts_needed) }} contacts needed
         <template v-if="view.demand.without_rule > 0">
-          · {{ formatCount(view.demand.without_rule) }} have no rule</template
+          ·
+          <RouterLink :to="{ name: 'setup.contact-planning' }" class="max-md:hit-44 text-readout"
+            >{{ formatCount(view.demand.without_rule) }} have no rule →</RouterLink
+          ></template
         >
       </p>
       <p v-if="view.last" class="m-0 font-mono text-sm text-text-3 uppercase">

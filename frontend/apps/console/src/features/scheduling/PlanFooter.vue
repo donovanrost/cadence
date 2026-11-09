@@ -26,6 +26,7 @@ const conflicts = computed(() => props.plan.conflicts.length);
         label="Rule met"
         :value="plan.demand.rule_met"
         :denominator="plan.demand.rule_total"
+        unit="spacecraft"
         :state="plan.demand.rule_met < plan.demand.rule_total ? 'caution' : 'nominal'"
       />
       <ApStatTile

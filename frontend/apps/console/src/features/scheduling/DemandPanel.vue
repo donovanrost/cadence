@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { ApListRow, ApPanel } from "@/ui";
 import { reasonText, type PlanDetail } from "./api.ts";
+import { contactsShortText, coverage } from "./coverage.ts";
 import type { SpacecraftName } from "./names.ts";
 
 /** A · Demand: only spacecraft whose rule isn't met (ScheduleFlow R01: start from demand). */
@@ -21,16 +22,16 @@ function why(reasons: readonly string[], have: number): string {
     return `No window can cover it: ${reasonText(reasons[0] ?? "").toLowerCase()}`;
   return reasons.length > 0 ? reasons.map(reasonText).join(" · ") : "Rule not met";
 }
+const meta = computed(() => {
+  const c = coverage(props.plan);
+  return c.spacecraft > 0
+    ? `${c.spacecraft} spacecraft · ${contactsShortText(c.contactsShort)}`
+    : "All spacecraft covered";
+});
 </script>
 
 <template>
-  <ApPanel
-    index="A"
-    title="Demand"
-    :meta="unmet.length > 0 ? `${unmet.length} not covered` : 'All covered'"
-    pane
-    flush
-  >
+  <ApPanel index="A" title="Demand" :meta="meta" pane flush>
     <ul v-if="unmet.length > 0" class="m-0 list-none p-0">
       <ApListRow
         v-for="row in unmet"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApListRow, ApPanel, ApStatStrip, ApStatTile, formatDuration } from "@/ui";
+import { ApListRow, ApPanel, ApStatStrip, ApStatTile, formatDuration, plural } from "@/ui";
 import { reasonText, type PlanDetail, type Repair } from "./api.ts";
 import type { SpacecraftName } from "./names.ts";
 
@@ -19,7 +19,7 @@ const sign = (s: number) => (s >= 0 ? `+${formatDuration(s)}` : `−${formatDura
   <ApPanel
     index="C"
     title="Changes"
-    :meta="`${diff.moved.length} moved · ${diff.dropped.length} dropped`"
+    :meta="`${plural(diff.moved.length, 'pass', 'passes')} moved · ${diff.dropped.length} dropped`"
     pane
     flush
   >
