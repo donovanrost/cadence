@@ -98,14 +98,7 @@ defmodule Cadence.Control.SpacecraftModelBindings do
              | metadata: %{"mission_model" => manifest}
            }) do
         {:ok, basis} ->
-          basis = if framing, do: Map.put(basis, :framing, framing), else: basis
-
-          additions =
-            grouped
-            |> Enum.flat_map(&Map.fetch!(elem(&1, 1), "source_endpoint_ids"))
-            |> Map.new(&{&1, basis})
-
-          {:cont, {:ok, Map.merge(bases, additions)}}
+          {:cont, {:ok, Map.merge(bases, source_bases(grouped, basis, framing))}}
 
         {:error, reason} ->
           {:halt, {:error, reason}}
@@ -113,9 +106,19 @@ defmodule Cadence.Control.SpacecraftModelBindings do
     end)
   end
 
+  defp source_bases(grouped, basis, framing) do
+    basis = if framing, do: Map.put(basis, :framing, framing), else: basis
+
+    grouped
+    |> Enum.flat_map(&Map.fetch!(elem(&1, 1), "source_endpoint_ids"))
+    |> Map.new(&{&1, basis})
+  end
+
   # Only entries produced with profile framing authority (change-set generations) carry framing
   # into the runtime; legacy entries keep decoding with the transport's ingress metadata.
-  defp profile_framing(%{"framing_authority" => "profile", "framing" => %{} = framing}), do: framing
+  defp profile_framing(%{"framing_authority" => "profile", "framing" => %{} = framing}),
+    do: framing
+
   defp profile_framing(_entry), do: nil
 
   defp validate_endpoints(organization_id, mission_id, spacecraft_id, entry) do
