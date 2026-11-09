@@ -316,6 +316,25 @@ Stations (G1) also carry `suggested_code` (U25): a stem of the name, de-duplicat
 mission's set codes (`Cadence.Comms.StationCode.suggest/2`). It's present only when `code` is
 `null`, and the server never stores it; show it as a suggestion the operator confirms.
 
+### `GET /missions/:mission_id/data-sources` (D1)
+
+`{sources: [{id, display_name, kind, owner: "cadence" | "customer", status, health: {status:
+"healthy" | "degraded" | "unknown", checked_at} | null, last_received_at, expected_interval_s,
+stale, credentials: {status: "valid" | "expired" | "none", rotated_at} | null}]}`. Cadence-owned
+sources come first, then by name.
+
+- Sources include the platform-managed ones visible to the mission (the telemetry store and the
+  projections).
+- `health` is the worst current probe result across the source's logical sources. It's
+  `unknown` once a probe is older than the source's max age, and `null` if the source was never
+  probed.
+- `last_received_at` is the newest `latest_receipt_time` across its watermarks, or `null`.
+- `stale` is the server's call (U9): `null` unless the source declares
+  `metadata.expected_interval_seconds` (then `expected_interval_s` carries it). No managed source
+  declares one yet, so expect `null`.
+- `credentials` is `null` for sources without a credential reference. There's no expiry data yet,
+  so there's no `expiring`.
+
 ### `GET /missions/:mission_id/routing-rules/groups` (pass-2 #10)
 
 `{groups: [{transport: {id, name}, direction, role, enabled_count, disabled_count,

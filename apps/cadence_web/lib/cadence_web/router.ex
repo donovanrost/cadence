@@ -834,6 +834,7 @@ defmodule CadenceWeb.Router do
       get("/transports/:transport_id", CommsController, :transport)
       get("/routing-rules", CommsController, :routing_rules)
       get("/routing-rules/groups", CommsController, :routing_rule_groups)
+      get("/data-sources", DataSourceController, :index)
 
       # -- Events and scheduling (owner: api, DECISIONS #26). Contracts: ops.md, scheduling.md
       get("/events", EventController, :index)
