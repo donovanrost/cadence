@@ -121,5 +121,10 @@ export function useReplan(missionId: Readonly<Ref<string>>) {
     resume,
     apply,
     execute,
+    /** After a U32 resolution: the plans' unconfirmed lists and states changed. */
+    refresh: () => {
+      source.refetch();
+      if (runId.value) repair.refetch();
+    },
   };
 }

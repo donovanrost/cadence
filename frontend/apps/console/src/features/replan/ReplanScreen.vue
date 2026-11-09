@@ -10,7 +10,6 @@ import {
   PlanFooter,
   PlanStatePanel,
   SubmitSheet,
-  UnconfirmedCallout,
   coverage,
   planPrimary,
   repairableStates,
@@ -27,6 +26,7 @@ import { lostWindow } from "./impact.ts";
 import { bookingRequests } from "./applied.ts";
 import { useLostBookings } from "./useLostBookings.ts";
 import ImpactPanel from "./ImpactPanel.vue";
+import UnconfirmedBlock from "./UnconfirmedBlock.vue";
 import StationImpactPanel from "./StationImpactPanel.vue";
 import { useStationEntry } from "./useStationEntry.ts";
 import { useReplan } from "./useReplan.ts";
@@ -34,8 +34,19 @@ import { useReplan } from "./useReplan.ts";
 /** K2 v1 · Re-plan after provider changes (DECISIONS #25), entered from a plan (`?plan=`). */
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
-const { planId, runId, source, repair, busy, actionError, propose, resume, apply, execute } =
-  useReplan(missionId);
+const {
+  planId,
+  runId,
+  source,
+  repair,
+  busy,
+  actionError,
+  propose,
+  resume,
+  apply,
+  execute,
+  refresh,
+} = useReplan(missionId);
 const nameOf = useSpacecraftNames(missionId);
 // Station-down entry (S7): resolves the plan to repair into ?plan=, then the plan flow continues.
 const station = useStationEntry(missionId);
@@ -205,7 +216,13 @@ async function onApply(acks: Acknowledgement[]) {
       <PlanStatePanel v-if="runView" :view="runView" />
       <template v-else-if="proposal && proposal.plan && proposal.diff">
         <ApCallout v-if="stopped" :tone="stopped.tone">{{ stopped.text }}</ApCallout>
-        <UnconfirmedCallout :plan="footerPlan ?? proposal.plan" :name-of="nameOf" />
+        <UnconfirmedBlock
+          :mission-id="missionId"
+          :plan="footerPlan ?? proposal.plan"
+          :name-of="nameOf"
+          :is-admin="isAdmin"
+          @resolved="refresh"
+        />
         <div
           class="grid min-h-0 flex-1 grid-cols-1 gap-3 console:grid-cols-[300px_minmax(0,1fr)_360px]"
         >
@@ -280,7 +297,14 @@ async function onApply(acks: Acknowledgement[]) {
         :station-name="station.stationName.value"
         :availability="station.availability.value.value"
       />
-      <UnconfirmedCallout v-if="!proposal" :plan="live" :name-of="nameOf" />
+      <UnconfirmedBlock
+        v-if="!proposal"
+        :mission-id="missionId"
+        :plan="live"
+        :name-of="nameOf"
+        :is-admin="isAdmin"
+        @resolved="refresh"
+      />
       <ApPanel v-if="!runView && !proposal" index="A2" title="Live plan">
         <ApCallout v-if="!repairableStates.includes(live.state)" tone="info">
           Live plan r{{ live.version }} is {{ live.state.replaceAll("_", " ") }}. Re-plan applies to
