@@ -208,3 +208,9 @@ SPACECRAFT NOT COVERED`; A Demand meta `10 SPACECRAFT · 40 CONTACTS SHORT`; foo
 SPACECRAFT`; a **gap** = one unmet requirement, so the primary reads `Accept 10 gaps and submit` and
 the sheet title adds the shortfall: `Accept 10 gaps · 40 contacts short`. Same rule everywhere: a
 count beside a label that doesn't name the unit is a bug.
+**U23 amendment (lead question, K1):** in the UI a **gap = one uncovered spacecraft**, not one
+requirement, because operators reason per spacecraft and it matches the headline unit. `Accept 10 gaps ·
+40 contacts short`; one sheet row per spacecraft listing its unmet requirements inside (mono, `1 DOWNLINK
+≥ 5 MIN · 11 NOV 00–24Z`); one reason per spacecraft, which the client sends as the acknowledgement for
+each of its requirements (the audit stays per requirement server-side). A `Different reason per
+requirement` disclosure in the row allows splitting when needed. The approver sees the same grouping.

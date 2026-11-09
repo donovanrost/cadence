@@ -90,7 +90,7 @@ then mono `0 / 3 CONTACTS`. D's alternatives list says "Nothing else is visible 
 day." and offers only `Accept gap` (adds it to the sheet with the reason prefilled from the cause). An
 uncoverable spacecraft never shows a disabled `Add`.
 
-**Accept gaps sheet** (side sheet, opened by the primary): title `Accept 6 gaps · 14 contacts short` (a gap = one unmet requirement); one row per unmet
+**Accept gaps sheet** (side sheet, opened by the primary): title `Accept 6 gaps · 14 contacts short` (a gap = one uncovered spacecraft, U23 amendment; its unmet requirements are listed inside the row, with an optional `Different reason per requirement` disclosure); one row per unmet
 requirement: mark, spacecraft (mono), the rule and shortfall (`2 / 3 contacts · longest gap 11h20 >
 10h00`), the cause, and a required reason field. A `Same reason for all` checkbox fills empty reasons
 from the first. Footer: caption `AUDITED · VISIBLE TO THE APPROVER` + primary `Accept 6 gaps and submit`
