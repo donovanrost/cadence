@@ -264,7 +264,7 @@ defmodule Cadence.Comms.TransportStore do
          transport
          | transport_kind: :tcp_socket,
            adapter_key: :tcp_socket,
-           direction_capability: :inbound,
+           direction_capability: provider_direction_capability(delivery_profile),
            configuration: configuration,
            mission_provider_id: provider.provider_id,
            mission_provider_version: provider.provider_version,
@@ -427,8 +427,7 @@ defmodule Cadence.Comms.TransportStore do
       delivery_profile["state"] != "ready" ->
         {:error, :provider_delivery_profile_not_ready}
 
-      service_profile["direction"] != "downlink" or
-          delivery_profile["direction"] != "downlink" ->
+      not supported_directions?(service_profile["direction"], delivery_profile["direction"]) ->
         {:error, :provider_profile_direction_not_supported}
 
       service_id not in supported_services ->
@@ -438,6 +437,18 @@ defmodule Cadence.Comms.TransportStore do
         :ok
     end
   end
+
+  # A downlink delivery carries TM to Cadence; an uplink delivery (#44) is where the provider
+  # connects to receive TC frames and return CLCWs.
+  defp supported_directions?("downlink", "downlink"), do: true
+
+  defp supported_directions?(service, "uplink") when service in ["uplink", "bidirectional"],
+    do: true
+
+  defp supported_directions?(_service, _delivery), do: false
+
+  defp provider_direction_capability(%{"direction" => "uplink"}), do: :outbound
+  defp provider_direction_capability(_delivery_profile), do: :inbound
 
   defp provider_snapshot(provider, service_profile, delivery_profile, configuration) do
     RedactedJson.sanitize(%{

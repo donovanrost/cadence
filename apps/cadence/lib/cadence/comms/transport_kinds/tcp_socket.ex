@@ -240,11 +240,10 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
   @doc "Derives read-only TCP setup from a synchronized provider Delivery Profile."
   @impl true
   @spec from_delivery_profile(map()) :: {:ok, map()} | {:error, binary()}
-  def from_delivery_profile(profile) when is_map(profile) do
+  def from_delivery_profile(%{"direction" => "downlink"} = profile) do
     diagnostics = value(profile, "diagnostics", %{})
 
     with "ready" <- value(profile, "state"),
-         "downlink" <- value(profile, "direction"),
          "realtime_stream" <- value(profile, "delivery_kind"),
          "tcp" <- value(diagnostics, "protocol"),
          "provider_connects" <- value(diagnostics, "mode"),
@@ -270,6 +269,40 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
       _other ->
         {:error,
          "Delivery profile is not a ready provider-connects TCP downlink with fixed-size CCSDS TM framing."}
+    end
+  end
+
+  # Uplink (#44): Cadence listens; the provider connects, receives TC frames and answers with
+  # 4-byte CLCWs, which reach the path's uplink gateway (linked at path resolution).
+  def from_delivery_profile(%{"direction" => "uplink"} = profile) do
+    diagnostics = value(profile, "diagnostics", %{})
+
+    with "ready" <- value(profile, "state"),
+         "realtime_stream" <- value(profile, "delivery_kind"),
+         "tcp" <- value(diagnostics, "protocol"),
+         "provider_connects" <- value(diagnostics, "mode"),
+         host when is_binary(host) and host != "" <- value(diagnostics, "host"),
+         port when is_integer(port) and port > 0 and port <= 65_535 <-
+           value(diagnostics, "port"),
+         "ccsds_tc" <- value(diagnostics, "framing_family"),
+         tc_frame_bytes when is_integer(tc_frame_bytes) and tc_frame_bytes > 0 <-
+           value(diagnostics, "frame_bytes") do
+      normalize_config(%{
+        "mode" => "listen",
+        "direction_capability" => "outbound",
+        "host" => host,
+        "port" => port,
+        "framing_mode" => "fixed_size",
+        "fixed_message_bytes" => 4,
+        "reconnect_policy" => "on_disconnect",
+        "tls_enabled" => false,
+        "ingress_protocol_family" => "cop1_clcw",
+        "uplink_resource_id" => "uplink:#{host}:#{port}"
+      })
+    else
+      _other ->
+        {:error,
+         "Delivery profile is not a ready provider-connects TCP uplink with fixed-size CCSDS TC framing."}
     end
   end
 

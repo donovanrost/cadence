@@ -15,7 +15,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
     Transport
   }
 
-  alias Cadence.Comms.TransportStore
+  alias Cadence.Comms.{TransportStore, UplinkGateway}
 
   alias Cadence.Contacts.{
     LinkAssignment,
@@ -410,8 +410,9 @@ defmodule Cadence.Comms.RoutingRuleStore do
              rule.transport_version
            ),
          {:ok, provider_profile} <- fetch_materialized_provider(rule, transport),
+         context = %{spacecraft: spacecraft, transport: transport, provider: provider_profile},
          {:ok, materialized} <-
-           materialize_for_directions(rule, source_endpoint.source_endpoint_id, provider_profile) do
+           materialize_for_directions(rule, source_endpoint.source_endpoint_id, context) do
       {:ok, merge_materialized_refs(rule, materialized)}
     end
   end
@@ -427,10 +428,10 @@ defmodule Cadence.Comms.RoutingRuleStore do
   defp materialize_for_directions(
          %RoutingRule{direction: :bidirectional} = rule,
          source_endpoint_ref,
-         provider
+         context
        ) do
-    with {:ok, inbound} <- materialize_direction(rule, :inbound, source_endpoint_ref, provider),
-         {:ok, outbound} <- materialize_direction(rule, :outbound, source_endpoint_ref, provider) do
+    with {:ok, inbound} <- materialize_direction(rule, :inbound, source_endpoint_ref, context),
+         {:ok, outbound} <- materialize_direction(rule, :outbound, source_endpoint_ref, context) do
       {:ok, [inbound, outbound]}
     end
   end
@@ -438,15 +439,20 @@ defmodule Cadence.Comms.RoutingRuleStore do
   defp materialize_for_directions(
          %RoutingRule{direction: direction} = rule,
          source_endpoint_ref,
-         provider
+         context
        ) do
     with {:ok, materialized} <-
-           materialize_direction(rule, direction, source_endpoint_ref, provider) do
+           materialize_direction(rule, direction, source_endpoint_ref, context) do
       {:ok, [materialized]}
     end
   end
 
-  defp materialize_direction(rule, direction, source_endpoint_ref, provider) do
+  defp materialize_direction(
+         rule,
+         direction,
+         source_endpoint_ref,
+         %{provider: provider} = context
+       ) do
     path_direction = path_direction(direction)
     selection_role = selection_role(rule.role)
 
@@ -455,6 +461,37 @@ defmodule Cadence.Comms.RoutingRuleStore do
       "version" => provider.version
     }
 
+    with {:ok, transport_refs} <- transport_refs(rule, direction, context) do
+      persist_direction(
+        rule,
+        source_endpoint_ref,
+        path_direction,
+        selection_role,
+        [
+          provider_ref
+        ],
+        transport_refs
+      )
+    end
+  end
+
+  # Outbound legs release commands through an uplink gateway for this spacecraft (#44).
+  defp transport_refs(rule, :outbound, context) do
+    with {:ok, ref} <-
+           UplinkGateway.ensure(rule, context.spacecraft, context.transport, context.provider),
+         do: {:ok, [ref]}
+  end
+
+  defp transport_refs(_rule, _direction, _context), do: {:ok, []}
+
+  defp persist_direction(
+         rule,
+         source_endpoint_ref,
+         path_direction,
+         selection_role,
+         provider_refs,
+         transport_refs
+       ) do
     path_template =
       PathTemplate.new(%{
         mission_id: rule.mission_id,
@@ -462,7 +499,8 @@ defmodule Cadence.Comms.RoutingRuleStore do
         direction: path_direction,
         selection_role: selection_role,
         provider_path_ref: rule.provider_path_ref,
-        provider_profile_refs: [provider_ref],
+        provider_profile_refs: provider_refs,
+        transport_profile_refs: transport_refs,
         metadata: %{
           "display_name" => "#{rule.display_name} #{path_direction}",
           "materialized_from_routing_rule_id" => rule.routing_rule_id
