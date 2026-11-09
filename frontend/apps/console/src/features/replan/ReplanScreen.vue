@@ -53,6 +53,20 @@ const station = useStationEntry(missionId);
 const availability = useRemoteQuery(missionId, (id, signal) => fetchAvailability(id, signal));
 const liveSource = computed(() => (source.value.status === "ready" ? source.value.value : null));
 const lost = useLostBookings(missionId, liveSource);
+/** qa #30: a later applied repair heads the day's chain, so r{n}'s own state no longer decides. */
+const repaired = computed(() => {
+  const head = liveSource.value?.chain_head;
+  return Boolean(head && head !== liveSource.value?.id);
+});
+const showImpact = computed(
+  () =>
+    repaired.value ||
+    (liveSource.value !== null && repairableStates.includes(liveSource.value.state)),
+);
+/** The server repairs a day only while its chain has lost bookings (or its head needs it). */
+const canPropose = computed(() =>
+  repaired.value ? (lost.impact.value?.passes ?? 0) > 0 : showImpact.value,
+);
 /** Re-plan around what was lost (station outage window, else the lost bookings' span). */
 function proposeAround() {
   const window = station.span.value ?? lostWindow(lost.impact.value?.rows ?? [], new Date());
@@ -306,10 +320,14 @@ async function onApply(acks: Acknowledgement[]) {
         @resolved="refresh"
       />
       <ApPanel v-if="!runView && !proposal" index="A2" title="Live plan">
-        <ApCallout v-if="!repairableStates.includes(live.state)" tone="info">
+        <ApCallout v-if="!showImpact" tone="info">
           Live plan r{{ live.version }} is {{ live.state.replaceAll("_", " ") }}. Re-plan applies to
           plans with rejected or failed bookings.
         </ApCallout>
+        <p v-else-if="repaired" class="m-0 mb-3 text-base text-text-3">
+          Live plan r{{ live.version }} was re-planned. A new re-plan starts from the applied repair
+          and covers only bookings that are still lost.
+        </p>
         <p v-else class="m-0 mb-3 text-base text-text-3">
           Live plan r{{ live.version }} is {{ live.state.replaceAll("_", " ") }}:
           {{ plural(live.counts.passes, "pass", "passes")
@@ -319,7 +337,7 @@ async function onApply(acks: Acknowledgement[]) {
           apply it.
         </p>
         <ImpactPanel
-          v-if="repairableStates.includes(live.state)"
+          v-if="showImpact"
           :live="live"
           :state="lost.state.value"
           :impact="lost.impact.value"
@@ -330,7 +348,7 @@ async function onApply(acks: Acknowledgement[]) {
       <ApCallout v-if="actionError" tone="caution">{{ replanErrorText(actionError) }}</ApCallout>
       <footer v-if="!proposal" class="flex flex-none justify-end border-t border-hairline pt-3">
         <ApButton
-          v-if="!runId && repairableStates.includes(live.state)"
+          v-if="!runId && canPropose"
           variant="primary"
           size="commit"
           :disabled="busy"
