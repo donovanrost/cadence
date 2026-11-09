@@ -22,13 +22,29 @@ defmodule CadenceSimulator.Provider.UplinkSessions do
              host: target.host,
              port: target.port,
              tc_frame_size: target.tc_frame_size,
-             command_target: stream_pid
+             command_target: stream_pid,
+             clcw_overrides: armed(contact["id"])
            ) do
       Map.put(sessions, contact["id"], %{pid: pid, reference: Process.monitor(pid)})
     else
       _running_or_not_uplinked -> sessions
     end
   end
+
+  @doc """
+  Arms CLCW overrides for one contact's uplink session (test fault injection), e.g.
+  `%{lockout: 1}`: the peer's FARM still accepts frames and attests `unlocked`, so the session
+  qualifies, but every CLCW it reports carries the overrides. Read when the session starts, so
+  arm before AOS; other contacts are unaffected. `disarm/1` clears it.
+  """
+  @spec arm(binary(), map()) :: :ok
+  def arm(contact_id, overrides) when is_binary(contact_id) and is_map(overrides),
+    do: :persistent_term.put({__MODULE__, :clcw_overrides, contact_id}, overrides)
+
+  @spec disarm(binary()) :: boolean()
+  def disarm(contact_id), do: :persistent_term.erase({__MODULE__, :clcw_overrides, contact_id})
+
+  defp armed(contact_id), do: :persistent_term.get({__MODULE__, :clcw_overrides, contact_id}, %{})
 
   @spec stop(sessions(), binary()) :: sessions()
   def stop(sessions, contact_id) do

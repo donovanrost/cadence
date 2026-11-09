@@ -36,6 +36,8 @@ defmodule CadenceSimulator.Provider.UplinkAttestationTest do
       run: context.run,
       contact: contact,
       session: fn _id -> sessions[contact["id"]].pid end,
+      sessions: sessions,
+      listener: listener,
       peer: "#{:inet.ntoa(ip)}:#{peer_port}"
     }
   end
@@ -76,6 +78,25 @@ defmodule CadenceSimulator.Provider.UplinkAttestationTest do
                "k",
                session: fn _ -> nil end
              )
+  end
+
+  test "an armed contact's session reports the CLCW overrides yet attests its FARM unlocked", c do
+    id = c.contact["id"]
+    UplinkSessions.stop(c.sessions, id)
+    :ok = UplinkSessions.arm(id, %{lockout: 1})
+    on_exit(fn -> UplinkSessions.disarm(id) end)
+
+    sessions = UplinkSessions.ensure(%{}, internal(c.contact), nil)
+    on_exit(fn -> UplinkSessions.stop(sessions, id) end)
+    {:ok, _socket} = :gen_tcp.accept(c.listener, 2_000)
+    pid = sessions[id].pid
+
+    assert %{overrides: %{lockout: 1}} = :sys.get_state(pid).clcw_injector
+
+    assert {:ok, %{"farm" => "unlocked"}} =
+             attest(%{c | session: fn _id -> pid end}, "fencing", "k")
+
+    assert UplinkSessions.disarm(id)
   end
 
   defp attest(c, purpose, key) do
