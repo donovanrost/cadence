@@ -47,8 +47,10 @@ defmodule CadenceWeb.Endpoint do
     plug(Tidewave)
   end
 
+  # Multipart allows catalog uploads up to Cadence.Catalog.Upload.max_bytes
+  # (50 MiB) plus form overhead; other parsers keep Plug's defaults.
   plug(Plug.Parsers,
-    parsers: [:urlencoded, :multipart, :json],
+    parsers: [:urlencoded, {:multipart, length: 56_000_000}, :json],
     pass: ["*/*"],
     json_decoder: Jason
   )

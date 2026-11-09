@@ -269,7 +269,14 @@ defmodule Cadence.Reads.Readiness.Rules do
   end
 
   defp tile(:apps, apps),
-    do: tile(apps.installed_count, "installed", apps.available_count, "available", nil)
+    do:
+      tile(
+        apps.installed_count,
+        "installed",
+        apps.available_count,
+        "available",
+        missing_apps(apps)
+      )
 
   defp tile(count, unit, secondary_count, secondary_unit, detail),
     do: %{
@@ -298,6 +305,16 @@ defmodule Cadence.Reads.Readiness.Rules do
 
   defp unknown_tile(key),
     do: tile(nil, to_string(key), nil, nil, "This area couldn't be assessed.")
+
+  defp missing_apps(%{missing: []}), do: nil
+  defp missing_apps(%{missing: [app]}), do: "#{app.name} isn't installed"
+
+  defp missing_apps(%{missing: missing}) do
+    {rest, [last]} = missing |> Enum.map(& &1.name) |> Enum.split(-1)
+    "#{Enum.join(rest, ", ")} and #{last} aren't installed"
+  end
+
+  defp missing_apps(_apps), do: nil
 
   defp fleet_detail(%{total: 0}), do: nil
 

@@ -11,6 +11,7 @@ defmodule Cadence.Reads.Readiness do
 
   alias Cadence.Applications.ApplicationDefinition
   alias Cadence.Applications.ApplicationInstallations
+  alias Cadence.Applications.SpacecraftConfiguration.Drafts
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Comms.{GroundStationStore, RoutingRule, RoutingRuleStore, TransportStore}
   alias Cadence.DataSources.SourceHealthStatus
@@ -92,16 +93,21 @@ defmodule Cadence.Reads.Readiness do
     %{
       database_count: length(databases),
       revision_count: length(revisions),
-      latest_label: revisions |> List.first() |> revision_label()
+      latest_label: latest_label(organization_id, mission_id, List.first(revisions))
     }
   end
 
-  defp revision_label(nil), do: nil
   # "rev N" for catalog revisions; "rN" is reserved for mission config revisions.
-  defp revision_label(%{revision_number: n, revision_label: nil}), do: "Latest rev #{n}"
+  defp latest_label(_organization_id, _mission_id, nil), do: nil
 
-  defp revision_label(%{revision_number: n, revision_label: label}),
-    do: "Latest rev #{n} · #{label}"
+  defp latest_label(organization_id, mission_id, %{catalog_revision_id: id, revision_number: n}) do
+    used_by =
+      organization_id
+      |> Drafts.catalog_usage_entries(mission_id)
+      |> Enum.count(&(&1.catalog_revision_id == id))
+
+    if used_by > 0, do: "rev #{n} · used by #{used_by} spacecraft", else: "rev #{n}"
+  end
 
   defp data_source_statuses(organization_id, mission_id) do
     organization_id

@@ -772,6 +772,8 @@ defmodule CadenceWeb.Router do
       get("/readiness", ReadinessController, :show)
       get("/catalog", CatalogController, :index)
       get("/catalog/imports/:import_run_id", CatalogController, :import_run)
+      post("/catalog/imports", CatalogImportController, :create)
+      get("/catalog/importers", CatalogImportController, :importers)
 
       # -- Change sets (owner: api). Contract: docs/apogee/api/changes.md
       scope "/config" do

@@ -110,6 +110,9 @@ defmodule Cadence.Reads.Readiness.RulesTest do
 
     assert area(result, :apps).status == :not_set_up
 
+    assert area(result, :apps).detail ==
+             "Limits & Alarming and Derived telemetry aren't installed"
+
     assert Enum.map(result.findings, &{&1.cause, &1.severity}) == [
              {:"app_not_installed:limits", :not_set_up},
              {:"app_not_installed:derived", :optional}

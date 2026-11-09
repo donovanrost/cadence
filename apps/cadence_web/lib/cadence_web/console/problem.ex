@@ -19,6 +19,9 @@ defmodule CadenceWeb.Console.Problem do
     spacecraft_not_found: {404, "Spacecraft not found."},
     profile_not_found: {404, "Profile not found."},
     import_run_not_found: {404, "Import run not found."},
+    unsupported_format: {422, "That file format isn't supported."},
+    file_too_large: {413, "The file is larger than 50 MiB."},
+    import_failed: {422, "The import could not be started."},
     invalid_params: {422, "The request parameters are invalid."},
     history_unavailable: {503, "Telemetry history is unavailable right now."}
   }

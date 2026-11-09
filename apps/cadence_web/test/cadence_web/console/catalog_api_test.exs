@@ -79,6 +79,69 @@ defmodule CadenceWeb.Console.CatalogAPITest do
     end
   end
 
+  defp upload(c, file_name, contents, fields) do
+    path =
+      Path.join(System.tmp_dir!(), "catalog-#{System.unique_integer([:positive])}-#{file_name}")
+
+    File.write!(path, contents)
+    on_exit(fn -> File.rm(path) end)
+
+    c.user
+    |> TestFixtures.member_conn()
+    |> post(
+      "#{c.base}/imports",
+      Map.put(fields, "file", %Plug.Upload{
+        path: path,
+        filename: file_name,
+        content_type: "application/octet-stream"
+      })
+    )
+  end
+
+  @yaml """
+  packets:
+    - name: HEALTH
+      items:
+        - name: mode
+          data_type: uint
+          bit_offset: 0
+          bit_size: 8
+  commands: []
+  """
+
+  test "lists accepted importers with extensions and the size limit", c do
+    data = get_data(c, "#{c.base}/importers")
+    assert data["max_bytes"] == 52_428_800
+    assert [_ | _] = data["importers"]
+    assert Enum.any?(data["importers"], &(".yaml" in &1["extensions"]))
+  end
+
+  test "a multipart upload creates a database and starts an import run", c do
+    conn =
+      upload(c, "mission.yaml", @yaml, %{"name" => "Earendil FSW", "revision_label" => "FSW 1"})
+
+    assert %{"import_run_id" => run_id} = json_response(conn, 202)["data"]
+    assert [%{"name" => "Earendil FSW"}] = get_data(c, c.base)["databases"]
+    assert get_data(c, "#{c.base}/imports/#{run_id}")["file"]["name"] == "mission.yaml"
+  end
+
+  test "upload rejects an unsupported format, missing fields and a missing file", c do
+    conn = upload(c, "notes.pdf", "%PDF", %{"name" => "X"})
+
+    assert %{"code" => "unsupported_format", "details" => %{"accepted" => [_ | _]}} =
+             json_response(conn, 422)["error"]
+
+    conn = upload(c, "mission.yaml", @yaml, %{})
+
+    assert %{"code" => "invalid_params", "details" => %{"name" => _}} =
+             json_response(conn, 422)["error"]
+
+    conn = c.user |> TestFixtures.member_conn() |> post("#{c.base}/imports", %{})
+
+    assert %{"code" => "invalid_params", "details" => %{"file" => _}} =
+             json_response(conn, 422)["error"]
+  end
+
   test "an unknown import run is not found", c do
     conn = c.user |> TestFixtures.member_conn() |> get("#{c.base}/imports/nope")
     assert json_response(conn, 404)["error"]["code"] == "import_run_not_found"

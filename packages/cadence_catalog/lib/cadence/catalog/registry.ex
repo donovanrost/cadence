@@ -106,6 +106,14 @@ defmodule Cadence.Catalog.Registry do
     end
   end
 
+  @doc "File extensions (with the dot) an importer accepts, derived from its media types."
+  @spec extensions(map()) :: [binary()]
+  def extensions(%{media_types: media_types}) do
+    media_types
+    |> Enum.flat_map(&Map.get(@extension_by_media_type, &1, []))
+    |> Enum.uniq()
+  end
+
   defp find_by_media_type(_importers, nil), do: :error
 
   defp find_by_media_type(importers, media_type) do
