@@ -141,6 +141,11 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
   <template v-if="view.kind === 'plan'">
     <SupersededCallout v-if="view.plan.superseded" :superseded="view.plan.superseded" />
     <ApCallout v-else-if="stopped" :tone="stopped.tone">{{ stopped.text }}</ApCallout>
+    <!-- U30, until plan detail names the unconfirmed passes (asked of api): no counts, no guess. -->
+    <ApCallout v-else-if="view.plan.state === 'unconfirmed'" tone="caution">
+      The provider hasn't confirmed some bookings within the confirmation window. They may or may
+      not be booked, so Cadence won't send them again. Check them with the provider.
+    </ApCallout>
     <div
       class="grid min-h-0 flex-1 grid-cols-1 gap-3 console:grid-cols-[300px_minmax(0,1fr)_340px]"
     >
