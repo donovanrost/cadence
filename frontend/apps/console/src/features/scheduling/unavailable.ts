@@ -1,55 +1,39 @@
 import type { RemoteState } from "@/api";
-import type { Availability, AvailabilityWindow, PlanDetail } from "./api.ts";
-
-/** A drafted pass that falls inside one of its station's availability windows (ux U26). */
-export type UnavailablePass = Readonly<{ snapshotId: string; window: AvailabilityWindow }>;
-export type StationHits = Readonly<{ blocking: UnavailablePass[]; atRisk: UnavailablePass[] }>;
-
-const BLOCKING = new Set(["outage", "maintenance"]);
+import type { Availability, AvailabilityWindow, PlanDetail, PlanIssue } from "./api.ts";
 
 /**
- * Passes on a station that's down for part of them. Treated like a conflict: dashed caution, counted,
- * listed with Remove, and Submit is blocked. Degraded windows don't block. Until the server's
- * conflict check covers availability (asked of api), this client check is what blocks.
+ * Drafted passes the server flags against station availability (ux U26, scheduling.md):
+ * `station_unavailable` conflicts block; `station_degraded` at-risk entries warn. The availability
+ * read only adds the window's times and "reported after this draft" for D.
  */
-export function unavailablePasses(
-  plan: Pick<PlanDetail, "passes">,
-  availability: RemoteState<Availability> | null | undefined,
-): UnavailablePass[] {
-  return stationHits(plan, availability).blocking;
-}
+export type UnavailablePass = Readonly<{
+  snapshotId: string;
+  windowId: string | null;
+  kind: string;
+  window: AvailabilityWindow | null;
+}>;
+export type StationHits = Readonly<{ blocking: UnavailablePass[]; atRisk: UnavailablePass[] }>;
 
-/** U26: outage/maintenance block (conflict); degraded is a warning (passes may lose data). */
+export const isStationConflict = (c: PlanIssue) => c.code === "station_unavailable";
+
 export function stationHits(
-  plan: Pick<PlanDetail, "passes">,
+  plan: Pick<PlanDetail, "conflicts" | "at_risk">,
   availability: RemoteState<Availability> | null | undefined,
 ): StationHits {
-  const all = hits(plan, availability, (k) => BLOCKING.has(k));
-  const risky = hits(plan, availability, (k) => k === "degraded");
-  const blocked = new Set(all.map((h) => h.snapshotId));
-  return { blocking: all, atRisk: risky.filter((h) => !blocked.has(h.snapshotId)) };
-}
-
-function hits(
-  plan: Pick<PlanDetail, "passes">,
-  availability: RemoteState<Availability> | null | undefined,
-  kind: (k: AvailabilityWindow["kind"]) => boolean,
-): UnavailablePass[] {
-  if (availability?.status !== "ready") return [];
-  const windows = availability.value.stations.flatMap((s) =>
-    s.windows.filter((w) => kind(w.kind) && w.cleared_at === null),
-  );
-  return plan.passes.flatMap((p) => {
-    const id = p.station?.id;
-    if (!id) return [];
-    const from = Date.parse(p.starts_at);
-    const to = Date.parse(p.ends_at);
-    const hit = windows.find(
-      (w) =>
-        w.ground_station_id === id &&
-        Date.parse(w.from) < to &&
-        (w.to === null || Date.parse(w.to) > from),
+  const windows = new Map<string, AvailabilityWindow>();
+  if (availability?.status === "ready")
+    for (const s of availability.value.stations) for (const w of s.windows) windows.set(w.id, w);
+  const toHits = (issues: readonly PlanIssue[]) =>
+    issues.flatMap((i) =>
+      i.snapshot_ids.map((snapshotId) => ({
+        snapshotId,
+        windowId: i.window_id ?? null,
+        kind: i.kind ?? "",
+        window: (i.window_id && windows.get(i.window_id)) || null,
+      })),
     );
-    return hit ? [{ snapshotId: p.snapshot_id, window: hit }] : [];
-  });
+  return {
+    blocking: toHits(plan.conflicts.filter(isStationConflict)),
+    atRisk: toHits(plan.at_risk),
+  };
 }

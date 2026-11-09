@@ -22,6 +22,8 @@ const plan: PlanDetail = {
   demand: { rule_met: 1, rule_total: 3, spacecraft: [], rules: [] },
   unmet: [gap("r1"), gap("r2")],
   conflicts: [],
+  at_risk: [],
+  superseded: null,
 };
 
 describe("SubmitSheet", () => {

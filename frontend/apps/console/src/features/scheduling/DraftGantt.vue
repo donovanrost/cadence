@@ -21,7 +21,6 @@ import {
   type StationRef,
 } from "./api.ts";
 import type { SpacecraftName } from "./names.ts";
-import type { StationHits } from "./unavailable.ts";
 
 /** B · Draft by station: the plan's passes; the focused spacecraft ringed, conflicts dashed caution. */
 const props = defineProps<{
@@ -34,8 +33,6 @@ const props = defineProps<{
   index?: string | undefined;
   /** S7 station availability: windows become bands, down/degraded stations tint their row. */
   availability?: RemoteState<Availability> | undefined;
-  /** U26 station hits: blocking → conflict bar, atRisk → risk bar. */
-  hits?: StationHits | undefined;
   nameOf: (id: string | null) => SpacecraftName | null;
   focused: string | null;
   selected: string | null;
@@ -51,8 +48,15 @@ const window = computed(() => {
   return { from, to: from + 86_400_000 };
 });
 const clashing = computed(() => new Set(props.plan.conflicts.flatMap((c) => c.snapshot_ids)));
-const down = computed(() => new Set((props.hits?.blocking ?? []).map((h) => h.snapshotId)));
-const risky = computed(() => new Set((props.hits?.atRisk ?? []).map((h) => h.snapshotId)));
+const down = computed(
+  () =>
+    new Set(
+      props.plan.conflicts
+        .filter((c) => c.code === "station_unavailable")
+        .flatMap((c) => c.snapshot_ids),
+    ),
+);
+const risky = computed(() => new Set(props.plan.at_risk.flatMap((r) => r.snapshot_ids)));
 const others = computed(() =>
   props.alternatives?.status === "ready"
     ? distinctWindows(props.alternatives.value.alternatives)

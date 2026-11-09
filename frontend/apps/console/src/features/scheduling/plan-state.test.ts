@@ -66,3 +66,28 @@ describe("planView", () => {
     ).toBe("no_draft");
   });
 });
+
+describe("planOfDay (superseded state)", () => {
+  it("opens the newest plan when it's a superseded draft and nothing current exists", async () => {
+    const { planOfDay } = await import("./plan-state.ts");
+    const row = (
+      id: string,
+      state: PlanSummary["state"],
+      superseded: PlanSummary["superseded"],
+    ): PlanSummary => ({
+      id,
+      version: 1,
+      state,
+      window: { from: null, to: null },
+      author: null,
+      counts: { passes: 40, minutes: 320, conflicts: 0, unsatisfied: 0 },
+      ready_to_approve: false,
+      updated_at: "2026-11-10T10:00:00Z",
+      superseded,
+    });
+    const why = { at: "2026-11-10T11:00:00Z", by: null, reason: "template_changed", changes: [] };
+    expect(planOfDay([row("old", "superseded", why)])?.id).toBe("old");
+    expect(planOfDay([row("new", "draft", null), row("old", "superseded", why)])?.id).toBe("new");
+    expect(planOfDay([row("gone", "canceled", null)])).toBeNull();
+  });
+});

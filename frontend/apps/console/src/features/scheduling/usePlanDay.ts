@@ -18,7 +18,7 @@ import {
   type Acknowledgement,
   type PlanDetail,
 } from "./api.ts";
-import { currentPlan, planView } from "./plan-state.ts";
+import { planOfDay, planView } from "./plan-state.ts";
 
 const progressReader = d.object({ kind: d.string, id: d.token, state: d.string });
 
@@ -58,7 +58,7 @@ export function usePlanDay(
   const planId = computed(() => {
     if (runId.value) return null;
     const p = plans.state.value;
-    return p.status === "ready" ? (currentPlan(p.value.plans)?.id ?? null) : null;
+    return p.status === "ready" ? (planOfDay(p.value.plans)?.id ?? null) : null;
   });
   const plan = useRemoteQuery(planId, (id, signal) => fetchPlan(missionId.value, id, signal));
   /** S7 station availability for the Gantt's outage / maintenance / degraded bands. */

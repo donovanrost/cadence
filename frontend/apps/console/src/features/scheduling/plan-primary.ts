@@ -1,6 +1,7 @@
 import type { RouteLocationRaw } from "vue-router";
 import { plural } from "@/ui";
 import { coverage, spacecraftNotCovered } from "./coverage.ts";
+import { isStationConflict } from "./unavailable.ts";
 import type { PlanDetail } from "./api.ts";
 
 /**
@@ -11,26 +12,30 @@ export type PlanPrimary =
   | { kind: "sheet"; label: string; confirm: string }
   | { kind: "execute"; label: string }
   | { kind: "link"; label: string; to: RouteLocationRaw }
+  | { kind: "redraft"; label: string }
   | { kind: "blocked"; label: string; reason: string }
   | { kind: "none"; note: string | null };
 
-/** `stationBlocked`: drafted passes inside a station outage/maintenance (U26), which block like conflicts. */
-export function planPrimary(plan: PlanDetail, isAdmin: boolean, stationBlocked = 0): PlanPrimary {
+export function planPrimary(plan: PlanDetail, isAdmin: boolean): PlanPrimary {
   const n = plan.counts.passes;
   const gaps = coverage(plan).gaps;
   switch (plan.state) {
     case "draft": {
-      if (plan.conflicts.length > 0)
+      const overlaps = plan.conflicts.filter((c) => !isStationConflict(c)).length;
+      const onDownStation = plan.conflicts
+        .filter(isStationConflict)
+        .flatMap((c) => c.snapshot_ids).length;
+      if (overlaps > 0)
         return {
           kind: "blocked",
           label: "Submit",
-          reason: `${plural(plan.conflicts.length, "conflict")}. Move or remove a pass to submit.`,
+          reason: `${plural(overlaps, "conflict")}. Move or remove a pass to submit.`,
         };
-      if (stationBlocked > 0)
+      if (onDownStation > 0)
         return {
           kind: "blocked",
           label: "Submit",
-          reason: `${plural(stationBlocked, "drafted pass", "drafted passes")} on a station that's down. Move or remove ${stationBlocked === 1 ? "it" : "them"} to submit.`,
+          reason: `${plural(onDownStation, "drafted pass", "drafted passes")} on a station that's down. Move or remove ${onDownStation === 1 ? "it" : "them"} to submit.`,
         };
       if (n === 0) return { kind: "blocked", label: "Submit", reason: "The draft has no passes." };
       const label = isAdmin
@@ -74,17 +79,18 @@ export function planPrimary(plan: PlanDetail, isAdmin: boolean, stationBlocked =
       };
     case "reserved":
       return { kind: "link", label: "Open Contacts", to: { name: "ops.contacts" } };
-    case "canceled":
     case "superseded":
+      return { kind: "redraft", label: "Draft again with the current rules" };
+    case "canceled":
       return { kind: "none", note: "This plan is no longer current." };
   }
 }
 
 /** Header mono tail per plan state. */
-export function planHeaderTail(plan: PlanDetail, stationBlocked = 0): string {
+export function planHeaderTail(plan: PlanDetail): string {
   switch (plan.state) {
     case "draft": {
-      const conflicts = plan.conflicts.length + stationBlocked;
+      const conflicts = plan.conflicts.length;
       if (conflicts > 0) return plural(conflicts, "conflict");
       const c = coverage(plan);
       return c.spacecraft > 0 ? spacecraftNotCovered(c.spacecraft) : "ready";

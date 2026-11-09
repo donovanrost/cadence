@@ -2,25 +2,23 @@
 import { computed } from "vue";
 import { ApButton, ApStatStrip, ApStatTile } from "@/ui";
 import type { PlanDetail } from "./api.ts";
-import type { StationHits } from "./unavailable.ts";
 import { planPrimary } from "./plan-primary.ts";
 
-/** K1 footer: totals + the one primary for the plan's state (plan-primary.ts). */
+/**
+ * K1 footer: totals + the one primary for the plan's state (plan-primary.ts). Conflicts include the
+ * server's station_unavailable entries; at-risk (station_degraded) is the caption (U26).
+ */
 const props = defineProps<{
   plan: PlanDetail;
   isAdmin: boolean;
   busy: boolean;
   /** Replaces the sheet primary's label (K2: "Apply r42 · book N passes"). */
   sheetLabel?: string | undefined;
-  /** U26: blocking station hits count as conflicts; at-risk passes are a caption. */
-  hits?: StationHits | undefined;
 }>();
-defineEmits<{ sheet: []; execute: [] }>();
-const primary = computed(() =>
-  planPrimary(props.plan, props.isAdmin, props.hits?.blocking.length ?? 0),
-);
-const conflicts = computed(() => props.plan.conflicts.length + (props.hits?.blocking.length ?? 0));
-const atRisk = computed(() => props.hits?.atRisk.length ?? 0);
+defineEmits<{ sheet: []; execute: []; redraft: [] }>();
+const primary = computed(() => planPrimary(props.plan, props.isAdmin));
+const conflicts = computed(() => props.plan.conflicts.length);
+const atRisk = computed(() => props.plan.at_risk.flatMap((r) => r.snapshot_ids).length);
 </script>
 
 <template>
@@ -55,6 +53,14 @@ const atRisk = computed(() => props.hits?.atRisk.length ?? 0);
         size="commit"
         :disabled="busy"
         @click="$emit('execute')"
+        >{{ primary.label }}</ApButton
+      >
+      <ApButton
+        v-else-if="primary.kind === 'redraft'"
+        variant="primary"
+        size="commit"
+        :disabled="busy"
+        @click="$emit('redraft')"
         >{{ primary.label }}</ApButton
       >
       <ApButton

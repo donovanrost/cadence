@@ -15,6 +15,7 @@ import PlanStatePanel from "./PlanStatePanel.vue";
 import SelectedPanel from "./SelectedPanel.vue";
 import { planErrorText } from "./errors.ts";
 import SubmitSheet from "./SubmitSheet.vue";
+import SupersededCallout from "./SupersededCallout.vue";
 import { stationHits } from "./unavailable.ts";
 import { planPrimary } from "./plan-primary.ts";
 import type { PlanView } from "./plan-state.ts";
@@ -54,9 +55,7 @@ const hits = computed(() =>
     : { blocking: [], atRisk: [] },
 );
 const primary = computed(() =>
-  view.value.kind === "plan"
-    ? planPrimary(view.value.plan, isAdmin.value, hits.value.blocking.length)
-    : null,
+  view.value.kind === "plan" ? planPrimary(view.value.plan, isAdmin.value) : null,
 );
 
 async function onSubmit(acks: Acknowledgement[]) {
@@ -85,7 +84,7 @@ const step = computed(() =>
   view.value.kind === "drafting" ? 2 : view.value.kind === "plan" ? 2 : 0,
 );
 /** Header mono line per state (ScheduleFlow "K1 plan states"). */
-function headerFor(v: PlanView, d: string, stationBlocked: number): string {
+function headerFor(v: PlanView, d: string): string {
   switch (v.kind) {
     case "not_set_up":
       return "Contact plan · not set up";
@@ -101,12 +100,12 @@ function headerFor(v: PlanView, d: string, stationBlocked: number): string {
     case "loading":
       return `Contact plan · ${d}`;
     case "plan":
-      return `Contact plan · R${v.plan.version} ${v.plan.state.replaceAll("_", " ")} · ${planHeaderTail(v.plan, stationBlocked)}`;
+      return v.plan.superseded
+        ? `Contact plan · R${v.plan.version} draft · superseded`
+        : `Contact plan · R${v.plan.version} ${v.plan.state.replaceAll("_", " ")} · ${planHeaderTail(v.plan)}`;
   }
 }
-const headerLine = computed(() =>
-  headerFor(view.value, dayLabel(day.value), hits.value.blocking.length),
-);
+const headerLine = computed(() => headerFor(view.value, dayLabel(day.value)));
 const setupLink = computed(() => ({ name: "setup.contact-planning" }));
 </script>
 
@@ -122,8 +121,10 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
   </TakeoverHeader>
   <DayNav :day="day" />
   <template v-if="view.kind === 'plan'">
+    <SupersededCallout v-if="view.plan.superseded" :superseded="view.plan.superseded" />
     <div
       class="grid min-h-0 flex-1 grid-cols-1 gap-3 console:grid-cols-[300px_minmax(0,1fr)_340px]"
+      :class="view.plan.superseded ? 'opacity-60' : ''"
     >
       <DemandPanel
         :plan="view.plan"
@@ -139,7 +140,6 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
         :selected="selected"
         :alternatives="alternatives"
         :availability="availability"
-        :hits="hits"
         @select="selected = $event"
       />
       <SelectedPanel
@@ -160,10 +160,10 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
     <ApCallout v-if="actionText" tone="caution">{{ actionText }}</ApCallout>
     <PlanFooter
       :plan="view.plan"
-      :hits="hits"
       :is-admin="isAdmin"
       :busy="busy"
       @sheet="sheet?.open()"
+      @redraft="draftDay"
       @execute="onExecute"
     />
     <SubmitSheet

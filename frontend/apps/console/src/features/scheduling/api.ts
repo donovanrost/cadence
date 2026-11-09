@@ -29,6 +29,26 @@ export const stationReader = d.nullable(
 );
 export type StationRef = Decoded<typeof stationReader>;
 
+/** Why a draft / pending plan was overtaken (DECISIONS: superseded state; scheduling.md). */
+export const supersededReader = d.nullable(
+  d.object({
+    at: d.timestamp,
+    by: d.nullable(d.object({ name: d.string })),
+    reason: d.string,
+    changes: d.array(
+      d.object({
+        kind: d.string,
+        id: d.token,
+        name: d.nullable(d.string),
+        from_version: d.nullable(d.integer),
+        to_version: d.nullable(d.integer),
+      }),
+      500,
+    ),
+  }),
+);
+export type Superseded = NonNullable<Decoded<typeof supersededReader>>;
+
 const planRow = {
   id: d.token,
   version: d.integer,
@@ -43,10 +63,23 @@ const planRow = {
   }),
   ready_to_approve: d.boolean,
   updated_at: d.timestamp,
+  /** Absent on older servers; null when the plan isn't superseded. */
+  superseded: (value: unknown, path?: string) =>
+    value === undefined ? null : supersededReader(value, path),
 };
 
 export const plansReader = d.object({ plans: d.array(d.object(planRow), 100) });
 export type PlanSummary = Decoded<typeof plansReader>["plans"][number];
+
+/** One conflict / at-risk entry; fields depend on `code`, so the code-specific ones are optional. */
+const planIssue = d.object({
+  code: d.string,
+  snapshot_ids: d.array(d.token),
+  spacecraft_id: d.optional(d.nullable(d.token)),
+  ground_station_id: d.optional(d.token),
+  window_id: d.optional(d.token),
+  kind: d.optional(d.string),
+});
 
 export const planDetailReader = d.object({
   ...planRow,
@@ -95,16 +128,14 @@ export const planDetailReader = d.object({
     }),
     5_000,
   ),
-  conflicts: d.array(
-    d.object({
-      code: d.string,
-      spacecraft_id: d.nullable(d.token),
-      snapshot_ids: d.array(d.token),
-    }),
-    5_000,
-  ),
+  /** `selected_contacts_overlap` (spacecraft_id) or `station_unavailable` (station window, U26). Both block. */
+  conflicts: d.array(planIssue, 5_000),
+  /** `station_degraded`: passes inside a degraded window; a warning only (U26). */
+  at_risk: (value: unknown, path?: string) =>
+    value === undefined ? [] : d.array(planIssue, 5_000)(value, path),
 });
 export type PlanDetail = Decoded<typeof planDetailReader>;
+export type PlanIssue = PlanDetail["conflicts"][number];
 export type PlanPass = PlanDetail["passes"][number];
 
 export const runStates = [

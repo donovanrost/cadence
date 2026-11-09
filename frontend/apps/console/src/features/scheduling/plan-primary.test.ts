@@ -15,14 +15,49 @@ const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   demand: { rule_met: 3, rule_total: 3, spacecraft: [], rules: [] },
   unmet: [],
   conflicts: [],
+  at_risk: [],
+  superseded: null,
   ...over,
 });
 const gap = { requirement_id: "r1", requirement_version: 1, spacecraft_id: "sc1", why: [] };
 
 describe("planPrimary", () => {
+  it("blocks on a station_unavailable conflict with the station wording (U26)", () => {
+    const p = planPrimary(
+      plan({
+        conflicts: [
+          {
+            code: "station_unavailable",
+            spacecraft_id: undefined,
+            snapshot_ids: ["c"],
+            ground_station_id: "gs-sva",
+            window_id: "w1",
+            kind: "outage",
+          },
+        ],
+      }),
+      true,
+    );
+    expect(p).toMatchObject({
+      kind: "blocked",
+      reason: "1 drafted pass on a station that's down. Move or remove it to submit.",
+    });
+  });
+
   it("blocks on conflicts with the reason, whoever submits", () => {
     const p = planPrimary(
-      plan({ conflicts: [{ code: "overlap", spacecraft_id: "sc1", snapshot_ids: ["a", "b"] }] }),
+      plan({
+        conflicts: [
+          {
+            code: "selected_contacts_overlap",
+            spacecraft_id: "sc1",
+            snapshot_ids: ["a", "b"],
+            ground_station_id: undefined,
+            window_id: undefined,
+            kind: undefined,
+          },
+        ],
+      }),
       true,
     );
     expect(p).toMatchObject({

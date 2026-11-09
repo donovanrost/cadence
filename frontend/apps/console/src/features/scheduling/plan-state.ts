@@ -20,6 +20,17 @@ export function currentPlan(plans: readonly PlanSummary[]): PlanSummary | null {
   return plans.find((p) => p.state !== "superseded" && p.state !== "canceled") ?? null;
 }
 
+/**
+ * The plan K1 opens for a day: the current one, else the newest plan if it's a superseded draft
+ * (shown dimmed with why, so the planner doesn't lose the work silently).
+ */
+export function planOfDay(plans: readonly PlanSummary[]): PlanSummary | null {
+  const current = currentPlan(plans);
+  if (current) return current;
+  const newest = plans[0];
+  return newest && newest.state === "superseded" && newest.superseded ? newest : null;
+}
+
 export function planView(
   input: Readonly<{
     notSetUp: readonly string[] | null;
@@ -59,7 +70,7 @@ export function planView(
   }
   if (input.plans.status === "loading") return { kind: "loading" };
   if (input.plans.status === "failed") return { kind: "failed", error: input.plans.error };
-  if (!currentPlan(input.plans.value.plans))
+  if (!planOfDay(input.plans.value.plans))
     return {
       kind: "no_draft",
       last: input.plans.value.plans[0] ?? null,

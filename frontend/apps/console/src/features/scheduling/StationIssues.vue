@@ -26,28 +26,32 @@ const groups = computed<Group[]>(() => {
     [props.hits.atRisk, false],
   ] as const)
     for (const h of list) {
-      const g = map.get(h.window.id) ?? { key: h.window.id, blocking, hits: [] };
+      const key = h.windowId ?? `${h.kind}:${h.snapshotId}`;
+      const g = map.get(key) ?? { key, blocking, hits: [] };
       g.hits.push(h);
-      map.set(h.window.id, g);
+      map.set(key, g);
     }
   return [...map.values()].sort((a, b) => Number(b.blocking) - Number(a.blocking));
 });
 const passOf = (id: string) => props.plan.passes.find((p) => p.snapshot_id === id) ?? null;
 const hhmm = (t: string | null) => (t ? `${t.slice(11, 16)}Z` : "open-ended");
 function headline(g: Group): string {
-  const w = g.hits[0]?.window;
-  const p = g.hits[0] ? passOf(g.hits[0].snapshotId) : null;
-  if (!w) return "";
+  const first = g.hits[0];
+  if (!first) return "";
+  const p = passOf(first.snapshotId);
   const code = p ? stationCode(p.station) : "Station";
-  const span = w.to
-    ? `${w.from.slice(11, 16)}–${w.to.slice(11, 16)}Z`
-    : `from ${hhmm(w.from)}, no end reported`;
+  const w = first.window;
+  const span = w
+    ? w.to
+      ? ` ${w.from.slice(11, 16)}–${w.to.slice(11, 16)}Z`
+      : ` from ${hhmm(w.from)}, no end reported`
+    : "";
   return g.blocking
-    ? `${code} is down ${span} (${w.kind}) · ${plural(g.hits.length, "drafted pass", "drafted passes")} ${g.hits.length === 1 ? "falls" : "fall"} in it`
-    : `${code} is degraded ${span} · ${plural(g.hits.length, "pass", "passes")} may lose data`;
+    ? `${code} is down${span} (${first.kind || "unavailable"}) · ${plural(g.hits.length, "drafted pass", "drafted passes")} ${g.hits.length === 1 ? "falls" : "fall"} in it`
+    : `${code} is degraded${span} · ${plural(g.hits.length, "pass", "passes")} may lose data`;
 }
 const reportedAfter = (g: Group) => {
-  const at = g.hits[0]?.window.reported_at;
+  const at = g.hits[0]?.window?.reported_at;
   return at && Date.parse(at) > Date.parse(props.plan.updated_at)
     ? `Reported ${at.slice(11, 16)}Z, after this draft.`
     : null;
