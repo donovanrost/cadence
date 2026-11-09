@@ -12,3 +12,12 @@ export {
   type StageResult,
 } from "./actions.ts";
 export { refreshConfigState, useConfigState } from "./useConfigState.ts";
+export { default as SchemaForm } from "./SchemaForm.vue";
+export {
+  diffEdits,
+  fetchKindSchema,
+  fromDocument,
+  type EditableKind,
+  type FormValues,
+  type KindSchema,
+} from "./kindSchema.ts";

@@ -10,8 +10,9 @@ const station = object({
   provider: nullable(string),
   region: nullable(string),
   lifecycle_state: oneOf(["active", "archived"]),
-  transport_count: integer,
-  routing_rule_count: integer,
+  // null: the model has no station↔transport link yet (api); the columns are hidden then.
+  transport_count: nullable(integer),
+  routing_rule_count: nullable(integer),
   health: nullable(
     object({ status: oneOf(["nominal", "degraded", "down"]), since: nullable(string) }),
   ),
