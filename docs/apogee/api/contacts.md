@@ -7,7 +7,7 @@ S8) are api's: [scheduling.md](scheduling.md). Conventions: [README.md](README.m
 | Ask | Endpoint | Status |
 | --- | --- | --- |
 | M7 / S1 | `GET /missions/:mission_id/passes` | **implemented** (booked contacts; opportunities not yet) |
-| S10 | `contacts` on the `mission:<id>` `invalidate` event | **implemented** for contact facts; reservation-only transitions pending domain |
+| S10 | `contacts` on the `mission:<id>` `invalidate` event | **implemented** (contact facts + reservation changes; plans/runs not yet) |
 
 ## `GET /api/console/v1/missions/:mission_id/passes`
 
@@ -56,7 +56,8 @@ Query: `from`, `to` (ISO-8601; default `from` = now, `to` = `from` + 24 h; at mo
   for the simulator's deterministic windows. Say so in the UI.
 - `plan`: the contact plan revision that booked it, or `null` for direct bookings.
 - `truncated: true`: more than 500 reservations overlap the window. Narrow it.
-- Refetch on `invalidate` with `contacts` (below), and periodically (about 30 s) until S10 is complete.
+- Refetch on `invalidate` with `contacts` (below). AOS/LOS happen without an event; refresh a
+  "now" line on a timer if you draw one.
 
 Errors: `422 invalid_params`, `404 mission_not_found`.
 
@@ -64,6 +65,6 @@ Errors: `422 invalid_params`, `404 mission_not_found`.
 
 `invalidate` with `contacts` fires when a scheduled or realized contact or a contact action is
 committed (relayed from `Cadence.Contacts.Facts` by `CadenceWeb.Console.ContactChanges`), and on
-the `:contacts_changed` read update. The read update is wired, but nothing publishes it yet:
-domain is adding it for reservation-only transitions (for example `requesting → rejected`) and
-for plans and runs. Until that lands, also poll the passes read (about 30 s).
+the `:contacts_changed` read update, which every `ProviderReservations` writer publishes after
+commit (domain `db8c9953`), so reservation-only transitions (for example `requesting → rejected`)
+invalidate too. Contact **plan and fleet-run** changes don't publish yet; ask domain if a screen needs them.
