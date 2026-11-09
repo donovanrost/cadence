@@ -61,14 +61,20 @@ async function stage() {
 </script>
 
 <template>
-  <ApPanel index="V2" :title="`Roll back to r${to}`">
+  <ApPanel index="V3">
+    <template #header>
+      <!-- U17: the revision id keeps its case (mono, normal-case); the rest is a panel title. -->
+      <h2 class="m-0 font-display text-base font-semibold tracking-title text-text-2 uppercase">
+        Roll back to <span class="font-mono normal-case">r{{ to }}</span>
+      </h2>
+    </template>
     <div class="flex flex-col gap-3">
       <p class="m-0 text-md text-text-3">
         A rollback is a new revision that reverses later ones. History isn't rewritten.
       </p>
       <div v-if="!open">
         <ApButton :disabled="blocked !== null" :disabled-reason="blocked ?? ''" @click="open = true"
-          >Roll back to r{{ to }}</ApButton
+          >Roll back to <span class="font-mono normal-case">r{{ to }}</span></ApButton
         >
       </div>
       <ApCallout v-else-if="preview.state.value.status === 'failed'" tone="caution">
@@ -82,7 +88,7 @@ async function stage() {
       >
         <template #default="{ value }">
           <p class="m-0 font-semibold text-readout">{{ value.summary }}</p>
-          <RollbackOps :ops="value.ops" />
+          <RollbackOps :ops="value.ops" :diffs="value.preview?.diffs ?? []" />
           <ApCallout v-if="value.outside.length > 0" tone="caution">
             {{ plural(value.outside.length, "item") }} changed outside change sets since r{{ to }}.
             The rollback overwrites them; you'll acknowledge that when you submit.
@@ -108,7 +114,7 @@ async function stage() {
             busy ? 'Staging…' : noGo ? 'The checks say NO-GO' : 'Nothing to roll back'
           "
           @click="stage"
-          >Stage rollback to r{{ to }}</ApButton
+          >Stage rollback to <span class="font-mono normal-case">r{{ to }}</span></ApButton
         >
         <ApButton variant="ghost" @click="open = false">Cancel</ApButton>
       </div>

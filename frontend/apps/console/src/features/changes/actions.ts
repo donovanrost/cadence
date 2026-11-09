@@ -62,8 +62,26 @@ export function itemLine(item: PreviewItem): string {
   return humanize(item.reason ?? item.kind);
 }
 
+/** A staged/rolled-back field: raw path plus, when the server sends them, label and unit. */
+export const diffField = object({
+  path: string,
+  label: decoders.optional(nullable(string)),
+  unit: decoders.optional(nullable(string)),
+  before: (v: unknown) => (v === undefined ? null : v),
+  after: (v: unknown) => (v === undefined ? null : v),
+});
+export const diffEntry = object({
+  kind: token,
+  entity_id: decoders.optional(nullable(string)),
+  entity_name: decoders.optional(nullable(string)),
+  action: token,
+  fields: decoders.optional(array(diffField, 2000)),
+});
+export type DiffEntry = Decoded<typeof diffEntry>;
+
 export const previewReader = object({
   verdict,
+  diffs: decoders.optional(array(diffEntry, 5000)),
   checks: array(object({ key: token, verdict, items: array(previewItem, 500) }), 20),
   effects: array(
     object({

@@ -38,7 +38,13 @@ export function fetchRevision(
 }
 
 /** Field values are raw JSON; show them compactly and exactly. */
-export function showValue(value: unknown): string {
+export function showValue(value: unknown, unit?: string | null): string {
   if (value === null || value === undefined) return "—";
-  return typeof value === "string" ? value : JSON.stringify(value);
+  const text =
+    typeof value === "number"
+      ? value.toLocaleString("en-US")
+      : typeof value === "string"
+        ? value
+        : JSON.stringify(value);
+  return unit && typeof value === "number" ? `${text} ${unit}` : text;
 }

@@ -1,24 +1,51 @@
 <script setup lang="ts">
-import { humanize } from "./actions.ts";
+import { computed } from "vue";
+import { humanize, type DiffEntry } from "./actions.ts";
+import { showValue } from "./api.ts";
 import type { RollbackPreview } from "./rollback.ts";
 
-/** What the rollback does, one line per op (created after → removed, deleted → re-created, …). */
-defineProps<{ ops: RollbackPreview["ops"] }>();
+/**
+ * What the rollback stages back, one entity per line with its values ("frame size 1,115 → 900
+ * bytes"). Names and labels come from the server when it sends them; raw ids/paths otherwise.
+ */
+const props = defineProps<{ ops: RollbackPreview["ops"]; diffs: readonly DiffEntry[] }>();
 const verb: Readonly<Record<string, string>> = {
   create: "Re-create",
   update: "Change back",
   delete: "Remove",
   archive: "Archive",
 };
+/** Prefer the checked diff (values); fall back to the op list when the preview has none. */
+const lines = computed((): readonly DiffEntry[] =>
+  props.diffs.length > 0
+    ? props.diffs
+    : props.ops.map((o) => ({
+        kind: o.kind,
+        entity_id: o.entity_id,
+        entity_name: undefined,
+        action: o.action,
+        fields: undefined,
+      })),
+);
 </script>
 
 <template>
-  <ul class="m-0 flex list-none flex-col gap-1 p-0 text-sm">
-    <li v-for="(op, i) in ops.slice(0, 20)" :key="i" class="flex flex-wrap gap-x-2">
-      <span class="text-text-2">{{ verb[op.action] ?? humanize(op.action) }}</span>
-      <span class="text-text-3">{{ humanize(op.kind).toLowerCase() }}</span>
-      <span v-if="op.entity_id" class="font-mono text-xs text-text-3">{{ op.entity_id }}</span>
+  <ul class="m-0 flex list-none flex-col gap-2 p-0 text-sm">
+    <li v-for="(d, i) in lines.slice(0, 20)" :key="i" class="flex flex-col gap-0.5">
+      <span>
+        <span class="text-text-2">{{ verb[d.action] ?? humanize(d.action) }}</span>
+        {{ " " }}<span class="text-text-3">{{ humanize(d.kind).toLowerCase() }}</span> {{ " "
+        }}<span class="text-readout">{{ d.entity_name ?? d.entity_id ?? "" }}</span>
+      </span>
+      <span
+        v-for="f in d.fields ?? []"
+        :key="f.path"
+        class="pl-4 font-mono text-xs text-text-3"
+        :title="f.path"
+        >{{ f.label ?? f.path }} · {{ showValue(f.before, f.unit) }} →
+        <span class="text-text-2">{{ showValue(f.after, f.unit) }}</span></span
+      >
     </li>
-    <li v-if="ops.length > 20" class="text-sm text-text-3">and {{ ops.length - 20 }} more</li>
+    <li v-if="lines.length > 20" class="text-text-3">and {{ lines.length - 20 }} more</li>
   </ul>
 </template>

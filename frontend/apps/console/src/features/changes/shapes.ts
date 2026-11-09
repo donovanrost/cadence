@@ -4,7 +4,8 @@ import { decoders, type Decoded, type Reader } from "@/api";
  * Change-set wire shapes. Requested: docs/apogee/plans/setup-shapes.md §K (a JSON passthrough
  * of Cadence.Control.Configuration, docs/apogee/api/domain.md). Final contract: api/setup.md.
  */
-const { array, boolean, integer, nullable, object, oneOf, string, timestamp, token } = decoders;
+const { array, boolean, integer, nullable, object, oneOf, optional, string, timestamp, token } =
+  decoders;
 
 const raw: Reader<unknown> = (value) => value;
 
@@ -119,11 +120,19 @@ export const configStateReader = (value: unknown, path = "") => {
 
 export const revisionsReader = object({ revisions: array(revisionSummary, 200) });
 
-const field = object({ path: string, before: raw, after: raw });
+/** label/unit/entity_name arrive from the server with the readable-diff work (ux review #3). */
+const field = object({
+  path: string,
+  label: optional(nullable(string)),
+  unit: optional(nullable(string)),
+  before: raw,
+  after: raw,
+});
 export const entry = object({
   revision: revisionNumber,
   kind: token,
   entity_id: nullable(token),
+  entity_name: optional(nullable(string)),
   op: token,
   paths: array(string, 500),
   fields: array(field, 2000),

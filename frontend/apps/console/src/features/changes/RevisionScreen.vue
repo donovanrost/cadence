@@ -36,7 +36,7 @@ const rollback = computed(() => {
 });
 const crumbs = computed(() => [
   { label: "Revisions", to: { name: "setup.revisions" } },
-  { label: revision.value === null ? "Unknown" : `r${revision.value}` },
+  revision.value === null ? { label: "Unknown" } : { label: `r${revision.value}`, literal: true },
 ]);
 </script>
 
