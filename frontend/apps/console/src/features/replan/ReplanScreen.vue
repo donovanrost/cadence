@@ -33,19 +33,8 @@ import { useReplan } from "./useReplan.ts";
 /** K2 v1 · Re-plan after provider changes (DECISIONS #25), entered from a plan (`?plan=`). */
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
-const {
-  planId,
-  runId,
-  source,
-  repair,
-  applied,
-  busy,
-  actionError,
-  propose,
-  resume,
-  apply,
-  execute,
-} = useReplan(missionId);
+const { planId, runId, source, repair, busy, actionError, propose, resume, apply, execute } =
+  useReplan(missionId);
 const nameOf = useSpacecraftNames(missionId);
 // Station-down entry (S7): resolves the plan to repair into ?plan=, then the plan flow continues.
 const station = useStationEntry(missionId);
@@ -84,10 +73,8 @@ const proposal = computed(() =>
     ? repair.value.value
     : null,
 );
-/** After submit, the proposal's own detail (it reads `interrupted`; the repair read doesn't). */
-const footerPlan = computed(() =>
-  applied.value.status === "ready" ? applied.value.value : (proposal.value?.plan ?? null),
-);
+/** The repair read embeds the proposal with its derived state (`interrupted` included, 5b49faeb). */
+const footerPlan = computed(() => proposal.value?.plan ?? null);
 /** Apply is the current step once the proposal has left draft / pending approval. */
 const step = computed(() => {
   const state = footerPlan.value?.state;

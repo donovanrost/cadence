@@ -30,13 +30,6 @@ export function useReplan(missionId: Readonly<Ref<string>>) {
 
   const source = useRemoteQuery(planId, (id, signal) => fetchPlan(missionId.value, id, signal));
   const repair = useRemoteQuery(runId, (id, signal) => fetchRepair(missionId.value, id, signal));
-  /** Once submitted, the proposal's own detail is authoritative (it derives `interrupted`). */
-  const appliedId = computed(() => {
-    const s = repair.state.value;
-    const plan = s.status === "ready" ? s.value.plan : null;
-    return plan && !["draft", "pending_approval"].includes(plan.state) ? plan.id : null;
-  });
-  const applied = useRemoteQuery(appliedId, (id, signal) => fetchPlan(missionId.value, id, signal));
 
   useChannelEvent(
     computed(() => `mission:${missionId.value}`),
@@ -56,7 +49,6 @@ export function useReplan(missionId: Readonly<Ref<string>>) {
     () => {
       source.refetch();
       if (runId.value) repair.refetch();
-      if (appliedId.value) applied.refetch();
     },
     { throttleMs: 2_000 },
   );
@@ -111,7 +103,7 @@ export function useReplan(missionId: Readonly<Ref<string>>) {
     try {
       const result = await executePlan(missionId.value, planId);
       if (!result.ok) actionError.value = result.error;
-      applied.refetch();
+      repair.refetch();
       source.refetch();
     } finally {
       busy.value = false;
@@ -123,7 +115,6 @@ export function useReplan(missionId: Readonly<Ref<string>>) {
     runId,
     source: source.state,
     repair: repair.state,
-    applied: applied.state,
     busy,
     actionError,
     propose,
