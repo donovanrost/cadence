@@ -50,7 +50,7 @@ export type GanttBand = Readonly<{
   rowId: string | null;
   from: number;
   to: number;
-  kind: "outage" | "maintenance" | "unusable";
+  kind: "outage" | "maintenance" | "degraded" | "unusable";
   label?: string | undefined;
 }>;
 

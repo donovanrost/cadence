@@ -14,6 +14,7 @@ export const missionResources = [
   "limits",
   "settings",
   "spacecraft",
+  "stations",
   "telemetry",
 ] as const;
 export type MissionResource = (typeof missionResources)[number];

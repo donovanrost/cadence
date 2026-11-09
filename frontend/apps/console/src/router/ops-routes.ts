@@ -72,8 +72,14 @@ export const opsRoutes: RouteRecordRaw[] = [
     meta: { mode: "takeover", nav: "contacts", title: "Plan contacts", board: "SchedulePlan (K1)" },
   },
   {
-    // K2 v1 (DECISIONS #25): re-plan after provider changes, ?plan= or ?reservation=. The
-    // station-down entry (contacts/replan/:stationId) returns with S7.
+    // K2 station-down entry (S7, fe-setup): same screen, branches on route.params.stationId.
+    path: "contacts/replan/:stationId",
+    name: "ops.contacts.replan.station",
+    component: () => import("@/features/replan/ReplanScreen.vue"),
+    meta: { mode: "takeover", nav: "contacts", title: "Re-plan", board: "Replan (K2)" },
+  },
+  {
+    // K2 v1 (DECISIONS #25): re-plan after provider changes, ?plan= (fe-setup, DECISIONS #43).
     path: "contacts/replan",
     name: "ops.contacts.replan",
     component: () => import("@/features/replan/ReplanScreen.vue"),

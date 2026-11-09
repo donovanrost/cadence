@@ -46,3 +46,17 @@ describe("distinctWindows (ux K1 #5)", () => {
     ]);
   });
 });
+
+describe("station labels (ux U25)", () => {
+  it("prefer the confirmed code, then the name, never a guess", async () => {
+    const { stationCode, stationName } = await import("./api.ts");
+    expect(
+      stationCode({ ref: "earendil-fairbanks", id: "gs_1", code: "FAI", name: "Fairbanks" }),
+    ).toBe("FAI");
+    expect(
+      stationCode({ ref: "earendil-fairbanks", id: "gs_1", code: null, name: "Fairbanks (Demo)" }),
+    ).toBe("Fairbanks (Demo)");
+    expect(stationCode({ ref: "earendil-x", id: null, code: null, name: null })).toBe("earendil-x");
+    expect(stationName(null)).toBe("unknown station");
+  });
+});

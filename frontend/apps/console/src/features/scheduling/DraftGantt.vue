@@ -1,9 +1,18 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApGantt, ApPanel, formatCount, useNow, type GanttBar, type GanttRow } from "@/ui";
+import {
+  ApGantt,
+  ApPanel,
+  formatCount,
+  useNow,
+  type GanttBand,
+  type GanttBar,
+  type GanttRow,
+} from "@/ui";
 import type { RemoteState } from "@/api";
 import {
   distinctWindows,
+  type Availability,
   stationCode,
   stationKey,
   stationName,
@@ -22,6 +31,8 @@ const props = defineProps<{
   /** Panel heading and index (B1 live plan / B2 proposal). */
   title?: string | undefined;
   index?: string | undefined;
+  /** S7 station availability: windows become bands, down/degraded stations tint their row. */
+  availability?: RemoteState<Availability> | undefined;
   nameOf: (id: string | null) => SpacecraftName | null;
   focused: string | null;
   selected: string | null;
@@ -47,7 +58,12 @@ const rows = computed<GanttRow[]>(() => {
   for (const p of [...props.plan.passes, ...others.value])
     byKey.set(stationKey(p.station), p.station);
   return [...byKey.entries()]
-    .map(([id, st]) => ({ id, label: stationCode(st), name: stationName(st) }))
+    .map(([id, st]) => ({
+      id,
+      label: stationCode(st),
+      name: stationName(st),
+      degraded: stationState.value.get(id) !== undefined && stationState.value.get(id) !== "up",
+    }))
     .sort((a, b) => a.label.localeCompare(b.label));
 });
 const windowBars = computed<GanttBar[]>(() =>
@@ -85,6 +101,25 @@ const rangeText = computed(() =>
     ? `${new Date(props.span.from).toISOString().slice(11, 16)}–${new Date(props.span.to).toISOString().slice(11, 16)}Z`
     : "00–24Z",
 );
+const stations = computed(() =>
+  props.availability?.status === "ready" ? props.availability.value.stations : [],
+);
+const stationState = computed(
+  () => new Map(stations.value.map((st) => [st.ground_station_id, st.state])),
+);
+const bands = computed<GanttBand[]>(() =>
+  stations.value.flatMap((st) =>
+    st.windows
+      .filter((w) => w.cleared_at === null)
+      .map((w) => ({
+        rowId: w.ground_station_id,
+        from: Date.parse(w.from),
+        to: w.to ? Date.parse(w.to) : window.value.to,
+        kind: w.kind,
+        label: `${w.kind[0]?.toUpperCase() ?? ""}${w.kind.slice(1)}${w.reason ? `: ${w.reason}` : ""}${w.to ? "" : " · no end reported"}`,
+      })),
+  ),
+);
 </script>
 
 <template>
@@ -99,6 +134,7 @@ const rangeText = computed(() =>
       :label-width="rows.every((r) => r.label.length <= 8) ? 88 : 150"
       :rows="rows"
       :bars="bars"
+      :bands="bands"
       :window="window"
       :now="now.getTime()"
       :selected="selected"

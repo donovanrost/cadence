@@ -433,7 +433,47 @@ export function distinctWindows(list: readonly Alternative[]): Alternative[] {
 
 /** Row identity for a station: Cadence id, else the provider ref. */
 export const stationKey = (s: StationRef) => s?.id ?? s?.ref ?? "?";
-/** Short label: Cadence code (FAI), else the provider ref. */
-export const stationCode = (s: StationRef) => s?.code ?? s?.ref ?? "?";
+/** Row label: confirmed Cadence code (FAI), else the station name, else the provider ref (ux U25). */
+export const stationCode = (s: StationRef) => s?.code ?? s?.name ?? s?.ref ?? "?";
 /** Full name for screen readers and tooltips. */
 export const stationName = (s: StationRef) => s?.name ?? s?.code ?? s?.ref ?? "unknown station";
+
+const availabilityWindow = d.object({
+  id: d.token,
+  ground_station_id: d.token,
+  kind: d.oneOf(["outage", "maintenance", "degraded"]),
+  from: d.timestamp,
+  to: d.nullable(d.timestamp),
+  eta: d.nullable(d.timestamp),
+  source: d.string,
+  reason: d.nullable(d.string),
+  cleared_at: d.nullable(d.timestamp),
+});
+export const availabilityReader = d.object({
+  at: d.timestamp,
+  stations: d.array(
+    d.object({
+      ground_station_id: d.token,
+      state: d.oneOf(["up", "degraded", "down"]),
+      since: d.nullable(d.timestamp),
+      eta: d.nullable(d.timestamp),
+      basis: d.nullable(d.string),
+      windows: d.array(availabilityWindow, 500),
+    }),
+    500,
+  ),
+});
+export type Availability = Decoded<typeof availabilityReader>;
+export type AvailabilityWindow = Decoded<typeof availabilityWindow>;
+
+/** S7: every station's reported state with active and upcoming windows (7 d). 'up' = nothing reported. */
+export function fetchAvailability(
+  missionId: string,
+  signal?: AbortSignal,
+): Promise<ApiResult<Availability>> {
+  return request(
+    `/missions/${encodeURIComponent(missionId)}/station-availability`,
+    availabilityReader,
+    signal ? { signal } : {},
+  );
+}

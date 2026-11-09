@@ -7,6 +7,7 @@ import {
   editPlan,
   executePlan,
   fetchAlternatives,
+  fetchAvailability,
   fetchDayDemand,
   fetchDraft,
   fetchPlan,
@@ -60,6 +61,9 @@ export function usePlanDay(
     return p.status === "ready" ? (currentPlan(p.value.plans)?.id ?? null) : null;
   });
   const plan = useRemoteQuery(planId, (id, signal) => fetchPlan(missionId.value, id, signal));
+  /** S7 station availability for the Gantt's outage / maintenance / degraded bands. */
+  const availability = useRemoteQuery(missionId, (id, signal) => fetchAvailability(id, signal));
+  useMissionInvalidation(missionId, ["stations"], availability.refetch);
 
   useChannelEvent(
     computed(() => `mission:${missionId.value}`),
@@ -207,6 +211,7 @@ export function usePlanDay(
     execute,
     edit,
     alternatives: alternatives.state,
+    availability: availability.state,
     refresh,
   };
 }

@@ -29,8 +29,18 @@ const day = computed(() => {
     : new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 });
 const focused = ref<string | null>(null);
-const { view, busy, actionError, draftDay, resume, submit, execute, edit, alternatives } =
-  usePlanDay(missionId, day, focused);
+const {
+  view,
+  busy,
+  actionError,
+  draftDay,
+  resume,
+  submit,
+  execute,
+  edit,
+  alternatives,
+  availability,
+} = usePlanDay(missionId, day, focused);
 const session = useSession();
 const isAdmin = computed(() => canAdministerOrganization(session, scope.value.organization));
 const sheet = ref<InstanceType<typeof SubmitSheet> | null>(null);
@@ -122,6 +132,7 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
         :focused="focused"
         :selected="selected"
         :alternatives="alternatives"
+        :availability="availability"
         @select="selected = $event"
       />
       <SelectedPanel

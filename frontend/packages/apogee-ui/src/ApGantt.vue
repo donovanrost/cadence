@@ -230,6 +230,10 @@ async function onKey(event: KeyboardEvent, id: string) {
 .ap-band--maintenance {
   background-image: var(--apogee-hatch-maint);
 }
+.ap-band--degraded {
+  background: var(--apogee-wash-caution);
+  border-top: 1px dashed var(--color-caution);
+}
 .ap-band--unusable {
   background-image: var(--apogee-hatch-unusable);
 }
