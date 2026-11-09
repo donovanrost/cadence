@@ -123,3 +123,11 @@ describe("planHeaderTail drafter (ux: reviewer ≠ author)", () => {
     expect(planHeaderTail(plan({ state: "pending_approval" }))).toBe("waiting for an admin");
   });
 });
+
+describe("unconfirmed and unknown states (#52, U30)", () => {
+  it("offers no action for unconfirmed and degrades an unknown state", () => {
+    expect(planPrimary(plan({ state: "unconfirmed" }), true)).toEqual({ kind: "none", note: null });
+    expect(planHeaderTail(plan({ state: "unconfirmed" }))).toBe("unconfirmed");
+    expect(planPrimary(plan({ state: "unrecognized" }), true).kind).toBe("none");
+  });
+});

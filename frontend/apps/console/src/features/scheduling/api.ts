@@ -13,10 +13,18 @@ export const planStates = [
   "failed",
   "canceled",
   "superseded",
-  /** executing with no live executor (cluster-wide): offer Execute (DECISIONS #27). */
+  /** Requests that never went out, with no live executor: offer Execute (DECISIONS #27, #52). */
   "interrupted",
+  /** Placed, but the provider hasn't answered within the window (10 min); no Execute (#52). */
+  "unconfirmed",
 ] as const;
-export type PlanState = (typeof planStates)[number];
+/** `unrecognized`: a state this console doesn't know yet (decoded, never fatal to the read). */
+export type PlanState = (typeof planStates)[number] | "unrecognized";
+/** A new server state degrades one plan's actions instead of failing every plan read (#52). */
+const planState: Reader<PlanState> = (value, path) => {
+  const s = d.string(value, path);
+  return planStates.find((candidate) => candidate === s) ?? "unrecognized";
+};
 
 /** Station identity joined by the server (Reads.StationRefs); ids/codes are null when unmatched. */
 export const stationReader = d.nullable(
@@ -57,7 +65,7 @@ const repairOfReader = d.nullable(
 const planRow = {
   id: d.token,
   version: d.integer,
-  state: d.oneOf(planStates),
+  state: planState,
   window: d.object({ from: d.nullable(d.timestamp), to: d.nullable(d.timestamp) }),
   /** `kind: system` = an automatic run ("Cadence"); null only when unknown (api af0279d1). */
   author: d.nullable(

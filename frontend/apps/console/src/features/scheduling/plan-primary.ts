@@ -73,6 +73,11 @@ export function planPrimary(
         : { kind: "none", note: "Waiting for an organization admin to approve." };
     case "approved":
       return { kind: "execute", label: `Book ${plural(n, "pass", "passes")}` };
+    case "unconfirmed":
+      // #52/U30: the server refuses Execute and nothing is re-sent; the callout says why.
+      return { kind: "none", note: null };
+    case "unrecognized":
+      return { kind: "none", note: "This console doesn't know the plan's state yet." };
     case "interrupted":
       return options.requestsLeft === 0
         ? { kind: "none", note: null } // the info callout says it (ux: no second line)
@@ -136,5 +141,9 @@ export function planHeaderTail(plan: PlanDetail): string {
       return "canceled";
     case "superseded":
       return "superseded";
+    case "unconfirmed":
+      return "unconfirmed";
+    case "unrecognized":
+      return "state not recognized";
   }
 }

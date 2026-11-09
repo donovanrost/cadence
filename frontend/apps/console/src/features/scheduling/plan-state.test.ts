@@ -117,3 +117,21 @@ describe("planOfDay (superseded state)", () => {
     expect(planOfDay([proposal])).toBeNull();
   });
 });
+
+describe("plan state decoding (#52)", () => {
+  it("reads unconfirmed, and an unknown state as unrecognized instead of failing", async () => {
+    const { plansReader } = await import("./api.ts");
+    const row = (state: string) => ({
+      id: "p",
+      version: 1,
+      state,
+      window: { from: null, to: null },
+      author: null,
+      counts: { passes: 1, minutes: 8, conflicts: 0, unsatisfied: 0 },
+      ready_to_approve: false,
+      updated_at: "2026-11-10T10:00:00Z",
+    });
+    const read = plansReader({ plans: [row("unconfirmed"), row("something_new")] });
+    expect(read.plans.map((p) => p.state)).toEqual(["unconfirmed", "unrecognized"]);
+  });
+});
