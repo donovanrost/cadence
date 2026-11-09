@@ -71,3 +71,37 @@ describe("SubmitSheet", () => {
     wrapper.unmount();
   });
 });
+
+describe("SubmitSheet per-spacecraft gaps (U23 amended)", () => {
+  it("asks one reason per spacecraft and acknowledges each of its requirements", async () => {
+    const two = {
+      ...plan,
+      unmet: [
+        { ...gap("r1"), spacecraft_id: "sc-a" },
+        { ...gap("r2"), spacecraft_id: "sc-a" },
+      ],
+    };
+    const wrapper = mount(SubmitSheet, {
+      props: {
+        plan: two,
+        nameOf: () => null,
+        commitLabel: "Accept 1 gap and submit",
+        confirm: "",
+        busy: false,
+      },
+      attachTo: document.body,
+    });
+    expect(wrapper.get("h2").text()).toContain("Accept 1 gap");
+    await wrapper.findAll("textarea")[0]?.setValue("Both windows are under the minimum.");
+    await wrapper.findAll("footer button").at(-1)?.trigger("click");
+    expect(wrapper.emitted("submit")).toEqual([
+      [
+        [
+          { requirement_id: "r1", reason: "Both windows are under the minimum." },
+          { requirement_id: "r2", reason: "Both windows are under the minimum." },
+        ],
+      ],
+    ]);
+    wrapper.unmount();
+  });
+});

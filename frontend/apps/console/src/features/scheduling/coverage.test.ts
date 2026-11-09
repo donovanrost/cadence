@@ -23,7 +23,7 @@ describe("coverage (ux U23)", () => {
         { requirement_id: "r3", requirement_version: 1, spacecraft_id: "c", why: [] },
       ],
     });
-    expect(c).toEqual({ spacecraft: 2, contactsShort: 6, gaps: 3 });
+    expect(c).toEqual({ spacecraft: 2, contactsShort: 6, gaps: 2 });
     expect(spacecraftNotCovered(c.spacecraft)).toBe("2 spacecraft not covered");
     expect(contactsShortText(1)).toBe("1 contact short");
   });

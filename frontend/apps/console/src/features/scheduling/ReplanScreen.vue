@@ -5,6 +5,7 @@ import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession 
 import { ApButton, ApCallout, ApPanel, ApRemote, ApStationBar, plural } from "@/ui";
 import { repairableStates, type Acknowledgement, type PlanDetail } from "./api.ts";
 import ChangesPanel from "./ChangesPanel.vue";
+import { coverage, spacecraftNotCovered } from "./coverage.ts";
 import DraftGantt from "./DraftGantt.vue";
 import { useSpacecraftNames } from "./names.ts";
 import PlanFooter from "./PlanFooter.vue";
@@ -51,8 +52,8 @@ const step = computed(() => (proposal.value ? 1 : 0));
 const applyLabel = (plan: PlanDetail) =>
   !isAdmin.value
     ? `Request approval for r${plan.version}`
-    : plan.unmet.length > 0
-      ? `Accept ${plural(plan.unmet.length, "gap")} and apply r${plan.version}`
+    : coverage(plan).gaps > 0
+      ? `Accept ${plural(coverage(plan).gaps, "gap")} and apply r${plan.version}`
       : `Apply r${plan.version} · book ${plural(plan.counts.passes, "pass", "passes")}`;
 const primary = computed(() =>
   proposal.value?.plan ? planPrimary(proposal.value.plan, isAdmin.value) : null,
@@ -151,8 +152,9 @@ async function onApply(acks: Acknowledgement[]) {
         <p v-else class="m-0 text-base text-text-3">
           Live plan r{{ live.version }} is {{ live.state.replaceAll("_", " ") }}:
           {{ plural(live.counts.passes, "pass", "passes")
-          }}<template v-if="live.unmet.length > 0">, {{ live.unmet.length }} not covered</template>.
-          A re-plan keeps every committed pass and re-plans the rest. Nothing is booked until you
+          }}<template v-if="coverage(live).spacecraft > 0"
+            >, {{ spacecraftNotCovered(coverage(live).spacecraft) }}</template
+          >. A re-plan keeps every committed pass and re-plans the rest. Nothing is booked until you
           apply it.
         </p>
       </ApPanel>

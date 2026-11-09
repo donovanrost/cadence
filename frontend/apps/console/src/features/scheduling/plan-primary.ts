@@ -16,7 +16,7 @@ export type PlanPrimary =
 
 export function planPrimary(plan: PlanDetail, isAdmin: boolean): PlanPrimary {
   const n = plan.counts.passes;
-  const gaps = plan.unmet.length;
+  const gaps = coverage(plan).gaps;
   switch (plan.state) {
     case "draft": {
       if (plan.conflicts.length > 0)
