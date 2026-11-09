@@ -373,3 +373,46 @@ re-derives them. Counts are null when they can't be computed.
 
 Writes follow U20. A rejection says nothing changed; an unreadable reply says the outcome is
 unclear.
+
+## ST · Settings, AU · Audit log, PA · Provider accounts (`ux/screens/SettingsAuditProviders.md`)
+
+### ST1 · `GET /missions/:mission_id/settings` (and `GET /organizations/:org_id/settings`)
+
+```json
+{"data": {"sections": [{"key": "cadence.governance", "title": "Governance", "purpose": "…",
+  "fields": [{…kind-schema field…, "value": …, "source": "mission|organization|default",
+              "inherited_value": …|null}]}],
+  "version": {"version": 4, "at": "…", "actor": {"name"}|null}|null,
+  "permissions": ["settings.edit"]}}
+```
+- Sections come from the server registry. Sections with no fields are left out.
+- `PUT /missions/:mission_id/settings/:section_key` with `{values: {path: value|null}, reason, expected_version}`:
+  - `null` resets to inherited.
+  - Returns `201 {version, state: "active"|"pending_approval"}`.
+  - Errors: `invalid_params` (by path), `version_conflict`, `forbidden`.
+
+### AU1 · `GET /organizations/:org_id/audit?from=&to=&actor_id=&mission_id=&kinds=&cursor=`
+
+```json
+{"data": {"events": [{"id", "at", "actor": {"kind": "user|service", "id", "name"},
+  "kind": "config|commanding|access|alarms|contacts|data", "action": "Applied r6 · 2 changes",
+  "target": {"kind", "id", "label"}|null, "mission": {"id", "name"}|null, "reason": "…"|null}],
+  "sources": {"included": ["config", "commanding", "access"], "missing": ["contacts", "data"]},
+  "next_cursor": null}}
+```
+`sources` lets the UI say which sources aren't in the log yet. Action sentences are made on the
+server.
+
+### PA1 · Provider accounts (org)
+
+- `GET /organizations/:org_id/provider-accounts`:
+  `{accounts: [{id, name, provider: {key, label}, status: "connected|expiring|auth_failed|not_checked",
+  status_detail: "…"|null, expires_at|null, last_success_at|null, missions: [{id, name}],
+  added_at, added_by: {name}|null}], adapters: [{key, label}], permissions}`
+- `GET /provider-accounts/:id`: the account plus `schema: [field, with secret: boolean]`.
+  Secret values come back as `{set: true, set_at}`, never the value.
+- `POST /provider-accounts` with `{provider_key, name, credentials}`, and `PUT /provider-accounts/:id`
+  with `{name, credentials}` (secrets are sent only when replaced).
+- `POST /provider-accounts/:id/test`: `{ok, message}` from a real provider call.
+- `DELETE /provider-accounts/:id`: `409 in_use` with `details.missions` while missions use it.
+- `GET /provider-adapters/:key/schema` for the add form.
