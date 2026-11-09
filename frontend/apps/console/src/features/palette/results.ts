@@ -50,7 +50,7 @@ export function parseQuery(raw: string): {
   return { text, only };
 }
 
-function spacecraftItem(sc: FleetSpacecraft, rank: number): PaletteItem {
+function spacecraftItem(sc: FleetSpacecraft, rank: number, canCommand: boolean): PaletteItem {
   const parts = [
     sc.worst_point
       ? `${fleetStateWord(sc.state)} · ${sc.worst_point.point_name}`
@@ -66,7 +66,7 @@ function spacecraftItem(sc: FleetSpacecraft, rank: number): PaletteItem {
     hint: `SCID ${sc.scid}`,
     state: fleetOpState(sc.state),
     to: { name: "ops.spacecraft", params: { scId: String(sc.scid) } },
-    commandTo: { name: "ops.commands.new", query: { targets: `sc:${sc.id}` } },
+    commandTo: canCommand ? { name: "ops.commands.new", query: { targets: `sc:${sc.id}` } } : null,
     rank,
   };
 }
@@ -87,6 +87,8 @@ export function search(
   raw: string,
   fleet: readonly FleetSpacecraft[],
   pages: readonly PageEntry[],
+  /** Command entries only for viewers the server lets request commands (DECISIONS #38). */
+  canCommand: boolean,
 ): PaletteItem[] {
   const { text, only } = parseQuery(raw);
   if (only === "commands" || only === "stations") return [];
@@ -96,11 +98,11 @@ export function search(
     .map((sc) => ({ sc, rank: spacecraftRank(sc, text) }))
     .filter((m): m is { sc: FleetSpacecraft; rank: number } => m.rank !== null)
     .sort((a, b) => a.rank - b.rank || a.sc.scid - b.sc.scid);
-  items.push(...matched.map((m) => spacecraftItem(m.sc, m.rank)));
+  items.push(...matched.map((m) => spacecraftItem(m.sc, m.rank, canCommand)));
   if (only === "spacecraft") return items;
 
   const top = matched[0]?.sc;
-  if (top && matched.length <= 3) {
+  if (canCommand && top && matched.length <= 3) {
     items.push({
       key: `cmd-${top.id}`,
       group: "Actions",

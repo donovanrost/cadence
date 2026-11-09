@@ -11,6 +11,7 @@ import {
 import { useRouter, type RouteLocationRaw } from "vue-router";
 import { useConsoleScope } from "@/shell/index.ts";
 import { ApKbd } from "@/ui";
+import { useCommandAccess } from "@/features/commands/index.ts";
 import { useFleet } from "@/features/fleet/index.ts";
 import PaletteResults from "./PaletteResults.vue";
 import { grouped, groupJump, rowsOf, search, type Group, type PageEntry } from "./results.ts";
@@ -21,6 +22,7 @@ const router = useRouter();
 const scope = useConsoleScope();
 const missionId = computed(() => (scope.value.kind === "mission" ? scope.value.mission.id : null));
 const fleet = useFleet(missionId, { live: false });
+const access = useCommandAccess();
 
 const input = useTemplateRef<HTMLInputElement>("input");
 const query = ref("");
@@ -36,7 +38,8 @@ const pages = computed<PageEntry[]>(() =>
         typeof r.name === "string" &&
         r.meta.title &&
         r.meta.mode &&
-        !/:(?!org\b|mission\b)/.test(r.path),
+        !/:(?!org\b|mission\b)/.test(r.path) &&
+        (access.value.request || r.name !== "ops.commands.new"),
     )
     .map((r) => ({ name: String(r.name), title: r.meta.title ?? "", mode: r.meta.mode ?? "" })),
 );
@@ -44,7 +47,7 @@ const spacecraft = computed(() =>
   fleet.state.value.status === "ready" ? fleet.state.value.value.spacecraft : [],
 );
 const groups = computed(() =>
-  grouped(search(query.value, spacecraft.value, pages.value), expanded.value),
+  grouped(search(query.value, spacecraft.value, pages.value, access.value.request), expanded.value),
 );
 const rows = computed(() => rowsOf(groups.value));
 const strip = computed(() => {
@@ -138,8 +141,8 @@ onBeforeUnmount(() => returnFocus?.focus());
       <p
         class="m-0 flex flex-wrap gap-4 border-t border-hairline px-4 py-2 font-mono text-xs text-text-4 uppercase"
       >
-        <span>↑↓ move</span><span>↵ open</span><span>⌘↵ command it</span><span>G N now</span
-        ><span>G C contacts</span><span>[ ] prev/next sc</span>
+        <span>↑↓ move</span><span>↵ open</span><span v-if="access.request">⌘↵ command it</span
+        ><span>G N now</span><span>G C contacts</span><span>[ ] prev/next sc</span>
       </p>
     </div>
   </div>

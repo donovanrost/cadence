@@ -13,6 +13,7 @@ import {
   ApTag,
   type OpState,
 } from "@/ui";
+import { useCommandAccess } from "@/features/commands/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { usePrevNextKeys } from "./usePrevNextKeys.ts";
 
@@ -26,6 +27,8 @@ const props = defineProps<{
   tab: string;
 }>();
 const router = useRouter();
+/** Members without command access get no Command button (DECISIONS #38). */
+const access = useCommandAccess();
 const now = useNow();
 
 const at = (sc: FleetSpacecraft) => ({
@@ -122,7 +125,10 @@ const tabs = computed(() =>
     </div>
     <ApPageHeader :title="sc.name">
       <template #status><ApTag :state="hero.state" :label="hero.label" /></template>
-      <ApButton size="compact" :to="{ name: 'ops.commands.new', query: { targets: `sc:${sc.id}` } }"
+      <ApButton
+        v-if="access.request"
+        size="compact"
+        :to="{ name: 'ops.commands.new', query: { targets: `sc:${sc.id}` } }"
         >Command</ApButton
       >
     </ApPageHeader>

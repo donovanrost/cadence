@@ -10,7 +10,7 @@ const pages = [
 
 describe("palette search", () => {
   it("puts the exact SCID first for numeric queries", () => {
-    const items = search("312", fleet, pages);
+    const items = search("312", fleet, pages, true);
     expect(items[0]?.title).toBe("EARENDIL-312");
     expect(items[0]?.hint).toBe("SCID 312");
     expect(items[0]?.commandTo).toEqual({
@@ -19,24 +19,30 @@ describe("palette search", () => {
     });
   });
 
+  it("offers no command entries without command access (DECISIONS #38)", () => {
+    const items = search("312", fleet, pages, false);
+    expect(items[0]?.commandTo).toBeNull();
+    expect(items.filter((i) => i.group === "Actions")).toEqual([]);
+  });
+
   it("offers 'Command …' for a narrow spacecraft match", () => {
-    const actions = search("312", fleet, pages).filter((i) => i.group === "Actions");
+    const actions = search("312", fleet, pages, true).filter((i) => i.group === "Actions");
     expect(actions.map((a) => a.title)).toEqual(["Command EARENDIL-312…"]);
   });
 
   it("shows pages (not spacecraft) for an empty query", () => {
-    expect(search("", fleet, pages).map((i) => i.group)).toEqual(["Pages", "Pages"]);
+    expect(search("", fleet, pages, true).map((i) => i.group)).toEqual(["Pages", "Pages"]);
   });
 
   it("honours prefixes and finds pages by title", () => {
     expect(parseQuery("# 31")).toEqual({ text: "31", only: "spacecraft" });
-    expect(search("#contacts", fleet, pages)).toEqual([]);
-    expect(search(">set_", fleet, pages)).toEqual([]);
-    expect(search("cont", fleet, pages).map((i) => i.title)).toEqual(["Contacts"]);
+    expect(search("#contacts", fleet, pages, true)).toEqual([]);
+    expect(search(">set_", fleet, pages, true)).toEqual([]);
+    expect(search("cont", fleet, pages, true).map((i) => i.title)).toEqual(["Contacts"]);
   });
 
   it("caps groups at five rows unless expanded", () => {
-    const items = search("earendil", fleet, pages);
+    const items = search("earendil", fleet, pages, true);
     const [first] = grouped(items, new Set());
     expect(first?.items).toHaveLength(PER_GROUP);
     expect(first?.more).toBe(500 - PER_GROUP);
@@ -46,9 +52,12 @@ describe("palette search", () => {
 
 describe("palette rows (qa #12, #13)", () => {
   it("adds a 'show all' option per capped group and jumps between groups", () => {
-    const rows = rowsOf(grouped(search("earendil", fleet, pages), new Set()));
-    expect(rows.find((r) => r.kind === "more")).toMatchObject({ key: "more-Spacecraft", total: 500 });
-    const mixed = rowsOf(grouped(search("3", fleet, pages), new Set()));
+    const rows = rowsOf(grouped(search("earendil", fleet, pages, true), new Set()));
+    expect(rows.find((r) => r.kind === "more")).toMatchObject({
+      key: "more-Spacecraft",
+      total: 500,
+    });
+    const mixed = rowsOf(grouped(search("3", fleet, pages, true), new Set()));
     const firstAction = mixed.findIndex((r) => r.group !== "Spacecraft");
     expect(groupJump(mixed, 0, false)).toBe(firstAction === -1 ? 0 : firstAction);
     expect(groupJump(mixed, 0, true)).toBe(mixed.findIndex((r) => r.group === mixed.at(-1)?.group));

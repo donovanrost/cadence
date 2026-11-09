@@ -5,6 +5,7 @@ import { describeApiError } from "@/api/index.ts";
 import { TakeoverHeader, useMissionScope } from "@/shell/index.ts";
 import { plural, ApButton, ApCallout, ApEmptyState, ApPanel, ApRemote, ApStationBar } from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
+import { useCommandAccess } from "../access.ts";
 import { fetchCommand } from "../api.ts";
 import DeliveryPanel from "./DeliveryPanel.vue";
 import StackPanel from "./StackPanel.vue";
@@ -20,6 +21,7 @@ import { FLEET_REACH, queryFromRoute, resolveTargets, type TargetQuery } from ".
  */
 const scope = useMissionScope();
 const route = useRoute();
+const access = useCommandAccess();
 const missionId = computed(() => scope.value.mission.id);
 const fleet = useFleet(missionId);
 const rows = computed(() =>
@@ -112,59 +114,71 @@ const close = computed(() => {
       ><ApStationBar :steps="steps" :current="current" label="Sequence steps"
     /></template>
   </TakeoverHeader>
-  <!-- Mobile.md: building new uplink sequences is desktop-only by design (ux pass 2 #3). -->
-  <ApPanel index="C0" title="Desktop only" flush class="md:hidden">
+  <!-- DECISIONS #38: gate on the capabilities the server reports, nothing else. -->
+  <ApPanel v-if="!access.request" index="C0" title="No command access" flush>
     <ApEmptyState
-      headline="New uplink sequences are desktop only, by design"
-      sentence="Approve requests and give GO / NO-GO from the phone; compose and arm sequences at a console."
+      state="off"
+      headline="You can't command on this mission"
+      :sentence="`Your access in ${scope.organization.name} doesn't include requesting commands. An organization admin can change that.`"
     >
       <ApButton size="compact" :to="close">Back</ApButton>
     </ApEmptyState>
   </ApPanel>
-  <ApRemote :state="fleet.state.value" loading-label="LOADING FLEET…" @retry="fleet.refetch">
-    <div
-      class="grid min-h-0 flex-1 grid-cols-1 gap-3 max-md:hidden console:grid-cols-[minmax(0,1fr)_360px]"
-    >
-      <div class="flex min-h-0 flex-col gap-3 overflow-auto">
-        <div class="grid grid-cols-1 items-start gap-3 console:grid-cols-2">
-          <TargetsPanel
-            :fleet="rows"
-            :query="query"
-            :targets="targets"
-            @change="(q) => (query = q)"
-          />
-          <ApCallout v-if="addError" tone="caution"
-            >Couldn't add that command: {{ addError }}</ApCallout
-          >
-          <StackPanel
-            v-model:open="openKey"
-            :items="stack"
-            :revision="revision"
-            :adding="adding"
-            @add="onAdd"
-            @change="setValues"
-            @move="(i, by) => (stack = move(stack, i, by))"
-            @remove="(key) => (stack = stack.filter((s) => s.key !== key))"
-          />
+  <template v-else>
+    <!-- Mobile.md: building new uplink sequences is desktop-only by design (ux pass 2 #3). -->
+    <ApPanel index="C0" title="Desktop only" flush class="md:hidden">
+      <ApEmptyState
+        headline="New uplink sequences are desktop only, by design"
+        sentence="Approve requests and give GO / NO-GO from the phone; compose and arm sequences at a console."
+      >
+        <ApButton size="compact" :to="close">Back</ApButton>
+      </ApEmptyState>
+    </ApPanel>
+    <ApRemote :state="fleet.state.value" loading-label="LOADING FLEET…" @retry="fleet.refetch">
+      <div
+        class="grid min-h-0 flex-1 grid-cols-1 gap-3 max-md:hidden console:grid-cols-[minmax(0,1fr)_360px]"
+      >
+        <div class="flex min-h-0 flex-col gap-3 overflow-auto">
+          <div class="grid grid-cols-1 items-start gap-3 console:grid-cols-2">
+            <TargetsPanel
+              :fleet="rows"
+              :query="query"
+              :targets="targets"
+              @change="(q) => (query = q)"
+            />
+            <ApCallout v-if="addError" tone="caution"
+              >Couldn't add that command: {{ addError }}</ApCallout
+            >
+            <StackPanel
+              v-model:open="openKey"
+              :items="stack"
+              :revision="revision"
+              :adding="adding"
+              @add="onAdd"
+              @change="setValues"
+              @move="(i, by) => (stack = move(stack, i, by))"
+              @remove="(key) => (stack = stack.filter((s) => s.key !== key))"
+            />
+          </div>
+          <ApPanel index="C3" title="GO / NO-GO poll" flush>
+            <ApEmptyState
+              state="off"
+              headline="Preflight checks aren't available yet"
+              :sentence="`The server's checks (identity, catalog, conflicts, contact, two-person) arrive with group requests. ${plural(targets.length * stack.length, 'uplink')} drafted.`"
+            />
+          </ApPanel>
+          <DeliveryPanel :targets="targets" />
         </div>
-        <ApPanel index="C3" title="GO / NO-GO poll" flush>
-          <ApEmptyState
-            state="off"
-            headline="Preflight checks aren't available yet"
-            :sentence="`The server's checks (identity, catalog, conflicts, contact, two-person) arrive with group requests. ${plural(targets.length * stack.length, 'uplink')} drafted.`"
-          />
-        </ApPanel>
-        <DeliveryPanel :targets="targets" />
+        <SummaryPanel
+          v-model:release="release"
+          v-model:approver="approver"
+          v-model:log="log"
+          :targets="targets.length"
+          :commands="stack.length"
+          :second-go="secondGo"
+          :blocked="blocked"
+        />
       </div>
-      <SummaryPanel
-        v-model:release="release"
-        v-model:approver="approver"
-        v-model:log="log"
-        :targets="targets.length"
-        :commands="stack.length"
-        :second-go="secondGo"
-        :blocked="blocked"
-      />
-    </div>
-  </ApRemote>
+    </ApRemote>
+  </template>
 </template>
