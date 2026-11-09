@@ -20,7 +20,7 @@ const emit = defineEmits<{ close: [] }>();
 const router = useRouter();
 const scope = useConsoleScope();
 const missionId = computed(() => (scope.value.kind === "mission" ? scope.value.mission.id : null));
-const fleet = useFleet(missionId);
+const fleet = useFleet(missionId, { live: false });
 
 const input = useTemplateRef<HTMLInputElement>("input");
 const query = ref("");

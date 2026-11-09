@@ -1,7 +1,13 @@
-import { onScopeDispose, watch, type Ref } from "vue";
+import { computed, onScopeDispose, shallowRef, watch, type Ref } from "vue";
 import { useRemoteQuery, type RemoteState } from "@/api/index.ts";
-import { useConnection, useMissionInvalidation } from "@/live/index.ts";
+import {
+  useChannelEvent,
+  useChannelSubscription,
+  useConnection,
+  useMissionInvalidation,
+} from "@/live/index.ts";
 import { fetchFleet, type Fleet } from "./api.ts";
+import { applyFleetPush, fleetPushReader } from "./live.ts";
 
 /**
  * Telemetry invalidations arrive every 500 ms while feeds run, and the fleet read is ~300 KB, so
@@ -47,19 +53,62 @@ export function throttle(run: () => void, gapMs: number, clock: () => number = D
 }
 
 /** The fleet snapshot for one mission, refetched (throttled) on mission invalidations. */
-/** `missionId: null` pauses (e.g. the palette outside a mission). */
-export function useFleet(missionId: Readonly<Ref<string | null>>): FleetHandle {
+/**
+ * `missionId: null` pauses (e.g. the palette outside a mission). With `live` (default) the fleet
+ * comes from the opt-in `fleet` push (full snapshot, then deltas) and GET /fleet is only the
+ * first paint and the fallback: on a seq gap or inconsistent delta it resubscribes, and while the
+ * socket is down it polls. Overlays that open over a screen (the palette) pass `live: false` so
+ * closing them doesn't unsubscribe the screen underneath.
+ */
+export function useFleet(
+  missionId: Readonly<Ref<string | null>>,
+  options: Readonly<{ live?: boolean }> = {},
+): FleetHandle {
   const query = useRemoteQuery(missionId, (id, signal) => fetchFleet(id, signal));
+  const pushed = shallowRef<{ fleet: Fleet; seq: number; at: Date } | null>(null);
   const throttled = throttle(query.refetch, FLEET_REFETCH_GAP_MS);
+  /** While pushes arrive, invalidation hints don't refetch the fleet (realtime.md). */
+  const refetchUnlessLive = () => {
+    if (pushed.value === null) throttled.call();
+  };
   // State changes (limit transitions, configuration, commanding) refetch promptly; telemetry,
   // which fires every 500 ms under live feeds, only refreshes freshness every 10 s.
   useMissionInvalidation(
     missionId,
     ["alarms", "limits", "spacecraft", "commanding"],
-    throttled.call,
+    refetchUnlessLive,
   );
-  const telemetry = throttle(throttled.call, FLEET_TELEMETRY_GAP_MS);
+  const telemetry = throttle(refetchUnlessLive, FLEET_TELEMETRY_GAP_MS);
   useMissionInvalidation(missionId, ["telemetry"], telemetry.call);
+
+  if (options.live !== false) {
+    const topic = computed(() => (missionId.value ? `mission:${missionId.value}` : null));
+    const { resubscribe } = useChannelSubscription(topic, {
+      subscribe: ["fleet:subscribe", {}],
+      unsubscribe: ["fleet:unsubscribe", {}],
+    });
+    const restart = () => {
+      pushed.value = null;
+      resubscribe();
+    };
+    useChannelEvent(topic, "fleet", fleetPushReader, {
+      onEvent: (push) => {
+        const current = pushed.value;
+        const result = applyFleetPush(current?.fleet ?? null, current?.seq ?? 0, push);
+        if (result.ok) pushed.value = { fleet: result.fleet, seq: result.seq, at: new Date() };
+        else restart();
+      },
+      // A rejoin starts a new channel process: the helper resubscribes and seq restarts at 1.
+      onResync: () => {
+        pushed.value = null;
+      },
+      onMalformed: restart,
+    });
+    watch(missionId, () => {
+      pushed.value = null;
+    });
+  }
+
   const connection = useConnection();
   let poll: ReturnType<typeof setInterval> | null = null;
   const stopPoll = () => {
@@ -70,7 +119,10 @@ export function useFleet(missionId: Readonly<Ref<string | null>>): FleetHandle {
     connection,
     (now, before) => {
       stopPoll();
-      if (now !== "live") poll = setInterval(throttled.call, FLEET_POLL_OFFLINE_S * 1000);
+      if (now !== "live") {
+        pushed.value = null;
+        poll = setInterval(throttled.call, FLEET_POLL_OFFLINE_S * 1000);
+      }
       // Hints were missed while offline; reconnect resync also refetches, the throttle merges them.
       else if (before === "offline") throttled.call();
     },
@@ -81,5 +133,9 @@ export function useFleet(missionId: Readonly<Ref<string | null>>): FleetHandle {
     telemetry.cancel();
     stopPoll();
   });
-  return { state: query.state, refetch: query.refetch };
+  const state = computed<RemoteState<Fleet>>(() => {
+    const live = pushed.value;
+    return live ? { status: "ready", value: live.fleet, receivedAt: live.at } : query.state.value;
+  });
+  return { state, refetch: query.refetch };
 }
