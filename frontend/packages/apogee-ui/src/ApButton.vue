@@ -69,7 +69,7 @@ const classes = computed(() => [
     @click="onClick"
   >
     <slot />
-    <span v-if="disabled && disabledReason" :id="reasonId" class="sr-only">{{
+    <span v-if="disabled && disabledReason" :id="reasonId" aria-hidden="true" class="sr-only">{{
       disabledReason
     }}</span>
   </button>

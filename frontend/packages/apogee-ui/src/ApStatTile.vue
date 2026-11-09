@@ -14,6 +14,8 @@ const props = withDefaults(
     denominator?: number | undefined;
     /** Unit after the value, e.g. `V`, drawn like the denominator. */
     unit?: string | undefined;
+    /** 0..1: a 3px bar under the value (share of targets in this state). */
+    share?: number | undefined;
     caption?: string | undefined;
     state?: OpState | undefined;
     /** Tint the caption with the tile's own state (it's the call to action). */
@@ -55,6 +57,24 @@ const valueTone = computed(() =>
         ><span aria-hidden="true" class="text-text-4">—</span
         ><span class="sr-only">unknown</span></template
       >
+    </span>
+    <span
+      v-if="share !== undefined"
+      aria-hidden="true"
+      class="relative mt-1.5 block h-[3px] bg-hairline"
+    >
+      <span
+        class="absolute inset-y-0 left-0"
+        :class="{
+          'bg-nominal': state === 'nominal',
+          'bg-caution': state === 'caution',
+          'bg-crit': state === 'crit',
+          'bg-stale': state === 'stale',
+          'bg-text-3':
+            state !== 'nominal' && state !== 'caution' && state !== 'crit' && state !== 'stale',
+        }"
+        :style="{ width: `${Math.round(Math.max(0, Math.min(1, share)) * 100)}%` }"
+      />
     </span>
     <span
       v-if="caption"

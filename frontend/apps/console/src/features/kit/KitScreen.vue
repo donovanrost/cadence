@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import CommandKit from "./CommandKit.vue";
 import {
   ApPageHeader,
   ApPanel,
@@ -63,5 +64,6 @@ const warn = (t: number) =>
     <ApPanel index="K2" title="ApTimeRange" meta="FIXTURE PRESETS · NO BANDS">
       <ApTimeRange v-model="plotWindow" label="Plot window" :presets="rangePresets" />
     </ApPanel>
+    <CommandKit />
   </div>
 </template>
