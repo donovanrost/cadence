@@ -3,7 +3,9 @@ import { decode } from "@/api/index.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import type { CommandArgument, CommandDetail } from "../api.ts";
 import { argumentValuesJson, buildDraft } from "../compose/draft.ts";
+import { splitArgs } from "../compose/resend.ts";
 import { newItem } from "../compose/stack.ts";
+import { resendFrom } from "../compose/useResend.ts";
 import { EMPTY_QUERY } from "../compose/targets.ts";
 import { fetchGroups, preflightReader, type Preflight } from "./api.ts";
 import { checkMeta, checkRows, noGoReason, routingProfile } from "./checks.ts";
@@ -234,5 +236,27 @@ describe("group list", () => {
     } finally {
       globalThis.fetch = original;
     }
+  });
+});
+
+describe("resend", () => {
+  it("splits argument JSON without losing 64-bit values", () => {
+    expect(splitArgs('{"count":18446744073709551615, "mode":"SAFE","on":true,"x":-1.5e3}')).toEqual(
+      {
+        count: "18446744073709551615",
+        mode: '"SAFE"',
+        on: "true",
+        x: "-1.5e3",
+      },
+    );
+    expect(splitArgs("{}")).toEqual({});
+    expect(splitArgs('{"a":[1]}')).toBeNull();
+    expect(splitArgs('{"a":1} trailing')).toBeNull();
+  });
+
+  it("reads ?from=group:<id>", () => {
+    expect(resendFrom("group:grp-1")).toBe("grp-1");
+    expect(resendFrom("group:")).toBeNull();
+    expect(resendFrom(undefined)).toBeNull();
   });
 });

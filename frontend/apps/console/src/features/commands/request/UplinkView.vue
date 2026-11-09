@@ -20,7 +20,13 @@ import { abortable, pipeline } from "./uplink.ts";
  * C3 · Uplink & verify v1: pipeline tiles, each target's trail, the request log, and Abort
  * remaining. Waves, the verifier plot and Needs-you cards come with their data (#8, M24).
  */
-const props = defineProps<{ group: Group; nameOf: PersonName; canAbort: boolean }>();
+const props = defineProps<{
+  group: Group;
+  nameOf: PersonName;
+  canAbort: boolean;
+  /** Anyone who may request can resend a sent-back request (DECISIONS #31 (4)). */
+  canResend: boolean;
+}>();
 defineEmits<{ changed: [] }>();
 const tiles = computed(() => pipeline(props.group));
 const events = computed(() =>
@@ -46,6 +52,13 @@ const pos = (n: number) => String(n + 1).padStart(2, "0");
       {{ nameOf(group.decided_by?.user_id ?? null) }}
       {{ group.state === "sent_back" ? "sent it back" : "gave NO-GO"
       }}<template v-if="decisionNote">: “{{ decisionNote }}”</template>. Nothing radiated.
+      <template v-if="group.state === 'sent_back' && canResend" #action
+        ><ApButton
+          size="compact"
+          :to="{ name: 'ops.commands.new', query: { from: `group:${group.id}` } }"
+          >Edit and resend</ApButton
+        ></template
+      >
     </ApCallout>
     <ApCallout v-else-if="group.state === 'aborted'" tone="off">
       Aborted by {{ nameOf(group.aborted_by?.user_id ?? null) }}: “{{ group.abort_reason }}”.

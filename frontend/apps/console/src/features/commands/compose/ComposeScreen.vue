@@ -16,6 +16,7 @@ import TargetsPanel from "./TargetsPanel.vue";
 import { checkItem, move, newItem, type StackItem } from "./stack.ts";
 import { queryFromRoute, resolveTargets, type TargetQuery } from "./targets.ts";
 import { useComposeRequest } from "./useComposeRequest.ts";
+import { resendFrom, useResend } from "./useResend.ts";
 
 /**
  * C1 Compose / J3 Command a group (Command.md, DECISIONS #31: every request is a group). Targets
@@ -63,8 +64,22 @@ const release = ref<Release>({ mode: "next_contact", notBefore: null });
 const approver = ref("");
 const log = ref("");
 const title = ref(typeof route.query.title === "string" ? route.query.title : "");
+const resend = useResend(missionId, resendFrom(route.query.from), {
+  query,
+  stack,
+  title,
+  log,
+  approver,
+  release,
+});
 const { draft, preflight, nameOf, contacts, secondGo, blocked, submission, send, check } =
-  useComposeRequest(missionId, rows, targets, query, stack, { title, log, release, approver });
+  useComposeRequest(missionId, rows, targets, query, stack, {
+    title,
+    log,
+    release,
+    approver,
+    sentBackFrom: resend.sentBackFrom,
+  });
 
 const steps = computed(() => [
   `Targets · ${targets.value.length}`,
@@ -136,6 +151,9 @@ const close = computed(() => {
         class="grid min-h-0 flex-1 grid-cols-1 gap-3 max-md:hidden console:grid-cols-[minmax(0,1fr)_360px]"
       >
         <div class="flex min-h-0 flex-col gap-3 overflow-auto">
+          <ApCallout v-if="resend.notice.value" :tone="resend.notice.value.tone">{{
+            resend.notice.value.text
+          }}</ApCallout>
           <div class="grid grid-cols-1 items-start gap-3 console:grid-cols-2">
             <TargetsPanel
               :fleet="rows"

@@ -14,6 +14,8 @@ export type ComposeForm = Readonly<{
   log: Ref<string>;
   release: Ref<Release>;
   approver: Ref<string>;
+  /** The sent-back group this resends (DECISIONS #31 (4)), else null. */
+  sentBackFrom: Ref<string | null>;
 }>;
 
 /**
@@ -39,7 +41,7 @@ export function useComposeRequest(
           stack: stack.value,
           notBefore: form.release.value.mode === "not_before" ? form.release.value.notBefore : null,
           approver: form.approver.value,
-          sentBackFrom: null,
+          sentBackFrom: form.sentBackFrom.value,
         })
       : null,
   );

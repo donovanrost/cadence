@@ -57,11 +57,15 @@ export function argInput(arg: CommandArgument): ArgInput {
   }
 }
 
+/** Form text for a JSON value: enums keep their JSON (choice keys), strings unwrap, numbers stay exact. */
+export function textFromJson(arg: CommandArgument, json: string): string {
+  return arg.type === "enumerated" ? json : display(json);
+}
+
 /** The form's starting text: fixed value, else the catalog default, else empty. */
 export function initialText(arg: CommandArgument): string {
   const json = arg.fixed_value_json ?? arg.default_value_json;
-  if (json === null) return "";
-  return arg.type === "enumerated" ? json : display(json);
+  return json === null ? "" : textFromJson(arg, json);
 }
 
 export type ArgCheck =
