@@ -45,3 +45,8 @@ export function useConfigState(missionId: string) {
   });
   return { state: current.state, refetch: current.refetch };
 }
+
+/** After a write on the Changes page, refresh the shared state the top bar and staged bar show. */
+export function refreshConfigState(missionId: string): void {
+  shared.get(missionId)?.refetch();
+}

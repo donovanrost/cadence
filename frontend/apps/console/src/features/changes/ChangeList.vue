@@ -1,10 +1,40 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { ApButton, ApPanel, formatShort, plural } from "@/ui";
-import type { Change } from "./shapes.ts";
+import { useSession } from "@/shell";
+import { ApButton, ApCallout, ApPanel, formatShort, plural } from "@/ui";
+import { discardChangeSet, rejectionSentence, withdrawChange } from "./actions.ts";
+import type { Change, ChangeSet, ConfigState } from "./shapes.ts";
 
 /** K1: one row per staged change, collapsed; expanded shows what each op touches. */
-defineProps<{ changes: readonly Change[] }>();
+const props = defineProps<{ missionId: string; config: ConfigState; changeSet: ChangeSet }>();
+const emit = defineEmits<{ changed: [] }>();
+const session = useSession();
+const failure = ref<string | null>(null);
+const busy = ref(false);
+
+/** Withdraw and discard act on your own changes, or anyone's with config.discard_any. */
+const mayRemove = (change: Change) =>
+  change.author.id === session.user.id || props.config.permissions.has("config.discard_any");
+
+async function run(
+  action: () => Promise<
+    { ok: true } | { ok: false; error: Parameters<typeof rejectionSentence>[0] }
+  >,
+) {
+  if (busy.value) return;
+  busy.value = true;
+  failure.value = null;
+  try {
+    const result = await action();
+    if (!result.ok) failure.value = rejectionSentence(result.error);
+  } finally {
+    busy.value = false;
+    emit("changed");
+  }
+}
+const withdraw = (change: Change) => run(() => withdrawChange(props.missionId, change.id));
+const discard = () =>
+  run(() => discardChangeSet(props.missionId, props.changeSet.id, props.changeSet.version));
 const open = ref(new Set<string>());
 function toggle(id: string) {
   const next = new Set(open.value);
@@ -15,20 +45,43 @@ function toggle(id: string) {
 </script>
 
 <template>
-  <ApPanel index="K1" title="Changes" :meta="plural(changes.length, 'change')" flush>
+  <ApPanel index="K1" title="Changes" :meta="plural(changeSet.changes.length, 'change')" flush>
+    <template v-if="changeSet.state === 'open'" #header>
+      <ApButton
+        size="compact"
+        variant="ghost"
+        :disabled="busy"
+        disabled-reason="Working…"
+        @click="discard"
+        >{{
+          config.permissions.has("config.discard_any") ? "Discard all" : "Discard mine"
+        }}</ApButton
+      >
+    </template>
+    <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
     <ul class="m-0 list-none p-0">
       <li
-        v-for="change in changes"
+        v-for="change in changeSet.changes"
         :key="change.id"
         class="border-t border-hairline first:border-t-0"
       >
-        <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-4 py-3">
+        <div class="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 px-4 py-3">
           <span class="text-base font-semibold text-readout">{{ change.summary }}</span>
           <span class="text-sm text-text-3"
             >{{ change.author.name }} ·
             <time class="font-mono text-xs" :datetime="change.staged_at">{{
               formatShort(new Date(change.staged_at))
             }}</time></span
+          >
+          <ApButton
+            v-if="changeSet.state === 'open' && mayRemove(change)"
+            size="compact"
+            variant="ghost"
+            :aria-label="`Withdraw ${change.summary}`"
+            :disabled="busy"
+            disabled-reason="Working…"
+            @click="withdraw(change)"
+            >Withdraw</ApButton
           >
           <ApButton
             size="compact"
@@ -50,9 +103,5 @@ function toggle(id: string) {
         </ul>
       </li>
     </ul>
-    <p class="m-0 border-t border-hairline px-4 py-2.5 text-sm text-text-3">
-      Withdraw and Discard arrive with the change-set write endpoints. Until then, changes are
-      withdrawn where they were made.
-    </p>
   </ApPanel>
 </template>

@@ -1,20 +1,57 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
-import { ApEmptyState, ApPageHeader, ApPanel, ApRemote, formatShort, plural } from "@/ui";
+import {
+  ApButton,
+  ApCallout,
+  ApEmptyState,
+  ApPageHeader,
+  ApPanel,
+  ApRemote,
+  formatShort,
+  plural,
+} from "@/ui";
 import ApplyAside from "./ApplyAside.vue";
 import ChangeList from "./ChangeList.vue";
 import ChecksPanel from "./ChecksPanel.vue";
+import ReviewPanel from "./ReviewPanel.vue";
+import { previewChangeSet, type SubmitResult } from "./actions.ts";
+import { refreshConfigState } from "./useConfigState.ts";
 import { fetchConfigState } from "./api.ts";
 import type { ConfigState } from "./shapes.ts";
 
 /** Setup › Staged changes: review & apply the mission's one change set (Changes.md §3). */
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
-const { state, refetch } = useRemoteQuery(missionId, fetchConfigState);
+const query = useRemoteQuery(missionId, fetchConfigState);
+const state = query.state;
+/** Refetch this page and the shared chrome (top bar status, staged bar). */
+function refetch() {
+  query.refetch();
+  refreshConfigState(missionId.value);
+}
 useMissionInvalidation(missionId, ["configuration"], refetch);
+
+// The dry run of the open set, re-run whenever the set's version moves.
+const previewKey = computed(() => {
+  const s = state.value;
+  const set = s.status === "ready" ? s.value.change_set : null;
+  return set && set.staged_count > 0
+    ? { missionId: missionId.value, changeSetId: set.id, version: set.version }
+    : null;
+});
+const preview = useRemoteQuery(previewKey, previewChangeSet);
+
+// Kept here so the outcome survives the set closing (the aside unmounts on apply).
+const outcome = ref<SubmitResult | null>(null);
+function onResult(result: SubmitResult) {
+  outcome.value = result;
+  refetch();
+}
+const reviewing = (config: ConfigState) =>
+  config.change_set?.state === "in_review" && config.permissions.has("config.review");
 
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
@@ -57,6 +94,26 @@ function meta(config: ConfigState): string | null {
         sentence="This server doesn't serve mission change sets to the console yet."
       />
     </ApPanel>
+    <ApCallout v-if="outcome?.state === 'applied'" tone="nominal">
+      <span class="font-mono normal-case">r{{ outcome.revision }}</span> applied ·
+      {{ plural(outcome.staged_count, "change")
+      }}<template v-if="outcome.runtime === 'degraded'">
+        · the runtime hasn't converged on
+        {{ outcome.degraded_partitions.length }} partitions</template
+      >
+      <template #action
+        ><ApButton size="compact" :to="{ name: 'setup.revisions' }"
+          >View revisions</ApButton
+        ></template
+      >
+    </ApCallout>
+    <ApCallout v-else-if="outcome?.state === 'in_review'" tone="info">
+      Sent for review. An org member who didn't stage any of these changes approves or sends it
+      back.
+    </ApCallout>
+    <ApCallout v-else-if="outcome?.state === 'open'" tone="info">
+      Sent back to the authors with your comment.
+    </ApCallout>
     <ApRemote v-else :state="state" loading-label="Loading staged changes…" @retry="refetch">
       <template #default="{ value }">
         <ApPanel
@@ -72,13 +129,32 @@ function meta(config: ConfigState): string | null {
         </ApPanel>
         <div v-else class="flex flex-wrap items-start gap-4">
           <div class="flex min-w-0 flex-[999_1_560px] flex-col gap-4">
-            <ChangeList :changes="value.change_set.changes" />
-            <ChecksPanel />
+            <ChangeList
+              :mission-id="missionId"
+              :config="value"
+              :change-set="value.change_set"
+              @changed="refetch"
+            />
+            <ChecksPanel :preview="preview.state.value" @retry="preview.refetch" />
           </div>
-          <ApplyAside
+          <ReviewPanel
+            v-if="reviewing(value)"
+            :mission-id="missionId"
             :config="value"
             :change-set="value.change_set"
             class="sticky top-0 min-w-0 flex-[1_1_340px]"
+            @result="onResult"
+            @changed="refetch"
+          />
+          <ApplyAside
+            v-else
+            :mission-id="missionId"
+            :config="value"
+            :change-set="value.change_set"
+            :preview="preview.state.value"
+            class="sticky top-0 min-w-0 flex-[1_1_340px]"
+            @result="onResult"
+            @changed="refetch"
           />
         </div>
       </template>
