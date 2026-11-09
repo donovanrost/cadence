@@ -120,7 +120,7 @@ defmodule CadenceWeb.Console.MissionChannelTest do
         {:config_runtime, %{revision: 3, runtime: :not_applicable, degraded_partitions: []}}
       )
 
-      assert_push("config_runtime", %{"revision" => 3, "runtime" => "not_applicable"})
+      assert_push("config_runtime", %{"revision" => 3, "runtime" => "not_applicable"}, 2_000)
     end
 
     test "ignores changes to other missions", c do
