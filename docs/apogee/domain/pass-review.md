@@ -137,3 +137,41 @@ prices.
    per-pass threshold.
 9. **`rows`** returns `{rows, total, disputable, next_cursor}`, filtered by `outcome[]`,
    `station`, `spacecraft_id` and `plan`.
+
+## Settings (DECISIONS #48) and fe-setup's review
+
+**Mission settings**, in scoped section `cadence.pass_review`, shown in Settings (ST1):
+- `pass_realized_threshold` (default 0.95): a pass is realized when flown ≥ that share of
+  planned;
+- `realization_target` (default 0.98): the fleet's target share, used for the R3 dashed line and
+  the h1 verdict.
+
+**Final read shapes.** These merge api-ops' 9 items with fe-setup's additions.
+
+- **Identity on every row:** `spacecraft {id, name}`, `station {ref, id, code, name}`,
+  `provider {id, name}`, `antenna_ref`, `plan {id, version}`. Station `code` is the confirmed
+  code or nil (U25); identity never shows a suggestion.
+- **Failed folds into Missed on the strip.** Rows keep `outcome: failed`, and the UI word is
+  "Failed". `summary.missed` counts missed plus failed, split by owner.
+- **Pending reports are out of the denominator.** `realized_ratio = realized / (planned −
+  canceled − pending)`. `summary.provisional` is true whenever `pending_count > 0` or any
+  provider in the span has an unhealthy cursor, so a final % is never shown while a report is
+  missing.
+- **Weather:** no provider reports weather today, and the simulator never does. The `weather`
+  owner appears only when a provider's cause names it, so drop the bucket until one does.
+- **`summary`:**
+  - `{planned, realized, partial, missed, canceled, pending_count, provisional, realized_ratio,
+    target}`;
+  - `missed_by_owner` and `partial_by_owner`;
+  - `by_station` (the 6. shape plus `provider`);
+  - `by_cause` (`{cause, cause_source, owner, missed, partial}`);
+  - `plans [{id, version}]`;
+  - `freshness [{provider {id, name}, last_report_at, pending_reports, oldest_pending_los,
+    cursor_healthy}]`.
+- **`daily`:** `{day (UTC), planned, realized, canceled, pending, realized_ratio, top_cause,
+  top_station}` plus `target`.
+- **`rows`:** `{rows, total, disputable, next_cursor}`, with filters `outcome[]` (missed,
+  partial, failed, pending_report, realized, canceled), `station`, `spacecraft_id`, `plan`, and
+  `limit`.
+- **Volume:** shown as provider vs received. `planned_bytes` is nil: no requirement or profile
+  carries an expected volume today.
