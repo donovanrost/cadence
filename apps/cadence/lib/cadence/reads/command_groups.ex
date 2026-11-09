@@ -170,6 +170,7 @@ defmodule Cadence.Reads.CommandGroups do
       command_name: request.command_name,
       stage: stage,
       end_reason: end_reason(request, stage),
+      caused_by: caused_by(request),
       verify_by: verify_by(row),
       occurred_at: row && row.occurred_at
     }
@@ -207,6 +208,14 @@ defmodule Cadence.Reads.CommandGroups do
   defp end_reason(_request, :excluded), do: :excluded_at_review
   defp end_reason(_request, :rejected), do: :rejected
   defp end_reason(_request, _stage), do: nil
+
+  # The earlier member whose failure stopped this one (stop on failure per target).
+  defp caused_by(request) do
+    case request.metadata["cancellation"]["reason"] do
+      "earlier_command_failed: " <> id -> id
+      _other -> nil
+    end
+  end
 
   defp verify_by(%{verifier_instances: [_ | _] = instances}) do
     instances

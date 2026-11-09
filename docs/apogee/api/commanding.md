@@ -167,7 +167,8 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   `abort_reason`, `abort_result`, `progress` (`{stage: target count}`), `events[] {id, kind, actor, at, payload}`,
   and `targets[]`:
   `{spacecraft_id, name, scid, stage, members: [{position, request_id, command_id, command_name, stage,
-  end_reason, verify_by, occurred_at}], last_event_at, blocked: null}`.
+  end_reason, caused_by, verify_by, occurred_at}], last_event_at, blocked: null}`. `caused_by` is the
+  earlier member whose failure stopped this one (`end_reason: earlier_command_failed`).
 - Member `stage`: `awaiting_go | queued_for_contact | radiating | executed | verified | no_verifier
   | verify_failed | release_failed | indeterminate | canceled | rejected | excluded`. A target's stage
   is its first unfinished member's. `end_reason`: `aborted | release_basis_changed |
@@ -197,8 +198,14 @@ operator may abort (not two-person). Cancel works on any request (grouped or not
 Errors: `422 reason_required`, `409 command_group_not_abortable`, `409 command_request_already_started`,
 `404 command_request_not_found`, `404 command_group_not_found`.
 
-Also new: a queued request whose model revision is no longer active **fails closed** at release
-(`canceled`, `end_reason: release_basis_changed`) instead of blocking its lane.
+Also new, at release time:
+- A queued request whose model revision is no longer active **fails closed** (`canceled`,
+  `end_reason: release_basis_changed`) instead of blocking its lane.
+- **Stop on failure per target** (DECISIONS #31): a member doesn't release after an earlier member
+  of the same target failed to release, failed or timed out verification, or was itself stopped.
+  It's canceled with `end_reason: earlier_command_failed` and `caused_by`. Other targets continue.
+  A verification failure that arrives after the next member already radiated can't stop it.
+  That would need "verify before next" gates (waves, #8).
 
 ### `POST /command-groups/:id/notes` (M19)
 
@@ -214,6 +221,6 @@ The UI writes the sentences (title + sentence per key).
 
 ### Not yet
 
-Stop-on-failure per target (`earlier_command_failed`), the expiry sweep (`expired`), the
+The expiry sweep (`expired`; expired entries are skipped by release but stay queued), the
 `blocked` flag, and the `command_group:<id>` channel push. Until the push lands, refetch on
 `commanding`.

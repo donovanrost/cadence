@@ -10,6 +10,7 @@ defmodule Cadence.Commanding do
   alias Cadence.Commanding.{
     Cancellation,
     CommandApproval,
+    Groups,
     CommandQueueEntry,
     CommandQueueEntryRow,
     CommandReleaseAttempt,
@@ -441,7 +442,7 @@ defmodule Cadence.Commanding do
       )
       |> case do
         # The head failed closed; the lane's next entry may still release in this contact.
-        {:error, :release_basis_changed} ->
+        {:error, reason} when reason in [:release_basis_changed, :earlier_command_failed] ->
           dispatch_queue_lane(organization_id, mission_id, queue_lane_key, released_by, opts)
 
         result ->
@@ -669,6 +670,7 @@ defmodule Cadence.Commanding do
              queue_entry_row.command_request_id
            ),
          :ok <- LifecyclePolicy.ensure_request_releasable(request_row),
+         :ok <- group_still_going(organization_id, mission_id, request_row),
          {:ok, %RealizedContact{} = realized_contact} <-
            ReleaseTargetSelection.fetch_realized_contact(
              organization_id,
@@ -744,19 +746,42 @@ defmodule Cadence.Commanding do
     end
   end
 
+  # Stop on failure per target (DECISIONS #31): a group member doesn't release after an
+  # earlier member of its target failed.
+  defp group_still_going(organization_id, mission_id, request_row) do
+    case Groups.Halt.earlier_failure(request_row) do
+      nil ->
+        :ok
+
+      failed_id ->
+        fail_closed(
+          organization_id,
+          mission_id,
+          request_row,
+          "earlier_command_failed: " <> failed_id
+        )
+
+        {:error, :earlier_command_failed}
+    end
+  end
+
   defp fail_closed(organization_id, mission_id, request_row) do
+    fail_closed(organization_id, mission_id, request_row, "release_basis_changed")
+    {:error, :release_basis_changed}
+  end
+
+  defp fail_closed(organization_id, mission_id, request_row, reason) do
     {:ok, _outcome} =
       Repo.transaction(fn ->
         Cancellation.fail_closed(
           organization_id,
           mission_id,
           request_row.command_request_id,
-          "release_basis_changed"
+          reason
         )
       end)
 
     ReadUpdates.publish(:commanding_changed, organization_id, mission_id)
-    {:error, :release_basis_changed}
   end
 
   defp execute_release_attempt(release_context) when is_map(release_context) do
