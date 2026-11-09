@@ -5,6 +5,7 @@ defmodule Cadence.Configuration.ConfigKindsTest do
 
   alias Cadence.Comms.TransportStore
   alias Cadence.Control.Configuration
+  alias Cadence.Platform.ConfigurationSettings
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftTypeStore
 
@@ -127,7 +128,14 @@ defmodule Cadence.Configuration.ConfigKindsTest do
                SpacecraftStore.fetch_spacecraft(ctx.org, ctx.mission, sc)
     end
 
-    test "spacecraft governed by configuration review are kept", ctx do
+    test "with profile framing generations off, spacecraft governed by configuration review are kept",
+         ctx do
+      {:ok, _} =
+        ConfigurationSettings.put_profile_framing_generations(ctx.org, ctx.mission, false, %{
+          id: "test",
+          name: "Test"
+        })
+
       {profile_id, [sc]} = block(ctx, 1)
       {:ok, spacecraft} = SpacecraftStore.fetch_spacecraft(ctx.org, ctx.mission, sc)
       governed = %{spacecraft | metadata: %{"spacecraft_configuration_revision_id" => "rev-1"}}
@@ -139,6 +147,21 @@ defmodule Cadence.Configuration.ConfigKindsTest do
                Configuration.preview(ctx.alice, ctx.mission, {:ops, [edit]})
 
       assert reason =~ "configuration review"
+    end
+
+    test "by default (generations on, DECISIONS #45) governed spacecraft move with the profile",
+         ctx do
+      assert ConfigurationSettings.profile_framing_generations?(ctx.org, ctx.mission)
+
+      {profile_id, [sc]} = block(ctx, 1)
+      {:ok, spacecraft} = SpacecraftStore.fetch_spacecraft(ctx.org, ctx.mission, sc)
+      governed = %{spacecraft | metadata: %{"spacecraft_configuration_revision_id" => "rev-1"}}
+      {:ok, _} = SpacecraftStore.update_spacecraft(ctx.org, governed)
+
+      edit = update("spacecraft_profile", profile_id, "frame_parameters.frame_size", 1000)
+
+      assert {:ok, %{effects: [%{changes: 1, keeps: []}]}} =
+               Configuration.preview(ctx.alice, ctx.mission, {:ops, [edit]})
     end
 
     test "framing and SCIDs are validated", ctx do

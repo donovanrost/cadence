@@ -44,6 +44,23 @@ defmodule Cadence.Control.ConfigurationGeneration do
        else: {:ok, nil}
   end
 
+  @doc """
+  The spacecraft among `ids` whose runtime framing an apply would change: those with an active
+  fleet entry that differs from their effective profile framing. The framing compatibility HOLD
+  checks exactly these, so it fires only when a generation would follow (DECISIONS #45).
+  """
+  @spec changed_spacecraft(String.t(), String.t(), [String.t()]) :: [String.t()]
+  def changed_spacecraft(_organization_id, _mission_id, []), do: []
+
+  def changed_spacecraft(organization_id, mission_id, ids) do
+    with {:ok, mission} <- Missions.fetch_mission(organization_id, mission_id),
+         {:ok, %{activation: %{}} = active} <- Active.load(mission) do
+      organization_id |> changed_entries(mission_id, ids, active.entries) |> Map.keys()
+    else
+      _no_active_activation -> []
+    end
+  end
+
   defp build_for(%{set: set} = input, touched) do
     with {:ok, mission} <- Missions.fetch_mission(set.organization_id, set.mission_id),
          {:ok, %{activation: %{}, binding_set: binding_set} = active} <- Active.load(mission) do

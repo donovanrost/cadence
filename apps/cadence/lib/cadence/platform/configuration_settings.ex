@@ -2,16 +2,16 @@ defmodule Cadence.Platform.ConfigurationSettings do
   @moduledoc """
   Mission settings for change sets, in scoped settings section `cadence.configuration`.
 
-  `profile_framing_generations` (default **off**, DECISIONS #33): when on, applying a change set
-  that changes a profile's framing or catalog for its spacecraft also produces a runtime
-  activation in which the profile is the framing authority. It stays off until the review page
-  shows the framing compatibility HOLD and a framing change is verified end to end.
+  `profile_framing_generations` (default **on** since DECISIONS #45; introduced off by #33): when
+  on, applying a change set that changes a profile's framing for its spacecraft also produces a
+  runtime activation in which the profile is the framing authority. qa's #33/#36 gates verified
+  the compatibility HOLD and a framing change end to end. A mission can still turn it off.
   """
 
   alias Cadence.Platform.ScopedSettings
 
   @section "cadence.configuration"
-  @default %{"value" => %{"profile_framing_generations" => false}, "allow_override" => true}
+  @default %{"value" => %{"profile_framing_generations" => true}, "allow_override" => true}
 
   def section_id, do: @section
 

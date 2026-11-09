@@ -176,7 +176,26 @@ defmodule Cadence.Configuration.FramingGenerationTest do
     end
   end
 
+  test "profile framing generations are on by default, and a mission can turn them off",
+       c do
+    assert ConfigurationSettings.profile_framing_generations?(c.org, c.mission.mission_id)
+
+    {:ok, _} =
+      ConfigurationSettings.put_profile_framing_generations(c.org, c.mission.mission_id, false, %{
+        id: "test",
+        name: "Test"
+      })
+
+    refute ConfigurationSettings.profile_framing_generations?(c.org, c.mission.mission_id)
+  end
+
   test "with the flag off the same change set produces no activation", c do
+    {:ok, _} =
+      ConfigurationSettings.put_profile_framing_generations(c.org, c.mission.mission_id, false, %{
+        id: "test",
+        name: "Test"
+      })
+
     {:ok, before} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
 
     assert {:error, {:checks_failed, _}} = apply_framing_profile(c, 1279)

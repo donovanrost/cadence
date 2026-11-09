@@ -104,3 +104,18 @@ wait behind a flag until fe-setup's review page shows the HOLD?
     retries.
   - **Preview:** a compatibility HOLD for `framing_mismatch` in fe-setup's agreed item shape,
     whenever a profile-authoritative change would differ from the transport's ingress metadata.
+
+## Default on (DECISIONS #45, 2026-11-09)
+
+After qa's #33 and #36 gates passed, `profile_framing_generations` defaults to **on**
+(`Cadence.Platform.ConfigurationSettings`). A mission can still turn it off: an explicit
+mission-level setting overrides the default.
+
+The framing compatibility HOLD now checks only spacecraft whose runtime framing the apply would
+change. Those are the spacecraft with an active fleet entry that differs from their effective
+profile framing, as computed by the same builder that makes the activation
+(`ConfigurationGeneration.changed_spacecraft/3`). With the default on, a routing-only profile
+edit therefore doesn't hold.
+
+Missions that had the flag set explicitly keep that value. On :4011, Earendil was set off
+explicitly after the #36 gate, so it stays off until someone changes it.

@@ -45,6 +45,7 @@ defmodule Cadence.Comms.ConfigKinds.FramingCompatibility do
       |> Enum.filter(&(&1.kind in ["spacecraft", "spacecraft_override"] and &1.op == :update))
       |> Enum.map(& &1.entity_id)
       |> Enum.uniq()
+      |> framing_changes(organization_id, mission_id)
 
     if touched != [] and
          ConfigurationSettings.profile_framing_generations?(organization_id, mission_id) do
@@ -55,6 +56,18 @@ defmodule Cadence.Comms.ConfigKinds.FramingCompatibility do
         )
     else
       []
+    end
+  end
+
+  # Only spacecraft whose runtime framing the apply would change, as the configured generation
+  # builder decides (the same one that builds the activation), so a routing-only edit doesn't
+  # hold. No builder configured means no framing generation, so nothing to hold.
+  defp framing_changes([], _organization_id, _mission_id), do: []
+
+  defp framing_changes(ids, organization_id, mission_id) do
+    case Application.get_env(:cadence, :configuration_generation) do
+      nil -> []
+      builder -> builder.changed_spacecraft(organization_id, mission_id, ids)
     end
   end
 
