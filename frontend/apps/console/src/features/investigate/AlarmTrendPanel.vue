@@ -130,7 +130,7 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
                 view?.rate == null
                   ? 'needs 15 min of data'
                   : alarm.point.unit
-                    ? `${alarm.point.unit} per hour`
+                    ? `${alarm.point.unit}/h`
                     : 'per hour'
               "
             />

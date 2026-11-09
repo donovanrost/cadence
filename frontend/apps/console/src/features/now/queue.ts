@@ -21,6 +21,8 @@ export type QueueItem = Readonly<{
   sentence: string;
   meta: string | null;
   action: QueueAction;
+  /** Every alarm behind the row is acknowledged (U21): keeps its priority, action 'Open', never primary. */
+  acknowledged?: boolean;
   /** Spacecraft this row is about (for the "N spacecraft need you" headline). */
   spacecraftIds: readonly string[];
 }>;

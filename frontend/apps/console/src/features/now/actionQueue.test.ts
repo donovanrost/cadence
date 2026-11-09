@@ -15,6 +15,7 @@ const member = (scid: number, extra: Record<string, unknown> = {}) => ({
   episode_id: null,
   status: null,
   assignee: null,
+  acknowledged_by: null,
   ...extra,
 });
 const item = (overrides: Record<string, unknown>) => ({
@@ -68,10 +69,18 @@ describe("action queue (M6)", () => {
         id: "alarm:c",
         ...vbat,
         acknowledged: 1,
-        spacecraft: [member(9, { status: "acknowledged", assignee: { id: "u", name: "Mira K." } })],
+        spacecraft: [
+          member(9, {
+            status: "acknowledged",
+            acknowledged_by: { kind: "user", id: "u1", name: "Mira K." },
+            assignee: { id: "u2", name: "Tomás R." },
+          }),
+        ],
       }),
     ]);
-    expect(owned[0]?.meta).toBe("ACKNOWLEDGED · ASSIGNED TO MIRA K.");
+    expect(owned[0]?.meta).toBe("ACK MIRA K. · → TOMÁS R.");
+    expect(owned[0]?.action.label).toBe("Open");
+    expect(owned[0]?.acknowledged).toBe(true);
     expect(
       present([
         item({

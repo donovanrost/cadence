@@ -43,7 +43,9 @@ defineEmits<{ retry: [] }>();
             <template #action>
               <ApButton
                 size="compact"
-                :variant="i === 0 && item.priority === 1 ? 'primary' : 'secondary'"
+                :variant="
+                  i === 0 && item.priority === 1 && !item.acknowledged ? 'primary' : 'secondary'
+                "
                 :to="item.action.to"
                 >{{ item.action.label }}</ApButton
               >

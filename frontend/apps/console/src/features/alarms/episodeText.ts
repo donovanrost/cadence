@@ -19,16 +19,22 @@ export function sourceTag(episode: Episode, now: Date): string {
 export const valueLabel = (episode: Episode | null) =>
   episode?.source === "ground_limit" ? "At evaluation" : "Now";
 
-export function statusLine(episode: Episode): { state: OpState; text: string } {
+export function statusLine(
+  episode: Episode,
+  viewerId: string | null = null,
+): { state: OpState; text: string } {
   const who = episode.assignee?.name ? ` · assigned to ${episode.assignee.name}` : "";
   switch (episode.status) {
     case "new":
       return { state: episode.severity === "critical" ? "crit" : "caution", text: `New${who}` };
-    case "acknowledged":
-      return {
-        state: "neutral",
-        text: `Acknowledged${episode.acknowledged_by?.name ? ` by ${episode.acknowledged_by.name}` : ""}${who}`,
-      };
+    case "acknowledged": {
+      const actor = episode.acknowledged_by;
+      const name = actor && viewerId !== null && actor.id === viewerId ? "you" : actor?.name;
+      const at = episode.acknowledged_at
+        ? ` · ${formatClock(new Date(episode.acknowledged_at)).slice(0, 5)}Z`
+        : "";
+      return { state: "neutral", text: `Acknowledged${name ? ` by ${name}` : ""}${at}${who}` };
+    }
     case "cleared":
       return {
         state: "nominal",
@@ -37,12 +43,26 @@ export function statusLine(episode: Episode): { state: OpState; text: string } {
   }
 }
 
-/** "Ack cleared · escalated to critical" when the latest escalation dropped an acknowledgement. */
+/**
+ * "Ack cleared · escalated to critical" while an escalation has dropped the acknowledgement and
+ * nobody has re-acknowledged (U16). Uses the event's `acknowledgement_cleared` flag, or, when it's
+ * absent, infers it: an acknowledgement before the escalation and none after.
+ */
 export function escalationNotice(detail: EpisodeDetail): string | null {
-  const last = [...detail.events].reverse().find((e) => e.kind === "escalated");
-  if (!last || detail.status !== "new" || field(last.payload, "acknowledgement_cleared") !== true)
-    return null;
-  return `Ack cleared · escalated to ${text(field(last.payload, "to")) ?? detail.severity}`;
+  if (detail.status !== "new") return null;
+  let i = -1;
+  detail.events.forEach((e, index) => {
+    if (e.kind === "escalated") i = index;
+  });
+  const last = detail.events[i];
+  if (!last) return null;
+  const flag = field(last.payload, "acknowledgement_cleared");
+  const ackedBefore = detail.events.slice(0, i).some((e) => e.kind === "acknowledged");
+  const ackedAfter = detail.events.slice(i + 1).some((e) => e.kind === "acknowledged");
+  const cleared = flag === true || (flag === undefined && ackedBefore && !ackedAfter);
+  return cleared
+    ? `Ack cleared · escalated to ${text(field(last.payload, "to")) ?? detail.severity}`
+    : null;
 }
 
 const by = (event: EpisodeEvent) => (event.actor?.name ? ` by ${event.actor.name}` : "");

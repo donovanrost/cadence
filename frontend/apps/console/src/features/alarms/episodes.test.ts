@@ -65,6 +65,12 @@ describe("alarm episodes", () => {
       assignee: { id: "u2", name: "Ana P." },
     });
     expect(statusLine(acked).text).toBe("Acknowledged by Mira K. · assigned to Ana P.");
+    const mine = episode({
+      status: "acknowledged",
+      acknowledged_at: "2026-11-09T01:09:30Z",
+      acknowledged_by: { kind: "user", id: "me", name: "Donovan R." },
+    });
+    expect(statusLine(mine, "me").text).toBe("Acknowledged by you · 01:09Z");
     expect(statusLine(episode({ status: "cleared", cleared_unacknowledged: true })).text).toBe(
       "Cleared before anyone acknowledged",
     );
@@ -90,6 +96,23 @@ describe("alarm episodes", () => {
       "Escalated to critical · acknowledgement cleared",
     );
     expect(escalationNotice({ ...detail, status: "acknowledged" })).toBeNull();
+    // ux #14: no flag in the payload; inferred from an ack before the escalation and none after.
+    const inferred: EpisodeDetail = {
+      ...episode(),
+      events: [
+        { id: "a", kind: "acknowledged", actor: null, at: "2026-11-08T02:36:00Z", payload: {} },
+        {
+          id: "b",
+          kind: "escalated",
+          actor: null,
+          at: "2026-11-08T02:40:00Z",
+          payload: { from: "caution", to: "critical" },
+        },
+      ],
+    };
+    expect(escalationNotice(inferred)).toBe("Ack cleared · escalated to critical");
+    const neverAcked: EpisodeDetail = { ...inferred, events: inferred.events.slice(1) };
+    expect(escalationNotice(neverAcked)).toBeNull();
   });
 });
 

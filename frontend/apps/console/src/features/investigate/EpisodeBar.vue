@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef } from "vue";
 import { describeApiError } from "@/api/index.ts";
-import { useMissionScope } from "@/shell/index.ts";
+import { useMissionScope, useSession } from "@/shell/index.ts";
 import { useNow, ApButton, ApCallout, ApStatusMark } from "@/ui";
 import {
   escalationNotice,
@@ -32,7 +32,8 @@ const scope = useMissionScope();
 const now = useNow();
 const stacked = computed(() => props.layout === "stacked");
 
-const status = computed(() => statusLine(props.episode));
+const session = useSession();
+const status = computed(() => statusLine(props.episode, session.user.id));
 const escalation = computed(() => escalationNotice(props.episode));
 const canAck = computed(
   () => props.permissions.includes("alarm.acknowledge") && props.episode.status === "new",
@@ -98,7 +99,8 @@ const buttonClass = computed(() => (stacked.value ? "min-h-12 w-full" : ""));
           :disabled="busy"
           disabled-reason="Working…"
           @click="toggle('assign')"
-          >Assign</ApButton
+          :aria-expanded="form === 'assign'"
+          >{{ form === "assign" ? "Cancel" : "Assign" }}</ApButton
         >
         <ApButton
           v-if="canAssign"
@@ -107,11 +109,12 @@ const buttonClass = computed(() => (stacked.value ? "min-h-12 w-full" : ""));
           :disabled="busy"
           disabled-reason="Working…"
           @click="toggle('hand_off')"
-          >Hand off</ApButton
+          :aria-expanded="form === 'hand_off'"
+          >{{ form === "hand_off" ? "Cancel" : "Hand off" }}</ApButton
         >
       </span>
     </div>
-    <ApCallout v-if="escalation" tone="crit">{{ escalation }}</ApCallout>
+    <ApCallout v-if="escalation" tone="caution">{{ escalation }}</ApCallout>
     <EpisodePersonForm
       v-if="form"
       :key="form"

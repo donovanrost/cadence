@@ -30,6 +30,9 @@ const member = d.object({
   episode_id: d.nullable(d.token),
   status: d.nullable(d.oneOf(["new", "acknowledged"] as const)),
   assignee: d.nullable(d.object({ id: d.token, name: d.nullable(d.string) })),
+  acknowledged_by: d.nullable(
+    d.object({ kind: d.token, id: d.nullable(d.token), name: d.nullable(d.string) }),
+  ),
 });
 type Member = Decoded<typeof member>;
 
@@ -123,8 +126,8 @@ const base = (item: ServerItem) => ({
 /** "ACKNOWLEDGED · MIRA K." / "ASSIGNED TO …" / stale, for one spacecraft's alarm row. */
 function memberMeta(sc: Member): string | null {
   const parts = [
-    sc.status === "acknowledged" ? "Acknowledged" : null,
-    sc.assignee ? `assigned to ${sc.assignee.name ?? "someone"}` : null,
+    sc.status === "acknowledged" ? `Ack ${sc.acknowledged_by?.name ?? ""}`.trim() : null,
+    sc.assignee ? `→ ${sc.assignee.name ?? "someone"}` : null,
     sc.stale ? "last known · telemetry stale" : null,
   ].filter((p): p is string => p !== null);
   return parts.length ? parts.join(" · ").toUpperCase() : null;
@@ -158,7 +161,8 @@ function alarmRows(item: ServerItem): QueueItem[] {
     titleTo: investigate(sc),
     sentence: `${point} reads ${withUnit(formatValue(sc.value), item.point?.unit ?? null) ?? "—"}.`,
     meta: memberMeta(sc),
-    action: { label: "Engage", to: investigate(sc) },
+    acknowledged: sc.status === "acknowledged",
+    action: { label: sc.status === "acknowledged" ? "Open" : "Engage", to: investigate(sc) },
     spacecraftIds: [sc.id],
   }));
 }
