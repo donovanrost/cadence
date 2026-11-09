@@ -21,7 +21,9 @@ defmodule Cadence.Reads.CommandGroups do
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
   alias Cadence.Reads.{CommandCatalog, Commands}
 
-  @finished ~w(verified no_verifier verify_failed release_failed indeterminate canceled rejected excluded)a
+  # Final member stages. `indeterminate` (an uncertain release) isn't: an operator must resolve
+  # it, so its group isn't finished (and gets no `completed` event, DECISIONS #51).
+  @finished ~w(verified no_verifier verify_failed release_failed canceled rejected excluded)a
 
   @spec list(binary(), binary(), binary() | nil, keyword()) :: [map()]
   def list(org, mission, viewer_id, opts \\ []) do

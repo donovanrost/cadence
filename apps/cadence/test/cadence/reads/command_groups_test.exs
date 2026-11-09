@@ -121,21 +121,13 @@ defmodule Cadence.Reads.CommandGroupsTest do
   end
 
   test "a target waiting behind an uncertain release on its lane is blocked", c do
-    draft =
-      draft(c.spacecraft, [
-        command(c, "SET_SIGNED", %{"counter" => 1}),
-        command(c, "SET_SIGNED", %{"counter" => 2})
-      ])
+    ahead = submit(c, "SET_SIGNED", %{"counter" => 1})
+    behind = submit(c, "SET_SIGNED", %{"counter" => 2})
 
-    {:ok, group} =
-      GroupSubmission.submit(c.scope, c.mission, draft, preflight_digest: digest(c, draft))
-
-    [first | _] =
-      GroupStore.members(c.org, c.mission, group.command_group_id)
-
+    [first | _] = GroupStore.members(c.org, c.mission, ahead.command_group_id)
     release!(c, first, :release_uncertain)
 
-    {:ok, view} = CommandGroups.get(c.org, c.mission, group.command_group_id, nil)
+    {:ok, view} = CommandGroups.get(c.org, c.mission, behind.command_group_id, nil)
     [held, other] = view.targets
 
     assert %{
@@ -145,6 +137,12 @@ defmodule Cadence.Reads.CommandGroupsTest do
 
     assert id == first.command_request_id
     assert other.blocked == nil
+
+    # The uncertain member's own target shows it (an operator must resolve it), so its group
+    # isn't finished.
+    {:ok, ahead_view} = CommandGroups.get(c.org, c.mission, ahead.command_group_id, nil)
+    assert [%{stage: :indeterminate, blocked: nil}, _] = ahead_view.targets
+    assert ahead_view.finished == false
   end
 
   # A release attempt for `member` in `state` (what the dispatcher records on release).

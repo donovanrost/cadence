@@ -10,7 +10,6 @@ defmodule Cadence.Commanding do
   alias Cadence.Commanding.{
     Cancellation,
     CommandApproval,
-    Groups,
     CommandQueueEntry,
     CommandQueueEntryRow,
     CommandReleaseAttempt,
@@ -22,6 +21,7 @@ defmodule Cadence.Commanding do
     ConstraintEvaluation,
     Dispatcher,
     DispatchSupervisor,
+    Groups,
     LifecyclePolicy,
     ProcessNamespace,
     ReleaseArtifacts,
@@ -59,10 +59,11 @@ defmodule Cadence.Commanding do
 
   defp publish_verifier_changes({:ok, instances} = result) when is_list(instances) do
     instances
-    |> Enum.map(&{&1.organization_id, &1.mission_id})
-    |> Enum.uniq()
-    |> Enum.each(fn {org, mission} ->
+    |> Enum.group_by(&{&1.organization_id, &1.mission_id}, & &1.command_request_id)
+    |> Enum.each(fn {{org, mission}, request_ids} ->
       ReadUpdates.publish_result(result, :commanding_changed, org, mission)
+      # A verification outcome can fail a group member or finish its group (DECISIONS #51).
+      Groups.Timeline.settle_requests(org, mission, Enum.uniq(request_ids))
     end)
 
     result
@@ -698,7 +699,7 @@ defmodule Cadence.Commanding do
              request_basis.runtime_definition,
              JsonDocument.unwrap_value(request_row.resolved_argument_values_document)
            ) do
-      execute_release_attempt(%{
+      %{
         organization_id: organization_id,
         mission_id: mission_id,
         queue_entry_row: queue_entry_row,
@@ -712,7 +713,13 @@ defmodule Cadence.Commanding do
         attempted_at: attempted_at,
         metadata: Keyword.get(opts, :metadata, %{}),
         process_namespace: process_namespace(opts)
-      })
+      }
+      |> execute_release_attempt()
+      |> tap(fn _result ->
+        Groups.Timeline.settle_requests(organization_id, mission_id, [
+          request_row.command_request_id
+        ])
+      end)
     else
       {:error, reason} ->
         {:error, reason}
@@ -734,6 +741,10 @@ defmodule Cadence.Commanding do
     Enum.each(Cancellation.expire_due(), fn {{org, mission}, _count} ->
       ReadUpdates.publish(:commanding_changed, org, mission)
     end)
+
+    # Also on the reconcile: the group timeline's safety net for outcomes no hook saw (#51).
+    _written = Groups.Timeline.settle_open()
+    :ok
   end
 
   # A queued request whose model revision is no longer active can never release. Fail it
@@ -793,6 +804,7 @@ defmodule Cadence.Commanding do
       end)
 
     ReadUpdates.publish(:commanding_changed, organization_id, mission_id)
+    Groups.Timeline.settle_requests(organization_id, mission_id, [request_row.command_request_id])
   end
 
   defp execute_release_attempt(release_context) when is_map(release_context) do

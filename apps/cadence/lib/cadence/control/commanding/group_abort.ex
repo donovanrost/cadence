@@ -11,7 +11,7 @@ defmodule Cadence.Control.Commanding.GroupAbort do
   alias Cadence.Accounts.User
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Commanding.{Cancellation, Dispatcher, ProcessNamespace}
-  alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
+  alias Cadence.Commanding.Groups.{CommandGroup, GroupStore, Timeline}
   alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Repo
 
@@ -176,9 +176,17 @@ defmodule Cadence.Control.Commanding.GroupAbort do
 
   defp after_commit({:ok, %{value: value, lanes: lanes}}, org, mission) do
     ScopedReadUpdates.publish(:commanding_changed, org, mission)
+    settle_timeline(value, org, mission)
     Enum.each(lanes, &Dispatcher.kick_lane(ProcessNamespace.default(), org, mission, &1))
     {:ok, value}
   end
 
   defp after_commit({:error, reason}, _org, _mission), do: {:error, reason}
+
+  # Canceling the last open members can finish the group (DECISIONS #51).
+  defp settle_timeline(%CommandGroup{command_group_id: id}, org, mission),
+    do: Timeline.settle_group(org, mission, id)
+
+  defp settle_timeline(%{command_request_id: id}, org, mission),
+    do: Timeline.settle_requests(org, mission, [id])
 end

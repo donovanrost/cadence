@@ -172,17 +172,15 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   target_count, command_count, second_go_required, awaiting_me, operation_id, progress, finished}`.
 - `state` is the approval lifecycle only. A group stays `queued` after delivery. Delivery is in
   `progress` (`{stage: target count}`, same as show) and `finished` (`true` when every target is at
-  a final stage: `verified | no_verifier | verify_failed | release_failed | indeterminate |
-  canceled | rejected | excluded`). `finished` doesn't mean success; read `progress` for the outcome.
+  a final stage: `verified | no_verifier | verify_failed | release_failed | canceled | rejected |
+  excluded`; `indeterminate` isn't final, since an operator must resolve the uncertain release). `finished` doesn't mean success; read `progress` for the outcome.
   Both are `null` on rows whose state isn't `queued` (the state already says how they ended).
   Released tab = `queued` and not `finished` (qa #28).
 - Show adds `review_token` (send it back on decisions), `log_entry`, `sent_back_from`,
   `target_query`, `commands[] {position, command_id, name, significance, critical, hazardous,
   argument_values_json}`, `release`, `policy`, `decision`, `decided_by/at`, `aborted_by/at`,
   `abort_reason`, `abort_result`, `progress` (`{stage: target count}`), `finished` (always a
-  boolean on show), `events[] {id, kind, actor, at, payload}` (kinds emitted today: `submitted`,
-  the decision kinds, `note`, `member_canceled`, `aborted`; release and delivery appear only in
-  `targets[].members`),
+  boolean on show), `events[] {id, kind, actor, at, payload}` (see Timeline events below),
   and `targets[]`:
   `{spacecraft_id, name, scid, stage, members: [{position, request_id, command_id, command_name, stage,
   end_reason, caused_by, verify_by, occurred_at}], last_event_at, blocked: null}`. `caused_by` is the
@@ -199,6 +197,19 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   `changed_since_submit` (`hold` when the result no longer matches what was submitted). Its
   `conflicts` check leaves out the group's own members, so only other work on the lanes counts.
 - Compose "send back" clone: everything a new draft needs is in the show response.
+- **Timeline events** (`events[]`, oldest first), the group's audit record:
+  - `submitted`, `approved`, `approved_with_exclusions`, `sent_back`, `rejected`, `note`,
+    `member_canceled`, `aborted`: written by the operator action, with `actor` the user.
+  - `member_failed` (DECISIONS #51): once per member whose release failed or whose
+    verification failed or timed out. `actor: {actor_kind: "system"}`. Payload:
+    `{command_request_id, command_id, spacecraft_id, target_index, position, reason:
+    release_failed | verify_failed | verify_timed_out, later_members_stopped}`. The last field
+    counts the later members of that target that won't release (stop on failure, #31).
+  - `completed` (#51): once, when every member of a `queued` or `aborted` group is final.
+    `actor: {actor_kind: "system"}`. Payload: `{members: {verified, no_verifier, verify_failed,
+    verify_timed_out, release_failed, canceled, rejected: count}}` (only non-zero keys).
+    Written right after the release, verification, halt or abort that finished the last member.
+    A one-minute reconcile sweep backs it up. Each write invalidates `commanding`.
 
 ### `POST /command-groups/:id/decision`
 
