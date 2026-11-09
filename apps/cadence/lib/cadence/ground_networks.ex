@@ -2,6 +2,7 @@ defmodule Cadence.GroundNetworks do
   @moduledoc "Mission-scoped provider control-plane context."
 
   alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Comms.StationAvailability.ProviderReports
   alias Cadence.Contacts.ProviderClients.Registry
   alias Cadence.Ids
 
@@ -174,6 +175,14 @@ defmodule Cadence.GroundNetworks do
           "status" => "healthy",
           "checked_at" => DateTime.to_iso8601(synced_at)
         })
+
+      {:ok, _availability} =
+        ProviderReports.sync(
+          provider.organization_id,
+          provider.mission_id,
+          provider.provider_id,
+          ground_stations
+        )
 
       MissionProviders.update_operational_state(provider, %{
         capabilities_document: capabilities.evidence,

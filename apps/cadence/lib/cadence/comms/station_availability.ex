@@ -88,7 +88,8 @@ defmodule Cadence.Comms.StationAvailability do
 
   @doc """
   Upserts a provider-reported window, keyed by the provider's own reference. Adapters call this
-  when their API reports station status. `report`: ground_station_id, kind, starts_at,
+  when their API reports station status. A window the provider reports again is active again,
+  even if it was cleared: the provider's report is the source of truth for its own windows. `report`: ground_station_id, kind, starts_at,
   ends_at | eta, provider_ref, reason, provider (name for `reported_by`).
   """
   @spec record_provider_report(String.t(), String.t(), map()) :: {:ok, map()} | {:error, term()}
@@ -108,7 +109,18 @@ defmodule Cadence.Comms.StationAvailability do
       |> struct(attrs)
       |> Repo.insert(
         on_conflict:
-          {:replace, [:kind, :starts_at, :ends_at, :eta, :reason, :detail, :updated_at]},
+          {:replace,
+           [
+             :kind,
+             :starts_at,
+             :ends_at,
+             :eta,
+             :reason,
+             :detail,
+             :cleared_at,
+             :cleared_by,
+             :updated_at
+           ]},
         conflict_target:
           {:unsafe_fragment, "(mission_id, provider_ref) WHERE provider_ref IS NOT NULL"}
       )

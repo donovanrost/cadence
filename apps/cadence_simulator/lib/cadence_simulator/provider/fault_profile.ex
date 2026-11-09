@@ -1,7 +1,7 @@
 defmodule CadenceSimulator.Provider.FaultProfile do
   @moduledoc "Validated scenario and run-scoped provider fault controls."
 
-  alias CadenceSimulator.Provider.Contract
+  alias CadenceSimulator.Provider.{Contract, StationOutages}
 
   @rate_fields [
     "scheduling_rejection_rate",
@@ -20,7 +20,8 @@ defmodule CadenceSimulator.Provider.FaultProfile do
   ]
   @duration_fields ["latency_ms", "jitter_ms"]
   @boolean_fields ["provider_outage"]
-  @fields @rate_fields ++ @count_fields ++ @duration_fields ++ @boolean_fields
+  @list_fields ["station_outages"]
+  @fields @rate_fields ++ @count_fields ++ @duration_fields ++ @boolean_fields ++ @list_fields
 
   @defaults %{
     "scheduling_rejection_rate" => 0.0,
@@ -36,7 +37,8 @@ defmodule CadenceSimulator.Provider.FaultProfile do
     "event_identity_collision_count" => 0,
     "latency_ms" => 0,
     "jitter_ms" => 0,
-    "provider_outage" => false
+    "provider_outage" => false,
+    "station_outages" => []
   }
 
   @spec defaults() :: map()
@@ -51,8 +53,9 @@ defmodule CadenceSimulator.Provider.FaultProfile do
          merged = Map.merge(@defaults, profile),
          :ok <- validate_rates(merged),
          :ok <- validate_nonnegative_integers(merged, @count_fields ++ @duration_fields),
-         :ok <- validate_booleans(merged) do
-      {:ok, merged}
+         :ok <- validate_booleans(merged),
+         {:ok, outages} <- StationOutages.normalize(merged["station_outages"]) do
+      {:ok, Map.put(merged, "station_outages", outages)}
     end
   end
 

@@ -4,6 +4,7 @@ defmodule Cadence.Comms.StationAvailabilityTest do
   import Cadence.ConfigurationFixtures
 
   alias Cadence.Comms.{GroundStation, GroundStationStore, StationAvailability}
+  alias Cadence.Comms.StationAvailability.ProviderReports
   alias Cadence.ContactPlanning.{ContactRequirementVersion, RequirementEvaluator}
 
   setup do
@@ -98,6 +99,57 @@ defmodule Cadence.Comms.StationAvailabilityTest do
 
     assert {:ok, %{state: :degraded}} =
              StationAvailability.status(ctx.alice, ctx.mission, ctx.station, at(3))
+  end
+
+  test "a provider sync records reported windows and clears ones it stops reporting", ctx do
+    stations = fn windows ->
+      [
+        %{"id" => ctx.station, "availability_windows" => windows},
+        %{"id" => "not-in-cadence", "availability_windows" => [window("x", 1, 2)]}
+      ]
+    end
+
+    assert {:ok, %{recorded: 2, cleared: 0}} =
+             ProviderReports.sync(
+               ctx.org,
+               ctx.mission,
+               "provider-a",
+               stations.([window("a", 1, 3), window("b", 5, 6)])
+             )
+
+    assert {:ok, %{state: :down, source: :provider, reported_by: %{"id" => "provider-a"}}} =
+             StationAvailability.status(ctx.alice, ctx.mission, ctx.station, at(2))
+
+    assert {:ok, %{recorded: 1, cleared: 1}} =
+             ProviderReports.sync(
+               ctx.org,
+               ctx.mission,
+               "provider-a",
+               stations.([window("b", 5, 6)])
+             )
+
+    assert {:ok, %{state: :up}} =
+             StationAvailability.status(ctx.alice, ctx.mission, ctx.station, at(2))
+
+    assert {:ok, %{recorded: 2}} =
+             ProviderReports.sync(
+               ctx.org,
+               ctx.mission,
+               "provider-a",
+               stations.([window("a", 1, 3), window("b", 5, 6)])
+             )
+
+    assert {:ok, %{state: :down}} =
+             StationAvailability.status(ctx.alice, ctx.mission, ctx.station, at(2))
+  end
+
+  defp window(id, from, to) do
+    %{
+      "id" => id,
+      "kind" => "outage",
+      "starts_at" => DateTime.to_iso8601(at(from)),
+      "ends_at" => DateTime.to_iso8601(at(to))
+    }
   end
 
   test "planning treats opportunities during outage or maintenance as ineligible", ctx do

@@ -16,6 +16,7 @@ defmodule CadenceSimulator.Provider do
     RouteProfiles,
     ServiceProfiles,
     SpacecraftFrames,
+    StationOutages,
     Store
   }
 
@@ -161,7 +162,13 @@ defmodule CadenceSimulator.Provider do
   @spec ground_stations(binary()) :: {:ok, [map()]} | {:error, :not_found}
   def ground_stations(run_id) do
     with {:ok, run} <- Store.fetch(:run, run_id) do
-      {:ok, run["scenario_snapshot"]["ground_stations"]}
+      faults = run["scenario_snapshot"]["fault_profile"]
+
+      {:ok,
+       Enum.map(
+         run["scenario_snapshot"]["ground_stations"],
+         &Map.put(&1, "availability_windows", StationOutages.for_station(faults, &1["id"]))
+       )}
     end
   end
 
@@ -220,7 +227,7 @@ defmodule CadenceSimulator.Provider do
          :ok <- validate_reservation_resources(run, attrs),
          :ok <- ensure_capacity(attrs, starts_at, ends_at) do
       now = now_iso8601()
-      status = initial_reservation_status(run, attrs)
+      status = initial_reservation_status(run, attrs, starts_at, ends_at)
 
       reservation = %{
         "id" => Ids.new("reservation"),
@@ -388,10 +395,11 @@ defmodule CadenceSimulator.Provider do
 
   defp normalize_stations(_stations), do: {:error, {:invalid, "ground_stations"}}
 
-  defp initial_reservation_status(run, attrs) do
+  defp initial_reservation_status(run, attrs, starts_at, ends_at) do
     fault_profile = run["scenario_snapshot"]["fault_profile"]
 
     if fault_profile["provider_outage"] or
+         StationOutages.blocked?(fault_profile, attrs["ground_station_id"], starts_at, ends_at) or
          deterministic_fault?(
            run,
            attrs,
