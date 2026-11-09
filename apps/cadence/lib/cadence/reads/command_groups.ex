@@ -64,8 +64,7 @@ defmodule Cadence.Reads.CommandGroups do
        |> summary()
        |> Map.merge(%{
          awaiting_me: awaiting?(group, viewer_id),
-         catalog_revision:
-           Cadence.Reads.CommandCatalog.catalog_revision(org, mission, revision_id),
+         catalog_revision: CommandCatalog.catalog_revision(org, mission, revision_id),
          group: group,
          targets: targets,
          progress: Enum.frequencies_by(targets, & &1.stage),
