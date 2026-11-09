@@ -78,9 +78,19 @@ defmodule Cadence.Contacts.ContactRuntimeConfig do
              scheduled_contact.path_template_ids,
              scheduled_contact.path_template_refs
            ) do
-      {:ok, assignment_paths ++ template_paths ++ scheduled_contact.paths}
+      {:ok,
+       assignment_paths ++ booked(scheduled_contact, template_paths) ++ scheduled_contact.paths}
     end
   end
+
+  # A provider booking names the paths of the route it was booked on. On that contact those
+  # paths are the selected ones, even when the route is a candidate (a fallback station chosen
+  # because the primary was unavailable); otherwise the contact could never be scheduled.
+  defp booked(%ScheduledContact{metadata: %{"provider_reservation_id" => id}}, paths)
+       when is_binary(id),
+       do: Enum.map(paths, &%{&1 | selection_role: :selected})
+
+  defp booked(_scheduled_contact, paths), do: paths
 
   defp resolve_link_assignment_paths(_organization_id, _mission_id, []), do: {:ok, []}
 
