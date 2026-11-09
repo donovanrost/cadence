@@ -74,6 +74,42 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     end
   end
 
+  @doc """
+  Records the console operation that created a run (DECISIONS #27). Returns
+  `{:error, :operation_already_claimed}` when another run in the mission holds
+  the same `operation_id`.
+  """
+  @spec claim_operation(binary(), binary(), binary(), binary()) ::
+          :ok | {:error, :operation_already_claimed | term()}
+  def claim_operation(organization_id, mission_id, run_id, operation_id) do
+    with %FleetPlanningRunRow{} = row <-
+           Repo.get_by(FleetPlanningRunRow,
+             organization_id: organization_id,
+             mission_id: mission_id,
+             fleet_planning_run_id: run_id
+           ) || {:error, :fleet_planning_run_not_found},
+         {:ok, _row} <-
+           row |> FleetPlanningRunRow.operation_changeset(operation_id) |> Repo.update() do
+      :ok
+    else
+      {:error, %Ecto.Changeset{}} -> {:error, :operation_already_claimed}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  @spec fetch_by_operation(binary(), binary(), binary()) ::
+          {:ok, FleetPlanningRun.t()} | {:error, :fleet_planning_run_not_found}
+  def fetch_by_operation(organization_id, mission_id, operation_id) do
+    case Repo.get_by(FleetPlanningRunRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           operation_id: operation_id
+         ) do
+      nil -> {:error, :fleet_planning_run_not_found}
+      row -> {:ok, FleetPlanningRunRow.to_domain(row)}
+    end
+  end
+
   @doc "Locks a scoped run for a short database-only reviewed decision."
   def fetch_locked(organization_id, mission_id, run_id) do
     if Repo.in_transaction?() do

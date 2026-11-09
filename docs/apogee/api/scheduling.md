@@ -3,8 +3,9 @@
 Owner: **api** (DECISIONS #26). Consumer: **lead** (K1 Plan, K2 Re-plan). S1 passes and S10 push
 are api-ops'. Base: `/api/console/v1/missions/:mission_id`. Conventions: [README.md](README.md).
 
-Status: **design for agreement** (2026-11-09). The reads (S2, S6, S3 read) are being built now.
-The async actions wait for the decisions in §2.
+Status: decisions agreed (DECISIONS #27, #28). **Implemented:** S6 list, plan detail with S2 demand,
+and S3 drafts (start/read/continue). **Next:** S5 submit (with acknowledged exceptions), S4 edits
+and alternatives, then S8 re-plan.
 
 ## 1. What the domain actually does (survey)
 
@@ -65,3 +66,61 @@ The async actions wait for the decisions in §2.
 - **S8** `POST /contact-plans/:plan_id/repairs {from, to, operation_id}` → `202 {run_id}`;
   `GET /contact-plans/repairs/:run_id` → `{source_plan, plan (new), moved: [...], dropped: [...],
   added: [...], totals}`; apply = S5 submit on the new plan.
+
+## 4. Implemented contracts
+
+### Live: `scheduling_progress` on `mission:<id>`
+
+`{kind: "draft" | "execute", id, state: "running" | "finished" | "failed", reason, at}`, sent when
+off-request work starts and ends. It also emits `invalidate` with `contacts`. Treat it as a hint and
+refetch the read. The read is the truth.
+
+### `GET /contact-plans?day=YYYY-MM-DD&state=` (S6)
+
+`{plans: [{id, version, state, window: {from, to}, author, counts: {passes, minutes, conflicts,
+unsatisfied}, ready_to_approve, updated_at}]}`, newest first, capped at 100. `window` spans the
+selected passes (`null` for an empty plan); `day` matches the window's start date (UTC). `state` is
+one of `draft, pending_approval, approved, executing, partially_reserved, reserved, failed,
+canceled, superseded`.
+
+### `GET /contact-plans/:plan_id[?version=n]`
+
+The list row, plus:
+- `passes: [{snapshot_id, spacecraft_id, station, starts_at, ends_at, synthetic, locked}]`
+- `demand: {rule_met, rule_total, spacecraft: [{spacecraft_id, rule_met, contacts: {have, need},
+  reasons: [code]}], rules: [{requirement_id, version, spacecraft_id, text, source: "requirement",
+  window}]}` (S2, from the version's persisted coverage)
+- `unmet: [{requirement_id, requirement_version, spacecraft_id, why: [code]}]`: what an approver
+  must acknowledge (DECISIONS #28)
+- `conflicts: [{code, spacecraft_id, snapshot_ids}]`: overlapping passes for one spacecraft, which
+  always block approval
+
+`station` is the provider's ground-station ref. Errors: `404 plan_not_found`.
+
+### `POST /contact-plans/drafts` (S3)
+
+Body `{day: "YYYY-MM-DD", operation_id}`. It plans 00:00–24:00 UTC of that day with the mission's
+active fleet planning policy and the active requirements (including recurring templates), then
+runs the plan **off the request**.
+
+- `202 {run_id, outcome: "created" | "replayed", state}`. The same `operation_id` returns the same
+  run (persisted, so it works on any node).
+- `422 planning_not_set_up` with `details.missing`: `["fleet_planning_policy"]` or
+  `["contact_requirements"]`. `422 horizon_exceeds_policy`. `409 inputs_changed` (retry).
+
+### `GET /contact-plans/drafts/:run_id`
+
+`{run: {id, state, phase, horizon: {from, to}, failure, started_at, updated_at}, plan: <plan detail>
+| null}`.
+
+- `state`: `queued | running | completed | partial | failed | canceled | interrupted`.
+  **`interrupted`** means the run is queued/running but nothing is executing it (no session holds
+  its lock, checked cluster-wide), so offer Continue. A queued run gets 60 s to start before it
+  counts as interrupted.
+- `plan` is the candidate plan (draft) once the run materializes it.
+- `404 draft_not_found`.
+
+### `POST /contact-plans/drafts/:run_id/continue`
+
+Resumes an interrupted run off the request and returns `202 {run_id, state: "running"}`.
+`409 draft_not_interrupted` otherwise.

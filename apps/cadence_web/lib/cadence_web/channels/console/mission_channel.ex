@@ -15,7 +15,7 @@ defmodule CadenceWeb.Console.MissionChannel do
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Platform.ScopedReadUpdates
   alias CadenceWeb.Console.Access
-  alias CadenceWeb.Console.ConfigLive
+  alias CadenceWeb.Console.{ConfigJSON, ConfigLive, SchedulingRunner}
   alias CadenceWeb.Console.ContactChanges
   alias CadenceWeb.Console.FleetPush
   alias CadenceWeb.Console.LimitTransitions
@@ -93,6 +93,11 @@ defmodule CadenceWeb.Console.MissionChannel do
     end
   end
 
+  def handle_info({:scheduling_progress, progress}, socket) do
+    push(socket, "scheduling_progress", ConfigJSON.encode(progress))
+    {:noreply, mark(socket, "contacts")}
+  end
+
   def handle_info({:change_set_progress, set_id, step}, socket) do
     push(socket, "change_set_progress", ConfigLive.progress_payload(set_id, step))
     {:noreply, socket}
@@ -157,6 +162,7 @@ defmodule CadenceWeb.Console.MissionChannel do
     end)
 
     :ok = LimitTransitions.subscribe(mission_id)
+    :ok = SchedulingRunner.subscribe(mission_id)
     :ok = ContactChanges.subscribe(mission_id)
     RuntimeInvalidation.subscribe(%{organization_id: organization_id, mission_id: mission_id})
   end

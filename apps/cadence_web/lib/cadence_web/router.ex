@@ -796,6 +796,9 @@ defmodule CadenceWeb.Router do
       # -- Events and scheduling (owner: api, DECISIONS #26). Contracts: ops.md, scheduling.md
       get("/events", EventController, :index)
       get("/events/density", EventController, :density)
+      post("/contact-plans/drafts", ContactDraftController, :create)
+      get("/contact-plans/drafts/:run_id", ContactDraftController, :show)
+      post("/contact-plans/drafts/:run_id/continue", ContactDraftController, :continue)
       get("/contact-plans", ContactPlanController, :index)
       get("/contact-plans/:plan_id", ContactPlanController, :show)
 
