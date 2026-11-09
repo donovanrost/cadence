@@ -12,6 +12,7 @@ export const missionResources = [
   "data_sources",
   "events",
   "limits",
+  "pass_results",
   "settings",
   "spacecraft",
   "stations",

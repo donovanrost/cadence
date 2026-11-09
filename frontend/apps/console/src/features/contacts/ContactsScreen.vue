@@ -117,6 +117,7 @@ const meta = computed(() => {
 const tabs = [
   { key: "live", label: "Live", to: { name: "ops.contacts" } },
   { key: "plan", label: "Plan", to: { name: "ops.contacts.plan" } },
+  { key: "review", label: "Review", to: { name: "ops.contacts.review" } },
 ];
 </script>
 
