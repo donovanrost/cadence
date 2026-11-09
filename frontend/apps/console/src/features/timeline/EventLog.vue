@@ -33,11 +33,11 @@ const spacecraftOf = (members: readonly MissionEvent[]) =>
       >
         <details v-if="members.length" class="inline">
           <summary class="cursor-pointer">
-            {{ label }} ·
+            {{ label }}
             <span class="font-mono">{{
               spacecraftOf(members).length
-                ? plural(spacecraftOf(members).length, "spacecraft", "spacecraft")
-                : plural(members.length, "event")
+                ? `· ${plural(spacecraftOf(members).length, "spacecraft", "spacecraft")}`
+                : `× ${members.length}`
             }}</span>
           </summary>
           <span class="flex flex-wrap gap-x-3 pt-1 font-mono text-sm">

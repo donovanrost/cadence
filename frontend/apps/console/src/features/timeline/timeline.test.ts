@@ -5,6 +5,7 @@ import {
   byHour,
   densityBars,
   densityBucketS,
+  kindLabel,
   needsSpacecraftPrefix,
   severityState,
   subjectLink,
@@ -135,7 +136,7 @@ describe("fan-out on kind + minute (ux timeline 7/8)", () => {
     });
     const [g] = byHour([1, 2, 3, 4].map(completed));
     expect(g?.rows).toHaveLength(1);
-    expect(g?.rows[0]?.label).toBe("Realized contact interval");
+    expect(g?.rows[0]?.label).toBe("Contacts ended (not verified)");
 
     const canceled = (n: number, severity: MissionEvent["severity"]) => ({
       ...ev(`c${n}`, `2026-11-09T10:47:0${n}Z`, severity),
@@ -151,5 +152,9 @@ describe("fan-out on kind + minute (ux timeline 7/8)", () => {
     expect(c?.rows).toHaveLength(1);
     expect(c?.rows[0]?.members).toHaveLength(4);
     expect(c?.rows[0]?.event.severity).toBe("caution");
+    expect(c?.rows[0]?.label).toBe("Contacts canceled by the provider");
+    expect(kindLabel({ ...canceled(1, "info"), raw_kind: "station_went_dark" })).toBe(
+      "Station went dark",
+    );
   });
 });

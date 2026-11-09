@@ -76,10 +76,27 @@ const RANK: Readonly<Record<EventSeverity, number>> = {
   nominal: 1,
   info: 0,
 };
-const kindLabel = (e: MissionEvent) => {
-  const w = (e.raw_kind ?? e.kind).replaceAll("_", " ");
-  return w.charAt(0).toUpperCase() + w.slice(1);
+/**
+ * Fold labels in operator words (ux timeline 11). "Ended (not verified)": a contact's end is the
+ * booking's, not proof of a flown pass (S9). Unknown kinds fall back to the sentence-case key.
+ */
+const FOLD_WORDS: Readonly<Record<string, string>> = {
+  realized_contact_interval: "Contacts ended (not verified)",
+  scheduled_contact_interval: "Contacts scheduled",
+  scheduled_contact_canceled: "Contacts canceled by the provider",
+  limit_violation: "Limit violations",
+  binding_set_activated: "Configurations activated",
+  source_watermark_advanced: "Data sources caught up",
+  catalog_revision_registered: "Catalog revisions registered",
+  dashboard_published: "Dashboards published",
 };
+export function kindLabel(e: MissionEvent): string {
+  const key = e.raw_kind ?? e.kind;
+  const known = FOLD_WORDS[key];
+  if (known) return known;
+  const w = key.replaceAll("_", " ");
+  return w.charAt(0).toUpperCase() + w.slice(1);
+}
 
 /**
  * Fan-out folds on (raw kind, minute), independent of the sentence: server sentences name each
