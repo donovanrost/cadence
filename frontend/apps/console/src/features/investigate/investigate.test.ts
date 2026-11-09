@@ -1,3 +1,4 @@
+import { logLines } from "./eventLog.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { formatLimitLike, formatValue, type Alarm } from "@/features/alarms/index.ts";
@@ -192,5 +193,44 @@ describe("hero status (ux review fix 1)", () => {
   it("formats a rate with two decimals and a real minus", () => {
     expect(formatRate(-0.4271)).toBe("−0.43");
     expect(formatRate(0.5)).toBe("+0.50");
+  });
+});
+
+describe("event log lines (B2)", () => {
+  const mission = {
+    id: "m1",
+    at: "2026-11-08T02:08:11Z",
+    kind: "limit" as const,
+    raw_kind: "limit_violation",
+    severity: "critical" as const,
+    text: "VBAT crossed red low",
+    detail: null,
+    spacecraft: null,
+    refs: { alarm_id: null, point_id: "EPS.VBAT", command_request_id: null, contact_id: null },
+  };
+  const raised = {
+    id: "e1",
+    kind: "raised" as const,
+    actor: null,
+    at: "2026-11-08T02:08:11Z",
+    payload: {},
+  };
+  const acked = {
+    id: "e2",
+    kind: "acknowledged" as const,
+    actor: { kind: "user", id: "u", name: "Mira K." },
+    at: "2026-11-08T02:10:00Z",
+    payload: {},
+  };
+
+  it("merges lifecycle actions into mission events, newest first, without duplicates", () => {
+    expect(logLines([mission], [raised, acked]).map((l) => l.text)).toEqual([
+      "Acknowledged by Mira K.",
+      "VBAT crossed red low",
+    ]);
+  });
+
+  it("falls back to the whole episode history without the mission read", () => {
+    expect(logLines(null, [raised, acked])).toHaveLength(2);
   });
 });

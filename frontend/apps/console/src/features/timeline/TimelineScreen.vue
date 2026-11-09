@@ -45,7 +45,7 @@ const density = useRemoteQuery(key, (k, signal) => {
   const w = windowOf(r);
   return fetchDensity(m, w, densityBucketS(w.to.getTime() - w.from.getTime()), signal);
 });
-useMissionInvalidation(missionId, ["events"], () => {
+useMissionInvalidation(missionId, ["events", "alarms"], () => {
   events.refetch();
   density.refetch();
 });

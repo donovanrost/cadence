@@ -10,7 +10,8 @@ import AlarmTrendPanel from "./AlarmTrendPanel.vue";
 import EventLogPanel from "./EventLogPanel.vue";
 import EpisodeBar from "./EpisodeBar.vue";
 import SistersPanel from "./SistersPanel.vue";
-import { useEpisodeDetail, useSpacecraftEpisodes } from "./useInvestigate.ts";
+import { logLines } from "./eventLog.ts";
+import { useEpisodeDetail, useSpacecraftEpisodes, useSpacecraftEvents } from "./useInvestigate.ts";
 import { DEFAULT_RANGE, pickAlarm, type RangeKey } from "./model.ts";
 
 /** J2 · Investigate tab: B1 trend, B2 events, B4 same point in limits, technical details. */
@@ -51,6 +52,16 @@ const episode = computed(() =>
 const permissions = computed(() =>
   episodes.state.value.status === "ready" ? episodes.state.value.value.permissions : [],
 );
+const events = useSpacecraftEvents(
+  missionId,
+  computed(() => props.sc.id),
+);
+const lines = computed(() =>
+  logLines(
+    events.state.value.status === "ready" ? events.state.value.value.events : null,
+    episode.value?.events ?? null,
+  ),
+);
 function refreshEpisode() {
   episodes.refetch();
   detail.refetch();
@@ -88,7 +99,12 @@ const details = computed(() => [
           <EpisodeBar :episode="episode" :permissions="permissions" @changed="refreshEpisode" />
         </template>
       </AlarmTrendPanel>
-      <EventLogPanel class="min-h-[120px] flex-1" :events="episode?.events ?? null" />
+      <EventLogPanel
+        class="min-h-[120px] flex-1"
+        :state="events.state.value"
+        :lines="lines"
+        @retry="events.refetch"
+      />
     </div>
     <aside class="flex flex-col gap-2.5 console:min-h-0" aria-label="Context">
       <SistersPanel class="min-h-[120px] flex-1" :sc="sc" :fleet="fleet" :alarm="alarm" />

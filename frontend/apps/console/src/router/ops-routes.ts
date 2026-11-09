@@ -102,7 +102,7 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "timeline",
     name: "ops.timeline",
-    component: pending,
+    component: () => import("@/features/timeline/TimelineScreen.vue"),
     meta: { mode: "ops", nav: "timeline", title: "Timeline" },
   },
 ];

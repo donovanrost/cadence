@@ -1,6 +1,6 @@
 import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
 
-/** Proposed contracts (plans/ops.md, "Events" and "Event density"); not implemented yet. */
+/** Contracts: docs/apogee/api/ops.md, `GET …/events` and `…/events/density` (owner api, DECISIONS #26). */
 
 export const eventKinds = [
   "limit",
@@ -18,8 +18,10 @@ const event = d.object({
   id: d.token,
   at: d.timestamp,
   kind: d.oneOf(eventKinds),
+  raw_kind: d.nullable(d.string),
   severity: d.oneOf(eventSeverities),
   text: d.string,
+  detail: d.nullable(d.string),
   spacecraft: d.nullable(d.object({ id: d.token, name: d.string, scid: d.integer })),
   refs: d.object({
     alarm_id: d.nullable(d.token),
@@ -44,7 +46,11 @@ const bucket = d.object({
   nominal: d.integer,
   info: d.integer,
 });
-export const densityReader = d.object({ bucket_s: d.integer, buckets: d.array(bucket, 2_000) });
+export const densityReader = d.object({
+  bucket_s: d.integer,
+  buckets: d.array(bucket, 2_000),
+  truncated: d.boolean,
+});
 export type Density = Decoded<typeof densityReader>;
 
 export type EventQuery = Readonly<{

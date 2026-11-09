@@ -3,6 +3,7 @@ import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { fetchAlarms, fetchEpisode, fetchEpisodes } from "@/features/alarms/index.ts";
 import { FLEET_REFETCH_GAP_MS, throttle } from "@/features/fleet/index.ts";
+import { fetchEvents } from "@/features/timeline/index.ts";
 import { fetchHistory, fetchLimitIntervals } from "./api.ts";
 import { rangeWindow, type RangeKey } from "./model.ts";
 
@@ -100,5 +101,23 @@ export function useEpisodeDetail(missionId: Ref<string>, episodeId: Ref<string |
     return fetchEpisode(m, e, signal);
   });
   useMissionInvalidation(missionId, ["alarms"], query.refetch);
+  return query;
+}
+
+/** The spacecraft's mission events over the last 24 h (B2), newest first. */
+export function useSpacecraftEvents(missionId: Ref<string>, spacecraftId: Ref<string | null>) {
+  const key = computed(() =>
+    keyOf(spacecraftId.value ? { m: missionId.value, sc: spacecraftId.value } : null),
+  );
+  const query = useRemoteQuery(key, (k, signal) => {
+    const { m = "", sc = "" } = parse(k);
+    const to = new Date();
+    return fetchEvents(
+      m,
+      { from: new Date(to.getTime() - 86_400_000), to, spacecraftId: sc },
+      signal,
+    );
+  });
+  useMissionInvalidation(missionId, ["events", "alarms"], query.refetch);
   return query;
 }

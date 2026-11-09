@@ -8,7 +8,9 @@ const ev = (id: string, at: string, severity: MissionEvent["severity"] = "info")
   at,
   kind: "limit",
   severity,
+  raw_kind: "limit_violation",
   text: "VBAT crossed red low",
+  detail: null,
   spacecraft: null,
   refs: { alarm_id: null, point_id: null, command_request_id: null, contact_id: null },
 });
@@ -44,6 +46,7 @@ describe("timeline", () => {
     expect(densityBucketS(3_600_000)).toBe(60);
     const { bars, max } = densityBars({
       bucket_s: 900,
+      truncated: false,
       buckets: [{ t: "2026-11-08T00:00:00Z", critical: 1, caution: 0, nominal: 0, info: 3 }],
     });
     expect(max).toBe(4);
