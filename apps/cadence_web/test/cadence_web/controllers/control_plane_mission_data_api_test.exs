@@ -7,8 +7,8 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
   alias Cadence.Jobs
-  alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.Jobs.Runner, as: JobRunner
+  alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.Runtime.MissionModelPlanDecoder
 
   defp assert_dev_telemetry_ingress(
