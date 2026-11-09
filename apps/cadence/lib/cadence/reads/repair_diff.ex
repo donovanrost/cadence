@@ -13,6 +13,10 @@ defmodule Cadence.Reads.RepairDiff do
   current bookings the repair keeps. Every other candidate pass is a new booking, even one on
   the same freed opportunity as a lost pass (new item, new idempotency key), so `moved` and
   `added` together are what Apply sends.
+
+  `covered` (DECISIONS #56): lost passes a live single booking covers. The repair holds them
+  like current bookings, so they're locked, but they're listed apart with the covering
+  `provider_reservation_id` ("covered by a single booking") instead of as kept.
   """
 
   alias Cadence.Comms.StationRefs
@@ -23,9 +27,9 @@ defmodule Cadence.Reads.RepairDiff do
           [ContactOpportunitySnapshot.t()],
           StationRefs.index()
         ) :: map()
-  def diff(before, after_passes, stations \\ %{}, locked \\ nil)
+  def diff(before, after_passes, stations \\ %{}, locked \\ nil, covered \\ %{})
 
-  def diff(before, after_passes, stations, nil) do
+  def diff(before, after_passes, stations, nil, _covered) do
     before_keys = MapSet.new(before, &key/1)
     after_keys = MapSet.new(after_passes, &key/1)
 
@@ -37,15 +41,26 @@ defmodule Cadence.Reads.RepairDiff do
     )
   end
 
-  def diff(before, after_passes, stations, %MapSet{} = locked) do
+  def diff(before, after_passes, stations, %MapSet{} = locked, covered) do
     locked? = &MapSet.member?(locked, &1.contact_opportunity_snapshot_id)
+    covered? = &Map.has_key?(covered, &1.contact_opportunity_snapshot_id)
+    {held, kept} = after_passes |> Enum.filter(locked?) |> Enum.split_with(covered?)
 
-    build(
-      Enum.filter(after_passes, locked?),
-      Enum.reject(before, locked?),
-      Enum.reject(after_passes, locked?),
-      stations
-    )
+    kept
+    |> build(Enum.reject(before, locked?), Enum.reject(after_passes, locked?), stations)
+    |> put_covered(held, covered, stations)
+  end
+
+  defp put_covered(diff, held, covered, stations) do
+    passes =
+      Enum.map(
+        held,
+        &Map.put(pass(&1, stations), :covered_by, covered[&1.contact_opportunity_snapshot_id])
+      )
+
+    diff
+    |> Map.put(:covered, passes)
+    |> put_in([:totals, :covered], length(passes))
   end
 
   defp build(kept, gone, new, stations) do

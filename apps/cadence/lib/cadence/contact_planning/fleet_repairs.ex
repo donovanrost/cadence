@@ -15,8 +15,11 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
     FleetPlanningPolicies,
     FleetPlanningRun,
     FleetPlanningRuns,
-    RepairChain
+    RepairChain,
+    RepairPairing
   }
+
+  alias Cadence.Contacts.SingleBookings
 
   @repairable_plan_states [:executing, :partially_reserved, :failed]
 
@@ -26,6 +29,7 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
           required(:plan_version) => struct(),
           required(:locked_commitments) => [struct()],
           required(:chain) => RepairChain.t(),
+          required(:covered) => %{binary() => binary()},
           required(:repair_attempt) => pos_integer()
         }
 
@@ -120,7 +124,8 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
          {:ok, chain} <- RepairChain.load(organization_id, mission_id, plan_id),
          :ok <- repairable(plan, chain),
          {:ok, attempt} <- repair_attempt(organization_id, mission_id, run),
-         locked <- source_locked_commitments(plan, chain) do
+         covered = covered_by_single_bookings(organization_id, mission_id, run, chain),
+         locked <- source_locked_commitments(plan, chain, covered) do
       {:ok,
        %{
          run: run,
@@ -128,6 +133,7 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
          plan_version: current_version,
          locked_commitments: locked,
          chain: chain,
+         covered: covered,
          repair_attempt: attempt
        }}
     end
@@ -139,10 +145,30 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
   # Also kept (review R3): a pass a chain version locks that no item in the chain booked, so
   # nothing says it was lost (a lock carried from elsewhere). A locked pass whose booking is in
   # the chain follows that booking: live stays locked, lost is re-planned.
-  defp source_locked_commitments(plan, chain) do
+  # DECISIONS #56: a lost booking a live single booking covers is held like a current
+  # booking, so the planner counts its need as met and doesn't book it again. Its snapshot can
+  # only be held when the source plan selected it (the planner validates locks against it).
+  defp source_locked_commitments(plan, chain, covered) do
+    selected =
+      plan.organization_id
+      |> ContactPlans.selected_snapshots(
+        plan.mission_id,
+        plan.contact_plan_id,
+        chain.versions[plan.contact_plan_id]
+      )
+      |> MapSet.new(& &1.contact_opportunity_snapshot_id)
+
+    covered_items =
+      Enum.filter(
+        chain.items,
+        &(Map.has_key?(covered, RepairChain.lost_key(&1)) and
+            MapSet.member?(selected, &1.contact_opportunity_snapshot_id))
+      )
+
     live =
       chain
       |> RepairChain.live_items()
+      |> Enum.concat(covered_items)
       |> MapSet.new(&{&1.contact_plan_id, &1.contact_opportunity_snapshot_id})
 
     booked = MapSet.new(chain.items, & &1.contact_opportunity_snapshot_id)
@@ -161,6 +187,18 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
     end)
     |> Enum.uniq_by(& &1.contact_opportunity_snapshot_id)
     |> Enum.sort_by(&{&1.starts_at, &1.contact_opportunity_snapshot_id})
+  end
+
+  defp covered_by_single_bookings(organization_id, mission_id, run, chain) do
+    case SingleBookings.live(organization_id, mission_id, run.horizon_start, run.horizon_end) do
+      [] ->
+        %{}
+
+      singles ->
+        chain
+        |> RepairChain.lost_booking_inputs(organization_id, mission_id)
+        |> RepairPairing.cover(singles)
+    end
   end
 
   defp held_locks(plan, plan_id, version, booked) do
@@ -258,12 +296,12 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
       "repair_attempt" => source.repair_attempt,
       "source_plan_content_sha256" => source.plan_version.content_sha256,
       # qa #30: what this repair replaces, paired with its new passes at materialization.
+      # Lost bookings a single booking covers (#56) are recorded apart and aren't replaced.
       "lost_bookings" =>
-        RepairChain.lost_booking_inputs(
-          source.chain,
-          source.plan.organization_id,
-          source.plan.mission_id
-        ),
+        source.chain
+        |> RepairChain.lost_booking_inputs(source.plan.organization_id, source.plan.mission_id)
+        |> Enum.reject(&Map.has_key?(source.covered, &1["key"])),
+      "covered" => source.covered,
       "locked_commitments" =>
         Enum.map(source.locked_commitments, fn snapshot ->
           %{

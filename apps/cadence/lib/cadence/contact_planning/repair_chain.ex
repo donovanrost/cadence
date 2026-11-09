@@ -33,7 +33,8 @@ defmodule Cadence.ContactPlanning.RepairChain do
           run_id: binary(),
           source: binary(),
           plan_id: binary(),
-          replaces: %{binary() => binary()}
+          replaces: %{binary() => binary()},
+          covered: %{binary() => binary()}
         }
   @type t :: %{
           root: binary(),
@@ -129,7 +130,8 @@ defmodule Cadence.ContactPlanning.RepairChain do
       %{
         before: before,
         after: ContactPlans.selected_snapshots(org, mission, plan_id, version.version),
-        locked: MapSet.new(version.locked_snapshot_ids)
+        locked: MapSet.new(version.locked_snapshot_ids),
+        covered: covered_snapshots(chain, run)
       }
     else
       _missing -> nil
@@ -137,6 +139,18 @@ defmodule Cadence.ContactPlanning.RepairChain do
   end
 
   def review_passes(_run), do: nil
+
+  # `%{snapshot_id => provider_reservation_id}`: the lost passes this run found covered by a
+  # single booking (#56), for the review's 'covered by a single booking'.
+  defp covered_snapshots(chain, run) do
+    covered = get_in(run.input_document || %{}, ["repair", "covered"]) || %{}
+
+    for item <- chain.items,
+        reservation_id = covered[lost_key(item)],
+        reservation_id != nil,
+        into: %{},
+        do: {item.contact_opportunity_snapshot_id, reservation_id}
+  end
 
   defp started_from?(item, replaced_elsewhere),
     do:
@@ -236,10 +250,25 @@ defmodule Cadence.ContactPlanning.RepairChain do
     by_plan_snapshot =
       Map.new(chain.items, &{{&1.contact_plan_id, &1.contact_opportunity_snapshot_id}, &1})
 
-    for link <- chain.links, {snapshot_id, lost} <- link.replaces, into: %{} do
-      item = Map.get(by_plan_snapshot, {link.plan_id, snapshot_id})
-      {lost, %{plan_id: link.plan_id, reservation_id: item && item.provider_reservation_id}}
-    end
+    repaired =
+      for link <- chain.links, {snapshot_id, lost} <- link.replaces, into: %{} do
+        item = Map.get(by_plan_snapshot, {link.plan_id, snapshot_id})
+
+        {lost,
+         %{
+           kind: "repair",
+           plan_id: link.plan_id,
+           reservation_id: item && item.provider_reservation_id
+         }}
+      end
+
+    # DECISIONS #56: a live single booking covers it (no plan).
+    covered =
+      for link <- chain.links, {lost, reservation_id} <- link.covered, into: %{} do
+        {lost, %{kind: "single_booking", plan_id: nil, reservation_id: reservation_id}}
+      end
+
+    Map.merge(covered, repaired)
   end
 
   @doc "Whether an execution item is a lost booking."

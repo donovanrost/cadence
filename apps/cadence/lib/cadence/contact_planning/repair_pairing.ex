@@ -14,12 +14,18 @@ defmodule Cadence.ContactPlanning.RepairPairing do
 
   alias Cadence.ContactPlanning.ContactPlans
 
-  @doc "`%{\"replaces\" => pairs}` for a repair run's candidate version, else `%{}`."
-  @spec summary(struct(), struct()) :: map()
-  def summary(
-        %{input_document: %{"repair" => %{"lost_bookings" => [_ | _] = lost}}} = run,
-        version
-      ) do
+  @doc """
+  What a repair run's candidate version persists on the run: `"replaces"` (`%{new snapshot_id =>
+  lost key}`) and, when single bookings cover lost ones (#56), `"covered"` (`%{lost key =>
+  provider_reservation_id}`, decided at repair start and recorded in its input).
+  """
+  @spec summary(struct() | map(), struct()) :: map()
+  def summary(run, version), do: Map.merge(replaces(run, version), covered(run))
+
+  defp replaces(
+         %{input_document: %{"repair" => %{"lost_bookings" => [_ | _] = lost}}} = run,
+         version
+       ) do
     locked = MapSet.new(version.locked_snapshot_ids)
 
     fresh =
@@ -35,22 +41,51 @@ defmodule Cadence.ContactPlanning.RepairPairing do
         }
       )
 
-    lost =
-      Enum.map(lost, fn booking ->
-        {:ok, starts_at, _} = DateTime.from_iso8601(booking["starts_at"])
-
-        %{
-          id: booking["key"],
-          requirement_id: booking["requirement_id"],
-          spacecraft_id: booking["spacecraft_id"],
-          starts_at: starts_at
-        }
-      end)
-
-    %{"replaces" => pair(lost, fresh)}
+    %{"replaces" => pair(Enum.map(lost, &lost_entry/1), fresh)}
   end
 
-  def summary(_run, _version), do: %{}
+  defp replaces(_run, _version), do: %{}
+
+  defp covered(%{input_document: %{"repair" => %{"covered" => covered}}})
+       when is_map(covered) and map_size(covered) > 0,
+       do: %{"covered" => covered}
+
+  defp covered(_run), do: %{}
+
+  @doc """
+  Which lost bookings live single bookings cover (DECISIONS #56): `%{lost key =>
+  provider_reservation_id}`. The same rules as `pair/2`; a single booking has no requirement,
+  so it pairs within its spacecraft, nearest start first, and the rest stay unpaired.
+  """
+  @spec cover([map()], [map()]) :: %{binary() => binary()}
+  def cover(lost_inputs, single_bookings) do
+    singles =
+      Enum.map(
+        single_bookings,
+        &%{
+          id: &1.provider_reservation_id,
+          requirement_id: nil,
+          spacecraft_id: &1.spacecraft_id,
+          starts_at: &1.starts_at
+        }
+      )
+
+    lost_inputs
+    |> Enum.map(&lost_entry/1)
+    |> pair(singles)
+    |> Map.new(fn {reservation_id, lost_key} -> {lost_key, reservation_id} end)
+  end
+
+  defp lost_entry(booking) do
+    {:ok, starts_at, _} = DateTime.from_iso8601(booking["starts_at"])
+
+    %{
+      id: booking["key"],
+      requirement_id: booking["requirement_id"],
+      spacecraft_id: booking["spacecraft_id"],
+      starts_at: starts_at
+    }
+  end
 
   @doc """
   Pairs `%{id, requirement_id, spacecraft_id, starts_at}` lists: `%{new id => lost id}`. Same

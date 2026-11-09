@@ -2,7 +2,8 @@ defmodule Cadence.ContactPlanning.RepairLinks do
   @moduledoc """
   Repair runs as links between plans (`RepairChain`): each run that proposed a candidate plan
   from a source plan, with the pairing it persisted (`result_summary_document["replaces"]`,
-  `%{new snapshot_id => lost key}`), oldest first.
+  `%{new snapshot_id => lost key}`) and the lost bookings single bookings cover
+  (`"covered"`, `%{lost key => provider_reservation_id}`, #56), oldest first.
   """
 
   import Ecto.Query
@@ -11,7 +12,13 @@ defmodule Cadence.ContactPlanning.RepairLinks do
   alias Cadence.Repo
 
   @spec list(binary(), binary()) :: [
-          %{run_id: binary(), source: binary(), plan_id: binary(), replaces: map()}
+          %{
+            run_id: binary(),
+            source: binary(),
+            plan_id: binary(),
+            replaces: map(),
+            covered: map()
+          }
         ]
   def list(organization_id, mission_id) do
     FleetPlanningRunRow
@@ -28,11 +35,14 @@ defmodule Cadence.ContactPlanning.RepairLinks do
       replaces: r.result_summary_document
     })
     |> Repo.all()
-    |> Enum.map(&%{&1 | replaces: replaces(&1.replaces)})
+    |> Enum.map(&Map.merge(&1, %{replaces: replaces(&1.replaces), covered: covered(&1.replaces)}))
   end
 
   defp replaces(%{"replaces" => replaces}) when is_map(replaces), do: replaces
   defp replaces(_summary), do: %{}
+
+  defp covered(%{"covered" => covered}) when is_map(covered), do: covered
+  defp covered(_summary), do: %{}
 
   @doc "Persists a repair run's pairing (`RepairChain.backfill/2` for runs that predate it)."
   @spec put_replaces(binary(), map()) :: :ok | {:error, term()}

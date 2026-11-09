@@ -38,4 +38,38 @@ defmodule Cadence.ContactPlanning.RepairPairingTest do
     assert RepairPairing.pair(lost, [pass("other-craft", at(10, 5), spacecraft: "sc-9")]) ==
              %{}
   end
+
+  describe "cover/2 (DECISIONS #56)" do
+    defp lost_input(key, at, spacecraft, requirement \\ "req-a"),
+      do: %{
+        "key" => key,
+        "starts_at" => DateTime.to_iso8601(at),
+        "spacecraft_id" => spacecraft,
+        "requirement_id" => requirement
+      }
+
+    defp single(id, at, spacecraft),
+      do: %{provider_reservation_id: id, spacecraft_id: spacecraft, starts_at: at}
+
+    test "a single booking covers its spacecraft's nearest lost booking, even with a known requirement" do
+      lost = [
+        lost_input("lost-0054", at(0, 54), "sc-004"),
+        lost_input("lost-2018", at(20, 18), "sc-004")
+      ]
+
+      assert RepairPairing.cover(lost, [single("res-single", at(1, 5), "sc-004")]) ==
+               %{"lost-0054" => "res-single"}
+    end
+
+    test "another spacecraft's booking covers nothing, and extra singles stay unpaired" do
+      lost = [lost_input("lost-a", at(9, 0), "sc-004")]
+
+      assert RepairPairing.cover(lost, [single("res-other", at(9, 0), "sc-005")]) == %{}
+
+      assert RepairPairing.cover(lost, [
+               single("res-near", at(9, 10), "sc-004"),
+               single("res-far", at(15, 0), "sc-004")
+             ]) == %{"lost-a" => "res-near"}
+    end
+  end
 end

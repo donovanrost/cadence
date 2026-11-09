@@ -96,12 +96,13 @@ defmodule CadenceWeb.Console.ContactDraftController do
       nil ->
         nil
 
-      %{before: before, after: after_passes, locked: locked} ->
+      %{before: before, after: after_passes, locked: locked} = review ->
         RepairDiff.diff(
           before,
           after_passes,
           StationRefs.index(org_id(conn), mission_id(conn)),
-          locked
+          locked,
+          Map.get(review, :covered, %{})
         )
     end
   end

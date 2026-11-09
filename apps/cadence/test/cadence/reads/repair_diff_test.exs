@@ -58,7 +58,7 @@ defmodule Cadence.Reads.RepairDiffTest do
 
     diff = RepairDiff.diff(before, after_passes, %{}, MapSet.new(["kept1"]))
 
-    assert diff.totals == %{kept: 1, moved: 1, dropped: 0, added: 0}
+    assert diff.totals == %{kept: 1, moved: 1, dropped: 0, added: 0, covered: 0}
     assert [%{snapshot_id: "kept1"}] = diff.kept
 
     assert [
