@@ -47,9 +47,18 @@ const pass = d.object({
   ended_by: d.optional(
     d.nullable(d.object({ kind: d.string, id: d.nullable(d.string), name: d.nullable(d.string) })),
   ),
-  /** qa #30: the applied repair that replaced this lost booking; null while still lost. */
+  /**
+   * qa #30 / domain #56: what replaced this lost booking (an applied repair, or a single booking
+   * with plan_id null); null while still lost.
+   */
   replaced_by: d.optional(
-    d.nullable(d.object({ plan_id: d.token, reservation_id: d.nullable(d.token) })),
+    d.nullable(
+      d.object({
+        kind: d.optional(d.nullable(d.string)),
+        plan_id: d.nullable(d.token),
+        reservation_id: d.nullable(d.token),
+      }),
+    ),
   ),
   /** U32 (contacts.md d2632794): how the booking is known; optional until api-ops ships it. */
   booking_evidence: d.optional(d.nullable(d.oneOf(["provider", "operator_attested"] as const))),

@@ -57,6 +57,18 @@ describe("impactOf", () => {
       ["haw", "Marked not booked by Mira K."],
     ]);
   });
+  it("drops a lost booking a single booking covered (domain #56: replaced_by.plan_id null)", () => {
+    const rows = read([
+      {
+        ...pass("single", "canceled", "r1", "sc-4", "KIR"),
+        replaced_by: { kind: "single_booking", plan_id: null, reservation_id: "res-9" },
+      },
+      pass("still", "canceled", "r1", "sc-5", "KIR"),
+    ]);
+    expect(impactOf(rows, { id: "r1", repair_of: null }, false).rows.map((r) => r.id)).toEqual([
+      "still",
+    ]);
+  });
   it("uses the server's chain when the plan carries one (api 22d83acd)", () => {
     const rows = read([
       pass("root", "canceled", "r0", "sc-1", "FAI"),

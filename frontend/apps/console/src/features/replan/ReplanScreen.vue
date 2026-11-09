@@ -163,7 +163,10 @@ const context = computed(() => {
   const s = source.value;
   if (s.status !== "ready") return "Re-plan";
   const state = s.value.state.replaceAll("_", " ");
-  if (!proposal.value) return `Re-plan · live plan r${s.value.version} · ${state}`;
+  if (!proposal.value)
+    return repaired.value
+      ? `Re-plan · plan r${s.value.version} · re-planned`
+      : `Re-plan · live plan r${s.value.version} · ${state}`;
   const started = repair.value.status === "ready" ? repair.value.value.run.started_at : null;
   const proposed = started
     ? `proposed ${started.slice(11, 16)}Z${byAuthor(proposal.value.plan?.author ?? null)}`
