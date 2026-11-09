@@ -20,6 +20,11 @@ const props = defineProps<{
   tableLink?: boolean;
   /** Hide the footer plane picker when the owner already offers one (Fleet filter row). */
   noPlanePicker?: boolean;
+  /**
+   * `selection` (Compose targeting): matching cells are filled white, the rest empty; health
+   * colors are off so "selected" never reads as a state (ux Compose review 3).
+   */
+  mode?: "health" | "selection";
   /** Filter: non-matching cells are drawn at 25% opacity, never hidden (fleet first). */
   matches?: ((sc: FleetSpacecraft) => boolean) | undefined;
 }>();
@@ -75,6 +80,8 @@ const CELL: Readonly<Record<FleetSpacecraft["state"], string>> = {
 
 function cellClass(sc: FleetSpacecraft | null): readonly string[] {
   if (sc === null) return ["bg-cell-empty"];
+  if (props.mode === "selection")
+    return [props.matches?.(sc) ? "bg-readout" : "bg-cell-empty", "cursor-pointer"];
   const dim = props.matches && !props.matches(sc) ? "opacity-25" : "";
   // In contact: the white ring replaces any other ring (a crit cell keeps its red fill).
   if (sc.in_contact === true)

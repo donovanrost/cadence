@@ -40,15 +40,17 @@ const open = ref<string | null>(null);
             type="button"
             class="max-md:hit-44 cursor-pointer font-mono font-semibold text-readout"
             :aria-expanded="open === item.key"
+            :aria-label="`${item.command.name}: edit arguments`"
             @click="open = open === item.key ? null : item.key"
           >
             {{ item.command.name }}
           </button>
           <ApTag v-if="item.command.hazardous" state="crit" label="Hazardous" />
           <ApTag v-if="!checkItem(item).ok" state="caution" label="Needs values" />
-          <span class="min-w-0 flex-1 truncate font-mono text-sm text-text-3">{{
+          <span class="order-last min-w-0 basis-full truncate font-mono text-sm text-text-3">{{
             argSummary(item).join(" · ")
           }}</span>
+          <span aria-hidden="true" class="flex-1" />
           <ApButton
             size="compact"
             variant="ghost"

@@ -93,20 +93,28 @@ const byId = computed(() => new Map(props.fleet.map((sc) => [sc.id, sc])));
           >{{ byId.get(id)?.name ?? id }}</ApChip
         >
       </div>
-      <FleetMatrix
-        :spacecraft="fleet"
-        :selected-plane="query.plane"
-        :matches="(sc) => ids.has(sc.id)"
-        no-plane-picker
-        @open="
-          (sc) =>
-            set({
-              explicit: query.explicit.includes(sc.id)
-                ? query.explicit
-                : [...query.explicit, sc.id],
-            })
-        "
-      />
+      <details :open="targets.length === 0">
+        <summary class="ap-label cursor-pointer">
+          Fleet matrix · click a cell to add or remove
+        </summary>
+        <div class="pt-2">
+          <FleetMatrix
+            mode="selection"
+            :spacecraft="fleet"
+            :selected-plane="query.plane"
+            :matches="(sc) => ids.has(sc.id)"
+            no-plane-picker
+            @open="
+              (sc) =>
+                set({
+                  explicit: query.explicit.includes(sc.id)
+                    ? query.explicit
+                    : [...query.explicit, sc.id],
+                })
+            "
+          />
+        </div>
+      </details>
       <details v-if="targets.length">
         <summary class="ap-label cursor-pointer">
           Show {{ plural(targets.length, "target") }}

@@ -2,7 +2,7 @@
 import { computed, onScopeDispose, ref, watch } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
-import { ApButton, ApEmptyState, ApField, ApRemote, ApTag } from "@/ui";
+import { plural, ApButton, ApEmptyState, ApField, ApRemote, ApTag } from "@/ui";
 import { fetchCatalog } from "../api.ts";
 
 /** `+ Add command`: search the active catalog (M17); Enter or click adds the command. */
@@ -74,7 +74,9 @@ function addFirst() {
                 cmd.description ?? ""
               }}</span>
               <ApTag v-if="cmd.hazardous" state="crit" label="Hazardous" />
-              <span class="font-mono text-xs text-text-4">{{ cmd.argument_count }} args</span>
+              <span class="font-mono text-xs text-text-4">{{
+                plural(cmd.argument_count, "arg")
+              }}</span>
             </button>
           </li>
           <li v-if="value.commands.length === 0" class="px-3 py-2 text-md text-text-3">

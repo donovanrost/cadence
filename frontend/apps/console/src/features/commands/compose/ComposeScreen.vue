@@ -105,24 +105,26 @@ const close = computed(() => {
   <ApRemote :state="fleet.state.value" loading-label="LOADING FLEET…" @retry="fleet.refetch">
     <div class="grid min-h-0 flex-1 grid-cols-1 gap-3 console:grid-cols-[minmax(0,1fr)_360px]">
       <div class="flex min-h-0 flex-col gap-3 overflow-auto">
-        <TargetsPanel
-          :fleet="rows"
-          :query="query"
-          :targets="targets"
-          @change="(q) => (query = q)"
-        />
-        <ApCallout v-if="addError" tone="caution"
-          >Couldn't add that command: {{ addError }}</ApCallout
-        >
-        <StackPanel
-          :items="stack"
-          :revision="revision"
-          :adding="adding"
-          @add="onAdd"
-          @change="setValues"
-          @move="(i, by) => (stack = move(stack, i, by))"
-          @remove="(key) => (stack = stack.filter((s) => s.key !== key))"
-        />
+        <div class="grid grid-cols-1 items-start gap-3 console:grid-cols-2">
+          <TargetsPanel
+            :fleet="rows"
+            :query="query"
+            :targets="targets"
+            @change="(q) => (query = q)"
+          />
+          <ApCallout v-if="addError" tone="caution"
+            >Couldn't add that command: {{ addError }}</ApCallout
+          >
+          <StackPanel
+            :items="stack"
+            :revision="revision"
+            :adding="adding"
+            @add="onAdd"
+            @change="setValues"
+            @move="(i, by) => (stack = move(stack, i, by))"
+            @remove="(key) => (stack = stack.filter((s) => s.key !== key))"
+          />
+        </div>
         <ApPanel index="C3" title="GO / NO-GO poll" flush>
           <ApEmptyState
             state="off"
