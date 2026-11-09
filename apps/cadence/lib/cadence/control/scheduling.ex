@@ -220,15 +220,64 @@ defmodule Cadence.Control.Scheduling do
     end)
   end
 
-  @doc "A plan's lifecycle, with `:interrupted` for an `executing` plan nobody is executing."
-  @spec plan_state(binary(), binary(), binary(), atom()) :: atom()
-  def plan_state(organization_id, mission_id, plan_id, :executing) do
+  @doc """
+  A plan's lifecycle as operators see it (DECISIONS #52). An `executing` plan that no session
+  is executing reads by its unfinished items:
+
+  - `:interrupted` when any were never placed (`pending`/`requesting`). Execute resumes those
+    and only re-reads `uncertain` ones; it never re-sends them.
+  - `:unconfirmed` when an `uncertain` item (placed, provider hasn't answered) has waited past
+    the provider confirmation window. It needs operator resolution, not Execute.
+  - `:executing` when every unfinished item is `uncertain` within the window. Nothing to
+    resume; the plan settles when the provider confirms.
+
+  Options: `:now`, `:confirmation_window_ms` (default from `:provider_confirmation_window_ms`).
+  """
+  @spec plan_state(binary(), binary(), binary(), atom(), keyword()) :: atom()
+  def plan_state(organization_id, mission_id, plan_id, lifecycle_state, opts \\ [])
+
+  def plan_state(organization_id, mission_id, plan_id, :executing, opts) do
     if FleetRunLock.key_held?(execution_key(organization_id, mission_id, plan_id)),
       do: :executing,
-      else: :interrupted
+      else: unattended_state(organization_id, mission_id, plan_id, opts)
   end
 
-  def plan_state(_organization_id, _mission_id, _plan_id, lifecycle_state), do: lifecycle_state
+  def plan_state(_organization_id, _mission_id, _plan_id, lifecycle_state, _opts),
+    do: lifecycle_state
+
+  defp unattended_state(organization_id, mission_id, plan_id, opts) do
+    unfinished =
+      organization_id
+      |> plan_items(mission_id, plan_id)
+      |> Enum.filter(&(&1.lifecycle_state in [:pending, :requesting, :uncertain]))
+
+    cutoff =
+      DateTime.add(
+        Keyword.get_lazy(opts, :now, &DateTime.utc_now/0),
+        -Keyword.get(opts, :confirmation_window_ms, confirmation_window_ms()),
+        :millisecond
+      )
+
+    cond do
+      unfinished == [] -> :interrupted
+      Enum.any?(unfinished, &(&1.lifecycle_state != :uncertain)) -> :interrupted
+      Enum.any?(unfinished, &(DateTime.compare(&1.updated_at, cutoff) == :lt)) -> :unconfirmed
+      true -> :executing
+    end
+  end
+
+  defp plan_items(organization_id, mission_id, plan_id) do
+    case approved_version(organization_id, mission_id, plan_id) do
+      {:ok, version, _sha} ->
+        ControlContacts.list_plan_execution(organization_id, mission_id, plan_id, version)
+
+      {:error, _reason} ->
+        []
+    end
+  end
+
+  defp confirmation_window_ms,
+    do: Application.get_env(:cadence, :provider_confirmation_window_ms, :timer.minutes(10))
 
   @doc "The approved version and hash of a plan, for (re-)execution."
   @spec approved_version(binary(), binary(), binary()) ::

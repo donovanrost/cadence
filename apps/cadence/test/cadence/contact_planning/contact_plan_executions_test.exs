@@ -15,6 +15,8 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
   }
 
   alias Cadence.Control.Contacts, as: ControlContacts
+  alias Cadence.Control.Contacts.Store.ContactPlanExecutionItemRow
+  alias Cadence.Control.Scheduling
   alias Cadence.Management.Contacts, as: ManagementContacts
 
   alias Cadence.Contacts.{PathTemplate, ProviderBooking, ProviderReservations}
@@ -463,6 +465,86 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
 
     assert Enum.all?(second.items, &(&1.lifecycle_state == :uncertain))
     refute_received {:provider_mutation, _opportunity_ref}
+  end
+
+  test "an unattended plan awaiting its provider reads executing, then unconfirmed past the window (DECISIONS #52)",
+       context do
+    assert {:ok, %{plan: %{lifecycle_state: :executing}, items: [_, _]}} =
+             execute(context, ambiguous_reserver(self()))
+
+    state = fn opts ->
+      Scheduling.plan_state(
+        context.organization_id,
+        context.mission_id,
+        context.plan.contact_plan_id,
+        :executing,
+        opts
+      )
+    end
+
+    now = DateTime.utc_now()
+    assert state.(now: now) == :executing
+    assert state.(now: DateTime.add(now, 11, :minute)) == :unconfirmed
+
+    assert state.(now: DateTime.add(now, 2, :second), confirmation_window_ms: 1_000) ==
+             :unconfirmed
+  end
+
+  test "Execute on an interrupted plan resumes unplaced items and never re-sends uncertain ones (DECISIONS #52)",
+       context do
+    assert {:ok, %{items: items}} = execute(context, ambiguous_reserver(self()))
+    assert_received {:provider_mutation, _first}
+    assert_received {:provider_mutation, _second}
+
+    # The session died before placing one pass: it never left `pending`.
+    [_uncertain, unplaced] = items
+
+    ContactPlanExecutionItemRow
+    |> where([i], i.contact_plan_execution_item_id == ^unplaced.contact_plan_execution_item_id)
+    |> Repo.update_all(set: [lifecycle_state: "pending", provider_reservation_id: nil])
+
+    Repo.query!("DELETE FROM provider_reservations WHERE provider_reservation_id = $1", [
+      unplaced.provider_reservation_id
+    ])
+
+    assert Scheduling.plan_state(
+             context.organization_id,
+             context.mission_id,
+             context.plan.contact_plan_id,
+             :executing
+           ) == :interrupted
+
+    assert {:ok, %{items: resumed}} = execute(context, ambiguous_reserver(self()))
+
+    # Exactly one provider write: the unplaced pass. The uncertain one is only re-read.
+    assert_received {:provider_mutation, _unplaced}
+    refute_received {:provider_mutation, _uncertain}
+    assert Enum.all?(resumed, &(&1.lifecycle_state == :uncertain))
+  end
+
+  defp execute(context, reserve) do
+    ContactPlanExecutions.execute(
+      context.member_scope,
+      context.mission_id,
+      context.plan.contact_plan_id,
+      now: DateTime.add(@now, 2, :second),
+      resolve_route: context.resolve_route,
+      reserve: reserve
+    )
+  end
+
+  defp ambiguous_reserver(test_pid) do
+    fn organization_id, mission_id, provider_id, attrs, _opts ->
+      send(test_pid, {:provider_mutation, attrs["opportunity_ref"]})
+
+      reserve_with_response(
+        organization_id,
+        mission_id,
+        provider_id,
+        attrs,
+        {:error, ProviderError.ambiguous(%{"reason" => "connection_closed"})}
+      )
+    end
   end
 
   defp successful_reserver(test_pid) do
