@@ -2,6 +2,7 @@ defmodule Cadence.ContactPlanning.Planner do
   @moduledoc "Durable bounded multi-provider planning for one exact Contact Requirement version."
 
   alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Comms.StationAvailability
 
   alias Cadence.ContactPlanning.{
     ContactOpportunitySnapshot,
@@ -401,6 +402,14 @@ defmodule Cadence.ContactPlanning.Planner do
         completed_at: completed_at
       })
 
+    unavailable =
+      StationAvailability.blocking_windows(
+        run.organization_id,
+        run.mission_id,
+        requirement.earliest_start,
+        requirement.latest_end
+      )
+
     snapshots =
       Enum.map(opportunities, fn opportunity ->
         evaluation =
@@ -408,7 +417,8 @@ defmodule Cadence.ContactPlanning.Planner do
             requirement,
             opportunity,
             route_document,
-            now: completed_at
+            now: completed_at,
+            unavailable_windows: unavailable
           )
 
         evidence = Validation.sanitize(opportunity)

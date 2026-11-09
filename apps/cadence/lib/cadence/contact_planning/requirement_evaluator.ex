@@ -62,6 +62,16 @@ defmodule Cadence.ContactPlanning.RequirementEvaluator do
           "Ground station is outside this Requirement's allowed set."
         ),
         failure(
+          station_unavailable?(
+            opportunity,
+            starts_at,
+            ends_at,
+            Keyword.get(opts, :unavailable_windows, %{})
+          ),
+          "station_unavailable",
+          "Ground station has an outage or maintenance window over this opportunity."
+        ),
+        failure(
           requirement.success_measure == :minimum_data_volume and
             is_nil(estimated_volume_bytes),
           "estimated_volume_unknown",
@@ -228,5 +238,16 @@ defmodule Cadence.ContactPlanning.RequirementEvaluator do
 
   defp search_value(search, key) do
     Map.get(search, key, Map.get(search, Atom.to_string(key)))
+  end
+
+  # S7: `unavailable_windows` is `%{station_id => [%{starts_at, ends_at | nil}]}` (outage and
+  # maintenance windows, from `Cadence.Comms.StationAvailability.blocking_windows/4`).
+  defp station_unavailable?(opportunity, starts_at, ends_at, windows) do
+    windows
+    |> Map.get(opportunity["ground_station_ref"], [])
+    |> Enum.any?(fn window ->
+      DateTime.before?(window.starts_at, ends_at) and
+        (is_nil(window.ends_at) or DateTime.after?(window.ends_at, starts_at))
+    end)
   end
 end
