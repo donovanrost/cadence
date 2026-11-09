@@ -91,5 +91,14 @@ defmodule Cadence.Platform.ConfigKind do
   """
   @callback normalize_options(action(), map()) :: {:ok, map()} | {:error, [field_error()]}
 
-  @optional_callbacks effect: 7, normalize_options: 2
+  @doc """
+  Runs once after every op of a run has been written, in the same transaction. A kind that
+  derives state from other kinds (for example routes from profiles, pins and overrides) brings
+  it in line here and returns the changes as ledger entries, plus what the after-commit tail
+  must notify. Field errors make the run a NO-GO.
+  """
+  @callback finalize(organization_id :: String.t(), mission_id :: String.t(), [entry()]) ::
+              {:ok, [entry()], [:generation | :contacts]} | {:error, [field_error()]}
+
+  @optional_callbacks effect: 7, normalize_options: 2, finalize: 3
 end

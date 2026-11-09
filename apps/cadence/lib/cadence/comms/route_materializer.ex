@@ -1,0 +1,161 @@
+defmodule Cadence.Comms.RouteMaterializer do
+  @moduledoc """
+  Brings spacecraft's `origin: profile` routes in line with their pinned profile version, their
+  overrides, and the mission's stations and transports. Only changed routes are written; routes
+  no longer wanted are archived (their materialized paths retire with them). Spacecraft-local
+  and legacy routes are left alone.
+
+  Runs inside the caller's transaction (change-set apply or preview). Uses only `Repo`.
+  """
+
+  alias Cadence.Comms.{GroundStationStore, RoutePlan, RoutingRuleStore, TransportStore}
+  alias Cadence.SpacecraftStore
+  alias Cadence.SpacecraftStore.Overrides
+  alias Cadence.SpacecraftType.Effective
+  alias Cadence.SpacecraftTypeStore
+
+  @type change :: %{spacecraft_id: String.t(), previous: map(), proposed: map()}
+
+  @doc "Returns one change per spacecraft whose routes changed, or field errors."
+  @spec materialize(String.t(), String.t(), [String.t()]) :: {:ok, [change()]} | {:error, [map()]}
+  def materialize(_organization_id, _mission_id, []), do: {:ok, []}
+
+  def materialize(organization_id, mission_id, spacecraft_ids) do
+    context =
+      RoutePlan.context(
+        GroundStationStore.list_ground_stations(organization_id, mission_id),
+        TransportStore.list_transports(organization_id, mission_id)
+      )
+
+    overrides = Overrides.list(organization_id, mission_id, spacecraft_ids)
+
+    spacecraft_ids
+    |> Enum.uniq()
+    |> Enum.chunk_every(100)
+    |> Enum.flat_map(fn ids ->
+      {:ok, found} = SpacecraftStore.fetch_spacecrafts(organization_id, mission_id, ids)
+      Map.values(found)
+    end)
+    |> Enum.reduce_while({:ok, []}, fn spacecraft, {:ok, changes} ->
+      case reconcile(
+             organization_id,
+             spacecraft,
+             Map.get(overrides, spacecraft.spacecraft_id, %{}),
+             context
+           ) do
+        {:ok, nil} -> {:cont, {:ok, changes}}
+        {:ok, change} -> {:cont, {:ok, [change | changes]}}
+        {:error, errors} -> {:halt, {:error, errors}}
+      end
+    end)
+    |> case do
+      {:ok, changes} -> {:ok, Enum.reverse(changes)}
+      error -> error
+    end
+  end
+
+  @doc "A spacecraft's profile routes as a ledger document."
+  @spec document(String.t(), String.t(), String.t()) :: map()
+  def document(organization_id, mission_id, spacecraft_id) do
+    organization_id
+    |> profile_routes(mission_id, spacecraft_id)
+    |> to_document()
+  end
+
+  defp reconcile(organization_id, spacecraft, overrides, context) do
+    existing = profile_routes(organization_id, spacecraft.mission_id, spacecraft.spacecraft_id)
+
+    with {:ok, desired} <- desired(organization_id, spacecraft, overrides, context),
+         {:ok, _} <- write(organization_id, desired),
+         :ok <- archive_unwanted(organization_id, existing, desired) do
+      after_routes =
+        profile_routes(organization_id, spacecraft.mission_id, spacecraft.spacecraft_id)
+
+      previous = to_document(existing)
+      proposed = to_document(after_routes)
+
+      if previous == proposed,
+        do: {:ok, nil},
+        else:
+          {:ok,
+           %{spacecraft_id: spacecraft.spacecraft_id, previous: previous, proposed: proposed}}
+    end
+  end
+
+  defp desired(_organization_id, %{spacecraft_type_id: nil}, _overrides, _context), do: {:ok, []}
+
+  defp desired(organization_id, spacecraft, overrides, context) do
+    case SpacecraftTypeStore.fetch_spacecraft_type_version(
+           organization_id,
+           spacecraft.mission_id,
+           spacecraft.spacecraft_type_id,
+           spacecraft.spacecraft_type_version
+         ) do
+      {:ok, profile} ->
+        profile
+        |> Effective.resolve(overrides)
+        |> then(
+          &RoutePlan.plan(spacecraft, &1, profile.spacecraft_type_id, profile.version, context)
+        )
+        |> prefix_errors(spacecraft)
+
+      {:error, _missing} ->
+        {:ok, []}
+    end
+  end
+
+  defp prefix_errors({:error, errors}, spacecraft),
+    do: {:error, Enum.map(errors, &%{&1 | message: "#{spacecraft.display_name}: #{&1.message}"})}
+
+  defp prefix_errors(ok, _spacecraft), do: ok
+
+  defp write(organization_id, desired) do
+    Enum.reduce_while(desired, {:ok, []}, fn route, {:ok, acc} ->
+      case RoutingRuleStore.put_route(organization_id, route) do
+        {:ok, rule, _change} ->
+          {:cont, {:ok, [rule | acc]}}
+
+        {:error, reason} ->
+          {:halt,
+           {:error, [%{path: "routing", message: "Couldn't save route: #{inspect(reason)}"}]}}
+      end
+    end)
+  end
+
+  defp archive_unwanted(organization_id, existing, desired) do
+    wanted = MapSet.new(desired, & &1.routing_rule_id)
+
+    existing
+    |> Enum.reject(&MapSet.member?(wanted, &1.routing_rule_id))
+    |> Enum.each(
+      &RoutingRuleStore.archive_routing_rule(organization_id, &1.mission_id, &1.routing_rule_id)
+    )
+
+    :ok
+  end
+
+  defp profile_routes(organization_id, mission_id, spacecraft_id) do
+    organization_id
+    |> RoutingRuleStore.list_routing_rules_for_spacecraft(mission_id, spacecraft_id)
+    |> Enum.filter(&(&1.origin == :profile))
+  end
+
+  defp to_document(routes) do
+    %{
+      "routes" =>
+        routes
+        |> Enum.map(fn route ->
+          %{
+            "id" => route.routing_rule_id,
+            "name" => route.display_name,
+            "rule" => route.profile_rule_id,
+            "station" => route.ground_station_id,
+            "leg" => route.leg_direction,
+            "transport" => "#{route.transport_id}@#{route.transport_version}",
+            "role" => Atom.to_string(route.role)
+          }
+        end)
+        |> Enum.sort_by(& &1["id"])
+    }
+  end
+end

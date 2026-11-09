@@ -15,11 +15,11 @@ defmodule Cadence.Comms.ConfigKinds.Transport do
 
   import Ecto.Query
 
-  alias Cadence.Comms.{Transport, TransportKind, TransportRow, TransportStore}
+  alias Cadence.Comms.{GroundStationStore, Transport, TransportKind, TransportRow, TransportStore}
   alias Cadence.Platform.ConfigFields, as: F
   alias Cadence.Repo
 
-  @fields ~w(display_name origin transport_kind direction_capability configuration
+  @fields ~w(display_name origin transport_kind direction_capability configuration ground_station_id
              mission_provider_id mission_provider_version service_profile_ref
              delivery_profile_ref metadata)
   @field_atoms Map.new(@fields, &{&1, String.to_atom(&1)})
@@ -79,6 +79,31 @@ defmodule Cadence.Comms.ConfigKinds.Transport do
 
   @impl true
   def validate(_organization_id, _mission_id, :delete, _entity_id, _previous, nil), do: :ok
+
+  def validate(
+        org,
+        mission_id,
+        action,
+        entity_id,
+        previous,
+        %{"ground_station_id" => station} = doc
+      )
+      when is_binary(station) do
+    case GroundStationStore.fetch_ground_station(org, mission_id, station) do
+      {:ok, _station} ->
+        validate(
+          org,
+          mission_id,
+          action,
+          entity_id,
+          previous,
+          Map.delete(doc, "ground_station_id")
+        )
+
+      {:error, _missing} ->
+        {:error, [F.error("ground_station_id", "That ground station doesn't exist")]}
+    end
+  end
 
   def validate(
         _organization_id,
@@ -161,6 +186,7 @@ defmodule Cadence.Comms.ConfigKinds.Transport do
       "transport_kind" => Atom.to_string(transport.transport_kind),
       "direction_capability" => Atom.to_string(transport.direction_capability),
       "configuration" => transport.configuration || %{},
+      "ground_station_id" => transport.ground_station_id,
       "mission_provider_id" => transport.mission_provider_id,
       "mission_provider_version" => transport.mission_provider_version,
       "service_profile_ref" => transport.service_profile_ref,

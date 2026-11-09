@@ -69,11 +69,64 @@ defmodule Cadence.Comms.RoutingRuleStore do
   def update_routing_rule(organization_id, mission_id, routing_rule_id, attrs, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(routing_rule_id) and
              is_map(attrs) and is_list(opts) do
+    case fetch_routing_rule(organization_id, mission_id, routing_rule_id) do
+      {:ok, current_rule} -> update_from(current_rule, attrs, opts)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Creates or updates a materialized route to match `desired` (by its deterministic id),
+  reviving it when it was archived. Returns what happened.
+  """
+  @spec put_route(binary(), RoutingRule.t(), keyword()) ::
+          {:ok, RoutingRule.t(), :created | :updated | :unchanged} | {:error, term()}
+  def put_route(organization_id, %RoutingRule{} = desired, opts \\ []) do
+    case fetch_routing_rule_state(organization_id, desired.mission_id, desired.routing_rule_id) do
+      {:error, :routing_rule_not_found} ->
+        with {:ok, rule} <- create_routing_rule(organization_id, desired, opts),
+             do: {:ok, rule, :created}
+
+      {:ok, current} ->
+        refresh_route(current, desired, opts)
+    end
+  end
+
+  defp refresh_route(current, desired, opts) do
+    if same_route?(current, desired) do
+      {:ok, current, :unchanged}
+    else
+      with {:ok, rule} <- update_from(current, route_attrs(desired), opts),
+           do: {:ok, rule, :updated}
+    end
+  end
+
+  @route_fields [
+    :display_name,
+    :purpose_label,
+    :direction,
+    :transport_id,
+    :transport_version,
+    :role,
+    :spacecraft_type_id,
+    :spacecraft_type_version
+  ]
+
+  defp same_route?(current, desired) do
+    current.lifecycle_state == :active and current.enabled? and
+      Map.take(current, @route_fields) == Map.take(desired, @route_fields)
+  end
+
+  defp route_attrs(desired) do
+    desired
+    |> Map.take(@route_fields)
+    |> Map.merge(%{lifecycle_state: :active, enabled?: true})
+  end
+
+  defp update_from(%RoutingRule{} = current_rule, attrs, opts) do
     transaction_result =
       Repo.transaction(fn ->
-        with {:ok, %RoutingRule{} = current_rule} <-
-               fetch_routing_rule(organization_id, mission_id, routing_rule_id),
-             {:ok, next_rule} <- build_next_rule(current_rule, attrs),
+        with {:ok, next_rule} <- build_next_rule(current_rule, attrs),
              :ok <- retire_materialized(current_rule),
              {:ok, prepared_rule} <- prepare_rule(next_rule),
              {:ok, materialized_rule} <- materialize_runtime_compatibility(prepared_rule),

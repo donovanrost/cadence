@@ -15,7 +15,7 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
   alias Cadence.Platform.ConfigFields, as: F
   alias Cadence.Repo
 
-  @fields ~w(display_name provider region metadata)
+  @fields ~w(display_name code provider region metadata)
 
   @impl true
   def kind, do: "ground_station"
@@ -47,6 +47,7 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
     errors =
       F.only(document, @fields) ++
         F.text(document, "display_name", 1..200, required: true, label: "Name") ++
+        code_errors(document) ++
         F.text(document, "provider", 1..200, label: "Provider") ++
         F.text(document, "region", 1..200, label: "Region") ++
         F.map(document, "metadata")
@@ -57,7 +58,32 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
   def normalize(_action, _id, _document), do: {:error, [F.error("", "Enter the station details")]}
 
   @impl true
+  def validate(organization_id, mission_id, _action, entity_id, _previous, %{"code" => code})
+      when is_binary(code) do
+    taken? =
+      organization_id
+      |> GroundStationStore.list_ground_stations(mission_id)
+      |> Enum.any?(&(&1.code == code and &1.ground_station_id != entity_id))
+
+    if taken?,
+      do: {:error, [F.error("code", "#{code} is already used by another station")]},
+      else: :ok
+  end
+
   def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
+
+  defp code_errors(%{"code" => code}) when is_binary(code) do
+    if Regex.match?(~r/\A[A-Z0-9]{2,8}\z/, code),
+      do: [],
+      else: [F.error("code", "Use 2–8 capital letters or digits, like SVB")]
+  end
+
+  defp code_errors(%{"code" => nil}), do: []
+
+  defp code_errors(%{"code" => _}),
+    do: [F.error("code", "Use 2–8 capital letters or digits, like SVB")]
+
+  defp code_errors(_document), do: []
 
   @impl true
   def write(organization_id, mission_id, :create, id, nil, proposed, _options) do
@@ -67,6 +93,7 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
         organization_id: organization_id,
         mission_id: mission_id,
         display_name: proposed["display_name"],
+        code: proposed["code"],
         provider: proposed["provider"],
         region: proposed["region"],
         metadata: proposed["metadata"]
@@ -78,6 +105,7 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
   def write(organization_id, mission_id, :update, id, _previous, proposed, _options) do
     attrs = %{
       display_name: proposed["display_name"],
+      code: proposed["code"],
       provider: proposed["provider"],
       region: proposed["region"],
       metadata: proposed["metadata"]
@@ -107,6 +135,7 @@ defmodule Cadence.Comms.ConfigKinds.GroundStation do
   defp document(%GroundStation{} = station) do
     %{
       "display_name" => station.display_name,
+      "code" => station.code,
       "provider" => station.provider,
       "region" => station.region,
       "metadata" => station.metadata || %{}

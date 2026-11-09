@@ -19,10 +19,11 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
   alias Cadence.Spacecraft.ConfigKinds.Spacecraft, as: SpacecraftKind
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftType
+  alias Cadence.SpacecraftType.RoutingRule, as: ProfileRule
   alias Cadence.SpacecraftTypeStore
 
   @fields ~w(display_name downlink_protocol uplink_protocol packet_protocol frame_parameters
-             applications metadata)
+             applications metadata catalog_revision_id routing_rules)
   @frame_fields ~w(frame_size secondary_header_length insert_zone_length ocf_length
                    truncated_primary_header)
   @governed_key "spacecraft_configuration_revision_id"
@@ -57,9 +58,20 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
       |> Map.put_new("frame_parameters", %{})
       |> Map.put_new("applications", %{})
       |> Map.put_new("metadata", %{})
+      |> Map.put_new("catalog_revision_id", nil)
+
+    {rules, rule_errors} =
+      case ProfileRule.normalize(Map.get(document, "routing_rules")) do
+        {:ok, rules} -> {rules, []}
+        {:error, errors} -> {Map.get(document, "routing_rules"), errors}
+      end
+
+    document = Map.put(document, "routing_rules", rules)
 
     errors =
-      F.only(document, @fields) ++
+      rule_errors ++
+        F.text(document, "catalog_revision_id", 1..255, label: "Catalog revision") ++
+        F.only(document, @fields) ++
         F.text(document, "display_name", 1..200, required: true, label: "Name") ++
         F.one_of(document, "downlink_protocol", ~w(tm aos uslp),
           required: true,
@@ -198,7 +210,9 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
         packet_protocol: document["packet_protocol"],
         frame_parameters: document["frame_parameters"],
         applications: document["applications"],
-        metadata: document["metadata"]
+        metadata: document["metadata"],
+        catalog_revision_id: document["catalog_revision_id"],
+        routing_rules: document["routing_rules"] || []
       })
 
     SpacecraftTypeStore.persist_spacecraft_type(organization_id, profile)
@@ -228,14 +242,18 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
     SpacecraftStore.list_pinned_to_profile(
       organization_id,
       mission_id,
-      current.spacecraft_type_id, version: current.version)
+      current.spacecraft_type_id,
+      version: current.version
+    )
   end
 
   defp rollout_targets(organization_id, mission_id, current, %{"spacecraft" => ids}) do
     SpacecraftStore.list_pinned_to_profile(
       organization_id,
       mission_id,
-      current.spacecraft_type_id, spacecraft_ids: ids)
+      current.spacecraft_type_id,
+      spacecraft_ids: ids
+    )
   end
 
   defp rollout(options), do: Map.get(options, "rollout", "all")
@@ -266,7 +284,9 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
       "packet_protocol" => Atom.to_string(profile.packet_protocol),
       "frame_parameters" => profile.frame_parameters || %{},
       "applications" => profile.applications || %{},
-      "metadata" => profile.metadata || %{}
+      "metadata" => profile.metadata || %{},
+      "catalog_revision_id" => profile.catalog_revision_id,
+      "routing_rules" => profile.routing_rules || []
     }
   end
 end

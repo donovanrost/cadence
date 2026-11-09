@@ -7,8 +7,14 @@ defmodule Cadence.Configuration.Kinds do
   this configured list, so it has no compile-time dependency on those contexts.
   """
 
+  # Optional callbacks are probed with `function_exported?/3`, which is false for a module that
+  # isn't loaded yet, so every kind is loaded here.
   @spec all() :: [module()]
-  def all, do: Application.get_env(:cadence, :configuration_kinds, [])
+  def all do
+    kinds = Application.get_env(:cadence, :configuration_kinds, [])
+    Enum.each(kinds, &Code.ensure_loaded!/1)
+    kinds
+  end
 
   @spec fetch(String.t()) :: {:ok, module()} | {:error, :unknown_kind}
   def fetch(kind) when is_binary(kind) do

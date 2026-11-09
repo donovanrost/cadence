@@ -31,7 +31,10 @@ config :cadence,
     Cadence.Comms.ConfigKinds.GroundStation,
     Cadence.Comms.ConfigKinds.Transport,
     Cadence.Spacecraft.ConfigKinds.Spacecraft,
-    Cadence.Spacecraft.ConfigKinds.SpacecraftProfile
+    Cadence.Spacecraft.ConfigKinds.SpacecraftProfile,
+    Cadence.Spacecraft.ConfigKinds.SpacecraftOverride,
+    # Derived: re-materializes profile routes after the ops above (finalize/3).
+    Cadence.Comms.ConfigKinds.SpacecraftRoutes
   ],
   ecto_repos: [Cadence.Repo],
   start_background_jobs: true,

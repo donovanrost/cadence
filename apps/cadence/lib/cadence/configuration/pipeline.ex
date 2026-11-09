@@ -53,12 +53,43 @@ defmodule Cadence.Configuration.Pipeline do
         acc -> {:cont, acc}
       end
     end)
+    |> finalize(organization_id, mission_id)
     |> Map.update!(:entries, &Enum.reverse/1)
     |> Map.update!(:conflicts, &Enum.reverse/1)
     |> Map.update!(:errors, &Enum.reverse/1)
     |> Map.update!(:effects, &Enum.reverse/1)
     |> Map.update!(:diffs, &Enum.reverse/1)
   end
+
+  # Derived kinds run only when every op applied cleanly; otherwise there's nothing coherent
+  # to derive from.
+  defp finalize(%{halted?: false, errors: [], conflicts: []} = acc, organization_id, mission_id) do
+    Kinds.all()
+    |> Enum.filter(&function_exported?(&1, :finalize, 3))
+    |> Enum.reduce(acc, fn kind, acc ->
+      case kind.finalize(organization_id, mission_id, Enum.reverse(acc.entries)) do
+        {:ok, entries, impacts} ->
+          %{
+            acc
+            | entries: Enum.reverse(entries, acc.entries),
+              impacts: Enum.into(impacts, acc.impacts)
+          }
+
+        {:error, field_errors} ->
+          error = %{
+            op_id: nil,
+            change_id: nil,
+            kind: kind.kind(),
+            entity_id: nil,
+            errors: field_errors
+          }
+
+          Map.update!(acc, :errors, &[error | &1])
+      end
+    end)
+  end
+
+  defp finalize(acc, _organization_id, _mission_id), do: acc
 
   @doc "Computes the proposed document for an op from the live document."
   @spec propose(String.t(), Document.t() | nil, map()) ::
