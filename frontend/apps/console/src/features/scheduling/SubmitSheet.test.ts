@@ -18,6 +18,7 @@ const plan: PlanDetail = {
   counts: { passes: 12, minutes: 96, conflicts: 0, unsatisfied: 2 },
   ready_to_approve: false,
   updated_at: "2026-11-09T10:00:00Z",
+  created_at: null,
   passes: [],
   demand: { rule_met: 1, rule_total: 3, spacecraft: [], rules: [] },
   unmet: [gap("r1"), gap("r2")],

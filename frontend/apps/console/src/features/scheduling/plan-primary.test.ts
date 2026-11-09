@@ -11,6 +11,7 @@ const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   counts: { passes: 12, minutes: 96, conflicts: 0, unsatisfied: 0 },
   ready_to_approve: true,
   updated_at: "2026-11-09T10:00:00Z",
+  created_at: null,
   passes: [],
   demand: { rule_met: 3, rule_total: 3, spacecraft: [], rules: [] },
   unmet: [],

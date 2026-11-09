@@ -83,6 +83,7 @@ describe("planOfDay (superseded state)", () => {
       counts: { passes: 40, minutes: 320, conflicts: 0, unsatisfied: 0 },
       ready_to_approve: false,
       updated_at: "2026-11-10T10:00:00Z",
+      created_at: null,
       superseded,
       repair_of: null,
     });
@@ -103,6 +104,7 @@ describe("planOfDay (superseded state)", () => {
       counts: { passes: 40, minutes: 320, conflicts: 0, unsatisfied: 0 },
       ready_to_approve: false,
       updated_at: "2026-11-10T10:00:00Z",
+      created_at: null,
       superseded: null,
       repair_of: null,
     });

@@ -71,6 +71,9 @@ const planRow = {
   }),
   ready_to_approve: d.boolean,
   updated_at: d.timestamp,
+  /** Asked of api (ux); null until the server sends it. */
+  created_at: (value: unknown, path?: string) =>
+    value === undefined ? null : d.nullable(d.timestamp)(value, path),
   /** Absent on older servers; null when the plan isn't superseded. */
   superseded: (value: unknown, path?: string) =>
     value === undefined ? null : supersededReader(value, path),
@@ -97,7 +100,14 @@ export function byAuthor(
 export function draftedByOther(plan: PlanSummary, userId: string): string | null {
   const a = plan.author;
   if (!a || (a.kind !== "system" && a.id === userId)) return null;
-  return `Drafted ${plan.updated_at.slice(11, 16)}Z${byAuthor(a, "automatic draft")}`;
+  // ux: never put the last change's time next to the creator's name.
+  const by = byAuthor(a, "automatic draft");
+  const updated = `${plan.updated_at.slice(11, 16)}Z`;
+  if (!plan.created_at) return `Drafted${by} · updated ${updated}`;
+  const created = `${plan.created_at.slice(11, 16)}Z`;
+  return created === updated
+    ? `Drafted ${created}${by}`
+    : `Drafted ${created}${by} · updated ${updated}`;
 }
 
 export const plansReader = d.object({
