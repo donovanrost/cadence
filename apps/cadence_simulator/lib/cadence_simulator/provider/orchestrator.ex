@@ -27,6 +27,10 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @doc "The COP-1 peer serving an active contact's uplink leg, if any."
+  @spec uplink_session(binary()) :: pid() | nil
+  def uplink_session(contact_id), do: GenServer.call(__MODULE__, {:uplink_session, contact_id})
+
   @spec reconcile(DateTime.t()) :: :ok
   def reconcile(now \\ DateTime.utc_now()) do
     GenServer.call(__MODULE__, {:reconcile, now}, :infinity)
@@ -54,6 +58,10 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   @impl true
   def handle_call({:reconcile, now}, _from, state) do
     {:reply, :ok, reconcile_all(state, now)}
+  end
+
+  def handle_call({:uplink_session, contact_id}, _from, state) do
+    {:reply, get_in(state.uplinks, [contact_id, :pid]), state}
   end
 
   def handle_call(:active_stream_count, _from, state) do

@@ -101,6 +101,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
        host: state.host,
        port: state.port,
        connected?: is_port(state.socket),
+       local_address: local_address(state.socket),
        tc_frame_size: state.tc_frame_size,
        fecf: state.fecf,
        tc_frame_count: state.tc_frame_count,
@@ -325,6 +326,16 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
       state
     end
   end
+
+  # The peer's own socket address: what the far end sees as this connection's peer (#44).
+  defp local_address(socket) when is_port(socket) do
+    case :inet.sockname(socket) do
+      {:ok, {ip, port}} -> "#{:inet.ntoa(ip)}:#{port}"
+      _error -> nil
+    end
+  end
+
+  defp local_address(_socket), do: nil
 
   defp farm_snapshots(farm_by_vcid) do
     Map.new(farm_by_vcid, fn {vcid, farm} ->

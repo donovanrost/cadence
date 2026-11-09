@@ -18,6 +18,15 @@ defmodule CadenceSimulator.Provider.Auth do
     end
   end
 
+  @doc "The bearer token a request was authenticated with, or nil."
+  @spec supplied_token(Plug.Conn.t()) :: binary() | nil
+  def supplied_token(conn) do
+    case Plug.Conn.get_req_header(conn, "authorization") do
+      ["Bearer " <> token] -> token
+      _other -> nil
+    end
+  end
+
   @spec authorized?(Plug.Conn.t(), binary() | nil) :: boolean()
   def authorized?(_conn, expected_token) when expected_token in [nil, ""], do: true
 
