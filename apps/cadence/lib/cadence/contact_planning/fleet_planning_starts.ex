@@ -15,7 +15,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
   def preview(%Scope{} = scope, mission_id, params) do
     with :ok <- authorize(scope, mission_id),
          {:ok, window, pages, _} <- admit(params, :preview),
-         {:ok, inputs} <- FleetStartInputs.load(scope, mission_id, window) do
+         {:ok, as_of} <- preview_as_of(params["as_of"]),
+         {:ok, inputs} <- FleetStartInputs.load(scope, mission_id, window, false, as_of) do
       {:ok, FleetStartProjection.review(inputs, pages)}
     end
   end
@@ -37,8 +38,12 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
     end
   end
 
+  # A review older than this is stale: its `as_of` no longer says what "future" means.
+  @review_max_age_s 15 * 60
+
   defp claim(scope, mission_id, window, evidence, operation_id) do
-    with {:ok, inputs} <- FleetStartInputs.load(scope, mission_id, window, true),
+    with {:ok, as_of} <- review_as_of(evidence),
+         {:ok, inputs} <- FleetStartInputs.load(scope, mission_id, window, true, as_of),
          true <- inputs.evidence === evidence,
          {:ok, generated, materialization} <- materialize(scope, mission_id, inputs),
          :ok <- supersede(scope, inputs),
@@ -83,7 +88,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
 
     allowed =
       if mode == :preview,
-        do: ~w(fleet_run requirements_page templates_page),
+        do: ~w(fleet_run requirements_page templates_page as_of),
         else: ~w(fleet_run evidence)
 
     with true <- Enum.all?(Map.keys(params), &(&1 in allowed)),
@@ -118,25 +123,46 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
       else: {:error, :invalid_page}
   end
 
+  # Later review pages pass the first page's `evidence.as_of`, so every page is one review.
+  defp preview_as_of(nil), do: {:ok, nil}
+  defp preview_as_of(value), do: review_as_of(%{"as_of" => value})
+
+  defp review_as_of(evidence) do
+    with value when is_binary(value) <- evidence["as_of"],
+         {:ok, as_of, _offset} <- DateTime.from_iso8601(value),
+         age = DateTime.diff(DateTime.utc_now(), as_of),
+         true <- age >= -60 and age <= @review_max_age_s do
+      {:ok, as_of}
+    else
+      _stale -> {:error, :fleet_planning_review_changed}
+    end
+  end
+
   defp evidence_shape(nil, :preview), do: :ok
 
   defp evidence_shape(e, :create) when is_map(e) do
     keys =
-      ~w(contract_version organization_id mission_id policy_id policy_version policy_sha256 input_sha256)
+      ~w(contract_version organization_id mission_id policy_id policy_version policy_sha256 input_sha256 as_of)
 
     if Enum.sort(Map.keys(e)) == Enum.sort(keys) and e["contract_version"] === 1 and
          is_integer(e["policy_version"]) and e["policy_version"] > 0 and
-         Enum.all?(
-           ~w(organization_id mission_id policy_id),
-           &(is_binary(e[&1]) and byte_size(e[&1]) in 1..240)
-         ) and
-         Enum.all?(
-           ~w(policy_sha256 input_sha256),
-           &(is_binary(e[&1]) and Regex.match?(~r/\A[a-f0-9]{64}\z/, e[&1]))
-         ), do: :ok, else: {:error, :invalid_review}
+         evidence_values?(e),
+       do: :ok,
+       else: {:error, :invalid_review}
   end
 
   defp evidence_shape(_, _), do: {:error, :invalid_review}
+
+  defp evidence_values?(e) do
+    Enum.all?(
+      ~w(organization_id mission_id policy_id),
+      &(is_binary(e[&1]) and byte_size(e[&1]) in 1..240)
+    ) and
+      Enum.all?(
+        ~w(policy_sha256 input_sha256),
+        &(is_binary(e[&1]) and Regex.match?(~r/\A[a-f0-9]{64}\z/, e[&1]))
+      ) and match?({:ok, _, _}, DateTime.from_iso8601(to_string(e["as_of"])))
+  end
 
   defp authorize(scope, mission),
     do:
@@ -187,7 +213,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
   # The reviewed inputs already leave these out (FleetStartInputs), so the run's refs are
   # unaffected; cancelling them here keeps v1 and v2 from planning the same slot twice.
   defp supersede(scope, inputs) do
-    now = DateTime.utc_now()
+    # The review's instant, so exactly what the review left out is superseded (G1).
+    now = inputs.as_of
 
     Enum.each(inputs.templates, fn t ->
       TemplateSupersession.supersede(

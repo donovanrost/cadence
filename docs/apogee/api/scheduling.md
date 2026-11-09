@@ -154,6 +154,11 @@ runs the plan **off the request**.
 - `422 planning_not_set_up` with `details.missing`: `["fleet_planning_policy"]` or
   `["contact_requirements"]`. `422 horizon_exceeds_policy`. `409 inputs_changed` (retry).
 
+The review evidence pins its instant (`evidence.as_of`, G1): which requirements count as still in
+the future (and so are superseded by a template) is decided at that instant, and the start reloads
+its inputs at the same one, so a requirement starting between review and start doesn't change the
+hash. Later review pages pass `as_of` back; a review older than 15 minutes asks for a fresh one.
+
 ### `GET /contact-plans/drafts/:run_id`
 
 `{run: {id, state, phase, horizon: {from, to}, failure, started_at, updated_at}, plan: <plan detail>

@@ -21,7 +21,14 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
 
   alias Cadence.Repo
 
-  def load(scope, mission_id, window, locked \\ false) do
+  @doc """
+  The reviewed inputs. `as_of` is the instant that decides which requirements are still in the
+  future (and so get superseded): a preview takes now, and a start passes its review's `as_of`,
+  so the review hash doesn't drift with the wall clock between the two (G1).
+  """
+  def load(scope, mission_id, window, locked \\ false, as_of \\ nil) do
+    as_of = as_of || DateTime.truncate(DateTime.utc_now(), :second)
+
     policy_reader =
       if locked,
         do: &FleetPlanningPolicies.fetch_active_locked/2,
@@ -33,10 +40,11 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
          {:ok, requirements} <- requirements(scope.organization_id, mission_id, window, locked),
          {:ok, templates} <- templates(scope.organization_id, mission_id, window, locked) do
       context = %{organization_id: scope.organization_id, mission_id: mission_id}
-      requirements = without_superseded(context, window, requirements, templates, locked)
+      requirements = without_superseded(context, window, requirements, templates, locked, as_of)
 
       snapshot = %{
         context: context,
+        as_of: as_of,
         window: window,
         policy: policy,
         requirements: requirements,
@@ -65,11 +73,10 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
     end
   end
 
-  defp without_superseded(_context, _window, requirements, [], _locked), do: requirements
+  defp without_superseded(_context, _window, requirements, [], _locked, _as_of),
+    do: requirements
 
-  defp without_superseded(context, window, requirements, templates, locked) do
-    now = DateTime.utc_now()
-
+  defp without_superseded(context, window, requirements, templates, locked, now) do
     future =
       requirements
       |> Enum.filter(fn {_requirement, version} ->
@@ -266,7 +273,8 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
       "mission_id" => snapshot.context.mission_id,
       "policy_id" => policy.fleet_planning_policy_id,
       "policy_version" => policy.version,
-      "policy_sha256" => policy.content_sha256
+      "policy_sha256" => policy.content_sha256,
+      "as_of" => DateTime.to_iso8601(snapshot.as_of)
     }
 
     hash =

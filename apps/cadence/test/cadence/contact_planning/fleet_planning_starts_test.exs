@@ -245,7 +245,9 @@ defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
              FleetPlanningStarts.preview(
                c.scope,
                c.mission_id,
-               Map.put(params, "requirements_page", 2)
+               params
+               |> Map.put("requirements_page", 2)
+               |> Map.put("as_of", first.evidence["as_of"])
              )
 
     assert first.requirements.total == 27
@@ -271,6 +273,46 @@ defmodule Cadence.ContactPlanning.FleetPlanningStartsTest do
              )
 
     assert FleetPlanningRuns.list(c.organization_id, c.mission_id) == []
+  end
+
+  test "a start reloads its inputs at the review's instant, not the wall clock (G1)", c do
+    params = Fixtures.params()
+    earlier = DateTime.utc_now() |> DateTime.add(-600) |> DateTime.truncate(:second)
+    as_of = DateTime.to_iso8601(earlier)
+
+    assert {:ok, review} =
+             FleetPlanningStarts.preview(c.scope, c.mission_id, Map.put(params, "as_of", as_of))
+
+    assert review.evidence["as_of"] == as_of
+
+    for stale <- [
+          earlier |> DateTime.add(-600) |> DateTime.to_iso8601(),
+          DateTime.utc_now() |> DateTime.add(600) |> DateTime.to_iso8601()
+        ] do
+      assert {:error, :fleet_planning_review_changed} =
+               FleetPlanningStarts.create(
+                 c.scope,
+                 c.mission_id,
+                 Map.put(params, "evidence", Map.put(review.evidence, "as_of", stale))
+               )
+
+      assert {:error, :fleet_planning_review_changed} =
+               FleetPlanningStarts.preview(c.scope, c.mission_id, Map.put(params, "as_of", stale))
+    end
+
+    assert {:error, :fleet_planning_start_input_invalid} =
+             FleetPlanningStarts.create(
+               c.scope,
+               c.mission_id,
+               Map.put(params, "evidence", Map.delete(review.evidence, "as_of"))
+             )
+
+    assert {:ok, _run, [_ref]} =
+             FleetPlanningStarts.create(
+               c.scope,
+               c.mission_id,
+               Map.put(params, "evidence", review.evidence)
+             )
   end
 
   test "previously generated closed demand is not advertised or recreated as new demand", c do
