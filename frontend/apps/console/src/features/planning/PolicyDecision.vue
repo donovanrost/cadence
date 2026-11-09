@@ -10,10 +10,13 @@ const emit = defineEmits<{ decided: [] }>();
 const comment = ref("");
 const busy = ref(false);
 const failure = ref<string | null>(null);
+// The decision endpoint requires a comment (qa #21): block both actions until there is one.
+const needComment = () =>
+  comment.value.trim() === "" ? "Add a comment for the record first." : null;
 
 async function decide(decision: "approve" | "reject") {
   const pending = props.policy.pending;
-  if (!pending || busy.value) return;
+  if (!pending || busy.value || needComment()) return;
   busy.value = true;
   failure.value = null;
   try {
@@ -43,17 +46,26 @@ async function decide(decision: "approve" | "reject") {
         admin approves it.
       </p>
       <template v-if="policy.permissions.includes('planning.approve')">
-        <ApField v-model="comment" label="Comment" />
+        <ApField
+          v-model="comment"
+          label="Comment"
+          required
+          hint="Required: it's recorded with the decision."
+        />
         <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
+        <p v-if="needComment()" class="m-0 text-sm text-text-3">{{ needComment() }}</p>
         <div class="flex flex-wrap gap-2">
           <ApButton
             variant="primary"
-            :disabled="busy"
-            disabled-reason="Working…"
+            :disabled="busy || needComment() !== null"
+            :disabled-reason="needComment() ?? 'Working…'"
             @click="decide('approve')"
             >Approve v{{ policy.pending.version }}</ApButton
           >
-          <ApButton :disabled="busy" disabled-reason="Working…" @click="decide('reject')"
+          <ApButton
+            :disabled="busy || needComment() !== null"
+            :disabled-reason="needComment() ?? 'Working…'"
+            @click="decide('reject')"
             >Reject</ApButton
           >
         </div>

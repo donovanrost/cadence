@@ -270,6 +270,21 @@ export function failureOutcome(
       changed: false,
       sentence: `Nothing was ${verb}. ${fields.errors.map((e) => (e.path ? `${e.path}: ${e.message}` : e.message)).join(" · ")}`,
     };
+  // invalid_params: details keyed by field (`{comment: "is required"}` or a list of messages).
+  if (errorCode(error) === "invalid_params" && "details" in error) {
+    const d = error.details;
+    if (d !== null && typeof d === "object" && !Array.isArray(d)) {
+      const parts = Object.entries(d).flatMap(([field, v]) =>
+        typeof v === "string"
+          ? [`${field}: ${v}`]
+          : Array.isArray(v)
+            ? v.filter((m): m is string => typeof m === "string").map((m) => `${field}: ${m}`)
+            : [],
+      );
+      if (parts.length > 0)
+        return { changed: false, sentence: `Nothing was ${verb}. ${parts.join(" · ")}` };
+    }
+  }
   return { changed: false, sentence: `Nothing was ${verb}. ${rejectionSentence(error)}` };
 }
 

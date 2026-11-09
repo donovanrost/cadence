@@ -132,3 +132,20 @@ describe("failureOutcome", () => {
     });
   });
 });
+
+describe("failureOutcome invalid_params", () => {
+  it("names the fields from details (qa #21)", async () => {
+    const { failureOutcome } = await import("./actions.ts");
+    expect(
+      failureOutcome(
+        {
+          kind: "invalid",
+          code: "invalid_params",
+          message: "The request parameters are invalid.",
+          details: { comment: "is required" },
+        },
+        "changed",
+      ).sentence,
+    ).toBe("Nothing was changed. comment: is required");
+  });
+});
