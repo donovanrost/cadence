@@ -324,6 +324,15 @@ exactly what Apply sends. "Moved" pairs a spacecraft's lost and new passes in ti
 that pairing is persisted as what the repair *replaces* (see contacts.md `replaced_by`). The
 diff stays the same after Apply.
 
+**Covered by a single booking** (DECISIONS #56): a repair also holds the mission's live single
+bookings (no plan) in its horizon and pairs them with lost bookings by the same rules (same
+spacecraft, nearest start, the rest unpaired). The diff lists those lost passes under `covered`
+(each pass plus `covered_by`: the single booking's `provider_reservation_id`), not under `kept`,
+and `totals.covered` counts them; Apply sends nothing for them. Known limit: a lost booking can
+only be held when the plan the repair starts from selected it (true when it was lost after the
+latest repair). An older lost booking that a single booking covers is still recorded as covered,
+but the planner may propose a pass for it, which then shows under `added`.
+
 **Apply** = `POST /contact-plans/<new plan id>/submit` (S5), with acknowledgements for any gaps.
 The repair yields a new plan; the source plan isn't superseded automatically (domain behavior).
 Not yet: station-outage entry (S7), provider billing terms, and the uplink impact read.

@@ -65,9 +65,11 @@ Query: `from`, `to` (ISO-8601; default `from` = now, `to` = `from` + 24 h; at mo
 - `ended_by` (qa #30): who ended a `canceled`, `rejected` or `failed` booking, else `null`.
   `{kind: "user", id, name}` for a cancel from the contact workspace or an operator's #53
   "not booked" resolution; otherwise `{kind: "provider", id, name}`.
-- `replaced_by` (qa #30): on a lost booking that an applied repair replaced,
-  `{plan_id, reservation_id}` (`reservation_id` is `null` until that pass is placed), else
-  `null`. A lost row with `replaced_by: null` is still lost: that's what re-plan's Impact shows.
+- `replaced_by` (qa #30, DECISIONS #56): on a lost booking that something replaced, else `null`.
+  `{kind: "repair", plan_id, reservation_id}` when an applied repair re-booked it
+  (`reservation_id` is `null` until that pass is placed), or `{kind: "single_booking", plan_id:
+  null, reservation_id}` when a live single booking (contact workspace `actions/reserve`) covers
+  it. A lost row with `replaced_by: null` is still lost: that's what re-plan's Impact shows.
   Replacement is persisted when the repair plan is created and never re-derived.
 - `truncated: true`: more than 500 reservations overlap the window. Narrow it.
 - Refetch on `invalidate` with `contacts` (below). AOS/LOS happen without an event; refresh a
