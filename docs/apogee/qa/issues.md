@@ -24,7 +24,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 21 | Planning policy decisions | Server requires `comment` on approve/reject; the UI allows an empty comment and shows only 'The request parameters are invalid.' | fe-setup / api | fixed (d692fea8; documented) |
 | 22 | Contact plan state (K2) | Provider-cancelled bookings (4 reservations `canceled`) leave the plan `reserved`, so K2 refuses to re-plan | api / domain | verified (27459044 + booking_lost backfill; plan partially_reserved, K2 proposes) |
 | 23 | Provider event inbox | ~96 events stuck `received` since 10:47Z and 5 `processing` since 10:43Z on :4011 | api / domain | verified (16570f5d; drained) |
-| 24 | K1 superseded draft | Dimmed superseded draft fails WCAG contrast (axe: 22 color-contrast nodes) | lead | open |
+| 24 | K1 superseded draft | Dimmed superseded draft fails WCAG contrast (axe: 22 color-contrast nodes) | lead | verified (U27: marks dim, text full contrast) |
 | 12 | Palette | 'Show all N' `<button>` inside `role=listbox` (axe aria-required-children) | fe-ops | verified (cb5b2d12) |
 | 13 | Palette | Focus leaves the `aria-modal` dialog after two Tabs (no focus trap) | fe-ops | verified (cb5b2d12) |
 | 14 | Catalog import | File picker shows no visible keyboard focus (WCAG 2.4.7) | fe-setup | verified (32c2cb4e) |
