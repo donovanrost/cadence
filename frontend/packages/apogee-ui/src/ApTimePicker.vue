@@ -28,6 +28,8 @@ const props = withDefaults(
     warn?: ((at: number) => string | null) | undefined;
     /** Release-style pickers: a time in the past is flagged (caution) with `pastMessage`. */
     future?: boolean | undefined;
+    /** Day picker: calendar only, values snap to 00:00:00Z, labels show the date. */
+    dateOnly?: boolean | undefined;
     pastMessage?: string | undefined;
     placeholder?: string | undefined;
   }>(),
@@ -38,6 +40,7 @@ const props = withDefaults(
     metEpoch: null,
     placeholder: "Pick a time",
     future: false,
+    dateOnly: false,
     pastMessage: "In the past.",
   },
 );
@@ -53,14 +56,21 @@ const past = computed(() => props.future && draft.value < now.value.getTime() - 
 const id = `ap-tp-${Math.random().toString(36).slice(2, 9)}`;
 
 function open() {
-  draft.value = model.value ?? now.value.getTime();
+  const start = model.value ?? now.value.getTime();
+  draft.value = props.dateOnly ? Math.floor(start / UTC_DAY) * UTC_DAY : start;
   preset.value = null;
   dialog.value?.showModal();
 }
 function setDraft(at: number, presetId: string | null = null) {
-  draft.value = at;
+  draft.value = props.dateOnly ? Math.floor(at / UTC_DAY) * UTC_DAY : at;
   preset.value = presetId;
 }
+const UTC_DAY = 86_400_000;
+/** What a value reads as in this mode. */
+const shown = (t: number) =>
+  props.dateOnly ? new Date(t).toISOString().slice(0, 10) : formatAbsolute(new Date(t));
+const shownShort = (t: number) =>
+  props.dateOnly ? new Date(t).toISOString().slice(0, 10) : formatDayTime(new Date(t));
 function commit() {
   model.value = draft.value;
   dialog.value?.close();
@@ -95,9 +105,9 @@ function commit() {
         class="flex-1 font-mono text-base"
         :class="model === null ? 'text-text-4' : 'text-readout'"
       >
-        {{ model === null ? placeholder : formatAbsolute(new Date(model)) }}
+        {{ model === null ? placeholder : shown(model) }}
       </span>
-      <span v-if="model !== null" class="font-mono text-sm text-text-3">{{
+      <span v-if="model !== null && !dateOnly" class="font-mono text-sm text-text-3">{{
         formatRelative(new Date(model), now)
       }}</span>
     </button>
@@ -116,6 +126,7 @@ function commit() {
         />
         <div class="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto]">
           <TimePresets
+            v-if="!dateOnly || presets.length > 0"
             :presets="presets"
             :selected="preset"
             @pick="setDraft($event.at, $event.id)"
@@ -127,16 +138,20 @@ function commit() {
             :marked-label="markedLabel"
             @update:model-value="setDraft($event)"
           />
-          <TimeSpinners :model-value="draft" @update:model-value="setDraft($event)" />
+          <TimeSpinners
+            v-if="!dateOnly"
+            :model-value="draft"
+            @update:model-value="setDraft($event)"
+          />
         </div>
         <dl
           class="m-0 grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-px border border-hairline bg-hairline"
         >
           <div class="bg-panel px-4 py-2.5">
-            <dt class="ap-label">UTC</dt>
-            <dd class="m-0 font-mono text-base">{{ formatDayTime(new Date(draft)) }}</dd>
+            <dt class="ap-label">{{ dateOnly ? "Day · UTC" : "UTC" }}</dt>
+            <dd class="m-0 font-mono text-base">{{ shownShort(draft) }}</dd>
           </div>
-          <div class="bg-panel px-4 py-2.5">
+          <div v-if="!dateOnly" class="bg-panel px-4 py-2.5">
             <dt class="ap-label">From now</dt>
             <dd class="m-0 font-mono text-base" :class="past ? 'text-caution-text' : ''">
               {{ formatRelative(new Date(draft), now) }}
@@ -159,9 +174,7 @@ function commit() {
         </span>
         <span class="ml-auto flex gap-2">
           <ApButton variant="ghost" @click="dialog?.close()">Cancel</ApButton>
-          <ApButton variant="primary" @click="commit"
-            >Set {{ formatDayTime(new Date(draft)) }}</ApButton
-          >
+          <ApButton variant="primary" @click="commit">Set {{ shownShort(draft) }}</ApButton>
         </span>
       </footer>
     </dialog>

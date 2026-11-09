@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { TakeoverHeader, useMissionScope } from "@/shell";
 import { ApButton, ApStationBar } from "@/ui";
+import DayNav from "./DayNav.vue";
 import DemandPanel from "./DemandPanel.vue";
 import DraftGantt from "./DraftGantt.vue";
 import { dayLabel, useSpacecraftNames } from "./names.ts";
@@ -73,6 +74,7 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
   >
     <template #steps><ApStationBar :steps="STEPS" :current="step" label="Plan steps" /></template>
   </TakeoverHeader>
+  <DayNav :day="day" />
   <template v-if="view.kind === 'plan'">
     <div
       class="grid min-h-0 flex-1 grid-cols-1 gap-3 console:grid-cols-[300px_minmax(0,1fr)_340px]"

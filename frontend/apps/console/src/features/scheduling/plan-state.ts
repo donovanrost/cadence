@@ -9,7 +9,7 @@ export type PlanView =
   | { kind: "loading" }
   | { kind: "failed"; error: ApiError }
   | { kind: "not_set_up"; missing: readonly string[] }
-  | { kind: "no_draft" }
+  | { kind: "no_draft"; last: PlanSummary | null }
   | { kind: "drafting"; phase: string | null; startedAt: string | null }
   | { kind: "interrupted"; phase: string | null }
   | { kind: "draft_failed"; message: string }
@@ -58,7 +58,8 @@ export function planView(
   }
   if (input.plans.status === "loading") return { kind: "loading" };
   if (input.plans.status === "failed") return { kind: "failed", error: input.plans.error };
-  if (!currentPlan(input.plans.value.plans)) return { kind: "no_draft" };
+  if (!currentPlan(input.plans.value.plans))
+    return { kind: "no_draft", last: input.plans.value.plans[0] ?? null };
   const p = input.plan;
   if (!p || p.status === "loading") return { kind: "loading" };
   if (p.status === "failed") return { kind: "failed", error: p.error };

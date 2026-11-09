@@ -50,3 +50,10 @@ describe("time formats", () => {
     expect(formatMet(new Date(NOW), new Date(NOW - 86_400_000 - 3_661_000))).toBe("MET 1:01:01:01");
   });
 });
+
+describe("parseTime dates", () => {
+  it("reads a bare date as midnight UTC and rejects rollovers", () => {
+    expect(parseTime("2026-11-10", NOW)).toBe(Date.UTC(2026, 10, 10));
+    expect(parseTime("2026-02-30", NOW)).toBeNull();
+  });
+});
