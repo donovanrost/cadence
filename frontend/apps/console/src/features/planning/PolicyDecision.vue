@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { failureOutcome } from "@/features/changes/index.ts";
+import { errorCode, failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApField, ApPanel, formatShort } from "@/ui";
 import { decidePolicy, type Policy } from "./policy.ts";
 
@@ -22,7 +22,11 @@ async function decide(decision: "approve" | "reject") {
       comment: comment.value.trim(),
     });
     if (result.ok) emit("decided");
-    else failure.value = failureOutcome(result.error, "changed").sentence;
+    else
+      failure.value =
+        errorCode(result.error) === "reviewer_is_author"
+          ? "Nothing was changed. You saved this version, so another admin must approve it."
+          : failureOutcome(result.error, "changed").sentence;
   } finally {
     busy.value = false;
   }
