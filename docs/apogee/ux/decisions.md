@@ -148,3 +148,14 @@ Words like `rev 14` (catalog revision) are words and may uppercase.
 name links, segmented options, chips) has at least 44px of hit area (padding, min-height or a
 `::before` hit box), keeping its visual size. Primary/commit actions stay at 48px and full width
 (Mobile.md). Desktop keeps the canvas densities.
+
+### U19 · Takeover routes replace the shell top bar (lead question)
+**Decision:** as on the boards, a takeover (Add spacecraft, New mission, Compose, Command a group,
+Approve, Uplink & verify, Plan, Re-plan) **swaps the 52px shell top bar for its takeover header**.
+The header context line carries org and mission (qa contract): mono `REFLECT ORBITAL / EARENDIL ·
+APPROVALS · SIGNED IN AS MIRA K.` over the title. `×`/back sits left, the step/station bar in the
+middle, clocks (UTC + the flow's own countdown) right. No mode switch, query or account menu inside a
+takeover: `×` is the way out, and Esc does nothing destructive. Under 768 the header is one 56px row
+(`×`, title, UTC) with the station bar scrolling horizontally below it.
+**Why:** commanding screens hold still and need the height; a second header row says the same
+thing twice.

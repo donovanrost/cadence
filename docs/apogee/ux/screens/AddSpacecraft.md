@@ -10,9 +10,9 @@ SCIDs, planes and routes and checks clashes → review the batch as a table → 
 option A).
 
 ## Takeover frame
-Top bar stays (brand, mission switcher, mode switch, UTC, account). Below it a **flow header**
-(52px, `chrome` bg, hairline bottom): left `×` close button (`aria-label="Close and keep draft"`,
-→ back to where the flow was opened) + mono lbl `SETUP · EARENDIL · SPACECRAFT` over title
+The flow header **replaces** the shell top bar (U19): one 52px row (`chrome` bg, hairline
+bottom), with org / mission in its context line: left `×` close button (`aria-label="Close and keep draft"`,
+→ back to where the flow was opened) + mono lbl `REFLECT ORBITAL / EARENDIL · SETUP · SPACECRAFT` over title
 `Add spacecraft` (display 20px); center **ApStepBar** `01 Source · 02 Identity · 03 Orbit &
 routing · 04 Review` (done = `✓`, current = `●` + `aria-current="step"`; done steps are links back);
 right mono meta (`CONFIG r5 → r6 draft` only under option A; otherwise omitted).
