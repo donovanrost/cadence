@@ -773,6 +773,22 @@ defmodule CadenceWeb.Router do
       get("/commands/:command_id", CommandCatalogController, :show)
       get("/command-policies", CommandGroupController, :policies)
       get("/command-endpoints", CommandGroupController, :endpoints)
+      get("/station-availability", StationAvailabilityController, :index)
+      get("/station-availability/:station_id", StationAvailabilityController, :show)
+      get("/station-availability/:station_id/impact", StationAvailabilityController, :impact)
+
+      post(
+        "/station-availability/:station_id/windows",
+        StationAvailabilityController,
+        :create_window
+      )
+
+      post(
+        "/station-availability/windows/:window_id/clear",
+        StationAvailabilityController,
+        :clear_window
+      )
+
       post("/command-groups/preflight", CommandGroupController, :preflight)
       get("/command-groups", CommandGroupController, :index)
       post("/command-groups", CommandGroupController, :create)

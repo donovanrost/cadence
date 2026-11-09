@@ -76,7 +76,12 @@ defmodule CadenceWeb.Console.Problem do
     command_group_not_abortable: {409, "That group can't be aborted any more."},
     reason_required: {422, "A reason is required."},
     command_request_already_started: {409, "That command has already started."},
-    command_request_not_found: {404, "Command request not found."}
+    command_request_not_found: {404, "Command request not found."},
+    station_not_found: {404, "Ground station not found."},
+    window_not_found: {404, "Availability window not found."},
+    window_overlaps: {409, "That window overlaps another of the same kind at this station."},
+    window_cleared: {409, "That window is already cleared."},
+    invalid_window: {422, "The window is invalid (kind, start, or end before start)."}
   }
 
   @doc "Sends the error envelope for a known reason atom and halts."

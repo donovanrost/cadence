@@ -7,6 +7,7 @@ S8) are api's: [scheduling.md](scheduling.md). Conventions: [README.md](README.m
 | Ask | Endpoint | Status |
 | --- | --- | --- |
 | M7 / S1 | `GET /missions/:mission_id/passes` | **implemented** (booked contacts; opportunities not yet) |
+| S7 | `GET/POST /missions/:mission_id/station-availability…` | **implemented** (api-ops on domain's facades, DECISIONS #39/#44) |
 | S10 | `contacts` on the `mission:<id>` `invalidate` event | **implemented** (contact facts + reservation changes; plans/runs not yet) |
 
 ## `GET /api/console/v1/missions/:mission_id/passes`
@@ -71,3 +72,41 @@ committed (relayed from `Cadence.Contacts.Facts` by `CadenceWeb.Console.ContactC
 the `:contacts_changed` read update, which every `ProviderReservations` writer publishes after
 commit (domain `db8c9953`), so reservation-only transitions (for example `requesting → rejected`)
 invalidate too. Contact **plan and fleet-run** changes don't publish yet; ask domain if a screen needs them.
+
+## Station availability (S7)
+
+Over domain's `Cadence.Comms.StationAvailability` and `Cadence.Reads.StationImpact`
+(`docs/apogee/domain/station-availability.md`). Station ids are api's
+`GET /ground-stations` ids. Refetch on `invalidate` with `stations` (and `contacts`; every window
+change publishes both).
+
+- `GET /station-availability?at=` (default now) → `{at, stations: [status]}`, one row per station.
+- `GET /station-availability/:station_id?from&to` (default now → +7 d, ≤ 31 d) →
+  `{status, from, to, windows: [window]}`.
+- `POST /station-availability/:station_id/windows` `{kind: outage | maintenance | degraded,
+  starts_at, ends_at?, eta?, reason?, detail?}` → `201` window. Operator-entered
+  (`source: operator`, `reported_by` = you).
+- `POST /station-availability/windows/:window_id/clear` `{reason?}` → the window with `cleared_at`.
+- `GET /station-availability/:station_id/impact?from&to` → `{ground_station_id, from, to, passes_hit,
+  reservation_ids, spacecraft_ids, truncated}`: live bookings at that station in the window (K2's
+  "passes hit"). Reservations that never named a station can't be attributed and aren't counted.
+
+```json
+status = {"ground_station_id": "gs-…", "state": "up | degraded | down", "since": null, "eta": null,
+          "source": "operator | provider | simulator | null", "reported_by": {…} | null,
+          "reported_at": null, "basis": "no reported windows", "windows": [window]}
+window = {"id": "station_window_…", "ground_station_id": "gs-…", "kind": "outage | maintenance | degraded",
+          "from": "…", "to": "…" | null, "eta": "…" | null, "source": "operator | provider | simulator",
+          "reported_by": {…}, "created_by": {…}, "reported_at": "…", "reason": "…" | null,
+          "detail": {}, "cleared_at": null}
+```
+
+- `state`: `down` while an outage or maintenance window is active; `degraded` while a degraded one
+  is; `up` means **nothing is reported**, not live telemetry. Say so (`basis`).
+- `eta`: when it's expected back (`to`, or the reported ETA). `null` when unknown; never guess.
+- `status.windows` lists active and upcoming windows (7 d).
+- Provider-reported windows come from provider sync. A window the provider stops reporting is
+  cleared. The simulator fault `station_outages` produces `source: simulator` windows.
+
+Errors: `422 invalid_params` / `invalid_window`, `404 station_not_found` / `window_not_found`,
+`409 window_overlaps` (same kind, same station) / `window_cleared`, `403 forbidden`.
