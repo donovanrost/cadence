@@ -2,6 +2,7 @@ import type { RouteLocationRaw } from "vue-router";
 import { plural } from "@/ui";
 import { coverage, spacecraftNotCovered } from "./coverage.ts";
 import { isStationConflict } from "./unavailable.ts";
+import { unconfirmedTail } from "./unconfirmed.ts";
 import { byAuthor, type PlanDetail } from "./api.ts";
 
 /**
@@ -109,8 +110,14 @@ export function planPrimary(
   }
 }
 
-/** Header mono tail per plan state. */
+/** Header mono tail per plan state, plus U30's `· 4 unconfirmed` on any state that has them. */
 export function planHeaderTail(plan: PlanDetail): string {
+  const unconfirmed = unconfirmedTail(plan);
+  if (!unconfirmed) return stateTail(plan);
+  return plan.state === "unconfirmed" ? unconfirmed : `${stateTail(plan)} · ${unconfirmed}`;
+}
+
+function stateTail(plan: PlanDetail): string {
   switch (plan.state) {
     case "draft": {
       const conflicts = plan.conflicts.length;

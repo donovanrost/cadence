@@ -33,7 +33,9 @@ export type GanttBarKind =
   /** Ended / past: drawn dimmer than scheduled. */
   | "done"
   /** Drafted but at risk (e.g. a degraded station): white with a caution outline. */
-  | "risk";
+  | "risk"
+  /** Placed, provider silent past its window: truth unknown, stale-hatched (ux U30). */
+  | "unconfirmed";
 
 export type GanttBar = Readonly<{
   id: string;

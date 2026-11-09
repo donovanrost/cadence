@@ -24,6 +24,7 @@ const plan: PlanDetail = {
   unmet: [gap("r1"), gap("r2")],
   conflicts: [],
   at_risk: [],
+  unconfirmed: null,
   superseded: null,
   repair_of: null,
 };

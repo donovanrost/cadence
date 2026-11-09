@@ -17,6 +17,7 @@ const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   unmet: [],
   conflicts: [],
   at_risk: [],
+  unconfirmed: null,
   superseded: null,
   repair_of: null,
   ...over,

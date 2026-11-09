@@ -97,12 +97,17 @@ const bandKinds = computed(() =>
     props.bands.some((b) => b.kind === k),
   ),
 );
+/** Bar kinds whose look needs a word (U30): legended only when on screen. */
+const BAR_WORDS = { unconfirmed: "Unconfirmed" } as const;
+const barKinds = computed(() =>
+  (["unconfirmed"] as const).filter((k) => props.bars.some((b) => b.kind === k)),
+);
 </script>
 
 <template>
   <div ref="root" role="group" :aria-label="label" class="flex min-w-0 flex-col">
     <ul
-      v-if="bandKinds.length > 0"
+      v-if="bandKinds.length > 0 || barKinds.length > 0"
       class="m-0 mb-2 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 font-mono text-xs text-text-3 uppercase"
     >
       <li v-for="k in bandKinds" :key="k" class="flex items-center gap-1.5">
@@ -111,6 +116,11 @@ const bandKinds = computed(() =>
           class="ap-band relative inline-block h-3 w-5 border border-hairline"
           :class="`ap-band--${k}`"
         />{{ BAND_WORDS[k] }}
+      </li>
+      <li v-for="k in barKinds" :key="k" class="flex items-center gap-1.5">
+        <span aria-hidden="true" class="relative inline-block h-3 w-5" :class="`ap-bar--${k}`" />{{
+          BAR_WORDS[k]
+        }}
       </li>
     </ul>
     <div class="relative flex flex-col gap-px">
@@ -250,6 +260,13 @@ const bandKinds = computed(() =>
   background: transparent;
   /* U27: dim the mark, not the text (labels stay ≥ text-3). */
   color: var(--color-text-3);
+}
+.ap-bar--unconfirmed {
+  /* U30: unknown truth reads stale; label on the deep base keeps its contrast (U27). */
+  border: 1px solid var(--color-stale);
+  background-color: var(--color-stale-deep);
+  background-image: var(--apogee-hatch-stale-cell);
+  color: var(--color-stale-text);
 }
 .ap-bar--selected {
   outline: 2px solid var(--color-readout);

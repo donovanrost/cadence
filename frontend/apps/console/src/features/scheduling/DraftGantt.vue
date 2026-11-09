@@ -59,6 +59,10 @@ const down = computed(
     ),
 );
 const risky = computed(() => new Set(props.plan.at_risk.flatMap((r) => r.snapshot_ids)));
+/** U30: placed, provider silent past its window; stale-hatched. */
+const unconfirmed = computed(
+  () => new Set(props.plan.unconfirmed?.passes.map((p) => p.snapshot_id) ?? []),
+);
 const others = computed(() =>
   props.alternatives?.status === "ready"
     ? distinctWindows(props.alternatives.value.alternatives)
@@ -98,15 +102,17 @@ const draftedBars = computed<GanttBar[]>(() =>
       to: Date.parse(p.ends_at),
       kind: props.muted
         ? "done"
-        : clashing.value.has(p.snapshot_id) || down.value.has(p.snapshot_id)
-          ? "clash"
-          : risky.value.has(p.snapshot_id)
-            ? "risk"
-            : p.spacecraft_id === props.focused
-              ? "focused"
-              : "own",
+        : unconfirmed.value.has(p.snapshot_id)
+          ? "unconfirmed"
+          : clashing.value.has(p.snapshot_id) || down.value.has(p.snapshot_id)
+            ? "clash"
+            : risky.value.has(p.snapshot_id)
+              ? "risk"
+              : p.spacecraft_id === props.focused
+                ? "focused"
+                : "own",
       label: sc ? String(sc.scid) : undefined,
-      description: `${who} · ${stationName(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z${clashing.value.has(p.snapshot_id) ? " · conflict" : ""}${down.value.has(p.snapshot_id) ? " · station down" : risky.value.has(p.snapshot_id) ? " · station degraded, may lose data" : ""}`,
+      description: `${who} · ${stationName(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z${clashing.value.has(p.snapshot_id) ? " · conflict" : ""}${down.value.has(p.snapshot_id) ? " · station down" : risky.value.has(p.snapshot_id) ? " · station degraded, may lose data" : ""}${unconfirmed.value.has(p.snapshot_id) ? " · unconfirmed: the provider hasn't answered" : ""}`,
     };
   }),
 );

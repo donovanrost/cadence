@@ -136,6 +136,21 @@ const planIssue = d.object({
   kind: d.optional(d.string),
 });
 
+const unconfirmedReader = d.nullable(
+  d.object({
+    window_ms: d.integer,
+    booked: d.integer,
+    passes: d.array(
+      d.object({
+        snapshot_id: d.token,
+        provider: d.object({ id: d.token, name: d.nullable(d.string) }),
+        sent_at: d.timestamp,
+      }),
+      5_000,
+    ),
+  }),
+);
+
 export const planDetailReader = d.object({
   ...planRow,
   passes: d.array(
@@ -188,6 +203,9 @@ export const planDetailReader = d.object({
   /** `station_degraded`: passes inside a degraded window; a warning only (U26). */
   at_risk: (value: unknown, path?: string) =>
     value === undefined ? [] : d.array(planIssue, 5_000)(value, path),
+  /** U30 (api b122f667): placed bookings unanswered past the window, on any state; else null. */
+  unconfirmed: (value: unknown, path?: string) =>
+    value === undefined ? null : unconfirmedReader(value, path),
 });
 export type PlanDetail = Decoded<typeof planDetailReader>;
 export type PlanIssue = PlanDetail["conflicts"][number];

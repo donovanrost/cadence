@@ -11,6 +11,8 @@ export {
 } from "./contact.ts";
 export { bookingStopped, type BookingStopped } from "./booking.ts";
 export { useBookingStopped } from "./useBookingStopped.ts";
+export { default as UnconfirmedCallout } from "./UnconfirmedCallout.vue";
+export { unconfirmedView } from "./unconfirmed.ts";
 export {
   byAuthor,
   continueDraft,

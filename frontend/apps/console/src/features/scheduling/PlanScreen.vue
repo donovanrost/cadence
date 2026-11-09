@@ -18,6 +18,7 @@ import { isPlanSuperseded, planErrorText } from "./errors.ts";
 import SubmitSheet from "./SubmitSheet.vue";
 import ProposalCallout from "./ProposalCallout.vue";
 import SupersededCallout from "./SupersededCallout.vue";
+import UnconfirmedCallout from "./UnconfirmedCallout.vue";
 import { stationHits } from "./unavailable.ts";
 import { planPrimary } from "./plan-primary.ts";
 import type { PlanView } from "./plan-state.ts";
@@ -144,7 +145,9 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
   <template v-if="view.kind === 'plan'">
     <SupersededCallout v-if="view.plan.superseded" :superseded="view.plan.superseded" />
     <ApCallout v-else-if="stopped" :tone="stopped.tone">{{ stopped.text }}</ApCallout>
-    <!-- U30, until plan detail names the unconfirmed passes (asked of api): no counts, no guess. -->
+    <!-- U30: on any state that has unconfirmed bookings, on top of the state's own callout. -->
+    <UnconfirmedCallout v-if="view.plan.unconfirmed" :plan="view.plan" :name-of="nameOf" />
+    <!-- An older server without the unconfirmed block: no counts, no guess. -->
     <ApCallout v-else-if="view.plan.state === 'unconfirmed'" tone="caution">
       The provider hasn't confirmed some bookings within the confirmation window. They may or may
       not be booked, so Cadence won't send them again. Check them with the provider.
