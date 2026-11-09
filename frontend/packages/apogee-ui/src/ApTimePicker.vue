@@ -40,7 +40,7 @@ const model = defineModel<number | null>({ required: true });
 
 const now = useNow();
 const dialog = ref<HTMLDialogElement | null>(null);
-const draft = ref(0);
+const draft = ref(model.value ?? now.value.getTime());
 const preset = ref<string | null>(null);
 const marked = computed(() => new Set(props.markedDays));
 const warning = computed(() => props.warn?.(draft.value) ?? null);

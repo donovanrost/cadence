@@ -48,3 +48,14 @@ describe("ApTimePicker", () => {
     wrapper.unmount();
   });
 });
+
+describe("ApTimePicker calendar", () => {
+  it("shows the month of the value being edited", async () => {
+    const wrapper = picker(AT);
+    await wrapper.get("button[aria-haspopup=dialog]").trigger("click");
+    expect(wrapper.text()).toContain("October 2026");
+    await wrapper.get("dialog input").setValue("2027-03-05 10:00");
+    expect(wrapper.text()).toContain("March 2027");
+    wrapper.unmount();
+  });
+});

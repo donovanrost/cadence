@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { fieldId } from "../field-id.ts";
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { dayKey, monthGrid, MONTHS, withDate } from "./calendar.ts";
 
 /** UTC month calendar. Days are a roving-tabindex grid: arrows move, Enter/Space picks. */
@@ -15,6 +15,11 @@ const emit = defineEmits<{ "update:modelValue": [value: number] }>();
 
 const selected = computed(() => new Date(props.modelValue));
 const view = ref({ year: selected.value.getUTCFullYear(), month: selected.value.getUTCMonth() });
+// Follow the selection when it moves outside the visible month (presets, typing, spinners).
+watch(selected, (d) => {
+  if (d.getUTCFullYear() !== view.value.year || d.getUTCMonth() !== view.value.month)
+    view.value = { year: d.getUTCFullYear(), month: d.getUTCMonth() };
+});
 const grid = computed(() => monthGrid(view.value.year, view.value.month));
 const selectedKey = computed(() =>
   dayKey(

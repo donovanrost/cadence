@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { ApPageHeader, ApPanel, ApTimePicker, useNow, type TimePreset } from "@/ui";
+import {
+  ApPageHeader,
+  ApPanel,
+  ApTimePicker,
+  ApTimeRange,
+  useNow,
+  type RangePreset,
+  type TimePreset,
+  type TimeRange,
+} from "@/ui";
 
 /**
  * Development-only review page for shared components that have no consuming screen yet.
@@ -21,6 +30,15 @@ const presets = computed<TimePreset[]>(() => {
     },
   ];
 });
+const rangePresets = computed<RangePreset[]>(() => {
+  const t = Math.floor(now.value.getTime() / 60_000) * 60_000;
+  return [
+    { id: "h1", label: "Last 1h", from: t - 3_600_000, to: t },
+    { id: "h6", label: "Last 6h", from: t - 21_600_000, to: t },
+    { id: "h24", label: "24h", from: t - 86_400_000, to: t },
+  ];
+});
+const plotWindow = ref<TimeRange>({ from: Date.now() - 21_600_000, to: Date.now() });
 const today = computed(() => now.value.toISOString().slice(0, 10));
 const warn = (t: number) =>
   t < now.value.getTime() - 1000
@@ -41,6 +59,9 @@ const warn = (t: number) =>
           :warn="warn"
         />
       </div>
+    </ApPanel>
+    <ApPanel index="K2" title="ApTimeRange" meta="FIXTURE PRESETS · NO BANDS">
+      <ApTimeRange v-model="plotWindow" label="Plot window" :presets="rangePresets" />
     </ApPanel>
   </div>
 </template>

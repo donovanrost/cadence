@@ -23,6 +23,7 @@ export { default as ApTable, type ApColumn } from "./ApTable.vue";
 export { default as ApTabLinks, type ApTabLink } from "./ApTabLinks.vue";
 export { default as ApTag } from "./ApTag.vue";
 export { default as ApTimePicker } from "./ApTimePicker.vue";
+export { default as ApTimeRange } from "./ApTimeRange.vue";
 export { default as ApTimeSeries } from "./ApTimeSeries.vue";
 export { stateInsetClass, stateTextClass, stateWord, type OpState } from "./status.ts";
 export * from "./lib/index.ts";
