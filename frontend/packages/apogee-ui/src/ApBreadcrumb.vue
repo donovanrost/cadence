@@ -16,7 +16,7 @@ defineProps<{ crumbs: readonly ApCrumb[] }>();
         <RouterLink
           v-if="crumb.to && i < crumbs.length - 1"
           :to="crumb.to"
-          class="text-text-3 no-underline hover:text-readout"
+          class="text-text-3 no-underline hover:text-readout max-md:hit-44"
           >{{ crumb.label }}</RouterLink
         >
         <span

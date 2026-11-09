@@ -44,7 +44,7 @@ const describedBy = computed(
   <div class="flex flex-col gap-1.5">
     <label :for="id" class="ap-label" :class="hiddenLabel ? 'sr-only' : ''">{{ label }}</label>
     <div
-      class="flex h-[38px] items-center border bg-well focus-within:border-readout"
+      class="flex h-[38px] items-center border bg-well max-md:h-11 focus-within:border-readout"
       :class="[error ? 'border-caution' : 'border-line', disabled ? 'opacity-60' : '']"
     >
       <input

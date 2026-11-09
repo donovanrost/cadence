@@ -40,7 +40,11 @@ watch(
   (r) => {
     fromText.value = formatAbsolute(new Date(r.from));
     toText.value = formatAbsolute(new Date(r.to));
-    presetId.value = props.presets.find((p) => p.from === r.from && p.to === r.to)?.id ?? "custom";
+    // Presets that track "now" drift by seconds between renders; match within a minute.
+    presetId.value =
+      props.presets.find(
+        (p) => Math.abs(p.from - r.from) <= 60_000 && Math.abs(p.to - r.to) <= 60_000,
+      )?.id ?? "custom";
   },
   { immediate: true },
 );

@@ -14,7 +14,7 @@ defineEmits<{ remove: [] }>();
     <button
       v-if="removable"
       type="button"
-      class="inline-flex size-[22px] cursor-pointer items-center justify-center border-0 bg-transparent text-text-3 hover:text-readout"
+      class="inline-flex size-[22px] cursor-pointer max-md:hit-44 items-center justify-center border-0 bg-transparent text-text-3 hover:text-readout"
       :aria-label="removeLabel ?? 'Remove'"
       @click="$emit('remove')"
     >

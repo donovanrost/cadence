@@ -38,8 +38,8 @@ const variantClasses = {
 } as const satisfies Record<NonNullable<typeof props.variant>, string>;
 
 const sizeClasses = {
-  compact: "h-8 px-3 text-md tracking-btn",
-  standard: "h-[38px] px-[18px] text-base tracking-tag",
+  compact: "h-8 px-3 text-md tracking-btn max-md:hit-44",
+  standard: "h-[38px] px-[18px] text-base tracking-tag max-md:hit-44",
   commit: "h-[46px] px-6 text-[15px] tracking-tag",
 } as const satisfies Record<NonNullable<typeof props.size>, string>;
 

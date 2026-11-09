@@ -38,3 +38,16 @@ describe("ApTimeRange", () => {
     expect(wrapper.emitted("update:modelValue")?.length).toBe(before);
   });
 });
+
+describe("ApTimeRange preset drift", () => {
+  it("still highlights a preset whose window drifted by seconds", () => {
+    const wrapper = mount(ApTimeRange, {
+      props: {
+        label: "Plot window",
+        presets,
+        modelValue: { from: NOW - 3_600_000 - 5_000, to: NOW - 5_000 },
+      },
+    });
+    expect(wrapper.get("[role=radio][aria-checked=true]").text()).toBe("Last 1h");
+  });
+});

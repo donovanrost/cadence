@@ -68,7 +68,7 @@ const uid = fieldId("ap-tp-month");
       <button
         type="button"
         aria-label="Previous month"
-        class="size-8 cursor-pointer border-0 bg-transparent text-text-3 hover:text-readout"
+        class="size-8 cursor-pointer border-0 bg-transparent text-text-3 hover:text-readout max-md:hit-44"
         @click="shiftMonth(-1)"
       >
         ‹
@@ -83,7 +83,7 @@ const uid = fieldId("ap-tp-month");
       <button
         type="button"
         aria-label="Next month"
-        class="size-8 cursor-pointer border-0 bg-transparent text-text-3 hover:text-readout"
+        class="size-8 cursor-pointer border-0 bg-transparent text-text-3 hover:text-readout max-md:hit-44"
         @click="shiftMonth(1)"
       >
         ›
@@ -111,7 +111,7 @@ const uid = fieldId("ap-tp-month");
         :tabindex="d.key === selectedKey ? 0 : -1"
         :aria-selected="d.key === selectedKey"
         :aria-label="`${d.key}${marked.has(d.key) ? `, ${markedLabel}` : ''}${d.key === todayKey ? ', today' : ''}`"
-        class="relative flex h-9 cursor-pointer items-center justify-center border font-sans text-md tabular"
+        class="relative flex h-9 cursor-pointer max-md:min-h-11 items-center justify-center border font-sans text-md tabular"
         :class="[
           d.key === selectedKey
             ? 'border-action bg-action font-semibold text-on-action'

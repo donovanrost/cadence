@@ -71,7 +71,7 @@ function move(event: KeyboardEvent, index: number) {
       :aria-checked="variant === 'tabs' ? undefined : option.value === modelValue"
       :aria-selected="variant === 'tabs' ? option.value === modelValue : undefined"
       :tabindex="option.value === modelValue ? 0 : -1"
-      class="flex cursor-pointer items-center gap-2 border-0 whitespace-nowrap"
+      class="flex cursor-pointer items-center gap-2 border-0 whitespace-nowrap max-md:hit-44"
       :class="{
         'h-[30px] px-3 font-display text-md font-semibold tracking-title uppercase':
           variant === 'choice',

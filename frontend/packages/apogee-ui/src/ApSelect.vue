@@ -50,7 +50,7 @@ const describedBy = computed(
         class="w-full cursor-pointer appearance-none rounded-none [color-scheme:dark] border bg-well pr-8 pl-3 text-readout focus:border-readout disabled:cursor-not-allowed disabled:text-text-off"
         :class="[
           error ? 'border-caution' : 'border-line',
-          size === 'compact' ? 'h-8' : 'h-[38px]',
+          size === 'compact' ? 'h-8 max-md:h-11' : 'h-[38px] max-md:h-11',
           mono ? 'font-mono text-sm' : 'font-sans text-base',
         ]"
       >

@@ -59,3 +59,21 @@ describe("ApTimePicker calendar", () => {
     wrapper.unmount();
   });
 });
+
+describe("ApTimePicker future", () => {
+  it("flags a past time only when the caller asks for future times", async () => {
+    const wrapper = mount(ApTimePicker, {
+      props: {
+        label: "Release at",
+        modelValue: null,
+        future: true,
+        pastMessage: "In the past: it would send at the next AOS.",
+      },
+      attachTo: document.body,
+    });
+    await wrapper.get("button[aria-haspopup=dialog]").trigger("click");
+    await wrapper.get("dialog input").setValue("2020-01-01 00:00");
+    expect(wrapper.text()).toContain("In the past: it would send at the next AOS.");
+    wrapper.unmount();
+  });
+});

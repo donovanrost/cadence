@@ -50,7 +50,10 @@ const placeholder = computed(() =>
     <!-- Mode-specific status from features, composed in App.vue: Ops fleet tag / next AOS,
          Setup config revision. -->
     <slot v-if="mode === 'ops' && mission" name="status" />
-    <slot v-if="mode === 'setup' && mission" name="setup-status" />
+    <!-- Below 768 the staged bar carries the revision, so the top row stays one line (ux #2). -->
+    <div v-if="mode === 'setup' && mission" class="flex max-md:hidden">
+      <slot name="setup-status" />
+    </div>
     <ClockCluster />
     <AccountMenu />
   </header>

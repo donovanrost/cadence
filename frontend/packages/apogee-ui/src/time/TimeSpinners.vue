@@ -39,7 +39,7 @@ const uid = fieldId("ap-tp-time");
             type="button"
             tabindex="-1"
             :aria-label="`${field.label} up`"
-            class="h-6 w-12 cursor-pointer border-0 bg-transparent text-xs text-text-4 hover:text-readout"
+            class="h-6 w-12 cursor-pointer border-0 bg-transparent text-xs text-text-4 hover:text-readout max-md:h-11"
             @click="bump(field.ms, 1)"
           >
             ▲
@@ -59,7 +59,7 @@ const uid = fieldId("ap-tp-time");
             type="button"
             tabindex="-1"
             :aria-label="`${field.label} down`"
-            class="h-6 w-12 cursor-pointer border-0 bg-transparent text-xs text-text-4 hover:text-readout"
+            class="h-6 w-12 cursor-pointer border-0 bg-transparent text-xs text-text-4 hover:text-readout max-md:h-11"
             @click="bump(field.ms, -1)"
           >
             ▼

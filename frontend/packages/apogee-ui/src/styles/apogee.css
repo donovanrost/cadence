@@ -54,3 +54,20 @@
   color: var(--color-text-4);
   margin: 0;
 }
+
+/*
+ * U18: at least 44px of hit area without changing visuals. Use as `max-md:hit-44` on small
+ * interactive elements (links in meta lines, breadcrumbs, segments, chips' remove buttons).
+ */
+@utility hit-44 {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+}

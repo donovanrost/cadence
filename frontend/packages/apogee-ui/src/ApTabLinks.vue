@@ -18,7 +18,7 @@ defineProps<{ links: readonly ApTabLink[]; active: string; label: string }>();
       :key="link.key"
       :to="link.to"
       :aria-current="link.key === active ? 'page' : undefined"
-      class="flex h-9 items-center gap-2 border-r border-hairline px-4 font-display text-md font-semibold tracking-tag uppercase no-underline last:border-r-0"
+      class="flex h-9 items-center gap-2 max-md:hit-44 border-r border-hairline px-4 font-display text-md font-semibold tracking-tag uppercase no-underline last:border-r-0"
       :class="
         link.key === active
           ? 'bg-raised text-readout shadow-[inset_0_-2px_0_var(--color-readout)]'

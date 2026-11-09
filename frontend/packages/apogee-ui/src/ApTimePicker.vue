@@ -26,6 +26,9 @@ const props = withDefaults(
     /** Mission epoch (ms). MET appears only when the mission defines one (U7). */
     metEpoch?: number | null | undefined;
     warn?: ((at: number) => string | null) | undefined;
+    /** Release-style pickers: a time in the past is flagged (caution) with `pastMessage`. */
+    future?: boolean | undefined;
+    pastMessage?: string | undefined;
     placeholder?: string | undefined;
   }>(),
   {
@@ -34,6 +37,8 @@ const props = withDefaults(
     markedLabel: "Queued uplinks",
     metEpoch: null,
     placeholder: "Pick a time",
+    future: false,
+    pastMessage: "In the past.",
   },
 );
 const model = defineModel<number | null>({ required: true });
@@ -44,6 +49,7 @@ const draft = ref(model.value ?? now.value.getTime());
 const preset = ref<string | null>(null);
 const marked = computed(() => new Set(props.markedDays));
 const warning = computed(() => props.warn?.(draft.value) ?? null);
+const past = computed(() => props.future && draft.value < now.value.getTime() - 1_000);
 const id = `ap-tp-${Math.random().toString(36).slice(2, 9)}`;
 
 function open() {
@@ -132,7 +138,9 @@ function commit() {
           </div>
           <div class="bg-panel px-4 py-2.5">
             <dt class="ap-label">From now</dt>
-            <dd class="m-0 font-mono text-base">{{ formatRelative(new Date(draft), now) }}</dd>
+            <dd class="m-0 font-mono text-base" :class="past ? 'text-caution-text' : ''">
+              {{ formatRelative(new Date(draft), now) }}
+            </dd>
           </div>
           <div v-if="metEpoch !== null" class="bg-panel px-4 py-2.5">
             <dt class="ap-label">MET</dt>
@@ -141,6 +149,7 @@ function commit() {
             </dd>
           </div>
         </dl>
+        <ApCallout v-if="past" tone="caution">{{ pastMessage }}</ApCallout>
         <ApCallout v-if="warning" tone="crit">{{ warning }}</ApCallout>
       </div>
       <footer class="flex flex-wrap items-center gap-3 border-t border-hairline px-5 py-3">
