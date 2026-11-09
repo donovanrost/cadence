@@ -46,18 +46,28 @@ filters: actor (select) · mission (select) · kind chips (Config · Commanding 
   (`■ CONNECTED` / `▲ CREDENTIALS EXPIRING · 6 days` / `◆ AUTH FAILED` / hatched `NOT CHECKED`) ·
   Missions using it (count, link) · Last successful call (`T+04:12`) · Added (by, when). Primary `Add
   provider account`.
-- **Add / detail:** provider select (from the server's adapter registry: `provider_adapters`), account
-  name, credential fields **generated from the adapter's schema** (secret fields write-only: shown as
-  `•••• set 11-02` with `Replace`; never echo a secret), environment (sandbox/production if the adapter
-  has it). `Test connection` (secondary) reports the real result with the provider's message. Save is
-  only enabled after the required fields are filled. Missions panel: which missions use this account
-  (link to Setup › Ground stations › Providers).
-- **Removal:** `Remove account` (danger) is blocked with a reason while missions use it ("Used by 2
-  missions. Unlink it from them first.").
+- **Add / detail (revised per api's design note: Cadence never receives secret values):** fields from the
+  adapter schema (`GET /provider-adapters/:key/schema`): provider (adapter select), account name, base
+  URL, environment, region (optional). **Credential** is a *reference*, never a secret:
+  - `Where the secret lives`: choice segmented `Secret manager` / `Environment variable` (the latter tagged
+    `DEV ONLY` in caution; refuse or warn on production environments if the server says so).
+  - `Reference` (mono input): placeholder `providers/reflect-orbital/northlight-prod` (secret manager) or
+    `NORTHLIGHT_API_KEY` (env). Help: "Cadence reads the secret from there when it calls the provider. The
+    secret itself is never sent to or stored in Cadence."
+  - No masked "•••• set" field and no password input anywhere on this page.
+  `Test connection` (secondary) checks that the reference resolves **and** the provider accepts it, and
+  reports which failed: "Reference not found in the secret manager" vs "Provider rejected the
+  credential (401)" vs "Connected · 312 ms". Save is enabled when the required fields are filled; an
+  untested account saves with status `NOT CHECKED`.
+  **Editing** saves a new version (`v2`); changing the reference is just a new reference value. History
+  lists versions with who/when and the reference (not secret) used. Missions panel: which missions use
+  this account (link to Setup › Ground stations › Providers).
+- **Removal:** not available yet (no account retirement in the domain). Hide `Remove`, and say "Accounts
+  can't be removed yet." in the detail's Technical details, rather than a disabled dead button.
 - Health is real only: if the server doesn't check credentials, the status is `NOT CHECKED` (hatched),
   not connected.
 
 ## Acceptance (for qa)
 - No hard-coded settings sections or fields; inheritance source is shown on every field.
 - The audit log says which sources are missing until it's unified.
-- Secrets are never echoed back; provider status is never green without a real check.
+- No secret is ever entered or shown; credentials are references. Provider status is never green without a real check.
