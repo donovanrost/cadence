@@ -60,26 +60,25 @@ export const opsRoutes: RouteRecordRaw[] = [
     meta: { mode: "ops", nav: "contacts", title: "Contacts", board: "Contacts (J4)" },
   },
   {
+    // K1 (lead, DECISIONS #24): takeover console. K0 has no route (DECISIONS #4).
     path: "contacts/plan",
     name: "ops.contacts.plan",
-    component: pending,
-    meta: {
-      mode: "ops",
-      nav: "contacts",
-      title: "Plan contacts",
-      board: "PassPrediction (K0), SchedulePlan (K1)",
-    },
+    component: () => import("@/features/scheduling/PlanScreen.vue"),
+    meta: { mode: "takeover", nav: "contacts", title: "Plan contacts", board: "SchedulePlan (K1)" },
   },
   {
-    path: "contacts/replan/:stationId",
+    // K2 v1 (DECISIONS #25): re-plan after provider changes, ?plan= or ?reservation=. The
+    // station-down entry (contacts/replan/:stationId) returns with S7.
+    path: "contacts/replan",
     name: "ops.contacts.replan",
-    component: pending,
-    meta: { mode: "ops", nav: "contacts", title: "Replan", board: "Replan (K2)" },
+    component: () => import("@/features/scheduling/ReplanScreen.vue"),
+    meta: { mode: "takeover", nav: "contacts", title: "Re-plan", board: "Replan (K2)" },
   },
   {
     path: "contacts/review",
     name: "ops.contacts.review",
     component: pending,
+    // K3 waits for S9 (DECISIONS #25); not linked from anywhere until then.
     meta: { mode: "ops", nav: "contacts", title: "Pass review", board: "PassReview (K3)" },
   },
   {
