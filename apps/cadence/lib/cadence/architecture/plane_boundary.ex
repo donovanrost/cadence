@@ -46,6 +46,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
       "lib/cadence/spacecraft_store.ex",
       "lib/cadence/spacecraft_store/",
       "lib/cadence/spacecraft_type.ex",
+      "lib/cadence/spacecraft_type/",
       "lib/cadence/spacecraft_type_store.ex",
       "lib/cadence/spacecraft_type_store/"
     ],
@@ -63,6 +64,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
     ],
     data: [
       "lib/cadence/action_requests/",
+      "lib/cadence/alarms/",
       "lib/cadence/application_dispatch/",
       "lib/cadence/applications/",
       "lib/cadence/capabilities/",
@@ -488,6 +490,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
   # when the owning plane intends the module to be consumed across the boundary.
   @public_cross_plane_sinks MapSet.new([
                               "lib/cadence/control/activations.ex",
+                              "lib/cadence/control/alarms.ex",
                               "lib/cadence/control/activations/activation_execution.ex",
                               "lib/cadence/applications/telemetry_decom.ex",
                               "lib/cadence/management/activations/approved_activation.ex",

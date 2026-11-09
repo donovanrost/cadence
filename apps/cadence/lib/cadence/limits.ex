@@ -6,6 +6,7 @@ defmodule Cadence.Limits do
 
   import Ecto.Query
 
+  alias Cadence.Alarms.Ground, as: AlarmGround
   alias Ecto.Changeset
   alias Ecto.Multi
 
@@ -388,10 +389,14 @@ defmodule Cadence.Limits do
     |> Multi.run(:latest_limit_states, fn repo, _changes ->
       persist_latest_states(repo, limit_events)
     end)
+    |> Multi.run(:alarm_episodes, fn repo, _changes ->
+      AlarmGround.observe(repo, run.mission_id, limit_events)
+    end)
     |> Repo.transaction()
     |> case do
-      {:ok, _changes} ->
+      {:ok, changes} ->
         Enum.each(limit_events, &Facts.publish(event_bus, &1))
+        AlarmGround.notify(changes.alarm_episodes)
         {:ok, run}
 
       {:error, _operation, %Changeset{} = changeset, _changes_so_far} ->

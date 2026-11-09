@@ -119,6 +119,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
        "lib/cadence/limits/store/"
      ]},
     {["lib/cadence/limits/"], @limits_context},
+    {["lib/cadence/alarms/"], ["lib/cadence/alarms/"]},
     {["lib/cadence/jobs/"], @jobs_context},
     {["lib/cadence/notifications/"], @notifications_context},
     {["lib/cadence/applications/"], @applications_context},

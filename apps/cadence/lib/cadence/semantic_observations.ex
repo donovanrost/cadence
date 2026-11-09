@@ -11,6 +11,7 @@ defmodule Cadence.SemanticObservations do
 
   alias Ecto.Multi
 
+  alias Cadence.Alarms.{Episodes, Notify, Sources}
   alias Cadence.Catalog.MissionModel.Canonical
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
@@ -37,9 +38,22 @@ defmodule Cadence.SemanticObservations do
     |> evaluation_multi(transitions)
     |> Repo.transaction()
     |> case do
-      {:ok, _changes} -> :ok
-      {:error, _operation, reason, _changes} -> {:error, reason}
+      {:ok, changes} ->
+        notify_alarm_changes(changes)
+        :ok
+
+      {:error, _operation, reason, _changes} ->
+        {:error, reason}
     end
+  end
+
+  defp notify_alarm_changes(changes) do
+    changes
+    |> Enum.flat_map(fn
+      {{:alarm_episode, _evidence, _index}, {:changed, mission_id}} -> [mission_id]
+      _other -> []
+    end)
+    |> Notify.missions_changed()
   end
 
   defp evaluation_multi(evaluations, transitions) do
@@ -118,7 +132,7 @@ defmodule Cadence.SemanticObservations do
       update = Map.fetch!(updates, monitoring_result.update_id)
       evaluation_attrs = MonitoringEvaluationRow.attrs(monitoring_result, update, context)
 
-      {add_transition(multi, prepared, index, monitoring_result, evaluation_attrs),
+      {add_transition(multi, prepared, index, monitoring_result, evaluation_attrs, update),
        [MonitoringEvaluationRow.changeset(evaluation_attrs) | evaluations]}
     end)
   end
@@ -154,7 +168,7 @@ defmodule Cadence.SemanticObservations do
     end)
   end
 
-  defp add_transition(multi, prepared, index, result, evaluation_attrs) do
+  defp add_transition(multi, prepared, index, result, evaluation_attrs, update) do
     transition_attrs = AlarmTransitionRow.attrs(evaluation_attrs, result)
 
     latest_attrs = %{
@@ -183,6 +197,10 @@ defmodule Cadence.SemanticObservations do
       conflict_target: [:mission_id, :spacecraft_scope_id, :parameter_id, :policy_id],
       allow_stale: true
     )
+    |> Multi.run({:alarm_episode, prepared.raw_evidence.evidence_id, index}, fn repo, _changes ->
+      observation = Sources.catalog(evaluation_attrs, update, transition_attrs.transition_id)
+      Episodes.record(repo, observation)
+    end)
   end
 
   defp semantic_context(%{observation_context: context}) when is_map(context), do: context

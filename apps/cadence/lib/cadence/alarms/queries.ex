@@ -1,0 +1,163 @@
+defmodule Cadence.Alarms.Queries do
+  @moduledoc """
+  Episode reads in their raw form. `Cadence.Reads.AlarmEpisodes` adds spacecraft, threshold
+  and other cross-context detail for the console.
+
+  Active episodes are ordered for the action queue: critical before caution, New before
+  acknowledged, then the most recently opened first. Cleared episodes come newest-cleared first.
+  """
+
+  import Ecto.Query
+
+  alias Cadence.Alarms.{EpisodeEventRow, EpisodeRow}
+  alias Cadence.Repo
+
+  @max_limit 200
+  @sources %{"catalog_monitoring" => :catalog_monitoring, "ground_limit" => :ground_limit}
+  @event_kinds Map.new(EpisodeEventRow.kinds(), &{&1, String.to_atom(&1)})
+
+  @type filters :: %{
+          optional(:state) => String.t(),
+          optional(:severity) => String.t(),
+          optional(:spacecraft_id) => String.t(),
+          optional(:source) => String.t(),
+          optional(:assignee_id) => String.t(),
+          optional(:limit) => pos_integer()
+        }
+
+  @spec list(String.t(), filters()) :: [map()]
+  def list(mission_id, filters \\ %{}) do
+    state = Map.get(filters, :state, "active")
+    limit = filters |> Map.get(:limit, 50) |> min(@max_limit) |> max(1)
+
+    EpisodeRow
+    |> where([e], e.mission_id == ^mission_id)
+    |> state_filter(state)
+    |> field_filter(:severity, Map.get(filters, :severity))
+    |> field_filter(:spacecraft_id, Map.get(filters, :spacecraft_id))
+    |> field_filter(:source, Map.get(filters, :source))
+    |> assignee_filter(Map.get(filters, :assignee_id))
+    |> ordered(state)
+    |> limit(^limit)
+    |> Repo.all()
+    |> Enum.map(&view/1)
+  end
+
+  @spec get(String.t(), String.t()) :: {:ok, map()} | {:error, :episode_not_found}
+  def get(mission_id, episode_id) do
+    case Repo.get_by(EpisodeRow, mission_id: mission_id, episode_id: episode_id) do
+      nil ->
+        {:error, :episode_not_found}
+
+      episode ->
+        events =
+          EpisodeEventRow
+          |> where([event], event.episode_id == ^episode_id)
+          |> order_by([event], asc: event.at, asc: event.event_id)
+          |> Repo.all()
+          |> Enum.map(&event_view/1)
+
+        {:ok, episode |> view() |> Map.put(:events, events)}
+    end
+  end
+
+  @doc "Active episode counts by severity and status."
+  @spec summary(String.t()) :: map()
+  def summary(mission_id) do
+    counts =
+      EpisodeRow
+      |> where([e], e.mission_id == ^mission_id and e.state == "active")
+      |> group_by([e], [e.severity, is_nil(e.acknowledged_at)])
+      |> select([e], {e.severity, is_nil(e.acknowledged_at), count(e.episode_id)})
+      |> Repo.all()
+
+    count = fn severity, new? ->
+      Enum.reduce(counts, 0, fn
+        {^severity, ^new?, n}, acc -> acc + n
+        _row, acc -> acc
+      end)
+    end
+
+    %{
+      active: Enum.reduce(counts, 0, fn {_s, _n, n}, acc -> acc + n end),
+      critical: %{new: count.("critical", true), acknowledged: count.("critical", false)},
+      caution: %{new: count.("caution", true), acknowledged: count.("caution", false)}
+    }
+  end
+
+  @spec view(EpisodeRow.t()) :: map()
+  def view(%EpisodeRow{} = episode) do
+    %{
+      id: episode.episode_id,
+      source: Map.fetch!(@sources, episode.source),
+      status: status(episode),
+      cleared_unacknowledged: episode.cleared_unacknowledged,
+      severity: severity(episode.severity),
+      peak_severity: severity(episode.peak_severity),
+      source_state: episode.source_state,
+      spacecraft_id: episode.spacecraft_id,
+      point: %{id: episode.parameter_ref, name: episode.point_name},
+      context: episode.context,
+      opened_at: episode.opened_at,
+      cleared_at: episode.cleared_at,
+      first_value: unwrap(episode.first_value),
+      last_value: unwrap(episode.last_value),
+      last_observed_at: episode.last_observed_at,
+      last_evaluated_at: episode.last_evaluated_at,
+      acknowledged_at: episode.acknowledged_at,
+      acknowledged_by: actor(episode.acknowledged_by),
+      assignee: assignee(episode.assignee),
+      assigned_at: episode.assigned_at
+    }
+  end
+
+  defp event_view(event) do
+    %{
+      id: event.event_id,
+      kind: Map.fetch!(@event_kinds, event.kind),
+      actor: actor(event.actor),
+      at: event.at,
+      payload: event.payload
+    }
+  end
+
+  defp status(%EpisodeRow{state: "cleared"}), do: :cleared
+  defp status(%EpisodeRow{acknowledged_at: nil}), do: :new
+  defp status(%EpisodeRow{}), do: :acknowledged
+
+  defp severity("critical"), do: :critical
+  defp severity("caution"), do: :caution
+
+  defp state_filter(query, "all"), do: query
+  defp state_filter(query, "cleared"), do: where(query, [e], e.state == "cleared")
+  defp state_filter(query, _active), do: where(query, [e], e.state == "active")
+
+  defp field_filter(query, _field, nil), do: query
+  defp field_filter(query, field, value), do: where(query, [e], field(e, ^field) == ^value)
+
+  defp assignee_filter(query, nil), do: query
+
+  defp assignee_filter(query, user_id),
+    do: where(query, [e], fragment("?->>'id' = ?", e.assignee, ^user_id))
+
+  defp ordered(query, "cleared"),
+    do: order_by(query, [e], desc: e.cleared_at, asc: e.episode_id)
+
+  defp ordered(query, _state) do
+    order_by(query, [e],
+      asc: fragment("CASE ? WHEN 'critical' THEN 0 ELSE 1 END", e.severity),
+      desc: is_nil(e.acknowledged_at),
+      desc: e.opened_at,
+      asc: e.episode_id
+    )
+  end
+
+  defp unwrap(%{"value" => value}), do: value
+  defp unwrap(_value), do: nil
+
+  defp actor(nil), do: nil
+  defp actor(%{"kind" => kind, "id" => id} = doc), do: %{kind: kind, id: id, name: doc["name"]}
+
+  defp assignee(nil), do: nil
+  defp assignee(%{"id" => id} = doc), do: %{id: id, name: doc["name"]}
+end

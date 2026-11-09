@@ -205,6 +205,7 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/spacecraft_store.ex",
       "lib/cadence/spacecraft_store/",
       "lib/cadence/spacecraft_type.ex",
+      "lib/cadence/spacecraft_type/",
       "lib/cadence/spacecraft_type_store.ex",
       "lib/cadence/spacecraft_type_store/"
     ],
@@ -248,6 +249,7 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/runtime/"
     ],
     telemetry: [
+      "lib/cadence/alarms/",
       "lib/cadence/derived_telemetry.ex",
       "lib/cadence/derived_telemetry/",
       "lib/cadence/ingress/",
@@ -312,7 +314,7 @@ defmodule Cadence.Architecture.ContextBoundary do
       "lib/cadence/control/runtime",
       "lib/cadence/control/missions"
     ],
-    telemetry: ["lib/cadence/control/replay"],
+    telemetry: ["lib/cadence/control/alarms.ex", "lib/cadence/control/replay"],
     data_sources: [
       "lib/cadence/management/data_sources",
       "lib/cadence/management/managed_resources",
