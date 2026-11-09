@@ -140,3 +140,87 @@ export async function routeEpisodes(
     state: () => ({ ...episode }),
   };
 }
+
+export interface EpisodeSeed {
+  readonly scid: number;
+  readonly severity: "critical" | "caution";
+  readonly status: "new" | "acknowledged" | "cleared";
+  readonly point: string;
+}
+
+function seeded(seed: EpisodeSeed, index: number): Json {
+  const name = `EARENDIL-${String(seed.scid).padStart(3, "0")}`;
+  const opened = new Date(Date.now() - (index + 1) * 600_000).toISOString();
+  const cleared =
+    seed.status === "cleared" ? new Date(Date.now() - index * 60_000).toISOString() : null;
+  return {
+    id: `alarm_episode_qa_list_${index + 1}`,
+    source: "ground_limit",
+    status: seed.status,
+    cleared_unacknowledged: seed.status === "cleared",
+    severity: seed.severity,
+    peak_severity: seed.severity,
+    source_state: seed.severity === "critical" ? "red_low" : "yellow_high",
+    spacecraft_id: `spacecraft-earendil-${String(seed.scid).padStart(3, "0")}`,
+    spacecraft: {
+      id: `spacecraft-earendil-${String(seed.scid).padStart(3, "0")}`,
+      name,
+      scid: seed.scid,
+    },
+    point: { id: seed.point, name: seed.point.split(".").pop() ?? seed.point, unit: "A" },
+    thresholds: { red_low: -5.5, yellow_low: -5, yellow_high: 5, red_high: 6 },
+    context: {
+      limit_set_name: "DEFAULT",
+      limit_definition_id: "limit_qa",
+      limit_definition_version: 1,
+    },
+    opened_at: opened,
+    cleared_at: cleared,
+    first_value: -5.8,
+    last_value: -6.1,
+    last_observed_at: opened,
+    last_evaluated_at: new Date(Date.now() - 120_000).toISOString(),
+    acknowledged_at: seed.status === "acknowledged" ? opened : null,
+    acknowledged_by: seed.status === "acknowledged" ? ADMIN : null,
+    assignee: null,
+    assigned_at: null,
+  };
+}
+
+/** Read-only episode list for the Alarms screen; honours `state` and `spacecraft_id`. */
+export async function routeEpisodeList(page: Page, seeds: readonly EpisodeSeed[]): Promise<void> {
+  const all = seeds.map(seeded);
+  const active = all.filter((e) => e["status"] !== "cleared");
+  const count = (severity: string, status: string) =>
+    active.filter((e) => e["severity"] === severity && e["status"] === status).length;
+  await page.route(`${missionApi("alarm-episodes")}**`, async (route) => {
+    const url = new URL(route.request().url());
+    const state = url.searchParams.get("state") ?? "active";
+    const sc = url.searchParams.get("spacecraft_id");
+    const episodes = all.filter(
+      (e) =>
+        (state === "all" ||
+          (state === "cleared" ? e["status"] === "cleared" : e["status"] !== "cleared")) &&
+        (!sc || e["spacecraft_id"] === sc),
+    );
+    await route.fulfill({
+      json: {
+        data: {
+          summary: {
+            active: active.length,
+            critical: {
+              new: count("critical", "new"),
+              acknowledged: count("critical", "acknowledged"),
+            },
+            caution: {
+              new: count("caution", "new"),
+              acknowledged: count("caution", "acknowledged"),
+            },
+          },
+          permissions: ["alarm.acknowledge", "alarm.assign"],
+          episodes,
+        },
+      },
+    });
+  });
+}
