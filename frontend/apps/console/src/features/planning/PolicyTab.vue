@@ -66,9 +66,9 @@ async function save() {
     <template #default="{ value: policy }">
       <PolicyDecision :mission-id="missionId" :policy="policy" @decided="refetch" />
       <ApPanel
-        v-for="g in groups(policy)"
+        v-for="(g, i) in groups(policy)"
         :key="g.key"
-        :index="`P4·${g.key}`"
+        :index="`P4.${i + 1}`"
         :title="groupTitles[g.key] ?? g.key"
       >
         <SchemaForm
