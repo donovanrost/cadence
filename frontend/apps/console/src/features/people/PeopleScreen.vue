@@ -15,6 +15,7 @@ import {
 import InvitationsTable from "./InvitationsTable.vue";
 import InvitePanel from "./InvitePanel.vue";
 import PeopleTable from "./PeopleTable.vue";
+import ServiceIdentitiesPanel from "./ServiceIdentitiesPanel.vue";
 import { fetchPeople, matchesPerson, type People } from "./api.ts";
 
 /** S5 · People & access (org-scoped). Spec: docs/apogee/ux/screens/People.md. */
@@ -25,7 +26,7 @@ const organization = computed(() =>
     : null,
 );
 const { state, refetch } = useRemoteQuery(() => organization.value?.id ?? null, fetchPeople);
-const tab = ref<"people" | "invitations">("people");
+const tab = ref<"people" | "invitations" | "services">("people");
 const query = ref("");
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
@@ -38,6 +39,10 @@ const subline = (p: People) =>
 const tabs = (p: People) => [
   { value: "people" as const, label: "People", count: p.members.length },
   { value: "invitations" as const, label: "Invitations", count: p.invitations.length },
+  // Org admins only (O3 is 403 for members): gate on the caller's org permissions.
+  ...(p.permissions.includes("org.manage_members")
+    ? [{ value: "services" as const, label: "Service identities" }]
+    : []),
 ];
 </script>
 
@@ -86,6 +91,11 @@ const tabs = (p: People) => [
             >
             <PeopleTable :rows="value.members.filter((m) => matchesPerson(m, query))" />
           </ApPanel>
+          <ServiceIdentitiesPanel
+            v-else-if="tab === 'services' && organization"
+            :organization-id="organization.id"
+            class="min-w-0 flex-[999_1_560px]"
+          />
           <ApPanel v-else index="U1" title="Invitations" class="min-w-0 flex-[999_1_560px]" flush>
             <ApEmptyState v-if="value.invitations.length === 0" headline="No invitations" />
             <InvitationsTable v-else :rows="value.invitations" />

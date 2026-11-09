@@ -82,3 +82,36 @@ export function matchesPerson(m: Member, query: string): boolean {
     t.toLowerCase().includes(q),
   );
 }
+
+const serviceIdentity = object({
+  id: token,
+  name: string,
+  scope_summary: string,
+  capabilities: array(token, 100),
+  mission: nullable(object({ id: token, name: string })),
+  last_used_at: nullable(timestamp),
+  key_created_at: nullable(timestamp),
+});
+export const serviceIdentitiesReader = object({
+  service_identities: array(serviceIdentity, 1000),
+  rotation_policy_days: nullable(decoders.integer),
+});
+export type ServiceIdentities = Decoded<typeof serviceIdentitiesReader>;
+
+export function fetchServiceIdentities(
+  organizationId: string,
+  signal: AbortSignal,
+): Promise<ApiResult<ServiceIdentities>> {
+  return request(`${base(organizationId)}/service-identities`, serviceIdentitiesReader, { signal });
+}
+
+/** Key age warning only against a real org policy; never an invented number (People.md U3). */
+export function keyAgeWarning(
+  keyCreatedAt: string | null,
+  policyDays: number | null,
+  now: Date,
+): string | null {
+  if (keyCreatedAt === null || policyDays === null) return null;
+  const days = Math.floor((now.getTime() - Date.parse(keyCreatedAt)) / 86_400_000);
+  return days > policyDays ? `Key is ${days} days old; rotation policy is ${policyDays}.` : null;
+}
