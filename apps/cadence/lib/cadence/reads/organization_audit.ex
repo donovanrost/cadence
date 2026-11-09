@@ -206,6 +206,12 @@ defmodule Cadence.Reads.OrganizationAudit do
     end)
   end
 
+  defp alarm_verb("acknowledged"), do: "Acknowledged"
+  defp alarm_verb("assigned"), do: "Assigned"
+  defp alarm_verb("unassigned"), do: "Unassigned"
+  defp alarm_verb("handed_off"), do: "Handed off"
+  defp alarm_verb("note"), do: "Added a note to"
+
   defp humanize(value),
     do: value |> to_string() |> String.replace("_", " ") |> String.capitalize()
 
