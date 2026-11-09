@@ -9,6 +9,7 @@ defmodule Cadence.Dev.ReflectOrbital.Planning do
   alias Cadence.ContactPlanning.{ContactRequirementTemplates, FleetPlanningPolicies}
 
   @anchor ~U[2026-01-01 00:00:00Z]
+  @minimum_duration_s 300
 
   def run do
     unless Code.ensure_loaded?(Mix) and Mix.env() == :dev,
@@ -47,7 +48,7 @@ defmodule Cadence.Dev.ReflectOrbital.Planning do
 
     IO.puts("""
     Contact planning: fleet planning policy #{policy} active; #{templates} recurring downlink
-    templates (one 10-minute contact every 6 h) for the first #{count} spacecraft.
+    templates (one 5-minute contact every 6 h) for the first #{count} spacecraft.
     """)
   end
 
@@ -74,10 +75,22 @@ defmodule Cadence.Dev.ReflectOrbital.Planning do
   end
 
   defp ensure_templates(scope, count) do
-    existing =
-      F.organization_id()
-      |> ContactRequirementTemplates.list(F.mission_id())
-      |> MapSet.new(fn {_template, version} -> version.spacecraft_id end)
+    templates = ContactRequirementTemplates.list(F.organization_id(), F.mission_id())
+    existing = MapSet.new(templates, fn {_template, version} -> version.spacecraft_id end)
+
+    # Bring templates seeded with an older rule up to date (new template version).
+    Enum.each(templates, fn {template, version} ->
+      if version.requirement_document["minimum_duration_seconds"] != @minimum_duration_s do
+        {:ok, _template, _version} =
+          ContactRequirementTemplates.version(
+            scope,
+            F.mission_id(),
+            template.contact_requirement_template_id,
+            version.version,
+            template_attrs(version.spacecraft_id)
+          )
+      end
+    end)
 
     F.spacecraft()
     |> Enum.take(count)
@@ -107,8 +120,9 @@ defmodule Cadence.Dev.ReflectOrbital.Planning do
         "service_direction" => "downlink",
         "contact_intent" => "recurring_payload_downlink",
         "success_measure" => "minimum_duration",
-        "minimum_duration_seconds" => 600,
-        "preferred_duration_seconds" => 600,
+        # The simulator's visibility windows are 8 min; ask for 5.
+        "minimum_duration_seconds" => @minimum_duration_s,
+        "preferred_duration_seconds" => @minimum_duration_s,
         "minimum_data_volume_bytes" => nil,
         "contact_count" => 1,
         "minimum_separation_seconds" => 0,
