@@ -30,8 +30,8 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 14 | Catalog import | File picker shows no visible keyboard focus (WCAG 2.4.7) | fe-setup | verified (32c2cb4e) |
 | 5 | Now · fleet matrix | Plane buttons: "P01" vs label "Plane 1" (WCAG 2.5.3) and 36×10px targets 18px apart (WCAG 2.5.8) | fe-ops | verified (8ccf851f) |
 | 25 | Uplink · abort | Pointer click on Abort hit the dev-only Tidewave toolbar (keyboard worked) | fe-ops | verified (e05d3790: real mouse clicks on Abort and its confirm, group aborted) |
-| 26 | K1 submit · gap reasons | Windows already past on today's draft read "Provider search unavailable" (printed twice per row) instead of saying the window has passed | domain / api | open |
-| 27 | K1 submit · gap reasons | Ticking "Same reason for all" still leaves one reason box per spacecraft; filling only the first keeps Submit disabled ("Every gap needs a reason first.") | lead | open |
+| 26 | K1 submit · gap reasons | Windows already past on today's draft read "Provider search unavailable" (printed twice per row) instead of saying the window has passed | domain / api | doubled text fixed (lead, 10ffd37d); wording open (domain/api: `provider_search_unavailable` for past windows) |
+| 27 | K1 submit · gap reasons | Ticking "Same reason for all" still leaves one reason box per spacecraft; filling only the first keeps Submit disabled ("Every gap needs a reason first.") | lead | fixed (10ffd37d: one shared reason box); `planning-submit-race` e2e uses it |
 
 ## Details
 

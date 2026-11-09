@@ -25,7 +25,8 @@ Report: `frontend/apps/console/playwright-report/index.html`; traces and failure
 **Writes.** By default the suite writes nothing permanent. Staged changes it creates carry the
 `QA-E2E` marker and are discarded after each test, and specs skip when someone else has changes
 staged. `E2E_MUTATE=1` enables the tests that create permanent records: the change-set apply
-round-trip (rename EARENDIL-499 and back, r2/r3) and a catalog re-import of `demo_spacecraft.yaml`.
+round-trip (rename EARENDIL-499 and back, r2/r3), a catalog re-import of `demo_spacecraft.yaml`,
+planning-policy versions, and the K1 submit race (a template version plus, if needed, a draft).
 
 ## Personas
 
@@ -53,6 +54,7 @@ The default is `admin`; switch with `test.use({ storageState: storageStateFor("o
 | `support/alarms.ts` | `/alarms` fixture with server-side filtering (Investigate B1/B4) |
 | `support/episodes.ts` | Stateful alarm-episode fixture (acknowledge/assign, injectable failures) and a read-only list fixture |
 | `support/config.ts` | Change-set API helpers: stage a rename, QA-only discard, foreign-staged guard |
+| `support/planning.ts` | Contact-planning helpers: `utcDay`, `plansForDay`, `bumpTemplate` (a rule change "from another tab") |
 
 ## Coverage
 
@@ -68,6 +70,8 @@ The default is `admin`; switch with `test.use({ storageState: storageStateFor("o
 | `setup-spacecraft`, `setup-detail`, `setup-add-spacecraft` | S2 directory, detail, wizard; profiles; catalog index | real |
 | `catalog-import` | S3 import | real (upload opt-in) |
 | `changes`, `setup-stations` | Change sets (decision 1), stations edit/add | real, staged then discarded (apply opt-in) |
+| `planning-requirements`, `planning-policy` | CP1 contact rules, CP2 planning policy | real (policy versions opt-in) |
+| `planning-submit-race` | K1 submit loses a race with a template change: 409 `plan_superseded`, nothing booked | real, opt-in (saves a template version; drafts today+4 if needed) |
 
 ## Conventions
 
