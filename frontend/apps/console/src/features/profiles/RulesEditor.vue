@@ -1,0 +1,147 @@
+<script setup lang="ts">
+import { computed, ref } from "vue";
+import { useRouter } from "vue-router";
+import { useRemoteQuery, type ApiError } from "@/api";
+import {
+  failureOutcome,
+  invalidOpDetails,
+  previewOps,
+  refreshConfigState,
+  stageChange,
+  type Preview,
+  type StageOp,
+} from "@/features/changes/index.ts";
+import { fetchStations } from "@/features/stations/index.ts";
+import { ApButton, ApCallout, ApPanel, ApRemote, ApSegmented, plural } from "@/ui";
+import RuleForm from "./RuleForm.vue";
+import type { ProfileDetail } from "./detail.ts";
+import { draftProblems, newRule, toDocument, toDrafts, type RuleDraft } from "./rulesDraft.ts";
+
+/** P2 edit: the whole rule list as one staged change at `routing_rules` (domain P2). */
+const props = defineProps<{ missionId: string; detail: ProfileDetail }>();
+const emit = defineEmits<{ close: [] }>();
+const router = useRouter();
+const stations = useRemoteQuery(() => props.missionId, fetchStations);
+const drafts = ref<RuleDraft[]>(toDrafts(props.detail.rules));
+const rollout = ref<"all" | "none">("all");
+const busy = ref(false);
+const outcome = ref<{ tone: "nominal" | "caution" | "crit"; text: string } | null>(null);
+const problems = computed(() => draftProblems(drafts.value));
+if (drafts.value.length === 0) drafts.value.push(newRule([]));
+
+/** Rejections name the field (`routing_rules.0.stations` etc.), per U20 nothing changed. */
+function rejected(error: ApiError, verb: "staged" | "changed") {
+  const detail = invalidOpDetails(error);
+  return detail
+    ? `Nothing was ${verb}. ${detail.errors.map((e) => `${e.path}: ${e.message}`).join(" · ")}`
+    : failureOutcome(error, verb).sentence;
+}
+
+const op = (): StageOp => ({
+  kind: "spacecraft_profile",
+  action: "update",
+  entity_id: props.detail.profile.id,
+  changes: [{ path: "routing_rules", value: toDocument(drafts.value) }],
+  options: { rollout: rollout.value },
+});
+function describe(p: Preview): { tone: "nominal" | "caution" | "crit"; text: string } {
+  const issues = p.checks.flatMap((c) =>
+    c.items.flatMap((i) => i.errors?.map((e) => e.message) ?? [i.reason ?? i.kind]),
+  );
+  const changes = p.effects.reduce((n, e) => n + e.changes, 0);
+  if (p.verdict === "no_go")
+    return { tone: "crit", text: `NO-GO: ${issues.slice(0, 3).join(" · ")}` };
+  return {
+    tone: p.verdict === "hold" ? "caution" : "nominal",
+    text: `Checks pass · changes ${plural(changes, "spacecraft", "spacecraft")}${issues.length ? ` · ${issues.join(" · ")}` : ""}`,
+  };
+}
+
+async function check() {
+  if (problems.value.length > 0 || busy.value) return;
+  busy.value = true;
+  try {
+    const result = await previewOps(
+      { missionId: props.missionId, ops: [op()] },
+      new AbortController().signal,
+    );
+    outcome.value = result.ok
+      ? describe(result.value)
+      : { tone: "crit", text: rejected(result.error, "changed") };
+  } finally {
+    busy.value = false;
+  }
+}
+async function stage() {
+  if (problems.value.length > 0 || busy.value) return;
+  busy.value = true;
+  try {
+    const result = await stageChange(props.missionId, {
+      summary: `${props.detail.profile.name} · routing rules (${plural(drafts.value.length, "rule")})`,
+      source: { surface: "profile_routing" },
+      ops: [op()],
+    });
+    if (!result.ok)
+      return void (outcome.value = {
+        tone: "crit",
+        text: failureOutcome(result.error, "staged").sentence,
+      });
+    refreshConfigState(props.missionId);
+    await router.push({ name: "setup.changes" });
+  } finally {
+    busy.value = false;
+  }
+}
+</script>
+
+<template>
+  <ApPanel index="P2" title="Edit routing rules" :meta="plural(drafts.length, 'rule')">
+    <ApRemote
+      :state="stations.state.value"
+      loading-label="Loading stations…"
+      @retry="stations.refetch"
+    >
+      <template #default="{ value: stationList }">
+        <div class="flex flex-col gap-4">
+          <RuleForm
+            v-for="(_, i) in drafts"
+            :key="drafts[i]?.id ?? i"
+            v-model="drafts[i]!"
+            :index="i"
+            :stations="stationList"
+            @remove="drafts.splice(i, 1)"
+          />
+          <div>
+            <ApButton size="compact" @click="drafts.push(newRule(drafts))">Add rule</ApButton>
+          </div>
+          <ApSegmented
+            v-model="rollout"
+            label="Roll out to"
+            :options="[
+              { value: 'all', label: 'All spacecraft on this profile' },
+              { value: 'none', label: 'New version only' },
+            ]"
+          />
+          <ApCallout v-if="problems.length > 0" tone="caution">{{ problems.join(" ") }}</ApCallout>
+          <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
+          <div class="flex flex-wrap gap-2">
+            <ApButton
+              :disabled="busy || problems.length > 0"
+              disabled-reason="Fix the rules first."
+              @click="check"
+              >Check with the server</ApButton
+            >
+            <ApButton
+              variant="primary"
+              :disabled="busy || problems.length > 0"
+              disabled-reason="Fix the rules first."
+              @click="stage"
+              >Stage rule change</ApButton
+            >
+            <ApButton variant="ghost" @click="emit('close')">Cancel</ApButton>
+          </div>
+        </div>
+      </template>
+    </ApRemote>
+  </ApPanel>
+</template>

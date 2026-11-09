@@ -64,6 +64,7 @@ export function inviteFailure(code: string | null, message: string): string {
       return "They already have a pending invitation.";
     case "forbidden":
       return "Only an organization admin can invite people.";
+    case null:
     default:
       return message;
   }
