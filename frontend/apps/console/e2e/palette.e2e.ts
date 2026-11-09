@@ -54,17 +54,12 @@ test.describe("Palette (J5)", () => {
   });
 
   test("is accessible when open", async ({ page }) => {
-    test.fail(
-      true,
-      "qa issue #12: 'Show all' <button> inside role=listbox (aria-required-children)",
-    );
     await page.keyboard.press("Control+k");
     await expect(dialog(page).getByRole("option").first()).toBeVisible();
     await expectAccessible(page);
   });
 
   test("Tab keeps focus inside the modal dialog", async ({ page }) => {
-    test.fail(true, "qa issue #13: focus leaves the aria-modal palette after two Tabs");
     await page.keyboard.press("Control+k");
     await expect(query(page)).toBeFocused();
     for (let i = 0; i < 8; i += 1) {
