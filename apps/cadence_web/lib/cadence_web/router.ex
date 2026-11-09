@@ -762,6 +762,7 @@ defmodule CadenceWeb.Router do
       get("/alarms", AlarmController, :index)
       get("/telemetry/points/:point_id/history", PointController, :history)
       get("/limits/points/:point_id/intervals", PointController, :limit_intervals)
+      get("/action-queue", ActionQueueController, :show)
 
       # -- Setup (owner: api). Contracts: docs/apogee/api/setup.md
       get("/spacecraft", SpacecraftController, :index)

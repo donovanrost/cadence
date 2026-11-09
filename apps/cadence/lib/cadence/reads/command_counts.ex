@@ -33,10 +33,12 @@ defmodule Cadence.Reads.CommandCounts do
     }
   end
 
-  defp requester_id(%CommandRequest{requested_by: requested_by}) when is_map(requested_by) do
+  @doc "The requesting user's id, or `nil` when the request does not record one."
+  @spec requester_id(CommandRequest.t()) :: binary() | nil
+  def requester_id(%CommandRequest{requested_by: requested_by}) when is_map(requested_by) do
     Map.get(requested_by, "id") || Map.get(requested_by, :id) ||
       Map.get(requested_by, "user_id") || Map.get(requested_by, :user_id)
   end
 
-  defp requester_id(%CommandRequest{}), do: nil
+  def requester_id(%CommandRequest{}), do: nil
 end

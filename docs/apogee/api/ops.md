@@ -15,7 +15,7 @@ is yours too.
 | M9 | `GET /missions/:mission_id/alarms` | **implemented** |
 | M10 | `GET /missions/:mission_id/telemetry/points/:point_id/history` | **implemented** |
 | M11 | `GET /missions/:mission_id/limits/points/:point_id/intervals` | **implemented** |
-| M6 | `GET /missions/:mission_id/action-queue` | planned |
+| M6 | `GET /missions/:mission_id/action-queue` | **implemented** (api-ops) |
 | M8 | channel events: see [realtime.md](realtime.md) | `invalidate` live, `fleet` delta planned |
 
 ## `GET /api/console/v1/missions/:mission_id/fleet`
@@ -148,6 +148,62 @@ values get `422 invalid_params` with `details`.
 - Sorting: severity (critical first), then newest received first.
 - **Not yet:** point `unit` and `description` (they need the catalog point join; planned with M23
   point search), and the D6 alarm lifecycle (ack/assign/hand-off).
+
+## `GET /api/console/v1/missions/:mission_id/action-queue`
+
+The viewer's ranked action queue (Now A2), ranked by ux U11. Refetch on `invalidate` with `alarms`,
+`commanding`, `spacecraft`, `limits`, `catalog`, `data_sources` or `settings`, plus `telemetry`
+throttled to about 10 s (stale groups change with time).
+
+```json
+{"data": {
+  "observed_at": "2026-11-08T02:41:17Z", "stale_after_s": 900, "failure_lookback_s": 86400,
+  "counts": {"p1": 2, "p2": 3, "p3": 1, "spacecraft_p1": 4},
+  "items": [{
+    "id": "alarm:critical:EPS.VBAT:red_low",
+    "priority": 1, "kind": "alarm", "state": "critical",
+    "since": "2026-11-08T02:35:02Z", "due_at": null, "count": 3,
+    "spacecraft": [{"id": "spacecraft-earendil-312", "name": "EARENDIL-312", "scid": 312, "plane": 13,
+                    "stale": false, "last_received_at": "…", "violating_points": 1,
+                    "value": 23.1, "first_crossed_at": "2026-11-08T02:35:02Z"}],
+    "point": {"id": "EPS.VBAT", "name": "VBAT", "subsystem": "EPS"}, "condition": "red_low",
+    "plane": null, "command": null, "outcome": null, "command_requests": [], "finding": null
+  }]
+}}
+```
+
+Every item has every field; fields that don't apply to its `kind` are `null` (or `[]` for lists).
+
+| kind | priority | state | grouped by | filled fields |
+| --- | --- | --- | --- | --- |
+| `alarm` | 1 critical, 2 caution | `critical` / `caution` | `{severity, point, condition}` of each spacecraft's **worst** active alarm | `spacecraft` (with `value`, `first_crossed_at`), `point`, `condition` |
+| `command_failed` | 1 | `critical` | `{command, outcome}`, failures within `failure_lookback_s` | `command {id, name}`, `outcome` (`failed` = release or verify failed, `indeterminate` = release uncertain), `command_requests`, `spacecraft` (resolved targets) |
+| `approval` | 2 | `caution` | one item: approval-pending requests **not** requested by the viewer | `command_requests`, `spacecraft` |
+| `stale` | 2 | `stale` | plane (`plane: null` = no plane metadata) | `plane`, `spacecraft` |
+| `setup` | 3 | `off` | one per readiness finding with severity `blocker` or `not_set_up` | `finding` (the readiness finding: `id, area, severity, cause, title, body, affected_count, fix`) |
+| `limits_not_configured` | 3 | `off` | — (omitted when the limits app itself isn't installed; that is a `setup` item) | none |
+| `never_heard` | 3 | `off` | one item | `spacecraft` |
+
+- `id` is stable across refetches (use it as the list key and for "seen" state).
+- Order: `priority`, then `due_at` (soonest first), then `since` (oldest first, `null` last), then `id`.
+  The server returns the order; don't re-sort.
+- `since`: alarm = earliest `first_crossed_at` in the group; command = oldest failure / request time;
+  stale = the oldest `last_received_at` (silent the longest); setup / never-heard = `null`.
+- `due_at` (time to consequence: next AOS, umbra entry, release time) is **always `null` for now**.
+  It fills in with M7 (passes) and D1 (propagation).
+- Groups can have one member. The server groups every identical cause; the UI may show small
+  groups as individual rows.
+- `spacecraft` members are ordered oldest-first by `since` for alarms, fleet order otherwise.
+- `command_requests[]`: `{id, command_name, target: {id, name}, spacecraft_id, requested_by, requested_at, status, occurred_at}`.
+  `requested_by` is a display label. `status` uses the command-status vocabulary (`failed`, `indeterminate`, `approval_pending`, …).
+- `counts.spacecraft_p1`: distinct spacecraft across P1 items (the "N spacecraft need you" headline).
+- **Not derived yet** (no source): critical flight events (safe mode), missed passes, degraded
+  stations, no-ACK retries. Alarm items are limit-state based; they switch to alarm episodes (D6/#17)
+  when domain's lifecycle lands.
+- `failure_lookback_s` is `config :cadence, :action_queue_failure_lookback_s` (default 24 h).
+  Failures older than that drop off the queue; they stay on the commands pages.
+
+Errors: `404 mission_not_found`.
 
 ## Time windows (shared by M10 and M11)
 
