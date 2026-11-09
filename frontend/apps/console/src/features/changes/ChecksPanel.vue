@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { RemoteState } from "@/api";
-import { CheckRows, type CheckRow } from "@/features/spacecraft/index.ts";
-import { ApPanel, ApRemote, plural } from "@/ui";
+import { ApCheckRows, ApPanel, ApRemote, plural, type ApCheckRow } from "@/ui";
 import type { Preview } from "./actions.ts";
 
 /** K2 Checks: the server's dry run of the staged set (validation, conflicts; more kinds in P2). */
@@ -14,7 +13,7 @@ const labels: Readonly<Record<string, string>> = {
   conflicts: "Conflicts",
 };
 
-function rows(preview: Preview): readonly CheckRow[] {
+function rows(preview: Preview): readonly ApCheckRow[] {
   return preview.checks.map((check) => ({
     key: check.key,
     label: labels[check.key] ?? check.key,
@@ -47,7 +46,7 @@ const meta = computed(() =>
 <template>
   <ApPanel index="K2" title="Checks" :meta="meta" flush>
     <ApRemote :state="preview" loading-label="Running checks…" @retry="$emit('retry')">
-      <template #default="{ value }"><CheckRows :rows="rows(value)" /></template>
+      <template #default="{ value }"><ApCheckRows :rows="rows(value)" /></template>
     </ApRemote>
   </ApPanel>
 </template>

@@ -41,7 +41,7 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
   {
     path: "setup/profiles/:profileId/:section?",
     name: "setup.profile",
-    component: pending,
+    component: () => import("@/features/profiles/ProfileScreen.vue"),
     meta: { mode: "setup", nav: "profiles", title: "Profile", board: "Profile (S4)" },
   },
   {
