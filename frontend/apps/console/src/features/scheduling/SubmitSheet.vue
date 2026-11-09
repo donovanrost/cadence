@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
-import { describeApiError, type ApiError } from "@/api";
+import type { ApiError } from "@/api";
 import { ApButton, ApCallout, ApTextarea, plural } from "@/ui";
 import {
   reasonText,
@@ -10,6 +10,7 @@ import {
   type Acknowledgement,
   type PlanDetail,
 } from "./api.ts";
+import { planErrorText } from "./errors.ts";
 import { contactsShortText, coverage, gapGroups } from "./coverage.ts";
 import type { SpacecraftName } from "./names.ts";
 
@@ -117,7 +118,7 @@ const errorText = computed(() => {
   if (!e) return null;
   if (e.kind === "conflict" && e.code === "plan_changed")
     return "The plan changed since you opened this. Close it and review again.";
-  return describeApiError(e);
+  return planErrorText(e);
 });
 /** U26/ux #13: passes on a degraded station, listed so booking them is an informed choice. */
 const atRisk = computed(() => {

@@ -12,6 +12,9 @@ describe("planErrorText", () => {
       }),
     ).toContain("Contact rules aren't active for this day");
     expect(
+      planErrorText({ kind: "conflict", code: "plan_superseded", message: "x", details: null }),
+    ).toContain("superseded and can't be submitted");
+    expect(
       planErrorText({
         kind: "invalid",
         code: "something_new",

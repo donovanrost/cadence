@@ -12,6 +12,8 @@ const MESSAGES: Readonly<Record<string, string>> = {
   fleet_repair_horizon_exceeded:
     "That re-plan window is longer than the planning policy allows. Narrow it to the lost bookings.",
   plan_changed: "Someone changed this plan meanwhile. It's reloaded; check it and try again.",
+  plan_superseded:
+    "Contact rules changed since this draft, so it's superseded and can't be submitted. Draft the day again.",
   plan_not_editable: "This plan can't be edited in its current state.",
   plan_not_submittable: "This plan can't be submitted in its current state.",
   plan_not_resumable: "Booking can't be resumed for this plan.",

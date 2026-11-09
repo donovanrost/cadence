@@ -14,6 +14,8 @@ const props = defineProps<{
   busy: boolean;
   /** Replaces the sheet primary's label (K2: "Apply r42 · book N passes"). */
   sheetLabel?: string | undefined;
+  /** Replaces the redraft primary's label (K2 superseded proposal: "Propose again"). */
+  redraftLabel?: string | undefined;
 }>();
 defineEmits<{ sheet: []; execute: []; redraft: [] }>();
 const primary = computed(() => planPrimary(props.plan, props.isAdmin));
@@ -61,7 +63,7 @@ const atRisk = computed(() => props.plan.at_risk.flatMap((r) => r.snapshot_ids).
         size="commit"
         :disabled="busy"
         @click="$emit('redraft')"
-        >{{ primary.label }}</ApButton
+        >{{ redraftLabel ?? primary.label }}</ApButton
       >
       <ApButton
         v-else-if="primary.kind === 'link'"
