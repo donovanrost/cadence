@@ -301,3 +301,27 @@ with DECISIONS #3.
 
 For editing, the UI needs each kind's editable fields. Please add a `schema` (same field shape as
 PD sections) to G1/T1, or a `GET /config/kinds/:kind/schema`, so the edit forms are generated.
+
+## D · Data sources (rail 07) and A · Apps (rail 08)
+
+### D1 · `GET /missions/:mission_id/data-sources`
+
+```json
+{"data": {"sources": [{"id", "display_name", "kind": "managed_tsdb|…", "owner": "cadence|external",
+  "status": "active|disabled|…", "health": {"status": "healthy|degraded|unknown", "checked_at"}|null,
+  "last_received_at": "…"|null, "expected_interval_s": 300|null, "stale": false|null,
+  "credentials": {"status": "valid|expiring|expired|none", "rotated_at"}|null}]}}
+```
+Staleness comes from the server (U9): `stale` is null when there's no expectation to judge it by.
+
+### A1 · `GET /missions/:mission_id/apps`
+
+```json
+{"data": {"apps": [{"key": "limits", "name": "Limits & Alarming", "description": "…",
+  "installed": true, "state": "installed|disabled|not_installed",
+  "version": "1.2.0"|null, "consequence_if_missing": "Ground limit checks are off."|null}],
+  "permissions": ["apps.install"]}}
+```
+Install, disable and uninstall exist today as direct actions (`ApplicationInstallations`).
+**Question:** should they become a change-set kind (stage, then apply as rN), like stations, or
+stay direct? If direct: `POST /apps/:key/install|disable|uninstall` returning the app row.
