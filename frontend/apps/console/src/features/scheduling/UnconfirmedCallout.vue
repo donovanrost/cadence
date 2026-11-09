@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { ApCallout, formatCountdown, useNow } from "@/ui";
+import { computed, ref } from "vue";
+import { ApButton, ApCallout, formatCountdown, useNow } from "@/ui";
 import type { PlanDetail } from "./api.ts";
 import type { SpacecraftName } from "./names.ts";
 import { unconfirmedView, type UnconfirmedPass } from "./unconfirmed.ts";
+import UnconfirmedSheet from "./UnconfirmedSheet.vue";
 
 /**
  * U30 caution block, shared by K1 and K2 (exported): who hasn't confirmed what, and the passes
@@ -21,6 +22,11 @@ const now = useNow();
 const view = computed(() =>
   unconfirmedView(props.plan, props.nameOf, now.value.toISOString().slice(0, 10)),
 );
+/** ux U30 cap: the soonest 5; every pass in a sheet, so the callout never pushes A/B/D out. */
+const CAP = 5;
+const sheet = ref<InstanceType<typeof UnconfirmedSheet> | null>(null);
+const shown = computed(() => view.value?.passes.slice(0, CAP) ?? []);
+const hidden = computed(() => (view.value ? view.value.passes.length - CAP : 0));
 </script>
 
 <template>
@@ -28,7 +34,7 @@ const view = computed(() =>
     <span class="flex flex-col gap-1">
       <span>{{ view.headline }}</span>
       <span
-        v-for="(pass, i) in view.passes"
+        v-for="(pass, i) in shown"
         :key="pass.snapshot_id"
         class="flex flex-wrap items-center gap-x-3 gap-y-1"
       >
@@ -38,9 +44,25 @@ const view = computed(() =>
         >
         <slot name="row-actions" :pass="pass" />
       </span>
+      <span v-if="hidden > 0" class="flex items-center gap-2">
+        <span class="text-sm text-text-3">and {{ hidden }} more ·</span>
+        <ApButton variant="ghost" size="compact" @click="sheet?.open()"
+          >Show all {{ view.passes.length }}</ApButton
+        >
+      </span>
       <span v-if="memberNote" class="text-sm text-text-3"
         >Org admins resolve unconfirmed bookings.</span
       >
     </span>
   </ApCallout>
+  <UnconfirmedSheet
+    v-if="view && hidden > 0"
+    ref="sheet"
+    :title="`${view.count} unconfirmed bookings`"
+    :passes="view.passes"
+  >
+    <template v-if="$slots['row-actions']" #row-actions="{ pass }">
+      <slot name="row-actions" :pass="pass" />
+    </template>
+  </UnconfirmedSheet>
 </template>
