@@ -56,3 +56,10 @@ ISO-8601, revision numbers are integers (render them as `rN`), and actors are `{
 `GET /config` returns the mission's `permissions` (`config.stage`, `config.apply`, `config.review`,
 `config.rollback`, `config.discard_any`). Gate staged-bar actions on them; the server enforces
 them anyway.
+
+## Batch spacecraft creation
+
+There are no dedicated batch endpoints. Stage N `spacecraft` create ops in one `POST /stage`. Use
+`POST /preview {ops}` as the server-side validation step first: it runs the ops in a sandbox in
+order, so a SCID repeated **within the batch** fails validation for the later op (`no_go`, with a
+`validation` item on `scid`), as does a SCID already used in the mission.

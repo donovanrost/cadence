@@ -197,6 +197,37 @@ defmodule CadenceWeb.Console.ConfigAPITest do
     assert json_response(conn, 404)["error"]["code"] == "revision_not_found"
   end
 
+  test "previewing a batch of spacecraft creates catches a SCID duplicated within the batch", c do
+    approval_required(false)
+
+    sc = fn name, scid ->
+      %{
+        "kind" => "spacecraft",
+        "action" => "create",
+        "document" => %{"display_name" => name, "scid" => scid}
+      }
+    end
+
+    preview =
+      c.alice
+      |> call(:post, c.base <> "/preview", %{
+        "ops" => [sc.("A", 101), sc.("B", 102), sc.("C", 101)]
+      })
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert preview["verdict"] == "no_go"
+    validation = Enum.find(preview["checks"], &(&1["key"] == "validation"))
+    assert [%{"errors" => [%{"path" => "scid"} | _]}] = validation["items"]
+
+    ok =
+      c.alice
+      |> call(:post, c.base <> "/preview", %{"ops" => [sc.("A", 101), sc.("B", 102)]})
+      |> json_response(200)
+
+    assert ok["data"]["verdict"] == "go"
+  end
+
   test "previews unstaged ops and withdraws a staged change", c do
     approval_required(false)
 
