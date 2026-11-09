@@ -16,6 +16,7 @@ defmodule Cadence.Reads.Readiness do
   alias Cadence.Comms.{GroundStationStore, RoutingRule, RoutingRuleStore, TransportStore}
   alias Cadence.DataSources.SourceHealthStatus
   alias Cadence.Projections.DataSources.Health
+  alias Cadence.Reads.PlanningSetup
   alias Cadence.Reads.Readiness.Rules
 
   @spec mission(Scope.t(), binary()) :: {:ok, map()} | {:error, term()}
@@ -56,7 +57,7 @@ defmodule Cadence.Reads.Readiness do
       },
       data_sources: %{statuses: data_source_statuses(organization_id, mission_id)},
       apps: apps(organization_id, mission_id),
-      planning: Cadence.Reads.PlanningSetup.setup(organization_id, mission_id)
+      planning: PlanningSetup.setup(organization_id, mission_id)
     }
   end
 

@@ -1,6 +1,7 @@
 defmodule CadenceWeb.Console.ContactPlanAPITest do
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.Auth.Scope
   alias CadenceWeb.{ContactPlanningFixtures, TestFixtures}
 
   setup do
@@ -80,7 +81,7 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
              setup
 
     scope =
-      Cadence.Auth.Scope.new(%{
+      Scope.new(%{
         user: c.user,
         organization_id: c.org.organization_id,
         organization_membership: c.membership
