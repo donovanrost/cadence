@@ -7,7 +7,15 @@ defmodule Cadence.Reads.EventSentencesTest do
   @ctx %{
     spacecraft: %{"sc-4" => {"EARENDIL-004", 4}},
     users: %{"user-mira" => "Mira K."},
-    dashboards: %{"dash-comms" => "Comms payload"}
+    dashboards: %{"dash-comms" => "Comms payload"},
+    contacts: %{
+      "sc-contact-1" => %{
+        spacecraft_id: "sc-4",
+        station: %{name: "Hawaii (Demo)", code: "HAW"},
+        starts_at: ~U[2026-11-10 07:32:53Z],
+        ends_at: ~U[2026-11-10 07:40:53Z]
+      }
+    }
   }
 
   defp entry(kind, attrs) do
@@ -81,7 +89,7 @@ defmodule Cadence.Reads.EventSentencesTest do
       })
 
     assert %{
-             text: "Contact with EARENDIL-004 completed, 10:22:54Z–10:23:52Z",
+             text: "Contact with EARENDIL-004 ended (not verified), 10:22:54–10:23:52Z",
              subject: %{kind: "contact", id: "rc-1"}
            } =
              EventSentences.describe(contact, @ctx)
@@ -112,6 +120,28 @@ defmodule Cadence.Reads.EventSentencesTest do
              subject: %{kind: "catalog_revision"}
            } =
              EventSentences.describe(catalog, @ctx)
+  end
+
+  test "a cancelled contact names its spacecraft, station and window; activations drop internal keys" do
+    canceled =
+      entry(:scheduled_contact_canceled, %{
+        scheduled_contact_id: "sc-contact-1",
+        spacecraft_id: "sc-4",
+        summary: "provider_canceled"
+      })
+
+    assert %{
+             text:
+               "Contact for EARENDIL-004 at Hawaii (Demo) (HAW), 07:32:53–07:40:53Z, canceled by the provider"
+           } = EventSentences.describe(canceled, @ctx)
+
+    activated =
+      entry(:binding_set_activated, %{
+        summary: "Activated mission_applications:mission-earendil-demo v1"
+      })
+
+    assert %{text: "Mission applications configuration v1 activated"} =
+             EventSentences.describe(activated, @ctx)
   end
 
   test "unknown kinds use the sentence-case key plus the entity, never Title Case" do

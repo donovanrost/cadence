@@ -72,13 +72,26 @@ defmodule Cadence.Reads.EventSentences do
 
   defp sentence("scheduled_contact_canceled", entry, ctx) do
     why = if entry.summary == "provider_canceled", do: " by the provider", else: ""
-    {"Contact for #{craft(entry, ctx)} canceled#{why}", contact_ref(entry), nil}
+
+    facts =
+      ctx
+      |> Map.get(:contacts, %{})
+      |> Map.get(entry.scheduled_contact_id || entry.subject_id, %{})
+
+    window =
+      if facts[:starts_at],
+        do: ", #{span(%{"starts_at" => iso(facts.starts_at), "ends_at" => iso(facts.ends_at)})},",
+        else: ""
+
+    {"Contact for #{craft(entry, ctx)}#{station(facts[:station])}#{window} canceled#{why}",
+     contact_ref(entry), nil}
   end
 
+  # Contacts read "Ended · not verified" until S9 checks the downlink: don't claim a flown pass.
   defp sentence("realized_contact_interval", entry, ctx) do
     doc = current(entry)
 
-    {"Contact with #{craft(entry, ctx)} #{doc["status"] || "recorded"}, #{span(doc)}",
+    {"Contact with #{craft(entry, ctx)} #{outcome(doc["status"])}, #{span(doc)}",
      contact_ref(entry), nil}
   end
 
@@ -100,7 +113,7 @@ defmodule Cadence.Reads.EventSentences do
   end
 
   defp sentence("binding_set_activated", entry, ctx) do
-    {"Configuration activated#{by(entry, ctx)}#{detail(entry.summary)}",
+    {"#{configuration(entry.summary)} activated#{by(entry, ctx)}",
      %{kind: "activation", id: entry.activation_id || entry.subject_id, name: nil}, nil}
   end
 
@@ -176,9 +189,26 @@ defmodule Cadence.Reads.EventSentences do
     end
   end
 
-  defp span(%{"starts_at" => from, "ends_at" => to}), do: "#{time(from)}–#{time(to)}"
+  # One Z for a range: 10:22:54–10:23:52Z.
+  defp span(%{"starts_at" => from, "ends_at" => to}),
+    do: "#{String.trim_trailing(time(from), "Z")}–#{time(to)}"
+
   defp span(_doc), do: "time unknown"
 
+  defp outcome("completed"), do: "ended (not verified)"
+  defp outcome(nil), do: "recorded"
+  defp outcome(status), do: status |> to_string() |> String.replace("_", " ")
+
+  defp station(%{name: name, code: code}) when is_binary(code), do: " at #{name} (#{code})"
+  defp station(%{name: name}), do: " at #{name}"
+  defp station(_none), do: ""
+
+  defp iso(%DateTime{} = at), do: DateTime.to_iso8601(at)
+
+  defp iso(%NaiveDateTime{} = at),
+    do: at |> DateTime.from_naive!("Etc/UTC") |> DateTime.to_iso8601()
+
+  defp iso(other), do: other
   defp time(nil), do: "an unknown time"
 
   defp time(iso) when is_binary(iso) do
@@ -195,8 +225,17 @@ defmodule Cadence.Reads.EventSentences do
     end
   end
 
-  defp detail(nil), do: ""
-  defp detail(summary), do: ": " <> String.replace(summary, ~r/^Activated /, "")
+  # "Activated mission_applications:mission-earendil-demo v1" -> "Mission applications
+  # configuration v1"; the internal key stays out of the sentence.
+  defp configuration(summary) when is_binary(summary) do
+    case Regex.run(~r/^Activated ([a-z_]+):\S+(?: (v\d+))?/, summary) do
+      [_, area, version] -> "#{humanize(area)} configuration #{version}"
+      [_, area] -> "#{humanize(area)} configuration"
+      nil -> "Configuration"
+    end
+  end
+
+  defp configuration(_summary), do: "Configuration"
 
   defp current(entry), do: unwrap((entry.metadata || %{})["current"]) || %{}
   defp payload(entry), do: unwrap((entry.metadata || %{})["payload"]) || %{}

@@ -15,10 +15,10 @@ defmodule Cadence.Reads.EventLog do
 
   alias Cadence.Dashboards.DocumentStore
   alias Cadence.MissionEvents.Entry
-  alias Cadence.Reads.{EventSentences, MissionTimeline}
+  alias Cadence.Reads.{EventContacts, EventSentences, MissionTimeline}
 
   @kinds ~w(limit flight_event contact command config operator data)
-  @no_names %{spacecraft: %{}, users: %{}, dashboards: %{}}
+  @no_names %{spacecraft: %{}, users: %{}, dashboards: %{}, contacts: %{}}
   @density_cap 5_000
 
   @spec kinds() :: [binary()]
@@ -37,13 +37,15 @@ defmodule Cadence.Reads.EventLog do
           cursor: cursor
         )
 
-      context = context(organization_id, mission_id, page.entries)
+      {entries, contacts} = EventContacts.enrich(organization_id, mission_id, page.entries)
+      context = Map.put(context(organization_id, mission_id, entries), :contacts, contacts)
 
       {:ok,
        %{
          events:
-           page.entries
+           entries
            |> Enum.map(&event(&1, context))
+           |> dedupe()
            |> Enum.filter(&kind_selected?(&1, opts[:kinds])),
          next_cursor: encode_cursor(page.next_cursor)
        }}
@@ -66,6 +68,7 @@ defmodule Cadence.Reads.EventLog do
     counts =
       entries
       |> Enum.map(&event(&1, @no_names))
+      |> dedupe()
       |> Enum.filter(&kind_selected?(&1, opts[:kinds]))
       |> Enum.group_by(fn event -> div(DateTime.to_unix(event.at) - origin, opts.bucket_s) end)
 
@@ -110,10 +113,32 @@ defmodule Cadence.Reads.EventLog do
   end
 
   defp kind(%Entry{kind: kind} = entry) when is_atom(kind) or is_binary(kind) do
-    if housekeeping?(to_string(kind)), do: "data", else: classify(entry)
+    raw = to_string(kind)
+
+    cond do
+      housekeeping?(raw) -> "data"
+      String.contains?(raw, "contact") -> "contact"
+      true -> classify(entry)
+    end
   end
 
   defp kind(entry), do: classify(entry)
+
+  @severity_rank %{critical: 3, caution: 2, nominal: 1, info: 0}
+
+  # The same fact can reach the timeline from two sources (a projected mission event and its
+  # operational event): same kind, subject and second. Keep one, the more severe.
+  defp dedupe(events) do
+    events
+    |> Enum.chunk_by(&{&1.raw_kind, subject_id(&1), DateTime.truncate(&1.at, :second)})
+    |> Enum.map(fn
+      [event] -> event
+      same -> Enum.max_by(same, &Map.fetch!(@severity_rank, &1.severity))
+    end)
+  end
+
+  defp subject_id(%{refs: %{subject: %{id: id}}}), do: id
+  defp subject_id(%{refs: refs}), do: refs.contact_id
 
   defp housekeeping?(raw),
     do: String.starts_with?(raw, "source_") or String.contains?(raw, "watermark")

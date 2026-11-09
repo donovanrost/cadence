@@ -344,6 +344,14 @@ such as source watermarks and source health, which you'll usually filter out), `
   EARENDIL-004 completed, 10:22:54Z–10:23:52Z", "Dashboard Comms payload v1 published by Mira K.",
   "Catalog rev 2 (QA-E2E re-import) registered". Unknown kinds fall back to the sentence-case key
   plus the spacecraft ("Limit violation on EARENDIL-004"), never Title Case. `detail` is `null`.
+- Contact events (`scheduled_contact_*`, `realized_contact_*`) have kind `contact`. A realized
+  contact that completed reads "ended (not verified)" until S9 verifies it. A provider-cancelled
+  contact names its spacecraft, station and window. Ranges carry one Z ("10:22:54–10:23:52Z").
+- The same fact can reach the timeline from two sources (a projected mission event and its
+  operational event). Rows with the same raw kind, subject and second collapse into one, keeping
+  the more severe.
+- `activation` subjects have no console page yet; leave them unlinked (Setup's change history is
+  the nearest place).
 - `refs.subject` is the link target `{kind: "data_source" | "contact" | "dashboard" |
   "catalog_revision" | "activation", id, name}`, or `null` when there is none.
 - A watermark retreat is `caution` only when it means something for the operator (a replay or
