@@ -117,12 +117,50 @@ defmodule Cadence.ContactPlanning.RequirementEvaluator do
     }
   end
 
-  @spec evaluate_selection(ContactRequirementVersion.t(), [ContactOpportunitySnapshot.t()], [
-          map()
-        ]) ::
-          map()
-  def evaluate_selection(%ContactRequirementVersion{} = requirement, snapshots, searches \\ [])
+  @spec evaluate_selection(
+          ContactRequirementVersion.t(),
+          [ContactOpportunitySnapshot.t()],
+          [map()],
+          keyword()
+        ) :: map()
+  def evaluate_selection(
+        %ContactRequirementVersion{} = requirement,
+        snapshots,
+        searches \\ [],
+        opts \\ []
+      )
       when is_list(snapshots) and is_list(searches) do
+    now = Keyword.get(opts, :now, DateTime.utc_now())
+
+    if snapshots == [] and passed?(requirement, now),
+      do: passed_window(requirement),
+      else: selection(requirement, snapshots, searches)
+  end
+
+  # A window that has already passed can't be planned or searched (qa #26): one plain reason
+  # instead of "contact count not met" plus a search failure per route.
+  defp passed?(%{latest_end: %DateTime{} = latest_end}, now),
+    do: not DateTime.after?(latest_end, now)
+
+  defp passed?(_requirement, _now), do: false
+
+  defp passed_window(requirement) do
+    %{
+      "satisfied" => false,
+      "hard_failures" => [
+        %{"code" => "window_passed", "message" => "This window has already passed."}
+      ],
+      "search_failures" => [],
+      "facts" => %{
+        "selected_count" => 0,
+        "eligible_count" => 0,
+        "required_contact_count" => requirement.contact_count,
+        "aggregate_duration_seconds" => 0
+      }
+    }
+  end
+
+  defp selection(requirement, snapshots, searches) do
     ordered = Enum.sort_by(snapshots, & &1.starts_at, DateTime)
     eligible = Enum.filter(ordered, & &1.eligible)
     durations = Enum.map(eligible, &DateTime.diff(&1.ends_at, &1.starts_at, :second))
@@ -153,16 +191,24 @@ defmodule Cadence.ContactPlanning.RequirementEvaluator do
       |> Enum.reject(&is_nil/1)
       |> Kernel.++(separation_failures)
 
+    # One failure per requirement, naming the routes whose search failed (qa #26).
     search_failures =
       searches
       |> Enum.filter(&(search_value(&1, :outcome) in [:failed, :not_ready]))
-      |> Enum.map(fn search ->
-        %{
-          "code" => "provider_search_unavailable",
-          "route_key" => search_value(search, :route_key),
-          "outcome" => search_value(search, :outcome) |> to_string()
-        }
-      end)
+      |> case do
+        [] ->
+          []
+
+        failed ->
+          [
+            %{
+              "code" => "provider_search_unavailable",
+              "route_key" => search_value(hd(failed), :route_key),
+              "route_keys" => failed |> Enum.map(&search_value(&1, :route_key)) |> Enum.uniq(),
+              "outcome" => search_value(hd(failed), :outcome) |> to_string()
+            }
+          ]
+      end
 
     %{
       "satisfied" => hard_failures == [] and eligible != [],

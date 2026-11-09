@@ -91,9 +91,52 @@ defmodule Cadence.ContactPlanning.RequirementEvaluatorTest do
              %{
                "code" => "provider_search_unavailable",
                "route_key" => "route-beta",
+               "route_keys" => ["route-beta"],
                "outcome" => "failed"
              }
            ]
+  end
+
+  describe "qa #26" do
+    test "failed searches on several routes are one failure naming the routes" do
+      requirement = requirement(%{})
+
+      evaluation =
+        RequirementEvaluator.evaluate_selection(
+          requirement,
+          [],
+          [
+            %{route_key: "route-alpha", outcome: :failed},
+            %{route_key: "route-beta", outcome: :not_ready}
+          ], now: DateTime.add(requirement.earliest_start, -3600))
+
+      assert [
+               %{
+                 "code" => "provider_search_unavailable",
+                 "route_keys" => ["route-alpha", "route-beta"]
+               }
+             ] =
+               evaluation["search_failures"]
+    end
+
+    test "a window that has already passed says so, once, instead of search failures" do
+      requirement = requirement(%{})
+
+      evaluation =
+        RequirementEvaluator.evaluate_selection(
+          requirement,
+          [],
+          [
+            %{route_key: "route-alpha", outcome: :failed},
+            %{route_key: "route-beta", outcome: :failed}
+          ],
+          now: DateTime.add(requirement.latest_end, 60)
+        )
+
+      refute evaluation["satisfied"]
+      assert [%{"code" => "window_passed"}] = evaluation["hard_failures"]
+      assert evaluation["search_failures"] == []
+    end
   end
 
   test "missing optional capacity is a warning but does not make duration planning ineligible" do
