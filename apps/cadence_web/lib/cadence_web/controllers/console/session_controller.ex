@@ -33,8 +33,22 @@ defmodule CadenceWeb.Console.SessionController do
     end
   end
 
+  # The shell resolves URL org slugs; a platform admin in admin mode can open
+  # any organization this way (qa #15), others only their memberships.
+  def update_organization(conn, %{"organization_slug" => slug}) when is_binary(slug) do
+    case Cadence.Organizations.fetch_organization_by_slug(slug) do
+      {:ok, organization} ->
+        update_organization(conn, %{"organization_id" => organization.organization_id})
+
+      {:error, _not_found} ->
+        Problem.respond(conn, :organization_not_found)
+    end
+  end
+
   def update_organization(conn, _params) do
-    Problem.respond(conn, :invalid_params, %{organization_id: "is required"})
+    Problem.respond(conn, :invalid_params, %{
+      organization_id: "is required (or organization_slug)"
+    })
   end
 
   defp render_session(conn, %Scope{} = scope) do

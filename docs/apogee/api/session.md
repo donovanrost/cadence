@@ -66,7 +66,11 @@ Errors: `401 unauthenticated`.
 
 ## `PUT /api/console/v1/session/organization`
 
-Sets the session's default organization (the org switcher). Body `{"organization_id": "org_…"}`.
+Sets the session's default organization (the org switcher). Body `{"organization_id": "org_…"}` or
+`{"organization_slug": "reflect-orbital"}` (the shell uses the slug for an org in the URL it doesn't
+know yet). A platform admin in admin mode can select **any** organization, after which it appears
+in `organizations` with `role: null` and admin capabilities. Everyone else can select only their
+memberships.
 Requires `x-csrf-token`. Returns the same payload as `GET /session`, rebuilt for the new
 organization.
 

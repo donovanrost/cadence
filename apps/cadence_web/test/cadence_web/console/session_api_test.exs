@@ -121,6 +121,40 @@ defmodule CadenceWeb.Console.SessionAPITest do
       assert get_session(conn, :current_organization_id) == other.organization_id
     end
 
+    test "accepts an organization slug; a platform admin in admin mode can open any org", c do
+      other = TestFixtures.persist_org!(display_name: "Another Org", slug: "another-org")
+
+      member =
+        c.user
+        |> TestFixtures.member_conn()
+        |> put("/api/console/v1/session/organization", %{"organization_slug" => "another-org"})
+
+      assert json_response(member, 404)["error"]["code"] == "organization_not_found"
+
+      admin = TestFixtures.persist_user!(capabilities: [:platform_admin])
+
+      conn =
+        admin
+        |> TestFixtures.member_conn()
+        |> init_test_session(%{admin_mode_expires_at: System.system_time(:second) + 600})
+        |> put("/api/console/v1/session/organization", %{"organization_slug" => "another-org"})
+
+      data = json_response(conn, 200)["data"]
+      assert data["current_organization_id"] == other.organization_id
+
+      assert [%{"slug" => "another-org", "role" => nil, "capabilities" => caps}] =
+               data["organizations"]
+
+      assert "platform_admin" in caps
+
+      unknown =
+        c.user
+        |> TestFixtures.member_conn()
+        |> put("/api/console/v1/session/organization", %{"organization_slug" => "nope"})
+
+      assert json_response(unknown, 404)["error"]["code"] == "organization_not_found"
+    end
+
     test "refuses an organization the user is not a member of", c do
       stranger = TestFixtures.persist_org!()
 
