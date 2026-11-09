@@ -43,6 +43,40 @@ defmodule Cadence.Reads.CommandGroupsTest do
     assert [%{kind: :submitted}] = view.events
   end
 
+  test "list rows carry progress, and a delivered group reads finished while staying queued",
+       c do
+    group = submit(c, "SET_SIGNED", %{"counter" => 1})
+    id = group.command_group_id
+
+    assert [%{state: :queued, progress: %{queued_for_contact: 2}, finished: false}] =
+             CommandGroups.list(c.org, c.mission, viewer(c.scope))
+
+    [first, second] = GroupStore.members(c.org, c.mission, id)
+    release!(c, first, :released)
+
+    assert [%{progress: %{no_verifier: 1, queued_for_contact: 1}, finished: false}] =
+             CommandGroups.list(c.org, c.mission, viewer(c.scope))
+
+    release!(c, second, :released)
+
+    # Group state is the approval lifecycle; delivery lives in progress (qa #28).
+    assert [%{state: :queued, progress: %{no_verifier: 2}, finished: true}] =
+             CommandGroups.list(c.org, c.mission, viewer(c.scope))
+
+    assert {:ok, %{state: :queued, progress: %{no_verifier: 2}, finished: true}} =
+             CommandGroups.get(c.org, c.mission, id, viewer(c.scope))
+  end
+
+  test "list rows of groups that are not queued carry no progress", c do
+    group = submit(c, "SET_COUNTER", %{"amount" => 1}, %{log_entry: "x"})
+
+    assert [%{state: :approval_pending, progress: nil, finished: nil}] =
+             CommandGroups.list(c.org, c.mission, viewer(c.scope))
+
+    assert {:ok, %{finished: false}} =
+             CommandGroups.get(c.org, c.mission, group.command_group_id, viewer(c.scope))
+  end
+
   test "awaiting_me is true only for an eligible approver", c do
     group = submit(c, "SET_COUNTER", %{"amount" => 1}, %{log_entry: "x"})
 
@@ -99,26 +133,7 @@ defmodule Cadence.Reads.CommandGroupsTest do
     [first | _] =
       GroupStore.members(c.org, c.mission, group.command_group_id)
 
-    %CommandQueueEntryRow{command_queue_entry_id: entry_id} =
-      Repo.get_by!(CommandQueueEntryRow,
-        command_request_id: first.command_request_id
-      )
-
-    CommandReleaseAttempt.new(%{
-      organization_id: c.org,
-      mission_id: c.mission,
-      command_queue_entry_id: entry_id,
-      command_request_id: first.command_request_id,
-      source_endpoint_ref: first.source_endpoint_ref,
-      realized_contact_id: "contact-1",
-      mission_model_revision_id: first.mission_model_revision_id,
-      command_id: first.command_id,
-      lifecycle_state: :release_uncertain,
-      released_by: %{},
-      attempted_at: DateTime.utc_now()
-    })
-    |> CommandReleaseAttemptRow.changeset()
-    |> Repo.insert!()
+    release!(c, first, :release_uncertain)
 
     {:ok, view} = CommandGroups.get(c.org, c.mission, group.command_group_id, nil)
     [held, other] = view.targets
@@ -130,5 +145,27 @@ defmodule Cadence.Reads.CommandGroupsTest do
 
     assert id == first.command_request_id
     assert other.blocked == nil
+  end
+
+  # A release attempt for `member` in `state` (what the dispatcher records on release).
+  defp release!(c, member, state) do
+    %CommandQueueEntryRow{command_queue_entry_id: entry_id} =
+      Repo.get_by!(CommandQueueEntryRow, command_request_id: member.command_request_id)
+
+    CommandReleaseAttempt.new(%{
+      organization_id: c.org,
+      mission_id: c.mission,
+      command_queue_entry_id: entry_id,
+      command_request_id: member.command_request_id,
+      source_endpoint_ref: member.source_endpoint_ref,
+      realized_contact_id: "contact-1",
+      mission_model_revision_id: member.mission_model_revision_id,
+      command_id: member.command_id,
+      lifecycle_state: state,
+      released_by: %{},
+      attempted_at: DateTime.utc_now()
+    })
+    |> CommandReleaseAttemptRow.changeset()
+    |> Repo.insert!()
   end
 end

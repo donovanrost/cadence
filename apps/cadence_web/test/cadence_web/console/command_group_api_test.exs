@@ -97,7 +97,13 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
              |> post(base(c) <> "/command-groups/#{id}/decision", %{"kind" => "go"})
              |> json_response(403)
 
-    assert %{"data" => %{"groups" => [%{"id" => ^id, "awaiting_me" => true}]}} =
+    assert %{
+             "data" => %{
+               "groups" => [
+                 %{"id" => ^id, "awaiting_me" => true, "progress" => nil, "finished" => nil}
+               ]
+             }
+           } =
              as(c.approver)
              |> get(base(c) <> "/command-groups?awaiting_me=true")
              |> json_response(200)
@@ -191,10 +197,17 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
              }
            } = json_response(create(c, replay), 409)
 
-    assert %{"data" => %{"groups" => [_]}} =
+    assert %{
+             "data" => %{
+               "groups" => [%{"state" => "queued", "progress" => progress, "finished" => false}]
+             }
+           } =
              as(c.requester)
              |> get(base(c) <> "/command-groups?operation_id=op-9")
              |> json_response(200)
+
+    # Rows carry delivery too (qa #28): nothing has reached its contact yet.
+    assert [{"queued_for_contact", _count}] = Map.to_list(progress)
 
     assert %{"error" => %{"code" => "command_group_not_found"}} =
              as(c.requester) |> get(base(c) <> "/command-groups/nope") |> json_response(404)

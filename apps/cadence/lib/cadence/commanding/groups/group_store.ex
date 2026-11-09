@@ -142,6 +142,21 @@ defmodule Cadence.Commanding.Groups.GroupStore do
     |> Enum.map(&CommandRequestRow.to_domain/1)
   end
 
+  @doc "Members of several groups at once, `%{command_group_id => [request]}`."
+  @spec members_of(binary(), binary(), [binary()]) :: %{binary() => [CommandRequest.t()]}
+  def members_of(_org, _mission, []), do: %{}
+
+  def members_of(org, mission, ids) do
+    CommandRequestRow
+    |> where(
+      [r],
+      r.organization_id == ^org and r.mission_id == ^mission and r.command_group_id in ^ids
+    )
+    |> order_by([r], asc: r.group_target_index, asc: r.group_position)
+    |> Repo.all()
+    |> Enum.group_by(& &1.command_group_id, &CommandRequestRow.to_domain/1)
+  end
+
   @spec events(binary(), binary()) :: [map()]
   def events(mission, id) do
     CommandGroupEventRow

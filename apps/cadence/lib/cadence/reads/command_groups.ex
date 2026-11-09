@@ -31,15 +31,62 @@ defmodule Cadence.Reads.CommandGroups do
         limit: Keyword.get(opts, :limit, 100)
       )
 
+    delivery = delivery(org, mission, groups)
+
     groups
-    |> Enum.map(&Map.put(summary(&1), :awaiting_me, awaiting?(&1, viewer_id)))
+    |> Enum.map(fn group ->
+      group
+      |> summary()
+      |> Map.put(:awaiting_me, awaiting?(group, viewer_id))
+      |> Map.merge(Map.get(delivery, group.command_group_id, %{progress: nil, finished: nil}))
+    end)
     |> filter(Keyword.get(opts, :awaiting_me), Keyword.get(opts, :mine), viewer_id)
+  end
+
+  # Group state is the approval lifecycle only, so a delivered group still reads `queued`.
+  # List rows of queued groups carry the same `progress` as the show plus `finished` (every
+  # target at a final stage), so the list can say "delivered" without opening each group.
+  # Other states get `nil`: their state already says how they ended.
+  defp delivery(org, mission, groups) do
+    queued = Enum.filter(groups, &(&1.state == :queued))
+    members = GroupStore.members_of(org, mission, Enum.map(queued, & &1.command_group_id))
+    rows = command_rows(org, mission, members |> Map.values() |> List.flatten())
+
+    Map.new(queued, fn group ->
+      targets =
+        target_views(group, Map.get(members, group.command_group_id, []), rows, fn _, _ ->
+          nil
+        end)
+
+      {group.command_group_id,
+       %{
+         progress: Enum.frequencies_by(targets, & &1.stage),
+         finished: Enum.all?(targets, &(&1.stage in @finished))
+       }}
+    end)
+  end
+
+  defp target_views(group, members, rows, blocked_fun) do
+    excluded = excluded_indexes(group)
+
+    member_views =
+      Enum.map(members, fn request ->
+        member(request, Map.get(rows, request.command_request_id), excluded)
+      end)
+
+    targets(group, member_views, blocked_fun)
   end
 
   @spec fetch_by_operation(binary(), binary(), binary()) :: {:ok, map()} | {:error, term()}
   def fetch_by_operation(org, mission, operation_id) do
-    with {:ok, group} <- GroupStore.fetch_by_operation(org, mission, operation_id),
-         do: {:ok, summary(group)}
+    with {:ok, group} <- GroupStore.fetch_by_operation(org, mission, operation_id) do
+      delivery = delivery(org, mission, [group])
+
+      {:ok,
+       group
+       |> summary()
+       |> Map.merge(Map.get(delivery, group.command_group_id, %{progress: nil, finished: nil}))}
+    end
   end
 
   @spec get(binary(), binary(), binary(), binary() | nil) ::
@@ -48,16 +95,9 @@ defmodule Cadence.Reads.CommandGroups do
     with {:ok, group} <- GroupStore.fetch(org, mission, id) do
       members = GroupStore.members(org, mission, id)
       rows = command_rows(org, mission, members)
-      excluded = excluded_indexes(group)
-
-      member_views =
-        Enum.map(members, fn request ->
-          member(request, Map.get(rows, request.command_request_id), excluded)
-        end)
-
       held = held_lanes(org, mission, members)
       lanes = Map.new(members, &{&1.metadata["group"]["target_index"], &1.source_endpoint_ref})
-      targets = targets(group, member_views, &blocked(&1, &2, lanes, held))
+      targets = target_views(group, members, rows, &blocked(&1, &2, lanes, held))
 
       revision_id = members |> List.first() |> then(&(&1 && &1.mission_model_revision_id))
 
@@ -70,6 +110,7 @@ defmodule Cadence.Reads.CommandGroups do
          group: group,
          targets: targets,
          progress: Enum.frequencies_by(targets, & &1.stage),
+         finished: Enum.all?(targets, &(&1.stage in @finished)),
          events: GroupStore.events(mission, id)
        })}
     end

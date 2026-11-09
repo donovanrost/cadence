@@ -169,11 +169,20 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   `awaiting_me=true` (Approve queue: pending, not mine, and I'm the named approver or none was
   named), `mine=true`, `operation_id=` (returns 0 or 1 groups).
   Rows: `{id, state, title, requested_by, requested_at, requested_approver_user_id, member_count,
-  target_count, command_count, second_go_required, awaiting_me, operation_id}`.
+  target_count, command_count, second_go_required, awaiting_me, operation_id, progress, finished}`.
+- `state` is the approval lifecycle only. A group stays `queued` after delivery. Delivery is in
+  `progress` (`{stage: target count}`, same as show) and `finished` (`true` when every target is at
+  a final stage: `verified | no_verifier | verify_failed | release_failed | indeterminate |
+  canceled | rejected | excluded`). `finished` doesn't mean success; read `progress` for the outcome.
+  Both are `null` on rows whose state isn't `queued` (the state already says how they ended).
+  Released tab = `queued` and not `finished` (qa #28).
 - Show adds `review_token` (send it back on decisions), `log_entry`, `sent_back_from`,
   `target_query`, `commands[] {position, command_id, name, significance, critical, hazardous,
   argument_values_json}`, `release`, `policy`, `decision`, `decided_by/at`, `aborted_by/at`,
-  `abort_reason`, `abort_result`, `progress` (`{stage: target count}`), `events[] {id, kind, actor, at, payload}`,
+  `abort_reason`, `abort_result`, `progress` (`{stage: target count}`), `finished` (always a
+  boolean on show), `events[] {id, kind, actor, at, payload}` (kinds emitted today: `submitted`,
+  the decision kinds, `note`, `member_canceled`, `aborted`; release and delivery appear only in
+  `targets[].members`),
   and `targets[]`:
   `{spacecraft_id, name, scid, stage, members: [{position, request_id, command_id, command_name, stage,
   end_reason, caused_by, verify_by, occurred_at}], last_event_at, blocked: null}`. `caused_by` is the
