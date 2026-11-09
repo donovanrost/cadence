@@ -770,6 +770,8 @@ defmodule CadenceWeb.Router do
       get("/profiles", ProfileController, :index)
       get("/profiles/:profile_id", ProfileDetailController, :show)
       get("/readiness", ReadinessController, :show)
+      get("/catalog", CatalogController, :index)
+      get("/catalog/imports/:import_run_id", CatalogController, :import_run)
 
       # -- Change sets (owner: api). Contract: docs/apogee/api/changes.md
       scope "/config" do

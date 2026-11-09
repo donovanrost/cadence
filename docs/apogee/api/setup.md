@@ -9,7 +9,9 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | P | `GET /missions/:mission_id/profiles` | **implemented** |
 | SD | `GET /missions/:mission_id/spacecraft/:spacecraft_id` | **implemented** |
 | PD | `GET /missions/:mission_id/profiles/:profile_id` | **implemented** |
-| (3) | catalog databases/revisions/import runs, upload, import-run channel | planned |
+| C1 | `GET /missions/:mission_id/catalog` | **implemented** |
+| C3 | `GET /missions/:mission_id/catalog/imports/:import_run_id` | **implemented** |
+| C2 | multipart import + importers | next |
 | (4) | batch spacecraft validate + create | planned |
 | (5) | org members, invitations, service identities | planned (`/organizations/:organization_id/...`) |
 
@@ -198,3 +200,34 @@ Profile detail with **schema-driven sections** (`Cadence.SpacecraftType.Schema`,
   app's declared contract; that's planned.
 
 Errors: `404 profile_not_found`.
+
+## `GET /api/console/v1/missions/:mission_id/catalog` (C1)
+
+The shape is setup-shapes.md §C1. `?database_id=` selects a database (default: the first by name).
+`database` is `null` when the mission has none. Refetch on `invalidate` with `catalog`.
+
+- `revisions`: newest first, at most 50. `import_runs`: newest first, at most 20.
+- `revisions[].declaration_count` comes from the producing import run. `command_count` and
+  `telemetry_count` are **`null`**: importers report only a total so far, so show one
+  "Declarations" number.
+- `revisions[].spacecraft_count`: spacecraft whose latest saved configuration references the
+  revision.
+- `revisions[].artifact.size_bytes` is `null` in the index (sizes would mean loading every file).
+  C3 has the real size. `format_label` is the importer's display name.
+- `revisions[].actor`: `{name}` from the importer of record, when recorded.
+- `import_runs[].status`: `running | succeeded | failed`. There is no separate `pending` state: a
+  queued import is `running`. `file_name` is known for runs that produced a revision, otherwise
+  `null`.
+
+## `GET /api/console/v1/missions/:mission_id/catalog/imports/:import_run_id` (C3)
+
+The shape is setup-shapes.md §C3, plus `declaration_count`.
+
+- `file.size_bytes` is the uploaded artifact's byte size.
+- `diagnostics[]`: `{severity: error|warning|info, code, message, path}`, where `path` is a
+  " / "-joined XTCE path or `null`. A run can succeed with error diagnostics (unsupported items
+  are skipped).
+- `base_revision` and `diff` are `null` until the server-side revision diff exists
+  (DECISIONS #9). The UI shows validation and diagnostics only.
+- Errors: `404 import_run_not_found`.
+- Live: refetch on `invalidate` with `catalog`.

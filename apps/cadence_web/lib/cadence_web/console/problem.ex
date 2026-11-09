@@ -18,6 +18,7 @@ defmodule CadenceWeb.Console.Problem do
     organization_not_found: {404, "Organization not found."},
     spacecraft_not_found: {404, "Spacecraft not found."},
     profile_not_found: {404, "Profile not found."},
+    import_run_not_found: {404, "Import run not found."},
     invalid_params: {422, "The request parameters are invalid."},
     history_unavailable: {503, "Telemetry history is unavailable right now."}
   }
