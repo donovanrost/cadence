@@ -6,7 +6,7 @@ import type { PlanningSummary } from "./api.ts";
 defineProps<{ summary: PlanningSummary }>();
 const columns: readonly ApColumn[] = [
   { key: "name", label: "Template" },
-  { key: "applies", label: "Applies to" },
+  { key: "applies_to", label: "Applies to" },
   { key: "rule", label: "Rule", mono: true },
   { key: "priority", label: "Priority" },
   { key: "version", label: "Version", mono: true },
@@ -48,9 +48,13 @@ const columns: readonly ApColumn[] = [
       :row-key="(t) => t.id"
       caption="Requirement templates"
     >
-      <template #cell-name="{ row }"
-        ><span class="font-semibold text-readout">{{ row.name }}</span></template
-      >
+      <template #cell-name="{ row }">
+        <RouterLink
+          :to="{ name: 'setup.contact-planning.template', params: { templateId: row.id } }"
+          class="font-semibold text-readout no-underline hover:text-bright hover:underline max-md:hit-44"
+          >{{ row.name }}</RouterLink
+        >
+      </template>
       <template #cell-rule="{ row }"
         ><span class="uppercase">{{ row.rule_summary }}</span></template
       >
@@ -60,7 +64,7 @@ const columns: readonly ApColumn[] = [
         }}</span></template
       >
       <template #cell-version="{ row }">v{{ row.version }}</template>
-      <template #cell-count="{ row }">{{ row.spacecraft_count }}</template>
+      <template #cell-count="{ row }">{{ row.applies_to_count }}</template>
     </ApTable>
   </ApPanel>
   <ApPanel v-if="summary.not_covered.length > 0" index="P3" title="Not covered" flush>

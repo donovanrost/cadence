@@ -1,38 +1,38 @@
-import { decoders, request, type ApiResult, type Decoded } from "@/api";
+import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
 import { formatCount } from "@/ui";
 
 /** Requested shape: docs/apogee/plans/setup-shapes.md §CP1 (final contract in api/setup.md). */
-const { array, boolean, integer, nullable, object, oneOf, string, timestamp, token } = decoders;
+const { array, integer, nullable, object, string, token } = decoders;
+
+const raw: Reader<unknown> = (value) => (value === undefined ? null : value);
+
+/** CP3 template row (also the CP1 summary's `templates`); applies_to / rule_summary are server-made. */
+export const templateRow = object({
+  id: token,
+  name: string,
+  state: token,
+  version: integer,
+  target: raw,
+  applies_to: string,
+  applies_to_count: integer,
+  rule_summary: string,
+  priority: token,
+});
+export type TemplateRow = Decoded<typeof templateRow>;
 
 const summary = object({
-  policy: nullable(
-    object({
-      version: integer,
-      mode: oneOf(["advisory", "automatic_submission"]),
-      approval_required: boolean,
-      activated_at: nullable(timestamp),
-      actor: nullable(object({ name: string })),
-    }),
-  ),
+  policy: nullable(object({ version: integer, mode: token })),
   coverage: object({
     spacecraft_total: integer,
     covered: integer,
     contacts_per_day: nullable(integer),
     uplink_passes_per_day: nullable(integer),
   }),
-  templates: array(
-    object({
-      id: token,
-      name: string,
-      applies_to: string,
-      rule_summary: string,
-      priority: oneOf(["routine", "high", "critical"]),
-      version: integer,
-      spacecraft_count: integer,
-    }),
-    1000,
+  templates: array(templateRow, 1000),
+  not_covered: array(
+    object({ group: token, label: string, count: integer, suggested_target: nullable(raw) }),
+    500,
   ),
-  not_covered: array(object({ group: token, label: string, count: integer }), 500),
   permissions: array(token, 50),
 });
 export type PlanningSummary = Decoded<typeof summary>;
@@ -52,4 +52,33 @@ export function situation(s: PlanningSummary): string {
   return missing === 0
     ? "Every spacecraft has a contact rule"
     : `${formatCount(missing)} spacecraft have no contact rule`;
+}
+
+const templateDetail = (value: unknown, path = "") => ({
+  ...templateRow(value, path),
+  ...object({
+    document: raw,
+    versions: array(
+      object({
+        version: integer,
+        created_at: decoders.timestamp,
+        actor: nullable(
+          object({ kind: decoders.optional(token), id: decoders.optional(token), name: string }),
+        ),
+      }),
+      500,
+    ),
+  })(value, path),
+});
+export type TemplateDetail = ReturnType<typeof templateDetail>;
+
+export function fetchTemplate(
+  key: Readonly<{ missionId: string; templateId: string }>,
+  signal: AbortSignal,
+): Promise<ApiResult<TemplateDetail>> {
+  return request(
+    `/missions/${encodeURIComponent(key.missionId)}/contact-planning/templates/${encodeURIComponent(key.templateId)}`,
+    templateDetail,
+    { signal },
+  );
 }

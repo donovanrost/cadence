@@ -24,7 +24,7 @@ const links = [
 ];
 const subline = (s: PlanningSummary) =>
   s.policy
-    ? `Policy v${s.policy.version} · mode ${s.policy.mode === "advisory" ? "advisory" : "automatic submission"} · ${s.templates.length} templates cover ${s.coverage.covered} of ${s.coverage.spacecraft_total} spacecraft`
+    ? `Policy v${s.policy.version} · mode ${s.policy.mode.replaceAll("_", " ")} · ${s.templates.length} templates cover ${s.coverage.covered} of ${s.coverage.spacecraft_total} spacecraft`
     : null;
 </script>
 
