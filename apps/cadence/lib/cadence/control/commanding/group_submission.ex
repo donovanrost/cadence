@@ -14,7 +14,7 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
 
   alias Cadence.Commanding.{Dispatcher, ProcessNamespace, RequestValidation}
   alias Cadence.Commanding.Groups.{Admission, CommandGroup, GroupStore, Validation}
-  alias Cadence.Management.Commanding.RequestAuthoring
+  alias Cadence.Management.Commanding.{ApprovedCommand, RequestAuthoring}
   alias Cadence.Platform.ScopedReadUpdates
 
   @spec submit(Cadence.Auth.Scope.t(), binary(), map(), keyword()) ::
@@ -101,7 +101,8 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
 
     with {:ok, group} <- GroupStore.insert_group(group),
          :ok <- GroupStore.insert_members(members) do
-      queued = if second_go?, do: [], else: Admission.enqueue(members, actor)
+      queued =
+        if second_go?, do: [], else: Admission.enqueue(members, actor, &auto_approved_hash/1)
 
       :ok =
         GroupStore.append_events([
@@ -162,6 +163,15 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
         "argument_values" => Map.get(command, :argument_values, %{})
       })
     end)
+  end
+
+  # Members that need no second GO carry the policy approval's content hash, as single
+  # workspace submissions do.
+  defp auto_approved_hash(request) do
+    {:ok, approved} =
+      ApprovedCommand.from_automatic_policy(%{request | lifecycle_state: :validated})
+
+    %{"approved_content_sha256" => approved.content_sha256}
   end
 
   defp after_commit({:ok, %{group: group, lanes: lanes}}, org, mission) do

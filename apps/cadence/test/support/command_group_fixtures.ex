@@ -1,10 +1,14 @@
 defmodule Cadence.CommandGroupFixtures do
   @moduledoc false
 
+  alias Cadence.Accounts.{OrganizationMembership, OrganizationMembershipRow, User, UserRow}
+  alias Cadence.Auth.Scope
   alias Cadence.CommandAuthoringFixtures
   alias Cadence.Commanding.Groups.Validation
   alias Cadence.CommandReviewFixtures
   alias Cadence.ExactCommandAuthoringFixtures
+  alias Cadence.Ids
+  alias Cadence.Repo
 
   @doc "A mission with the exact-authoring catalog active and `count` commandable spacecraft."
   def setup!(count \\ 2) do
@@ -57,5 +61,29 @@ defmodule Cadence.CommandGroupFixtures do
   def digest(c, draft) do
     {:ok, validated} = Validation.validate(c.org, c.mission, actor(c), draft)
     validated.digest
+  end
+
+  @doc "Another operator (a member of the same organization) with their own scope."
+  def operator!(c, name \\ "Second Operator") do
+    id = Ids.new("operator")
+    user = User.new(%{user_id: id, email: "#{id}@example.test", display_name: name})
+    Repo.insert!(UserRow.changeset(user))
+
+    member =
+      OrganizationMembership.new(%{
+        user_id: id,
+        organization_id: c.org,
+        role: :organization_admin
+      })
+
+    Repo.insert!(OrganizationMembershipRow.changeset(member))
+    {:ok, org} = Cadence.Organizations.fetch_organization(c.org)
+
+    Scope.new(%{
+      user: user,
+      organization_id: c.org,
+      organization: org,
+      organization_membership: member
+    })
   end
 end
