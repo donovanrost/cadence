@@ -289,6 +289,56 @@ defmodule Cadence.Comms.RoutingRuleStore do
     |> Enum.map(&RoutingRuleRow.to_domain/1)
   end
 
+  @doc "Active profile-route counts per rule for spacecraft on one profile version."
+  @spec profile_route_counts(binary(), binary(), binary(), pos_integer()) :: %{
+          binary() => non_neg_integer()
+        }
+  def profile_route_counts(organization_id, mission_id, spacecraft_type_id, version) do
+    organization_id
+    |> profile_routes_query(mission_id, spacecraft_type_id, version)
+    |> group_by([row], row.profile_rule_id)
+    |> select([row], {row.profile_rule_id, count(row.routing_rule_id)})
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  @doc "The first `limit` route names of one profile rule, by name."
+  @spec profile_route_samples(
+          binary(),
+          binary(),
+          binary(),
+          pos_integer(),
+          binary(),
+          pos_integer()
+        ) ::
+          [binary()]
+  def profile_route_samples(
+        organization_id,
+        mission_id,
+        spacecraft_type_id,
+        version,
+        rule_id,
+        limit
+      ) do
+    organization_id
+    |> profile_routes_query(mission_id, spacecraft_type_id, version)
+    |> where([row], row.profile_rule_id == ^rule_id)
+    |> order_by([row], asc: row.display_name)
+    |> limit(^limit)
+    |> select([row], row.display_name)
+    |> Repo.all()
+  end
+
+  defp profile_routes_query(organization_id, mission_id, spacecraft_type_id, version) do
+    RoutingRuleRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.origin == "profile" and row.lifecycle_state == "active" and
+        row.spacecraft_type_id == ^spacecraft_type_id and row.spacecraft_type_version == ^version
+    )
+  end
+
   defp apply_routing_search(query, nil), do: query
   defp apply_routing_search(query, ""), do: query
 

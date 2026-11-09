@@ -5,6 +5,8 @@ defmodule Cadence.Configuration.ProfileRoutingTest do
 
   alias Cadence.Comms.RoutingRuleStore
   alias Cadence.Control.Configuration
+  alias Cadence.Reads.ProfileRouting
+  alias Cadence.SpacecraftTypeStore
 
   setup do
     on_exit(with_approval_required(false))
@@ -40,6 +42,41 @@ defmodule Cadence.Configuration.ProfileRoutingTest do
     {:ok, %{head: %{revision: head}}} = Configuration.current(ctx.alice, ctx.mission)
     {:ok, %{entries: entries}} = Configuration.get_revision(ctx.alice, ctx.mission, head)
     assert Enum.any?(entries, &(&1.kind == "spacecraft_routes" and &1.entity_id == ctx.sc))
+  end
+
+  test "reads: rules with route counts and samples; overrides with since rN", ctx do
+    {:ok, profile} =
+      SpacecraftTypeStore.fetch_spacecraft_type(ctx.org, ctx.mission, ctx.ids.profile)
+
+    assert [
+             %{
+               id: "ttc",
+               route_count: 1,
+               samples: ["SVB · EARENDIL-001"],
+               stations: [%{code: "SVB"}]
+             }
+           ] =
+             ProfileRouting.rules(ctx.org, ctx.mission, profile)
+
+    apply_ops(ctx, "Exclude Svalbard", [
+      override(ctx, %{"value" => [ctx.ids.station], "reason" => "Antenna 2 down"})
+    ])
+
+    {:ok, %{head: %{revision: head}}} = Configuration.current(ctx.alice, ctx.mission)
+
+    {:ok, profile} =
+      SpacecraftTypeStore.fetch_spacecraft_type(ctx.org, ctx.mission, ctx.ids.profile)
+
+    assert [
+             %{
+               path: "routing.ttc.excluded_stations",
+               section: :routing,
+               since_revision: ^head,
+               profile_value: [],
+               reason: "Antenna 2 down"
+             }
+           ] =
+             ProfileRouting.overrides(ctx.org, ctx.mission, profile)
   end
 
   test "an override excludes a station, and a reset brings the route back", ctx do
