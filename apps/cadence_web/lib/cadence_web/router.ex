@@ -764,6 +764,7 @@ defmodule CadenceWeb.Router do
       # -- Ops (owner: api-ops). Contracts: docs/apogee/api/ops.md
       get("/fleet", FleetController, :show)
       get("/alarms", AlarmController, :index)
+      get("/telemetry/points", TelemetryPointController, :index)
       get("/telemetry/points/:point_id/history", PointController, :history)
       get("/limits/points/:point_id/intervals", PointController, :limit_intervals)
       get("/action-queue", ActionQueueController, :show)

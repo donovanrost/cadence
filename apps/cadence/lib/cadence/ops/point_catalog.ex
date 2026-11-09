@@ -47,6 +47,7 @@ defmodule Cadence.Ops.PointCatalog do
         packet_name: packet_definition.packet_name,
         field_name: field.name,
         unit: field.engineering_unit,
+        data_type: Map.get(field, :data_type),
         stale_timeout_ms: nil,
         description: nil
       }

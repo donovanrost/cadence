@@ -372,3 +372,26 @@ such as source watermarks and source health, which you'll usually filter out), `
 Same filters (no cursor). `bucket_s` is 60–86400 (default: about 96 buckets over the window). Buckets
 are aligned to `from`; empty buckets are omitted. The window is at most 31 days, and at most 5,000
 events are counted (`truncated: true` beyond that).
+
+## `GET /api/console/v1/missions/:mission_id/telemetry/points` (M23, owner: api)
+
+Point search for Telemetry explore (T1) and ⌘K Telemetry. Query: `q` (a case-insensitive
+substring of the id, name or description; empty lists everything), `spacecraft_id` (optional;
+must be a mission spacecraft), and `limit` 1–200 (default 50).
+
+```json
+{"data": {"points": [{
+  "id": "EPS.VBAT", "name": "VBAT", "description": null, "unit": "V",
+  "subsystem": "EPS", "type": "numeric",
+  "latest": {"value": 23.1, "received_at": "…", "limit_state": "critical"}
+}]}}
+```
+
+- The points are the mission's canonical set: fields of the active binding set's packet
+  definitions (`subsystem` is the packet name) plus governed derived telemetry (`subsystem:
+  "Derived"`). It's the same set the LiveView point picker offers, sorted by id.
+- `type`: `numeric | enum | text`, from the field's data type.
+- `latest` appears only with `spacecraft_id`, and is `null` if that point was never received.
+  `limit_state` is `critical | caution | nominal | no_data`.
+- `description` is often `null`: packet fields don't carry one yet.
+- Errors: `422 invalid_params` (`limit`, `spacecraft_id`).
