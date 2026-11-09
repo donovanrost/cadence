@@ -73,6 +73,18 @@ describe("readinessReader", () => {
     expect(decode(readinessReader, strayId).ok).toBe(false);
   });
 
+  it("tolerates a fix kind this console doesn't know (finding kept, no action)", () => {
+    const body = valid();
+    body.findings[1] = finding("x", "blocker", {
+      kind: "contact_planning_v2",
+      id: null,
+      label: null,
+    });
+    const result = decode(readinessReader, body);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.findings[1]?.fix).toBeNull();
+  });
+
   it("requires secondary count and unit together", () => {
     const body = valid();
     body.areas[0] = area("fleet", { secondary_count: 2, secondary_unit: null });

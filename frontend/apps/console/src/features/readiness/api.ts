@@ -82,10 +82,17 @@ const count: Reader<number> = (value, path = "") => {
   return n;
 };
 
-const rawFix = object({ kind: oneOf(fixKinds), id: nullable(token), label: nullable(string) });
+const rawFix = object({ kind: token, id: nullable(token), label: nullable(string) });
+const isFixKind = (kind: string): kind is (typeof fixKinds)[number] =>
+  fixKinds.some((known) => known === kind);
 
-const fix: Reader<FindingFix> = (value, path = "") => {
+/**
+ * A fix target this console doesn't know yet (the server adds areas over time) reads as "no
+ * action" rather than failing the whole page; the finding itself still shows.
+ */
+const fix: Reader<FindingFix | null> = (value, path = "") => {
   const raw = rawFix(value, path);
+  if (!isFixKind(raw.kind)) return null;
   switch (raw.kind) {
     case "spacecraft_list":
     case "spacecraft_new":
@@ -139,7 +146,7 @@ const finding: Reader<Finding> = (value, path = "") => {
     title: string,
     body: string,
     affected_count: count,
-    fix: nullable(fix),
+    fix: (value: unknown, p = "") => (value === null ? null : fix(value, p)),
   })(value, path);
   return {
     id: raw.id,
