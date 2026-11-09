@@ -48,6 +48,46 @@ defmodule Cadence.Reads.PassesTest do
   end
 
   describe "build/1" do
+    test "booking evidence: the provider's word, an operator's attestation, or none (U32)" do
+      leg = %{"uplink" => %{"routing_rule_id" => "rr-1"}}
+
+      marker = %{
+        "action" => "booked",
+        "actor" => %{"kind" => "user", "id" => "u1", "name" => "Mira K."}
+      }
+
+      attested = %{
+        reservation("attested", state: :pending, metadata: %{"operator_resolution" => marker})
+        | request_document: leg
+      }
+
+      confirmed = %{
+        reservation("confirmed", state: :confirmed, metadata: %{"operator_resolution" => marker})
+        | request_document: leg,
+          provider_confirmed_snapshot_document: %{"uplink" => %{"status" => "included"}}
+      }
+
+      lost = reservation("lost", state: :canceled, metadata: %{"operator_resolution" => marker})
+      downlink_only = reservation("downlink", state: :confirmed)
+
+      %{passes: passes} = build([attested, confirmed, lost, downlink_only])
+      by_id = Map.new(passes, &{&1.id, &1})
+
+      assert %{
+               booking_evidence: "operator_attested",
+               attested_by: %{kind: "user", id: "u1", name: "Mira K."},
+               uplink_confirmed: false,
+               attention: nil
+             } = by_id["attested"]
+
+      # The provider confirming after an attestation makes it the provider's word.
+      assert %{booking_evidence: "provider", attested_by: nil, uplink_confirmed: true} =
+               by_id["confirmed"]
+
+      assert %{booking_evidence: nil, attested_by: nil} = by_id["lost"]
+      assert %{booking_evidence: "provider", uplink_confirmed: nil} = by_id["downlink"]
+    end
+
     test "takes station and antenna from the newest snapshot and matches Cadence stations" do
       %{passes: [pass]} =
         build([

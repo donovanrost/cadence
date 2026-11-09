@@ -770,6 +770,7 @@ defmodule CadenceWeb.Router do
       get("/action-queue", ActionQueueController, :show)
       get("/counts", OpsCountsController, :show)
       get("/passes", PassController, :index)
+      get("/passes/:id", PassController, :show)
       get("/commands", CommandCatalogController, :index)
       get("/commands/:command_id", CommandCatalogController, :show)
       get("/command-policies", CommandGroupController, :policies)
@@ -820,6 +821,8 @@ defmodule CadenceWeb.Router do
       post("/alarm-episodes/:episode_id/assign", AlarmEpisodeController, :assign)
       post("/alarm-episodes/:episode_id/hand-off", AlarmEpisodeController, :hand_off)
       post("/alarm-episodes/:episode_id/notes", AlarmEpisodeController, :add_note)
+      post("/attention/:source/:id/acknowledge", AttentionController, :acknowledge)
+      post("/attention/:source/:id/resolve", AttentionController, :resolve)
 
       # -- Setup (owner: api). Contracts: docs/apogee/api/setup.md
       get("/spacecraft", SpacecraftController, :index)

@@ -1,13 +1,14 @@
 defmodule CadenceWeb.Console.PassController do
   @moduledoc """
-  `GET /api/console/v1/missions/:mission_id/passes` (ops M7 = scheduling S1).
-  Contract: docs/apogee/api/contacts.md.
+  `GET /api/console/v1/missions/:mission_id/passes` (ops M7 = scheduling S1) and one pass,
+  `GET …/passes/:id` (U32). Contract: docs/apogee/api/contacts.md.
   """
 
   use CadenceWeb, :controller
 
   alias Cadence.ContactPlanning.RepairChain
-  alias Cadence.Reads.Passes
+  alias Cadence.Reads.ActionQueue.AttentionItems
+  alias Cadence.Reads.{Attention, Passes}
   alias CadenceWeb.Console.{PassJSON, Problem, WindowParams}
 
   @max_span_s 7 * 86_400
@@ -24,9 +25,46 @@ defmodule CadenceWeb.Console.PassController do
           states: states
         })
 
-      json(conn, %{data: PassJSON.passes(with_replacements(conn, result))})
+      json(conn, %{data: PassJSON.passes(decorate(conn, result))})
     else
       {:error, {:invalid_params, details}} -> Problem.respond(conn, :invalid_params, details)
+    end
+  end
+
+  def show(conn, %{"id" => id}) do
+    case Passes.fetch(org_id(conn), mission_id(conn), id) do
+      {:ok, pass} ->
+        %{passes: [pass]} = decorate(conn, %{passes: [pass]})
+        json(conn, %{data: pass})
+
+      {:error, :pass_not_found} ->
+        Problem.respond(conn, :pass_not_found)
+    end
+  end
+
+  defp decorate(conn, result),
+    do: conn |> with_replacements(result) |> then(&with_attention(conn, &1))
+
+  # U32: each booking's open or acknowledged attention item, for viewers who operate the mission.
+  defp with_attention(conn, %{passes: passes} = result) do
+    case Attention.load(conn.assigns.current_scope, mission_id(conn)) do
+      {:ok, %{items: [_ | _] = items}} ->
+        names = AttentionItems.lookups(org_id(conn), mission_id(conn))
+        by_reservation = Map.new(items, &{&1.provider_reservation_id, &1})
+
+        %{
+          result
+          | passes:
+              Enum.map(passes, fn pass ->
+                case Map.get(by_reservation, pass.id) do
+                  nil -> pass
+                  item -> %{pass | attention: AttentionItems.object(item, names)}
+                end
+              end)
+        }
+
+      _none_or_forbidden ->
+        result
     end
   end
 

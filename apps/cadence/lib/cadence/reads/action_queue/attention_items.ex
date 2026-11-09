@@ -53,10 +53,18 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
       |> Enum.filter(&MapSet.member?(wanted, &1.id))
       |> Map.new(&{&1.id, Item.member(&1)})
 
+    org
+    |> lookups(mission_id)
+    |> Map.put(:spacecraft, Map.merge(outside_fleet(org, mission_id, wanted, in_fleet), in_fleet))
+  end
+
+  @doc "Station and provider name lookups for `object/2` (pass rows, the attention endpoints)."
+  @spec lookups(binary(), binary()) :: map()
+  def lookups(org, mission_id) do
     stations = StationRefs.index(org, mission_id)
 
     %{
-      spacecraft: Map.merge(outside_fleet(org, mission_id, wanted, in_fleet), in_fleet),
+      spacecraft: %{},
       station: &StationRefs.resolve(&1, stations),
       providers:
         org
@@ -118,21 +126,31 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
       due_at: attention.starts_at,
       count: 1,
       spacecraft: spacecraft(attention.spacecraft_id, names),
-      attention: %{
-        id: attention.id,
-        source: attention.source,
-        conflict: attention.conflict,
-        state: attention.state,
-        acknowledged_by: attention.acknowledged_by,
-        contact_id: attention.contact_id,
-        station: station(attention.ground_station_ref, names),
-        provider: provider(attention.provider_id, names),
-        starts_at: attention.starts_at,
-        raised_at: attention.raised_at,
-        provider_message: attention.provider_message,
-        resolution: attention.resolution
-      }
+      attention: object(attention, names)
     })
+  end
+
+  @doc """
+  The wire `attention` object of one item from the attention read (the queue row's
+  `attention`, pass rows, the acknowledge/resolve responses), names resolved with `lookups/2`.
+  """
+  @spec object(map(), map()) :: map()
+  def object(attention, names) do
+    %{
+      id: attention.id,
+      source: attention.source,
+      conflict: attention.conflict,
+      state: attention.state,
+      acknowledged_by: attention.acknowledged_by,
+      contact_id: attention.contact_id,
+      reservation_id: Map.get(attention, :provider_reservation_id),
+      station: station(attention.ground_station_ref, names),
+      provider: provider(attention.provider_id, names),
+      starts_at: attention.starts_at,
+      raised_at: attention.raised_at,
+      provider_message: attention.provider_message,
+      resolution: attention.resolution
+    }
   end
 
   # Within 2 h of the pass start, or the pass is under way (started, not ended).

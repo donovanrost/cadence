@@ -75,7 +75,7 @@ Query: `from`, `to` (ISO-8601; default `from` = now, `to` = `from` + 24 h; at mo
 
 Errors: `422 invalid_params`, `404 mission_not_found`.
 
-### Booking evidence and attention on pass rows (U32, DECISIONS #53/#54/#55): proposed, not built
+### Booking evidence and attention on pass rows (U32, DECISIONS #53/#54/#55)
 
 Every row gains four fields:
 
@@ -97,8 +97,16 @@ Every row gains four fields:
   mission. The action queue's object also gains `reservation_id`, the pass row's `id`. A conflict
   on a booking that never got a scheduled contact (`cancel_failed`, `late_confirmation`) has
   `contact_id: null`, so link by `reservation_id`.
+- An attention change (`invalidate` `attention`) also invalidates `contacts`, since rows carry
+  their item.
 
-### `POST /api/console/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`: proposed
+### `GET /api/console/v1/missions/:mission_id/passes/:id`
+
+One pass by its reservation id (the row `id`, or the attention object's `reservation_id`), in the
+same row shape including `attention`, whatever its window. Review opens passes days out with it.
+Returns `{data: <row>}`. Errors: `404 pass_not_found`, `404 mission_not_found`.
+
+### `POST /api/console/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`
 
 `:source` and `:id` are the attention object's `source` and `id` (`pass_resolution`, the
 resolution id). Members who can operate the mission (`operate_mission`); the actor is always the
@@ -108,7 +116,7 @@ signed-in user (#30).
 - `resolve`: body `{"action_text": "Called Northlight; the cancel is confirmed, ticket 4471."}`
   (required, at most 200 characters). The text is shown as "Resolved: <action_text>" in history.
 - Both return `{data: <attention object>}` (`state` `acknowledged` / `resolved`) and invalidate
-  `attention` (plus `contacts`).
+  `attention` and `contacts`.
 - Errors: `404 attention_item_not_found` (also an unknown `:source`), `409 attention_item_not_open`
   (already resolved, or acknowledging one that's acknowledged), `403 forbidden`,
   `422 invalid_params` (`details.action_text`), `422 actor_not_assignable` (the body names an

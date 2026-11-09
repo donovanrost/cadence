@@ -104,6 +104,16 @@ defmodule CadenceWeb.Console.MissionChannelTest do
       assert_push("invalidate", %{resources: ["alarms"]}, 2_000)
     end
 
+    test "an attention change invalidates attention and contacts (pass rows carry it, U32)", c do
+      {:ok, _reply, _socket} =
+        subscribe_and_join(c.socket, "mission:" <> c.mission.mission_id, %{})
+
+      :ok =
+        ScopedReadUpdates.publish(:attention_changed, c.org.organization_id, c.mission.mission_id)
+
+      assert_push("invalidate", %{resources: ["attention", "contacts"]}, 2_000)
+    end
+
     test "relays configuration changes, apply progress and runtime", c do
       {:ok, _reply, _socket} =
         subscribe_and_join(c.socket, "mission:" <> c.mission.mission_id, %{})

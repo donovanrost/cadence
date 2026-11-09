@@ -19,6 +19,8 @@ defmodule Cadence.Reads.Passes do
   alias Cadence.Reads.PassEnders
 
   @default_limit 500
+  @provider_booked [:confirmed, :active, :completed]
+  @attestable [:pending, :unknown]
   @snapshots [
     :cadence_accepted_snapshot_document,
     :provider_confirmed_snapshot_document,
@@ -40,16 +42,43 @@ defmodule Cadence.Reads.Passes do
         limit: Map.get(filters, :limit, @default_limit)
       )
 
-    build(%{
+    load_rows(organization_id, mission_id, reservations, %{
       from: from,
       to: to,
-      reservations: reservations,
-      enders: PassEnders.load(organization_id, mission_id, reservations),
       truncated: truncated?,
-      stations: GroundStationStore.list_ground_stations(organization_id, mission_id),
-      spacecraft: Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id),
       filters: filters
     })
+  end
+
+  @doc "One pass by its reservation id, in the same row shape (U32: Review opens any pass)."
+  @spec fetch(binary(), binary(), binary()) :: {:ok, map()} | {:error, :pass_not_found}
+  def fetch(organization_id, mission_id, reservation_id) do
+    case Contacts.fetch_provider_reservation(organization_id, mission_id, reservation_id) do
+      {:ok, %ProviderReservation{} = reservation} ->
+        %{passes: [pass]} =
+          load_rows(organization_id, mission_id, [reservation], %{
+            from: nil,
+            to: nil,
+            truncated: false,
+            filters: %{}
+          })
+
+        {:ok, pass}
+
+      {:error, _reason} ->
+        {:error, :pass_not_found}
+    end
+  end
+
+  defp load_rows(organization_id, mission_id, reservations, window) do
+    window
+    |> Map.merge(%{
+      reservations: reservations,
+      enders: PassEnders.load(organization_id, mission_id, reservations),
+      stations: GroundStationStore.list_ground_stations(organization_id, mission_id),
+      spacecraft: Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id)
+    })
+    |> build()
   end
 
   @doc "Pure builder; see `load/5`."
@@ -117,8 +146,50 @@ defmodule Cadence.Reads.Passes do
         reservation.contact_plan_id &&
           %{id: reservation.contact_plan_id, version: reservation.contact_plan_version},
       reservation_id: reservation.provider_reservation_id,
-      scheduled_contact_id: reservation.scheduled_contact_id
+      scheduled_contact_id: reservation.scheduled_contact_id,
+      booking_evidence: booking_evidence(reservation),
+      attested_by: attested_by(reservation),
+      uplink_confirmed: uplink_confirmed(reservation),
+      # The booking's open attention item (U32); the controller fills it for viewers who operate.
+      attention: nil
     }
+  end
+
+  # U32 / DECISIONS #53: the provider's word wins; an operator's attestation counts only while the
+  # provider is silent.
+  defp booking_evidence(%ProviderReservation{lifecycle_state: state})
+       when state in @provider_booked,
+       do: "provider"
+
+  defp booking_evidence(%ProviderReservation{lifecycle_state: state} = reservation)
+       when state in @attestable do
+    if attestation(reservation), do: "operator_attested"
+  end
+
+  defp booking_evidence(_reservation), do: nil
+
+  defp attested_by(reservation) do
+    with "operator_attested" <- booking_evidence(reservation),
+         %{} = actor <- attestation(reservation)["actor"] do
+      %{kind: actor["kind"], id: actor["id"], name: actor["name"]}
+    else
+      _other -> nil
+    end
+  end
+
+  defp attestation(%ProviderReservation{
+         metadata: %{"operator_resolution" => %{"action" => "booked"} = marker}
+       }),
+       do: marker
+
+  defp attestation(_reservation), do: nil
+
+  # nil when no uplink leg was requested (downlink-only): there's nothing to confirm.
+  defp uplink_confirmed(%ProviderReservation{} = reservation) do
+    if is_map(get_in(reservation.request_document || %{}, ["uplink"])) do
+      get_in(reservation.provider_confirmed_snapshot_document || %{}, ["uplink", "status"]) ==
+        "included"
+    end
   end
 
   defp snapshot(reservation) do
