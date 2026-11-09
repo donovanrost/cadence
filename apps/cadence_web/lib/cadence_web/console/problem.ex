@@ -39,6 +39,9 @@ defmodule CadenceWeb.Console.Problem do
     policy_not_found: {404, "Policy or version not found."},
     template_not_found: {404, "Template not found."},
     app_not_found: {404, "App not found."},
+    settings_section_not_found: {404, "Settings section not found."},
+    settings_enforced_by_organization:
+      {409, "The organization doesn't let missions change this setting."},
     app_action_failed: {422, "The app change was refused."},
     template_rejected: {422, "The template change was refused."},
     policy_rejected: {422, "The policy change was refused."},

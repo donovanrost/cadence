@@ -835,6 +835,8 @@ defmodule CadenceWeb.Router do
       get("/routing-rules", CommsController, :routing_rules)
       get("/routing-rules/groups", CommsController, :routing_rule_groups)
       get("/data-sources", DataSourceController, :index)
+      get("/settings", SettingsController, :show)
+      put("/settings/:section_key", SettingsController, :update)
       get("/apps", AppController, :index)
       post("/apps/:key/install", AppController, :install)
       post("/apps/:key/disable", AppController, :disable)
@@ -901,6 +903,8 @@ defmodule CadenceWeb.Router do
       post("/invitations", PeopleController, :invite)
       get("/service-identities", PeopleController, :service_identities)
       get("/missions", OrganizationController, :missions)
+      get("/settings", SettingsController, :show)
+      put("/settings/:section_key", SettingsController, :update)
     end
 
     match(:*, "/*path", NotFoundController, :show)

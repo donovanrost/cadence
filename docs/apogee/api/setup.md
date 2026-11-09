@@ -355,6 +355,29 @@ audited lifecycle events.
 - Errors: `404 app_not_found`, `403 forbidden`, `422` with the domain's code (for example
   `application_dependency_missing`). Refetch on `invalidate` with `configuration`.
 
+### Settings (ST1): `GET /missions/:mission_id/settings` and `GET /organizations/:organization_id/settings`
+
+`{sections: [{key, title, purpose, fields: [field + {value, source: "mission" | "organization",
+inherited_value}], locked, version: {version, at, actor: {name}} | null}], permissions:
+["settings.edit"]}`.
+
+- Sections come from the server's settings registry (Governance, Commanding, Pass review when
+  it lands, and `cadence.configuration`, the profile framing generations flag). A section with no
+  console fields is left out.
+- Fields use the kind-schema shape, with paths inside the section's value. At organization level
+  each section adds `allow_override` ("Missions may override").
+- `inherited_value` is the organization's value (mission level only). `locked: true` means the
+  organization doesn't allow an override.
+- `version` is per section: there's no single settings version.
+
+`PUT …/settings/:section_key` with `{values: {path: value | null}, expected_version}` saves
+directly and returns `201 {version, state: "active"}`. For a mission, `null` inherits that field,
+and all-`null` clears the override. Errors: `422 invalid_params` (an unknown path in `details`,
+or `details.values` for a value the section refuses), `409 version_conflict` (with
+`details.expected_version`), `409 settings_enforced_by_organization`, `404
+settings_section_not_found`, `403 forbidden`. Edit needs `settings.edit` (any mission operator
+today, from the enforcing check).
+
 ### `GET /missions/:mission_id/routing-rules/groups` (pass-2 #10)
 
 `{groups: [{transport: {id, name}, direction, role, enabled_count, disabled_count,
