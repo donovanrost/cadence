@@ -32,10 +32,16 @@ const elapsed = computed(() =>
         </li>
       </ul>
     </template>
-    <p v-else-if="view.kind === 'no_draft'" class="m-0 text-base text-text-3">
-      There's no plan for this day yet. Cadence drafts the day across every provider's windows, then
-      you work the exceptions.
-    </p>
+    <div v-else-if="view.kind === 'no_draft'" class="flex flex-col gap-2">
+      <p class="m-0 text-base text-text-3">
+        There's no plan for this day yet. Cadence drafts the day across every provider's windows,
+        then you work the exceptions.
+      </p>
+      <p v-if="view.last" class="m-0 font-mono text-sm text-text-3 uppercase">
+        Last plan for this day: r{{ view.last.version }},
+        {{ view.last.state.replaceAll("_", " ") }} · {{ view.last.counts.passes }} passes
+      </p>
+    </div>
     <div v-else-if="view.kind === 'drafting'" role="status" class="flex flex-col gap-2">
       <ol
         class="m-0 flex list-none flex-wrap gap-2 p-0 font-mono text-sm uppercase"
