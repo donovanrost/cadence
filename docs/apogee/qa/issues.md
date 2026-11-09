@@ -16,7 +16,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 10 | Investigate header | Prev/next links show "2 ]" but are named "Next spacecraft, EARENDIL-002" (WCAG 2.5.3) | fe-ops | fixed (d3a2e569), e2e updated |
 | 11 | Config API | First `GET /missions/:id/config` returned 500 during an e2e run; a later call 200 with a baseline created at that moment (suspected race in lazy baseline creation) | api / domain | fixed (0c037ba0) |
 | 15 | Session / shell | Env admin in admin mode (platform_admin) gets `organizations: []` and can't open any org by URL | api / lead | verified (lead: org selected from the URL slug) |
-| 16 | Framing HOLD (DECISIONS #36 gate) | No COMPATIBILITY HOLD on dev for a profile frame_size change | domain / qa | cause: stale server config (FramingCompatibility registered in config.exs after the last restart); qa's code reading was wrong. Rerun pending |
+| 16 | Framing HOLD (DECISIONS #36 gate) | No COMPATIBILITY HOLD on dev for a profile frame_size change | domain / qa | verified: gate rerun passed after restart; default on (DECISIONS #45), Earendil override cleared (settings v6) |
 | 18 | Changes preview decode | Hold items lacked `change_id`; console couldn't decode the preview (K2 'reply wasn't understood', Apply stuck) | domain / fe-setup | verified (cc4afc5a, 86663423) |
 | 19 | Change-set submit | Submit answered 500 (DB pool timeout under load) after the apply had committed (r6, generation 4) | domain / api | open |
 | 20 | Station availability | Any OUTAGE window makes station-availability reads 500 (`binary_to_existing_atom("outage")`); the create returns 500 but persists | domain / api-ops | verified (306ca39c) |
@@ -29,6 +29,9 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 13 | Palette | Focus leaves the `aria-modal` dialog after two Tabs (no focus trap) | fe-ops | verified (cb5b2d12) |
 | 14 | Catalog import | File picker shows no visible keyboard focus (WCAG 2.4.7) | fe-setup | verified (32c2cb4e) |
 | 5 | Now · fleet matrix | Plane buttons: "P01" vs label "Plane 1" (WCAG 2.5.3) and 36×10px targets 18px apart (WCAG 2.5.8) | fe-ops | verified (8ccf851f) |
+| 25 | Uplink · abort | Pointer click on Abort hit the dev-only Tidewave toolbar (keyboard worked) | fe-ops | verified (e05d3790: real mouse clicks on Abort and its confirm, group aborted) |
+| 26 | K1 submit · gap reasons | Windows already past on today's draft read "Provider search unavailable" (printed twice per row) instead of saying the window has passed | domain / api | open |
+| 27 | K1 submit · gap reasons | Ticking "Same reason for all" still leaves one reason box per spacecraft; filling only the first keeps Submit disabled ("Every gap needs a reason first.") | lead | open |
 
 ## Details
 
@@ -201,5 +204,21 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   invalid." (scheduling.md doesn't state the comment is required.)
 - Fix: require the comment in the UI (disabled-with-reason, as Changes does for "why") or show
   the field error; api documents it.
+
+### 26. Past windows read "Provider search unavailable"
+
+- 2026-11-09 ~11:25Z, K1 Plan the day for 2026-11-09 (plan `contact_plan_fleet_d0ede25e2cd7efcafff80733`):
+  20 contacts short, all in 00:00–06:00Z and 06:00–12:00Z, i.e. windows that had already passed or
+  were closing. Each gap reads "Contact count not met · Provider search unavailable · Provider search
+  unavailable". The reason is misleading (the provider was up; the window is in the past) and is
+  printed twice.
+- Expected: a reason that says the window has passed (or past windows left out of today's demand).
+
+### 27. "Same reason for all" doesn't apply one reason
+
+- Same submit sheet ("Accept 10 gaps · 20 contacts short"). Tick "Same reason for all", fill the
+  first "Reason for accepting this gap" box: all 10 boxes stay, Submit stays `aria-disabled` with
+  "Every gap needs a reason first." Filling all 10 boxes enables it.
+- Expected: one reason box (or the first box's text applied to all) when the box is ticked.
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
