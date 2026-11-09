@@ -226,6 +226,12 @@ report it the same way:
 - `unconfirmed`: a placed booking is still unanswered past the window. The operator resolves it
   by checking that reservation with the provider. Execute answers `409 plan_not_resumable`.
 
+Plan detail (`GET /contact-plans/:id`, and the S4 edit response) carries `unconfirmed` (U30):
+`{window_ms, booked, passes: [{snapshot_id, provider: {id, name}, sent_at}]} | null`. It's non-null
+whenever a placed booking is unanswered past the window. `booked` counts reserved passes; `passes`
+are the unconfirmed ones, soonest first (join `snapshot_id` to `passes[]` for spacecraft, station
+and times); `sent_at` is when the booking was placed.
+
 ### `GET /contact-plans/setup`
 
 `{setup: {ready, missing: ["fleet_planning_policy" | "contact_requirements"], policy: {id, version} |

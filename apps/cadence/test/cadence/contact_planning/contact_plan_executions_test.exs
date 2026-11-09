@@ -15,6 +15,7 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
   }
 
   alias Cadence.Control.Contacts, as: ControlContacts
+  alias Cadence.Control.PlanConfirmation
   alias Cadence.Control.Contacts.Store.ContactPlanExecutionItemRow
   alias Cadence.Control.Scheduling
   alias Cadence.Management.Contacts, as: ManagementContacts
@@ -351,6 +352,31 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
              )
 
     assert Enum.map(reread, & &1.updated_at) == Enum.map(items, & &1.updated_at)
+
+    # U30: within the window nothing is unconfirmed; past it, plan detail names the passes.
+    unconfirmed =
+      &PlanConfirmation.unconfirmed(
+        context.organization_id,
+        context.mission_id,
+        context.plan.contact_plan_id,
+        now: DateTime.add(@now, &1, :minute),
+        window_ms: :timer.minutes(10)
+      )
+
+    assert unconfirmed.(1) == nil
+    assert %{window_ms: 600_000, booked: 0, passes: passes} = unconfirmed.(11)
+
+    assert Enum.sort(Enum.map(passes, & &1.snapshot_id)) ==
+             Enum.sort(Enum.map(items, & &1.contact_opportunity_snapshot_id))
+
+    assert Enum.all?(
+             passes,
+             &match?(
+               %{provider: %{id: id, name: "Ground Network Simulator"}, sent_at: %DateTime{}}
+               when is_binary(id),
+               &1
+             )
+           )
 
     for item <- items do
       {:ok, reservation} =

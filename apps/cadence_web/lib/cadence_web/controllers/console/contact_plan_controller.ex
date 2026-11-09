@@ -7,7 +7,7 @@ defmodule CadenceWeb.Console.ContactPlanController do
   use CadenceWeb, :controller
 
   alias Cadence.ContactPlanning.ContactPlan
-  alias Cadence.Control.Scheduling
+  alias Cadence.Control.{PlanConfirmation, Scheduling}
   alias Cadence.Reads.{ContactPlanOverview, PlanAlternatives, PlanningSetup}
   alias CadenceWeb.Console.{ConfigJSON, Problem, SchedulingRunner}
 
@@ -33,7 +33,7 @@ defmodule CadenceWeb.Console.ContactPlanController do
   def show(conn, %{"plan_id" => plan_id} = params) do
     with {:ok, version} <- version(params["version"]),
          {:ok, plan} <- ContactPlanOverview.plan(org_id(conn), mission_id(conn), plan_id, version) do
-      json(conn, %{data: ConfigJSON.encode(effective_state(conn, plan))})
+      json(conn, %{data: ConfigJSON.encode(detail(conn, plan))})
     else
       {:error, :plan_not_found} -> Problem.respond(conn, :plan_not_found)
       {:error, details} -> Problem.respond(conn, :invalid_params, details)
@@ -72,7 +72,7 @@ defmodule CadenceWeb.Console.ContactPlanController do
            Scheduling.edit_plan(scope(conn), mission_id(conn), plan_id, version, add, remove),
          {:ok, plan} <-
            ContactPlanOverview.plan(org_id(conn), mission_id(conn), plan_id, new_version.version) do
-      json(conn, %{data: ConfigJSON.encode(effective_state(conn, plan))})
+      json(conn, %{data: ConfigJSON.encode(detail(conn, plan))})
     else
       {:error, details} when is_map(details) ->
         Problem.respond(conn, :invalid_params, details)
@@ -249,6 +249,16 @@ defmodule CadenceWeb.Console.ContactPlanController do
     do: Problem.respond(conn, reason)
 
   defp submit_error(conn, _plan_id, _reason), do: Problem.respond(conn, :plan_not_submittable)
+
+  # U30: which placed bookings the provider hasn't confirmed past the window (null otherwise).
+  defp detail(conn, plan) do
+    conn
+    |> effective_state(plan)
+    |> Map.put(
+      :unconfirmed,
+      PlanConfirmation.unconfirmed(org_id(conn), mission_id(conn), plan.id)
+    )
+  end
 
   defp effective_state(conn, plan),
     do: %{
