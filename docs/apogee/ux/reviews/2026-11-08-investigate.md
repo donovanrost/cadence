@@ -67,3 +67,21 @@ never heard. Good. Items:
     yet`, but telemetry *was* received. Captions in priority: `limits not configured` (when ground
     limits are off, the real reason) → `no fresh telemetry` (when nothing is fresh) → the normal
     caption. The same applies on Now.
+
+## Alarm lifecycle on Investigate (77f93bad), injected episodes, 1440×900
+Injected: ground-limit episode, NEW, critical; events raised (caution) → acknowledged by Mira K. →
+escalated to critical; acknowledge returns acknowledged; assign returns 502.
+Verified: the episode bar with `◆ NEW` + `GROUND LIMITS · EVALUATED 00:56:55Z · T+00:12:09` (U16),
+`Acknowledge` primary + `Assign`; `AT EVALUATION` readout; units; B2 lists the episode events with
+marks; after ack: `■ ACKNOWLEDGED BY QA ORG ADMIN`, hero tag stays critical (correct); inline assign
+row (person select + optional note + disabled Assign).
+14. **Escalation callout missing:** with ack → escalated → status `new`, U16 wants `ACK CLEARED ·
+    ESCALATED TO CRITICAL` (caution) in the bar until re-acked. Not shown. Check what it keys on: the
+    events here are `acknowledged` then `escalated` (payload `{from, to}`).
+15. After ack, say who and when: `ACKNOWLEDGED BY YOU · 01:09Z` (you = current user).
+16. When the assign row is open, the header `Assign` should become `Cancel` (or carry
+    `aria-expanded`). Two `ASSIGN` buttons on screen is ambiguous.
+17. Rate unit compact: `V/h` (not `V per hour`).
+18. **Rail `ALARMS 0`** while ground limits aren't configured: the same U13 logic applies to rail
+    counts. Omit the count (or `—`) when limits aren't configured and there are no live-source episodes.
+Not exercised: the assign-failure path (the picker lists no people on :4011).

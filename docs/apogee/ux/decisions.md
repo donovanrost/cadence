@@ -169,3 +169,33 @@ happened to the data, and only claims what is certain:
   request page) instead of `Retry`, because a retry could duplicate the write.
 - **Partial** (only where the model allows it): name what changed and what didn't.
 **Why:** a 201 may already have staged it. "Nothing changed" is a promise; make it only when true.
+
+### U21 · Acknowledged items keep their priority (api-ops question)
+**Decision:** keep api-ops' current behavior: an item whose episodes are all acknowledged **keeps its
+priority and sorts last within it** (P1 acked stays P1, below unacked P1s). Don't demote. The row
+also changes: owner chip `ACK MIRA K.` (+ `→ TOMÁS R.` when assigned), the action becomes `Open`
+instead of `Engage`, and it's never the primary. An escalation clears the ack (U16) and the item
+returns to the top of its new priority.
+**Why:** ISA-18.2: acknowledging doesn't make a critical alarm less critical. Demotion would mix
+an acked critical in with fresh cautions and hide severity. Sorting last keeps unhandled work on top.
+
+### U22 · Scheduling answers (lead's plan, Q1–Q9)
+1. **Day** = 00–24Z UTC. Shift-aligned windows can come later as a preset.
+2. **Rule source:** show the rule text (`≥ 3 CONTACTS A DAY · NO GAP OVER 10h00`) with its true source,
+   `FROM REQUIREMENT TEMPLATE "BLOCK 1 DAILY" ↗` (link to the existing page) until profile demand
+   exists. No IA home is added for templates.
+3. **Budgets:** confirmed. No denominators and no budget caution until a budget setting exists.
+   Totals (minutes, cost) only when providers report prices.
+4. **Freeze clock:** omit until a provider reports a cutoff.
+5. **K2 v1:** yes, ship **"Re-plan after provider changes"** entered from a plan or a rejected/changed
+   reservation, same layout. A Impact lists the rejected/changed reservations instead of a station
+   outage (title `Re-plan · 3 reservations rejected`). The outage entry joins when S7 lands.
+6. **K3:** agreed, hold it until S9. Hide the `Review` tab until then (no dead tab).
+7. **Window source naming:** `<SOURCE> · <KIND>` mono, with the source's display name (`NORTHLIGHT ·
+   PROVIDER WINDOW`). The simulator always says so: `SIMULATOR · SYNTHETIC WINDOW`, and the plan
+   shows a stale-tone callout "Opportunities come from the simulator, not a provider" whenever any
+   window is synthetic.
+8. **Gantt rows** = stations; antenna sub-rows only when the provider reports antennas. Confirmed.
+9. **Plan approval** follows the server's policy, like commanding (DECISIONS #7 pattern). Default:
+   one planner submits. When a plan comes back `pending_approval`, show ApDecision to people who
+   can approve, with the reviewer ≠ the author. The UI never invents the requirement.
