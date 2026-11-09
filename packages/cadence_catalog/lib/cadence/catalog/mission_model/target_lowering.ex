@@ -128,7 +128,7 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
           size_bits: size_bits,
           data_type: data_type,
           byte_order: telemetry_byte_order(type),
-          engineering_unit: engineering_unit(parameter, index)
+          engineering_unit: engineering_unit(parameter, index) || engineering_unit(type, index)
         }
 
         {:cont, {:ok, [field | fields]}}
@@ -503,8 +503,10 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
     end)
   end
 
-  defp engineering_unit(parameter, index) do
-    with %Reference{} = reference <- Enum.find(parameter.references, &(&1.role == :unit)),
+  # A parameter's own unit wins; XTCE import attaches the unit to the parameter
+  # type instead, so callers fall back to the type's declaration.
+  defp engineering_unit(owner, index) do
+    with %Reference{} = reference <- Enum.find(owner.references, &(&1.role == :unit)),
          {:ok, unit} <- resolved(index, reference) do
       value(unit.definition, :symbol, unit.name)
     else
