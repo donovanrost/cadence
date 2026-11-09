@@ -57,8 +57,11 @@ export function useStationEntry(missionId: Readonly<Ref<string>>) {
     (i) => {
       if (i.status !== "ready") return;
       // One plan normally; with several, repair the latest revision that booked hit passes.
+      // Plans whose bookings the outage hits or already cost; repair the latest revision.
       const best =
-        [...i.value.plans].sort((a, b) => (b.version ?? 0) - (a.version ?? 0))[0]?.id ?? null;
+        [...i.value.lost.plans, ...i.value.plans].sort(
+          (a, b) => (b.version ?? 0) - (a.version ?? 0),
+        )[0]?.id ?? null;
       resolved.value = best ? "found" : "none";
       if (best && route.query.plan !== best)
         void router.replace({ query: { ...route.query, plan: best } }).catch(() => undefined);

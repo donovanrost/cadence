@@ -61,13 +61,23 @@ const impact = useRemoteQuery(impactKey, fetchStationImpact);
       @retry="impact.refetch"
     >
       <template #default="{ value }">
-        <div class="grid grid-cols-2 gap-px bg-hairline">
+        <div class="grid grid-cols-3 gap-px bg-hairline">
           <ApStatTile
             label="Passes hit"
             :value="value.passes_hit"
             :state="value.passes_hit > 0 ? 'crit' : 'neutral'"
+            caption="still booked"
           />
-          <ApStatTile label="Spacecraft" :value="value.spacecraft_ids.length" />
+          <ApStatTile
+            label="Already lost"
+            :value="value.lost.count"
+            :state="value.lost.count > 0 ? 'caution' : 'neutral'"
+            caption="canceled, rejected or failed"
+          />
+          <ApStatTile
+            label="Spacecraft"
+            :value="new Set([...value.spacecraft_ids, ...value.lost.spacecraft_ids]).size"
+          />
         </div>
         <p class="m-0 border-t border-hairline px-4 py-2 text-sm text-text-3">
           Bookings that never named a station can't be attributed and aren't counted.<template

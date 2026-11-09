@@ -124,8 +124,8 @@ async function onApply(acks: Acknowledgement[]) {
           :availability="avail"
         />
         <ApCallout v-if="station.resolved.value === 'none'" tone="info"
-          >No live plan has bookings at this station in the outage window, so there's nothing to
-          re-plan.</ApCallout
+          >No plan has bookings at this station in the outage window, booked or lost, so there's
+          nothing to re-plan.</ApCallout
         >
       </template>
     </ApRemote>
