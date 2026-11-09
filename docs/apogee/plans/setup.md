@@ -8,7 +8,7 @@ Owner: **fe-setup**. Status: draft 1 (2026-11-08). Boards: `Setup` (S1), `AddSpa
 breadcrumbs, tone strings), so the plan asks **api** for purpose-built `/api/console/v1` JSON,
 reusing the underlying `L/reads/*` and stores. "Missing" means no backend data exists today.
 
-## Build status (2026-11-09, end of day)
+## Build status (2026-11-09, late)
 
 | Screen | Route | State | Data |
 | --- | --- | --- | --- |
@@ -18,16 +18,18 @@ reusing the underlying `L/reads/*` and stores. "Missing" means no backend data e
 | Profiles / S4 Profile | `setup/profiles[/:id/:section]` | **live**; framing read-only (#19); routing rule editor + override reset stage live (domain P2) | P, PD, K |
 | S3 Catalog index / import run / upload | `setup/catalog[/import[/:id]]` | **live** (qa ran a real upload) | C1, C2, C3 |
 | Changes + Revisions | `setup/changes`, `setup/revisions[/:n]` | **live**; rollback waits for P2 | K |
-| Ground stations | `setup/stations[/:id\|new]` | **live**: edit and add through change sets | G1 + kind schema |
-| Comms & routing | `setup/comms[/transports[/:id]]` | **live**: transports editable, routing rules read-only (#3) | T1, T2, transport detail |
-| Data sources | `setup/data-sources` | built; not-available until D1 | D1 (api: after scheduling) |
-| Apps | `setup/apps` | built; actions behind the change seam (direct in v1, domain); not-available until A1 | A1 |
+| Ground stations | `setup/stations[/:id\|new]` | **live**: edit and add through change sets; U25 suggested codes with Confirm (stages a code change) | G1 + kind schema |
+| Comms & routing | `setup/comms[/transports[/:id]]` | **live**: transports editable; routing rules as groups (pass-2 #10) with a group's rules below (`?group=`), read-only (#3) | T1, T2, groups, transport detail |
+| Data sources | `setup/data-sources` | **live** | D1 |
+| Apps | `setup/apps` | **live**; platform apps always on; install/disable/uninstall direct (change seam kept) | A1 |
 | S5 People & access | `org/people` | **live** (members, invitations, invite, service identities) | O1, O2, O3; O4 with api-ops |
-| Org missions | `org/missions` | **live** (from the session) | session |
+| Org missions | `org/missions` | **live**: session rows + fleet size and worst state (pass-2 #11) | session, org missions |
 | Contact planning (#27) | `setup/contact-planning[/policy]` | requirements built; policy/templates wait for CP2/CP3 | CP1-3 |
-| Mission / org settings | `setup/settings`, `org/settings` | built read-only; not-available until ST1 | ST1 |
-| Audit log | `org/audit` | built; not-available until AU1 | AU1 |
-| Provider accounts | `org/provider-accounts` | list built; not-available until PA1 | PA1 |
+| Mission / org settings | `setup/settings`, `org/settings` | **live**: sections editable (direct save, per-section version), source per field, Reset to inherited, locked read-only | ST1 |
+| Audit log | `org/audit` | **live**: range, kind and mission filters, Load older, grouped repeats | AU1 |
+| Provider accounts | `org/provider-accounts[/:id\|new]` | **live**: list, detail, Test reference, add, rename, replace reference, remove (blocked while used). Settings edit waits for an account detail read | PA1 |
+| K2 Re-plan (#43) | `contacts/replan[/:stationId]` | **live**: propose around lost bookings/outage; Apply held for qa (after 004's 18:26Z pass) | S5, S7, S8 |
+| K3 Close the books (#43) | `contacts/review` | **live** on S9: h1 + freshness, strip, R1–R4. R4 shows the first 100 (cursor is in `meta`); downlink tile waits for summary volume totals | S9 |
 
 Shapes requested from api: `setup-shapes.md`. Contracts: `docs/apogee/api/setup.md`.
 
