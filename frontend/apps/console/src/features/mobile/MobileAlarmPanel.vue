@@ -60,7 +60,7 @@ const unit = computed(() => props.alarm.point.unit ?? undefined);
           :unit="unit"
         />
       </ApStatStrip>
-      <p class="m-0 font-mono text-xs text-text-3 uppercase">
+      <p class="m-0 font-mono text-xs text-text-3">
         {{
           view?.rate == null
             ? "Rate needs 15 min of data"
