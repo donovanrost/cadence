@@ -22,6 +22,7 @@ import {
 import ChangesPanel from "./ChangesPanel.vue";
 import { replanErrorText } from "./errors.ts";
 import { lostWindow } from "./impact.ts";
+import { bookingRequests, bookingStoppedText } from "./applied.ts";
 import { useLostBookings } from "./useLostBookings.ts";
 import ImpactPanel from "./ImpactPanel.vue";
 import StationImpactPanel from "./StationImpactPanel.vue";
@@ -92,11 +93,16 @@ const step = computed(() => {
   if (!state) return 0;
   return state === "draft" || state === "pending_approval" ? 1 : 2;
 });
-/** Provider requests the proposal sends: one per moved, dropped or added pass (U28). */
+/** Booking requests Apply sends (U28): moves and adds; drops send nothing. */
 const requests = computed(() => {
   const d = proposal.value?.diff;
-  return d ? d.moved.length + d.dropped.length + d.added.length : 0;
+  return d ? bookingRequests(d) : 0;
 });
+const stopped = computed(() =>
+  footerPlan.value?.state === "interrupted"
+    ? bookingStoppedText(footerPlan.value, lost.read.value)
+    : null,
+);
 const applyLabel = (plan: PlanDetail) =>
   !isAdmin.value
     ? "Request approval for the proposal"
@@ -210,6 +216,7 @@ async function onApply(acks: Acknowledgement[]) {
     <template #default="{ value: live }">
       <PlanStatePanel v-if="runView" :view="runView" />
       <template v-else-if="proposal && proposal.plan && proposal.diff">
+        <ApCallout v-if="stopped" tone="stale">{{ stopped }}</ApCallout>
         <div
           class="grid min-h-0 flex-1 grid-cols-1 gap-3 console:grid-cols-[300px_minmax(0,1fr)_360px]"
         >

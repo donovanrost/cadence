@@ -9,15 +9,16 @@ export function useLostBookings(
   missionId: Readonly<Ref<string>>,
   live: Readonly<Ref<PlanDetail | null>>,
 ) {
+  // A string key: every refetch of the live plan yields a new object, and an object key would
+  // reload the passes read (and flash its loading state) each time.
   const key = computed(() => {
     const w = live.value?.window;
-    return w?.from && w.to
-      ? { missionId: missionId.value, from: new Date(w.from), to: new Date(w.to) }
-      : null;
+    return w?.from && w.to ? `${missionId.value}|${w.from}|${w.to}` : null;
   });
-  const passes = useRemoteQuery(key, (k, signal) =>
-    fetchPasses(k.missionId, { from: k.from, to: k.to }, signal),
-  );
+  const passes = useRemoteQuery(key, (k, signal) => {
+    const [mission = "", from = "", to = ""] = k.split("|");
+    return fetchPasses(mission, { from: new Date(from), to: new Date(to) }, signal);
+  });
   const impact = computed(() => {
     const s = passes.state.value;
     return s.status === "ready" && live.value
@@ -28,6 +29,7 @@ export function useLostBookings(
     state: passes.state,
     refetch: passes.refetch,
     impact,
+    read: computed(() => (passes.state.value.status === "ready" ? passes.state.value.value : null)),
     hasWindow: computed(() => key.value !== null),
   };
 }
