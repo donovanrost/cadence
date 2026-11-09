@@ -33,7 +33,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 26 | K1 submit · gap reasons | Windows already past on today's draft read "Provider search unavailable" (printed twice per row) instead of saying the window has passed | domain / api | fixed (10ffd37d doubled text; d882ee70 `window_passed` "This window has already passed.", new drafts only); re-check on the next same-day draft |
 | 27 | K1 submit · gap reasons | Ticking "Same reason for all" still leaves one reason box per spacecraft; filling only the first keeps Submit disabled ("Every gap needs a reason first.") | lead | fixed (10ffd37d: one shared reason box); `planning-submit-race` e2e uses it |
 | 28 | Commands list · delivered group | A delivered group stays in the "Released" tab reading "GO given · released to the queue" (list rows carry no `progress`), indistinguishable from one still waiting for AOS | fe-ops / api | verified (a2b322c7 + cfef9e9a + fe-ops' nullable row decoder: 3MKNW and I2DO in Closed reading '1/1 delivered'; Uplink tag '1/1 delivered'; Released empty) |
-| 29 | Uplink · system events | After b5d6ed6d, the Uplink page for any completed group fails to decode: system events send `actor: {actor_kind: "system"}` with no `user_id`; commanding.md says `user_id: null` | api-ops | open |
+| 29 | Uplink · system events | After b5d6ed6d, the Uplink page for any completed group fails to decode the system actor `{actor_kind: "system"}` (no `user_id`; ruled correct, contract updated in 57fe2d6c) | fe-ops (actor reader as a variant on `actor_kind`) | open |
 
 ## Details
 
@@ -247,7 +247,8 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 - Actual: "The server sent data this console does not understand
   (data.events[1].actor.user_id: expected string)". The event is
   `{"kind":"completed","actor":{"actor_kind":"system"}}`, with the `user_id` key missing.
-- Expected (commanding.md, Timeline events): `actor: {actor_kind: "system", user_id: null}`, which
-  the console's `d.nullable(d.token)` already accepts.
+- Ruling (director, 2026-11-09): system actors carry no `user_id`; api-ops' 57fe2d6c reverted an
+  interim `user_id: null` and updated commanding.md. Fix is console-side: the actor reader becomes a
+  variant on `actor_kind` (fe-ops).
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
