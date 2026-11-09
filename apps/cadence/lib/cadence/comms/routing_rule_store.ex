@@ -32,6 +32,8 @@ defmodule Cadence.Comms.RoutingRuleStore do
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
 
+  @materialized_keys ["materialized_link_assignment_ids", "materialized_path_template_ids"]
+
   @spec create_routing_rule(binary(), RoutingRule.t(), keyword()) ::
           {:ok, RoutingRule.t()} | {:error, term()}
   def create_routing_rule(organization_id, %RoutingRule{} = routing_rule, opts \\ [])
@@ -72,6 +74,7 @@ defmodule Cadence.Comms.RoutingRuleStore do
         with {:ok, %RoutingRule{} = current_rule} <-
                fetch_routing_rule(organization_id, mission_id, routing_rule_id),
              {:ok, next_rule} <- build_next_rule(current_rule, attrs),
+             :ok <- retire_materialized(current_rule),
              {:ok, prepared_rule} <- prepare_rule(next_rule),
              {:ok, materialized_rule} <- materialize_runtime_compatibility(prepared_rule),
              {:ok, _count} <- update_rule_row(materialized_rule),
@@ -441,6 +444,22 @@ defmodule Cadence.Comms.RoutingRuleStore do
     }
   end
 
+  # Every save materializes fresh path templates and link assignments; retire the previous
+  # ones so they stop counting as live paths (they were left active before).
+  defp retire_materialized(%RoutingRule{} = rule) do
+    patch = %{"retired_by_routing_rule" => rule.routing_rule_id}
+
+    rule.metadata
+    |> Map.get("materialized_link_assignment_ids", [])
+    |> Enum.each(&LinkAssignmentStore.delete(rule.organization_id, rule.mission_id, &1, patch))
+
+    rule.metadata
+    |> Map.get("materialized_path_template_ids", [])
+    |> Enum.each(&PathTemplateStore.delete(rule.organization_id, rule.mission_id, &1, patch))
+
+    :ok
+  end
+
   defp update_rule_row(%RoutingRule{} = rule) do
     case Repo.get_by(RoutingRuleRow,
            organization_id: rule.organization_id,
@@ -472,6 +491,12 @@ defmodule Cadence.Comms.RoutingRuleStore do
               role: Atom.to_string(rule.role),
               enabled: rule.enabled?,
               materialized_link_assignment_id: rule.materialized_link_assignment_id,
+              origin: Atom.to_string(rule.origin),
+              profile_rule_id: rule.profile_rule_id,
+              spacecraft_type_id: rule.spacecraft_type_id,
+              spacecraft_type_version: rule.spacecraft_type_version,
+              ground_station_id: rule.ground_station_id,
+              leg_direction: rule.leg_direction,
               metadata: %{"value" => rule.metadata},
               updated_at: DateTime.utc_now()
             ]
@@ -506,7 +531,14 @@ defmodule Cadence.Comms.RoutingRuleStore do
        role: Map.get(attrs, :role, rule.role),
        enabled?: Map.get(attrs, :enabled?, rule.enabled?),
        materialized_link_assignment_id: nil,
-       metadata: metadata
+       origin: rule.origin,
+       profile_rule_id: rule.profile_rule_id,
+       spacecraft_type_id: Map.get(attrs, :spacecraft_type_id, rule.spacecraft_type_id),
+       spacecraft_type_version:
+         Map.get(attrs, :spacecraft_type_version, rule.spacecraft_type_version),
+       ground_station_id: rule.ground_station_id,
+       leg_direction: rule.leg_direction,
+       metadata: Map.drop(metadata, @materialized_keys)
      })}
   end
 

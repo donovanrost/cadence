@@ -4,6 +4,7 @@ defmodule Cadence.Comms.RoutingRuleStoreTest do
   alias Cadence.Comms.{RoutingRuleStore, TransportStore}
 
   alias Cadence.Comms.{RoutingRule, Transport}
+  alias Cadence.Contacts.LinkAssignmentStore
   alias Cadence.Spacecraft
 
   setup do
@@ -104,6 +105,52 @@ defmodule Cadence.Comms.RoutingRuleStoreTest do
 
     assert created.event_type == :created
     assert materialized.event_type == :materialized
+  end
+
+  test "re-saving or archiving a rule retires the paths it materialized before", %{
+    organization_id: organization_id,
+    mission_id: mission_id,
+    spacecraft: spacecraft,
+    transport: transport
+  } do
+    rule =
+      RoutingRule.new(%{
+        mission_id: mission_id,
+        spacecraft_id: spacecraft.spacecraft_id,
+        display_name: "Alpha downlink",
+        purpose_label: "TT&C",
+        direction: :inbound,
+        transport_id: transport.transport_id,
+        transport_version: transport.version
+      })
+
+    {:ok, first} = RoutingRuleStore.create_routing_rule(organization_id, rule)
+    first_assignment = first.materialized_link_assignment_id
+
+    {:ok, second} =
+      RoutingRuleStore.update_routing_rule(organization_id, mission_id, first.routing_rule_id, %{
+        role: :candidate
+      })
+
+    assert second.materialized_link_assignment_id != first_assignment
+    assert {:error, _} = LinkAssignmentStore.fetch(organization_id, mission_id, first_assignment)
+
+    assert {:ok, _} =
+             LinkAssignmentStore.fetch(
+               organization_id,
+               mission_id,
+               second.materialized_link_assignment_id
+             )
+
+    {:ok, _archived} =
+      RoutingRuleStore.archive_routing_rule(organization_id, mission_id, first.routing_rule_id)
+
+    assert {:error, _} =
+             LinkAssignmentStore.fetch(
+               organization_id,
+               mission_id,
+               second.materialized_link_assignment_id
+             )
   end
 
   test "updates, disables, enables, and archives while recording events", %{
