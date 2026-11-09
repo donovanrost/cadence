@@ -1,20 +1,20 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useRemoteQuery } from "@/api";
 import { useConsoleScope } from "@/shell";
 import {
+  ApButton,
   ApCallout,
   ApEmptyState,
   ApPageHeader,
   ApPanel,
   ApRemote,
   ApSegmented,
-  ApTable,
-  ApTag,
-  formatAbsolute,
-  type ApColumn,
+  ApSelect,
+  formatCount,
 } from "@/ui";
-import { fetchAudit, kindLabel, type AuditPage } from "./api.ts";
+import AuditTable from "./AuditTable.vue";
+import { auditKinds, kindLabel, listWords, type AuditKind, type AuditPage } from "./api.ts";
+import { useAuditLog } from "./useAuditLog.ts";
 
 /** Organization › Audit log. Says which sources are missing until the read is unified (ux spec). */
 const scope = useConsoleScope();
@@ -24,33 +24,42 @@ const organization = computed(() =>
     : null,
 );
 const days = ref<"1" | "7" | "30">("7");
+const kind = ref<AuditKind | "all">("all");
+const missionId = ref("");
 const query = computed(() =>
   organization.value
-    ? { organizationId: organization.value.id, days: Number(days.value), kinds: [] }
+    ? {
+        organizationId: organization.value.id,
+        days: Number(days.value),
+        kinds: kind.value === "all" ? [] : [kind.value],
+        missionId: missionId.value || null,
+        to: new Date(Math.floor(Date.now() / 60_000) * 60_000).toISOString(),
+      }
     : null,
 );
-const { state, refetch } = useRemoteQuery(query, fetchAudit);
+const log = useAuditLog(query);
 const notProvided = computed(
-  () => state.value.status === "failed" && state.value.error.kind === "not_found",
+  () => log.state.value.status === "failed" && log.state.value.error.kind === "not_found",
 );
-const columns: readonly ApColumn[] = [
-  { key: "at", label: "Time", mono: true },
-  { key: "actor", label: "Actor" },
-  { key: "action", label: "Action" },
-  { key: "mission", label: "Mission" },
-  { key: "why", label: "Why" },
+const span = computed(() => (days.value === "1" ? "24 hours" : `${days.value} days`));
+const kindOptions = [
+  { value: "all", label: "All" },
+  ...auditKinds.map((k) => ({ value: k, label: kindLabel[k] })),
 ];
-const missing = (p: AuditPage) =>
-  p.sources.missing.map((k) => kindLabel[k].toLowerCase()).join(" and ");
-const included = (p: AuditPage) =>
-  p.sources.included.map((k) => kindLabel[k].toLowerCase()).join(", ");
+const missionOptions = computed(() => [
+  { value: "", label: "All missions" },
+  ...(organization.value?.missions ?? []).map((m) => ({ value: m.id, label: m.name })),
+]);
+const words = (p: AuditPage, which: "included" | "missing") =>
+  listWords(p.sources[which].map((k) => kindLabel[k].toLowerCase()));
+const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 </script>
 
 <template>
   <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
     <ApPageHeader
       :label="`${organization?.name ?? ''} · audit log`"
-      :title="days === '1' ? 'Last 24 hours' : `Last ${days} days`"
+      :title="`Last ${span}`"
       size="reading"
     >
       <ApSegmented
@@ -63,6 +72,10 @@ const included = (p: AuditPage) =>
         ]"
       />
     </ApPageHeader>
+    <div class="flex flex-wrap items-end gap-3">
+      <ApSegmented v-model="kind" label="Kind" :options="kindOptions" />
+      <ApSelect v-model="missionId" label="Mission" :options="missionOptions" />
+    </div>
     <ApPanel v-if="notProvided" index="L1" title="Audit log" flush>
       <ApEmptyState
         state="off"
@@ -70,42 +83,43 @@ const included = (p: AuditPage) =>
         sentence="Configuration revisions are in Setup › Revisions in the meantime."
       />
     </ApPanel>
-    <ApRemote v-else :state="state" loading-label="Loading audit log…" @retry="refetch">
+    <ApRemote
+      v-else
+      :state="log.state.value"
+      loading-label="Loading audit log…"
+      @retry="log.refetch"
+    >
       <template #default="{ value }">
         <ApCallout v-if="value.sources.missing.length > 0" tone="info">
-          Showing {{ included(value) }} events. {{ missing(value) }} events aren't in the audit log
-          yet.
+          Showing {{ words(value, "included") }} events.
+          {{ capitalized(words(value, "missing")) }} events aren't in the audit log yet.
         </ApCallout>
         <ApPanel index="L1" title="Audit" flush>
           <ApEmptyState
             v-if="value.events.length === 0"
-            :headline="`No audited actions in the last ${days === '1' ? '24 hours' : `${days} days`}`"
+            :headline="`No audited actions in the last ${span}`"
           />
-          <ApTable
-            v-else
-            :columns="columns"
-            :rows="value.events"
-            :row-key="(e) => e.id"
-            caption="Audit log"
-          >
-            <template #cell-at="{ row }">{{ formatAbsolute(new Date(row.at)) }}</template>
-            <template #cell-actor="{ row }">
-              <span :class="row.actor.kind === 'service' ? 'font-mono' : ''">{{
-                row.actor.name
-              }}</span>
-              <ApTag v-if="row.actor.kind === 'service'" class="ml-2" label="Service" />
+          <AuditTable v-else :events="[...value.events, ...log.older.value]">
+            <template #footer>
+              <div
+                v-if="log.cursor.value || log.failed.value"
+                class="flex items-center gap-3 border-t border-hairline px-4 py-2.5 text-sm text-text-3"
+              >
+                <span>{{ formatCount(value.events.length + log.older.value.length) }} shown</span>
+                <ApButton
+                  v-if="log.cursor.value"
+                  size="compact"
+                  :disabled="log.loading.value"
+                  disabled-reason="Loading…"
+                  @click="log.loadOlder"
+                  >Load older</ApButton
+                >
+                <span v-if="log.failed.value" class="text-caution-text"
+                  >Older events couldn't load.</span
+                >
+              </div>
             </template>
-            <template #cell-action="{ row }"
-              >{{ row.action
-              }}<span v-if="row.target" class="text-text-3">
-                · {{ row.target.label }}</span
-              ></template
-            >
-            <template #cell-mission="{ row }">{{ row.mission?.name ?? "—" }}</template>
-            <template #cell-why="{ row }"
-              ><span class="text-text-3">{{ row.reason ?? "" }}</span></template
-            >
-          </ApTable>
+          </AuditTable>
         </ApPanel>
       </template>
     </ApRemote>
