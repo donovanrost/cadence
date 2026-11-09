@@ -17,8 +17,9 @@ const MOUNT_TIMEOUT_MS = 25_000;
  */
 export async function signIn(page: Page, credentials: Credentials): Promise<void> {
   for (let attempt = 1; ; attempt += 1) {
-    if (attempt === 1) await page.goto("/sign-in");
-    else await page.reload();
+    // A fresh navigation (not reload): a late LiveView connect can be mid-redirect, and reloading
+    // a navigating frame aborts. An aborted navigation just means "try again".
+    await page.goto("/sign-in").catch(() => undefined);
     const connected = await page
       .locator(".phx-connected")
       .first()
