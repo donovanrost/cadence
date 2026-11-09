@@ -21,7 +21,7 @@ episode = %{id, source: :catalog_monitoring | :ground_limit,
   status: :new | :acknowledged | :cleared, cleared_unacknowledged: boolean,
   severity: :critical | :caution, peak_severity, source_state,   # raw state, e.g. "distress", "red_high"
   spacecraft: %{id, name, scid} | nil, spacecraft_id,
-  point: %{id, name, unit: nil},                                  # units not resolved yet
+  point: %{id, name, unit},                                       # unit from catalog declarations, or nil
   thresholds: %{"red_low", "yellow_low", "yellow_high", "red_high"} | nil,   # ground limits only
   context: map,   # ground: limit_definition_id/version, limit_set_name; catalog: policy_id, mission_model_revision_id
   opened_at, cleared_at, first_value, last_value, last_observed_at,

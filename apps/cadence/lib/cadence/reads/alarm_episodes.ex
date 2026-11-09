@@ -4,13 +4,14 @@ defmodule Cadence.Reads.AlarmEpisodes do
   the list. Each episode carries its spacecraft (`id, name, scid`), point (`id, name, unit`) and,
   for ground limits, the thresholds of the limit definition in effect.
 
-  `point.unit` is `nil` for now: units live on catalog declarations, not on telemetry samples,
-  and are not resolved here yet.
+  `point.unit` comes from the catalog declarations of the active binding set
+  (`Cadence.Reads.PointInfo`); it is `nil` when the catalog has no unit for the point.
   """
 
   alias Cadence.Auth.Scope
   alias Cadence.Control.Alarms
   alias Cadence.Limits
+  alias Cadence.Reads.PointInfo
   alias Cadence.SpacecraftStore
 
   @spec list(Scope.t(), String.t(), map()) ::
@@ -33,11 +34,12 @@ defmodule Cadence.Reads.AlarmEpisodes do
   defp enrich(organization_id, mission_id, episodes) do
     spacecraft = spacecraft(organization_id, mission_id, episodes)
     thresholds = thresholds(organization_id, mission_id, episodes)
+    points = if episodes == [], do: %{}, else: PointInfo.by_id(organization_id, mission_id)
 
     Enum.map(episodes, fn episode ->
       episode
       |> Map.put(:spacecraft, Map.get(spacecraft, episode.spacecraft_id))
-      |> Map.put(:point, Map.put(episode.point, :unit, nil))
+      |> Map.put(:point, Map.put(episode.point, :unit, unit(points, episode.point.id)))
       |> Map.put(:thresholds, Map.get(thresholds, definition_key(episode)))
     end)
   end
@@ -69,6 +71,9 @@ defmodule Cadence.Reads.AlarmEpisodes do
       end
     end)
   end
+
+  defp unit(points, point_id),
+    do: points |> Map.get(point_id, PointInfo.unknown()) |> Map.get(:unit)
 
   defp definition_key(%{source: :ground_limit, context: context}) do
     case context do
