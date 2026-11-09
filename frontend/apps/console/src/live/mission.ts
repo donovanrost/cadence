@@ -1,5 +1,6 @@
 import { computed, type Ref } from "vue";
 import { array, object, token } from "@/api/decode.ts";
+import { coalesce } from "./coalesce.ts";
 import { useChannelEvent } from "./useChannelEvent.ts";
 
 export const missionResources = [
@@ -25,19 +26,23 @@ const invalidate = object({ resources: array(token, 64) });
 
 /**
  * Calls `refetch` when the server invalidates any of `resources` for the mission, and after a
- * socket reconnect. Pass the mission id (not slug); null pauses.
+ * socket reconnect. Pass the mission id (not slug); null pauses. Bursts are coalesced: the first
+ * invalidation refetches at once, the rest of a `throttleMs` window (default 1 s) refetch once
+ * at its end. A reconnect refetches immediately.
  */
 export function useMissionInvalidation(
   missionId: Readonly<Ref<string | null>>,
   resources: readonly MissionResource[],
   refetch: () => void,
+  options: Readonly<{ throttleMs?: number }> = {},
 ) {
   const wanted = new Set<string>(resources);
   const topic = computed(() => (missionId.value ? `mission:${missionId.value}` : null));
+  const run = coalesce(refetch, options.throttleMs ?? 1000);
   useChannelEvent(topic, "invalidate", invalidate, {
     onEvent: (payload) => {
-      if (payload.resources.some((resource) => wanted.has(resource))) refetch();
+      if (payload.resources.some((resource) => wanted.has(resource))) run.call();
     },
-    onResync: refetch,
+    onResync: run.flush,
   });
 }
