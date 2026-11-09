@@ -170,6 +170,44 @@ defmodule Cadence.Reads.CommsDirectory do
     end
   end
 
+  @doc """
+  Active routing rules grouped by transport, direction and role (ux pass-2 #10), so a
+  thousand per-spacecraft rules read as a few lines:
+  `[%{transport: %{id, name}, direction, role, enabled_count, disabled_count, spacecraft_count}]`.
+  """
+  @spec routing_rule_groups(binary(), binary()) :: [map()]
+  def routing_rule_groups(organization_id, mission_id) do
+    transports =
+      organization_id
+      |> TransportStore.list_transports(mission_id)
+      |> Map.new(&{&1.transport_id, &1.display_name})
+
+    organization_id
+    |> OperationalState.list_routing_rules(mission_id)
+    |> group_rules(transports)
+  end
+
+  @doc "Pure: active `rules` grouped, with `transports` mapping ids to names."
+  @spec group_rules([RoutingRule.t()], map()) :: [map()]
+  def group_rules(rules, transports) do
+    rules
+    |> Enum.filter(&(&1.lifecycle_state == :active))
+    |> Enum.group_by(&{&1.transport_id, &1.direction, &1.role})
+    |> Enum.map(fn {{transport_id, direction, role}, rules} ->
+      enabled = Enum.count(rules, & &1.enabled?)
+
+      %{
+        transport: %{id: transport_id, name: transports[transport_id]},
+        direction: direction,
+        role: role,
+        enabled_count: enabled,
+        disabled_count: length(rules) - enabled,
+        spacecraft_count: rules |> Enum.map(& &1.spacecraft_id) |> Enum.uniq() |> length()
+      }
+    end)
+    |> Enum.sort_by(&{&1.transport.name || "", to_string(&1.direction), to_string(&1.role)})
+  end
+
   defp rule(%RoutingRule{} = rule, names, transports) do
     %{
       id: rule.routing_rule_id,

@@ -264,6 +264,13 @@ Base: `/api/console/v1/organizations/:organization_id`. The organization comes f
 the session default. An actor who isn't an active member (or a platform admin in admin mode) gets
 `404 organization_not_found`.
 
+### `GET /missions` (pass-2 #11)
+
+`{missions: [{id, slug, name, spacecraft_count, worst_state}]}`, sorted by name. `worst_state` is
+the worst fleet state any of the mission's spacecraft is in (the fleet read's states, worst first:
+`critical | caution | stale | nominal | never_heard`), or `null` when it has no spacecraft. Visible
+to every member.
+
 ### `GET /people` (O1)
 
 ```json
@@ -304,6 +311,13 @@ Body `{email, role: "member" | "organization_admin"}` (default `member`). Requir
   `409 already_invited`, `403 forbidden`.
 
 ## Comms reads (G1, T1, T2)
+
+### `GET /missions/:mission_id/routing-rules/groups` (pass-2 #10)
+
+`{groups: [{transport: {id, name}, direction, role, enabled_count, disabled_count,
+spacecraft_count}]}`: active routing rules grouped by transport, direction and role, sorted by
+transport name. A thousand per-spacecraft rules read as a few lines; `GET /routing-rules` with
+`transport_id` lists one group's rules.
 
 Edits go through change sets (`ground_station` and `transport` kinds; see changes.md). Refetch on
 `invalidate` with `configuration` or `spacecraft`.

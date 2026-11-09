@@ -44,6 +44,12 @@ defmodule CadenceWeb.Console.CommsController do
     end
   end
 
+  @doc "Routing rules grouped by transport, direction and role (setup.md)."
+  def routing_rule_groups(conn, _params) do
+    groups = CommsDirectory.routing_rule_groups(org_id(conn), mission_id(conn))
+    json(conn, %{data: encode(%{groups: groups})})
+  end
+
   defp encode(value), do: ConfigJSON.encode(value)
   defp org_id(conn), do: conn.assigns.current_scope.organization_id
   defp mission_id(conn), do: conn.assigns.current_mission.mission_id
