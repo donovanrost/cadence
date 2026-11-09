@@ -1,6 +1,24 @@
 # Fleet snapshot: moving per-spacecraft entries out of activation metadata (DECISIONS #19)
 
-Owner: **domain**. Status: **draft 1 for review** (2026-11-08). Reviewer: director.
+Owner: **domain**. Status: **built** (`ddc72c2e`, DECISIONS #23). Reviewer: director.
+
+**As built, and how it differs from the draft below:**
+- **Fleets are keyed by their own hash, not by request.** Metadata v2 is
+  `%{"spacecraft_configuration_version" => 2, "fleet" => %{"mission_id", "sha256", "count"},
+  "configuration_review" => …}`. The tables are `activation_fleets`,
+  `activation_fleet_entries` (per mission, by entry hash) and `activation_fleet_members`
+  (GIN on `source_endpoint_ids`). Requests, approvals and activations all resolve the same way,
+  from metadata alone.
+- **No backfill.** v1 rows stay readable through `Cadence.Catalog.FleetSnapshot`, and a mission
+  moves to v2 on its next activation. The review evidence still lives in metadata (about 100 KB
+  for a 500-spacecraft batch); the command-basis size filter accepts v1 and v2.
+- **The data plane never reads the tables.** `Control.Activations` hands `TelemetryDecom` the
+  resolved entries. Runtime partitions don't need the snapshot (`PartitionMetadata.project` is a
+  pass-through for v2).
+- **Activation transactions get a 120 s timeout,** like review. The 15 s default was too short
+  for fleet admission under load.
+- **Measured:** 500 + 550 fleet tests went from 274 s (one failing) to 133 s (all passing) on a
+  loaded machine.
 `L` = `apps/cadence/lib/cadence`.
 
 ## Where we are
