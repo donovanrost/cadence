@@ -233,4 +233,11 @@ requirement` disclosure in the row allows splitting when needed. The approver se
 the console shows the absence (`—` in the code column, with the name carrying identity) and, where the
 user can fix it, a `Not set · Add code` affordance. It never derives a stand-in (`HAR` from
 "Hartebeesthoek"): a derived code looks real, can collide, and differs from the one that gets set later,
-so one station ends up with two codes across screens. Applies to reads too: the server returns `null`, not a derived value (correction: the HAR/PUN/SAN on Ground stations were **stored** by the profile-routing migration backfill, domain 99fc1dc7; the read and the console only displayed them). **Stored derived values:** keep them only as suggestions with provenance (e.g. `code_source: derived`); the UI shows `HAR` in `text-4` + `Suggested · Confirm` (editors) and treats the station as having no confirmed code (Readiness: "3 stations have no confirmed code", fix → Ground stations). Or clear them to `null`; domain's call.
+so one station ends up with two codes across screens. Applies to reads too: the server returns `null`, not a derived value (correction: the HAR/PUN/SAN on Ground stations were **stored** by the profile-routing migration backfill, domain 99fc1dc7; the read and the console only displayed them). **Final (domain):** stored codes are only confirmed codes. A migration (after #44) NULLs every code that
+still equals the backfill formula. The stations read returns `suggested_code` (computed from the name,
+de-duplicated against confirmed codes in the mission) **only when `code` is null**. UI: code cell shows
+the suggestion dimmed (`text-4`, mono) + `Suggested · Confirm` for editors (confirming stages a normal
+ground_station change writing `code`); viewers see `—` with the suggestion in the title attribute
+only. Readiness: "3 stations have no confirmed code" (counts `code IS NULL`), fix → Ground stations. A
+suggestion is never shown where a code is used as an identity (routing rules, the Gantt rows, the
+palette): those fall back to the station name.
