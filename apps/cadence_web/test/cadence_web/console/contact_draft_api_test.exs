@@ -35,6 +35,29 @@ defmodule CadenceWeb.Console.ContactDraftAPITest do
              json_response(conn, 422)["error"]
   end
 
+  test "re-planning needs a plan that came from a fleet draft and is executing", c do
+    fixture = ContactPlanningFixtures.plan_fixture(c.org, c.user, c.membership, c.mission)
+    path = "/api/console/v1/missions/#{c.mission.mission_id}/contact-plans"
+
+    post = fn body ->
+      c.user
+      |> TestFixtures.member_conn()
+      |> post("#{path}/#{fixture.plan.contact_plan_id}/repairs", body)
+    end
+
+    assert json_response(post.(%{"operation_id" => "op-r"}), 409)["error"]["code"] ==
+             "plan_not_repairable"
+
+    assert json_response(post.(%{}), 422)["error"]["details"]["operation_id"]
+
+    assert json_response(post.(%{"operation_id" => "x", "from" => "2027-01-01T00:00:00Z"}), 422)[
+             "error"
+           ]["details"]["from"]
+
+    conn = c.user |> TestFixtures.member_conn() |> get("#{path}/repairs/nope")
+    assert json_response(conn, 404)["error"]["code"] == "draft_not_found"
+  end
+
   test "validates day and operation_id", c do
     assert json_response(post_json(c, "", %{"operation_id" => "x"}), 422)["error"]["details"][
              "day"

@@ -10,7 +10,8 @@ defmodule CadenceWeb.Console.ContactDraftController do
 
   alias Cadence.ContactPlanning.FleetPlanningRuns
   alias Cadence.Control.Scheduling
-  alias Cadence.Reads.ContactPlanOverview
+  alias Cadence.Management.Contacts, as: ManagementContacts
+  alias Cadence.Reads.{ContactPlanOverview, RepairDiff}
   alias CadenceWeb.Console.{ConfigJSON, Problem, SchedulingRunner}
 
   def create(conn, params) do
@@ -48,6 +49,71 @@ defmodule CadenceWeb.Console.ContactDraftController do
       _other_state -> Problem.respond(conn, :draft_not_interrupted)
     end
   end
+
+  @doc "S8: start a repair (re-plan after provider changes) for a plan."
+  def repair(conn, %{"plan_id" => plan_id} = params) do
+    with {:ok, operation_id} <- operation_id(params["operation_id"]),
+         {:ok, window} <- window(params["from"], params["to"]),
+         {:ok, run, outcome} <-
+           Scheduling.start_repair(scope(conn), mission_id(conn), plan_id, window, operation_id) do
+      if outcome == :created, do: start(conn, run.fleet_planning_run_id, &Scheduling.run_draft/3)
+
+      conn
+      |> put_status(:accepted)
+      |> json(%{
+        data: %{run_id: run.fleet_planning_run_id, outcome: outcome, state: state(conn, run)}
+      })
+    else
+      {:error, :repair_source_not_found} -> Problem.respond(conn, :plan_not_repairable)
+      {:error, :fleet_repair_source_unavailable} -> Problem.respond(conn, :plan_not_repairable)
+      error -> error(conn, error)
+    end
+  end
+
+  @doc "S8: the repair run, its new candidate plan and the diff against the source plan."
+  def show_repair(conn, %{"run_id" => run_id}) do
+    case FleetPlanningRuns.fetch(org_id(conn), mission_id(conn), run_id) do
+      {:ok, %{source_contact_plan_id: source_id} = run} when is_binary(source_id) ->
+        new_passes =
+          passes(conn, run.candidate_contact_plan_id, run.candidate_contact_plan_version)
+
+        old_passes = passes(conn, source_id, run.source_contact_plan_version)
+
+        data =
+          conn
+          |> draft(run)
+          |> Map.merge(%{
+            source_plan: %{id: source_id, version: run.source_contact_plan_version},
+            diff: if(run.candidate_contact_plan_id, do: RepairDiff.diff(old_passes, new_passes))
+          })
+
+        json(conn, %{data: ConfigJSON.encode(data)})
+
+      _not_repair ->
+        Problem.respond(conn, :draft_not_found)
+    end
+  end
+
+  defp passes(_conn, nil, _version), do: []
+
+  defp passes(conn, plan_id, version),
+    do:
+      ManagementContacts.selected_opportunities(org_id(conn), mission_id(conn), plan_id, version)
+
+  defp window(nil, nil), do: {:ok, nil}
+
+  defp window(from, to) when is_binary(from) and is_binary(to) do
+    with {:ok, from, _} <- DateTime.from_iso8601(from),
+         {:ok, to, _} <- DateTime.from_iso8601(to),
+         true <- DateTime.before?(from, to) do
+      {:ok, {from, to}}
+    else
+      _invalid -> {:error, {:invalid_params, %{from: "from/to must be ISO-8601 with from < to"}}}
+    end
+  end
+
+  defp window(_from, _to),
+    do: {:error, {:invalid_params, %{from: "give both from and to, or neither"}}}
 
   defp start(conn, run_id, work) do
     scope = scope(conn)

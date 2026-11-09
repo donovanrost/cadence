@@ -799,6 +799,8 @@ defmodule CadenceWeb.Router do
       post("/contact-plans/drafts", ContactDraftController, :create)
       get("/contact-plans/drafts/:run_id", ContactDraftController, :show)
       post("/contact-plans/drafts/:run_id/continue", ContactDraftController, :continue)
+      get("/contact-plans/repairs/:run_id", ContactDraftController, :show_repair)
+      post("/contact-plans/:plan_id/repairs", ContactDraftController, :repair)
       get("/contact-plans", ContactPlanController, :index)
       get("/contact-plans/setup", ContactPlanController, :setup)
       get("/contact-plans/demand", ContactPlanController, :demand)

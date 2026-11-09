@@ -28,6 +28,7 @@ defmodule Cadence.Control.Scheduling do
     FleetPlanningStarts,
     FleetRunActions,
     FleetRunLock,
+    FleetRunRepairs,
     FleetRunReviews
   }
 
@@ -137,6 +138,60 @@ defmodule Cadence.Control.Scheduling do
         locked_snapshot_ids: Enum.reject(version.locked_snapshot_ids || [], &(&1 in remove)),
         rationale: "Edited in the console contact plan"
       })
+    end
+  end
+
+  @doc """
+  S8 re-plan after provider changes: creates a repair (successor) fleet run for
+  the run that produced `plan_id`, locking passes already committed; the
+  caller runs it off the request with `run_draft/3`. The successor produces a
+  **new** candidate plan; apply it with `submit_plan/5`. `window` is
+  `{from, to}` or `nil` (now → the end of the source run's horizon).
+
+  The operation is recorded on the successor right after creation (the reviewed
+  repair flow has no option for it), so a crash in between can leave an
+  unrecorded run; a replay then starts another repair.
+  """
+  @spec start_repair(Scope.t(), binary(), binary(), {DateTime.t(), DateTime.t()} | nil, binary()) ::
+          {:ok, FleetPlanningRun.t(), :created | :replayed} | {:error, term()}
+  def start_repair(%Scope{} = scope, mission_id, plan_id, window, operation_id) do
+    org = scope.organization_id
+
+    case FleetPlanningRuns.fetch_by_operation(org, mission_id, operation_id) do
+      {:ok, run} ->
+        {:ok, run, :replayed}
+
+      {:error, :fleet_planning_run_not_found} ->
+        with {:ok, source} <- source_run(org, mission_id, plan_id),
+             {:ok, reviewed} <-
+               FleetRunReviews.load(scope, mission_id, source.fleet_planning_run_id),
+             {:ok, %{evidence: evidence}} <-
+               FleetRunRepairs.review(scope, reviewed),
+             {from, to} = window || {DateTime.utc_now(), source.horizon_end},
+             {:ok, receipt} <-
+               FleetRunActions.execute(scope, mission_id, :repair, %{
+                 "fleet_planning_run_id" => source.fleet_planning_run_id,
+                 "evidence" => evidence,
+                 "repair" => %{
+                   "horizon_start" => DateTime.to_iso8601(from),
+                   "horizon_end" => DateTime.to_iso8601(to)
+                 }
+               }),
+             run_id = receipt["fleetPlanningRunId"],
+             :ok <- FleetPlanningRuns.claim_operation(org, mission_id, run_id, operation_id),
+             {:ok, run} <- FleetPlanningRuns.fetch(org, mission_id, run_id) do
+          {:ok, run, :created}
+        end
+    end
+  end
+
+  defp source_run(organization_id, mission_id, plan_id) do
+    case Enum.find(
+           FleetPlanningRuns.list(organization_id, mission_id),
+           &(&1.candidate_contact_plan_id == plan_id)
+         ) do
+      nil -> {:error, :repair_source_not_found}
+      run -> {:ok, run}
     end
   end
 

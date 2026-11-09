@@ -4,8 +4,8 @@ Owner: **api** (DECISIONS #26). Consumer: **lead** (K1 Plan, K2 Re-plan). S1 pas
 are api-ops'. Base: `/api/console/v1/missions/:mission_id`. Conventions: [README.md](README.md).
 
 Status: decisions agreed (DECISIONS #27, #28). **Implemented:** S6 list, plan detail with S2 demand,
-S3 drafts (start/read/continue) and S5 submit/execute with acknowledged exceptions. Planning setup, day demand
-and S4 edits/alternatives are also in. **Next:** S8 re-plan.
+S3 drafts (start/read/continue) and S5 submit/execute with acknowledged exceptions. Planning setup, day demand,
+S4 edits/alternatives and S8 re-plan (K2 v1: after provider changes) are also in.
 
 ## 1. What the domain actually does (survey)
 
@@ -195,3 +195,28 @@ requirement_id, station, starts_at, ends_at, synthetic, effect: {rule_met_after,
 spacecraft but didn't select, oldest first. Effects come from the same requirement evaluator the
 plan uses, and nothing is written. The "closes gap to 6h10" phrasing isn't computed (the rules
 have no gap measure); `rule_met_after` and `clashes_with` are.
+
+### `POST /contact-plans/:plan_id/repairs` (S8, K2 v1 "Re-plan after provider changes")
+
+Body `{operation_id, from?, to?}` (ISO-8601; default: now until the end of the source run's
+horizon). The plan must be the candidate of a fleet draft and be `executing`, `partially_reserved`
+or `failed`. This starts a **repair run** that keeps committed passes (reserved, uncertain or
+requesting) locked and re-plans the rest, **off the request**. `202 {run_id, outcome, state}`;
+progress arrives as `scheduling_progress {kind: "draft"}`. Errors: `409 plan_not_repairable`,
+`422 invalid_params`, `422 planning_not_set_up`.
+
+The operation id is recorded on the repair run right after creation, because the reviewed repair
+flow has no transactional option for it yet. A crash between the two can leave an unrecorded run,
+and a replay then starts another repair. (Drafts don't have this gap.)
+
+### `GET /contact-plans/repairs/:run_id`
+
+The draft read (`run`, `plan` = the **new** candidate plan), plus `source_plan: {id, version}` and
+`diff: {kept, moved: [{spacecraft_id, from, to, offset_s}], dropped, added, totals}` (each pass is
+`{snapshot_id, spacecraft_id, station, starts_at, ends_at}`). `diff` is `null` until the run has
+produced a plan. Passes are matched across runs by spacecraft + provider opportunity. "Moved" pairs a
+spacecraft's dropped and added passes in time order.
+
+**Apply** = `POST /contact-plans/<new plan id>/submit` (S5), with acknowledgements for any gaps.
+The repair yields a new plan; the source plan isn't superseded automatically (domain behavior).
+Not yet: station-outage entry (S7), provider billing terms, and the uplink impact read.
