@@ -34,6 +34,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 27 | K1 submit · gap reasons | Ticking "Same reason for all" still leaves one reason box per spacecraft; filling only the first keeps Submit disabled ("Every gap needs a reason first.") | lead | fixed (10ffd37d: one shared reason box); `planning-submit-race` e2e uses it |
 | 28 | Commands list · delivered group | A delivered group stays in the "Released" tab reading "GO given · released to the queue" (list rows carry no `progress`), indistinguishable from one still waiting for AOS | fe-ops / api | verified (a2b322c7 + cfef9e9a + fe-ops' nullable row decoder: 3MKNW and I2DO in Closed reading '1/1 delivered'; Uplink tag '1/1 delivered'; Released empty) |
 | 29 | Uplink · system events | After b5d6ed6d, the Uplink page for any completed group fails to decode the system actor `{actor_kind: "system"}` (no `user_id`; ruled correct, contract updated in 57fe2d6c) | fe-ops (actor reader as a variant on `actor_kind`) | verified (c1fe0eb4: 3MKNW and I2DO decode; log reads 'Cadence closed the run · 1 not verifiable'; no console errors) |
+| 30 | K2 repair after an applied repair | Repairing r1 again after one booking was lost re-proposes K2's 4 already-applied HBK moves ("Apply · send 4 requests") and classifies the lost 004@KIR pass as kept, so Apply would duplicate 4 bookings and not rebook 004 | domain / api | open (not applied) |
 
 ## Details
 
@@ -250,5 +251,22 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 - Ruling (director, 2026-11-09): system actors carry no `user_id`; api-ops' 57fe2d6c reverted an
   interim `user_id: null` and updated commanding.md. Fix is console-side: the actor reader becomes a
   variant on `actor_kind` (fe-ops).
+
+### 30. Second repair of a plan ignores the applied repair and the newly lost pass
+
+- Setup (2026-11-09, domain's stop-on-failure step b): 11-10 r1 = contact_plan_fleet_6e74ced0; K2
+  repair contact_plan_fleet_8ae6517e (4 HBK moves) applied and reserved 18:38Z. At 19:00Z qa
+  cancelled 004@KIR 00:54Z (provider_reservation_naf4iny7uy_8BQ9, operation 267cefb5…) via the
+  contact-workspace cancel action; r1 went partially_reserved.
+- Repro: Contacts › Plan day 2026-11-10 › "Re-plan after provider changes" → Propose.
+  Run fleet_planning_run_brs6fn2wcu_1E8RC → draft contact_plan_fleet_064be1c7.
+- Actual: Impact lists 5 lost (the 4 HBK ones already re-booked by 8ae6517e, plus 004), all
+  "Canceled by Earendil Demo Ground Network" (004 was cancelled by QA Org Admin). The proposal moves
+  the same 4 HBK passes again ("Apply proposal · send 4 requests"), and 004@KIR 00:54Z appears in
+  `diff.kept` with a new snapshot id (opportunity_snapshot_brs6fn2wcu_1EFM4), so it would not be rebooked.
+- Expected: the repair builds on the applied repair (8ae6517e is the live plan for those 4); the
+  lost 004 pass is a move/rebook (one request), even when the best opportunity is the freed one;
+  Impact attributes our own cancel to us.
+- Not applied. Evidence: scratchpad k2-004-1.png, k2-004-2.png.
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
