@@ -147,7 +147,9 @@ values get `422 invalid_params` with `details`.
 - `value`: the evaluated engineering value, as a number, string or boolean.
 - Sorting: severity (critical first), then newest received first.
 - `point.unit`: the engineering unit of the decoded packet field in the mission's **active** binding
-  set; `null` when the field has none or there's no active activation. `point.description` is
+  set, falling back to the active revision's catalog declarations (parameter → parameter type →
+  unit, which is where XTCE import puts it). `null` when the catalog declares no unit or nothing is
+  active. `point.description` is
   always `null` for now: catalog import doesn't carry parameter descriptions through to the binding
   set yet (api-ops backlog, with M23).
 - **Not yet:** the D6 alarm lifecycle (ack/assign/hand-off).

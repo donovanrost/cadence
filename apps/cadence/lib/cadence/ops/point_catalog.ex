@@ -14,6 +14,7 @@ defmodule Cadence.Ops.PointCatalog do
 
   @type point_info :: %{
           point_id: binary(),
+          parameter_id: binary() | nil,
           packet_name: binary(),
           field_name: binary(),
           unit: binary() | nil,
@@ -42,6 +43,7 @@ defmodule Cadence.Ops.PointCatalog do
     Enum.map(packet_definition.fields, fn field ->
       %{
         point_id: packet_definition.packet_name <> "." <> field.name,
+        parameter_id: field.parameter_id,
         packet_name: packet_definition.packet_name,
         field_name: field.name,
         unit: field.engineering_unit,
