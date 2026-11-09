@@ -39,7 +39,9 @@ function headline(g: Group): string {
   const p = g.hits[0] ? passOf(g.hits[0].snapshotId) : null;
   if (!w) return "";
   const code = p ? stationCode(p.station) : "Station";
-  const span = `${hhmm(w.from)}–${hhmm(w.to)}`;
+  const span = w.to
+    ? `${w.from.slice(11, 16)}–${w.to.slice(11, 16)}Z`
+    : `from ${hhmm(w.from)}, no end reported`;
   return g.blocking
     ? `${code} is down ${span} (${w.kind}) · ${plural(g.hits.length, "drafted pass", "drafted passes")} ${g.hits.length === 1 ? "falls" : "fall"} in it`
     : `${code} is degraded ${span} · ${plural(g.hits.length, "pass", "passes")} may lose data`;
