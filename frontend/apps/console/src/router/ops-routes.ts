@@ -55,8 +55,8 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "commands/:requestId/:view(review|uplink)?",
     name: "ops.commands.request",
-    component: pending,
-    meta: { mode: "ops", nav: "commands", title: "Command request", board: "Approve, Uplink" },
+    component: () => import("@/features/commands/request/RequestScreen.vue"),
+    meta: { mode: "takeover", nav: "commands", title: "Command request", board: "Approve, Uplink" },
   },
   {
     path: "contacts",

@@ -7,6 +7,7 @@ import { newItem } from "../compose/stack.ts";
 import { EMPTY_QUERY } from "../compose/targets.ts";
 import { preflightReader, type Preflight } from "./api.ts";
 import { checkMeta, checkRows, noGoReason } from "./checks.ts";
+import { showBody } from "./fixtures.ts";
 import { groupReader } from "./show.ts";
 
 function arg(overrides: Partial<CommandArgument>): CommandArgument {
@@ -184,86 +185,9 @@ describe("preflight", () => {
 });
 
 describe("group show", () => {
-  const actor = { actor_kind: "user", user_id: "user-1" };
-  const show = {
-    id: "grp-1",
-    state: "approval_pending",
-    title: "Reset watchdogs",
-    requested_by: actor,
-    requested_at: "2026-11-08T02:00:00Z",
-    requested_approver_user_id: null,
-    member_count: 2,
-    target_count: 2,
-    command_count: 1,
-    second_go_required: true,
-    awaiting_me: true,
-    operation_id: "op-1",
-    review_token: "tok",
-    log_entry: "Watchdog drift",
-    sent_back_from: null,
-    target_query: { chips: [] },
-    commands: [
-      {
-        position: 0,
-        command_id: "cmd-1",
-        name: "FORCE_WATCHDOG",
-        significance: "hazardous",
-        critical: false,
-        hazardous: true,
-        argument_values_json: "{}",
-      },
-    ],
-    release: { not_before: null, expires_at: null, priority: 3 },
-    policy: {
-      second_go_required: true,
-      reasons: [{ key: "hazardous_command", name: "FORCE_WATCHDOG" }],
-    },
-    decision: null,
-    decided_by: null,
-    decided_at: null,
-    aborted_by: null,
-    aborted_at: null,
-    abort_reason: null,
-    abort_result: null,
-    resolved_at: "2026-11-08T02:00:00Z",
-    progress: { awaiting_go: 2 },
-    events: [
-      {
-        id: "ev-1",
-        kind: "submitted",
-        actor,
-        at: "2026-11-08T02:00:00Z",
-        payload: { members: 2, second_go_required: true },
-      },
-    ],
-    targets: [
-      {
-        spacecraft_id: "sc-1",
-        name: "SC-1",
-        scid: 7,
-        stage: "awaiting_go",
-        members: [
-          {
-            position: 0,
-            target_index: 0,
-            request_id: "req-1",
-            command_id: "cmd-1",
-            command_name: "FORCE_WATCHDOG",
-            stage: "awaiting_go",
-            end_reason: null,
-            verify_by: null,
-            occurred_at: null,
-          },
-        ],
-        last_event_at: null,
-        blocked: null,
-      },
-    ],
-  };
-
   it("decodes the show shape and rejects unknown stages", () => {
-    const ok = decode(groupReader, show);
+    const ok = decode(groupReader, showBody);
     expect(ok.ok && ok.value.progress).toEqual({ awaiting_go: 2 });
-    expect(decode(groupReader, { ...show, progress: { warping: 1 } }).ok).toBe(false);
+    expect(decode(groupReader, { ...showBody, progress: { warping: 1 } }).ok).toBe(false);
   });
 });
