@@ -171,7 +171,7 @@ export const setupOrgRoutes: RouteRecordRaw[] = [
   {
     path: "org/provider-accounts/:accountId?",
     name: "org.provider-accounts",
-    component: pending,
+    component: () => import("@/features/providers/ProviderAccountsScreen.vue"),
     meta: { mode: "setup", nav: "provider-accounts", title: "Provider accounts" },
   },
   {
