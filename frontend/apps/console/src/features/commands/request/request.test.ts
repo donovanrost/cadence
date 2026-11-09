@@ -242,7 +242,8 @@ describe("delivered requests stay 'queued' (approval-only state, qa #28)", () =>
 });
 
 describe("#51 system events (b5d6ed6d)", () => {
-  const system = { actor_kind: "system", user_id: null };
+  // commanding.md §Timeline events (57fe2d6c): no user_id key on system events.
+  const system = { actor_kind: "system" };
   const g = groupOf({
     events: [
       {
@@ -280,14 +281,31 @@ describe("#51 system events (b5d6ed6d)", () => {
 
   it("names the failed uplink and what it stopped", () => {
     expect(failed && eventText(failed, () => "Cadence", targets)).toBe(
-      "SET_MODE on EARENDIL-004: verify timed out · 2 later uplinks stopped",
+      "Cadence: SET_MODE on EARENDIL-004 verify timed out · 2 later uplinks stopped",
     );
     expect(failed && eventState(failed)).toBe("crit");
   });
 
+  it("reads a system actor as Cadence, and still requires user_id from people", () => {
+    expect(failed?.actor).toEqual({ actor_kind: "system" });
+    expect(() =>
+      groupOf({
+        events: [
+          {
+            id: "e",
+            kind: "note",
+            actor: { actor_kind: "user" },
+            at: "2026-11-09T18:27:00Z",
+            payload: null,
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
   it("tallies the run's outcomes", () => {
     expect(completed && eventText(completed, () => "Cadence")).toBe(
-      "Run complete · 3 verified · 1 verify timed out",
+      "Cadence closed the run · 3 verified · 1 verify timed out",
     );
   });
 

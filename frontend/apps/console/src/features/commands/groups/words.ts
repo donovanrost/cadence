@@ -144,7 +144,8 @@ export const eventState = (e: GroupEvent): OpState =>
 
 /** One request-log line: what happened, by whom, with the note when there is one. */
 export function eventText(e: GroupEvent, nameOf: PersonName, targets: EventTargets = []): string {
-  const who = nameOf(e.actor?.user_id ?? null);
+  // A system actor has no user; nameOf(null) is "Cadence".
+  const who = nameOf(e.actor?.actor_kind === "user" ? e.actor.user_id : null);
   const p = e.payload;
   const note = p?.note ? `: “${p.note}”` : "";
   switch (e.kind) {
@@ -168,13 +169,13 @@ export function eventText(e: GroupEvent, nameOf: PersonName, targets: EventTarge
       return `${who} canceled one uplink${p?.reason ? `: “${p.reason}”` : ""}`;
     case "member_failed": {
       const stopped = p?.later_members_stopped ?? 0;
-      return `${memberName(e, targets)}: ${outcomeWord(p?.reason ?? "failed")}${stopped ? ` · ${plural(stopped, "later uplink")} stopped` : ""}`;
+      return `${who}: ${memberName(e, targets)} ${outcomeWord(p?.reason ?? "failed")}${stopped ? ` · ${plural(stopped, "later uplink")} stopped` : ""}`;
     }
     case "completed": {
       const m = p?.members;
       const tally =
         typeof m === "object" ? Object.entries(m).map(([k, n]) => `${n} ${outcomeWord(k)}`) : [];
-      return ["Run complete", ...tally].join(" · ");
+      return [`${who} closed the run`, ...tally].join(" · ");
     }
     default:
       return `${who} · ${e.kind.replaceAll("_", " ")}`;

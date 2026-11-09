@@ -75,10 +75,20 @@ const eventMembers: Reader<number | Readonly<Record<string, number>>> = (value, 
   return out;
 };
 
+/**
+ * An event's actor (commanding.md §Timeline events): a person `{actor_kind: "user", user_id}`, or
+ * `{actor_kind: "system"}` with no user for #51 member_failed/completed. The log names the
+ * system "Cadence".
+ */
+const eventActor = d.variant("actor_kind", {
+  user: d.object({ actor_kind: d.oneOf(["user"] as const), user_id: d.token }),
+  system: d.object({ actor_kind: d.oneOf(["system"] as const) }),
+});
+
 const event = d.object({
   id: d.token,
   kind: d.token,
-  actor: d.nullable(actor),
+  actor: d.nullable(eventActor),
   at: d.timestamp,
   payload: d.nullable(
     d.object({
