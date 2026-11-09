@@ -24,6 +24,7 @@ const plan: PlanDetail = {
   conflicts: [],
   at_risk: [],
   superseded: null,
+  repair_of: null,
 };
 
 describe("SubmitSheet", () => {

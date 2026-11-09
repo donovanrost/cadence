@@ -17,6 +17,7 @@ const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   conflicts: [],
   at_risk: [],
   superseded: null,
+  repair_of: null,
   ...over,
 });
 const gap = { requirement_id: "r1", requirement_version: 1, spacecraft_id: "sc1", why: [] };
@@ -83,6 +84,11 @@ describe("planPrimary", () => {
 
   it("lets only admins act on pending approval and offers Continue on interruption", () => {
     expect(planPrimary(plan({ state: "pending_approval" }), false).kind).toBe("none");
+    expect(planPrimary(plan({ state: "failed" }), true, "run_1")).toMatchObject({
+      kind: "link",
+      label: "Open the re-plan proposal",
+      to: { query: { run: "run_1" } },
+    });
     expect(planPrimary(plan({ state: "pending_approval" }), true)).toMatchObject({
       label: "Approve and book 12 passes",
     });

@@ -84,10 +84,34 @@ describe("planOfDay (superseded state)", () => {
       ready_to_approve: false,
       updated_at: "2026-11-10T10:00:00Z",
       superseded,
+      repair_of: null,
     });
     const why = { at: "2026-11-10T11:00:00Z", by: null, reason: "template_changed", changes: [] };
     expect(planOfDay([row("old", "superseded", why)])?.id).toBe("old");
     expect(planOfDay([row("new", "draft", null), row("old", "superseded", why)])?.id).toBe("new");
     expect(planOfDay([row("gone", "canceled", null)])).toBeNull();
+  });
+
+  it("U28: never opens a repair plan; an unapplied repair is the open proposal", async () => {
+    const { planOfDay, openProposal } = await import("./plan-state.ts");
+    const base = (id: string, state: PlanSummary["state"]): PlanSummary => ({
+      id,
+      version: 1,
+      state,
+      window: { from: null, to: null },
+      author: null,
+      counts: { passes: 40, minutes: 320, conflicts: 0, unsatisfied: 0 },
+      ready_to_approve: false,
+      updated_at: "2026-11-10T10:00:00Z",
+      superseded: null,
+      repair_of: null,
+    });
+    const repairOf = { plan: { id: "booked", version: 1 }, run_id: "run_1" };
+    const proposal = { ...base("repair", "draft"), repair_of: repairOf };
+    const plans = [proposal, base("booked", "reserved")];
+    expect(planOfDay(plans)?.id).toBe("booked");
+    expect(openProposal([proposal])?.id).toBe("repair");
+    expect(openProposal([{ ...proposal, state: "reserved" }])).toBeNull();
+    expect(planOfDay([proposal])).toBeNull();
   });
 });

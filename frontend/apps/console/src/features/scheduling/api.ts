@@ -49,6 +49,11 @@ export const supersededReader = d.nullable(
 );
 export type Superseded = NonNullable<Decoded<typeof supersededReader>>;
 
+/** U28: the booked plan a K2 repair proposal repairs, and its repair run. */
+const repairOfReader = d.nullable(
+  d.object({ plan: d.object({ id: d.token, version: d.integer }), run_id: d.token }),
+);
+
 const planRow = {
   id: d.token,
   version: d.integer,
@@ -66,10 +71,20 @@ const planRow = {
   /** Absent on older servers; null when the plan isn't superseded. */
   superseded: (value: unknown, path?: string) =>
     value === undefined ? null : supersededReader(value, path),
+  /** U28: set on repair plans (K2's); absent on older servers. */
+  repair_of: (value: unknown, path?: string) =>
+    value === undefined ? null : repairOfReader(value, path),
 };
 
-export const plansReader = d.object({ plans: d.array(d.object(planRow), 100) });
+const planRows = d.array(d.object(planRow), 100);
+/** U28: `plans` holds the day's base plans; K2 repair proposals are listed apart (absent on older servers). */
+export const plansReader = d.object({
+  plans: planRows,
+  repair_proposals: (value: unknown, path?: string) =>
+    value === undefined ? [] : planRows(value, path),
+});
 export type PlanSummary = Decoded<typeof plansReader>["plans"][number];
+export type PlanList = Decoded<typeof plansReader>;
 
 /** One conflict / at-risk entry; fields depend on `code`, so the code-specific ones are optional. */
 const planIssue = d.object({
@@ -186,7 +201,7 @@ export function fetchPlans(
   missionId: string,
   day: string,
   signal?: AbortSignal,
-): Promise<ApiResult<{ plans: readonly PlanSummary[] }>> {
+): Promise<ApiResult<PlanList>> {
   return request(
     `${base(missionId)}?day=${encodeURIComponent(day)}`,
     plansReader,

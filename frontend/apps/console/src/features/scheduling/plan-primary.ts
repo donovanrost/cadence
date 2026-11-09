@@ -16,7 +16,12 @@ export type PlanPrimary =
   | { kind: "blocked"; label: string; reason: string }
   | { kind: "none"; note: string | null };
 
-export function planPrimary(plan: PlanDetail, isAdmin: boolean): PlanPrimary {
+/** `openRepairRun`: the run of an open K2 proposal repairing this plan (U28), which the re-plan link opens. */
+export function planPrimary(
+  plan: PlanDetail,
+  isAdmin: boolean,
+  openRepairRun: string | null = null,
+): PlanPrimary {
   const n = plan.counts.passes;
   const gaps = coverage(plan).gaps;
   switch (plan.state) {
@@ -72,11 +77,17 @@ export function planPrimary(plan: PlanDetail, isAdmin: boolean): PlanPrimary {
       };
     case "partially_reserved":
     case "failed":
-      return {
-        kind: "link",
-        label: "Re-plan after provider changes",
-        to: { name: "ops.contacts.replan", query: { plan: plan.id } },
-      };
+      return openRepairRun
+        ? {
+            kind: "link",
+            label: "Open the re-plan proposal",
+            to: { name: "ops.contacts.replan", query: { plan: plan.id, run: openRepairRun } },
+          }
+        : {
+            kind: "link",
+            label: "Re-plan after provider changes",
+            to: { name: "ops.contacts.replan", query: { plan: plan.id } },
+          };
     case "reserved":
       return { kind: "link", label: "Open Contacts", to: { name: "ops.contacts" } };
     case "superseded":

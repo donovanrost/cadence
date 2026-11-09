@@ -15,9 +15,21 @@ export type PlanView =
   | { kind: "draft_failed"; message: string }
   | { kind: "plan"; plan: PlanDetail; fromRun: boolean };
 
+/** U28: K1 never opens a repair plan; repairs are proposed and applied in K2 (Re-plan). */
+const dayPlans = (plans: readonly PlanSummary[]) => plans.filter((p) => p.repair_of === null);
+
 /** Plans that represent the day's current state (superseded/canceled ones are history). */
 export function currentPlan(plans: readonly PlanSummary[]): PlanSummary | null {
-  return plans.find((p) => p.state !== "superseded" && p.state !== "canceled") ?? null;
+  return dayPlans(plans).find((p) => p.state !== "superseded" && p.state !== "canceled") ?? null;
+}
+
+/** U28: the day's open (not yet applied) repair proposal, newest first, for the K1 callout. */
+export function openProposal(proposals: readonly PlanSummary[]): PlanSummary | null {
+  return (
+    proposals.find(
+      (p) => p.repair_of !== null && (p.state === "draft" || p.state === "pending_approval"),
+    ) ?? null
+  );
 }
 
 /**
@@ -27,7 +39,7 @@ export function currentPlan(plans: readonly PlanSummary[]): PlanSummary | null {
 export function planOfDay(plans: readonly PlanSummary[]): PlanSummary | null {
   const current = currentPlan(plans);
   if (current) return current;
-  const newest = plans[0];
+  const newest = dayPlans(plans)[0];
   return newest && newest.state === "superseded" && newest.superseded ? newest : null;
 }
 
@@ -73,7 +85,7 @@ export function planView(
   if (!planOfDay(input.plans.value.plans))
     return {
       kind: "no_draft",
-      last: input.plans.value.plans[0] ?? null,
+      last: dayPlans(input.plans.value.plans)[0] ?? null,
       demand: input.demand ?? null,
     };
   const p = input.plan;

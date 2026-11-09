@@ -16,9 +16,11 @@ const props = defineProps<{
   sheetLabel?: string | undefined;
   /** Replaces the redraft primary's label (K2 superseded proposal: "Propose again"). */
   redraftLabel?: string | undefined;
+  /** U28: the open K2 proposal's run for this plan; the re-plan link opens it instead of a new one. */
+  openRepairRun?: string | null | undefined;
 }>();
 defineEmits<{ sheet: []; execute: []; redraft: [] }>();
-const primary = computed(() => planPrimary(props.plan, props.isAdmin));
+const primary = computed(() => planPrimary(props.plan, props.isAdmin, props.openRepairRun ?? null));
 const conflicts = computed(() => props.plan.conflicts.length);
 const atRisk = computed(() => props.plan.at_risk.flatMap((r) => r.snapshot_ids).length);
 </script>

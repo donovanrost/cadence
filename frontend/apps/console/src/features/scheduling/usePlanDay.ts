@@ -18,7 +18,7 @@ import {
   type Acknowledgement,
   type PlanDetail,
 } from "./api.ts";
-import { planOfDay, planView } from "./plan-state.ts";
+import { openProposal, planOfDay, planView } from "./plan-state.ts";
 
 const progressReader = d.object({ kind: d.string, id: d.token, state: d.string });
 
@@ -162,6 +162,13 @@ export function usePlanDay(
     else plan.refetch();
   }
 
+  /** U28: an unapplied K2 repair proposal for the day (K1 links to it, never opens it). */
+  const proposal = computed(() =>
+    plans.state.value.status === "ready"
+      ? openProposal(plans.state.value.value.repair_proposals)
+      : null,
+  );
+
   const view = computed(() =>
     planView({
       notSetUp: notSetUp.value,
@@ -203,6 +210,7 @@ export function usePlanDay(
 
   return {
     view,
+    proposal,
     busy,
     actionError,
     draftDay,

@@ -15,6 +15,7 @@ import PlanStatePanel from "./PlanStatePanel.vue";
 import SelectedPanel from "./SelectedPanel.vue";
 import { isPlanSuperseded, planErrorText } from "./errors.ts";
 import SubmitSheet from "./SubmitSheet.vue";
+import ProposalCallout from "./ProposalCallout.vue";
 import SupersededCallout from "./SupersededCallout.vue";
 import { stationHits } from "./unavailable.ts";
 import { planPrimary } from "./plan-primary.ts";
@@ -34,6 +35,7 @@ const day = computed(() => {
 const focused = ref<string | null>(null);
 const {
   view,
+  proposal,
   busy,
   actionError,
   draftDay,
@@ -122,6 +124,7 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
     <template #steps><ApStationBar :steps="STEPS" :current="step" label="Plan steps" /></template>
   </TakeoverHeader>
   <DayNav :day="day" />
+  <ProposalCallout v-if="proposal" :mission-id="missionId" :proposal="proposal" />
   <template v-if="view.kind === 'plan'">
     <SupersededCallout v-if="view.plan.superseded" :superseded="view.plan.superseded" />
     <div
@@ -164,6 +167,9 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
       :plan="view.plan"
       :is-admin="isAdmin"
       :busy="busy"
+      :open-repair-run="
+        proposal?.repair_of?.plan.id === view.plan.id ? proposal.repair_of.run_id : null
+      "
       @sheet="sheet?.open()"
       @redraft="draftDay"
       @execute="onExecute"
