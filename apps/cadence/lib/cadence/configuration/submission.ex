@@ -13,11 +13,23 @@ defmodule Cadence.Configuration.Submission do
   using the returned `impacts`.
   """
 
-  alias Cadence.Configuration.{ChangeSetStore, Document, Ledger, Pipeline, Preview, ReviewRow}
+  alias Cadence.Configuration.{
+    ChangeSetRow,
+    ChangeSetStore,
+    Document,
+    Ledger,
+    Pipeline,
+    Preview,
+    ReviewRow
+  }
+
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Ids
   alias Cadence.Repo
 
+  # Apply runs the pipeline and, for profile-framed sets, builds a fleet generation inside one
+  # transaction; the default 15 s is too short under load (qa #19), as for activations.
+  @apply_timeout_ms 120_000
   @reason_bytes 10..2_000
   @comment_bytes 1..2_000
 
@@ -30,7 +42,10 @@ defmodule Cadence.Configuration.Submission do
          :ok <- expected(set, params),
          {:ok, preview} <- checks(organization_id, set, params) do
       policy = ActivationPolicy.evidence(organization_id, mission_id)
-      Repo.transaction(fn -> submit_transaction(set, actor, reason, policy, preview, params) end)
+
+      apply_transaction(set, fn ->
+        submit_transaction(set, actor, reason, policy, preview, params)
+      end)
     end
   end
 
@@ -214,7 +229,7 @@ defmodule Cadence.Configuration.Submission do
   end
 
   defp locked(set, params, fun) do
-    Repo.transaction(fn ->
+    apply_transaction(set, fn ->
       with {:ok, set} <- ChangeSetStore.lock_set(set.mission_id, set.change_set_id),
            :ok <- state(set, "in_review"),
            :ok <- expected(set, params) do
@@ -223,6 +238,52 @@ defmodule Cadence.Configuration.Submission do
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
+  end
+
+  defp apply_transaction(set, fun) do
+    Repo.transaction(fun, timeout: @apply_timeout_ms)
+  rescue
+    DBConnection.ConnectionError -> landed(set)
+  end
+
+  # The connection dropped mid-transaction (qa #19), so COMMIT may or may not have reached
+  # Postgres. The set's own state says which. A landed apply is reported as applied with its
+  # runtime degraded: the generation is committed and the mission reconciler converges on it.
+  @doc false
+  @spec landed(ChangeSetRow.t()) :: {:ok, map()} | {:error, :apply_interrupted}
+  def landed(set) do
+    case ChangeSetStore.fetch(set.mission_id, set.change_set_id) do
+      {:ok, %{state: "applied", applied_revision_number: number} = applied} ->
+        {:ok, recovered(applied, number)}
+
+      {:ok, %{state: "in_review"} = frozen} when set.state == "open" ->
+        {:ok, %{state: :in_review, change_set_id: frozen.change_set_id, version: frozen.version}}
+
+      {:ok, %{state: "open"} = reopened} when set.state == "in_review" ->
+        {:ok, %{state: :open, change_set_id: reopened.change_set_id, version: reopened.version}}
+
+      _rolled_back ->
+        {:error, :apply_interrupted}
+    end
+  end
+
+  defp recovered(set, number) do
+    {:ok, revision} = Ledger.fetch_revision(set.mission_id, number)
+    kinds = revision.revision_id |> Ledger.entries() |> Enum.map(& &1.kind) |> Enum.uniq()
+
+    %{
+      state: :applied,
+      change_set_id: set.change_set_id,
+      revision: number,
+      staged_count: revision.entry_count,
+      activation_id: revision.activation_id,
+      generation: revision.generation,
+      runtime: if(revision.activation_id, do: :degraded, else: :not_applicable),
+      activation_payload: nil,
+      degraded_partitions: [],
+      impacts: [],
+      kinds: kinds
+    }
   end
 
   # A reviewed set that can't be applied goes back to its authors, with the reason recorded.

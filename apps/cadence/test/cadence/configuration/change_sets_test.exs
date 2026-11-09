@@ -4,6 +4,7 @@ defmodule Cadence.Configuration.ChangeSetsTest do
   import Cadence.ConfigurationFixtures
 
   alias Cadence.Comms.GroundStationStore
+  alias Cadence.Configuration.{ChangeSetStore, Submission}
   alias Cadence.Control.Configuration
   alias Cadence.Platform.ScopedReadUpdates
 
@@ -266,6 +267,36 @@ defmodule Cadence.Configuration.ChangeSetsTest do
 
       assert {:ok, %{change_set: %{state: :open, reviews: [%{decision: :sent_back}]}}} =
                Configuration.current(alice, mission)
+    end
+  end
+
+  describe "a dropped connection during apply (qa #19)" do
+    setup do
+      on_exit(with_approval_required(false))
+      :ok
+    end
+
+    test "reports the apply from the set's state, not the dropped call", %{alice: alice} = ctx do
+      {:ok, staged} =
+        Configuration.stage(alice, ctx.mission, %{summary: "Add Svalbard"}, [
+          station_op("Svalbard")
+        ])
+
+      {:ok, before} = ChangeSetStore.fetch(ctx.mission, staged.change_set_id)
+      assert {:error, :apply_interrupted} = Submission.landed(before)
+
+      {:ok, %{state: :applied, revision: 2}} =
+        Configuration.submit(alice, ctx.mission, staged.change_set_id, params(staged))
+
+      assert {:ok,
+              %{
+                state: :applied,
+                revision: 2,
+                staged_count: 1,
+                kinds: ["ground_station"],
+                runtime: :not_applicable,
+                activation_payload: nil
+              }} = Submission.landed(before)
     end
   end
 
