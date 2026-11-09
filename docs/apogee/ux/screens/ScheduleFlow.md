@@ -125,6 +125,13 @@ footer: Revision r41 → r42 │ Passes −N │ Cost today │ Rule met │ [Wa
 - **Footer:** revision delta, passes, cost today, rule met (caution until all), secondary `Wait for
   provider ETA`, primary `Apply r42 · send 117 requests`. Apply is one revision with batched provider
   requests (R05).
+- **Apply sheet (U28):** "This approves the proposal and sends 4 booking requests. The 36 kept passes
+  stay booked." Name the request kinds the proposal actually holds. When it mixes them, split the count
+  ("sends 6 requests: 4 bookings, 2 cancellations"), and never call a cancellation a booking.
+- **After Apply:** the step bar sits on `03 Apply`. Execution states reuse K1's table: an interrupted
+  execution shows the same stale callout under the header ("Booking stopped when the server restarted.
+  2 requests went out; 2 didn't.", or "Booking stopped before every request went out." when counts
+  aren't known, per U20) with `Continue booking` in the footer. Partial or failed results also follow K1.
 
 ## K3 · Close the books (`M/contacts/review`, reading)
 Header (not a takeover): back · mono `PASS REVIEW · PLAN R39 · 3 PROVIDERS` over the day ·
