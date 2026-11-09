@@ -70,6 +70,41 @@ defmodule Cadence.Reads.CommandGroups do
     end
   end
 
+  @doc "The draft a group was submitted from (Compose clones it; review re-runs preflight on it)."
+  @spec draft_of(CommandGroup.t()) :: map()
+  def draft_of(%CommandGroup{} = group) do
+    %{
+      title: group.title,
+      log_entry: group.log_entry,
+      requested_approver_user_id: group.requested_approver_user_id,
+      target_query: group.target_query,
+      targets:
+        Enum.map(
+          group.targets,
+          &%{spacecraft_id: &1["spacecraft_id"], source_endpoint_id: &1["source_endpoint_id"]}
+        ),
+      commands:
+        group.commands
+        |> Enum.sort_by(& &1["position"])
+        |> Enum.map(
+          &%{command_id: &1["command_id"], argument_values: &1["argument_values"] || %{}}
+        ),
+      not_before: parse_time(group.release["not_before"]),
+      expires_at: parse_time(group.release["expires_at"]),
+      priority: group.release["priority"] || 3
+    }
+  end
+
+  defp parse_time(nil), do: nil
+  defp parse_time(%DateTime{} = at), do: at
+
+  defp parse_time(value) when is_binary(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, at, _offset} -> at
+      _error -> nil
+    end
+  end
+
   @doc "Whether `viewer_id` may give this group its second GO."
   @spec awaiting?(CommandGroup.t(), binary() | nil) :: boolean()
   def awaiting?(%CommandGroup{} = group, viewer_id) do

@@ -1,0 +1,152 @@
+defmodule CadenceWeb.Console.CommandGroupParams do
+  @moduledoc """
+  Parses console command-group bodies into the domain draft and decision
+  shapes. Contract: docs/apogee/api/commanding.md. Argument values arrive as
+  `argument_values_json` strings (64-bit integers survive) and are decoded by
+  the same `ArgumentDocument` rules single requests use. Actors never come
+  from the body (DECISIONS #30).
+  """
+
+  alias Cadence.Management.Commanding.ArgumentDocument
+
+  @max_text 4_000
+  @decisions %{
+    "go" => :go,
+    "go_excluding" => :go_excluding,
+    "send_back" => :send_back,
+    "no_go" => :no_go
+  }
+
+  @spec draft(map()) :: {:ok, map()} | {:error, {:invalid_params, map()}}
+  def draft(params) when is_map(params) do
+    with {:ok, targets} <- targets(params["targets"]),
+         {:ok, commands} <- commands(params["commands"]),
+         {:ok, not_before} <- time(params, "not_before"),
+         {:ok, expires_at} <- time(params, "expires_at"),
+         {:ok, priority} <- priority(params["priority"]) do
+      {:ok,
+       %{
+         title: text(params["title"]),
+         log_entry: text(params["log_entry"]),
+         requested_approver_user_id: text(params["requested_approver_user_id"]),
+         sent_back_from: text(params["sent_back_from"]),
+         target_query: if(is_map(params["target_query"]), do: params["target_query"], else: %{}),
+         targets: targets,
+         commands: commands,
+         not_before: not_before,
+         expires_at: expires_at,
+         priority: priority
+       }}
+    end
+  end
+
+  def draft(_params), do: invalid("draft", "must be an object")
+
+  @spec decision(map()) :: {:ok, map()} | {:error, {:invalid_params, map()}}
+  def decision(params) when is_map(params) do
+    case Map.fetch(@decisions, params["kind"]) do
+      {:ok, kind} ->
+        with {:ok, excluded} <- string_list(params["excluded"], "excluded") do
+          {:ok,
+           %{
+             kind: kind,
+             excluded: excluded,
+             note: text(params["note"]),
+             expected_review: text(params["expected_review"])
+           }}
+        end
+
+      :error ->
+        invalid(
+          "kind",
+          "must be one of #{@decisions |> Map.keys() |> Enum.sort() |> Enum.join(", ")}"
+        )
+    end
+  end
+
+  @spec note(map(), binary()) :: {:ok, binary() | nil} | {:error, {:invalid_params, map()}}
+  def note(params, key) when is_map(params) do
+    case params[key] do
+      nil -> {:ok, nil}
+      value when is_binary(value) and byte_size(value) <= @max_text -> {:ok, value}
+      _other -> invalid(key, "must be text up to #{@max_text} bytes")
+    end
+  end
+
+  defp targets(list) when is_list(list) and list != [] do
+    Enum.reduce_while(list, {:ok, []}, fn
+      %{"spacecraft_id" => id} = target, {:ok, acc} when is_binary(id) and id != "" ->
+        {:cont,
+         {:ok,
+          acc ++ [%{spacecraft_id: id, source_endpoint_id: text(target["source_endpoint_id"])}]}}
+
+      _bad, _acc ->
+        {:halt, invalid("targets", "must be a list of {spacecraft_id, source_endpoint_id?}")}
+    end)
+  end
+
+  defp targets(_list), do: invalid("targets", "must be a non-empty list")
+
+  defp commands(list) when is_list(list) and list != [] do
+    list
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, []}, fn {command, index}, {:ok, acc} ->
+      case command(command) do
+        {:ok, parsed} -> {:cont, {:ok, acc ++ [parsed]}}
+        {:error, message} -> {:halt, invalid("commands", "item #{index}: #{message}")}
+      end
+    end)
+  end
+
+  defp commands(_list), do: invalid("commands", "must be a non-empty list")
+
+  defp command(%{"command_id" => id} = command) when is_binary(id) and id != "" do
+    case ArgumentDocument.decode(Map.get(command, "argument_values_json", "{}")) do
+      {:ok, values} -> {:ok, %{command_id: id, argument_values: values}}
+      _invalid -> {:error, "argument_values_json must be a JSON object of scalar values"}
+    end
+  end
+
+  defp command(_command), do: {:error, "must be {command_id, argument_values_json}"}
+
+  defp time(params, key) do
+    case params[key] do
+      nil ->
+        {:ok, nil}
+
+      value when is_binary(value) ->
+        case DateTime.from_iso8601(value) do
+          {:ok, at, _offset} -> {:ok, at}
+          _error -> invalid(key, "must be an ISO-8601 timestamp")
+        end
+
+      _other ->
+        invalid(key, "must be an ISO-8601 timestamp")
+    end
+  end
+
+  defp priority(nil), do: {:ok, 3}
+  defp priority(value) when is_integer(value) and value in 0..9, do: {:ok, value}
+  defp priority(_value), do: invalid("priority", "must be an integer from 0 to 9")
+
+  defp string_list(nil, _key), do: {:ok, []}
+
+  defp string_list(list, key) when is_list(list) do
+    if Enum.all?(list, &(is_binary(&1) and &1 != "")),
+      do: {:ok, list},
+      else: invalid(key, "must be a list of ids")
+  end
+
+  defp string_list(_value, key), do: invalid(key, "must be a list of ids")
+
+  defp text(value) when is_binary(value) and byte_size(value) <= @max_text do
+    case String.trim(value) do
+      "" -> nil
+      _text -> value
+    end
+  end
+
+  defp text(_value), do: nil
+
+  defp invalid(key, message), do: {:error, {:invalid_params, %{key => message}}}
+end

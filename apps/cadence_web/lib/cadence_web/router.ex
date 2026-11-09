@@ -771,6 +771,27 @@ defmodule CadenceWeb.Router do
       get("/passes", PassController, :index)
       get("/commands", CommandCatalogController, :index)
       get("/commands/:command_id", CommandCatalogController, :show)
+      get("/command-policies", CommandGroupController, :policies)
+      post("/command-groups/preflight", CommandGroupController, :preflight)
+      get("/command-groups", CommandGroupController, :index)
+      post("/command-groups", CommandGroupController, :create)
+      get("/command-groups/:command_group_id", CommandGroupController, :show)
+
+      get(
+        "/command-groups/:command_group_id/preflight",
+        CommandGroupController,
+        :review_preflight
+      )
+
+      post("/command-groups/:command_group_id/decision", CommandGroupController, :decision)
+      post("/command-groups/:command_group_id/abort", CommandGroupController, :abort)
+
+      post(
+        "/command-requests/:command_request_id/cancel",
+        CommandGroupController,
+        :cancel_request
+      )
+
       get("/alarm-episodes", AlarmEpisodeController, :index)
       get("/alarm-episodes/:episode_id", AlarmEpisodeController, :show)
       post("/alarm-episodes/:episode_id/acknowledge", AlarmEpisodeController, :acknowledge)

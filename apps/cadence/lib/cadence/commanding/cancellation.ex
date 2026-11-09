@@ -18,20 +18,25 @@ defmodule Cadence.Commanding.Cancellation do
   alias Cadence.Repo
 
   @cancelable_request_states ~w(validated approval_pending approved)
+  @ended_unstarted_states ~w(canceled rejected)
 
   @type outcome :: %{canceled: [binary()], already_started: [binary()], lanes: [binary()]}
 
   @doc """
   Cancels whichever of `request_ids` haven't started. Returns the canceled ids,
-  the ids that had already started (or finished), and the lanes to kick.
+  the ids that had already started or finished radiating (requests that were
+  already canceled or rejected are in neither list), and the lanes to kick.
   """
   @spec cancel(binary(), binary(), [binary()], binary(), map()) :: outcome()
   def cancel(org, mission, request_ids, reason, actor) do
     requests = lock_requests(org, mission, request_ids)
     entries = lock_entries(org, mission, request_ids)
 
-    {cancelable, started} =
+    {cancelable, others} =
       Enum.split_with(requests, &cancelable?(&1, Map.get(entries, &1.command_request_id)))
+
+    # Requests that ended without radiating (already canceled or rejected) are neither.
+    started = Enum.reject(others, &(&1.lifecycle_state in @ended_unstarted_states))
 
     now = DateTime.utc_now()
 

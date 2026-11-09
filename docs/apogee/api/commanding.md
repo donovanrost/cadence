@@ -6,7 +6,7 @@ Owner: **api-ops**. Conventions: [README.md](README.md). Asks are tracked by the
 | Ask | Endpoint | Status |
 | --- | --- | --- |
 | M17 | `GET /missions/:mission_id/commands`, `GET /missions/:mission_id/commands/:command_id` | **implemented** |
-| M16 M18 M20 | group requests, preflight, cancel/abort | planned |
+| M16 M18 M20 O4 | command groups: preflight, submit, list/show, decision, abort, cancel, policies | **implemented** |
 
 ## The active catalog
 
@@ -88,3 +88,126 @@ The list entry plus:
   target a different plan; this read shows the mission-level plan), and an encoded-packet preview (M24).
 
 Errors: `404 command_not_found`, `503 catalog_unavailable`, `404 mission_not_found`.
+
+## Command groups (M16 · M18 · M20 · O4)
+
+Design: [`domain/group-requests.md`](../domain/group-requests.md) (DECISIONS #29–#31). A group is
+N targets × K commands, decided and aborted as one unit. Every console-authored request is a
+group (1 × 1 included). Writes need `x-csrf-token`. The requester, approver and aborting
+operator are always the session user (DECISIONS #30). Commanding needs organization admin today
+(DECISIONS #38). Refetch on `invalidate` with `commanding`.
+
+### Draft (the body of preflight and create)
+
+```json
+{"title": "Load shed after VBAT red on 312", "log_entry": "…",
+ "targets": [{"spacecraft_id": "spacecraft-…", "source_endpoint_id": null}],
+ "target_query": {"chips": [{"key": "plane", "value": 7}]},
+ "commands": [{"command_id": "cmd_…", "argument_values_json": "{\"mode\":3}"}],
+ "not_before": null, "expires_at": null, "priority": 3,
+ "requested_approver_user_id": null, "sent_back_from": null}
+```
+
+- `targets[]`: `source_endpoint_id` is needed only when a spacecraft has several endpoints
+  (otherwise preflight says `ambiguous_source_endpoint`). `target_query` is stored as evidence.
+- `argument_values_json`: a JSON object string, the same rules as single requests (64-bit safe).
+- Bounds: N ≤ 1,000, K ≤ 16, N×K ≤ 5,000.
+
+### `POST /command-groups/preflight` (M18)
+
+No side effects. Returns:
+
+```json
+{"data": {"valid": true, "digest": "…", "members": 6, "second_go_required": true,
+  "targets": [{"index": 0, "spacecraft_id": "…", "source_endpoint_id": "…", "name": "SC-1", "scid": 7, "failure": null}],
+  "checks": [
+    {"key": "identity", "result": "go", "per_target": [], "evidence": {}},
+    {"key": "catalog", "result": "no_go", "per_target": [{"spacecraft_id": "…", "result": "no_go",
+       "reason": [{"position": 0, "command_id": "…", "reason": "invalid_command_argument"}]}], "evidence": {"count": 1}},
+    {"key": "size", "result": "go", "per_target": [], "evidence": {"max_targets": 1000, "max_commands": 16, "max_members": 5000, "targets": 2, "commands": 3}},
+    {"key": "conflicts", "result": "hold", "per_target": [], "evidence": {"count": 2, "command_request_ids": ["…"]}},
+    {"key": "contact", "result": "hold", "per_target": [{"spacecraft_id": "…", "result": "go",
+       "next_contact": {"station_code": "SVL", "aos": "…", "los": "…"}}], "evidence": {"until": "…"}},
+    {"key": "two_person", "result": "hold", "per_target": [], "evidence": {"reasons": [
+       {"key": "hazardous_command", "command_id": "…", "name": "SET_POWER_MODE"},
+       {"key": "fleet_reach", "targets": 12, "threshold": 10}]}}
+  ]}}
+```
+
+- `result`: `go | hold | no_go`. Any `no_go` blocks submit; `hold` names a requirement.
+- `contact`: the target's first `confirmed`/`active` booking before `expires_at` (or within 6 h).
+  `next_contact: null` → HOLD "no contact". C4 draws from it.
+- `two_person` reason keys: `hazardous_command | critical_command | policy_hint | fleet_reach`.
+- Plan impact and umbra margin are absent (no data, DECISIONS #4).
+- Oversize drafts return only `size` (`no_go`, with the bounds) and `digest: null`.
+
+### `POST /command-groups` (M16)
+
+Body: the draft plus `preflight_digest` (from the preflight the operator saw) and
+`operation_id` (client idempotency key). `201` with the group (show shape).
+
+- With no second GO required, members are **queued** at once, in stack order per target lane.
+  Otherwise the group is `approval_pending`, and `log_entry` is required.
+- `409 preflight_stale`: something changed since that preflight. Re-run it.
+- `409 duplicate_operation` (`details.command_group_id`): this `operation_id` was already
+  submitted. To resolve an unclear submit (ux U20), use `GET /command-groups?operation_id=`.
+- `422 preflight_no_go` (`details.identity[]`, `details.catalog[]`), `422 title_required`,
+  `422 log_entry_required`, `422 command_group_too_large`, `409 command_catalog_not_active`.
+
+### `GET /command-groups` · `GET /command-groups/:id` · `GET /command-groups/:id/preflight`
+
+- List query: `state` (comma list of `approval_pending | queued | rejected | sent_back | aborted`),
+  `awaiting_me=true` (Approve queue: pending, not mine, and I'm the named approver or none was
+  named), `mine=true`, `operation_id=` (returns 0 or 1 groups).
+  Rows: `{id, state, title, requested_by, requested_at, requested_approver_user_id, member_count,
+  target_count, command_count, second_go_required, awaiting_me, operation_id}`.
+- Show adds `review_token` (send it back on decisions), `log_entry`, `sent_back_from`,
+  `target_query`, `commands[] {position, command_id, name, significance, critical, hazardous,
+  argument_values_json}`, `release`, `policy`, `decision`, `decided_by/at`, `aborted_by/at`,
+  `abort_reason`, `abort_result`, `progress` (`{stage: target count}`), `events[] {id, kind, actor, at, payload}`,
+  and `targets[]`:
+  `{spacecraft_id, name, scid, stage, members: [{position, request_id, command_id, command_name, stage,
+  end_reason, verify_by, occurred_at}], last_event_at, blocked: null}`.
+- Member `stage`: `awaiting_go | queued_for_contact | radiating | executed | verified | no_verifier
+  | verify_failed | release_failed | indeterminate | canceled | rejected | excluded`. A target's stage
+  is its first unfinished member's. `end_reason`: `aborted | release_basis_changed |
+  earlier_command_failed | expired | excluded_at_review | canceled | rejected` (or null).
+- `…/preflight` re-runs preflight on the submitted inputs for Approve (A2) and adds
+  `changed_since_submit` (`hold` when the result no longer matches what was submitted).
+- Compose "send back" clone: everything a new draft needs is in the show response.
+
+### `POST /command-groups/:id/decision`
+
+`{"kind": "go" | "go_excluding" | "send_back" | "no_go", "excluded": [spacecraft_id], "note": "…",
+"expected_review": "<review_token>"}`. Returns the group. A note is required except for `go`.
+`go_excluding` rejects the named targets' members ("excluded at review").
+
+Errors: `403 command_group_self_approval_not_allowed`, `403 not_the_requested_approver`,
+`409 command_group_not_pending`, `409 command_group_review_stale`, `409 command_group_basis_changed`
+(the active catalog changed since submit, so resubmit), `422 note_required`, `422 exclusions_required`,
+`422 unknown_excluded_target`, `422 invalid_params`.
+
+### `POST /command-groups/:id/abort` · `POST /command-requests/:id/cancel` (M20)
+
+`{"reason": "…"}` (required). Abort cancels every member that hasn't started to radiate and
+returns the group with `abort_result: {canceled, already_started: [request ids]}`. Members already
+releasing or released keep running ("ABORT AVAILABLE UNTIL EACH UPLINK STARTS"). Any mission
+operator may abort (not two-person). Cancel works on any request (grouped or not) that hasn't started.
+
+Errors: `422 reason_required`, `409 command_group_not_abortable`, `409 command_request_already_started`,
+`404 command_request_not_found`, `404 command_group_not_found`.
+
+Also new: a queued request whose model revision is no longer active **fails closed** at release
+(`canceled`, `end_reason: release_basis_changed`) instead of blocking its lane.
+
+### `GET /command-policies` (O4)
+
+`{"data": {"policies": [{"key": "command_classification", "parameters": {"classifications": ["hazardous", "critical"]}},
+{"key": "policy_hint", …}, {"key": "fleet_reach", "parameters": {"threshold": 10}}, {"key": "no_self_approval", "parameters": {}}]}}`.
+The UI writes the sentences (title + sentence per key).
+
+### Not yet
+
+Stop-on-failure per target (`earlier_command_failed`), the expiry sweep (`expired`), the
+`blocked` flag, and the `command_group:<id>` channel push. Until the push lands, refetch on
+`commanding`.

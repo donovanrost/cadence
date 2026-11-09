@@ -11,8 +11,8 @@ defmodule Cadence.Reads.CommandPreflight do
   """
 
   alias Cadence.Commanding
-  alias Cadence.Commanding.Groups.Validation
-  alias Cadence.Reads.Passes
+  alias Cadence.Commanding.Groups.{CommandGroup, Validation}
+  alias Cadence.Reads.{CommandGroups, Passes}
 
   @contact_horizon_s 6 * 3_600
   @open_queue_states [:pending, :release_pending]
@@ -36,6 +36,23 @@ defmodule Cadence.Reads.CommandPreflight do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  @doc """
+  Re-runs preflight on a submitted group for review (Approve A2), adding a
+  `changed_since_submit` check that HOLDs when the validated result no longer
+  matches what the requester submitted (catalog, targets or values changed).
+  """
+  @spec review(binary(), binary(), CommandGroup.t()) ::
+          {:ok, map()} | {:error, term()}
+  def review(organization_id, mission_id, group) do
+    draft = CommandGroups.draft_of(group)
+
+    with {:ok, preflight} <- run(organization_id, mission_id, group.requested_by, draft) do
+      changed? = preflight.digest != group.preflight["digest"]
+      drift = check(:changed_since_submit, if(changed?, do: :hold, else: :go), [], %{})
+      {:ok, %{preflight | checks: preflight.checks ++ [drift]}}
     end
   end
 

@@ -54,7 +54,29 @@ defmodule CadenceWeb.Console.Problem do
     invalid_params: {422, "The request parameters are invalid."},
     history_unavailable: {503, "Telemetry history is unavailable right now."},
     catalog_unavailable: {503, "The command catalog is unavailable right now."},
-    alarms_unavailable: {503, "Alarms are unavailable right now."}
+    alarms_unavailable: {503, "Alarms are unavailable right now."},
+    commanding_unavailable: {503, "Commanding is unavailable right now."},
+    command_group_not_found: {404, "Command group not found."},
+    duplicate_operation: {409, "That operation was already submitted."},
+    preflight_stale: {409, "Something changed since the preflight. Run it again."},
+    preflight_no_go: {422, "The preflight has NO-GO checks."},
+    command_group_too_large: {422, "The group is larger than allowed."},
+    command_catalog_not_active: {409, "There is no active command catalog."},
+    title_required: {422, "A title is required."},
+    log_entry_required: {422, "A log entry is required when a second GO is needed."},
+    command_group_not_pending: {409, "That group isn't waiting for a decision."},
+    command_group_self_approval_not_allowed: {403, "You can't approve your own request."},
+    not_the_requested_approver: {403, "The requester asked another operator for the GO."},
+    command_group_review_stale: {409, "The group changed since you opened it. Reload it."},
+    command_group_basis_changed:
+      {409, "The command catalog changed since this was submitted. It must be resubmitted."},
+    exclusions_required: {422, "Name the targets to exclude."},
+    unknown_excluded_target: {422, "An excluded target isn't in this group."},
+    invalid_decision: {422, "That decision isn't valid."},
+    command_group_not_abortable: {409, "That group can't be aborted any more."},
+    reason_required: {422, "A reason is required."},
+    command_request_already_started: {409, "That command has already started."},
+    command_request_not_found: {404, "Command request not found."}
   }
 
   @doc "Sends the error envelope for a known reason atom and halts."
