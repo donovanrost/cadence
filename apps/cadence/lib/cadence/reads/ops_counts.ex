@@ -9,6 +9,7 @@ defmodule Cadence.Reads.OpsCounts do
 
   alias Cadence.Auth.Scope
   alias Cadence.Control.Alarms
+  alias Cadence.Control.Contacts
   alias Cadence.Reads.CommandCounts
 
   @spec load(Scope.t(), binary()) :: map()
@@ -23,8 +24,14 @@ defmodule Cadence.Reads.OpsCounts do
           CommandCounts.load(organization_id, mission_id, scope.user && scope.user.user_id)
         ),
       fleet: %{total: Cadence.SpacecraftStore.fleet_summary(organization_id, mission_id).total},
-      # Not tracked yet (M4/M7).
-      contacts: nil
+      contacts:
+        contacts(
+          Contacts.contact_summary(
+            organization_id,
+            mission_id,
+            DateTime.utc_now()
+          )
+        )
     }
   end
 
@@ -51,6 +58,12 @@ defmodule Cadence.Reads.OpsCounts do
         nil
     end
   end
+
+  # From booked reservations; nil when the mission has none (not tracked).
+  defp contacts(%{tracked?: false}), do: nil
+
+  defp contacts(%{by_spacecraft: by_spacecraft}),
+    do: %{in_contact: Enum.count(by_spacecraft, fn {_id, facts} -> facts.in_contact end)}
 
   defp commands(counts) do
     %{

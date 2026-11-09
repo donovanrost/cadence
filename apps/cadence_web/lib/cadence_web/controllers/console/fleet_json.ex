@@ -9,13 +9,8 @@ defmodule CadenceWeb.Console.FleetJSON do
       observed_at: fleet.observed_at,
       stale_after_s: fleet.stale_after_s,
       last_received_at: fleet.last_received_at,
-      counts:
-        Map.merge(fleet.counts, %{
-          # Not tracked yet: contact state (M4/M7) and limit-transition history.
-          in_contact: nil,
-          passes_next_2h: nil,
-          critical_delta_1h: nil
-        }),
+      # Not tracked yet: limit-transition history.
+      counts: Map.put(fleet.counts, :critical_delta_1h, nil),
       commands: commands,
       limits: %{configured: limits_configured?},
       spacecraft: Enum.map(fleet.spacecraft, &spacecraft/1)
@@ -40,7 +35,9 @@ defmodule CadenceWeb.Console.FleetJSON do
       worst_point: worst_point(row.worst_point),
       last_received_at: row.last_received_at,
       stale: row.stale,
-      in_contact: nil
+      in_contact: row.in_contact,
+      next_aos_at: row.next_aos_at,
+      last_los_at: row.last_los_at
     }
   end
 

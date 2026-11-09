@@ -14,6 +14,7 @@ defmodule Cadence.Reads.FleetStatus do
   read from spacecraft metadata until they become first-class fields.
   """
 
+  alias Cadence.Control.Contacts
   alias Cadence.Limits.Event
   alias Cadence.Reads.Limits, as: LimitReads
   alias Cadence.Reads.SpacecraftMetadata
@@ -42,20 +43,26 @@ defmodule Cadence.Reads.FleetStatus do
           violating_points: non_neg_integer(),
           worst_point: map() | nil,
           last_received_at: DateTime.t() | nil,
-          stale: boolean()
+          stale: boolean(),
+          in_contact: boolean() | nil,
+          next_aos_at: DateTime.t() | nil,
+          last_los_at: DateTime.t() | nil
         }
 
   @doc "Loads and builds the fleet status for one mission."
   @spec load(binary(), binary(), keyword()) :: map()
   def load(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) do
+    now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
+
     build(%{
+      contacts: Contacts.contact_summary(organization_id, mission_id, now),
       spacecraft: Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id),
       profiles: Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id),
       limit_states: LimitReads.latest_states_for_mission(organization_id, mission_id, []),
       samples: TelemetryReads.latest_values_for_mission(organization_id, mission_id, []),
       durable_receipts: durable_receipts(organization_id, mission_id),
-      now: Keyword.get_lazy(opts, :now, &DateTime.utc_now/0),
+      now: now,
       stale_after_s: Keyword.get_lazy(opts, :stale_after_s, &stale_after_s/0)
     })
   end
@@ -92,6 +99,9 @@ defmodule Cadence.Reads.FleetStatus do
     profiles = Map.new(Map.get(input, :profiles, []), &{&1.spacecraft_type_id, &1})
     limit_states = Enum.group_by(Map.get(input, :limit_states, []), & &1.spacecraft_id)
 
+    contacts =
+      Map.get(input, :contacts, %{tracked?: false, passes_next_2h: nil, by_spacecraft: %{}})
+
     received =
       latest_receipts(
         Map.get(input, :samples, []),
@@ -110,6 +120,7 @@ defmodule Cadence.Reads.FleetStatus do
           now,
           stale_after_s
         )
+        |> Map.merge(contact(contacts, craft.spacecraft_id))
       end)
       |> Enum.sort_by(&sort_key/1)
 
@@ -117,7 +128,7 @@ defmodule Cadence.Reads.FleetStatus do
       observed_at: now,
       stale_after_s: stale_after_s,
       last_received_at: rows |> Enum.map(& &1.last_received_at) |> max_datetime(),
-      counts: counts(rows),
+      counts: Map.merge(counts(rows), contact_counts(contacts, rows)),
       spacecraft: rows
     }
   end
@@ -144,6 +155,20 @@ defmodule Cadence.Reads.FleetStatus do
       last_received_at: last_received_at,
       stale: stale
     }
+  end
+
+  # Contact facts come from booked reservations; without any, they're not tracked (nil).
+  defp contact(%{tracked?: false}, _id),
+    do: %{in_contact: nil, next_aos_at: nil, last_los_at: nil}
+
+  defp contact(%{by_spacecraft: by_spacecraft}, id) do
+    Map.get(by_spacecraft, id, %{in_contact: false, next_aos_at: nil, last_los_at: nil})
+  end
+
+  defp contact_counts(%{tracked?: false}, _rows), do: %{in_contact: nil, passes_next_2h: nil}
+
+  defp contact_counts(contacts, rows) do
+    %{in_contact: Enum.count(rows, & &1.in_contact), passes_next_2h: contacts.passes_next_2h}
   end
 
   defp state(_limit_state, nil, _stale), do: :never_heard

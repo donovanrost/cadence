@@ -88,7 +88,7 @@ Live fleet state for Now, so the matrix and tiles don't refetch `GET /fleet`.
   by up to 10 s (freshness is server-decided and flips arrive as material changes).
 - `removed`: ids of deleted spacecraft. Drop those rows.
 - Timing: material pushes come at most once a second, within about a second of an `alarms`,
-  `spacecraft`, `commanding` or `limits` change. A **tick every 10 s** always pushes (possibly with no
+  `spacecraft`, `commanding`, `limits` or `contacts` change. A **tick every 10 s** always pushes (possibly with no
   rows), which catches spacecraft going stale with no event. Treat it as a heartbeat too.
 - The `invalidate` events still flow alongside. While subscribed, ignore `alarms`/`spacecraft`/
   `commanding` for the fleet read (keep them for the other reads).

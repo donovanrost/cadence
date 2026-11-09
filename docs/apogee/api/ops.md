@@ -35,7 +35,7 @@ freshness to the second; at 1 Hz feeds, throttle that to about 10 s client-side)
     "counts": {
       "total": 500, "critical": 3, "caution": 14, "stale": 12, "nominal": 471,
       "never_heard": 0, "fresh": 488,
-      "in_contact": null, "passes_next_2h": null, "critical_delta_1h": null
+      "in_contact": 4, "passes_next_2h": 31, "critical_delta_1h": null
     },
     "commands": {
       "queued": 23, "in_flight": 0, "failed": 0,
@@ -57,7 +57,9 @@ freshness to the second; at 1 Hz feeds, throttle that to about 10 s client-side)
         },
         "last_received_at": "2026-11-08T02:41:15Z",
         "stale": false,
-        "in_contact": null
+        "in_contact": false,
+        "next_aos_at": "2026-11-08T03:12:00Z",
+        "last_los_at": "2026-11-08T01:39:00Z"
       }
     ]
   }
@@ -91,9 +93,20 @@ freshness to the second; at 1 Hz feeds, throttle that to about 10 s client-side)
   policy.
 - `limits.configured`: `false` when the mission has no limit definitions. Show the P3 "Limits &
   Alarming not configured" item and treat `limit_state` as `no_data`.
-- **Not tracked yet, so always `null` for now:** `counts.in_contact`, `counts.passes_next_2h`,
-  `counts.critical_delta_1h`, and per-row `in_contact`. Show `—` and "not tracked yet" (U10).
-  They fill in with M4/M7 (contacts) and limit-transition history.
+- **Contact facts** (M7) come from **booked provider reservations** (see contacts.md), judged at
+  `observed_at`:
+  - row `in_contact`: a reservation for it is `active`, or its `pass_phase` is `pass`, and now is
+    inside its window. `next_aos_at`: start of its next `confirmed`/`active` reservation.
+    `last_los_at`: the planned end of its most recent booked reservation that has ended. They are
+    planned times (there are no actual AOS/LOS records yet, S9).
+  - `counts.in_contact`: rows in contact. `counts.passes_next_2h`: booked passes starting within 2 h.
+  - When the mission has **no reservations at all**, all of these are `null` ("not tracked").
+    Contacts that weren't booked through Cadence (for example a direct simulator link) aren't
+    seen.
+  - Refetch on `invalidate` with `contacts`. AOS and LOS happen without an event, so a static
+    page drifts; the fleet push's 10 s tick picks them up.
+- `counts.critical_delta_1h` is always `null` (no limit-transition history yet). Show `—` and
+  "not tracked yet" (U10).
 - Rows are sorted by `plane`, `slot`, `scid`, `name`, with nulls last.
 
 Errors: `404 mission_not_found`.
@@ -167,7 +180,7 @@ Small counts for the shell (Ops rail, mobile on-call tabs), so the shell doesn't
   "alarms": {"active": 4, "critical": 3, "caution": 1, "unacknowledged": 2, "limits_configured": true},
   "commands": {"open": 25, "awaiting_viewer": 2},
   "fleet": {"total": 500},
-  "contacts": null
+  "contacts": {"in_contact": 4}
 }}
 ```
 
@@ -177,7 +190,8 @@ Small counts for the shell (Ops rail, mobile on-call tabs), so the shell doesn't
   catalog monitoring). The whole object is `null` if episodes can't be read.
 - `commands.open`: queued + release pending + in flight + approval pending. `awaiting_viewer`:
   approval-pending requests the viewer didn't request (the same number as `GET /fleet`).
-- `contacts` is `null` until contact tracking exists (M4/M7). Then it becomes `{"in_contact": n}`.
+- `contacts.in_contact`: spacecraft in a booked contact now (same rule as `GET /fleet`). `contacts` is
+  `null` when the mission has no reservations (not tracked).
 - A `null` count means "can't compute": omit it in the UI, never show `0`.
 
 Errors: `404 mission_not_found`.

@@ -19,7 +19,7 @@ defmodule CadenceWeb.Console.FleetPush do
 
   @material_ms 1_000
   @tick_ms 10_000
-  @material_resources ~w(alarms spacecraft commanding limits)
+  @material_resources ~w(alarms spacecraft commanding limits contacts)
 
   @spec join(Socket.t()) :: Socket.t()
   def join(socket), do: Socket.assign(socket, :fleet, nil)

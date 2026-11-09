@@ -80,7 +80,9 @@ defmodule Cadence.Reads.FleetStatusTest do
              stale: 1,
              nominal: 1,
              never_heard: 1,
-             fresh: 3
+             fresh: 3,
+             in_contact: nil,
+             passes_next_2h: nil
            }
 
     assert result.stale_after_s == 900
@@ -153,5 +155,28 @@ defmodule Cadence.Reads.FleetStatusTest do
     assert {b.phase_deg, b.operational_phase} == {14.4, "routine"}
     assert {z.plane, z.slot, z.phase_deg} == {nil, nil, nil}
     assert z.limit_state == :no_data
+  end
+
+  test "contact facts: not tracked without bookings, otherwise per row and counted" do
+    untracked = build(%{spacecraft: [craft("a")]})
+    assert [%{in_contact: nil, next_aos_at: nil, last_los_at: nil}] = untracked.spacecraft
+    assert %{in_contact: nil, passes_next_2h: nil} = untracked.counts
+
+    aos = DateTime.add(@now, 600)
+
+    tracked =
+      build(%{
+        spacecraft: [craft("a"), craft("b")],
+        contacts: %{
+          tracked?: true,
+          passes_next_2h: 3,
+          by_spacecraft: %{"a" => %{in_contact: true, next_aos_at: aos, last_los_at: nil}}
+        }
+      })
+
+    assert [%{id: "a", in_contact: true, next_aos_at: ^aos}, %{id: "b", in_contact: false}] =
+             tracked.spacecraft
+
+    assert %{in_contact: 1, passes_next_2h: 3} = tracked.counts
   end
 end

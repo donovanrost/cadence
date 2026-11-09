@@ -137,6 +137,11 @@ defmodule Cadence.Control.Contacts do
     to: ProviderReservations,
     as: :list_mission_page
 
+  @doc "Per-spacecraft in-contact / next AOS / last LOS from booked reservations."
+  defdelegate contact_summary(org, mission, now),
+    to: ProviderReservations,
+    as: :contact_summary
+
   @doc "Reservations overlapping a time window (console passes read)."
   defdelegate list_provider_reservations_in_window(org, mission, from, to, opts \\ []),
     to: ProviderReservations,

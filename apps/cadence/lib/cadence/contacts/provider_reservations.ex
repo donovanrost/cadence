@@ -419,6 +419,82 @@ defmodule Cadence.Contacts.ProviderReservations do
      length(rows) > limit}
   end
 
+  @booked_states ~w(confirmed active completed)
+  @upcoming_states ~w(confirmed active)
+  @dead_states ~w(rejected canceling canceled failed)
+
+  @doc """
+  Per-spacecraft contact facts at `now` from booked reservations:
+  `%{tracked?: bool, passes_next_2h: n, by_spacecraft: %{id => %{in_contact,
+  next_aos_at, last_los_at}}}`. `tracked?` is `false` when the mission has no
+  reservations at all, so callers can say "not tracked" instead of "no contact".
+  """
+  @spec contact_summary(binary(), binary(), DateTime.t()) :: map()
+  def contact_summary(org, mission, %DateTime{} = now) do
+    base =
+      where(ProviderReservationRow, [r], r.organization_id == ^org and r.mission_id == ^mission)
+
+    if Repo.exists?(base) do
+      in_contact =
+        base
+        |> where([r], r.starts_at <= ^now and r.ends_at > ^now)
+        |> where([r], r.lifecycle_state == "active" or r.pass_phase == "pass")
+        |> where([r], r.lifecycle_state not in @dead_states)
+        |> distinct(true)
+        |> select([r], r.spacecraft_id)
+        |> Repo.all()
+        |> MapSet.new()
+
+      next =
+        base
+        |> where([r], r.starts_at > ^now and r.lifecycle_state in @upcoming_states)
+        |> group_by([r], r.spacecraft_id)
+        |> select([r], {r.spacecraft_id, min(r.starts_at)})
+        |> Repo.all()
+        |> Map.new()
+
+      last =
+        base
+        |> where([r], r.ends_at <= ^now and r.lifecycle_state in @booked_states)
+        |> group_by([r], r.spacecraft_id)
+        |> select([r], {r.spacecraft_id, max(r.ends_at)})
+        |> Repo.all()
+        |> Map.new()
+
+      soon = DateTime.add(now, 2 * 3_600)
+
+      passes_next_2h =
+        base
+        |> where([r], r.starts_at > ^now and r.starts_at <= ^soon)
+        |> where([r], r.lifecycle_state in @upcoming_states)
+        |> Repo.aggregate(:count)
+
+      ids =
+        in_contact
+        |> MapSet.to_list()
+        |> Enum.concat(Map.keys(next))
+        |> Enum.concat(Map.keys(last))
+
+      %{
+        tracked?: true,
+        passes_next_2h: passes_next_2h,
+        by_spacecraft:
+          ids
+          |> Enum.uniq()
+          |> Map.new(fn id ->
+            {id,
+             %{
+               in_contact: MapSet.member?(in_contact, id),
+               next_aos_at: Map.get(next, id),
+               last_los_at: Map.get(last, id)
+             }}
+          end)
+      }
+    else
+      %{tracked?: false, passes_next_2h: nil, by_spacecraft: %{}}
+    end
+  end
+
   defp window_spacecraft(query, nil), do: query
   defp window_spacecraft(query, id), do: where(query, [r], r.spacecraft_id == ^id)
 
