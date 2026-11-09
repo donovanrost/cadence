@@ -178,6 +178,10 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   `{spacecraft_id, name, scid, stage, members: [{position, request_id, command_id, command_name, stage,
   end_reason, caused_by, verify_by, occurred_at}], last_event_at, blocked: null}`. `caused_by` is the
   earlier member whose failure stopped this one (`end_reason: earlier_command_failed`).
+  `blocked`: `null`, or `{reason: "lane_release_uncertain", command_request_id}` when the target is
+  waiting for its contact but its lane is held by a release whose outcome is unknown
+  (`release_uncertain`). Nothing behind it releases until an operator resolves that attempt. Show
+  it in "Needs you".
 - Member `stage`: `awaiting_go | queued_for_contact | radiating | executed | verified | no_verifier
   | verify_failed | release_failed | indeterminate | canceled | rejected | excluded`. A target's stage
   is its first unfinished member's. `end_reason`: `aborted | release_basis_changed |
@@ -241,6 +245,6 @@ The UI writes the sentences (title + sentence per key).
 
 ### Not yet
 
-The expiry sweep (`expired`; expired entries are skipped by release but stay queued) and the
-`blocked` flag. Live progress: the `command_group:<mission_id>:<command_group_id>` channel
+Nothing outstanding from the design. Expired unstarted work is canceled by a sweep on every
+dispatcher reconcile (about a minute), with `end_reason: expired`. Live progress: the `command_group:<mission_id>:<command_group_id>` channel
 (realtime.md).

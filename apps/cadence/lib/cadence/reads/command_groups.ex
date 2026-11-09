@@ -55,7 +55,9 @@ defmodule Cadence.Reads.CommandGroups do
           member(request, Map.get(rows, request.command_request_id), excluded)
         end)
 
-      targets = targets(group, member_views)
+      held = held_lanes(org, mission, members)
+      lanes = Map.new(members, &{&1.metadata["group"]["target_index"], &1.source_endpoint_ref})
+      targets = targets(group, member_views, &blocked(&1, &2, lanes, held))
 
       revision_id = members |> List.first() |> then(&(&1 && &1.mission_model_revision_id))
 
@@ -229,7 +231,33 @@ defmodule Cadence.Reads.CommandGroups do
 
   defp verify_by(_row), do: nil
 
-  defp targets(group, members) do
+  # Lanes held by a release whose outcome is unknown (`release_uncertain`): nothing behind it
+  # releases until an operator resolves it. `%{lane => command_request_id}`.
+  defp held_lanes(_org, _mission, []), do: %{}
+
+  defp held_lanes(org, mission, members) do
+    lanes = members |> MapSet.new(& &1.source_endpoint_ref)
+
+    org
+    |> Cadence.Commanding.list_command_release_attempts(mission)
+    |> Enum.filter(&(&1.lifecycle_state == :release_uncertain))
+    |> Enum.map(&{&1.source_endpoint_ref, &1.command_request_id})
+    |> Enum.filter(fn {lane, _id} -> MapSet.member?(lanes, lane) end)
+    |> Map.new()
+  end
+
+  # A target waiting for its contact is blocked when its lane is held by another request's
+  # uncertain release.
+  defp blocked(target_index, :queued_for_contact, lanes, held) do
+    case Map.fetch(held, Map.get(lanes, target_index)) do
+      {:ok, request_id} -> %{reason: :lane_release_uncertain, command_request_id: request_id}
+      :error -> nil
+    end
+  end
+
+  defp blocked(_target_index, _stage, _lanes, _held), do: nil
+
+  defp targets(group, members, blocked_fun) do
     by_target = Enum.group_by(members, & &1.target_index)
 
     Enum.map(group.targets, fn target ->
@@ -241,12 +269,12 @@ defmodule Cadence.Reads.CommandGroups do
         scid: target["scid"],
         stage: target_stage(own),
         members: own,
+        blocked: blocked_fun.(target["index"], target_stage(own)),
         last_event_at:
           own
           |> Enum.map(& &1.occurred_at)
           |> Enum.reject(&is_nil/1)
-          |> Enum.max(DateTime, fn -> nil end),
-        blocked: nil
+          |> Enum.max(DateTime, fn -> nil end)
       }
     end)
   end

@@ -3,6 +3,8 @@ defmodule Cadence.Reads.CommandGroupsTest do
 
   import Cadence.CommandGroupFixtures
 
+  alias Cadence.Commanding.{CommandQueueEntryRow, CommandReleaseAttempt, CommandReleaseAttemptRow}
+  alias Cadence.Commanding.Groups.GroupStore
   alias Cadence.Control.Commanding.{GroupAbort, GroupDecision, GroupSubmission}
   alias Cadence.Reads.CommandGroups
 
@@ -82,5 +84,51 @@ defmodule Cadence.Reads.CommandGroupsTest do
     group = submit(c, "SET_SIGNED", %{"counter" => 2}, %{}, operation_id: "op-42")
     assert {:ok, %{id: id}} = CommandGroups.fetch_by_operation(c.org, c.mission, "op-42")
     assert id == group.command_group_id
+  end
+
+  test "a target waiting behind an uncertain release on its lane is blocked", c do
+    draft =
+      draft(c.spacecraft, [
+        command(c, "SET_SIGNED", %{"counter" => 1}),
+        command(c, "SET_SIGNED", %{"counter" => 2})
+      ])
+
+    {:ok, group} =
+      GroupSubmission.submit(c.scope, c.mission, draft, preflight_digest: digest(c, draft))
+
+    [first | _] =
+      GroupStore.members(c.org, c.mission, group.command_group_id)
+
+    %CommandQueueEntryRow{command_queue_entry_id: entry_id} =
+      Repo.get_by!(CommandQueueEntryRow,
+        command_request_id: first.command_request_id
+      )
+
+    CommandReleaseAttempt.new(%{
+      organization_id: c.org,
+      mission_id: c.mission,
+      command_queue_entry_id: entry_id,
+      command_request_id: first.command_request_id,
+      source_endpoint_ref: first.source_endpoint_ref,
+      realized_contact_id: "contact-1",
+      mission_model_revision_id: first.mission_model_revision_id,
+      command_id: first.command_id,
+      lifecycle_state: :release_uncertain,
+      released_by: %{},
+      attempted_at: DateTime.utc_now()
+    })
+    |> CommandReleaseAttemptRow.changeset()
+    |> Repo.insert!()
+
+    {:ok, view} = CommandGroups.get(c.org, c.mission, group.command_group_id, nil)
+    [held, other] = view.targets
+
+    assert %{
+             stage: :queued_for_contact,
+             blocked: %{reason: :lane_release_uncertain, command_request_id: id}
+           } = held
+
+    assert id == first.command_request_id
+    assert other.blocked == nil
   end
 end
