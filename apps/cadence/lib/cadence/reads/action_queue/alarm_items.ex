@@ -71,6 +71,7 @@ defmodule Cadence.Reads.ActionQueue.AlarmItems do
       first_crossed_at: episode.opened_at,
       episode_id: episode.id,
       status: episode.status,
+      acknowledged_by: Map.get(episode, :acknowledged_by),
       assignee: episode.assignee
     })
   end

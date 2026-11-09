@@ -38,6 +38,7 @@ defmodule Cadence.Reads.ActionQueue.Item do
       first_crossed_at: nil,
       episode_id: nil,
       status: nil,
+      acknowledged_by: nil,
       assignee: nil
     }
   end

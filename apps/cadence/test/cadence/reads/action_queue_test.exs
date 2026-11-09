@@ -34,7 +34,11 @@ defmodule Cadence.Reads.ActionQueueTest do
       },
       opened_at: Keyword.get(opts, :opened_at, ago(5)),
       last_value: Keyword.get(opts, :value, 23.1),
-      assignee: Keyword.get(opts, :assignee)
+      assignee: Keyword.get(opts, :assignee),
+      acknowledged_by:
+        if(Keyword.get(opts, :status) == :acknowledged,
+          do: %{kind: "user", id: "u1", name: "Mira K."}
+        )
     }
   end
 
@@ -136,6 +140,7 @@ defmodule Cadence.Reads.ActionQueueTest do
              ]
 
       assert List.last(result.items).acknowledged == 1
+      assert [%{acknowledged_by: %{name: "Mira K."}}] = List.last(result.items).spacecraft
     end
 
     test "prefers an unacknowledged episode as a spacecraft's worst; ignores cleared and unknown" do
