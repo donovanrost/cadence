@@ -154,7 +154,10 @@ function validFleetStartReview(
     e.policy_version !== v.policy.version ||
     e.policy_sha256 !== v.policy.content_sha256 ||
     !hash(e.input_sha256) ||
-    Object.keys(e).length !== 7
+    // The instant the review was taken (G1); the start reloads its inputs at it.
+    typeof e.as_of !== "string" ||
+    Number.isNaN(Date.parse(e.as_of)) ||
+    Object.keys(e).length !== 8
   )
     return false;
   if (
