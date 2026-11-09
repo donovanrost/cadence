@@ -4,6 +4,7 @@ defmodule CadenceWeb.Console.ContactChangesTest do
   import Phoenix.ChannelTest, except: [connect: 2, connect: 3]
   require Phoenix.ChannelTest
 
+  alias Cadence.ContactPlanning.PlanUpdates
   alias Cadence.Contacts.ScheduledContact
   alias Cadence.Platform.ScopedReadUpdates
   alias CadenceWeb.Console.ContactChanges
@@ -43,6 +44,13 @@ defmodule CadenceWeb.Console.ContactChangesTest do
       ScopedReadUpdates.publish(:contacts_changed, c.org.organization_id, c.mission.mission_id)
 
     assert_push("invalidate", %{resources: ["contacts"]}, 2_000)
+  end
+
+  test "contact plan and run changes invalidate contact_plans (S10)", c do
+    assert "contact_plans" in c.reply.resources
+
+    :ok = PlanUpdates.changed(c.org.organization_id, c.mission.mission_id)
+    assert_push("invalidate", %{resources: ["contact_plans"]}, 2_000)
   end
 
   test "facts without a mission are ignored" do

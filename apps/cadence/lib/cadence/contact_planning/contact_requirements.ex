@@ -7,6 +7,8 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
 
   alias Cadence.Auth.{Policy, Scope}
 
+  alias Cadence.ContactPlanning.PlanUpdates
+
   alias Cadence.ContactPlanning.{
     ContactRequirement,
     ContactRequirementVersion
@@ -53,8 +55,13 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
 
   @spec create(Scope.t(), binary(), map(), keyword()) ::
           {:ok, ContactRequirement.t(), ContactRequirementVersion.t()} | {:error, term()}
-  def create(%Scope{} = current_scope, mission_id, attrs, opts \\ [])
-      when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
+  def create(%Scope{} = current_scope, mission_id, attrs, opts \\ []) do
+    create_unpublished(current_scope, mission_id, attrs, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp create_unpublished(%Scope{} = current_scope, mission_id, attrs, opts)
+       when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
     with {:ok, requirement, version} <- prepare_create(current_scope, mission_id, attrs, opts) do
       Multi.new()
       |> Multi.insert(:requirement, ContactRequirementRow.changeset(requirement))
@@ -116,10 +123,22 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
         expected_version,
         attrs,
         opts \\ []
-      )
-      when is_binary(mission_id) and is_binary(requirement_id) and
-             is_integer(expected_version) and expected_version > 0 and is_map(attrs) and
-             is_list(opts) do
+      ) do
+    version_unpublished(current_scope, mission_id, requirement_id, expected_version, attrs, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp version_unpublished(
+         %Scope{} = current_scope,
+         mission_id,
+         requirement_id,
+         expected_version,
+         attrs,
+         opts
+       )
+       when is_binary(mission_id) and is_binary(requirement_id) and
+              is_integer(expected_version) and expected_version > 0 and is_map(attrs) and
+              is_list(opts) do
     now = now(opts)
 
     with :ok <- authorize_member(current_scope, mission_id),
@@ -144,6 +163,18 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
   @spec close(Scope.t(), binary(), binary(), pos_integer(), binary(), keyword()) ::
           {:ok, ContactRequirement.t()} | {:error, term()}
   def close(current_scope, mission_id, requirement_id, expected_version, reason, opts \\ []) do
+    close_unpublished(current_scope, mission_id, requirement_id, expected_version, reason, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp close_unpublished(
+         current_scope,
+         mission_id,
+         requirement_id,
+         expected_version,
+         reason,
+         opts
+       ) do
     transition(
       current_scope,
       mission_id,
@@ -158,6 +189,18 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
   @spec cancel(Scope.t(), binary(), binary(), pos_integer(), binary(), keyword()) ::
           {:ok, ContactRequirement.t()} | {:error, term()}
   def cancel(current_scope, mission_id, requirement_id, expected_version, reason, opts \\ []) do
+    cancel_unpublished(current_scope, mission_id, requirement_id, expected_version, reason, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp cancel_unpublished(
+         current_scope,
+         mission_id,
+         requirement_id,
+         expected_version,
+         reason,
+         opts
+       ) do
     transition(
       current_scope,
       mission_id,

@@ -7,6 +7,8 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
 
   alias Cadence.Auth.{Policy, Scope}
 
+  alias Cadence.ContactPlanning.PlanUpdates
+
   alias Cadence.ContactPlanning.{
     ContactRequirementOccurrence,
     ContactRequirements,
@@ -33,8 +35,13 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
   @spec create(Scope.t(), binary(), map(), keyword()) ::
           {:ok, ContactRequirementTemplate.t(), ContactRequirementTemplateVersion.t()}
           | {:error, term()}
-  def create(%Scope{} = current_scope, mission_id, attrs, opts \\ [])
-      when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
+  def create(%Scope{} = current_scope, mission_id, attrs, opts \\ []) do
+    create_unpublished(current_scope, mission_id, attrs, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp create_unpublished(%Scope{} = current_scope, mission_id, attrs, opts)
+       when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
     with {:ok, template, version} <- prepare_create(current_scope, mission_id, attrs, opts) do
       Multi.new()
       |> Multi.insert(:template, ContactRequirementTemplateRow.changeset(template))
@@ -96,9 +103,21 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
         expected_version,
         attrs,
         opts \\ []
-      )
-      when is_binary(mission_id) and is_binary(template_id) and is_integer(expected_version) and
-             expected_version > 0 and is_map(attrs) and is_list(opts) do
+      ) do
+    version_unpublished(current_scope, mission_id, template_id, expected_version, attrs, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp version_unpublished(
+         %Scope{} = current_scope,
+         mission_id,
+         template_id,
+         expected_version,
+         attrs,
+         opts
+       )
+       when is_binary(mission_id) and is_binary(template_id) and is_integer(expected_version) and
+              expected_version > 0 and is_map(attrs) and is_list(opts) do
     now = now(opts)
 
     with :ok <- authorize_admin(current_scope, mission_id),
@@ -121,18 +140,33 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
   @spec activate(Scope.t(), binary(), binary(), pos_integer(), binary(), keyword()) ::
           {:ok, ContactRequirementTemplate.t()} | {:error, term()}
   def activate(scope, mission_id, template_id, expected_version, reason, opts \\ []) do
+    activate_unpublished(scope, mission_id, template_id, expected_version, reason, opts)
+    |> PlanUpdates.published(scope.organization_id, mission_id)
+  end
+
+  defp activate_unpublished(scope, mission_id, template_id, expected_version, reason, opts) do
     transition(scope, mission_id, template_id, expected_version, :active, reason, opts)
   end
 
   @spec pause(Scope.t(), binary(), binary(), pos_integer(), binary(), keyword()) ::
           {:ok, ContactRequirementTemplate.t()} | {:error, term()}
   def pause(scope, mission_id, template_id, expected_version, reason, opts \\ []) do
+    pause_unpublished(scope, mission_id, template_id, expected_version, reason, opts)
+    |> PlanUpdates.published(scope.organization_id, mission_id)
+  end
+
+  defp pause_unpublished(scope, mission_id, template_id, expected_version, reason, opts) do
     transition(scope, mission_id, template_id, expected_version, :paused, reason, opts)
   end
 
   @spec close(Scope.t(), binary(), binary(), pos_integer(), binary(), keyword()) ::
           {:ok, ContactRequirementTemplate.t()} | {:error, term()}
   def close(scope, mission_id, template_id, expected_version, reason, opts \\ []) do
+    close_unpublished(scope, mission_id, template_id, expected_version, reason, opts)
+    |> PlanUpdates.published(scope.organization_id, mission_id)
+  end
+
+  defp close_unpublished(scope, mission_id, template_id, expected_version, reason, opts) do
     transition(scope, mission_id, template_id, expected_version, :closed, reason, opts)
   end
 

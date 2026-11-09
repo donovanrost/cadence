@@ -8,7 +8,8 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
   alias Cadence.ContactPlanning.{
     ContactPlanExecutionItem,
     ContentHash,
-    Planner
+    Planner,
+    PlanUpdates
   }
 
   alias Cadence.Management.Contacts, as: ManagementContacts
@@ -431,11 +432,23 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
         })
         |> Repo.update()
         |> case do
-          {:ok, updated} -> {:ok, ContactPlanExecutionItemRow.to_domain(updated)}
-          {:error, reason} -> {:error, reason}
+          {:ok, updated} ->
+            {:ok, announce_uncertain(row, ContactPlanExecutionItemRow.to_domain(updated))}
+
+          {:error, reason} ->
+            {:error, reason}
         end
     end
   end
+
+  # S10: a plan can turn unconfirmed by time alone; tell the console when it does.
+  defp announce_uncertain(%{lifecycle_state: before}, %{lifecycle_state: :uncertain} = item)
+       when before != "uncertain" and not is_nil(item.started_at) do
+    PlanUpdates.when_unconfirmed(item.organization_id, item.mission_id, item.started_at)
+    item
+  end
+
+  defp announce_uncertain(_row, item), do: item
 
   @doc false
   def project_plan(organization_id, mission_id, plan_id, plan_version, opts) do

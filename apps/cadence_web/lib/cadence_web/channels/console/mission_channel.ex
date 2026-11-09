@@ -26,6 +26,7 @@ defmodule CadenceWeb.Console.MissionChannel do
     commanding_changed: "commanding",
     alarms_changed: "alarms",
     contacts_changed: "contacts",
+    contact_plans_changed: "contact_plans",
     stations_changed: "stations",
     pass_results_changed: "pass_results",
     attention_changed: "attention",
@@ -101,7 +102,7 @@ defmodule CadenceWeb.Console.MissionChannel do
 
   def handle_info({:scheduling_progress, progress}, socket) do
     push(socket, "scheduling_progress", ConfigJSON.encode(progress))
-    {:noreply, mark(socket, "contacts")}
+    {:noreply, socket |> mark("contacts") |> mark("contact_plans")}
   end
 
   def handle_info({:change_set_progress, set_id, step}, socket) do

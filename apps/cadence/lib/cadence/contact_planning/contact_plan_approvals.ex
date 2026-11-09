@@ -5,6 +5,8 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
 
   alias Cadence.Auth.{Policy, Scope}
 
+  alias Cadence.ContactPlanning.PlanUpdates
+
   alias Cadence.ContactPlanning.{
     AutomationGrants,
     ContactPlan,
@@ -47,6 +49,27 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
         reason,
         opts \\ []
       ) do
+    approve_unpublished(
+      current_scope,
+      mission_id,
+      plan_id,
+      expected_version,
+      expected_hash,
+      reason,
+      opts
+    )
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp approve_unpublished(
+         %Scope{} = current_scope,
+         mission_id,
+         plan_id,
+         expected_version,
+         expected_hash,
+         reason,
+         opts
+       ) do
     decide(
       current_scope,
       mission_id,
@@ -79,6 +102,27 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
         reason,
         opts \\ []
       ) do
+    reject_unpublished(
+      current_scope,
+      mission_id,
+      plan_id,
+      expected_version,
+      expected_hash,
+      reason,
+      opts
+    )
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp reject_unpublished(
+         %Scope{} = current_scope,
+         mission_id,
+         plan_id,
+         expected_version,
+         expected_hash,
+         reason,
+         opts
+       ) do
     decide(
       current_scope,
       mission_id,

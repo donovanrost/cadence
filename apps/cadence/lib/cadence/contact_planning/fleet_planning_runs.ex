@@ -5,6 +5,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
 
   alias Cadence.Auth.{Policy, Scope}
 
+  alias Cadence.ContactPlanning.PlanUpdates
+
   alias Cadence.ContactPlanning.{
     ContactRequirements,
     FleetPlanningDecision,
@@ -28,8 +30,13 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
 
   @spec create(Scope.t(), binary(), map(), keyword()) ::
           {:ok, FleetPlanningRun.t(), [FleetPlanningRunRequirementRef.t()]} | {:error, term()}
-  def create(%Scope{} = scope, mission_id, attrs, _opts \\ [])
-      when is_binary(mission_id) and is_map(attrs) do
+  def create(%Scope{} = scope, mission_id, attrs, opts \\ []) do
+    create_unpublished(scope, mission_id, attrs, opts)
+    |> PlanUpdates.published(scope.organization_id, mission_id)
+  end
+
+  defp create_unpublished(%Scope{} = scope, mission_id, attrs, _opts)
+       when is_binary(mission_id) and is_map(attrs) do
     with :ok <- authorize_member(scope, mission_id),
          {:ok, _policy, policy_version} <-
            FleetPlanningPolicies.fetch_active(scope.organization_id, mission_id),
@@ -263,8 +270,21 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
         next_phase,
         attrs \\ %{},
         opts \\ []
-      )
-      when is_atom(expected_phase) and is_atom(next_phase) and is_map(attrs) do
+      ) do
+    advance_phase_unpublished(scope, mission_id, run_id, expected_phase, next_phase, attrs, opts)
+    |> PlanUpdates.published(scope.organization_id, mission_id)
+  end
+
+  defp advance_phase_unpublished(
+         %Scope{} = scope,
+         mission_id,
+         run_id,
+         expected_phase,
+         next_phase,
+         attrs,
+         opts
+       )
+       when is_atom(expected_phase) and is_atom(next_phase) and is_map(attrs) do
     now = now(opts)
 
     with :ok <- authorize_member(scope, mission_id),
@@ -284,6 +304,11 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
   @spec cancel(Scope.t(), binary(), binary(), binary(), keyword()) ::
           {:ok, FleetPlanningRun.t()} | {:error, term()}
   def cancel(%Scope{} = scope, mission_id, run_id, reason, opts \\ []) do
+    cancel_unpublished(scope, mission_id, run_id, reason, opts)
+    |> PlanUpdates.published(scope.organization_id, mission_id)
+  end
+
+  defp cancel_unpublished(%Scope{} = scope, mission_id, run_id, reason, opts) do
     reason = reason |> to_string() |> String.trim()
     now = now(opts)
 
@@ -295,15 +320,20 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
 
   @spec fail(Scope.t(), binary(), binary(), atom(), map(), keyword()) ::
           {:ok, FleetPlanningRun.t()} | {:error, term()}
-  def fail(
-        %Scope{} = scope,
-        mission_id,
-        run_id,
-        expected_phase,
-        failure_document,
-        opts \\ []
-      )
-      when is_atom(expected_phase) and is_map(failure_document) and is_list(opts) do
+  def fail(%Scope{} = scope, mission_id, run_id, expected_phase, failure_document, opts \\ []) do
+    fail_unpublished(scope, mission_id, run_id, expected_phase, failure_document, opts)
+    |> PlanUpdates.published(scope.organization_id, mission_id)
+  end
+
+  defp fail_unpublished(
+         %Scope{} = scope,
+         mission_id,
+         run_id,
+         expected_phase,
+         failure_document,
+         opts
+       )
+       when is_atom(expected_phase) and is_map(failure_document) and is_list(opts) do
     now = now(opts)
 
     with :ok <- authorize_member(scope, mission_id),

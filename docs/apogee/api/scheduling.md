@@ -335,7 +335,9 @@ but the planner may propose a pass for it, which then shows under `added`.
 
 **Apply** = `POST /contact-plans/<new plan id>/submit` (S5), with acknowledgements for any gaps.
 The repair yields a new plan; the source plan isn't superseded automatically (domain behavior).
-Not yet: station-outage entry (S7), provider billing terms, and the uplink impact read.
+Station-outage entry works through the station impact read's `plans` (above). Not yet: provider
+billing terms (no provider supplies them), and an uplink impact read (which queued uplinks a
+repair's moves affect). Ask if a screen needs either.
 
 ## Contact planning setup (CP, Setup screen; DECISIONS #27)
 

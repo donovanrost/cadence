@@ -9,7 +9,7 @@ S8) are api's: [scheduling.md](scheduling.md). Conventions: [README.md](README.m
 | M7 / S1 | `GET /missions/:mission_id/passes` | **implemented** (booked contacts; opportunities not yet) |
 | S7 | `GET/POST /missions/:mission_id/station-availability…` | **implemented** (api-ops on domain's facades, DECISIONS #39/#44) |
 | S9 | `GET /missions/:mission_id/pass-review[/rows|/daily]` | **implemented** (K3) |
-| S10 | `contacts` on the `mission:<id>` `invalidate` event | **implemented** (contact facts + reservation changes; plans/runs not yet) |
+| S10 | `contacts` and `contact_plans` on the `mission:<id>` `invalidate` event | **implemented** (contact facts + reservation changes; plans and fleet runs) |
 
 ## `GET /api/console/v1/missions/:mission_id/passes`
 
@@ -130,7 +130,26 @@ signed-in user (#30).
 committed (relayed from `Cadence.Contacts.Facts` by `CadenceWeb.Console.ContactChanges`), and on
 the `:contacts_changed` read update, which every `ProviderReservations` writer publishes after
 commit (domain `db8c9953`), so reservation-only transitions (for example `requesting → rejected`)
-invalidate too. Contact **plan and fleet-run** changes don't publish yet; ask domain if a screen needs them.
+invalidate too.
+
+### `contact_plans`
+
+`invalidate` with `contact_plans` fires after commit when (`ContactPlanning.PlanUpdates`):
+
+- a contact plan is created, gets a new version, or is submitted, approved or rejected;
+- its execution projection changes (`executing`, `reserved`, `partially_reserved`, `failed`),
+  including a booking the provider settles later (5b49faeb);
+- a fleet planning run (draft or repair) is created, advances a phase, fails or is canceled;
+  draft and execute progress (`scheduling_progress`) also mark it;
+- a requirement or template is created, versioned, closed, canceled, activated or paused, since
+  that can supersede a draft (`superseded` is computed on read);
+- a placed booking passes the #52 confirmation window, so a plan can turn `unconfirmed` by time
+  alone. This one is scheduled when the booking is placed. It's best effort: it doesn't survive a
+  server restart, so refetch on reconnect.
+
+Writes inside a transaction publish about a second later, after the commit. The channel
+debounces bursts (500 ms). Refetch plan lists, plan detail and draft/repair reads on it; there's
+no need to poll.
 
 ## Station availability (S7)
 

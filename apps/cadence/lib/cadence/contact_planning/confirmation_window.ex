@@ -23,6 +23,8 @@ defmodule Cadence.ContactPlanning.ConfirmationWindow do
     )
   end
 
-  defp window_ms,
+  @doc "The window in milliseconds."
+  @spec window_ms() :: pos_integer()
+  def window_ms,
     do: Application.get_env(:cadence, :provider_confirmation_window_ms, :timer.minutes(10))
 end

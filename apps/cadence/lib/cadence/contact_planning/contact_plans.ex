@@ -7,6 +7,8 @@ defmodule Cadence.ContactPlanning.ContactPlans do
 
   alias Cadence.Auth.{Policy, Scope}
 
+  alias Cadence.ContactPlanning.PlanUpdates
+
   alias Cadence.ContactPlanning.{
     AutomationGrants,
     ContactPlan,
@@ -37,8 +39,13 @@ defmodule Cadence.ContactPlanning.ContactPlans do
 
   @spec create(Scope.t(), binary(), map(), keyword()) ::
           {:ok, ContactPlan.t(), ContactPlanVersion.t()} | {:error, term()}
-  def create(%Scope{} = current_scope, mission_id, attrs, opts \\ [])
-      when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
+  def create(%Scope{} = current_scope, mission_id, attrs, opts \\ []) do
+    create_unpublished(current_scope, mission_id, attrs, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp create_unpublished(%Scope{} = current_scope, mission_id, attrs, opts)
+       when is_binary(mission_id) and is_map(attrs) and is_list(opts) do
     now = now(opts)
 
     with :ok <- authorize_member(current_scope, mission_id),
@@ -69,16 +76,21 @@ defmodule Cadence.ContactPlanning.ContactPlans do
 
   @spec version(Scope.t(), binary(), binary(), pos_integer(), map(), keyword()) ::
           {:ok, ContactPlan.t(), ContactPlanVersion.t()} | {:error, term()}
-  def version(
-        %Scope{} = current_scope,
-        mission_id,
-        plan_id,
-        expected_version,
-        attrs,
-        opts \\ []
-      )
-      when is_binary(mission_id) and is_binary(plan_id) and is_integer(expected_version) and
-             expected_version > 0 and is_map(attrs) and is_list(opts) do
+  def version(%Scope{} = current_scope, mission_id, plan_id, expected_version, attrs, opts \\ []) do
+    version_unpublished(current_scope, mission_id, plan_id, expected_version, attrs, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp version_unpublished(
+         %Scope{} = current_scope,
+         mission_id,
+         plan_id,
+         expected_version,
+         attrs,
+         opts
+       )
+       when is_binary(mission_id) and is_binary(plan_id) and is_integer(expected_version) and
+              expected_version > 0 and is_map(attrs) and is_list(opts) do
     now = now(opts)
 
     with :ok <- authorize_member(current_scope, mission_id),
@@ -172,6 +184,11 @@ defmodule Cadence.ContactPlanning.ContactPlans do
   @spec submit(Scope.t(), binary(), binary(), pos_integer(), binary(), keyword()) ::
           {:ok, ContactPlan.t()} | {:error, term()}
   def submit(current_scope, mission_id, plan_id, expected_version, reason, opts \\ []) do
+    submit_unpublished(current_scope, mission_id, plan_id, expected_version, reason, opts)
+    |> PlanUpdates.published(current_scope.organization_id, mission_id)
+  end
+
+  defp submit_unpublished(current_scope, mission_id, plan_id, expected_version, reason, opts) do
     transition_to_pending(
       current_scope,
       mission_id,
@@ -438,6 +455,16 @@ defmodule Cadence.ContactPlanning.ContactPlans do
   @spec start_execution_projection(binary(), binary(), binary(), DateTime.t()) ::
           {:ok, ContactPlan.t()} | {:error, term()}
   def start_execution_projection(organization_id, mission_id, plan_id, %DateTime{} = now) do
+    start_execution_projection_unpublished(organization_id, mission_id, plan_id, now)
+    |> PlanUpdates.published(organization_id, mission_id)
+  end
+
+  defp start_execution_projection_unpublished(
+         organization_id,
+         mission_id,
+         plan_id,
+         %DateTime{} = now
+       ) do
     Repo.transaction(fn ->
       case lock_plan(organization_id, mission_id, plan_id) do
         {:ok, %ContactPlanRow{lifecycle_state: "reserved"} = row} ->
@@ -476,6 +503,27 @@ defmodule Cadence.ContactPlanning.ContactPlans do
         reason,
         %DateTime{} = now
       ) do
+    update_execution_projection_unpublished(
+      organization_id,
+      mission_id,
+      plan_id,
+      plan_version,
+      state,
+      reason,
+      now
+    )
+    |> PlanUpdates.published(organization_id, mission_id)
+  end
+
+  defp update_execution_projection_unpublished(
+         organization_id,
+         mission_id,
+         plan_id,
+         plan_version,
+         state,
+         reason,
+         %DateTime{} = now
+       ) do
     Repo.transaction(fn ->
       with {:ok, row} <- lock_plan(organization_id, mission_id, plan_id),
            true <- row.approved_version == plan_version,
