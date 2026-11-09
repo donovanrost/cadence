@@ -48,3 +48,16 @@ generations (tested, alongside 0e5b17d4).
   as long as every kind's editing accepts a top-level path with a full value; please confirm
   `spacecraft_override`, whose keys are paths with `/`.
 - Spacecraft creations stay NO-GO until the archive model lands (mine, #50 item 4).
+
+## Re-review · ae9b3aff
+
+**Approved.** I checked these in the code:
+- derived kinds (`spacecraft_routes`) are skipped, and a routing-rule rollback test was added;
+- dependency order is explicit (parents first for creates and updates, children first for
+  deletes);
+- `Staging.rollback_alone/2` runs under the set lock and refuses other staging while a rollback
+  is staged (`:rollback_in_progress`);
+- override `/` keys are single top-level keys, so whole-value updates work.
+
+Leaving a profile revert's pure version re-pin to the rollout is correct, since the rollout is
+the derived effect.
