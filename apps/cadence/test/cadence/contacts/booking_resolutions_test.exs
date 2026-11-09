@@ -3,8 +3,17 @@ defmodule Cadence.Contacts.BookingResolutionsTest do
 
   alias Cadence.ContactPlanExecutionFixtures, as: Plan
   alias Cadence.ContactPlanning.{ContactPlanExecutions, ContactPlans}
-  alias Cadence.Contacts.{BookingResolutions, ProviderReservations}
+
+  alias Cadence.Contacts.{
+    BookingResolutions,
+    LateUplink,
+    ProviderReservations,
+    ScheduledContactRevisions
+  }
+
   alias Cadence.Contacts.BookingResolutions.Attention
+  alias Cadence.Control.Contacts.Store.ProviderReservationRow
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.Attention, as: AttentionRead
 
   setup do
@@ -40,7 +49,7 @@ defmodule Cadence.Contacts.BookingResolutionsTest do
         opts
       )
 
-  defp provider_says(c, reservation_id, status) do
+  defp provider_says(c, reservation_id, status, extra \\ %{}) do
     {:ok, reservation} =
       ProviderReservations.fetch(c.organization_id, c.mission_id, reservation_id)
 
@@ -51,6 +60,7 @@ defmodule Cadence.Contacts.BookingResolutionsTest do
         "status" => status,
         "provider_status" => status
       })
+      |> Map.merge(extra)
 
     ProviderReservations.apply_provider_status(
       c.organization_id,
@@ -92,8 +102,9 @@ defmodule Cadence.Contacts.BookingResolutionsTest do
     assert contact.metadata["booking_evidence"] == "operator_attested"
     refute :command_window in contact.contact_intents
 
-    # The item is reserved now, so it can't be resolved again.
-    assert {:error, :booking_not_unconfirmed} = resolve(c, c.first, :booked, attrs)
+    # Resolved already: the error names who did it.
+    assert {:error, {:booking_already_resolved, %{"kind" => "user"}}} =
+             resolve(c, c.first, :booked, attrs)
 
     assert {:ok, _} = provider_says(c, c.first.provider_reservation_id, "canceled")
     assert {:ok, %{lifecycle_state: :failed}} = item(c, c.first)
@@ -218,5 +229,82 @@ defmodule Cadence.Contacts.BookingResolutionsTest do
 
     assert {:error, :attention_item_not_open} =
              Attention.resolve(c.member_scope, c.mission_id, row.booking_resolution_id, "handled")
+  end
+
+  # The booking asked for an uplink leg (the fixture's route has none).
+  defp request_uplink(c, reservation_id) do
+    row = Repo.get_by!(ProviderReservationRow, provider_reservation_id: reservation_id)
+    request = JsonDocument.unwrap_value(row.request_document) || %{}
+
+    leg = %{
+      "routing_rule_id" => "route-uplink-#{c.mission_id}",
+      "path_template_id" => "template-uplink-#{c.mission_id}",
+      "path_template_version" => 1
+    }
+
+    row
+    |> Ecto.Changeset.change(
+      request_document: JsonDocument.wrap_value(Map.put(request, "uplink", leg))
+    )
+    |> Repo.update!()
+  end
+
+  defp contact(c, reservation) do
+    {:ok, contact} =
+      Cadence.Contacts.fetch_scheduled_contact(
+        c.organization_id,
+        c.mission_id,
+        reservation.scheduled_contact_id
+      )
+
+    contact
+  end
+
+  test "#55: the provider confirming an attested booking with uplink revises its contact before AOS, only records it after",
+       c do
+    request_uplink(c, c.first.provider_reservation_id)
+
+    assert {:ok, %{outcome: :attested}} =
+             resolve(c, c.first, :booked, %{"note" => "n", "provider_reference" => "NL-1"})
+
+    {:ok, reservation} =
+      ProviderReservations.fetch(c.organization_id, c.mission_id, c.first.provider_reservation_id)
+
+    assert contact(c, reservation).metadata["uplink"]["reason"] == "uplink unconfirmed"
+
+    # The confirmation arrives (through the hook, at real time: after this fixture's AOS).
+    assert {:ok, confirmed} =
+             provider_says(c, reservation.provider_reservation_id, "confirmed", %{
+               "uplink" => %{"status" => "included"}
+             })
+
+    [row] = Repo.all(BookingResolutions.Row)
+    assert row.provider_answer_document["uplink"] == "after_aos"
+    refute :command_window in contact(c, confirmed).contact_intents
+
+    # Before AOS the same confirmation adds the uplink path and command window as a revision.
+    assert {:ok, :revised} = LateUplink.revise(confirmed, now: Plan.now())
+    revised = contact(c, confirmed)
+    assert :command_window in revised.contact_intents
+    assert "template-uplink-#{c.mission_id}" in revised.path_template_ids
+    assert revised.metadata["uplink"]["booked"] == true
+
+    assert %{reason_document: %{"kind" => "uplink_confirmed"}} =
+             c.organization_id
+             |> ScheduledContactRevisions.list(revised.scheduled_contact_id)
+             |> Enum.find(&(&1.revision == revised.current_revision))
+
+    # Already revised: nothing more to do.
+    assert {:ok, :not_applicable} = LateUplink.revise(confirmed, now: Plan.now())
+  end
+
+  test "#55: a confirmation without uplink service leaves the attested contact downlink-only",
+       c do
+    assert {:ok, %{outcome: :attested}} =
+             resolve(c, c.first, :booked, %{"note" => "n", "provider_reference" => "NL-2"})
+
+    assert {:ok, confirmed} = provider_says(c, c.first.provider_reservation_id, "confirmed")
+    assert {:ok, :not_applicable} = LateUplink.revise(confirmed, now: Plan.now())
+    refute :command_window in contact(c, confirmed).contact_intents
   end
 end

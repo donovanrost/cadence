@@ -27,6 +27,7 @@ defmodule Cadence.Contacts.BookingResolutions do
   alias Cadence.Contacts.BookingResolutions.Row
 
   alias Cadence.Contacts.{
+    LateUplink,
     ProviderBooking,
     ProviderReservation,
     ProviderReservationReconciler,
@@ -158,10 +159,15 @@ defmodule Cadence.Contacts.BookingResolutions do
   defp text(_value), do: nil
 
   defp unconfirmed(item, opts) do
-    if ConfirmationWindow.overdue?(item, opts),
-      do: :ok,
-      else: {:error, :booking_not_unconfirmed}
+    cond do
+      ConfirmationWindow.overdue?(item, opts) -> :ok
+      resolved = for_item(item) -> {:error, {:booking_already_resolved, resolved.actor_document}}
+      true -> {:error, :booking_not_unconfirmed}
+    end
   end
+
+  defp for_item(item),
+    do: Repo.get_by(Row, contact_plan_execution_item_id: item.contact_plan_execution_item_id)
 
   defp fresh_read(reservation, opts) do
     reconcile =
@@ -342,7 +348,7 @@ defmodule Cadence.Contacts.BookingResolutions do
         {:ok, row}
 
       {:error, %Ecto.Changeset{errors: [contact_plan_execution_item_id: _]}} ->
-        {:error, :booking_already_resolved}
+        {:error, {:booking_already_resolved, nil}}
 
       {:error, reason} ->
         {:error, reason}
@@ -413,8 +419,16 @@ defmodule Cadence.Contacts.BookingResolutions do
     do: raise_conflict(row, "contradicts_attestation", answer(r))
 
   defp react(%Row{outcome: "attested"} = row, %{lifecycle_state: state} = r)
-       when state in @materialized,
-       do: close(row, r, Atom.to_string(state))
+       when state in @materialized do
+    # #55: the provider's own confirmation may bring the uplink leg; revise before AOS.
+    uplink =
+      case LateUplink.revise(r) do
+        {:ok, result} -> Atom.to_string(result)
+        {:error, reason} -> "error: " <> inspect(reason)
+      end
+
+    close(row, r, Atom.to_string(state), %{"uplink" => uplink})
+  end
 
   defp react(%Row{outcome: "not_booked"} = row, %{lifecycle_state: state} = r)
        when state in @materialized,
@@ -452,7 +466,7 @@ defmodule Cadence.Contacts.BookingResolutions do
 
   # A provider answer that agrees with the resolution closes an open conflict, or just
   # records the answer.
-  defp close(row, reservation, action) do
+  defp close(row, reservation, action, extra \\ %{}) do
     attrs =
       if row.conflict_state in ["open", "acknowledged"],
         do: %{
@@ -465,7 +479,9 @@ defmodule Cadence.Contacts.BookingResolutions do
 
     {:ok, _row} =
       row
-      |> Row.state_changeset(Map.put(attrs, :provider_answer_document, answer(reservation)))
+      |> Row.state_changeset(
+        Map.put(attrs, :provider_answer_document, Map.merge(answer(reservation), extra))
+      )
       |> Repo.update()
 
     changed(row.organization_id, row.mission_id)
