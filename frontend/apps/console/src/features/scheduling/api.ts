@@ -503,6 +503,21 @@ export const repairReader = d.object({
       ),
       dropped: d.array(repairPass, 5_000),
       added: d.array(repairPass, 5_000),
+      /** #56: lost passes a live single booking already covers (sent nothing); absent → []. */
+      covered: (value: unknown, path?: string) =>
+        value === undefined
+          ? []
+          : d.array(
+              d.object({
+                snapshot_id: d.token,
+                spacecraft_id: d.nullable(d.token),
+                station: stationReader,
+                starts_at: d.timestamp,
+                ends_at: d.timestamp,
+                covered_by: d.token,
+              }),
+              5_000,
+            )(value, path),
       totals: (value: unknown) => value,
     }),
   ),
