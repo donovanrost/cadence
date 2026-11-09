@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import {
   extent,
   hourTicks,
@@ -32,6 +32,23 @@ const props = withDefaults(
 const emit = defineEmits<{ select: [id: string] }>();
 
 const root = ref<HTMLElement | null>(null);
+/** Track width in px (lanes minus the 88px label column), for deciding which labels fit. */
+const trackWidth = ref(0);
+let observer: ResizeObserver | null = null;
+onMounted(() => {
+  if (!root.value || typeof ResizeObserver === "undefined") return;
+  observer = new ResizeObserver(([entry]) => {
+    trackWidth.value = Math.max(0, (entry?.contentRect.width ?? 0) - 88);
+  });
+  observer.observe(root.value);
+});
+onBeforeUnmount(() => observer?.disconnect());
+/** Mono 10px ≈ 6.1px per glyph + 8px padding. Labels that don't fit stay in the tooltip / name only. */
+const labelFits = (bar: GanttBar) => {
+  if (!bar.label) return false;
+  const e = extent(props.window, bar.from, bar.to);
+  return (e.width / 100) * trackWidth.value >= bar.label.length * 6.1 + 8;
+};
 const focusId = ref<string | null>(null);
 const tabStop = computed(() => focusId.value ?? props.selected ?? props.bars[0]?.id ?? null);
 const byRow = computed(() => {
@@ -113,7 +130,7 @@ async function onKey(event: KeyboardEvent, id: string) {
             @focus="focusId = bar.id"
             @keydown="onKey($event, bar.id)"
           >
-            <span aria-hidden="true">{{ bar.label }}</span>
+            <span v-if="labelFits(bar)" aria-hidden="true">{{ bar.label }}</span>
           </button>
         </div>
       </div>

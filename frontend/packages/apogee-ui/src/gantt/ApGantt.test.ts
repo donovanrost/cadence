@@ -61,3 +61,13 @@ describe("ApGantt", () => {
     wrapper.unmount();
   });
 });
+
+describe("ApGantt labels", () => {
+  it("hides labels that don't fit (no measured width in tests) but keeps the accessible name", () => {
+    const wrapper = gantt();
+    const first = wrapper.findAll("button")[0];
+    expect(first?.text()).toBe("");
+    expect(first?.attributes("aria-label")).toBe("118 pass");
+    wrapper.unmount();
+  });
+});
