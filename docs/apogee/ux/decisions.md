@@ -227,3 +227,10 @@ requirement` disclosure in the row allows splitting when needed. The approver se
   not `Choose…`; null = default, stated.
 - raw keys (`resources.capacities`) and JSON never appear in help text; they go to Technical details.
   JSON editing is Advanced-only, org admins only, and is labelled as such.
+
+### U25 · Never invent identifiers (station code fallback)
+**Decision:** when an entity lacks an identifier (a station with no `code`, a spacecraft with no SCID),
+the console shows the absence (`—` in the code column, with the name carrying identity) and, where the
+user can fix it, a `Not set · Add code` affordance. It never derives a stand-in (`HAR` from
+"Hartebeesthoek"): a derived code looks real, can collide, and differs from the one that gets set later,
+so one station ends up with two codes across screens.
