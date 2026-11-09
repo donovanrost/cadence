@@ -10,7 +10,7 @@ defmodule Cadence.SpacecraftType.SchemaTest do
     assert "frame_parameters.frame_size" in paths
     assert "catalog_revision_id" in paths
     assert "frame_parameters.fecf" in paths
-    refute Enum.any?(paths, &String.contains?(&1, ["virtual_channel", "fec", "randomizer"]))
+    refute Enum.any?(paths, &String.contains?(&1, ["virtual_channel", "reed_solomon", "randomizer", "segment"]))
   end
 
   test "reads current values by path" do
