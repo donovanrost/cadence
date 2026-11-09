@@ -18,12 +18,14 @@ const transport = object({
 });
 export type Transport = Decoded<typeof transport>;
 
+const role = oneOf(["primary", "candidate", "contributing"]);
+
 const rule = object({
   id: token,
   display_name: string,
   purpose: nullable(string),
   direction,
-  role: oneOf(["primary", "candidate", "contributing"]),
+  role,
   enabled: boolean,
   spacecraft: object({ id: token, name: string }),
   transport: object({ id: token, display_name: string, version: integer }),
@@ -47,12 +49,43 @@ export async function fetchTransports(
 export const rulesReader = object({ rules: array(rule, 500), total: integer });
 export type RulesPage = Decoded<typeof rulesReader>;
 
-/** First page only: routing is per spacecraft until DECISIONS #3, so this view stays minimal. */
+/** One group's rules (first 500); the groups read is the overview (pass-2 #10). */
 export function fetchRoutingRules(
-  missionId: string,
+  key: Readonly<{ missionId: string; transportId: string }>,
   signal: AbortSignal,
 ): Promise<ApiResult<RulesPage>> {
-  return request(`${base(missionId)}/routing-rules?limit=100`, rulesReader, { signal });
+  const query = new URLSearchParams({ transport_id: key.transportId, limit: "500" });
+  return request(`${base(key.missionId)}/routing-rules?${query.toString()}`, rulesReader, {
+    signal,
+  });
+}
+
+const group = object({
+  transport: object({ id: token, name: string }),
+  direction,
+  role,
+  enabled_count: integer,
+  disabled_count: integer,
+  spacecraft_count: integer,
+});
+export type RoutingGroup = Decoded<typeof group>;
+
+/** Active rules grouped by transport, direction and role, sorted by transport name. */
+export async function fetchRoutingGroups(
+  missionId: string,
+  signal: AbortSignal,
+): Promise<ApiResult<readonly RoutingGroup[]>> {
+  const result = await request(
+    `${base(missionId)}/routing-rules/groups`,
+    object({ groups: array(group, 5000) }),
+    { signal },
+  );
+  return result.ok ? { ok: true, value: result.value.groups } : result;
+}
+
+/** A group's `?group=` query value: transport, direction and role. */
+export function groupKey(g: Pick<RoutingGroup, "transport" | "direction" | "role">): string {
+  return `${g.transport.id}~${g.direction}~${g.role}`;
 }
 
 export function directionLabel(d: Decoded<typeof direction>): string {

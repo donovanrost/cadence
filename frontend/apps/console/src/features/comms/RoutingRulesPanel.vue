@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionScope } from "@/shell";
 import {
@@ -9,22 +10,42 @@ import {
   ApRemote,
   ApTable,
   formatCount,
+  plural,
   type ApColumn,
 } from "@/ui";
-import { directionLabel, fetchRoutingRules } from "./api.ts";
+import RoutingGroupRules from "./RoutingGroupRules.vue";
+import { directionLabel, fetchRoutingGroups, groupKey } from "./api.ts";
 
-/** Routing rules, read-only and minimal: this view is rebuilt around profile rules (DECISIONS #3). */
+/**
+ * Routing rules as groups (pass-2 #10): a thousand per-spacecraft rules read as one line per
+ * transport, direction and role. The transport links to that group's rules. Read-only; this view
+ * is rebuilt around profile rules (DECISIONS #3).
+ */
+const route = useRoute();
 const scope = useMissionScope();
-const { state, refetch } = useRemoteQuery(() => scope.value.mission.id, fetchRoutingRules);
+const { state, refetch } = useRemoteQuery(() => scope.value.mission.id, fetchRoutingGroups);
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
 );
+const selectedKey = computed(() =>
+  typeof route.query.group === "string" ? route.query.group : null,
+);
+const selected = computed(() =>
+  state.value.status === "ready"
+    ? (state.value.value.find((g) => groupKey(g) === selectedKey.value) ?? null)
+    : null,
+);
+const total = computed(() =>
+  state.value.status === "ready"
+    ? state.value.value.reduce((n, g) => n + g.enabled_count + g.disabled_count, 0)
+    : 0,
+);
 const columns: readonly ApColumn[] = [
-  { key: "spacecraft", label: "Spacecraft" },
-  { key: "rule", label: "Rule" },
+  { key: "transport", label: "Transport" },
   { key: "direction", label: "Direction" },
   { key: "role", label: "Role" },
-  { key: "transport", label: "Transport" },
+  { key: "spacecraft", label: "Spacecraft", align: "end", mono: true },
+  { key: "rules", label: "Rules", align: "end", mono: true },
 ];
 </script>
 
@@ -32,7 +53,11 @@ const columns: readonly ApColumn[] = [
   <ApPanel
     index="T2"
     title="Routing rules"
-    :meta="state.status === 'ready' ? `${formatCount(state.value.total)} rules` : undefined"
+    :meta="
+      state.status === 'ready'
+        ? `${plural(state.value.length, 'group')} · ${formatCount(total)} rules`
+        : undefined
+    "
     flush
   >
     <ApCallout tone="info">
@@ -46,36 +71,42 @@ const columns: readonly ApColumn[] = [
     />
     <ApRemote v-else :state="state" loading-label="Loading routing rules…" @retry="refetch">
       <template #default="{ value }">
+        <ApEmptyState
+          v-if="value.length === 0"
+          state="off"
+          headline="No routing rules"
+          sentence="A rule routes a spacecraft's traffic over a transport."
+        />
         <ApTable
+          v-else
           :columns="columns"
-          :rows="value.rules"
-          :row-key="(r) => r.id"
-          caption="Routing rules"
+          :rows="value"
+          :row-key="groupKey"
+          caption="Routing rule groups"
         >
-          <template #cell-spacecraft="{ row }">
+          <template #cell-transport="{ row }">
             <RouterLink
-              :to="{ name: 'setup.spacecraft.one', params: { scId: row.spacecraft.id } }"
+              :to="{ name: 'setup.comms', query: { group: groupKey(row) } }"
+              :aria-current="groupKey(row) === selectedKey ? 'true' : undefined"
               class="text-readout no-underline hover:text-bright hover:underline max-md:hit-44"
-              >{{ row.spacecraft.name }}</RouterLink
+              :class="groupKey(row) === selectedKey ? 'font-semibold text-bright' : ''"
+              >{{ row.transport.name }}</RouterLink
             >
           </template>
-          <template #cell-rule="{ row }"
-            >{{ row.display_name
-            }}<span v-if="!row.enabled" class="text-caution-text"> · disabled</span></template
-          >
           <template #cell-direction="{ row }">{{ directionLabel(row.direction) }}</template>
           <template #cell-role="{ row }"
             ><span class="capitalize">{{ row.role }}</span></template
           >
-          <template #cell-transport="{ row }">{{ row.transport.display_name }}</template>
-          <template v-if="value.total > value.rules.length" #footer>
-            <p class="m-0 border-t border-hairline px-4 py-2.5 text-sm text-text-3">
-              Showing {{ formatCount(value.rules.length) }} of {{ formatCount(value.total) }}. Each
-              spacecraft's rules are on its page.
-            </p>
-          </template>
+          <template #cell-spacecraft="{ row }">{{ formatCount(row.spacecraft_count) }}</template>
+          <template #cell-rules="{ row }"
+            >{{ formatCount(row.enabled_count)
+            }}<span v-if="row.disabled_count > 0" class="text-caution-text">
+              · {{ formatCount(row.disabled_count) }} disabled</span
+            ></template
+          >
         </ApTable>
       </template>
     </ApRemote>
   </ApPanel>
+  <RoutingGroupRules v-if="selected" :key="groupKey(selected)" :group="selected" />
 </template>
