@@ -20,6 +20,7 @@ defmodule Cadence.Control.Scheduling do
   alias Cadence.Management.Contacts, as: ManagementContacts
 
   alias Cadence.ContactPlanning.{
+    ConfirmationWindow,
     ContactPlan,
     ContactPlans,
     FleetPlanner,
@@ -253,17 +254,10 @@ defmodule Cadence.Control.Scheduling do
       |> plan_items(mission_id, plan_id)
       |> Enum.filter(&(&1.lifecycle_state in [:pending, :requesting, :uncertain]))
 
-    cutoff =
-      DateTime.add(
-        Keyword.get_lazy(opts, :now, &DateTime.utc_now/0),
-        -Keyword.get(opts, :confirmation_window_ms, confirmation_window_ms()),
-        :millisecond
-      )
-
     cond do
       unfinished == [] -> :interrupted
       Enum.any?(unfinished, &(&1.lifecycle_state != :uncertain)) -> :interrupted
-      Enum.any?(unfinished, &(DateTime.compare(&1.started_at, cutoff) == :lt)) -> :unconfirmed
+      Enum.any?(unfinished, &ConfirmationWindow.overdue?(&1, opts)) -> :unconfirmed
       true -> :executing
     end
   end
@@ -277,9 +271,6 @@ defmodule Cadence.Control.Scheduling do
         []
     end
   end
-
-  defp confirmation_window_ms,
-    do: Application.get_env(:cadence, :provider_confirmation_window_ms, :timer.minutes(10))
 
   @doc "The approved version and hash of a plan, for (re-)execution."
   @spec approved_version(binary(), binary(), binary()) ::
