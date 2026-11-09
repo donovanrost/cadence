@@ -3,7 +3,15 @@ defmodule Cadence.Contacts.ScheduleCommands do
   alias Cadence.Applications.JSONBoundary
   alias Cadence.Auth.Policy
   alias Cadence.ContactPlanning.OpportunityCapability
-  alias Cadence.Contacts.{ProviderBooking, ProviderScheduling, ScheduleCancellations, UplinkLegs}
+
+  alias Cadence.Contacts.{
+    ProviderBooking,
+    ProviderReservations,
+    ProviderScheduling,
+    ScheduleCancellations,
+    UplinkLegs
+  }
+
   alias Cadence.Missions
 
   @search_fields ~w(spacecraft_id route_key starts_at ends_at)
@@ -213,7 +221,7 @@ defmodule Cadence.Contacts.ScheduleCommands do
     with %{"id" => opportunity_id} = opportunity when is_binary(opportunity_id) <-
            payload["opportunity"],
          true <- is_map(payload["route"]) do
-      suffix = stable_booking_suffix(payload)
+      suffix = booking_suffix(payload, route)
 
       {:ok,
        opportunity
@@ -334,13 +342,38 @@ defmodule Cadence.Contacts.ScheduleCommands do
         )
     }
 
-  defp stable_booking_suffix(payload) do
+  # The identity derives from the opportunity, so a retried reserve is idempotent. Once the
+  # booking at that identity has ended (canceled, rejected, failed), reserving the same slot is
+  # a new booking: the identity's next generation (qa #32). Generation 1 is the original.
+  @ended_states ~w(canceled rejected failed)a
+  @max_generations 50
+
+  defp booking_suffix(payload, route, generation \\ 1) do
+    suffix = stable_booking_suffix(payload, generation)
+
+    case ProviderReservations.fetch_by_idempotency_key(
+           payload["organization_id"],
+           payload["mission_id"],
+           route.provider_id,
+           "cadence:contact:#{suffix}"
+         ) do
+      {:ok, %{lifecycle_state: state}}
+      when state in @ended_states and generation < @max_generations ->
+        booking_suffix(payload, route, generation + 1)
+
+      _live_or_new ->
+        suffix
+    end
+  end
+
+  defp stable_booking_suffix(payload, generation) do
     [
       payload["organization_id"],
       payload["mission_id"],
       payload["route_key"],
       payload["opportunity"]["id"]
     ]
+    |> Kernel.++(if generation == 1, do: [], else: [Integer.to_string(generation)])
     |> Enum.join("|")
     |> then(&:crypto.hash(:sha256, &1))
     |> Base.url_encode64(padding: false)
