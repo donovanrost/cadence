@@ -4,6 +4,7 @@ import { decoders as d, useRemoteQuery, type ApiError } from "@/api";
 import { useChannelEvent, useMissionInvalidation } from "@/live";
 import {
   continueDraft,
+  executePlan,
   fetchPlan,
   fetchRepair,
   startRepair,
@@ -29,6 +30,13 @@ export function useReplan(missionId: Readonly<Ref<string>>) {
 
   const source = useRemoteQuery(planId, (id, signal) => fetchPlan(missionId.value, id, signal));
   const repair = useRemoteQuery(runId, (id, signal) => fetchRepair(missionId.value, id, signal));
+  /** Once submitted, the proposal's own detail is authoritative (it derives `interrupted`). */
+  const appliedId = computed(() => {
+    const s = repair.state.value;
+    const plan = s.status === "ready" ? s.value.plan : null;
+    return plan && !["draft", "pending_approval"].includes(plan.state) ? plan.id : null;
+  });
+  const applied = useRemoteQuery(appliedId, (id, signal) => fetchPlan(missionId.value, id, signal));
 
   useChannelEvent(
     computed(() => `mission:${missionId.value}`),
@@ -44,6 +52,7 @@ export function useReplan(missionId: Readonly<Ref<string>>) {
   useMissionInvalidation(missionId, ["contacts"], () => {
     source.refetch();
     if (runId.value) repair.refetch();
+    if (appliedId.value) applied.refetch();
   });
   const poll = setInterval(() => {
     const s = repair.state.value;
@@ -89,15 +98,31 @@ export function useReplan(missionId: Readonly<Ref<string>>) {
     }
   }
 
+  /** Continue booking an interrupted proposal (S5 execute; items are idempotent). */
+  async function execute(planId: string) {
+    busy.value = true;
+    actionError.value = null;
+    try {
+      const result = await executePlan(missionId.value, planId);
+      if (!result.ok) actionError.value = result.error;
+      applied.refetch();
+      source.refetch();
+    } finally {
+      busy.value = false;
+    }
+  }
+
   return {
     planId,
     runId,
     source: source.state,
     repair: repair.state,
+    applied: applied.state,
     busy,
     actionError,
     propose,
     resume,
     apply,
+    execute,
   };
 }

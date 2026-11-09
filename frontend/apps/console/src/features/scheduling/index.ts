@@ -12,6 +12,7 @@ export {
 export {
   byAuthor,
   continueDraft,
+  executePlan,
   fetchAvailability,
   fetchPlan,
   fetchRepair,

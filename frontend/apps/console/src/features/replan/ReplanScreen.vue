@@ -31,8 +31,19 @@ import { useReplan } from "./useReplan.ts";
 /** K2 v1 · Re-plan after provider changes (DECISIONS #25), entered from a plan (`?plan=`). */
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
-const { planId, runId, source, repair, busy, actionError, propose, resume, apply } =
-  useReplan(missionId);
+const {
+  planId,
+  runId,
+  source,
+  repair,
+  applied,
+  busy,
+  actionError,
+  propose,
+  resume,
+  apply,
+  execute,
+} = useReplan(missionId);
 const nameOf = useSpacecraftNames(missionId);
 // Station-down entry (S7): resolves the plan to repair into ?plan=, then the plan flow continues.
 const station = useStationEntry(missionId);
@@ -71,7 +82,16 @@ const proposal = computed(() =>
     ? repair.value.value
     : null,
 );
-const step = computed(() => (proposal.value ? 1 : 0));
+/** After submit, the proposal's own detail (it reads `interrupted`; the repair read doesn't). */
+const footerPlan = computed(() =>
+  applied.value.status === "ready" ? applied.value.value : (proposal.value?.plan ?? null),
+);
+/** Apply is the current step once the proposal has left draft / pending approval. */
+const step = computed(() => {
+  const state = footerPlan.value?.state;
+  if (!state) return 0;
+  return state === "draft" || state === "pending_approval" ? 1 : 2;
+});
 /** Provider requests the proposal sends: one per moved, dropped or added pass (U28). */
 const requests = computed(() => {
   const d = proposal.value?.diff;
@@ -83,8 +103,13 @@ const applyLabel = (plan: PlanDetail) =>
     : coverage(plan).gaps > 0
       ? `Accept ${plural(coverage(plan).gaps, "gap")} and apply the proposal`
       : `Apply proposal · send ${plural(requests.value, "request")}`;
+/** The sheet's confirm names what Apply sends (U28), not the plan's total passes. */
+const applyConfirm = computed(() => {
+  const kept = proposal.value?.diff?.kept.length ?? 0;
+  return `This approves the proposal and sends ${plural(requests.value, "booking request")}. The ${plural(kept, "kept pass", "kept passes")} stay booked.`;
+});
 const primary = computed(() =>
-  proposal.value?.plan ? planPrimary(proposal.value.plan, isAdmin.value) : null,
+  footerPlan.value ? planPrimary(footerPlan.value, isAdmin.value) : null,
 );
 /** B1/B2 share one axis covering the repair window and every pass of both plans (moves can land after it). */
 const span = computed(() => {
@@ -230,11 +255,12 @@ async function onApply(acks: Acknowledgement[]) {
           <ChangesPanel :diff="proposal.diff" :plan="proposal.plan" :name-of="nameOf" />
         </div>
         <PlanFooter
-          :plan="proposal.plan"
+          :plan="footerPlan ?? proposal.plan"
           :is-admin="isAdmin"
           :busy="busy"
           :sheet-label="applyLabel(proposal.plan)"
           @sheet="sheet?.open()"
+          @execute="footerPlan && execute(footerPlan.id)"
           redraft-label="Propose again"
           @redraft="proposeAround"
         />
@@ -245,7 +271,7 @@ async function onApply(acks: Acknowledgement[]) {
           :plan="proposal.plan"
           :name-of="nameOf"
           :commit-label="applyLabel(proposal.plan)"
-          :confirm="primary.confirm"
+          :confirm="isAdmin ? applyConfirm : primary.confirm"
           :busy="busy"
           @submit="onApply"
         />
