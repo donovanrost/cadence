@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { ADMIN_STORAGE_STATE, BASE_URL } from "./e2e/support/env.ts";
+import { BASE_URL, DEFAULT_STORAGE_STATE } from "./e2e/support/env.ts";
 
 // Console e2e runs against a live Phoenix server (docs/apogee/qa/runbook.md).
 // It is deliberately not part of the workspace `test` script.
@@ -36,7 +36,7 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         channel: "chrome",
         viewport: { width: 1512, height: 1000 },
-        storageState: ADMIN_STORAGE_STATE,
+        storageState: DEFAULT_STORAGE_STATE,
       },
     },
   ],

@@ -58,6 +58,19 @@ test.describe("console shell, capability gating (decision 2, qa #4)", () => {
   });
 });
 
+test.describe("console shell, platform admin without a membership", () => {
+  test.use({ storageState: storageStateFor("admin") });
+
+  test("admin mode can open any organization by URL (session.md)", async ({ page }) => {
+    test.fail(
+      true,
+      "qa issue #15: admin-mode session lists no organizations; the org URL 'can't be opened'",
+    );
+    await openConsole(page, missionPath("now"));
+    await expect(page.getByRole("banner")).toContainText(DEMO.organizationName);
+  });
+});
+
 test.describe("console shell, signed out", () => {
   test.use({
     storageState: { cookies: [], origins: [] },

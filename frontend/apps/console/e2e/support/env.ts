@@ -37,6 +37,12 @@ export function storageStateFor(key: PersonaKey): string {
 
 export const ADMIN_STORAGE_STATE = storageStateFor("admin");
 
+/**
+ * Specs run as an organization admin by default. The env administrator (platform admin mode) has
+ * no Reflect Orbital membership and currently can't open the org in the console (qa #15).
+ */
+export const DEFAULT_STORAGE_STATE = storageStateFor("orgAdmin");
+
 // Seeded demo data (dev/reflect_orbital_demo.exs). Override when testing another dataset.
 export const DEMO = {
   organizationName: process.env["E2E_ORG_NAME"] ?? "Reflect Orbital",
