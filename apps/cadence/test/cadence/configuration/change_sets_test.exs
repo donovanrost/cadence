@@ -115,7 +115,8 @@ defmodule Cadence.Configuration.ChangeSetsTest do
                base: "Kiruna",
                live: "Esrange",
                staged: "Kiruna 2",
-               changed_in: :outside
+               changed_in: :outside,
+               changed_by: nil
              } = path
 
       assert {:ok, %{version: version}} = Configuration.rebase(alice, mission, op_id, :keep_mine)

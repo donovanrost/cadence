@@ -214,14 +214,19 @@ defmodule Cadence.Configuration.Pipeline do
 
       paths ->
         changed_in = changed_in(mission_id, op, base_revision, paths)
+        actors = changed_by(mission_id, changed_in)
 
         Enum.map(paths, fn path ->
+          revision = Map.get(changed_in, path, :outside)
+
           %{
             path: path,
             base: Map.get(values, path),
             live: Document.get(current, path),
             staged: staged_value(op, path),
-            changed_in: Map.get(changed_in, path, :outside)
+            changed_in: revision,
+            # Who applied that revision (ux: "changed in r9 by Mira K."); nil when outside.
+            changed_by: Map.get(actors, revision)
           }
         end)
     end
@@ -241,6 +246,23 @@ defmodule Cadence.Configuration.Pipeline do
     |> Enum.reverse()
     |> Enum.reduce(%{}, &record_changed_in(&1, &2, paths))
   end
+
+  defp changed_by(mission_id, changed_in) do
+    changed_in
+    |> Map.values()
+    |> Enum.uniq()
+    |> Map.new(fn number ->
+      case Ledger.fetch_revision(mission_id, number) do
+        {:ok, revision} -> {number, actor_name(revision.applied_by)}
+        _missing -> {number, nil}
+      end
+    end)
+  end
+
+  defp actor_name(%{"name" => name} = actor),
+    do: %{kind: actor["kind"], id: actor["id"], name: name}
+
+  defp actor_name(_actor), do: nil
 
   defp record_changed_in(entry, acc, paths) do
     paths

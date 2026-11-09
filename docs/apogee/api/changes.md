@@ -108,3 +108,14 @@ order, so a SCID repeated **within the batch** fails validation for the later op
   - `403 forbidden`: needs `config.rollback`.
 - **Not yet:** reverting a spacecraft creation is NO-GO ("Spacecraft can't be removed yet") until
   domain adds spacecraft archiving (with traffic, archive plus a HOLD; without, delete).
+
+**Conflict detail.** Each `conflicts` item's `paths` entries are `{path, base, live, staged,
+changed_in, changed_by}`:
+- `base` is the value when staged (for a rollback, what the reverted revisions left);
+- `live` is the value now;
+- `staged` is what the change writes;
+- `changed_in` is the revision that changed it since, or `"outside"`;
+- `changed_by` is `{kind, id, name}` of whoever applied that revision, or `null` for outside
+  changes.
+
+For example: "frame size is 1,024 now, not 900 as r8 left it (changed in r9 by Mira K.)".
