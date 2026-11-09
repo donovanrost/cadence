@@ -214,3 +214,16 @@ requirement, because operators reason per spacecraft and it matches the headline
 ≥ 5 MIN · 11 NOV 00–24Z`); one reason per spacecraft, which the client sends as the acknowledgement for
 each of its requirements (the audit stays per requirement server-side). A `Different reason per
 requirement` disclosure in the row allows splitting when needed. The approver sees the same grouping.
+
+### U24 · Schema units are formatted by the client (Contact planning policy)
+**Decision:** generated forms never ask people to type storage units. The client formats by the schema's
+`unit`, with no extra server hints needed:
+- `s` (duration): display `48h 00m` / `9m 12s` (design-language §4); input accepts `48h`, `2d`, `90m`,
+  `1h30m`, `5400s`; show the canonical seconds in `Technical details`.
+- `micros` (money): display and enter in the currency's units (`1,200.00 USD`); convert ×1e6 on save.
+  The currency field is a select of ISO 4217 codes (the provider's currency first when known), not free
+  text.
+- booleans with a server default: a Yes / No `choice` segmented showing the default (`No · default`),
+  not `Choose…`; null = default, stated.
+- raw keys (`resources.capacities`) and JSON never appear in help text; they go to Technical details.
+  JSON editing is Advanced-only, org admins only, and is labelled as such.
