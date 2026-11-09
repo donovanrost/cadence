@@ -1,18 +1,44 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApEmptyState, ApKeyValue, ApPanel, ApTag, formatDuration } from "@/ui";
-import type { PlanDetail } from "./api.ts";
+import type { RemoteState } from "@/api";
+import { ApButton, ApEmptyState, ApKeyValue, ApPanel, ApTag, formatDuration } from "@/ui";
+import AlternativesList from "./AlternativesList.vue";
+import type { Alternatives, PlanDetail } from "./api.ts";
 import type { SpacecraftName } from "./names.ts";
 
-/** D · Selected pass. Values come from the provider; Cadence derives nothing (DECISIONS #4). */
+/**
+ * D · Selected: a drafted pass (Remove) or another window (Add), then the focused spacecraft's
+ * other windows. Values come from the provider; Cadence derives nothing (DECISIONS #4).
+ */
 const props = defineProps<{
   plan: PlanDetail;
   selected: string | null;
+  focused: string | null;
+  alternatives: RemoteState<Alternatives>;
   nameOf: (id: string | null) => SpacecraftName | null;
+  editable: boolean;
+  busy: boolean;
+}>();
+const emit = defineEmits<{
+  add: [id: string];
+  remove: [id: string];
+  select: [id: string];
+  retry: [];
 }>();
 
-const pass = computed(
+const drafted = computed(
   () => props.plan.passes.find((p) => p.snapshot_id === props.selected) ?? null,
+);
+const other = computed(() => {
+  const a = props.alternatives;
+  return a.status === "ready"
+    ? (a.value.alternatives.find((x) => x.snapshot_id === props.selected) ?? null)
+    : null;
+});
+const pass = computed(
+  () =>
+    drafted.value ??
+    (other.value ? { ...other.value, spacecraft_id: props.focused, locked: false } : null),
 );
 const items = computed(() => {
   const p = pass.value;
@@ -36,7 +62,11 @@ const items = computed(() => {
       value: p.synthetic ? "SIMULATOR · SYNTHETIC WINDOW" : "PROVIDER WINDOW",
       mono: true,
     },
-    { key: "locked", label: "Locked", value: p.locked ? "Yes, committed" : "No" },
+    {
+      key: "status",
+      label: "In plan",
+      value: drafted.value ? (p.locked ? "Yes, committed" : "Yes") : "No",
+    },
   ];
 });
 </script>
@@ -54,11 +84,38 @@ const items = computed(() => {
       <p class="m-0 mt-3 text-md text-text-3">
         Provider-supplied. Cadence doesn't compute passes yet.
       </p>
+      <div v-if="editable" class="mt-3">
+        <ApButton
+          v-if="drafted && !drafted.locked"
+          size="compact"
+          :disabled="busy"
+          @click="emit('remove', drafted.snapshot_id)"
+          >Remove pass</ApButton
+        >
+        <ApButton
+          v-else-if="other"
+          size="compact"
+          variant="primary"
+          :disabled="busy"
+          @click="emit('add', other.snapshot_id)"
+          >Add pass</ApButton
+        >
+      </div>
     </template>
     <ApEmptyState
       v-else
       headline="Nothing selected"
-      sentence="Click a pass on the Gantt, or a spacecraft in Demand to focus it."
+      sentence="Click a pass on the Gantt, or a spacecraft in Demand to see its other windows."
+    />
+    <AlternativesList
+      v-if="focused"
+      :state="alternatives"
+      :editable="editable"
+      :busy="busy"
+      :name="nameOf(focused)?.name ?? focused"
+      @add="emit('add', $event)"
+      @select="emit('select', $event)"
+      @retry="emit('retry')"
     />
   </ApPanel>
 </template>

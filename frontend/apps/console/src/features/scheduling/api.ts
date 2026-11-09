@@ -290,3 +290,58 @@ export function executePlan(missionId: string, planId: string) {
 /** Acknowledgement reasons must be 10–2000 characters (scheduling.md S5). */
 export const REASON_MIN = 10;
 export const REASON_MAX = 2000;
+
+/** S4 edit: next plan version with the selection changed; returns the new plan detail. */
+export function editPlan(
+  missionId: string,
+  plan: Readonly<{ id: string; version: number }>,
+  change: Readonly<{ add?: readonly string[]; remove?: readonly string[] }>,
+): Promise<ApiResult<PlanDetail>> {
+  return request(`${base(missionId)}/${encodeURIComponent(plan.id)}/versions`, planDetailReader, {
+    method: "POST",
+    body: { expected_version: plan.version, ...change },
+  });
+}
+
+export const alternativesReader = d.object({
+  plan_id: d.token,
+  version: d.integer,
+  spacecraft_id: d.token,
+  rule_met: d.boolean,
+  contacts: d.object({ have: d.integer, need: d.nullable(d.integer) }),
+  alternatives: d.array(
+    d.object({
+      snapshot_id: d.token,
+      requirement_id: d.nullable(d.token),
+      station: d.nullable(d.string),
+      starts_at: d.timestamp,
+      ends_at: d.timestamp,
+      synthetic: d.boolean,
+      effect: d.object({
+        rule_met_after: d.boolean,
+        contacts_after: d.object({ have: d.integer, need: d.nullable(d.integer) }),
+        clashes_with: d.array(d.token),
+      }),
+    }),
+    2_000,
+  ),
+});
+export type Alternatives = Decoded<typeof alternativesReader>;
+export type Alternative = Alternatives["alternatives"][number];
+
+/** S4: unselected opportunities for one spacecraft with their effect (nothing is written). */
+export function fetchAlternatives(
+  missionId: string,
+  planId: string,
+  spacecraftId: string,
+  signal?: AbortSignal,
+): Promise<ApiResult<Alternatives>> {
+  return request(
+    `${base(missionId)}/${encodeURIComponent(planId)}/alternatives?spacecraft_id=${encodeURIComponent(spacecraftId)}`,
+    alternativesReader,
+    signal ? { signal } : {},
+  );
+}
+
+/** Plans whose selection can still change (editing a plan in review returns it to draft). */
+export const editableStates: readonly PlanState[] = ["draft", "pending_approval"];

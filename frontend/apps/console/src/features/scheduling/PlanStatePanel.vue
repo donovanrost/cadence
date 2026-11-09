@@ -1,16 +1,24 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { describeApiError } from "@/api";
-import { ApCallout, ApPanel, formatCount, formatRelative, useNow } from "@/ui";
+import { ApCallout, ApPanel, ApStatusMark, formatCount, formatRelative, useNow } from "@/ui";
 import type { PlanView } from "./plan-state.ts";
 
 /** K1 body for every state that isn't a plan (ScheduleFlow "K1 plan states"). */
 const props = defineProps<{ view: Exclude<PlanView, { kind: "plan" }> }>();
 const now = useNow();
 const PHASES = ["materializing", "searching", "optimizing", "materializing_plan"] as const;
-const MISSING: Readonly<Record<string, string>> = {
-  fleet_planning_policy: "No planning policy",
-  contact_requirements: "No active contact rule",
+const MISSING: Readonly<Record<string, { text: string; link: string; route: string }>> = {
+  fleet_planning_policy: {
+    text: "No planning policy",
+    link: "Policy",
+    route: "setup.contact-planning.policy",
+  },
+  contact_requirements: {
+    text: "No active contact rule",
+    link: "Requirements",
+    route: "setup.contact-planning",
+  },
 };
 const elapsed = computed(() =>
   props.view.kind === "drafting" && props.view.startedAt
@@ -26,9 +34,22 @@ const elapsed = computed(() =>
         >Cadence needs a planning policy and at least one contact rule before it can draft a
         day.</ApCallout
       >
-      <ul class="m-0 mt-3 list-none p-0 font-mono text-sm text-text-2 uppercase">
-        <li v-for="item in view.missing" :key="item">
-          {{ MISSING[item] ?? item.replaceAll("_", " ") }}
+      <ul class="m-0 mt-3 list-none border border-hairline p-0">
+        <li
+          v-for="item in view.missing"
+          :key="item"
+          class="flex items-center gap-3 border-t border-hairline px-4 py-2.5 first:border-t-0"
+        >
+          <ApStatusMark state="off" />
+          <span class="flex-1 text-base text-readout">{{
+            MISSING[item]?.text ?? item.replaceAll("_", " ")
+          }}</span>
+          <RouterLink
+            v-if="MISSING[item]"
+            :to="{ name: MISSING[item].route }"
+            class="max-md:hit-44 font-mono text-sm text-readout"
+            >{{ MISSING[item].link }} →</RouterLink
+          >
         </li>
       </ul>
     </template>

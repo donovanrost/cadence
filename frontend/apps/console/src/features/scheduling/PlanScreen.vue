@@ -2,9 +2,9 @@
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
-import type { ApiError } from "@/api";
+import { describeApiError, type ApiError } from "@/api";
 import { ApButton, ApCallout, ApStationBar } from "@/ui";
-import type { Acknowledgement } from "./api.ts";
+import { editableStates, type Acknowledgement } from "./api.ts";
 import DayNav from "./DayNav.vue";
 import DemandPanel from "./DemandPanel.vue";
 import DraftGantt from "./DraftGantt.vue";
@@ -28,7 +28,9 @@ const day = computed(() => {
     ? q
     : new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 });
-const { view, busy, actionError, draftDay, resume, submit, execute } = usePlanDay(missionId, day);
+const focused = ref<string | null>(null);
+const { view, busy, actionError, draftDay, resume, submit, execute, edit, alternatives } =
+  usePlanDay(missionId, day, focused);
 const session = useSession();
 const isAdmin = computed(() => canAdministerOrganization(session, scope.value.organization));
 const sheet = ref<InstanceType<typeof SubmitSheet> | null>(null);
@@ -43,11 +45,25 @@ async function onSubmit(acks: Acknowledgement[]) {
   if (result.ok) sheet.value?.close();
   else sheetError.value = result.error;
 }
+const editable = computed(
+  () => view.value.kind === "plan" && editableStates.includes(view.value.plan.state),
+);
+function onEdit(change: { add?: string[]; remove?: string[] }) {
+  if (view.value.kind !== "plan") return;
+  void edit(view.value.plan, change);
+  selected.value = null;
+}
+const actionText = computed(() => {
+  const e = actionError.value;
+  if (!e) return null;
+  return e.kind === "conflict" && e.code === "plan_changed"
+    ? "Someone changed this plan meanwhile. It's reloaded; check it and try again."
+    : describeApiError(e);
+});
 function onExecute() {
   if (view.value.kind === "plan") void execute(view.value.plan.id);
 }
 const nameOf = useSpacecraftNames(missionId);
-const focused = ref<string | null>(null);
 const selected = ref<string | null>(null);
 
 const STEPS = ["Demand", "Opportunities", "Draft", "Reserve"];
@@ -105,13 +121,23 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
         :name-of="nameOf"
         :focused="focused"
         :selected="selected"
+        :alternatives="alternatives"
         @select="selected = $event"
       />
-      <SelectedPanel :plan="view.plan" :selected="selected" :name-of="nameOf" />
+      <SelectedPanel
+        :plan="view.plan"
+        :selected="selected"
+        :focused="focused"
+        :alternatives="alternatives"
+        :name-of="nameOf"
+        :editable="editable"
+        :busy="busy"
+        @add="onEdit({ add: [$event] })"
+        @remove="onEdit({ remove: [$event] })"
+        @select="selected = $event"
+      />
     </div>
-    <ApCallout v-if="actionError" tone="caution"
-      >Couldn't continue booking. Reload the plan and try again.</ApCallout
-    >
+    <ApCallout v-if="actionText" tone="caution">{{ actionText }}</ApCallout>
     <PlanFooter
       :plan="view.plan"
       :is-admin="isAdmin"

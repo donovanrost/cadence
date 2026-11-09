@@ -4,7 +4,9 @@ import { decoders as d, useRemoteQuery, type ApiError } from "@/api";
 import { useChannelEvent, useMissionInvalidation } from "@/live";
 import {
   continueDraft,
+  editPlan,
   executePlan,
+  fetchAlternatives,
   fetchDayDemand,
   fetchDraft,
   fetchPlan,
@@ -24,7 +26,11 @@ const progressReader = d.object({ kind: d.string, id: d.token, state: d.string }
  * `scheduling_progress` and a 5 s poll while running), the current plan's detail, and the
  * start / continue actions. Exposes one derived `view`.
  */
-export function usePlanDay(missionId: Readonly<Ref<string>>, day: Readonly<Ref<string>>) {
+export function usePlanDay(
+  missionId: Readonly<Ref<string>>,
+  day: Readonly<Ref<string>>,
+  focused: Readonly<Ref<string | null>>,
+) {
   const route = useRoute();
   const router = useRouter();
   const runId = computed(() => (typeof route.query.run === "string" ? route.query.run : null));
@@ -163,6 +169,34 @@ export function usePlanDay(missionId: Readonly<Ref<string>>, day: Readonly<Ref<s
     }),
   );
 
+  /** S4: alternatives for the focused spacecraft on the current plan (nothing is written). */
+  const currentPlanId = computed(() => (view.value.kind === "plan" ? view.value.plan.id : null));
+  const currentVersion = computed(() =>
+    view.value.kind === "plan" ? view.value.plan.version : null,
+  );
+  const alternatives = useRemoteQuery(
+    () =>
+      currentPlanId.value && focused.value
+        ? `${currentPlanId.value}|${currentVersion.value}|${focused.value}`
+        : null,
+    (_k, signal) =>
+      fetchAlternatives(missionId.value, currentPlanId.value ?? "", focused.value ?? "", signal),
+  );
+
+  /** S4 edit: a new plan version. A stale version (409 plan_changed) reloads and says so. */
+  async function edit(plan: PlanDetail, change: Readonly<{ add?: string[]; remove?: string[] }>) {
+    busy.value = true;
+    actionError.value = null;
+    try {
+      const result = await editPlan(missionId.value, plan, change);
+      if (!result.ok) actionError.value = result.error;
+      refresh();
+      alternatives.refetch();
+    } finally {
+      busy.value = false;
+    }
+  }
+
   return {
     view,
     busy,
@@ -171,6 +205,8 @@ export function usePlanDay(missionId: Readonly<Ref<string>>, day: Readonly<Ref<s
     resume,
     submit,
     execute,
+    edit,
+    alternatives: alternatives.state,
     refresh,
   };
 }
