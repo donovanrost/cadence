@@ -107,7 +107,7 @@ const close = computed(() => {
     close-label="Close and keep nothing"
     title-as="h1"
   >
-    <template #steps
+    <template v-if="access.request" #steps
       ><ApStationBar :steps="steps" :current="current" label="Sequence steps"
     /></template>
   </TakeoverHeader>

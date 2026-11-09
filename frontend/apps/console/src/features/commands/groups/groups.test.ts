@@ -5,7 +5,7 @@ import type { CommandArgument, CommandDetail } from "../api.ts";
 import { argumentValuesJson, buildDraft } from "../compose/draft.ts";
 import { newItem } from "../compose/stack.ts";
 import { EMPTY_QUERY } from "../compose/targets.ts";
-import { preflightReader, type Preflight } from "./api.ts";
+import { fetchGroups, preflightReader, type Preflight } from "./api.ts";
 import { checkMeta, checkRows, noGoReason, routingProfile } from "./checks.ts";
 import { showBody } from "./fixtures.ts";
 import { groupReader } from "./show.ts";
@@ -220,5 +220,19 @@ describe("identity via routes (DECISIONS #41)", () => {
     expect(row?.sentence).toBe("SC-1 (SCID 7) has several primary uplink routes");
     expect(row?.profileId).toBe("prof-1");
     expect(decoded.value.checks[0] && routingProfile(decoded.value.checks[0])).toBe("prof-1");
+  });
+});
+
+describe("group list", () => {
+  it("unwraps {groups: [...]}", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = () =>
+      Promise.resolve(new Response(JSON.stringify({ data: { groups: [] } }), { status: 200 }));
+    try {
+      const r = await fetchGroups("m", {});
+      expect(r).toEqual({ ok: true, value: [] });
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });

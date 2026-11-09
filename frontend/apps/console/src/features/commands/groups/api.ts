@@ -155,7 +155,10 @@ export type GroupListQuery = Readonly<{
   states?: readonly GroupState[];
 }>;
 
-export function fetchGroups(
+const groupList = d.object({ groups: d.array(groupRow, 1_000) });
+
+/** `{data: {groups: [...]}}`; the screens want the rows. */
+export async function fetchGroups(
   missionId: string,
   query: GroupListQuery,
   signal?: AbortSignal,
@@ -166,11 +169,12 @@ export function fetchGroups(
   if (query.operationId) p.set("operation_id", query.operationId);
   if (query.states?.length) p.set("state", query.states.join(","));
   const qs = p.toString();
-  return request(
+  const result = await request(
     `${groupsBase(missionId)}${qs ? `?${qs}` : ""}`,
-    d.array(groupRow, 1_000),
+    groupList,
     signal ? { signal } : {},
   );
+  return result.ok ? { ok: true, value: result.value.groups } : result;
 }
 
 /** Write outcomes (ux U20): rejected = nothing changed; unclear = check, never blind retry. */
