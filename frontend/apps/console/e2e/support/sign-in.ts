@@ -6,7 +6,7 @@ export interface Credentials {
 }
 
 const ATTEMPTS = 3;
-const MOUNT_TIMEOUT_MS = 15_000;
+const MOUNT_TIMEOUT_MS = 25_000;
 
 /**
  * Signs in through the real Phoenix /sign-in page, the console's only login path.

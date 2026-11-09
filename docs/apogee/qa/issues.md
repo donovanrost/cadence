@@ -15,7 +15,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 9 | Investigate B1 | "No active alarm" shown as nominal (green) while the mission has no limits configured (U13) | fe-ops | fixed (d3a2e569), e2e updated |
 | 10 | Investigate header | Prev/next links show "2 ]" but are named "Next spacecraft, EARENDIL-002" (WCAG 2.5.3) | fe-ops | fixed (d3a2e569), e2e updated |
 | 11 | Config API | First `GET /missions/:id/config` returned 500 during an e2e run; a later call 200 with a baseline created at that moment (suspected race in lazy baseline creation) | api / domain | fixed (0c037ba0) |
-| 15 | Session / shell | Env admin in admin mode (platform_admin) gets `organizations: []` and can't open any org by URL | api / lead | open |
+| 15 | Session / shell | Env admin in admin mode (platform_admin) gets `organizations: []` and can't open any org by URL | api / lead | verified (lead: org selected from the URL slug) |
 | 12 | Palette | 'Show all N' `<button>` inside `role=listbox` (axe aria-required-children) | fe-ops | verified (cb5b2d12) |
 | 13 | Palette | Focus leaves the `aria-modal` dialog after two Tabs (no focus trap) | fe-ops | verified (cb5b2d12) |
 | 14 | Catalog import | File picker shows no visible keyboard focus (WCAG 2.4.7) | fe-setup | verified (32c2cb4e) |
