@@ -55,11 +55,6 @@ export function bookingStopped(plan: BookedPlan, read: PassesRead | null): Booki
   return { text: `${what} · waiting for ${who} to confirm.`, tone: "info", left: 0 };
 }
 
-/** @deprecated Use `bookingStopped(...).text`; kept while K2 switches over. */
-export function bookingStoppedText(plan: BookedPlan, read: PassesRead | null): string {
-  return bookingStopped(plan, read).text;
-}
-
 /** The passes-read window covering every request the plan sends, or null when it sends none. */
 export function bookingWindow(plan: BookedPlan): { from: string; to: string } | null {
   const wanted = plan.passes.filter((p) => !p.locked);
