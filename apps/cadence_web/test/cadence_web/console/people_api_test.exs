@@ -22,7 +22,12 @@ defmodule CadenceWeb.Console.PeopleAPITest do
     by_name = Map.new(data["members"], &{&1["display_name"], &1})
     assert by_name["Ada Admin"]["role"] == "organization_admin"
     assert "org.invite" in by_name["Ada Admin"]["capabilities"]
-    assert by_name["Mira K."]["capabilities"] == ["command.request", "command.approve"]
+    # Commanding needs :manage_mission today (DECISIONS #38): members can't.
+    assert by_name["Mira K."]["capabilities"] == []
+
+    assert Enum.sort(by_name["Ada Admin"]["capabilities"]) ==
+             ~w(command.approve command.request org.invite org.manage_members)
+
     assert is_binary(by_name["Mira K."]["joined_at"])
     assert data["invitations"] == []
     assert data["permissions"] == []

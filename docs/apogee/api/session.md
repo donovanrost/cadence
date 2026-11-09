@@ -32,12 +32,14 @@ The bootstrap payload.
     "current_organization_id": "org_…",
     "admin_mode": false,
     "platform_admin_eligible": false,
-    "capabilities": ["organization_admin"],
+    "capabilities": ["command.approve", "command.request", "org.invite", "org.manage_members",
+                     "organization_admin"],
     "organizations": [
       {
         "id": "org_…", "slug": "reflect-orbital", "name": "Reflect Orbital",
         "role": "organization_admin",
-        "capabilities": ["organization_admin"],
+        "capabilities": ["command.approve", "command.request", "org.invite", "org.manage_members",
+                         "organization_admin"],
         "missions": [{"id": "mission_…", "slug": "earendil", "name": "Earendil"}]
       }
     ],
@@ -51,14 +53,18 @@ The bootstrap payload.
   also sees the current organization even without a membership (`role` is then `null`).
   `missions` holds every mission in that organization; members can operate all of them.
 - `role`: `organization_admin`, `member` or `null`.
-- `organizations[].capabilities`: capabilities effective in **that** organization, computed with
-  the same scope rules the server enforces there (user capabilities, with `platform_admin` only in
-  admin mode, plus membership capabilities). Since the console scopes the organization by URL,
-  gate UI on the capabilities of the organization that owns the mission on screen.
-- `capabilities` (top level): the same, for `current_organization_id`: user capabilities
-  (`platform_admin` only while in admin mode) plus membership capabilities
-  (`organization_admin`). Gate UI on these (director decision 2). Every endpoint still enforces
-  authorization on the server.
+- `organizations[].capabilities`: capabilities effective in **that** organization, sorted. Each is
+  derived by calling the policy function that enforces it for that organization's scope
+  (DECISIONS #38), so the list and enforcement agree (tested per role):
+  - scope capabilities: `platform_admin` (only in admin mode), `organization_admin` (membership);
+  - `command.request`, `command.approve`: the command review policy (organization admins, and
+    platform admins in admin mode, today); the same names as the People read;
+  - `org.invite`, `org.manage_members`: `:manage_organization_members`.
+
+  Since the console scopes the organization by URL, gate UI on the capabilities of the organization
+  that owns the mission on screen.
+- `capabilities` (top level): the same list for `current_organization_id`. Every endpoint still
+  enforces authorization on the server.
 - `current_organization_id`: the session's default organization, used for org-level pages when
   the URL has no mission. It may be `null` for a user with no memberships.
 

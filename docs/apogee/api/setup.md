@@ -269,7 +269,7 @@ the session default. An actor who isn't an active member (or a platform admin in
 ```json
 {"data": {
   "members": [{"user_id": "user_…", "display_name": "Mira K.", "email": "mira@…",
-               "role": "member", "capabilities": ["command.request", "command.approve"],
+               "role": "member", "capabilities": [],
                "joined_at": "2026-10-19T02:29:00Z"}],
   "invitations": [{"id": "…", "email": "ana@…", "role": "member", "invited_by": {"name": "Ada Admin"},
                    "sent_at": "…", "expires_at": "…", "status": "pending"}],
@@ -279,9 +279,16 @@ the session default. An actor who isn't an active member (or a platform admin in
 
 - Visible to every member. `permissions` are the **caller's** org-level actions (empty for plain
   members), for gating the invite panel.
-- `capabilities` are evaluated on the server per member (DECISIONS #2): `command.request` and
-  `command.approve` for every active member (the two-person rule, D7, still forbids approving your
-  own request), plus `org.manage_members` and `org.invite` for organization admins.
+- `capabilities` are evaluated on the server per member (DECISIONS #2) by calling, for a scope
+  built from that member, the same policy function that enforces each one (DECISIONS #38; the
+  agreement is tested per role, never a role table):
+  - `command.request`, `command.approve`: the command review policy (`ReviewAccess`, which needs
+    `:manage_mission`). **Today that means organization admins only**; plain members get neither.
+    The two-person rule (D7) still forbids approving your own request.
+  - `org.manage_members`, `org.invite`: `:manage_organization_members` (organization admins).
+
+  When the server policy changes, these follow with no client change. The session reports the same
+  names per organization (session.md).
 - `invitations` holds only pending, unexpired ones, so `status` is always `pending`. Members are
   sorted by name; invitations newest first. There is no presence or last-seen yet.
 

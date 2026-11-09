@@ -8,6 +8,7 @@ defmodule CadenceWeb.Console.SessionController do
 
   alias Cadence.Auth.Scope
   alias CadenceWeb.Console.Access
+  alias CadenceWeb.Console.Capabilities
   alias CadenceWeb.Console.Problem
   alias CadenceWeb.Console.SessionJSON
 
@@ -97,7 +98,7 @@ defmodule CadenceWeb.Console.SessionController do
       %{
         organization: organization,
         role: membership && membership.role,
-        capabilities: org_scope.capabilities,
+        capabilities: Capabilities.organization(org_scope),
         missions: Cadence.Missions.list_missions(organization.organization_id)
       }
     end)

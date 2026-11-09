@@ -4,14 +4,14 @@ defmodule Cadence.Administration.OrganizationPeople do
   admins (the console People screen).
 
   Capabilities are evaluated on the server (DECISIONS #2) in a small,
-  stable vocabulary the UI gates on, mapped to today's policy until Cedar:
+  stable vocabulary the UI gates on. Each is derived by calling the policy
+  function that enforces it, for a scope built from that member
+  (DECISIONS #38), never from a role table:
 
-  | capability | today |
-  | --- | --- |
-  | `command.request` | any active member (`operate_mission`) |
-  | `command.approve` | any active human member (a second operator; never the requester) |
-  | `org.manage_members` | `organization_admin` |
-  | `org.invite` | `organization_admin` |
+  - `org.manage_members`, `org.invite`: `Policy` `:manage_organization_members`.
+  - Other contexts' capabilities (commanding's `command.request` /
+    `command.approve` from its review policy) come in through the
+    `:capabilities` option, since this identity module can't depend on them.
   """
 
   alias Cadence.{Accounts, Organizations}
@@ -20,13 +20,24 @@ defmodule Cadence.Administration.OrganizationPeople do
 
   @roles %{"member" => :member, "organization_admin" => :organization_admin}
 
-  @spec load(Scope.t(), binary()) :: {:ok, map()} | {:error, :forbidden | :organization_not_found}
-  def load(%Scope{} = scope, organization_id) do
+  @doc """
+  The directory. `opts[:capabilities]` (`Scope.t() -> [binary()]`) adds
+  capabilities evaluated by other contexts for each member's scope.
+  """
+  @spec load(Scope.t(), binary(), keyword()) ::
+          {:ok, map()} | {:error, :forbidden | :organization_not_found}
+  def load(%Scope{} = scope, organization_id, opts \\ []) do
     with :ok <- authorize(scope, :operate_organization, organization_id),
-         {:ok, _org} <- Organizations.fetch_organization(organization_id) do
+         {:ok, organization} <- Organizations.fetch_organization(organization_id) do
+      extra = Keyword.get(opts, :capabilities, fn _scope -> [] end)
+      scopes = member_scopes(organization)
+
       {:ok,
        %{
-         members: Enum.map(Accounts.list_member_directory(organization_id), &member/1),
+         members:
+           Enum.map(Accounts.list_member_directory(organization_id), fn row ->
+             member(row, Map.get(scopes, row.user_id), extra)
+           end),
          invitations:
            Enum.map(Accounts.list_invitation_directory(organization_id), &invitation/1),
          permissions: permissions(scope, organization_id)
@@ -79,11 +90,28 @@ defmodule Cadence.Administration.OrganizationPeople do
     if mission_name, do: "#{abilities} · #{mission_name}", else: "#{abilities} · all missions"
   end
 
+  @doc "The organization capabilities `scope` holds in `organization_id`, from enforcing policy."
   @spec permissions(Scope.t(), binary()) :: [binary()]
   def permissions(scope, organization_id) do
     if authorize(scope, :manage_organization_members, organization_id) == :ok,
       do: ["org.invite", "org.manage_members"],
       else: []
+  end
+
+  # Each active member's scope in the organization, as the server builds it
+  # for their requests (no admin mode: that's a per-session opt-in).
+  defp member_scopes(organization) do
+    organization.organization_id
+    |> Accounts.list_organization_members()
+    |> Map.new(fn %{user: user, membership: membership} ->
+      {user.user_id,
+       Scope.new(%{
+         user: user,
+         organization_id: organization.organization_id,
+         organization: organization,
+         organization_membership: membership
+       })}
+    end)
   end
 
   @doc "Invites `email` with `role`. Returns the invitation and whether mail was submitted."
@@ -118,23 +146,21 @@ defmodule Cadence.Administration.OrganizationPeople do
 
   def invite(%Scope{}, _organization_id, _params), do: {:error, :forbidden}
 
-  defp member(row) do
-    role = String.to_existing_atom(row.role)
-
+  defp member(row, member_scope, extra) do
     %{
       user_id: row.user_id,
       display_name: row.display_name,
       email: row.email,
-      role: role,
-      capabilities: member_capabilities(role),
+      role: String.to_existing_atom(row.role),
+      capabilities: member_capabilities(member_scope, extra),
       joined_at: row.joined_at
     }
   end
 
-  defp member_capabilities(:organization_admin),
-    do: ["command.request", "command.approve", "org.manage_members", "org.invite"]
+  defp member_capabilities(nil, _extra), do: []
 
-  defp member_capabilities(_member), do: ["command.request", "command.approve"]
+  defp member_capabilities(member_scope, extra),
+    do: extra.(member_scope) ++ permissions(member_scope, member_scope.organization_id)
 
   defp invitation(row) do
     %{

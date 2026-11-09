@@ -7,10 +7,12 @@ defmodule CadenceWeb.Console.PeopleController do
   use CadenceWeb, :controller
 
   alias Cadence.Administration.OrganizationPeople
-  alias CadenceWeb.Console.{ConfigJSON, Problem}
+  alias CadenceWeb.Console.{Capabilities, ConfigJSON, Problem}
 
   def index(conn, %{"organization_id" => organization_id}) do
-    case OrganizationPeople.load(conn.assigns.current_scope, organization_id) do
+    case OrganizationPeople.load(conn.assigns.current_scope, organization_id,
+           capabilities: &Capabilities.contributed/1
+         ) do
       {:ok, people} -> json(conn, %{data: ConfigJSON.encode(people)})
       {:error, reason} -> Problem.respond(conn, reason)
     end

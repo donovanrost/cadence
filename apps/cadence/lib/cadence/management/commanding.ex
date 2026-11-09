@@ -15,7 +15,11 @@ defmodule Cadence.Management.Commanding do
     StageStore
   }
 
-  alias Cadence.Management.Commanding.ApprovedCommand
+  alias Cadence.Management.Commanding.{ApprovedCommand, ReviewAccess}
+
+  @doc "`command.request` / `command.approve` from the enforcing review policy (DECISIONS #38)."
+  @spec capabilities(Cadence.Auth.Scope.t()) :: [binary()]
+  defdelegate capabilities(scope), to: ReviewAccess
 
   @spec persist_command_stage(binary(), CommandStage.t()) ::
           {:ok, CommandStage.t()} | {:error, term()}
