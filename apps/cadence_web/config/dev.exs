@@ -1,6 +1,9 @@
 import Config
 
-config :live_vue, vite_host: "http://127.0.0.1:5173"
+# CADENCE_LIVE_VUE_VITE_PORT (default 5173) must match the port vite.config.mjs
+# binds, so each worktree's LiveView pages load their own Vite dev server.
+config :live_vue,
+  vite_host: "http://127.0.0.1:#{System.get_env("CADENCE_LIVE_VUE_VITE_PORT", "5173")}"
 
 # Apogee console SPA: in dev, Phoenix serves /console by fetching index.html
 # from the console's Vite dev server (frontend/apps/console). Set

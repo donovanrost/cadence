@@ -4,6 +4,10 @@ import vue from "@vitejs/plugin-vue"
 import liveVuePlugin from "live_vue/vitePlugin"
 import {defineConfig} from "vite"
 
+// Each worktree's dev server needs its own port so its LiveView pages load
+// their own code; config/dev.exs reads the same variable for live_vue.
+const devPort = Number(process.env.CADENCE_LIVE_VUE_VITE_PORT || 5173)
+
 export default defineConfig(({command}) => ({
   root: "assets",
   base: command === "build" ? "/assets/" : "/",
@@ -15,9 +19,9 @@ export default defineConfig(({command}) => ({
   publicDir: "public",
   server: {
     host: "127.0.0.1",
-    port: 5173,
+    port: devPort,
     strictPort: true,
-    origin: "http://127.0.0.1:5173"
+    origin: `http://127.0.0.1:${devPort}`
   },
   plugins: [commonjs(), vue(), liveVuePlugin()],
   build: {
