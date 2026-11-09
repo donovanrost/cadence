@@ -51,6 +51,12 @@ const toneClass = {
         headline="Pick a point to plot"
         sentence="Add a spacecraft and search for a point. Each spacecraft × point is one series."
       />
+      <ApEmptyState
+        v-else-if="state.status === 'failed' && state.error.kind === 'unavailable'"
+        state="off"
+        headline="History not available"
+        :sentence="`The telemetry history store can't be reached (${state.error.message}).`"
+      />
       <ApRemote v-else :state="state" loading-label="LOADING HISTORY…" @retry="$emit('retry')">
         <TrendChart
           v-if="view"
