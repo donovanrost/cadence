@@ -96,6 +96,7 @@ const rangeText = computed(() =>
   >
     <ApGantt
       label="Drafted passes by station"
+      :label-width="rows.every((r) => r.label.length <= 8) ? 88 : 150"
       :rows="rows"
       :bars="bars"
       :window="window"
