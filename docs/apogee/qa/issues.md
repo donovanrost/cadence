@@ -15,6 +15,8 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 9 | Investigate B1 | "No active alarm" shown as nominal (green) while the mission has no limits configured (U13) | fe-ops | fixed (d3a2e569), e2e updated |
 | 10 | Investigate header | Prev/next links show "2 ]" but are named "Next spacecraft, EARENDIL-002" (WCAG 2.5.3) | fe-ops | fixed (d3a2e569), e2e updated |
 | 11 | Config API | First `GET /missions/:id/config` returned 500 during an e2e run; a later call 200 with a baseline created at that moment (suspected race in lazy baseline creation) | api / domain | fixed (0c037ba0) |
+| 12 | Palette | 'Show all N' `<button>` inside `role=listbox` (axe aria-required-children) | fe-ops | open |
+| 13 | Palette | Focus leaves the `aria-modal` dialog after two Tabs (no focus trap) | fe-ops | open |
 | 5 | Now · fleet matrix | Plane buttons: "P01" vs label "Plane 1" (WCAG 2.5.3) and 36×10px targets 18px apart (WCAG 2.5.8) | fe-ops | verified (8ccf851f) |
 
 ## Details
@@ -101,5 +103,17 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   returned 500 once. Immediately after, it returned 200 with a `baseline` head whose `applied_at`
   (23:17:43Z) matched that run, so the baseline was created lazily then. Two first requests
   creating the baseline concurrently is the likely cause. Server log had already rotated.
+
+### 12. Palette listbox contains a button
+
+- `features/palette/PaletteResults.vue:50-59`: "Show all N pages" is a `<button>` inside
+  `role="group"` within `role="listbox"`. A listbox may contain only options and groups, so axe
+  `aria-required-children` fires on `#palette-results`. Make it an option (activates on Enter like
+  the others) or move it outside the listbox. Test: palette "is accessible when open" (test.fail).
+
+### 13. Palette doesn't trap focus
+
+- Ctrl+K, then Tab twice: focus lands on the page behind the `aria-modal="true"` dialog. Keep Tab /
+  Shift+Tab inside the dialog until Esc. Test: palette "Tab keeps focus inside" (test.fail).
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
