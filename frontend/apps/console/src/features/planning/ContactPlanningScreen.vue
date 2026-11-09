@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionScope } from "@/shell";
 import { ApCallout, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApTabLinks } from "@/ui";
+import PolicyTab from "./PolicyTab.vue";
 import RequirementsTab from "./RequirementsTab.vue";
 import { fetchPlanning, situation, type PlanningSummary } from "./api.ts";
 
@@ -38,11 +39,14 @@ const subline = (s: PlanningSummary) =>
         ><span class="text-md text-text-3">{{ subline(state.value) }}</span></template
       >
     </ApPageHeader>
-    <ApPanel v-if="notProvided" index="P1" title="Contact planning" flush>
+    <ApTabLinks :links="links" :active="tab" label="Contact planning sections" />
+    <!-- Tabs load independently: the policy (CP2) works while the summary (CP1) isn't served yet. -->
+    <PolicyTab v-if="tab === 'policy'" :mission-id="scope.mission.id" />
+    <ApPanel v-else-if="notProvided" index="P1" title="Requirements" flush>
       <ApEmptyState
         state="off"
-        headline="Contact planning not available in the console yet"
-        sentence="This server doesn't serve the planning policy and contact requirements to the console yet."
+        headline="Contact requirements aren't available in the console yet"
+        sentence="The requirement templates and coverage arrive with their endpoint. The policy can be set up already."
       />
     </ApPanel>
     <ApRemote v-else :state="state" loading-label="Loading contact planning…" @retry="refetch">
@@ -50,15 +54,7 @@ const subline = (s: PlanningSummary) =>
         <ApCallout v-if="value.policy === null" tone="off">
           The scheduler needs a policy and at least one contact rule before it can draft a day.
         </ApCallout>
-        <ApTabLinks :links="links" :active="tab" label="Contact planning sections" />
-        <RequirementsTab v-if="tab === 'requirements'" :summary="value" />
-        <ApPanel v-else index="P4" title="Policy" flush>
-          <ApEmptyState
-            state="off"
-            headline="Policy editing arrives with its endpoint"
-            sentence="Mode, limits, reserves and diversity are edited here once the server serves the policy document and its fields."
-          />
-        </ApPanel>
+        <RequirementsTab :summary="value" />
       </template>
     </ApRemote>
   </div>

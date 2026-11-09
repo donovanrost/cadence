@@ -5,7 +5,7 @@ const { array, boolean, nullable, number, object, oneOf, optional, string, token
 
 const raw: Reader<unknown> = (value) => (value === undefined ? null : value);
 
-const field = object({
+export const schemaFieldReader = object({
   path: string,
   label: string,
   type: oneOf(["integer", "boolean", "enum", "string", "reference"]),
@@ -18,9 +18,9 @@ const field = object({
   visible_when: nullable(object({ path: string, equals: raw })),
   pattern: optional(nullable(string)),
 });
-export const kindSchemaReader = object({ kind: token, fields: array(field, 500) });
+export const kindSchemaReader = object({ kind: token, fields: array(schemaFieldReader, 500) });
 export type KindSchema = Decoded<typeof kindSchemaReader>;
-export type SchemaField = Decoded<typeof field>;
+export type SchemaField = Decoded<typeof schemaFieldReader>;
 export type EditableKind = "ground_station" | "transport";
 
 export function fetchKindSchema(
