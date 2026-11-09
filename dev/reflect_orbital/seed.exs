@@ -46,6 +46,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     transports = seed_sites(provider, deliveries)
     seed_fleet(transports)
     Cadence.Dev.ReflectOrbital.Configuration.prepare(scope)
+    Cadence.Dev.ReflectOrbital.Planning.prepare(scope)
     verify!()
 
     IO.puts("""

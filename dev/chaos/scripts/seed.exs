@@ -1,4 +1,4 @@
-for file <- ~w(fixture configuration seed activation live_contacts) do
+for file <- ~w(fixture configuration planning seed activation live_contacts) do
   Code.require_file("/lab/reflect_orbital/#{file}.exs")
 end
 
