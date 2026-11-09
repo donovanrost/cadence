@@ -254,6 +254,8 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
   # DECISIONS #28: conflicts and empty plans always block. Unsatisfied
   # requirements block unless the approver acknowledges every one of them with a
   # reason; without acknowledgements the original rule applies unchanged.
+  # Acknowledgements must match the unsatisfied set exactly (none extra, no
+  # duplicates), including when nothing is unsatisfied.
   defp proposal_satisfied(version, acknowledged) do
     cond do
       version.conflict_document["clear"] != true ->
@@ -262,11 +264,8 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
       version.selected_snapshot_ids ++ version.locked_snapshot_ids == [] ->
         {:error, :contact_plan_not_satisfied}
 
-      unsatisfied_ids(version) == [] ->
-        :ok
-
       acknowledged in [nil, []] ->
-        {:error, :contact_plan_not_satisfied}
+        if unsatisfied_ids(version) == [], do: :ok, else: {:error, :contact_plan_not_satisfied}
 
       true ->
         exceptions_cover(version, acknowledged)
@@ -335,7 +334,9 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
     id = item[:requirement_id] || item["requirement_id"]
     reason = (item[:reason] || item["reason"] || "") |> to_string() |> String.trim()
 
-    if is_binary(id) and byte_size(reason) in 10..2_000,
+    duplicate? = Enum.any?(acc, &(&1["contact_requirement_id"] == id))
+
+    if is_binary(id) and not duplicate? and byte_size(reason) in 10..2_000,
       do: {:cont, {:ok, acc ++ [%{"contact_requirement_id" => id, "reason" => reason}]}},
       else: {:halt, {:error, {:contact_plan_exception_invalid, id}}}
   end

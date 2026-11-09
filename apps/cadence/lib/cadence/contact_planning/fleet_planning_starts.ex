@@ -19,10 +19,16 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
     end
   end
 
-  def create(%Scope{} = scope, mission_id, params) do
+  @doc """
+  Creates the reviewed run. `operation_id:` (optional) records the console
+  operation on the run inside the same transaction, so a replay always finds it.
+  """
+  def create(%Scope{} = scope, mission_id, params, opts \\ []) do
     with :ok <- authorize(scope, mission_id),
          {:ok, window, _, evidence} <- admit(params, :create) do
-      Repo.transaction(fn -> claim(scope, mission_id, window, evidence) end)
+      Repo.transaction(fn ->
+        claim(scope, mission_id, window, evidence, Keyword.get(opts, :operation_id))
+      end)
       |> case do
         {:ok, {run, refs}} -> {:ok, run, refs}
         {:error, reason} -> {:error, reason}
@@ -30,7 +36,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
     end
   end
 
-  defp claim(scope, mission_id, window, evidence) do
+  defp claim(scope, mission_id, window, evidence, operation_id) do
     with {:ok, inputs} <- FleetStartInputs.load(scope, mission_id, window, true),
          true <- inputs.evidence === evidence,
          {:ok, generated, materialization} <- materialize(scope, mission_id, inputs),
@@ -43,13 +49,25 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
              requirement_refs: refs,
              creation_review_document: evidence,
              template_materialization_document: materialization
-           }) do
+           }),
+         :ok <- record_operation(scope, mission_id, run, operation_id) do
       {run, refs}
     else
       false -> Repo.rollback(:fleet_planning_review_changed)
       {:error, reason} -> Repo.rollback(reason)
     end
   end
+
+  defp record_operation(_scope, _mission_id, _run, nil), do: :ok
+
+  defp record_operation(scope, mission_id, run, operation_id),
+    do:
+      FleetPlanningRuns.claim_operation(
+        scope.organization_id,
+        mission_id,
+        run.fleet_planning_run_id,
+        operation_id
+      )
 
   def validate_input(params, mode) do
     case admit(params, mode) do

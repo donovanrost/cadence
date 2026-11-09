@@ -33,6 +33,7 @@ defmodule Cadence.ContactPlanning.FleetRunLock do
 
     case Repo.query(
            "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND granted " <>
+             "AND database = (SELECT oid FROM pg_database WHERE datname = current_database()) " <>
              "AND classid = $1::bigint::oid AND objid = $2::bigint::oid AND objsubid = 1)",
            [high, low]
          ) do

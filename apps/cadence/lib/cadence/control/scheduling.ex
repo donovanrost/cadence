@@ -5,8 +5,8 @@ defmodule Cadence.Control.Scheduling do
   re-implementing them:
 
   - `start_draft/4`: fleet-run preview + create for a UTC day (the evidence
-    pattern), then records the client's `operation_id` on the run so a replay
-    on any node finds it.
+    pattern), recording the client's `operation_id` on the run in the same
+    transaction, so a replay on any node finds it.
   - `run_draft/3` and `continue_draft/3`: execute or resume the run. These block
     on provider searches, so callers run them off the request path.
   - `draft_state/3`: the run's lifecycle, plus `interrupted` when a run sits
@@ -227,34 +227,26 @@ defmodule Cadence.Control.Scheduling do
            FleetPlanningStarts.preview(scope, mission_id, %{"fleet_run" => fleet_run})
            |> stringify(),
          {:ok, run, _refs} <-
-           FleetPlanningStarts.create(scope, mission_id, %{
-             "fleet_run" => fleet_run,
-             "evidence" => evidence
-           }) do
-      case FleetPlanningRuns.claim_operation(
-             scope.organization_id,
+           FleetPlanningStarts.create(
+             scope,
              mission_id,
-             run.fleet_planning_run_id,
-             operation_id
+             %{"fleet_run" => fleet_run, "evidence" => evidence},
+             operation_id: operation_id
            ) do
-        :ok ->
-          {:ok, run, :created}
+      {:ok, run, :created}
+    else
+      # A concurrent request with the same operation won the unique index; answer with its run.
+      {:error, :operation_already_claimed} ->
+        with {:ok, run} <-
+               FleetPlanningRuns.fetch_by_operation(
+                 scope.organization_id,
+                 mission_id,
+                 operation_id
+               ),
+             do: {:ok, run, :replayed}
 
-        {:error, :operation_already_claimed} ->
-          # A concurrent replay won; retire ours and answer with theirs.
-          _ =
-            FleetPlanningRuns.cancel(
-              scope,
-              mission_id,
-              run.fleet_planning_run_id,
-              "duplicate console operation"
-            )
-
-          start_draft(scope, mission_id, day, operation_id)
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+      other ->
+        other
     end
   end
 

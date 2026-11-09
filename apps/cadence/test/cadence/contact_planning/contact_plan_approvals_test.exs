@@ -119,6 +119,28 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
     assert {:error, :contact_plan_not_pending_approval} = approve(context)
   end
 
+  test "acknowledgements on a fully satisfied plan are rejected, not stored", context do
+    assert {:error, {:contact_plan_exceptions_unknown, [id]}} =
+             ContactPlanApprovals.approve(
+               context.admin_scope,
+               @mission_id,
+               context.plan.contact_plan_id,
+               context.plan.current_version,
+               context.plan_version.content_sha256,
+               "Reviewed provider, station, policy, and expiry",
+               now: DateTime.add(@now, 2, :second),
+               resolve_route: route_resolver(),
+               acknowledged_exceptions: [
+                 %{
+                   requirement_id: context.requirement.contact_requirement_id,
+                   reason: "Nothing is unmet here"
+                 }
+               ]
+             )
+
+    assert id == context.requirement.contact_requirement_id
+  end
+
   describe "acknowledged exceptions (DECISIONS #28)" do
     setup context do
       # A second requirement whose window is searched but left unselected.
@@ -189,6 +211,16 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
                  },
                  %{requirement_id: "nope", reason: "Not part of this plan at all"}
                ])
+    end
+
+    test "duplicate acknowledgements for one requirement are invalid", context do
+      ack = %{
+        requirement_id: context.gap.contact_requirement_id,
+        reason: "Weather window next pass"
+      }
+
+      assert {:error, {:contact_plan_exception_invalid, id}} = approve_gap(context, [ack, ack])
+      assert id == context.gap.contact_requirement_id
     end
 
     test "acknowledged gaps are approved and audited on the approval", context do

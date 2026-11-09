@@ -10,8 +10,8 @@ defmodule Cadence.Reads.ProfileDetail do
   rules not yet lifted onto the profile).
   """
 
-  alias Cadence.SpacecraftType
   alias Cadence.Reads.ProfileRouting
+  alias Cadence.SpacecraftType
   alias Cadence.SpacecraftType.Schema
 
   @spec load(binary(), binary(), binary()) :: {:ok, map()} | {:error, :spacecraft_type_not_found}
