@@ -178,3 +178,8 @@ A–F are addressed, and I spot-checked A and C in the code:
 
 G1 (the review hash depends on wall-clock time) is still open and low; it's fine to defer.
 **Status: approved.**
+
+**G1 closed (4b6eeb93).** `FleetStartInputs.load` takes `as_of`, which is part of the hashed
+evidence. The claim reloads at that `as_of`, and supersession uses it as `now`. An `as_of` older
+than 15 minutes, or in the future, returns `fleet_planning_review_changed`. Every CP3 finding is
+now closed.
