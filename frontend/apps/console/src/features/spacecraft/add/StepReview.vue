@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { ApPanel } from "@/ui";
 import { ApCheckRows as CheckRows } from "@/ui";
 import BatchPreview from "./BatchPreview.vue";
+import ServerChecks from "./ServerChecks.vue";
 import { batchChecks, checksMeta } from "./checks.ts";
 import { useDraft } from "./context.ts";
 
@@ -37,9 +38,9 @@ const rows = computed(() =>
   <ApPanel index="A2" title="Checks" :meta="checksMeta(checks)" flush>
     <CheckRows :rows="rows" />
     <p class="m-0 border-t border-hairline px-4 py-2.5 text-sm text-text-3">
-      Checked against this mission's spacecraft in the browser. Cadence checks again when the batch
-      is created.
+      Checked against this mission's spacecraft in the browser; the server's dry run is below.
     </p>
   </ApPanel>
+  <ServerChecks />
   <BatchPreview v-if="ready" :rows="ready.report.rows" />
 </template>

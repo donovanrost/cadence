@@ -6,6 +6,8 @@ export {
   failureOutcome,
   type FailureOutcome,
   invalidOpDetails,
+  previewOps,
+  type Preview,
   rejectionSentence,
   stageChange,
   type StageOp,

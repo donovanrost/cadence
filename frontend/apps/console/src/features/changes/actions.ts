@@ -213,3 +213,15 @@ export function failureOutcome(
     };
   return { changed: false, sentence: `Nothing was ${verb}. ${rejectionSentence(error)}` };
 }
+
+/** Dry run of unstaged ops (nothing written): per-op validation and conflicts, by op index. */
+export function previewOps(
+  key: Readonly<{ missionId: string; ops: readonly StageOp[] }>,
+  signal: AbortSignal,
+): Promise<ApiResult<Preview>> {
+  return request(`${base(key.missionId)}/preview`, previewReader, {
+    method: "POST",
+    body: { ops: key.ops },
+    signal,
+  });
+}
