@@ -43,7 +43,7 @@ defmodule CadenceWeb.API.CommandingParams do
     with {:ok, stage_name} <- required_string(params, "stage_name"),
          {:ok, visibility} <- command_stage_visibility(params, :private),
          {:ok, lifecycle_state} <- command_stage_lifecycle_state(params, :draft),
-         {:ok, owner} <- optional_map(params, "owner", Keyword.get(opts, :default_owner, %{})) do
+         {:ok, owner} <- scope_actor(params, "owner", opts, :default_owner) do
       {:ok,
        CommandStage.new(%{
          command_stage_id: string_value(params, "command_stage_id"),
@@ -65,7 +65,8 @@ defmodule CadenceWeb.API.CommandingParams do
            command_stage_visibility(params, existing_command_stage.visibility),
          {:ok, lifecycle_state} <-
            command_stage_lifecycle_state(params, existing_command_stage.lifecycle_state),
-         {:ok, owner} <- maybe_map_override(params, "owner", existing_command_stage.owner) do
+         {:ok, owner} <-
+           scope_actor(params, "owner", [existing: existing_command_stage.owner], :existing) do
       {:ok,
        CommandStage.new(%{
          command_stage_id: existing_command_stage.command_stage_id,
@@ -199,7 +200,7 @@ defmodule CadenceWeb.API.CommandingParams do
   def command_stage_submission(params, opts \\ []) when is_map(params) and is_list(opts) do
     with {:ok, staged_command_item_ids} <- required_string_list(params, "staged_command_item_ids"),
          {:ok, requested_by} <-
-           optional_map(params, "requested_by", Keyword.get(opts, :default_requested_by, %{})) do
+           scope_actor(params, "requested_by", opts, :default_requested_by) do
       {:ok, {staged_command_item_ids, requested_by || %{}}}
     end
   end
@@ -216,7 +217,7 @@ defmodule CadenceWeb.API.CommandingParams do
          {:ok, not_before} <- optional_datetime(params, "not_before"),
          {:ok, expires_at} <- optional_datetime(params, "expires_at"),
          {:ok, requested_by} <-
-           optional_map(params, "requested_by", Keyword.get(opts, :default_requested_by, %{})) do
+           scope_actor(params, "requested_by", opts, :default_requested_by) do
       {:ok,
        CommandRequest.new(%{
          command_request_id: string_value(params, "command_request_id"),
@@ -250,7 +251,7 @@ defmodule CadenceWeb.API.CommandingParams do
   def command_approval(command_request_id, params, opts \\ [])
       when is_binary(command_request_id) and is_map(params) and is_list(opts) do
     with {:ok, decided_by} <-
-           optional_map(params, "decided_by", Keyword.get(opts, :default_decided_by, %{})) do
+           scope_actor(params, "decided_by", opts, :default_decided_by) do
       {:ok,
        [
          reason: string_value(params, "reason"),
@@ -273,7 +274,7 @@ defmodule CadenceWeb.API.CommandingParams do
   @spec command_queue_entry(map(), keyword()) :: {:ok, keyword()} | {:error, term()}
   def command_queue_entry(params, opts \\ []) when is_map(params) and is_list(opts) do
     with {:ok, enqueued_by} <-
-           optional_map(params, "enqueued_by", Keyword.get(opts, :default_enqueued_by, %{})) do
+           scope_actor(params, "enqueued_by", opts, :default_enqueued_by) do
       {:ok,
        [
          enqueued_by: enqueued_by || %{},
@@ -297,7 +298,7 @@ defmodule CadenceWeb.API.CommandingParams do
   def command_release_attempt(params, opts \\ []) when is_map(params) and is_list(opts) do
     with {:ok, realized_contact_id} <- required_string(params, "realized_contact_id"),
          {:ok, released_by} <-
-           optional_map(params, "released_by", Keyword.get(opts, :default_released_by, %{})),
+           scope_actor(params, "released_by", opts, :default_released_by),
          {:ok, attempted_at} <- optional_datetime(params, "attempted_at") do
       {:ok,
        []
@@ -389,5 +390,15 @@ defmodule CadenceWeb.API.CommandingParams do
 
   defp optional_command_verifier_phase(params) when is_map(params) do
     optional_allowed_atom_param(params, "phase", @command_verifier_phases)
+  end
+
+  # Actors always come from the authenticated scope: a user, or a service identity acting as
+  # itself. A request that names any actor (owner, requested_by, decided_by, enqueued_by,
+  # released_by) is rejected rather than ignored, so a client can't attribute an action to
+  # someone else or approve its own request as another user (DECISIONS #30).
+  defp scope_actor(params, key, opts, default_key) do
+    if Map.has_key?(params, key),
+      do: {:error, {:invalid_param, key, :actor_not_assignable}},
+      else: {:ok, Keyword.get(opts, default_key, %{})}
   end
 end
