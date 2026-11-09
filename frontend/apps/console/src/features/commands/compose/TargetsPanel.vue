@@ -45,6 +45,16 @@ const stateModel = computed({
 const ids = computed(() => new Set(props.targets.map((sc) => sc.id)));
 const words = computed(() => chipWords(props.query, (id) => profiles.value.get(id) ?? id));
 const byId = computed(() => new Map(props.fleet.map((sc) => [sc.id, sc])));
+/** The keyboard path to one craft (the matrix is aria-hidden; qa note on #25). */
+const addOptions = computed(() => [
+  { value: "", label: "Add spacecraft…" },
+  ...props.fleet
+    .filter((sc) => !props.query.explicit.includes(sc.id))
+    .map((sc) => ({ value: sc.id, label: `${sc.name} · SCID ${sc.scid}` })),
+]);
+function addOne(id: string) {
+  if (id && !props.query.explicit.includes(id)) set({ explicit: [...props.query.explicit, id] });
+}
 </script>
 
 <template>
@@ -80,6 +90,13 @@ const byId = computed(() => new Map(props.fleet.map((sc) => [sc.id, sc])));
             { value: '', label: 'Any state' },
             ...fleetStates.map((s) => ({ value: s, label: fleetStateWord(s) })),
           ]"
+        />
+        <ApSelect
+          model-value=""
+          label="Spacecraft"
+          size="compact"
+          :options="addOptions"
+          @update:model-value="addOne"
         />
       </div>
       <div v-if="words.length || query.explicit.length" class="flex flex-wrap gap-1.5">
