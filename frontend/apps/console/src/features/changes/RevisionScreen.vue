@@ -5,9 +5,14 @@ import { useRemoteQuery } from "@/api";
 import { useMissionScope } from "@/shell";
 import { ApBreadcrumb, ApPageHeader, ApRemote, ApTag, formatAbsolute } from "@/ui";
 import EntryList from "./EntryList.vue";
+import RollbackPanel from "./RollbackPanel.vue";
+import { useConfigState } from "./useConfigState.ts";
 import { fetchRevision } from "./api.ts";
 
-/** Setup › Revisions › rN (Changes.md §4). Rollback arrives with domain P2 (config.rollback). */
+/**
+ * Setup › Revisions › rN (Changes.md §4). Rollback (#49): on the live revision, roll back to the
+ * one before it (undo); on an older one, roll back to it. Needs config.rollback.
+ */
 const route = useRoute();
 const scope = useMissionScope();
 const revision = computed(() => {
@@ -19,6 +24,16 @@ const key = computed(() =>
   revision.value === null ? null : { missionId: scope.value.mission.id, revision: revision.value },
 );
 const { state, refetch } = useRemoteQuery(key, fetchRevision);
+const config = useConfigState(scope.value.mission.id);
+const rollback = computed(() => {
+  const c = config.state.value;
+  const n = revision.value;
+  if (c.status !== "ready" || n === null || !c.value.permissions.has("config.rollback"))
+    return null;
+  const head = c.value.head.revision;
+  const to = n === head ? n - 1 : n < head ? n : null;
+  return to !== null && to >= 1 ? { to, staged: c.value.change_set?.staged_count ?? 0 } : null;
+});
 const crumbs = computed(() => [
   { label: "Revisions", to: { name: "setup.revisions" } },
   { label: revision.value === null ? "Unknown" : `r${revision.value}` },
@@ -49,5 +64,12 @@ const crumbs = computed(() => [
     <ApRemote :state="state" loading-label="Loading revision…" @retry="refetch">
       <template #default="{ value }"><EntryList :entries="value.entries" /></template>
     </ApRemote>
+    <RollbackPanel
+      v-if="rollback"
+      :key="rollback.to"
+      :mission-id="scope.mission.id"
+      :to="rollback.to"
+      :staged-count="rollback.staged"
+    />
   </div>
 </template>

@@ -204,7 +204,7 @@ export type StageOp = Readonly<{
   options?: Readonly<Record<string, unknown>>;
 }>;
 
-const stageResult = object({
+export const stageResultReader = object({
   change_set_id: token,
   change_id: token,
   version: integer,
@@ -212,7 +212,7 @@ const stageResult = object({
   base_revision: integer,
   entity_ids: array(token, 5000),
 });
-export type StageResult = Decoded<typeof stageResult>;
+export type StageResult = Decoded<typeof stageResultReader>;
 
 /** Stage one change (any number of ops) into the mission's open change set. */
 export function stageChange(
@@ -223,7 +223,7 @@ export function stageChange(
     ops: readonly StageOp[];
   }>,
 ): Promise<ApiResult<StageResult>> {
-  return request(`${base(missionId)}/stage`, stageResult, { method: "POST", body });
+  return request(`${base(missionId)}/stage`, stageResultReader, { method: "POST", body });
 }
 
 /** `invalid_op` details: which op (by index) failed, and why. */
