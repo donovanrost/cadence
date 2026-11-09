@@ -16,3 +16,14 @@ the save panel `SAVE AS V2` + Why + `APPLIES TO DRAFTS STARTED AFTER IT'S ACTIVE
 5. Help text exposes a raw key and JSON (`Per-resource capacities are edited as JSON
    ('resources.capacities')`). → "Per-antenna limits beyond this are set in Advanced." with the key in
    Technical details.
+
+## Requirements tab (ce660ecd), live CP1, 10:45Z
+Verified against ContactPlanning.md: h1 `490 SPACECRAFT HAVE NO CONTACT RULE`, subline `Policy v1 · mode
+advisory · 10 templates cover 10 of 500 spacecraft`, coverage strip (`10/500` with a caution bar), templates
+table with server rule summaries, `P3 Not covered` grouped by profile, a read-only template page (rule,
+applies to, priority, state, version history with authors, "Editing templates arrives with the requirement
+field schema."). Items:
+6. **Sort the templates** (by name / SCID): the order is 001, 005…010, 002…004.
+7. **The rule line uppercases its units** (`1 DOWNLINK ≥ 5 MIN EACH · EVERY 6H00`). Keep the rule in mono
+   **without** the uppercase transform, durations per U24/§4: `1 downlink ≥ 5 min each · every 6h 00m`
+   (lead did the same for units on mobile).
