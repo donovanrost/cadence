@@ -2,13 +2,25 @@
 import { computed, onScopeDispose, ref, watch } from "vue";
 import { useMissionScope } from "@/shell/index.ts";
 import { useRemoteQuery } from "@/api/index.ts";
-import { ApButton, ApChip, ApEmptyState, ApField, ApPanel, ApSelect } from "@/ui";
+import {
+  ApButton,
+  ApCallout,
+  ApChip,
+  ApEmptyState,
+  ApField,
+  ApPanel,
+  ApSelect,
+  ApStatusMark,
+} from "@/ui";
+import { describeApiError } from "@/api/index.ts";
+import { formatValue, withUnit } from "@/features/alarms/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
-import { fetchPoints } from "./api.ts";
+import { fetchPoints, type TelemetryPoint } from "./api.ts";
 
 /**
- * T1 · Spacecraft chips + point search. Until the point-search read exists (M23) the list says so
- * and a point id can be entered directly (the history read accepts any id).
+ * T1 · Spacecraft chips + point search (M23). An empty search lists the mission's points; with a
+ * spacecraft chosen, each point shows its latest value and limit state. An exact id can still be
+ * entered (the history read accepts any id).
  */
 const props = defineProps<{
   fleet: readonly FleetSpacecraft[];
@@ -37,7 +49,7 @@ function onPick(value: string) {
 const nameOf = (scid: number) => props.fleet.find((sc) => sc.scid === scid)?.name ?? `SCID ${scid}`;
 
 const q = ref("");
-/** Debounced query (120 ms, Palette.md); empty means no request, so loading the page never 404s. */
+/** Debounced query (120 ms, Palette.md); empty lists the mission's points. */
 const term = ref("");
 let timer: ReturnType<typeof setTimeout> | null = null;
 watch(q, (value) => {
@@ -52,9 +64,7 @@ onScopeDispose(() => {
 const firstSc = computed(() => props.fleet.find((sc) => sc.scid === props.scids[0])?.id);
 const search = useRemoteQuery(
   computed(() =>
-    term.value === ""
-      ? null
-      : JSON.stringify({ m: scope.value.mission.id, q: term.value, sc: firstSc.value ?? "" }),
+    JSON.stringify({ m: scope.value.mission.id, q: term.value, sc: firstSc.value ?? "" }),
   ),
   (k, signal) => {
     // Sound: produced by JSON.stringify above.
@@ -62,9 +72,14 @@ const search = useRemoteQuery(
     return fetchPoints(m, { q: text, ...(sc ? { spacecraftId: sc } : {}) }, signal);
   },
 );
-const searchMissing = computed(
-  () => search.state.value.status === "failed" && search.state.value.error.kind === "not_found",
-);
+const LIMIT_STATE = {
+  critical: "crit",
+  caution: "caution",
+  nominal: "nominal",
+  no_data: "stale",
+} as const;
+const latestText = (p: TelemetryPoint) =>
+  p.latest ? (withUnit(formatValue(p.latest.value), p.unit) ?? "—") : "No data yet";
 
 const manual = ref("");
 function addManual() {
@@ -111,9 +126,6 @@ function addManual() {
           Technical · exact point id
         </summary>
         <div class="flex flex-col gap-2 px-3 pb-3">
-          <p v-if="searchMissing" class="m-0 text-md text-text-3">
-            Point search isn't available yet.
-          </p>
           <form class="flex items-end gap-2" @submit.prevent="addManual">
             <div class="min-w-0 flex-1">
               <ApField v-model="manual" label="Point id" mono placeholder="EPS.sa1_current" />
@@ -129,11 +141,15 @@ function addManual() {
         </div>
       </details>
     </div>
+    <ApCallout v-if="search.state.value.status === 'failed'" tone="caution">
+      Couldn't search points: {{ describeApiError(search.state.value.error) }}
+      <template #action><ApButton size="compact" @click="search.refetch">Retry</ApButton></template>
+    </ApCallout>
     <ApEmptyState
-      v-if="searchMissing"
-      state="off"
-      headline="Point search not available yet"
-      sentence="The catalog search read isn't connected to this console yet."
+      v-else-if="
+        search.state.value.status === 'ready' && search.state.value.value.points.length === 0
+      "
+      :headline="term ? `No points match “${term}”` : 'No telemetry points in this mission yet'"
     />
     <ul v-else-if="search.state.value.status === 'ready'" class="m-0 list-none p-0">
       <li
@@ -146,9 +162,17 @@ function addManual() {
           class="flex min-h-11 w-full cursor-pointer flex-col px-4 py-2 text-left hover:bg-raised"
           @click="emit('addPoint', point.id)"
         >
-          <span class="font-mono text-sm text-readout normal-case">{{ point.id }}</span>
+          <span class="flex items-center gap-2 font-mono text-sm text-readout normal-case">
+            <ApStatusMark v-if="point.latest" :state="LIMIT_STATE[point.latest.limit_state]" />
+            {{ point.id }}
+            <span v-if="points.includes(point.id)" class="text-xs text-text-4 uppercase"
+              >added</span
+            >
+          </span>
           <span class="text-md text-text-3"
-            >{{ point.description ?? point.name }}{{ point.unit ? ` · ${point.unit}` : "" }}</span
+            ><template v-if="firstSc">{{ latestText(point) }} · </template
+            >{{ point.description ?? point.subsystem ?? point.name
+            }}{{ point.unit ? ` · ${point.unit}` : "" }}</span
           >
         </button>
       </li>

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import { grouped, groupJump, parseQuery, PER_GROUP, rowsOf, search } from "./results.ts";
+import type { TelemetryPoint } from "@/features/telemetry/index.ts";
+import { pointItems, telemetryQuery } from "./telemetry.ts";
 
 const fleet = Array.from({ length: 500 }, (_, i) => spacecraftRow(i + 1));
 const pages = [
@@ -61,5 +63,40 @@ describe("palette rows (qa #12, #13)", () => {
     const firstAction = mixed.findIndex((r) => r.group !== "Spacecraft");
     expect(groupJump(mixed, 0, false)).toBe(firstAction === -1 ? 0 : firstAction);
     expect(groupJump(mixed, 0, true)).toBe(mixed.findIndex((r) => r.group === mixed.at(-1)?.group));
+  });
+});
+
+describe("palette telemetry (M23)", () => {
+  const point = (id: string, latest: TelemetryPoint["latest"] = null): TelemetryPoint => ({
+    id,
+    name: id.split(".").at(-1) ?? id,
+    description: null,
+    unit: "V",
+    subsystem: "EPS",
+    type: "numeric",
+    latest,
+  });
+
+  it("scopes `312 vbat` to the spacecraft and needs 2+ characters otherwise", () => {
+    expect(telemetryQuery("312 vbat", fleet)?.spacecraft?.scid).toBe(312);
+    expect(telemetryQuery("312 vbat", fleet)?.q).toBe("vbat");
+    expect(telemetryQuery("vbat", fleet)).toEqual({ q: "vbat", spacecraft: null });
+    expect(telemetryQuery("v", fleet)).toBeNull();
+  });
+
+  it("writes `312 › VBAT` rows with the latest value and plots on ↵", () => {
+    const sc = fleet.find((s) => s.scid === 312) ?? null;
+    const [row] = pointItems(
+      [point("EPS.VBAT", { value: 23.1, received_at: null, limit_state: "critical" })],
+      sc,
+    );
+    expect(row).toMatchObject({
+      group: "Telemetry",
+      title: "312 › VBAT",
+      subtitle: "23.1 V · EPS · EPS.VBAT",
+      state: "crit",
+      to: { name: "ops.telemetry", query: { sc: "312", p: "EPS.VBAT" } },
+    });
+    expect(pointItems([point("EPS.VBAT")], null)[0]?.subtitle).toBe("EPS · EPS.VBAT");
   });
 });

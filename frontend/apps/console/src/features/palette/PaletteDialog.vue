@@ -15,6 +15,7 @@ import { useCommandAccess } from "@/features/commands/index.ts";
 import { useFleet } from "@/features/fleet/index.ts";
 import PaletteResults from "./PaletteResults.vue";
 import { grouped, groupJump, rowsOf, search, type Group, type PageEntry } from "./results.ts";
+import { usePointSearch } from "./usePointSearch.ts";
 
 /** The modal query line: combobox input + grouped listbox. Esc closes and restores focus. */
 const emit = defineEmits<{ close: [] }>();
@@ -46,8 +47,12 @@ const pages = computed<PageEntry[]>(() =>
 const spacecraft = computed(() =>
   fleet.state.value.status === "ready" ? fleet.state.value.value.spacecraft : [],
 );
+const points = usePointSearch(missionId, query, spacecraft);
 const groups = computed(() =>
-  grouped(search(query.value, spacecraft.value, pages.value, access.value.request), expanded.value),
+  grouped(
+    [...search(query.value, spacecraft.value, pages.value, access.value.request), ...points.value],
+    expanded.value,
+  ),
 );
 const rows = computed(() => rowsOf(groups.value));
 const strip = computed(() => {

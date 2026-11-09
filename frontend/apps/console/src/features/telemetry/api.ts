@@ -1,7 +1,7 @@
 import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
 import { engineeringValue } from "@/features/alarms/index.ts";
 
-/** Proposed contract (plans/ops.md, "Point search (M23)"); not implemented by api yet. */
+/** M23 point search (docs/apogee/api/ops.md, 5939f15d): the mission's canonical point set. */
 
 const point = d.object({
   id: d.token,

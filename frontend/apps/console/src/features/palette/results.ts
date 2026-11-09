@@ -4,11 +4,11 @@ import { fleetOpState, fleetStateWord, type FleetSpacecraft } from "@/features/f
 
 /**
  * ⌘K results (Palette.md). v1 searches client-side over what the console already has: the fleet
- * read (spacecraft, profiles, per-spacecraft actions) and the router (pages). Telemetry,
- * Commands and Stations groups appear when their search reads exist (ops plan M23/M17/M21).
+ * read (spacecraft, profiles, per-spacecraft actions) and the router (pages). Telemetry comes
+ * from the M23 point search (telemetry.ts); Commands and Stations appear when wired (M17/M21).
  */
 
-export const GROUPS = ["Spacecraft", "Actions", "Profiles", "Pages"] as const;
+export const GROUPS = ["Spacecraft", "Telemetry", "Actions", "Profiles", "Pages"] as const;
 export type Group = (typeof GROUPS)[number];
 export const PER_GROUP = 5;
 
