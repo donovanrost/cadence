@@ -76,7 +76,7 @@ Row: `[P1] [mark] [title link / secondary / meta] [action]`.
 - Action (compact button): `Engage` (alarm → Investigate), `Review` (GO poll → request review),
   `Station` (→ station / Replan), `Install` (→ Setup › Apps). The top P1 row's action is primary.
 - **Data:** `[{id, priority, state, kind: alarm|flight_event|missed_pass|approval|stale_group|
-  station|setup, title, spacecraft?: {id, name, scid}, evidence, raised_at, next_aos?: {station,
+  station|setup|attention (U31), title, spacecraft?: {id, name, scid}, evidence, raised_at, next_aos?: {station,
   at}, live_contact?: {station, los_at}, target: {kind, id}}]`.
 - **Empty:** `■` nominal callout "Nothing needs you. N spacecraft fresh and in limits." Never shown
   while anything is stale.

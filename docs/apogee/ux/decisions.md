@@ -290,3 +290,39 @@ re-planning a pass that may already be booked risks double-booking and double bi
 as booked or as not booked. Not-booked ones then become Demand rows and re-plan normally. Until domain
 offers a resolution action (`Mark booked` / `Mark not booked` with a note, audited), the screen offers none,
 and no dead buttons. When it lands, it sits per pass in that list.
+
+### U31 · Where mission "needs acknowledgment" items appear (DECISIONS #53/#54) (domain / api / fe-ops / lead)
+**Decision:** they use the console's existing "needs you" surface, **Now's action queue (A2)**, with no new
+rail item and no inbox page. Each open item from domain's attention read becomes a queue row of kind
+`attention` (subkind = source), ranked by U11 like everything else. The pass's own pages hold the detail
+and the actions.
+- **Ranking:**
+  - **P1** when the affected pass starts within 2 h, or is in progress.
+  - **P2** otherwise (`cancel_failed`, `late_confirmation`, `contradicts_attestation`).
+  - Within a priority, the soonest AOS comes first.
+  - Acknowledged items keep their priority and sort last within it (U21). Resolved items leave the queue
+    with "Resolved by Mira K." for 5 s.
+- **Rows** (title = `<SPACECRAFT NAME> · <what>`, secondary = evidence, meta = `SVB-1 · AOS T−01:12`):
+  - `contradicts_attestation`: "EARENDIL-001 · Northlight says a pass marked booked isn't." /
+    "Marked booked by Mira K. 10:52Z with ref NL-48213. Don't count on this contact."
+  - `late_confirmation`: "EARENDIL-001 · Northlight confirmed a pass marked not booked." / "Marked not
+    booked by Mira K. 10:52Z. It may be booked and billed."
+  - `cancel_failed`: "EARENDIL-001 · Northlight didn't accept the cancel." / "<provider's message>. The
+    pass may still be booked and billed."
+  - Action `Review`, which goes to the contact (`M/contacts/:contactId`, drawer). It's the primary only
+    when the row is the top P1 (U11).
+- **Contact drawer (D2)** for that pass: a caution block at the top with the open conflict in words, the
+  resolution record (who, when, note, provider reference, the provider's last answer), and the actions
+  domain offers (`Acknowledge`, `Resolve`). The `operator_attested` evidence reads
+  `BOOKED · ATTESTED BY MIRA K.` (not the provider's word), plus `UPLINK UNCONFIRMED` while #46 D1 holds.
+- **K1 for that day:** a caution callout under the header, "2 pass resolutions need you", which lists
+  them and links to each contact. No separate count anywhere else.
+- **Counts:** the `/counts` entry adds to Now's queue header (`6 OPEN`) and to the mobile Now badge. The
+  rail doesn't get a second number on Contacts (that count stays `7 AOS`).
+- **Future sources** (provider changes, …) join as new subkinds with the same row grammar. Each source
+  needs: subject (spacecraft and/or station), target route, evidence sentence, consequence time,
+  raised_at, actor of the originating action.
+**Data asked of domain's attention read:** `{id, source, conflict, state: open|acknowledged|resolved,
+acknowledged_by?, spacecraft_id, contact_id, station, provider, starts_at, raised_at, resolution:
+{action, actor, at, note, provider_reference?}, provider_message?}`.
+
