@@ -15,7 +15,10 @@ export const attentionReader = d.object({
   conflict: d.token,
   state: d.oneOf(["open", "acknowledged"] as const),
   acknowledged_by: d.nullable(who),
-  contact_id: d.token,
+  // d2632794: cancel_failed/late_confirmation may have no contact; reservation_id is the pass
+  // row id, which the Contacts drawer selects on.
+  contact_id: d.nullable(d.token),
+  reservation_id: d.optional(d.token),
   station: d.object({
     ref: d.nullable(d.string),
     id: d.nullable(d.token),

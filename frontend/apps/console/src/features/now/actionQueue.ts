@@ -252,7 +252,10 @@ function rowFor(item: ServerItem): QueueItem[] {
       const a = item.attention;
       if (!a) return [];
       const w = attentionWords(a);
-      const to: RouteLocationRaw = { name: "ops.contacts", query: { contact: a.contact_id } };
+      const pass = a.reservation_id ?? a.contact_id;
+      const to: RouteLocationRaw = pass
+        ? { name: "ops.contacts", query: { contact: pass } }
+        : { name: "ops.contacts" };
       return [
         {
           ...base(item),

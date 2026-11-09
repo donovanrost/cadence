@@ -176,6 +176,7 @@ describe("attention rows (U31, fafe581a)", () => {
         state: "open",
         acknowledged_by: null,
         contact_id: "contact-9",
+        reservation_id: "pass-9",
         station: { ref: "svb-1", id: "st-1", code: "SVB-1", name: "Svalbard 1" },
         provider: { id: "p-1", name: "Northlight" },
         starts_at: "2026-11-09T20:12:00Z",
@@ -202,7 +203,7 @@ describe("attention rows (U31, fafe581a)", () => {
     expect(row?.due).toEqual({ label: "AOS", at: "2026-11-09T20:12:00Z" });
     expect(row?.action).toEqual({
       label: "Review",
-      to: { name: "ops.contacts", query: { contact: "contact-9" } },
+      to: { name: "ops.contacts", query: { contact: "pass-9" } },
     });
   });
 
