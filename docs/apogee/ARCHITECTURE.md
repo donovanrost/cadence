@@ -155,6 +155,9 @@ Feature engineers compose these; ask lead before adding a new shared primitive.
   (from `frontend/`). Open `http://127.0.0.1:4011/console/`. Checks before commit, from `frontend/`:
   `node_modules/.bin/vp fmt apps/console && node_modules/.bin/vp check apps/console`,
   `cd apps/console && npx vue-tsc -b && corepack pnpm test`. (Use `mise exec --` if node isn't on PATH.)
+  vue-tsc runs with `checkUnknownComponents`: a component used in a template but not imported is
+  an error (otherwise it renders as an inert unknown element). `strictTemplates` stays off: it
+  also rejects `aria-*`/`data-*` fallthrough on Ap components.
 - A screen: `src/features/<area>/<Name>Screen.vue`, swap `pending` for it in
   `src/router/ops-routes.ts` (fe-ops) or `src/router/setup-routes.ts` (fe-setup). Route names are
   stable; link with `{ name: "ops.now" }` (org/mission params are inherited inside a mission).

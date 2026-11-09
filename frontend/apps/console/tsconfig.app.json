@@ -15,5 +15,8 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
+  },
+  "vueCompilerOptions": {
+    "checkUnknownComponents": true
   }
 }
