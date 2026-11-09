@@ -13,7 +13,7 @@ import PlanFooter from "./PlanFooter.vue";
 import { planHeaderTail } from "./plan-primary.ts";
 import PlanStatePanel from "./PlanStatePanel.vue";
 import SelectedPanel from "./SelectedPanel.vue";
-import { planErrorText } from "./errors.ts";
+import { isPlanSuperseded, planErrorText } from "./errors.ts";
 import SubmitSheet from "./SubmitSheet.vue";
 import SupersededCallout from "./SupersededCallout.vue";
 import { stationHits } from "./unavailable.ts";
@@ -61,7 +61,9 @@ const primary = computed(() =>
 async function onSubmit(acks: Acknowledgement[]) {
   if (view.value.kind !== "plan") return;
   const result = await submit(view.value.plan, acks);
-  if (result.ok) sheet.value?.close();
+  // A draft superseded meanwhile (409 plan_superseded): submit already re-read the plan, so close
+  // the sheet and let it land in the superseded state, which says nothing was submitted.
+  if (result.ok || isPlanSuperseded(result.error)) sheet.value?.close();
   else sheetError.value = result.error;
 }
 const editable = computed(

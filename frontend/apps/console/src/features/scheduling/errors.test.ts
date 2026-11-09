@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { planErrorText } from "./errors.ts";
+import { isPlanSuperseded, planErrorText } from "./errors.ts";
 
 describe("planErrorText", () => {
   it("names known refusals in plain words and falls back for the rest", () => {
@@ -22,5 +22,16 @@ describe("planErrorText", () => {
         details: null,
       }),
     ).toBe("Server says no.");
+  });
+});
+
+describe("isPlanSuperseded", () => {
+  it("is true only for a 409 plan_superseded", () => {
+    expect(
+      isPlanSuperseded({ kind: "conflict", code: "plan_superseded", message: "x", details: null }),
+    ).toBe(true);
+    expect(
+      isPlanSuperseded({ kind: "conflict", code: "plan_changed", message: "x", details: null }),
+    ).toBe(false);
   });
 });

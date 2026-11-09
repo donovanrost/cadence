@@ -24,3 +24,8 @@ export function planErrorText(error: ApiError): string {
   const code = "code" in error ? error.code : null;
   return (code && MESSAGES[code]) ?? describeApiError(error);
 }
+
+/** 409 plan_superseded: the draft's rules changed on read (U27); the screen shows the superseded state. */
+export function isPlanSuperseded(error: ApiError): boolean {
+  return error.kind === "conflict" && error.code === "plan_superseded";
+}
