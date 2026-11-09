@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
-import { previewOps, type Preview } from "@/features/changes/index.ts";
+import { itemLine, previewOps, type Preview } from "@/features/changes/index.ts";
 import { useMissionScope } from "@/shell";
 import { ApCheckRows, ApPanel, ApRemote, plural, type ApCheckRow } from "@/ui";
 import { useDraft } from "./context.ts";
@@ -36,9 +36,7 @@ function rows(p: Preview): readonly ApCheckRow[] {
           : "Every spacecraft is valid"
         : plural(check.items.length, "problem"),
     detail: check.items
-      .flatMap(
-        (i) => i.errors?.map((e) => `${e.path || "row"}: ${e.message}`) ?? [i.reason ?? i.kind],
-      )
+      .flatMap((i) => [itemLine(i)])
       .slice(0, 4)
       .join(" · "),
     ...(check.verdict === "go"

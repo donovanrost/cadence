@@ -10,6 +10,7 @@ import {
   stageChange,
   type Preview,
   type StageOp,
+  itemLine,
 } from "@/features/changes/index.ts";
 import { fetchStations } from "@/features/stations/index.ts";
 import { ApButton, ApCallout, ApPanel, ApRemote, ApSegmented, plural } from "@/ui";
@@ -45,9 +46,7 @@ const op = (): StageOp => ({
   options: { rollout: rollout.value },
 });
 function describe(p: Preview): { tone: "nominal" | "caution" | "crit"; text: string } {
-  const issues = p.checks.flatMap((c) =>
-    c.items.flatMap((i) => i.errors?.map((e) => e.message) ?? [i.reason ?? i.kind]),
-  );
+  const issues = p.checks.flatMap((c) => c.items.flatMap((i) => [itemLine(i)]));
   const changes = p.effects.reduce((n, e) => n + e.changes, 0);
   const keeps = p.effects.flatMap((e) => e.keeps);
   // Effect counts come from the server (Changes.md §1): say how many keep their setup, and why.

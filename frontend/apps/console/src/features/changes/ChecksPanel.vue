@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import type { RemoteState } from "@/api";
 import { ApButton, ApCallout, ApCheckRows, ApPanel, ApRemote, plural, type ApCheckRow } from "@/ui";
-import type { Preview } from "./actions.ts";
+import { itemLine, type Preview } from "./actions.ts";
 
 /** K2 Checks: the server's dry run of the staged set (validation, conflicts; more kinds in P2). */
 const props = defineProps<{ preview: RemoteState<Preview> }>();
@@ -21,14 +21,11 @@ function rows(preview: Preview): readonly ApCheckRow[] {
       check.items.length === 0
         ? check.key === "conflicts"
           ? "Every change applies cleanly on the live revision"
-          : "Every change is valid"
+          : check.key === "compatibility"
+            ? "Profile framing matches every transport's ingress"
+            : "Every change is valid"
         : `${plural(check.items.length, "problem")}`,
-    detail: check.items
-      .flatMap(
-        (item) => item.errors?.map((e) => `${e.path}: ${e.message}`) ?? [item.reason ?? item.kind],
-      )
-      .slice(0, 5)
-      .join(" · "),
+    detail: check.items.map(itemLine).slice(0, 5).join(" · "),
     ...(check.verdict === "go"
       ? { state: "nominal" as const, verdict: "GO" }
       : check.verdict === "hold"

@@ -13,7 +13,35 @@ const previewItem = object({
   entity_id: nullable(token),
   reason: decoders.optional(token),
   errors: decoders.optional(array(object({ path: string, message: string }), 200)),
+  // Compatibility HOLD (DECISIONS #33, domain): both values named.
+  spacecraft_count: decoders.optional(integer),
+  profile_value: decoders.optional(object({ path: string, value: (v: unknown) => v })),
+  transport_value: decoders.optional(
+    object({
+      transport: object({ id: token, name: string }),
+      path: string,
+      value: (v: unknown) => v,
+    }),
+  ),
+  sentence: decoders.optional(string),
 });
+export type PreviewItem = Decoded<typeof previewItem>;
+
+const shown = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
+
+/** One line per check item: server sentence first, then both values for a framing mismatch. */
+export function itemLine(item: PreviewItem): string {
+  if (item.profile_value && item.transport_value) {
+    const both = `profile ${item.profile_value.path} = ${shown(item.profile_value.value)} vs ${item.transport_value.transport.name} ${item.transport_value.path} = ${shown(item.transport_value.value)}`;
+    const count =
+      item.spacecraft_count === undefined ? "" : ` · ${item.spacecraft_count} spacecraft`;
+    return `${item.sentence ? `${item.sentence} ` : ""}(${both}${count})`;
+  }
+  if (item.sentence) return item.sentence;
+  if (item.errors && item.errors.length > 0)
+    return item.errors.map((e) => `${e.path}: ${e.message}`).join("; ");
+  return item.reason ?? item.kind;
+}
 
 export const previewReader = object({
   verdict,
