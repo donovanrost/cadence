@@ -11,13 +11,20 @@ const screen = missionPath("setup/contact-planning/policy");
 const summary404 = allow(/\/contact-planning -> 404/, /status of 404/);
 
 test.describe("Contact planning policy, organization admin", () => {
-  test.use({ allowedDiagnostics: summary404 });
+  test.use({
+    allowedDiagnostics: allow(
+      /\/contact-planning -> 404/,
+      /status of 404/,
+      /\/decision -> 409/,
+      /status of 409/,
+    ),
+  });
 
   test("shows the active policy's values", async ({ page }) => {
     await openConsole(page, screen);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(/contact planning/i);
     await expect(page.getByRole("textbox", { name: /longest planning window/i })).toHaveValue(
-      "172800",
+      "48h 00m",
     );
     await expect(page.getByRole("textbox", { name: /contacts per plan/i })).toHaveValue("1000");
     await expect(page.getByRole("button", { name: /save as v\d+/i })).toBeVisible();
@@ -42,6 +49,8 @@ test.describe("Contact planning policy, organization admin", () => {
     );
     await expect(waiting.first()).toBeVisible();
 
+    // The server requires a comment for any decision (qa #21).
+    await page.getByRole("textbox", { name: "Comment" }).fill("QA-E2E self-approval attempt");
     await page.getByRole("button", { name: /^approve v\d+/i }).click();
     await expect(
       page.getByText(

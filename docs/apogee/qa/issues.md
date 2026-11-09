@@ -20,7 +20,8 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 18 | Changes preview decode | Hold items lacked `change_id`; console couldn't decode the preview (K2 'reply wasn't understood', Apply stuck) | domain / fe-setup | verified (cc4afc5a, 86663423) |
 | 19 | Change-set submit | Submit answered 500 (DB pool timeout under load) after the apply had committed (r6, generation 4) | domain / api | open |
 | 20 | Station availability | Any OUTAGE window makes station-availability reads 500 (`binary_to_existing_atom("outage")`); the create returns 500 but persists | domain / api-ops | verified (306ca39c) |
-| 17 | Planning policy API | `pending.requested_by` is a bare id (UI expects `{name}`: whole page fails to decode); after a reject, `pending` still lists the version and `document` shows its values while `active_version` = 1 | api / fe-setup | fixed (58f948ae); reject path verified via API, UI pending view to re-verify |
+| 17 | Planning policy API | `pending.requested_by` is a bare id (UI expects `{name}`: whole page fails to decode); after a reject, `pending` still lists the version and `document` shows its values while `active_version` = 1 | api / fe-setup | verified (58f948ae; UI pending panel + reject) |
+| 21 | Planning policy decisions | Server requires `comment` on approve/reject; the UI allows an empty comment and shows only 'The request parameters are invalid.' | fe-setup / api | open |
 | 12 | Palette | 'Show all N' `<button>` inside `role=listbox` (axe aria-required-children) | fe-ops | verified (cb5b2d12) |
 | 13 | Palette | Focus leaves the `aria-modal` dialog after two Tabs (no focus trap) | fe-ops | verified (cb5b2d12) |
 | 14 | Catalog import | File picker shows no visible keyboard focus (WCAG 2.4.7) | fe-setup | verified (32c2cb4e) |
@@ -188,5 +189,14 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   → 500, yet the window persists (retry → 409 `window_overlaps`). Afterwards `GET
   /station-availability` and `GET /station-availability/earendil-svalbard` → 500.
 - Fix: explicit kind mapping instead of `binary_to_existing_atom`.
+
+### 21. Policy decision comment is required but the UI doesn't say so
+
+- `POST /contact-planning/policy/:version/decision` with `{decision: "approve", comment: ""}` →
+  422 `invalid_params`, `details.comment: "is required"`. The Approve/Reject buttons are enabled
+  with an empty Comment and the alert reads "Nothing was changed. The request parameters are
+  invalid." (scheduling.md doesn't state the comment is required.)
+- Fix: require the comment in the UI (disabled-with-reason, as Changes does for "why") or show
+  the field error; api documents it.
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
