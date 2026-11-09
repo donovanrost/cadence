@@ -8,6 +8,11 @@ defmodule Cadence.Reads.RepairDiff do
   - `moved`: a spacecraft lost one pass and gained another (paired in time
     order), with `offset_s` between their starts.
   - `dropped` / `added`: the rest.
+
+  With the candidate's locked snapshot ids (qa #30), `kept` is exactly the locked passes: the
+  current bookings the repair keeps. Every other candidate pass is a new booking, even one on
+  the same freed opportunity as a lost pass (new item, new idempotency key), so `moved` and
+  `added` together are what Apply sends.
   """
 
   alias Cadence.Comms.StationRefs
@@ -18,14 +23,32 @@ defmodule Cadence.Reads.RepairDiff do
           [ContactOpportunitySnapshot.t()],
           StationRefs.index()
         ) :: map()
-  def diff(before, after_passes, stations \\ %{}) do
+  def diff(before, after_passes, stations \\ %{}, locked \\ nil)
+
+  def diff(before, after_passes, stations, nil) do
     before_keys = MapSet.new(before, &key/1)
     after_keys = MapSet.new(after_passes, &key/1)
 
-    kept = Enum.filter(after_passes, &MapSet.member?(before_keys, key(&1)))
-    gone = Enum.reject(before, &MapSet.member?(after_keys, key(&1)))
-    new = Enum.reject(after_passes, &MapSet.member?(before_keys, key(&1)))
+    build(
+      Enum.filter(after_passes, &MapSet.member?(before_keys, key(&1))),
+      Enum.reject(before, &MapSet.member?(after_keys, key(&1))),
+      Enum.reject(after_passes, &MapSet.member?(before_keys, key(&1))),
+      stations
+    )
+  end
 
+  def diff(before, after_passes, stations, %MapSet{} = locked) do
+    locked? = &MapSet.member?(locked, &1.contact_opportunity_snapshot_id)
+
+    build(
+      Enum.filter(after_passes, locked?),
+      Enum.reject(before, locked?),
+      Enum.reject(after_passes, locked?),
+      stations
+    )
+  end
+
+  defp build(kept, gone, new, stations) do
     {moved, dropped, added} = pair(gone, new, stations)
     pass = &pass(&1, stations)
 

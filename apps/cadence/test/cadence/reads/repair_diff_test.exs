@@ -50,4 +50,25 @@ defmodule Cadence.Reads.RepairDiffTest do
     assert [%{snapshot_id: "c1"}] = diff.dropped
     assert [%{snapshot_id: "d2"}] = diff.added
   end
+
+  test "with locked ids, a lost pass re-planned on the same opportunity is a new booking (qa #30)" do
+    # 004 lost its booking; the repair re-selects the same opportunity as a new snapshot.
+    before = [pass("kept1", "sc-a", "w1", 0), pass("lost1", "sc-004", "w5", 60)]
+    after_passes = [pass("kept1", "sc-a", "w1", 0), pass("new1", "sc-004", "w5", 60)]
+
+    diff = RepairDiff.diff(before, after_passes, %{}, MapSet.new(["kept1"]))
+
+    assert diff.totals == %{kept: 1, moved: 1, dropped: 0, added: 0}
+    assert [%{snapshot_id: "kept1"}] = diff.kept
+
+    assert [
+             %{
+               spacecraft_id: "sc-004",
+               from: %{snapshot_id: "lost1"},
+               to: %{snapshot_id: "new1"},
+               offset_s: 0
+             }
+           ] =
+             diff.moved
+  end
 end

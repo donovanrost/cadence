@@ -9,9 +9,8 @@ defmodule CadenceWeb.Console.ContactDraftController do
   use CadenceWeb, :controller
 
   alias Cadence.Comms.StationRefs
-  alias Cadence.ContactPlanning.FleetPlanningRuns
+  alias Cadence.ContactPlanning.{FleetPlanningRuns, RepairChain}
   alias Cadence.Control.Scheduling
-  alias Cadence.Management.Contacts, as: ManagementContacts
   alias Cadence.Reads.{ContactPlanOverview, RepairDiff}
   alias CadenceWeb.Console.{ConfigJSON, Problem, SchedulingRunner}
 
@@ -75,25 +74,12 @@ defmodule CadenceWeb.Console.ContactDraftController do
   def show_repair(conn, %{"run_id" => run_id}) do
     case FleetPlanningRuns.fetch(org_id(conn), mission_id(conn), run_id) do
       {:ok, %{source_contact_plan_id: source_id} = run} when is_binary(source_id) ->
-        new_passes =
-          passes(conn, run.candidate_contact_plan_id, run.candidate_contact_plan_version)
-
-        old_passes = passes(conn, source_id, run.source_contact_plan_version)
-
         data =
           conn
           |> draft(run)
           |> Map.merge(%{
             source_plan: %{id: source_id, version: run.source_contact_plan_version},
-            diff:
-              if(run.candidate_contact_plan_id,
-                do:
-                  RepairDiff.diff(
-                    old_passes,
-                    new_passes,
-                    StationRefs.index(org_id(conn), mission_id(conn))
-                  )
-              )
+            diff: diff(conn, run)
           })
 
         json(conn, %{data: ConfigJSON.encode(data)})
@@ -103,11 +89,22 @@ defmodule CadenceWeb.Console.ContactDraftController do
     end
   end
 
-  defp passes(_conn, nil, _version), do: []
+  # qa #30: the bookings the repair started from (across the day's repair chain) against the
+  # candidate, classified by the candidate's locked passes.
+  defp diff(conn, run) do
+    case RepairChain.review_passes(run) do
+      nil ->
+        nil
 
-  defp passes(conn, plan_id, version),
-    do:
-      ManagementContacts.selected_opportunities(org_id(conn), mission_id(conn), plan_id, version)
+      %{before: before, after: after_passes, locked: locked} ->
+        RepairDiff.diff(
+          before,
+          after_passes,
+          StationRefs.index(org_id(conn), mission_id(conn)),
+          locked
+        )
+    end
+  end
 
   defp window(nil, nil), do: {:ok, nil}
 

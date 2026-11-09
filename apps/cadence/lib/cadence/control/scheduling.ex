@@ -31,6 +31,7 @@ defmodule Cadence.Control.Scheduling do
     FleetRunLock,
     FleetRunRepairs,
     FleetRunReviews,
+    RepairChain,
     StationConflicts
   }
 
@@ -199,15 +200,9 @@ defmodule Cadence.Control.Scheduling do
     end
   end
 
-  defp source_run(organization_id, mission_id, plan_id) do
-    case Enum.find(
-           FleetPlanningRuns.list(organization_id, mission_id),
-           &(&1.candidate_contact_plan_id == plan_id)
-         ) do
-      nil -> {:error, :repair_source_not_found}
-      run -> {:ok, run}
-    end
-  end
+  # qa #30: a repair starts from the chain head, whichever plan of the chain the console names.
+  defp source_run(organization_id, mission_id, plan_id),
+    do: RepairChain.head_run(organization_id, mission_id, plan_id)
 
   @doc "Books an approved plan with providers (blocking); holds the plan's execution lock."
   @spec execute_plan(Scope.t(), binary(), binary(), pos_integer(), binary()) ::

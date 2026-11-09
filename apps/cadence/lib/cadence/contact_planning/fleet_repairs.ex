@@ -239,6 +239,13 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
     |> Map.put(:repair_input_document, %{
       "repair_attempt" => source.repair_attempt,
       "source_plan_content_sha256" => source.plan_version.content_sha256,
+      # qa #30: what this repair replaces, paired with its new passes at materialization.
+      "lost_bookings" =>
+        RepairChain.lost_booking_inputs(
+          source.chain,
+          source.plan.organization_id,
+          source.plan.mission_id
+        ),
       "locked_commitments" =>
         Enum.map(source.locked_commitments, fn snapshot ->
           %{

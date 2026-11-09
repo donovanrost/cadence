@@ -18,7 +18,12 @@ defmodule Cadence.ContactPlanning.RepairChain do
   `lost_bookings/1` (lost and not replaced) feeds both the repair and the passes read.
   """
 
-  alias Cadence.ContactPlanning.{ContactPlanExecutions, ContactPlans, RepairLinks}
+  alias Cadence.ContactPlanning.{
+    ContactPlanExecutions,
+    ContactPlans,
+    FleetPlanningRuns,
+    RepairLinks
+  }
 
   @applied [:approved, :executing, :partially_reserved, :reserved, :failed]
   @live [:reserved, :uncertain, :requesting]
@@ -65,6 +70,78 @@ defmodule Cadence.ContactPlanning.RepairChain do
     end
   end
 
+  @doc """
+  The run that proposed the chain head of `plan_id` (the latest applied repair, else the plan
+  itself): the source a new repair starts from.
+  """
+  @spec head_run(binary(), binary(), binary()) ::
+          {:ok, struct()} | {:error, :repair_source_not_found}
+  def head_run(organization_id, mission_id, plan_id) do
+    head =
+      case load(organization_id, mission_id, plan_id) do
+        {:ok, chain} -> chain.head
+        {:error, _not_found} -> plan_id
+      end
+
+    case Enum.find(
+           FleetPlanningRuns.list(organization_id, mission_id),
+           &(&1.candidate_contact_plan_id == head)
+         ) do
+      nil -> {:error, :repair_source_not_found}
+      run -> {:ok, run}
+    end
+  end
+
+  @doc """
+  What a repair run proposes, for its diff (qa #30): `before` is the day's bookings it started
+  from (live ones across the chain, plus lost ones no *other* repair replaced), `after` the
+  candidate plan's passes, `locked` the candidate's locked snapshot ids. Stable after Apply.
+  """
+  @spec review_passes(struct()) ::
+          %{before: [struct()], after: [struct()], locked: MapSet.t()} | nil
+  def review_passes(%{candidate_contact_plan_id: plan_id, source_contact_plan_id: source} = run)
+      when is_binary(plan_id) and is_binary(source) do
+    org = run.organization_id
+    mission = run.mission_id
+
+    with {:ok, %{} = chain} <- load(org, mission, source),
+         {:ok, version} <-
+           ContactPlans.fetch_version(org, mission, plan_id, run.candidate_contact_plan_version) do
+      replaced_elsewhere =
+        for {lost, %{plan_id: by}} <- replacements(chain),
+            by != plan_id,
+            into: MapSet.new(),
+            do: lost
+
+      ids =
+        chain.items
+        |> Enum.filter(&(&1.contact_plan_id != plan_id and started_from?(&1, replaced_elsewhere)))
+        |> MapSet.new(& &1.contact_opportunity_snapshot_id)
+
+      before =
+        chain.plans
+        |> Enum.reject(&(&1 == plan_id))
+        |> Enum.flat_map(&ContactPlans.selected_snapshots(org, mission, &1, chain.versions[&1]))
+        |> Enum.filter(&MapSet.member?(ids, &1.contact_opportunity_snapshot_id))
+        |> Enum.uniq_by(& &1.contact_opportunity_snapshot_id)
+
+      %{
+        before: before,
+        after: ContactPlans.selected_snapshots(org, mission, plan_id, version.version),
+        locked: MapSet.new(version.locked_snapshot_ids)
+      }
+    else
+      _missing -> nil
+    end
+  end
+
+  def review_passes(_run), do: nil
+
+  defp started_from?(item, replaced_elsewhere),
+    do:
+      item.lifecycle_state in @live or
+        (lost?(item) and not MapSet.member?(replaced_elsewhere, lost_key(item)))
+
   @doc "Live items (the day's current bookings)."
   @spec live_items(t()) :: [struct()]
   def live_items(chain), do: Enum.filter(chain.items, &(&1.lifecycle_state in @live))
@@ -107,66 +184,28 @@ defmodule Cadence.ContactPlanning.RepairChain do
   def lost_key(item), do: item.provider_reservation_id || item.contact_plan_execution_item_id
 
   @doc """
-  Pairs a repair's new selections with the chain's lost bookings, per spacecraft in time
-  order: `%{new snapshot_id => lost key}`. `snapshots` maps snapshot ids to snapshots (the
-  lost items' and the new ones).
+  The chain's lost bookings as a repair records them in its input (`RepairPairing`):
+  `[%{"key", "spacecraft_id", "starts_at"}]`.
   """
-  @spec pair([struct()], [struct()], %{binary() => struct()}) :: %{binary() => binary()}
-  def pair(lost_items, new_snapshots, snapshots) do
-    lost_by =
-      Enum.group_by(lost_items, &spacecraft(snapshots[&1.contact_opportunity_snapshot_id]))
+  @spec lost_booking_inputs(t(), binary(), binary()) :: [map()]
+  def lost_booking_inputs(chain, organization_id, mission_id) do
+    snapshots =
+      chain.plans
+      |> Enum.flat_map(
+        &ContactPlans.selected_snapshots(organization_id, mission_id, &1, chain.versions[&1])
+      )
+      |> Map.new(&{&1.contact_opportunity_snapshot_id, &1})
 
-    new_by = Enum.group_by(new_snapshots, &spacecraft/1)
-
-    for {spacecraft_id, fresh} <- new_by,
-        {snapshot, item} <-
-          Enum.zip(
-            Enum.sort_by(fresh, & &1.starts_at, DateTime),
-            lost_by
-            |> Map.get(spacecraft_id, [])
-            |> Enum.sort_by(&starts(snapshots, &1), DateTime)
-          ),
-        into: %{},
-        do: {snapshot.contact_opportunity_snapshot_id, lost_key(item)}
-  end
-
-  @doc """
-  The pairing to persist when a repair run creates its candidate plan: `%{"replaces" => ...}`
-  (empty for a run that isn't a repair). New selections are the candidate's selected passes
-  that aren't locked; lost ones are the source chain's at this moment.
-  """
-  @spec replaces_summary(struct(), struct()) :: map()
-  def replaces_summary(%{source_contact_plan_id: source} = run, version) when is_binary(source) do
-    org = run.organization_id
-    mission = run.mission_id
-
-    with {:ok, chain} <- load(org, mission, source),
-         [_ | _] = lost <- lost_bookings(chain) do
-      locked = MapSet.new(version.locked_snapshot_ids)
-
-      fresh =
-        org
-        |> ContactPlans.selected_snapshots(mission, version.contact_plan_id, version.version)
-        |> Enum.reject(&MapSet.member?(locked, &1.contact_opportunity_snapshot_id))
-
-      snapshots =
-        chain.plans
-        |> Enum.flat_map(&ContactPlans.selected_snapshots(org, mission, &1, chain.versions[&1]))
-        |> Map.new(&{&1.contact_opportunity_snapshot_id, &1})
-
-      %{"replaces" => pair(lost, fresh, snapshots)}
-    else
-      _nothing_lost -> %{}
+    for item <- lost_bookings(chain),
+        snapshot = snapshots[item.contact_opportunity_snapshot_id],
+        snapshot != nil do
+      %{
+        "key" => lost_key(item),
+        "spacecraft_id" => (snapshot.route_binding_document || %{})["spacecraft_id"],
+        "starts_at" => DateTime.to_iso8601(snapshot.starts_at)
+      }
     end
   end
-
-  def replaces_summary(_run, _version), do: %{}
-
-  defp starts(snapshots, item),
-    do: snapshots[item.contact_opportunity_snapshot_id].starts_at
-
-  defp spacecraft(nil), do: nil
-  defp spacecraft(snapshot), do: (snapshot.route_binding_document || %{})["spacecraft_id"]
 
   defp root(plan_id, sources, seen) do
     case Map.fetch(sources, plan_id) do

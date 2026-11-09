@@ -17,7 +17,7 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
     FleetRepairInputs,
     FleetRunLock,
     Planner,
-    RepairChain
+    RepairPairing
   }
 
   @type result :: %{
@@ -192,7 +192,7 @@ defmodule Cadence.ContactPlanning.FleetPlanner do
                    "candidate_contact_plan_version" => version.version
                  })
                  # qa #30: which lost bookings this repair's new passes replace, fixed now.
-                 |> Map.merge(RepairChain.replaces_summary(run, version))
+                 |> Map.merge(RepairPairing.summary(run, version))
              },
              opts
            ) do

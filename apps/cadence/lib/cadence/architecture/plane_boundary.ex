@@ -362,6 +362,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/contact_planning/fleet_repair_inputs.ex" => :control,
     "lib/cadence/contact_planning/fleet_repairs.ex" => :control,
     "lib/cadence/contact_planning/repair_chain.ex" => :control,
+    "lib/cadence/contact_planning/repair_pairing.ex" => :control,
     "lib/cadence/contact_planning/planner.ex" => :control,
     "lib/cadence/contact_planning/policy_narrowing.ex" => :management,
     "lib/cadence/contacts/combined_downlink_record.ex" => :data,
