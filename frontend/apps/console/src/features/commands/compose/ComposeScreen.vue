@@ -3,7 +3,7 @@ import { computed, ref, shallowRef } from "vue";
 import { useRoute } from "vue-router";
 import { describeApiError } from "@/api/index.ts";
 import { TakeoverHeader, useMissionScope } from "@/shell/index.ts";
-import { plural, ApCallout, ApEmptyState, ApPanel, ApRemote, ApStationBar } from "@/ui";
+import { plural, ApButton, ApCallout, ApEmptyState, ApPanel, ApRemote, ApStationBar } from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
 import { fetchCommand } from "../api.ts";
 import DeliveryPanel from "./DeliveryPanel.vue";
@@ -112,8 +112,19 @@ const close = computed(() => {
       ><ApStationBar :steps="steps" :current="current" label="Sequence steps"
     /></template>
   </TakeoverHeader>
+  <!-- Mobile.md: building new uplink sequences is desktop-only by design (ux pass 2 #3). -->
+  <ApPanel index="C0" title="Desktop only" flush class="md:hidden">
+    <ApEmptyState
+      headline="New uplink sequences are desktop only, by design"
+      sentence="Approve requests and give GO / NO-GO from the phone; compose and arm sequences at a console."
+    >
+      <ApButton size="compact" :to="close">Back</ApButton>
+    </ApEmptyState>
+  </ApPanel>
   <ApRemote :state="fleet.state.value" loading-label="LOADING FLEET…" @retry="fleet.refetch">
-    <div class="grid min-h-0 flex-1 grid-cols-1 gap-3 console:grid-cols-[minmax(0,1fr)_360px]">
+    <div
+      class="grid min-h-0 flex-1 grid-cols-1 gap-3 max-md:hidden console:grid-cols-[minmax(0,1fr)_360px]"
+    >
       <div class="flex min-h-0 flex-col gap-3 overflow-auto">
         <div class="grid grid-cols-1 items-start gap-3 console:grid-cols-2">
           <TargetsPanel

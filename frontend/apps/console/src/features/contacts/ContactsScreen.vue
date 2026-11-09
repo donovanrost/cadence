@@ -84,7 +84,8 @@ const selected = computed(() => {
 });
 const view = computed(() => {
   const s = passes.state.value;
-  if (s.status !== "ready") return null;
+  // Wait for the fleet too: rows and D2 are labelled by name (R01), never by raw id.
+  if (s.status !== "ready" || fleet.state.value.status !== "ready") return null;
   const window = { from: Date.parse(s.value.from), to: Date.parse(s.value.to) };
   return {
     window,
