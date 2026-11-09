@@ -68,4 +68,19 @@ defmodule Cadence.Reads.CommandPreflightTest do
     assert [%{key: :size, result: :no_go, evidence: %{max_commands: 16, commands: 17}}] =
              oversize.checks
   end
+
+  test "review leaves the group's own members out of conflicts", c do
+    draft = draft(c.spacecraft, [command(c, "SET_COUNTER", %{"amount" => 2})], %{log_entry: "x"})
+
+    {:ok, group} =
+      GroupSubmission.submit(c.scope, c.mission, draft, preflight_digest: digest(c, draft))
+
+    {:ok, review} = CommandPreflight.review(c.org, c.mission, group)
+    assert %{result: :go, evidence: %{count: 0}} = result(review.checks, :conflicts)
+    assert %{result: :go} = result(review.checks, :changed_since_submit)
+
+    # A fresh draft on the same targets still sees them.
+    {:ok, other} = run(c, draft)
+    assert %{result: :hold, evidence: %{count: 2}} = result(other.checks, :conflicts)
+  end
 end

@@ -11,15 +11,19 @@ defmodule Cadence.Reads.CommandPreflight do
   """
 
   alias Cadence.Commanding
-  alias Cadence.Commanding.Groups.{CommandGroup, Validation}
+  alias Cadence.Commanding.Groups.{CommandGroup, GroupStore, Validation}
   alias Cadence.Comms.UplinkResolution
   alias Cadence.Reads.{CommandGroups, Passes}
 
   @contact_horizon_s 6 * 3_600
   @open_queue_states [:pending, :release_pending]
 
-  @spec run(binary(), binary(), map(), map()) :: {:ok, map()} | {:error, term()}
-  def run(organization_id, mission_id, requested_by, draft) do
+  @doc """
+  Runs the poll for a draft. Option `:exclude_request_ids` leaves those
+  requests out of `conflicts` (review passes the group's own members).
+  """
+  @spec run(binary(), binary(), map(), map(), keyword()) :: {:ok, map()} | {:error, term()}
+  def run(organization_id, mission_id, requested_by, draft, opts \\ []) do
     draft = %{
       draft
       | targets: UplinkResolution.annotate(organization_id, mission_id, draft.targets)
@@ -27,7 +31,7 @@ defmodule Cadence.Reads.CommandPreflight do
 
     case Validation.validate(organization_id, mission_id, requested_by, draft) do
       {:ok, validated} ->
-        {:ok, result(organization_id, mission_id, draft, validated)}
+        {:ok, result(organization_id, mission_id, draft, validated, opts)}
 
       {:error, {:command_group_too_large, evidence}} ->
         {:ok,
@@ -55,14 +59,20 @@ defmodule Cadence.Reads.CommandPreflight do
   def review(organization_id, mission_id, group) do
     draft = CommandGroups.draft_of(group)
 
-    with {:ok, preflight} <- run(organization_id, mission_id, group.requested_by, draft) do
+    own =
+      organization_id
+      |> GroupStore.members(mission_id, group.command_group_id)
+      |> Enum.map(& &1.command_request_id)
+
+    with {:ok, preflight} <-
+           run(organization_id, mission_id, group.requested_by, draft, exclude_request_ids: own) do
       changed? = preflight.digest != group.preflight["digest"]
       drift = check(:changed_since_submit, if(changed?, do: :hold, else: :go), [], %{})
       {:ok, %{preflight | checks: preflight.checks ++ [drift]}}
     end
   end
 
-  defp result(org, mission, draft, validated) do
+  defp result(org, mission, draft, validated, opts) do
     lanes = validated.targets |> Enum.map(& &1.source_endpoint_id) |> Enum.reject(&is_nil/1)
 
     checks = [
@@ -77,7 +87,12 @@ defmodule Cadence.Reads.CommandPreflight do
           commands: length(draft.commands)
         })
       ),
-      conflicts_check(org, mission, lanes),
+      conflicts_check(
+        org,
+        mission,
+        lanes,
+        MapSet.new(Keyword.get(opts, :exclude_request_ids, []))
+      ),
       contact_check(org, mission, draft, validated.targets),
       two_person_check(validated.policy)
     ]
@@ -133,9 +148,9 @@ defmodule Cadence.Reads.CommandPreflight do
 
   # Open work already on the targets' lanes: queued or releasing entries, plus requests
   # waiting for approval.
-  defp conflicts_check(_org, _mission, []), do: check(:conflicts, :go, [], %{count: 0})
+  defp conflicts_check(_org, _mission, [], _own), do: check(:conflicts, :go, [], %{count: 0})
 
-  defp conflicts_check(org, mission, lanes) do
+  defp conflicts_check(org, mission, lanes, own) do
     lane_set = MapSet.new(lanes)
 
     queued =
@@ -153,7 +168,10 @@ defmodule Cadence.Reads.CommandPreflight do
             MapSet.member?(lane_set, &1.source_endpoint_ref))
       )
 
-    ids = Enum.map(queued, & &1.command_request_id) ++ Enum.map(pending, & &1.command_request_id)
+    ids =
+      (Enum.map(queued, & &1.command_request_id) ++ Enum.map(pending, & &1.command_request_id))
+      |> Enum.reject(&MapSet.member?(own, &1))
+
     result = if ids == [], do: :go, else: :hold
     check(:conflicts, result, [], %{count: length(ids), command_request_ids: Enum.uniq(ids)})
   end

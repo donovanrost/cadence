@@ -187,7 +187,8 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   is its first unfinished member's. `end_reason`: `aborted | release_basis_changed |
   earlier_command_failed | expired | excluded_at_review | canceled | rejected` (or null).
 - `…/preflight` re-runs preflight on the submitted inputs for Approve (A2) and adds
-  `changed_since_submit` (`hold` when the result no longer matches what was submitted).
+  `changed_since_submit` (`hold` when the result no longer matches what was submitted). Its
+  `conflicts` check leaves out the group's own members, so only other work on the lanes counts.
 - Compose "send back" clone: everything a new draft needs is in the show response.
 
 ### `POST /command-groups/:id/decision`
