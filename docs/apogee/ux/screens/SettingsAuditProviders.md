@@ -43,7 +43,7 @@ filters: actor (select) · mission (select) · kind chips (Config · Commanding 
 ## Provider accounts (`O/org/provider-accounts[/:accountId]`, org admins)
 **Question:** "Which ground-network providers can this org book, and are the credentials healthy?"
 - **List** (ApTable): Provider (display name + mono provider type) · Account name · Status tag
-  (`■ CONNECTED` / `▲ CREDENTIALS EXPIRING · 6 days` / `◆ AUTH FAILED` / hatched `NOT CHECKED`) ·
+  (`■ CONNECTED` only when the provider was actually contacted / `REFERENCE OK · PROVIDER NOT CONTACTED` neutral / `▲ REFERENCE MISSING` / `◆ AUTH FAILED` / hatched `NOT CHECKED`) ·
   Missions using it (count, link) · Last successful call (`T+04:12`) · Added (by, when). Primary `Add
   provider account`.
 - **Add / detail (revised per api's design note: Cadence never receives secret values):** fields from the
@@ -55,9 +55,13 @@ filters: actor (select) · mission (select) · kind chips (Config · Commanding 
     `NORTHLIGHT_API_KEY` (env). Help: "Cadence reads the secret from there when it calls the provider. The
     secret itself is never sent to or stored in Cadence."
   - No masked "•••• set" field and no password input anywhere on this page.
-  `Test connection` (secondary) checks that the reference resolves **and** the provider accepts it, and
-  reports which failed: "Reference not found in the secret manager" vs "Provider rejected the
-  credential (401)" vs "Connected · 312 ms". Save is enabled when the required fields are filled; an
+  `Test reference` (secondary; renamed from Test connection while that's all it does) reports exactly what
+  was checked (api returns `checked`, `failed`, reason code, message): today only the reference is checked,
+  so success reads "Reference found · the provider wasn't contacted (provider sign-in checks aren't
+  available yet)", and failure reads the server's message ("Reference not found in the secret manager").
+  Never "Connected" unless `checked` includes the provider. Environment-variable references where local
+  credentials aren't enabled show the server's validation error under the backend choice
+  (`details['credential.backend']`). Save is enabled when the required fields are filled; an
   untested account saves with status `NOT CHECKED`.
   **Editing** saves a new version (`v2`); changing the reference is just a new reference value. History
   lists versions with who/when and the reference (not secret) used. Missions panel: which missions use
