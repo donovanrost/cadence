@@ -211,6 +211,12 @@ defmodule Cadence.Configuration.FramingGenerationTest do
       # Same keys as validation and conflict items, so clients decode one item shape (qa #18).
       assert Map.has_key?(item, :change_id) and Map.has_key?(item, :op_id)
       assert item.transport_value.value == 1115
+      # ux: a plain sentence with units; the raw comparison in detail.
+      assert item.sentence =~ "would decode 1,024-byte frames, but"
+      assert item.sentence =~ "sends 1,115-byte frames."
+
+      assert item.detail =~
+               "frame_parameters.frame_size = 1024 (profile) vs ingress_metadata.frame_size = 1115"
     end
 
     test "framing that can't be checked against a transport holds as framing_unverified", c do

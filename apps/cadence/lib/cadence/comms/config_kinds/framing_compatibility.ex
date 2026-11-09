@@ -111,11 +111,37 @@ defmodule Cadence.Comms.ConfigKinds.FramingCompatibility do
             "ingress_metadata." <> String.replace_prefix(difference.path, "frame_parameters.", ""),
           value: difference.transport_value
         },
+        # ux: a plain sentence with units; the raw comparison stays in `detail`.
         sentence:
-          "#{drift.spacecraft_count} spacecraft on #{drift.profile.name} will decode with " <>
-            "#{difference.path} #{inspect(difference.profile_value)} instead of " <>
-            "#{drift.transport.name}'s #{inspect(difference.transport_value)}."
+          "#{drift.spacecraft_count} spacecraft on #{drift.profile.name} would decode " <>
+            "#{framing(difference.path, difference.profile_value)}, but " <>
+            "#{drift.transport.name} sends #{framing(difference.path, difference.transport_value)}.",
+        detail:
+          "#{difference.path} = #{inspect(difference.profile_value)} (profile) vs " <>
+            "ingress_metadata.#{String.replace_prefix(difference.path, "frame_parameters.", "")} = " <>
+            "#{inspect(difference.transport_value)} (#{drift.transport.name})"
       }
     end)
+  end
+
+  defp framing("frame_parameters.frame_size", value), do: "#{bytes(value)} frames"
+
+  defp framing("frame_parameters.secondary_header_length", value),
+    do: "a #{bytes(value)} secondary header"
+
+  defp framing("frame_parameters.ocf_length", value), do: "a #{bytes(value)} OCF"
+  defp framing("frame_parameters.fecf", true), do: "frames with an FECF"
+  defp framing("frame_parameters.fecf", false), do: "frames without an FECF"
+  defp framing(path, value), do: "#{path} #{inspect(value)}"
+
+  defp bytes(value) when is_integer(value), do: "#{thousands(value)}-byte"
+  defp bytes(value), do: inspect(value)
+
+  defp thousands(value) do
+    value
+    |> Integer.to_string()
+    |> String.reverse()
+    |> String.replace(~r/(\d{3})(?=\d)/, "\\1,")
+    |> String.reverse()
   end
 end
