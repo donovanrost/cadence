@@ -32,7 +32,7 @@ const note = defineModel<string>("note", { required: true });
     v-model="note"
     label="Note"
     required
-    :placeholder="booked ? 'How did you confirm it?' : undefined"
+    :placeholder="booked ? 'How did you confirm it?' : 'How do you know it isn\'t booked?'"
     :error="errors['note'] ?? null"
   />
   <p v-if="booked" class="m-0 text-sm text-text-3">
