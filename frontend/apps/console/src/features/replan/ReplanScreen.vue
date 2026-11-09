@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { describeApiError, useRemoteQuery, type ApiError } from "@/api";
+import { useRemoteQuery, type ApiError } from "@/api";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
 import { ApButton, ApCallout, ApPanel, ApRemote, ApStationBar, plural } from "@/ui";
 import {
@@ -19,6 +19,7 @@ import {
   fetchAvailability,
 } from "@/features/scheduling/index.ts";
 import ChangesPanel from "./ChangesPanel.vue";
+import { replanErrorText } from "./errors.ts";
 import ImpactPanel from "./ImpactPanel.vue";
 import StationImpactPanel from "./StationImpactPanel.vue";
 import { useStationEntry } from "./useStationEntry.ts";
@@ -214,7 +215,7 @@ async function onApply(acks: Acknowledgement[]) {
           :live="live"
         />
       </ApPanel>
-      <ApCallout v-if="actionError" tone="caution">{{ describeApiError(actionError) }}</ApCallout>
+      <ApCallout v-if="actionError" tone="caution">{{ replanErrorText(actionError) }}</ApCallout>
       <footer v-if="!proposal" class="flex flex-none justify-end border-t border-hairline pt-3">
         <ApButton
           v-if="!runId && repairableStates.includes(live.state)"
