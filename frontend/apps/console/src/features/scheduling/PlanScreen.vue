@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { ResolveBookingActions } from "@/features/resolutions/index.ts";
 import { useRoute } from "vue-router";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
 import type { ApiError } from "@/api";
@@ -47,6 +48,7 @@ const {
   edit,
   alternatives,
   availability,
+  refresh,
 } = usePlanDay(missionId, day, focused);
 const session = useSession();
 const isAdmin = computed(() => canAdministerOrganization(session, scope.value.organization));
@@ -146,7 +148,22 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
     <SupersededCallout v-if="view.plan.superseded" :superseded="view.plan.superseded" />
     <ApCallout v-else-if="stopped" :tone="stopped.tone">{{ stopped.text }}</ApCallout>
     <!-- U30: on any state that has unconfirmed bookings, on top of the state's own callout. -->
-    <UnconfirmedCallout v-if="view.plan.unconfirmed" :plan="view.plan" :name-of="nameOf" />
+    <UnconfirmedCallout
+      v-if="view.plan.unconfirmed"
+      :plan="view.plan"
+      :name-of="nameOf"
+      :member-note="!isAdmin"
+    >
+      <!-- U32 (fe-setup's resolutions): org admins resolve each pass; the plan refetches after. -->
+      <template v-if="isAdmin" #row-actions="{ pass }">
+        <ResolveBookingActions
+          :mission-id="missionId"
+          :plan-id="view.plan.id"
+          :pass="pass"
+          @resolved="refresh"
+        />
+      </template>
+    </UnconfirmedCallout>
     <!-- An older server without the unconfirmed block: no counts, no guess. -->
     <ApCallout v-else-if="view.plan.state === 'unconfirmed'" tone="caution">
       The provider hasn't confirmed some bookings within the confirmation window. They may or may
