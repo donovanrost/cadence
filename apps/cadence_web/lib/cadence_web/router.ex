@@ -769,6 +769,12 @@ defmodule CadenceWeb.Router do
       get("/action-queue", ActionQueueController, :show)
       get("/commands", CommandCatalogController, :index)
       get("/commands/:command_id", CommandCatalogController, :show)
+      get("/alarm-episodes", AlarmEpisodeController, :index)
+      get("/alarm-episodes/:episode_id", AlarmEpisodeController, :show)
+      post("/alarm-episodes/:episode_id/acknowledge", AlarmEpisodeController, :acknowledge)
+      post("/alarm-episodes/:episode_id/assign", AlarmEpisodeController, :assign)
+      post("/alarm-episodes/:episode_id/hand-off", AlarmEpisodeController, :hand_off)
+      post("/alarm-episodes/:episode_id/notes", AlarmEpisodeController, :add_note)
 
       # -- Setup (owner: api). Contracts: docs/apogee/api/setup.md
       get("/spacecraft", SpacecraftController, :index)
@@ -780,6 +786,9 @@ defmodule CadenceWeb.Router do
       get("/catalog/imports/:import_run_id", CatalogController, :import_run)
       post("/catalog/imports", CatalogImportController, :create)
       get("/catalog/importers", CatalogImportController, :importers)
+      get("/ground-stations", CommsController, :stations)
+      get("/transports", CommsController, :transports)
+      get("/routing-rules", CommsController, :routing_rules)
 
       # -- Change sets (owner: api). Contract: docs/apogee/api/changes.md
       scope "/config" do
@@ -796,6 +805,7 @@ defmodule CadenceWeb.Router do
         get("/revisions", ConfigController, :revisions)
         get("/revisions/:revision", ConfigController, :revision)
         get("/compare", ConfigController, :compare)
+        get("/kinds/:kind/schema", ConfigController, :kind_schema)
       end
     end
 

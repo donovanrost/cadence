@@ -1,0 +1,100 @@
+defmodule Cadence.Reads.ConfigKindSchema do
+  @moduledoc """
+  Editable-field schemas for change-set kinds, in the same field shape as
+  `Cadence.SpacecraftType.Schema` (`path, label, type, unit, enum, range,
+  default, required, help, visible_when`), so console edit forms are generated.
+
+  `ground_station` mirrors the kind's validation (name, provider, region).
+  `transport` adds the transport kind's own configuration fields (today
+  `tcp_socket`) under `configuration.*`, using the keys its
+  `normalize_config/1` accepts.
+  """
+
+  alias Cadence.Comms.TransportKind
+
+  # Definition field names that differ from the configuration keys accepted on write.
+  @config_keys %{tcp_mode: "mode"}
+
+  @spec fields(binary()) :: {:ok, [map()]} | {:error, :unknown_kind}
+  def fields("ground_station") do
+    {:ok,
+     [
+       field("display_name", "Name", :string, required: true, range: %{min: 1, max: 200}),
+       field("provider", "Provider", :string, range: %{max: 200}),
+       field("region", "Region", :string, range: %{max: 200})
+     ]}
+  end
+
+  def fields("transport") do
+    {:ok,
+     [
+       field("display_name", "Name", :string, required: true, range: %{min: 1, max: 200}),
+       field("transport_kind", "Kind", :enum,
+         required: true,
+         default: "tcp_socket",
+         enum: Enum.map(TransportKind.all(), &%{value: &1.form_value, label: &1.label})
+       )
+     ] ++ configuration_fields()}
+  end
+
+  def fields(_kind), do: {:error, :unknown_kind}
+
+  defp configuration_fields do
+    TransportKind.all()
+    |> Enum.flat_map(fn definition ->
+      definition.configuration.sections
+      |> Enum.flat_map(& &1.fields)
+      |> Enum.map(&configuration_field(&1, definition.form_value))
+    end)
+  end
+
+  defp configuration_field(definition_field, transport_kind) do
+    key = Map.get(@config_keys, definition_field.field, to_string(definition_field.field))
+
+    field("configuration." <> key, definition_field.label, type(definition_field.type),
+      required: definition_field.required,
+      default: blank_to_nil(definition_field.default),
+      enum: enum(definition_field.options),
+      range: range(definition_field.min, definition_field.max),
+      help: definition_field.help,
+      visible_when: visible_when(definition_field.visible_when, transport_kind)
+    )
+  end
+
+  defp visible_when(nil, transport_kind),
+    do: %{path: "transport_kind", equals: transport_kind}
+
+  defp visible_when(%{field: field, equals: value}, _transport_kind),
+    do: %{path: "configuration." <> Map.get(@config_keys, field, to_string(field)), equals: value}
+
+  defp type(:select), do: :enum
+  defp type(:number), do: :integer
+  defp type(:checkbox), do: :boolean
+  defp type(_text), do: :string
+
+  defp enum([]), do: nil
+
+  defp enum(options),
+    do: Enum.map(options, fn {label, value} -> %{value: value, label: label} end)
+
+  defp range(nil, nil), do: nil
+  defp range(min, max), do: %{min: min, max: max}
+
+  defp field(path, label, type, opts) do
+    %{
+      path: path,
+      label: label,
+      type: type,
+      unit: Keyword.get(opts, :unit),
+      enum: Keyword.get(opts, :enum),
+      range: Keyword.get(opts, :range),
+      default: Keyword.get(opts, :default),
+      required: Keyword.get(opts, :required, false),
+      help: Keyword.get(opts, :help),
+      visible_when: Keyword.get(opts, :visible_when)
+    }
+  end
+
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(value), do: value
+end

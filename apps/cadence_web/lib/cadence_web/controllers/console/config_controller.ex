@@ -8,7 +8,8 @@ defmodule CadenceWeb.Console.ConfigController do
   use CadenceWeb, :controller
 
   alias Cadence.Control.Configuration
-  alias CadenceWeb.Console.{ConfigJSON, ConfigParams}
+  alias Cadence.Reads.ConfigKindSchema
+  alias CadenceWeb.Console.{ConfigJSON, ConfigParams, Problem}
 
   def show(conn, _params) do
     with {:ok, current} <- Configuration.current(scope(conn), mission_id(conn)),
@@ -99,6 +100,18 @@ defmodule CadenceWeb.Console.ConfigController do
       ok(conn, %{from: from, to: to, entries: entries})
     end
     |> reply(conn)
+  end
+
+  def kind_schema(conn, %{"kind" => kind}) do
+    case ConfigKindSchema.fields(kind) do
+      {:ok, fields} ->
+        json(conn, %{data: ConfigJSON.encode(%{kind: kind, fields: fields})})
+
+      {:error, :unknown_kind} ->
+        Problem.respond(conn, :invalid_params, %{
+          kind: "is not an editable kind"
+        })
+    end
   end
 
   defp ok(conn, data), do: {:sent, json(conn, %{data: ConfigJSON.encode(data)})}

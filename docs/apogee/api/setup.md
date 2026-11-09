@@ -16,7 +16,8 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | O1 | `GET /organizations/:organization_id/people` | **implemented** |
 | O2 | `POST /organizations/:organization_id/invitations` | **implemented** |
 | O3, O4 | service identities, command policies | planned |
-| G1, T1, T2 | ground stations, transports, routing rules + kind schemas | planned |
+| G1, T1, T2 | `GET /missions/:mission_id/ground-stations`, `/transports`, `/routing-rules` | **implemented** |
+| kind schema | `GET /missions/:mission_id/config/kinds/:kind/schema` | **implemented** |
 
 ## `GET /api/console/v1/missions/:mission_id/spacecraft`
 
@@ -287,3 +288,37 @@ Body `{email, role: "member" | "organization_admin"}` (default `member`). Requir
 - `201` returns the invitation (same shape as above) plus `delivery: "submitted" | "unavailable"`.
 - Errors: `422 invalid_params` (`details.email` / `details.role`), `409 already_member`,
   `409 already_invited`, `403 forbidden`.
+
+## Comms reads (G1, T1, T2)
+
+Edits go through change sets (`ground_station` and `transport` kinds; see changes.md). Refetch on
+`invalidate` with `configuration` or `spacecraft`.
+
+- `GET .../ground-stations` → `{stations: [{id, display_name, code, provider, region,
+  lifecycle_state, transport_count, routing_rule_count, health}]}`. Only active stations are
+  listed. `code` comes from station metadata until domain adds the field (profile-routing §5).
+  `transport_count` and `routing_rule_count` are **`null`** because the model has no
+  station↔transport link yet. `health` is `null` (not tracked; show "not reported").
+- `GET .../transports` → `{transports: [{id, display_name, version, origin, transport_kind,
+  direction_capability, lifecycle_state, station: null, routing_rule_count}]}`.
+  `routing_rule_count` counts active rules using the transport; `station` is `null` for the same
+  reason as above.
+- `GET .../routing-rules?spacecraft_id=&transport_id=&limit=&cursor=` → `{rules: [{id, display_name,
+  purpose, direction, role, enabled, active, spacecraft: {id, name}, transport: {id, display_name,
+  version}}], total, next_cursor}`. Sorted by spacecraft name, then rule name. `limit` is 1–500
+  (default 100); pass `next_cursor` back as `cursor`, and `null` means the last page. This changes with
+  DECISIONS #3 (rules on the profile).
+
+## `GET /api/console/v1/missions/:mission_id/config/kinds/:kind/schema`
+
+`{kind, fields: [{path, label, type, unit, enum, range, default, required, help, visible_when}]}`
+for generating change-set edit forms. `kind` is `ground_station` or `transport`; anything else
+gets `422 invalid_params`.
+
+- `ground_station`: `display_name` (required), `provider`, `region`.
+- `transport`: `display_name`, `transport_kind`, plus each transport kind's configuration fields
+  as `configuration.<key>` (today `tcp_socket`: `mode`, `direction_capability`, `host`, `port`,
+  `framing_mode`, `frame_size`, `reconnect_policy`, `tls_enabled`). Stage edits to those paths.
+- `visible_when: {path, equals}` says when to show a field (for example `frame_size` only when
+  `configuration.framing_mode` is `fixed_size`, and each kind's fields only for its
+  `transport_kind`).
