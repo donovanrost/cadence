@@ -11,6 +11,7 @@ import { rememberMission } from "./last-mission.ts";
 import { bindPaletteShortcut } from "./palette.ts";
 import { useConsoleScope } from "./scope.ts";
 import { canAdministerOrganization, useSession } from "./session.ts";
+import { useOpsCounts } from "./counts.ts";
 
 const route = useRoute();
 const scope = useConsoleScope();
@@ -39,6 +40,11 @@ const unknownScope = computed(() => {
   return null;
 });
 /** Ops screens fit the viewport and scroll their panes; reading views scroll main. */
+const { counts } = useOpsCounts(
+  computed(() =>
+    mode.value === "ops" && missionScope.value ? missionScope.value.mission.id : null,
+  ),
+);
 const consoleLayout = computed(() => mode.value === "ops");
 
 watch(
@@ -78,6 +84,7 @@ watch(
         :org="missionScope.organization.slug"
         :mission="missionScope.mission.slug"
         :can-admin-org="canAdminOrg"
+        :counts="counts"
       />
       <SetupRail
         v-else-if="mode === 'setup' && orgSlug"
@@ -111,6 +118,7 @@ watch(
       v-if="mode === 'ops' && missionScope"
       :org="missionScope.organization.slug"
       :mission="missionScope.mission.slug"
+      :counts="counts"
     />
   </div>
 </template>
