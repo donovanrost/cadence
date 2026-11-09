@@ -268,3 +268,36 @@ Errors: `422 invalid_params` (`details.email`), `409 already_member`, `409 alrea
 
 `{"data": {"policies": [{"key", "title", "sentence"}]}}` gives the effective two-person and
 fleet-reach policy as text (DECISIONS #7).
+
+## G · Ground stations (rail 06) and T · Comms & routing (rail 05)
+
+These screens edit through change sets. The `ground_station` and `transport` kinds already stage.
+They only need reads.
+
+### G1 · `GET /missions/:mission_id/ground-stations`
+
+```json
+{"data": {"stations": [{"id", "display_name", "code": "SVB"|null, "provider": "…"|null,
+  "region": "…"|null, "lifecycle_state": "active|archived", "transport_count": 2,
+  "routing_rule_count": 500, "health": null}]}}
+```
+`health` stays null until station health is tracked (the UI shows "not reported", never "ok").
+
+### T1 · `GET /missions/:mission_id/transports`
+
+```json
+{"data": {"transports": [{"id", "display_name", "version", "origin": "direct|provider_managed",
+  "transport_kind": "tcp_socket", "direction_capability": "inbound|outbound|bidirectional",
+  "lifecycle_state": "active|archived", "station": {"id", "display_name"}|null,
+  "routing_rule_count": 500}]}}
+```
+
+### T2 · `GET /missions/:mission_id/routing-rules?spacecraft_id=&transport_id=`
+
+`{"data": {"rules": [{"id", "display_name", "purpose", "direction", "role", "enabled", "spacecraft":
+{"id", "name"}, "transport": {"id", "display_name", "version"}}], "total": 1000}}`. This one is
+paged (`limit`, `cursor`), since rules are per spacecraft today (1,000+). It goes away or changes
+with DECISIONS #3.
+
+For editing, the UI needs each kind's editable fields. Please add a `schema` (same field shape as
+PD sections) to G1/T1, or a `GET /config/kinds/:kind/schema`, so the edit forms are generated.
