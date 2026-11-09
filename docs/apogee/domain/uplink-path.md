@@ -149,3 +149,34 @@ Here's the flow:
 Items 1–5 and 6 can be built now (no behaviour change for other missions). D1 and D2 come
 after you approve them. Done means a `SET_MODE` command composed and approved in the console
 uplinks on a real Earendil pass on :4011 and reads `satisfied`. Then I tell qa and fe-ops.
+
+## Back-to-back releases and FOP faults (#33)
+
+COP-1's FOP keeps one release in flight: a release is accepted, its frames go out, and the
+release completes when a CLCW acknowledges them. The release path now separates **busy** from
+**broken**:
+
+| FOP state | Admission | Release | What the operator sees |
+| --- | --- | --- | --- |
+| `active`, nothing in flight | admits | accepted; `transport:started` | released |
+| `active` / `retransmit_without_wait`, release in flight | refuses `{:uplink_busy, :cop1_release_in_flight}`, no attempt claimed | — | still queued; the lane retries in 0.5 s and is kicked when the release completes or fails |
+| `retransmit_with_wait` (CLCW wait) | refuses `{:uplink_busy, :cop1_wait}` | — | still queued |
+| `initializing_without_bc` / `initializing_with_bc` | refuses `{:uplink_busy, :cop1_initializing}` | — | still queued |
+| `initial` (alerted: lockout, NN(R) error, transmission limit, …; or never initialized) | admits | refused by the FOP before anything is sent (`cop1_not_initialized`): the attempt is `release_failed` and the request canceled | failed; stop-on-failure cancels the group's later members (`earlier_command_failed`) |
+| disabled | admits | refused (`cop1_disabled`): `release_failed` | failed |
+
+An alert while a release is in flight is that release's **transport failure**: the gateway
+reports the FOP's `{:failure, release, reason}` as signal phase `failure` (`transport:failed`,
+`cop1_alert`), and the release's pending transport verifiers fail at once
+(`failure_reason: "transport_failed"`) instead of timing out. Before #33 that signal crashed
+the gateway.
+
+So a group `[A, B, C]` on one target:
+- **No fault:** A releases; B and C wait (busy) and release in order as each completes.
+- **Lockout while A is in flight:** A's verifier fails (`verify_failed`). B and C fail closed
+  (`earlier_command_failed`) on the lane's next attempt, without ever reaching the FOP.
+- **FOP already alerted before A:** A is `release_failed`; B and C fail closed.
+
+A Halt'd or refused head no longer waits for the 60 s safety poll: the lane goes on to the
+next entry at once. Recovering an alerted FOP (re-initializing the AD service) is an operator
+action and isn't automated here.

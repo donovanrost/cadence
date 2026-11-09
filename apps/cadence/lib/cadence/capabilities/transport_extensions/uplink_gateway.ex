@@ -87,6 +87,32 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
     end
   end
 
+  @doc """
+  Whether the gateway can take an uplink release now (#33). A COP-1 release in flight, or a FOP
+  initializing or waiting, is **busy**: `{:error, {:uplink_busy, reason}}`, and the caller
+  retries without claiming a release. Any other FOP state admits: an alerted FOP (`initial`,
+  e.g. after a lockout) then refuses the release itself (`cop1_not_initialized`), which fails
+  it, so stop-on-failure fires.
+  """
+  @impl true
+  def uplink_readiness(%{cop1_mode: :fop, cop1: %FOP{} = fop}) do
+    cond do
+      fop.in_flight_release != nil ->
+        {:error, {:uplink_busy, :cop1_release_in_flight}}
+
+      fop.state in [:initializing_without_bc, :initializing_with_bc] ->
+        {:error, {:uplink_busy, :cop1_initializing}}
+
+      fop.state == :retransmit_with_wait ->
+        {:error, {:uplink_busy, :cop1_wait}}
+
+      true ->
+        :ok
+    end
+  end
+
+  def uplink_readiness(_app_state), do: :ok
+
   @impl true
   def handle_transport_event(event, app_state, %ExecutionContext{} = ctx)
       when is_map(app_state) do
@@ -450,8 +476,9 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
 
   defp build_cop1_execution_result(app_state, transition, current_time, next_frame_seq \\ nil) do
     state = transition.state
-    transition_metadata = transition_signal_metadata(transition.signal)
-    metadata = cop1_transition_metadata(app_state, state, transition.signal, transition_metadata)
+    signal = transition.signal || alert_signal(transition)
+    transition_metadata = transition_signal_metadata(signal)
+    metadata = cop1_transition_metadata(app_state, state, signal, transition_metadata)
     started_increment = cop1_signal_increment(transition.signal, :start)
     completed_increment = cop1_signal_increment(transition.signal, :completion)
 
@@ -491,6 +518,9 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
       _other -> Map.merge(release_metadata || %{}, transition_metadata)
     end
   end
+
+  defp alert_signal(%{alerts: [reason | _]}), do: {:failure, %{cop1_alert: reason}}
+  defp alert_signal(_transition), do: nil
 
   defp cop1_signal_increment({signal_phase, _metadata}, signal_phase), do: 1
   defp cop1_signal_increment(_signal, _signal_phase), do: 0
@@ -690,6 +720,15 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
   end
 
   defp transition_signal_metadata(nil), do: %{}
+
+  # #33: an alert (lockout, retransmission limit, ...) ends the release in flight without
+  # completion. The FOP signals it as `{:failure, release, reason}`; report it as the release's
+  # transport failure so its verifiers fail now. (Unhandled, this crashed the gateway.)
+  defp transition_signal_metadata({:failure, metadata, reason}) when is_map(metadata),
+    do: metadata |> Map.new() |> Map.merge(%{signal_phase: :failure, cop1_alert: reason})
+
+  defp transition_signal_metadata({:failure, metadata}) when is_map(metadata),
+    do: Map.put(metadata, :signal_phase, :failure)
 
   defp transition_signal_metadata({signal_phase, metadata})
        when signal_phase in [:start, :completion] and is_map(metadata) do

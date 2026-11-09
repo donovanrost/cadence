@@ -205,6 +205,22 @@ defmodule Cadence.Commanding.RequestQueueStore do
     end
   end
 
+  @doc "`[{organization_id, mission_id, queue_lane_key}]` of the requests' queue entries."
+  @spec lanes_for_requests([binary()]) :: [{binary(), binary(), binary()}]
+  def lanes_for_requests([]), do: []
+
+  def lanes_for_requests(command_request_ids) when is_list(command_request_ids) do
+    import Ecto.Query, only: [from: 2]
+
+    Repo.all(
+      from(q in CommandQueueEntryRow,
+        where: q.command_request_id in ^command_request_ids,
+        distinct: true,
+        select: {q.organization_id, q.mission_id, q.queue_lane_key}
+      )
+    )
+  end
+
   @spec ensure_entry_is_next_release_candidate(struct(), DateTime.t()) ::
           :ok | {:error, term()}
   def ensure_entry_is_next_release_candidate(

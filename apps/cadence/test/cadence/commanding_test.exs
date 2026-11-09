@@ -1291,6 +1291,165 @@ defmodule Cadence.CommandingTest do
     assert retransmit_request.request_document["first_frame_seq"] == 0
   end
 
+  describe "#33 COP-1 releases" do
+    setup %{source_endpoint: source_endpoint, command_model: command_model} do
+      requests =
+        for n <- 1..3 do
+          request = persist_burst_request(command_model, source_endpoint)
+
+          {:ok, %{queue_entry: entry}} =
+            Cadence.Commanding.enqueue_command_request(
+              @organization_id,
+              @mission_id,
+              request.command_request_id,
+              %{"user_id" => "queue-33-#{n}"}
+            )
+
+          %{request: request, entry: entry}
+        end
+
+      contact =
+        persist_active_uplink_contact(source_endpoint.source_endpoint_id, %{
+          "service_name" => "cop1",
+          "cop1_mode" => "fop",
+          "cop1_timeout_ms" => 5_000,
+          "cop1_max_retransmit" => 2
+        })
+
+      %{members: requests, contact: contact}
+    end
+
+    test "back-to-back releases wait while one is in flight, then go in order", c do
+      [first, second, third] = c.members
+
+      assert {:ok, %{release_attempt: _}} = release_33(c, first)
+
+      # Busy: refused before any attempt is claimed; the request stays queued.
+      assert {:error, {:uplink_busy, :cop1_release_in_flight}} = release_33(c, second)
+      assert attempts_33(second) == []
+
+      assert {:ok, []} = clcw_33(c, CLCW.new(vcid: 0, report_value: 1))
+      assert {:ok, %{release_attempt: _}} = release_33(c, second)
+      assert {:error, {:uplink_busy, :cop1_release_in_flight}} = release_33(c, third)
+
+      assert {:ok, []} = clcw_33(c, CLCW.new(vcid: 0, report_value: 2))
+      assert {:ok, %{release_attempt: _}} = release_33(c, third)
+
+      assert Enum.map(c.members, &request_33(&1).lifecycle_state) == [
+               :released,
+               :released,
+               :released
+             ]
+    end
+
+    test "a lockout fails the member in flight and the group's later members fail closed", c do
+      [first, second, third] = c.members
+      group_33(c.members)
+
+      assert {:ok, %{release_attempt: _}} = release_33(c, first)
+
+      # The FARM reports lockout: the FOP alerts; the release's transport verifier fails now.
+      assert {:ok, []} = clcw_33(c, CLCW.new(vcid: 0, report_value: 1, lockout: 1))
+      assert request_33(first).verification_state == :failed
+
+      assert {:error, :earlier_command_failed} = release_33(c, second)
+      assert {:error, :earlier_command_failed} = release_33(c, third)
+
+      for member <- [second, third] do
+        assert %{lifecycle_state: :canceled} = request_33(member)
+        assert attempts_33(member) == []
+      end
+    end
+
+    test "an alerted FOP refuses a release outright: release_failed, not uncertain", c do
+      [first, second, _third] = c.members
+
+      assert {:ok, %{release_attempt: _}} = release_33(c, first)
+      assert {:ok, []} = clcw_33(c, CLCW.new(vcid: 0, report_value: 1, lockout: 1))
+
+      # Not a group, so no Halt: the release itself is refused and fails.
+      assert {:error, {:command_release_refused, _attempt_id, :cop1_not_initialized}} =
+               release_33(c, second)
+
+      assert [%{lifecycle_state: :release_failed}] = attempts_33(second)
+      assert %{lifecycle_state: :canceled} = request_33(second)
+    end
+  end
+
+  defp persist_burst_request(command_model, source_endpoint) do
+    {:ok, request} =
+      Cadence.Commanding.persist_command_request(
+        @organization_id,
+        CommandRequest.new(%{
+          mission_id: @mission_id,
+          source_endpoint_ref: source_endpoint.source_endpoint_id,
+          mission_model_revision_id: command_model.revision_id,
+          command_id: fetch_command_id(command_model, "TRANSMIT_BURST"),
+          requested_by: %{"user_id" => "requester-33"}
+        })
+      )
+
+    request
+  end
+
+  defp release_33(c, member),
+    do:
+      Cadence.Commanding.release_command_queue_entry(
+        @organization_id,
+        @mission_id,
+        member.entry.command_queue_entry_id,
+        c.contact.realized_contact_id,
+        %{"user_id" => "release-33"},
+        attempted_at: DateTime.from_unix!(1_700_400_000, :second)
+      )
+
+  defp clcw_33(c, clcw),
+    do:
+      Cadence.handle_path_transport_event(
+        @organization_id,
+        @mission_id,
+        c.contact.realized_contact_id,
+        "uplink-path-alpha",
+        "uplink-gateway-alpha",
+        %{kind: :cop1_clcw, clcw: clcw},
+        []
+      )
+
+  defp request_33(member) do
+    {:ok, request} =
+      Cadence.Commanding.fetch_command_request(
+        @organization_id,
+        @mission_id,
+        member.request.command_request_id
+      )
+
+    request
+  end
+
+  defp attempts_33(member) do
+    @organization_id
+    |> Cadence.Commanding.list_command_release_attempts(@mission_id)
+    |> Enum.filter(&(&1.command_request_id == member.request.command_request_id))
+  end
+
+  # One group, one target, in queue order (stop-on-failure applies per target).
+  defp group_33(members) do
+    members
+    |> Enum.with_index()
+    |> Enum.each(fn {member, position} ->
+      Repo.update_all(
+        from(r in Cadence.Commanding.CommandRequestRow,
+          where: r.command_request_id == ^member.request.command_request_id
+        ),
+        set: [
+          command_group_id: "command-group-33",
+          group_target_index: 0,
+          group_position: position
+        ]
+      )
+    end)
+  end
+
   defp persist_source_endpoint do
     spacecraft =
       Spacecraft.new(%{

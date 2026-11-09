@@ -35,6 +35,7 @@ defmodule Cadence.Commanding do
     StageStore,
     VerifierScheduler,
     VerifierStore,
+    VerifierTransportSignals,
     VerifierWorkflow
   }
 
@@ -572,6 +573,13 @@ defmodule Cadence.Commanding do
          end) do
       {:ok, {:ok, verifier_instances}} ->
         VerifierScheduler.notify_verifier_instances_changed(verifier_instances, process_namespace)
+
+        kick_lanes_after_transport(
+          transport_capability_records,
+          transport_action_requests,
+          process_namespace
+        )
+
         {:ok, verifier_instances}
 
       {:ok, result} ->
@@ -602,6 +610,20 @@ defmodule Cadence.Commanding do
       end,
       &VerifierStore.apply_updates(repo, &1)
     )
+  end
+
+  # #33: a COP-1 release ended (completion or transport failure), so the uplink can take the
+  # lane's next member now: kick its lane instead of waiting for the busy retry.
+  defp kick_lanes_after_transport(records, action_requests, process_namespace) do
+    records
+    |> VerifierTransportSignals.build(action_requests)
+    |> Enum.filter(&(&1.phase in [:completion, :failure]))
+    |> Enum.map(& &1.command_request_id)
+    |> Enum.uniq()
+    |> RequestQueueStore.lanes_for_requests()
+    |> Enum.each(fn {organization_id, mission_id, lane} ->
+      maybe_schedule_queue_lane_dispatch(process_namespace, organization_id, mission_id, lane)
+    end)
   end
 
   @spec command_verifier_timeout_projection() :: [CommandVerifierInstance.t()]
@@ -861,7 +883,35 @@ defmodule Cadence.Commanding do
         end
 
       {:error, reason} ->
-        retain_uncertain_release(release_context, persisted_attempt, reason)
+        if refused_before_send?(reason),
+          do: fail_refused_release(release_context, persisted_attempt, reason),
+          else: retain_uncertain_release(release_context, persisted_attempt, reason)
+    end
+  end
+
+  # #33: the uplink refused the release before sending anything, so the outcome is known:
+  # an alerted or disabled COP-1 FOP. Fail it (not uncertain), so stop-on-failure fires.
+  defp refused_before_send?(reason), do: reason in [:cop1_not_initialized, :cop1_disabled]
+
+  defp fail_refused_release(context, attempt, reason) do
+    case ReleaseStore.mark_failed(context.queue_entry_row, context.request_row, attempt, reason) do
+      {:ok, _} ->
+        request_row = context.request_row
+
+        ReadUpdates.publish(
+          :commanding_changed,
+          request_row.organization_id,
+          request_row.mission_id
+        )
+
+        Groups.Timeline.settle_requests(request_row.organization_id, request_row.mission_id, [
+          request_row.command_request_id
+        ])
+
+        {:error, {:command_release_refused, attempt.command_release_attempt_id, reason}}
+
+      {:error, _persistence_reason} ->
+        retain_uncertain_release(context, attempt, reason)
     end
   end
 

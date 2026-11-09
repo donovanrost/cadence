@@ -7,6 +7,8 @@ defmodule Cadence.Commanding.LaneDispatcher do
   alias Cadence.Control.Commanding
 
   @default_safety_poll_interval_ms 60_000
+  # #33: the uplink is busy with a COP-1 release in flight; retry soon (completion also kicks).
+  @uplink_busy_retry_ms 500
   @event_prefix [:cadence, :commanding, :lane_dispatcher]
 
   @type quiescence_status ::
@@ -182,6 +184,23 @@ defmodule Cadence.Commanding.LaneDispatcher do
 
         {:quiescent, quiescence_summary(:waiting_for_not_before, released_count, next_not_before),
          state}
+
+      {:error, {:uplink_busy, _reason}} ->
+        emit(:dispatch_result, state, %{count: 1}, %{result: :uplink_busy})
+        state = schedule_dispatch(state, @uplink_busy_retry_ms, :uplink_busy)
+        {:quiescent, quiescence_summary(:waiting_for_release_target, released_count), state}
+
+      # The uplink refused it before sending (#33): it failed and closed; go on to the next,
+      # so stop-on-failure settles the rest of a group now.
+      {:error, {:command_release_refused, _attempt_id, _reason}} ->
+        emit(:dispatch_result, state, %{count: 1}, %{result: :release_refused})
+        drain_available(state, :continuation, released_count)
+
+      # The head was failed closed (stop-on-failure, or a basis that can't release): its entry
+      # is closed, so the lane moves on instead of waiting for the safety poll.
+      {:error, reason} when reason in [:earlier_command_failed, :release_basis_changed] ->
+        emit(:dispatch_result, state, %{count: 1}, %{result: reason})
+        drain_available(state, :continuation, released_count)
 
       {:error, {:command_queue_lane_no_release_target, _source_endpoint_ref, _mission_id}} =
           _result ->

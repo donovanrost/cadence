@@ -96,7 +96,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.Checkpoint do
       [state.last_signal_at, state.last_control_at],
       &(is_nil(&1) or is_struct(&1, DateTime))
     ) and
-      state.last_signal_phase in [nil, :acceptance, :start, :completion] and
+      state.last_signal_phase in [nil, :acceptance, :start, :completion, :failure] and
       Enum.all?(
         [state.last_release_attempt_id, state.last_command_request_id, state.last_command_name],
         &(is_nil(&1) or is_binary(&1))

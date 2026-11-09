@@ -20,7 +20,7 @@ defmodule Cadence.Runtime.TransportActionRequest do
           command_request_id: binary() | nil,
           source_endpoint_ref: binary() | nil,
           command_name: binary() | nil,
-          signal_phase: :acceptance | :start | :completion | :custom | nil,
+          signal_phase: :acceptance | :start | :completion | :failure | :custom | nil,
           action_kind: atom(),
           request_document: map(),
           requested_at: DateTime.t(),

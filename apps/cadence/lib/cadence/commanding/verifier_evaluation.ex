@@ -65,6 +65,19 @@ defmodule Cadence.Commanding.VerifierEvaluation do
       when is_list(transport_signals) do
     Enum.reduce_while(transport_signals, nil, fn transport_signal, _acc ->
       cond do
+        # #33: the transport failed the release (a COP-1 alert such as lockout), so its
+        # pending transport verifiers fail now, whatever phase they wait for.
+        transport_failure?(transport_signal, verifier_instance) ->
+          {:halt,
+           %CommandVerifierInstance{
+             verifier_instance
+             | lifecycle_state: :failed,
+               matched_record_kind: transport_signal.matched_record_kind,
+               matched_record_id: transport_signal.matched_record_id,
+               matched_at: transport_signal.occurred_at,
+               failure_reason: "transport_failed"
+           }}
+
         transport_signal_phase_mismatch?(transport_signal, verifier_instance) ->
           {:cont, nil}
 
@@ -328,6 +341,14 @@ defmodule Cadence.Commanding.VerifierEvaluation do
       nil -> false
     end
   end
+
+  defp transport_failure?(%{input_kind: :transport, phase: :failure}, verifier_instance),
+    do: transport_subject?(verifier_instance.success_criteria)
+
+  defp transport_failure?(_signal, _verifier_instance), do: false
+
+  defp transport_subject?(%{subject_ref: "transport:" <> _}), do: true
+  defp transport_subject?(_criteria), do: false
 
   defp transport_signal_phase_mismatch?(
          %{input_kind: :transport, phase: signal_phase},

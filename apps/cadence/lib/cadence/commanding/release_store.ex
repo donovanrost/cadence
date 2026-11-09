@@ -93,6 +93,29 @@ defmodule Cadence.Commanding.ReleaseStore do
     |> ReadUpdates.publish_result(:commanding_changed, queue.organization_id, queue.mission_id)
   end
 
+  @doc """
+  Records a release the uplink refused before sending anything (#33, e.g. an alerted COP-1
+  FOP): the attempt fails and its request and queue entry close, so the lane moves on and
+  stop-on-failure sees the failure.
+  """
+  def mark_failed(queue, request, attempt, reason) do
+    with_claim(queue, request, attempt, fn queue_row, request_row, row ->
+      with {:ok, _attempt} <-
+             row
+             |> Changeset.change(
+               lifecycle_state: "release_failed",
+               failure_reason: "refused: " <> inspect(reason)
+             )
+             |> Repo.update(),
+           {:ok, _queue} <-
+             queue_row |> Changeset.change(lifecycle_state: "canceled") |> Repo.update(),
+           {:ok, _request} <-
+             request_row |> Changeset.change(lifecycle_state: "canceled") |> Repo.update() do
+        {:ok, :failed}
+      end
+    end)
+  end
+
   @doc "Records an ambiguous transmission without reopening its lane or replacing earlier evidence."
   def mark_uncertain(queue, request, attempt, reason) do
     with_claim(queue, request, attempt, fn _queue, _request, row ->

@@ -80,6 +80,40 @@ defmodule Cadence.Commanding.LaneDispatcherTest do
     assert Process.alive?(lane_dispatcher)
   end
 
+  test "#33: a refused or fail-closed head lets the lane go on; a busy uplink retries within a second" do
+    test_pid = self()
+
+    dispatch_fun =
+      dispatch_sequence([
+        {:ok, %{command_request_id: "command-1"}},
+        {:error, {:command_release_refused, "attempt-2", :cop1_not_initialized}},
+        {:error, :earlier_command_failed},
+        {:error, {:uplink_busy, :cop1_release_in_flight}},
+        {:ok, %{command_request_id: "command-4"}},
+        {:error, :command_queue_lane_empty}
+      ])
+
+    lane_dispatcher =
+      start_lane_dispatcher!(
+        dispatch_fun: fn org, mission, lane, released_by, opts ->
+          send(test_pid, :dispatch_attempt)
+          dispatch_fun.(org, mission, lane, released_by, opts)
+        end
+      )
+
+    # Released, refused, failed closed, then busy: quiescent, waiting on the uplink.
+    assert {:ok, %{released_count: 1, status: :waiting_for_release_target}} =
+             LaneDispatcher.drain(lane_dispatcher)
+
+    for _ <- 1..4, do: assert_receive(:dispatch_attempt)
+
+    # The busy retry fires on its own, well before the 60 s safety poll.
+    monitor = Process.monitor(lane_dispatcher)
+    assert_receive :dispatch_attempt, 2_000
+    assert_receive :dispatch_attempt, 2_000
+    assert_receive {:DOWN, ^monitor, :process, ^lane_dispatcher, :normal}, 2_000
+  end
+
   defp start_lane_dispatcher!(opts) do
     suffix = System.unique_integer([:positive]) |> Integer.to_string()
 
