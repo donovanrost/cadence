@@ -227,10 +227,18 @@ Base: `/api/console/v1/missions/:mission_id/contact-planning`.
 
 ### `GET /policy` (CP2)
 
-`{policy_id, version, active_version, document, pending: {version, requested_by, requested_at} |
-null, schema: [field], defaults, permissions: ["planning.edit", "planning.approve"]}`. `document`
-groups the six policy sections: `horizon, scoring, resources, budgets, redundancy, automation`.
-It is `null` (and so is `version`) when the mission has no policy. `schema` fields use the
+`{policy_id, version, active_version, document, pending: {version, requested_by, requested_at,
+document} | null, schema: [field], defaults, permissions: ["planning.edit", "planning.approve"]}`.
+`document` groups the six policy sections: `horizon, scoring, resources, budgets, redundancy,
+automation`.
+
+- `document` is the **active** version's document (the latest one while nothing is active yet).
+  It is `null` (and so is `version`) when the mission has no policy.
+- `version` is the latest version (pending, active or rejected): send it as `expected_version` on
+  the next save.
+- `pending` is the latest version while it awaits review (not active, no decision). A rejected
+  version is never pending. `pending.document` is what's under review, for the diff.
+  `requested_by` is an actor `{kind: "user", id, name}`. `schema` fields use the
 kind-schema shape plus `group` and `advanced`; paths are `<group>.<field>`. `defaults` is what
 the server fills in for omitted fields. Permissions are organization-admin today.
 

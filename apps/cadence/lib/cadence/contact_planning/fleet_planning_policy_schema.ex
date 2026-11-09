@@ -83,7 +83,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicySchema do
   defp resources do
     [
       int("resources.default_exclusive_capacity", "Passes per antenna at once", 1, 1, 1_000,
-        help: "Per-resource capacities are edited as JSON (`resources.capacities`)."
+        help: "Applies to every antenna. Limits for individual antennas can't be set here yet."
       )
     ]
   end
@@ -102,7 +102,9 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicySchema do
         unit: "micros",
         help: "Empty means no cap; needs a currency."
       ),
-      field("budgets.currency", "Currency", :string, nil, help: "ISO 4217 code, e.g. USD."),
+      field("budgets.currency", "Currency", :string, nil,
+        help: "Three-letter currency code, for example USD."
+      ),
       int(
         "budgets.critical_contact_reserve",
         "Contacts reserved for critical needs",

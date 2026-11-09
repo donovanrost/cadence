@@ -62,6 +62,12 @@ defmodule CadenceWeb.Console.PlanningPolicyAPITest do
     data = c.ada |> call(:get, c.base) |> json_response(200) |> Map.fetch!("data")
     assert %{"version" => 1, "active_version" => nil, "pending" => %{"version" => 1}} = data
 
+    assert data["pending"]["requested_by"] == %{
+             "kind" => "user",
+             "id" => c.ada.user_id,
+             "name" => "Ada"
+           }
+
     decision = %{"decision" => "approve", "comment" => "Looks right"}
     conn = call(c.ada, :post, c.base <> "/1/decision", decision)
     assert json_response(conn, 409)["error"]["code"] == "reviewer_is_author"
@@ -76,6 +82,33 @@ defmodule CadenceWeb.Console.PlanningPolicyAPITest do
 
     assert %{"code" => "version_conflict", "details" => %{"expected_version" => 1}} =
              json_response(stale, 409)["error"]
+  end
+
+  test "a rejected version is not pending and the active document stays shown", c do
+    call(c.ada, :post, c.base, %{"document" => document()}) |> json_response(201)
+
+    approve = %{"decision" => "approve", "comment" => "ok"}
+    c.bob |> call(:post, c.base <> "/1/decision", approve) |> json_response(200)
+
+    edited = put_in(document(), ["budgets", "max_contacts"], 1001)
+
+    assert call(c.ada, :post, c.base, %{"document" => edited, "expected_version" => 1})
+           |> json_response(201)
+           |> get_in(["data", "version"]) == 2
+
+    pending = c.ada |> call(:get, c.base) |> json_response(200) |> Map.fetch!("data")
+    assert pending["pending"]["version"] == 2
+    assert pending["pending"]["document"]["budgets"]["max_contacts"] == 1001
+    refute pending["document"]["budgets"]["max_contacts"] == 1001
+
+    reject = %{"decision" => "reject", "comment" => "No"}
+
+    assert c.bob |> call(:post, c.base <> "/2/decision", reject) |> json_response(200) ==
+             %{"data" => %{"version" => 2, "state" => "rejected"}}
+
+    data = c.ada |> call(:get, c.base) |> json_response(200) |> Map.fetch!("data")
+    assert %{"version" => 2, "active_version" => 1, "pending" => nil} = data
+    assert data["document"] == pending["document"]
   end
 
   test "invalid fields are reported by path; members can't edit", c do

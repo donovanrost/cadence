@@ -10,6 +10,7 @@ defmodule Cadence.Control.PlanningPolicy do
   (`Cadence.ContactPlanning.FleetPlanningPolicySchema.groups/0`).
   """
 
+  alias Cadence.Accounts
   alias Cadence.Auth.{Policy, Scope}
 
   alias Cadence.ContactPlanning.{
@@ -42,12 +43,15 @@ defmodule Cadence.Control.PlanningPolicy do
 
     case FleetPlanningPolicies.fetch(organization_id, mission_id) do
       {:ok, %FleetPlanningPolicy{} = policy, %FleetPlanningPolicyVersion{} = current} ->
+        pending = pending(organization_id, mission_id, policy, current)
+
         Map.merge(base, %{
           policy_id: policy.fleet_planning_policy_id,
+          # The latest version: the `expected_version` for the next save.
           version: current.version,
           active_version: policy.active_version,
-          document: document(current),
-          pending: pending(policy, current)
+          document: shown_document(organization_id, mission_id, policy, current),
+          pending: pending
         })
 
       {:error, _none} ->
@@ -147,18 +151,48 @@ defmodule Cadence.Control.PlanningPolicy do
 
   defp not_author(_scope, _version), do: :ok
 
-  defp pending(
-         %FleetPlanningPolicy{active_version: active},
-         %FleetPlanningPolicyVersion{} = current
-       )
-       when active != current.version,
-       do: %{
-         version: current.version,
-         requested_by: current.created_by,
-         requested_at: current.created_at
-       }
+  # The latest version awaits review while it isn't active and has no
+  # decision (a rejected version stays latest but isn't pending).
+  defp pending(organization_id, mission_id, %FleetPlanningPolicy{} = policy, current) do
+    decided? =
+      organization_id
+      |> FleetPlanningPolicies.list_approvals(mission_id, policy.fleet_planning_policy_id)
+      |> Enum.any?(&(&1.fleet_planning_policy_version == current.version))
 
-  defp pending(_policy, _current), do: nil
+    if policy.active_version != current.version and not decided?,
+      do: %{
+        version: current.version,
+        requested_by: actor(current.created_by),
+        requested_at: current.created_at,
+        document: document(current)
+      }
+  end
+
+  # The active version's document; the latest one when nothing is active yet.
+  defp shown_document(organization_id, mission_id, policy, current) do
+    with active when is_integer(active) and active != current.version <- policy.active_version,
+         {:ok, version} <-
+           FleetPlanningPolicies.fetch_version(
+             organization_id,
+             mission_id,
+             policy.fleet_planning_policy_id,
+             active
+           ) do
+      document(version)
+    else
+      _latest -> document(current)
+    end
+  end
+
+  defp actor(user_id) do
+    name =
+      case Accounts.fetch_user(user_id) do
+        {:ok, user} -> user.display_name || user.email
+        _missing -> nil
+      end
+
+    %{kind: "user", id: user_id, name: name}
+  end
 
   defp document(version) do
     Map.new(FleetPlanningPolicySchema.groups(), fn {key, attr} ->
