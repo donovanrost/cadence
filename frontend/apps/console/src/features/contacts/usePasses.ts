@@ -3,9 +3,13 @@ import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { fetchPasses } from "./api.ts";
 
+/** Changes arrive as `contacts` invalidations (S10); this only slides the window forward. */
+export const WINDOW_SLIDE_MS = 5 * 60_000;
+
 /**
- * Booked passes over a window that slides with now (`back` ms before, `ahead` ms after), refetched
- * on `contacts` and every 30 s until S10 covers every reservation transition (contacts.md).
+ * Booked passes over a window that slides with now (`back` ms before, `ahead` ms after). Every
+ * reservation change invalidates `contacts` (S10, db8c9953), so data refetches on that; a slow
+ * timer moves the window so passes entering the horizon appear.
  */
 export function usePasses(missionId: Ref<string>, back: number, ahead: number | Ref<number>) {
   const span = computed(() => (typeof ahead === "number" ? ahead : ahead.value));
@@ -16,7 +20,7 @@ export function usePasses(missionId: Ref<string>, back: number, ahead: number | 
     return fetchPasses(id, { from: new Date(t - back), to: new Date(t + Number(ms)) }, signal);
   });
   useMissionInvalidation(missionId, ["contacts"], query.refetch);
-  const poll = setInterval(query.refetch, 30_000);
-  onScopeDispose(() => clearInterval(poll));
+  const slide = setInterval(query.refetch, WINDOW_SLIDE_MS);
+  onScopeDispose(() => clearInterval(slide));
   return query;
 }

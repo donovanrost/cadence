@@ -7,7 +7,7 @@ import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 
 /**
  * A4 · Passes in the next 2 h (now − 15 min → now + 2 h), stations × time from the booked
- * reservations (M7). Refetched on `contacts` and every 30 s until S10 covers every transition.
+ * reservations (M7), refetched on `contacts` (usePasses).
  */
 const props = defineProps<{ spacecraft: readonly FleetSpacecraft[] }>();
 const scope = useMissionScope();
