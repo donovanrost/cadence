@@ -147,7 +147,7 @@ export const setupOrgRoutes: RouteRecordRaw[] = [
   {
     path: "org/missions",
     name: "org.missions",
-    component: pending,
+    component: () => import("@/features/missions/MissionsScreen.vue"),
     meta: { mode: "setup", nav: "missions", title: "Missions" },
   },
   {
