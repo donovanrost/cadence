@@ -86,7 +86,9 @@ order, so a SCID repeated **within the batch** fails validation for the later op
   `submit`/`review` like any set (holds, approval policy, apply). The revision it applies has
   `kind: "rollback"` and `rolls_back_to: N`.
 - Each op is the kind's own inverse against the current state:
-  - created after `N` → delete (stations, transports and profiles archive);
+  - created after `N` → delete (stations, transports, profiles and spacecraft archive; a
+    spacecraft that has had reservations or command requests raises the
+    `spacecraft_has_traffic` HOLD);
   - deleted → re-created;
   - changed → updated back.
 
@@ -106,8 +108,6 @@ order, so a SCID repeated **within the batch** fails validation for the later op
     its set's only change.
   - `422 nothing_to_roll_back`.
   - `403 forbidden`: needs `config.rollback`.
-- **Not yet:** reverting a spacecraft creation is NO-GO ("Spacecraft can't be removed yet") until
-  domain adds spacecraft archiving (with traffic, archive plus a HOLD; without, delete).
 
 **Conflict detail.** Each `conflicts` item's `paths` entries are `{path, base, live, staged,
 changed_in, changed_by}`:

@@ -6,6 +6,7 @@ defmodule Cadence.Configuration.RollbackTest do
 
   alias Cadence.Comms.GroundStationStore
   alias Cadence.Configuration.Ledger
+  alias Cadence.SpacecraftStore
   alias Cadence.Control.{Configuration, ConfigurationRollback}
 
   setup do
@@ -84,6 +85,37 @@ defmodule Cadence.Configuration.RollbackTest do
     assert {:ok, %{state: :applied}} = submit_open(ctx)
     # The ground station kind archives on delete; archived stations aren't fetched.
     assert {:error, :ground_station_not_found} = station(ctx, id)
+  end
+
+  defmodule BusyTraffic do
+    @moduledoc false
+    def with_traffic(_org, _mission, ids), do: MapSet.new(ids)
+  end
+
+  test "rolling back a spacecraft's creation archives it; with traffic that's a HOLD", ctx do
+    {%{entity_ids: [id]}, 2} =
+      apply_ops(ctx, "Add craft", [
+        %{kind: "spacecraft", action: :create, document: spacecraft_doc("ROLLBACK-1", 911)}
+      ])
+
+    previous = Application.get_env(:cadence, :spacecraft_traffic)
+    Application.put_env(:cadence, :spacecraft_traffic, BusyTraffic)
+    on_exit(fn -> Application.put_env(:cadence, :spacecraft_traffic, previous) end)
+
+    assert {:ok,
+            %{ops: [%{kind: "spacecraft", action: "delete", entity_id: ^id}], preview: preview}} =
+             ConfigurationRollback.preview(ctx.alice, ctx.mission, 1)
+
+    assert preview.verdict == :hold
+
+    assert %{items: [%{reason: :spacecraft_has_traffic, entity_id: ^id}]} =
+             Enum.find(preview.checks, &(&1.key == "compatibility"))
+
+    assert {:ok, _} = ConfigurationRollback.stage(ctx.alice, ctx.mission, 1)
+    assert {:ok, %{state: :applied}} = submit_open(ctx, %{acknowledged_holds: true})
+
+    assert {:ok, %{lifecycle_state: :archived}} =
+             SpacecraftStore.fetch_spacecraft(ctx.org, ctx.mission, id)
   end
 
   test "refuses bad targets, an open set, nothing to revert and a legacy activation in range",
