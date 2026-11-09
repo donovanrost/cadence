@@ -11,6 +11,7 @@ export {
 } from "./contact.ts";
 export {
   continueDraft,
+  fetchAvailability,
   fetchPlan,
   fetchRepair,
   reasonText,
@@ -21,6 +22,8 @@ export {
   stationName,
   submitPlan,
   type Acknowledgement,
+  type Availability,
+  type AvailabilityWindow,
   type PlanDetail,
   type PlanState,
   type Repair,
