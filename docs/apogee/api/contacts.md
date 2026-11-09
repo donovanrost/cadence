@@ -75,6 +75,45 @@ Query: `from`, `to` (ISO-8601; default `from` = now, `to` = `from` + 24 h; at mo
 
 Errors: `422 invalid_params`, `404 mission_not_found`.
 
+### Booking evidence and attention on pass rows (U32, DECISIONS #53/#54/#55): proposed, not built
+
+Every row gains four fields:
+
+- `booking_evidence`:
+  - `provider` when the provider confirmed the booking (`state` `confirmed | active | completed`);
+  - `operator_attested` when an org admin marked it booked (#53) and the provider hasn't confirmed;
+  - otherwise `null` (not booked, or lost).
+- `attested_by`: `{kind, id, name}` of who marked it booked, when `booking_evidence` is
+  `operator_attested`; otherwise `null`. Reads "BOOKED · ATTESTED BY MIRA K.".
+- `uplink_confirmed`:
+  - `true` when the provider confirmed the booking's uplink leg;
+  - `false` when an uplink leg was requested but isn't confirmed (always for an attested booking,
+    while #46 D1 holds). The UI reads "UPLINK UNCONFIRMED".
+  - It turns `true` when the provider confirms before AOS (#55).
+  - `null` when no uplink leg was requested (a downlink-only booking), so there's nothing to
+    confirm.
+- `attention`: this booking's open or acknowledged attention item, the same object as the action
+  queue's `attention` (ops.md), or `null`. It's also `null` for a viewer who can't operate the
+  mission. The action queue's object also gains `reservation_id`, the pass row's `id`. A conflict
+  on a booking that never got a scheduled contact (`cancel_failed`, `late_confirmation`) has
+  `contact_id: null`, so link by `reservation_id`.
+
+### `POST /api/console/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`: proposed
+
+`:source` and `:id` are the attention object's `source` and `id` (`pass_resolution`, the
+resolution id). Members who can operate the mission (`operate_mission`); the actor is always the
+signed-in user (#30).
+
+- `acknowledge`: no body. The item stays listed, sorted last (U21).
+- `resolve`: body `{"action_text": "Called Northlight; the cancel is confirmed, ticket 4471."}`
+  (required, at most 200 characters). The text is shown as "Resolved: <action_text>" in history.
+- Both return `{data: <attention object>}` (`state` `acknowledged` / `resolved`) and invalidate
+  `attention` (plus `contacts`).
+- Errors: `404 attention_item_not_found` (also an unknown `:source`), `409 attention_item_not_open`
+  (already resolved, or acknowledging one that's acknowledged), `403 forbidden`,
+  `422 invalid_params` (`details.action_text`), `422 actor_not_assignable` (the body names an
+  actor field), `404 mission_not_found`.
+
 ## S10: `contacts` invalidation
 
 `invalidate` with `contacts` fires when a scheduled or realized contact or a contact action is
