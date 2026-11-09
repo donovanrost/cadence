@@ -13,7 +13,16 @@ export function useActionQueue(missionId: Ref<string | null>) {
   const slow = throttle(prompt.call, FLEET_TELEMETRY_GAP_MS);
   useMissionInvalidation(
     missionId,
-    ["alarms", "commanding", "spacecraft", "limits", "catalog", "data_sources", "settings"],
+    [
+      "alarms",
+      "attention",
+      "commanding",
+      "spacecraft",
+      "limits",
+      "catalog",
+      "data_sources",
+      "settings",
+    ],
     prompt.call,
   );
   useMissionInvalidation(missionId, ["telemetry"], slow.call);

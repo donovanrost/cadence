@@ -5,6 +5,7 @@ import { useChannelEvent } from "./useChannelEvent.ts";
 
 export const missionResources = [
   "alarms",
+  "attention",
   "catalog",
   "commanding",
   "configuration",
