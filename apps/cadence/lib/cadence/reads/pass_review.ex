@@ -60,6 +60,7 @@ defmodule Cadence.Reads.PassReview do
          by_station: by_station(agg.stations, stations, providers),
          by_cause: by_cause(agg.causes),
          plans: agg.plans,
+         volume: volume(agg.volume),
          freshness:
            Enum.map(freshness, &Map.put(&1, :provider, Map.get(providers, &1.provider_id)))
        })}
@@ -86,6 +87,22 @@ defmodule Cadence.Reads.PassReview do
 
   # -- shaping ---------------------------------------------------------------------------------
 
+  defp volume(nil), do: volume(%{})
+
+  defp volume(totals) do
+    %{
+      provider_bytes: number(totals[:provider_bytes]),
+      provider_frames: number(totals[:provider_frames]),
+      received_bytes: number(totals[:received_bytes]),
+      received_frames: number(totals[:received_frames]),
+      provider_reported_passes: totals[:provider_reported_passes] || 0,
+      received_known_passes: totals[:received_known_passes] || 0
+    }
+  end
+
+  defp number(%Decimal{} = value), do: Decimal.to_integer(value)
+  defp number(value), do: value
+
   defp outcome_counts(outcomes) do
     count = fn names ->
       outcomes
@@ -99,6 +116,7 @@ defmodule Cadence.Reads.PassReview do
       realized: count.(["realized"]),
       partial: count.(["partial"]),
       missed: count.(["missed", "failed"]),
+      failed: count.(["failed"]),
       canceled: count.(["canceled"]),
       pending_count: count.(["pending_report"])
     }
@@ -111,11 +129,13 @@ defmodule Cadence.Reads.PassReview do
     end
   end
 
+  # Every owner key is present (0 when none), so the strip caption needs no defaults.
   defp by_owner(owners, outcomes) do
     owners
     |> Enum.filter(fn {key, _count} -> key.outcome in outcomes end)
-    |> Enum.reduce(%{}, fn {key, count}, acc ->
-      Map.update(acc, key.owner, count, &(&1 + count))
+    |> Enum.reduce(%{"provider" => 0, "us" => 0, "weather" => 0, "unknown" => 0}, fn {key, count},
+                                                                                     acc ->
+      Map.update(acc, key.owner || "unknown", count, &(&1 + count))
     end)
   end
 

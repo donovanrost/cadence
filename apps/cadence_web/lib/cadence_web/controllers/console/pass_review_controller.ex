@@ -37,7 +37,8 @@ defmodule CadenceWeb.Console.PassReviewController do
             to: window.to,
             rows: page.rows,
             total: page.total,
-            disputable: page.disputable
+            disputable: page.disputable,
+            next_cursor: page.next_cursor
           }),
         meta: %{next_cursor: page.next_cursor}
       })

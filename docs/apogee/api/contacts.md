@@ -130,7 +130,7 @@ of `day`. Optional `plan` (contact plan id) narrows to one plan.
 
 `{from, to, planned, realized, partial, missed, failed, canceled, pending_count, realized_ratio,
 threshold, target, provisional, missed_by_owner, partial_by_owner, by_station[], by_cause[], plans[],
-freshness[]}`:
+volume, freshness[]}`:
 
 - `realized_ratio = realized / (planned − canceled − pending_report)`. `null` when nothing counts yet.
 - `threshold` is `pass_realized_threshold` (a pass counts as realized when flown ≥ that share of
@@ -138,8 +138,12 @@ freshness[]}`:
   and R3 line, default 0.98). Both are mission settings (ST1).
 - `provisional: true` when any pass in the span awaits its provider report or a provider's event
   cursor is unhealthy. Say the % is provisional, in words.
-- `missed_by_owner` / `partial_by_owner`: `{provider, us, weather, unknown}` counts (the strip caption).
-  `failed` counts as missed there.
+- `missed_by_owner` / `partial_by_owner`: `{provider, us, weather, unknown}` counts (the strip caption),
+  every key always present. `missed` **includes** `failed` (as on the strip); `failed` is also given alone.
+- `volume` ("Downlink: received vs provider-reported"): span totals `{provider_bytes,
+  provider_frames, received_bytes, received_frames, provider_reported_passes, received_known_passes}`.
+  A total is `null` when no pass in the span has that figure; the `*_passes` counts say how many
+  passes contributed it (unknown volumes are null, not 0).
 - `by_station[]` (R1): station identity, provider, planned, realized, partial, missed, failed,
   canceled, flown and planned seconds. There's no billing, so billed minutes are absent.
 - `by_cause[]` (R2): `{cause, cause_source, owner, missed, partial}`.
@@ -150,8 +154,8 @@ freshness[]}`:
 
 Query: the window, `outcome` (comma list of `realized | partial | missed | failed | canceled |
 pending_report`; R4 uses `missed,partial`), `station`, `spacecraft_id`, `plan`, `limit` (1–500,
-default 50), `cursor` (`meta.next_cursor`). Returns `{from, to, rows[], total, disputable}`, with
-`meta.next_cursor`. For the footer, use "SHOWING n OF total · disputable DISPUTABLE".
+default 50), `cursor` (`next_cursor`). Returns `{from, to, rows[], total, disputable, next_cursor}`
+(`next_cursor` is also in `meta`). For the footer, use "SHOWING n OF total · disputable DISPUTABLE".
 
 Row: `{id, spacecraft {id, name}, station {ref, id, code, name}, provider {id, name}, antenna_ref,
 plan {id, version} | null, planned_aos, planned_los, actual_aos, actual_los, planned_seconds,
@@ -168,7 +172,8 @@ realized_contact_id, scheduled_contact_id}`.
 
 ### `GET /pass-review/daily` (R3)
 
-`{from, to, days: [{day, planned, realized, ratio, top_cause, top_station}], target, threshold}`.
+`{from, to, days: [{day, planned, realized, realized_ratio, top_cause, top_station, …}], target,
+threshold}`.
 Draw `target` as the dashed line. `top_cause`/`top_station` annotate dips.
 
 Money (R5, disputes in $) is out of scope: no provider reports prices.

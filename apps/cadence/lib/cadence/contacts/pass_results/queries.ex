@@ -52,7 +52,20 @@ defmodule Cadence.Contacts.PassResults.Queries do
         |> select([r], %{id: r.contact_plan_id, version: r.contact_plan_version})
         |> order_by([r], asc: r.contact_plan_id, asc: r.contact_plan_version)
         |> Repo.all(),
-      provider_ids: base |> distinct(true) |> select([r], r.provider_id) |> Repo.all()
+      provider_ids: base |> distinct(true) |> select([r], r.provider_id) |> Repo.all(),
+      # Span totals for "Downlink: received vs provider-reported". The counts say how many passes
+      # contributed each figure, since unknown volumes are null, not 0.
+      volume:
+        base
+        |> select([r], %{
+          provider_bytes: sum(r.provider_bytes),
+          provider_frames: sum(r.provider_frames),
+          received_bytes: sum(r.received_bytes),
+          received_frames: sum(r.received_frames),
+          provider_reported_passes: count(r.provider_bytes),
+          received_known_passes: count(r.received_bytes)
+        })
+        |> Repo.one()
     }
   end
 

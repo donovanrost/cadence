@@ -23,11 +23,23 @@ defmodule CadenceWeb.Console.PassReviewAPITest do
     assert data["threshold"] == 0.95
     assert data["target"] == 0.98
     assert data["by_station"] == []
+    assert data["failed"] == 0
+
+    assert data["missed_by_owner"] == %{
+             "provider" => 0,
+             "us" => 0,
+             "weather" => 0,
+             "unknown" => 0
+           }
+
+    assert %{"provider_bytes" => nil, "received_bytes" => nil, "provider_reported_passes" => 0} =
+             data["volume"]
 
     rows = get_json(c, "/rows?day=2026-11-08&outcome=missed,partial")
     assert rows["data"]["rows"] == []
     assert rows["data"]["total"] == 0
     assert rows["meta"]["next_cursor"] == nil
+    assert Map.fetch!(rows["data"], "next_cursor") == nil
 
     daily = get_json(c, "/daily?day=2026-11-08")["data"]
     assert daily["days"] == []
