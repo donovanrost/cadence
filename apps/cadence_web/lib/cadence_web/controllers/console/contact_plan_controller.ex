@@ -8,7 +8,7 @@ defmodule CadenceWeb.Console.ContactPlanController do
 
   alias Cadence.ContactPlanning.ContactPlan
   alias Cadence.Control.Scheduling
-  alias Cadence.Reads.{ContactPlanOverview, PlanningSetup}
+  alias Cadence.Reads.{ContactPlanOverview, PlanAlternatives, PlanningSetup}
   alias CadenceWeb.Console.{ConfigJSON, Problem, SchedulingRunner}
 
   @states Map.new(ContactPlan.states(), &{Atom.to_string(&1), &1})
@@ -59,6 +59,57 @@ defmodule CadenceWeb.Console.ContactPlanController do
         Problem.respond(conn, :invalid_params, details)
     end
   end
+
+  @doc "S4: add/remove passes as a new plan version; returns the new plan detail."
+  def edit(conn, %{"plan_id" => plan_id} = params) do
+    with {:ok, version} <- positive(params["expected_version"], :expected_version),
+         {:ok, add} <- ids(params["add"], :add),
+         {:ok, remove} <- ids(params["remove"], :remove),
+         {:ok, _plan, new_version} <-
+           Scheduling.edit_plan(scope(conn), mission_id(conn), plan_id, version, add, remove),
+         {:ok, plan} <-
+           ContactPlanOverview.plan(org_id(conn), mission_id(conn), plan_id, new_version.version) do
+      json(conn, %{data: ConfigJSON.encode(effective_state(conn, plan))})
+    else
+      {:error, details} when is_map(details) ->
+        Problem.respond(conn, :invalid_params, details)
+
+      {:error, :contact_plan_version_changed} ->
+        Problem.respond(conn, :plan_changed)
+
+      {:error, reason} when reason in [:contact_plan_not_found, :plan_not_found] ->
+        Problem.respond(conn, :plan_not_found)
+
+      {:error, reason} when is_atom(reason) ->
+        Problem.respond(conn, :plan_not_editable, %{reason: Atom.to_string(reason)})
+
+      _other ->
+        Problem.respond(conn, :plan_not_editable)
+    end
+  end
+
+  @doc "S4: unselected opportunities for one spacecraft with their effect if added."
+  def alternatives(conn, %{"plan_id" => plan_id} = params) do
+    with spacecraft_id when is_binary(spacecraft_id) and spacecraft_id != "" <-
+           params["spacecraft_id"],
+         {:ok, result} <-
+           PlanAlternatives.load(org_id(conn), mission_id(conn), plan_id, spacecraft_id) do
+      json(conn, %{data: ConfigJSON.encode(result)})
+    else
+      {:error, :plan_not_found} -> Problem.respond(conn, :plan_not_found)
+      _missing -> Problem.respond(conn, :invalid_params, %{spacecraft_id: "is required"})
+    end
+  end
+
+  defp ids(nil, _key), do: {:ok, []}
+
+  defp ids(list, key) when is_list(list) do
+    if Enum.all?(list, &is_binary/1),
+      do: {:ok, list},
+      else: {:error, %{key => "must be a list of snapshot ids"}}
+  end
+
+  defp ids(_value, key), do: {:error, %{key => "must be a list of snapshot ids"}}
 
   @doc "S5: submit (member) or submit + approve + execute (admin). See scheduling.md."
   def submit(conn, %{"plan_id" => plan_id} = params) do

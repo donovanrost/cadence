@@ -116,6 +116,30 @@ defmodule Cadence.Control.Scheduling do
     end
   end
 
+  @doc """
+  S4: adds and removes passes (snapshot ids the plan's runs found) as a new
+  plan version; coverage, conflicts and unsatisfied are recomputed by the
+  domain. A plan in review returns to draft (the domain's rule).
+  """
+  @spec edit_plan(Scope.t(), binary(), binary(), pos_integer(), [binary()], [binary()]) ::
+          {:ok, ContactPlan.t(), map()} | {:error, term()}
+  def edit_plan(%Scope{} = scope, mission_id, plan_id, expected_version, add, remove) do
+    with {:ok, _plan, version} <-
+           ManagementContacts.fetch_plan(scope.organization_id, mission_id, plan_id),
+         :ok <- expected(version.version, expected_version) do
+      selected =
+        ((version.selected_snapshot_ids || []) ++ add)
+        |> Enum.uniq()
+        |> Enum.reject(&(&1 in remove))
+
+      ManagementContacts.version_plan(scope, mission_id, plan_id, expected_version, %{
+        selected_snapshot_ids: selected,
+        locked_snapshot_ids: Enum.reject(version.locked_snapshot_ids || [], &(&1 in remove)),
+        rationale: "Edited in the console contact plan"
+      })
+    end
+  end
+
   @doc "Books an approved plan with providers (blocking); holds the plan's execution lock."
   @spec execute_plan(Scope.t(), binary(), binary(), pos_integer(), binary()) ::
           {:ok, map()} | {:error, term()}

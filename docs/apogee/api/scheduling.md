@@ -4,8 +4,8 @@ Owner: **api** (DECISIONS #26). Consumer: **lead** (K1 Plan, K2 Re-plan). S1 pas
 are api-ops'. Base: `/api/console/v1/missions/:mission_id`. Conventions: [README.md](README.md).
 
 Status: decisions agreed (DECISIONS #27, #28). **Implemented:** S6 list, plan detail with S2 demand,
-S3 drafts (start/read/continue) and S5 submit/execute with acknowledged exceptions. **Next:** planning
-setup status and day demand (lead's asks), S4 edits and alternatives, then S8 re-plan.
+S3 drafts (start/read/continue) and S5 submit/execute with acknowledged exceptions. Planning setup, day demand
+and S4 edits/alternatives are also in. **Next:** S8 re-plan.
 
 ## 1. What the domain actually does (survey)
 
@@ -177,3 +177,21 @@ least one active requirement or template). Readiness reports the same condition 
 `{day, spacecraft_with_rules, contacts_needed, without_rule, spacecraft_total}`. It counts active
 requirements whose window overlaps the UTC day, plus template occurrences due that day (previewed;
 nothing is materialized). Each one contributes its `contact_count`.
+
+### `POST /contact-plans/:plan_id/versions` (S4 edit)
+
+Body `{expected_version, add?: [snapshot_id], remove?: [snapshot_id]}`. Creates the next plan
+version with the selection changed, and the domain recomputes coverage, conflicts and unmet. It
+returns the new plan detail. Only passes the plan's planning runs found can be added (pick them
+from alternatives). Editing a plan in review returns it to draft (the domain's rule). Errors:
+`409 plan_changed`, `404 plan_not_found`, `422 plan_not_editable` (`details.reason` is the domain
+code, e.g. a snapshot that doesn't belong to the plan's runs), `422 invalid_params`.
+
+### `GET /contact-plans/:plan_id/alternatives?spacecraft_id=` (S4)
+
+`{plan_id, version, spacecraft_id, rule_met, contacts, alternatives: [{snapshot_id,
+requirement_id, station, starts_at, ends_at, synthetic, effect: {rule_met_after, contacts_after,
+clashes_with: [snapshot_id]}}]}`: eligible opportunities the plan's runs found for that
+spacecraft but didn't select, oldest first. Effects come from the same requirement evaluator the
+plan uses, and nothing is written. The "closes gap to 6h10" phrasing isn't computed (the rules
+have no gap measure); `rule_met_after` and `clashes_with` are.

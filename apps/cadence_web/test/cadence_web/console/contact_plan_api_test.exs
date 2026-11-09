@@ -112,6 +112,65 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
     assert json_response(get_json(c, "/contact-plans/demand"), 422)["error"]["details"]["day"]
   end
 
+  test "alternatives show the effect of adding a pass; versions add and remove passes", c do
+    fixture =
+      ContactPlanningFixtures.plan_fixture(c.org, c.user, c.membership, c.mission, select?: false)
+
+    plan_id = fixture.plan.contact_plan_id
+    sc = fixture.craft.spacecraft_id
+
+    alternatives =
+      json_response(
+        get_json(c, "/contact-plans/#{plan_id}/alternatives?spacecraft_id=#{sc}"),
+        200
+      )[
+        "data"
+      ]
+
+    assert %{"rule_met" => false, "contacts" => 0, "alternatives" => [alternative]} = alternatives
+
+    assert %{"rule_met_after" => true, "contacts_after" => 1, "clashes_with" => []} =
+             alternative["effect"]
+
+    post_edit = fn body ->
+      c.user
+      |> TestFixtures.member_conn()
+      |> post(c.base <> "/contact-plans/#{plan_id}/versions", body)
+    end
+
+    added =
+      json_response(
+        post_edit.(%{"expected_version" => 1, "add" => [alternative["snapshot_id"]]}),
+        200
+      )[
+        "data"
+      ]
+
+    assert %{"version" => 2, "unmet" => [], "ready_to_approve" => true} = added
+    assert [%{"snapshot_id" => _}] = added["passes"]
+
+    assert json_response(post_edit.(%{"expected_version" => 1, "remove" => []}), 409)["error"][
+             "code"
+           ] ==
+             "plan_changed"
+
+    removed =
+      json_response(
+        post_edit.(%{"expected_version" => 2, "remove" => [alternative["snapshot_id"]]}),
+        200
+      )[
+        "data"
+      ]
+
+    assert %{"version" => 3, "passes" => []} = removed
+
+    assert json_response(get_json(c, "/contact-plans/#{plan_id}/alternatives"), 422)["error"][
+             "details"
+           ][
+             "spacecraft_id"
+           ]
+  end
+
   test "a plan without its pass lists the requirement as unmet", c do
     fixture =
       ContactPlanningFixtures.plan_fixture(c.org, c.user, c.membership, c.mission, select?: false)

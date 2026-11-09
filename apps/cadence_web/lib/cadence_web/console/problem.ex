@@ -31,6 +31,7 @@ defmodule CadenceWeb.Console.Problem do
     plan_changed: {409, "The plan changed since you loaded it."},
     plan_not_submittable: {409, "The plan can't be submitted in its current state."},
     plan_not_resumable: {409, "The plan isn't waiting to execute."},
+    plan_not_editable: {422, "The plan can't be edited like that."},
     operation_conflict: {409, "That operation id was already used for another plan."},
     import_run_not_found: {404, "Import run not found."},
     command_not_found: {404, "Command not found."},
