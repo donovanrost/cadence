@@ -2,7 +2,8 @@
 import { computed } from "vue";
 import { formatCountdown, useNow, ApEmptyState, ApPanel, ApStatusMark } from "@/ui";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
-import type { NextContact } from "../groups/api.ts";
+import type { NextContact, TargetEndpoints } from "../groups/api.ts";
+import EndpointCell from "./EndpointCell.vue";
 
 /**
  * C4 · Delivery plan: each target's own next booked contact. The preflight's contact check
@@ -12,7 +13,11 @@ import type { NextContact } from "../groups/api.ts";
 const props = defineProps<{
   targets: readonly FleetSpacecraft[];
   contacts: ReadonlyMap<string, NextContact | null> | null;
+  /** Per target: what routing resolves (DECISIONS #41), with the endpoints to override with. */
+  endpoints: ReadonlyMap<string, TargetEndpoints>;
+  overrides: Readonly<Record<string, string>>;
 }>();
+defineEmits<{ override: [spacecraftId: string, endpointId: string | null] }>();
 const now = useNow();
 const LIMIT = 40;
 type Row = { sc: FleetSpacecraft; aos: string | null; station: string | null };
@@ -50,6 +55,13 @@ const noContact = computed(() => all.value.filter((r) => r.aos === null).length)
               : "No booked contact"
           }}
         </span>
+        <EndpointCell
+          class="ml-auto"
+          :name="sc.name"
+          :info="endpoints.get(sc.id)"
+          :override="overrides[sc.id]"
+          @change="(id) => $emit('override', sc.id, id)"
+        />
       </li>
       <li
         v-if="targets.length > LIMIT"

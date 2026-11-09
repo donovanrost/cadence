@@ -41,6 +41,8 @@ export type ComposeInput = Readonly<{
   notBefore: number | null;
   approver: string;
   sentBackFrom: string | null;
+  /** Explicit uplink endpoints by spacecraft id (an audited override; else routing decides). */
+  endpoints: Readonly<Record<string, string>>;
 }>;
 
 /** Null while any argument is invalid: such a stack can't be checked or sent. */
@@ -54,7 +56,10 @@ export function buildDraft(input: ComposeInput): Draft | null {
   return {
     title: input.title.trim(),
     log_entry: input.log.trim(),
-    targets: input.targets.map((sc) => ({ spacecraft_id: sc.id, source_endpoint_id: null })),
+    targets: input.targets.map((sc) => ({
+      spacecraft_id: sc.id,
+      source_endpoint_id: input.endpoints[sc.id] ?? null,
+    })),
     target_query: { chips: queryChips(input.query), explicit: input.query.explicit },
     commands,
     not_before: input.notBefore === null ? null : new Date(input.notBefore).toISOString(),

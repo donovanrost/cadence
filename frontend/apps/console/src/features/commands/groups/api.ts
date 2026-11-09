@@ -211,3 +211,36 @@ export async function submitGroup(
     }),
   );
 }
+
+/** Compose's endpoint picker (commanding.md §GET /command-endpoints, DECISIONS #41). */
+const targetEndpoints = d.object({
+  spacecraft_id: d.token,
+  resolved_source_endpoint_id: d.nullable(d.token),
+  failure: d.nullable(d.token),
+  routes: d.array(route, 100),
+  endpoints: d.array(
+    d.object({
+      id: d.token,
+      name: d.nullable(d.string),
+      scid: d.nullable(d.integer),
+      managed: d.boolean,
+    }),
+    50,
+  ),
+});
+export type TargetEndpoints = Decoded<typeof targetEndpoints>;
+const endpointList = d.object({ spacecraft: d.array(targetEndpoints, 1_000) });
+
+export async function fetchEndpoints(
+  missionId: string,
+  spacecraftIds: readonly string[],
+  signal?: AbortSignal,
+): Promise<ApiResult<readonly TargetEndpoints[]>> {
+  const p = new URLSearchParams({ spacecraft_ids: spacecraftIds.join(",") });
+  const result = await request(
+    `/missions/${encodeURIComponent(missionId)}/command-endpoints?${p.toString()}`,
+    endpointList,
+    signal ? { signal } : {},
+  );
+  return result.ok ? { ok: true, value: result.value.spacecraft } : result;
+}

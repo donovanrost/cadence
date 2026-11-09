@@ -142,12 +142,13 @@ describe("group draft", () => {
       notBefore: Date.parse("2026-11-08T04:00:00Z"),
       approver: "",
       sentBackFrom: null,
+      endpoints: { "spacecraft-earendil-002": "ep-2" },
     });
     expect(draft).toMatchObject({
       title: "Reset counters",
       targets: [
         { spacecraft_id: "spacecraft-earendil-001", source_endpoint_id: null },
-        { spacecraft_id: "spacecraft-earendil-002", source_endpoint_id: null },
+        { spacecraft_id: "spacecraft-earendil-002", source_endpoint_id: "ep-2" },
       ],
       target_query: { chips: [{ key: "plane", value: 1 }], explicit: [] },
       commands: [{ command_id: "cmd-1", argument_values_json: '{"count":3}' }],

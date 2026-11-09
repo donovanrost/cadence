@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef } from "vue";
 import { useRoute } from "vue-router";
-import { describeApiError } from "@/api/index.ts";
+import { describeApiError, useRemoteQuery } from "@/api/index.ts";
 import { TakeoverHeader, useMissionScope } from "@/shell/index.ts";
 import { ApButton, ApCallout, ApEmptyState, ApPanel, ApRemote, ApStationBar } from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
 import { useCommandAccess } from "../access.ts";
 import { fetchCommand } from "../api.ts";
+import { fetchEndpoints, type TargetEndpoints } from "../groups/api.ts";
 import DeliveryPanel from "./DeliveryPanel.vue";
 import PreflightPanel from "./PreflightPanel.vue";
 import StackPanel from "./StackPanel.vue";
@@ -64,6 +65,24 @@ const release = ref<Release>({ mode: "next_contact", notBefore: null });
 const approver = ref("");
 const log = ref("");
 const title = ref(typeof route.query.title === "string" ? route.query.title : "");
+/** Uplink endpoints per target (DECISIONS #41) and the operator's explicit overrides. */
+const overrides = ref<Record<string, string>>({});
+const endpointRead = useRemoteQuery(
+  () => (targets.value.length ? targets.value.map((sc) => sc.id).join(",") : null),
+  (ids, signal) => fetchEndpoints(missionId.value, ids.split(","), signal),
+);
+const endpoints = computed(
+  () =>
+    new Map<string, TargetEndpoints>(
+      endpointRead.state.value.status === "ready"
+        ? endpointRead.state.value.value.map((e) => [e.spacecraft_id, e])
+        : [],
+    ),
+);
+function setOverride(spacecraftId: string, endpointId: string | null) {
+  const { [spacecraftId]: _drop, ...rest } = overrides.value;
+  overrides.value = endpointId === null ? rest : { ...rest, [spacecraftId]: endpointId };
+}
 const resend = useResend(missionId, resendFrom(route.query.from), {
   query,
   stack,
@@ -79,6 +98,7 @@ const { draft, preflight, nameOf, contacts, secondGo, blocked, submission, send,
     release,
     approver,
     sentBackFrom: resend.sentBackFrom,
+    endpoints: overrides,
   });
 
 const steps = computed(() => [
@@ -182,7 +202,13 @@ const close = computed(() => {
             :name-of="nameOf"
             @retry="preflight.refetch"
           />
-          <DeliveryPanel :targets="targets" :contacts="contacts" />
+          <DeliveryPanel
+            :targets="targets"
+            :contacts="contacts"
+            :endpoints="endpoints"
+            :overrides="overrides"
+            @override="setOverride"
+          />
         </div>
         <SummaryPanel
           v-model:release="release"
