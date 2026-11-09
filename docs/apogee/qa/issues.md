@@ -35,6 +35,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 28 | Commands list · delivered group | A delivered group stays in the "Released" tab reading "GO given · released to the queue" (list rows carry no `progress`), indistinguishable from one still waiting for AOS | fe-ops / api | verified (a2b322c7 + cfef9e9a + fe-ops' nullable row decoder: 3MKNW and I2DO in Closed reading '1/1 delivered'; Uplink tag '1/1 delivered'; Released empty) |
 | 29 | Uplink · system events | After b5d6ed6d, the Uplink page for any completed group fails to decode the system actor `{actor_kind: "system"}` (no `user_id`; ruled correct, contract updated in 57fe2d6c) | fe-ops (actor reader as a variant on `actor_kind`) | verified (c1fe0eb4: 3MKNW and I2DO decode; log reads 'Cadence closed the run · 1 not verifiable'; no console errors) |
 | 30 | K2 repair after an applied repair | Repairing r1 again after one booking was lost re-proposes K2's 4 already-applied HBK moves ("Apply · send 4 requests") and classifies the lost 004@KIR pass as kept, so Apply would duplicate 4 bookings and not rebook 004 | domain / api (plan), fe-setup (Impact wording) | open (not applied); attribution now 'Canceled at <provider>' (fe-setup); rebooked marker on /passes pending domain/api |
+| 31 | K1/K2 unconfirmed callout (U30) | The callout lists every unconfirmed booking (40) uncapped; at 1512×1000 Demand/Draft/Selected collapse to ~0 height and the Gantt disappears; icon centred on the list; axe scrollable-region-focusable; hatch drawn under the bar label (1.3:1 where a stroke crosses a stripe) | lead / ux | open |
 
 ## Details
 
@@ -268,5 +269,19 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   lost 004 pass is a move/rebook (one request), even when the best opportunity is the freed one;
   Impact attributes our own cancel to us.
 - Not applied. Evidence: scratchpad k2-004-1.png, k2-004-2.png.
+
+### 31. Unconfirmed callout crowds out the plan (U30)
+
+- Setup: simulator run paused 20:24–20:37Z 2026-11-09; the 11-14 plan contact_plan_fleet_e238c640
+  approved, so 40 bookings stayed pending past the 10-min window (plan state `unconfirmed`).
+- Works: the header reads "R1 · 0 BOOKED · 40 UNCONFIRMED"; the callout names the provider and
+  count, lists soonest first, and shows T− on the first row; K2's live-plan view shows the same
+  callout; the legend reads "Unconfirmed"; on resume all 40 confirmed in 11 s and the plan went to
+  `reserved` by itself.
+- Problems: (1) all 40 rows are listed, so the A/B/D panels collapse and the Gantt can't be seen
+  (u30-gantt.png); (2) the warning icon is centred on the list; (3) axe scrollable-region-focusable
+  (serious): K1 2 nodes, K2 `#main`; (4) `.ap-bar--unconfirmed` paints the hatch on the label's own
+  element: label rgb(189,179,255) is 9.8:1 on stale-deep rgb(20,15,38) and about 5.9:1 against the
+  averaged hatch, but 1.3:1 on a stripe. Labels don't render at day scale (bars about 10 px wide).
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
