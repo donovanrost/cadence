@@ -361,6 +361,48 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
        else: {:error, :contact_plan_execution_reservation_binding_mismatch}
   end
 
+  @doc """
+  A reserved selection whose provider booking is later canceled or failed provider-side: its
+  item fails with code `booking_lost` and the plan projection updates (`reserved` becomes
+  `partially_reserved` or `failed`), so repairs can re-plan the lost passes (qa #22).
+  """
+  @spec booking_lost(ProviderReservation.t(), keyword()) :: :ok | {:error, term()}
+  def booking_lost(%ProviderReservation{} = reservation, opts \\ []) do
+    error = %{
+      "code" => "booking_lost",
+      "provider_state" => Atom.to_string(reservation.lifecycle_state),
+      "provider_reservation_id" => reservation.provider_reservation_id
+    }
+
+    ContactPlanExecutionItemRow
+    |> where(
+      [i],
+      i.organization_id == ^reservation.organization_id and
+        i.mission_id == ^reservation.mission_id and
+        i.provider_reservation_id == ^reservation.provider_reservation_id and
+        i.lifecycle_state == "reserved"
+    )
+    |> Repo.all()
+    |> Enum.reduce_while(:ok, fn row, :ok ->
+      item = ContactPlanExecutionItemRow.to_domain(row)
+
+      with {:ok, item} <-
+             finish_item(item, :failed, reservation.provider_reservation_id, error, opts),
+           {:ok, _plan, _items} <-
+             project_plan(
+               item.organization_id,
+               item.mission_id,
+               item.contact_plan_id,
+               item.contact_plan_version,
+               opts
+             ) do
+        {:cont, :ok}
+      else
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
   defp execution_outcome(%ProviderReservation{lifecycle_state: state})
        when state in [:confirmed, :active, :completed],
        do: {:reserved, %{}}

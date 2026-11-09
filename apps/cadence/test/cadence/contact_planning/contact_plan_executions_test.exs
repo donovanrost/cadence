@@ -253,6 +253,65 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
     refute_received {:provider_mutation, _opportunity_ref}
   end
 
+  test "a booking the provider cancels later is lost and the plan becomes repairable (qa #22)",
+       context do
+    {:ok, %{plan: %{lifecycle_state: :reserved}, items: [lost | _]}} =
+      ContactPlanExecutions.execute(
+        context.member_scope,
+        context.mission_id,
+        context.plan.contact_plan_id,
+        now: DateTime.add(@now, 2, :second),
+        resolve_route: context.resolve_route,
+        reserve: successful_reserver(self())
+      )
+
+    {:ok, reservation} =
+      ProviderReservations.fetch(
+        context.organization_id,
+        context.mission_id,
+        lost.provider_reservation_id
+      )
+
+    canceled =
+      reservation.provider_confirmed_snapshot_document
+      |> Map.merge(%{
+        "id" => reservation.provider_contact_ref,
+        "provider_revision" => reservation.provider_revision + 1,
+        "status" => "canceled",
+        "provider_status" => "canceled",
+        "status_reason" => "station_unavailable"
+      })
+
+    assert {:ok, %{lifecycle_state: :canceled}} =
+             ProviderReservations.apply_provider_status(
+               context.organization_id,
+               context.mission_id,
+               reservation.provider_reservation_id,
+               canceled
+             )
+
+    items =
+      ContactPlanExecutions.list(
+        context.organization_id,
+        context.mission_id,
+        context.plan.contact_plan_id,
+        1
+      )
+
+    assert %{lifecycle_state: :failed, last_error_document: %{"code" => "booking_lost"}} =
+             Enum.find(
+               items,
+               &(&1.contact_plan_execution_item_id == lost.contact_plan_execution_item_id)
+             )
+
+    assert {:ok, %{lifecycle_state: :partially_reserved}, _version} =
+             ContactPlans.fetch(
+               context.organization_id,
+               context.mission_id,
+               context.plan.contact_plan_id
+             )
+  end
+
   test "mixed provider outcomes preserve committed capacity and project partial success",
        context do
     reserve = fn organization_id, mission_id, provider_id, attrs, _opts ->
