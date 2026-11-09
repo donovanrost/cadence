@@ -71,3 +71,14 @@ export async function discardQaChanges(request: APIRequestContext, marker: strin
     data: { expected_version: set["version"] },
   });
 }
+
+/** True when the mission has staged changes that aren't QA's (so specs must not touch them). */
+export async function hasForeignStagedChanges(
+  request: APIRequestContext,
+  marker: string,
+): Promise<boolean> {
+  const set = (await configState(request))["change_set"];
+  if (!isJson(set)) return false;
+  const changes = Array.isArray(set["changes"]) ? set["changes"].filter(isJson) : [];
+  return changes.some((c) => !(typeof c["summary"] === "string" && c["summary"].includes(marker)));
+}
