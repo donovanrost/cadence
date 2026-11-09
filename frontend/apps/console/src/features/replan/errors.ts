@@ -13,6 +13,8 @@ export function replanErrorText(error: ApiError): string {
       return "A contact rule this plan depends on isn't active any more. Check Setup › Contact planning, then try again.";
     case "fleet_repair_horizon_exceeded":
       return "That re-plan window is longer than the policy's repair window. Re-plan a shorter span around the lost bookings, or raise the repair window in Setup › Contact planning › Policy.";
+    case "plan_superseded":
+      return "Nothing was booked: the rules behind this proposal changed since it was made. Propose again.";
     case "inputs_changed":
       return "The plan's inputs changed while proposing. Try again.";
     case "plan_changed":

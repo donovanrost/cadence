@@ -80,11 +80,14 @@ const applyLabel = (plan: PlanDetail) =>
 const primary = computed(() =>
   proposal.value?.plan ? planPrimary(proposal.value.plan, isAdmin.value) : null,
 );
+/** B1/B2 share one axis covering the repair window and every pass of both plans (moves can land after it). */
 const span = computed(() => {
   const r = repair.value;
-  return r.status === "ready"
-    ? { from: Date.parse(r.value.run.horizon.from), to: Date.parse(r.value.run.horizon.to) }
-    : undefined;
+  if (r.status !== "ready") return undefined;
+  const times = [Date.parse(r.value.run.horizon.from), Date.parse(r.value.run.horizon.to)];
+  for (const p of [...(liveSource.value?.passes ?? []), ...(r.value.plan?.passes ?? [])])
+    times.push(Date.parse(p.starts_at), Date.parse(p.ends_at));
+  return { from: Math.min(...times), to: Math.max(...times) };
 });
 const context = computed(() => {
   const s = source.value;
@@ -184,7 +187,7 @@ async function onApply(acks: Acknowledgement[]) {
               day=""
               :span="span"
               index="B2"
-              :title="`Proposed r${proposal.plan.version}`"
+              :title="`Proposed · new plan r${proposal.plan.version}`"
               :name-of="nameOf"
               :focused="null"
               :selected="null"
@@ -199,6 +202,8 @@ async function onApply(acks: Acknowledgement[]) {
           :busy="busy"
           :sheet-label="applyLabel(proposal.plan)"
           @sheet="sheet?.open()"
+          redraft-label="Propose again"
+          @redraft="proposeAround"
         />
         <SubmitSheet
           v-if="primary?.kind === 'sheet'"
