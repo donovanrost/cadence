@@ -2,24 +2,34 @@
 import { computed } from "vue";
 import { formatCountdown, useNow, ApEmptyState, ApPanel, ApStatusMark } from "@/ui";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
+import type { NextContact } from "../groups/api.ts";
 
 /**
- * C4 · Delivery plan: each target's own next booked contact (M7 next_aos_at). Release fires at
- * that contact; targets without one get a caution row. Umbra margin omitted (DECISIONS #4).
+ * C4 · Delivery plan: each target's own next booked contact. The preflight's contact check
+ * (confirmed/active bookings, with the station) is authoritative once it answers; until then the
+ * fleet's next AOS. Targets without one get a caution row. Umbra margin omitted (DECISIONS #4).
  */
-const props = defineProps<{ targets: readonly FleetSpacecraft[] }>();
+const props = defineProps<{
+  targets: readonly FleetSpacecraft[];
+  contacts: ReadonlyMap<string, NextContact | null> | null;
+}>();
 const now = useNow();
 const LIMIT = 40;
+type Row = { sc: FleetSpacecraft; aos: string | null; station: string | null };
+const all = computed<Row[]>(() =>
+  props.targets.map((sc) => {
+    const c = props.contacts?.get(sc.id);
+    return c === undefined
+      ? { sc, aos: sc.next_aos_at, station: null }
+      : { sc, aos: c?.aos ?? null, station: c?.station_code ?? null };
+  }),
+);
 const rows = computed(() =>
-  [...props.targets]
-    .sort(
-      (a, b) =>
-        (a.next_aos_at ? Date.parse(a.next_aos_at) : Infinity) -
-        (b.next_aos_at ? Date.parse(b.next_aos_at) : Infinity),
-    )
+  [...all.value]
+    .sort((a, b) => (a.aos ? Date.parse(a.aos) : Infinity) - (b.aos ? Date.parse(b.aos) : Infinity))
     .slice(0, LIMIT),
 );
-const noContact = computed(() => props.targets.filter((sc) => sc.next_aos_at === null).length);
+const noContact = computed(() => all.value.filter((r) => r.aos === null).length);
 </script>
 
 <template>
@@ -27,19 +37,16 @@ const noContact = computed(() => props.targets.filter((sc) => sc.next_aos_at ===
     <ApEmptyState v-if="targets.length === 0" headline="No targets yet" />
     <ul v-else class="m-0 list-none p-0">
       <li
-        v-for="sc in rows"
+        v-for="{ sc, aos, station } in rows"
         :key="sc.id"
         class="flex items-center gap-3 border-t border-hairline-faint px-4 py-1.5 first:border-t-0"
       >
-        <ApStatusMark :state="sc.next_aos_at ? 'live' : 'caution'" />
+        <ApStatusMark :state="aos ? 'live' : 'caution'" />
         <span class="w-32 font-mono text-md text-readout">{{ sc.name }}</span>
-        <span
-          class="font-mono text-sm"
-          :class="sc.next_aos_at ? 'text-text-2' : 'text-caution-text'"
-        >
+        <span class="font-mono text-sm" :class="aos ? 'text-text-2' : 'text-caution-text'">
           {{
-            sc.next_aos_at
-              ? `AOS ${formatCountdown(new Date(sc.next_aos_at), now)}`
+            aos
+              ? `AOS ${formatCountdown(new Date(aos), now)}${station ? ` · ${station}` : ""}`
               : "No booked contact"
           }}
         </span>

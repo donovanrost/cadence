@@ -3,21 +3,24 @@ import { computed, ref, shallowRef } from "vue";
 import { useRoute } from "vue-router";
 import { describeApiError } from "@/api/index.ts";
 import { TakeoverHeader, useMissionScope } from "@/shell/index.ts";
-import { plural, ApButton, ApCallout, ApEmptyState, ApPanel, ApRemote, ApStationBar } from "@/ui";
+import { ApButton, ApCallout, ApEmptyState, ApPanel, ApRemote, ApStationBar } from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
 import { useCommandAccess } from "../access.ts";
 import { fetchCommand } from "../api.ts";
 import DeliveryPanel from "./DeliveryPanel.vue";
+import PreflightPanel from "./PreflightPanel.vue";
 import StackPanel from "./StackPanel.vue";
-import SummaryPanel, { type Release } from "./SummaryPanel.vue";
+import type { Release } from "./draft.ts";
+import SummaryPanel from "./SummaryPanel.vue";
 import TargetsPanel from "./TargetsPanel.vue";
-import { checkItem, move, newItem, secondGoReasons, type StackItem } from "./stack.ts";
-import { FLEET_REACH, queryFromRoute, resolveTargets, type TargetQuery } from "./targets.ts";
+import { checkItem, move, newItem, type StackItem } from "./stack.ts";
+import { queryFromRoute, resolveTargets, type TargetQuery } from "./targets.ts";
+import { useComposeRequest } from "./useComposeRequest.ts";
 
 /**
  * C1 Compose / J3 Command a group (Command.md, DECISIONS #31: every request is a group). Targets
- * by live query, a catalog-driven stack, each target's next AOS, and the summary. Preflight (M18)
- * and submit (M16) arrive with group requests; until then the commit says why it can't.
+ * by live query, a catalog-driven stack, the server's preflight (M18) re-run on every change, each
+ * target's next contact, and the summary. Submit (M16) sends the digest of the checks on screen.
  */
 const scope = useMissionScope();
 const route = useRoute();
@@ -59,17 +62,9 @@ const setValues = (key: string, values: Record<string, string>) =>
 const release = ref<Release>({ mode: "next_contact", notBefore: null });
 const approver = ref("");
 const log = ref("");
-const secondGo = computed(() => secondGoReasons(stack.value, targets.value.length, FLEET_REACH));
-const blocked = computed(() => {
-  if (targets.value.length === 0) return "Add at least one target.";
-  if (stack.value.length === 0) return "Add a command from the catalog.";
-  if (stack.value.some((i) => !checkItem(i).ok)) return "Fix the highlighted argument values.";
-  if (secondGo.value.length && !log.value.trim())
-    return "Write a log entry: a second GO needs one.";
-  if (release.value.mode === "not_before" && release.value.notBefore === null)
-    return "Pick the hold-until time.";
-  return "Group requests aren't available yet: the server checks and submit arrive with api-ops M16/M18.";
-});
+const title = ref(typeof route.query.title === "string" ? route.query.title : "");
+const { draft, preflight, nameOf, contacts, secondGo, blocked, submission, send, check } =
+  useComposeRequest(missionId, rows, targets, query, stack, { title, log, release, approver });
 
 const steps = computed(() => [
   `Targets · ${targets.value.length}`,
@@ -82,7 +77,9 @@ const current = computed(() =>
     ? 0
     : stack.value.length === 0 || stack.value.some((i) => !checkItem(i).ok)
       ? 1
-      : 2,
+      : blocked.value === null
+        ? 3
+        : 2,
 );
 const context = computed(() => {
   const only =
@@ -160,23 +157,27 @@ const close = computed(() => {
               @remove="(key) => (stack = stack.filter((s) => s.key !== key))"
             />
           </div>
-          <ApPanel index="C3" title="GO / NO-GO poll" flush>
-            <ApEmptyState
-              state="off"
-              headline="Preflight checks aren't available yet"
-              :sentence="`The server's checks (identity, catalog, conflicts, contact, two-person) arrive with group requests. ${plural(targets.length * stack.length, 'uplink')} drafted.`"
-            />
-          </ApPanel>
-          <DeliveryPanel :targets="targets" />
+          <PreflightPanel
+            :state="preflight.state.value"
+            :checking="preflight.checking.value"
+            :ready="draft !== null"
+            :name-of="nameOf"
+            @retry="preflight.refetch"
+          />
+          <DeliveryPanel :targets="targets" :contacts="contacts" />
         </div>
         <SummaryPanel
           v-model:release="release"
           v-model:approver="approver"
           v-model:log="log"
+          v-model:title="title"
           :targets="targets.length"
           :commands="stack.length"
           :second-go="secondGo"
           :blocked="blocked"
+          :submit="submission.state.value"
+          @send="send"
+          @check="check"
         />
       </div>
     </ApRemote>
