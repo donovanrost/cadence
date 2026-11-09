@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PlanDetail } from "./api.ts";
 import { planHeaderTail } from "./plan-primary.ts";
-import { unconfirmedView } from "./unconfirmed.ts";
+import { shortWhen, unconfirmedView } from "./unconfirmed.ts";
 
 const pass = (id: string, sc: string, start: string) => ({
   snapshot_id: id,
@@ -47,19 +47,23 @@ const names = (id: string | null) => (id ? { name: `EARENDIL-${id.slice(3)}`, sc
 
 describe("U30 unconfirmed", () => {
   it("names the one provider, the window, and lists passes soonest first", () => {
-    const v = unconfirmedView(plan("unconfirmed", ["Northlight", "Northlight"]), names);
+    const v = unconfirmedView(
+      plan("unconfirmed", ["Northlight", "Northlight"]),
+      names,
+      "2026-11-10",
+    );
     expect(v?.headline).toBe(
       "Northlight hasn't confirmed 2 bookings after 10 min. They may or may not be booked, so Cadence won't send them again. Check them with Northlight.",
     );
-    expect(v?.rows.map((r) => r.text)).toEqual([
+    expect(v?.passes.map((r) => r.text)).toEqual([
       "EARENDIL-2 · KIR · 03:00Z",
       "EARENDIL-1 · KIR · 09:00Z",
     ]);
   });
   it("splits by provider when there are several", () => {
-    expect(unconfirmedView(plan("unconfirmed", ["Northlight", "KSAT"]), names)?.headline).toContain(
-      "Providers haven't confirmed 2 bookings (Northlight 1, KSAT 1) after 10 min.",
-    );
+    expect(
+      unconfirmedView(plan("unconfirmed", ["Northlight", "KSAT"]), names, "2026-11-10")?.headline,
+    ).toContain("Providers haven't confirmed 2 bookings (Northlight 1, KSAT 1) after 10 min.");
   });
   it("header: booked + unconfirmed on the state, a suffix on any other state", () => {
     expect(planHeaderTail(plan("unconfirmed", ["Northlight"]))).toBe("36 booked · 1 unconfirmed");
@@ -67,5 +71,12 @@ describe("U30 unconfirmed", () => {
       "partly booked · 1 unconfirmed",
     );
     expect(planHeaderTail({ ...plan("reserved", []), unconfirmed: null })).toBe("booked");
+  });
+});
+
+describe("shortWhen (design language §4)", () => {
+  it("drops the date today and keeps MM-DD otherwise", () => {
+    expect(shortWhen("2026-11-15T03:00:00Z", "2026-11-15")).toBe("03:00Z");
+    expect(shortWhen("2026-11-15T03:00:00Z", "2026-11-14")).toBe("11-15 03:00Z");
   });
 });
