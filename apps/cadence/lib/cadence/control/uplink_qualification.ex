@@ -15,7 +15,7 @@ defmodule Cadence.Control.UplinkQualification do
   require Logger
 
   alias Cadence.Control.UplinkQualification.Booking
-  alias Cadence.Runtime.{ProcessNamespace, TransportRuntime}
+  alias Cadence.Runtime.{ProcessNamespace, UplinkSessions}
 
   @tick_ms 15_000
   @requalify_after_ms 180_000
@@ -62,7 +62,7 @@ defmodule Cadence.Control.UplinkQualification do
 
     {results, qualified} =
       state.namespace
-      |> transport_runtimes()
+      |> UplinkSessions.list()
       |> Enum.reduce({%{}, %{}}, fn {key, pid}, {results, qualified} ->
         case qualify(pid, state.qualified, now) do
           {:qualified, incarnation} ->
@@ -84,23 +84,16 @@ defmodule Cadence.Control.UplinkQualification do
     {results, %{state | qualified: qualified}}
   end
 
-  defp transport_runtimes(namespace) do
-    Registry.select(namespace.registry, [
-      {{{:transport_runtime, :"$1", :"$2", :"$3", :"$4"}, :"$5", :_}, [],
-       [{{{{:"$1", :"$2", :"$3", :"$4"}}, :"$5"}}]}
-    ])
-  end
-
   defp qualify(pid, qualified, now) do
     with {:ok, review} <- review(pid),
          :ok <- provider_managed(review),
          :ok <- due(review, qualified, now),
          {:ok, booking} <- booking(review.provider),
          {:ok, fencing} <- evidence(booking, review, "fencing"),
-         :ok <- TransportRuntime.begin_session_recovery(pid, fencing),
+         :ok <- UplinkSessions.begin_recovery(pid, fencing),
          {:ok, review} <- review(pid),
          {:ok, protocol} <- evidence(booking, review, "protocol"),
-         :ok <- TransportRuntime.complete_session_recovery(pid, protocol) do
+         :ok <- UplinkSessions.complete_recovery(pid, protocol) do
       {:qualified, review.incarnation}
     end
   catch
@@ -108,7 +101,7 @@ defmodule Cadence.Control.UplinkQualification do
   end
 
   defp review(pid) do
-    case TransportRuntime.session_review(pid) do
+    case UplinkSessions.review(pid) do
       {:ok, review} -> {:ok, review}
       {:error, reason} -> {:skipped, reason}
     end

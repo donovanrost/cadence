@@ -536,6 +536,8 @@ defmodule Cadence.Architecture.PlaneBoundary do
                               "lib/cadence/runtime/replay_session.ex",
                               "lib/cadence/runtime/realized_contact_runtime_spec.ex",
                               "lib/cadence/runtime/transmit_command.ex",
+                              "lib/cadence/runtime/uplink_sessions.ex",
+                              "lib/cadence/runtime/session_qualification.ex",
                               "lib/cadence/runtime/transport_action_request.ex",
                               "lib/cadence/runtime/transport_capability_record.ex",
                               "lib/cadence/runtime/transport_records.ex",
