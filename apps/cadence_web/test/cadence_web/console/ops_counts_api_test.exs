@@ -25,7 +25,8 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
              "active" => 0,
              "critical" => 0,
              "caution" => 0,
-             "unacknowledged" => 0
+             "unacknowledged" => 0,
+             "limits_configured" => false
            }
 
     assert data["commands"] == %{"open" => 0, "awaiting_viewer" => 0}
@@ -38,7 +39,7 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
     ControlPlaneApiFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
     data = c |> counts() |> json_response(200) |> Map.fetch!("data")
 
-    assert %{"active" => 1, "caution" => 1, "critical" => 0, "unacknowledged" => 1} =
+    assert %{"active" => 1, "caution" => 1, "unacknowledged" => 1, "limits_configured" => true} =
              data["alarms"]
 
     assert data["fleet"]["total"] == 1

@@ -17,7 +17,7 @@ defmodule Cadence.Reads.OpsCounts do
 
     %{
       observed_at: DateTime.utc_now(),
-      alarms: alarms(scope, mission_id),
+      alarms: alarms(scope, mission_id, Cadence.Limits.list_limit_definitions(mission_id) != []),
       commands:
         commands(
           CommandCounts.load(organization_id, mission_id, scope.user && scope.user.user_id)
@@ -42,10 +42,13 @@ defmodule Cadence.Reads.OpsCounts do
     }
   end
 
-  defp alarms(scope, mission_id) do
+  defp alarms(scope, mission_id, limits_configured?) do
     case Alarms.summary(scope, mission_id) do
-      {:ok, summary} -> alarm_counts(summary)
-      {:error, _reason} -> nil
+      {:ok, summary} ->
+        summary |> alarm_counts() |> Map.put(:limits_configured, limits_configured?)
+
+      {:error, _reason} ->
+        nil
     end
   end
 
