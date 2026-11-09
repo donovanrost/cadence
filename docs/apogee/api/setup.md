@@ -271,6 +271,21 @@ the worst fleet state any of the mission's spacecraft is in (the fleet read's st
 `critical | caution | stale | nominal | never_heard`), or `null` when it has no spacecraft. Visible
 to every member.
 
+### Provider accounts (PA1, organization admins)
+
+- `GET /provider-accounts` → `{accounts: [{id, name, provider: {key, label}, status: "connected" |
+  "auth_failed" | "not_checked", status_detail, expires_at: null, last_success_at, missions: [{id,
+  name}], added_at, added_by: {name} | null}], adapters: [{key, label}], permissions:
+  ["provider_accounts.manage"]}`.
+  - `missions` lists the missions whose ground-network providers use the account.
+  - `status` is `auth_failed` when the credential is revoked, and `not_checked` before a first
+    successful test.
+  - There's no `expiring`: credentials carry no expiry yet.
+- `POST /provider-accounts/:id/test` → `{ok, message}` from the real credential check.
+  `404 provider_account_not_found`.
+- **Not yet:** create, update, delete and the adapter schema. Those need the secrets path
+  (`ProviderCredentials`); next.
+
 ### `GET /audit` (AU1, organization admins)
 
 Query: `from`, `to` (ISO; default the last 7 days), `actor_id`, `mission_id`, `kinds` (comma
@@ -362,7 +377,8 @@ sources come first, then by name.
 applications installable on a mission, platform ones first, then by name.
 
 - `platform: true` apps are always on and can't be changed.
-- `version` is the installed version, or `null` when the app isn't installed.
+- `version` is the installed version, an integer (application versions are integers), or `null`
+  when the app isn't installed.
 - `consequence_if_missing` is always `null`: apps don't declare one yet.
 - `apps.install` comes from the check the actions enforce (`:operate_mission`, so any mission
   operator today; DECISIONS #38).
@@ -384,7 +400,8 @@ inherited_value}], locked, version: {version, at, actor: {name}} | null}], permi
 - Sections come from the server's settings registry (Governance, Commanding, Pass review when
   it lands, and `cadence.configuration`, the profile framing generations flag). A section with no
   console fields is left out.
-- Fields use the kind-schema shape, with paths inside the section's value. At organization level
+- Fields use the kind-schema shape, with paths inside the section's value. Shares between 0 and 1
+  (Pass review) have `unit: "ratio"`. At organization level
   each section adds `allow_override` ("Missions may override").
 - `inherited_value` is the organization's value (mission level only). `locked: true` means the
   organization doesn't allow an override.

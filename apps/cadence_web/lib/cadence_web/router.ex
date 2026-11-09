@@ -904,6 +904,8 @@ defmodule CadenceWeb.Router do
       get("/service-identities", PeopleController, :service_identities)
       get("/missions", OrganizationController, :missions)
       get("/audit", OrganizationController, :audit)
+      get("/provider-accounts", ProviderAccountController, :index)
+      post("/provider-accounts/:id/test", ProviderAccountController, :test)
       get("/settings", SettingsController, :show)
       put("/settings/:section_key", SettingsController, :update)
     end

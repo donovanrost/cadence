@@ -124,15 +124,22 @@ defmodule Cadence.Management.ConsoleSettings do
         enum: Enum.map(options, fn {value, text} -> %{value: value, label: text} end)
       )
 
+  # Shares between 0 and 1: the console shows and accepts percentages (unit "ratio").
   defp number(path, label, opts \\ []),
-    do: field(path, label, :number, Keyword.put(opts, :range, %{min: 0, max: 1}))
+    do:
+      field(
+        path,
+        label,
+        :number,
+        opts |> Keyword.put(:range, %{min: 0, max: 1}) |> Keyword.put(:unit, "ratio")
+      )
 
   defp field(path, label, type, opts) do
     %{
       path: path,
       label: label,
       type: type,
-      unit: nil,
+      unit: Keyword.get(opts, :unit),
       enum: Keyword.get(opts, :enum),
       range: Keyword.get(opts, :range),
       required: false,

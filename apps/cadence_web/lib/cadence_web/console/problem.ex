@@ -40,6 +40,7 @@ defmodule CadenceWeb.Console.Problem do
     template_not_found: {404, "Template not found."},
     app_not_found: {404, "App not found."},
     settings_section_not_found: {404, "Settings section not found."},
+    provider_account_not_found: {404, "Provider account not found."},
     settings_enforced_by_organization:
       {409, "The organization doesn't let missions change this setting."},
     app_action_failed: {422, "The app change was refused."},
