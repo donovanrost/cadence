@@ -1,0 +1,95 @@
+import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+
+/** Proposed contracts (plans/ops.md, "Events" and "Event density"); not implemented yet. */
+
+export const eventKinds = [
+  "limit",
+  "flight_event",
+  "contact",
+  "command",
+  "config",
+  "operator",
+] as const;
+export type EventKind = (typeof eventKinds)[number];
+export const eventSeverities = ["critical", "caution", "nominal", "info"] as const;
+export type EventSeverity = (typeof eventSeverities)[number];
+
+const event = d.object({
+  id: d.token,
+  at: d.timestamp,
+  kind: d.oneOf(eventKinds),
+  severity: d.oneOf(eventSeverities),
+  text: d.string,
+  spacecraft: d.nullable(d.object({ id: d.token, name: d.string, scid: d.integer })),
+  refs: d.object({
+    alarm_id: d.nullable(d.token),
+    point_id: d.nullable(d.token),
+    command_request_id: d.nullable(d.token),
+    contact_id: d.nullable(d.token),
+  }),
+});
+
+export const eventsReader = d.object({
+  from: d.timestamp,
+  to: d.timestamp,
+  events: d.array(event, 500),
+});
+export type Events = Decoded<typeof eventsReader>;
+export type MissionEvent = Events["events"][number];
+
+const bucket = d.object({
+  t: d.timestamp,
+  critical: d.integer,
+  caution: d.integer,
+  nominal: d.integer,
+  info: d.integer,
+});
+export const densityReader = d.object({ bucket_s: d.integer, buckets: d.array(bucket, 2_000) });
+export type Density = Decoded<typeof densityReader>;
+
+export type EventQuery = Readonly<{
+  from: Date;
+  to: Date;
+  spacecraftId?: string;
+  plane?: number;
+  kinds?: readonly EventKind[];
+}>;
+
+function params(query: EventQuery, extra: Record<string, string>) {
+  const p = new URLSearchParams({
+    from: query.from.toISOString(),
+    to: query.to.toISOString(),
+    ...extra,
+  });
+  if (query.spacecraftId) p.set("spacecraft_id", query.spacecraftId);
+  if (query.plane !== undefined) p.set("plane", String(query.plane));
+  if (query.kinds?.length) p.set("kind", query.kinds.join(","));
+  return p.toString();
+}
+
+const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/events`;
+
+export function fetchEvents(
+  missionId: string,
+  query: EventQuery,
+  signal?: AbortSignal,
+): Promise<ApiResult<Events>> {
+  return request(
+    `${base(missionId)}?${params(query, { limit: "500" })}`,
+    eventsReader,
+    signal ? { signal } : {},
+  );
+}
+
+export function fetchDensity(
+  missionId: string,
+  query: EventQuery,
+  bucketS: number,
+  signal?: AbortSignal,
+): Promise<ApiResult<Density>> {
+  return request(
+    `${base(missionId)}/density?${params(query, { bucket_s: String(bucketS) })}`,
+    densityReader,
+    signal ? { signal } : {},
+  );
+}
