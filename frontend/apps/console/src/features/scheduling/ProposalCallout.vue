@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { ApCallout, plural } from "@/ui";
-import { fetchRepair, stationCode, type PlanSummary } from "./api.ts";
+import { byAuthor, fetchRepair, stationCode, type PlanSummary } from "./api.ts";
 
 /**
  * U28: K1 never opens a repair proposal; it says one is open for the day and links to K2, which
@@ -32,8 +32,7 @@ const moves = computed(() => {
   return `${parts.join(", ")}${off.length > 0 ? ` off ${off.join(", ")}` : ""}`;
 });
 const proposed = computed(() => {
-  const by = props.proposal.author ? ` by ${props.proposal.author.name}` : "";
-  return `proposed ${props.proposal.updated_at.slice(11, 16)}Z${by}`;
+  return `proposed ${props.proposal.updated_at.slice(11, 16)}Z${byAuthor(props.proposal.author)}`;
 });
 const to = computed(() =>
   repairOf.value

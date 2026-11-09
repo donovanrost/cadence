@@ -10,6 +10,7 @@ export {
   type ContactState,
 } from "./contact.ts";
 export {
+  byAuthor,
   continueDraft,
   fetchAvailability,
   fetchPlan,

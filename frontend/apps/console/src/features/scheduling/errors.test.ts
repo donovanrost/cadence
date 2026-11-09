@@ -35,3 +35,14 @@ describe("isPlanSuperseded", () => {
     ).toBe(false);
   });
 });
+
+describe("byAuthor (ux, api af0279d1)", () => {
+  it("names a person, marks a system run as automatic, and says nothing when unknown", async () => {
+    const { byAuthor } = await import("./api.ts");
+    expect(byAuthor({ kind: "user", name: "Cadence Administrator" })).toBe(
+      " by Cadence Administrator",
+    );
+    expect(byAuthor({ kind: "system", name: "Cadence" })).toBe(" by Cadence (automatic repair)");
+    expect(byAuthor(null)).toBe("");
+  });
+});

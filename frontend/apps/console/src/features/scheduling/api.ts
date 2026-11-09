@@ -59,7 +59,8 @@ const planRow = {
   version: d.integer,
   state: d.oneOf(planStates),
   window: d.object({ from: d.nullable(d.timestamp), to: d.nullable(d.timestamp) }),
-  author: d.nullable(d.object({ name: d.string })),
+  /** `kind: system` = an automatic run ("Cadence"); null only when unknown (api af0279d1). */
+  author: d.nullable(d.object({ kind: d.optional(d.string), name: d.string })),
   counts: d.object({
     passes: d.integer,
     minutes: d.integer,
@@ -78,6 +79,15 @@ const planRow = {
 
 const planRows = d.array(d.object(planRow), 100);
 /** U28: `plans` holds the day's base plans; K2 repair proposals are listed apart (absent on older servers). */
+/**
+ * ux (api af0279d1): " by Cadence Administrator" for a person, " by Cadence (automatic repair)" for
+ * a system run, "" only when the author is unknown. Leading space included, for appending.
+ */
+export function byAuthor(author: PlanSummary["author"]): string {
+  if (!author) return "";
+  return author.kind === "system" ? ` by ${author.name} (automatic repair)` : ` by ${author.name}`;
+}
+
 export const plansReader = d.object({
   plans: planRows,
   repair_proposals: (value: unknown, path?: string) =>
