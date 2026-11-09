@@ -87,3 +87,14 @@ row (person select + optional note + disabled Assign).
 Not exercised: the assign-failure path (the picker lists no people on :4011).
 
 **Closed (8241c0e8):** 14 verified (`Ack cleared · escalated to critical` shows), 16 verified (header toggles to `Cancel`), 17 verified (`V/h`). 15 renders `ACKNOWLEDGED BY QA ORG ADMIN · 01:14Z`: the time is there, and "by you" didn't trigger only because my mock's actor id isn't the session user's. Accepted. 18: the rail no longer shows an Alarms count. Lifecycle review closed.
+
+## Alarms on episodes (566f6998), injected episodes, 1440×900
+Verified: tabs with counts, Owner (`UNASSIGNED`) and Source columns, `23.1 V / 24.0 V`, conditions
+in words, the limits-off callout, L2 By point. Items:
+19. **"Active" means two things:** the h1 says `2 ALARMS ACTIVE`, but the `Active` tab counts 1
+    (unacknowledged only); acknowledged alarms are still active. → tabs `New 1 · Acknowledged 1 ·
+    Cleared · 24 h`, h1 `2 alarms active · 1 new`.
+20. **Source column clipped** at the table's right edge (`GROUND` cut off) next to L2. → give the
+    table its columns (narrow L2 to 300px or let the table scroll inside its panel), or put the
+    source tag under the severity in the first column.
+Not checked: the Cleared tab content (my tab click didn't land); re-check on the next pass.

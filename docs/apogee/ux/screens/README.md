@@ -17,6 +17,7 @@ acceptance. Language: `../design-language.md`; routes: `../information-architect
 | 2 · Setup | [Catalog import](Catalog.md) | Catalog (S3) | fe-setup |
 | 2 · Setup | [Profile](Profile.md) | Profile (S4) | fe-setup |
 | 2 · Setup | [People & access](People.md) | People (S5) | fe-setup |
+| 2 · Setup | [Contact planning](ContactPlanning.md) | none (DECISIONS #27) | fe-setup |
 | 2→3 · Setup | [Staged changes, apply, revisions](Changes.md) | Setup, Profile | fe-setup (+ domain, api) |
 | 3 | [Commanding flow](CommandFlow.md) | CommandFlow, Compose, Approve, Uplink | fe-ops |
 | 3 | [Scheduling flow](ScheduleFlow.md) | ScheduleFlow, PassPrediction, SchedulePlan, Replan, PassReview | fe-ops |

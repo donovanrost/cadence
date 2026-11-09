@@ -64,6 +64,39 @@ footer: Passes │ Minutes / budget │ Cost / budget │ Rule met │ Conflicts
   `Submit 1,512 requests` (step 04). After submit the plan shows per-contact Requested → Confirmed /
   Rejected live; rejections become new A rows.
 
+### K1 plan states (DECISIONS #27, #28; lead's model in plans/scheduling.md)
+The takeover header's mono line names the state. There's **one primary per state**, always in the
+footer's commit slot, and a blocked primary always says why in visible text under it (U6/§6).
+| State | Header line (mono) | Body | Primary (footer) |
+| --- | --- | --- | --- |
+| `not_set_up` | `CONTACT PLAN · NOT SET UP` | `off` callout: "Cadence needs a planning policy and at least one contact rule before it can draft a day." Lists what's missing (`No policy`, `312 spacecraft have no rule`). | `Set up contact planning` → Setup › Contact planning |
+| `no_draft` | `CONTACT PLAN · FRI 24 OCT · NO DRAFT` | Demand list (from rules) + "Last plan for this day: r40, booked 1,498 of 1,512" if any. | `Draft the day` |
+| `drafting` | `DRAFTING · OPTIMIZING · 00:41` | Step bar shows 03 Draft as current, and a phase line `MATERIALIZING → SEARCHING → OPTIMIZING → PLAN` with the current phase in readout and elapsed time. Panels show what's known so far. | none (secondary `Cancel` only if the domain supports it) |
+| `interrupted` (draft) | `DRAFTING STOPPED` | stale callout: "Drafting stopped when the server restarted at 02:31Z. Nothing was submitted." | `Continue drafting` |
+| `draft` + **conflicts** | `R41 DRAFT · 2 CONFLICTS` | Conflicts as crit rows at the top of D (`SVB-1 double-booked 03:20Z: 073 and 251 overlap 3 min`), each with `Move` / `Remove`. Conflicting passes dashed caution on the Gantt. | `Submit` **disabled**, reason under it: "2 conflicts on SVB-1 and FBK-2. Move or remove a pass to submit." (Conflicts always block, #28.) |
+| `draft` + **unmet requirements** (no conflicts) | `R41 DRAFT · 6 NOT COVERED` | A Demand lists them first (see below). Footer `Rule met 494/500` caution. | `Accept 6 gaps and submit` → **Accept gaps sheet** |
+| `draft` ready | `R41 DRAFT · READY` | Totals; `Rule met 500/500` nominal. | admin: `Submit and book 1,512 passes` (confirm sheet: totals, providers, "This books passes with 3 providers"); member: `Request approval` |
+| `pending_approval` | `R41 · WAITING FOR AN ADMIN` | member: info callout "Sent to org admins 02:44Z." Read-only plan. admin: ApDecision (`Approve and book` / `Send back` with a comment). Reviewer ≠ author. Accepted gaps listed with their reasons. | admin: `Approve and book 1,512 passes` |
+| `executing` | `BOOKING · 812 OF 1,512` | Per-contact trail Requested → Confirmed / Rejected live on the Gantt (rejected = caution dashed), with counts in the footer. | none |
+| `interrupted` (execute) | `BOOKING STOPPED · 812 OF 1,512` | stale callout: "Booking stopped when the server restarted. 812 requests went out; 700 didn't." (U20: state what's known.) | `Continue booking` |
+| `reserved` | `R41 · BOOKED` | nominal callout "1,512 passes confirmed." | secondary `Open Contacts` |
+| `partially_reserved` / `failed` | `R41 · 1,490 OF 1,512 BOOKED` / `R41 · BOOKING FAILED` | Rejections become A Demand rows (`Rejected by Northlight: antenna fault`). | `Re-plan after provider changes` (K2) |
+
+**A Demand when a spacecraft can't be covered at all:** the row says so plainly, with no alternatives.
+Caution mark, name, and "No window can cover it: no station sees EARENDIL-389 with uplink today"
+(the cause from the server: no opportunity / all windows taken / constraint excludes every station),
+then mono `0 / 3 CONTACTS`. D's alternatives list says "Nothing else is visible from the network that
+day." and offers only `Accept gap` (adds it to the sheet with the reason prefilled from the cause). An
+uncoverable spacecraft never shows a disabled `Add`.
+
+**Accept gaps sheet** (side sheet, opened by the primary): title `Accept 6 gaps`; one row per unmet
+requirement: mark, spacecraft (mono), the rule and shortfall (`2 / 3 contacts · longest gap 11h20 >
+10h00`), the cause, and a required reason field. A `Same reason for all` checkbox fills empty reasons
+from the first. Footer: caption `AUDITED · VISIBLE TO THE APPROVER` + primary `Accept 6 gaps and submit`
+(member: `Accept 6 gaps and request approval`), disabled until every row has a reason, with the
+count still missing under it ("2 gaps still need a reason"). Accepted gaps show in the plan as `GAP
+ACCEPTED · <reason>` rows, and in the revision history.
+
 ## K2 · A station goes down (`M/contacts/replan/:stationId`)
 Entered from Now (P2 station degraded), the Contacts station row or ⌘K. Takeover header: close ·
 mono `RE-PLAN · LIVE PLAN R41 · 02:45–10:45Z` over `Svalbard outage` · step bar `01 Impact · 02

@@ -53,9 +53,10 @@ org and mission (decision U1): `O = /console/:orgId`, `M = O/:missionId` (e.g.
 | 04 | **Catalog** | `M/setup/catalog` · import `M/setup/catalog/import[/:importId]` · `M/setup/catalog/:databaseId` | Catalog (S3) |
 | 05 | **Comms & routing** | tabs: `M/setup/comms` (routing rules) · `M/setup/comms/transports[/:id]` | – |
 | 06 | **Ground stations** | tabs: `M/setup/stations[/:id]` · `M/setup/stations/providers[/:id]` (decision U4) | – |
-| 07 | **Data sources** | `M/setup/data-sources[/:id]` · `M/setup/data-sources/operations` | – |
-| 08 | **Apps** | `M/setup/apps[/:appKey]` | – |
-| 09 | **Mission settings** **[decision]** | `M/setup/settings[/:section]` | – |
+| 07 | **Contact planning** (DECISIONS #27) | `M/setup/contact-planning[/policy]` · `…/templates/:id` | – (`screens/ContactPlanning.md`) |
+| 08 | **Data sources** | `M/setup/data-sources[/:id]` · `M/setup/data-sources/operations` | – |
+| 09 | **Apps** | `M/setup/apps[/:appKey]` | – |
+| 10 | **Mission settings** **[decision]** | `M/setup/settings[/:section]` | – |
 | | staged changes | `M/setup/changes` (review & apply) · `M/setup/revisions[/:rev]` (history, compare, roll back). Target design: `screens/Changes.md` (DECISIONS #1); hidden in v1 (U2). | Setup R2 + staged bar |
 | Org | **People & access** | `O/org/people` · `O/org/people/invite` · service identities `O/org/people/services` | People (S5) |
 | Org | **Missions** | `O/org/missions` · `O/org/missions/new` (takeover wizard, U5) | – |
