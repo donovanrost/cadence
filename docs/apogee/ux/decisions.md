@@ -142,3 +142,9 @@ CRITICAL` in caution text until someone acks again. Assign lists all mission mem
 and tags, wrap it in a mono `normal-case` span: `APPLY r6 · 2 CHANGES`, `REVIEW & APPLY AS r6`,
 `REVISIONS · r5 LIVE`. Same for other literal ids inside display text (`SCID 312`, `HK.battery_voltage`).
 Words like `rev 14` (catalog revision) are words and may uppercase.
+
+### U18 · Touch targets under 768 (pass 1)
+**Decision:** below 768px every interactive element (links in breadcrumbs and panel metas, table
+name links, segmented options, chips) has at least 44px of hit area (padding, min-height or a
+`::before` hit box), keeping its visual size. Primary/commit actions stay at 48px and full width
+(Mobile.md). Desktop keeps the canvas densities.
