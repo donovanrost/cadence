@@ -44,8 +44,13 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "commands/new",
     name: "ops.commands.new",
-    component: pending,
-    meta: { mode: "ops", nav: "commands", title: "Compose", board: "Compose (C1), Command (J3)" },
+    component: () => import("@/features/commands/compose/ComposeScreen.vue"),
+    meta: {
+      mode: "takeover",
+      nav: "commands",
+      title: "Compose",
+      board: "Compose (C1), Command (J3)",
+    },
   },
   {
     path: "commands/:requestId/:view(review|uplink)?",
