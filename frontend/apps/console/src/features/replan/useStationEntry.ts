@@ -69,5 +69,5 @@ export function useStationEntry(missionId: Readonly<Ref<string>>) {
     { immediate: true },
   );
 
-  return { stationId, stationName, availability: availability.state, resolved };
+  return { stationId, stationName, availability: availability.state, resolved, span };
 }

@@ -10,6 +10,7 @@ export type ImpactRow = Readonly<{
   spacecraft: string;
   station: string;
   startsAt: string;
+  endsAt: string;
   why: string;
 }>;
 export type Impact = Readonly<{
@@ -46,6 +47,7 @@ export function impactOf(passes: readonly Pass[], planId: string, truncated: boo
       spacecraft: p.spacecraft?.name ?? p.spacecraft_id ?? "Unknown spacecraft",
       station: p.station.code ?? p.station.ref ?? "—",
       startsAt: p.starts_at,
+      endsAt: p.ends_at,
       why: why(p),
     })),
     passes: lost.length,
@@ -53,4 +55,19 @@ export function impactOf(passes: readonly Pass[], planId: string, truncated: boo
     stations,
     truncated,
   };
+}
+
+/**
+ * The window a re-plan should cover: the lost bookings' span, never starting in the past. Without
+ * one the server repairs now → end of horizon, which can exceed the policy's repair window
+ * (422 fleet_repair_horizon_exceeded).
+ */
+export function lostWindow(
+  rows: readonly Readonly<{ startsAt: string; endsAt: string }>[],
+  now: Date,
+): Readonly<{ from: string; to: string }> | null {
+  if (rows.length === 0) return null;
+  const from = Math.max(now.getTime(), Math.min(...rows.map((r) => Date.parse(r.startsAt))));
+  const to = Math.max(...rows.map((r) => Date.parse(r.endsAt)));
+  return to > from ? { from: new Date(from).toISOString(), to: new Date(to).toISOString() } : null;
 }

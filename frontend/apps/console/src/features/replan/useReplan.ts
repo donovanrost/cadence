@@ -52,12 +52,12 @@ export function useReplan(missionId: Readonly<Ref<string>>) {
   }, 5_000);
   onScopeDispose(() => clearInterval(poll));
 
-  async function propose() {
+  async function propose(window?: Readonly<{ from: string; to: string }>) {
     if (!planId.value) return;
     busy.value = true;
     actionError.value = null;
     try {
-      const result = await startRepair(missionId.value, planId.value, crypto.randomUUID());
+      const result = await startRepair(missionId.value, planId.value, crypto.randomUUID(), window);
       if (result.ok) await router.replace({ query: { ...route.query, run: result.value.run_id } });
       else actionError.value = result.error;
     } finally {

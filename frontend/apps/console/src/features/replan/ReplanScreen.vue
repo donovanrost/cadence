@@ -20,6 +20,8 @@ import {
 } from "@/features/scheduling/index.ts";
 import ChangesPanel from "./ChangesPanel.vue";
 import { replanErrorText } from "./errors.ts";
+import { lostWindow } from "./impact.ts";
+import { useLostBookings } from "./useLostBookings.ts";
 import ImpactPanel from "./ImpactPanel.vue";
 import StationImpactPanel from "./StationImpactPanel.vue";
 import { useStationEntry } from "./useStationEntry.ts";
@@ -34,6 +36,13 @@ const nameOf = useSpacecraftNames(missionId);
 // Station-down entry (S7): resolves the plan to repair into ?plan=, then the plan flow continues.
 const station = useStationEntry(missionId);
 const availability = useRemoteQuery(missionId, (id, signal) => fetchAvailability(id, signal));
+const liveSource = computed(() => (source.value.status === "ready" ? source.value.value : null));
+const lost = useLostBookings(missionId, liveSource);
+/** Re-plan around what was lost (station outage window, else the lost bookings' span). */
+function proposeAround() {
+  const window = station.span.value ?? lostWindow(lost.impact.value?.rows ?? [], new Date());
+  void propose(window ?? undefined);
+}
 const session = useSession();
 const isAdmin = computed(() => canAdministerOrganization(session, scope.value.organization));
 const sheet = ref<InstanceType<typeof SubmitSheet> | null>(null);
@@ -150,7 +159,14 @@ async function onApply(acks: Acknowledgement[]) {
             :station-name="station.stationName.value"
             :availability="station.availability.value.value"
           />
-          <ImpactPanel v-else :mission-id="missionId" :live="live" />
+          <ImpactPanel
+            v-else
+            :live="live"
+            :state="lost.state.value"
+            :impact="lost.impact.value"
+            :has-window="lost.hasWindow.value"
+            @retry="lost.refetch"
+          />
           <div class="flex min-h-0 flex-col gap-3">
             <DraftGantt
               :plan="live"
@@ -218,8 +234,11 @@ async function onApply(acks: Acknowledgement[]) {
         </p>
         <ImpactPanel
           v-if="repairableStates.includes(live.state)"
-          :mission-id="missionId"
           :live="live"
+          :state="lost.state.value"
+          :impact="lost.impact.value"
+          :has-window="lost.hasWindow.value"
+          @retry="lost.refetch"
         />
       </ApPanel>
       <ApCallout v-if="actionError" tone="caution">{{ replanErrorText(actionError) }}</ApCallout>
@@ -229,7 +248,7 @@ async function onApply(acks: Acknowledgement[]) {
           variant="primary"
           size="commit"
           :disabled="busy"
-          @click="propose"
+          @click="proposeAround"
           >Propose a re-plan</ApButton
         >
         <ApButton

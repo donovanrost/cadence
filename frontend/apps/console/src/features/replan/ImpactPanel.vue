@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { useRemoteQuery } from "@/api";
-import { fetchPasses } from "@/features/contacts/index.ts";
+import type { RemoteState } from "@/api";
+import type { Passes } from "@/features/contacts/index.ts";
 import type { PlanDetail } from "@/features/scheduling/index.ts";
 import {
   ApEmptyState,
@@ -12,41 +11,28 @@ import {
   formatShort,
   plural,
 } from "@/ui";
-import { impactOf } from "./impact.ts";
+import type { Impact } from "./impact.ts";
 
 /** A Impact (v1): the live plan's rejected / failed / canceled bookings (DECISIONS #25). */
-const props = defineProps<{ missionId: string; live: PlanDetail }>();
-const key = computed(() => {
-  const w = props.live.window;
-  return w.from && w.to
-    ? { missionId: props.missionId, from: new Date(w.from), to: new Date(w.to) }
-    : null;
-});
-const passes = useRemoteQuery(key, (k, signal) =>
-  fetchPasses(k.missionId, { from: k.from, to: k.to }, signal),
-);
-const impact = computed(() =>
-  passes.state.value.status === "ready"
-    ? impactOf(passes.state.value.value.passes, props.live.id, passes.state.value.value.truncated)
-    : null,
-);
+defineProps<{
+  live: PlanDetail;
+  state: RemoteState<Passes>;
+  impact: Impact | null;
+  hasWindow: boolean;
+}>();
+defineEmits<{ retry: [] }>();
 </script>
 
 <template>
   <ApPanel
     index="A"
     title="Impact"
-    :meta="impact ? plural(impact.passes, 'booking', 'bookings') + ' lost' : undefined"
+    :meta="impact ? `${plural(impact.passes, 'booking')} lost` : undefined"
     pane
     flush
   >
-    <ApEmptyState v-if="!key" headline="The live plan has no passes" />
-    <ApRemote
-      v-else
-      :state="passes.state.value"
-      loading-label="Loading bookings…"
-      @retry="passes.refetch"
-    >
+    <ApEmptyState v-if="!hasWindow" headline="The live plan has no passes" />
+    <ApRemote v-else :state="state" loading-label="Loading bookings…" @retry="$emit('retry')">
       <template #default>
         <template v-if="impact">
           <div class="grid grid-cols-3 gap-px border-b border-hairline bg-hairline">
@@ -92,10 +78,6 @@ const impact = computed(() =>
           >
             Showing {{ Math.min(40, impact.rows.length) }} of {{ impact.passes
             }}{{ impact.truncated ? "; the window was truncated by the server" : "" }}.
-          </p>
-          <p class="m-0 border-t border-hairline px-4 py-2 text-sm text-text-3">
-            Station status isn't reported yet; this lists the bookings providers rejected, failed or
-            canceled.
           </p>
         </template>
       </template>
