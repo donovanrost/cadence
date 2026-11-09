@@ -123,3 +123,33 @@ describe("event subjects (ux timeline #1)", () => {
     expect(subjectLink(activation)).toBeNull();
   });
 });
+
+describe("fan-out on kind + minute (ux timeline 7/8)", () => {
+  it("folds per-spacecraft sentences and spacecraft-less events, with the worst mark", () => {
+    const completed = (n: number) => ({
+      ...ev(`r${n}`, "2026-11-09T10:22:54Z"),
+      kind: "operator" as const,
+      raw_kind: "realized_contact_interval",
+      text: `Contact with EARENDIL-00${n} completed`,
+      spacecraft: { id: `sc-${n}`, name: `EARENDIL-00${n}`, scid: n },
+    });
+    const [g] = byHour([1, 2, 3, 4].map(completed));
+    expect(g?.rows).toHaveLength(1);
+    expect(g?.rows[0]?.label).toBe("Realized contact interval");
+
+    const canceled = (n: number, severity: MissionEvent["severity"]) => ({
+      ...ev(`c${n}`, `2026-11-09T10:47:0${n}Z`, severity),
+      raw_kind: "scheduled_contact_canceled",
+      text: "Contact for a spacecraft canceled by the provider",
+    });
+    const [c] = byHour([
+      canceled(1, "info"),
+      canceled(2, "caution"),
+      canceled(3, "info"),
+      canceled(4, "caution"),
+    ]);
+    expect(c?.rows).toHaveLength(1);
+    expect(c?.rows[0]?.members).toHaveLength(4);
+    expect(c?.rows[0]?.event.severity).toBe("caution");
+  });
+});

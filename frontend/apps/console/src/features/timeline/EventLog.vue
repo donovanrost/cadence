@@ -25,7 +25,7 @@ const spacecraftOf = (members: readonly MissionEvent[]) =>
     <h3 class="ap-label m-0 border-b border-hairline px-4 pt-3 pb-1.5">{{ group.hour }}</h3>
     <ol class="m-0 list-none px-4 py-1">
       <ApEventLine
-        v-for="{ key, event, count, firstAt, members } in group.rows"
+        v-for="{ key, event, count, firstAt, members, label } in group.rows"
         :key="key"
         :time="`${formatClock(new Date(event.at))}Z`"
         :datetime="event.at"
@@ -33,9 +33,11 @@ const spacecraftOf = (members: readonly MissionEvent[]) =>
       >
         <details v-if="members.length" class="inline">
           <summary class="cursor-pointer">
-            {{ event.text }} ·
+            {{ label }} ·
             <span class="font-mono">{{
-              plural(spacecraftOf(members).length, "spacecraft", "spacecraft")
+              spacecraftOf(members).length
+                ? plural(spacecraftOf(members).length, "spacecraft", "spacecraft")
+                : plural(members.length, "event")
             }}</span>
           </summary>
           <span class="flex flex-wrap gap-x-3 pt-1 font-mono text-sm">
@@ -47,6 +49,16 @@ const spacecraftOf = (members: readonly MissionEvent[]) =>
               >{{ sc.name }}</RouterLink
             >
           </span>
+          <ul v-if="!spacecraftOf(members).length" class="m-0 list-none p-0 pt-1 text-sm">
+            <li v-for="m in members" :key="m.id">
+              <RouterLink
+                v-if="subjectLink(m)"
+                :to="subjectLink(m) ?? ''"
+                class="max-md:hit-44 text-readout no-underline hover:underline"
+                >{{ m.text }}</RouterLink
+              ><template v-else>{{ m.text }}</template>
+            </li>
+          </ul>
         </details>
         <template v-else>
           <template v-if="event.spacecraft && needsSpacecraftPrefix(event)"

@@ -53,8 +53,9 @@ export const KIND_WORDS: Readonly<Record<EventKind, string>> = {
 };
 
 /**
- * One row: an event, a run of consecutive identical events (× count, first–last), or the same
- * event across many spacecraft in one minute (`members`, expandable; ux Timeline review 6).
+ * One row: an event, a run of consecutive identical events (× count, first–last), or a fan-out:
+ * more than FANOUT_AT events of one kind in one minute (`members`, expandable, with a kind-level
+ * `label`; ux Timeline review 6/7).
  */
 export type LogRow = Readonly<{
   key: string;
@@ -62,36 +63,51 @@ export type LogRow = Readonly<{
   count: number;
   firstAt: string;
   members: readonly MissionEvent[];
+  /** Fan-out rows: the kind in words ("Realized contact interval"); null otherwise. */
+  label: string | null;
 }>;
 
-/** More than this many spacecraft with the same event in one minute fold into one row. */
+/** More than this many events of one kind in one minute fold into one row. */
 export const FANOUT_AT = 3;
 
-function foldAcrossSpacecraft(rows: LogRow[]): LogRow[] {
-  const keyOf = (r: LogRow) => `${r.event.kind}|${r.event.text}|${r.event.at.slice(0, 16)}`;
+const RANK: Readonly<Record<EventSeverity, number>> = {
+  critical: 3,
+  caution: 2,
+  nominal: 1,
+  info: 0,
+};
+const kindLabel = (e: MissionEvent) => {
+  const w = (e.raw_kind ?? e.kind).replaceAll("_", " ");
+  return w.charAt(0).toUpperCase() + w.slice(1);
+};
+
+/**
+ * Fan-out folds on (raw kind, minute), independent of the sentence: server sentences name each
+ * spacecraft, so the text differs per row (ux review 7). The row takes its worst severity's mark.
+ */
+function foldFanOut(rows: LogRow[]): LogRow[] {
+  const keyOf = (r: LogRow) => `${r.event.raw_kind ?? r.event.kind}|${r.event.at.slice(0, 16)}`;
   const groups = new Map<string, LogRow[]>();
-  for (const row of rows) {
-    if (!row.event.spacecraft) continue;
-    groups.set(keyOf(row), [...(groups.get(keyOf(row)) ?? []), row]);
-  }
+  for (const row of rows) groups.set(keyOf(row), [...(groups.get(keyOf(row)) ?? []), row]);
   const out: LogRow[] = [];
   const emitted = new Set<string>();
   for (const row of rows) {
     const key = keyOf(row);
-    const group = row.event.spacecraft ? groups.get(key) : undefined;
-    const distinct = new Set(group?.map((r) => r.event.spacecraft?.id)).size;
-    if (!group || distinct <= FANOUT_AT) {
+    const group = groups.get(key) ?? [row];
+    if (group.reduce((n, r) => n + r.count, 0) <= FANOUT_AT) {
       out.push(row);
       continue;
     }
     if (emitted.has(key)) continue;
     emitted.add(key);
+    const worst = group.reduce((a, b) => (RANK[b.event.severity] > RANK[a.event.severity] ? b : a));
     out.push({
       key: `fanout:${row.key}`,
-      event: row.event,
+      event: worst.event,
       count: group.reduce((n, r) => n + r.count, 0),
       firstAt: group.at(-1)?.firstAt ?? row.firstAt,
       members: group.map((r) => r.event),
+      label: kindLabel(row.event),
     });
   }
   return out;
@@ -118,6 +134,7 @@ export function byHour(events: readonly MissionEvent[]): HourGroup[] {
       count: number;
       firstAt: string;
       members: MissionEvent[];
+      label: string | null;
     }[];
   }[] = [];
   for (const event of sorted) {
@@ -131,9 +148,17 @@ export function byHour(events: readonly MissionEvent[]): HourGroup[] {
     if (last && same(last.event, event)) {
       last.count += 1;
       last.firstAt = event.at;
-    } else group.rows.push({ key: event.id, event, count: 1, firstAt: event.at, members: [] });
+    } else
+      group.rows.push({
+        key: event.id,
+        event,
+        count: 1,
+        firstAt: event.at,
+        members: [],
+        label: null,
+      });
   }
-  return groups.map((g) => ({ hour: g.hour, rows: foldAcrossSpacecraft(g.rows) }));
+  return groups.map((g) => ({ hour: g.hour, rows: foldFanOut(g.rows) }));
 }
 
 /** Bucket size giving at most ~96 bars over the window (15 min over 24 h). */
