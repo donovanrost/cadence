@@ -109,7 +109,7 @@ async function resolve() {
         <RouterLink
           v-if="todo.plan"
           :to="{ name: 'ops.contacts.plan', query: { day: planDay } }"
-          class="max-md:hit-44 text-readout hover:text-bright"
+          class="max-md:hit-44 text-readout underline hover:text-bright"
           >Open the day's plan</RouterLink
         >
       </p>
