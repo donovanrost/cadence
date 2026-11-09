@@ -903,6 +903,7 @@ defmodule CadenceWeb.Router do
       post("/invitations", PeopleController, :invite)
       get("/service-identities", PeopleController, :service_identities)
       get("/missions", OrganizationController, :missions)
+      get("/audit", OrganizationController, :audit)
       get("/settings", SettingsController, :show)
       put("/settings/:section_key", SettingsController, :update)
     end

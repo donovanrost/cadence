@@ -271,6 +271,26 @@ the worst fleet state any of the mission's spacecraft is in (the fleet read's st
 `critical | caution | stale | nominal | never_heard`), or `null` when it has no spacecraft. Visible
 to every member.
 
+### `GET /audit` (AU1, organization admins)
+
+Query: `from`, `to` (ISO; default the last 7 days), `actor_id`, `mission_id`, `kinds` (comma
+list of `config, commanding, access, alarms, contacts, data`), `limit` 1–200 (default 100), and
+`cursor` (from `next_cursor`).
+
+`{events: [{id, at, actor: {kind, id, name} | null, kind, action, target: {kind, id, label} |
+null, mission: {id, name} | null, reason}], sources: {included, missing}, next_cursor}`, newest
+first.
+
+- There's no single audit store yet, so this merges each domain's own records:
+  - `config`: applied configuration revisions ("Applied r6 · 2 changes", "Rolled back to r4") and
+    settings changes ("Changed Governance settings");
+  - `commanding`: command requests and approval decisions;
+  - `access`: members joining, invitations sent.
+- `sources.missing` (`alarms`, `contacts`, `data`) is what isn't in the log yet; say so in the UI.
+- Actions are server-made sentences.
+- Settings history carries only the actor's name, so its `actor.id` is `null`.
+- `403 forbidden` for non-admins; `422 invalid_params` (`kinds`, `from`/`to`, `limit`, `cursor`).
+
 ### `GET /people` (O1)
 
 ```json

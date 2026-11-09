@@ -31,7 +31,9 @@ defmodule Cadence.Architecture.ContextBoundary do
   @file_context_overrides %{
     "lib/cadence/management/settings.ex" => :composition,
     "lib/cadence/management/console_settings.ex" => :composition,
+    "lib/cadence/management/organization_audit.ex" => :composition,
     "lib/cadence/management/configuration_settings_section.ex" => :composition,
+    "lib/cadence/management/pass_review_settings_section.ex" => :composition,
     "lib/cadence/control/spacecraft_configuration.ex" => :catalog,
     "lib/cadence/control/spacecraft_model_bindings.ex" => :catalog,
     "lib/cadence/reads/mission_models/active_basis.ex" => :adapter,
@@ -46,6 +48,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/uplink_qualification.ex" => :composition,
     "lib/cadence/control/uplink_qualification/booking.ex" => :composition,
     "lib/cadence/control/uplink_session_qualification.ex" => :composition,
+    "lib/cadence/control/pass_results_close_out.ex" => :composition,
     "lib/cadence/applications/telemetry_decom_catalog_contribution.ex" => :composition,
     "lib/cadence/semantic_runtime.ex" => :catalog,
     "lib/cadence/semantic_runtime/algorithm_plan.ex" => :catalog,
