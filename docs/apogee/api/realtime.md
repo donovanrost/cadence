@@ -93,6 +93,16 @@ Live fleet state for Now, so the matrix and tiles don't refetch `GET /fleet`.
 - The `invalidate` events still flow alongside. While subscribed, ignore `alarms`/`spacecraft`/
   `commanding` for the fleet read (keep them for the other reads).
 
+### Topic `command_group:<mission_id>:<command_group_id>` (owner api-ops)
+
+Live Uplink & verify for one group. Join authorization is the same as `mission:<id>`, plus the
+group must exist (`{"reason": "command_group_not_found"}` otherwise).
+
+- Event `group`: `{"seq", "group": <GET /command-groups/:id payload>}`. Sent once after join
+  (`seq: 1`), then after any commanding change in the mission (at most once a second), **only when
+  the view changed**. Replace your copy wholesale; `seq` increases by one per push.
+- After a reconnect, rejoin; the first push is the full view again.
+
 ## Planned (with fe-ops, for M8)
 
 These are the shapes I plan to build, revised with fe-ops' comments (plans/ops.md).
@@ -102,4 +112,4 @@ These are the shapes I plan to build, revised with fe-ops' comments (plans/ops.m
   for that spacecraft's subscribed points, throttled. `value` keeps its exact type and
   `limit_state` uses the alarm vocabulary. The join payload `{"point_ids": [...]}` selects the
   points (capped at 200), and the join reply carries each point's `unit`.
-- Topic `uplink:<command_request_id>` for live uplink and verify progress (Commanding flow).
+- (Done as `command_group:<mission_id>:<command_group_id>`, above.)

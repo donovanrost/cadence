@@ -238,6 +238,6 @@ The UI writes the sentences (title + sentence per key).
 
 ### Not yet
 
-The expiry sweep (`expired`; expired entries are skipped by release but stay queued), the
-`blocked` flag, and the `command_group:<id>` channel push. Until the push lands, refetch on
-`commanding`.
+The expiry sweep (`expired`; expired entries are skipped by release but stay queued) and the
+`blocked` flag. Live progress: the `command_group:<mission_id>:<command_group_id>` channel
+(realtime.md).

@@ -15,6 +15,7 @@ defmodule CadenceWeb.ConsoleSocket do
   alias CadenceWeb.Console.Access
 
   channel("mission:*", CadenceWeb.Console.MissionChannel)
+  channel("command_group:*", CadenceWeb.Console.CommandGroupChannel)
 
   @impl true
   def connect(_params, socket, %{session: session}) do
