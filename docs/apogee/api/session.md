@@ -32,14 +32,14 @@ The bootstrap payload.
     "current_organization_id": "org_…",
     "admin_mode": false,
     "platform_admin_eligible": false,
-    "capabilities": ["command.approve", "command.request", "org.invite", "org.manage_members",
-                     "organization_admin"],
+    "capabilities": ["command.abort", "command.approve", "command.request", "org.invite",
+                     "org.manage_members", "organization_admin"],
     "organizations": [
       {
         "id": "org_…", "slug": "reflect-orbital", "name": "Reflect Orbital",
         "role": "organization_admin",
-        "capabilities": ["command.approve", "command.request", "org.invite", "org.manage_members",
-                         "organization_admin"],
+        "capabilities": ["command.abort", "command.approve", "command.request", "org.invite",
+                         "org.manage_members", "organization_admin"],
         "missions": [{"id": "mission_…", "slug": "earendil", "name": "Earendil"}]
       }
     ],
@@ -57,8 +57,9 @@ The bootstrap payload.
   derived by calling the policy function that enforces it for that organization's scope
   (DECISIONS #38), so the list and enforcement agree (tested per role):
   - scope capabilities: `platform_admin` (only in admin mode), `organization_admin` (membership);
-  - `command.request`, `command.approve`: the command review policy (organization admins, and
-    platform admins in admin mode, today); the same names as the People read;
+  - `command.request`, `command.approve`, `command.abort`: the command review policy, which
+    request authoring, review and group abort/cancel all enforce today (organization admins, and
+    platform admins in admin mode). These are the same names as the People read;
   - `org.invite`, `org.manage_members`: `:manage_organization_members`.
 
   Since the console scopes the organization by URL, gate UI on the capabilities of the organization

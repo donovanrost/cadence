@@ -81,7 +81,7 @@ defmodule CadenceWeb.Console.SessionAPITest do
 
       assert Enum.map(orgs, &{&1["name"], &1["role"], &1["capabilities"]}) == [
                {"Another Org", "organization_admin",
-                ~w(command.approve command.request org.invite org.manage_members organization_admin)},
+                ~w(command.abort command.approve command.request org.invite org.manage_members organization_admin)},
                {"Reflect Orbital", "member", []}
              ]
     end

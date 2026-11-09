@@ -8,6 +8,7 @@ defmodule CadenceWeb.Console.CapabilitiesAgreementTest do
   alias Cadence.Accounts
   alias Cadence.Administration.OrganizationPeople
   alias Cadence.Auth.Scope
+  alias Cadence.Control.Commanding.GroupAbort
   alias Cadence.Management.Commanding.ReviewAccess
   alias CadenceWeb.Console.Capabilities
   alias CadenceWeb.TestFixtures
@@ -51,13 +52,20 @@ defmodule CadenceWeb.Console.CapabilitiesAgreementTest do
         {:error, _} -> []
       end
 
+    # Abort authorizes before it checks the reason, so a blank reason tells them apart.
+    abort =
+      case GroupAbort.abort(scope, c.mission.mission_id, "group_none", "") do
+        {:error, :unavailable} -> []
+        {:error, _authorized} -> ["command.abort"]
+      end
+
     members =
       case OrganizationPeople.invite(scope, c.org.organization_id, %{"email" => "bad"}) do
         {:error, :forbidden} -> []
         {:error, {:invalid, _}} -> ["org.invite", "org.manage_members"]
       end
 
-    Enum.sort(commanding ++ members)
+    Enum.sort(commanding ++ abort ++ members)
   end
 
   defp reported(scope) do
@@ -80,7 +88,7 @@ defmodule CadenceWeb.Console.CapabilitiesAgreementTest do
     end
 
     assert reported(scope(c.admin, c.org)) ==
-             ~w(command.approve command.request org.invite org.manage_members)
+             ~w(command.abort command.approve command.request org.invite org.manage_members)
 
     assert reported(scope(c.member, c.org)) == []
   end

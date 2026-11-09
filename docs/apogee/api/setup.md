@@ -282,8 +282,10 @@ the session default. An actor who isn't an active member (or a platform admin in
 - `capabilities` are evaluated on the server per member (DECISIONS #2) by calling, for a scope
   built from that member, the same policy function that enforces each one (DECISIONS #38; the
   agreement is tested per role, never a role table):
-  - `command.request`, `command.approve`: the command review policy (`ReviewAccess`, which needs
-    `:manage_mission`). **Today that means organization admins only**; plain members get neither.
+  - `command.request`, `command.approve`, `command.abort`: the command review policy
+    (`ReviewAccess`, which needs `:manage_mission`). Request authoring, review and group
+    abort/cancel all enforce it. **Today that means organization admins only**; plain members get
+    none of these.
     The two-person rule (D7) still forbids approving your own request.
   - `org.manage_members`, `org.invite`: `:manage_organization_members` (organization admins).
 

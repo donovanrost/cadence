@@ -26,7 +26,7 @@ defmodule CadenceWeb.Console.PeopleAPITest do
     assert by_name["Mira K."]["capabilities"] == []
 
     assert Enum.sort(by_name["Ada Admin"]["capabilities"]) ==
-             ~w(command.approve command.request org.invite org.manage_members)
+             ~w(command.abort command.approve command.request org.invite org.manage_members)
 
     assert is_binary(by_name["Mira K."]["joined_at"])
     assert data["invitations"] == []
