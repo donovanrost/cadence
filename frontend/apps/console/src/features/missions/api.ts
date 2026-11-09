@@ -22,5 +22,7 @@ export async function fetchMissionSummaries(
     object({ missions: array(summary, 1000) }),
     { signal },
   );
-  return result.ok ? { ok: true, value: new Map(result.value.missions.map((m) => [m.id, m])) } : result;
+  return result.ok
+    ? { ok: true, value: new Map(result.value.missions.map((m) => [m.id, m])) }
+    : result;
 }

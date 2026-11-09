@@ -4,11 +4,21 @@ import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
-import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApTabLinks, plural } from "@/ui";
+import {
+  ApButton,
+  ApCallout,
+  ApEmptyState,
+  ApPageHeader,
+  ApPanel,
+  ApRemote,
+  ApTabLinks,
+  plural,
+} from "@/ui";
 import ProvidersPanel from "./ProvidersPanel.vue";
 import { KindEditor } from "@/features/changes/index.ts";
 import StationsTable from "./StationsTable.vue";
 import { fetchStations } from "./api.ts";
+import { useConfirmCode } from "./useConfirmCode.ts";
 
 /** Setup › Ground stations (rail 06). Edits stage into the change set (ground_station kind). */
 const scope = useMissionScope();
@@ -29,6 +39,7 @@ const tabs = [
   { key: "stations", label: "Stations", to: { name: "setup.stations" } },
   { key: "providers", label: "Providers", to: { name: "setup.stations.providers" } },
 ];
+const codes = useConfirmCode(() => missionId.value);
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
 );
@@ -83,7 +94,16 @@ const notProvided = computed(
             headline="No ground stations yet"
             sentence="Stations come from your ground-network providers or are added here."
           />
-          <StationsTable v-else :rows="value" :can-edit="canStage" />
+          <template v-else>
+            <ApCallout v-if="codes.failure.value" tone="crit">{{ codes.failure.value }}</ApCallout>
+            <StationsTable
+              :rows="value"
+              :can-edit="canStage"
+              :staged="codes.staged.value"
+              :busy="codes.busy.value"
+              @confirm="codes.confirm"
+            />
+          </template>
         </template>
       </ApRemote>
     </ApPanel>

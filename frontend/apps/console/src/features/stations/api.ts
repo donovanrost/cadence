@@ -7,6 +7,8 @@ const station = object({
   id: token,
   display_name: string,
   code: nullable(string),
+  /** U25: a name stem the operator confirms; present only when `code` is null, never stored. */
+  suggested_code: decoders.optional(nullable(string)),
   provider: nullable(string),
   region: nullable(string),
   lifecycle_state: oneOf(["active", "archived"]),

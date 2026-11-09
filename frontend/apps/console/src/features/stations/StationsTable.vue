@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import { ApStatusMark, ApTable, formatCount, type ApColumn } from "@/ui";
 import type { Station } from "./api.ts";
+import StationCodeCell from "./StationCodeCell.vue";
 
 /** Ground stations; health is "not reported" until the server tracks it (never assumed ok). */
-const props = defineProps<{ rows: readonly Station[]; canEdit?: boolean }>();
+const props = defineProps<{
+  rows: readonly Station[];
+  canEdit?: boolean;
+  /** Stations whose suggested code is staged in the change set, and the one being staged. */
+  staged?: ReadonlySet<string>;
+  busy?: string | null;
+}>();
+defineEmits<{ confirm: [station: Station] }>();
 // U10: a column the server can't fill is left out, not shown as a column of dashes.
 const linked = props.rows.some((s) => s.transport_count !== null);
 const coded = props.canEdit === true || props.rows.some((s) => s.code !== null);
@@ -31,16 +39,17 @@ const columns = allColumns.filter(
       >
       <span v-if="row.lifecycle_state === 'archived'" class="text-xs text-text-4"> · archived</span>
     </template>
-    <!-- U25: never invent identifiers; a missing code is "—" (the name carries identity). -->
+    <!-- U25: never invent identifiers; a suggestion is dimmed and only real once confirmed. -->
     <template #cell-code="{ row }">
       <template v-if="row.code">{{ row.code }}</template>
-      <RouterLink
-        v-else-if="canEdit"
-        :to="{ name: 'setup.stations', params: { stationId: row.id } }"
-        class="font-sans text-sm text-text-3 no-underline hover:text-readout max-md:hit-44"
-        >Not set · Add code</RouterLink
-      >
-      <span v-else class="text-text-4">—</span>
+      <StationCodeCell
+        v-else
+        :station="row"
+        :can-edit="canEdit === true"
+        :staged="staged?.has(row.id) === true"
+        :busy="busy === row.id"
+        @confirm="$emit('confirm', row)"
+      />
     </template>
     <template #cell-provider="{ row }">{{ row.provider ?? "—" }}</template>
     <template #cell-region="{ row }">{{ row.region ?? "—" }}</template>
