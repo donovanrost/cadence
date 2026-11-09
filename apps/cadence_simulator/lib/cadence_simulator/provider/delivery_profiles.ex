@@ -7,6 +7,8 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
   @delivery_kinds ["realtime_stream", "object_delivery", "message_bus", "provider_managed"]
   @states ["ready", "degraded", "unavailable"]
   @internal_keys ["run_id", "client_reference", "target", "framing", "configuration_snapshot"]
+  @framing_family %{"downlink" => "ccsds_tm", "uplink" => "ccsds_tc"}
+  @summary %{"downlink" => "Streaming to Cadence", "uplink" => "Uplinking from Cadence"}
 
   @spec normalize(term()) :: {:ok, [map()]} | {:error, {:invalid, binary()}}
   def normalize(profiles) when is_list(profiles) do
@@ -103,19 +105,19 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
 
     with {:ok, display_name} <- required_provisioning_text(attrs, "display_name"),
          {:ok, client_reference} <- required_provisioning_text(attrs, "client_reference"),
-         :ok <- exact_value(attrs, "direction", "downlink"),
+         {:ok, direction} <- provisioning_direction(attrs),
          :ok <- exact_value(attrs, "delivery_kind", "realtime_stream"),
          :ok <- exact_value(target, "protocol", "tcp", "target.protocol"),
          :ok <- exact_value(target, "mode", "provider_connects", "target.mode"),
          {:ok, host} <- required_provisioning_text(target, "host", "target.host"),
          {:ok, port} <- port(target["port"]),
-         :ok <- exact_value(framing, "family", "ccsds_tm", "framing.family"),
+         :ok <- exact_value(framing, "family", @framing_family[direction], "framing.family"),
          :ok <- exact_value(framing, "mode", "fixed_size", "framing.mode"),
          {:ok, frame_bytes} <- positive_integer(framing["frame_bytes"], "framing.frame_bytes"),
          {:ok, operator_summary} <-
-           optional_provisioning_text(attrs, "operator_summary", "Streaming to Cadence"),
+           optional_provisioning_text(attrs, "operator_summary", @summary[direction]),
          {:ok, extensions} <- provisioning_object(attrs, "extensions", %{}) do
-      service_refs = compatible_service_refs(run)
+      service_refs = compatible_service_refs(run, direction)
 
       if service_refs == [] do
         {:error, {:invalid, "no compatible active Service Profile is available"}}
@@ -124,7 +126,7 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
          %{
            "display_name" => display_name,
            "client_reference" => client_reference,
-           "direction" => "downlink",
+           "direction" => direction,
            "delivery_kind" => "realtime_stream",
            "target" => %{
              "protocol" => "tcp",
@@ -133,7 +135,7 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
              "port" => port
            },
            "framing" => %{
-             "family" => "ccsds_tm",
+             "family" => @framing_family[direction],
              "mode" => "fixed_size",
              "frame_bytes" => frame_bytes
            },
@@ -183,11 +185,20 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
     end)
   end
 
-  defp compatible_service_refs(run) do
+  # Uplink deliveries (#44) carry CCSDS TC frames to Cadence's uplink listener: the provider
+  # connects to Cadence, receives TC frames and answers with CLCWs.
+  defp provisioning_direction(attrs) do
+    case Map.get(attrs, "direction") do
+      direction when direction in ["downlink", "uplink"] -> {:ok, direction}
+      _other -> {:error, {:invalid, "direction must be downlink or uplink"}}
+    end
+  end
+
+  defp compatible_service_refs(run, direction) do
     run
     |> ServiceProfiles.for_run()
     |> Enum.filter(fn profile ->
-      profile["state"] == "active" and profile["direction"] == "downlink" and
+      profile["state"] == "active" and profile["direction"] in [direction, "bidirectional"] and
         "realtime_stream" in profile["supported_delivery_kinds"]
     end)
     |> Enum.map(& &1["id"])

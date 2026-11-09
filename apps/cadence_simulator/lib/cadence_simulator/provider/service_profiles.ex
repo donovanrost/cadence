@@ -6,6 +6,23 @@ defmodule CadenceSimulator.Provider.ServiceProfiles do
   @directions ["downlink", "uplink", "bidirectional"]
   @states ["active", "inactive"]
 
+  @uplink_ttc %{
+    "id" => "service-realtime-ttc-uplink",
+    "version" => 1,
+    "display_name" => "Realtime TT&C uplink",
+    "service_kind" => "realtime_command",
+    "direction" => "uplink",
+    "supported_delivery_kinds" => ["realtime_stream"],
+    "data_families" => ["ccsds_tc"],
+    "minimum_duration_seconds" => 30,
+    "state" => "active",
+    "extensions" => %{}
+  }
+
+  @doc "The built-in uplink TT&C service (#44). Every run offers it, older runs included."
+  @spec uplink_ttc() :: map()
+  def uplink_ttc, do: @uplink_ttc
+
   @spec default() :: [map()]
   def default do
     [
@@ -43,7 +60,13 @@ defmodule CadenceSimulator.Provider.ServiceProfiles do
   def normalize(_profiles), do: {:error, {:invalid, "service_profiles must be a list"}}
 
   @spec for_run(map()) :: [map()]
-  def for_run(run), do: get_in(run, ["scenario_snapshot", "service_profiles"]) || default()
+  def for_run(run) do
+    configured = get_in(run, ["scenario_snapshot", "service_profiles"]) || default()
+
+    if Enum.any?(configured, &(&1["id"] == @uplink_ttc["id"])),
+      do: configured,
+      else: configured ++ [@uplink_ttc]
+  end
 
   defp normalize_profile(profile, index) when is_map(profile) do
     profile = Contract.sanitize(profile)

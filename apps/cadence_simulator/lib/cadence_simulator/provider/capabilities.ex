@@ -76,7 +76,7 @@ defmodule CadenceSimulator.Provider.Capabilities do
       "delivery" => %{
         "kinds" => ["realtime_stream"],
         "protocols" => ["tcp"],
-        "directions" => ["downlink"]
+        "directions" => ["downlink", "uplink"]
       }
     }
   end

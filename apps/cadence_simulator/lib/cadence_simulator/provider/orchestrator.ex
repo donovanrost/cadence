@@ -9,7 +9,15 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   use GenServer
 
   alias CadenceSimulator.Provider
-  alias CadenceSimulator.Provider.{ContactLifecycle, ContactResults, Contacts, SpacecraftFrames}
+
+  alias CadenceSimulator.Provider.{
+    ContactLifecycle,
+    ContactResults,
+    Contacts,
+    SpacecraftFrames,
+    UplinkSessions
+  }
+
   alias CadenceSimulator.Providers.DatabaseDynamics
 
   @tick_ms 100
@@ -38,6 +46,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
      %{
        tick_ms: tick_ms,
        streams: %{},
+       uplinks: %{},
        provider_defaults: Keyword.get(opts, :provider_defaults, [])
      }}
   end
@@ -58,6 +67,13 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   end
 
   def handle_info({:DOWN, reference, :process, pid, reason}, state) do
+    case UplinkSessions.down(state.uplinks, reference) do
+      {:ok, uplinks} -> {:noreply, %{state | uplinks: uplinks}}
+      :not_found -> stream_down(state, reference, pid, reason)
+    end
+  end
+
+  defp stream_down(state, reference, pid, reason) do
     case Enum.find(state.streams, fn {_id, stream} ->
            stream.pid == pid and stream.reference == reference
          end) do
@@ -271,6 +287,8 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     else
       case start_contact_stream(state, contact, run) do
         {:ok, state} ->
+          stream_pid = get_in(state.streams, [contact["id"], :pid])
+          state = %{state | uplinks: UplinkSessions.ensure(state.uplinks, contact, stream_pid)}
           delivery = Map.put(contact["delivery"], "status", "connected")
 
           {:ok, _updated} =
@@ -529,6 +547,8 @@ defmodule CadenceSimulator.Provider.Orchestrator do
   end
 
   defp stop_stream_with_stats(state, reservation_id) do
+    state = %{state | uplinks: UplinkSessions.stop(state.uplinks, reservation_id)}
+
     case Map.pop(state.streams, reservation_id) do
       {nil, _streams} ->
         {state, %{}}
@@ -551,6 +571,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
       |> Enum.map(& &1["id"])
 
     active_ids = MapSet.new(active_reservation_ids ++ active_contact_ids)
+    state = %{state | uplinks: UplinkSessions.stop_except(state.uplinks, active_ids)}
 
     Enum.reduce(Map.keys(state.streams), state, fn reservation_id, acc ->
       if MapSet.member?(active_ids, reservation_id),

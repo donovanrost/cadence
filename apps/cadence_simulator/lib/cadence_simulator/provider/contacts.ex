@@ -8,7 +8,8 @@ defmodule CadenceSimulator.Provider.Contacts do
     Opportunities,
     ServiceProfiles,
     StationOutages,
-    Store
+    Store,
+    UplinkLeg
   }
 
   @terminal_statuses ["rejected", "canceled", "completed", "failed"]
@@ -24,6 +25,7 @@ defmodule CadenceSimulator.Provider.Contacts do
     "run_id",
     "configuration_snapshot",
     "service_profile_snapshot",
+    "uplink_delivery_profile_snapshot",
     "delivery_profile_snapshot",
     "idempotency_key",
     "modification_history",
@@ -51,13 +53,13 @@ defmodule CadenceSimulator.Provider.Contacts do
          {:ok, delivery_profile} <-
            DeliveryProfiles.fetch_internal(run, request["delivery_profile_ref"]),
          :ok <- validate_delivery_profile(delivery_profile, service_profile),
+         {:ok, uplink} <- UplinkLeg.resolve(run, request["uplink"]),
          :ok <- validate_idempotency_key(run, idempotency_key) do
       create_or_recover(
         run,
         request,
         opportunity,
-        service_profile,
-        delivery_profile,
+        {service_profile, delivery_profile, uplink},
         idempotency_key,
         request_id
       )
@@ -163,8 +165,7 @@ defmodule CadenceSimulator.Provider.Contacts do
          run,
          request,
          opportunity,
-         service_profile,
-         delivery_profile,
+         {service_profile, delivery_profile, uplink},
          idempotency_key,
          request_id
        ) do
@@ -172,14 +173,15 @@ defmodule CadenceSimulator.Provider.Contacts do
       nil ->
         with :ok <- ensure_capacity(run, opportunity),
              contact <-
-               build_contact(
-                 run,
+               run
+               |> build_contact(
                  request,
                  opportunity,
                  service_profile,
                  delivery_profile,
                  idempotency_key
-               ),
+               )
+               |> with_uplink(uplink),
              {:ok, stored} <- ContactLifecycle.create(contact, request_id) do
           {:ok, public(stored)}
         end
@@ -242,6 +244,13 @@ defmodule CadenceSimulator.Provider.Contacts do
     }
   end
 
+  defp with_uplink(contact, uplink) do
+    Map.merge(
+      contact,
+      UplinkLeg.contact_fields(uplink, contact["status"] == "rejected", contact["status_reason"])
+    )
+  end
+
   defp delivery_descriptor(profile, opportunity) do
     framing = profile["framing"] || %{}
 
@@ -272,11 +281,10 @@ defmodule CadenceSimulator.Provider.Contacts do
 
   defp normalize_request(attrs) do
     with :ok <- require_text_fields(attrs, @required_request_keys),
-         {:ok, tags} <- tags(attrs["tags"]) do
-      {:ok,
-       attrs
-       |> Map.take(@required_request_keys)
-       |> Map.put("tags", tags)}
+         {:ok, tags} <- tags(attrs["tags"]),
+         {:ok, uplink} <- UplinkLeg.normalize(attrs) do
+      request = attrs |> Map.take(@required_request_keys) |> Map.put("tags", tags)
+      {:ok, if(uplink, do: Map.put(request, "uplink", uplink), else: request)}
     end
   end
 
