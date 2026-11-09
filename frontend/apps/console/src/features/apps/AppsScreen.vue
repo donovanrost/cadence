@@ -11,7 +11,7 @@ import { fetchApps, type App } from "./api.ts";
 const scope = useMissionScope();
 const missionId = computed(() => scope.value.mission.id);
 const { state, refetch } = useRemoteQuery(missionId, fetchApps);
-useMissionInvalidation(missionId, ["settings"], refetch);
+useMissionInvalidation(missionId, ["configuration"], refetch);
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
 );
@@ -19,7 +19,13 @@ const installedCount = computed(() =>
   state.value.status === "ready" ? state.value.value.apps.filter((a) => a.installed).length : null,
 );
 const word = (a: App) =>
-  a.state === "installed" ? "Installed" : a.state === "disabled" ? "Disabled" : "Not set up";
+  a.platform
+    ? "Platform · always on"
+    : a.state === "installed"
+      ? "Installed"
+      : a.state === "disabled"
+        ? "Disabled"
+        : "Not set up";
 </script>
 
 <template>
@@ -59,7 +65,7 @@ const word = (a: App) =>
                 <div class="flex flex-col items-end gap-2">
                   <ApTag :state="a.state === 'installed' ? 'nominal' : 'off'" :label="word(a)" />
                   <AppActions
-                    v-if="value.permissions.includes('apps.install')"
+                    v-if="!a.platform && value.permissions.includes('apps.install')"
                     :mission-id="missionId"
                     :app="a"
                     @changed="refetch"

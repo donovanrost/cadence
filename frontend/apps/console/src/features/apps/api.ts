@@ -1,12 +1,14 @@
 import { decoders, request, type ApiResult, type Decoded } from "@/api";
 
-/** Requested shape: docs/apogee/plans/setup-shapes.md §A1. */
+/** Contract: docs/apogee/api/setup.md, `GET /missions/:id/apps` (A1). */
 const { array, boolean, nullable, object, oneOf, string, token } = decoders;
 
 const app = object({
   key: token,
   name: string,
   description: nullable(string),
+  /** Always on; can't be installed, disabled or removed. */
+  platform: decoders.optional(boolean),
   installed: boolean,
   state: oneOf(["installed", "disabled", "not_installed"]),
   version: nullable(string),

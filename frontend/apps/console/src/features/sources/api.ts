@@ -1,6 +1,6 @@
 import { decoders, request, type ApiResult, type Decoded } from "@/api";
 
-/** Requested shape: docs/apogee/plans/setup-shapes.md §D1. */
+/** Contract: docs/apogee/api/setup.md, `GET /missions/:id/data-sources` (D1). */
 const { array, boolean, integer, nullable, object, oneOf, string, timestamp, token } = decoders;
 
 const source = object({
