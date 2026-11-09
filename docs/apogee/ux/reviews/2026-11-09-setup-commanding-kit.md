@@ -23,3 +23,17 @@ tick; hollow-radio ApDecision.
   `VERIFY FAILED` caution / crit text), not just the mark (CommandFlow C3, U3).
 - Takeover question → **U19: takeover routes replace the shell top bar**; org/mission move into the
   takeover header's context line.
+
+## Wizard staging (dabd101b), exercised with an intercepted `POST …/config/stage`
+Walked Source → Identity (3 × SCID 601) → Orbit (Not now) → Review → `Stage 3 spacecraft`. The
+review is honest ("Checked against this mission's spacecraft in the browser. Cadence checks again
+when the batch is created."), the A4 copy reads as staging, and the payload is one change with 3
+create ops. Success routes to Staged changes: good, the batch is seen in context.
+- **Fix:** a malformed or unexpected server reply shows the raw decoder text as the error
+  (`data.change_id: expected string`). Use the console's standard wording, and say what happened to
+  the data: "The server's reply wasn't understood. Nothing was staged; your draft is kept." + Retry.
+  Generally, every stage/apply failure must say whether anything changed.
+- **Add:** on arrival at Staged changes after a stage, a one-time nominal callout: "3 spacecraft
+  staged. They're created when this change set is applied as r2."
+- fe-setup's note on the profile subline is right: `last_change.revision` is null until profile
+  edits go through change sets, so `v1 · date` is the honest text. Accepted.
