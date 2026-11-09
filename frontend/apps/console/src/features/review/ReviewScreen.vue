@@ -17,8 +17,9 @@ import DailyPanel from "./DailyPanel.vue";
 import LostPanel from "./LostPanel.vue";
 import ReviewStrip from "./ReviewStrip.vue";
 import StationsPanel from "./StationsPanel.vue";
-import { fetchDaily, fetchLost, fetchSummary, type Span } from "./api.ts";
+import { fetchDaily, fetchSummary, type Span } from "./api.ts";
 import { freshnessMeta, headline, provisionalText } from "./format.ts";
+import { useLostRows } from "./useLostRows.ts";
 import { useReviewWindow } from "./useReviewWindow.ts";
 
 /** K3 · Close the books (reading page). Spec: ux/screens/ScheduleFlow.md §K3; data: S9. */
@@ -31,7 +32,7 @@ const key = computed(() => ({
   span: win.span.value,
 }));
 const summary = useRemoteQuery(key, fetchSummary);
-const lost = useRemoteQuery(key, fetchLost);
+const lost = useLostRows(key);
 const daily = useRemoteQuery(key, fetchDaily);
 useMissionInvalidation(missionId, ["pass_results"], () => {
   summary.refetch();
@@ -117,7 +118,15 @@ const pickDay = (t: number | null) =>
       <template #default="{ value }"><DailyPanel :daily="value" :day="win.day.value" /></template>
     </ApRemote>
     <ApRemote :state="lost.state.value" loading-label="Loading lost passes…" @retry="lost.refetch">
-      <template #default="{ value }"><LostPanel :page="value" /></template>
+      <template #default="{ value }"
+        ><LostPanel
+          :page="value"
+          :more="lost.more.value"
+          :has-more="lost.cursor.value !== null"
+          :loading="lost.loading.value"
+          :failed="lost.failed.value"
+          @more="lost.loadMore"
+      /></template>
     </ApRemote>
   </div>
 </template>

@@ -75,6 +75,15 @@ const summary = object({
     200,
   ),
   plans: array(object({ id: token, version: integer }), 100),
+  /** Span totals; a total is null when no pass reports it (unknown, not 0). */
+  volume: optional(
+    object({
+      provider_bytes: nullable(integer),
+      received_bytes: nullable(integer),
+      provider_reported_passes: count,
+      received_known_passes: count,
+    }),
+  ),
   freshness: array(
     object({
       provider,
@@ -121,7 +130,12 @@ const row = object({
   provisional: boolean,
 });
 export type ReviewRow = Decoded<typeof row>;
-const rowsReader = object({ rows: array(row, 500), total: integer, disputable: count });
+const rowsReader = object({
+  rows: array(row, 500),
+  total: integer,
+  disputable: count,
+  next_cursor: optional(nullable(string)),
+});
 export type ReviewRows = Decoded<typeof rowsReader>;
 
 const daily = object({
@@ -158,11 +172,14 @@ export function fetchSummary(k: ReviewKey, signal: AbortSignal): Promise<ApiResu
   return request(path(k, ""), summary, { signal });
 }
 
-/** R4: missed and partial passes (first 100; the cursor is in `meta`, which request() drops). */
-export function fetchLost(k: ReviewKey, signal: AbortSignal): Promise<ApiResult<ReviewRows>> {
-  return request(path(k, "/rows", { outcome: "missed,failed,partial", limit: "100" }), rowsReader, {
-    signal,
-  });
+/** R4: missed, failed and partial passes, 50 a page; pass `cursor` for the next page. */
+export function fetchLost(
+  k: ReviewKey & Readonly<{ cursor?: string }>,
+  signal: AbortSignal,
+): Promise<ApiResult<ReviewRows>> {
+  const extra: Record<string, string> = { outcome: "missed,failed,partial", limit: "50" };
+  if (k.cursor) extra.cursor = k.cursor;
+  return request(path(k, "/rows", extra), rowsReader, { signal });
 }
 
 /** R3 always reads the 30 days ending at the chosen day. */

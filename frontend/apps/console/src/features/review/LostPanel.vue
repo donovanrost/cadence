@@ -1,13 +1,30 @@
 <script setup lang="ts">
-import { ApEmptyState, ApPanel, ApTable, ApTag, formatAbsolute, type ApColumn } from "@/ui";
-import type { ReviewRows } from "./api.ts";
+import { computed } from "vue";
+import {
+  ApButton,
+  ApEmptyState,
+  ApPanel,
+  ApTable,
+  ApTag,
+  formatAbsolute,
+  type ApColumn,
+} from "@/ui";
+import type { ReviewRow, ReviewRows } from "./api.ts";
 import { bytes, causeText, duration, outcomeTag, ownerWord, stationText } from "./format.ts";
 
 /**
  * R4 · Missed and partial passes. Volume is provider-reported vs what Cadence received (never a
  * planned figure: none exists). Disputes have no flow yet (no billing), so they're marked, not linked.
  */
-defineProps<{ page: ReviewRows }>();
+const props = defineProps<{
+  page: ReviewRows;
+  more: readonly ReviewRow[];
+  hasMore: boolean;
+  loading: boolean;
+  failed: boolean;
+}>();
+defineEmits<{ more: [] }>();
+const rows = computed(() => [...props.page.rows, ...props.more]);
 const columns: readonly ApColumn[] = [
   { key: "aos", label: "AOS", mono: true },
   { key: "spacecraft", label: "Spacecraft", mono: true },
@@ -22,15 +39,11 @@ const columns: readonly ApColumn[] = [
 
 <template>
   <ApPanel index="R4" title="Missed and partial passes" flush>
-    <ApEmptyState
-      v-if="page.rows.length === 0"
-      state="off"
-      headline="No missed or partial passes"
-    />
+    <ApEmptyState v-if="rows.length === 0" state="off" headline="No missed or partial passes" />
     <ApTable
       v-else
       :columns="columns"
-      :rows="page.rows"
+      :rows="rows"
       :row-key="(r) => r.id"
       caption="Missed and partial passes"
     >
@@ -59,9 +72,24 @@ const columns: readonly ApColumn[] = [
         ></template
       >
       <template #footer>
-        <p class="m-0 border-t border-hairline px-4 py-2.5 font-mono text-xs text-text-3 uppercase">
-          Showing {{ page.rows.length }} of {{ page.total }} · {{ page.disputable }} disputable
-        </p>
+        <div
+          class="flex flex-wrap items-center gap-3 border-t border-hairline px-4 py-2.5 font-mono text-xs text-text-3 uppercase"
+        >
+          <span
+            >Showing {{ rows.length }} of {{ page.total }} · {{ page.disputable }} disputable</span
+          >
+          <ApButton
+            v-if="hasMore"
+            size="compact"
+            :disabled="loading"
+            disabled-reason="Loading…"
+            @click="$emit('more')"
+            >Load more</ApButton
+          >
+          <span v-if="failed" class="text-caution-text normal-case"
+            >More passes couldn't load.</span
+          >
+        </div>
       </template>
     </ApTable>
   </ApPanel>
