@@ -16,6 +16,7 @@ export type NavKey =
   | "catalog"
   | "comms"
   | "stations"
+  | "contact-planning"
   | "data-sources"
   | "apps"
   | "mission-settings"

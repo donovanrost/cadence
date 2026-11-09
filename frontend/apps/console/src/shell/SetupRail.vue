@@ -13,6 +13,7 @@ const missionItems = [
   { nav: "catalog", to: "setup.catalog", label: "Catalog" },
   { nav: "comms", to: "setup.comms", label: "Comms & routing" },
   { nav: "stations", to: "setup.stations", label: "Ground stations" },
+  { nav: "contact-planning", to: "setup.contact-planning", label: "Contact planning" },
   { nav: "data-sources", to: "setup.data-sources", label: "Data sources" },
   { nav: "apps", to: "setup.apps", label: "Apps" },
   { nav: "mission-settings", to: "setup.settings", label: "Mission settings" },
