@@ -19,7 +19,7 @@ import { useFleet } from "@/features/fleet/index.ts";
 import { passGantt, passStatus, type GanttAxis } from "./gantt.ts";
 import SelectedPassPanel from "./SelectedPassPanel.vue";
 import { usePasses } from "./usePasses.ts";
-import { fetchStations } from "./api.ts";
+import { fetchPass, fetchStations } from "./api.ts";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 
@@ -75,11 +75,30 @@ const byId = computed(() => {
 const list = computed(() =>
   passes.state.value.status === "ready" ? passes.state.value.value.passes : [],
 );
+/** A pass named in the URL but outside the window (Review from Now, U31) is read on its own. */
+const outsideKey = computed(() => {
+  const id = selectedId.value;
+  if (id === null || passes.state.value.status !== "ready") return null;
+  return list.value.some((p) => p.id === id) ? null : `${missionId.value}|${id}`;
+});
+const outside = useRemoteQuery(outsideKey, (k, signal) => {
+  const [m = "", id = ""] = k.split("|");
+  return fetchPass(m, id, signal);
+});
+useMissionInvalidation(missionId, ["contacts", "attention"], outside.refetch);
+const outsidePass = computed(() =>
+  outside.state.value.status === "ready" ? outside.state.value.value : null,
+);
+function refetchPass() {
+  passes.refetch();
+  if (outsideKey.value !== null) outside.refetch();
+}
 /** Default selection: the pass named in the URL, else the next AOS fleet-wide. */
 const selected = computed(() => {
   const t = now.value.getTime();
   return (
     list.value.find((p) => p.id === selectedId.value) ??
+    outsidePass.value ??
     list.value.find((p) => Date.parse(p.starts_at) > t && passStatus(p, t) === "scheduled") ??
     null
   );
@@ -208,7 +227,7 @@ const tabs = [
           :mission-id="missionId"
           :pass="selected"
           :spacecraft="selectedSpacecraft"
-          @changed="passes.refetch"
+          @changed="refetchPass"
         />
       </div>
     </template>

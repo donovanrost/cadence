@@ -64,7 +64,8 @@ const facts = computed(() => {
     {
       key: "window",
       label: "Window",
-      value: `${formatClock(from)} – ${formatClock(to)}Z`,
+      // A pass opened from Now can be days out (U31): name its day unless it's today (UTC).
+      value: `${p.starts_at.slice(0, 10) === now.value.toISOString().slice(0, 10) ? "" : `${p.starts_at.slice(5, 10)} `}${formatClock(from)} – ${formatClock(to)}Z`,
       mono: true,
     },
     {

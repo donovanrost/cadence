@@ -71,6 +71,19 @@ export const passesReader = d.object({
 export type Passes = Decoded<typeof passesReader>;
 export type Pass = Passes["passes"][number];
 
+/** One pass in any window (8329ec68): Review from Now can name a pass days out. 404 pass_not_found. */
+export function fetchPass(
+  missionId: string,
+  passId: string,
+  signal?: AbortSignal,
+): Promise<ApiResult<Pass>> {
+  return request(
+    `/missions/${encodeURIComponent(missionId)}/passes/${encodeURIComponent(passId)}`,
+    pass,
+    signal ? { signal } : {},
+  );
+}
+
 export function fetchPasses(
   missionId: string,
   query: Readonly<{ from: Date; to: Date; spacecraftId?: string; station?: string }>,
