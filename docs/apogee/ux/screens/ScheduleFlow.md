@@ -73,13 +73,13 @@ footer's commit slot, and a blocked primary always says why in visible text unde
 | `no_draft` | `CONTACT PLAN · FRI 24 OCT · NO DRAFT` | Demand list (from rules) + "Last plan for this day: r40, booked 1,498 of 1,512" if any. | `Draft the day` |
 | `drafting` | `DRAFTING · OPTIMIZING · 00:41` | Step bar shows 03 Draft as current, and a phase line `MATERIALIZING → SEARCHING → OPTIMIZING → PLAN` with the current phase in readout and elapsed time. Panels show what's known so far. | none (secondary `Cancel` only if the domain supports it) |
 | `superseded` (draft) **[decision]** | `R41 DRAFT · SUPERSEDED` | stale callout: "This draft was made against contact rules that have since changed (template Block 1 daily v2 → v3, 05:40Z by api seed). It can't be submitted." The old draft stays readable: its Gantt bars and panel chrome are dimmed, its text stays at full contrast (U27). | `Draft again with the current rules` |
-| `interrupted` (draft) | `DRAFTING STOPPED` | stale callout: "Drafting stopped when the server restarted at 02:31Z. Nothing was submitted." | `Continue drafting` |
+| `interrupted` (draft) | `DRAFTING STOPPED` | stale callout: "Drafting stopped at 02:31Z. Nothing was submitted." (name a cause only when the server reports one) | `Continue drafting` |
 | `draft` + **conflicts** | `R41 DRAFT · 2 CONFLICTS` | Conflicts as crit rows at the top of D (`SVB-1 double-booked 03:20Z: 073 and 251 overlap 3 min`), each with `Move` / `Remove`. Conflicting passes dashed caution on the Gantt. | `Submit` **disabled**, reason under it: "2 conflicts on SVB-1 and FBK-2. Move or remove a pass to submit." (Conflicts always block, #28.) |
 | `draft` + **unmet requirements** (no conflicts) | `R41 DRAFT · 6 SPACECRAFT NOT COVERED` (U23) | A Demand lists them first (see below). Footer `Rule met 494 / 500 spacecraft` caution; A meta `6 SPACECRAFT · 14 CONTACTS SHORT`. | `Accept 6 gaps and submit` → **Accept gaps sheet** |
 | `draft` ready | `R41 DRAFT · READY` | Totals; `Rule met 500/500` nominal. | admin: `Submit and book 1,512 passes` (confirm sheet: totals, providers, "This books passes with 3 providers"); member: `Request approval` |
 | `pending_approval` | `R41 · WAITING FOR AN ADMIN` | member: info callout "Sent to org admins 02:44Z." Read-only plan. admin: ApDecision (`Approve and book` / `Send back` with a comment). Reviewer ≠ author. Accepted gaps listed with their reasons. | admin: `Approve and book 1,512 passes` |
 | `executing` | `BOOKING · 812 OF 1,512` | Per-contact trail Requested → Confirmed / Rejected live on the Gantt (rejected = caution dashed), with counts in the footer. | none |
-| `interrupted` (execute) | `BOOKING STOPPED · 812 OF 1,512` | stale callout: "Booking stopped when the server restarted. 812 requests went out; 700 didn't." (U20: state what's known.) | `Continue booking` |
+| `interrupted` (execute) | `BOOKING STOPPED · 812 OF 1,512` | stale callout: "Booking stopped. 812 requests went out; 700 didn't." (U20: state what's known; name a cause only when the server reports one.) | `Continue booking` |
 | `reserved` | `R41 · BOOKED` | nominal callout "1,512 passes confirmed." | secondary `Open Contacts` |
 | `partially_reserved` / `failed` | `R41 · 1,490 OF 1,512 BOOKED` / `R41 · BOOKING FAILED` | Rejections become A Demand rows (`Rejected by Northlight: antenna fault`). | `Re-plan after provider changes` (K2) |
 
@@ -126,11 +126,11 @@ footer: Revision r41 → r42 │ Passes −N │ Cost today │ Rule met │ [Wa
   provider ETA`, primary `Apply r42 · send 117 requests`. Apply is one revision with batched provider
   requests (R05).
 - **Apply sheet (U28):** "This approves the proposal and sends 4 booking requests. The 36 kept passes
-  stay booked." Name the request kinds the proposal actually holds. When it mixes them, split the count
-  ("sends 6 requests: 4 bookings, 2 cancellations"), and never call a cancellation a booking.
+  stay booked." A repair keeps every committed pass locked (S8), so Apply only books: requests = moves +
+  adds, and drops send nothing. If cancellations ever become possible, split the count by kind.
 - **After Apply:** the step bar sits on `03 Apply`. Execution states reuse K1's table: an interrupted
-  execution shows the same stale callout under the header ("Booking stopped when the server restarted.
-  2 requests went out; 2 didn't.", or "Booking stopped before every request went out." when counts
+  execution shows the same stale callout under the header ("Booking stopped. 2 requests went out; 2
+  didn't.", or "Booking stopped before every request went out." when counts
   aren't known, per U20) with `Continue booking` in the footer. Partial or failed results also follow K1.
 
 ## K3 · Close the books (`M/contacts/review`, reading)
