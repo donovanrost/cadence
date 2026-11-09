@@ -49,14 +49,21 @@ const emit = defineEmits<{ open: [to: RouteLocationRaw]; expand: [group: Group] 
         </span>
         <span class="font-mono text-xs text-text-4 uppercase">{{ item.hint }}</span>
       </div>
-      <button
+      <div
         v-if="g.more > 0"
-        type="button"
+        :id="`palette-more-${g.group}`"
+        role="option"
+        :aria-selected="`more-${g.group}` === activeKey"
         class="w-full cursor-pointer px-4 py-2 text-left font-mono text-xs text-text-3 uppercase hover:text-readout"
+        :class="
+          `more-${g.group}` === activeKey
+            ? 'bg-raised-hi text-readout shadow-[inset_2px_0_0_var(--color-readout)]'
+            : ''
+        "
         @click="emit('expand', g.group)"
       >
         Show all {{ g.items.length + g.more }} {{ g.group.toLowerCase() }}
-      </button>
+      </div>
     </div>
   </div>
 </template>

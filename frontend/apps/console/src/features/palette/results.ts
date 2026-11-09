@@ -168,3 +168,33 @@ export function grouped(items: readonly PaletteItem[], expanded: ReadonlySet<Gro
     return [{ group, items: shown, more: all.length - shown.length }];
   });
 }
+
+/** A navigable listbox row: a result, or a group's "Show all" option (qa #12: options only). */
+export type Row =
+  | Readonly<{ kind: "item"; key: string; group: Group; item: PaletteItem }>
+  | Readonly<{ kind: "more"; key: string; group: Group; total: number }>;
+
+export function rowsOf(groups: readonly GroupView[]): Row[] {
+  return groups.flatMap((g) => [
+    ...g.items.map((item): Row => ({ kind: "item", key: item.key, group: g.group, item })),
+    ...(g.more > 0
+      ? [
+          {
+            kind: "more",
+            key: `more-${g.group}`,
+            group: g.group,
+            total: g.items.length + g.more,
+          } as const,
+        ]
+      : []),
+  ]);
+}
+
+/** Tab / Shift+Tab: first row of the next / previous group (wraps), per Palette.md. */
+export function groupJump(rows: readonly Row[], active: number, backwards: boolean): number {
+  const starts = rows.flatMap((row, i) => (i === 0 || rows[i - 1]?.group !== row.group ? [i] : []));
+  if (starts.length === 0) return 0;
+  const current = starts.filter((s) => s <= active).length - 1;
+  const next = (current + (backwards ? -1 : 1) + starts.length) % starts.length;
+  return starts[next] ?? 0;
+}

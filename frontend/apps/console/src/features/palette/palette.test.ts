@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { spacecraftRow } from "@/features/fleet/index.ts";
-import { grouped, parseQuery, PER_GROUP, search } from "./results.ts";
+import { grouped, groupJump, parseQuery, PER_GROUP, rowsOf, search } from "./results.ts";
 
 const fleet = Array.from({ length: 500 }, (_, i) => spacecraftRow(i + 1));
 const pages = [
@@ -41,5 +41,16 @@ describe("palette search", () => {
     expect(first?.items).toHaveLength(PER_GROUP);
     expect(first?.more).toBe(500 - PER_GROUP);
     expect(grouped(items, new Set(["Spacecraft"]))[0]?.items).toHaveLength(500);
+  });
+});
+
+describe("palette rows (qa #12, #13)", () => {
+  it("adds a 'show all' option per capped group and jumps between groups", () => {
+    const rows = rowsOf(grouped(search("earendil", fleet, pages), new Set()));
+    expect(rows.find((r) => r.kind === "more")).toMatchObject({ key: "more-Spacecraft", total: 500 });
+    const mixed = rowsOf(grouped(search("3", fleet, pages), new Set()));
+    const firstAction = mixed.findIndex((r) => r.group !== "Spacecraft");
+    expect(groupJump(mixed, 0, false)).toBe(firstAction === -1 ? 0 : firstAction);
+    expect(groupJump(mixed, 0, true)).toBe(mixed.findIndex((r) => r.group === mixed.at(-1)?.group));
   });
 });

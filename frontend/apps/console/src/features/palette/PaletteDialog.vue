@@ -13,7 +13,7 @@ import { useConsoleScope } from "@/shell/index.ts";
 import { ApKbd } from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
 import PaletteResults from "./PaletteResults.vue";
-import { grouped, search, type Group, type PageEntry } from "./results.ts";
+import { grouped, groupJump, rowsOf, search, type Group, type PageEntry } from "./results.ts";
 
 /** The modal query line: combobox input + grouped listbox. Esc closes and restores focus. */
 const emit = defineEmits<{ close: [] }>();
@@ -46,7 +46,7 @@ const spacecraft = computed(() =>
 const groups = computed(() =>
   grouped(search(query.value, spacecraft.value, pages.value), expanded.value),
 );
-const flat = computed(() => groups.value.flatMap((g) => g.items));
+const rows = computed(() => rowsOf(groups.value));
 const strip = computed(() => {
   const s = scope.value;
   if (s.kind !== "mission") return "";
@@ -61,8 +61,14 @@ function go(to: RouteLocationRaw | null) {
   router.push(to).catch((error: unknown) => console.error("Navigation failed", error));
 }
 function onKey(event: KeyboardEvent) {
-  const count = flat.value.length;
+  const count = rows.value.length;
   if (event.key === "Escape") return emit("close");
+  // Focus trap (qa #13): the input is the dialog's only tab stop; Tab moves between groups.
+  if (event.key === "Tab") {
+    event.preventDefault();
+    if (count) active.value = groupJump(rows.value, active.value, event.shiftKey);
+    return;
+  }
   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
     event.preventDefault();
     if (count) active.value = (active.value + (event.key === "ArrowDown" ? 1 : count - 1)) % count;
@@ -70,8 +76,9 @@ function onKey(event: KeyboardEvent) {
   }
   if (event.key === "Enter") {
     event.preventDefault();
-    const item = flat.value[active.value];
-    if (item) go(event.metaKey || event.ctrlKey ? item.commandTo : item.to);
+    const row = rows.value[active.value];
+    if (row?.kind === "more") expand(row.group);
+    else if (row) go(event.metaKey || event.ctrlKey ? row.item.commandTo : row.item.to);
   }
 }
 function onInput() {
@@ -113,7 +120,7 @@ onBeforeUnmount(() => returnFocus?.focus());
           aria-expanded="true"
           aria-controls="palette-results"
           aria-autocomplete="list"
-          :aria-activedescendant="flat[active] ? `palette-${flat[active]?.key}` : undefined"
+          :aria-activedescendant="rows[active] ? `palette-${rows[active]?.key}` : undefined"
           autocomplete="off"
           placeholder="Spacecraft, SCID, pages…  (# spacecraft only)"
           class="h-14 min-w-0 flex-1 bg-transparent text-lg text-readout outline-none placeholder:text-text-4"
@@ -124,7 +131,7 @@ onBeforeUnmount(() => returnFocus?.focus());
       </div>
       <PaletteResults
         :groups="groups"
-        :active-key="flat[active]?.key ?? null"
+        :active-key="rows[active]?.key ?? null"
         @open="go"
         @expand="expand"
       />
