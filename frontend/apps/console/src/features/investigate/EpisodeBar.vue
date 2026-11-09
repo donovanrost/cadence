@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef } from "vue";
-import { useRemoteQuery, describeApiError } from "@/api/index.ts";
+import { describeApiError } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
-import { useNow, ApButton, ApCallout, ApField, ApSelect, ApStatusMark } from "@/ui";
+import { useNow, ApButton, ApCallout, ApStatusMark } from "@/ui";
 import {
   escalationNotice,
-  fetchPeople,
   runEpisodeCommand,
   sourceTag,
   statusLine,
@@ -13,15 +12,25 @@ import {
   type EpisodeCommand,
   type EpisodeDetail,
 } from "@/features/alarms/index.ts";
+import EpisodePersonForm from "./EpisodePersonForm.vue";
 
 /**
  * The alarm's lifecycle beside its evidence (DECISIONS #6, ux U16/U20): status + source tag,
- * escalation notice, and Acknowledge / Assign for viewers with the permission.
+ * escalation notice, and Acknowledge / Assign / Hand off for viewers with the permission.
+ * `layout="stacked"` (Mobile J6): full-width ≥48px Acknowledge | Hand off, no Assign.
  */
-const props = defineProps<{ episode: EpisodeDetail; permissions: readonly string[] }>();
+const props = withDefaults(
+  defineProps<{
+    episode: EpisodeDetail;
+    permissions: readonly string[];
+    layout?: "inline" | "stacked";
+  }>(),
+  { layout: "inline" },
+);
 const emit = defineEmits<{ changed: [] }>();
 const scope = useMissionScope();
 const now = useNow();
+const stacked = computed(() => props.layout === "stacked");
 
 const status = computed(() => statusLine(props.episode));
 const escalation = computed(() => escalationNotice(props.episode));
@@ -32,6 +41,7 @@ const canAssign = computed(
   () => props.permissions.includes("alarm.assign") && props.episode.status !== "cleared",
 );
 
+const form = ref<"assign" | "hand_off" | null>(null);
 const busy = ref(false);
 const outcome = shallowRef<CommandOutcome | null>(null);
 async function run(command: EpisodeCommand) {
@@ -40,7 +50,7 @@ async function run(command: EpisodeCommand) {
   try {
     outcome.value = await runEpisodeCommand(scope.value.mission.id, props.episode.id, command);
     if (outcome.value.status === "done") {
-      assigning.value = false;
+      form.value = null;
       emit("changed");
     }
   } finally {
@@ -50,32 +60,15 @@ async function run(command: EpisodeCommand) {
 const act = (command: EpisodeCommand) => {
   run(command).catch((error: unknown) => console.error("Alarm command failed", error));
 };
-
-const assigning = ref(false);
-const assignee = ref("");
-const note = ref("");
-const people = useRemoteQuery(
-  computed(() => (assigning.value ? scope.value.organization.id : null)),
-  (org, signal) => fetchPeople(org, signal),
-);
-const options = computed(() => [
-  { value: "", label: "Choose a person…" },
-  { value: "none", label: "Nobody (unassign)" },
-  ...(people.state.value.status === "ready"
-    ? people.state.value.value.members.map((m) => ({
-        value: m.user_id,
-        label: m.display_name ?? m.user_id,
-      }))
-    : []),
-]);
-function assign() {
-  if (!assignee.value) return;
-  act({
-    kind: "assign",
-    userId: assignee.value === "none" ? null : assignee.value,
-    ...(note.value.trim() ? { note: note.value } : {}),
-  });
+function submitForm(to: string | null, note: string) {
+  if (form.value === "assign") act({ kind: "assign", userId: to, ...(note ? { note } : {}) });
+  else if (form.value === "hand_off") act({ kind: "hand_off", to, note });
 }
+const toggle = (which: "assign" | "hand_off") => {
+  form.value = form.value === which ? null : which;
+};
+const buttonSize = computed(() => (stacked.value ? "commit" : "compact"));
+const buttonClass = computed(() => (stacked.value ? "min-h-12 w-full" : ""));
 </script>
 
 <template>
@@ -87,10 +80,11 @@ function assign() {
         <ApStatusMark :state="status.state" />{{ status.text }}
       </span>
       <span class="font-mono text-xs text-text-3 uppercase">{{ sourceTag(episode, now) }}</span>
-      <span class="ml-auto flex gap-2">
+      <span :class="stacked ? 'grid w-full grid-cols-2 gap-2' : 'ml-auto flex gap-2'">
         <ApButton
           v-if="canAck"
-          size="compact"
+          :size="buttonSize"
+          :class="buttonClass"
           variant="primary"
           :disabled="busy"
           disabled-reason="Working…"
@@ -98,27 +92,35 @@ function assign() {
           >Acknowledge</ApButton
         >
         <ApButton
-          v-if="canAssign"
-          size="compact"
+          v-if="canAssign && !stacked"
+          :size="buttonSize"
+          :class="buttonClass"
           :disabled="busy"
           disabled-reason="Working…"
-          @click="assigning = !assigning"
+          @click="toggle('assign')"
           >Assign</ApButton
+        >
+        <ApButton
+          v-if="canAssign"
+          :size="buttonSize"
+          :class="buttonClass"
+          :disabled="busy"
+          disabled-reason="Working…"
+          @click="toggle('hand_off')"
+          >Hand off</ApButton
         >
       </span>
     </div>
     <ApCallout v-if="escalation" tone="crit">{{ escalation }}</ApCallout>
-    <form v-if="assigning" class="flex flex-wrap items-end gap-2" @submit.prevent="assign">
-      <ApSelect v-model="assignee" label="Assign to" size="compact" :options="options" />
-      <div class="min-w-[220px] flex-1"><ApField v-model="note" label="Note (optional)" /></div>
-      <ApButton
-        size="compact"
-        type="submit"
-        :disabled="!assignee || busy"
-        disabled-reason="Choose a person first"
-        >Assign</ApButton
-      >
-    </form>
+    <EpisodePersonForm
+      v-if="form"
+      :key="form"
+      :mode="form"
+      :busy="busy"
+      :stacked="stacked"
+      @submit="submitForm"
+      @cancel="form = null"
+    />
     <ApCallout v-if="outcome?.status === 'rejected'" tone="caution">
       Nothing changed: {{ describeApiError(outcome.error) }}
     </ApCallout>

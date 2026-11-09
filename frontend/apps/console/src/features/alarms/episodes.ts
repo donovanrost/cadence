@@ -150,7 +150,14 @@ export async function runEpisodeCommand(
 
 /** Assignable people: active members of the mission's organization (setup.md O1). */
 const peopleReader = d.object({
-  members: d.array(d.object({ user_id: d.token, display_name: d.nullable(d.string) }), 5_000),
+  members: d.array(
+    d.object({
+      user_id: d.token,
+      display_name: d.nullable(d.string),
+      capabilities: d.array(d.token, 50),
+    }),
+    5_000,
+  ),
 });
 export type Person = Decoded<typeof peopleReader>["members"][number];
 
