@@ -31,3 +31,29 @@ export async function fetchStations(
   );
   return result.ok ? { ok: true, value: result.value.stations } : result;
 }
+
+const provider = object({
+  id: token,
+  name: string,
+  provider_type: token,
+  account: object({ id: token, name: nullable(string) }),
+  status: object({
+    lifecycle_state: token,
+    last_validated_at: nullable(decoders.timestamp),
+    last_synced_at: nullable(decoders.timestamp),
+  }),
+  station_count: integer,
+});
+export type MissionProvider = Decoded<typeof provider>;
+
+export async function fetchProviders(
+  missionId: string,
+  signal: AbortSignal,
+): Promise<ApiResult<readonly MissionProvider[]>> {
+  const result = await request(
+    `/missions/${encodeURIComponent(missionId)}/providers`,
+    array(provider, 500),
+    { signal },
+  );
+  return result;
+}

@@ -16,6 +16,7 @@ const field = object({
   required: boolean,
   help: nullable(string),
   visible_when: nullable(object({ path: string, equals: raw })),
+  pattern: optional(nullable(string)),
 });
 export const kindSchemaReader = object({ kind: token, fields: array(field, 500) });
 export type KindSchema = Decoded<typeof kindSchemaReader>;
@@ -92,6 +93,8 @@ export function toValue(f: SchemaField, text: string): FieldCheck {
     }
     case "string":
     case "reference":
+      if (f.pattern && !safeTest(f.pattern, t))
+        return { ok: false, message: `${f.label} doesn't match the required format.` };
       if (f.range?.max != null && t.length > f.range.max)
         return { ok: false, message: `${f.label} is at most ${f.range.max} characters.` };
       return { ok: true, value: t };
@@ -114,4 +117,13 @@ export function diffEdits(schema: KindSchema, before: FormValues, after: FormVal
       changes.push({ path: f.path, value: checked.value });
   }
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, changes };
+}
+
+/** Server patterns are hints; an unparsable one never blocks (the server re-validates). */
+function safeTest(pattern: string, text: string): boolean {
+  try {
+    return new RegExp(pattern).test(text);
+  } catch {
+    return true;
+  }
 }

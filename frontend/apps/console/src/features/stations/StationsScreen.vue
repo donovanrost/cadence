@@ -4,7 +4,8 @@ import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
-import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, plural } from "@/ui";
+import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApTabLinks, plural } from "@/ui";
+import ProvidersPanel from "./ProvidersPanel.vue";
 import { KindEditor } from "@/features/changes/index.ts";
 import StationsTable from "./StationsTable.vue";
 import { fetchStations } from "./api.ts";
@@ -23,6 +24,11 @@ const editing = computed(() =>
     ? route.params.stationId
     : null,
 );
+const tab = computed(() => (route.name === "setup.stations.providers" ? "providers" : "stations"));
+const tabs = [
+  { key: "stations", label: "Stations", to: { name: "setup.stations" } },
+  { key: "providers", label: "Providers", to: { name: "setup.stations.providers" } },
+];
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
 );
@@ -43,7 +49,9 @@ const notProvided = computed(
         >Add station</ApButton
       >
     </ApPageHeader>
-    <template v-if="editing && canStage && state.status === 'ready'">
+    <ApTabLinks :links="tabs" :active="tab" label="Ground station sections" />
+    <ProvidersPanel v-if="tab === 'providers'" :mission-id="missionId" />
+    <template v-if="tab === 'stations' && editing && canStage && state.status === 'ready'">
       <KindEditor
         :key="editing"
         :mission-id="missionId"
@@ -60,7 +68,7 @@ const notProvided = computed(
         :done="{ name: 'setup.stations' }"
       />
     </template>
-    <ApPanel index="G1" title="Stations" flush>
+    <ApPanel v-if="tab === 'stations'" index="G1" title="Stations" flush>
       <ApEmptyState
         v-if="notProvided"
         state="off"

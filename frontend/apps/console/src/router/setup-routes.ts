@@ -101,7 +101,7 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
   {
     path: "setup/stations/providers/:providerId?",
     name: "setup.stations.providers",
-    component: pending,
+    component: () => import("@/features/stations/StationsScreen.vue"),
     meta: { mode: "setup", nav: "stations", title: "Providers" },
   },
   {
