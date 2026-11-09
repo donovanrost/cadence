@@ -29,5 +29,11 @@ export {
   trendSentence,
   type RangeKey,
 } from "./model.ts";
-export { usePointTrend, useSpacecraftAlarms } from "./useInvestigate.ts";
+export {
+  useEpisodeDetail,
+  usePointTrend,
+  useSpacecraftAlarms,
+  useSpacecraftEpisodes,
+} from "./useInvestigate.ts";
+export { default as EpisodeBar } from "./EpisodeBar.vue";
 export { default as TrendBlock } from "./TrendBlock.vue";
