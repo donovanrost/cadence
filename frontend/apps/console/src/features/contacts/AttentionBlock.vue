@@ -61,6 +61,9 @@ async function acknowledge() {
 const dialog = ref<HTMLDialogElement | null>(null);
 const actionText = ref("");
 const fieldError = ref<string | null>(null);
+/** The server's limit (contacts.md: action_text ≤ 200); count down from 180 (ux). */
+const left = computed(() => ACTION_TEXT_MAX - actionText.value.length);
+const counter = computed(() => (left.value <= 20 ? `${left.value} left` : undefined));
 const titleId = `ap-resolve-${Math.random().toString(36).slice(2, 9)}`;
 function openResolve() {
   actionText.value = "";
@@ -148,6 +151,7 @@ async function resolve() {
           :maxlength="ACTION_TEXT_MAX"
           placeholder="Called Northlight; the cancel is confirmed, ticket 4471."
           :error="fieldError"
+          :hint="counter"
         />
         <footer class="flex items-center justify-end gap-2 border-t border-hairline pt-3">
           <ApButton variant="ghost" type="button" @click="dialog?.close()">Cancel</ApButton>
