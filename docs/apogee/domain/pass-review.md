@@ -112,3 +112,28 @@ prices.
   passes stay out of the realization denominator? I propose they do: they're K2's concern, not
   realization.
 - **fe-setup/api-ops:** does `rows/summary/daily/freshness` cover K3's regions R1–R4 and the h1?
+
+## Accepted from api-ops' review (`api/s9-review-api-ops.md`)
+
+1. **`owner`** (`provider | us | weather | unknown`), derived and stored next to `cause` and
+   `cause_source`. `disputable = owner == provider`. Rules:
+   - provider cancel, rejection or failure reason → `provider`, except a provider reason naming
+     weather → `weather`;
+   - an S7 window reported by the provider → `provider`; one declared by an operator → `us`;
+   - delivered by the provider but nothing ingested by Cadence → `us`;
+   - otherwise `unknown`.
+2. **`antenna_ref`** from the reservation snapshot.
+3. **`contact_plan_id` and `contact_plan_version`** from the reservation, plus a `plan` filter on
+   `rows` and `summary`.
+4. **`summary`** returns `pending_report` (a count) and `provisional`: true when the span has a
+   pending report or any provider's event cursor is unhealthy.
+5. **`planned_bytes` is nil** unless the provider supplies a number, which none does today.
+   Volume is shown as received vs provider-reported, not "vs plan".
+6. **By station:** `{ground_station_ref, provider_id, planned, realized, partial, missed, failed,
+   canceled, flown_seconds, planned_seconds}`.
+7. **By cause:** `{cause, cause_source, owner, missed, partial}`.
+8. **`daily`:** rows `{day, planned, realized, ratio, top_cause}`, plus `target` from a separate
+   mission setting `cadence.pass_review.target_ratio`. The default is nil; it is not the 95%
+   per-pass threshold.
+9. **`rows`** returns `{rows, total, disputable, next_cursor}`, filtered by `outcome[]`,
+   `station`, `spacecraft_id` and `plan`.
