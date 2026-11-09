@@ -23,7 +23,7 @@ defmodule Cadence.Reads.CommsDirectory do
       %{
         id: station.ground_station_id,
         display_name: station.display_name,
-        code: (station.metadata || %{})["code"],
+        code: station.code,
         provider: station.provider,
         region: station.region,
         lifecycle_state: station.lifecycle_state,

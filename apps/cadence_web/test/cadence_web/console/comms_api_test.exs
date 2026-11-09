@@ -42,7 +42,7 @@ defmodule CadenceWeb.Console.CommsAPITest do
         display_name: "Svalbard",
         provider: "KSAT",
         region: "Arctic",
-        metadata: %{"code" => "SVB"}
+        code: "SVB"
       })
 
     {:ok, _} =

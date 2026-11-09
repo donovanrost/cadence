@@ -194,7 +194,7 @@ Profile detail with **schema-driven sections** (`Cadence.SpacecraftType.Schema`,
 ```
 
 - Fields are exactly the model-backed ones from profile-routing §3: framing (TM/TC/packet
-  protocol, frame length, secondary header, insert zone, OCF, truncated primary header) and catalog.
+  protocol, frame length, secondary header, insert zone, OCF, FECF, truncated primary header) and catalog.
   `type` is `integer | boolean | enum | string | reference`; `runtime_impact` is
   `generation | routes | none`. Enum options come as `[{value, label}]`.
 - `rules` and `overrides` come from domain's profile routing (DECISIONS #3, shapes in domain.md
@@ -301,7 +301,7 @@ Edits go through change sets (`ground_station` and `transport` kinds; see change
 
 - `GET .../ground-stations` → `{stations: [{id, display_name, code, provider, region,
   lifecycle_state, transport_count, routing_rule_count, health}]}`. Only active stations are
-  listed. `code` comes from station metadata until domain adds the field (profile-routing §5).
+  listed. `code` is the station's short code (2–8 capitals/digits, unique per mission).
   `transport_count` and `routing_rule_count` are **`null`** because the model has no
   station↔transport link yet. `health` is `null` (not tracked; show "not reported").
 - `GET .../transports` → `{transports: [{id, display_name, version, origin, transport_kind,

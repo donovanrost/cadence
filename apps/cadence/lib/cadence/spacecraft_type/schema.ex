@@ -98,6 +98,11 @@ defmodule Cadence.SpacecraftType.Schema do
         default: 0,
         runtime_impact: :generation
       ),
+      field("frame_parameters.fecf", "Frame error control field", :boolean,
+        default: false,
+        runtime_impact: :generation,
+        help: "Frames end with a 2-byte CRC (FECF)."
+      ),
       field(
         "frame_parameters.truncated_primary_header",
         "Truncated primary header (USLP)",
