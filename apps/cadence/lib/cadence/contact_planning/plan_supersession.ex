@@ -102,9 +102,7 @@ defmodule Cadence.ContactPlanning.PlanSupersession do
           )
         ]
 
-      requirement.lifecycle_state == :active and
-        not MapSet.member?(kept, requirement.contact_requirement_id) and
-          overtaken?(current, template) ->
+      stale_template?(requirement, current, template, kept) ->
         {version, _targets} = template
         [template_change(version.created_at, version.created_by, current, template)]
 
@@ -132,6 +130,13 @@ defmodule Cadence.ContactPlanning.PlanSupersession do
         []
     end
   end
+
+  defp stale_template?(%{lifecycle_state: :active} = requirement, current, template, kept),
+    do:
+      not MapSet.member?(kept, requirement.contact_requirement_id) and
+        overtaken?(current, template)
+
+  defp stale_template?(_requirement, _current, _template, _kept), do: false
 
   defp overtaken?(_current, nil), do: false
 
