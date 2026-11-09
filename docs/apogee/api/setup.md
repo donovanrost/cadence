@@ -296,9 +296,10 @@ to every member.
 - `POST /provider-accounts` `{provider_key, name, settings: {base_url, environment_ref, region_ref?},
   credential: {backend, key}}` → `201 {id, version: 1}`. It registers the reference without
   calling the provider; use Test afterwards.
-- `PUT /provider-accounts/:id` `{settings?, credential?}` → `201 {id, version}` (a new account
-  version; a sent `credential` registers a new reference). Renaming isn't supported yet:
-  `422 details.name`.
+- `PUT /provider-accounts/:id` `{name?, settings?, credential?}` → `201 {id, version}`. Settings and
+  credential make a new account version (a sent `credential` registers a new reference). A
+  rename alone writes no version (`version: null`); it's presentation, and it's audited. A blank
+  name or one over 120 bytes: `422 details.name`.
 - `DELETE /provider-accounts/:id` (optional `reason`) → `{id, state: "archived"}`. The account
   drops out of the list. While missions use it: `409 in_use` with `details.missions: [{id,
   name}]`. `409 already_retired`.

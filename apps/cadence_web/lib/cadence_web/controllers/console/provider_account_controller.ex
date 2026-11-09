@@ -6,7 +6,7 @@ defmodule CadenceWeb.Console.ProviderAccountController do
 
   use CadenceWeb, :controller
 
-  alias Cadence.GroundNetworks.ProviderAccountRetirement
+  alias Cadence.GroundNetworks.{ProviderAccountRename, ProviderAccountRetirement}
   alias Cadence.Management.{ProviderAccountDirectory, ProviderAccountWrites}
   alias Cadence.Missions
   alias CadenceWeb.Console.{ConfigJSON, Problem}
@@ -40,9 +40,29 @@ defmodule CadenceWeb.Console.ProviderAccountController do
   end
 
   def update(conn, %{"id" => id} = params) do
-    case ProviderAccountWrites.update(conn.assigns.current_scope, id, params) do
-      {:ok, result} -> conn |> put_status(:created) |> json(%{data: ConfigJSON.encode(result)})
+    scope = conn.assigns.current_scope
+
+    with :ok <- rename(scope, id, params["name"]),
+         {:ok, result} <- ProviderAccountWrites.update(scope, id, params) do
+      conn |> put_status(:created) |> json(%{data: ConfigJSON.encode(result)})
+    else
       {:error, reason} -> error(conn, reason)
+    end
+  end
+
+  # The name is presentation, renamed without a new version (domain ProviderAccountRename).
+  defp rename(_scope, _id, nil), do: :ok
+
+  defp rename(scope, id, name) do
+    case ProviderAccountRename.rename(scope, id, name) do
+      {:ok, _account} ->
+        :ok
+
+      {:error, :invalid_display_name} ->
+        {:error, {:invalid_params, %{"name" => "Use 1 to 120 characters."}}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

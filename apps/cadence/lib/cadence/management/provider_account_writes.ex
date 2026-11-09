@@ -46,11 +46,18 @@ defmodule Cadence.Management.ProviderAccountWrites do
     end
   end
 
-  @doc "A new account version from the changed settings (and credential reference, if sent)."
+  @doc """
+  A new account version from the changed settings (and credential reference, if sent). The
+  name is renamed separately (the web layer calls `ProviderAccountRename`); with nothing else
+  to change, no version is written.
+  """
   @spec update(Scope.t(), binary(), map()) :: {:ok, map()} | {:error, term()}
+  def update(%Scope{} = _scope, account_id, params)
+      when not is_map_key(params, "settings") and not is_map_key(params, "credential"),
+      do: {:ok, %{id: account_id, version: nil}}
+
   def update(%Scope{} = scope, account_id, params) do
-    with :ok <- no_rename(params["name"]),
-         {:ok, credential} <- maybe_credential(scope, account_id, params["credential"]),
+    with {:ok, credential} <- maybe_credential(scope, account_id, params["credential"]),
          attrs = params |> settings() |> Map.merge(credential),
          {:ok, _account, version} <-
            ProviderAccounts.version(scope, account_id, attrs, validate_credential?: false) do
@@ -115,12 +122,6 @@ defmodule Cadence.Management.ProviderAccountWrites do
     end)
     |> Map.new()
   end
-
-  # The name lives on the account, which the domain can't rename yet; refuse rather than ignore.
-  defp no_rename(nil), do: :ok
-
-  defp no_rename(_name),
-    do: {:error, {:invalid_params, %{"name" => "Renaming an account isn't supported yet."}}}
 
   defp maybe_credential(_scope, _account_id, nil), do: {:ok, %{}}
 

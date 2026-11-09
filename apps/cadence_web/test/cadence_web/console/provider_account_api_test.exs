@@ -99,7 +99,18 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
              |> Map.fetch!("data")
 
     rename = conn.() |> put(base <> "/provider-accounts/" <> id, %{"name" => "Sim (renamed)"})
-    assert json_response(rename, 422)["error"]["details"]["name"]
+    assert %{"version" => nil} = json_response(rename, 201)["data"]
+
+    [renamed] =
+      conn.()
+      |> get(base <> "/provider-accounts")
+      |> json_response(200)
+      |> get_in(["data", "accounts"])
+
+    assert renamed["name"] == "Sim (renamed)"
+
+    blank = conn.() |> put(base <> "/provider-accounts/" <> id, %{"name" => " "})
+    assert json_response(blank, 422)["error"]["details"]["name"]
 
     # No secret manager in tests: the reference can't resolve, and Test says so.
     test = conn.() |> post(base <> "/provider-accounts/#{id}/test", %{}) |> json_response(200)
