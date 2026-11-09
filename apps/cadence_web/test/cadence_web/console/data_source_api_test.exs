@@ -2,6 +2,7 @@ defmodule CadenceWeb.Console.DataSourceAPITest do
   @moduledoc "D1 data sources."
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.Management.DataSources
   alias CadenceWeb.TestFixtures
 
   test "lists the mission's data sources with health, last data and credentials" do
@@ -9,7 +10,7 @@ defmodule CadenceWeb.Console.DataSourceAPITest do
     user = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(user, org)
     mission = TestFixtures.persist_mission!(org)
-    Cadence.Management.DataSources.ensure_default_managed_sources!()
+    DataSources.ensure_default_managed_sources!()
 
     sources =
       user
