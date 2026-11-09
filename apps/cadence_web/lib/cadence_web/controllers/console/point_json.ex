@@ -11,10 +11,12 @@ defmodule CadenceWeb.Console.PointJSON do
     {"red_high", :red_high}
   ]
 
-  @spec history(binary(), map(), map()) :: map()
-  def history(point_id, window, history) do
+  @spec history(binary(), map(), map(), map()) :: map()
+  def history(point_id, window, history, info) do
     %{
       point_id: point_id,
+      unit: info.unit,
+      description: info.description,
       spacecraft_id: window.spacecraft_id,
       from: window.from,
       to: window.to,

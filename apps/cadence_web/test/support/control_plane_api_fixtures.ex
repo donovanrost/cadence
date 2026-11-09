@@ -135,7 +135,8 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
             name: "counter",
             offset_bits: 0,
             size_bits: 16,
-            data_type: :uint
+            data_type: :uint,
+            engineering_unit: "count"
           },
           %{
             field_id: "field-voltage",

@@ -1,6 +1,6 @@
 defmodule Cadence.Reads.AlarmList do
   @moduledoc """
-  Limit alarms for a mission, enriched for operators: the thresholds of the
+  Limit alarms for a mission, enriched for operators: the point's `unit` and `description`, the thresholds of the
   limit definition that produced each state, and when the point first entered
   its current state (`first_crossed_at`).
 
@@ -11,6 +11,7 @@ defmodule Cadence.Reads.AlarmList do
   alias Cadence.Limits.Event
   alias Cadence.Reads.Alarms
   alias Cadence.Reads.Limits, as: LimitReads
+  alias Cadence.Reads.PointInfo
 
   @history_depth 200
   @enrich_limit 200
@@ -33,6 +34,7 @@ defmodule Cadence.Reads.AlarmList do
 
     rows = snapshot.rows
     thresholds = thresholds(organization_id, mission_id, Enum.take(rows, @enrich_limit))
+    points = if rows == [], do: %{}, else: PointInfo.by_id(organization_id, mission_id)
 
     %{
       observed_at: snapshot.observed_at,
@@ -44,6 +46,7 @@ defmodule Cadence.Reads.AlarmList do
           enriched? = index < @enrich_limit
 
           row
+          |> Map.merge(Map.get(points, row.point_id, PointInfo.unknown()))
           |> Map.put(:severity, severity(row.normalized_state))
           |> Map.put(:thresholds, Map.get(thresholds, definition_key(row)))
           |> Map.put(

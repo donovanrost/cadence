@@ -14,7 +14,13 @@ defmodule CadenceWeb.Console.AlarmJSON do
     %{
       id: row.id,
       spacecraft_id: row.spacecraft_id,
-      point: %{id: row.point_id, name: row.point_name, subsystem: row.subsystem},
+      point: %{
+        id: row.point_id,
+        name: row.point_name,
+        subsystem: row.subsystem,
+        unit: row.unit,
+        description: row.description
+      },
       severity: Atom.to_string(row.severity),
       active: row.active?,
       condition: row.limit_state && to_string(row.limit_state),

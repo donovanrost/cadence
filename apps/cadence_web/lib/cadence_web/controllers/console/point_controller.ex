@@ -7,14 +7,15 @@ defmodule CadenceWeb.Console.PointController do
   use CadenceWeb, :controller
 
   alias Cadence.Reads.Limits, as: LimitReads
-  alias Cadence.Reads.PointHistory
+  alias Cadence.Reads.{PointHistory, PointInfo}
   alias CadenceWeb.Console.{PointJSON, Problem, WindowParams}
 
   def history(conn, %{"point_id" => point_id} = params) do
     with {:ok, window} <- WindowParams.parse(params, max_points: true),
          {:ok, history} <-
            PointHistory.load(org_id(conn), mission_id(conn), point_id, window) do
-      json(conn, %{data: PointJSON.history(point_id, window, history)})
+      info = PointInfo.fetch(org_id(conn), mission_id(conn), point_id)
+      json(conn, %{data: PointJSON.history(point_id, window, history, info)})
     else
       {:error, {:invalid_params, details}} -> Problem.respond(conn, :invalid_params, details)
       {:error, _reason} -> Problem.respond(conn, :history_unavailable)

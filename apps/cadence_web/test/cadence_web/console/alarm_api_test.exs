@@ -29,6 +29,22 @@ defmodule CadenceWeb.Console.AlarmAPITest do
       :ok
     end
 
+    test "takes the point unit from the active binding set", c do
+      assert {:ok, _activation} =
+               Cadence.Activations.record_binding_set_activation(
+                 c.org.organization_id,
+                 c.mission.mission_id,
+                 "read-models",
+                 1,
+                 binding_set_content_sha256: String.duplicate("0", 64)
+               )
+
+      data = c |> get_json("/alarms") |> json_response(200) |> Map.fetch!("data")
+
+      assert [%{"point" => %{"id" => "HK.counter", "unit" => "count", "description" => nil}}] =
+               data["alarms"]
+    end
+
     test "lists the active alarm with thresholds and first-crossed time", c do
       data = c |> get_json("/alarms") |> json_response(200) |> Map.fetch!("data")
 
@@ -38,6 +54,8 @@ defmodule CadenceWeb.Console.AlarmAPITest do
       assert [alarm] = data["alarms"]
       assert alarm["spacecraft_id"] == "spacecraft-001"
       assert alarm["point"]["id"] == "HK.counter"
+      assert alarm["point"]["unit"] == nil
+      assert alarm["point"]["description"] == nil
       assert alarm["severity"] == "caution"
       assert alarm["active"] == true
       assert alarm["value"] == 30

@@ -126,7 +126,12 @@ defmodule Cadence.Reads.ActionQueue do
         since: worst |> Enum.map(&alarm_since/1) |> min_datetime(),
         count: length(members),
         spacecraft: members,
-        point: %{id: point_id, name: first.point_name, subsystem: first.subsystem},
+        point: %{
+          id: point_id,
+          name: first.point_name,
+          subsystem: first.subsystem,
+          unit: Map.get(first, :unit)
+        },
         condition: condition
       })
     end)

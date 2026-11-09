@@ -27,6 +27,7 @@ defmodule Cadence.Reads.ActionQueueTest do
       point_id: Keyword.get(opts, :point_id, "EPS.VBAT"),
       point_name: Keyword.get(opts, :point_name, "VBAT"),
       subsystem: "EPS",
+      unit: "V",
       limit_state: Keyword.get(opts, :condition, :red_low),
       evaluated_value: Keyword.get(opts, :value, 23.1),
       first_crossed_at: Keyword.get(opts, :first_crossed_at),
@@ -105,7 +106,7 @@ defmodule Cadence.Reads.ActionQueueTest do
       assert critical.since == ago(400)
       assert Enum.map(critical.spacecraft, & &1.id) == ["b", "a"]
       assert hd(critical.spacecraft).value == 22.8
-      assert critical.point == %{id: "EPS.VBAT", name: "VBAT", subsystem: "EPS"}
+      assert critical.point == %{id: "EPS.VBAT", name: "VBAT", subsystem: "EPS", unit: "V"}
       assert critical.condition == "red_low"
 
       assert caution.priority == 2

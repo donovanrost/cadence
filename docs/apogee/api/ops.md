@@ -118,7 +118,7 @@ values get `422 invalid_params` with `details`.
       {
         "id": "limit_event_…",
         "spacecraft_id": "spacecraft-earendil-312",
-        "point": {"id": "EPS.VBAT", "name": "VBAT", "subsystem": "EPS"},
+        "point": {"id": "EPS.VBAT", "name": "VBAT", "subsystem": "EPS", "unit": "V", "description": null},
         "severity": "critical",
         "active": true,
         "condition": "red_low",
@@ -146,8 +146,11 @@ values get `422 invalid_params` with `details`.
   one in the window. Only the first 200 rows are enriched; later rows have `null`.
 - `value`: the evaluated engineering value, as a number, string or boolean.
 - Sorting: severity (critical first), then newest received first.
-- **Not yet:** point `unit` and `description` (they need the catalog point join; planned with M23
-  point search), and the D6 alarm lifecycle (ack/assign/hand-off).
+- `point.unit`: the engineering unit of the decoded packet field in the mission's **active** binding
+  set; `null` when the field has none or there's no active activation. `point.description` is
+  always `null` for now: catalog import doesn't carry parameter descriptions through to the binding
+  set yet (api-ops backlog, with M23).
+- **Not yet:** the D6 alarm lifecycle (ack/assign/hand-off).
 
 ## `GET /api/console/v1/missions/:mission_id/action-queue`
 
@@ -166,7 +169,7 @@ throttled to about 10 s (stale groups change with time).
     "spacecraft": [{"id": "spacecraft-earendil-312", "name": "EARENDIL-312", "scid": 312, "plane": 13,
                     "stale": false, "last_received_at": "…", "violating_points": 1,
                     "value": 23.1, "first_crossed_at": "2026-11-08T02:35:02Z"}],
-    "point": {"id": "EPS.VBAT", "name": "VBAT", "subsystem": "EPS"}, "condition": "red_low",
+    "point": {"id": "EPS.VBAT", "name": "VBAT", "subsystem": "EPS", "unit": "V"}, "condition": "red_low",
     "plane": null, "command": null, "outcome": null, "command_requests": [], "finding": null
   }]
 }}
@@ -222,7 +225,7 @@ the window's first day, the same as QuestDB `ALIGN TO CALENDAR`); there are at m
 
 ```json
 {"data": {
-  "point_id": "EPS.VBAT", "spacecraft_id": "spacecraft-earendil-312",
+  "point_id": "EPS.VBAT", "unit": "V", "description": null, "spacecraft_id": "spacecraft-earendil-312",
   "from": "2026-11-08T01:41:17.000Z", "to": "2026-11-08T02:41:17.000Z",
   "bucket_width_ms": 7200, "truncated": false,
   "buckets": [{"t": "2026-11-08T01:41:17.000Z", "t_end": "2026-11-08T01:41:24.200Z",
@@ -230,6 +233,7 @@ the window's first day, the same as QuestDB `ALIGN TO CALENDAR`); there are at m
 }}
 ```
 
+- `unit` / `description`: same source and caveats as the alarm `point.unit` / `point.description`.
 - Only numeric values are bucketed (booleans count as 0/1). Enum and text points return no
   buckets for now; a state-timeline shape will come if a screen needs it.
 - `truncated: true` means the raw-sample fallback (used on backends without native decimation)
