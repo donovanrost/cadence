@@ -13,6 +13,10 @@ const failure = ref<string | null>(null);
 const busy = ref(false);
 
 /** Withdraw and discard act on your own changes, or anyone's with config.discard_any. */
+/** Discard shows only when there's something the caller may discard (ux pass 2 #6). */
+const canDiscard = () =>
+  props.config.permissions.has("config.discard_any") ||
+  props.changeSet.changes.some((c) => c.author.id === session.user.id);
 const mayRemove = (change: Change) =>
   change.author.id === session.user.id || props.config.permissions.has("config.discard_any");
 
@@ -44,7 +48,7 @@ function toggle(id: string) {
 
 <template>
   <ApPanel index="K1" title="Changes" :meta="plural(changeSet.changes.length, 'change')" flush>
-    <template v-if="changeSet.state === 'open'" #header>
+    <template v-if="changeSet.state === 'open' && canDiscard()" #header>
       <ApButton
         size="compact"
         variant="ghost"

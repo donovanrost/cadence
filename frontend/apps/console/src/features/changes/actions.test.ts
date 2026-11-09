@@ -55,6 +55,6 @@ describe("preview compatibility HOLD (DECISIONS #33)", () => {
 
   it("falls back to field errors, then the reason", () => {
     expect(itemLine({ ...base, errors: [{ path: "a", message: "bad" }] })).toBe("a: bad");
-    expect(itemLine({ ...base, reason: "entity_gone" })).toBe("entity_gone");
+    expect(itemLine({ ...base, reason: "entity_gone" })).toBe("Entity gone");
   });
 });

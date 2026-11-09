@@ -30,6 +30,15 @@ export type PreviewItem = Decoded<typeof previewItem>;
 const shown = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
 
 /** One line per check item: server sentence first, then both values for a framing mismatch. */
+/** `contacts_in_window` → "Contacts in window" (fallback when the server sends no sentence). */
+export function humanize(key: string): string {
+  const words = key
+    .replace(/[_.:-]+/g, " ")
+    .trim()
+    .toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function itemLine(item: PreviewItem): string {
   if (item.profile_value && item.transport_value) {
     const both = `profile ${item.profile_value.path} = ${shown(item.profile_value.value)} vs ${item.transport_value.transport.name} ${item.transport_value.path} = ${shown(item.transport_value.value)}`;
@@ -40,7 +49,7 @@ export function itemLine(item: PreviewItem): string {
   if (item.sentence) return item.sentence;
   if (item.errors && item.errors.length > 0)
     return item.errors.map((e) => `${e.path}: ${e.message}`).join("; ");
-  return item.reason ?? item.kind;
+  return humanize(item.reason ?? item.kind);
 }
 
 export const previewReader = object({
