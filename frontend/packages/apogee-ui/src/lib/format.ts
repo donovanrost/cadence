@@ -35,12 +35,18 @@ export function formatShort(date: Date): string {
   return `${p.mo}-${p.d} ${p.h}:${p.mi}Z`;
 }
 
-/** `T−00:04:12` for a future target, `T+00:06:41` for a past one. */
+/**
+ * `T−00:04:12` for a future target, `T+00:06:41` for a past one; past a day `T−4d 03:28:39`
+ * (§4: hours never exceed 23).
+ */
 export function formatCountdown(target: Date, now: Date): string {
   const delta = Math.round((target.getTime() - now.getTime()) / 1000);
   const sign = delta > 0 ? MINUS : "+";
   const total = Math.abs(delta);
-  return `T${sign}${pad(total / 3600)}:${pad((total % 3600) / 60)}:${pad(total % 60)}`;
+  const days = Math.floor(total / 86_400);
+  const rest = total % 86_400;
+  const clock = `${pad(rest / 3600)}:${pad((rest % 3600) / 60)}:${pad(rest % 60)}`;
+  return `T${sign}${days > 0 ? `${days}d ` : ""}${clock}`;
 }
 
 /** `9m 12s`, `5h 40m`, `45s` */

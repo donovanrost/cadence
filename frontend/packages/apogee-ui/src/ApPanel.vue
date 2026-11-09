@@ -3,6 +3,9 @@
  * Every surface is a panel: zero radius, hairline border, indexed header with meta on the right.
  * `pane` fills a console grid cell and scrolls its body; the page never scrolls.
  */
+import { ref } from "vue";
+import { useScrollable } from "./lib/scrollable.ts";
+
 withDefaults(
   defineProps<{
     /** Index code in reading order, e.g. `A1`. */
@@ -19,6 +22,9 @@ withDefaults(
   }>(),
   { variant: "default", pane: false, flush: false, headingLevel: 2 },
 );
+/** A pane body that scrolls is a named, focusable group (axe scrollable-region-focusable). */
+const body = ref<HTMLElement | null>(null);
+const scrolls = useScrollable(body);
 </script>
 
 <template>
@@ -59,7 +65,13 @@ withDefaults(
         <slot name="meta">{{ meta }}</slot>
       </span>
     </header>
-    <div :class="[pane ? 'min-h-0 flex-1 overflow-auto' : '', flush ? '' : 'p-4']">
+    <div
+      ref="body"
+      :class="[pane ? 'min-h-0 flex-1 overflow-auto' : '', flush ? '' : 'p-4']"
+      :tabindex="pane && scrolls ? 0 : undefined"
+      :role="pane && scrolls ? 'group' : undefined"
+      :aria-label="pane && scrolls ? title : undefined"
+    >
       <slot />
     </div>
   </section>

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import MobileTabBar from "./MobileTabBar.vue";
-import { ApCallout } from "@/ui";
+import { ApCallout, useScrollable } from "@/ui";
 import NotFoundScreen from "./NotFoundScreen.vue";
 import OpsRail from "./OpsRail.vue";
 import SetupRail from "./SetupRail.vue";
@@ -64,6 +64,9 @@ watch(
   },
   { immediate: true },
 );
+/** A scrolling main must be keyboard reachable (axe scrollable-region-focusable, qa U30 #3). */
+const main = ref<HTMLElement | null>(null);
+const mainScrolls = useScrollable(main);
 </script>
 
 <template>
@@ -97,7 +100,8 @@ watch(
       <div class="flex min-w-0 flex-1 flex-col">
         <main
           id="main"
-          tabindex="-1"
+          ref="main"
+          :tabindex="mainScrolls ? 0 : -1"
           class="flex min-h-0 flex-1 flex-col"
           :class="
             consoleLayout

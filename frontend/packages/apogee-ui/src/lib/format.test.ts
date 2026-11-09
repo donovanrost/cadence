@@ -18,6 +18,10 @@ describe("format", () => {
   it("uses U+2212 for countdowns and + for elapsed", () => {
     expect(formatCountdown(new Date("2026-10-23T02:45:29Z"), at)).toBe("T−00:04:12");
     expect(formatCountdown(new Date("2026-10-23T02:34:36Z"), at)).toBe("T+00:06:41");
+    // §4: past a day, days then a clock that never exceeds 23 h (qa saw T−99:28:39).
+    expect(
+      formatCountdown(new Date(at.getTime() + (4 * 86_400 + 3 * 3600 + 28 * 60 + 39) * 1000), at),
+    ).toBe("T−4d 03:28:39");
   });
 
   it("formats durations, counts and plurals", () => {
