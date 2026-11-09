@@ -39,6 +39,8 @@ export const impactReader = object({
   passes_hit: integer,
   reservation_ids: array(token, 5000),
   spacecraft_ids: array(token, 5000),
+  /** The plan revisions that booked the hit passes (api-ops fecd8245): K2 repairs from these. */
+  plans: array(object({ id: token, version: nullable(integer) }), 100),
   truncated: boolean,
 });
 export type StationAvailability = Decoded<typeof availabilityReader>;
