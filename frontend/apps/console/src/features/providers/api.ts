@@ -1,7 +1,7 @@
 import { decoders, request, type ApiResult, type Decoded } from "@/api";
 import type { OpState } from "@/ui";
 
-/** Requested shape: docs/apogee/plans/setup-shapes.md §PA1. */
+/** Contract: docs/apogee/api/setup.md, `GET /organizations/:id/provider-accounts` (PA1). */
 const { array, nullable, object, oneOf, string, timestamp, token } = decoders;
 
 const account = object({
@@ -32,6 +32,18 @@ export function fetchProviderAccounts(
     `/organizations/${encodeURIComponent(organizationId)}/provider-accounts`,
     accountsReader,
     { signal },
+  );
+}
+
+/** The real credential check: the reference resolves and the provider accepts it. */
+export function testAccount(
+  organizationId: string,
+  accountId: string,
+): Promise<ApiResult<{ ok: boolean; message: string }>> {
+  return request(
+    `/organizations/${encodeURIComponent(organizationId)}/provider-accounts/${encodeURIComponent(accountId)}/test`,
+    object({ ok: decoders.boolean, message: string }),
+    { method: "POST", body: {} },
   );
 }
 

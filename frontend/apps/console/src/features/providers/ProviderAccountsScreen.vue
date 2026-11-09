@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useConsoleScope } from "@/shell";
 import {
@@ -13,6 +14,7 @@ import {
   plural,
   type ApColumn,
 } from "@/ui";
+import ProviderAccountDetail from "./ProviderAccountDetail.vue";
 import { fetchProviderAccounts, statusTag } from "./api.ts";
 
 /** Organization › Provider accounts (org admins). Spec: SettingsAuditProviders.md. */
@@ -26,6 +28,13 @@ const { state, refetch } = useRemoteQuery(
   () => organization.value?.id ?? null,
   fetchProviderAccounts,
 );
+const route = useRoute();
+const selected = computed(() => {
+  const id = route.params.accountId;
+  return state.value.status === "ready" && typeof id === "string"
+    ? (state.value.value.accounts.find((a) => a.id === id) ?? null)
+    : null;
+});
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
 );
@@ -49,6 +58,14 @@ const columns: readonly ApColumn[] = [
           : 'Provider accounts'
       "
       size="reading"
+    />
+    <ProviderAccountDetail
+      v-if="selected && organization && state.status === 'ready'"
+      :key="selected.id"
+      :organization="organization"
+      :account="selected"
+      :can-manage="state.value.permissions.includes('provider_accounts.manage')"
+      @tested="refetch"
     />
     <ApPanel index="V1" title="Provider accounts" flush>
       <ApEmptyState
@@ -76,9 +93,13 @@ const columns: readonly ApColumn[] = [
               >{{ row.provider.label
               }}<span class="font-mono text-xs text-text-4"> {{ row.provider.key }}</span></template
             >
-            <template #cell-name="{ row }"
-              ><span class="font-semibold text-readout">{{ row.name }}</span></template
-            >
+            <template #cell-name="{ row }">
+              <RouterLink
+                :to="{ name: 'org.provider-accounts', params: { accountId: row.id } }"
+                class="font-semibold text-readout no-underline hover:text-bright hover:underline max-md:hit-44"
+                >{{ row.name }}</RouterLink
+              >
+            </template>
             <template #cell-status="{ row }">
               <ApTag v-bind="statusTag(row)" />
               <span v-if="row.status_detail" class="block text-xs text-text-3">{{
