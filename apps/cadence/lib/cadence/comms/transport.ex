@@ -26,6 +26,7 @@ defmodule Cadence.Comms.Transport do
           direction_capability: direction_capability(),
           adapter_key: adapter_key(),
           configuration: map(),
+          ground_station_id: binary() | nil,
           mission_provider_id: binary() | nil,
           mission_provider_version: pos_integer() | nil,
           service_profile_ref: map() | nil,
@@ -46,6 +47,7 @@ defmodule Cadence.Comms.Transport do
     :transport_kind,
     :direction_capability,
     :adapter_key,
+    :ground_station_id,
     :mission_provider_id,
     :mission_provider_version,
     :service_profile_ref,
@@ -100,6 +102,7 @@ defmodule Cadence.Comms.Transport do
         |> Map.get(:adapter_key, Map.get(attrs, "adapter_key", default_adapter_key(kind)))
         |> normalize_atom(@adapter_keys, :adapter_key),
       configuration: Map.get(attrs, :configuration, Map.get(attrs, "configuration", %{})),
+      ground_station_id: Map.get(attrs, :ground_station_id, Map.get(attrs, "ground_station_id")),
       mission_provider_id:
         Map.get(attrs, :mission_provider_id, Map.get(attrs, "mission_provider_id")),
       mission_provider_version:

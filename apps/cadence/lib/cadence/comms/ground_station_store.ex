@@ -116,6 +116,7 @@ defmodule Cadence.Comms.GroundStationStore do
       updated = %GroundStation{
         current_ground_station
         | display_name: Map.get(attrs, :display_name, current_ground_station.display_name),
+          code: Map.get(attrs, :code, current_ground_station.code),
           provider: Map.get(attrs, :provider, current_ground_station.provider),
           region: Map.get(attrs, :region, current_ground_station.region),
           metadata: Map.get(attrs, :metadata, current_ground_station.metadata)
@@ -166,6 +167,7 @@ defmodule Cadence.Comms.GroundStationStore do
           set: [
             lifecycle_state: Atom.to_string(ground_station.lifecycle_state),
             display_name: ground_station.display_name,
+            code: ground_station.code,
             provider: ground_station.provider,
             region: ground_station.region,
             metadata: JsonDocument.wrap_value(ground_station.metadata),

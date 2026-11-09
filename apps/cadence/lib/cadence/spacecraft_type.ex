@@ -15,6 +15,7 @@ defmodule Cadence.SpacecraftType do
   """
 
   alias Cadence.Ids
+  alias Cadence.Persistence.JsonDocument
 
   @type lifecycle_state :: :active | :deleted
   @type downlink_protocol :: :tm | :aos | :uslp
@@ -33,6 +34,8 @@ defmodule Cadence.SpacecraftType do
           uplink_protocol: uplink_protocol(),
           packet_protocol: packet_protocol(),
           frame_parameters: map(),
+          catalog_revision_id: binary() | nil,
+          routing_rules: [map()],
           applications: %{application_key() => map()},
           metadata: map()
         }
@@ -48,6 +51,8 @@ defmodule Cadence.SpacecraftType do
     :uplink_protocol,
     :packet_protocol,
     frame_parameters: %{},
+    catalog_revision_id: nil,
+    routing_rules: [],
     applications: %{},
     metadata: %{}
   ]
@@ -99,6 +104,12 @@ defmodule Cadence.SpacecraftType do
         Map.get(attrs, :frame_parameters, Map.get(attrs, "frame_parameters", %{})),
       applications:
         normalize_applications(Map.get(attrs, :applications, Map.get(attrs, "applications", %{}))),
+      catalog_revision_id:
+        Map.get(attrs, :catalog_revision_id, Map.get(attrs, "catalog_revision_id")),
+      routing_rules:
+        attrs
+        |> Map.get(:routing_rules, Map.get(attrs, "routing_rules", []))
+        |> JsonDocument.encode(),
       metadata: Map.get(attrs, :metadata, Map.get(attrs, "metadata", %{}))
     }
   end

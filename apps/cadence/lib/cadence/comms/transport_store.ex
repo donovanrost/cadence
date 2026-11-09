@@ -335,6 +335,7 @@ defmodule Cadence.Comms.TransportStore do
            Map.get(attrs, :direction_capability, transport.direction_capability),
          adapter_key: Map.get(attrs, :adapter_key, transport.adapter_key),
          configuration: Map.get(attrs, :configuration, transport.configuration),
+         ground_station_id: Map.get(attrs, :ground_station_id, transport.ground_station_id),
          mission_provider_id: Map.get(attrs, :mission_provider_id, transport.mission_provider_id),
          mission_provider_version:
            Map.get(attrs, :mission_provider_version, transport.mission_provider_version),
