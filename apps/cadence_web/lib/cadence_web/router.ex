@@ -857,6 +857,13 @@ defmodule CadenceWeb.Router do
         :decide_policy
       )
 
+      get("/contact-planning", ContactTemplateController, :summary)
+      get("/contact-planning/templates", ContactTemplateController, :index)
+      post("/contact-planning/templates", ContactTemplateController, :create)
+      post("/contact-planning/templates/preview", ContactTemplateController, :preview)
+      get("/contact-planning/templates/:template_id", ContactTemplateController, :show)
+      post("/contact-planning/templates/:template_id", ContactTemplateController, :update)
+
       post("/contact-plans/:plan_id/execute", ContactPlanController, :execute)
 
       # -- Change sets (owner: api). Contract: docs/apogee/api/changes.md

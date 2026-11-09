@@ -1,7 +1,7 @@
 # Targeted contact requirement templates (DECISIONS #37)
 
 Author: **api**. Reviewer: **domain**. Status: **approved with notes** (domain, 2026-11-09;
-folded in below).
+folded in below). **Implemented** (api); console contract in `api/scheduling.md` § Templates.
 
 ## Problem
 
@@ -25,8 +25,9 @@ A template version gains:
   - `{"kind": "spacecraft_ids", "spacecraft_ids": [id, …]}` (1–10,000, unique),
 
   plus an optional `"exclude_spacecraft_ids": [id, …]` for profile and plane.
-- `spacecraft_id` becomes nullable and **legacy-only**. New versions write `target_document`
-  and leave it `NULL`.
+- `spacecraft_id` becomes nullable and **legacy-only**. It is set only when the target is a
+  one-spacecraft list, so older readers (LiveView surfaces, review projection) keep working, and is
+  `NULL` otherwise.
 
 Membership **resolves at materialization time** (it follows pins, metadata and new spacecraft),
 not when the template is saved. `ContactRequirementTemplates.resolve_targets/3` →

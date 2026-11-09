@@ -12,7 +12,8 @@ defmodule Cadence.Reads.PlanningSetup do
   alias Cadence.ContactPlanning.{
     ContactRequirements,
     ContactRequirementTemplates,
-    FleetPlanningPolicies
+    FleetPlanningPolicies,
+    TemplateTargets
   }
 
   @spec setup(binary(), binary()) :: map()
@@ -72,18 +73,18 @@ defmodule Cadence.Reads.PlanningSetup do
       |> ContactRequirementTemplates.list(mission_id, lifecycle_state: :active)
       |> Enum.flat_map(fn {template, version} ->
         count = (version.requirement_document || %{})["contact_count"] || 1
+        targets = TemplateTargets.resolve(organization_id, mission_id, version.target_document)
 
-        version
-        |> ContactRequirementTemplates.preview_occurrences(from, until)
         # The schedule range includes `until`; that occurrence belongs to the next day.
-        |> Enum.filter(&DateTime.before?(&1, until))
-        |> Enum.reject(fn occurrence ->
-          MapSet.member?(
-            materialized,
-            {template.contact_requirement_template_id, DateTime.to_unix(occurrence)}
-          )
-        end)
-        |> Enum.map(fn _occurrence -> {version.spacecraft_id, count} end)
+        for occurrence <- ContactRequirementTemplates.preview_occurrences(version, from, until),
+            DateTime.before?(occurrence, until),
+            spacecraft_id <- targets,
+            not MapSet.member?(
+              materialized,
+              {template.contact_requirement_template_id, DateTime.to_unix(occurrence),
+               spacecraft_id}
+            ),
+            do: {spacecraft_id, count}
       end)
 
     needs = requirement_needs ++ template_needs
@@ -103,7 +104,7 @@ defmodule Cadence.Reads.PlanningSetup do
     with %{"contact_requirement_template_id" => id, "occurrence_at" => at} <-
            (version.metadata || %{})["generation"],
          {:ok, at, _offset} <- DateTime.from_iso8601(at) do
-      {id, DateTime.to_unix(at)}
+      {id, DateTime.to_unix(at), version.spacecraft_id}
     else
       _not_generated -> nil
     end

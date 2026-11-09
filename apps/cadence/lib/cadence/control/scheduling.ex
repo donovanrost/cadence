@@ -22,6 +22,7 @@ defmodule Cadence.Control.Scheduling do
   alias Cadence.ContactPlanning.{
     ContactPlan,
     ContactPlans,
+    ContactRequirementTemplates,
     FleetPlanner,
     FleetPlanningRun,
     FleetPlanningRuns,
@@ -301,6 +302,10 @@ defmodule Cadence.Control.Scheduling do
         day |> Date.add(1) |> DateTime.new!(~T[00:00:00], "Etc/UTC") |> DateTime.to_iso8601(),
       "include_recurring" => true
     }
+
+    # Retire requirements from older template versions (or spacecraft that left a target)
+    # before the review captures the active ones.
+    ContactRequirementTemplates.supersede_stale(scope, mission_id)
 
     with {:ok, %{"evidence" => evidence}} <-
            FleetPlanningStarts.preview(scope, mission_id, %{"fleet_run" => fleet_run})

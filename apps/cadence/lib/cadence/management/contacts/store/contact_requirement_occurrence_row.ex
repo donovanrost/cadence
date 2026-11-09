@@ -16,6 +16,7 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementOccurrenceRow do
     field(:mission_id, :string)
     field(:contact_requirement_template_id, :string)
     field(:contact_requirement_template_version, :integer)
+    field(:spacecraft_id, :string)
     field(:occurrence_at, :utc_datetime_usec)
     field(:generation_state, :string)
     field(:generated_contact_requirement_id, :string)
@@ -33,6 +34,7 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementOccurrenceRow do
     :mission_id,
     :contact_requirement_template_id,
     :contact_requirement_template_version,
+    :spacecraft_id,
     :occurrence_at,
     :generation_state,
     :generated_contact_requirement_id,
@@ -48,6 +50,7 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementOccurrenceRow do
     :mission_id,
     :contact_requirement_template_id,
     :contact_requirement_template_version,
+    :spacecraft_id,
     :occurrence_at,
     :generation_state,
     :error_document,
@@ -70,9 +73,10 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementOccurrenceRow do
         :mission_id,
         :contact_requirement_template_id,
         :contact_requirement_template_version,
-        :occurrence_at
+        :occurrence_at,
+        :spacecraft_id
       ],
-      name: :contact_requirement_occurrences_identity_uniq
+      name: :contact_requirement_occurrences_spacecraft_identity_uniq
     )
   end
 
@@ -100,6 +104,7 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementOccurrenceRow do
       mission_id: row.mission_id,
       contact_requirement_template_id: row.contact_requirement_template_id,
       contact_requirement_template_version: row.contact_requirement_template_version,
+      spacecraft_id: row.spacecraft_id,
       occurrence_at: row.occurrence_at,
       generation_state: row.generation_state,
       generated_contact_requirement_id: row.generated_contact_requirement_id,
@@ -119,6 +124,7 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementOccurrenceRow do
       mission_id: occurrence.mission_id,
       contact_requirement_template_id: occurrence.contact_requirement_template_id,
       contact_requirement_template_version: occurrence.contact_requirement_template_version,
+      spacecraft_id: occurrence.spacecraft_id,
       occurrence_at: occurrence.occurrence_at,
       generation_state: Atom.to_string(occurrence.generation_state),
       generated_contact_requirement_id: occurrence.generated_contact_requirement_id,

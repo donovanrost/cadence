@@ -13,7 +13,9 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
     ContactRequirementTemplate,
     ContactRequirementTemplateVersion,
     ContactRequirementVersion,
-    RequirementSchedule
+    RequirementSchedule,
+    TemplateSupersession,
+    TemplateTargets
   }
 
   alias Cadence.Missions
@@ -25,7 +27,6 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
   }
 
   alias Cadence.Repo
-  alias Cadence.SpacecraftStore
 
   @document_limit 64 * 1_024
 
@@ -228,18 +229,74 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
          {:ok, template, version} <-
            fetch(current_scope.organization_id, mission_id, template_id),
          :ok <- active_template(template),
-         {:ok, actor_id} <- actor_id(current_scope) do
-      occurrences =
-        version
-        |> due_occurrences(from, until, opts)
-        |> Enum.map(&materialize_occurrence(current_scope, version, &1, actor_id, now(opts)))
+         {:ok, actor_id} <- actor_id(current_scope),
+         targets =
+           TemplateTargets.resolve(version.organization_id, mission_id, version.target_document),
+         due = due_occurrences(version, from, until, opts),
+         :ok <- fan_out_bound(length(due) * length(targets)) do
+      now = now(opts)
 
-      case Enum.find(occurrences, &match?({:error, _}, &1)) do
-        nil -> {:ok, Enum.map(occurrences, fn {:ok, result} -> result end)}
-        {:error, reason} -> {:error, reason}
+      results =
+        for occurrence_at <- due, spacecraft_id <- targets do
+          materialize_occurrence(
+            current_scope,
+            version,
+            occurrence_at,
+            spacecraft_id,
+            actor_id,
+            now
+          )
+        end
+
+      case Enum.find(results, &match?({:error, _}, &1)) do
+        nil ->
+          maybe_supersede(current_scope, version, targets, now, opts)
+          {:ok, Enum.map(results, fn {:ok, result} -> result end)}
+
+        {:error, reason} ->
+          {:error, reason}
       end
     end
   end
+
+  @doc """
+  Supersedes stale generated requirements of every active template now (see
+  `TemplateSupersession`). Run it **before** reviewing planning inputs: a fleet
+  start materializes with `supersede: false`, so it never cancels a
+  requirement its reviewed inputs already list.
+  """
+  @spec supersede_stale(Scope.t(), binary(), keyword()) :: %{superseded: non_neg_integer()}
+  def supersede_stale(%Scope{} = current_scope, mission_id, opts \\ []) do
+    now = now(opts)
+
+    superseded =
+      current_scope.organization_id
+      |> list(mission_id, lifecycle_state: :active)
+      |> Enum.map(fn {_template, version} ->
+        targets =
+          TemplateTargets.resolve(version.organization_id, mission_id, version.target_document)
+
+        TemplateSupersession.supersede(current_scope, version, targets, now).superseded
+      end)
+      |> Enum.sum()
+
+    %{superseded: superseded}
+  end
+
+  defp maybe_supersede(scope, version, targets, now, opts) do
+    if Keyword.get(opts, :supersede, true),
+      do: TemplateSupersession.supersede(scope, version, targets, now)
+  end
+
+  @fan_out_limit 10_000
+
+  @doc "Spacecraft × occurrences one materialization may create (fails instead of truncating)."
+  def fan_out_limit, do: @fan_out_limit
+
+  defp fan_out_bound(count) when count > @fan_out_limit,
+    do: {:error, {:template_fan_out_exceeded, count}}
+
+  defp fan_out_bound(_count), do: :ok
 
   @spec materialize_active(
           Scope.t(),
@@ -309,7 +366,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
     )
   end
 
-  defp materialize_occurrence(scope, version, occurrence_at, actor_id, now) do
+  defp materialize_occurrence(scope, version, occurrence_at, spacecraft_id, actor_id, now) do
     Repo.transaction(fn ->
       candidate =
         ContactRequirementOccurrence.new(%{
@@ -317,6 +374,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
           mission_id: version.mission_id,
           contact_requirement_template_id: version.contact_requirement_template_id,
           contact_requirement_template_version: version.version,
+          spacecraft_id: spacecraft_id,
           occurrence_at: occurrence_at,
           generation_state: :materializing,
           materialized_by: actor_id,
@@ -333,11 +391,12 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
             :mission_id,
             :contact_requirement_template_id,
             :contact_requirement_template_version,
-            :occurrence_at
+            :occurrence_at,
+            :spacecraft_id
           ]
         )
 
-      row = fetch_occurrence_row!(version, occurrence_at)
+      row = fetch_occurrence_row!(version, occurrence_at, spacecraft_id)
 
       if row.contact_requirement_occurrence_id == candidate.contact_requirement_occurrence_id do
         create_generated_requirement(scope, version, row, occurrence_at, now)
@@ -349,7 +408,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
   end
 
   defp create_generated_requirement(scope, version, row, occurrence_at, now) do
-    attrs = generated_requirement_attrs(version, occurrence_at)
+    attrs = generated_requirement_attrs(version, occurrence_at, row.spacecraft_id)
 
     case ContactRequirements.create(scope, version.mission_id, attrs, now: now) do
       {:ok, requirement, requirement_version} ->
@@ -408,7 +467,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
   defp existing_materialization(_row),
     do: Repo.rollback(:contact_requirement_occurrence_not_converged)
 
-  defp generated_requirement_attrs(version, occurrence_at) do
+  defp generated_requirement_attrs(version, occurrence_at, spacecraft_id) do
     {earliest_start, latest_end} =
       RequirementSchedule.window(version.schedule_document, occurrence_at)
 
@@ -423,7 +482,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
       })
 
     version.requirement_document
-    |> Map.put("spacecraft_id", version.spacecraft_id)
+    |> Map.put("spacecraft_id", spacecraft_id)
     |> Map.put("earliest_start", earliest_start)
     |> Map.put("latest_end", latest_end)
     |> Map.put("metadata", metadata)
@@ -466,7 +525,16 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
   end
 
   defp merge_version_attrs(current, attrs) do
+    # A legacy edit giving only spacecraft_id retargets to that one spacecraft.
+    current =
+      if match?({:ok, _}, fetch_value(attrs, :spacecraft_id)) and
+           fetch_value(attrs, :target_document) == :error,
+         do: %{current | target_document: nil},
+         else: current
+
     fields = [
+      :name,
+      :target_document,
       :spacecraft_id,
       :schedule_document,
       :requirement_document,
@@ -519,7 +587,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
       |> DateTime.from_iso8601()
       |> then(fn {:ok, timestamp, _offset} -> timestamp end)
 
-    attrs = generated_requirement_attrs(version, occurrence)
+    attrs = generated_requirement_attrs(version, occurrence, validation_spacecraft(version))
 
     {:ok,
      ContactRequirementVersion.new(
@@ -542,15 +610,27 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
       else: {:error, :contact_requirement_template_document_too_large}
   end
 
+  # Legacy single-spacecraft templates keep their old error; targets report the unknown ids.
   defp validate_spacecraft(version) do
-    case SpacecraftStore.fetch_spacecraft(
+    case TemplateTargets.validate(
            version.organization_id,
            version.mission_id,
-           version.spacecraft_id
+           version.target_document
          ) do
-      {:ok, _spacecraft} -> :ok
-      {:error, _reason} -> {:error, :contact_requirement_template_spacecraft_not_found}
+      {:error, {:template_target_unknown_spacecraft, _ids}}
+      when is_binary(version.spacecraft_id) ->
+        {:error, :contact_requirement_template_spacecraft_not_found}
+
+      result ->
+        result
     end
+  end
+
+  # The content check builds one sample requirement; its spacecraft doesn't affect the content rules.
+  defp validation_spacecraft(version) do
+    version.spacecraft_id ||
+      List.first(Map.get(version.target_document, "spacecraft_ids", [])) ||
+      "template_validation"
   end
 
   defp transition(
@@ -655,14 +735,15 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
     |> Repo.update()
   end
 
-  defp fetch_occurrence_row!(version, occurrence_at) do
+  defp fetch_occurrence_row!(version, occurrence_at, spacecraft_id) do
     Repo.get_by!(
       ContactRequirementOccurrenceRow,
       organization_id: version.organization_id,
       mission_id: version.mission_id,
       contact_requirement_template_id: version.contact_requirement_template_id,
       contact_requirement_template_version: version.version,
-      occurrence_at: occurrence_at
+      occurrence_at: occurrence_at,
+      spacecraft_id: spacecraft_id
     )
   end
 

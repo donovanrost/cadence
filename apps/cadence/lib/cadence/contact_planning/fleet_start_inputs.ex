@@ -1,7 +1,13 @@
 defmodule Cadence.ContactPlanning.FleetStartInputs do
   @moduledoc "Bounded, exact input snapshots for reviewed manual fleet starts."
   import Ecto.Query
-  alias Cadence.ContactPlanning.{ContactRequirementTemplates, ContentHash, FleetPlanningPolicies}
+
+  alias Cadence.ContactPlanning.{
+    ContactRequirementTemplates,
+    ContentHash,
+    FleetPlanningPolicies,
+    TemplateTargets
+  }
 
   alias Cadence.Management.Contacts.Store.{
     ContactRequirementOccurrenceRow,
@@ -136,7 +142,15 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
           window.horizon_end
         )
 
-      total = count + length(occurrences)
+      targets =
+        TemplateTargets.resolve(
+          version.organization_id,
+          version.mission_id,
+          version.target_document
+        )
+
+      # A template fans out per targeted spacecraft.
+      total = count + length(occurrences) * length(targets)
 
       if total > 10_000 do
         {:halt, {:error, :fleet_planning_occurrence_limit_exceeded}}
@@ -145,6 +159,7 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
           template: ContactRequirementTemplateRow.to_domain(t),
           version: version,
           occurrences: occurrences,
+          spacecraft_ids: targets,
           existing_occurrences: existing_occurrences(version, occurrences)
         }
 
@@ -170,6 +185,7 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
     |> order_by([r], asc: r.occurrence_at)
     |> select([r], %{
       at: r.occurrence_at,
+      spacecraft_id: r.spacecraft_id,
       state: r.generation_state,
       requirement_id: r.generated_contact_requirement_id,
       requirement_version: r.generated_contact_requirement_version
@@ -208,6 +224,7 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
               version: t.version.version,
               sha256: t.version.content_sha256,
               occurrences: Enum.map(t.occurrences, &DateTime.to_iso8601/1),
+              spacecraft_ids: t.spacecraft_ids,
               existing_occurrences: t.existing_occurrences
             }
           end)

@@ -35,6 +35,8 @@ defmodule CadenceWeb.Console.Problem do
     version_conflict: {409, "The policy changed since you loaded it."},
     reviewer_is_author: {409, "You can't approve a version you saved."},
     policy_not_found: {404, "Policy or version not found."},
+    template_not_found: {404, "Template not found."},
+    template_rejected: {422, "The template change was refused."},
     policy_rejected: {422, "The policy change was refused."},
     plan_not_repairable:
       {409,

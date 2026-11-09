@@ -153,7 +153,9 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
              mission,
              t.template.contact_requirement_template_id,
              inputs.window.horizon_start,
-             inputs.window.horizon_end
+             inputs.window.horizon_end,
+             # The reviewed inputs list the active requirements; don't cancel any of them now.
+             supersede: false
            ) do
         {:ok, rows} ->
           append_reviewed_materialization(t, rows, results)
@@ -185,13 +187,13 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
   end
 
   defp reviewed_materialization?(template, rows) do
-    existing = Map.new(template.existing_occurrences, &{&1.at, &1})
+    existing = Map.new(template.existing_occurrences, &{{&1.at, &1.spacecraft_id}, &1})
 
     Enum.all?(rows, fn result ->
       occurrence = result.occurrence
       at = DateTime.to_unix(occurrence.occurrence_at, :microsecond)
 
-      case {result.status, Map.get(existing, at)} do
+      case {result.status, Map.get(existing, {at, occurrence.spacecraft_id})} do
         {:created, nil} ->
           true
 

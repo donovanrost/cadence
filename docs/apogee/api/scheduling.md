@@ -209,6 +209,11 @@ requesting) locked and re-plans the rest, **off the request**. `202 {run_id, out
 progress arrives as `scheduling_progress {kind: "draft"}`. Errors: `409 plan_not_repairable`,
 `422 invalid_params`, `422 planning_not_set_up`.
 
+There is no `station_id`: a repair run plans through the same Planner as a draft, which treats
+windows at stations that are down or in maintenance (`StationAvailability`, S7) as ineligible.
+To start from a station outage, take the plan ids from the station impact read (`plans`, see
+contacts.md S7).
+
 The operation id is recorded on the repair run right after creation, because the reviewed repair
 flow has no transactional option for it yet. A crash between the two can leave an unrecorded run,
 and a replay then starts another repair. (Drafts don't have this gap.)
@@ -255,6 +260,56 @@ approves it. Errors: `422 invalid_params` (details keyed by `<group>.<field>`),
 
 ### `POST /policy/:version/decision`
 
-Body `{decision: "approve" | "reject", comment}`. Returns `{version, state: "active" | "rejected"}`.
+Body `{decision: "approve" | "reject", comment}`; `comment` is **required** for both decisions
+(`422 invalid_params`, `details.comment`). Returns `{version, state: "active" | "rejected"}`.
 `409 reviewer_is_author` if you saved that version (a single-admin organization can't activate
 its own edits; that's by design per ux).
+
+### `GET /` (CP1 summary)
+
+`{policy: {version, mode} | null, coverage: {spacecraft_total, covered, contacts_per_day,
+uplink_passes_per_day}, templates: [template row], not_covered: [{group: "profile" | "none", label,
+count, suggested_target: target | null}], permissions}`. `policy: null` means no active policy.
+Coverage counts the next 24 h of the **active** templates: `covered` is how many spacecraft at
+least one of them targets now, and `contacts_per_day` counts occurrences × targeted spacecraft ×
+`contact_count`. `not_covered` groups the rest by profile, largest first, and suggests a profile
+target. Permissions are the CP2 ones (`planning.edit` is what template writes need).
+
+### Templates (CP3; design: [`domain/contact-templates.md`](../domain/contact-templates.md))
+
+A **target** is one of:
+
+- `{kind: "profile", spacecraft_type_id, exclude_spacecraft_ids?}`: every spacecraft pinned to that
+  profile;
+- `{kind: "plane", plane: n, exclude_spacecraft_ids?}`: spacecraft whose `metadata.plane` is the
+  integer `n`. This is interim: plane is free-form metadata until it's first-class, so a string or
+  missing plane never matches;
+- `{kind: "spacecraft_ids", spacecraft_ids: [id]}` (1 to 10,000, unique).
+
+Membership resolves when requirements are generated, so a target follows profile pins, metadata and
+new spacecraft. The **document** is `{schedule, requirement, catch_up_policy}`: the template's
+schedule, the requirement content each occurrence generates, and the catch-up bounds.
+
+- `GET /templates` → `{templates: [{id, name, state, version, target, applies_to, applies_to_count,
+  rule_summary, priority}]}` (closed ones are left out). `applies_to` ("plane 1", "profile Block 1",
+  "12 spacecraft", "…, except 2") and `rule_summary` ("1 downlink ≥ 5 min each · every 6h00") are
+  server-made; don't re-derive them. `applies_to_count` is resolved now.
+- `GET /templates/:id` → the row plus `document` and `versions: [{version, created_at, actor:
+  {kind, id, name}}]` (newest first). `404 template_not_found`.
+- `POST /templates` `{name, target, document}` → `201 {id, version: 1}`. The template is active
+  at once.
+- `POST /templates/:id` `{name?, target?, document?, expected_version}` → `201 {id, version}`.
+  Omitted parts carry over. `409 version_conflict` on a stale `expected_version`.
+- `POST /templates/preview` `{name?, target, document, days?}` (days 1–31, default 1) → `{spacecraft_count,
+  occurrences, contacts, contacts_per_day, warnings: [{code}]}`, writing nothing. Warnings:
+  `applies_to_nobody` (count 0) and `excluded_outside_target` (with `spacecraft_ids`: excluded ids
+  the target wouldn't include anyway).
+- Errors: `422 invalid_params` (`details.document` with the reason; `details.target` +
+  `spacecraft_ids` for unknown spacecraft; `details.target: "unknown profile"`), `403 forbidden`
+  (writes need organization admin).
+- When a template's **new version** generates requirements, the older version's future requirements
+  that no plan has taken up (pending approval or later) are canceled with reason
+  `template_versioned: …`. So are those for spacecraft that **left the target**
+  (`left_template_target: …`). Requirements already started or planned are left alone.
+- Templates aren't change sets: edits are versioned and audited on the template (planning policy,
+  not mission configuration).

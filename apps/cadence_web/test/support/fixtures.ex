@@ -128,7 +128,8 @@ defmodule CadenceWeb.TestFixtures do
         display_name: display_name,
         scid: Keyword.get(opts, :scid),
         spacecraft_type_id: Keyword.get(opts, :spacecraft_type_id),
-        spacecraft_type_version: Keyword.get(opts, :spacecraft_type_version)
+        spacecraft_type_version: Keyword.get(opts, :spacecraft_type_version),
+        metadata: Keyword.get(opts, :metadata, %{})
       })
 
     assert {:ok, persisted} =
