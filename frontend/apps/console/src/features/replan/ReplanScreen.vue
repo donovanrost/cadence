@@ -18,6 +18,7 @@ import {
   type PlanView,
 } from "@/features/scheduling/index.ts";
 import ChangesPanel from "./ChangesPanel.vue";
+import ImpactPanel from "./ImpactPanel.vue";
 import { useReplan } from "./useReplan.ts";
 
 /** K2 v1 · Re-plan after provider changes (DECISIONS #25), entered from a plan (`?plan=`). */
@@ -105,7 +106,10 @@ async function onApply(acks: Acknowledgement[]) {
     <template #default="{ value: live }">
       <PlanStatePanel v-if="runView" :view="runView" />
       <template v-else-if="proposal && proposal.plan && proposal.diff">
-        <div class="grid min-h-0 flex-1 grid-cols-1 gap-3 console:grid-cols-[minmax(0,1fr)_360px]">
+        <div
+          class="grid min-h-0 flex-1 grid-cols-1 gap-3 console:grid-cols-[300px_minmax(0,1fr)_360px]"
+        >
+          <ImpactPanel :mission-id="missionId" :live="live" />
           <div class="flex min-h-0 flex-col gap-3">
             <DraftGantt
               :plan="live"
@@ -154,7 +158,7 @@ async function onApply(acks: Acknowledgement[]) {
           Live plan r{{ live.version }} is {{ live.state.replaceAll("_", " ") }}. Re-plan applies to
           plans with rejected or failed bookings.
         </ApCallout>
-        <p v-else class="m-0 text-base text-text-3">
+        <p v-else class="m-0 mb-3 text-base text-text-3">
           Live plan r{{ live.version }} is {{ live.state.replaceAll("_", " ") }}:
           {{ plural(live.counts.passes, "pass", "passes")
           }}<template v-if="coverage(live).spacecraft > 0"
@@ -162,6 +166,11 @@ async function onApply(acks: Acknowledgement[]) {
           >. A re-plan keeps every committed pass and re-plans the rest. Nothing is booked until you
           apply it.
         </p>
+        <ImpactPanel
+          v-if="repairableStates.includes(live.state)"
+          :mission-id="missionId"
+          :live="live"
+        />
       </ApPanel>
       <ApCallout v-if="actionError" tone="caution">{{ describeApiError(actionError) }}</ApCallout>
       <footer v-if="!proposal" class="flex flex-none justify-end border-t border-hairline pt-3">

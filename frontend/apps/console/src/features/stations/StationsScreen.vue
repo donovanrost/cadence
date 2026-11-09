@@ -83,7 +83,7 @@ const notProvided = computed(
             headline="No ground stations yet"
             sentence="Stations come from your ground-network providers or are added here."
           />
-          <StationsTable v-else :rows="value" />
+          <StationsTable v-else :rows="value" :can-edit="canStage" />
         </template>
       </ApRemote>
     </ApPanel>

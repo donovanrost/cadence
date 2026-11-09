@@ -3,10 +3,10 @@ import { ApStatusMark, ApTable, formatCount, type ApColumn } from "@/ui";
 import type { Station } from "./api.ts";
 
 /** Ground stations; health is "not reported" until the server tracks it (never assumed ok). */
-const props = defineProps<{ rows: readonly Station[] }>();
+const props = defineProps<{ rows: readonly Station[]; canEdit?: boolean }>();
 // U10: a column the server can't fill is left out, not shown as a column of dashes.
 const linked = props.rows.some((s) => s.transport_count !== null);
-const coded = props.rows.some((s) => s.code !== null);
+const coded = props.canEdit === true || props.rows.some((s) => s.code !== null);
 const allColumns: readonly ApColumn[] = [
   { key: "name", label: "Station" },
   { key: "code", label: "Code", mono: true },
@@ -31,7 +31,17 @@ const columns = allColumns.filter(
       >
       <span v-if="row.lifecycle_state === 'archived'" class="text-xs text-text-4"> · archived</span>
     </template>
-    <template #cell-code="{ row }">{{ row.code ?? "—" }}</template>
+    <!-- U25: never invent identifiers; a missing code is "—" (the name carries identity). -->
+    <template #cell-code="{ row }">
+      <template v-if="row.code">{{ row.code }}</template>
+      <RouterLink
+        v-else-if="canEdit"
+        :to="{ name: 'setup.stations', params: { stationId: row.id } }"
+        class="font-sans text-sm text-text-3 no-underline hover:text-readout max-md:hit-44"
+        >Not set · Add code</RouterLink
+      >
+      <span v-else class="text-text-4">—</span>
+    </template>
     <template #cell-provider="{ row }">{{ row.provider ?? "—" }}</template>
     <template #cell-region="{ row }">{{ row.region ?? "—" }}</template>
     <template #cell-transports="{ row }">{{
