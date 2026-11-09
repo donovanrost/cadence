@@ -68,6 +68,7 @@ defmodule Cadence.Comms.ConfigKinds.FramingCompatibility do
 
     %{
       op_id: nil,
+      change_id: nil,
       kind: "spacecraft_profile",
       entity_id: profile.id,
       reason: :framing_unverified,
@@ -85,6 +86,7 @@ defmodule Cadence.Comms.ConfigKinds.FramingCompatibility do
     Enum.map(drift.differences, fn difference ->
       %{
         op_id: nil,
+        change_id: nil,
         kind: "spacecraft_profile",
         entity_id: drift.profile.id,
         reason: :framing_mismatch,

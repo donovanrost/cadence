@@ -119,6 +119,8 @@ defmodule Cadence.Configuration.FramingGenerationTest do
              } = item
 
       assert profile_id == c.profile_id
+      # Same keys as validation and conflict items, so clients decode one item shape (qa #18).
+      assert Map.has_key?(item, :change_id) and Map.has_key?(item, :op_id)
       assert item.transport_value.value == 1115
     end
 
