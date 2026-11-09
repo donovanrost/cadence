@@ -29,7 +29,6 @@ export function useLostBookings(
     state: passes.state,
     refetch: passes.refetch,
     impact,
-    read: computed(() => (passes.state.value.status === "ready" ? passes.state.value.value : null)),
     hasWindow: computed(() => key.value !== null),
   };
 }

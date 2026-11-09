@@ -5,7 +5,7 @@ import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession 
 import { ApButton, ApCallout, ApPanel, ApRemote, ApStationBar, plural } from "@/ui";
 import {
   DraftGantt,
-  bookingStoppedText,
+  useBookingStopped,
   byAuthor,
   PlanFooter,
   PlanStatePanel,
@@ -86,11 +86,8 @@ const requests = computed(() => {
   const d = proposal.value?.diff;
   return d ? bookingRequests(d) : 0;
 });
-const stopped = computed(() =>
-  footerPlan.value?.state === "interrupted"
-    ? bookingStoppedText(footerPlan.value, lost.read.value)
-    : null,
-);
+/** Interrupted booking: callout + whether anything is left to continue (ux 1a906155). */
+const stopped = useBookingStopped(missionId, footerPlan);
 const applyLabel = (plan: PlanDetail) =>
   !isAdmin.value
     ? "Request approval for the proposal"
@@ -103,7 +100,9 @@ const applyConfirm = computed(() => {
   return `This approves the proposal and sends ${plural(requests.value, "booking request")}. The ${plural(kept, "kept pass", "kept passes")} stay booked.`;
 });
 const primary = computed(() =>
-  footerPlan.value ? planPrimary(footerPlan.value, isAdmin.value) : null,
+  footerPlan.value
+    ? planPrimary(footerPlan.value, isAdmin.value, { requestsLeft: stopped.value?.left ?? null })
+    : null,
 );
 /** B1/B2 share one axis covering the repair window and every pass of both plans (moves can land after it). */
 const span = computed(() => {
@@ -204,7 +203,7 @@ async function onApply(acks: Acknowledgement[]) {
     <template #default="{ value: live }">
       <PlanStatePanel v-if="runView" :view="runView" />
       <template v-else-if="proposal && proposal.plan && proposal.diff">
-        <ApCallout v-if="stopped" tone="stale">{{ stopped }}</ApCallout>
+        <ApCallout v-if="stopped" :tone="stopped.tone">{{ stopped.text }}</ApCallout>
         <div
           class="grid min-h-0 flex-1 grid-cols-1 gap-3 console:grid-cols-[300px_minmax(0,1fr)_360px]"
         >
@@ -253,6 +252,7 @@ async function onApply(acks: Acknowledgement[]) {
           :plan="footerPlan ?? proposal.plan"
           :is-admin="isAdmin"
           :busy="busy"
+          :requests-left="stopped?.left ?? null"
           :sheet-label="applyLabel(proposal.plan)"
           @sheet="sheet?.open()"
           @execute="footerPlan && execute(footerPlan.id)"
