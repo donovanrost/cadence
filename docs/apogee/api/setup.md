@@ -11,7 +11,7 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | PD | `GET /missions/:mission_id/profiles/:profile_id` | **implemented** |
 | C1 | `GET /missions/:mission_id/catalog` | **implemented** |
 | C3 | `GET /missions/:mission_id/catalog/imports/:import_run_id` | **implemented** |
-| C2 | multipart import + importers | next |
+| C2 | `POST /missions/:mission_id/catalog/imports`, `GET …/catalog/importers` | **implemented** |
 | (4) | batch spacecraft validate + create | planned |
 | (5) | org members, invitations, service identities | planned (`/organizations/:organization_id/...`) |
 
@@ -146,11 +146,11 @@ Rules (v1), by area:
 | Area | Findings (cause → severity → fix) | Status notes |
 | --- | --- | --- |
 | fleet | `no_spacecraft` blocker → `spacecraft_new`; `spacecraft_missing_scid`, `spacecraft_without_profile` blocker → `spacecraft_list`; `spacecraft_without_routing_rule` blocker → `comms`; `spacecraft_on_older_profile_version` caution → `profile` (one profile) or `spacecraft_list` | |
-| catalog | `no_catalog`, `catalog_without_revision` blocker → `catalog_import` | detail "Latest rev N · label" ("rN" is reserved for mission config revisions) |
+| catalog | `no_catalog`, `catalog_without_revision` blocker → `catalog_import` | detail "rev N · used by M spacecraft", or "rev N" ("rN" is reserved for mission config revisions) |
 | comms | `no_transports` blocker → `comms` | |
 | stations | `no_ground_stations` not_set_up → `station` | `unknown` when stations exist, because station health isn't tracked (never ready by default) |
 | data_sources | `data_source_unavailable` blocker, `data_source_degraded` caution → `data_source` (id when it is just one) | `unknown` when no health has been reported |
-| apps | `app_not_installed:limits` not_set_up; other missing optional apps → optional; fix `app` with the app key | optional findings never degrade an area |
+| apps | `app_not_installed:limits` not_set_up; other missing optional apps → optional; fix `app` with the app key | optional findings never degrade an area; detail names the missing apps ("A and B aren't installed") |
 
 - Units are singular when the count is 1.
 - `affected_count` is 0 for findings that aren't about a set of items.
@@ -231,3 +231,20 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
   (DECISIONS #9). The UI shows validation and diagnostics only.
 - Errors: `404 import_run_not_found`.
 - Live: refetch on `invalidate` with `catalog`.
+
+## `POST /api/console/v1/missions/:mission_id/catalog/imports` (C2, multipart)
+
+Fields: `file` (at most 50 MiB), `database_id` (optional; when absent, `name` is required and creates
+a database), `revision_label`, `revision_notes`. Send `x-csrf-token`. The format is detected from
+the file name and extension (the browser's media type is only a hint).
+
+- `202 {"data": {"import_run_id": "…"}}`. Then poll or refetch C3 on `invalidate` with `catalog`.
+- `422 invalid_params` (details keyed by field: `name`, `revision_label`, `revision_notes`,
+  `file`), `422 unsupported_format` (details `{accepted: [{key, label, extensions}]}`),
+  `413 file_too_large`. A body over the server's multipart limit is also rejected with `413`
+  (code `file_too_large`) before it reaches the controller.
+
+## `GET /api/console/v1/missions/:mission_id/catalog/importers`
+
+`{"data": {"importers": [{"key": "xtce_1_3", "label": "XTCE 1.3", "extensions": [".xtce", ".xml"]}],
+"max_bytes": 52428800}}`: the accepted-format chips.
