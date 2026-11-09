@@ -129,7 +129,7 @@ export const setupOrgRoutes: RouteRecordRaw[] = [
   {
     path: "org/people",
     name: "org.people",
-    component: pending,
+    component: () => import("@/features/people/PeopleScreen.vue"),
     meta: { mode: "setup", nav: "people", title: "People & access", board: "People (S5)" },
   },
   {
