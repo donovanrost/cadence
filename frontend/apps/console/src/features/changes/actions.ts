@@ -46,6 +46,13 @@ export function itemLine(item: PreviewItem): string {
       item.spacecraft_count === undefined ? "" : ` · ${item.spacecraft_count} spacecraft`;
     return `${item.sentence ? `${item.sentence} ` : ""}(${both}${count})`;
   }
+  // framing_unverified (DECISIONS #40): only the profile side is known.
+  if (item.profile_value && item.reason === "framing_unverified") {
+    const head = item.sentence ?? "Can't verify against any transport.";
+    const count =
+      item.spacecraft_count === undefined ? "" : ` · ${item.spacecraft_count} spacecraft`;
+    return `${head} (profile ${item.profile_value.path} = ${shown(item.profile_value.value)}${count})`;
+  }
   if (item.sentence) return item.sentence;
   if (item.errors && item.errors.length > 0)
     return item.errors.map((e) => `${e.path}: ${e.message}`).join("; ");

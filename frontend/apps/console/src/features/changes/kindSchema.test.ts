@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
-import { diffEdits, fromDocument, kindSchemaReader, visible } from "./kindSchema.ts";
+import {
+  diffEdits,
+  formatSeconds,
+  fromDocument,
+  kindSchemaReader,
+  parseDuration,
+  visible,
+} from "./kindSchema.ts";
 
 const decoded = decode(kindSchemaReader, {
   kind: "transport",
@@ -79,5 +86,19 @@ describe("kind schema forms", () => {
     expect(bad.ok).toBe(false);
     if (!bad.ok)
       expect(Object.keys(bad.errors).sort()).toEqual(["configuration.frame_size", "display_name"]);
+  });
+});
+
+describe("U24 units", () => {
+  it("formats and parses durations", () => {
+    expect(formatSeconds(172_800)).toBe("48h 00m");
+    expect(formatSeconds(5_445)).toBe("1h 30m 45s");
+    expect(parseDuration("48h")).toBe(172_800);
+    expect(parseDuration("2d")).toBe(172_800);
+    expect(parseDuration("90m")).toBe(5_400);
+    expect(parseDuration("1d 6h")).toBe(108_000);
+    expect(parseDuration("48h 00m")).toBe(172_800);
+    expect(parseDuration("3600")).toBe(3_600);
+    expect(parseDuration("2 weeks")).toBeNull();
   });
 });

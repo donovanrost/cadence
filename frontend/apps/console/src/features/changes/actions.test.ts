@@ -53,6 +53,20 @@ describe("preview compatibility HOLD (DECISIONS #33)", () => {
     );
   });
 
+  it("renders framing_unverified with the profile side only (DECISIONS #40)", () => {
+    expect(
+      itemLine({
+        ...base,
+        reason: "framing_unverified",
+        spacecraft_count: 3,
+        profile_value: { path: "frame_parameters.frame_size", value: 1279 },
+        sentence: "Can't verify against any transport.",
+      }),
+    ).toBe(
+      "Can't verify against any transport. (profile frame_parameters.frame_size = 1279 · 3 spacecraft)",
+    );
+  });
+
   it("falls back to field errors, then the reason", () => {
     expect(itemLine({ ...base, errors: [{ path: "a", message: "bad" }] })).toBe("a: bad");
     expect(itemLine({ ...base, reason: "entity_gone" })).toBe("Entity gone");

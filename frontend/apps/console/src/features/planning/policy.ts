@@ -134,3 +134,9 @@ export const groupTitles: Readonly<Record<string, string>> = {
   redundancy: "Diversity",
   automation: "Mode",
 };
+
+/** One line for panels whose fields are all advanced (ux review: no empty panels). */
+export const groupSummaries: Readonly<Record<string, string>> = {
+  scoring:
+    "How the scheduler weighs cost, priority and coverage against each other. The defaults suit most missions.",
+};

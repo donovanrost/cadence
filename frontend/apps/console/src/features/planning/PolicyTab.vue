@@ -8,6 +8,7 @@ import {
   buildDocument,
   fetchPolicy,
   groups,
+  groupSummaries,
   groupTitles,
   initialValues,
   savePolicy,
@@ -77,8 +78,15 @@ async function save() {
           :schema="{ kind: 'policy', fields: g.fields }"
           :errors="errors"
         />
-        <details v-if="g.advanced.length > 0" class="mt-3">
-          <summary class="ap-label cursor-pointer">Advanced</summary>
+        <p v-if="g.fields.length === 0" class="m-0 text-md text-text-3">
+          {{
+            groupSummaries[g.key] ?? "These are advanced settings; the defaults suit most missions."
+          }}
+        </p>
+        <details v-if="g.advanced.length > 0" :class="g.fields.length > 0 ? 'mt-3' : 'mt-2'">
+          <summary class="ap-label cursor-pointer">
+            {{ g.fields.length === 0 ? `Show ${g.advanced.length} settings` : "Advanced" }}
+          </summary>
           <div class="mt-3">
             <SchemaForm
               v-model="values"
