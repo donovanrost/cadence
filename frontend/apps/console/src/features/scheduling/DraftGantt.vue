@@ -59,9 +59,9 @@ const down = computed(
     ),
 );
 const risky = computed(() => new Set(props.plan.at_risk.flatMap((r) => r.snapshot_ids)));
-/** U30: placed, provider silent past its window; stale-hatched. */
+/** U30: placed, provider silent past its window; stale-hatched. Value: when it was sent. */
 const unconfirmed = computed(
-  () => new Set(props.plan.unconfirmed?.passes.map((p) => p.snapshot_id) ?? []),
+  () => new Map(props.plan.unconfirmed?.passes.map((p) => [p.snapshot_id, p.sent_at]) ?? []),
 );
 const others = computed(() =>
   props.alternatives?.status === "ready"
@@ -112,7 +112,7 @@ const draftedBars = computed<GanttBar[]>(() =>
                 ? "focused"
                 : "own",
       label: sc ? String(sc.scid) : undefined,
-      description: `${who} · ${stationName(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z${clashing.value.has(p.snapshot_id) ? " · conflict" : ""}${down.value.has(p.snapshot_id) ? " · station down" : risky.value.has(p.snapshot_id) ? " · station degraded, may lose data" : ""}${unconfirmed.value.has(p.snapshot_id) ? " · unconfirmed: the provider hasn't answered" : ""}`,
+      description: `${who} · ${stationName(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z${clashing.value.has(p.snapshot_id) ? " · conflict" : ""}${down.value.has(p.snapshot_id) ? " · station down" : risky.value.has(p.snapshot_id) ? " · station degraded, may lose data" : ""}${unconfirmed.value.has(p.snapshot_id) ? ` · UNCONFIRMED · sent ${unconfirmed.value.get(p.snapshot_id)?.slice(11, 16) ?? "?"}Z` : ""}`,
     };
   }),
 );
