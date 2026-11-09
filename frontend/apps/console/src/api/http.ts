@@ -5,10 +5,10 @@ export const API_BASE = "/api/console/v1";
 
 export type ApiError =
   | { kind: "unauthenticated" }
-  | { kind: "forbidden"; message: string }
-  | { kind: "not_found"; message: string }
+  | { kind: "forbidden"; code: string; message: string }
+  | { kind: "not_found"; code: string; message: string }
   | { kind: "conflict"; code: string; message: string; details: unknown }
-  | { kind: "invalid"; message: string; details: unknown }
+  | { kind: "invalid"; code: string; message: string; details: unknown }
   | { kind: "unavailable"; status: number; message: string }
   | { kind: "malformed"; message: string };
 
@@ -58,14 +58,14 @@ function toError(status: number, body: unknown): ApiError {
     case 401:
       return { kind: "unauthenticated" };
     case 403:
-      return { kind: "forbidden", message };
+      return { kind: "forbidden", code, message };
     case 404:
-      return { kind: "not_found", message };
+      return { kind: "not_found", code, message };
     case 409:
       return { kind: "conflict", code, message, details };
     case 400:
     case 422:
-      return { kind: "invalid", message, details };
+      return { kind: "invalid", code, message, details };
     default:
       return { kind: "unavailable", status, message };
   }
