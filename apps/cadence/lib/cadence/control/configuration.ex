@@ -9,10 +9,15 @@ defmodule Cadence.Control.Configuration do
   `{:config_runtime, map}` on `"config:" <> org <> ":" <> mission`.
   """
 
+  alias Cadence.Activations
+  alias Cadence.Applications.TelemetryDecom
   alias Cadence.Auth.Scope
+  alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Configuration.{Access, Editing, Ledger, Preview, Staging, Status, Submission}
   alias Cadence.Configuration.ChangeSetStore
   alias Cadence.Contacts.Scheduler
+  alias Cadence.Control.MissionRuntimeReconciler
+  alias Cadence.Control.Missions, as: ControlMissions
   alias Cadence.Platform.ScopedReadUpdates
 
   @pubsub Cadence.PubSub
@@ -190,11 +195,12 @@ defmodule Cadence.Control.Configuration do
     progress(change_set_id, "write_config", :done)
     progress(change_set_id, "notify_runtime", :running)
     notify_runtime(mission, result.impacts)
+    result = converge(mission, result)
     progress(change_set_id, "notify_runtime", :done)
-    progress(change_set_id, "verify", :done)
+    progress(change_set_id, "verify", if(result.runtime == :degraded, do: :failed, else: :done))
     broadcast_runtime(mission, result)
     publish_entity_updates(mission, result.kinds)
-    changed({:ok, Map.drop(result, [:impacts, :kinds])}, mission)
+    changed({:ok, Map.drop(result, [:impacts, :kinds, :activation_payload])}, mission)
   end
 
   defp after_apply({:ok, _result} = ok, mission, change_set_id) do
@@ -223,6 +229,41 @@ defmodule Cadence.Control.Configuration do
       )
     end
   end
+
+  # Admission and the generation were committed with the revision; here the runtime converges
+  # on it. A failure leaves the revision applied and the runtime degraded; the mission
+  # reconciler keeps retrying on its safety loop.
+  defp converge(_mission, %{activation_payload: nil} = result), do: result
+
+  defp converge(
+         mission,
+         %{activation_payload: %{activation: activation, binding_set: binding_set}} = result
+       ) do
+    Activations.publish_activation(activation)
+
+    runtime =
+      with {:ok, _} <- ControlMissions.ensure_started(mission.mission_id),
+           {:ok, _} <-
+             MissionRuntimeReconciler.apply_generation(
+               mission.mission_id,
+               activation,
+               binding_set
+             ),
+           {:ok, entries} <- FleetSnapshot.entries(activation.metadata),
+           :ok <-
+             TelemetryDecom.activation_applied(binding_set, %{
+               "spacecraft_configuration_version" => 1,
+               "spacecraft_configurations" => entries
+             }) do
+        :applied
+      else
+        _failed -> :degraded
+      end
+
+    %{result | runtime: runtime}
+  end
+
+  defp converge(_mission, result), do: result
 
   defp notify_runtime(mission, impacts) do
     if :contacts in impacts, do: Scheduler.notify_contact_changed(mission.mission_id)

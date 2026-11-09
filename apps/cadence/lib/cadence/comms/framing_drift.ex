@@ -29,8 +29,8 @@ defmodule Cadence.Comms.FramingDrift do
           differences: [%{path: String.t(), profile_value: term(), transport_value: term()}]
         }
 
-  @spec audit(String.t(), String.t()) :: [item()]
-  def audit(organization_id, mission_id) do
+  @spec audit(String.t(), String.t(), [String.t()] | :all) :: [item()]
+  def audit(organization_id, mission_id, only \\ :all) do
     transports =
       organization_id
       |> TransportStore.list_transports(mission_id)
@@ -40,6 +40,7 @@ defmodule Cadence.Comms.FramingDrift do
       organization_id
       |> SpacecraftStore.list_spacecraft(mission_id)
       |> Enum.reject(&is_nil(&1.spacecraft_type_id))
+      |> Enum.filter(&(only == :all or &1.spacecraft_id in only))
 
     overrides =
       Overrides.list(organization_id, mission_id, Enum.map(spacecraft, & &1.spacecraft_id))

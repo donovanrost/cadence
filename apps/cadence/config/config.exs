@@ -34,8 +34,12 @@ config :cadence,
     Cadence.Spacecraft.ConfigKinds.SpacecraftProfile,
     Cadence.Spacecraft.ConfigKinds.SpacecraftOverride,
     # Derived: re-materializes profile routes after the ops above (finalize/3).
-    Cadence.Comms.ConfigKinds.SpacecraftRoutes
+    Cadence.Comms.ConfigKinds.SpacecraftRoutes,
+    # Derived: framing compatibility HOLDs when the profile becomes framing authority.
+    Cadence.Comms.ConfigKinds.FramingCompatibility
   ],
+  # Builds runtime activations for profile-framed change-set applies (DECISIONS #36).
+  configuration_generation: Cadence.Control.ConfigurationGeneration,
   ecto_repos: [Cadence.Repo],
   start_background_jobs: true,
   background_jobs: [

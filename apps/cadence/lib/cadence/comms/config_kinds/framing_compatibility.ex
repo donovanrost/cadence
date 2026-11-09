@@ -1,0 +1,81 @@
+defmodule Cadence.Comms.ConfigKinds.FramingCompatibility do
+  @moduledoc """
+  Derived check (DECISIONS #33): with profile framing generations on, applying a change set
+  makes the profile the framing authority for the spacecraft it touches, so decode switches
+  from the transport's ingress metadata to the profile's framing. Every difference becomes a
+  compatibility HOLD that names both values; the reviewer must acknowledge holds before
+  applying. Never staged.
+  """
+
+  @behaviour Cadence.Platform.ConfigKind
+
+  alias Cadence.Comms.FramingDrift
+  alias Cadence.Platform.ConfigFields, as: F
+  alias Cadence.Platform.ConfigurationSettings
+
+  @impl true
+  def kind, do: "framing_compatibility"
+
+  @impl true
+  def id_prefix, do: "framing"
+
+  @impl true
+  def load(_organization_id, _mission_id, _ids), do: %{}
+
+  @impl true
+  def normalize(_action, _id, _document), do: {:error, [F.error("", "This check isn't staged")]}
+
+  @impl true
+  def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
+
+  @impl true
+  def write(_organization_id, _mission_id, _action, _id, _previous, _proposed, _options),
+    do: {:error, :not_staged}
+
+  @impl true
+  def summary(_action, _previous, _proposed), do: "Framing compatibility"
+
+  @impl true
+  def runtime_impact(_action, _previous, _proposed), do: :none
+
+  @impl true
+  def holds(organization_id, mission_id, entries) do
+    touched =
+      entries
+      |> Enum.filter(&(&1.kind in ["spacecraft", "spacecraft_override"] and &1.op == :update))
+      |> Enum.map(& &1.entity_id)
+      |> Enum.uniq()
+
+    if touched != [] and
+         ConfigurationSettings.profile_framing_generations?(organization_id, mission_id) do
+      organization_id
+      |> FramingDrift.audit(mission_id, touched)
+      |> Enum.flat_map(&items/1)
+    else
+      []
+    end
+  end
+
+  defp items(drift) do
+    Enum.map(drift.differences, fn difference ->
+      %{
+        op_id: nil,
+        kind: "spacecraft_profile",
+        entity_id: drift.profile.id,
+        reason: :framing_mismatch,
+        spacecraft_count: drift.spacecraft_count,
+        profile_value: %{path: difference.path, value: difference.profile_value},
+        transport_value: %{
+          transport: drift.transport,
+          path:
+            "ingress_metadata." <> String.replace_prefix(difference.path, "frame_parameters.", ""),
+          value: difference.transport_value
+        },
+        sentence:
+          "#{drift.spacecraft_count} spacecraft on #{drift.profile.name} will decode with " <>
+            "#{difference.path} #{inspect(difference.profile_value)} instead of " <>
+            "#{drift.transport.name}'s #{inspect(difference.transport_value)}."
+      }
+    end)
+  end
+end

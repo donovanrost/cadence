@@ -16,6 +16,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
   @behaviour Cadence.Platform.ConfigKind
 
   alias Cadence.Platform.ConfigFields, as: F
+  alias Cadence.Platform.ConfigurationSettings
   alias Cadence.Spacecraft.ConfigKinds.Spacecraft, as: SpacecraftKind
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftType
@@ -169,7 +170,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
 
   defp rollout_effect(organization_id, mission_id, entity_id, current, options) do
     targets = rollout_targets(organization_id, mission_id, current, rollout(options))
-    {governed, moving} = Enum.split_with(targets, &governed?/1)
+    kept? = kept_fn(organization_id, mission_id)
+    {governed, moving} = Enum.split_with(targets, kept?)
     moving_ids = MapSet.new(targets, & &1.spacecraft_id)
 
     older =
@@ -236,7 +238,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
   defp roll_out(organization_id, mission_id, current, profile, options) do
     organization_id
     |> rollout_targets(mission_id, current, rollout(options))
-    |> Enum.reject(&governed?/1)
+    |> Enum.reject(kept_fn(organization_id, mission_id))
     |> Enum.reduce_while({:ok, []}, fn spacecraft, {:ok, entries} ->
       moved = %{spacecraft | spacecraft_type_version: profile.version}
 
@@ -278,6 +280,14 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
       spacecraft: %{id: spacecraft.spacecraft_id, name: spacecraft.display_name},
       reason: reason
     }
+
+  # With profile framing generations on, the profile takes framing authority for every moved
+  # spacecraft, including ones configured through per-spacecraft review (DECISIONS #33).
+  defp kept_fn(organization_id, mission_id) do
+    if ConfigurationSettings.profile_framing_generations?(organization_id, mission_id),
+      do: fn _spacecraft -> false end,
+      else: &governed?/1
+  end
 
   defp governed?(spacecraft), do: is_binary(Map.get(spacecraft.metadata || %{}, @governed_key))
 

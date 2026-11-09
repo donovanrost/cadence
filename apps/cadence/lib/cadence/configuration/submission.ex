@@ -116,7 +116,16 @@ defmodule Cadence.Configuration.Submission do
          result = Pipeline.run(org, mission, set.base_revision_number, ops),
          :ok <- clean(result),
          changes = ChangeSetStore.changes(set.change_set_id),
-         {:ok, revision} <- record(head, set, applier, reason, approvals, changes, ops, result) do
+         {:ok, generation} <-
+           generation(%{
+             set: set,
+             applier: applier,
+             approvals: approvals,
+             entries: result.entries,
+             revision: head.revision_number + 1
+           }),
+         {:ok, revision} <-
+           record(head, set, applier, reason, approvals, changes, ops, {result, generation}) do
       ChangeSetStore.set_change_states(
         set.change_set_id,
         Enum.map(changes, & &1.change_id),
@@ -140,9 +149,10 @@ defmodule Cadence.Configuration.Submission do
         change_set_id: set.change_set_id,
         revision: revision.revision_number,
         staged_count: length(changes),
-        activation_id: nil,
-        generation: nil,
-        runtime: :not_applicable,
+        activation_id: generation && generation.activation.activation_id,
+        generation: generation && generation.activation.generation,
+        runtime: if(generation, do: :converging, else: :not_applicable),
+        activation_payload: generation,
         degraded_partitions: [],
         impacts: MapSet.to_list(result.impacts),
         kinds: result.entries |> Enum.map(& &1.kind) |> Enum.uniq()
@@ -152,7 +162,16 @@ defmodule Cadence.Configuration.Submission do
     end
   end
 
-  defp record(head, set, applier, reason, approvals, changes, ops, result) do
+  # The composition layer (configured, so this context has no compile-time edge to it) builds
+  # a runtime activation for profile-framed applies; it runs inside this transaction.
+  defp generation(input) do
+    case Application.get_env(:cadence, :configuration_generation) do
+      nil -> {:ok, nil}
+      module -> module.build(input)
+    end
+  end
+
+  defp record(head, set, applier, reason, approvals, changes, ops, {result, generation}) do
     Ledger.record(
       head,
       %{
@@ -163,7 +182,9 @@ defmodule Cadence.Configuration.Submission do
         reason: reason,
         approvals: approvals,
         summary: summary(changes),
-        content_sha256: content_sha256(ops)
+        content_sha256: content_sha256(ops),
+        activation_id: generation && generation.activation.activation_id,
+        generation: generation && generation.activation.generation
       },
       result.entries
     )

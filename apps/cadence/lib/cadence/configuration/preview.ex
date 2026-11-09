@@ -44,7 +44,8 @@ defmodule Cadence.Configuration.Preview do
   def summarize(result) do
     checks = [
       check("validation", result.errors ++ halted(result)),
-      check("conflicts", result.conflicts)
+      check("conflicts", result.conflicts),
+      hold_check("compatibility", Map.get(result, :holds, []))
     ]
 
     %{
@@ -57,6 +58,9 @@ defmodule Cadence.Configuration.Preview do
 
   @spec go?(t()) :: boolean()
   def go?(%{verdict: verdict}), do: verdict != :no_go
+
+  defp hold_check(key, []), do: %{key: key, verdict: :go, items: []}
+  defp hold_check(key, items), do: %{key: key, verdict: :hold, items: items}
 
   defp check(key, []), do: %{key: key, verdict: :go, items: []}
   defp check(key, items), do: %{key: key, verdict: :no_go, items: items}

@@ -14,6 +14,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   @behaviour Cadence.Platform.ConfigKind
 
   alias Cadence.Platform.ConfigFields, as: F
+  alias Cadence.Platform.ConfigurationSettings
   alias Cadence.Spacecraft, as: SpacecraftAsset
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftTypeStore
@@ -66,7 +67,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
     errors =
       scid_free(organization_id, mission_id, previous, proposed) ++
         pin_exists(organization_id, mission_id, previous, proposed) ++
-        governed(previous, proposed)
+        governed_rule(organization_id, mission_id, previous, proposed)
 
     if errors == [], do: :ok, else: {:error, errors}
   end
@@ -139,6 +140,14 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   end
 
   defp pin_exists(_organization_id, _mission_id, _previous, _proposed), do: []
+
+  # With profile framing generations on, the profile takes framing authority, so a spacecraft
+  # configured through per-spacecraft review may be re-pinned (DECISIONS #33).
+  defp governed_rule(organization_id, mission_id, previous, proposed) do
+    if ConfigurationSettings.profile_framing_generations?(organization_id, mission_id),
+      do: governed_key_kept(previous && get_in(previous, ["metadata", @governed_key]), proposed),
+      else: governed(previous, proposed)
+  end
 
   defp same_pin?(nil, _proposed), do: false
 

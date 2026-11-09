@@ -100,5 +100,11 @@ defmodule Cadence.Platform.ConfigKind do
   @callback finalize(organization_id :: String.t(), mission_id :: String.t(), [entry()]) ::
               {:ok, [entry()], [:generation | :contacts]} | {:error, [field_error()]}
 
-  @optional_callbacks effect: 7, normalize_options: 2, finalize: 3
+  @doc """
+  Compatibility HOLDs for a run, after finalize: things that will apply but deserve an explicit
+  acknowledgement (e.g. framing that will change decode). Read-only.
+  """
+  @callback holds(organization_id :: String.t(), mission_id :: String.t(), [entry()]) :: [map()]
+
+  @optional_callbacks effect: 7, normalize_options: 2, finalize: 3, holds: 3
 end

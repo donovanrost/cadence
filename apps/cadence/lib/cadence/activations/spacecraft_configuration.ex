@@ -12,6 +12,35 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
   alias Cadence.SpacecraftType
   alias Cadence.SpacecraftTypeStore
 
+  # A change-set generation (DECISIONS #35/#36): the change set already validated and wrote
+  # the configuration in this same transaction. Admission checks the fleet it admits: every
+  # spacecraft the set didn't change keeps exactly its active entry, and every changed one is
+  # profile-framed.
+  def admit(
+        %{
+          organization_id: org,
+          metadata:
+            %{
+              "spacecraft_configuration_version" => 2,
+              "change_set" => %{"spacecraft_ids" => ids}
+            } = metadata
+        } = attrs
+      )
+      when is_binary(org) and is_list(ids) do
+    ConfigurationLock.run(org, attrs.mission_id, fn ->
+      with {:ok, entries} <- FleetSnapshot.entries(metadata),
+           {:ok, mission} <- Missions.fetch_mission(org, attrs.mission_id),
+           {:ok, active} <- ConfigurationActive.load(mission),
+           true <- Map.drop(entries, ids) == Map.drop(active.entries, ids),
+           true <- Enum.all?(ids, &(get_in(entries, [&1, "framing_authority"]) == "profile")) do
+        {:ok, :admitted}
+      else
+        {:error, reason} -> {:error, reason}
+        _ -> {:error, :change_set_activation_stale}
+      end
+    end)
+  end
+
   # Called inside the activation transaction, after the generation lock. Runtime
   # reconciliation and broadcasts happen only after this transaction commits.
   def admit(

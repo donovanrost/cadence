@@ -223,6 +223,78 @@ defmodule Cadence.Management.Activations do
     })
   end
 
+  @doc """
+  An activation request made by applying a change set (DECISIONS #35/#36). It is approved
+  only when the change set satisfied the activation policy: direct policy, or an independent
+  review recorded in `approvals` (`[%{"actor", "comment", "decided_at"}]` from the change-set
+  review, which `Cadence.Configuration` already checked was by none of its authors). The review
+  is recorded as the request's decision. Runs inside the caller's transaction and publishes
+  nothing.
+  """
+  @spec request_from_change_set(map()) :: {:ok, ActivationRequest.t()} | {:error, term()}
+  def request_from_change_set(%{
+        binding_set: %BindingSet{} = binding_set,
+        requester: %{"kind" => kind, "id" => id} = requester,
+        metadata: metadata,
+        approvals: approvals
+      }) do
+    policy = ActivationPolicy.evidence(binding_set.organization_id, binding_set.mission_id)
+    now = DateTime.utc_now()
+
+    with :ok <- change_set_approval(policy, approvals),
+         {:ok, request} <-
+           persist_request(
+             ActivationRequest.new(%{
+               organization_id: binding_set.organization_id,
+               mission_id: binding_set.mission_id,
+               binding_set_id: binding_set.binding_set_id,
+               binding_set_version: binding_set.version,
+               binding_set_content_sha256: ContentHash.term_sha256(binding_set),
+               change_class: :mission_data_plane,
+               state: :approved,
+               requester_actor_kind: if(kind == "service", do: :service, else: :user),
+               requester_actor_id: id,
+               requester_actor_document: requester,
+               policy_document: policy,
+               metadata: metadata,
+               requested_at: now,
+               decided_at: now
+             })
+           ),
+         :ok <- record_change_set_approvals(request, approvals) do
+      {:ok, request}
+    end
+  end
+
+  defp change_set_approval(%{"approval_required" => true}, [_ | _]), do: :ok
+
+  defp change_set_approval(%{"approval_required" => true}, _none),
+    do: {:error, :activation_approval_required}
+
+  defp change_set_approval(_policy, _approvals), do: :ok
+
+  defp record_change_set_approvals(request, approvals) do
+    Enum.reduce_while(approvals, :ok, fn %{"actor" => actor} = approval, :ok ->
+      decision =
+        ActivationDecision.new(%{
+          activation_request_id: request.activation_request_id,
+          organization_id: request.organization_id,
+          mission_id: request.mission_id,
+          decision: :approved,
+          actor_kind: :user,
+          actor_id: actor["id"],
+          actor_document: actor,
+          reason: approval["comment"],
+          decided_at: DateTime.utc_now()
+        })
+
+      case decision |> ActivationDecisionRow.changeset() |> Repo.insert() do
+        {:ok, _row} -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
   defp persist_request(request) do
     request
     |> ActivationRequestRow.changeset()

@@ -54,6 +54,7 @@ defmodule Cadence.Configuration.Pipeline do
       end
     end)
     |> finalize(organization_id, mission_id)
+    |> holds(organization_id, mission_id)
     |> Map.update!(:entries, &Enum.reverse/1)
     |> Map.update!(:conflicts, &Enum.reverse/1)
     |> Map.update!(:errors, &Enum.reverse/1)
@@ -90,6 +91,19 @@ defmodule Cadence.Configuration.Pipeline do
   end
 
   defp finalize(acc, _organization_id, _mission_id), do: acc
+
+  defp holds(%{halted?: false, errors: [], conflicts: []} = acc, organization_id, mission_id) do
+    entries = Enum.reverse(acc.entries)
+
+    holds =
+      Kinds.all()
+      |> Enum.filter(&function_exported?(&1, :holds, 3))
+      |> Enum.flat_map(& &1.holds(organization_id, mission_id, entries))
+
+    Map.put(acc, :holds, holds)
+  end
+
+  defp holds(acc, _organization_id, _mission_id), do: Map.put(acc, :holds, [])
 
   @doc "Computes the proposed document for an op from the live document."
   @spec propose(String.t(), Document.t() | nil, map()) ::

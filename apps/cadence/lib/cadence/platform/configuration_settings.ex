@@ -1,4 +1,4 @@
-defmodule Cadence.Configuration.Settings do
+defmodule Cadence.Platform.ConfigurationSettings do
   @moduledoc """
   Mission settings for change sets, in scoped settings section `cadence.configuration`.
 

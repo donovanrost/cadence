@@ -71,7 +71,8 @@ defmodule Cadence.Activations do
           metadata: Keyword.get(opts, :metadata, %{}),
           activated_at: Keyword.get(opts, :activated_at, DateTime.utc_now())
         },
-        Keyword.get(opts, :event_bus, EventBus)
+        Keyword.get(opts, :event_bus, EventBus),
+        Keyword.get(opts, :publish, true)
       )
     end
   end
@@ -253,7 +254,22 @@ defmodule Cadence.Activations do
     )
   end
 
-  defp persist_activation(attrs, event_bus) do
+  @doc """
+  Publishes an activation's facts and read updates. Callers that persisted it with
+  `publish: false` inside their own transaction call this after their commit.
+  """
+  @spec publish_activation(BindingSetActivation.t(), module()) :: :ok
+  def publish_activation(%BindingSetActivation{} = activation, event_bus \\ EventBus) do
+    Facts.publish(event_bus, activation)
+
+    for event <- [:commanding_changed, :spacecraft_configuration_changed] do
+      ScopedReadUpdates.publish(event, activation.organization_id, activation.mission_id)
+    end
+
+    :ok
+  end
+
+  defp persist_activation(attrs, event_bus, publish? \\ true) do
     Multi.new()
     |> Multi.run(:approval_admission, fn _repo, _changes ->
       ApprovalAdmission.lock_and_admit(attrs)
@@ -280,7 +296,7 @@ defmodule Cadence.Activations do
       {:ok, %{activation_record: %{row: activation_row, inserted?: inserted?}}} ->
         activation = BindingSetActivationRow.to_domain(activation_row)
 
-        if inserted? do
+        if inserted? and publish? do
           Facts.publish(event_bus, activation)
 
           ScopedReadUpdates.publish_result(
@@ -291,7 +307,7 @@ defmodule Cadence.Activations do
           )
         end
 
-        if inserted?,
+        if inserted? and publish?,
           do:
             ScopedReadUpdates.publish_result(
               {:ok, activation},
