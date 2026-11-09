@@ -16,12 +16,28 @@ defmodule Cadence.Dev.ReflectOrbital.Planning do
 
     Logger.configure(level: :warning)
     {:ok, _apps} = Application.ensure_all_started(:cadence)
-    email = System.get_env("EARENDIL_DEMO_EMAIL", "admin@example.com")
-    {:ok, user} = Cadence.Accounts.fetch_user_by_email(email)
     {:ok, organization} = Cadence.Organizations.fetch_organization(F.organization_id())
-    {:ok, membership} = Cadence.Accounts.fetch_user_membership(user.user_id, F.organization_id())
+    {user, membership} = admin_member(System.get_env("EARENDIL_DEMO_EMAIL", "admin@example.com"))
 
     prepare(Scope.new(%{user: user, organization: organization, organization_membership: membership}))
+  end
+
+  # The given user when they are a Reflect Orbital member; otherwise the first
+  # organization admin of Reflect Orbital (the env admin may not be a member).
+  defp admin_member(email) do
+    with {:ok, user} <- Cadence.Accounts.fetch_user_by_email(email),
+         {:ok, membership} <- Cadence.Accounts.fetch_user_membership(user.user_id, F.organization_id()) do
+      {user, membership}
+    else
+      _not_member ->
+        case Enum.find(
+               Cadence.Accounts.list_organization_members(F.organization_id()),
+               &(&1.membership.role == :organization_admin)
+             ) do
+          %{user: user, membership: membership} -> {user, membership}
+          nil -> raise "No Reflect Orbital organization admin to seed planning as (set EARENDIL_DEMO_EMAIL)"
+        end
+    end
   end
 
   def prepare(%Scope{} = scope) do
@@ -67,17 +83,9 @@ defmodule Cadence.Dev.ReflectOrbital.Planning do
     |> Enum.take(count)
     |> Enum.reject(&MapSet.member?(existing, &1.spacecraft_id))
     |> Enum.each(fn craft ->
-      {:ok, template, version} =
+      # Templates are created active.
+      {:ok, _template, _version} =
         ContactRequirementTemplates.create(scope, F.mission_id(), template_attrs(craft.spacecraft_id))
-
-      {:ok, _active} =
-        ContactRequirementTemplates.activate(
-          scope,
-          F.mission_id(),
-          template.contact_requirement_template_id,
-          version.version,
-          "Earendil demo recurring downlink"
-        )
     end)
 
     F.organization_id()
