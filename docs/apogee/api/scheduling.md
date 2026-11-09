@@ -234,8 +234,12 @@ and times); `sent_at` is when the booking was placed.
 Each pass also carries `item_id` (the execution item).
 
 Plan detail also carries the day's **repair chain** (qa #30): `chain: [{id, version}]` (the root
-plan first, then each applied repair in order; versions are the approved ones) and `chain_head`
-(the plan a new Re-plan starts from). A draft or a proposal that isn't applied reads the chain
+plan first, then each applied repair in order; versions are the approved ones) and
+`chain_head`: the **plan id as a bare string** (not `{id, version}`), naming the plan a new
+Re-plan starts from; its version is the matching `chain` entry's. Example:
+`"chain": [{"id": "contact_plan_fleet_6e74…", "version": 1}, {"id": "contact_plan_fleet_8ae6…",
+"version": 1}], "chain_head": "contact_plan_fleet_8ae6…"`. On an unknown chain: `chain: []`,
+`chain_head: null`. A draft or a proposal that isn't applied reads the chain
 it belongs to; it isn't in `chain` itself.
 
 ### `POST /contact-plans/:plan_id/unconfirmed/:snapshot_id/resolve` (#53, U32)
