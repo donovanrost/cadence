@@ -13,6 +13,8 @@ export const planStates = [
   "failed",
   "canceled",
   "superseded",
+  /** executing with no live executor (cluster-wide): offer Execute (DECISIONS #27). */
+  "interrupted",
 ] as const;
 export type PlanState = (typeof planStates)[number];
 
@@ -207,3 +209,84 @@ const REASONS: Readonly<Record<string, string>> = {
 export function reasonText(code: string): string {
   return REASONS[code] ?? code.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase());
 }
+
+export const setupReader = d.object({
+  setup: d.object({
+    ready: d.boolean,
+    missing: d.array(d.string),
+    policy: d.nullable(d.object({ id: d.token, version: d.integer })),
+    requirements: d.integer,
+    templates: d.integer,
+  }),
+});
+export type PlanningSetup = Decoded<typeof setupReader>["setup"];
+
+export const dayDemandReader = d.object({
+  day: d.string,
+  spacecraft_with_rules: d.integer,
+  contacts_needed: d.integer,
+  without_rule: d.integer,
+  spacecraft_total: d.integer,
+});
+export type DayDemand = Decoded<typeof dayDemandReader>;
+
+export function fetchSetup(
+  missionId: string,
+  signal?: AbortSignal,
+): Promise<ApiResult<{ setup: PlanningSetup }>> {
+  return request(`${base(missionId)}/setup`, setupReader, signal ? { signal } : {});
+}
+
+export function fetchDayDemand(
+  missionId: string,
+  day: string,
+  signal?: AbortSignal,
+): Promise<ApiResult<DayDemand>> {
+  return request(
+    `${base(missionId)}/demand?day=${encodeURIComponent(day)}`,
+    dayDemandReader,
+    signal ? { signal } : {},
+  );
+}
+
+export type Acknowledgement = Readonly<{ requirement_id: string; reason: string }>;
+
+const submitReader = d.object({
+  plan_id: d.token,
+  state: d.string,
+  outcome: d.oneOf(["pending_approval", "executing", "replayed"]),
+});
+export type SubmitResult = Decoded<typeof submitReader>;
+
+/** S5. Member → pending_approval; org admin → approve + execute off the request (202). */
+export function submitPlan(
+  missionId: string,
+  plan: Readonly<{ id: string; version: number }>,
+  operationId: string,
+  acknowledgements: readonly Acknowledgement[],
+): Promise<ApiResult<SubmitResult>> {
+  return request(`${base(missionId)}/${encodeURIComponent(plan.id)}/submit`, submitReader, {
+    method: "POST",
+    body: {
+      expected_version: plan.version,
+      operation_id: operationId,
+      ...(acknowledgements.length > 0 ? { acknowledgements } : {}),
+    },
+  });
+}
+
+/** Resume an interrupted (or approved, never started) execution; items are idempotent. */
+export function executePlan(missionId: string, planId: string) {
+  return request(
+    `${base(missionId)}/${encodeURIComponent(planId)}/execute`,
+    d.object({ plan_id: d.token, state: d.string }),
+    {
+      method: "POST",
+      body: {},
+    },
+  );
+}
+
+/** Acknowledgement reasons must be 10–2000 characters (scheduling.md S5). */
+export const REASON_MIN = 10;
+export const REASON_MAX = 2000;

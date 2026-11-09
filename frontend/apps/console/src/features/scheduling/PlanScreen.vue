@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
-import { TakeoverHeader, useMissionScope } from "@/shell";
-import { ApButton, ApStationBar } from "@/ui";
+import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
+import type { ApiError } from "@/api";
+import { ApButton, ApCallout, ApStationBar } from "@/ui";
+import type { Acknowledgement } from "./api.ts";
 import DayNav from "./DayNav.vue";
 import DemandPanel from "./DemandPanel.vue";
 import DraftGantt from "./DraftGantt.vue";
 import { dayLabel, useSpacecraftNames } from "./names.ts";
 import PlanFooter from "./PlanFooter.vue";
+import { planHeaderTail } from "./plan-primary.ts";
 import PlanStatePanel from "./PlanStatePanel.vue";
 import SelectedPanel from "./SelectedPanel.vue";
+import SubmitSheet from "./SubmitSheet.vue";
+import { planPrimary } from "./plan-primary.ts";
 import type { PlanView } from "./plan-state.ts";
 import { usePlanDay } from "./usePlanDay.ts";
 
@@ -23,7 +28,24 @@ const day = computed(() => {
     ? q
     : new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 });
-const { view, busy, draftDay, resume } = usePlanDay(missionId, day);
+const { view, busy, actionError, draftDay, resume, submit, execute } = usePlanDay(missionId, day);
+const session = useSession();
+const isAdmin = computed(() => canAdministerOrganization(session, scope.value.organization));
+const sheet = ref<InstanceType<typeof SubmitSheet> | null>(null);
+const sheetError = ref<ApiError | null>(null);
+const primary = computed(() =>
+  view.value.kind === "plan" ? planPrimary(view.value.plan, isAdmin.value) : null,
+);
+
+async function onSubmit(acks: Acknowledgement[]) {
+  if (view.value.kind !== "plan") return;
+  const result = await submit(view.value.plan, acks);
+  if (result.ok) sheet.value?.close();
+  else sheetError.value = result.error;
+}
+function onExecute() {
+  if (view.value.kind === "plan") void execute(view.value.plan.id);
+}
 const nameOf = useSpacecraftNames(missionId);
 const focused = ref<string | null>(null);
 const selected = ref<string | null>(null);
@@ -48,16 +70,8 @@ function headerFor(v: PlanView, d: string): string {
       return `Contact plan · ${d}`;
     case "loading":
       return `Contact plan · ${d}`;
-    case "plan": {
-      const p = v.plan;
-      const tail =
-        p.conflicts.length > 0
-          ? `${p.conflicts.length} conflicts`
-          : p.unmet.length > 0
-            ? `${p.unmet.length} not covered`
-            : "ready";
-      return `R${p.version} ${p.state.replaceAll("_", " ")} · ${tail}`;
-    }
+    case "plan":
+      return `R${v.plan.version} · ${planHeaderTail(v.plan)}`;
   }
 }
 const headerLine = computed(() => headerFor(view.value, dayLabel(day.value)));
@@ -95,7 +109,27 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
       />
       <SelectedPanel :plan="view.plan" :selected="selected" :name-of="nameOf" />
     </div>
-    <PlanFooter :plan="view.plan" />
+    <ApCallout v-if="actionError" tone="caution"
+      >Couldn't continue booking. Reload the plan and try again.</ApCallout
+    >
+    <PlanFooter
+      :plan="view.plan"
+      :is-admin="isAdmin"
+      :busy="busy"
+      @sheet="sheet?.open()"
+      @execute="onExecute"
+    />
+    <SubmitSheet
+      v-if="primary?.kind === 'sheet'"
+      ref="sheet"
+      v-model:error="sheetError"
+      :plan="view.plan"
+      :name-of="nameOf"
+      :commit-label="primary.label"
+      :confirm="primary.confirm"
+      :busy="busy"
+      @submit="onSubmit"
+    />
   </template>
   <template v-else>
     <PlanStatePanel :view="view" />

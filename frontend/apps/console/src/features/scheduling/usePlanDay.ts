@@ -2,7 +2,19 @@ import { computed, onScopeDispose, ref, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { decoders as d, useRemoteQuery, type ApiError } from "@/api";
 import { useChannelEvent } from "@/live";
-import { continueDraft, fetchDraft, fetchPlan, fetchPlans, startDraft } from "./api.ts";
+import {
+  continueDraft,
+  executePlan,
+  fetchDayDemand,
+  fetchDraft,
+  fetchPlan,
+  fetchPlans,
+  fetchSetup,
+  startDraft,
+  submitPlan,
+  type Acknowledgement,
+  type PlanDetail,
+} from "./api.ts";
 import { currentPlan, planView } from "./plan-state.ts";
 
 const progressReader = d.object({ kind: d.string, id: d.token, state: d.string });
@@ -16,7 +28,18 @@ export function usePlanDay(missionId: Readonly<Ref<string>>, day: Readonly<Ref<s
   const route = useRoute();
   const router = useRouter();
   const runId = computed(() => (typeof route.query.run === "string" ? route.query.run : null));
-  const notSetUp = ref<readonly string[] | null>(null);
+  /** Fallback when a draft request is refused before the setup read caught up. */
+  const refusedNotSetUp = ref<readonly string[] | null>(null);
+  const setup = useRemoteQuery(missionId, (id, signal) => fetchSetup(id, signal));
+  const dayDemand = useRemoteQuery(
+    () => `${missionId.value}|${day.value}`,
+    (_k, signal) => fetchDayDemand(missionId.value, day.value, signal),
+  );
+  const notSetUp = computed<readonly string[] | null>(() => {
+    const s = setup.state.value;
+    if (s.status === "ready" && !s.value.setup.ready) return s.value.setup.missing;
+    return refusedNotSetUp.value;
+  });
   const actionError = ref<ApiError | null>(null);
   const busy = ref(false);
 
@@ -60,7 +83,7 @@ export function usePlanDay(missionId: Readonly<Ref<string>>, day: Readonly<Ref<s
     try {
       const result = await startDraft(missionId.value, day.value, crypto.randomUUID());
       if (result.ok) {
-        notSetUp.value = null;
+        refusedNotSetUp.value = null;
         await router.replace({ query: { ...route.query, run: result.value.run_id } });
       } else if (result.error.kind === "invalid" && result.error.code === "planning_not_set_up") {
         const missing = d.optional(d.object({ missing: d.array(d.string) }));
@@ -71,7 +94,8 @@ export function usePlanDay(missionId: Readonly<Ref<string>>, day: Readonly<Ref<s
             return [];
           }
         })();
-        notSetUp.value = details;
+        refusedNotSetUp.value = details;
+        setup.refetch();
       } else {
         actionError.value = result.error;
       }
@@ -93,6 +117,36 @@ export function usePlanDay(missionId: Readonly<Ref<string>>, day: Readonly<Ref<s
     }
   }
 
+  /** S5: admin → approve + execute (202); member → pending_approval. The caller shows errors. */
+  async function submit(plan: PlanDetail, acknowledgements: readonly Acknowledgement[]) {
+    busy.value = true;
+    try {
+      const result = await submitPlan(missionId.value, plan, crypto.randomUUID(), acknowledgements);
+      refresh();
+      return result;
+    } finally {
+      busy.value = false;
+    }
+  }
+
+  async function execute(planIdToRun: string) {
+    busy.value = true;
+    actionError.value = null;
+    try {
+      const result = await executePlan(missionId.value, planIdToRun);
+      if (!result.ok) actionError.value = result.error;
+      refresh();
+    } finally {
+      busy.value = false;
+    }
+  }
+
+  function refresh() {
+    plans.refetch();
+    if (runId.value) draft.refetch();
+    else plan.refetch();
+  }
+
   const view = computed(() =>
     planView({
       notSetUp: notSetUp.value,
@@ -100,6 +154,7 @@ export function usePlanDay(missionId: Readonly<Ref<string>>, day: Readonly<Ref<s
       draft: runId.value ? draft.state.value : null,
       plans: plans.state.value,
       plan: planId.value ? plan.state.value : null,
+      demand: dayDemand.state.value.status === "ready" ? dayDemand.state.value.value : null,
     }),
   );
 
@@ -109,6 +164,8 @@ export function usePlanDay(missionId: Readonly<Ref<string>>, day: Readonly<Ref<s
     actionError,
     draftDay,
     resume,
-    refetch: () => (runId.value ? draft.refetch() : plans.refetch()),
+    submit,
+    execute,
+    refresh,
   };
 }

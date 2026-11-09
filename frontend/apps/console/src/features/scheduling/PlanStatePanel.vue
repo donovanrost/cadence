@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { describeApiError } from "@/api";
-import { ApCallout, ApPanel, formatRelative, useNow } from "@/ui";
+import { ApCallout, ApPanel, formatCount, formatRelative, useNow } from "@/ui";
 import type { PlanView } from "./plan-state.ts";
 
 /** K1 body for every state that isn't a plan (ScheduleFlow "K1 plan states"). */
@@ -36,6 +36,13 @@ const elapsed = computed(() =>
       <p class="m-0 text-base text-text-3">
         There's no plan for this day yet. Cadence drafts the day across every provider's windows,
         then you work the exceptions.
+      </p>
+      <p v-if="view.demand" class="m-0 font-mono text-sm text-text-2 uppercase">
+        {{ formatCount(view.demand.spacecraft_with_rules) }} spacecraft have rules ·
+        {{ formatCount(view.demand.contacts_needed) }} contacts needed
+        <template v-if="view.demand.without_rule > 0">
+          · {{ formatCount(view.demand.without_rule) }} have no rule</template
+        >
       </p>
       <p v-if="view.last" class="m-0 font-mono text-sm text-text-3 uppercase">
         Last plan for this day: r{{ view.last.version }},

@@ -2,28 +2,13 @@
 import { computed } from "vue";
 import { ApButton, ApStatStrip, ApStatTile } from "@/ui";
 import type { PlanDetail } from "./api.ts";
+import { planPrimary } from "./plan-primary.ts";
 
-/**
- * K1 footer: totals + the one primary. Submit waits for S5 on the server, so a ready draft's
- * primary is disabled with that reason; conflicts block with their own reason (#28).
- */
-const props = defineProps<{ plan: PlanDetail }>();
-
+/** K1 footer: totals + the one primary for the plan's state (plan-primary.ts). */
+const props = defineProps<{ plan: PlanDetail; isAdmin: boolean; busy: boolean }>();
+defineEmits<{ sheet: []; execute: [] }>();
+const primary = computed(() => planPrimary(props.plan, props.isAdmin));
 const conflicts = computed(() => props.plan.conflicts.length);
-const unmet = computed(() => props.plan.unmet.length);
-const primary = computed(() => {
-  if (props.plan.state !== "draft") return null;
-  if (conflicts.value > 0)
-    return {
-      label: "Submit",
-      reason: `${conflicts.value} conflicts. Move or remove a pass to submit.`,
-    };
-  const label =
-    unmet.value > 0
-      ? `Accept ${unmet.value} gaps and submit`
-      : `Submit ${props.plan.counts.passes} requests`;
-  return { label, reason: "Submitting from the console arrives with the next server update." };
-});
 </script>
 
 <template>
@@ -43,11 +28,36 @@ const primary = computed(() => {
         :state="conflicts > 0 ? 'crit' : 'neutral'"
       />
     </ApStatStrip>
-    <div v-if="primary" class="flex min-w-[240px] flex-col justify-center gap-1.5">
-      <ApButton variant="primary" size="commit" disabled :disabled-reason="primary.reason">{{
-        primary.label
-      }}</ApButton>
-      <p class="m-0 max-w-[320px] text-sm text-text-3">{{ primary.reason }}</p>
+    <div class="flex min-w-[240px] flex-col justify-center gap-1.5">
+      <template v-if="primary.kind === 'sheet'">
+        <ApButton variant="primary" size="commit" :disabled="busy" @click="$emit('sheet')">{{
+          primary.label
+        }}</ApButton>
+      </template>
+      <ApButton
+        v-else-if="primary.kind === 'execute'"
+        variant="primary"
+        size="commit"
+        :disabled="busy"
+        @click="$emit('execute')"
+        >{{ primary.label }}</ApButton
+      >
+      <ApButton
+        v-else-if="primary.kind === 'link'"
+        variant="primary"
+        size="commit"
+        :to="primary.to"
+        >{{ primary.label }}</ApButton
+      >
+      <template v-else-if="primary.kind === 'blocked'">
+        <ApButton variant="primary" size="commit" disabled :disabled-reason="primary.reason">{{
+          primary.label
+        }}</ApButton>
+        <p class="m-0 max-w-[320px] text-sm text-text-3">{{ primary.reason }}</p>
+      </template>
+      <p v-else-if="primary.note" class="m-0 max-w-[320px] text-md text-text-3">
+        {{ primary.note }}
+      </p>
     </div>
   </footer>
 </template>

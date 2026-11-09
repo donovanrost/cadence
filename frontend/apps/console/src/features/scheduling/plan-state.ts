@@ -1,5 +1,5 @@
 import type { ApiError, RemoteState } from "@/api";
-import type { Draft, PlanDetail, PlanSummary } from "./api.ts";
+import type { DayDemand, Draft, PlanDetail, PlanSummary } from "./api.ts";
 
 /**
  * K1 view state (plans/scheduling.md "K1 state model", ux ScheduleFlow "K1 plan states").
@@ -9,7 +9,7 @@ export type PlanView =
   | { kind: "loading" }
   | { kind: "failed"; error: ApiError }
   | { kind: "not_set_up"; missing: readonly string[] }
-  | { kind: "no_draft"; last: PlanSummary | null }
+  | { kind: "no_draft"; last: PlanSummary | null; demand: DayDemand | null }
   | { kind: "drafting"; phase: string | null; startedAt: string | null }
   | { kind: "interrupted"; phase: string | null }
   | { kind: "draft_failed"; message: string }
@@ -27,6 +27,7 @@ export function planView(
     draft: RemoteState<Draft> | null;
     plans: RemoteState<{ plans: readonly PlanSummary[] }>;
     plan: RemoteState<PlanDetail> | null;
+    demand?: DayDemand | null;
   }>,
 ): PlanView {
   if (input.notSetUp) return { kind: "not_set_up", missing: input.notSetUp };
@@ -59,7 +60,11 @@ export function planView(
   if (input.plans.status === "loading") return { kind: "loading" };
   if (input.plans.status === "failed") return { kind: "failed", error: input.plans.error };
   if (!currentPlan(input.plans.value.plans))
-    return { kind: "no_draft", last: input.plans.value.plans[0] ?? null };
+    return {
+      kind: "no_draft",
+      last: input.plans.value.plans[0] ?? null,
+      demand: input.demand ?? null,
+    };
   const p = input.plan;
   if (!p || p.status === "loading") return { kind: "loading" };
   if (p.status === "failed") return { kind: "failed", error: p.error };
