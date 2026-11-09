@@ -725,6 +725,17 @@ defmodule Cadence.Commanding do
       {:error, {:command_release_encoding_failed, Exception.message(error)}}
   end
 
+  @doc """
+  The expiry sweep (run on the dispatcher's reconcile): cancels unstarted work past
+  `expires_at` with reason `expired` and publishes read updates for each mission touched.
+  """
+  @spec expire_due_requests() :: :ok
+  def expire_due_requests do
+    Enum.each(Cancellation.expire_due(), fn {{org, mission}, _count} ->
+      ReadUpdates.publish(:commanding_changed, org, mission)
+    end)
+  end
+
   # A queued request whose model revision is no longer active can never release. Fail it
   # closed (canceled, `release_basis_changed`) instead of holding its lane forever.
   defp release_basis(organization_id, mission_id, request_row) do

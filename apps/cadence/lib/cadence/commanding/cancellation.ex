@@ -78,6 +78,46 @@ defmodule Cadence.Commanding.Cancellation do
     }
   end
 
+  @sweep_limit 1_000
+  @system_actor %{"actor_kind" => "system", "id" => "cadence:expiry"}
+
+  @doc """
+  The expiry sweep: cancels, with reason `expired`, work past its `expires_at`
+  that never started (the same cancelable states as `cancel/5`), at most
+  #{@sweep_limit} requests per sweep. Release already skips expired entries;
+  this makes them end visibly instead of staying queued. Returns
+  `%{{organization_id, mission_id} => canceled_count}` so the caller can publish
+  read updates.
+  """
+  @spec expire_due(DateTime.t()) :: %{{binary(), binary()} => pos_integer()}
+  def expire_due(now \\ DateTime.utc_now()) do
+    unqueued =
+      CommandRequestRow
+      |> where([r], r.lifecycle_state in ^@cancelable_request_states and r.expires_at < ^now)
+      |> select([r], {r.organization_id, r.mission_id, r.command_request_id})
+      |> limit(@sweep_limit)
+      |> Repo.all()
+
+    queued =
+      CommandQueueEntryRow
+      |> where([q], q.lifecycle_state == "pending" and q.expires_at < ^now)
+      |> select([q], {q.organization_id, q.mission_id, q.command_request_id})
+      |> limit(@sweep_limit)
+      |> Repo.all()
+
+    (unqueued ++ queued)
+    |> Enum.uniq()
+    |> Enum.group_by(fn {org, mission, _id} -> {org, mission} end, fn {_org, _mission, id} ->
+      id
+    end)
+    |> Enum.reduce(%{}, fn {{org, mission} = key, ids}, acc ->
+      {:ok, %{canceled: canceled}} =
+        Repo.transaction(fn -> cancel(org, mission, ids, "expired", @system_actor) end)
+
+      if canceled == [], do: acc, else: Map.put(acc, key, length(canceled))
+    end)
+  end
+
   @doc "Cancels the request behind a pending queue entry whose basis no longer resolves."
   @spec fail_closed(binary(), binary(), binary(), binary()) :: :ok | {:error, :not_pending}
   def fail_closed(org, mission, command_request_id, reason) do

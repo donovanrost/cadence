@@ -147,6 +147,8 @@ defmodule Cadence.Commanding.Dispatcher do
         ),
       list_pending_queue_lanes_fun:
         Keyword.get(opts, :list_pending_queue_lanes_fun, &Commanding.list_pending_queue_lanes/0),
+      expire_due_fun:
+        Keyword.get(opts, :expire_due_fun, &Cadence.Commanding.expire_due_requests/0),
       lane_dispatcher_opts: lane_dispatcher_opts(opts),
       safety_poll_interval_ms:
         Keyword.get(opts, :safety_poll_interval_ms, @default_safety_poll_interval_ms),
@@ -188,6 +190,7 @@ defmodule Cadence.Commanding.Dispatcher do
 
   @impl true
   def handle_info(:reconcile, state) do
+    _ = state.expire_due_fun.()
     _ = reconcile_dispatch_lanes(state, :safety)
     schedule_next_reconcile(state)
     {:noreply, state}
