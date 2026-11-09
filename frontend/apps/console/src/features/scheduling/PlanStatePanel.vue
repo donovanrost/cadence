@@ -94,8 +94,8 @@ const elapsed = computed(() =>
       </p>
     </div>
     <ApCallout v-else-if="view.kind === 'interrupted'" tone="stale">
-      Drafting stopped when the server restarted<span v-if="view.phase">
-        during {{ view.phase.replaceAll("_", " ") }}</span
+      <!-- U20: no cause unless the server reports one; the console can't know it. -->
+      Drafting stopped<span v-if="view.phase"> during {{ view.phase.replaceAll("_", " ") }}</span
       >. Nothing was submitted.
     </ApCallout>
     <ApCallout v-else-if="view.kind === 'draft_failed'" tone="caution">{{

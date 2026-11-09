@@ -5,6 +5,7 @@ import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession 
 import type { ApiError } from "@/api";
 import { ApButton, ApCallout, ApStationBar } from "@/ui";
 import { draftedByOther, editableStates, type Acknowledgement } from "./api.ts";
+import BookingStopped from "./BookingStopped.vue";
 import DayNav from "./DayNav.vue";
 import DemandPanel from "./DemandPanel.vue";
 import DraftGantt from "./DraftGantt.vue";
@@ -134,6 +135,11 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
   <ProposalCallout v-if="proposal" :mission-id="missionId" :proposal="proposal" />
   <template v-if="view.kind === 'plan'">
     <SupersededCallout v-if="view.plan.superseded" :superseded="view.plan.superseded" />
+    <BookingStopped
+      v-else-if="view.plan.state === 'interrupted'"
+      :mission-id="missionId"
+      :plan="view.plan"
+    />
     <div
       class="grid min-h-0 flex-1 grid-cols-1 gap-3 console:grid-cols-[300px_minmax(0,1fr)_340px]"
     >
