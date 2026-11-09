@@ -137,6 +137,11 @@ defmodule Cadence.Control.Contacts do
     to: ProviderReservations,
     as: :list_mission_page
 
+  @doc "Reservations overlapping a time window (console passes read)."
+  defdelegate list_provider_reservations_in_window(org, mission, from, to, opts \\ []),
+    to: ProviderReservations,
+    as: :list_in_window
+
   @spec fetch_provider_reservation(binary(), binary(), binary()) ::
           {:ok, ProviderReservation.t()} | {:error, term()}
   def fetch_provider_reservation(organization_id, mission_id, reservation_id),

@@ -768,6 +768,7 @@ defmodule CadenceWeb.Router do
       get("/limits/points/:point_id/intervals", PointController, :limit_intervals)
       get("/action-queue", ActionQueueController, :show)
       get("/counts", OpsCountsController, :show)
+      get("/passes", PassController, :index)
       get("/commands", CommandCatalogController, :index)
       get("/commands/:command_id", CommandCatalogController, :show)
       get("/alarm-episodes", AlarmEpisodeController, :index)
@@ -795,6 +796,8 @@ defmodule CadenceWeb.Router do
       # -- Events and scheduling (owner: api, DECISIONS #26). Contracts: ops.md, scheduling.md
       get("/events", EventController, :index)
       get("/events/density", EventController, :density)
+      get("/contact-plans", ContactPlanController, :index)
+      get("/contact-plans/:plan_id", ContactPlanController, :show)
 
       # -- Change sets (owner: api). Contract: docs/apogee/api/changes.md
       scope "/config" do

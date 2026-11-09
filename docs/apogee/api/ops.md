@@ -164,7 +164,7 @@ Small counts for the shell (Ops rail, mobile on-call tabs), so the shell doesn't
 ```json
 {"data": {
   "observed_at": "2026-11-08T02:41:17Z",
-  "alarms": {"active": 4, "critical": 3, "caution": 1, "unacknowledged": 2},
+  "alarms": {"active": 4, "critical": 3, "caution": 1, "unacknowledged": 2, "limits_configured": true},
   "commands": {"open": 25, "awaiting_viewer": 2},
   "fleet": {"total": 500},
   "contacts": null
@@ -172,7 +172,9 @@ Small counts for the shell (Ops rail, mobile on-call tabs), so the shell doesn't
 ```
 
 - `alarms`: from **alarm episodes** (both sources, DECISIONS #17); `unacknowledged` = active
-  episodes with status `new`. The whole object is `null` if episodes can't be read.
+  episodes with status `new`. `limits_configured` is the same as `GET /fleet` `limits.configured`.
+  Per U13, show a real `0` only when something can raise alarms (ground limits configured, or
+  catalog monitoring). The whole object is `null` if episodes can't be read.
 - `commands.open`: queued + release pending + in flight + approval pending. `awaiting_viewer`:
   approval-pending requests the viewer didn't request (the same number as `GET /fleet`).
 - `contacts` is `null` until contact tracking exists (M4/M7). Then it becomes `{"in_contact": n}`.
