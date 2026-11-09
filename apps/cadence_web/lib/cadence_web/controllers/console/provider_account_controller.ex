@@ -6,7 +6,9 @@ defmodule CadenceWeb.Console.ProviderAccountController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.GroundNetworks.ProviderAccountRetirement
   alias Cadence.Management.{ProviderAccountDirectory, ProviderAccountWrites}
+  alias Cadence.Missions
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
   def index(conn, _params) do
@@ -45,10 +47,32 @@ defmodule CadenceWeb.Console.ProviderAccountController do
   end
 
   def delete(conn, %{"id" => id} = params) do
-    case ProviderAccountWrites.retire(conn.assigns.current_scope, id, params["reason"]) do
-      {:ok, result} -> json(conn, %{data: ConfigJSON.encode(result)})
-      {:error, reason} -> error(conn, reason)
+    scope = conn.assigns.current_scope
+
+    case ProviderAccountRetirement.retire(scope, id, params["reason"] || "Removed in the console") do
+      {:ok, account} ->
+        json(conn, %{
+          data:
+            ConfigJSON.encode(%{id: account.provider_account_id, state: account.lifecycle_state})
+        })
+
+      {:error, {:in_use, uses}} ->
+        error(conn, {:in_use, in_use_missions(scope.organization_id, uses)})
+
+      {:error, reason} ->
+        error(conn, reason)
     end
+  end
+
+  # Name the missions that still use the account, so the console can list them.
+  defp in_use_missions(organization_id, uses) do
+    names =
+      organization_id |> Missions.list_missions() |> Map.new(&{&1.mission_id, &1.display_name})
+
+    uses
+    |> Enum.map(& &1.mission_id)
+    |> Enum.uniq()
+    |> Enum.map(&%{id: &1, name: Map.get(names, &1)})
   end
 
   defp error(conn, {:in_use, missions}),

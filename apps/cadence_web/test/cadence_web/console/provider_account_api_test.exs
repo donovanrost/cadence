@@ -3,6 +3,7 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.GroundNetworks.{ProviderAccounts, ProviderCredentials}
+  alias Cadence.Secrets.ResolverConfiguration
   alias CadenceWeb.TestFixtures
 
   test "lists accounts with status and permissions; members can't read" do
@@ -119,7 +120,7 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
     env = put_in(body, ["credential", "backend"], "env")
     env_conn = conn.() |> post(base <> "/provider-accounts", env)
 
-    if Cadence.Secrets.ResolverConfiguration.provider_options()[
+    if ResolverConfiguration.provider_options()[
          :allow_local_provider_credentials?
        ],
        do: assert(json_response(env_conn, 201)),

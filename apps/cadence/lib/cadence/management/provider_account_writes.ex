@@ -9,14 +9,7 @@ defmodule Cadence.Management.ProviderAccountWrites do
 
   alias Cadence.Auth.Scope
 
-  alias Cadence.GroundNetworks.{
-    MissionProvider,
-    ProviderAccountRetirement,
-    ProviderAccounts,
-    ProviderCredentials
-  }
-
-  alias Cadence.Missions
+  alias Cadence.GroundNetworks.{MissionProvider, ProviderAccounts, ProviderCredentials}
   alias Cadence.Secrets.ResolverConfiguration
 
   @backends %{"external" => :external, "env" => :env}
@@ -29,7 +22,7 @@ defmodule Cadence.Management.ProviderAccountWrites do
       else: {:error, :provider_adapter_not_found}
   end
 
-  @doc "`%{\"provider_key\", \"name\", \"settings\", \"credential\"}` → `{:ok, %{id, version}}`."
+  @doc ~S|`%{"provider_key", "name", "settings", "credential"}` → `{:ok, %{id, version}}`.|
   @spec create(Scope.t(), map()) :: {:ok, map()} | {:error, term()}
   def create(%Scope{} = scope, params) do
     account_id = Cadence.Ids.new("provider_account")
@@ -62,35 +55,6 @@ defmodule Cadence.Management.ProviderAccountWrites do
          {:ok, _account, version} <-
            ProviderAccounts.version(scope, account_id, attrs, validate_credential?: false) do
       {:ok, %{id: account_id, version: version.version}}
-    end
-  end
-
-  @doc """
-  Retires the account (domain `ProviderAccountRetirement`). While missions use it:
-  `{:error, {:in_use, [%{id, name}]}}`, naming the missions.
-  """
-  @spec retire(Scope.t(), binary(), binary() | nil) :: {:ok, map()} | {:error, term()}
-  def retire(%Scope{} = scope, account_id, reason) do
-    case ProviderAccountRetirement.retire(scope, account_id, reason || "Removed in the console") do
-      {:ok, account} ->
-        {:ok, %{id: account.provider_account_id, state: account.lifecycle_state}}
-
-      {:error, {:in_use, uses}} ->
-        names =
-          scope.organization_id
-          |> Missions.list_missions()
-          |> Map.new(&{&1.mission_id, &1.display_name})
-
-        missions =
-          uses
-          |> Enum.map(& &1.mission_id)
-          |> Enum.uniq()
-          |> Enum.map(&%{id: &1, name: Map.get(names, &1)})
-
-        {:error, {:in_use, missions}}
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 
