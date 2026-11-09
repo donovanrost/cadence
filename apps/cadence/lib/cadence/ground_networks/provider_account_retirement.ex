@@ -10,8 +10,8 @@ defmodule Cadence.GroundNetworks.ProviderAccountRetirement do
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.GroundNetworks.MissionProviders.ProviderRow
-  alias Cadence.GroundNetworks.ProviderAccounts.AccountRow
   alias Cadence.GroundNetworks.{ProviderAccount, ProviderAudit, ProviderAuditEntry}
+  alias Cadence.GroundNetworks.ProviderAccounts.AccountRow
   alias Cadence.Repo
   alias Ecto.Multi
 
