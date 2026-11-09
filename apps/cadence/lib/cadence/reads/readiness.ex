@@ -13,7 +13,15 @@ defmodule Cadence.Reads.Readiness do
   alias Cadence.Applications.ApplicationInstallations
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.Comms.{GroundStationStore, RoutingRule, RoutingRuleStore, TransportStore}
+
+  alias Cadence.Comms.{
+    FramingDrift,
+    GroundStationStore,
+    RoutingRule,
+    RoutingRuleStore,
+    TransportStore
+  }
+
   alias Cadence.DataSources.SourceHealthStatus
   alias Cadence.Projections.DataSources.Health
   alias Cadence.Reads.PlanningSetup
@@ -50,7 +58,8 @@ defmodule Cadence.Reads.Readiness do
       catalog: catalog(organization_id, mission_id),
       comms: %{
         transport_count: length(TransportStore.list_transports(organization_id, mission_id)),
-        routing_rule_count: Enum.count(rules, &usable?/1)
+        routing_rule_count: Enum.count(rules, &usable?/1),
+        framing_drift: FramingDrift.audit(organization_id, mission_id)
       },
       stations: %{
         count: length(GroundStationStore.list_ground_stations(organization_id, mission_id))

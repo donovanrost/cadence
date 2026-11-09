@@ -137,6 +137,29 @@ defmodule Cadence.Reads.Readiness.Rules do
     ]
   end
 
+  # DECISIONS #33: profile framing that differs from the transports feeding its spacecraft.
+  # Decode still uses the transport values; this tells operators what a profile-authoritative
+  # generation would change.
+  defp comms_findings(%{comms: %{framing_drift: [_ | _] = drift}}) do
+    drift
+    |> Enum.group_by(& &1.profile)
+    |> Enum.map(fn {profile, items} ->
+      count = items |> Enum.map(& &1.spacecraft_count) |> Enum.sum()
+      fields = items |> Enum.flat_map(& &1.differences) |> Enum.map(& &1.path) |> Enum.uniq()
+
+      :comms
+      |> finding(
+        :caution,
+        :framing_drift,
+        "#{profile.name} framing differs from its transports",
+        "#{Enum.join(fields, ", ")} on #{length(items)} transport(s). Decode uses the transport values today.",
+        count,
+        fix(:profile, profile.id)
+      )
+      |> Map.put(:id, "comms.framing_drift.#{profile.id}")
+    end)
+  end
+
   defp comms_findings(_facts), do: []
 
   defp station_findings(%{stations: %{count: 0}}) do
