@@ -66,7 +66,7 @@ async function upload() {
   <ApPanel index="B1" title="Source file">
     <form class="flex flex-col gap-4" @submit.prevent="upload">
       <label
-        class="flex min-h-40 cursor-pointer flex-col items-center justify-center gap-2 border border-dashed border-line bg-vacuum px-4 py-6 text-center"
+        class="flex min-h-40 cursor-pointer flex-col items-center justify-center gap-2 border border-dashed border-line bg-vacuum px-4 py-6 text-center focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-readout"
       >
         <span class="text-base text-readout">{{
           file ? file.name : "Choose an XTCE or catalog export"
