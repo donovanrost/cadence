@@ -100,6 +100,41 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     error in ArgumentError -> {:error, {:invalid_contact_plan, error.message}}
   end
 
+  @taken_up ~w(pending_approval approved executing partially_reserved reserved)
+
+  @doc """
+  The ids among `requirement_ids` that a plan in pending_approval or later
+  has taken up (template supersession keeps those). `lock: true` holds those
+  plans `FOR SHARE`, so it serializes with `submit/6`, which takes the plan
+  `FOR UPDATE`; call it inside the transaction that acts on the answer.
+  """
+  @spec requirements_taken_up(binary(), binary(), [binary()], keyword()) :: MapSet.t()
+  def requirements_taken_up(organization_id, mission_id, requirement_ids, opts \\ [])
+
+  def requirements_taken_up(_organization_id, _mission_id, [], _opts), do: MapSet.new()
+
+  def requirements_taken_up(organization_id, mission_id, requirement_ids, opts) do
+    ContactPlanRequirementRefRow
+    |> join(:inner, [ref], plan in ContactPlanRow,
+      on:
+        plan.organization_id == ref.organization_id and plan.mission_id == ref.mission_id and
+          plan.contact_plan_id == ref.contact_plan_id
+    )
+    |> where(
+      [ref, plan],
+      ref.organization_id == ^organization_id and ref.mission_id == ^mission_id and
+        ref.contact_requirement_id in ^requirement_ids and plan.lifecycle_state in ^@taken_up
+    )
+    |> select([ref, _plan], ref.contact_requirement_id)
+    |> then(fn query ->
+      if Keyword.get(opts, :lock, false),
+        do: lock(query, [_ref, plan], fragment("FOR SHARE OF ?", plan)),
+        else: distinct(query, true)
+    end)
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
   @spec submit(Scope.t(), binary(), binary(), pos_integer(), binary(), keyword()) ::
           {:ok, ContactPlan.t()} | {:error, term()}
   def submit(current_scope, mission_id, plan_id, expected_version, reason, opts \\ []) do

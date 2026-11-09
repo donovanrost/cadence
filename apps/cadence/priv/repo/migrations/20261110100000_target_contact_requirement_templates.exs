@@ -94,43 +94,11 @@ defmodule Cadence.Repo.Migrations.TargetContactRequirementTemplates do
     """)
   end
 
+  # Irreversible: once a template fans out, one occurrence row per spacecraft can't fold back into
+  # the old (template, version, occurrence) identity, and multi-target versions have no
+  # spacecraft_id to restore. (domain review 9)
   def down do
-    execute("""
-    ALTER TABLE contact_requirement_occurrences
-    DROP CONSTRAINT IF EXISTS contact_requirement_occurrences_spacecraft_fk
-    """)
-
-    create(
-      unique_index(
-        :contact_requirement_occurrences,
-        [
-          :organization_id,
-          :mission_id,
-          :contact_requirement_template_id,
-          :contact_requirement_template_version,
-          :occurrence_at
-        ],
-        name: :contact_requirement_occurrences_identity_uniq
-      )
-    )
-
-    drop(
-      index(:contact_requirement_occurrences, [],
-        name: :contact_requirement_occurrences_spacecraft_identity_uniq
-      )
-    )
-
-    alter table(:contact_requirement_occurrences) do
-      remove(:spacecraft_id)
-    end
-
-    execute("""
-    ALTER TABLE contact_requirement_template_versions ALTER COLUMN spacecraft_id SET NOT NULL
-    """)
-
-    alter table(:contact_requirement_template_versions) do
-      remove(:target_document)
-      remove(:name)
-    end
+    raise Ecto.MigrationError,
+          "20261110100000 is irreversible: targeted templates can't fold back to one spacecraft"
   end
 end

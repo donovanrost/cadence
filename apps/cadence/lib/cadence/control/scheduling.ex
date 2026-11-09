@@ -22,7 +22,6 @@ defmodule Cadence.Control.Scheduling do
   alias Cadence.ContactPlanning.{
     ContactPlan,
     ContactPlans,
-    ContactRequirementTemplates,
     FleetPlanner,
     FleetPlanningRun,
     FleetPlanningRuns,
@@ -31,6 +30,7 @@ defmodule Cadence.Control.Scheduling do
     FleetRunLock,
     FleetRunRepairs,
     FleetRunReviews,
+    PlanSupersession,
     StationConflicts
   }
 
@@ -106,6 +106,7 @@ defmodule Cadence.Control.Scheduling do
         with {:ok, %ContactPlan{} = plan, version} <-
                ManagementContacts.fetch_plan(org, mission_id, plan_id),
              :ok <- expected(version.version, params[:expected_version]),
+             :ok <- current(org, mission_id, plan, version),
              :ok <- stations_available(org, mission_id, plan_id, version),
              {:ok, plan} <- maybe_submit(scope, mission_id, plan, version, params[:reason]),
              {:ok, outcome} <- decide(scope, mission_id, plan, version, params),
@@ -117,6 +118,14 @@ defmodule Cadence.Control.Scheduling do
 
       _other_plan ->
         {:error, :operation_already_claimed}
+    end
+  end
+
+  # U27: a draft overtaken by newer requirement or template versions can't be booked.
+  defp current(org, mission_id, plan, version) do
+    case PlanSupersession.check(org, mission_id, plan, version) do
+      nil -> :ok
+      superseded -> {:error, {:contact_plan_superseded, superseded}}
     end
   end
 
@@ -315,10 +324,6 @@ defmodule Cadence.Control.Scheduling do
         day |> Date.add(1) |> DateTime.new!(~T[00:00:00], "Etc/UTC") |> DateTime.to_iso8601(),
       "include_recurring" => true
     }
-
-    # Retire requirements from older template versions (or spacecraft that left a target)
-    # before the review captures the active ones.
-    ContactRequirementTemplates.supersede_stale(scope, mission_id)
 
     with {:ok, %{"evidence" => evidence}} <-
            FleetPlanningStarts.preview(scope, mission_id, %{"fleet_run" => fleet_run})

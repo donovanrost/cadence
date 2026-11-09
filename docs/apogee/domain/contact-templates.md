@@ -52,6 +52,27 @@ requirement. It becomes one row per `(template, version, occurrence_at, spacecra
   generated from an older template version are superseded (cause `template_versioned`) when a
   newer version materializes, so a re-seed doesn't leave the old rule active next to the new
   one (qa, 2026-11-11).
+- **When superseding runs** (domain review 2026-11-09, findings 2–4, 8):
+  - A fleet start (console draft or ops console) supersedes **inside its claim transaction,
+    after every template has materialized**. A failed materialization rolls the cancels back, so
+    a v2 that fails (for example over the cap) never cancels v1's coverage.
+  - The reviewed inputs (`FleetStartInputs`) already leave out the requirements that will be
+    superseded, so preview and create agree and v1 and v2 never plan the same slot.
+  - Materialization in a start uses exactly the reviewed spacecraft (`targets:`), not a fresh
+    resolve.
+  - Outside starts (scheduler `materialize_active`), each template supersedes after its own
+    materialization.
+- **Taken up by a plan** means referenced by a plan in `pending_approval` or later
+  (`ContactPlans.requirements_taken_up/4`). Each cancel locks the requirement row, re-checks
+  uptake with those plans locked `FOR SHARE` (submit holds the plan `FOR UPDATE`), and keeps it
+  if a plan took it up in between.
+- **Decision (review 11): kept, planned requirements are not deduplicated.** If v1's requirement
+  for a slot is kept because a plan took it up, v2 still generates its own requirement for the same
+  slot, so that slot is demanded twice until the planned one completes. That's rare (it needs a
+  template edit while a plan is pending or booked), and the planner treats them as two
+  requirements. Revisit if it shows up in practice.
+- **The cause** is free text in `lifecycle_reason` (`template_versioned: …`,
+  `left_template_target: …`). The console doesn't filter on it; make it a field if one does.
 - Bounds: `catch_up_policy.maximum_occurrences_per_run` still limits occurrences. A cap on
   spacecraft × occurrences fails the materialization with `{:template_fan_out_exceeded, n}`
   instead of silently truncating; the fleet start review applies the same cap summed over its
@@ -63,6 +84,7 @@ requirement. It becomes one row per `(template, version, occurrence_at, spacecra
 
 1. Add `name` (text) and `target_document` (map) to `contact_requirement_template_versions`.
    Make `spacecraft_id` nullable.
+   The migration is irreversible (`down/0` raises): fanned-out occurrences can't fold back.
 2. Backfill every existing version: `target_document = {"kind": "spacecraft_ids",
    "spacecraft_ids": [spacecraft_id]}`, `name = "<spacecraft display name> recurring"` (falling
    back to the id).

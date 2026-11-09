@@ -17,6 +17,7 @@ defmodule Cadence.Control.PlanningTemplates do
   alias Cadence.ContactPlanning.{
     ContactRequirementTemplates,
     ContactRequirementTemplateVersion,
+    RequirementSchedule,
     TemplateDescriptions,
     TemplateTargets
   }
@@ -25,6 +26,8 @@ defmodule Cadence.Control.PlanningTemplates do
   alias Cadence.{SpacecraftStore, SpacecraftTypeStore}
 
   @day 86_400
+  # 31 days at the 60 s minimum interval.
+  @max_preview_occurrences 44_640
 
   @doc "Templates that aren't closed, each with its target and rule in words."
   @spec list(binary(), binary()) :: [map()]
@@ -158,9 +161,11 @@ defmodule Cadence.Control.PlanningTemplates do
     candidates = TemplateTargets.candidates(organization_id, mission_id, target)
     ids = TemplateTargets.select(target, candidates)
 
+    # The whole window, not the catch-up bounds (lookback, occurrences per run) that limit
+    # one materialization.
     occurrences =
-      version
-      |> ContactRequirementTemplates.preview_occurrences(from, until)
+      version.schedule_document
+      |> RequirementSchedule.occurrences_between(from, until, @max_preview_occurrences)
       |> Enum.count(&DateTime.before?(&1, until))
 
     contacts = occurrences * length(ids) * (version.requirement_document["contact_count"] || 1)

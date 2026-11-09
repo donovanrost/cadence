@@ -6,7 +6,8 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
     ContactRequirementTemplates,
     FleetPlanningRuns,
     FleetStartInputs,
-    FleetStartProjection
+    FleetStartProjection,
+    TemplateSupersession
   }
 
   alias Cadence.Repo
@@ -40,6 +41,7 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
     with {:ok, inputs} <- FleetStartInputs.load(scope, mission_id, window, true),
          true <- inputs.evidence === evidence,
          {:ok, generated, materialization} <- materialize(scope, mission_id, inputs),
+         :ok <- supersede(scope, inputs),
          refs <- requirement_refs(inputs, generated),
          {:ok, run, refs} <-
            FleetPlanningRuns.create(scope, mission_id, %{
@@ -154,8 +156,10 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
              t.template.contact_requirement_template_id,
              inputs.window.horizon_start,
              inputs.window.horizon_end,
-             # The reviewed inputs list the active requirements; don't cancel any of them now.
-             supersede: false
+             # Exactly the reviewed spacecraft; supersession runs after every template has
+             # materialized, inside this transaction, so a later failure rolls it back.
+             supersede: false,
+             targets: t.spacecraft_ids
            ) do
         {:ok, rows} ->
           append_reviewed_materialization(t, rows, results)
@@ -178,6 +182,16 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
       {:error, _} = error ->
         error
     end
+  end
+
+  # The reviewed inputs already leave these out (FleetStartInputs), so the run's refs are
+  # unaffected; cancelling them here keeps v1 and v2 from planning the same slot twice.
+  defp supersede(scope, inputs) do
+    now = DateTime.utc_now()
+
+    Enum.each(inputs.templates, fn t ->
+      TemplateSupersession.supersede(scope, t.version, t.spacecraft_ids, now)
+    end)
   end
 
   defp append_reviewed_materialization(template, rows, results) do

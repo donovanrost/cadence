@@ -197,6 +197,9 @@ defmodule CadenceWeb.Console.ContactPlanController do
 
   defp acknowledgements(_items), do: {:error, %{acknowledgements: "must be a list"}}
 
+  defp submit_error(conn, _plan_id, {:contact_plan_superseded, superseded}),
+    do: Problem.respond(conn, :plan_superseded, ConfigJSON.encode(%{superseded: superseded}))
+
   defp submit_error(conn, plan_id, :contact_plan_not_satisfied) do
     details =
       case ContactPlanOverview.plan(org_id(conn), mission_id(conn), plan_id) do

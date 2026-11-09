@@ -108,10 +108,12 @@ The list row, plus:
 **Superseded drafts** (K1, ux ScheduleFlow): a `draft` or `pending_approval` plan whose
 requirements were overtaken reads as `state: "superseded"` (in the list rows and the detail), with
 `superseded: {at, by: {name} | null, reason, changes: [{kind: "requirement" | "template", id, name,
-from_version, to_version}]}`. Otherwise `superseded` is `null`. Reasons, strongest first:
-`template_changed` (a requirement was cancelled because its template was versioned or its
-spacecraft left the target), `requirement_changed` (a newer requirement version than the plan
-used), and `requirement_closed`. The plan itself isn't changed, so its detail stays readable, and
+from_version, to_version}]}`. Otherwise `superseded` is `null`. It is computed **on read** against
+the current versions (U27), so bumping a template or requirement supersedes the draft at once.
+Reasons, strongest first: `template_changed` (a requirement's template has a newer version, or no
+longer targets its spacecraft), `requirement_changed` (a newer requirement version than the plan
+used), and `requirement_closed`. **Submit refuses a superseded draft** with `409 plan_superseded`
+and `details.superseded`. The plan itself isn't changed, so its detail stays readable, and
 `ready_to_approve` is `false`. `?state=draft` filters on the stored state, so a superseded draft
 still comes back, as `superseded`. Re-draft the day to plan against the new versions.
 

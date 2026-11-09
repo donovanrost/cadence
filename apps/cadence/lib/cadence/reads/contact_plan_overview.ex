@@ -15,11 +15,11 @@ defmodule Cadence.Reads.ContactPlanOverview do
     ContactOpportunitySnapshot,
     ContactPlan,
     ContactPlanVersion,
+    PlanSupersession,
     StationConflicts
   }
 
   alias Cadence.Management.Contacts
-  alias Cadence.Reads.PlanSupersession
 
   @list_cap 100
 

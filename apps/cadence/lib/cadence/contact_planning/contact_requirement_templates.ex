@@ -230,8 +230,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
            fetch(current_scope.organization_id, mission_id, template_id),
          :ok <- active_template(template),
          {:ok, actor_id} <- actor_id(current_scope),
-         targets =
-           TemplateTargets.resolve(version.organization_id, mission_id, version.target_document),
+         targets = targets(version, mission_id, opts),
          due = due_occurrences(version, from, until, opts),
          :ok <- fan_out_bound(length(due) * length(targets)) do
       now = now(opts)
@@ -259,33 +258,16 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
     end
   end
 
-  @doc """
-  Supersedes stale generated requirements of every active template now (see
-  `TemplateSupersession`). Run it **before** reviewing planning inputs: a fleet
-  start materializes with `supersede: false`, so it never cancels a
-  requirement its reviewed inputs already list.
-  """
-  @spec supersede_stale(Scope.t(), binary(), keyword()) :: %{superseded: non_neg_integer()}
-  def supersede_stale(%Scope{} = current_scope, mission_id, opts \\ []) do
-    now = now(opts)
-
-    superseded =
-      current_scope.organization_id
-      |> list(mission_id, lifecycle_state: :active)
-      |> Enum.map(fn {_template, version} ->
-        targets =
-          TemplateTargets.resolve(version.organization_id, mission_id, version.target_document)
-
-        TemplateSupersession.supersede(current_scope, version, targets, now).superseded
-      end)
-      |> Enum.sum()
-
-    %{superseded: superseded}
-  end
-
   defp maybe_supersede(scope, version, targets, now, opts) do
     if Keyword.get(opts, :supersede, true),
       do: TemplateSupersession.supersede(scope, version, targets, now)
+  end
+
+  # A reviewed fleet start passes the spacecraft it reviewed; otherwise resolve them now.
+  defp targets(version, mission_id, opts) do
+    Keyword.get_lazy(opts, :targets, fn ->
+      TemplateTargets.resolve(version.organization_id, mission_id, version.target_document)
+    end)
   end
 
   # 2,000 spacecraft (the runtime target) × 3 contacts/day × a 7-day horizon = 42,000.

@@ -271,7 +271,7 @@ defmodule Cadence.ContactPlanning.TargetedTemplatesTest do
              4
   end
 
-  test "fleet starts never supersede; supersede_stale does it before review", c do
+  test "materializing with supersede: false (a reviewed fleet start) cancels nothing", c do
     {:ok, template, _} =
       ContactRequirementTemplates.create(c.scope, @mission_id, plane_one(), now: @now)
 
@@ -303,14 +303,6 @@ defmodule Cadence.ContactPlanning.TargetedTemplatesTest do
              ContactRequirements.list(@organization_id, @mission_id, lifecycle_state: :active)
            ) ==
              8
-
-    assert %{superseded: 4} =
-             ContactRequirementTemplates.supersede_stale(c.scope, @mission_id, now: @now)
-
-    assert length(
-             ContactRequirements.list(@organization_id, @mission_id, lifecycle_state: :active)
-           ) ==
-             4
   end
 
   defp plane_one, do: attrs(%{"kind" => "plane", "plane" => 1})

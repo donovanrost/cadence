@@ -31,7 +31,8 @@ defmodule CadenceWeb.ContactPlanningFixtures do
 
     craft =
       Cadence.Spacecraft.new(%{
-        spacecraft_id: Cadence.Ids.new("spacecraft"),
+        spacecraft_id:
+          Keyword.get_lazy(opts, :spacecraft_id, fn -> Cadence.Ids.new("spacecraft") end),
         mission_id: mission.mission_id,
         display_name: Keyword.get(opts, :display_name, "Plan craft")
       })
@@ -48,7 +49,8 @@ defmodule CadenceWeb.ContactPlanningFixtures do
         success_measure: :minimum_duration,
         minimum_duration_seconds: 60,
         priority: :high,
-        rationale: "Reviewed contact need"
+        rationale: "Reviewed contact need",
+        metadata: Keyword.get(opts, :metadata, %{})
       })
 
     {:ok, planning} =

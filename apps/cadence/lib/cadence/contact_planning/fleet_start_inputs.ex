@@ -3,9 +3,11 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
   import Ecto.Query
 
   alias Cadence.ContactPlanning.{
+    ContactPlans,
     ContactRequirementTemplates,
     ContentHash,
     FleetPlanningPolicies,
+    TemplateSupersession,
     TemplateTargets
   }
 
@@ -30,6 +32,7 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
          {:ok, requirements} <- requirements(scope.organization_id, mission_id, window, locked),
          {:ok, templates} <- templates(scope.organization_id, mission_id, window, locked) do
       context = %{organization_id: scope.organization_id, mission_id: mission_id}
+      requirements = without_superseded(context, requirements, templates, locked)
 
       snapshot = %{
         context: context,
@@ -42,6 +45,45 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
       {:ok, Map.put(snapshot, :evidence, evidence(snapshot))}
     end
   end
+
+  # Requirements the start will supersede once the templates' current versions materialize
+  # (TemplateSupersession) aren't planned: future, not taken up by a plan, and from an older
+  # template version or for a spacecraft the template no longer targets.
+  defp without_superseded(_context, requirements, [], _locked), do: requirements
+
+  defp without_superseded(context, requirements, templates, locked) do
+    now = DateTime.utc_now()
+
+    future =
+      requirements
+      |> Enum.filter(fn {_requirement, version} ->
+        DateTime.after?(version.earliest_start, now)
+      end)
+      |> Enum.group_by(fn {_requirement, version} -> generated_by(version) end)
+
+    stale =
+      templates
+      |> Enum.flat_map(fn t ->
+        future
+        |> Map.get(t.version.contact_requirement_template_id, [])
+        |> TemplateSupersession.stale(t.version, MapSet.new(t.spacecraft_ids))
+        |> Enum.map(&elem(&1, 0))
+      end)
+
+    taken_up =
+      ContactPlans.requirements_taken_up(context.organization_id, context.mission_id, stale,
+        lock: locked
+      )
+
+    excluded = stale |> MapSet.new() |> MapSet.difference(taken_up)
+
+    Enum.reject(requirements, fn {requirement, _version} ->
+      MapSet.member?(excluded, requirement.contact_requirement_id)
+    end)
+  end
+
+  defp generated_by(version),
+    do: get_in(version.metadata || %{}, ["generation", "contact_requirement_template_id"])
 
   def horizon(window, policy) do
     duration = DateTime.diff(window.horizon_end, window.horizon_start, :microsecond)
@@ -182,7 +224,8 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
         r.contact_requirement_template_version == ^version.version and
         r.occurrence_at in ^occurrences
     )
-    |> order_by([r], asc: r.occurrence_at)
+    # Stable order: several spacecraft share one occurrence, and the review hashes this list.
+    |> order_by([r], asc: r.occurrence_at, asc: r.spacecraft_id)
     |> select([r], %{
       at: r.occurrence_at,
       spacecraft_id: r.spacecraft_id,

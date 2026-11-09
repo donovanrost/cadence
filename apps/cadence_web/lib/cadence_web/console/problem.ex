@@ -27,6 +27,8 @@ defmodule CadenceWeb.Console.Problem do
     inputs_changed: {409, "Planning inputs changed while starting; try again."},
     draft_failed: {422, "The draft could not be started."},
     plan_not_ready: {422, "The plan has unmet requirements or conflicts."},
+    plan_superseded:
+      {409, "Newer requirement or template versions overtook this draft. Draft the day again."},
     acknowledgements_required: {422, "Acknowledge every unmet requirement to approve."},
     plan_changed: {409, "The plan changed since you loaded it."},
     plan_not_submittable: {409, "The plan can't be submitted in its current state."},

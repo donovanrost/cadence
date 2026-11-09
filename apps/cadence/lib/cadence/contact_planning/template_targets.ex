@@ -76,7 +76,8 @@ defmodule Cadence.ContactPlanning.TemplateTargets do
   @doc "Resolves a target against the mission's spacecraft now."
   @spec resolve(binary(), binary(), map()) :: [binary()]
   def resolve(organization_id, mission_id, target),
-    do: select(target, candidates(organization_id, mission_id, target))
+    # Sorted by id, so a rename doesn't change a reviewed start's hash.
+    do: target |> select(candidates(organization_id, mission_id, target)) |> Enum.sort()
 
   @doc "The spacecraft a target is evaluated over (profile pins via the store)."
   @spec candidates(binary(), binary(), map()) :: [Spacecraft.t()]
