@@ -44,12 +44,28 @@ defmodule Cadence.Configuration.Staging do
 
   defp stage_locked(set, actor, summary, source, prepared) do
     with :ok <- not_frozen(set),
+         :ok <- rollback_alone(set, source),
          :ok <- resolve_overlaps(set, actor, prepared) do
       insert_change(set, actor, summary, source, prepared)
     else
       {:error, reason} -> Repo.rollback(reason)
     end
   end
+
+  # A rollback is its set's only change (DECISIONS #49 review 3/4), decided under the set lock: it
+  # stages only into an empty set, and nothing else joins a set that holds one.
+  defp rollback_alone(set, source) do
+    staged = ChangeSetStore.changes(set.change_set_id)
+
+    cond do
+      rollback?(source) and staged != [] -> {:error, :change_set_open}
+      Enum.any?(staged, &rollback?(&1.source)) -> {:error, :rollback_in_progress}
+      true -> :ok
+    end
+  end
+
+  defp rollback?(%{"rollback" => %{}}), do: true
+  defp rollback?(_source), do: false
 
   @doc "Prepares unstaged ops for a preview, in pipeline form."
   @spec prepare_ops(String.t(), String.t(), [op_input()]) :: {:ok, [map()]} | {:error, term()}

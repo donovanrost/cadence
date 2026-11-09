@@ -36,7 +36,8 @@ defmodule CadenceWeb.Console.ConfigJSON do
     nothing_to_roll_back: 422,
     rollback_unknown_kind: 422,
     rollback_crosses_legacy: 409,
-    change_set_open: 409
+    change_set_open: 409,
+    rollback_in_progress: 409
   }
 
   @messages %{
@@ -66,7 +67,9 @@ defmodule CadenceWeb.Console.ConfigJSON do
     rollback_unknown_kind: "A revision in that range has changes this version can't undo.",
     rollback_crosses_legacy:
       "The range includes a legacy activation; roll back to it, not past it.",
-    change_set_open: "Finish or discard the open change set first."
+    change_set_open: "Finish or discard the open change set first.",
+    rollback_in_progress:
+      "A rollback is staged; apply or discard it before staging other changes."
   }
 
   @doc "Deep-encodes a facade value for JSON."

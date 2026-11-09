@@ -90,14 +90,20 @@ order, so a SCID repeated **within the batch** fails validation for the later op
   - deleted → re-created;
   - changed → updated back.
 
-  Ops run creates, then updates, then deletes. A framing rollback produces a runtime generation
+  Order is dependency-aware: creates and updates run parents first (station, transport,
+  profile, spacecraft, override), deletes run children first. Derived kinds (`spacecraft_routes`)
+  aren't reverted directly: reverting the profile re-derives them. A pin version that only moved
+  because of a profile rollout follows the reverted profile's rollout. A framing rollback produces a runtime generation
   with the same HOLDs as any framing change. Catalog revisions are never deleted: pins move back.
 - Refusals:
   - `422 invalid_rollback_target`: `N` must be from r1 up to the revision before the head;
     there's no ledger before r1.
   - `409 rollback_crosses_legacy` with `details.newest_legacy_revision`: the range holds a
     legacy activation. You can roll back to it, not past it.
-  - `409 change_set_open`: finish or discard the open set first.
+  - `409 change_set_open`: finish or discard the open set first. Checked under the change-set
+    lock.
+  - While a rollback is staged, other staging answers `409 rollback_in_progress`: a rollback is
+    its set's only change.
   - `422 nothing_to_roll_back`.
   - `403 forbidden`: needs `config.rollback`.
 - **Not yet:** reverting a spacecraft creation is NO-GO ("Spacecraft can't be removed yet") until

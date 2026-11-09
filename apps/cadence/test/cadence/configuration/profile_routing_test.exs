@@ -4,7 +4,7 @@ defmodule Cadence.Configuration.ProfileRoutingTest do
   import Cadence.ConfigurationFixtures
 
   alias Cadence.Comms.RoutingRuleStore
-  alias Cadence.Control.Configuration
+  alias Cadence.Control.{Configuration, ConfigurationRollback}
   alias Cadence.Reads.ProfileRouting
   alias Cadence.SpacecraftTypeStore
 
@@ -120,6 +120,38 @@ defmodule Cadence.Configuration.ProfileRoutingTest do
 
     assert message =~ "nowhere"
     assert [_still_there] = profile_routes(ctx)
+  end
+
+  test "rolling back a routing-rule edit skips the derived routes and re-derives them (#49)",
+       ctx do
+    {:ok, %{head: %{revision: before_edit}}} = Configuration.current(ctx.alice, ctx.mission)
+
+    apply_ops(ctx, "Rename the rule", [
+      %{
+        kind: "spacecraft_profile",
+        action: :update,
+        entity_id: ctx.ids.profile,
+        changes: [
+          %{path: "routing_rules", value: [Map.put(rule(ctx.ids.station), "label", "TT&C B")]}
+        ]
+      }
+    ])
+
+    assert {:ok, %{ops: ops, preview: %{verdict: :go}}} =
+             ConfigurationRollback.preview(ctx.alice, ctx.mission, before_edit)
+
+    assert [%{kind: "spacecraft_profile", action: "update"}] = ops
+
+    {:ok, staged} =
+      ConfigurationRollback.stage(ctx.alice, ctx.mission, before_edit)
+
+    {:ok, %{state: :applied}} =
+      Configuration.submit(ctx.alice, ctx.mission, staged.change_set_id, %{
+        reason: "Undo the rename",
+        expected_version: staged.version
+      })
+
+    assert [_route] = profile_routes(ctx)
   end
 
   defp profile_with_rule(station),

@@ -11,7 +11,7 @@ defmodule Cadence.Control.ConfigurationRollback do
   """
 
   alias Cadence.Auth.Scope
-  alias Cadence.Configuration.{Access, ChangeSetStore, Preview, Rollback, Staging}
+  alias Cadence.Configuration.{Access, Preview, Rollback, Staging}
   alias Cadence.Platform.ScopedReadUpdates
 
   @doc """
@@ -27,11 +27,13 @@ defmodule Cadence.Control.ConfigurationRollback do
     end
   end
 
-  @doc "Stages the rollback; the mission must have no open change set."
+  @doc """
+  Stages the rollback. Staging decides under the change-set lock that the set is empty
+  (`:change_set_open` otherwise) and keeps other changes out of it afterwards.
+  """
   @spec stage(Scope.t(), String.t(), integer()) :: {:ok, map()} | {:error, term()}
   def stage(%Scope{} = scope, mission_id, target) do
     with {:ok, mission} <- Access.authorize(scope, mission_id, :rollback),
-         :ok <- no_open_set(mission.mission_id),
          {:ok, plan} <- Rollback.plan(mission.organization_id, mission.mission_id, target),
          :ok <- something_to_revert(plan),
          {:ok, result} <-
@@ -82,13 +84,6 @@ defmodule Cadence.Control.ConfigurationRollback do
         "outside" => Enum.map(plan.outside, &%{"kind" => &1.kind, "entity_id" => &1.entity_id})
       }
     }
-  end
-
-  defp no_open_set(mission_id) do
-    case ChangeSetStore.active(mission_id) do
-      nil -> :ok
-      _open -> {:error, :change_set_open}
-    end
   end
 
   defp something_to_revert(%{ops: []}), do: {:error, :nothing_to_roll_back}

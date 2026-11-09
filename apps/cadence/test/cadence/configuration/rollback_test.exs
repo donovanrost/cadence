@@ -125,6 +125,36 @@ defmodule Cadence.Configuration.RollbackTest do
              ConfigurationRollback.preview(ctx.alice, ctx.mission, 1)
   end
 
+  test "deletes come children first, and nothing joins a rollback's set", ctx do
+    station = unique("station")
+
+    {_, 2} =
+      apply_ops(ctx, "Station and transport", [
+        Map.put(station_op("Hawaii"), :entity_id, station),
+        %{
+          kind: "transport",
+          action: :create,
+          document: Map.put(transport_doc("Hawaii TCP"), "ground_station_id", station)
+        }
+      ])
+
+    assert {:ok,
+            %{
+              ops: [
+                %{kind: "transport", action: "delete"},
+                %{kind: "ground_station", action: "delete"}
+              ]
+            }} =
+             ConfigurationRollback.preview(ctx.alice, ctx.mission, 1)
+
+    assert {:ok, _} = ConfigurationRollback.stage(ctx.alice, ctx.mission, 1)
+
+    assert {:error, :rollback_in_progress} =
+             Configuration.stage(ctx.alice, ctx.mission, %{summary: "Sneak in"}, [
+               station_op("Late")
+             ])
+  end
+
   test "a value changed outside change sets since the target is a HOLD to acknowledge", ctx do
     {%{entity_ids: [id]}, 2} = apply_ops(ctx, "Add Perth", [station_op("Perth")])
 

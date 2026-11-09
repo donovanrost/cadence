@@ -44,10 +44,7 @@ defmodule Cadence.Configuration.Rollback do
          :ok <- no_legacy(reverted),
          entries = Ledger.entries_between(mission_id, target, head),
          {:ok, ops, outside} <- inverse_ops(organization_id, mission_id, entries) do
-      # Creates, then updates, then deletes: a re-pin lands before the profile it left is
-      # removed, and a re-created entity exists before anything references it.
-      ops =
-        Enum.sort_by(ops, &Map.fetch!(%{"create" => 0, "update" => 1, "delete" => 2}, &1.action))
+      ops = ops |> without_rollout_pins() |> order()
 
       numbers = reverted |> Enum.map(& &1.revision_number) |> Enum.sort()
 
@@ -80,6 +77,58 @@ defmodule Cadence.Configuration.Rollback do
     end
   end
 
+  # A profile update rolls its pinned spacecraft to the new profile version (finalize), so when
+  # the rollback reverts a profile, a craft's change of just its pin *version* to that same
+  # profile is the rollout's to make; staging it too conflicts with the rollout.
+  defp without_rollout_pins(ops) do
+    profiles =
+      for %{kind: "spacecraft_profile", action: "update", entity_id: id} <- ops,
+          into: MapSet.new(),
+          do: id
+
+    Enum.flat_map(ops, fn
+      %{kind: "spacecraft", action: "update", changes: changes} = op ->
+        rest =
+          Enum.reject(changes, fn change ->
+            change.path == "spacecraft_type_version" and
+              MapSet.member?(profiles, pinned_profile(op, changes))
+          end)
+
+        if rest == [], do: [], else: [%{op | changes: rest}]
+
+      op ->
+        [op]
+    end)
+  end
+
+  # The profile the craft stays pinned to (its id isn't among the changes).
+  defp pinned_profile(%{current_profile: id}, changes) do
+    if Enum.any?(changes, &(&1.path == "spacecraft_type_id")), do: nil, else: id
+  end
+
+  defp pinned_profile(_op, _changes), do: nil
+
+  # Kinds re-derived by finalize from their source (routes from profile routing rules); they
+  # refuse staging, and reverting the source reverts them.
+  @derived ~w(spacecraft_routes)
+
+  # Dependency order (parents first). The `configuration_kinds` registry isn't one.
+  @dependency ~w(ground_station transport spacecraft_profile spacecraft spacecraft_override)
+
+  # Creates parents-first, then updates parents-first, then deletes children-first: a re-created
+  # transport follows its station, a re-pin lands before the profile it left is removed.
+  defp order(ops) do
+    Enum.sort_by(ops, fn op ->
+      rank = Enum.find_index(@dependency, &(&1 == op.kind)) || length(@dependency)
+
+      case op.action do
+        "create" -> {0, rank}
+        "update" -> {1, rank}
+        "delete" -> {2, -rank}
+      end
+    end)
+  end
+
   defp target_in_range(target, head) when target >= 1 and target < head, do: :ok
   defp target_in_range(_target, _head), do: {:error, :invalid_rollback_target}
 
@@ -95,7 +144,10 @@ defmodule Cadence.Configuration.Rollback do
   end
 
   defp inverse_ops(organization_id, mission_id, entries) do
-    by_entity = Enum.group_by(entries, &{&1.kind, &1.entity_id})
+    by_entity =
+      entries
+      |> Enum.reject(&(&1.kind in @derived))
+      |> Enum.group_by(&{&1.kind, &1.entity_id})
 
     by_entity
     |> Enum.group_by(fn {{kind, _id}, _entries} -> kind end)
@@ -146,8 +198,16 @@ defmodule Cadence.Configuration.Rollback do
       |> Enum.sort()
       |> Enum.map(&%{path: &1, value: Map.get(target, &1)})
 
-    [%{kind: kind, action: "update", entity_id: id, changes: changes}]
+    [
+      %{kind: kind, action: "update", entity_id: id, changes: changes}
+      |> maybe_profile(kind, current)
+    ]
   end
+
+  defp maybe_profile(op, "spacecraft", current),
+    do: Map.put(op, :current_profile, current["spacecraft_type_id"])
+
+  defp maybe_profile(op, _kind, _current), do: op
 
   # Every revision in (target, head], paging the ledger (200 per page).
   defp revisions_after(mission_id, target, head) do
