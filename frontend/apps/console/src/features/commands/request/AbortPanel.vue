@@ -26,7 +26,7 @@ async function run() {
       const res = r.value.events.find((e) => e.kind === "aborted")?.payload;
       outcome.value = {
         tone: "nominal",
-        text: `Aborted: ${res?.canceled?.length ?? 0} canceled, ${res?.already_started?.length ?? 0} already started and still running.`,
+        text: `Aborted: ${res?.canceled ?? 0} canceled, ${res?.already_started?.length ?? 0} already started and still running.`,
       };
       open.value = false;
       emit("done");

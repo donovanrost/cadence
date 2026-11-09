@@ -122,3 +122,32 @@ describe("uplink", () => {
     expect(e && eventText(e, () => "Ana")).toBe("Ana sent it back: “Wrong plane”");
   });
 });
+
+describe("abort event (live shape)", () => {
+  it("reads canceled as a count and already_started as ids", () => {
+    const g = groupOf({
+      state: "aborted",
+      events: [
+        {
+          id: "e1",
+          kind: "submitted",
+          actor: { actor_kind: "user", user_id: "user-1" },
+          at: "2026-11-09T11:06:57Z",
+          payload: { members: 1, second_go_required: false },
+        },
+        {
+          id: "e2",
+          kind: "aborted",
+          actor: { actor_kind: "user", user_id: "user-1" },
+          at: "2026-11-09T11:07:02Z",
+          payload: { already_started: [], canceled: 1, reason: "e2e" },
+        },
+      ],
+    });
+    const [submitted, aborted] = g.events;
+    expect(submitted && eventText(submitted, () => "You")).toBe("You submitted 1 uplink");
+    expect(aborted && eventText(aborted, () => "You")).toBe(
+      "You aborted: “e2e” · 1 canceled, 0 already started",
+    );
+  });
+});

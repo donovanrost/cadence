@@ -1,4 +1,4 @@
-import type { OpState } from "@/ui";
+import { plural, type OpState } from "@/ui";
 import type { GroupState } from "./api.ts";
 import type { GroupEvent, MemberStage } from "./show.ts";
 
@@ -61,7 +61,9 @@ export function eventText(e: GroupEvent, nameOf: PersonName): string {
   const note = p?.note ? `: “${p.note}”` : "";
   switch (e.kind) {
     case "submitted":
-      return `${who} submitted ${p?.members ?? "the"} uplinks`;
+      return p?.members === undefined
+        ? `${who} submitted it`
+        : `${who} submitted ${plural(p.members, "uplink")}`;
     case "approved":
       return `${who} gave GO${note}`;
     case "approved_with_exclusions":
@@ -73,7 +75,7 @@ export function eventText(e: GroupEvent, nameOf: PersonName): string {
     case "note":
       return `${who} noted${note}`;
     case "aborted":
-      return `${who} aborted${p?.reason ? `: “${p.reason}”` : ""} · ${p?.canceled?.length ?? 0} canceled, ${p?.already_started?.length ?? 0} already started`;
+      return `${who} aborted${p?.reason ? `: “${p.reason}”` : ""} · ${p?.canceled ?? 0} canceled, ${p?.already_started?.length ?? 0} already started`;
     case "member_canceled":
       return `${who} canceled one uplink${p?.reason ? `: “${p.reason}”` : ""}`;
     default:

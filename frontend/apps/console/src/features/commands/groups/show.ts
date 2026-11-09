@@ -89,7 +89,8 @@ const event = d.object({
       members: d.optional(d.integer),
       approved: d.optional(d.integer),
       excluded: d.optional(d.array(d.token, 1_000)),
-      canceled: d.optional(d.array(d.token, 5_000)),
+      /** A count; `already_started` lists the request ids that kept running. */
+      canceled: d.optional(d.integer),
       already_started: d.optional(d.array(d.token, 5_000)),
       command_request_id: d.optional(d.token),
     }),

@@ -61,7 +61,7 @@ const pos = (n: number) => String(n + 1).padStart(2, "0");
       >
     </ApCallout>
     <ApCallout v-else-if="group.state === 'aborted'" tone="off">
-      Aborted by {{ nameOf(group.aborted_by?.user_id ?? null) }}: “{{ group.abort_reason }}”.
+      Aborted by {{ nameOf(group.aborted_by?.user_id ?? null) }}: “{{ group.abort_reason }}”
     </ApCallout>
     <ApStatStrip :columns="tiles.length" label="Uplink pipeline">
       <ApStatTile
