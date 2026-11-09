@@ -10,6 +10,15 @@ const stationKey = (p: Pass) => p.station.id ?? p.station.ref ?? "unknown";
 export type PassStatus = "live" | "scheduled" | "done" | "problem" | "canceled";
 
 /** A client reading of the three provider fields (contract: the UI decodes them). */
+/** U32 evidence in a bar's description: whose word the booking rests on, and an unconfirmed uplink. */
+function evidence(p: Pass): string {
+  const attested =
+    p.booking_evidence === "operator_attested"
+      ? `, booked on the word of ${p.attested_by?.name ?? "an operator"}`
+      : "";
+  return `${attested}${p.uplink_confirmed === false ? ", uplink unconfirmed" : ""}${p.attention ? ", needs attention" : ""}`;
+}
+
 export function passStatus(p: Pass, now: number): PassStatus {
   if (p.state === "rejected" || p.state === "failed" || p.state === "unknown") return "problem";
   if (p.state === "canceled" || p.state === "canceling") return "canceled";
@@ -57,7 +66,7 @@ export function passGantt(
       kind: selected === p.id ? "focused" : kind,
       label:
         axis === "station" ? (sc ? String(sc.scid).padStart(3, "0") : undefined) : stationLabel(p),
-      description: `${sc?.name ?? "Unknown spacecraft"} at ${p.station.name ?? stationLabel(p)}, ${status}${p.source.synthetic ? " (synthetic window)" : ""}`,
+      description: `${sc?.name ?? "Unknown spacecraft"} at ${p.station.name ?? stationLabel(p)}, ${status}${evidence(p)}${p.source.synthetic ? " (synthetic window)" : ""}`,
     });
   }
   return { rows: [...rows.values()].sort((a, b) => a.label.localeCompare(b.label)), bars };
