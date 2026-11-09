@@ -1,4 +1,4 @@
-import { computed, onScopeDispose, ref, type Ref } from "vue";
+import { computed, ref, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { decoders as d, useRemoteQuery, type ApiError } from "@/api";
 import { useChannelEvent, useMissionInvalidation } from "@/live";
@@ -42,22 +42,17 @@ export function useReplan(missionId: Readonly<Ref<string>>) {
       onResync: () => repair.refetch(),
     },
   );
-  // `contacts` fires once per reservation change (Apply sends a burst); the helper coalesces it.
+  // `contacts` fires per reservation change (Apply sends a burst); `contact_plans` on plan and
+  // fleet-run changes (drafting, repair, execution, the #52 window), so no poll is needed.
   useMissionInvalidation(
     missionId,
-    ["contacts"],
+    ["contacts", "contact_plans"],
     () => {
       source.refetch();
       if (runId.value) repair.refetch();
     },
     { throttleMs: 2_000 },
   );
-  const poll = setInterval(() => {
-    const s = repair.state.value;
-    if (runId.value && s.status === "ready" && ["queued", "running"].includes(s.value.run.state))
-      repair.refetch();
-  }, 5_000);
-  onScopeDispose(() => clearInterval(poll));
 
   async function propose(window?: Readonly<{ from: string; to: string }>) {
     if (!planId.value) return;
