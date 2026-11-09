@@ -53,7 +53,9 @@ const crumbs = computed(() => [
 
 const facts = computed(() => {
   const sc = props.sc;
-  const list = [{ label: "SCID", value: String(sc.scid) }];
+  const list: { label: string; value: string; next?: boolean }[] = [
+    { label: "SCID", value: String(sc.scid) },
+  ];
   if (sc.profile?.name)
     list.push({
       label: "Profile",
@@ -68,6 +70,14 @@ const facts = computed(() => {
     list.push({
       label: "Last TLM",
       value: formatCountdown(new Date(sc.last_received_at), now.value),
+    });
+  if (sc.last_los_at)
+    list.push({ label: "Last LOS", value: formatCountdown(new Date(sc.last_los_at), now.value) });
+  if (sc.next_aos_at)
+    list.push({
+      label: "Next AOS",
+      value: formatCountdown(new Date(sc.next_aos_at), now.value),
+      next: true,
     });
   return list;
 });
@@ -117,7 +127,13 @@ const tabs = computed(() =>
       >
     </ApPageHeader>
     <ApStatStrip :columns="facts.length" label="Spacecraft facts">
-      <ApFact v-for="fact in facts" :key="fact.label" :label="fact.label" :value="fact.value" />
+      <ApFact
+        v-for="fact in facts"
+        :key="fact.label"
+        :label="fact.label"
+        :value="fact.value"
+        :next="fact.next ?? false"
+      />
     </ApStatStrip>
     <ApTabLinks :links="tabs" :active="tab" label="Spacecraft sections" />
   </div>

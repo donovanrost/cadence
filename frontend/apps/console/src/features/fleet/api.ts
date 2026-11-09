@@ -39,6 +39,9 @@ const spacecraft = d.object({
   last_received_at: d.nullable(d.timestamp),
   stale: d.boolean,
   in_contact: d.nullable(d.boolean),
+  /** Planned times from booked reservations (M7); null = not tracked / none booked. */
+  next_aos_at: d.nullable(d.timestamp),
+  last_los_at: d.nullable(d.timestamp),
 });
 
 const count = d.integer;

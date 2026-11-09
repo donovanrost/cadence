@@ -23,6 +23,8 @@ export function spacecraftRow(
     last_received_at: "2026-11-08T02:41:15Z",
     stale: false,
     in_contact: null,
+    next_aos_at: null,
+    last_los_at: null,
     ...overrides,
   };
 }
