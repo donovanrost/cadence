@@ -26,19 +26,21 @@ const props = withDefaults(
     now?: number | null | undefined;
     selected?: string | null | undefined;
     laneHeight?: number | undefined;
+    /** Row label column width in px (long provider station refs need more than the default). */
+    labelWidth?: number | undefined;
   }>(),
-  { bands: () => [], now: null, selected: null, laneHeight: 30 },
+  { bands: () => [], now: null, selected: null, laneHeight: 30, labelWidth: 88 },
 );
 const emit = defineEmits<{ select: [id: string] }>();
 
 const root = ref<HTMLElement | null>(null);
-/** Track width in px (lanes minus the 88px label column), for deciding which labels fit. */
+/** Track width in px (lanes minus the label column), for deciding which labels fit. */
 const trackWidth = ref(0);
 let observer: ResizeObserver | null = null;
 onMounted(() => {
   if (!root.value || typeof ResizeObserver === "undefined") return;
   observer = new ResizeObserver(([entry]) => {
-    trackWidth.value = Math.max(0, (entry?.contentRect.width ?? 0) - 88);
+    trackWidth.value = Math.max(0, (entry?.contentRect.width ?? 0) - props.labelWidth);
   });
   observer.observe(root.value);
 });
@@ -96,10 +98,11 @@ async function onKey(event: KeyboardEvent, id: string) {
         class="flex items-stretch"
       >
         <div
-          class="flex w-[88px] flex-none items-center gap-1.5 pr-2 font-mono text-xs"
+          class="flex flex-none items-center gap-1.5 pr-2 font-mono text-xs"
+          :style="{ width: `${labelWidth}px` }"
           :class="row.degraded ? 'text-caution-text' : 'text-text-2'"
         >
-          <span class="truncate">{{ row.label }}</span>
+          <span class="truncate" :title="row.label">{{ row.label }}</span>
           <span v-if="row.tag" class="text-2xs text-text-4">{{ row.tag }}</span>
         </div>
         <div
@@ -137,12 +140,17 @@ async function onKey(event: KeyboardEvent, id: string) {
       <div
         v-if="nowPct !== null"
         aria-hidden="true"
-        class="pointer-events-none absolute -inset-y-1 right-0 left-[88px]"
+        class="pointer-events-none absolute -inset-y-1 right-0"
+        :style="{ left: `${labelWidth}px` }"
       >
         <span class="absolute inset-y-0 w-px bg-readout" :style="{ left: `${nowPct}%` }" />
       </div>
     </div>
-    <div aria-hidden="true" class="relative mt-1 ml-[88px] h-4 font-mono text-2xs text-text-4">
+    <div
+      aria-hidden="true"
+      class="relative mt-1 h-4 font-mono text-2xs text-text-4"
+      :style="{ marginLeft: `${labelWidth}px` }"
+    >
       <template v-for="tick in ticks" :key="tick.t">
         <span
           class="absolute top-0 w-px"

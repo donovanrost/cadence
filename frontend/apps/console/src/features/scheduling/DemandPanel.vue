@@ -17,6 +17,13 @@ const unmet = computed(() => props.plan.demand.spacecraft.filter((s) => !s.rule_
 const ruleText = computed(() =>
   [...new Set(props.plan.demand.rules.map((r) => r.text))].slice(0, 2),
 );
+/** Server causes: the demand row's reasons plus its unmet requirements' specific `why` codes. */
+function causes(spacecraftId: string, reasons: readonly string[]): string[] {
+  const fromUnmet = props.plan.unmet
+    .filter((u) => u.spacecraft_id === spacecraftId)
+    .flatMap((u) => u.why);
+  return [...new Set([...fromUnmet, ...reasons])];
+}
 function why(reasons: readonly string[], have: number): string {
   if (have === 0 && reasons.length > 0)
     return `No window can cover it: ${reasonText(reasons[0] ?? "").toLowerCase()}`;
@@ -37,7 +44,7 @@ const meta = computed(() => {
         v-for="row in unmet"
         :key="row.spacecraft_id"
         :state="row.contacts.have === 0 ? 'crit' : 'caution'"
-        :sentence="why(row.reasons, row.contacts.have)"
+        :sentence="why(causes(row.spacecraft_id, row.reasons), row.contacts.have)"
         :meta="`${row.contacts.have} / ${row.contacts.need ?? '?'} contacts`"
       >
         <template #title>

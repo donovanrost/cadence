@@ -28,3 +28,21 @@ describe("coverage (ux U23)", () => {
     expect(contactsShortText(1)).toBe("1 contact short");
   });
 });
+
+describe("distinctWindows (ux K1 #5)", () => {
+  it("keeps one row per station + window", async () => {
+    const { distinctWindows } = await import("./api.ts");
+    const alt = (id: string, req: string) => ({
+      snapshot_id: id,
+      requirement_id: req,
+      station: "earendil-fairbanks",
+      starts_at: "2026-11-11T12:09:00Z",
+      ends_at: "2026-11-11T12:17:00Z",
+      synthetic: true,
+      effect: { rule_met_after: false, contacts_after: { have: 5, need: 8 }, clashes_with: [] },
+    });
+    expect(distinctWindows([alt("s1", "r1"), alt("s2", "r2")]).map((a) => a.snapshot_id)).toEqual([
+      "s1",
+    ]);
+  });
+});

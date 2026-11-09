@@ -87,7 +87,7 @@ function headerFor(v: PlanView, d: string): string {
     case "loading":
       return `Contact plan · ${d}`;
     case "plan":
-      return `R${v.plan.version} · ${planHeaderTail(v.plan)}`;
+      return `Contact plan · R${v.plan.version} ${v.plan.state.replaceAll("_", " ")} · ${planHeaderTail(v.plan)}`;
   }
 }
 const headerLine = computed(() => headerFor(view.value, dayLabel(day.value)));

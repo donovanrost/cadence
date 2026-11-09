@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { RemoteState } from "@/api";
 import { ApButton, ApEmptyState, ApRemote, plural } from "@/ui";
-import type { Alternative, Alternatives } from "./api.ts";
+import { distinctWindows, type Alternative, type Alternatives } from "./api.ts";
 
 /**
  * Other windows for the focused spacecraft (S4) with their effect from the server's evaluator.
@@ -18,14 +18,14 @@ const when = (a: Alternative) => `${a.starts_at.slice(11, 16)}–${a.ends_at.sli
     <ApRemote :state="state" loading-label="Looking for windows…" @retry="$emit('retry')">
       <template #default="{ value }">
         <ApEmptyState
-          v-if="value.alternatives.length === 0"
+          v-if="distinctWindows(value.alternatives).length === 0"
           state="off"
           headline="Nothing else is visible"
           sentence="No other window from the network that day. Accept the gap when you submit."
         />
         <ul v-else class="m-0 flex list-none flex-col p-0">
           <li
-            v-for="alt in value.alternatives"
+            v-for="alt in distinctWindows(value.alternatives)"
             :key="alt.snapshot_id"
             class="flex items-center gap-3 border-t border-hairline-faint py-2 first:border-t-0"
           >

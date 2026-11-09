@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { ApGantt, ApPanel, formatCount, useNow, type GanttBar, type GanttRow } from "@/ui";
 import type { RemoteState } from "@/api";
-import type { Alternatives, PlanDetail } from "./api.ts";
+import { distinctWindows, type Alternatives, type PlanDetail } from "./api.ts";
 import type { SpacecraftName } from "./names.ts";
 
 /** B · Draft by station: the plan's passes; the focused spacecraft ringed, conflicts dashed caution. */
@@ -30,7 +30,9 @@ const window = computed(() => {
 });
 const clashing = computed(() => new Set(props.plan.conflicts.flatMap((c) => c.snapshot_ids)));
 const others = computed(() =>
-  props.alternatives?.status === "ready" ? props.alternatives.value.alternatives : [],
+  props.alternatives?.status === "ready"
+    ? distinctWindows(props.alternatives.value.alternatives)
+    : [],
 );
 const rows = computed<GanttRow[]>(() =>
   [...new Set([...props.plan.passes, ...others.value].map((p) => p.station ?? "?"))]
@@ -83,6 +85,7 @@ const rangeText = computed(() =>
   >
     <ApGantt
       label="Drafted passes by station"
+      :label-width="150"
       :rows="rows"
       :bars="bars"
       :window="window"

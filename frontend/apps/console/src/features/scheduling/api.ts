@@ -407,3 +407,14 @@ export function fetchRepair(
     signal ? { signal } : {},
   );
 }
+
+/** One row per window: the same provider window can come back once per requirement (ux K1 #5). */
+export function distinctWindows(list: readonly Alternative[]): Alternative[] {
+  const seen = new Set<string>();
+  return list.filter((a) => {
+    const key = `${a.station ?? "?"}|${a.starts_at}|${a.ends_at}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
