@@ -1,6 +1,6 @@
 # Scheduling data plan (lead)
 
-Owner: lead. Status: draft 2, 2026-11-09 (ux U22, DECISIONS #25/#26 folded in). Scope (DECISIONS #24): ScheduleFlow, K0 Pass prediction,
+Owner: lead. Status: draft 3, 2026-11-09 (ux U22, DECISIONS #25–#27 folded in). Scope (DECISIONS #24): ScheduleFlow, K0 Pass prediction,
 K1 Plan, K2 Re-plan, K3 Review. Design: `docs/apogee/ux/screens/ScheduleFlow.md`. Reference:
 `frontend/docs/contact-scheduling-architecture.md`, `frontend/modules/planning-and-contacts`.
 Missing items are numbered **S1…** and collected in the [ask list](#ask-list-for-api-ops). Related
@@ -159,6 +159,27 @@ journal semantics. Please document each in `docs/apogee/api/scheduling.md`.
   `SIMULATOR · SYNTHETIC WINDOW`, plus a stale callout when any window is synthetic. Q8 rows =
   stations, antennas as sub-rows only when reported. Q9 follow server policy: one planner by default;
   ApDecision with reviewer ≠ author when a plan is `pending_approval`.
+
+- **DECISIONS #27:** supervised task per draft/execute, but a run/plan with no live task reads as
+  **interrupted · Continue**, never running forever; `operation_id` persisted on the run/plan row;
+  admin submit = submit + approve + execute in one confirmed action, member submit →
+  `pending_approval`; unsatisfied/conflicting drafts → `422 plan_not_ready` (rule kept; revisit under
+  Cedar); planning setup becomes a fe-setup Setup screen ("Contact planning"), readiness surfaces
+  `planning_not_set_up`.
+
+## K1 state model (from #27)
+One union in `features/scheduling/plan-state.ts`; every state has a header line and one primary.
+| State | Shows | Primary |
+| --- | --- | --- |
+| `not_set_up` (422 planning_not_set_up) | what's missing (policy / requirements) | `Set up contact planning` (Setup screen when it exists; legacy page until then) |
+| `no_draft` | the day, last plan for it if any | `Draft the day` |
+| `drafting` (phase from `scheduling_progress`) | materializing → searching → optimizing → plan, with elapsed | none (Cancel if the domain supports it) |
+| `interrupted` | "Drafting stopped when the server restarted." | `Continue` |
+| `draft` + blockers (`plan_not_ready`) | A Demand lists unmet spacecraft; footer shows conflicts and unmet count; Submit disabled **with the reason** | `Submit` disabled, reason: "6 spacecraft still miss their rule. Add passes or change the rule." |
+| `draft` ready | totals, rule met n/n | admin: `Submit and book N passes` (confirm sheet); member: `Request approval` |
+| `pending_approval` | "Waiting for an admin" (member); admin sees ApDecision (reviewer ≠ author) | admin: `Approve and book` |
+| `executing` / `interrupted` | per-contact Requested → Confirmed / Rejected (S1 + S10) | interrupted: `Continue booking` |
+| `reserved` / `partially_reserved` / `failed` | outcome counts; rejections become A rows | partial/failed: `Re-plan after provider changes` (K2) |
 
 ## Questions for ux (answered: U22)
 - **Q1** Day boundary: plan "tomorrow" = 00–24Z UTC, or the shift-aligned window?
