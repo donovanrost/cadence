@@ -32,7 +32,7 @@ const noGo = computed(
     preview.state.value.status === "ready" &&
     preview.state.value.value.preview?.verdict === "no_go",
 );
-/** The first NO-GO item in words, e.g. "Spacecraft can't be removed yet" (domain archive pending). */
+/** The first NO-GO item in words (any kind; spacecraft creation is now an archive + HOLD, not NO-GO). */
 const noGoReason = computed(() => {
   const p = preview.state.value.status === "ready" ? preview.state.value.value.preview : null;
   const item = p?.checks.find((c) => c.verdict === "no_go")?.items[0];
