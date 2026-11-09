@@ -13,7 +13,11 @@ defineProps<{ section: ProfileSection; inheritCount: number }>();
     :meta="`Inherited by ${formatCount(inheritCount)}`"
     flush
   >
-    <ApCallout v-if="section.key === 'framing'" tone="info">
+    <ApCallout v-if="section.key === 'catalog'" tone="info">
+      Catalog revisions can't change through change sets yet (DECISIONS #36): a change set that
+      would move a spacecraft to another catalog revision is refused with the supported route.
+    </ApCallout>
+    <ApCallout v-else-if="section.key === 'framing'" tone="info">
       Decode uses each transport's frame settings today. Profile framing takes effect when the
       pipeline reads it.
     </ApCallout>
