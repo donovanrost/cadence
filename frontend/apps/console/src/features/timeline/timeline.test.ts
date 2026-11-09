@@ -33,11 +33,24 @@ describe("timeline", () => {
     const groups = byHour([
       ev("a", "2026-11-08T01:05:00Z"),
       ev("b", "2026-11-08T02:30:00Z"),
-      ev("c", "2026-11-08T02:10:00Z"),
+      { ...ev("c", "2026-11-08T02:10:00Z"), text: "AOS Svalbard" },
     ]);
-    expect(groups.map((g) => [g.hour, g.events.map((e) => e.id)])).toEqual([
+    expect(groups.map((g) => [g.hour, g.rows.map((r) => r.event.id)])).toEqual([
       ["2026-11-08 02:00Z", ["b", "c"]],
       ["2026-11-08 01:00Z", ["a"]],
+    ]);
+  });
+
+  it("collapses consecutive identical events into one row with a count", () => {
+    const [group] = byHour([
+      ev("a", "2026-11-08T02:30:03Z"),
+      ev("b", "2026-11-08T02:30:02Z"),
+      ev("c", "2026-11-08T02:30:01Z"),
+      { ...ev("d", "2026-11-08T02:29:00Z"), text: "Something else" },
+    ]);
+    expect(group?.rows.map((r) => [r.event.id, r.count, r.firstAt])).toEqual([
+      ["a", 3, "2026-11-08T02:30:01Z"],
+      ["d", 1, "2026-11-08T02:29:00Z"],
     ]);
   });
 

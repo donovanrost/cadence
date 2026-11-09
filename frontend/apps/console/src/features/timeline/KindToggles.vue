@@ -2,7 +2,7 @@
 import { eventKinds, type EventKind } from "./api.ts";
 import { KIND_WORDS } from "./model.ts";
 
-/** Event kind filter (multi): toggles with words, ≥44px targets; none selected = all kinds. */
+/** Event kind filter (multi): toggles with words, ≥44px targets; selected = white fill (ux #4). */
 const props = defineProps<{ selected: readonly EventKind[] }>();
 const emit = defineEmits<{ change: [kinds: EventKind[]] }>();
 const toggle = (kind: EventKind) =>

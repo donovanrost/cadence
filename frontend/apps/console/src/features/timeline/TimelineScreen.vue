@@ -6,7 +6,7 @@ import { useMissionInvalidation } from "@/live/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { useNow, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented } from "@/ui";
 import { RANGES, rangeWindow, type RangeKey } from "@/features/investigate/index.ts";
-import { eventKinds, fetchDensity, fetchEvents, type EventKind } from "./api.ts";
+import { DEFAULT_KINDS, eventKinds, fetchDensity, fetchEvents, type EventKind } from "./api.ts";
 import KindToggles from "./KindToggles.vue";
 import DensityStrip from "./DensityStrip.vue";
 import EventLog from "./EventLog.vue";
@@ -30,14 +30,17 @@ const range = computed<RangeKey>({
 const title = computed(
   () => `Last ${RANGES.find((r) => r.value === range.value)?.label ?? range.value}`,
 );
-/** Selected kinds from ?kind=limit,command (none = all). */
+/** Selected kinds from ?kind=limit,command; absent = every kind but `data` (opt-in housekeeping). */
 const kinds = computed<EventKind[]>(() => {
-  const raw = typeof route.query.kind === "string" ? route.query.kind.split(",") : [];
+  if (typeof route.query.kind !== "string") return [...DEFAULT_KINDS];
+  const raw = route.query.kind.split(",");
   return eventKinds.filter((k) => raw.includes(k));
 });
 function setKinds(next: EventKind[]) {
+  const isDefault =
+    next.length === DEFAULT_KINDS.length && DEFAULT_KINDS.every((k) => next.includes(k));
   router
-    .replace({ query: { ...route.query, kind: next.length ? next.join(",") : undefined } })
+    .replace({ query: { ...route.query, kind: isDefault ? undefined : next.join(",") } })
     .catch((e: unknown) => console.error("Navigation failed", e));
 }
 const key = computed(() => JSON.stringify({ m: missionId.value, r: range.value, k: kinds.value }));

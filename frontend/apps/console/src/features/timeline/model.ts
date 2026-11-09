@@ -23,19 +23,41 @@ export const KIND_WORDS: Readonly<Record<EventKind, string>> = {
   command: "Commands",
   config: "Configuration",
   operator: "Operators",
+  data: "Data pipeline",
 };
 
-export type HourGroup = Readonly<{ hour: string; events: readonly MissionEvent[] }>;
+/** One row: an event, or a run of consecutive identical events (× count, first–last). */
+export type LogRow = Readonly<{ key: string; event: MissionEvent; count: number; firstAt: string }>;
+export type HourGroup = Readonly<{ hour: string; rows: readonly LogRow[] }>;
 
-/** Newest first, grouped under UTC hour headers ("2026-11-08 02:00Z"). */
+const same = (a: MissionEvent, b: MissionEvent) =>
+  a.kind === b.kind &&
+  a.text === b.text &&
+  a.severity === b.severity &&
+  a.spacecraft?.id === b.spacecraft?.id;
+
+/**
+ * Newest first under UTC hour headers ("2026-11-08 02:00Z"); consecutive identical events
+ * collapse into one row (ux Timeline review 2: "× 214", with the time span).
+ */
 export function byHour(events: readonly MissionEvent[]): HourGroup[] {
   const sorted = [...events].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-  const groups: { hour: string; events: MissionEvent[] }[] = [];
+  const groups: {
+    hour: string;
+    rows: { key: string; event: MissionEvent; count: number; firstAt: string }[];
+  }[] = [];
   for (const event of sorted) {
     const hour = `${event.at.slice(0, 10)} ${event.at.slice(11, 13)}:00Z`;
-    const last = groups.at(-1);
-    if (last && last.hour === hour) last.events.push(event);
-    else groups.push({ hour, events: [event] });
+    let group = groups.at(-1);
+    if (!group || group.hour !== hour) {
+      group = { hour, rows: [] };
+      groups.push(group);
+    }
+    const last = group.rows.at(-1);
+    if (last && same(last.event, event)) {
+      last.count += 1;
+      last.firstAt = event.at;
+    } else group.rows.push({ key: event.id, event, count: 1, firstAt: event.at });
   }
   return groups;
 }

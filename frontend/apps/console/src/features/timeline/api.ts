@@ -9,8 +9,11 @@ export const eventKinds = [
   "command",
   "config",
   "operator",
+  "data",
 ] as const;
 export type EventKind = (typeof eventKinds)[number];
+/** Shown by default; `data` (pipeline housekeeping, e.g. source watermarks) is opt-in (ux). */
+export const DEFAULT_KINDS: readonly EventKind[] = eventKinds.filter((k) => k !== "data");
 export const eventSeverities = ["critical", "caution", "nominal", "info"] as const;
 export type EventSeverity = (typeof eventSeverities)[number];
 

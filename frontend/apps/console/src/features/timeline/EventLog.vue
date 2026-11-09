@@ -15,8 +15,8 @@ const groups = computed(() => byHour(props.events));
     <h3 class="ap-label m-0 border-b border-hairline px-4 pt-3 pb-1.5">{{ group.hour }}</h3>
     <ol class="m-0 list-none px-4 py-1">
       <ApEventLine
-        v-for="event in group.events"
-        :key="event.id"
+        v-for="{ key, event, count, firstAt } in group.rows"
+        :key="key"
         :time="`${formatClock(new Date(event.at))}Z`"
         :datetime="event.at"
         :state="severityState(event.severity)"
@@ -30,7 +30,10 @@ const groups = computed(() => byHour(props.events));
           }"
           class="text-readout no-underline hover:underline"
           >{{ event.spacecraft.name }}</RouterLink
-        ><template v-if="event.spacecraft"> · </template>{{ event.text }}
+        ><template v-if="event.spacecraft"> · </template>{{ event.text
+        }}<span v-if="count > 1" class="font-mono text-text-3">
+          × {{ count }} since {{ formatClock(new Date(firstAt)) }}Z</span
+        >
       </ApEventLine>
     </ol>
   </section>

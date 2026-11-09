@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onScopeDispose } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
+import { useMissionInvalidation } from "@/live/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { useNow, ApButton, ApEmptyState, ApGantt, ApPanel, ApRemote } from "@/ui";
 import { fetchPasses, passGantt } from "@/features/contacts/index.ts";
@@ -8,7 +9,7 @@ import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 
 /**
  * A4 · Passes in the next 2 h (now − 15 min → now + 2 h), stations × time from the booked
- * reservations (M7). Polled every 30 s (contract); `contacts` invalidation joins when @/live knows it.
+ * reservations (M7). Refetched on `contacts` and every 30 s until S10 covers every transition.
  */
 const props = defineProps<{ spacecraft: readonly FleetSpacecraft[] }>();
 const scope = useMissionScope();
@@ -22,6 +23,7 @@ const query = useRemoteQuery(missionId, (id, signal) => {
     signal,
   );
 });
+useMissionInvalidation(missionId, ["contacts"], query.refetch);
 const poll = setInterval(query.refetch, 30_000);
 onScopeDispose(() => clearInterval(poll));
 
