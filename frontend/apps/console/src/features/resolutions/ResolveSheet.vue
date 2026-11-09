@@ -102,6 +102,8 @@ async function submit() {
         :errors="errors"
         :failure="failure"
       />
+      <!-- The provider re-ask takes seconds (qa: 4-6 s); say what's happening, not just disable. -->
+      <p v-if="busy" class="m-0 text-sm text-text-2" role="status">Asking {{ provider }} first…</p>
       <footer class="flex items-center justify-end gap-3 border-t border-hairline pt-3">
         <ApButton variant="ghost" @click="dialog?.close()">{{
           outcome ? "Close" : "Cancel"
@@ -111,7 +113,7 @@ async function submit() {
           type="submit"
           :variant="booked ? 'primary' : 'danger'"
           :disabled="busy"
-          disabled-reason="Asking the provider…"
+          disabled-reason="Waiting for the provider's answer"
           >{{ primary }}</ApButton
         >
       </footer>
