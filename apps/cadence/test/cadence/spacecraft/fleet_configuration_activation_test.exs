@@ -84,6 +84,38 @@ defmodule Cadence.Activations.FleetConfigurationTest do
              ConfigurationRead.load(c.scope, c.mission, last.spacecraft_id, "changes")
   end
 
+  @tag timeout: 300_000
+  test "a 550-spacecraft fleet activates in two review batches", c do
+    fleet = [
+      c.first
+      | Enum.map(2..550, fn i ->
+          Fixtures.persist_spacecraft!(c.org, c.mission.mission_id, display_name: "Fleet #{i}")
+        end)
+    ]
+
+    {block1, block2} = Enum.split(fleet, 500)
+
+    for batch <- [block1, block2] do
+      tokens = Map.new(batch, fn craft -> {craft.spacecraft_id, save(c, craft)} end)
+      assert {:ok, request} = Review.request_many(c.scope, c.mission.mission_id, tokens)
+      assert {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
+      assert {:ok, %{status: :succeeded}} = ControlActivations.execute(approved)
+    end
+
+    assert {:ok, active} = Active.load(c.mission)
+    assert map_size(active.entries) == 550
+
+    last = List.last(block2)
+    source = hd(active.entries[last.spacecraft_id]["source_endpoint_ids"])
+
+    assert {:ok, _basis} =
+             Cadence.Activations.with_locked_command_basis(
+               c.org,
+               c.mission.mission_id,
+               &SpacecraftModelBindings.command_basis(&1, source)
+             )
+  end
+
   test "fleet review retains independent approval and rejects self approval", c do
     policy = ActivationPolicy.load(c.org, c.mission.mission_id)
 
