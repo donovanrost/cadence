@@ -76,8 +76,14 @@ mise exec -- mix cadence.questdb.migrate
 #    since 4e755071 the server refuses the Postgres store + filesystem archive pair at boot. Durable
 #    last-heard comes from the history merge (qa #7). Output is teed to var/qa-server.log.
 #    First time: (cd apps/cadence_web && npm ci), or the watcher can't start and sign-in breaks.
-CADENCE_LIVE_VUE_VITE_PORT=5183 OTEL_EXPORTER_OTLP_ENDPOINT= POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 PORT=4011 \
+#    The QuestDB/DB variables are inline on purpose: a restart from a fresh shell without the
+#    step-3 exports silently points the server at the main checkout's QuestDB ports (9000/8812).
+CADENCE_DEV_DATABASE=cadence_apogee_dev CADENCE_QUESTDB_HTTP_ENDPOINT=http://127.0.0.1:9200 \
+  CADENCE_QUESTDB_HOST=127.0.0.1 CADENCE_QUESTDB_PORT=8822 EARENDIL_PROVIDER_URL=http://127.0.0.1:4111 \
+  CADENCE_LIVE_VUE_VITE_PORT=5183 OTEL_EXPORTER_OTLP_ENDPOINT= POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 PORT=4011 \
   mise exec -- iex --sname cadence_apogee --cookie cadence -S mix phx.server 2>&1 | tee -a ../../var/qa-server.log
+#    Check after any restart (expect 9200/8822; nil means restart again with the line above):
+#    rpc System.get_env("CADENCE_QUESTDB_HTTP_ENDPOINT") on cadence_apogee
 
 # 5. Seed (once; both are rerunnable)
 CADENCE_DEV_DATABASE=cadence_apogee_dev EARENDIL_PROVIDER_URL=http://127.0.0.1:4111 \
@@ -97,7 +103,9 @@ EARENDIL_CADENCE_NODE=cadence_apogee \
 
 # 7. Live feeds (on request only; keep them short, e.g. EARENDIL_DEMO_CONTACT_SECONDS=600)
 cd apps/cadence_simulator
-CADENCE_DEV_DATABASE=cadence_apogee_dev EARENDIL_CADENCE_NODE=cadence_apogee \
+CADENCE_DEV_DATABASE=cadence_apogee_dev EARENDIL_CADENCE_NODE=cadence_apogee EARENDIL_SIMULATOR_PORT=4111 \
+  CADENCE_QUESTDB_HTTP_ENDPOINT=http://127.0.0.1:9200 CADENCE_QUESTDB_HOST=127.0.0.1 CADENCE_QUESTDB_PORT=8822 \
+  EARENDIL_DEMO_CONTACT_SECONDS=120 \
   mise exec -- elixir --hidden --sname earendil_tm_apogee --cookie cadence \
   -S mix run --no-start ../../dev/reflect_orbital_live.exs
 
