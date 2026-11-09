@@ -2,8 +2,9 @@ defmodule Cadence.Reads.StationRefs do
   @moduledoc """
   A provider's station ref (`ground_station_ref`) resolved to the Cadence ground
   station it names, for console reads: `%{ref, id, code, name}`. A station
-  matches by its id, `metadata.code` or `metadata.provider_station_ref`; `id`,
-  `code` and `name` are nil when nothing matches.
+  matches by its id, its `code` (the model field; legacy `metadata.code`) or
+  `metadata.provider_station_ref`; `id`, `code` and `name` are nil when
+  nothing matches. `code` is the same one Setup › Ground stations shows.
   """
 
   alias Cadence.Comms.{GroundStation, GroundStationStore}
@@ -24,7 +25,7 @@ defmodule Cadence.Reads.StationRefs do
   @spec build([GroundStation.t()]) :: index()
   def build(stations) do
     Enum.reduce(stations, %{}, fn %GroundStation{} = station, acc ->
-      code = text(station.metadata, "code")
+      code = station.code || text(station.metadata, "code")
 
       [station.ground_station_id, code, text(station.metadata, "provider_station_ref")]
       |> Enum.reject(&is_nil/1)
