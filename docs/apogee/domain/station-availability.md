@@ -1,6 +1,7 @@
 # S7 · Ground station availability (scheduling plan S7, K1 maintenance band, K2 station down)
 
-Owner: **domain**. Status: **draft for review** (2026-11-09). Reviewers: director, api-ops, lead.
+Owner: **domain**. Status: **built** (approved as DECISIONS #39; 38e92f1b, ceee7aa2, ed60abe3).
+Reviewers: director, api-ops, lead. See "As built" at the end for where the build differs.
 `L` = `apps/cadence/lib/cadence`.
 
 ## What exists
@@ -91,3 +92,27 @@ adapters (`ground_networks` → `comms`, allowed).
 - **api-ops:** this facade matches your S7 endpoint shape (`state`, `since`, `reported_by`,
   `eta`, `windows[{from, to, kind, source}]`). `kind` is `outage | maintenance | degraded`; the
   plan said `unusable`, and I renamed it `degraded` to match the state. OK?
+
+## As built
+
+- **Status has no `unknown` state yet.** Nothing links a ground station to the provider account
+  serving it, so provider health can't be attributed to a station. `state` is `down`,
+  `degraded` or `up` (with `basis: "no reported windows"`).
+- **Views** carry `source` (`operator | provider`), `reported_by`, `reported_at`, `created_by`
+  and `eta` (null when unknown); windows carry `id`.
+- **Impact** is a read, not part of the comms facade (comms can't reach contacts):
+  `Cadence.Reads.StationImpact.impact(scope, mission_id, station_id, from, to)` returns
+  `%{passes_hit, reservation_ids, spacecraft_ids, truncated}` for live reservations whose
+  provider snapshot (confirmed, else requested) or metadata names the station.
+- **Provider ingestion** runs on provider inventory sync (`GroundNetworks.sync_provider`):
+  `StationAvailability.ProviderReports.sync/4` takes the provider's full report from each
+  station's `availability_windows`. It upserts each window by `"<provider_id>:<window id>"`,
+  clears this provider's windows no longer listed, and reactivates a re-reported window even
+  if it was cleared. Stations are matched by id (the convention opportunities already use for
+  `ground_station_ref`); unknown stations are skipped. Sync is on demand today, not periodic.
+- **Simulator fault** `station_outages: [%{id, ground_station_id, kind, starts_at,
+  ends_at | nil, reason}]` lists the windows on `/provider/v1/ground-stations`. Outage and
+  maintenance windows mark overlapping opportunities `availability: "unavailable"` and reject
+  bookings with `status_reason: "station_unavailable"`; degraded windows are only reported.
+- **Planning**: opportunities overlapping an outage or maintenance window at their station get
+  hard failure `station_unavailable`.
