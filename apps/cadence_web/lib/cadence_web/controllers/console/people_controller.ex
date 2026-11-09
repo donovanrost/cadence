@@ -16,6 +16,13 @@ defmodule CadenceWeb.Console.PeopleController do
     end
   end
 
+  def service_identities(conn, %{"organization_id" => organization_id}) do
+    case OrganizationPeople.service_identities(conn.assigns.current_scope, organization_id) do
+      {:ok, data} -> json(conn, %{data: ConfigJSON.encode(data)})
+      {:error, reason} -> Problem.respond(conn, reason)
+    end
+  end
+
   def invite(conn, %{"organization_id" => organization_id} = params) do
     case OrganizationPeople.invite(conn.assigns.current_scope, organization_id, params) do
       {:ok, invitation} ->

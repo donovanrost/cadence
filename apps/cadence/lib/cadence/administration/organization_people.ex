@@ -34,6 +34,53 @@ defmodule Cadence.Administration.OrganizationPeople do
     end
   end
 
+  @doc "Service identities for organization admins. `last_used_at` is not tracked yet."
+  @spec service_identities(Scope.t(), binary()) :: {:ok, map()} | {:error, :forbidden}
+  def service_identities(%Scope{} = scope, organization_id) do
+    with :ok <- authorize(scope, :manage_service_identities, organization_id) do
+      missions =
+        organization_id
+        |> Cadence.Missions.list_missions()
+        |> Map.new(&{&1.mission_id, &1.display_name})
+
+      {:ok,
+       %{
+         service_identities:
+           organization_id
+           |> Cadence.Auth.list_service_identity_directory()
+           |> Enum.map(&service_identity(&1, missions)),
+         rotation_policy_days: nil
+       }}
+    end
+  end
+
+  defp service_identity(row, missions) do
+    %{
+      id: row.id,
+      name: row.name,
+      scope_summary: scope_summary(row.capabilities, missions[row.mission_id]),
+      capabilities: row.capabilities,
+      mission: row.mission_id && %{id: row.mission_id, name: missions[row.mission_id]},
+      last_used_at: nil,
+      key_created_at: row.key_created_at
+    }
+  end
+
+  defp scope_summary(capabilities, mission_name) do
+    abilities =
+      case capabilities do
+        [] ->
+          "No capabilities"
+
+        list ->
+          list
+          |> Enum.map(&(&1 |> String.replace("_", " ") |> String.capitalize()))
+          |> Enum.join(", ")
+      end
+
+    if mission_name, do: "#{abilities} · #{mission_name}", else: "#{abilities} · all missions"
+  end
+
   @spec permissions(Scope.t(), binary()) :: [binary()]
   def permissions(scope, organization_id) do
     if authorize(scope, :manage_organization_members, organization_id) == :ok,

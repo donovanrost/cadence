@@ -15,7 +15,8 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | (4) | batch spacecraft validate + create | planned |
 | O1 | `GET /organizations/:organization_id/people` | **implemented** |
 | O2 | `POST /organizations/:organization_id/invitations` | **implemented** |
-| O3, O4 | service identities, command policies | planned |
+| O3 | `GET /organizations/:organization_id/service-identities` | **implemented** |
+| O4 | command policies (as text) | with api-ops (commanding policy, D7) |
 | G1, T1, T2 | `GET /missions/:mission_id/ground-stations`, `/transports`, `/routing-rules` | **implemented** |
 | kind schema | `GET /missions/:mission_id/config/kinds/:kind/schema` | **implemented** |
 
@@ -322,3 +323,19 @@ gets `422 invalid_params`.
 - `visible_when: {path, equals}` says when to show a field (for example `frame_size` only when
   `configuration.framing_mode` is `fixed_size`, and each kind's fields only for its
   `transport_kind`).
+
+### `GET /service-identities` (O3)
+
+Organization admins only (`403 forbidden` for members).
+
+```json
+{"data": {"service_identities": [{"id": "…", "name": "Ground segment ingest",
+  "scope_summary": "Telemetry write · Earendil", "capabilities": ["telemetry_write"],
+  "mission": {"id": "…", "name": "Earendil"}, "last_used_at": null,
+  "key_created_at": "2026-10-19T02:29:00Z"}],
+ "rotation_policy_days": null}}
+```
+
+Only active identities are listed. `last_used_at` is always `null` (token use isn't tracked yet),
+and `rotation_policy_days` is `null` (there is no rotation policy model). `mission` is `null` for
+organization-wide identities ("· all missions" in `scope_summary`).

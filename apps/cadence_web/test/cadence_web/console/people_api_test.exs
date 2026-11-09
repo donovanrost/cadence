@@ -58,6 +58,19 @@ defmodule CadenceWeb.Console.PeopleAPITest do
              json_response(conn, 422)["error"]
   end
 
+  test "organization admins list service identities; members can't", c do
+    data =
+      c.admin
+      |> call(:get, c.base <> "/service-identities")
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert data == %{"service_identities" => [], "rotation_policy_days" => nil}
+
+    conn = call(c.member, :get, c.base <> "/service-identities")
+    assert json_response(conn, 403)["error"]["code"] == "forbidden"
+  end
+
   test "a plain member can't invite", c do
     conn = call(c.member, :post, c.base <> "/invitations", %{"email" => "x@example.com"})
     assert json_response(conn, 403)["error"]["code"] in ["forbidden", "scope_mismatch"]
