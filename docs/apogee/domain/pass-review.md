@@ -1,7 +1,16 @@
 # S9 · Pass results (feeds K3 "Close the books")
 
-Owner: **domain**. Status: **draft for review** (2026-11-09). Reviewers: director, api-ops,
-fe-setup (K3, DECISIONS #43). `L` = `apps/cadence/lib/cadence`.
+Owner: **domain**. Status: **approved, DECISIONS #47** (2026-11-09). fe-setup owns K3 (#43);
+api-ops owns the endpoints. `L` = `apps/cadence/lib/cadence`.
+
+**Decisions (#47):**
+- The realized threshold is a mission setting, default 95%.
+- Cancellations are split by initiator:
+  - **operator or Cadence cancellations before AOS** (plan changes, re-plans) are `canceled` and
+    left out of the realization denominator;
+  - **provider-initiated cancellations or rejections after booking** are `missed`, with cause
+    `provider_canceled`. They are the losses K3 exists to show.
+- Both stay visible as rows.
 
 ## Why
 
@@ -38,7 +47,8 @@ contact_pass_results
 
 | Condition | `outcome` |
 | --- | --- |
-| reservation canceled or rejected before AOS | `canceled` (not counted against realization) |
+| canceled before AOS **at Cadence's request** (operator, re-plan) | `canceled` (out of the denominator) |
+| canceled or rejected **by the provider** after booking | `missed`, cause `provider_canceled` |
 | provider says failed, or no AOS before LOS + grace | `missed` (station or provider cause) or `failed` (delivery cause) |
 | flown ≥ 95% of planned, and provider bytes > 0 or received bytes > 0 | `realized` |
 | flown < 95% of planned, or nothing received while the provider reported delivery | `partial` |
