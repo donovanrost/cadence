@@ -49,25 +49,23 @@ export function useReplan(missionId: Readonly<Ref<string>>) {
       onResync: () => repair.refetch(),
     },
   );
-  // `contacts` fires once per reservation change (Apply sends a burst): one refetch per 2 s at most.
-  let pending: ReturnType<typeof setTimeout> | null = null;
-  useMissionInvalidation(missionId, ["contacts"], () => {
-    pending ??= setTimeout(() => {
-      pending = null;
+  // `contacts` fires once per reservation change (Apply sends a burst); the helper coalesces it.
+  useMissionInvalidation(
+    missionId,
+    ["contacts"],
+    () => {
       source.refetch();
       if (runId.value) repair.refetch();
       if (appliedId.value) applied.refetch();
-    }, 2_000);
-  });
+    },
+    { throttleMs: 2_000 },
+  );
   const poll = setInterval(() => {
     const s = repair.state.value;
     if (runId.value && s.status === "ready" && ["queued", "running"].includes(s.value.run.state))
       repair.refetch();
   }, 5_000);
-  onScopeDispose(() => {
-    clearInterval(poll);
-    if (pending) clearTimeout(pending);
-  });
+  onScopeDispose(() => clearInterval(poll));
 
   async function propose(window?: Readonly<{ from: string; to: string }>) {
     if (!planId.value) return;
