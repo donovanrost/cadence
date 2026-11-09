@@ -253,3 +253,10 @@ palette): those fall back to the station name.
   ("KIR degraded 14:00–18:00Z · passes may lose data"), counted in the footer as `1 at risk`.
 - After submit (booked passes), the same windows feed K2 "Re-plan after provider changes".
 The planner's conflict check must include availability windows (api) so the server agrees with the UI.
+
+### U27 · Dim marks, not text (qa axe finding on the superseded draft)
+**Decision:** see design-language §6. Inactive / superseded / historical states dim marks and chrome
+only, and text keeps its tier (≥ 4.5:1). The state is named in words. Also: **a draft is superseded when
+its inputs change, not when the next draft starts.** A plan read must compare the draft's rule/template
+versions with the current ones and report `superseded` immediately (api), so a stale draft can never be
+shown as current or submitted.

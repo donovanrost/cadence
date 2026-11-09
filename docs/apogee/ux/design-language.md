@@ -189,6 +189,10 @@ themselves.
 - Pressed/selected: white inset bar (rows, tabs, steps) or white fill (choice segments, mode switch).
 - Disabled: `text-off` text, `hairline` border, no hover, plus a reason (tooltip or adjacent text).
   Never disable a commit action silently: say what blocks it ("Needs the 3 breaking items fixed first").
+- **Dimming never lowers text below its contrast tier** (U27): to mark something inactive, superseded or
+  historical, dim the *marks and chrome* (bars, cells, borders, hatches to ~40%) and keep text at ≥ 4.5:1
+  (`text-3` at the lowest). Add a word (`SUPERSEDED`, `ENDED`) rather than relying on fade. `opacity` on a
+  container holding text is a bug.
 - Targets: ≥44px for primary/commit actions (commit buttons are 44–46px). Compact 32px buttons are
   for in-row and panel-header actions only.
 - Real elements: `<button>`, `<a>`, `<input>`, `role="tab"`/`radio` where the canvas shows them.
