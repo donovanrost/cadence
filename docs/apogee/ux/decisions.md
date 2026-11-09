@@ -285,7 +285,9 @@ confirmation window. Cadence **doesn't know** whether the pass is booked, so the
 passes themselves are stale-hatched, because their truth is unknown. Header tail
 `R41 · 36 BOOKED · 4 UNCONFIRMED`. Callout: "Northlight hasn't confirmed 4 bookings after 10 min. They
 may or may not be booked, so Cadence won't send them again. Check them with Northlight." The passes are
-listed with the soonest first and a `T−` to it. **No re-plan for unconfirmed passes** in K2 or K1:
+listed with the soonest first and a `T−` to it. **The list is capped** (qa's U30 live check): show the 5 soonest, then
+`and 35 more · Show all 40`, which opens a sheet listing all of them (with the U32 actions). The callout
+never grows past that, so the console layout holds still. **No re-plan for unconfirmed passes** in K2 or K1:
 re-planning a pass that may already be booked risks double-booking and double billing. They resolve first,
 as booked or as not booked. Not-booked ones then become Demand rows and re-plan normally. Until domain
 offers a resolution action (`Mark booked` / `Mark not booked` with a note, audited), the screen offers none,
@@ -347,12 +349,16 @@ acknowledged_by?, spacecraft_id, contact_id, station, provider, starts_at, raise
     arrives in the Now queue (U31).
 - **Errors (U20):**
   - `booking_not_unconfirmed`: "This booking isn't unconfirmed any more. Northlight may have answered." + refresh.
-  - `booking_already_resolved`: "Someone already resolved this." (name them when the reply carries the actor).
+  - `{booking_already_resolved, actor}`: "Mira K. already resolved this." (domain 8a1e9721), or "Someone
+    already resolved this." when the actor is nil. Then refresh.
   - `invalid`: inline under the field.
   - `forbidden`: "Org admins resolve unconfirmed bookings."
 - **Evidence afterwards:**
   - Contact and pass rows read `BOOKED · ATTESTED BY MIRA K.` for `booking_evidence: operator_attested`.
   - Its uplink reads `UPLINK UNCONFIRMED` (caution text) until the provider confirms the leg.
+  - When the provider confirms the uplink before AOS (#55, revision reason `uplink_confirmed`), the warning clears
+    and the contact's history reads "Northlight confirmed the uplink · 11-14 02:10Z".
+  - After AOS the confirmation is only recorded in the history, and the pass doesn't change.
 
 **Attention items (contact drawer D2 block, members with operate):**
 - **Caution block:**
