@@ -51,6 +51,10 @@ defmodule CadenceWeb.Router do
     plug(CadenceWeb.Console.Plugs.MissionScope)
   end
 
+  pipeline :console_organization do
+    plug(CadenceWeb.Console.Plugs.OrganizationScope)
+  end
+
   # Kubelet probes do not carry browser sessions or API credentials.
   # Only coarse process/database readiness is exposed here.
   scope "/health", CadenceWeb do
@@ -791,6 +795,14 @@ defmodule CadenceWeb.Router do
         get("/revisions/:revision", ConfigController, :revision)
         get("/compare", ConfigController, :compare)
       end
+    end
+
+    # -- Organization (owner: api). Contracts: docs/apogee/api/setup.md
+    scope "/organizations/:organization_id" do
+      pipe_through(:console_organization)
+
+      get("/people", PeopleController, :index)
+      post("/invitations", PeopleController, :invite)
     end
 
     match(:*, "/*path", NotFoundController, :show)

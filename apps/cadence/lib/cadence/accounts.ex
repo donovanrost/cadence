@@ -179,6 +179,47 @@ defmodule Cadence.Accounts do
     end)
   end
 
+  @doc "Active members with join time, for the organization people directory (no credentials)."
+  @spec list_member_directory(binary()) :: [map()]
+  def list_member_directory(organization_id) when is_binary(organization_id) do
+    OrganizationMembershipRow
+    |> join(:inner, [m], u in UserRow, on: m.user_id == u.user_id)
+    |> where([m, _u], m.organization_id == ^organization_id and m.lifecycle_state == "active")
+    |> order_by([m, u], asc: u.display_name, asc: u.email)
+    |> select([m, u], %{
+      user_id: u.user_id,
+      display_name: u.display_name,
+      email: u.email,
+      role: m.role,
+      capabilities: u.capabilities,
+      joined_at: m.inserted_at
+    })
+    |> Repo.all()
+  end
+
+  @doc "Pending, unexpired invitations with inviter names, newest first (no tokens)."
+  @spec list_invitation_directory(binary()) :: [map()]
+  def list_invitation_directory(organization_id) when is_binary(organization_id) do
+    now = DateTime.utc_now()
+
+    OrganizationInvitationRow
+    |> join(:left, [i], u in UserRow, on: i.invited_by_user_id == u.user_id)
+    |> where(
+      [i, _u],
+      i.organization_id == ^organization_id and i.status == "pending" and i.expires_at > ^now
+    )
+    |> order_by([i, _u], desc: i.inserted_at)
+    |> select([i, u], %{
+      id: i.organization_invitation_id,
+      email: i.email,
+      role: i.membership_role,
+      invited_by_name: u.display_name,
+      sent_at: i.inserted_at,
+      expires_at: i.expires_at
+    })
+    |> Repo.all()
+  end
+
   @doc "Bounded member facts for the platform organization detail; excludes credential columns."
   def page_organization_members(organization_id, after_id) do
     OrganizationMembershipRow

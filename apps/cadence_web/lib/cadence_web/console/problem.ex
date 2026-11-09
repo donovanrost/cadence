@@ -22,6 +22,8 @@ defmodule CadenceWeb.Console.Problem do
     unsupported_format: {422, "That file format isn't supported."},
     file_too_large: {413, "The file is larger than 50 MiB."},
     import_failed: {422, "The import could not be started."},
+    already_member: {409, "That person is already a member."},
+    already_invited: {409, "That person already has a pending invitation."},
     invalid_params: {422, "The request parameters are invalid."},
     history_unavailable: {503, "Telemetry history is unavailable right now."}
   }

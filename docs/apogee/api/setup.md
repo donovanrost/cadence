@@ -13,7 +13,10 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | C3 | `GET /missions/:mission_id/catalog/imports/:import_run_id` | **implemented** |
 | C2 | `POST /missions/:mission_id/catalog/imports`, `GET …/catalog/importers` | **implemented** |
 | (4) | batch spacecraft validate + create | planned |
-| (5) | org members, invitations, service identities | planned (`/organizations/:organization_id/...`) |
+| O1 | `GET /organizations/:organization_id/people` | **implemented** |
+| O2 | `POST /organizations/:organization_id/invitations` | **implemented** |
+| O3, O4 | service identities, command policies | planned |
+| G1, T1, T2 | ground stations, transports, routing rules + kind schemas | planned |
 
 ## `GET /api/console/v1/missions/:mission_id/spacecraft`
 
@@ -248,3 +251,39 @@ the file name and extension (the browser's media type is only a hint).
 
 `{"data": {"importers": [{"key": "xtce_1_3", "label": "XTCE 1.3", "extensions": [".xtce", ".xml"]}],
 "max_bytes": 52428800}}`: the accepted-format chips.
+
+## Organization routes
+
+Base: `/api/console/v1/organizations/:organization_id`. The organization comes from the URL, not
+the session default. An actor who isn't an active member (or a platform admin in admin mode) gets
+`404 organization_not_found`.
+
+### `GET /people` (O1)
+
+```json
+{"data": {
+  "members": [{"user_id": "user_…", "display_name": "Mira K.", "email": "mira@…",
+               "role": "member", "capabilities": ["command.request", "command.approve"],
+               "joined_at": "2026-10-19T02:29:00Z"}],
+  "invitations": [{"id": "…", "email": "ana@…", "role": "member", "invited_by": {"name": "Ada Admin"},
+                   "sent_at": "…", "expires_at": "…", "status": "pending"}],
+  "permissions": ["org.invite", "org.manage_members"]
+}}
+```
+
+- Visible to every member. `permissions` are the **caller's** org-level actions (empty for plain
+  members), for gating the invite panel.
+- `capabilities` are evaluated on the server per member (DECISIONS #2): `command.request` and
+  `command.approve` for every active member (the two-person rule, D7, still forbids approving your
+  own request), plus `org.manage_members` and `org.invite` for organization admins.
+- `invitations` holds only pending, unexpired ones, so `status` is always `pending`. Members are
+  sorted by name; invitations newest first. There is no presence or last-seen yet.
+
+### `POST /invitations` (O2)
+
+Body `{email, role: "member" | "organization_admin"}` (default `member`). Requires
+`org.invite` (organization admin). It sends the invitation email when mail is configured.
+
+- `201` returns the invitation (same shape as above) plus `delivery: "submitted" | "unavailable"`.
+- Errors: `422 invalid_params` (`details.email` / `details.role`), `409 already_member`,
+  `409 already_invited`, `403 forbidden`.
