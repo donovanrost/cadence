@@ -166,3 +166,15 @@ were mid-write.
     the warning path continues as if the start succeeded;
   - a `pending_approval` plan reads as superseded through `except_plan_id`, so the console
     approve returns 409 while the ops console approves.
+
+## Second re-review · 21d37913 (2026-11-09)
+
+A–F are addressed, and I spot-checked A and C in the code:
+
+- `requirements_taken_up` share-locks every referencing plan with no state filter in the
+  query, then filters in Elixir. Plans are locked before requirements everywhere.
+- `stale_template?` applies the supersession rule: only a future requirement of an active
+  template.
+
+G1 (the review hash depends on wall-clock time) is still open and low; it's fine to defer.
+**Status: approved.**
