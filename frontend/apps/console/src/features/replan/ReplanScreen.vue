@@ -319,7 +319,11 @@ async function onApply(acks: Acknowledgement[]) {
         :is-admin="isAdmin"
         @resolved="refresh"
       />
-      <ApPanel v-if="!runView && !proposal" index="A2" title="Live plan">
+      <ApPanel
+        v-if="!runView && !proposal"
+        index="A2"
+        :title="repaired ? `Plan r${live.version} · re-planned` : 'Live plan'"
+      >
         <ApCallout v-if="!showImpact" tone="info">
           Live plan r{{ live.version }} is {{ live.state.replaceAll("_", " ") }}. Re-plan applies to
           plans with rejected or failed bookings.

@@ -52,7 +52,11 @@ defineEmits<{ retry: [] }>();
             v-if="impact.passes === 0"
             state="off"
             :headline="`No lost bookings on r${live.version}`"
-            sentence="Every booking of the live plan is holding."
+            :sentence="
+              live.chain_head && live.chain_head !== live.id
+                ? 'Every booking is holding, including the repair\'s.'
+                : 'Every booking of the live plan is holding.'
+            "
           />
           <ul v-else class="m-0 list-none p-0">
             <li
