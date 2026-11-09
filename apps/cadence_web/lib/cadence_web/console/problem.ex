@@ -19,6 +19,7 @@ defmodule CadenceWeb.Console.Problem do
     spacecraft_not_found: {404, "Spacecraft not found."},
     profile_not_found: {404, "Profile not found."},
     transport_not_found: {404, "Transport not found."},
+    plan_not_found: {404, "Contact plan not found."},
     import_run_not_found: {404, "Import run not found."},
     command_not_found: {404, "Command not found."},
     episode_not_found: {404, "Alarm not found."},
