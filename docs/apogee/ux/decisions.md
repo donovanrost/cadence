@@ -340,7 +340,7 @@ acknowledged_by?, spacecraft_id, contact_id, station, provider, starts_at, raise
 - **Mark not booked sheet:**
   - Same first line.
   - Then: "Then Cadence sends Northlight a cancel. The pass becomes a gap that Re-plan can fill."
-  - `Note` (required).
+  - `Note` (required, placeholder "How do you know it isn't booked?").
   - Primary: `Cancel at Northlight and mark not booked`.
 - **Outcomes** (callout in the sheet's place, then the list refreshes):
   - `provider_answered`: info, "Northlight answered: booked. Nothing was marked." (or "…: not booked.").
