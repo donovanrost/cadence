@@ -27,6 +27,7 @@ defmodule CadenceWeb.Console.MissionChannel do
     alarms_changed: "alarms",
     contacts_changed: "contacts",
     stations_changed: "stations",
+    pass_results_changed: "pass_results",
     spacecraft_configuration_changed: "spacecraft",
     dashboards_changed: "dashboards",
     settings_changed: "settings",

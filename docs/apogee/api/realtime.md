@@ -49,6 +49,7 @@ pushes are not replayed.
 | `telemetry` | new samples committed (source watermark), backfills, revision-state changes. This fires about every 500 ms on live feeds, so throttle telemetry-driven refetches client-side |
 | `contacts` | contact facts (scheduled/realized contacts, contact actions) and, once domain publishes it, reservation, plan and run changes. See contacts.md |
 | `stations` | station availability windows (operator, provider or simulator). See contacts.md, S7 |
+| `pass_results` | pass results (S9 close-out, provider results). See contacts.md, pass review |
 | `limits` | limit definition changes |
 | `events` | mission event changes |
 | `catalog` | catalog revision changes |

@@ -8,6 +8,7 @@ S8) are api's: [scheduling.md](scheduling.md). Conventions: [README.md](README.m
 | --- | --- | --- |
 | M7 / S1 | `GET /missions/:mission_id/passes` | **implemented** (booked contacts; opportunities not yet) |
 | S7 | `GET/POST /missions/:mission_id/station-availability…` | **implemented** (api-ops on domain's facades, DECISIONS #39/#44) |
+| S9 | `GET /missions/:mission_id/pass-review[/rows|/daily]` | **implemented** (K3) |
 | S10 | `contacts` on the `mission:<id>` `invalidate` event | **implemented** (contact facts + reservation changes; plans/runs not yet) |
 
 ## `GET /api/console/v1/missions/:mission_id/passes`
@@ -114,3 +115,60 @@ window = {"id": "station_window_…", "ground_station_id": "gs-…", "kind": "ou
 
 Errors: `422 invalid_params` / `invalid_window`, `404 station_not_found` / `window_not_found`,
 `409 window_overlaps` (same kind, same station) / `window_cleared`, `403 forbidden`.
+
+## Pass review (S9, K3 "Close the books")
+
+Over domain's `Cadence.Reads.PassReview` (`docs/apogee/domain/pass-review.md`, "As built";
+DECISIONS #47/#48). One result per booked pass, filled by provider results and a once-a-minute
+close-out. Refetch on `invalidate` with `pass_results`.
+
+Window (all three reads): `from`/`to` (ISO-8601, ≤ 31 d), **or** `day` (`YYYY-MM-DD`, default today
+UTC) + `span` (`day | week | month`, default `day`; `daily` defaults to `month`), ending at the close
+of `day`. Optional `plan` (contact plan id) narrows to one plan.
+
+### `GET /pass-review` (h1, stat strip, R1, R2, freshness)
+
+`{from, to, planned, realized, partial, missed, failed, canceled, pending_count, realized_ratio,
+threshold, target, provisional, missed_by_owner, partial_by_owner, by_station[], by_cause[], plans[],
+freshness[]}`:
+
+- `realized_ratio = realized / (planned − canceled − pending_report)`. `null` when nothing counts yet.
+- `threshold` is `pass_realized_threshold` (a pass counts as realized when flown ≥ that share of
+  planned, default 0.95). `target` is `realization_target` (the fleet's target share, the h1 verdict
+  and R3 line, default 0.98). Both are mission settings (ST1).
+- `provisional: true` when any pass in the span awaits its provider report or a provider's event
+  cursor is unhealthy. Say the % is provisional, in words.
+- `missed_by_owner` / `partial_by_owner`: `{provider, us, weather, unknown}` counts (the strip caption).
+  `failed` counts as missed there.
+- `by_station[]` (R1): station identity, provider, planned, realized, partial, missed, failed,
+  canceled, flown and planned seconds. There's no billing, so billed minutes are absent.
+- `by_cause[]` (R2): `{cause, cause_source, owner, missed, partial}`.
+- `freshness[]` (h1 meta): per provider `{provider {id, name}, last_report_at, pending_reports,
+  oldest_pending_los, cursor_healthy}`.
+
+### `GET /pass-review/rows` (R4)
+
+Query: the window, `outcome` (comma list of `realized | partial | missed | failed | canceled |
+pending_report`; R4 uses `missed,partial`), `station`, `spacecraft_id`, `plan`, `limit` (1–500,
+default 50), `cursor` (`meta.next_cursor`). Returns `{from, to, rows[], total, disputable}`, with
+`meta.next_cursor`. For the footer, use "SHOWING n OF total · disputable DISPUTABLE".
+
+Row: `{id, spacecraft {id, name}, station {ref, id, code, name}, provider {id, name}, antenna_ref,
+plan {id, version} | null, planned_aos, planned_los, actual_aos, actual_los, planned_seconds,
+flown_seconds, planned_bytes, provider_bytes, provider_frames, received_bytes, received_frames,
+observations, outcome, cause, cause_source, owner, disputable, provisional, provider_reported_at,
+realized_contact_id, scheduled_contact_id}`.
+
+- Two volumes, never merged: `provider_*` is what the provider says it delivered, and `received_*` is
+  what Cadence ingested. `received_*: null` means unknown (never realized), not 0. `planned_bytes`
+  is `null` unless the provider supplies a number, so show received vs provider-reported, not "vs plan".
+- `owner`: `provider | us | weather | unknown`. `disputable` = owner is the provider (show `Dispute`).
+  A provider-reported station window counts as the provider's; an operator-declared one counts as ours.
+- `provisional`: no provider report yet.
+
+### `GET /pass-review/daily` (R3)
+
+`{from, to, days: [{day, planned, realized, ratio, top_cause, top_station}], target, threshold}`.
+Draw `target` as the dashed line. `top_cause`/`top_station` annotate dips.
+
+Money (R5, disputes in $) is out of scope: no provider reports prices.

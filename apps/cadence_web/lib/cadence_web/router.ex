@@ -775,6 +775,9 @@ defmodule CadenceWeb.Router do
       get("/command-policies", CommandGroupController, :policies)
       get("/command-endpoints", CommandGroupController, :endpoints)
       get("/station-availability", StationAvailabilityController, :index)
+      get("/pass-review", PassReviewController, :summary)
+      get("/pass-review/rows", PassReviewController, :rows)
+      get("/pass-review/daily", PassReviewController, :daily)
       get("/station-availability/:station_id", StationAvailabilityController, :show)
       get("/station-availability/:station_id/impact", StationAvailabilityController, :impact)
 
