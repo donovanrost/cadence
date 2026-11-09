@@ -67,6 +67,55 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     assert json_response(conn, 404)["error"]["code"] == "spacecraft_not_found"
   end
 
+  test "profile detail: schema-driven sections with values, counts and versions", c do
+    profile = TestFixtures.persist_spacecraft_profile!(c.mission, display_name: "Block 1")
+
+    TestFixtures.persist_spacecraft!(c.mission,
+      spacecraft_type_id: profile.spacecraft_type_id,
+      spacecraft_type_version: profile.version
+    )
+
+    data =
+      c.user
+      |> TestFixtures.member_conn()
+      |> get(
+        "/api/console/v1/missions/#{c.mission.mission_id}/profiles/#{profile.spacecraft_type_id}"
+      )
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert data["profile"]["name"] == "Block 1"
+    assert data["profile"]["protocols"]["downlink"] == %{"value" => "tm", "label" => "CCSDS TM"}
+    assert data["inherit_count"] == 1
+    assert data["routing_model"] == "per_spacecraft"
+    assert data["rules"] == [] and data["overrides"] == []
+    assert [%{"version" => 1, "created_at" => _, "actor" => nil}] = data["versions"]
+
+    framing = Enum.find(data["sections"], &(&1["key"] == "framing"))
+    frame_size = Enum.find(framing["fields"], &(&1["path"] == "frame_parameters.frame_size"))
+
+    assert %{
+             "type" => "integer",
+             "unit" => "bytes",
+             "value" => 1024,
+             "runtime_impact" => "generation"
+           } =
+             frame_size
+
+    downlink = Enum.find(framing["fields"], &(&1["path"] == "downlink_protocol"))
+    assert downlink["value"] == "tm"
+    assert %{"value" => "aos", "label" => "CCSDS AOS"} in downlink["enum"]
+  end
+
+  test "an unknown profile is not found", c do
+    conn =
+      c.user
+      |> TestFixtures.member_conn()
+      |> get("/api/console/v1/missions/#{c.mission.mission_id}/profiles/nope")
+
+    assert json_response(conn, 404)["error"]["code"] == "profile_not_found"
+  end
+
   test "lists profiles with protocol labels and pinned counts", c do
     profile = TestFixtures.persist_spacecraft_profile!(c.mission, display_name: "Block 1")
 

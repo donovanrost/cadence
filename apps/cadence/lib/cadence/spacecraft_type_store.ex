@@ -163,6 +163,24 @@ defmodule Cadence.SpacecraftTypeStore do
     |> Enum.map(&SpacecraftTypeRow.to_domain/1)
   end
 
+  @doc "Version history of one profile, newest first: `[%{version, created_at}]`."
+  @spec list_spacecraft_type_version_history(binary(), binary(), binary()) :: [
+          %{version: pos_integer(), created_at: DateTime.t()}
+        ]
+  def list_spacecraft_type_version_history(organization_id, mission_id, spacecraft_type_id)
+      when is_binary(organization_id) and is_binary(mission_id) and
+             is_binary(spacecraft_type_id) do
+    SpacecraftTypeRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.spacecraft_type_id == ^spacecraft_type_id
+    )
+    |> order_by([row], desc: row.version)
+    |> select([row], %{version: row.version, created_at: row.inserted_at})
+    |> Repo.all()
+  end
+
   defp latest_versioned_row(organization_id, mission_id, spacecraft_type_id) do
     SpacecraftTypeRow
     |> where(

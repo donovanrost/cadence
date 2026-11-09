@@ -8,7 +8,7 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | R | `GET /missions/:mission_id/readiness` | **implemented** (v1, `Cadence.Reads.Readiness`; domain extends it for change-set preview) |
 | P | `GET /missions/:mission_id/profiles` | **implemented** |
 | SD | `GET /missions/:mission_id/spacecraft/:spacecraft_id` | **implemented** |
-| PD | profile detail + versions | next |
+| PD | `GET /missions/:mission_id/profiles/:profile_id` | **implemented** |
 | (3) | catalog databases/revisions/import runs, upload, import-run channel | planned |
 | (4) | batch spacecraft validate + create | planned |
 | (5) | org members, invitations, service identities | planned (`/organizations/:organization_id/...`) |
@@ -154,3 +154,47 @@ Rules (v1), by area:
 - `affected_count` is 0 for findings that aren't about a set of items.
 - Findings are sorted by severity (blocker first), then area order.
 - `recent_changes` stays `null` until a unified change feed exists (mission change sets).
+
+## `GET /api/console/v1/missions/:mission_id/profiles/:profile_id`
+
+Profile detail with **schema-driven sections** (`Cadence.SpacecraftType.Schema`, profile-routing
+§3), so the form is generated from the server. Refetch on `invalidate` with `spacecraft` or
+`configuration`.
+
+```json
+{"data": {
+  "profile": {"id": "…", "name": "Earendil Block 1", "version": 4, "catalog_revision": null,
+              "protocols": {"downlink": {"value": "tm", "label": "CCSDS TM"},
+                            "uplink": {"value": "tc", "label": "CCSDS TC"},
+                            "packet": {"value": "space_packet", "label": "CCSDS Space Packet"}},
+              "last_change": {"version": 4, "revision": null, "at": "2026-10-19T02:29:00Z", "actor": null}},
+  "inherit_count": 500, "on_older_versions": 3, "override_count": 0,
+  "sections": [
+    {"key": "framing", "label": "Framing", "fields": [
+      {"path": "frame_parameters.frame_size", "label": "TM frame length", "type": "integer",
+       "unit": "bytes", "enum": null, "range": {"min": 1, "max": 65535}, "default": 1115,
+       "overridable": true, "runtime_impact": "generation",
+       "help": "TM and AOS frames are at most 2048 bytes; validated per protocol.",
+       "value": 1115, "overridden_by": 0}
+    ]},
+    {"key": "catalog", "label": "Catalog", "fields": [{"path": "catalog_revision_id", "type": "reference", "value": null, "…": "…"}]}
+  ],
+  "applications": {"telemetry_decom": {}},
+  "rules": [], "overrides": [], "routing_model": "per_spacecraft",
+  "versions": [{"version": 4, "created_at": "2026-10-19T02:29:00Z", "actor": null}]
+}}
+```
+
+- Fields are exactly the model-backed ones from profile-routing §3: framing (TM/TC/packet
+  protocol, frame length, secondary header, insert zone, OCF, truncated primary header) and catalog.
+  `type` is `integer | boolean | enum | string | reference`; `runtime_impact` is
+  `generation | routes | none`. Enum options come as `[{value, label}]`.
+- `routing_model: "per_spacecraft"` with empty `rules`/`overrides` until DECISIONS #3 lands.
+- `catalog_revision` and the catalog field's `value` are `null` until the catalog moves onto the
+  profile. `versions[].actor` and `last_change.actor` are `null` because profile versions don't
+  record an author (change-set revisions do; `last_change.revision` fills in when profile edits go
+  through change sets).
+- `applications`: the profile's app defaults as raw JSON. A typed app-config schema needs each
+  app's declared contract; that's planned.
+
+Errors: `404 profile_not_found`.
