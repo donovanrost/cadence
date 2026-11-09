@@ -274,6 +274,35 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
     end)
   end
 
+  @doc "Requirements by id at their current version, in one query: `%{id => {requirement, version}}`."
+  @spec fetch_many(binary(), binary(), [binary()]) :: %{
+          binary() => {ContactRequirement.t(), ContactRequirementVersion.t()}
+        }
+  def fetch_many(_organization_id, _mission_id, []), do: %{}
+
+  def fetch_many(organization_id, mission_id, ids) do
+    ContactRequirementRow
+    |> join(:inner, [requirement], version in ContactRequirementVersionRow,
+      on:
+        version.organization_id == requirement.organization_id and
+          version.mission_id == requirement.mission_id and
+          version.contact_requirement_id == requirement.contact_requirement_id and
+          version.version == requirement.current_version
+    )
+    |> where(
+      [requirement],
+      requirement.organization_id == ^organization_id and requirement.mission_id == ^mission_id and
+        requirement.contact_requirement_id in ^ids
+    )
+    |> select([requirement, version], {requirement, version})
+    |> Repo.all()
+    |> Map.new(fn {requirement, version} ->
+      {requirement.contact_requirement_id,
+       {ContactRequirementRow.to_domain(requirement),
+        ContactRequirementVersionRow.to_domain(version)}}
+    end)
+  end
+
   @doc "Locks a requirement row `FOR UPDATE` (inside a transaction) and returns it."
   @spec lock(binary(), binary(), binary()) :: {:ok, ContactRequirement.t()} | {:error, term()}
   def lock(organization_id, mission_id, requirement_id) do

@@ -28,7 +28,11 @@ defmodule Cadence.Reads.ContactPlanOverview do
     organization_id
     |> Contacts.list_plans(mission_id, list_opts(filters))
     |> Enum.take(@list_cap)
-    |> Enum.map(fn {plan, version} ->
+    |> then(fn plans ->
+      superseded = PlanSupersession.check_many(organization_id, mission_id, plans)
+      Enum.map(plans, &{&1, Map.get(superseded, elem(&1, 0).contact_plan_id)})
+    end)
+    |> Enum.map(fn {{plan, version}, superseded} ->
       passes =
         Contacts.selected_opportunities(
           organization_id,
@@ -37,12 +41,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
           version.version
         )
 
-      summary(
-        plan,
-        version,
-        passes,
-        PlanSupersession.check(organization_id, mission_id, plan, version)
-      )
+      summary(plan, version, passes, superseded)
     end)
     |> Enum.filter(&on_day?(&1, filters[:day]))
   end

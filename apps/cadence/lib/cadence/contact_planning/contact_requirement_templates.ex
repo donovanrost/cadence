@@ -249,7 +249,7 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
 
       case Enum.find(results, &match?({:error, _}, &1)) do
         nil ->
-          maybe_supersede(current_scope, version, targets, now, opts)
+          maybe_supersede(current_scope, version, targets, now, {from, until}, opts)
           {:ok, Enum.map(results, fn {:ok, result} -> result end)}
 
         {:error, reason} ->
@@ -258,9 +258,9 @@ defmodule Cadence.ContactPlanning.ContactRequirementTemplates do
     end
   end
 
-  defp maybe_supersede(scope, version, targets, now, opts) do
+  defp maybe_supersede(scope, version, targets, now, window, opts) do
     if Keyword.get(opts, :supersede, true),
-      do: TemplateSupersession.supersede(scope, version, targets, now)
+      do: TemplateSupersession.supersede(scope, version, targets, now, window)
   end
 
   # A reviewed fleet start passes the spacecraft it reviewed; otherwise resolve them now.

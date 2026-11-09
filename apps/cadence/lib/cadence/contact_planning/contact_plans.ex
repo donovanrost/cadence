@@ -11,6 +11,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     AutomationGrants,
     ContactPlan,
     ContactPlanVersion,
+    PlanSupersession,
     PolicyNarrowing,
     RequirementEvaluator
   }
@@ -102,42 +103,70 @@ defmodule Cadence.ContactPlanning.ContactPlans do
 
   @taken_up ~w(pending_approval approved executing partially_reserved reserved)
 
-  defp except_plan(query, nil), do: query
-  defp except_plan(query, plan_id), do: where(query, [ref], ref.contact_plan_id != ^plan_id)
-
   @doc """
   The ids among `requirement_ids` that a plan in pending_approval or later
   has taken up (template supersession keeps those). `except_plan_id:` leaves
-  one plan out (a plan doesn't keep its own requirements current). `lock: true` holds those
-  plans `FOR SHARE`, so it serializes with `submit/6`, which takes the plan
-  `FOR UPDATE`; call it inside the transaction that acts on the answer.
+  one plan out. `lock: true` share-locks **every** plan referencing them, with
+  no state filter in the query, and filters the states afterwards. A submit
+  in flight holds its plan `FOR UPDATE`, so the lock waits for it and then
+  sees its committed state (domain CP3 re-review A). Take it before locking
+  the requirements: plans first, everywhere (B).
   """
   @spec requirements_taken_up(binary(), binary(), [binary()], keyword()) :: MapSet.t()
-  def requirements_taken_up(organization_id, mission_id, requirement_ids, opts \\ [])
+  def requirements_taken_up(organization_id, mission_id, requirement_ids, opts \\ []) do
+    except = Keyword.get(opts, :except_plan_id)
 
-  def requirements_taken_up(_organization_id, _mission_id, [], _opts), do: MapSet.new()
-
-  def requirements_taken_up(organization_id, mission_id, requirement_ids, opts) do
-    ContactPlanRequirementRefRow
-    |> join(:inner, [ref], plan in ContactPlanRow,
-      on:
-        plan.organization_id == ref.organization_id and plan.mission_id == ref.mission_id and
-          plan.contact_plan_id == ref.contact_plan_id
-    )
-    |> where(
-      [ref, plan],
-      ref.organization_id == ^organization_id and ref.mission_id == ^mission_id and
-        ref.contact_requirement_id in ^requirement_ids and plan.lifecycle_state in ^@taken_up
-    )
-    |> except_plan(Keyword.get(opts, :except_plan_id))
-    |> select([ref, _plan], ref.contact_requirement_id)
-    |> then(fn query ->
-      if Keyword.get(opts, :lock, false),
-        do: lock(query, [_ref, plan], fragment("FOR SHARE OF ?", plan)),
-        else: distinct(query, true)
+    organization_id
+    |> referencing_plans(mission_id, requirement_ids, Keyword.get(opts, :lock, false))
+    |> Enum.filter(fn {_requirement_id, plan_id, state} ->
+      state in @taken_up and plan_id != except
     end)
-    |> Repo.all()
-    |> MapSet.new()
+    |> MapSet.new(&elem(&1, 0))
+  end
+
+  @doc "Share-locks the plans referencing `requirement_ids` (plans before requirements)."
+  @spec lock_referencing_plans(binary(), binary(), [binary()]) :: :ok
+  def lock_referencing_plans(organization_id, mission_id, requirement_ids) do
+    _ = referencing_plans(organization_id, mission_id, requirement_ids, true)
+    :ok
+  end
+
+  @doc """
+  For batch reads: `%{requirement_id => [plan_id]}` of the plans in pending_approval or later
+  that took each requirement up (unlocked).
+  """
+  @spec requirement_uptake(binary(), binary(), [binary()]) :: %{binary() => [binary()]}
+  def requirement_uptake(organization_id, mission_id, requirement_ids) do
+    organization_id
+    |> referencing_plans(mission_id, requirement_ids, false)
+    |> Enum.filter(fn {_requirement_id, _plan_id, state} -> state in @taken_up end)
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+  end
+
+  defp referencing_plans(_organization_id, _mission_id, [], _lock?), do: []
+
+  defp referencing_plans(organization_id, mission_id, requirement_ids, lock?) do
+    query =
+      ContactPlanRequirementRefRow
+      |> join(:inner, [ref], plan in ContactPlanRow,
+        on:
+          plan.organization_id == ref.organization_id and plan.mission_id == ref.mission_id and
+            plan.contact_plan_id == ref.contact_plan_id
+      )
+      |> where(
+        [ref, _plan],
+        ref.organization_id == ^organization_id and ref.mission_id == ^mission_id and
+          ref.contact_requirement_id in ^requirement_ids
+      )
+      # A stable order, so concurrent lockers take the plans in the same order.
+      |> order_by([_ref, plan], asc: plan.contact_plan_id)
+      |> select(
+        [ref, plan],
+        {ref.contact_requirement_id, plan.contact_plan_id, plan.lifecycle_state}
+      )
+
+    query = if lock?, do: lock(query, [_ref, plan], fragment("FOR SHARE OF ?", plan)), else: query
+    Repo.all(query)
   end
 
   @spec submit(Scope.t(), binary(), binary(), pos_integer(), binary(), keyword()) ::
@@ -707,10 +736,30 @@ defmodule Cadence.ContactPlanning.ContactPlans do
          :ok <- draft_plan(row),
          :ok <- expected_version(row, expected_version),
          :ok <- undecided_version(row),
+         :ok <- not_superseded(row),
          {:ok, updated} <- update_pending_plan(row, reason, actor_id, now) do
       ContactPlanRow.to_domain(updated)
     else
       {:error, error} -> Repo.rollback(error)
+    end
+  end
+
+  # U27, under the plan lock, for every caller (console, ops console, automation): a draft that
+  # newer requirement or template versions overtook can't be submitted.
+  defp not_superseded(row) do
+    plan = ContactPlanRow.to_domain(row)
+
+    with {:ok, version} <-
+           fetch_version(
+             row.organization_id,
+             row.mission_id,
+             row.contact_plan_id,
+             row.current_version
+           ) do
+      case PlanSupersession.check(row.organization_id, row.mission_id, plan, version) do
+        nil -> :ok
+        superseded -> {:error, {:contact_plan_superseded, superseded}}
+      end
     end
   end
 

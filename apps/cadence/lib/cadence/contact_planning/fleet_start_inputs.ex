@@ -29,10 +29,11 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
 
     with {:ok, _, policy} <- policy_reader.(scope.organization_id, mission_id),
          :ok <- horizon(window, policy),
+         :ok <- lock_plans_first(scope.organization_id, mission_id, window, locked),
          {:ok, requirements} <- requirements(scope.organization_id, mission_id, window, locked),
          {:ok, templates} <- templates(scope.organization_id, mission_id, window, locked) do
       context = %{organization_id: scope.organization_id, mission_id: mission_id}
-      requirements = without_superseded(context, requirements, templates, locked)
+      requirements = without_superseded(context, window, requirements, templates, locked)
 
       snapshot = %{
         context: context,
@@ -49,9 +50,24 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
   # Requirements the start will supersede once the templates' current versions materialize
   # (TemplateSupersession) aren't planned: future, not taken up by a plan, and from an older
   # template version or for a spacecraft the template no longer targets.
-  defp without_superseded(_context, requirements, [], _locked), do: requirements
+  # Lock order is plans, then requirements, everywhere (domain CP3 re-review B): before the
+  # claim share-locks the requirements, share-lock the plans that reference generated ones.
+  defp lock_plans_first(_org, _mission, _window, false), do: :ok
 
-  defp without_superseded(context, requirements, templates, locked) do
+  defp lock_plans_first(org, mission, window, true) do
+    with {:ok, requirements} <- requirements(org, mission, window, false) do
+      ids =
+        for {requirement, version} <- requirements,
+            generated_by(version) != nil,
+            do: requirement.contact_requirement_id
+
+      ContactPlans.lock_referencing_plans(org, mission, ids)
+    end
+  end
+
+  defp without_superseded(_context, _window, requirements, [], _locked), do: requirements
+
+  defp without_superseded(context, window, requirements, templates, locked) do
     now = DateTime.utc_now()
 
     future =
@@ -66,6 +82,7 @@ defmodule Cadence.ContactPlanning.FleetStartInputs do
       |> Enum.flat_map(fn t ->
         future
         |> Map.get(t.version.contact_requirement_template_id, [])
+        |> TemplateSupersession.in_window({window.horizon_start, window.horizon_end})
         |> TemplateSupersession.stale(t.version, MapSet.new(t.spacecraft_ids))
         |> Enum.map(&elem(&1, 0))
       end)

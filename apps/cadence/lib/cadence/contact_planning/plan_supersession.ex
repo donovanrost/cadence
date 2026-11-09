@@ -29,55 +29,81 @@ defmodule Cadence.ContactPlanning.PlanSupersession do
   @open [:draft, :pending_approval]
 
   @spec check(binary(), binary(), map(), map()) :: map() | nil
-  def check(organization_id, mission_id, %{lifecycle_state: state} = plan, version)
-      when state in @open do
-    requirements =
-      ((version.requirement_refs_document || %{})["requirements"] || [])
-      |> Enum.flat_map(&fetch(organization_id, mission_id, &1))
+  def check(organization_id, mission_id, plan, version),
+    do:
+      organization_id
+      |> check_many(mission_id, [{plan, version}])
+      |> Map.get(plan.contact_plan_id)
 
-    templates = templates(organization_id, mission_id, requirements)
+  @doc """
+  `check/4` for many plans at once (list reads; domain re-review F): requirements, plan uptake
+  and templates are each read once for the whole batch. `%{plan_id => superseded | nil}`.
+  """
+  @spec check_many(binary(), binary(), [{map(), map()}]) :: %{binary() => map() | nil}
+  def check_many(organization_id, mission_id, pairs) do
+    open = Enum.filter(pairs, fn {plan, _version} -> plan.lifecycle_state in @open end)
+    refs = Map.new(open, fn {plan, version} -> {plan.contact_plan_id, refs(version)} end)
+    ids = refs |> Map.values() |> List.flatten() |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+    requirements = ContactRequirements.fetch_many(organization_id, mission_id, ids)
 
-    # Supersession keeps requirements another plan has taken up (a booked source plan's, which
-    # a repair re-plans), so they aren't stale here either.
-    kept =
-      ContactPlans.requirements_taken_up(
-        organization_id,
-        mission_id,
-        Enum.map(requirements, fn {requirement, _, _} -> requirement.contact_requirement_id end),
-        except_plan_id: plan.contact_plan_id
-      )
+    context = %{
+      templates: templates(organization_id, mission_id, Map.values(requirements)),
+      uptake: ContactPlans.requirement_uptake(organization_id, mission_id, ids),
+      now: DateTime.utc_now()
+    }
 
-    requirements
-    |> Enum.flat_map(fn {requirement, current, used} ->
-      requirement_change(requirement, current, used, templates, kept)
+    Map.new(pairs, fn {plan, _version} ->
+      superseded =
+        if plan.lifecycle_state in @open,
+          do:
+            plan
+            |> plan_changes(Map.get(refs, plan.contact_plan_id, []), requirements, context)
+            |> summarize()
+
+      {plan.contact_plan_id, superseded}
     end)
-    |> summarize()
   end
 
-  def check(_organization_id, _mission_id, _plan, _version), do: nil
+  defp plan_changes(plan, refs, requirements, context) do
+    Enum.flat_map(refs, fn {id, used} ->
+      case Map.get(requirements, id) do
+        {requirement, current} ->
+          requirement_change(requirement, current, used, kept?(plan, id, context), context)
 
-  defp fetch(organization_id, mission_id, %{"id" => id, "version" => used}) do
-    case ContactRequirements.fetch(organization_id, mission_id, id) do
-      {:ok, requirement, current} -> [{requirement, current, used}]
-      _missing -> []
-    end
+        nil ->
+          []
+      end
+    end)
   end
 
-  defp fetch(_organization_id, _mission_id, _ref), do: []
+  defp refs(version) do
+    for %{"id" => id, "version" => used} <-
+          (version.requirement_refs_document || %{})["requirements"] || [],
+        do: {id, used}
+  end
 
-  # Each generating template once: its current version and who it targets now.
+  # Supersession keeps requirements a plan in pending_approval or later took up: another plan's
+  # (a booked source plan's, which a repair re-plans), or this plan's own once it's submitted
+  # (re-review G3). A draft doesn't keep its own.
+  defp kept?(plan, requirement_id, context) do
+    takers = Map.get(context.uptake, requirement_id, [])
+
+    if plan.lifecycle_state == :draft,
+      do: Enum.any?(takers, &(&1 != plan.contact_plan_id)),
+      else: takers != []
+  end
+
+  # Each generating template once: its current version, whether it's active, who it targets now.
   defp templates(organization_id, mission_id, requirements) do
     requirements
-    |> Enum.map(fn {_r, current, _used} ->
-      generation(current)["contact_requirement_template_id"]
-    end)
+    |> Enum.map(fn {_r, current} -> generation(current)["contact_requirement_template_id"] end)
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
     |> Map.new(fn template_id ->
       case ContactRequirementTemplates.fetch(organization_id, mission_id, template_id) do
-        {:ok, _template, version} ->
+        {:ok, template, version} ->
           targets = TemplateTargets.resolve(organization_id, mission_id, version.target_document)
-          {template_id, {version, MapSet.new(targets)}}
+          {template_id, {version, MapSet.new(targets), template.lifecycle_state == :active}}
 
         _missing ->
           {template_id, nil}
@@ -87,9 +113,9 @@ defmodule Cadence.ContactPlanning.PlanSupersession do
 
   defp generation(current), do: (current.metadata || %{})["generation"] || %{}
 
-  defp requirement_change(requirement, current, used, templates, kept) do
+  defp requirement_change(requirement, current, used, kept?, context) do
     reason = requirement.lifecycle_reason || ""
-    template = Map.get(templates, generation(current)["contact_requirement_template_id"])
+    template = Map.get(context.templates, generation(current)["contact_requirement_template_id"])
 
     cond do
       requirement.lifecycle_state == :canceled and template_cause?(reason) ->
@@ -102,8 +128,8 @@ defmodule Cadence.ContactPlanning.PlanSupersession do
           )
         ]
 
-      stale_template?(requirement, current, template, kept) ->
-        {version, _targets} = template
+      stale_template?(requirement, current, template, kept?, context.now) ->
+        {version, _targets, _active?} = template
         [template_change(version.created_at, version.created_by, current, template)]
 
       requirement.lifecycle_state in [:canceled, :closed] ->
@@ -131,29 +157,25 @@ defmodule Cadence.ContactPlanning.PlanSupersession do
     end
   end
 
-  defp stale_template?(%{lifecycle_state: :active} = requirement, current, template, kept),
-    do:
-      not MapSet.member?(kept, requirement.contact_requirement_id) and
-        overtaken?(current, template)
-
-  defp stale_template?(_requirement, _current, _template, _kept), do: false
-
-  defp overtaken?(_current, nil), do: false
-
-  defp overtaken?(current, {version, targets}) do
-    current
-    |> generation()
-    |> Map.put("spacecraft_id", current.spacecraft_id)
-    |> TemplateSupersession.cause(version, targets)
-    |> Kernel.!=(nil)
+  # The same rule supersession applies (re-review C): only a future requirement of an active
+  # template, not taken up, from an older version or for a spacecraft no longer targeted.
+  defp stale_template?(%{lifecycle_state: :active}, current, {version, targets, true}, false, now) do
+    DateTime.after?(current.earliest_start, now) and
+      current
+      |> generation()
+      |> Map.put("spacecraft_id", current.spacecraft_id)
+      |> TemplateSupersession.cause(version, targets)
+      |> Kernel.!=(nil)
   end
+
+  defp stale_template?(_requirement, _current, _template, _kept?, _now), do: false
 
   defp template_change(at, by, current, template) do
     generation = generation(current)
 
     {name, to_version} =
       case template do
-        {version, _targets} -> {version.name, version.version}
+        {version, _targets, _active?} -> {version.name, version.version}
         nil -> {nil, nil}
       end
 

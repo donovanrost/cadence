@@ -74,7 +74,8 @@ defmodule CadenceWeb.Console.TemplateSupersessionTest do
             "generation" => %{
               "kind" => "contact_requirement_template",
               "contact_requirement_template_id" => template_id,
-              "contact_requirement_template_version" => 1
+              "contact_requirement_template_version" => 1,
+              "occurrence_at" => "2027-01-01T01:00:00Z"
             }
           }
         )
@@ -92,11 +93,7 @@ defmodule CadenceWeb.Console.TemplateSupersessionTest do
           )
         )
 
-      {:ok, _template, v2} =
-        ContactRequirementTemplates.version(c.scope, c.mission.mission_id, template_id, 1, %{
-          name: "v2"
-        })
-
+      # Submitted before the template changes: the plan took the requirement up.
       if submit? do
         {:ok, _} =
           ContactPlans.submit(
@@ -108,12 +105,18 @@ defmodule CadenceWeb.Console.TemplateSupersessionTest do
           )
       end
 
+      {:ok, _template, v2} =
+        ContactRequirementTemplates.version(c.scope, c.mission.mission_id, template_id, 1, %{
+          name: "v2"
+        })
+
       result =
         TemplateSupersession.supersede(
           c.scope,
           v2,
           [fixture.craft.spacecraft_id],
-          DateTime.utc_now()
+          DateTime.utc_now(),
+          {~U[2027-01-01 00:00:00Z], ~U[2027-01-02 00:00:00Z]}
         )
 
       {:ok, requirement, _} =
@@ -262,6 +265,79 @@ defmodule CadenceWeb.Console.TemplateSupersessionTest do
              repair,
              repair_version
            ) == nil
+  end
+
+  test "a failed v2 materialization in a fleet start rolls the cancels back (review 4)", c do
+    ContactPlanningFixtures.active_policy!(c.scope, c.mission.mission_id)
+    craft = TestFixtures.persist_spacecraft!(c.mission)
+    target = %{"kind" => "spacecraft_ids", "spacecraft_ids" => [craft.spacecraft_id]}
+    day = ~U[2027-03-02 00:00:00Z]
+    until = DateTime.add(day, 86_400)
+
+    {:ok, template, _} =
+      ContactRequirementTemplates.create(c.scope, c.mission.mission_id, attrs(target, day))
+
+    id = template.contact_requirement_template_id
+
+    {:ok, v1_rows} =
+      ContactRequirementTemplates.materialize(
+        c.scope,
+        c.mission.mission_id,
+        id,
+        day,
+        DateTime.add(until, -1)
+      )
+
+    {:ok, _, _} =
+      ContactRequirementTemplates.version(c.scope, c.mission.mission_id, id, 1, %{name: "v2"})
+
+    fleet_run = %{
+      "horizon_start" => DateTime.to_iso8601(day),
+      "horizon_end" => DateTime.to_iso8601(until),
+      "include_recurring" => true
+    }
+
+    # Another day's start claims the operation id first.
+    other_day = %{
+      "horizon_start" => DateTime.to_iso8601(DateTime.add(day, 2 * 86_400)),
+      "horizon_end" => DateTime.to_iso8601(DateTime.add(day, 3 * 86_400)),
+      "include_recurring" => true
+    }
+
+    {:ok, other} =
+      FleetPlanningStarts.preview(c.scope, c.mission.mission_id, %{"fleet_run" => other_day})
+
+    {:ok, _run, _refs} =
+      FleetPlanningStarts.create(
+        c.scope,
+        c.mission.mission_id,
+        %{"fleet_run" => other_day, "evidence" => other.evidence},
+        operation_id: "op-dup"
+      )
+
+    {:ok, review} =
+      FleetPlanningStarts.preview(c.scope, c.mission.mission_id, %{"fleet_run" => fleet_run})
+
+    # This start materializes v2 and supersedes v1, then fails recording the operation id, so
+    # the whole claim (including the cancels) rolls back.
+    assert {:error, _reason} =
+             FleetPlanningStarts.create(
+               c.scope,
+               c.mission.mission_id,
+               %{"fleet_run" => fleet_run, "evidence" => review.evidence},
+               operation_id: "op-dup"
+             )
+
+    for row <- v1_rows do
+      {:ok, requirement, _} =
+        ContactRequirements.fetch(
+          c.org.organization_id,
+          c.mission.mission_id,
+          row.requirement.contact_requirement_id
+        )
+
+      assert requirement.lifecycle_state == :active
+    end
   end
 
   test "a fleet start leaves v1's requirements out of review and supersedes them after v2 materializes",

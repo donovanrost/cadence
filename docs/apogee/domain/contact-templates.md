@@ -63,9 +63,21 @@ requirement. It becomes one row per `(template, version, occurrence_at, spacecra
   - Outside starts (scheduler `materialize_active`), each template supersedes after its own
     materialization.
 - **Taken up by a plan** means referenced by a plan in `pending_approval` or later
-  (`ContactPlans.requirements_taken_up/4`). Each cancel locks the requirement row, re-checks
-  uptake with those plans locked `FOR SHARE` (submit holds the plan `FOR UPDATE`), and keeps it
-  if a plan took it up in between.
+  (`ContactPlans.requirements_taken_up/4`). Each cancel first share-locks **every** plan that
+  references the requirement, with no state filter in the query (so an in-flight submit, which
+  holds its plan `FOR UPDATE`, is waited for), filters the states afterwards, and only then locks
+  the requirement. **Lock order is plans, then requirements, everywhere**: the fleet start's
+  claim share-locks the plans referencing generated requirements before it locks the requirements
+  (re-review A, B).
+- **Only what v2 replaced:** supersession cancels only requirements whose occurrence falls in the
+  window the new version just materialized, so no slot is left without a replacement (re-review
+  E).
+- **Read rule = cancel rule (U27, re-review C):** a draft reads as `superseded` by a template only
+  for a future requirement of an active template that no plan has taken up. A plan that is
+  `pending_approval` keeps its own requirements. The superseded check runs inside
+  `ContactPlans.submit` under the plan lock, so every caller gets it: console, ops console and
+  automation (D). Approval keeps its own fail-safe (`contact_plan_requirement_not_active`). List
+  reads check all plans in one batch (F).
 - **Decision (review 11): kept, planned requirements are not deduplicated.** If v1's requirement
   for a slot is kept because a plan took it up, v2 still generates its own requirement for the same
   slot, so that slot is demanded twice until the planned one completes. That's rare (it needs a

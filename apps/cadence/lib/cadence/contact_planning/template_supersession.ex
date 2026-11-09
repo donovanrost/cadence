@@ -24,14 +24,27 @@ defmodule Cadence.ContactPlanning.TemplateSupersession do
   alias Cadence.Repo
 
   @doc """
-  Cancels the stale generated requirements of `version`'s template (call it
-  after `version` has materialized). Each cancel locks the requirement, then
-  re-checks plan uptake `FOR SHARE`, so a requirement a plan took up in the
-  meantime is kept.
+  Cancels the stale generated requirements of `version`'s template whose
+  occurrence falls in `window` (`{from, until}`, what `version` just
+  materialized, so each cancelled slot has its replacement; review E). Call it
+  after `version` has materialized. For each requirement the referencing plans
+  are share-locked first and uptake re-checked, then the requirement is locked
+  and cancelled (plans before requirements; review A, B).
   """
-  @spec supersede(Scope.t(), ContactRequirementTemplateVersion.t(), [binary()], DateTime.t()) ::
-          %{superseded: non_neg_integer()}
-  def supersede(%Scope{} = scope, %ContactRequirementTemplateVersion{} = version, targets, now) do
+  @spec supersede(
+          Scope.t(),
+          ContactRequirementTemplateVersion.t(),
+          [binary()],
+          DateTime.t(),
+          {DateTime.t(), DateTime.t()}
+        ) :: %{superseded: non_neg_integer()}
+  def supersede(
+        %Scope{} = scope,
+        %ContactRequirementTemplateVersion{} = version,
+        targets,
+        now,
+        window
+      ) do
     superseded =
       version.organization_id
       |> ContactRequirements.list_generated(
@@ -39,10 +52,25 @@ defmodule Cadence.ContactPlanning.TemplateSupersession do
         version.contact_requirement_template_id,
         now
       )
+      |> in_window(window)
       |> stale(version, MapSet.new(targets))
       |> Enum.count(&cancel_unless_taken_up(scope, version, &1, now))
 
     %{superseded: superseded}
+  end
+
+  @doc "Requirements whose generating occurrence falls in `{from, until}` (inclusive)."
+  @spec in_window([{map(), map()}], {DateTime.t(), DateTime.t()}) :: [{map(), map()}]
+  def in_window(requirements, {from, until}) do
+    Enum.filter(requirements, fn {_requirement, current} ->
+      with at when is_binary(at) <-
+             get_in(current.metadata || %{}, ["generation", "occurrence_at"]),
+           {:ok, at, _offset} <- DateTime.from_iso8601(at) do
+        not DateTime.before?(at, from) and not DateTime.after?(at, until)
+      else
+        _not_generated -> false
+      end
+    end)
   end
 
   @doc """
@@ -94,12 +122,15 @@ defmodule Cadence.ContactPlanning.TemplateSupersession do
         "version #{version.version}"
 
     Repo.transaction(fn ->
-      with {:ok, %{lifecycle_state: :active} = requirement} <-
+      # Plans first: share-lock every referencing plan and re-check uptake, then the requirement.
+      taken_up? =
+        org
+        |> ContactPlans.requirements_taken_up(mission, [requirement_id], lock: true)
+        |> MapSet.member?(requirement_id)
+
+      with false <- taken_up?,
+           {:ok, %{lifecycle_state: :active} = requirement} <-
              ContactRequirements.lock(org, mission, requirement_id),
-           false <-
-             org
-             |> ContactPlans.requirements_taken_up(mission, [requirement_id], lock: true)
-             |> MapSet.member?(requirement_id),
            {:ok, _canceled} <-
              ContactRequirements.cancel(
                scope,
@@ -111,6 +142,7 @@ defmodule Cadence.ContactPlanning.TemplateSupersession do
              ) do
         true
       else
+        {:error, error} -> Repo.rollback(error)
         _kept -> false
       end
     end)
@@ -118,7 +150,10 @@ defmodule Cadence.ContactPlanning.TemplateSupersession do
       {:ok, superseded?} ->
         superseded?
 
+      # Inside a fleet start's claim, a failed cancel has already poisoned the transaction: fail
+      # the start rather than carry on as if it succeeded (review G).
       {:error, error} ->
+        if Repo.in_transaction?(), do: Repo.rollback(error)
         Logger.warning("could not supersede requirement #{requirement_id}: #{inspect(error)}")
         false
     end

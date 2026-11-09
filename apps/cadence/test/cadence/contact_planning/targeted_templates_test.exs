@@ -263,7 +263,9 @@ defmodule Cadence.ContactPlanning.TargetedTemplatesTest do
     {:ok, _} = materialize(c, template, @now)
 
     later = DateTime.add(@now, 3_600, :second)
-    assert %{superseded: 0} = TemplateSupersession.supersede(c.scope, v1, [], later)
+
+    assert %{superseded: 0} =
+             TemplateSupersession.supersede(c.scope, v1, [], later, {@now, later})
 
     assert length(
              ContactRequirements.list(@organization_id, @mission_id, lifecycle_state: :active)

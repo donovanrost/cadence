@@ -190,7 +190,13 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
     now = DateTime.utc_now()
 
     Enum.each(inputs.templates, fn t ->
-      TemplateSupersession.supersede(scope, t.version, t.spacecraft_ids, now)
+      TemplateSupersession.supersede(
+        scope,
+        t.version,
+        t.spacecraft_ids,
+        now,
+        {inputs.window.horizon_start, inputs.window.horizon_end}
+      )
     end)
   end
 
