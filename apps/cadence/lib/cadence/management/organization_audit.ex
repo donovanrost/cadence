@@ -42,7 +42,7 @@ defmodule Cadence.Management.OrganizationAudit do
       |> Enum.filter(&keep?(&1, opts))
       |> Enum.sort_by(& &1.at, {:desc, DateTime})
 
-    page = events |> Enum.drop(opts.offset) |> Enum.take(opts.limit)
+    page = events |> Enum.drop(opts.offset) |> Enum.take(opts.limit) |> with_actor_names()
     next = opts.offset + length(page)
 
     %{
@@ -58,7 +58,7 @@ defmodule Cadence.Management.OrganizationAudit do
     (revision_events(organization_id, mission.mission_id) ++
        settings_events(organization_id, mission.mission_id, ref) ++
        command_events(organization_id, mission.mission_id))
-    |> Enum.map(&Map.put_new(&1, :mission, ref))
+    |> Enum.map(fn event -> %{event | mission: event.mission || ref} end)
   end
 
   defp revision_events(organization_id, mission_id) do
@@ -72,7 +72,11 @@ defmodule Cadence.Management.OrganizationAudit do
           else: "Applied r#{revision.revision} · #{changes(revision.entry_count)}"
 
       event("config", revision.applied_at, revision.applied_by, action,
-        target: %{kind: "revision", id: revision.revision, label: "r#{revision.revision}"},
+        target: %{
+          kind: "revision",
+          id: Integer.to_string(revision.revision),
+          label: "r#{revision.revision}"
+        },
         reason: revision.reason
       )
     end)
@@ -195,11 +199,39 @@ defmodule Cadence.Management.OrganizationAudit do
       (is_nil(from) or not DateTime.before?(at, from)) and
         (is_nil(to) or DateTime.before?(at, to))
 
+  defp actor(%{"actor_kind" => kind} = doc),
+    do: %{kind: kind, id: doc["user_id"] || doc["id"], name: doc["name"]}
+
   defp actor(%{"kind" => kind} = doc),
     do: %{kind: kind, id: doc["id"] || doc["user_id"], name: doc["name"] || doc["display_name"]}
 
   defp actor(%{kind: _} = actor), do: actor
   defp actor(_none), do: nil
+
+  # Actor documents often carry only an id: name the people once per page.
+  defp with_actor_names(events) do
+    names =
+      events
+      |> Enum.flat_map(fn
+        %{actor: %{id: id, name: nil}} when is_binary(id) -> [id]
+        _named -> []
+      end)
+      |> Enum.uniq()
+      |> Map.new(fn id ->
+        case Accounts.fetch_user(id) do
+          {:ok, user} -> {id, user.display_name || user.email}
+          _system -> {id, nil}
+        end
+      end)
+
+    Enum.map(events, fn
+      %{actor: %{id: id, name: nil} = actor} = event when is_binary(id) ->
+        %{event | actor: %{actor | name: Map.get(names, id)}}
+
+      event ->
+        event
+    end)
+  end
 
   defp command_name(request),
     do: request.command_display_name || request.command_name || request.command_id
