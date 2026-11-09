@@ -79,7 +79,7 @@ footer's commit slot, and a blocked primary always says why in visible text unde
 | `draft` ready | `R41 DRAFT · READY` | Totals; `Rule met 500/500` nominal. | admin: `Submit and book 1,512 passes` (confirm sheet: totals, providers, "This books passes with 3 providers"); member: `Request approval` |
 | `pending_approval` | `R41 · WAITING FOR AN ADMIN` | member: info callout "Sent to org admins 02:44Z." Read-only plan. admin: ApDecision (`Approve and book` / `Send back` with a comment). Reviewer ≠ author. Accepted gaps listed with their reasons. | admin: `Approve and book 1,512 passes` |
 | `executing` | `BOOKING · 812 OF 1,512` | Per-contact trail Requested → Confirmed / Rejected live on the Gantt (rejected = caution dashed), with counts in the footer. | none |
-| `interrupted` (execute) | `BOOKING STOPPED · 812 OF 1,512` | stale callout: "Booking stopped. 812 requests went out; 700 didn't." (U20: state what's known; name a cause only when the server reports one.) | `Continue booking` |
+| `interrupted` (execute) | `BOOKING STOPPED · 812 OF 1,512` | stale callout: "Booking stopped. 812 requests went out; 700 didn't." (U20: state what's known; name a cause only when the server reports one.) When none are left (`0 didn't`), nothing stopped: an info callout "All 4 requests went out · waiting for the provider to confirm." (provider named when there's only one; `The request went out…` for 1), and no `Continue booking`. | `Continue booking` |
 | `reserved` | `R41 · BOOKED` | nominal callout "1,512 passes confirmed." | secondary `Open Contacts` |
 | `partially_reserved` / `failed` | `R41 · 1,490 OF 1,512 BOOKED` / `R41 · BOOKING FAILED` | Rejections become A Demand rows (`Rejected by Northlight: antenna fault`). | `Re-plan after provider changes` (K2) |
 
