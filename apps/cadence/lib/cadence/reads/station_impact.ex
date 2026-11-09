@@ -36,6 +36,12 @@ defmodule Cadence.Reads.StationImpact do
          reservation_ids: Enum.map(hit, & &1.provider_reservation_id),
          spacecraft_ids:
            hit |> Enum.map(& &1.spacecraft_id) |> Enum.reject(&is_nil/1) |> Enum.uniq(),
+         # The contact plan revisions that booked them, so K2 can start a repair (S8) directly.
+         plans:
+           hit
+           |> Enum.reject(&is_nil(&1.contact_plan_id))
+           |> Enum.map(&%{id: &1.contact_plan_id, version: &1.contact_plan_version})
+           |> Enum.uniq(),
          truncated: truncated?
        }}
     end

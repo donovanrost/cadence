@@ -51,6 +51,8 @@ defmodule Cadence.Reads.StationImpactTest do
     assert %{passes_hit: 2, truncated: false, ground_station_id: "svb"} = impact
     assert Enum.sort(impact.reservation_ids) == ["impact-1", "impact-2"]
     assert Enum.sort(impact.spacecraft_ids) == ["sat-a", "sat-b"]
+    # Direct bookings carry no plan; plan-bound ones add {id, version} here (for K2 → S8).
+    assert impact.plans == []
   end
 
   test "a station with nothing booked reports no hits", %{c: c, alice: alice} do
