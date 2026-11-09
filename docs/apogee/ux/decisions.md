@@ -241,3 +241,15 @@ ground_station change writing `code`); viewers see `—` with the suggestion in 
 only. Readiness: "3 stations have no confirmed code" (counts `code IS NULL`), fix → Ground stations. A
 suggestion is never shown where a code is used as an identity (routing rules, the Gantt rows, the
 palette): those fall back to the station name.
+
+### U26 · Passes inside station unavailability (K1, lead question)
+**Decision:** K1 flags it in place; it isn't left to K2.
+- **Outage or maintenance** (the station won't serve): the pass is a **conflict**. The bar is drawn
+  caution-dashed over the band, it counts in `CONFLICTS`, and D lists it ("SVA is down 04:00–08:00Z
+  (outage) · 1 drafted pass falls in it") with `Move` (to the focused spacecraft's alternatives) / `Remove`.
+  Submit stays blocked with the reason (#28). A draft that predates the window says so: "The outage was
+  reported after this draft (05:10Z)".
+- **Degraded** (may still work): a **warning**, not a block. A caution marker on the bar, a line in D
+  ("KIR degraded 14:00–18:00Z · passes may lose data"), counted in the footer as `1 at risk`.
+- After submit (booked passes), the same windows feed K2 "Re-plan after provider changes".
+The planner's conflict check must include availability windows (api) so the server agrees with the UI.
