@@ -50,6 +50,7 @@ const notProvided = computed(
       </template>
       <div v-if="canManage" class="flex flex-wrap gap-2">
         <ApButton :to="{ name: 'setup.spacecraft.new' }">Add spacecraft</ApButton>
+        <ApButton :to="{ name: 'setup.catalog.import' }">Import catalog</ApButton>
       </div>
     </ApPageHeader>
 

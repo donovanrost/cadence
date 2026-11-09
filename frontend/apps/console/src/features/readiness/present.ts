@@ -102,8 +102,7 @@ export function fixLink(fix: FindingFix, severity: Severity): FixLink {
       case "catalog":
         return { label: "Open catalog", to: { name: "setup.catalog" } };
       case "catalog_import":
-        // The import screen isn't built yet; the catalog page is the honest destination.
-        return { label: "Open catalog", to: { name: "setup.catalog" } };
+        return { label: "Import catalog", to: { name: "setup.catalog.import" } };
       case "comms":
         return { label: "Open routing", to: { name: "setup.comms" } };
       case "spacecraft":
