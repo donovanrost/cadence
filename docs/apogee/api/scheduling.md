@@ -231,6 +231,23 @@ Plan detail (`GET /contact-plans/:id`, and the S4 edit response) carries `unconf
 whenever a placed booking is unanswered past the window. `booked` counts reserved passes; `passes`
 are the unconfirmed ones, soonest first (join `snapshot_id` to `passes[]` for spacecraft, station
 and times); `sent_at` is when the booking was placed.
+Each pass also carries `item_id` (the execution item).
+
+### `POST /contact-plans/:plan_id/unconfirmed/:snapshot_id/resolve` (#53, U32)
+
+Body `{action: "booked" | "not_booked", note, provider_reference?}` (`provider_reference` only
+for `booked`). Admins only (`approve_contact_plans`); the pass must be one of `unconfirmed.passes`.
+Cadence re-reads the provider first. Reply `200 {outcome, provider_answer, resolution: {actor:
+{kind, id, name}, at, note, provider_reference}}`:
+
+- `outcome: "provider_answered"`: the provider answered on the re-read, so its answer settled the
+  booking and no operator claim was recorded. `provider_answer` is `"booked" | "not_booked"`.
+- `outcome: "attested"` (Mark booked) or `"not_booked"` (Cadence cancels first, then fails the
+  item; repair treats it as lost). `provider_answer` is `null`.
+
+Errors: `422 invalid_params` (`action`, `note`, `provider_reference`), `404 booking_not_found`,
+`409 booking_not_unconfirmed`, `409 booking_already_resolved` with `details.actor` (who
+resolved it, or `null`), `403 forbidden`.
 
 ### `GET /contact-plans/setup`
 

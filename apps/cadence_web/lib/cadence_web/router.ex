@@ -892,6 +892,12 @@ defmodule CadenceWeb.Router do
 
       post("/contact-plans/:plan_id/execute", ContactPlanController, :execute)
 
+      post(
+        "/contact-plans/:plan_id/unconfirmed/:snapshot_id/resolve",
+        BookingResolutionController,
+        :resolve
+      )
+
       # -- Change sets (owner: api). Contract: docs/apogee/api/changes.md
       scope "/config" do
         get("/", ConfigController, :show)

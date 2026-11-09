@@ -33,6 +33,10 @@ defmodule CadenceWeb.Console.Problem do
     plan_changed: {409, "The plan changed since you loaded it."},
     plan_not_submittable: {409, "The plan can't be submitted in its current state."},
     plan_not_resumable: {409, "The plan isn't waiting to execute."},
+    booking_not_found: {404, "That pass isn't a booking of this plan."},
+    booking_not_unconfirmed:
+      {409, "That booking isn't waiting on the provider past the confirmation window."},
+    booking_already_resolved: {409, "Someone already resolved that booking."},
     plan_not_editable: {422, "The plan can't be edited like that."},
     version_conflict: {409, "The policy changed since you loaded it."},
     reviewer_is_author: {409, "You can't approve a version you saved."},

@@ -12,6 +12,7 @@ defmodule Cadence.Control.PlanConfirmation do
 
   @type pass :: %{
           snapshot_id: binary(),
+          item_id: binary(),
           provider: %{id: binary(), name: binary() | nil} | nil,
           sent_at: DateTime.t()
         }
@@ -53,6 +54,26 @@ defmodule Cadence.Control.PlanConfirmation do
     end
   end
 
+  @doc "The execution item of an approved plan's pass (for #53 resolve)."
+  @spec item(binary(), binary(), binary(), binary()) ::
+          {:ok, struct()} | {:error, :booking_not_found}
+  def item(organization_id, mission_id, plan_id, snapshot_id) do
+    with {:ok, approved} <-
+           ManagementContacts.fetch_approved_plan(organization_id, mission_id, plan_id),
+         %{} = item <-
+           organization_id
+           |> ControlContacts.list_plan_execution(
+             mission_id,
+             plan_id,
+             approved.contact_plan_version
+           )
+           |> Enum.find(&(&1.contact_opportunity_snapshot_id == snapshot_id)) do
+      {:ok, item}
+    else
+      _missing -> {:error, :booking_not_found}
+    end
+  end
+
   defp late?(%{lifecycle_state: :uncertain, started_at: %DateTime{} = at}, cutoff),
     do: DateTime.compare(at, cutoff) == :lt
 
@@ -79,6 +100,7 @@ defmodule Cadence.Control.PlanConfirmation do
       {reservation && reservation.starts_at,
        %{
          snapshot_id: item.contact_opportunity_snapshot_id,
+         item_id: item.contact_plan_execution_item_id,
          provider:
            reservation &&
              %{id: reservation.provider_id, name: Map.get(providers, reservation.provider_id)},
