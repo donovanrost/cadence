@@ -391,6 +391,18 @@ defmodule Cadence.Protocol.RecordArchive do
     |> policy()
   end
 
+  @doc "Transfer frames Cadence recorded per realized contact (S9); `%{}` when the backend can't say."
+  @spec received_frames(binary(), [binary()]) :: %{binary() => non_neg_integer()}
+  def received_frames(_mission_id, []), do: %{}
+
+  def received_frames(mission_id, realized_contact_ids) do
+    backend = backend(configured_policy())
+
+    if function_exported?(backend, :received_frames, 2),
+      do: backend.received_frames(mission_id, realized_contact_ids),
+      else: %{}
+  end
+
   defp backend(%{backend: backend}), do: ensure_backend_loaded!(backend)
 
   defp call_backend(%{backend_opts: backend_opts} = policy, function, args) do

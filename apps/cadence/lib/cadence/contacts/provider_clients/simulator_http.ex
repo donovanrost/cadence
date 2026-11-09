@@ -110,6 +110,12 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
     end
   end
 
+  @doc "The provider's result for a finished contact (S9); an error until it's available."
+  @impl true
+  def fetch_contact_result(%ProviderContext{} = context, provider_contact_ref, opts \\ []) do
+    request_data(context, :get, "/provider/v1/contacts/#{provider_contact_ref}/result", opts)
+  end
+
   @doc "Asks the provider to attest the uplink session of a contact (#44 D2)."
   @impl true
   def attest_uplink_session(%ProviderContext{} = context, provider_contact_ref, attrs, opts \\ []) do

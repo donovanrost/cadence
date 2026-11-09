@@ -60,7 +60,11 @@ defmodule Cadence.Contacts.ProviderClient do
   @callback attest_uplink_session(ProviderContext.t(), binary(), map(), keyword()) ::
               provider_result(map())
 
+  @callback fetch_contact_result(ProviderContext.t(), binary(), keyword()) ::
+              provider_result(map())
+
   @optional_callbacks attest_uplink_session: 4,
+                      fetch_contact_result: 3,
                       provision_delivery_profile: 3,
                       modify_contact: 4,
                       find_contact_by_client_reference: 3,

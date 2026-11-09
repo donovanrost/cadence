@@ -38,6 +38,7 @@ defmodule CadenceWeb.SettingsPageTest do
 
       assert Enum.map(data["sections"], & &1["id"]) == [
                "cadence.governance",
+               "cadence.pass_review",
                "commanding.defaults"
              ]
 

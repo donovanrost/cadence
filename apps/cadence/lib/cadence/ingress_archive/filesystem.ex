@@ -571,4 +571,19 @@ defmodule Cadence.IngressArchive.FileSystem do
     |> :erlang.term_to_binary([:deterministic])
     |> then(&:crypto.hash(:sha256, &1))
   end
+
+  @doc false
+  @spec received_bytes(binary(), [binary()]) :: %{binary() => non_neg_integer()}
+  def received_bytes(mission_id, realized_contact_ids) do
+    IngressArchiveEvidenceEntryRow
+    |> where([e], e.mission_id == ^mission_id and e.realized_contact_id in ^realized_contact_ids)
+    |> group_by([e], e.realized_contact_id)
+    |> select([e], {e.realized_contact_id, sum(e.raw_size_bytes)})
+    |> Cadence.Repo.all()
+    |> Map.new(fn {id, bytes} -> {id, to_integer(bytes)} end)
+  end
+
+  defp to_integer(%Decimal{} = value), do: Decimal.to_integer(value)
+  defp to_integer(value) when is_integer(value), do: value
+  defp to_integer(_value), do: 0
 end

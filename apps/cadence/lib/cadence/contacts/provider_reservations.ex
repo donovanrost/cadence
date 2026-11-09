@@ -643,7 +643,8 @@ defmodule Cadence.Contacts.ProviderReservations do
            :ok <- reviewed_cancellation(row, Keyword.get(opts, :expected_cancel_evidence)),
            {:ok, reservation} <-
              transition(ProviderReservationRow.to_domain(row), :canceling, %{
-               last_error_document: JsonDocument.wrap_value(%{})
+               last_error_document: JsonDocument.wrap_value(%{}),
+               metadata: cadence_initiated(row)
              }) do
         reservation
       else
@@ -651,6 +652,18 @@ defmodule Cadence.Contacts.ProviderReservations do
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
+  end
+
+  # Pass review (S9, DECISIONS #47) tells Cadence-requested cancellations from provider ones.
+  defp cadence_initiated(row) do
+    row.metadata
+    |> JsonDocument.unwrap_value()
+    |> Kernel.||(%{})
+    |> Map.merge(%{
+      "cancel_initiator" => "cadence",
+      "cancel_requested_at" => DateTime.to_iso8601(DateTime.utc_now())
+    })
+    |> JsonDocument.wrap_value()
   end
 
   defp reviewed_cancellation(_, nil), do: :ok

@@ -88,7 +88,8 @@ defmodule Cadence.Control.Supervisor do
         contact_scheduler_global_safety_children(composition) ++
         provider_reservation_reconciler_children(composition) ++
         provider_event_ingestion_children(composition) ++
-        uplink_qualification_children(composition)
+        uplink_qualification_children(composition) ++
+        [{Cadence.Control.PassResultsCloseOut, name: Cadence.Control.PassResultsCloseOut}]
     else
       []
     end

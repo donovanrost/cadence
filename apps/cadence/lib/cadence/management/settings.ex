@@ -4,6 +4,7 @@ defmodule Cadence.Management.Settings do
   alias Cadence.Applications.{ApplicationInstallations, Registry}
   alias Cadence.Auth.SettingsAccess
   alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Management.PassReviewSettingsSection
   alias Cadence.Platform.ScopedSettings
 
   def load(scope, mission_id, section_id) do
@@ -101,6 +102,17 @@ defmodule Cadence.Management.Settings do
       |> Enum.sort_by(& &1.id)
       |> Enum.take(64)
 
-    [governance | admitted]
+    pass_review = %{
+      id: "cadence.pass_review",
+      slot: "settings.section",
+      version: 1,
+      title: "Pass review",
+      description: "When a pass counts as realized, and the fleet's realization target.",
+      provider: PassReviewSettingsSection,
+      scopes: ["organization", "mission"],
+      owner: %{kind: "host", label: "Cadence"}
+    }
+
+    [governance, pass_review | admitted]
   end
 end

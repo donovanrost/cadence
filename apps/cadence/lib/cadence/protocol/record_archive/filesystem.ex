@@ -713,4 +713,19 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
   end
 
   defp repo(opts), do: Keyword.get(opts, :repo, Repo)
+
+  @doc false
+  @spec received_frames(binary(), [binary()]) :: %{binary() => non_neg_integer()}
+  def received_frames(mission_id, realized_contact_ids) do
+    ProtocolArchiveRecordEntryRow
+    |> where(
+      [e],
+      e.mission_id == ^mission_id and e.realized_contact_id in ^realized_contact_ids and
+        e.record_kind == "transfer_frame_record"
+    )
+    |> group_by([e], e.realized_contact_id)
+    |> select([e], {e.realized_contact_id, count(e.record_id)})
+    |> Cadence.Repo.all()
+    |> Map.new()
+  end
 end

@@ -144,7 +144,12 @@ defmodule Cadence.Comms.StationAvailability do
     |> Enum.filter(&(&1.kind in @blocking))
     |> Enum.group_by(
       & &1.ground_station_id,
-      &%{window_id: &1.window_id, starts_at: &1.starts_at, ends_at: &1.ends_at}
+      &%{
+        window_id: &1.window_id,
+        starts_at: &1.starts_at,
+        ends_at: &1.ends_at,
+        source: Map.fetch!(@sources, &1.source)
+      }
     )
   end
 
