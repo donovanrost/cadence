@@ -8,7 +8,15 @@ defmodule Cadence.Reads.CommsDirectory do
   and a transport's `station` are `nil` (unknown) rather than invented.
   """
 
-  alias Cadence.Comms.{GroundStation, GroundStationStore, RoutingRule, Transport, TransportStore}
+  alias Cadence.Comms.{
+    GroundStation,
+    GroundStationStore,
+    RoutingRule,
+    StationCode,
+    Transport,
+    TransportStore
+  }
+
   alias Cadence.Configuration.Kinds
   alias Cadence.GroundNetworks.ProviderAccounts
   alias Cadence.Reads.OperationalState
@@ -18,13 +26,18 @@ defmodule Cadence.Reads.CommsDirectory do
 
   @spec stations(binary(), binary()) :: [map()]
   def stations(organization_id, mission_id) do
-    organization_id
-    |> GroundStationStore.list_ground_stations(mission_id)
+    stations = GroundStationStore.list_ground_stations(organization_id, mission_id)
+    taken = stations |> Enum.map(& &1.code) |> Enum.reject(&is_nil/1)
+
+    stations
     |> Enum.map(fn %GroundStation{} = station ->
       %{
         id: station.ground_station_id,
         display_name: station.display_name,
         code: station.code,
+        # U25: never invent a code; offer one only where none is set.
+        suggested_code:
+          if(is_nil(station.code), do: StationCode.suggest(station.display_name, taken)),
         provider: station.provider,
         region: station.region,
         lifecycle_state: station.lifecycle_state,

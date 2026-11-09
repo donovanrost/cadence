@@ -312,6 +312,10 @@ Body `{email, role: "member" | "organization_admin"}` (default `member`). Requir
 
 ## Comms reads (G1, T1, T2)
 
+Stations (G1) also carry `suggested_code` (U25): a stem of the name, de-duplicated against the
+mission's set codes (`Cadence.Comms.StationCode.suggest/2`). It's present only when `code` is
+`null`, and the server never stores it; show it as a suggestion the operator confirms.
+
 ### `GET /missions/:mission_id/routing-rules/groups` (pass-2 #10)
 
 `{groups: [{transport: {id, name}, direction, role, enabled_count, disabled_count,
