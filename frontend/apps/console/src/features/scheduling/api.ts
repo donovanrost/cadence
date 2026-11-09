@@ -208,9 +208,14 @@ export const planDetailReader = d.object({
   /** qa #30: the day's repair chain, root first then each applied repair; null on older servers. */
   chain: (value: unknown, path?: string) =>
     value === undefined ? null : d.array(planRef, 100)(value, path),
-  /** qa #30: the plan a new Re-plan starts from (latest applied repair, else the root). */
-  chain_head: (value: unknown, path?: string) =>
-    value === undefined ? null : d.nullable(planRef)(value, path),
+  /**
+   * qa #30: the id of the plan a new Re-plan starts from (latest applied repair, else the root).
+   * The server sends a bare id; an `{id, version}` object is accepted too (the doc doesn't say).
+   */
+  chain_head: (value: unknown, path?: string): string | null => {
+    if (value === undefined || value === null) return null;
+    return typeof value === "string" ? d.token(value, path) : planRef(value, path).id;
+  },
   /** U30 (api b122f667): placed bookings unanswered past the window, on any state; else null. */
   unconfirmed: (value: unknown, path?: string) =>
     value === undefined ? null : unconfirmedReader(value, path),

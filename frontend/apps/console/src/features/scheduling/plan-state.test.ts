@@ -135,3 +135,29 @@ describe("plan state decoding (#52)", () => {
     expect(read.plans.map((p) => p.state)).toEqual(["unconfirmed", "unrecognized"]);
   });
 });
+
+describe("plan detail chain_head (qa #30)", () => {
+  it("reads the server's bare id, an {id, version} object, or nothing", async () => {
+    const { planDetailReader } = await import("./api.ts");
+    const detail = (chain_head: unknown) => ({
+      id: "p",
+      version: 1,
+      state: "reserved",
+      window: { from: null, to: null },
+      author: null,
+      counts: { passes: 0, minutes: 0, conflicts: 0, unsatisfied: 0 },
+      ready_to_approve: false,
+      updated_at: "2026-11-10T10:00:00Z",
+      passes: [],
+      demand: { rule_met: 0, rule_total: 0, spacecraft: [], rules: [] },
+      unmet: [],
+      conflicts: [],
+      chain: [{ id: "root", version: 1 }],
+      ...(chain_head === undefined ? {} : { chain_head }),
+    });
+    expect(planDetailReader(detail("contact_plan_head")).chain_head).toBe("contact_plan_head");
+    expect(planDetailReader(detail({ id: "head", version: 2 })).chain_head).toBe("head");
+    expect(planDetailReader(detail(undefined)).chain_head).toBeNull();
+    expect(planDetailReader(detail(null)).chain_head).toBeNull();
+  });
+});
