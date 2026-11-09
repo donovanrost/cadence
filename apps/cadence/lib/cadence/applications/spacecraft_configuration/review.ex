@@ -18,11 +18,13 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
     request_many(scope, mission_id, %{spacecraft_id => expected_token}, opts)
   end
 
+  @max_review_batch SpacecraftModelBindings.max_review_batch()
+
   @doc "Reviews an exact, bounded set of spacecraft drafts as one governed activation."
   def request_many(scope, mission_id, tokens, opts \\ [])
 
   def request_many(scope, mission_id, tokens, opts)
-      when is_map(tokens) and map_size(tokens) in 1..500 do
+      when is_map(tokens) and map_size(tokens) in 1..@max_review_batch do
     {spacecraft_id, _token} = tokens |> Enum.sort() |> hd()
 
     with {:ok, mission, spacecraft} <-
