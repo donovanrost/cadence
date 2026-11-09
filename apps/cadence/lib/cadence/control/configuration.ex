@@ -9,6 +9,8 @@ defmodule Cadence.Control.Configuration do
   `{:config_runtime, map}` on `"config:" <> org <> ":" <> mission`.
   """
 
+  require Logger
+
   alias Cadence.Activations
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Auth.Scope
@@ -194,8 +196,7 @@ defmodule Cadence.Control.Configuration do
     progress(change_set_id, "validate", :done)
     progress(change_set_id, "write_config", :done)
     progress(change_set_id, "notify_runtime", :running)
-    notify_runtime(mission, result.impacts)
-    result = converge(mission, result)
+    result = post_commit(mission, change_set_id, result)
     progress(change_set_id, "notify_runtime", :done)
     progress(change_set_id, "verify", if(result.runtime == :degraded, do: :failed, else: :done))
     broadcast_runtime(mission, result)
@@ -228,6 +229,27 @@ defmodule Cadence.Control.Configuration do
         mission.mission_id
       )
     end
+  end
+
+  # The revision is committed: nothing after this may fail the response (qa #19). A crash or
+  # exit while notifying or converging (a pool timeout under load) leaves the revision applied
+  # and reports the runtime degraded; the mission reconciler keeps retrying.
+  defp post_commit(mission, change_set_id, result) do
+    notify_runtime(mission, result.impacts)
+    converge(mission, result)
+  rescue
+    error -> degraded_after_commit(mission, change_set_id, result, Exception.message(error))
+  catch
+    :exit, reason -> degraded_after_commit(mission, change_set_id, result, inspect(reason))
+  end
+
+  defp degraded_after_commit(mission, change_set_id, result, reason) do
+    Logger.warning(
+      "change set #{change_set_id} applied (revision #{inspect(result[:revision])}) but " <>
+        "post-commit runtime work failed for mission #{mission.mission_id}: #{reason}"
+    )
+
+    %{result | runtime: :degraded}
   end
 
   # Admission and the generation were committed with the revision; here the runtime converges

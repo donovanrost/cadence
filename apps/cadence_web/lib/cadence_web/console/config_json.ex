@@ -30,7 +30,8 @@ defmodule CadenceWeb.Console.ConfigJSON do
     revision_not_found: 404,
     change_not_found: 404,
     op_not_found: 404,
-    mission_not_found: 404
+    mission_not_found: 404,
+    apply_interrupted: 503
   }
 
   @messages %{
@@ -53,7 +54,8 @@ defmodule CadenceWeb.Console.ConfigJSON do
     revision_not_found: "Revision not found.",
     change_not_found: "Change not found.",
     op_not_found: "Change not found.",
-    mission_not_found: "Mission not found."
+    mission_not_found: "Mission not found.",
+    apply_interrupted: "The apply was interrupted and did not take effect. Try again."
   }
 
   @doc "Deep-encodes a facade value for JSON."

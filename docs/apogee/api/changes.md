@@ -39,6 +39,7 @@ ISO-8601, revision numbers are integers (render them as `rN`), and actors are `{
 | 422 | `invalid_op` (details = `{index, errors: [{path, message}]}`), `reason_required`, `comment_required`, `nothing_staged`, `not_in_review`, `checks_failed` and `holds_not_acknowledged` (details = the preview), `invalid_range`, `invalid_params` (malformed body; details keyed by field) |
 | 403 | `forbidden` |
 | 404 | `change_set_not_found`, `revision_not_found`, `change_not_found`, `op_not_found`, `mission_not_found` |
+| 503 | `apply_interrupted` (submit/approve: nothing changed; safe to retry) |
 
 ## Live (on `mission:<id>`)
 
@@ -50,6 +51,13 @@ ISO-8601, revision numbers are integers (render them as `rN`), and actors are `{
   submit/review HTTP call, so the steps arrive while that request is in flight.
 - **`config_runtime`** `{revision, activation_id, generation, runtime, degraded_partitions}` after an
   apply (`runtime` is `not_applicable` in P1).
+- Once the apply has committed, submit and approve never fail the response (qa #19). If notifying
+  or converging the runtime crashes afterwards (a DB pool timeout under load, say), the response
+  is still `200 {state: "applied", revision, …}` with `runtime: "degraded"`, and the mission
+  reconciler keeps retrying. If the connection drops during the apply itself, the server checks
+  whether it landed: if it did, the normal applied result with `runtime: "degraded"`; if not,
+  `503 apply_interrupted` ("did not take effect"), which is safe to retry. Any other 5xx on
+  submit means "unclear": refetch the change set and head before telling the operator it failed.
 
 ## Permissions
 
