@@ -72,7 +72,10 @@ export function unconfirmedView(
 export function unconfirmedTail(plan: PlanDetail): string | null {
   const u = plan.unconfirmed;
   if (!u || u.passes.length === 0) return null;
-  return plan.state === "unconfirmed"
-    ? `${formatCount(u.booked)} booked · ${formatCount(u.passes.length)} unconfirmed`
-    : `${formatCount(u.passes.length)} unconfirmed`;
+  const n = `${formatCount(u.passes.length)} unconfirmed`;
+  if (plan.state === "unconfirmed") return `${formatCount(u.booked)} booked · ${n}`;
+  // ux: 'R41 · 1,490 OF 1,512 BOOKED · 4 UNCONFIRMED'.
+  if (plan.state === "partially_reserved")
+    return `${formatCount(u.booked)} of ${formatCount(plan.counts.passes)} booked · ${n}`;
+  return n;
 }

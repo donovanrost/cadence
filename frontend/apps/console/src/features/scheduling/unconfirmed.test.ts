@@ -70,7 +70,7 @@ describe("U30 unconfirmed", () => {
   it("header: booked + unconfirmed on the state, a suffix on any other state", () => {
     expect(planHeaderTail(plan("unconfirmed", ["Northlight"]))).toBe("36 booked · 1 unconfirmed");
     expect(planHeaderTail(plan("partially_reserved", ["Northlight"]))).toBe(
-      "partly booked · 1 unconfirmed",
+      "36 of 40 booked · 1 unconfirmed",
     );
     expect(planHeaderTail({ ...plan("reserved", []), unconfirmed: null })).toBe("booked");
   });

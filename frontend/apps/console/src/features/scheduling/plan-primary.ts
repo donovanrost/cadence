@@ -114,7 +114,9 @@ export function planPrimary(
 export function planHeaderTail(plan: PlanDetail): string {
   const unconfirmed = unconfirmedTail(plan);
   if (!unconfirmed) return stateTail(plan);
-  return plan.state === "unconfirmed" ? unconfirmed : `${stateTail(plan)} · ${unconfirmed}`;
+  return plan.state === "unconfirmed" || plan.state === "partially_reserved"
+    ? unconfirmed
+    : `${stateTail(plan)} · ${unconfirmed}`;
 }
 
 function stateTail(plan: PlanDetail): string {

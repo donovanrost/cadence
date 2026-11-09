@@ -125,10 +125,9 @@ function headerFor(v: PlanView, d: string): string {
     case "plan":
       return v.plan.superseded
         ? `Contact plan · R${v.plan.version} draft · superseded`
-        : v.plan.state === "unconfirmed"
-          ? // U30: the tail carries the state ('R41 · unconfirmed', later '36 booked · 4 unconfirmed').
-            `Contact plan · R${v.plan.version} · ${planHeaderTail(v.plan)}`
-          : `Contact plan · R${v.plan.version} ${v.plan.state.replaceAll("_", " ")} · ${planHeaderTail(v.plan)}`;
+        : // ScheduleFlow K1 table: 'R41 DRAFT · READY', otherwise 'R41 · <tail>' (the tail names
+          // the state), so the line stays short enough not to truncate (qa: the U30 count was cut).
+          `Contact plan · R${v.plan.version}${v.plan.state === "draft" ? " draft" : ""} · ${planHeaderTail(v.plan)}`;
   }
 }
 const headerLine = computed(() => headerFor(view.value, dayLabel(day.value)));

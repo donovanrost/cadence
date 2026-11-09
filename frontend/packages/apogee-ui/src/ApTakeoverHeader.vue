@@ -45,9 +45,12 @@ const now = useNow();
     <div
       class="flex min-w-0 flex-col justify-center gap-0.5 border-r border-hairline px-[18px] py-1.5 max-md:flex-1"
     >
-      <span v-if="context" class="truncate font-mono text-xs text-text-4 uppercase">{{
-        context
-      }}</span>
+      <span
+        v-if="context"
+        class="truncate font-mono text-xs text-text-4 uppercase"
+        :title="context"
+        >{{ context }}</span
+      >
       <component
         :is="titleAs"
         class="m-0 font-display text-[19px] leading-tight font-bold tracking-[.14em] uppercase"
