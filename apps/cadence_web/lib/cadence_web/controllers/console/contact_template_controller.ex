@@ -7,6 +7,7 @@ defmodule CadenceWeb.Console.ContactTemplateController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.ContactPlanning.TemplateSchema
   alias Cadence.Control.PlanningTemplates
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
@@ -14,6 +15,9 @@ defmodule CadenceWeb.Console.ContactTemplateController do
 
   def summary(conn, _params),
     do: ok(conn, PlanningTemplates.summary(conn.assigns.current_scope, mission_id(conn)))
+
+  def schema(conn, _params),
+    do: ok(conn, %{fields: TemplateSchema.fields(), defaults: TemplateSchema.defaults()})
 
   def index(conn, _params),
     do: ok(conn, %{templates: PlanningTemplates.list(org_id(conn), mission_id(conn))})

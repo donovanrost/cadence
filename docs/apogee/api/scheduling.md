@@ -294,6 +294,11 @@ schedule, the requirement content each occurrence generates, and the catch-up bo
   rule_summary, priority}]}` (closed ones are left out). `applies_to` ("plane 1", "profile Block 1",
   "12 spacecraft", "…, except 2") and `rule_summary` ("1 downlink ≥ 5 min each · every 6h00") are
   server-made; don't re-derive them. `applies_to_count` is resolved now.
+- `GET /templates/schema` → `{fields, defaults}` for the template form, in the policy schema's
+  field shape (`path, label, type, unit, enum, range, default, required, help, visible_when,
+  group, advanced`) over `schedule.*`, `requirement.*`, `catch_up_policy.*`. Types add `datetime`,
+  `time` and `list` (ids). `visible_when` ties `interval_seconds` / `time_utc` to `schedule.type`
+  and the duration / volume fields to `requirement.success_measure`. Units are `s` and `bytes`.
 - `GET /templates/:id` → the row plus `document` and `versions: [{version, created_at, actor:
   {kind, id, name}}]` (newest first). `404 template_not_found`.
 - `POST /templates` `{name, target, document}` → `201 {id, version: 1}`. The template is active

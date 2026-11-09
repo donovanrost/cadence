@@ -136,6 +136,35 @@ defmodule CadenceWeb.Console.ContactTemplateAPITest do
     assert summary["permissions"] == ["planning.edit", "planning.approve"]
   end
 
+  test "the template form schema covers the document paths", c do
+    data =
+      c.member
+      |> call(:get, c.base <> "/templates/schema")
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    paths = Map.new(data["fields"], &{&1["path"], &1})
+
+    assert %{"type" => "enum", "group" => "schedule"} = paths["schedule.type"]
+
+    assert paths["schedule.interval_seconds"]["visible_when"] == %{
+             "path" => "schedule.type",
+             "equals" => "fixed_interval"
+           }
+
+    assert paths["requirement.minimum_data_volume_bytes"]["unit"] == "bytes"
+
+    assert paths["catch_up_policy.maximum_occurrences_per_run"]["range"] == %{
+             "min" => 1,
+             "max" => 1_000
+           }
+
+    assert data["defaults"]["requirement"]["station_constraints_document"] == %{
+             "allowed" => [],
+             "excluded" => []
+           }
+  end
+
   test "bad targets and members are refused; unknown templates are 404", c do
     bad = call(c.admin, :post, c.base <> "/templates", body(%{"kind" => "plane", "plane" => "1"}))
     assert %{"code" => "invalid_params"} = json_response(bad, 422)["error"]
