@@ -9,6 +9,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
   and the latest end), since plans don't store a horizon.
   """
 
+  alias Cadence.Accounts
   alias Cadence.Comms.StationRefs
 
   alias Cadence.ContactPlanning.{
@@ -279,8 +280,22 @@ defmodule Cadence.Reads.ContactPlanOverview do
 
   defp list_opts(_filters), do: []
 
-  defp actor(%{"display_name" => name}) when is_binary(name), do: %{name: name}
-  defp actor(%{"name" => name}) when is_binary(name), do: %{name: name}
-  defp actor(%{"email" => email}) when is_binary(email), do: %{name: email}
+  # Who made the plan version: a person (`created_by` is usually a user id), Cadence itself for an
+  # automatic run (`{kind: "system", name: "Cadence"}`), or nil when it isn't known (ux).
+  defp actor(%{"display_name" => name}) when is_binary(name), do: %{kind: "user", name: name}
+  defp actor(%{"name" => name}) when is_binary(name), do: %{kind: "user", name: name}
+  defp actor(%{"email" => email}) when is_binary(email), do: %{kind: "user", name: email}
+
+  defp actor(id) when is_binary(id) do
+    case Accounts.fetch_user(id) do
+      {:ok, user} -> %{kind: "user", id: id, name: user.display_name || user.email}
+      _not_a_user -> system_actor(id)
+    end
+  end
+
   defp actor(_other), do: nil
+
+  defp system_actor("cadence" <> _), do: %{kind: "system", name: "Cadence"}
+  defp system_actor("system" <> _), do: %{kind: "system", name: "Cadence"}
+  defp system_actor(_unknown), do: nil
 end

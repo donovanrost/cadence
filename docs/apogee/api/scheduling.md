@@ -105,6 +105,10 @@ The list row, plus:
   K2's (repairs). `counts.conflicts` and `ready_to_approve` include station conflicts on the detail
   read; the list rows count only overlaps.
 
+**Author** (`author` on rows and detail): `{kind: "user", id, name}` for a person (a repair
+proposal's author is whoever started the repair), `{kind: "system", name: "Cadence"}` for an
+automatic run, or `null` when it isn't known.
+
 **Counts** describe the whole plan the Gantt shows: `counts.passes` and `minutes` include kept
 (locked) passes, and `counts.locked` says how many are locked. A repair proposal of 40 with 4
 moves reads `passes: 40, locked: 36`; the diff counts the moves.
