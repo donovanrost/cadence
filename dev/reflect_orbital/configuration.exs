@@ -52,9 +52,41 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
     %{mission: mission, revision: revision, apids: apids, fleet: fleet}
   end
 
+  # The legacy reference database has no verifiers, so commands would never read satisfied.
+  # The demo adds uplink verifiers to a few commands as it reads the file (#44); the reference
+  # file itself stays untouched. COP-1 completion means the spacecraft's FARM accepted the frame.
+  @verified_commands ~w(NOOP RESET_COUNTERS SET_MODE)
+  @verifiers """
+      verifiers:
+        - name: Uplink started
+          phase: start
+          timeout_ms: 30000
+          success_criteria:
+            criteria_type: comparison
+            subject_ref: transport:started
+            comparison: equal
+            value: true
+        - name: Accepted on board
+          phase: completion
+          timeout_ms: 30000
+          success_criteria:
+            criteria_type: comparison
+            subject_ref: transport:completed
+            comparison: equal
+            value: true
+  """
+
+  defp with_demo_verifiers(source) do
+    Enum.reduce(@verified_commands, source, fn name, acc ->
+      line = "  - name: #{name}\n"
+      ^line = if String.contains?(acc, line), do: line, else: raise("#{name} not found")
+      String.replace(acc, line, line <> @verifiers, global: false)
+    end)
+  end
+
   defp import_database(opts) do
     id = "catalog-earendil-command-telemetry"
-    source = File.read!(F.database_path())
+    source = F.database_path() |> File.read!() |> with_demo_verifiers()
     digest = :crypto.hash(:sha256, source) |> Base.encode16(case: :lower)
 
     case Catalog.fetch_database(F.organization_id(), F.mission_id(), id) do
