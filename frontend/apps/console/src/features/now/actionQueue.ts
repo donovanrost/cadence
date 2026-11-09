@@ -7,6 +7,7 @@ import {
   formatValue,
   withUnit,
 } from "@/features/alarms/index.ts";
+import { attentionMeta, attentionReader, attentionWords, resolvedReader } from "./attention.ts";
 import { GROUP_AT, type QueueItem } from "./queue.ts";
 
 /** Contract: docs/apogee/api/ops.md, `GET /missions/:mission_id/action-queue` (M6). Server-ranked. */
@@ -55,9 +56,10 @@ const itemReader = d.object({
     "setup",
     "limits_not_configured",
     "never_heard",
+    "attention",
   ] as const),
   state: d.oneOf(["critical", "caution", "stale", "off"] as const),
-  source: d.nullable(d.oneOf(["catalog_monitoring", "ground_limit"] as const)),
+  source: d.nullable(d.oneOf(["catalog_monitoring", "ground_limit", "pass_resolution"] as const)),
   /** Alarm items: how many members are acknowledged. */
   acknowledged: d.nullable(d.integer),
   since: d.nullable(d.timestamp),
@@ -77,6 +79,8 @@ const itemReader = d.object({
   outcome: d.nullable(d.oneOf(["failed", "indeterminate"] as const)),
   command_requests: d.array(commandRequest, 1_000),
   finding: d.nullable(d.object({ id: d.token, title: d.string, body: d.nullable(d.string) })),
+  // U31 (fafe581a): null on other kinds; optional until api ships it.
+  attention: d.optional(d.nullable(attentionReader)),
 });
 type ServerItem = Decoded<typeof itemReader>;
 
@@ -84,6 +88,7 @@ export const actionQueueReader = d.object({
   observed_at: d.timestamp,
   counts: d.object({ p1: d.integer, p2: d.integer, p3: d.integer, spacecraft_p1: d.integer }),
   items: d.array(itemReader, 1_000),
+  resolved: d.optional(d.array(resolvedReader, 1_000)),
 });
 export type ActionQueue = Decoded<typeof actionQueueReader>;
 
@@ -243,6 +248,25 @@ function rowFor(item: ServerItem): QueueItem[] {
           action: { label: "Set up", to: { name: "setup.apps" } },
         },
       ];
+    case "attention": {
+      const a = item.attention;
+      if (!a) return [];
+      const w = attentionWords(a);
+      const to: RouteLocationRaw = { name: "ops.contacts", query: { contact: a.contact_id } };
+      const meta = [attentionMeta(a), `AOS ${a.starts_at.slice(11, 16)}Z`].filter(Boolean);
+      return [
+        {
+          ...base(item),
+          key: item.id,
+          title: `${item.spacecraft[0]?.name ?? "Spacecraft"} · ${w.what}`,
+          titleTo: to,
+          sentence: w.evidence,
+          meta: meta.join(" · "),
+          acknowledged: a.state === "acknowledged",
+          action: { label: "Review", to },
+        },
+      ];
+    }
     case "never_heard":
       return [
         {
