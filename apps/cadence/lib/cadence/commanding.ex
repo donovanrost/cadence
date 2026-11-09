@@ -8,6 +8,7 @@ defmodule Cadence.Commanding do
   alias Ecto.Multi
 
   alias Cadence.Commanding.{
+    Cancellation,
     CommandApproval,
     CommandQueueEntry,
     CommandQueueEntryRow,
@@ -427,8 +428,8 @@ defmodule Cadence.Commanding do
              mission_id,
              CommandRequestRow.to_domain(request_row)
            ) do
-      release_command_queue_entry(
-        organization_id,
+      organization_id
+      |> release_command_queue_entry(
         mission_id,
         queue_entry_row.command_queue_entry_id,
         realized_contact.realized_contact_id,
@@ -438,6 +439,14 @@ defmodule Cadence.Commanding do
         transport_binding_id: transport_binding.transport_binding_id,
         process_namespace: process_namespace(opts)
       )
+      |> case do
+        # The head failed closed; the lane's next entry may still release in this contact.
+        {:error, :release_basis_changed} ->
+          dispatch_queue_lane(organization_id, mission_id, queue_lane_key, released_by, opts)
+
+        result ->
+          result
+      end
     end
   end
 
@@ -675,14 +684,7 @@ defmodule Cadence.Commanding do
              CommandRequestRow.to_domain(request_row),
              opts
            ),
-         {:ok, request_basis} <-
-           RequestValidation.resolve_basis(
-             organization_id,
-             mission_id,
-             request_row.mission_model_revision_id,
-             request_row.command_id,
-             request_row.source_endpoint_ref
-           ),
+         {:ok, request_basis} <- release_basis(organization_id, mission_id, request_row),
          :ok <-
            ConstraintEvaluation.validate(
              organization_id,
@@ -719,6 +721,42 @@ defmodule Cadence.Commanding do
   rescue
     error in [ArgumentError] ->
       {:error, {:command_release_encoding_failed, Exception.message(error)}}
+  end
+
+  # A queued request whose model revision is no longer active can never release. Fail it
+  # closed (canceled, `release_basis_changed`) instead of holding its lane forever.
+  defp release_basis(organization_id, mission_id, request_row) do
+    case RequestValidation.resolve_basis(
+           organization_id,
+           mission_id,
+           request_row.mission_model_revision_id,
+           request_row.command_id,
+           request_row.source_endpoint_ref
+         ) do
+      {:error, {:mission_model_revision_mismatch, _requested, _active}} ->
+        fail_closed(organization_id, mission_id, request_row)
+
+      {:error, {:mission_model_revision_not_active, _requested}} ->
+        fail_closed(organization_id, mission_id, request_row)
+
+      result ->
+        result
+    end
+  end
+
+  defp fail_closed(organization_id, mission_id, request_row) do
+    {:ok, _outcome} =
+      Repo.transaction(fn ->
+        Cancellation.fail_closed(
+          organization_id,
+          mission_id,
+          request_row.command_request_id,
+          "release_basis_changed"
+        )
+      end)
+
+    ReadUpdates.publish(:commanding_changed, organization_id, mission_id)
+    {:error, :release_basis_changed}
   end
 
   defp execute_release_attempt(release_context) when is_map(release_context) do
