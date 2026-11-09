@@ -1,4 +1,4 @@
-import { computed, onScopeDispose, ref, type Ref } from "vue";
+import { computed, ref, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { decoders as d, useRemoteQuery, type ApiError } from "@/api";
 import { useChannelEvent, useMissionInvalidation } from "@/live";
@@ -24,7 +24,7 @@ const progressReader = d.object({ kind: d.string, id: d.token, state: d.string }
 
 /**
  * K1 data owner: the day's plans (S6), the draft run named by `?run=` (S3, followed by
- * `scheduling_progress` and a 5 s poll while running), the current plan's detail, and the
+ * `scheduling_progress` and `contact_plans` invalidations), the current plan's detail, and the
  * start / continue actions. Exposes one derived `view`.
  */
 export function usePlanDay(
@@ -80,17 +80,14 @@ export function usePlanDay(
       },
     },
   );
-  // Reservation changes (booking confirmations / rejections) invalidate `contacts` (S10).
-  useMissionInvalidation(missionId, ["contacts"], () => {
+  // S10 (api d13ed37c): `contact_plans` covers plan and fleet-run changes (approvals, execution,
+  // supersession, the #52 window); `contacts` covers reservation changes. No poll: a reconnect
+  // refetches (onResync), which also covers events lost across a server restart.
+  useMissionInvalidation(missionId, ["contacts", "contact_plans"], () => {
     plans.refetch();
-    if (!runId.value) plan.refetch();
+    if (runId.value) draft.refetch();
+    else plan.refetch();
   });
-  const poll = setInterval(() => {
-    const s = draft.state.value;
-    if (runId.value && s.status === "ready" && ["queued", "running"].includes(s.value.run.state))
-      draft.refetch();
-  }, 5_000);
-  onScopeDispose(() => clearInterval(poll));
 
   async function draftDay() {
     busy.value = true;
