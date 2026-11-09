@@ -32,16 +32,10 @@ const props = defineProps<{
 const now = useNow();
 
 const state = computed(() => (props.pass ? contactState(props.pass) : null));
-/**
- * Until pass review (S9) compares planned vs flown, a completed reservation is only known to have
- * ended: gray "Ended · not verified", never a green "realized" (ux Contacts review 1).
- */
 const tag = computed(() =>
   state.value === null
     ? null
-    : state.value === "realized"
-      ? { state: "neutral" as const, label: "Ended · not verified" }
-      : { state: contactOpState(state.value), label: contactStateWord[state.value] },
+    : { state: contactOpState(state.value), label: contactStateWord[state.value] },
 );
 const facts = computed(() => {
   const p = props.pass;

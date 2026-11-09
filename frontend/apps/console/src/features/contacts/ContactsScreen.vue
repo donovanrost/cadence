@@ -150,7 +150,7 @@ const tabs = [
       </ApEmptyState>
     </ApPanel>
     <template v-else>
-      <ApCallout v-if="list.some((p) => p.source.synthetic)" tone="info">
+      <ApCallout v-if="list.some((p) => p.source.synthetic)" tone="stale">
         These passes are the simulator's synthetic windows, not a real ground provider's.
       </ApCallout>
       <ApPanel index="D1" title="Ground track" flush class="flex-none">

@@ -40,6 +40,9 @@ describe("passes", () => {
     expect(passStatus(pass("b", { state: "active" }), now)).toBe("live");
     expect(passStatus(pass("c", { pass_phase: "pass" }), now)).toBe("live");
     expect(passStatus(pass("d", { ends_at: "2026-11-09T01:50:00Z" }), now)).toBe("done");
+    expect(
+      passGantt([pass("d", { ends_at: "2026-11-09T01:50:00Z" })], () => null, now).bars[0]?.kind,
+    ).toBe("done");
     expect(passStatus(pass("e", { state: "rejected" }), now)).toBe("problem");
     expect(passStatus(pass("f", { state: "canceled" }), now)).toBe("canceled");
   });

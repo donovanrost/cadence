@@ -22,7 +22,7 @@ const KIND: Readonly<Record<PassStatus, GanttBar["kind"] | null>> = {
   live: "live",
   scheduled: "scheduled",
   problem: "problem",
-  done: "scheduled",
+  done: "done",
   canceled: null,
 };
 
