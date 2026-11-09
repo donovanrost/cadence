@@ -71,12 +71,17 @@ const proposal = computed(() =>
     : null,
 );
 const step = computed(() => (proposal.value ? 1 : 0));
+/** Provider requests the proposal sends: one per moved, dropped or added pass (U28). */
+const requests = computed(() => {
+  const d = proposal.value?.diff;
+  return d ? d.moved.length + d.dropped.length + d.added.length : 0;
+});
 const applyLabel = (plan: PlanDetail) =>
   !isAdmin.value
-    ? `Request approval for r${plan.version}`
+    ? "Request approval for the proposal"
     : coverage(plan).gaps > 0
-      ? `Accept ${plural(coverage(plan).gaps, "gap")} and apply r${plan.version}`
-      : `Apply r${plan.version} · book ${plural(plan.counts.passes, "pass", "passes")}`;
+      ? `Accept ${plural(coverage(plan).gaps, "gap")} and apply the proposal`
+      : `Apply proposal · send ${plural(requests.value, "request")}`;
 const primary = computed(() =>
   proposal.value?.plan ? planPrimary(proposal.value.plan, isAdmin.value) : null,
 );
@@ -89,21 +94,43 @@ const span = computed(() => {
     times.push(Date.parse(p.starts_at), Date.parse(p.ends_at));
   return { from: Math.min(...times), to: Math.max(...times) };
 });
-const context = computed(() => {
-  const s = source.value;
-  return s.status === "ready"
-    ? `Re-plan · live plan r${s.value.version} · ${s.value.state.replaceAll("_", " ")}`
-    : "Re-plan";
+/** U28: once proposed, the header says what it repairs and how much moves. */
+const changeWords = computed(() => {
+  const d = proposal.value?.diff;
+  if (!d) return "";
+  return (
+    [
+      d.moved.length > 0 ? plural(d.moved.length, "move") : null,
+      d.dropped.length > 0 ? `${d.dropped.length} dropped` : null,
+      d.added.length > 0 ? `${d.added.length} added` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || "no changes"
+  );
 });
-const title = computed(() => {
-  if (!station.stationId.value) return "Re-plan after provider changes";
+const stationTitle = computed(() => {
   const a = station.availability.value;
   const state = a.status === "ready" ? a.value.status.state : null;
-  return state === "down"
-    ? `${station.stationName.value} outage`
-    : state === "degraded"
-      ? `${station.stationName.value} degraded`
-      : station.stationName.value;
+  const name = station.stationName.value;
+  return state === "down" ? `${name} outage` : state === "degraded" ? `${name} degraded` : name;
+});
+const context = computed(() => {
+  const s = source.value;
+  if (s.status !== "ready") return "Re-plan";
+  const state = s.value.state.replaceAll("_", " ");
+  if (!proposal.value) return `Re-plan · live plan r${s.value.version} · ${state}`;
+  return [
+    `Repair of r${s.value.version} (${state})`,
+    station.stationId.value ? stationTitle.value : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+});
+const title = computed(() => {
+  const s = source.value;
+  if (proposal.value && s.status === "ready")
+    return `r${s.value.version} → proposal · ${changeWords.value}`;
+  return station.stationId.value ? stationTitle.value : "Re-plan after provider changes";
 });
 async function onApply(acks: Acknowledgement[]) {
   const plan = proposal.value?.plan;
@@ -187,7 +214,7 @@ async function onApply(acks: Acknowledgement[]) {
               day=""
               :span="span"
               index="B2"
-              :title="`Proposed · new plan r${proposal.plan.version}`"
+              :title="`Proposal · ${changeWords}`"
               :name-of="nameOf"
               :focused="null"
               :selected="null"
