@@ -199,3 +199,12 @@ an acked critical in with fresh cautions and hide severity. Sorting last keeps u
 9. **Plan approval** follows the server's policy, like commanding (DECISIONS #7 pattern). Default:
    one planner submits. When a plan comes back `pending_approval`, show ApDecision to people who
    can approve, with the reviewer ≠ the author. The UI never invents the requirement.
+
+### U23 · Every count names its unit; plans count spacecraft first (qa question)
+**Decision:** no bare counts. Every number on a plan screen says what it counts: `10 SPACECRAFT NOT
+COVERED`, `40 CONTACTS SHORT`. The **headline unit for coverage is spacecraft** (ScheduleFlow R01: "who
+isn't covered"). Contact shortfall is the secondary figure, beside it. So: header line `R41 DRAFT · 10
+SPACECRAFT NOT COVERED`; A Demand meta `10 SPACECRAFT · 40 CONTACTS SHORT`; footer `RULE MET 490 / 500
+SPACECRAFT`; a **gap** = one unmet requirement, so the primary reads `Accept 10 gaps and submit` and
+the sheet title adds the shortfall: `Accept 10 gaps · 40 contacts short`. Same rule everywhere: a
+count beside a label that doesn't name the unit is a bug.

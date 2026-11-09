@@ -74,7 +74,7 @@ footer's commit slot, and a blocked primary always says why in visible text unde
 | `drafting` | `DRAFTING · OPTIMIZING · 00:41` | Step bar shows 03 Draft as current, and a phase line `MATERIALIZING → SEARCHING → OPTIMIZING → PLAN` with the current phase in readout and elapsed time. Panels show what's known so far. | none (secondary `Cancel` only if the domain supports it) |
 | `interrupted` (draft) | `DRAFTING STOPPED` | stale callout: "Drafting stopped when the server restarted at 02:31Z. Nothing was submitted." | `Continue drafting` |
 | `draft` + **conflicts** | `R41 DRAFT · 2 CONFLICTS` | Conflicts as crit rows at the top of D (`SVB-1 double-booked 03:20Z: 073 and 251 overlap 3 min`), each with `Move` / `Remove`. Conflicting passes dashed caution on the Gantt. | `Submit` **disabled**, reason under it: "2 conflicts on SVB-1 and FBK-2. Move or remove a pass to submit." (Conflicts always block, #28.) |
-| `draft` + **unmet requirements** (no conflicts) | `R41 DRAFT · 6 NOT COVERED` | A Demand lists them first (see below). Footer `Rule met 494/500` caution. | `Accept 6 gaps and submit` → **Accept gaps sheet** |
+| `draft` + **unmet requirements** (no conflicts) | `R41 DRAFT · 6 SPACECRAFT NOT COVERED` (U23) | A Demand lists them first (see below). Footer `Rule met 494 / 500 spacecraft` caution; A meta `6 SPACECRAFT · 14 CONTACTS SHORT`. | `Accept 6 gaps and submit` → **Accept gaps sheet** |
 | `draft` ready | `R41 DRAFT · READY` | Totals; `Rule met 500/500` nominal. | admin: `Submit and book 1,512 passes` (confirm sheet: totals, providers, "This books passes with 3 providers"); member: `Request approval` |
 | `pending_approval` | `R41 · WAITING FOR AN ADMIN` | member: info callout "Sent to org admins 02:44Z." Read-only plan. admin: ApDecision (`Approve and book` / `Send back` with a comment). Reviewer ≠ author. Accepted gaps listed with their reasons. | admin: `Approve and book 1,512 passes` |
 | `executing` | `BOOKING · 812 OF 1,512` | Per-contact trail Requested → Confirmed / Rejected live on the Gantt (rejected = caution dashed), with counts in the footer. | none |
@@ -89,7 +89,7 @@ then mono `0 / 3 CONTACTS`. D's alternatives list says "Nothing else is visible 
 day." and offers only `Accept gap` (adds it to the sheet with the reason prefilled from the cause). An
 uncoverable spacecraft never shows a disabled `Add`.
 
-**Accept gaps sheet** (side sheet, opened by the primary): title `Accept 6 gaps`; one row per unmet
+**Accept gaps sheet** (side sheet, opened by the primary): title `Accept 6 gaps · 14 contacts short` (a gap = one unmet requirement); one row per unmet
 requirement: mark, spacecraft (mono), the rule and shortfall (`2 / 3 contacts · longest gap 11h20 >
 10h00`), the cause, and a required reason field. A `Same reason for all` checkbox fills empty reasons
 from the first. Footer: caption `AUDITED · VISIBLE TO THE APPROVER` + primary `Accept 6 gaps and submit`
