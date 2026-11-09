@@ -5,7 +5,7 @@ import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
 import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, plural } from "@/ui";
-import StationEditor from "./StationEditor.vue";
+import { KindEditor } from "@/features/changes/index.ts";
 import StationsTable from "./StationsTable.vue";
 import { fetchStations } from "./api.ts";
 
@@ -44,10 +44,20 @@ const notProvided = computed(
       >
     </ApPageHeader>
     <template v-if="editing && canStage && state.status === 'ready'">
-      <StationEditor
+      <KindEditor
         :key="editing"
         :mission-id="missionId"
-        :station="editing === 'new' ? null : (state.value.find((s) => s.id === editing) ?? null)"
+        kind="ground_station"
+        :entity-id="editing === 'new' ? null : editing"
+        :document="editing === 'new' ? {} : (state.value.find((s) => s.id === editing) ?? {})"
+        :name="
+          editing === 'new'
+            ? 'station'
+            : (state.value.find((s) => s.id === editing)?.display_name ?? 'station')
+        "
+        index="G2"
+        surface="stations"
+        :done="{ name: 'setup.stations' }"
       />
     </template>
     <ApPanel index="G1" title="Stations" flush>

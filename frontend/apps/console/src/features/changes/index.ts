@@ -13,6 +13,7 @@ export {
 } from "./actions.ts";
 export { refreshConfigState, useConfigState } from "./useConfigState.ts";
 export { default as SchemaForm } from "./SchemaForm.vue";
+export { default as KindEditor } from "./KindEditor.vue";
 export {
   diffEdits,
   fetchKindSchema,

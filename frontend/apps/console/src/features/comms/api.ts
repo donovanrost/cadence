@@ -58,3 +58,27 @@ export function fetchRoutingRules(
 export function directionLabel(d: Decoded<typeof direction>): string {
   return d === "inbound" ? "Downlink" : d === "outbound" ? "Uplink" : "Both";
 }
+
+const transportDetail = object({
+  id: token,
+  version: integer,
+  lifecycle_state: oneOf(["active", "archived"]),
+  document: (value: unknown, path = "") => {
+    if (value === null || typeof value !== "object" || Array.isArray(value))
+      throw new decoders.DecodeError(path, "object");
+    // Sound: a non-array object; field values are read through the kind schema's paths.
+    return value as Readonly<Record<string, unknown>>;
+  },
+});
+export type TransportDetail = Decoded<typeof transportDetail>;
+
+export function fetchTransport(
+  key: Readonly<{ missionId: string; transportId: string }>,
+  signal: AbortSignal,
+): Promise<ApiResult<TransportDetail>> {
+  return request(
+    `${base(key.missionId)}/transports/${encodeURIComponent(key.transportId)}`,
+    transportDetail,
+    { signal },
+  );
+}

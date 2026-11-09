@@ -11,13 +11,19 @@ const { state, refetch } = useRemoteQuery(() => scope.value.mission.id, fetchTra
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
 );
-const columns: readonly ApColumn[] = [
+const allColumns: readonly ApColumn[] = [
   { key: "name", label: "Transport" },
   { key: "station", label: "Station" },
   { key: "direction", label: "Direction" },
   { key: "origin", label: "Origin" },
   { key: "rules", label: "Routing rules", mono: true, align: "end" },
 ];
+// U10: the model has no station↔transport link yet, so the column is left out while all null.
+const columns = computed(() =>
+  state.value.status === "ready" && state.value.value.some((t) => t.station !== null)
+    ? allColumns
+    : allColumns.filter((c) => c.key !== "station"),
+);
 </script>
 
 <template>
@@ -39,7 +45,11 @@ const columns: readonly ApColumn[] = [
           caption="Transports"
         >
           <template #cell-name="{ row }">
-            <span class="font-semibold text-readout">{{ row.display_name }}</span>
+            <RouterLink
+              :to="{ name: 'setup.comms.transports', params: { transportId: row.id } }"
+              class="font-semibold text-readout no-underline hover:text-bright hover:underline max-md:hit-44"
+              >{{ row.display_name }}</RouterLink
+            >
             <span class="font-mono text-xs text-text-4"> v{{ row.version }}</span>
           </template>
           <template #cell-station="{ row }">{{ row.station?.display_name ?? "—" }}</template>

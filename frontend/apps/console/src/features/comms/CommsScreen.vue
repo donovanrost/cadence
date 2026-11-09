@@ -4,11 +4,17 @@ import { useRoute } from "vue-router";
 import { useMissionScope } from "@/shell";
 import { ApPageHeader, ApTabLinks } from "@/ui";
 import RoutingRulesPanel from "./RoutingRulesPanel.vue";
+import TransportEditor from "./TransportEditor.vue";
 import TransportsPanel from "./TransportsPanel.vue";
 
 /** Setup › Comms & routing (rail 05): Routing rules · Transports (ux U4). */
 const route = useRoute();
 const scope = useMissionScope();
+const transportId = computed(() =>
+  typeof route.params.transportId === "string" && route.params.transportId
+    ? route.params.transportId
+    : null,
+);
 const active = computed(() => (route.name === "setup.comms.transports" ? "transports" : "routing"));
 const links = [
   { key: "routing", label: "Routing rules", to: { name: "setup.comms" } },
@@ -24,6 +30,12 @@ const links = [
       size="reading"
     />
     <ApTabLinks :links="links" :active="active" label="Comms sections" />
+    <TransportEditor
+      v-if="active === 'transports' && transportId"
+      :key="transportId"
+      :mission-id="scope.mission.id"
+      :transport-id="transportId"
+    />
     <TransportsPanel v-if="active === 'transports'" />
     <RoutingRulesPanel v-else />
   </div>
