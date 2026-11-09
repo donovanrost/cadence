@@ -11,7 +11,6 @@ export {
 } from "./contact.ts";
 export { bookingStopped, bookingStoppedText, type BookingStopped } from "./booking.ts";
 export { useBookingStopped } from "./useBookingStopped.ts";
-export { useBookingStopped } from "./useBookingStopped.ts";
 export {
   byAuthor,
   continueDraft,
