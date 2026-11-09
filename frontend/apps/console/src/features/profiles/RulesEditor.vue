@@ -49,11 +49,18 @@ function describe(p: Preview): { tone: "nominal" | "caution" | "crit"; text: str
     c.items.flatMap((i) => i.errors?.map((e) => e.message) ?? [i.reason ?? i.kind]),
   );
   const changes = p.effects.reduce((n, e) => n + e.changes, 0);
+  const keeps = p.effects.flatMap((e) => e.keeps);
+  // Effect counts come from the server (Changes.md §1): say how many keep their setup, and why.
+  const reasons = [...new Set(keeps.map((k) => k.reason))].slice(0, 2).join("; ");
+  const keptText =
+    keeps.length > 0
+      ? ` · keeps ${plural(keeps.length, "spacecraft", "spacecraft")} (${reasons})`
+      : "";
   if (p.verdict === "no_go")
     return { tone: "crit", text: `NO-GO: ${issues.slice(0, 3).join(" · ")}` };
   return {
-    tone: p.verdict === "hold" ? "caution" : "nominal",
-    text: `Checks pass · changes ${plural(changes, "spacecraft", "spacecraft")}${issues.length ? ` · ${issues.join(" · ")}` : ""}`,
+    tone: p.verdict === "hold" || (changes === 0 && keeps.length > 0) ? "caution" : "nominal",
+    text: `Checks pass · changes ${plural(changes, "spacecraft", "spacecraft")}${keptText}${issues.length ? ` · ${issues.join(" · ")}` : ""}`,
   };
 }
 
