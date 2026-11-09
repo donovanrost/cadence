@@ -37,7 +37,11 @@ function kindLabel(row: RevisionSummary): string {
   >
     <template #cell-revision="{ row }">
       <span class="inline-flex items-center gap-2"
-        >r{{ row.revision }}<ApTag v-if="row.live" state="live" label="Live"
+        ><RouterLink
+          :to="{ name: 'setup.revision', params: { revision: String(row.revision) } }"
+          class="text-readout no-underline hover:text-bright hover:underline"
+          >r{{ row.revision }}</RouterLink
+        ><ApTag v-if="row.live" state="live" label="Live"
       /></span>
     </template>
     <template #cell-applied="{ row }">{{ formatAbsolute(new Date(row.applied_at)) }}</template>

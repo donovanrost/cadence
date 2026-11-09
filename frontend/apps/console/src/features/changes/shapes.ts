@@ -119,8 +119,26 @@ export const configStateReader = (value: unknown, path = "") => {
 
 export const revisionsReader = object({ revisions: array(revisionSummary, 200) });
 
+const field = object({ path: string, before: raw, after: raw });
+export const entry = object({
+  revision: revisionNumber,
+  kind: token,
+  entity_id: nullable(token),
+  op: token,
+  paths: array(string, 500),
+  fields: array(field, 2000),
+});
+
+/** revision_summary + entries (GET /config/revisions/:n). */
+export const revisionDetailReader = (value: unknown, path = "") => ({
+  ...revisionSummary(value, path),
+  entries: object({ entries: array(entry, 5000) })(value, path).entries,
+});
+
 export type Actor = Decoded<typeof actor>;
 export type RevisionSummary = Decoded<typeof revisionSummary>;
 export type Change = Decoded<typeof change>;
 export type ChangeSet = Decoded<typeof changeSet>;
 export type ConfigState = ReturnType<typeof configStateReader>;
+export type RevisionDetail = ReturnType<typeof revisionDetailReader>;
+export type RevisionEntry = Decoded<typeof entry>;

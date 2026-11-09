@@ -1,8 +1,10 @@
 import { request, type ApiResult } from "@/api";
 import {
   configStateReader,
+  revisionDetailReader,
   revisionsReader,
   type ConfigState,
+  type RevisionDetail,
   type RevisionSummary,
 } from "./shapes.ts";
 
@@ -24,4 +26,19 @@ export async function fetchRevisions(
     signal,
   });
   return result.ok ? { ok: true, value: result.value.revisions } : result;
+}
+
+export function fetchRevision(
+  key: Readonly<{ missionId: string; revision: number }>,
+  signal: AbortSignal,
+): Promise<ApiResult<RevisionDetail>> {
+  return request(`${base(key.missionId)}/revisions/${key.revision}`, revisionDetailReader, {
+    signal,
+  });
+}
+
+/** Field values are raw JSON; show them compactly and exactly. */
+export function showValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  return typeof value === "string" ? value : JSON.stringify(value);
 }

@@ -75,6 +75,12 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "readiness", title: "Revisions" },
   },
   {
+    path: "setup/revisions/:revision(\\d+)",
+    name: "setup.revision",
+    component: () => import("@/features/changes/RevisionScreen.vue"),
+    meta: { mode: "setup", nav: "readiness", title: "Revision" },
+  },
+  {
     path: "setup/comms",
     name: "setup.comms",
     component: pending,
