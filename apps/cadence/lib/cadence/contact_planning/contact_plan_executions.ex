@@ -75,6 +75,9 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
              plan.approved_version
            ),
          _processed <- process_items(items, opts),
+         # A booking confirmed while its item was being written settles here; one confirmed
+         # later settles through BookingOutcomes.booking_settled/2.
+         _settled <- settle_uncertain(current_scope.organization_id, mission_id, plan, opts),
          {:ok, projected_plan, projected_items} <-
            project_plan(
              current_scope.organization_id,
@@ -349,7 +352,15 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
     }
   end
 
-  defp finish_with_reservation(item, reservation, opts) do
+  defp settle_uncertain(organization_id, mission_id, plan, opts) do
+    organization_id
+    |> list(mission_id, plan.contact_plan_id, plan.approved_version)
+    |> Enum.filter(&(&1.lifecycle_state == :uncertain))
+    |> Enum.each(&process_item(&1, opts))
+  end
+
+  @doc false
+  def finish_with_reservation(item, reservation, opts) do
     case exact_reservation_binding(item, reservation) do
       :ok ->
         {state, error} = execution_outcome(reservation)
@@ -369,48 +380,6 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
        else: {:error, :contact_plan_execution_reservation_binding_mismatch}
   end
 
-  @doc """
-  A reserved selection whose provider booking is later canceled or failed provider-side: its
-  item fails with code `booking_lost` and the plan projection updates (`reserved` becomes
-  `partially_reserved` or `failed`), so repairs can re-plan the lost passes (qa #22).
-  """
-  @spec booking_lost(ProviderReservation.t(), keyword()) :: :ok | {:error, term()}
-  def booking_lost(%ProviderReservation{} = reservation, opts \\ []) do
-    error = %{
-      "code" => "booking_lost",
-      "provider_state" => Atom.to_string(reservation.lifecycle_state),
-      "provider_reservation_id" => reservation.provider_reservation_id
-    }
-
-    ContactPlanExecutionItemRow
-    |> where(
-      [i],
-      i.organization_id == ^reservation.organization_id and
-        i.mission_id == ^reservation.mission_id and
-        i.provider_reservation_id == ^reservation.provider_reservation_id and
-        i.lifecycle_state == "reserved"
-    )
-    |> Repo.all()
-    |> Enum.reduce_while(:ok, fn row, :ok ->
-      item = ContactPlanExecutionItemRow.to_domain(row)
-
-      with {:ok, item} <-
-             finish_item(item, :failed, reservation.provider_reservation_id, error, opts),
-           {:ok, _plan, _items} <-
-             project_plan(
-               item.organization_id,
-               item.mission_id,
-               item.contact_plan_id,
-               item.contact_plan_version,
-               opts
-             ) do
-        {:cont, :ok}
-      else
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
-  end
-
   defp execution_outcome(%ProviderReservation{lifecycle_state: state})
        when state in [:confirmed, :active, :completed],
        do: {:reserved, %{}}
@@ -428,7 +397,8 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
     finish_item(item, state, item.provider_reservation_id, safe_error(reason), opts)
   end
 
-  defp finish_item(item, state, provider_reservation_id, error, opts) do
+  @doc false
+  def finish_item(item, state, provider_reservation_id, error, opts) do
     now = now(opts)
 
     case Repo.get(ContactPlanExecutionItemRow, item.contact_plan_execution_item_id) do
@@ -453,7 +423,8 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
     end
   end
 
-  defp project_plan(organization_id, mission_id, plan_id, plan_version, opts) do
+  @doc false
+  def project_plan(organization_id, mission_id, plan_id, plan_version, opts) do
     items = list(organization_id, mission_id, plan_id, plan_version)
     state = projection_state(items)
 

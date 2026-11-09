@@ -312,6 +312,71 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
              )
   end
 
+  test "bookings the provider confirms after execution ends settle the plan (K2 Apply)",
+       context do
+    pending = fn organization_id, mission_id, provider_id, attrs, _opts ->
+      reserve_with_response(
+        organization_id,
+        mission_id,
+        provider_id,
+        attrs,
+        {:ok, provider_response(attrs, "pending")}
+      )
+    end
+
+    assert {:ok, %{plan: %{lifecycle_state: :executing}, items: items}} =
+             ContactPlanExecutions.execute(
+               context.member_scope,
+               context.mission_id,
+               context.plan.contact_plan_id,
+               now: DateTime.add(@now, 2, :second),
+               resolve_route: context.resolve_route,
+               reserve: pending
+             )
+
+    assert Enum.all?(items, &(&1.lifecycle_state == :uncertain))
+
+    for item <- items do
+      {:ok, reservation} =
+        ProviderReservations.fetch(
+          context.organization_id,
+          context.mission_id,
+          item.provider_reservation_id
+        )
+
+      confirmed =
+        Map.merge(reservation.provider_confirmed_snapshot_document, %{
+          "id" => reservation.provider_contact_ref,
+          "provider_revision" => reservation.provider_revision + 1,
+          "status" => "confirmed",
+          "provider_status" => "confirmed"
+        })
+
+      assert {:ok, %{lifecycle_state: :confirmed}} =
+               ProviderReservations.apply_provider_status(
+                 context.organization_id,
+                 context.mission_id,
+                 reservation.provider_reservation_id,
+                 confirmed
+               )
+    end
+
+    assert ContactPlanExecutions.list(
+             context.organization_id,
+             context.mission_id,
+             context.plan.contact_plan_id,
+             1
+           )
+           |> Enum.all?(&(&1.lifecycle_state == :reserved))
+
+    assert {:ok, %{lifecycle_state: :reserved}, _version} =
+             ContactPlans.fetch(
+               context.organization_id,
+               context.mission_id,
+               context.plan.contact_plan_id
+             )
+  end
+
   test "mixed provider outcomes preserve committed capacity and project partial success",
        context do
     reserve = fn organization_id, mission_id, provider_id, attrs, _opts ->

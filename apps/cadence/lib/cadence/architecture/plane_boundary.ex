@@ -347,6 +347,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/contact_planning/contact_plan_approval.ex" => :management,
     "lib/cadence/contact_planning/contact_plan_approvals.ex" => :management,
     "lib/cadence/contact_planning/contact_plan_execution_item.ex" => :control,
+    "lib/cadence/contact_planning/booking_outcomes.ex" => :control,
     "lib/cadence/contact_planning/contact_plan_executions.ex" => :control,
     "lib/cadence/contact_planning/contact_plan_version.ex" => :management,
     "lib/cadence/contact_planning/contact_plans.ex" => :management,

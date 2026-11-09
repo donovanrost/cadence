@@ -134,6 +134,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/contacts/provider_scheduling.ex" => :ground_networks,
     "lib/cadence/contacts/known_atom.ex" => :adapter,
     "lib/cadence/contact_planning/contact_plan_executions.ex" => :contacts,
+    "lib/cadence/contact_planning/booking_outcomes.ex" => :contacts,
     "lib/cadence/contact_planning/fleet_automation.ex" => :contacts,
     "lib/cadence/contact_planning/fleet_automation_actions.ex" => :contacts,
     "lib/cadence/contact_planning/fleet_repairs.ex" => :contacts,

@@ -59,6 +59,7 @@ defmodule Cadence.Architecture.DependencyBoundary do
                                 "lib/cadence/control/contacts.ex",
                                 "lib/cadence/control/contacts/",
                                 "lib/cadence/contact_planning/contact_plan_executions.ex",
+                                "lib/cadence/contact_planning/booking_outcomes.ex",
                                 "lib/cadence/contact_planning/fleet_automation_actions.ex"
                               ]
   @limits_context ["lib/cadence/limits.ex", "lib/cadence/limits/"]

@@ -140,7 +140,11 @@ defmodule CadenceWeb.Console.ContactDraftController do
                id,
                run.candidate_contact_plan_version
              ) do
-        plan
+        # The same derived state as GET /contact-plans/:id (`interrupted` when nobody executes).
+        %{
+          plan
+          | state: Scheduling.plan_state(org_id(conn), mission_id(conn), plan.id, plan.state)
+        }
       else
         _none -> nil
       end

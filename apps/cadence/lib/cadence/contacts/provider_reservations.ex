@@ -12,7 +12,7 @@ defmodule Cadence.Contacts.ProviderReservations do
   alias Ecto.Multi
 
   alias Cadence.Comms.{Transport, TransportStore}
-  alias Cadence.ContactPlanning.ContactPlanExecutions
+  alias Cadence.ContactPlanning.BookingOutcomes
   alias Cadence.Contacts
 
   alias Cadence.Contacts.{
@@ -1026,17 +1026,21 @@ defmodule Cadence.Contacts.ProviderReservations do
            reservation.mission_id,
            reservation.provider_reservation_id
          ) do
-      {:ok, _result} -> :ok
+      {:ok, _result} -> BookingOutcomes.booking_settled(reservation)
       {:error, reason} -> {:error, reason}
     end
   end
 
   defp apply_contact_side_effect(%ProviderReservation{lifecycle_state: state} = reservation)
        when state in [:canceled, :failed] do
-    with :ok <- cancel_scheduled_contact(reservation, state) do
-      ContactPlanExecutions.booking_lost(reservation)
+    with :ok <- cancel_scheduled_contact(reservation, state),
+         :ok <- BookingOutcomes.booking_lost(reservation) do
+      BookingOutcomes.booking_settled(reservation)
     end
   end
+
+  defp apply_contact_side_effect(%ProviderReservation{lifecycle_state: :rejected} = reservation),
+    do: BookingOutcomes.booking_settled(reservation)
 
   defp apply_contact_side_effect(_reservation), do: :ok
 
