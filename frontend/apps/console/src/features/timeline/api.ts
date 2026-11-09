@@ -31,6 +31,10 @@ const event = d.object({
     point_id: d.nullable(d.token),
     command_request_id: d.nullable(d.token),
     contact_id: d.nullable(d.token),
+    /** What the sentence is about, as a link target (ux timeline review #1); null when none. */
+    subject: d.optional(
+      d.nullable(d.object({ kind: d.token, id: d.token, name: d.nullable(d.string) })),
+    ),
   }),
 });
 

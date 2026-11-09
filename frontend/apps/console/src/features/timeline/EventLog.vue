@@ -3,9 +3,12 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { formatClock, plural, ApEventLine } from "@/ui";
 import type { MissionEvent } from "./api.ts";
-import { byHour, severityState } from "./model.ts";
+import { byHour, needsSpacecraftPrefix, severityState, subjectLink } from "./model.ts";
 
-/** E2 · Events newest first under UTC hour headers; spacecraft names link to the spacecraft. */
+/**
+ * E2 · Events newest first under UTC hour headers. The server sentence names its subject and links
+ * to it (refs.subject), else to the spacecraft it names.
+ */
 const props = defineProps<{ events: readonly MissionEvent[] }>();
 const groups = computed(() => byHour(props.events));
 /** Distinct spacecraft of a folded row, in scid order. */
@@ -46,13 +49,27 @@ const spacecraftOf = (members: readonly MissionEvent[]) =>
           </span>
         </details>
         <template v-else>
+          <template v-if="event.spacecraft && needsSpacecraftPrefix(event)"
+            ><RouterLink
+              :to="{ name: 'ops.spacecraft', params: { scId: String(event.spacecraft.scid) } }"
+              class="text-readout no-underline hover:underline"
+              >{{ event.spacecraft.name }}</RouterLink
+            >
+            ·
+          </template>
           <RouterLink
-            v-if="event.spacecraft"
+            v-if="subjectLink(event)"
+            :to="subjectLink(event) ?? ''"
+            class="text-readout no-underline hover:underline"
+            >{{ event.text }}</RouterLink
+          >
+          <RouterLink
+            v-else-if="event.spacecraft"
             :to="{ name: 'ops.spacecraft', params: { scId: String(event.spacecraft.scid) } }"
             class="text-readout no-underline hover:underline"
-            >{{ event.spacecraft.name }}</RouterLink
-          ><template v-if="event.spacecraft"> · </template>{{ event.text
-          }}<span v-if="count > 1" class="font-mono text-text-3">
+            >{{ event.text }}</RouterLink
+          ><template v-else>{{ event.text }}</template
+          ><span v-if="count > 1" class="font-mono text-text-3">
             × {{ count }} since {{ formatClock(new Date(firstAt)) }}Z</span
           >
         </template>

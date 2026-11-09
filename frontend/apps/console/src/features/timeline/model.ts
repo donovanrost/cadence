@@ -1,3 +1,4 @@
+import type { RouteLocationRaw } from "vue-router";
 import type { OpState } from "@/ui";
 import type { Density, EventKind, EventSeverity, MissionEvent } from "./api.ts";
 
@@ -15,6 +16,31 @@ export function severityState(severity: EventSeverity): OpState {
       return "neutral";
   }
 }
+
+/**
+ * Where an event's subject lives. Kinds without a page of their own (e.g. `activation`) stay plain
+ * text rather than linking somewhere vague.
+ */
+export function subjectLink(event: MissionEvent): RouteLocationRaw | null {
+  const s = event.refs.subject;
+  if (!s) return null;
+  switch (s.kind) {
+    case "data_source":
+      return { name: "setup.data-sources", params: { sourceId: s.id } };
+    case "contact":
+      return { name: "ops.contacts", query: { contact: s.id } };
+    case "dashboard":
+      return { name: "ops.dashboards", params: { dashboardId: s.id } };
+    case "catalog_revision":
+      return { name: "setup.catalog" };
+    default:
+      return null;
+  }
+}
+
+/** The server sentence names the spacecraft itself now; only prefix it when it doesn't. */
+export const needsSpacecraftPrefix = (event: MissionEvent) =>
+  event.spacecraft !== null && !event.text.includes(event.spacecraft.name);
 
 export const KIND_WORDS: Readonly<Record<EventKind, string>> = {
   limit: "Limits",

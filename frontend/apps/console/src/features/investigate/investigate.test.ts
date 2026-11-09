@@ -206,7 +206,13 @@ describe("event log lines (B2)", () => {
     text: "VBAT crossed red low",
     detail: null,
     spacecraft: null,
-    refs: { alarm_id: null, point_id: "EPS.VBAT", command_request_id: null, contact_id: null },
+    refs: {
+      alarm_id: null,
+      point_id: "EPS.VBAT",
+      command_request_id: null,
+      contact_id: null,
+      subject: null,
+    },
   };
   const raised = {
     id: "e1",

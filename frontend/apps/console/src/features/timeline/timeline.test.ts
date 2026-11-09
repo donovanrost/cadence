@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { eventsReader, type MissionEvent } from "./api.ts";
-import { byHour, densityBars, densityBucketS, severityState } from "./model.ts";
+import {
+  byHour,
+  densityBars,
+  densityBucketS,
+  needsSpacecraftPrefix,
+  severityState,
+  subjectLink,
+} from "./model.ts";
 
 const ev = (id: string, at: string, severity: MissionEvent["severity"] = "info"): MissionEvent => ({
   id,
@@ -12,7 +19,13 @@ const ev = (id: string, at: string, severity: MissionEvent["severity"] = "info")
   text: "VBAT crossed red low",
   detail: null,
   spacecraft: null,
-  refs: { alarm_id: null, point_id: null, command_request_id: null, contact_id: null },
+  refs: {
+    alarm_id: null,
+    point_id: null,
+    command_request_id: null,
+    contact_id: null,
+    subject: null,
+  },
 });
 
 describe("timeline", () => {
@@ -87,5 +100,26 @@ describe("timeline", () => {
   it("maps severities to marks", () => {
     expect(severityState("info")).toBe("neutral");
     expect(severityState("critical")).toBe("crit");
+  });
+});
+
+describe("event subjects (ux timeline #1)", () => {
+  it("links the subject, and skips the spacecraft prefix the sentence already names", () => {
+    const sc = { id: "sc-4", name: "EARENDIL-004", scid: 4 };
+    const contact = {
+      ...ev("c", "2026-11-09T10:23:52Z"),
+      kind: "contact" as const,
+      text: "Contact with EARENDIL-004 completed, 10:22:54Z–10:23:52Z",
+      spacecraft: sc,
+      refs: { ...ev("c", "x").refs, subject: { kind: "contact", id: "ct-1", name: null } },
+    };
+    expect(subjectLink(contact)).toEqual({ name: "ops.contacts", query: { contact: "ct-1" } });
+    expect(needsSpacecraftPrefix(contact)).toBe(false);
+    expect(needsSpacecraftPrefix({ ...contact, text: "Limit violation" })).toBe(true);
+    const activation = {
+      ...contact,
+      refs: { ...contact.refs, subject: { kind: "activation", id: "a", name: null } },
+    };
+    expect(subjectLink(activation)).toBeNull();
   });
 });
