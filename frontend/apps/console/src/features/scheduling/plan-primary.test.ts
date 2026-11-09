@@ -106,9 +106,10 @@ describe("planPrimary interrupted (ux 1a906155)", () => {
     expect(planPrimary(plan({ state: "interrupted" }), true, { requestsLeft: 3 }).kind).toBe(
       "execute",
     );
-    expect(planPrimary(plan({ state: "interrupted" }), true, { requestsLeft: 0 }).kind).toBe(
-      "none",
-    );
+    expect(planPrimary(plan({ state: "interrupted" }), true, { requestsLeft: 0 })).toEqual({
+      kind: "none",
+      note: null,
+    });
   });
 });
 

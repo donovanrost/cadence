@@ -75,7 +75,7 @@ export function planPrimary(
       return { kind: "execute", label: `Book ${plural(n, "pass", "passes")}` };
     case "interrupted":
       return options.requestsLeft === 0
-        ? { kind: "none", note: "Nothing left to send." }
+        ? { kind: "none", note: null } // the info callout says it (ux: no second line)
         : { kind: "execute", label: "Continue booking" };
     case "executing":
       return {
