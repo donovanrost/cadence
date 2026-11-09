@@ -82,3 +82,14 @@ export function fetchTemplate(
     { signal },
   );
 }
+
+/** ux (7)/U24: durations in the server's rule sentence as "6h 00m" (it writes "6h00"). */
+export function ruleText(summary: string): string {
+  return summary.replace(/\b(\d+)h(\d{2})\b/g, "$1h $2m");
+}
+
+const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
+/** ux (6): templates in natural name order (EARENDIL-002 before EARENDIL-010). */
+export function sortedTemplates<T extends { name: string }>(rows: readonly T[]): readonly T[] {
+  return [...rows].sort((a, b) => collator.compare(a.name, b.name));
+}

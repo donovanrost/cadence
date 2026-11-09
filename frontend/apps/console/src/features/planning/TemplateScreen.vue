@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
-import { useMissionScope } from "@/shell";
+import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
 import {
   ApBreadcrumb,
   ApKeyValue,
@@ -14,25 +14,43 @@ import {
   plural,
   type ApColumn,
 } from "@/ui";
-import { fetchTemplate, type TemplateDetail } from "./api.ts";
+import TemplateEditor from "./TemplateEditor.vue";
+import { fetchTemplate, ruleText, type TemplateDetail } from "./api.ts";
 
-/** Contact planning › one requirement template (CP3): read-only until the template schema exists. */
+/** Contact planning › one requirement template (CP3): read, edit (new version) or create. */
 const route = useRoute();
 const scope = useMissionScope();
 const templateId = computed(() =>
   typeof route.params.templateId === "string" ? route.params.templateId : null,
 );
+const isNew = computed(() => templateId.value === "new");
 const { state, refetch } = useRemoteQuery(
   () =>
-    templateId.value ? { missionId: scope.value.mission.id, templateId: templateId.value } : null,
+    templateId.value && !isNew.value
+      ? { missionId: scope.value.mission.id, templateId: templateId.value }
+      : null,
   fetchTemplate,
 );
+const session = useSession();
+// Template writes need organization admin (api CP3).
+const canEdit = computed(() => canAdministerOrganization(session, scope.value.organization));
+const editing = ref(false);
+function closed() {
+  editing.value = false;
+  refetch();
+}
 const crumbs = computed(() => [
   { label: "Contact planning", to: { name: "setup.contact-planning" } },
-  { label: state.value.status === "ready" ? state.value.value.name : "Template" },
+  {
+    label: isNew.value
+      ? "New template"
+      : state.value.status === "ready"
+        ? state.value.value.name
+        : "Template",
+  },
 ]);
 const facts = (t: TemplateDetail) => [
-  { key: "rule", label: "Rule", value: t.rule_summary, mono: true },
+  { key: "rule", label: "Rule", value: ruleText(t.rule_summary), mono: true },
   {
     key: "applies",
     label: "Applies to",
@@ -51,29 +69,56 @@ const columns: readonly ApColumn[] = [
 <template>
   <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
     <ApBreadcrumb :crumbs="crumbs" />
-    <ApPageHeader :title="state.status === 'ready' ? state.value.name : 'Template'" size="reading">
-      <template v-if="state.status === 'ready'" #subtitle
+    <ApPageHeader
+      :title="isNew ? 'New template' : state.status === 'ready' ? state.value.name : 'Template'"
+      size="reading"
+    >
+      <template v-if="!isNew && state.status === 'ready'" #subtitle
         ><span class="font-mono text-sm text-text-3">v{{ state.value.version }}</span></template
       >
+      <ApButton
+        v-if="canEdit && !isNew && !editing && state.status === 'ready'"
+        @click="editing = true"
+        >Edit</ApButton
+      >
     </ApPageHeader>
-    <ApRemote :state="state" loading-label="Loading template…" @retry="refetch">
+    <TemplateEditor
+      v-if="isNew && canEdit"
+      :mission-id="scope.mission.id"
+      :template="null"
+      @close="$router.push({ name: 'setup.contact-planning' })"
+    />
+    <ApRemote v-else-if="!isNew" :state="state" loading-label="Loading template…" @retry="refetch">
       <template #default="{ value }">
-        <ApPanel index="T1" title="Rule"><ApKeyValue :items="facts(value)" :columns="2" /></ApPanel>
-        <ApPanel index="T2" title="History" :meta="plural(value.versions.length, 'version')" flush>
-          <ApTable
-            :columns="columns"
-            :rows="value.versions"
-            :row-key="(v) => String(v.version)"
-            caption="Template versions"
+        <TemplateEditor
+          v-if="editing"
+          :mission-id="scope.mission.id"
+          :template="value"
+          @close="closed"
+        />
+        <template v-else>
+          <ApPanel index="T1" title="Rule"
+            ><ApKeyValue :items="facts(value)" :columns="2"
+          /></ApPanel>
+          <ApPanel
+            index="T2"
+            title="History"
+            :meta="plural(value.versions.length, 'version')"
+            flush
           >
-            <template #cell-version="{ row }">v{{ row.version }}</template>
-            <template #cell-at="{ row }">{{ formatAbsolute(new Date(row.created_at)) }}</template>
-            <template #cell-by="{ row }">{{ row.actor?.name ?? "Not recorded" }}</template>
-          </ApTable>
-        </ApPanel>
-        <p class="m-0 text-sm text-text-3">
-          Editing templates arrives with the requirement field schema.
-        </p>
+            <ApTable
+              :columns="columns"
+              :rows="value.versions"
+              :row-key="(v) => String(v.version)"
+              caption="Template versions"
+            >
+              <template #cell-version="{ row }">v{{ row.version }}</template>
+              <template #cell-at="{ row }">{{ formatAbsolute(new Date(row.created_at)) }}</template>
+              <template #cell-by="{ row }">{{ row.actor?.name ?? "Not recorded" }}</template>
+            </ApTable>
+          </ApPanel>
+          <p v-if="!canEdit" class="m-0 text-sm text-text-3">Org admins change contact planning.</p>
+        </template>
       </template>
     </ApRemote>
   </div>

@@ -71,7 +71,9 @@ const hint = (f: SchemaField) =>
           v-else
           :label="f.label"
           :model-value="values[f.path] ?? ''"
-          :mono="f.type === 'integer'"
+          :mono="
+            f.type === 'integer' || f.type === 'datetime' || f.type === 'time' || f.type === 'list'
+          "
           :unit="unitLabel(f)"
           :inputmode="
             f.unit === 'micros'

@@ -1,0 +1,171 @@
+<script setup lang="ts">
+import { computed, ref, watch } from "vue";
+import { useRouter } from "vue-router";
+import { useRemoteQuery } from "@/api";
+import {
+  failureOutcome,
+  fromDocument,
+  SchemaForm,
+  type FormValues,
+} from "@/features/changes/index.ts";
+import { ApButton, ApCallout, ApField, ApPanel, ApRemote, formatCount, plural } from "@/ui";
+import TargetPicker from "./TargetPicker.vue";
+import type { TemplateDetail } from "./api.ts";
+import { asRecord, draftFromTarget, targetFromDraft, type TargetDraft } from "./targets.ts";
+import {
+  buildNested,
+  fetchTemplateSchema,
+  previewTemplate,
+  saveTemplate,
+  warningText,
+  type TemplateSchema,
+} from "./templates.ts";
+
+/** New or edit a requirement template (CP3): form generated from the server's template schema. */
+const props = defineProps<{ missionId: string; template: TemplateDetail | null }>();
+const emit = defineEmits<{ close: [] }>();
+const router = useRouter();
+const schema = useRemoteQuery(() => props.missionId, fetchTemplateSchema);
+const name = ref(props.template?.name ?? "");
+const target = ref<TargetDraft>(draftFromTarget(props.template?.target ?? null));
+const values = ref<FormValues>({});
+const errors = ref<Readonly<Record<string, string>>>({});
+const targetError = ref<string | null>(null);
+const note = ref<{ tone: "nominal" | "caution" | "crit"; text: string } | null>(null);
+const busy = ref(false);
+watch(
+  schema.state,
+  (s) => {
+    if (s.status === "ready")
+      values.value = fromDocument(
+        { kind: "template", fields: s.value.fields },
+        asRecord(props.template?.document ?? s.value.defaults),
+      );
+  },
+  { immediate: true },
+);
+
+const groupTitles: Readonly<Record<string, string>> = {
+  schedule: "Schedule",
+  requirement: "Each contact",
+  catch_up_policy: "Catch-up",
+};
+function groups(s: TemplateSchema) {
+  const keys = [...new Set(s.meta.map((m) => m.group))];
+  return keys.map((key) => ({
+    key,
+    fields: s.fields.filter((_, i) => s.meta[i]?.group === key && !s.meta[i]?.advanced),
+    advanced: s.fields.filter((_, i) => s.meta[i]?.group === key && s.meta[i]?.advanced),
+  }));
+}
+
+function collect() {
+  if (schema.state.value.status !== "ready") return null;
+  const t = targetFromDraft(target.value);
+  targetError.value = t.ok ? null : t.message;
+  const built = buildNested(
+    schema.state.value.value.fields,
+    values.value,
+    props.template?.document ?? schema.state.value.value.defaults,
+  );
+  errors.value = built.ok ? {} : built.errors;
+  return t.ok && built.ok ? { target: t.target, document: built.document } : null;
+}
+
+async function preview() {
+  const input = collect();
+  if (!input || busy.value) return;
+  busy.value = true;
+  try {
+    const r = await previewTemplate(props.missionId, input, new AbortController().signal);
+    note.value = r.ok
+      ? {
+          tone: r.value.warnings.length > 0 ? "caution" : "nominal",
+          text: `${plural(r.value.spacecraft_count, "spacecraft", "spacecraft")} · ${formatCount(r.value.contacts)} contacts a day${r.value.warnings.length ? ` · ${r.value.warnings.map((w) => warningText[w.code] ?? w.code).join(" ")}` : ""}`,
+        }
+      : { tone: "crit", text: failureOutcome(r.error, "changed").sentence };
+  } finally {
+    busy.value = false;
+  }
+}
+
+const canSave = computed(() => name.value.trim().length > 0);
+async function save() {
+  const input = collect();
+  if (!input || !canSave.value || busy.value) return;
+  busy.value = true;
+  try {
+    const body = {
+      name: name.value.trim(),
+      ...input,
+      ...(props.template ? { expected_version: props.template.version } : {}),
+    };
+    const r = await saveTemplate(props.missionId, props.template?.id ?? null, body);
+    if (!r.ok)
+      return void (note.value = {
+        tone: "crit",
+        text: failureOutcome(r.error, "changed").sentence,
+      });
+    if (props.template) emit("close");
+    else
+      await router.push({
+        name: "setup.contact-planning.template",
+        params: { templateId: r.value.id },
+      });
+  } finally {
+    busy.value = false;
+  }
+}
+</script>
+
+<template>
+  <ApRemote
+    :state="schema.state.value"
+    loading-label="Loading template fields…"
+    @retry="schema.refetch"
+  >
+    <template #default="{ value: s }">
+      <ApPanel index="T0" :title="template ? `Edit ${template.name}` : 'New template'">
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <ApField v-model="name" label="Name" required />
+          <TargetPicker v-model="target" :mission-id="missionId" :error="targetError" />
+        </div>
+      </ApPanel>
+      <ApPanel
+        v-for="(g, i) in groups(s)"
+        :key="g.key"
+        :index="`T0.${i + 1}`"
+        :title="groupTitles[g.key] ?? g.key"
+      >
+        <SchemaForm
+          v-if="g.fields.length > 0"
+          v-model="values"
+          :schema="{ kind: 'template', fields: g.fields }"
+          :errors="errors"
+        />
+        <details v-if="g.advanced.length > 0" class="mt-3">
+          <summary class="ap-label cursor-pointer">Advanced</summary>
+          <div class="mt-3">
+            <SchemaForm
+              v-model="values"
+              :schema="{ kind: 'template', fields: g.advanced }"
+              :errors="errors"
+            />
+          </div>
+        </details>
+      </ApPanel>
+      <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
+      <div class="flex flex-wrap gap-2">
+        <ApButton :disabled="busy" disabled-reason="Working…" @click="preview">Preview</ApButton>
+        <ApButton
+          variant="primary"
+          :disabled="busy || !canSave"
+          :disabled-reason="canSave ? 'Saving…' : 'Name the template first.'"
+          @click="save"
+          >{{ template ? `Save as v${template.version + 1}` : "Create template" }}</ApButton
+        >
+        <ApButton variant="ghost" @click="emit('close')">Cancel</ApButton>
+      </div>
+    </template>
+  </ApRemote>
+</template>

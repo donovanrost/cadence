@@ -8,7 +8,7 @@ const raw: Reader<unknown> = (value) => (value === undefined ? null : value);
 export const schemaFieldReader = object({
   path: string,
   label: string,
-  type: oneOf(["integer", "boolean", "enum", "string", "reference"]),
+  type: oneOf(["integer", "boolean", "enum", "string", "reference", "datetime", "time", "list"]),
   unit: nullable(string),
   enum: nullable(array(object({ value: raw, label: string }), 200)),
   range: nullable(object({ min: optional(nullable(number)), max: optional(nullable(number)) })),
@@ -59,6 +59,8 @@ export function fromDocument(
 export function displayValue(f: SchemaField, v: unknown): string {
   if (typeof v === "number" && f.unit === "s") return formatSeconds(v);
   if (typeof v === "boolean") return v ? "true" : "false";
+  if (Array.isArray(v))
+    return v.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(", ");
   if (typeof v === "number" && f.unit === "micros") return (v / 1_000_000).toFixed(2);
   return typeof v === "string" ? v : JSON.stringify(v);
 }
@@ -143,6 +145,24 @@ export function toValue(f: SchemaField, text: string): FieldCheck {
         ? { ok: true, value: option.value }
         : { ok: false, message: `Choose a ${f.label.toLowerCase()}.` };
     }
+    case "datetime": {
+      const ms = Date.parse(t);
+      return Number.isNaN(ms) || !/T|\s/.test(t)
+        ? { ok: false, message: `${f.label}: write a UTC time like 2026-11-12T06:00:00Z.` }
+        : { ok: true, value: new Date(ms).toISOString().replace(".000Z", "Z") };
+    }
+    case "time":
+      return /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(t)
+        ? { ok: true, value: t.length === 5 ? `${t}:00` : t }
+        : { ok: false, message: `${f.label}: write a UTC time of day like 06:30.` };
+    case "list":
+      return {
+        ok: true,
+        value: t
+          .split(",")
+          .map((x) => x.trim())
+          .filter(Boolean),
+      };
     case "string":
     case "reference":
       if (f.pattern && !safeTest(f.pattern, t))

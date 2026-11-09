@@ -1,6 +1,15 @@
 <script setup lang="ts">
-import { ApEmptyState, ApListRow, ApPanel, ApStatTile, ApTable, plural, type ApColumn } from "@/ui";
-import type { PlanningSummary } from "./api.ts";
+import {
+  ApButton,
+  ApEmptyState,
+  ApListRow,
+  ApPanel,
+  ApStatTile,
+  ApTable,
+  plural,
+  type ApColumn,
+} from "@/ui";
+import { ruleText, sortedTemplates, type PlanningSummary } from "./api.ts";
 
 /** Requirements tab: coverage (P1), templates with the rule in words (P2), not covered (P3). */
 defineProps<{ summary: PlanningSummary }>();
@@ -35,6 +44,14 @@ const columns: readonly ApColumn[] = [
     />
   </div>
   <ApPanel index="P2" title="Templates" flush>
+    <template v-if="summary.permissions.includes('planning.edit')" #header>
+      <ApButton
+        size="compact"
+        variant="primary"
+        :to="{ name: 'setup.contact-planning.template', params: { templateId: 'new' } }"
+        >New template</ApButton
+      >
+    </template>
     <ApEmptyState
       v-if="summary.templates.length === 0"
       state="off"
@@ -44,7 +61,7 @@ const columns: readonly ApColumn[] = [
     <ApTable
       v-else
       :columns="columns"
-      :rows="summary.templates"
+      :rows="sortedTemplates(summary.templates)"
       :row-key="(t) => t.id"
       caption="Requirement templates"
     >
@@ -55,9 +72,7 @@ const columns: readonly ApColumn[] = [
           >{{ row.name }}</RouterLink
         >
       </template>
-      <template #cell-rule="{ row }"
-        ><span class="uppercase">{{ row.rule_summary }}</span></template
-      >
+      <template #cell-rule="{ row }">{{ ruleText(row.rule_summary) }}</template>
       <template #cell-priority="{ row }"
         ><span class="capitalize" :class="row.priority === 'critical' ? 'text-caution-text' : ''">{{
           row.priority
