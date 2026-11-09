@@ -6,7 +6,8 @@ import { useMissionInvalidation } from "@/live/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { useNow, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented } from "@/ui";
 import { RANGES, rangeWindow, type RangeKey } from "@/features/investigate/index.ts";
-import { fetchDensity, fetchEvents } from "./api.ts";
+import { eventKinds, fetchDensity, fetchEvents, type EventKind } from "./api.ts";
+import KindToggles from "./KindToggles.vue";
 import DensityStrip from "./DensityStrip.vue";
 import EventLog from "./EventLog.vue";
 import { densityBucketS } from "./model.ts";
@@ -29,21 +30,36 @@ const range = computed<RangeKey>({
 const title = computed(
   () => `Last ${RANGES.find((r) => r.value === range.value)?.label ?? range.value}`,
 );
-const key = computed(() => JSON.stringify({ m: missionId.value, r: range.value }));
-type Key = { m: string; r: RangeKey };
+/** Selected kinds from ?kind=limit,command (none = all). */
+const kinds = computed<EventKind[]>(() => {
+  const raw = typeof route.query.kind === "string" ? route.query.kind.split(",") : [];
+  return eventKinds.filter((k) => raw.includes(k));
+});
+function setKinds(next: EventKind[]) {
+  router
+    .replace({ query: { ...route.query, kind: next.length ? next.join(",") : undefined } })
+    .catch((e: unknown) => console.error("Navigation failed", e));
+}
+const key = computed(() => JSON.stringify({ m: missionId.value, r: range.value, k: kinds.value }));
+type Key = { m: string; r: RangeKey; k: EventKind[] };
 const windowOf = (r: RangeKey) => {
   const w = rangeWindow(r, new Date());
   return { from: new Date(w.from), to: new Date(w.to) };
 };
 // Sound: keys are produced by JSON.stringify(Key) above.
 const events = useRemoteQuery(key, (k, signal) => {
-  const { m, r } = JSON.parse(k) as Key;
-  return fetchEvents(m, windowOf(r), signal);
+  const { m, r, k: only } = JSON.parse(k) as Key;
+  return fetchEvents(m, { ...windowOf(r), kinds: only }, signal);
 });
 const density = useRemoteQuery(key, (k, signal) => {
-  const { m, r } = JSON.parse(k) as Key;
+  const { m, r, k: only } = JSON.parse(k) as Key;
   const w = windowOf(r);
-  return fetchDensity(m, w, densityBucketS(w.to.getTime() - w.from.getTime()), signal);
+  return fetchDensity(
+    m,
+    { ...w, kinds: only },
+    densityBucketS(w.to.getTime() - w.from.getTime()),
+    signal,
+  );
 });
 useMissionInvalidation(missionId, ["events", "alarms"], () => {
   events.refetch();
@@ -61,6 +77,7 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
     <ApPageHeader :label="`${scope.mission.name} · timeline`" :title="title">
       <ApSegmented v-model="range" :options="ranges" label="Window" variant="micro" />
     </ApPageHeader>
+    <KindToggles class="flex-none" :selected="kinds" @change="setKinds" />
     <ApPanel v-if="missing" index="E2" title="Event log" flush>
       <ApEmptyState
         state="off"
