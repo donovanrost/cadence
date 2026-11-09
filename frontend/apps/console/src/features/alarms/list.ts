@@ -7,7 +7,7 @@ import type { Episode } from "./episodes.ts";
  * lifecycle tabs, owner, source, joined with fleet identity, and the by-point aggregate.
  */
 
-export const ALARM_TABS = ["active", "acknowledged", "cleared"] as const;
+export const ALARM_TABS = ["new", "acknowledged", "cleared"] as const;
 export type AlarmTab = (typeof ALARM_TABS)[number];
 
 export type AlarmListRow = Readonly<{
@@ -31,7 +31,7 @@ export function ownerText(e: Episode): string {
 
 const inTab = (e: Episode, tab: AlarmTab, now: number) => {
   switch (tab) {
-    case "active":
+    case "new":
       return e.status === "new";
     case "acknowledged":
       return e.status === "acknowledged";
@@ -71,7 +71,7 @@ export function tabCounts(
 ) {
   const t = now.getTime();
   return {
-    active: active.filter((e) => inTab(e, "active", t)).length,
+    new: active.filter((e) => inTab(e, "new", t)).length,
     acknowledged: active.filter((e) => inTab(e, "acknowledged", t)).length,
     cleared: cleared === null ? null : cleared.filter((e) => inTab(e, "cleared", t)).length,
   };

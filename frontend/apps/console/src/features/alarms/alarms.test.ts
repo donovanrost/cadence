@@ -41,13 +41,13 @@ describe("alarm list on episodes", () => {
   const clearedRecent = ep("c", { status: "cleared", cleared_at: "2026-11-09T01:30:00Z" });
   const clearedOld = ep("d", { status: "cleared", cleared_at: "2026-11-07T01:00:00Z" });
 
-  it("splits tabs: New in Active, acknowledged, cleared within 24 h", () => {
+  it("splits tabs: New, Acknowledged, Cleared within 24 h", () => {
     const all = [ep("a"), acked, clearedRecent, clearedOld];
-    expect(alarmRows(all, fleet, "active", null, now).map((r) => r.key)).toEqual(["a"]);
+    expect(alarmRows(all, fleet, "new", null, now).map((r) => r.key)).toEqual(["a"]);
     expect(alarmRows(all, fleet, "acknowledged", null, now).map((r) => r.key)).toEqual(["b"]);
     expect(alarmRows(all, fleet, "cleared", null, now).map((r) => r.key)).toEqual(["c"]);
     expect(tabCounts([ep("a"), acked], [clearedRecent, clearedOld], now)).toEqual({
-      active: 1,
+      new: 1,
       acknowledged: 1,
       cleared: 1,
     });
@@ -58,7 +58,7 @@ describe("alarm list on episodes", () => {
     const [row] = alarmRows(
       [ep("a", { assignee: { id: "t", name: "Tomás R." } })],
       fleet,
-      "active",
+      "new",
       null,
       now,
     );
@@ -74,9 +74,7 @@ describe("alarm list on episodes", () => {
 
   it("filters by point and counts active episodes per point", () => {
     const other = ep("o", { point: { id: "P2", name: "P2", unit: null } });
-    expect(alarmRows([ep("a"), other], fleet, "active", "P2", now).map((r) => r.key)).toEqual([
-      "o",
-    ]);
+    expect(alarmRows([ep("a"), other], fleet, "new", "P2", now).map((r) => r.key)).toEqual(["o"]);
     expect(byPoint([ep("a"), ep("b", { severity: "caution" }), other, clearedRecent])).toEqual([
       { pointId: "EPS.VBAT", name: "VBAT", count: 2, critical: 1 },
       { pointId: "P2", name: "P2", count: 1, critical: 1 },

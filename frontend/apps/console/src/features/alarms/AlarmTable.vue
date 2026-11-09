@@ -21,8 +21,7 @@ const columns: readonly ApColumn[] = [
   { key: "point", label: "Point" },
   { key: "value", label: "Last / limit", mono: true, align: "end" },
   { key: "since", label: "Opened", mono: true },
-  { key: "owner", label: "Owner" },
-  { key: "source", label: "Source", mono: true },
+  { key: "owner", label: "Owner · source" },
 ];
 const tint = (row: AlarmListRow) =>
   row.episode.severity === "critical" ? "text-crit-text" : "text-caution-text";
@@ -91,17 +90,15 @@ const to = (row: AlarmListRow) => ({
         >{{ formatCountdown(new Date(row.episode.opened_at), now) }}</time
       >
     </template>
-    <template #cell-owner="{ row }"
-      ><span
-        class="font-mono text-xs uppercase"
-        :class="row.owner === 'Unassigned' ? 'text-text-4' : 'text-text-2'"
-        >{{ row.owner }}</span
-      ></template
-    >
-    <template #cell-source="{ row }"
-      ><span class="text-xs text-text-3 uppercase">{{
-        row.episode.source === "catalog_monitoring" ? "Live" : "Ground limits"
-      }}</span></template
-    >
+    <template #cell-owner="{ row }">
+      <span class="flex flex-col gap-0.5 font-mono text-xs uppercase">
+        <span :class="row.owner === 'Unassigned' ? 'text-text-4' : 'text-text-2'">{{
+          row.owner
+        }}</span>
+        <span class="text-text-3">{{
+          row.episode.source === "catalog_monitoring" ? "Live" : "Ground limits"
+        }}</span>
+      </span>
+    </template>
   </ApTable>
 </template>

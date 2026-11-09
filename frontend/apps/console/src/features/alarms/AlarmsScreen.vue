@@ -22,7 +22,7 @@ import { useActiveEpisodes, useClearedEpisodes } from "./useAlarms.ts";
 
 /**
  * Alarms (OpsLists.md §Alarms) on alarm episodes: "What's out of limits right now, and who has it?"
- * Tabs Active · Acknowledged · Cleared (24 h) live in the URL (?tab=), the point filter too.
+ * Tabs New · Acknowledged · Cleared (24 h) live in the URL (?tab=), the point filter too.
  */
 const scope = useMissionScope();
 const route = useRoute();
@@ -35,7 +35,7 @@ const tab = computed<AlarmTab>(() => {
   const t = route.query.tab;
   return typeof t === "string" && (ALARM_TABS as readonly string[]).includes(t)
     ? (t as AlarmTab)
-    : "active";
+    : "new";
 });
 const active = useActiveEpisodes(missionId);
 const cleared = useClearedEpisodes(
@@ -72,7 +72,8 @@ const headline = computed(() => {
   if (s.status !== "ready") return "Alarms";
   if (s.value.summary.active === 0)
     return limitsOff.value ? "Ground limits off" : "No active alarms";
-  return `${plural(s.value.summary.active, "alarm")} active`;
+  const fresh = s.value.episodes.filter((e) => e.status === "new").length;
+  return `${plural(s.value.summary.active, "alarm")} active · ${fresh} new`;
 });
 const tabs = computed(() =>
   ALARM_TABS.map((key) => {
@@ -80,7 +81,7 @@ const tabs = computed(() =>
     return {
       key,
       label: key === "cleared" ? "Cleared · 24 h" : key[0]?.toUpperCase() + key.slice(1),
-      to: { query: { ...route.query, tab: key === "active" ? undefined : key } },
+      to: { query: { ...route.query, tab: key === "new" ? undefined : key } },
       ...(count === null ? {} : { count }),
     };
   }),
