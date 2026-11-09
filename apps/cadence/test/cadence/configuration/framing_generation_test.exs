@@ -4,6 +4,7 @@ defmodule Cadence.Configuration.FramingGenerationTest do
   alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.{FleetSnapshot, SpacecraftConfigurationInput}
+  alias Cadence.Comms.{RoutingRule, RoutingRuleStore, TransportStore}
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.Configuration
   alias Cadence.Governance.ActivationPolicy
@@ -168,12 +169,12 @@ defmodule Cadence.Configuration.FramingGenerationTest do
 
   defp route_craft(c, transport_id) do
     {:ok, transport} =
-      Cadence.Comms.TransportStore.fetch_transport(c.org, c.mission.mission_id, transport_id)
+      TransportStore.fetch_transport(c.org, c.mission.mission_id, transport_id)
 
     {:ok, _} =
-      Cadence.Comms.RoutingRuleStore.create_routing_rule(
+      RoutingRuleStore.create_routing_rule(
         c.org,
-        Cadence.Comms.RoutingRule.new(%{
+        RoutingRule.new(%{
           mission_id: c.mission.mission_id,
           spacecraft_id: c.craft.spacecraft_id,
           display_name: "Svalbard downlink",
