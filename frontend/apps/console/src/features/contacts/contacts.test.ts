@@ -20,6 +20,8 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   source: { provider: "p", provider_name: "Simulator", synthetic: true },
   max_elevation_deg: null,
   plan: null,
+  ended_by: null,
+  replaced_by: null,
   ...overrides,
 });
 

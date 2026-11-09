@@ -42,6 +42,14 @@ const pass = d.object({
   max_elevation_deg: d.nullable(d.number),
   /** The contact plan revision that booked it; null for direct bookings. */
   plan: d.nullable(d.object({ id: d.token, version: d.nullable(d.integer) })),
+  /** qa #30: who ended a canceled/rejected/failed booking; absent on older servers. */
+  ended_by: d.optional(
+    d.nullable(d.object({ kind: d.string, id: d.nullable(d.string), name: d.nullable(d.string) })),
+  ),
+  /** qa #30: the applied repair that replaced this lost booking; null while still lost. */
+  replaced_by: d.optional(
+    d.nullable(d.object({ plan_id: d.token, reservation_id: d.nullable(d.token) })),
+  ),
 });
 
 export const passesReader = d.object({

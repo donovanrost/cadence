@@ -23,23 +23,53 @@ export type Impact = Readonly<{
 
 function why(p: Pass & { state: LostState }): string {
   const provider = p.source.provider_name ?? "the provider";
+  const by = p.ended_by;
+  const person = by?.kind === "user" ? (by.name ?? "an operator") : null;
   switch (p.state) {
     case "rejected":
       return `Rejected by ${provider}`;
     case "failed":
-      return `Booking with ${provider} failed`;
+      // #53: an operator's "not booked" fails the item (ended_by is the operator).
+      return person ? `Marked not booked by ${person}` : `Booking with ${provider} failed`;
     case "canceled":
-      // U20: the passes read doesn't say who canceled (an operator can too; qa #30).
-      return `Canceled at ${provider}`;
+      // ux 45099dc0 / U20: name who canceled only when the read says so.
+      if (person) return `Canceled by ${person} · at ${provider}`;
+      return by?.kind === "provider"
+        ? `Canceled by ${by.name ?? provider}`
+        : `Canceled at ${provider}`;
     case "unknown":
       return `State unknown at ${provider}`;
   }
 }
 
-/** The live plan's bookings that didn't hold: what A Impact lists in v1 (no station status yet). */
-export function impactOf(passes: readonly Pass[], planId: string, truncated: boolean): Impact {
+/**
+ * The day's repair chain as far as the passes read shows it (qa #30): the plan, its parent, and
+ * every applied repair that replaced a lost booking of a plan already in the chain.
+ */
+function chainOf(passes: readonly Pass[], plan: ImpactPlan): Set<string> {
+  const chain = new Set([plan.id, ...(plan.repair_of ? [plan.repair_of.plan.id] : [])]);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const p of passes) {
+      const next = p.replaced_by?.plan_id;
+      if (next && p.plan && chain.has(p.plan.id) && !chain.has(next)) {
+        chain.add(next);
+        grew = true;
+      }
+    }
+  }
+  return chain;
+}
+
+export type ImpactPlan = Readonly<{ id: string; repair_of: { plan: { id: string } } | null }>;
+
+/** The day's bookings that didn't hold and no applied repair replaced: what A Impact lists. */
+export function impactOf(passes: readonly Pass[], plan: ImpactPlan, truncated: boolean): Impact {
+  const chain = chainOf(passes, plan);
   const lost = passes.flatMap((p) =>
-    p.plan?.id === planId && isLost(p.state) ? [{ ...p, state: p.state }] : [],
+    p.plan && chain.has(p.plan.id) && isLost(p.state) && !p.replaced_by
+      ? [{ ...p, state: p.state }]
+      : [],
   );
   const stations = [...new Set(lost.map((p) => p.station.code ?? p.station.ref ?? "—"))].sort();
   return {

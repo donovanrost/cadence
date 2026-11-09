@@ -25,6 +25,52 @@ const pass = (id: string, state: string, planId: string | null, sc: string, stat
 });
 
 describe("impactOf", () => {
+  const read = (rows: unknown[]) => {
+    const decoded = decode(passesReaderForTests, {
+      from: "2026-11-10T00:00:00Z",
+      to: "2026-11-11T00:00:00Z",
+      truncated: false,
+      passes: rows,
+    });
+    if (!decoded.ok) throw decoded.error;
+    return decoded.value.passes;
+  };
+  it("follows the repair chain and skips lost bookings an applied repair replaced (qa #30)", () => {
+    const rows = read([
+      {
+        ...pass("hbk", "canceled", "r1", "sc-2", "HBK"),
+        replaced_by: { plan_id: "rep", reservation_id: "x" },
+      },
+      {
+        ...pass("kir", "canceled", "r1", "sc-4", "KIR"),
+        ended_by: { kind: "user", id: "u1", name: "QA Org Admin" },
+      },
+      {
+        ...pass("haw", "failed", "rep", "sc-2", "HAW"),
+        ended_by: { kind: "user", id: "u1", name: "Mira K." },
+      },
+      pass("other", "rejected", "plan-other-day", "sc-9", "SVL"),
+    ]);
+    const impact = impactOf(rows, { id: "r1", repair_of: null }, false);
+    expect(impact.rows.map((r) => [r.id, r.why])).toEqual([
+      ["kir", "Canceled by QA Org Admin · at Simulator"],
+      ["haw", "Marked not booked by Mira K."],
+    ]);
+  });
+  it("starts from the parent when opened on a repair, and names the provider only when it ended it", () => {
+    const rows = read([
+      {
+        ...pass("a", "canceled", "r1", "sc-1", "FAI"),
+        ended_by: { kind: "provider", id: "p1", name: "Northlight" },
+      },
+      pass("b", "canceled", "r1", "sc-3", "FAI"),
+    ]);
+    const impact = impactOf(rows, { id: "rep", repair_of: { plan: { id: "r1" } } }, false);
+    expect(impact.rows.map((r) => r.why)).toEqual([
+      "Canceled by Northlight",
+      "Canceled at Simulator",
+    ]);
+  });
   it("lists only this plan's lost bookings with a reason in words", () => {
     const decoded = decode(passesReaderForTests, {
       from: "2026-11-09T00:00:00Z",
@@ -38,7 +84,7 @@ describe("impactOf", () => {
       ],
     });
     if (!decoded.ok) throw decoded.error;
-    const impact = impactOf(decoded.value.passes, "plan-41", false);
+    const impact = impactOf(decoded.value.passes, { id: "plan-41", repair_of: null }, false);
     expect(impact.passes).toBe(2);
     expect(impact.spacecraft).toBe(1);
     expect(impact.stations).toEqual(["FAI", "SVL"]);
