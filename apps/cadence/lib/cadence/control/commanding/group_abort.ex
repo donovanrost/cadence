@@ -8,9 +8,10 @@ defmodule Cadence.Control.Commanding.GroupAbort do
   keep running. A single request can be canceled under the same rule.
   """
 
+  alias Cadence.Accounts.User
+  alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Commanding.{Cancellation, Dispatcher, ProcessNamespace}
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
-  alias Cadence.Management.Commanding.RequestAuthoring
   alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Repo
 
@@ -19,7 +20,7 @@ defmodule Cadence.Control.Commanding.GroupAbort do
   @spec abort(Cadence.Auth.Scope.t(), binary(), binary(), binary()) ::
           {:ok, CommandGroup.t()} | {:error, term()}
   def abort(scope, mission_id, group_id, reason) do
-    with {:ok, fresh, _mission} <- RequestAuthoring.authorize(scope, mission_id),
+    with {:ok, fresh, _mission} <- authorize(scope, mission_id),
          :ok <- reason_given(reason) do
       org = fresh.organization_id
       actor = actor(fresh)
@@ -33,7 +34,7 @@ defmodule Cadence.Control.Commanding.GroupAbort do
   @spec cancel_request(Cadence.Auth.Scope.t(), binary(), binary(), binary()) ::
           {:ok, map()} | {:error, term()}
   def cancel_request(scope, mission_id, request_id, reason) do
-    with {:ok, fresh, _mission} <- RequestAuthoring.authorize(scope, mission_id),
+    with {:ok, fresh, _mission} <- authorize(scope, mission_id),
          :ok <- reason_given(reason) do
       org = fresh.organization_id
       actor = actor(fresh)
@@ -113,6 +114,53 @@ defmodule Cadence.Control.Commanding.GroupAbort do
     else
       _not_a_member -> :ok
     end
+  end
+
+  @doc """
+  `command.abort` for the console (DECISIONS #42), from the check `abort/4`
+  and `cancel_request/4` enforce: an active human who can operate the mission.
+  The check needs a real mission, so for an organization-level answer it's
+  evaluated against the organization's missions (held if any passes; an
+  organization without missions has nothing to abort).
+  """
+  @spec capabilities(Scope.t()) :: [binary()]
+  def capabilities(
+        %Scope{actor_kind: :user, user: %User{lifecycle_state: :active}, organization_id: org} =
+          scope
+      )
+      when is_binary(org) do
+    missions =
+      case scope.mission_id do
+        nil -> org |> Cadence.Missions.list_missions() |> Enum.map(& &1.mission_id)
+        mission_id -> [mission_id]
+      end
+
+    if Enum.any?(missions, &(operate(scope, &1) == :ok)), do: ["command.abort"], else: []
+  end
+
+  def capabilities(%Scope{}), do: []
+
+  # Abort is safing: any mission operator, not only commanding admins (DECISIONS #31, #42).
+  defp authorize(
+         %Scope{actor_kind: :user, user: %{user_id: _}, organization_id: org} = scope,
+         mission_id
+       )
+       when is_binary(org) and is_binary(mission_id) do
+    with :ok <- operate(scope, mission_id),
+         {:ok, _mission} <- Cadence.Missions.fetch_mission(org, mission_id) do
+      {:ok, scope, mission_id}
+    else
+      _denied -> {:error, :unavailable}
+    end
+  end
+
+  defp authorize(_scope, _mission_id), do: {:error, :unavailable}
+
+  defp operate(scope, mission_id) do
+    Policy.authorize(scope, :operate_mission, %{
+      organization_id: scope.organization_id,
+      mission_id: mission_id
+    })
   end
 
   defp abortable(%CommandGroup{state: state}) when state in @abortable, do: :ok

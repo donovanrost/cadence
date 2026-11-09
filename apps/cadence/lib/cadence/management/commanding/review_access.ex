@@ -28,10 +28,10 @@ defmodule Cadence.Management.Commanding.ReviewAccess do
   def authorize(_, _), do: {:error, :unavailable}
 
   @doc """
-  The console capability names (`command.request`, `command.approve`,
-  `command.abort`) that `scope` holds in its organization, from the same policy
-  `authorize/2` enforces (DECISIONS #38). Requesting, reviewing and aborting
-  (`GroupAbort`, via `RequestAuthoring.authorize/2`) share this one rule today;
+  The console capability names (`command.request`, `command.approve`) that
+  `scope` holds in its organization, from the same policy `authorize/2`
+  enforces (DECISIONS #38). Requesting and reviewing share this one rule today
+  (`command.abort` is `GroupAbort.capabilities/1`, DECISIONS #42);
   the two-person rule still forbids approving your own request. If one of them
   moves to its own rule, its name moves with it. The rule doesn't
   depend on the mission for human actors, so `scope.mission_id` (usually nil)
@@ -40,7 +40,7 @@ defmodule Cadence.Management.Commanding.ReviewAccess do
   @spec capabilities(Scope.t()) :: [binary()]
   def capabilities(%Scope{actor_kind: :user, user: %User{lifecycle_state: :active}} = scope) do
     if is_binary(scope.organization_id) and policy(scope, scope.mission_id) == :ok,
-      do: ["command.request", "command.approve", "command.abort"],
+      do: ["command.request", "command.approve"],
       else: []
   end
 

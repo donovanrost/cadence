@@ -25,8 +25,9 @@ defmodule CadenceWeb.Console.PeopleAPITest do
     # Commanding needs :manage_mission today (DECISIONS #38): members can't.
     assert by_name["Mira K."]["capabilities"] == []
 
+    # No command.abort: this organization has no missions to abort in (DECISIONS #42).
     assert Enum.sort(by_name["Ada Admin"]["capabilities"]) ==
-             ~w(command.abort command.approve command.request org.invite org.manage_members)
+             ~w(command.approve command.request org.invite org.manage_members)
 
     assert is_binary(by_name["Mira K."]["joined_at"])
     assert data["invitations"] == []

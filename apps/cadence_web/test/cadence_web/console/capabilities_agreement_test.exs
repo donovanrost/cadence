@@ -90,7 +90,8 @@ defmodule CadenceWeb.Console.CapabilitiesAgreementTest do
     assert reported(scope(c.admin, c.org)) ==
              ~w(command.abort command.approve command.request org.invite org.manage_members)
 
-    assert reported(scope(c.member, c.org)) == []
+    # Any mission operator may abort (DECISIONS #42); commanding itself stays admins-only.
+    assert reported(scope(c.member, c.org)) == ["command.abort"]
   end
 
   test "People member capabilities match enforcement for each member", c do

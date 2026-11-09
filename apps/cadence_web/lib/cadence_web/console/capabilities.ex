@@ -6,6 +6,7 @@ defmodule CadenceWeb.Console.Capabilities do
   - `command.request`, `command.approve`: commanding's review policy
     (`Cadence.Management.Commanding.capabilities/1`, the check
     `ReviewAccess.authorize/2` enforces).
+  - `command.abort`: `GroupAbort.capabilities/1`, any mission operator (DECISIONS #42).
   - `org.invite`, `org.manage_members`: `OrganizationPeople.permissions/2`.
 
   The session's per-organization list also keeps the scope capabilities
@@ -14,11 +15,13 @@ defmodule CadenceWeb.Console.Capabilities do
 
   alias Cadence.Administration.OrganizationPeople
   alias Cadence.Auth.Scope
+  alias Cadence.Control.Commanding.GroupAbort
   alias Cadence.Management.Commanding
 
   @doc "Capabilities other contexts evaluate, for People members (`OrganizationPeople.load/3`)."
   @spec contributed(Scope.t()) :: [binary()]
-  def contributed(%Scope{} = scope), do: Commanding.capabilities(scope)
+  def contributed(%Scope{} = scope),
+    do: Commanding.capabilities(scope) ++ GroupAbort.capabilities(scope)
 
   @doc "Everything `scope` holds in its organization, for the session."
   @spec organization(Scope.t()) :: [binary()]
