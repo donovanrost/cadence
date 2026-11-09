@@ -25,6 +25,13 @@ const organization = computed(() =>
 );
 const days = ref<"1" | "7" | "30">("7");
 const kind = ref<AuditKind | "all">("all");
+/** ApSegmented emits strings; keep only values this screen knows (typed v-model, lead c41e549d). */
+const setDays = (v: string) => {
+  if (v === "1" || v === "7" || v === "30") days.value = v;
+};
+const setKind = (v: string) => {
+  kind.value = v === "all" ? "all" : (auditKinds.find((k) => k === v) ?? "all");
+};
 const missionId = ref("");
 const query = computed(() =>
   organization.value
@@ -63,7 +70,8 @@ const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(
       size="reading"
     >
       <ApSegmented
-        v-model="days"
+        :model-value="days"
+        @update:model-value="setDays"
         label="Range"
         :options="[
           { value: '1', label: '24h' },
@@ -73,7 +81,12 @@ const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(
       />
     </ApPageHeader>
     <div class="flex flex-wrap items-end gap-3">
-      <ApSegmented v-model="kind" label="Kind" :options="kindOptions" />
+      <ApSegmented
+        :model-value="kind"
+        label="Kind"
+        :options="kindOptions"
+        @update:model-value="setKind"
+      />
       <ApSelect v-model="missionId" label="Mission" :options="missionOptions" />
     </div>
     <ApPanel v-if="notProvided" index="L1" title="Audit log" flush>
