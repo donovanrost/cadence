@@ -326,3 +326,48 @@ and the actions.
 acknowledged_by?, spacecraft_id, contact_id, station, provider, starts_at, raised_at, resolution:
 {action, actor, at, note, provider_reference?}, provider_message?}`.
 
+### U32 · Resolving unconfirmed bookings and attention items: copy (DECISIONS #53/#54, domain e3849f74)
+**Unconfirmed passes (K1/K2 U30 list, admins only):** each pass row gets two secondary buttons, `Mark booked` and
+`Mark not booked`. Members see the list without them, plus "Org admins resolve unconfirmed bookings."
+- **Mark booked sheet:**
+  - Title `Mark EARENDIL-001 · KIR · 03:00Z as booked`.
+  - First line: "Cadence asks Northlight once more first. If Northlight answers, its answer is used and nothing is marked."
+  - Fields: `Northlight booking reference` (mono, required) and `Note` (required, placeholder "How did you confirm it?").
+  - Consequence: "The pass counts as booked on your word. Uplink stays unconfirmed until Northlight confirms it."
+  - Primary: `Mark booked`.
+- **Mark not booked sheet:**
+  - Same first line.
+  - Then: "Then Cadence sends Northlight a cancel. The pass becomes a gap that Re-plan can fill."
+  - `Note` (required).
+  - Primary: `Cancel at Northlight and mark not booked`.
+- **Outcomes** (callout in the sheet's place, then the list refreshes):
+  - `provider_answered`: info, "Northlight answered: booked. Nothing was marked." (or "…: not booked.").
+  - `attested`: "Marked booked by you · ref NL-48213."
+  - `not_booked`: "Marked not booked. The cancel went to Northlight." Don't claim it was accepted: a failed cancel
+    arrives in the Now queue (U31).
+- **Errors (U20):**
+  - `booking_not_unconfirmed`: "This booking isn't unconfirmed any more. Northlight may have answered." + refresh.
+  - `booking_already_resolved`: "Someone already resolved this." (name them when the reply carries the actor).
+  - `invalid`: inline under the field.
+  - `forbidden`: "Org admins resolve unconfirmed bookings."
+- **Evidence afterwards:**
+  - Contact and pass rows read `BOOKED · ATTESTED BY MIRA K.` for `booking_evidence: operator_attested`.
+  - Its uplink reads `UPLINK UNCONFIRMED` (caution text) until the provider confirms the leg.
+
+**Attention items (contact drawer D2 block, members with operate):**
+- **Caution block:**
+  - The U31 title sentence.
+  - The resolution record: "Marked booked by Mira K. 10:52Z · ref NL-48213 · 'Called the Northlight ops desk.'"
+  - The provider's message, quoted, in mono.
+  - One "what to do" line per conflict:
+    - `cancel_failed`: "Check with Northlight that the pass is canceled. If it can't be, keep it and record what you did."
+    - `late_confirmation`: "Northlight booked it after it was marked not booked. Cancel it with Northlight or use the pass, then record what you did."
+    - `contradicts_attestation`: "Don't count on this contact. Re-plan the spacecraft if it needs this contact." (link `Open the day's plan`)
+- **Actions:**
+  - `Acknowledge` (secondary): the row gets `ACK <you>` (U21).
+  - `Resolve…` (primary in the block): a sheet with `What did you do?` (required, placeholder "Called Northlight; the cancel is confirmed, ticket 4471."), then `Resolve`.
+  - Cadence can't act at the provider here, so the copy never implies it did.
+  - Errors `attention_item_not_found` / `not_open`: "This was already resolved." + refresh.
+- **Names:** spacecraft, station and provider names are resolved client-side from their ids. A provider closure in
+  `resolved[]` reads "Resolved: Northlight confirmed" / "…canceled".
+
