@@ -10,6 +10,7 @@ import {
   PlanFooter,
   PlanStatePanel,
   SubmitSheet,
+  UnconfirmedCallout,
   coverage,
   planPrimary,
   repairableStates,
@@ -204,6 +205,7 @@ async function onApply(acks: Acknowledgement[]) {
       <PlanStatePanel v-if="runView" :view="runView" />
       <template v-else-if="proposal && proposal.plan && proposal.diff">
         <ApCallout v-if="stopped" :tone="stopped.tone">{{ stopped.text }}</ApCallout>
+        <UnconfirmedCallout :plan="footerPlan ?? proposal.plan" :name-of="nameOf" />
         <div
           class="grid min-h-0 flex-1 grid-cols-1 gap-3 console:grid-cols-[300px_minmax(0,1fr)_360px]"
         >
@@ -278,6 +280,7 @@ async function onApply(acks: Acknowledgement[]) {
         :station-name="station.stationName.value"
         :availability="station.availability.value.value"
       />
+      <UnconfirmedCallout v-if="!proposal" :plan="live" :name-of="nameOf" />
       <ApPanel v-if="!runView && !proposal" index="A2" title="Live plan">
         <ApCallout v-if="!repairableStates.includes(live.state)" tone="info">
           Live plan r{{ live.version }} is {{ live.state.replaceAll("_", " ") }}. Re-plan applies to
