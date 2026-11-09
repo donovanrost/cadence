@@ -50,6 +50,7 @@ pushes are not replayed.
 | `contacts` | contact facts (scheduled/realized contacts, contact actions) and, once domain publishes it, reservation, plan and run changes. See contacts.md |
 | `stations` | station availability windows (operator, provider or simulator). See contacts.md, S7 |
 | `pass_results` | pass results (S9 close-out, provider results). See contacts.md, pass review |
+| `attention` | mission "needs acknowledgment" items (DECISIONS #54: pass-resolution conflicts raised, acknowledged or resolved). Refetch the action queue and `/counts` |
 | `limits` | limit definition changes |
 | `events` | mission event changes |
 | `catalog` | catalog revision changes |

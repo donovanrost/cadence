@@ -10,7 +10,7 @@ defmodule Cadence.Reads.OpsCounts do
   alias Cadence.Auth.Scope
   alias Cadence.Control.Alarms
   alias Cadence.Control.Contacts
-  alias Cadence.Reads.CommandCounts
+  alias Cadence.Reads.{Attention, CommandCounts}
 
   @spec load(Scope.t(), binary()) :: map()
   def load(%Scope{} = scope, mission_id) do
@@ -31,7 +31,9 @@ defmodule Cadence.Reads.OpsCounts do
             mission_id,
             DateTime.utc_now()
           )
-        )
+        ),
+      # Open "needs acknowledgment" items (DECISIONS #54): Now's queue header and mobile badge.
+      attention: Attention.counts(organization_id, mission_id)
     }
   end
 

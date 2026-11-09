@@ -26,7 +26,7 @@ defmodule Cadence.Reads.ActionQueue do
   """
 
   alias Cadence.Auth.Scope
-  alias Cadence.Reads.ActionQueue.{AlarmItems, Item}
+  alias Cadence.Reads.ActionQueue.{AlarmItems, AttentionItems, Item}
 
   alias Cadence.Reads.{
     AlarmEpisodes,
@@ -51,6 +51,7 @@ defmodule Cadence.Reads.ActionQueue do
           | :setup
           | :limits_not_configured
           | :never_heard
+          | :attention
 
   @doc "Loads every input and builds the queue for the scope's user."
   @spec load(Scope.t(), binary(), keyword()) :: map()
@@ -64,8 +65,12 @@ defmodule Cadence.Reads.ActionQueue do
         requests: fn _org, _mission, _opts -> requests end
       )
 
+    fleet = FleetStatus.load(organization_id, mission_id, opts)
+    now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
+
     build(%{
-      fleet: FleetStatus.load(organization_id, mission_id, opts),
+      fleet: fleet,
+      attention: AttentionItems.load(scope, mission_id, fleet, now),
       episodes: episodes,
       alarms_truncated: truncated?,
       command_rows: commands.rows,
@@ -81,7 +86,7 @@ defmodule Cadence.Reads.ActionQueue do
       viewer_user_id: viewer_user_id,
       limits_configured?: Cadence.Limits.list_limit_definitions(mission_id) != [],
       findings: Readiness.evaluate(organization_id, mission_id).findings,
-      now: Keyword.get_lazy(opts, :now, &DateTime.utc_now/0),
+      now: now,
       failure_lookback_s: Keyword.get_lazy(opts, :failure_lookback_s, &failure_lookback_s/0)
     })
   end
@@ -115,7 +120,8 @@ defmodule Cadence.Reads.ActionQueue do
         approval_items(input, targets),
         stale_items(fleet.spacecraft),
         setup_items(input),
-        never_heard_items(fleet.spacecraft)
+        never_heard_items(fleet.spacecraft),
+        attention_input(input).items
       ]
       |> List.flatten()
       |> Enum.sort_by(&sort_key/1)
@@ -126,9 +132,12 @@ defmodule Cadence.Reads.ActionQueue do
       failure_lookback_s: input.failure_lookback_s,
       alarms_truncated: Map.get(input, :alarms_truncated, false),
       counts: counts(items),
-      items: items
+      items: items,
+      resolved: attention_input(input).resolved
     }
   end
+
+  defp attention_input(input), do: Map.get(input, :attention) || %{items: [], resolved: []}
 
   # -- commands ----------------------------------------------------------------
 
@@ -340,6 +349,7 @@ defmodule Cadence.Reads.ActionQueue do
   end
 
   defp acknowledged_only?(%{kind: :alarm, acknowledged: n, count: n}), do: true
+  defp acknowledged_only?(%{kind: :attention, attention: %{state: "acknowledged"}}), do: true
   defp acknowledged_only?(_item), do: false
 
   # nil sorts after every time.

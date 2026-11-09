@@ -18,7 +18,8 @@ defmodule Cadence.Reads.ActionQueue.Item do
         outcome: nil,
         command_requests: [],
         command_groups: [],
-        finding: nil
+        finding: nil,
+        attention: nil
       },
       fields
     )

@@ -1,6 +1,8 @@
 defmodule CadenceWeb.Console.ActionQueueAPITest do
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.Contacts.BookingResolutions.Row
+  alias Cadence.Repo
   alias CadenceWeb.ControlPlaneApiFixtures
   alias CadenceWeb.TestFixtures
 
@@ -31,6 +33,61 @@ defmodule CadenceWeb.Console.ActionQueueAPITest do
 
     assert %{"kind" => "setup", "state" => "off", "finding" => %{"cause" => "no_spacecraft"}} =
              Enum.find(data["items"], &(&1["id"] == "setup:fleet.no_spacecraft"))
+  end
+
+  test "a pass-resolution conflict is an attention row; the empty queue has no resolved", c do
+    ControlPlaneApiFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
+
+    empty = c |> get_queue() |> json_response(200) |> Map.fetch!("data")
+    assert empty["resolved"] == []
+    assert Enum.all?(empty["items"], &Map.has_key?(&1, "attention"))
+
+    starts_at = DateTime.add(DateTime.utc_now(), 3600)
+    conflict!(c, "br-1", starts_at)
+
+    data = c |> get_queue() |> json_response(200) |> Map.fetch!("data")
+
+    assert %{
+             "priority" => 1,
+             "kind" => "attention",
+             "state" => "critical",
+             "source" => "pass_resolution",
+             "spacecraft" => [%{"id" => "spacecraft-001", "name" => "SC-001"}],
+             "attention" => %{
+               "id" => "br-1",
+               "conflict" => "contradicts_attestation",
+               "state" => "open",
+               "contact_id" => "contact-1",
+               "station" => %{"ref" => "svb"},
+               "provider" => %{"id" => "northlight"}
+             }
+           } = Enum.find(data["items"], &(&1["id"] == "attention:pass_resolution:br-1"))
+  end
+
+  defp conflict!(c, id, starts_at) do
+    %{
+      booking_resolution_id: id,
+      organization_id: c.org.organization_id,
+      mission_id: c.mission.mission_id,
+      contact_plan_id: "plan-1",
+      contact_plan_version: 1,
+      contact_plan_execution_item_id: "item-" <> id,
+      provider_reservation_id: "res-" <> id,
+      scheduled_contact_id: "contact-1",
+      spacecraft_id: "spacecraft-001",
+      ground_station_ref: "svb",
+      provider_id: "northlight",
+      starts_at: starts_at,
+      ends_at: DateTime.add(starts_at, 600),
+      action: "booked",
+      outcome: "attested",
+      note: "Booked by phone",
+      actor_document: %{"kind" => "user", "id" => c.user.user_id, "name" => "Mira K."}
+    }
+    |> Row.changeset()
+    |> Repo.insert!()
+    |> Row.conflict_changeset("contradicts_attestation", %{}, DateTime.utc_now())
+    |> Repo.update!()
   end
 
   test "a caution alarm is a P2 item naming the spacecraft and point", c do

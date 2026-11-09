@@ -11,7 +11,8 @@ defmodule CadenceWeb.Console.ActionQueueJSON do
       failure_lookback_s: queue.failure_lookback_s,
       alarms_truncated: queue.alarms_truncated,
       counts: queue.counts,
-      items: Enum.map(queue.items, &item/1)
+      items: Enum.map(queue.items, &item/1),
+      resolved: Map.get(queue, :resolved, [])
     }
   end
 
@@ -27,14 +28,15 @@ defmodule CadenceWeb.Console.ActionQueueJSON do
       spacecraft: Enum.map(item.spacecraft, &member/1),
       point: item.point,
       condition: item.condition,
-      source: item.source && Atom.to_string(item.source),
+      source: item.source && to_string(item.source),
       acknowledged: item.acknowledged,
       plane: item.plane,
       command: item.command,
       outcome: item.outcome && Atom.to_string(item.outcome),
       command_requests: Enum.map(item.command_requests, &request/1),
       command_groups: item.command_groups,
-      finding: finding(item.finding)
+      finding: finding(item.finding),
+      attention: item.attention
     }
   end
 

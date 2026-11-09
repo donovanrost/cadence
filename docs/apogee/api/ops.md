@@ -174,7 +174,8 @@ values get `422 invalid_params` with `details`.
 ## `GET /api/console/v1/missions/:mission_id/counts`
 
 Small counts for the shell (Ops rail, mobile on-call tabs), so the shell doesn't load `GET /fleet`
-(~300 KB) for numbers. Refetch on `invalidate` with `alarms`, `commanding` or `spacecraft`, throttled.
+(~300 KB) for numbers. Refetch on `invalidate` with `alarms`, `commanding`, `spacecraft` or
+`attention`, throttled.
 
 ```json
 {"data": {
@@ -182,7 +183,8 @@ Small counts for the shell (Ops rail, mobile on-call tabs), so the shell doesn't
   "alarms": {"active": 4, "critical": 3, "caution": 1, "unacknowledged": 2, "limits_configured": true},
   "commands": {"open": 25, "awaiting_viewer": 2},
   "fleet": {"total": 500},
-  "contacts": {"in_contact": 4}
+  "contacts": {"in_contact": 4},
+  "attention": {"open": 2, "acknowledged": 1}
 }}
 ```
 
@@ -196,17 +198,16 @@ Small counts for the shell (Ops rail, mobile on-call tabs), so the shell doesn't
   `null` when the mission has no reservations (not tracked).
 - A `null` count means "can't compute": omit it in the UI, never show `0`.
 
-- **Planned (DECISIONS #54, U31):** `attention: {open, acknowledged}`, counting the mission's
+- `attention` (DECISIONS #54, U31): `{open, acknowledged}`, counting the mission's
   open "needs acknowledgment" items (pass-resolution conflicts for now). It feeds Now's queue header
-  and the mobile Now badge, not a rail count. `null` when the attention read can't be read.
-  Refetch on `invalidate` with `attention`.
+  and the mobile Now badge, not a rail count. Refetch on `invalidate` with `attention`.
 
 Errors: `404 mission_not_found`.
 
 ## `GET /api/console/v1/missions/:mission_id/action-queue`
 
 The viewer's ranked action queue (Now A2), ranked by ux U11. Refetch on `invalidate` with `alarms`,
-`commanding`, `spacecraft`, `limits`, `catalog`, `data_sources` or `settings`, plus `telemetry`
+`commanding`, `spacecraft`, `limits`, `catalog`, `data_sources`, `settings` or `attention`, plus `telemetry`
 throttled to about 10 s (stale groups change with time).
 
 ```json
@@ -261,8 +262,9 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
 - `counts.spacecraft_p1`: distinct spacecraft across P1 items (the "N spacecraft need you" headline).
 - **Not derived yet** (no source): critical flight events (safe mode), missed passes, degraded
   stations, no-ACK retries. Alarm items come from **alarm episodes** (both sources, DECISIONS #17).
-- **Planned: `attention` items (DECISIONS #54, U31).** Not built yet; it waits on domain's attention
-  read. One item per open or acknowledged item from that read, never grouped:
+- **`attention` items (DECISIONS #54, U31).** One item per open or acknowledged item from domain's
+  attention read (`Cadence.Reads.Attention`), never grouped. The queue's `invalidate` list includes
+  `attention`:
   - `id` `attention:<source>:<attention id>`; `kind` `attention`; `source` is the subkind
     (`pass_resolution` for now).
   - `priority` 1 (`state` `critical`) when the pass starts within 2 h or is in progress;
@@ -272,8 +274,8 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
   - `due_at` is the pass's `starts_at`, the consequence time that Now's meta shows as "AOS T−01:12".
     `since` is `raised_at`.
   - `spacecraft` has one member with the **resolved name** (title `EARENDIL-001 · …`, never the id),
-    in the full member shape: `scid`, `plane`, `stale` and `last_received_at` filled, the alarm
-    fields `null`.
+    in the full member shape, filled as on `stale` items (the alarm fields `null`). A spacecraft
+    that left the fleet still gets its name and `scid`.
   - A new field, `attention` (`null` on other kinds), holds `{id, source, conflict:
     cancel_failed | late_confirmation | contradicts_attestation, state: open | acknowledged,
     acknowledged_by: {kind, id, name} | null, contact_id, station {ref, id, code, name},
@@ -287,8 +289,6 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
     confirmed", never "by Cadence". A `system` closure reads its `action` alone, with no actor
     ("Resolved: cancel confirmed").
   - Refetch on `invalidate` with `attention`.
-  - Ship order: fe-ops lands the reader (kind `attention`, source `pass_resolution`, the
-    `attention` object, top-level `resolved`) before the server sends any attention row.
 - `failure_lookback_s` is `config :cadence, :action_queue_failure_lookback_s` (default 24 h).
   Failures older than that drop off the queue; they stay on the commands pages.
 

@@ -32,6 +32,7 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
     assert data["commands"] == %{"open" => 0, "awaiting_viewer" => 0}
     assert data["fleet"] == %{"total" => 0}
     assert data["contacts"] == nil
+    assert data["attention"] == %{"open" => 0, "acknowledged" => 0}
     assert is_binary(data["observed_at"])
   end
 
