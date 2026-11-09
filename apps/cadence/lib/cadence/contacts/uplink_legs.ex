@@ -14,6 +14,7 @@ defmodule Cadence.Contacts.UplinkLegs do
   alias Cadence.Contacts.{LinkAssignment, LinkAssignmentStore, ProviderReservation}
 
   @not_booked "uplink not booked"
+  @unconfirmed "uplink unconfirmed"
 
   @doc "The uplink leg to request with a booking at `ground_station_ref`, or nil."
   @spec for_booking(binary(), binary(), binary(), binary() | nil, binary()) :: map() | nil
@@ -30,6 +31,14 @@ defmodule Cadence.Contacts.UplinkLegs do
   """
   @spec scheduled_fields(ProviderReservation.t()) :: {[binary()], [map()], [atom()], map()}
   def scheduled_fields(%ProviderReservation{} = reservation) do
+    {ids, refs, intents, metadata} = leg_fields(reservation)
+
+    if attested?(reservation),
+      do: {ids, refs, intents, Map.put(metadata, "booking_evidence", "operator_attested")},
+      else: {ids, refs, intents, metadata}
+  end
+
+  defp leg_fields(reservation) do
     requested = get_in(reservation.request_document, ["uplink"])
     confirmed = get_in(reservation.provider_confirmed_snapshot_document, ["uplink", "status"])
 
@@ -46,6 +55,12 @@ defmodule Cadence.Contacts.UplinkLegs do
         {[requested["path_template_id"]], [ref], [:telemetry_downlink, :command_window],
          %{"uplink" => %{"booked" => true, "routing_rule_id" => requested["routing_rule_id"]}}}
 
+      # An operator attested the booking (DECISIONS #53); only the provider can confirm the
+      # uplink service, so no command window yet.
+      attested?(reservation) ->
+        {[], [], [:telemetry_downlink],
+         %{"uplink" => %{"booked" => false, "reason" => @unconfirmed}}}
+
       true ->
         reason =
           get_in(reservation.provider_confirmed_snapshot_document, ["uplink", "status_reason"])
@@ -54,6 +69,13 @@ defmodule Cadence.Contacts.UplinkLegs do
          %{"uplink" => %{"booked" => false, "reason" => @not_booked, "provider_reason" => reason}}}
     end
   end
+
+  defp attested?(%ProviderReservation{
+         metadata: %{"operator_resolution" => %{"action" => "booked"}}
+       }),
+       do: true
+
+  defp attested?(_reservation), do: false
 
   defp primary_uplink?(%RoutingRule{} = rule) do
     rule.lifecycle_state == :active and rule.enabled? and rule.role == :primary and

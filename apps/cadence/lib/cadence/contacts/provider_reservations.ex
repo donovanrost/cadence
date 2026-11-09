@@ -16,6 +16,7 @@ defmodule Cadence.Contacts.ProviderReservations do
   alias Cadence.Contacts
 
   alias Cadence.Contacts.{
+    BookingResolutions,
     KnownAtom,
     ProviderReservation,
     ProviderReservationChanges,
@@ -621,6 +622,54 @@ defmodule Cadence.Contacts.ProviderReservations do
     end
   end
 
+  @doc """
+  Records an operator's attestation that the provider booked this reservation (DECISIONS
+  #53) and materializes its scheduled contact. The lifecycle stays the provider's.
+  """
+  @spec attest_booking(ProviderReservation.t(), map()) :: {:ok, map()} | {:error, term()}
+  def attest_booking(%ProviderReservation{} = reservation, document) do
+    with {:ok, _} <- put_operator_resolution(reservation, document) do
+      materialize_scheduled_contact(
+        reservation.organization_id,
+        reservation.mission_id,
+        reservation.provider_reservation_id
+      )
+    end
+  end
+
+  @doc "Marks a reservation with an operator resolution (#53); its lifecycle is unchanged."
+  @spec put_operator_resolution(ProviderReservation.t(), map()) ::
+          {:ok, ProviderReservation.t()} | {:error, term()}
+  def put_operator_resolution(%ProviderReservation{} = reservation, document) do
+    row =
+      reservation_row(
+        reservation.provider_reservation_id,
+        reservation.organization_id,
+        reservation.mission_id
+      )
+
+    metadata =
+      row.metadata
+      |> JsonDocument.unwrap_value()
+      |> Kernel.||(%{})
+      |> Map.put("operator_resolution", document)
+
+    row
+    |> ProviderReservationRow.transition_changeset(%{metadata: JsonDocument.wrap_value(metadata)})
+    |> Repo.update()
+    |> case do
+      {:ok, row} -> {:ok, ProviderReservationRow.to_domain(row)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp attested?(%ProviderReservation{
+         metadata: %{"operator_resolution" => %{"action" => "booked"}}
+       }),
+       do: true
+
+  defp attested?(_reservation), do: false
+
   @spec mark_canceling(binary(), binary(), binary(), keyword()) ::
           {:ok, ProviderReservation.t()} | {:error, term()}
   def mark_canceling(org, mission, id, opts \\ []) do
@@ -760,9 +809,20 @@ defmodule Cadence.Contacts.ProviderReservations do
            response
          ) do
       {:ok, reservation} ->
-        with :ok <- apply_contact_side_effect(reservation) do
+        with :ok <- apply_contact_side_effect(reservation),
+             :ok <- BookingResolutions.provider_answered(reservation) do
           fetch(organization_id, mission_id, provider_reservation_id)
         end
+
+      {:error, {:invalid_provider_reservation_transition, :canceled, requested}} = error ->
+        BookingResolutions.provider_answer_refused(
+          organization_id,
+          mission_id,
+          provider_reservation_id,
+          requested
+        )
+
+        error
 
       {:error, {:provider_configuration_mismatch, reason}} ->
         persist_configuration_failure(
@@ -958,6 +1018,14 @@ defmodule Cadence.Contacts.ProviderReservations do
        when state in @materialized_states,
        do: :ok
 
+  # An operator attested the booking while the provider stayed silent (DECISIONS #53).
+  defp ensure_materializable(%ProviderReservation{lifecycle_state: state} = reservation)
+       when state in [:pending, :unknown] do
+    if attested?(reservation),
+      do: :ok,
+      else: {:error, {:provider_reservation_not_confirmed, state}}
+  end
+
   defp ensure_materializable(%ProviderReservation{lifecycle_state: state}),
     do: {:error, {:provider_reservation_not_confirmed, state}}
 
@@ -1019,6 +1087,15 @@ defmodule Cadence.Contacts.ProviderReservations do
     end
   end
 
+  # Marked not booked by an operator (#53): a later confirmation raises a conflict
+  # (BookingResolutions) instead of silently scheduling the pass.
+  defp apply_contact_side_effect(%ProviderReservation{
+         lifecycle_state: state,
+         metadata: %{"operator_resolution" => %{"action" => "not_booked"}}
+       })
+       when state in @materialized_states,
+       do: :ok
+
   defp apply_contact_side_effect(%ProviderReservation{lifecycle_state: state} = reservation)
        when state in @materialized_states do
     case materialize_scheduled_contact(
@@ -1039,8 +1116,17 @@ defmodule Cadence.Contacts.ProviderReservations do
     end
   end
 
-  defp apply_contact_side_effect(%ProviderReservation{lifecycle_state: :rejected} = reservation),
-    do: BookingOutcomes.booking_settled(reservation)
+  defp apply_contact_side_effect(%ProviderReservation{lifecycle_state: :rejected} = reservation) do
+    # An attested booking the provider rejects is lost like a canceled one (#53).
+    if attested?(reservation) do
+      with :ok <- cancel_scheduled_contact(reservation, :rejected),
+           :ok <- BookingOutcomes.booking_lost(reservation) do
+        BookingOutcomes.booking_settled(reservation)
+      end
+    else
+      BookingOutcomes.booking_settled(reservation)
+    end
+  end
 
   defp apply_contact_side_effect(_reservation), do: :ok
 

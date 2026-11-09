@@ -103,6 +103,20 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
     |> Enum.map(&ContactPlanExecutionItemRow.to_domain/1)
   end
 
+  @doc "One execution item, scoped to its mission."
+  @spec fetch_item(binary(), binary(), binary()) ::
+          {:ok, ContactPlanExecutionItem.t()} | {:error, :contact_plan_execution_item_not_found}
+  def fetch_item(organization_id, mission_id, item_id) do
+    case Repo.get_by(ContactPlanExecutionItemRow,
+           organization_id: organization_id,
+           mission_id: mission_id,
+           contact_plan_execution_item_id: item_id
+         ) do
+      nil -> {:error, :contact_plan_execution_item_not_found}
+      row -> {:ok, ContactPlanExecutionItemRow.to_domain(row)}
+    end
+  end
+
   @doc "Keeps execution claims stable through a short reviewed repair transaction."
   def list_locked(org, mission, plan_id, version) do
     if Repo.in_transaction?() do

@@ -31,6 +31,23 @@ defmodule Cadence.Contacts.UplinkLegsTest do
              UplinkLegs.scheduled_fields(reservation(nil, nil))
   end
 
+  test "an operator-attested booking shows its evidence and no command window until the provider confirms uplink (#53)" do
+    attested = %{"operator_resolution" => %{"action" => "booked"}}
+
+    assert {[], [], [:telemetry_downlink],
+            %{
+              "booking_evidence" => "operator_attested",
+              "uplink" => %{"booked" => false, "reason" => "uplink unconfirmed"}
+            }} =
+             UplinkLegs.scheduled_fields(%{reservation(@leg, nil) | metadata: attested})
+
+    assert {_ids, _refs, [:telemetry_downlink, :command_window], %{"booking_evidence" => _}} =
+             UplinkLegs.scheduled_fields(%{
+               reservation(@leg, %{"status" => "included"})
+               | metadata: attested
+             })
+  end
+
   defp reservation(leg, confirmed) do
     %ProviderReservation{
       request_document: if(leg, do: %{"uplink" => leg}, else: %{}),

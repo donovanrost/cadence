@@ -8,14 +8,10 @@ defmodule Cadence.ContactPlanning.ConfirmationWindow do
   Options: `:now`, `:confirmation_window_ms` (default `:provider_confirmation_window_ms`, 10 min).
   """
 
-  alias Cadence.ContactPlanning.ContactPlanExecutionItem
-
-  @spec overdue?(ContactPlanExecutionItem.t(), keyword()) :: boolean()
-  def overdue?(
-        %ContactPlanExecutionItem{lifecycle_state: :uncertain, started_at: %DateTime{} = at},
-        opts
-      ),
-      do: DateTime.compare(at, cutoff(opts)) == :lt
+  @doc "Whether an execution item has waited past the window (only `uncertain` items can)."
+  @spec overdue?(map(), keyword()) :: boolean()
+  def overdue?(%{lifecycle_state: :uncertain, started_at: %DateTime{} = at}, opts),
+    do: DateTime.compare(at, cutoff(opts)) == :lt
 
   def overdue?(_item, _opts), do: false
 
