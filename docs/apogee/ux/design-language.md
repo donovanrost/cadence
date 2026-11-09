@@ -137,7 +137,7 @@ Units sit after the value in a smaller size and `text-4`: `23.1 V`, `−0.4 V/or
 | --- | --- | --- |
 | absolute | `2026-10-23 02:41:17Z` | always UTC, always to the second, always the `Z` |
 | short | `10-23 02:41Z` / `02:08:11Z` | within the current day / log lines |
-| countdown | `AOS T−00:04:12` | **U+2212 minus**, not hyphen. White when it's the next action. |
+| countdown | `AOS T−00:04:12`, beyond 24 h `T−4d 03:28:39` | **U+2212 minus**, not hyphen. White when it's the next action. Never more than 23 in the hours field. |
 | elapsed | `LOS T+00:06:41`, queue age `T+6m` | |
 | mission elapsed | `MET 412:07:14:05` | days:hh:mm:ss |
 | duration | `9m 12s`, `5h 40m`, `95.6 min` | |
@@ -351,7 +351,7 @@ use the `off` mark and an Install action. Never an illustration, never "Nothing 
 **ApFleetMatrix.** Rows = planes (label mono 10px, selected plane readout), 50 square cells per row,
 gap 2px. Cell: nominal `nominal-bulk`; caution fill; crit fill + 1px crit outline offset 1.5px;
 stale `stale-deep` + hatch + stale border; live = 1px white outline offset 1.5px (combines with any
-state); empty slot `cell-empty`; not-yet-heard = dashed `off` border. Hover/focus shows an
+state); empty slot `cell-empty`; not-yet-heard = dashed `off` border. **Text never sits directly on a hatch** (any viz: matrix, Gantt bars, bands): a label over a hatched mark goes in a span with the mark's solid base (`stale-deep`, etc.) behind it, so it keeps its 4.5:1 against the base, not against the stripes. Hover/focus shows an
 inspector with name, SCID, state word, last TLM. Always paired with a stat strip carrying the counts.
 
 **ApPassStrip / ApGantt.** Rows = stations (code mono 11; degraded station code in caution text),
