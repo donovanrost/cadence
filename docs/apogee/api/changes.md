@@ -125,4 +125,8 @@ sentences:
 - conflict items, preview diffs and revision entries have `entity_name`: the entity's name, a
   spacecraft's name for overrides and routes, or `null`;
 - each `paths[]` / `fields[]` entry has the kind schema's `label` and `unit`, or `null` when the
-  path isn't a schema field.
+  path isn't a schema field. Kinds without an edit schema use their editors' labels: profile paths
+  the profile schema's (`frame_parameters.frame_size` → "TM frame length", `bytes`), override
+  paths the overridden field's (`…/frame_size.value`; `.reason` → "… override reason"), and
+  spacecraft paths Name, SCID, NORAD ID, Profile, Profile version. An entry may also carry
+  `format: "version"` (show `4` as "v4").

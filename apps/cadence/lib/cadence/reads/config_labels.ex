@@ -5,10 +5,17 @@ defmodule Cadence.Reads.ConfigLabels do
   can say "Earendil Block 1 · TM frame length is 1,024 bytes now, not 900 bytes as r8 left it".
   Names come from the documents (`display_name`), else the entity's current document; a
   spacecraft-keyed kind (overrides, routes) takes the spacecraft's name. Unknown ones stay nil.
+
+  Labels come from the kind's edit schema (`ConfigKindSchema`); kinds without one fall back to the
+  labels their editors already use: a profile's fields from `Cadence.SpacecraftType.Schema`
+  (`frame_parameters.frame_size` is "TM frame length", bytes), an override's from the profile
+  field it overrides, and a spacecraft's from a small map. A label may carry `format`
+  (`"version"`: show 4 as "v4").
   """
 
   alias Cadence.Configuration.Kinds
   alias Cadence.Reads.ConfigKindSchema
+  alias Cadence.SpacecraftType.Schema
 
   @spacecraft_keyed ~w(spacecraft_override spacecraft_routes)
 
@@ -69,7 +76,10 @@ defmodule Cadence.Reads.ConfigLabels do
 
   defp label(%{path: path} = entry, labels) do
     field = Map.get(labels, path, %{})
-    Map.merge(entry, %{label: field[:label], unit: field[:unit]})
+
+    entry
+    |> Map.merge(%{label: field[:label], unit: field[:unit]})
+    |> then(&if(field[:format], do: Map.put(&1, :format, field.format), else: &1))
   end
 
   defp label(entry, _labels), do: entry
@@ -110,10 +120,41 @@ defmodule Cadence.Reads.ConfigLabels do
     |> Map.new(fn kind ->
       case ConfigKindSchema.fields(kind, organization_id, mission_id) do
         {:ok, fields} -> {kind, Map.new(fields, &{&1.path, &1})}
-        _none -> {kind, %{}}
+        _none -> {kind, fallback(kind)}
       end
     end)
   end
+
+  @spacecraft [
+    %{path: "display_name", label: "Name"},
+    %{path: "scid", label: "SCID"},
+    %{path: "metadata.norad_id", label: "NORAD ID"},
+    %{path: "spacecraft_type_id", label: "Profile"},
+    %{path: "spacecraft_type_version", label: "Profile version", format: "version"}
+  ]
+
+  defp fallback("spacecraft"), do: Map.new(@spacecraft, &{&1.path, &1})
+
+  defp fallback("spacecraft_profile"),
+    do: Map.new([%{path: "display_name", label: "Name"} | profile_fields()], &{&1.path, &1})
+
+  # Override documents are `%{"frame_parameters/frame_size" => %{"value", "reason"}}`.
+  defp fallback("spacecraft_override") do
+    profile_fields()
+    |> Enum.flat_map(fn field ->
+      key = String.replace(field.path, ".", "/")
+
+      [
+        {key <> ".value", field},
+        {key <> ".reason", %{label: field.label <> " override reason"}}
+      ]
+    end)
+    |> Map.new()
+  end
+
+  defp fallback(_kind), do: %{}
+
+  defp profile_fields, do: Enum.flat_map(Schema.sections(), & &1.fields)
 
   defp name_of(%{"display_name" => name}) when is_binary(name), do: name
   defp name_of(_document), do: nil
