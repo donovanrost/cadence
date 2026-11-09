@@ -19,6 +19,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
   }
 
   alias Cadence.Management.Contacts
+  alias Cadence.Reads.PlanSupersession
 
   @list_cap 100
 
@@ -36,7 +37,12 @@ defmodule Cadence.Reads.ContactPlanOverview do
           version.version
         )
 
-      summary(plan, version, passes)
+      summary(
+        plan,
+        version,
+        passes,
+        PlanSupersession.check(organization_id, mission_id, plan, version)
+      )
     end)
     |> Enum.filter(&on_day?(&1, filters[:day]))
   end
@@ -55,7 +61,8 @@ defmodule Cadence.Reads.ContactPlanOverview do
       stations = StationRefs.index(organization_id, mission_id)
       availability = StationConflicts.check(organization_id, mission_id, passes)
       conflicts = conflicts(version) ++ availability.conflicts
-      summary = summary(plan, version, passes)
+      superseded = PlanSupersession.check(organization_id, mission_id, plan, version)
+      summary = summary(plan, version, passes, superseded)
 
       {:ok,
        summary
@@ -195,7 +202,16 @@ defmodule Cadence.Reads.ContactPlanOverview do
   defp reason(%{"code" => code}), do: code
   defp reason(failure), do: inspect(failure)
 
-  defp summary(plan, version, passes) do
+  defp state(_plan, %{} = _superseded), do: :superseded
+  defp state(plan, nil), do: plan.lifecycle_state
+
+  defp ready?(nil, version, passes),
+    do: (version.unsatisfied_document || %{})["clear"] == true and passes != []
+
+  defp ready?(_superseded, _version, _passes), do: false
+
+  # A draft overtaken by newer requirement or template versions reads as `superseded`, with why.
+  defp summary(plan, version, passes, superseded) do
     {starts, ends} = span(passes)
     unsatisfied = (version.unsatisfied_document || %{})["requirements"] || []
     conflicts = (version.conflict_document || %{})["items"] || []
@@ -203,7 +219,8 @@ defmodule Cadence.Reads.ContactPlanOverview do
     %{
       id: plan.contact_plan_id,
       version: version.version,
-      state: plan.lifecycle_state,
+      state: state(plan, superseded),
+      superseded: superseded,
       window: %{from: starts, to: ends},
       author: actor(version.created_by || plan.created_by),
       counts: %{
@@ -213,7 +230,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
         conflicts: length(conflicts),
         unsatisfied: length(unsatisfied)
       },
-      ready_to_approve: (version.unsatisfied_document || %{})["clear"] == true and passes != [],
+      ready_to_approve: ready?(superseded, version, passes),
       updated_at: plan.updated_at
     }
   end

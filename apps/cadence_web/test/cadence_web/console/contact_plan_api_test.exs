@@ -2,7 +2,7 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Auth.Scope
-  alias Cadence.ContactPlanning.ContactRequirementTemplates
+  alias Cadence.ContactPlanning.{ContactRequirements, ContactRequirementTemplates}
   alias CadenceWeb.{ContactPlanningFixtures, TestFixtures}
 
   setup do
@@ -179,6 +179,52 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
     assert length(materialized) == 4
 
     assert needed.() == 4
+  end
+
+  test "a draft overtaken by a newer requirement version reads as superseded, with why", c do
+    fixture = ContactPlanningFixtures.plan_fixture(c.org, c.user, c.membership, c.mission)
+    plan_id = fixture.plan.contact_plan_id
+
+    detail = json_response(get_json(c, "/contact-plans/#{plan_id}"), 200)["data"]
+    assert %{"state" => "draft", "superseded" => nil} = detail
+
+    scope =
+      Scope.new(%{
+        user: c.user,
+        organization_id: c.org.organization_id,
+        organization_membership: c.membership
+      })
+
+    requirement_id = fixture.requirement.contact_requirement_id
+
+    {:ok, _, _} =
+      ContactRequirements.version(
+        scope,
+        c.mission.mission_id,
+        requirement_id,
+        1,
+        %{priority: :critical}
+      )
+
+    detail = json_response(get_json(c, "/contact-plans/#{plan_id}"), 200)["data"]
+    assert detail["state"] == "superseded"
+    assert detail["ready_to_approve"] == false
+
+    assert %{
+             "reason" => "requirement_changed",
+             "by" => %{"name" => _},
+             "changes" => [
+               %{
+                 "kind" => "requirement",
+                 "id" => ^requirement_id,
+                 "from_version" => 1,
+                 "to_version" => 2
+               }
+             ]
+           } = detail["superseded"]
+
+    [row] = json_response(get_json(c, "/contact-plans?day=2027-01-01"), 200)["data"]["plans"]
+    assert %{"state" => "superseded", "superseded" => %{"reason" => "requirement_changed"}} = row
   end
 
   test "alternatives show the effect of adding a pass; versions add and remove passes", c do

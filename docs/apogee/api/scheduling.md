@@ -104,6 +104,16 @@ The list row, plus:
   K2's (repairs). `counts.conflicts` and `ready_to_approve` include station conflicts on the detail
   read; the list rows count only overlaps.
 
+**Superseded drafts** (K1, ux ScheduleFlow): a `draft` or `pending_approval` plan whose
+requirements were overtaken reads as `state: "superseded"` (in the list rows and the detail), with
+`superseded: {at, by: {name} | null, reason, changes: [{kind: "requirement" | "template", id, name,
+from_version, to_version}]}`. Otherwise `superseded` is `null`. Reasons, strongest first:
+`template_changed` (a requirement was cancelled because its template was versioned or its
+spacecraft left the target), `requirement_changed` (a newer requirement version than the plan
+used), and `requirement_closed`. The plan itself isn't changed, so its detail stays readable, and
+`ready_to_approve` is `false`. `?state=draft` filters on the stored state, so a superseded draft
+still comes back, as `superseded`. Re-draft the day to plan against the new versions.
+
 `station` is `{ref, id, code, name}`: `ref` is the provider's ground-station ref, matched to a
 Cadence ground station by id, `metadata.code` or `metadata.provider_station_ref` (the same join as
 the passes read, `Reads.StationRefs`). `id`, `code` and `name` are `null` when nothing matches.
