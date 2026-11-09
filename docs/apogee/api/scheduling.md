@@ -98,7 +98,8 @@ The list row, plus:
     spacecraft;
   - `{code: "station_unavailable", ground_station_id, window_id, kind: "outage" | "maintenance",
     snapshot_ids}`: passes inside an active outage or maintenance window on their station (U26),
-    grouped per window.
+    grouped per window. These carry no `spacecraft_id` key at all (not `null`); decode per-code
+    fields as optional.
 - `at_risk: [{code: "station_degraded", ground_station_id, window_id, kind: "degraded",
   snapshot_ids}]`: passes inside a degraded window. A warning; it doesn't block. Booked passes are
   K2's (repairs). `counts.conflicts` and `ready_to_approve` include station conflicts on the detail

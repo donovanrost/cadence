@@ -334,10 +334,21 @@ such as source watermarks and source health, which you'll usually filter out), `
   "kind": "limit", "raw_kind": "limit_violation", "severity": "critical",
   "text": "VBAT crossed red low", "detail": "…",
   "spacecraft": {"id": "spacecraft-earendil-312", "name": "EARENDIL-312", "scid": 312},
-  "refs": {"alarm_id": null, "point_id": "EPS.VBAT", "command_request_id": null, "contact_id": null}
+  "refs": {"alarm_id": null, "point_id": "EPS.VBAT", "command_request_id": null, "contact_id": null,
+           "subject": {"kind": "data_source", "id": "…", "name": "Flight telemetry source"}}
 }]}, "meta": {"next_cursor": "…"}}
 ```
 
+- `text` is an operator sentence naming what the event is about, built on the server (ux review
+  2026-11-09-timeline #1): "Flight telemetry source caught up to 10:23:54Z", "Contact with
+  EARENDIL-004 completed, 10:22:54Z–10:23:52Z", "Dashboard Comms payload v1 published by Mira K.",
+  "Catalog rev 2 (QA-E2E re-import) registered". Unknown kinds fall back to the sentence-case key
+  plus the spacecraft ("Limit violation on EARENDIL-004"), never Title Case. `detail` is `null`.
+- `refs.subject` is the link target `{kind: "data_source" | "contact" | "dashboard" |
+  "catalog_revision" | "activation", id, name}`, or `null` when there is none.
+- A watermark retreat is `caution` only when it means something for the operator (a replay or
+  late data), and the sentence says so ("… went back to 22:28:30Z (data replay)"); otherwise
+  it's `info` (#3).
 - `kind` is derived from the entry's source and category; `raw_kind` keeps the original.
   `severity`: timeline critical/error → `critical`, warning → `caution`, cleared/resolved status →
   `nominal`, everything else → `info`.

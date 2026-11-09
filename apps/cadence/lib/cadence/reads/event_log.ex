@@ -13,10 +13,12 @@ defmodule Cadence.Reads.EventLog do
     → critical, `warning` → caution, cleared/resolved statuses → nominal).
   """
 
+  alias Cadence.Dashboards.DocumentStore
   alias Cadence.MissionEvents.Entry
-  alias Cadence.Reads.MissionTimeline
+  alias Cadence.Reads.{EventSentences, MissionTimeline}
 
   @kinds ~w(limit flight_event contact command config operator data)
+  @no_names %{spacecraft: %{}, users: %{}, dashboards: %{}}
   @density_cap 5_000
 
   @spec kinds() :: [binary()]
@@ -35,13 +37,13 @@ defmodule Cadence.Reads.EventLog do
           cursor: cursor
         )
 
-      names = spacecraft_names(organization_id, mission_id)
+      context = context(organization_id, mission_id, page.entries)
 
       {:ok,
        %{
          events:
            page.entries
-           |> Enum.map(&event(&1, names))
+           |> Enum.map(&event(&1, context))
            |> Enum.filter(&kind_selected?(&1, opts[:kinds])),
          next_cursor: encode_cursor(page.next_cursor)
        }}
@@ -63,7 +65,7 @@ defmodule Cadence.Reads.EventLog do
 
     counts =
       entries
-      |> Enum.map(&event(&1, %{}))
+      |> Enum.map(&event(&1, @no_names))
       |> Enum.filter(&kind_selected?(&1, opts[:kinds]))
       |> Enum.group_by(fn event -> div(DateTime.to_unix(event.at) - origin, opts.bucket_s) end)
 
@@ -85,17 +87,20 @@ defmodule Cadence.Reads.EventLog do
     %{bucket_s: opts.bucket_s, buckets: buckets, truncated: length(entries) >= @density_cap}
   end
 
-  defp event(%Entry{} = entry, names) do
+  defp event(%Entry{} = entry, context) do
+    described = EventSentences.describe(entry, context)
+
     %{
       id: entry.mission_event_id,
       at: entry.occurred_at,
       kind: kind(entry),
       raw_kind: entry.kind && to_string(entry.kind),
-      severity: severity(entry),
-      text: entry.title || entry.summary,
-      detail: if(entry.title, do: entry.summary),
-      spacecraft: spacecraft(entry.spacecraft_id, names),
+      severity: described.severity || severity(entry),
+      text: described.text,
+      detail: nil,
+      spacecraft: spacecraft(entry.spacecraft_id, context.spacecraft),
       refs: %{
+        subject: described.subject,
         alarm_id: nil,
         point_id: if(entry.subject_kind == :telemetry_point, do: entry.subject_id),
         command_request_id: (entry.metadata || %{})["command_request_id"],
@@ -142,6 +147,35 @@ defmodule Cadence.Reads.EventLog do
       nil -> %{id: id, name: nil, scid: nil}
       {name, scid} -> %{id: id, name: name, scid: scid}
     end
+  end
+
+  # Names the sentences use: spacecraft always, people and dashboards only when the page has them.
+  defp context(organization_id, mission_id, entries) do
+    users =
+      entries
+      |> Enum.map(&EventSentences.actor_id(&1.actor))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+      |> Map.new(fn id ->
+        case Cadence.Accounts.fetch_user(id) do
+          {:ok, user} -> {id, user.display_name || user.email}
+          _missing -> {id, nil}
+        end
+      end)
+
+    dashboards =
+      if Enum.any?(entries, &String.starts_with?(to_string(&1.kind), "dashboard_")),
+        do:
+          organization_id
+          |> DocumentStore.list_dashboard_summaries(mission_id)
+          |> Map.new(&{&1.dashboard_id, &1.name}),
+        else: %{}
+
+    %{
+      spacecraft: spacecraft_names(organization_id, mission_id),
+      users: users,
+      dashboards: dashboards
+    }
   end
 
   defp spacecraft_names(organization_id, mission_id) do
