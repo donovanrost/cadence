@@ -16,7 +16,8 @@ is yours too.
 | M10 | `GET /missions/:mission_id/telemetry/points/:point_id/history` | **implemented** |
 | M11 | `GET /missions/:mission_id/limits/points/:point_id/intervals` | **implemented** |
 | M6 | `GET /missions/:mission_id/action-queue` | **implemented** (api-ops) |
-| M8 | channel events: see [realtime.md](realtime.md) | `invalidate` live, `fleet` delta planned |
+| M8 | channel events: see [realtime.md](realtime.md) | `invalidate` and `fleet` push live |
+| M17 | `GET /missions/:mission_id/commands[/:command_id]`: see [commanding.md](commanding.md) | **implemented** |
 
 ## `GET /api/console/v1/missions/:mission_id/fleet`
 

@@ -316,7 +316,12 @@ defmodule Cadence.Commanding.RequestValidation do
     end
   end
 
-  defp approval_required?(significance, critical, hazardous, release_policy_hint) do
+  @doc """
+  Whether a request for a command with this binding needs a second operator's
+  approval (DECISIONS #7: critical or hazardous commands, or a policy hint).
+  """
+  @spec approval_required?(atom() | nil, boolean(), boolean(), binary() | nil) :: boolean()
+  def approval_required?(significance, critical, hazardous, release_policy_hint) do
     critical or hazardous or significance in [:critical, :hazardous] or
       release_policy_hint in ["confirmation_required", "approval_required"]
   end

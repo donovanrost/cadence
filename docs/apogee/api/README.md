@@ -10,6 +10,7 @@ Owner: **api**. Every contract the console SPA uses is documented in this folder
 | [setup.md](setup.md) | Readiness, spacecraft, profiles, catalog, people |
 | [changes.md](changes.md) | Mission change sets and configuration revisions |
 | [domain.md](domain.md) | domain's facade contracts (owner: domain) |
+| [commanding.md](commanding.md) | Command catalog, requests, preflight (api-ops) |
 | [inventory.md](inventory.md) | What existed before the console API, and the gaps |
 
 ## Base and auth
