@@ -21,7 +21,13 @@ export function usePassResolutions(missionId: Readonly<Ref<string>>, day: Readon
     passes.state.value.status === "ready"
       ? passes.state.value.value.passes
           .filter((p) => p.attention)
-          .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+          // U21: acknowledged isn't resolved; it stays, sorted last, soonest AOS first within each.
+          .sort(
+            (a, b) =>
+              Number(a.attention?.state === "acknowledged") -
+                Number(b.attention?.state === "acknowledged") ||
+              a.starts_at.localeCompare(b.starts_at),
+          )
       : [],
   );
 }
