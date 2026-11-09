@@ -20,6 +20,10 @@ defmodule CadenceWeb.Console.Problem do
     profile_not_found: {404, "Profile not found."},
     import_run_not_found: {404, "Import run not found."},
     command_not_found: {404, "Command not found."},
+    episode_not_found: {404, "Alarm not found."},
+    episode_cleared: {409, "That alarm has already cleared."},
+    note_required: {422, "A note is required."},
+    assignee_not_member: {422, "That person isn't a member of this organization."},
     unsupported_format: {422, "That file format isn't supported."},
     file_too_large: {413, "The file is larger than 50 MiB."},
     import_failed: {422, "The import could not be started."},
@@ -27,7 +31,8 @@ defmodule CadenceWeb.Console.Problem do
     already_invited: {409, "That person already has a pending invitation."},
     invalid_params: {422, "The request parameters are invalid."},
     history_unavailable: {503, "Telemetry history is unavailable right now."},
-    catalog_unavailable: {503, "The command catalog is unavailable right now."}
+    catalog_unavailable: {503, "The command catalog is unavailable right now."},
+    alarms_unavailable: {503, "Alarms are unavailable right now."}
   }
 
   @doc "Sends the error envelope for a known reason atom and halts."

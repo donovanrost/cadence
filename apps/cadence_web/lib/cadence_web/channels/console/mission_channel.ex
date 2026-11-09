@@ -23,6 +23,7 @@ defmodule CadenceWeb.Console.MissionChannel do
 
   @read_update_resources %{
     commanding_changed: "commanding",
+    alarms_changed: "alarms",
     spacecraft_configuration_changed: "spacecraft",
     dashboards_changed: "dashboards",
     settings_changed: "settings",
