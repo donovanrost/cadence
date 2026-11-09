@@ -16,6 +16,7 @@ export function replanErrorText(error: ApiError): string {
       return "The proposal changed since you opened it. It has been reloaded; review it and apply again.";
     case "plan_not_ready":
       return "The proposal isn't ready to apply: resolve its conflicts or acknowledge the gaps.";
+    case null:
     default:
       return describeApiError(error);
   }
