@@ -28,7 +28,7 @@ defmodule Cadence.Commanding.Groups.Timeline do
 
   @open_states ~w(queued aborted)
   @sweep_limit 200
-  @actor %{"actor_kind" => "system"}
+  @actor %{"actor_kind" => "system", "user_id" => nil}
 
   @doc "Settles the groups of the given member requests. Never raises; returns `:ok`."
   @spec settle_requests(binary(), binary(), [binary()]) :: :ok

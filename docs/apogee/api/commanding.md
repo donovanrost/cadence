@@ -201,12 +201,12 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   - `submitted`, `approved`, `approved_with_exclusions`, `sent_back`, `rejected`, `note`,
     `member_canceled`, `aborted`: written by the operator action, with `actor` the user.
   - `member_failed` (DECISIONS #51): once per member whose release failed or whose
-    verification failed or timed out. `actor: {actor_kind: "system"}`. Payload:
+    verification failed or timed out. `actor: {actor_kind: "system", user_id: null}`. Payload:
     `{command_request_id, command_id, spacecraft_id, target_index, position, reason:
     release_failed | verify_failed | verify_timed_out, later_members_stopped}`. The last field
     counts the later members of that target that won't release (stop on failure, #31).
   - `completed` (#51): once, when every member of a `queued` or `aborted` group is final.
-    `actor: {actor_kind: "system"}`. Payload: `{members: {verified, no_verifier, verify_failed,
+    `actor: {actor_kind: "system", user_id: null}`. Payload: `{members: {verified, no_verifier, verify_failed,
     verify_timed_out, release_failed, canceled, rejected: count}}` (only non-zero keys).
     Written right after the release, verification, halt or abort that finished the last member.
     A one-minute reconcile sweep backs it up. Each write invalidates `commanding`.
