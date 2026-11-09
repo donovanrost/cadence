@@ -105,6 +105,18 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "stations", title: "Providers" },
   },
   {
+    path: "setup/contact-planning",
+    name: "setup.contact-planning",
+    component: () => import("@/features/planning/ContactPlanningScreen.vue"),
+    meta: { mode: "setup", nav: "stations", title: "Contact planning" },
+  },
+  {
+    path: "setup/contact-planning/policy",
+    name: "setup.contact-planning.policy",
+    component: () => import("@/features/planning/ContactPlanningScreen.vue"),
+    meta: { mode: "setup", nav: "stations", title: "Contact planning policy" },
+  },
+  {
     path: "setup/data-sources/:sourceId?",
     name: "setup.data-sources",
     component: () => import("@/features/sources/SourcesScreen.vue"),

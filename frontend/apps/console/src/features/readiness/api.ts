@@ -23,6 +23,7 @@ const fixKinds = [
   "catalog",
   "catalog_import",
   "comms",
+  "contact_planning",
   "station",
   "data_source",
   "app",
@@ -31,7 +32,13 @@ const fixKinds = [
 /** Fix targets that name one object carry its id; list/new targets carry none. */
 export type FindingFix =
   | Readonly<{
-      kind: "spacecraft_list" | "spacecraft_new" | "catalog" | "catalog_import" | "comms";
+      kind:
+        | "spacecraft_list"
+        | "spacecraft_new"
+        | "catalog"
+        | "catalog_import"
+        | "comms"
+        | "contact_planning";
       label: string | null;
     }>
   | Readonly<{
@@ -99,6 +106,7 @@ const fix: Reader<FindingFix | null> = (value, path = "") => {
     case "catalog":
     case "catalog_import":
     case "comms":
+    case "contact_planning":
       if (raw.id !== null) throw new decoders.DecodeError(`${path}.id`, "null for a list target");
       return { kind: raw.kind, label: raw.label };
     case "spacecraft":
