@@ -767,6 +767,7 @@ defmodule CadenceWeb.Router do
       get("/telemetry/points/:point_id/history", PointController, :history)
       get("/limits/points/:point_id/intervals", PointController, :limit_intervals)
       get("/action-queue", ActionQueueController, :show)
+      get("/counts", OpsCountsController, :show)
       get("/commands", CommandCatalogController, :index)
       get("/commands/:command_id", CommandCatalogController, :show)
       get("/alarm-episodes", AlarmEpisodeController, :index)
@@ -815,6 +816,7 @@ defmodule CadenceWeb.Router do
 
       get("/people", PeopleController, :index)
       post("/invitations", PeopleController, :invite)
+      get("/service-identities", PeopleController, :service_identities)
     end
 
     match(:*, "/*path", NotFoundController, :show)

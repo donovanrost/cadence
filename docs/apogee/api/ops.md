@@ -17,6 +17,7 @@ is yours too.
 | M11 | `GET /missions/:mission_id/limits/points/:point_id/intervals` | **implemented** |
 | M6 | `GET /missions/:mission_id/action-queue` | **implemented** (api-ops) |
 | M8 | channel events: see [realtime.md](realtime.md) | `invalidate` and `fleet` push live |
+| shell | `GET /missions/:mission_id/counts` (lead) | **implemented** |
 | M17 | `GET /missions/:mission_id/commands[/:command_id]`: see [commanding.md](commanding.md) | **implemented** |
 
 ## `GET /api/console/v1/missions/:mission_id/fleet`
@@ -154,6 +155,30 @@ values get `422 invalid_params` with `details`.
   always `null` for now: catalog import doesn't carry parameter descriptions through to the binding
   set yet (api-ops backlog, with M23).
 - **Not yet:** the D6 alarm lifecycle (ack/assign/hand-off).
+
+## `GET /api/console/v1/missions/:mission_id/counts`
+
+Small counts for the shell (Ops rail, mobile on-call tabs), so the shell doesn't load `GET /fleet`
+(~300 KB) for numbers. Refetch on `invalidate` with `alarms`, `commanding` or `spacecraft`, throttled.
+
+```json
+{"data": {
+  "observed_at": "2026-11-08T02:41:17Z",
+  "alarms": {"active": 4, "critical": 3, "caution": 1, "unacknowledged": 2},
+  "commands": {"open": 25, "awaiting_viewer": 2},
+  "fleet": {"total": 500},
+  "contacts": null
+}}
+```
+
+- `alarms`: from **alarm episodes** (both sources, DECISIONS #17); `unacknowledged` = active
+  episodes with status `new`. The whole object is `null` if episodes can't be read.
+- `commands.open`: queued + release pending + in flight + approval pending. `awaiting_viewer`:
+  approval-pending requests the viewer didn't request (the same number as `GET /fleet`).
+- `contacts` is `null` until contact tracking exists (M4/M7). Then it becomes `{"in_contact": n}`.
+- A `null` count means "can't compute": omit it in the UI, never show `0`.
+
+Errors: `404 mission_not_found`.
 
 ## `GET /api/console/v1/missions/:mission_id/action-queue`
 
