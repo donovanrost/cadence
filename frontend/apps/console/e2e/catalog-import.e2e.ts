@@ -48,7 +48,6 @@ test.describe("Catalog import", () => {
   });
 
   test("the file picker shows keyboard focus", async ({ page }) => {
-    test.fail(true, "qa issue #14: the sr-only file input's label has no focus-within style");
     await openConsole(page, screen);
     await expect(page.getByText("XTCE 1.3")).toBeVisible();
     const label = fileInput(page).locator("xpath=ancestor::label[1]");
