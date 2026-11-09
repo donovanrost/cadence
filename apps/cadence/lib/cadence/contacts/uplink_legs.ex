@@ -15,6 +15,7 @@ defmodule Cadence.Contacts.UplinkLegs do
 
   @not_booked "uplink not booked"
   @unconfirmed "uplink unconfirmed"
+  @provider_confirmed [:confirmed, :active, :completed]
 
   @doc "The uplink leg to request with a booking at `ground_station_ref`, or nil."
   @spec for_booking(binary(), binary(), binary(), binary() | nil, binary()) :: map() | nil
@@ -46,6 +47,13 @@ defmodule Cadence.Contacts.UplinkLegs do
       is_nil(requested) ->
         {[], [], [:telemetry_downlink], %{}}
 
+      # An operator attested the booking (DECISIONS #53) and the provider hasn't confirmed it:
+      # an `included` leg in a pending snapshot isn't the provider confirming uplink service,
+      # so no command window yet (#55 adds it when the provider confirms the booking).
+      attested?(reservation) and reservation.lifecycle_state not in @provider_confirmed ->
+        {[], [], [:telemetry_downlink],
+         %{"uplink" => %{"booked" => false, "reason" => @unconfirmed}}}
+
       confirmed == "included" ->
         ref = %{
           "path_template_id" => requested["path_template_id"],
@@ -54,12 +62,6 @@ defmodule Cadence.Contacts.UplinkLegs do
 
         {[requested["path_template_id"]], [ref], [:telemetry_downlink, :command_window],
          %{"uplink" => %{"booked" => true, "routing_rule_id" => requested["routing_rule_id"]}}}
-
-      # An operator attested the booking (DECISIONS #53); only the provider can confirm the
-      # uplink service, so no command window yet.
-      attested?(reservation) ->
-        {[], [], [:telemetry_downlink],
-         %{"uplink" => %{"booked" => false, "reason" => @unconfirmed}}}
 
       true ->
         reason =

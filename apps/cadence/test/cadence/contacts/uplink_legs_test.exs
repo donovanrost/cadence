@@ -34,17 +34,31 @@ defmodule Cadence.Contacts.UplinkLegsTest do
   test "an operator-attested booking shows its evidence and no command window until the provider confirms uplink (#53)" do
     attested = %{"operator_resolution" => %{"action" => "booked"}}
 
-    assert {[], [], [:telemetry_downlink],
-            %{
-              "booking_evidence" => "operator_attested",
-              "uplink" => %{"booked" => false, "reason" => "uplink unconfirmed"}
-            }} =
-             UplinkLegs.scheduled_fields(%{reservation(@leg, nil) | metadata: attested})
+    unconfirmed = %{"booked" => false, "reason" => "uplink unconfirmed"}
 
+    assert {[], [], [:telemetry_downlink],
+            %{"booking_evidence" => "operator_attested", "uplink" => ^unconfirmed}} =
+             UplinkLegs.scheduled_fields(%{
+               reservation(@leg, nil)
+               | metadata: attested,
+                 lifecycle_state: :pending
+             })
+
+    # qa: a pending booking's snapshot can already say the leg is 'included'; that isn't the
+    # provider confirming it.
+    assert {[], [], [:telemetry_downlink], %{"uplink" => ^unconfirmed}} =
+             UplinkLegs.scheduled_fields(%{
+               reservation(@leg, %{"status" => "included"})
+               | metadata: attested,
+                 lifecycle_state: :pending
+             })
+
+    # Once the provider confirms the booking with the leg, the command window follows (#55).
     assert {_ids, _refs, [:telemetry_downlink, :command_window], %{"booking_evidence" => _}} =
              UplinkLegs.scheduled_fields(%{
                reservation(@leg, %{"status" => "included"})
-               | metadata: attested
+               | metadata: attested,
+                 lifecycle_state: :confirmed
              })
   end
 
