@@ -99,6 +99,10 @@ Send a teammate a message with (`herdr` may not be on PATH in agent shells; use 
   - Elixir (api only): `mix format`, `mix compile --warnings-as-errors`, `mix credo --strict` on touched
     files, and the tests for the touched area. **Only api, api-ops and domain run Elixir tests**, since parallel runs fight
     over the `cadence_test` database (domain uses `MIX_TEST_PARTITION=2`, api-ops uses `3`). qa runs the dev server against the dev database.
+- **Machine load etiquette (8 cores, 9 agents):** before a heavy job (full Elixir suite, full frontend
+  `verify`, a whole Playwright run, a production build), check `uptime`. If the 1-minute load is above 16,
+  run only targeted tests for what you changed and save the full run for milestones. Never leave watchers,
+  dev servers or feeds running that you aren't using (qa owns the one shared dev stack).
 - Conventional commit messages (`feat(console): …`, `feat(api): …`) with the Co-Authored-By trailer.
 
 ## Phases
