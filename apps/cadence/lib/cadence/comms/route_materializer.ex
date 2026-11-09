@@ -161,11 +161,11 @@ defmodule Cadence.Comms.RouteMaterializer do
       spacecraft.mission_id,
       spacecraft.spacecraft_id
     )
-    |> Enum.filter(&(&1.origin == :legacy and &1.enabled?))
     |> Enum.filter(fn rule ->
-      rule
-      |> directions()
-      |> Enum.all?(&MapSet.member?(covered, {rule.transport_id, &1, rule.role}))
+      rule.origin == :legacy and rule.enabled? and
+        rule
+        |> directions()
+        |> Enum.all?(&MapSet.member?(covered, {rule.transport_id, &1, rule.role}))
     end)
     |> Enum.each(
       &RoutingRuleStore.archive_routing_rule(
