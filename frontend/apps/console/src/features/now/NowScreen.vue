@@ -16,7 +16,8 @@ import ConstellationPanel from "./ConstellationPanel.vue";
 import LiveStatusCallout from "./LiveStatusCallout.vue";
 import NowHeader from "./NowHeader.vue";
 import PassesPanel from "./PassesPanel.vue";
-import { deriveQueue, nowHeadline } from "./queue.ts";
+import { nowHeadline } from "./queue.ts";
+import { useActionQueue } from "./useActionQueue.ts";
 
 /** J1 · Now. Spec: docs/apogee/ux/screens/Now.md. Data: docs/apogee/api/ops.md (fleet). */
 const scope = useMissionScope();
@@ -34,7 +35,10 @@ const a3Need = computed(() => {
   const rows = snapshot.value ? layoutMatrix(snapshot.value.spacecraft).rows.length : 0;
   return `${matrixNaturalHeight(rows) + A3_CHROME_PX}px`;
 });
-const queue = computed(() => (snapshot.value ? deriveQueue(snapshot.value) : []));
+const actionQueue = useActionQueue(computed(() => scope.value.mission.id));
+const queue = computed(() =>
+  actionQueue.items.value.status === "ready" ? actionQueue.items.value.value : [],
+);
 const headline = computed(() => {
   if (snapshot.value) return nowHeadline(snapshot.value, queue.value);
   return fleet.state.value.status === "failed"
@@ -89,7 +93,8 @@ function openById(id: string) {
           />
           <ActionQueuePanel
             class="order-first min-h-[320px] md:order-none console:min-h-0"
-            :items="queue"
+            :state="actionQueue.items.value"
+            @retry="actionQueue.refetch"
             :nominal="value.counts.nominal"
           />
           <ApPanel

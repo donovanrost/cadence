@@ -134,7 +134,7 @@ function approvalItems(fleet: Fleet): QueueItem[] {
       key: "approvals",
       priority: 2,
       state: "caution",
-      title: `${plural(waiting, "command request")} await your GO`,
+      title: `${plural(waiting, "command request")} ${waiting === 1 ? "awaits" : "await"} your GO`,
       titleTo: null,
       sentence: "Requested by another operator. Nothing radiates until it has a GO.",
       meta: null,
