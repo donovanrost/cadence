@@ -33,4 +33,16 @@ defmodule Cadence.ContactPlanning.RepairLinks do
 
   defp replaces(%{"replaces" => replaces}) when is_map(replaces), do: replaces
   defp replaces(_summary), do: %{}
+
+  @doc "Persists a repair run's pairing (`RepairChain.backfill/2` for runs that predate it)."
+  @spec put_replaces(binary(), map()) :: :ok | {:error, term()}
+  def put_replaces(run_id, replaces) do
+    row = Repo.get!(FleetPlanningRunRow, run_id)
+    summary = Map.put(row.result_summary_document || %{}, "replaces", replaces)
+
+    case row |> Ecto.Changeset.change(result_summary_document: summary) |> Repo.update() do
+      {:ok, _row} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
 end

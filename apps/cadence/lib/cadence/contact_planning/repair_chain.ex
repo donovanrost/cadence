@@ -22,7 +22,8 @@ defmodule Cadence.ContactPlanning.RepairChain do
     ContactPlanExecutions,
     ContactPlans,
     FleetPlanningRuns,
-    RepairLinks
+    RepairLinks,
+    RepairPairing
   }
 
   @applied [:approved, :executing, :partially_reserved, :reserved, :failed]
@@ -161,6 +162,56 @@ defmodule Cadence.ContactPlanning.RepairChain do
     else
       true -> {seen, acc}
       {:error, _not_found} -> {MapSet.put(seen, plan_id), acc}
+    end
+  end
+
+  @doc """
+  One-time pairing for applied repairs created before pairings were persisted (qa #30): each
+  such run pairs its new passes with its source chain's lost bookings, the same way
+  `RepairPairing` does at creation, and persists it. Returns the run ids it filled.
+  """
+  @spec backfill(binary(), binary()) :: [binary()]
+  def backfill(organization_id, mission_id) do
+    for link <- RepairLinks.list(organization_id, mission_id),
+        link.replaces == %{},
+        plan = applied(organization_id, mission_id, link.plan_id),
+        plan != nil,
+        {:ok, chain} = load(organization_id, mission_id, link.source),
+        {:ok, version} =
+          ContactPlans.fetch_version(
+            organization_id,
+            mission_id,
+            plan.contact_plan_id,
+            plan.approved_version
+          ),
+        replaces =
+          RepairPairing.summary(
+            %{
+              organization_id: organization_id,
+              mission_id: mission_id,
+              input_document: %{
+                "repair" => %{
+                  "lost_bookings" =>
+                    lost_booking_inputs(
+                      %{
+                        chain
+                        | items:
+                            Enum.reject(
+                              chain.items,
+                              &(&1.contact_plan_id == plan.contact_plan_id)
+                            )
+                      },
+                      organization_id,
+                      mission_id
+                    )
+                }
+              }
+            },
+            version
+          ),
+        map_size(replaces) > 0,
+        :ok = RepairLinks.put_replaces(link.run_id, replaces["replaces"]) do
+      link.run_id
     end
   end
 

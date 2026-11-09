@@ -13,7 +13,8 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     FleetPlanningPolicies,
     FleetPlanningRuns,
     FleetRepairs,
-    RepairChain
+    RepairChain,
+    RepairLinks
   }
 
   alias Cadence.Control.Contacts, as: ControlContacts
@@ -493,6 +494,14 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
 
     assert [{replacement_id, _lost}] = Map.to_list(run.result_summary_document["replaces"])
     assert replacement_id == replacement.contact_opportunity_snapshot_id
+
+    # A repair applied before pairings were persisted gets the same pairing from the backfill.
+    replaces = run.result_summary_document["replaces"]
+    :ok = RepairLinks.put_replaces(run.fleet_planning_run_id, %{})
+    assert RepairChain.backfill(@organization_id, @mission_id) == [run.fleet_planning_run_id]
+
+    assert {:ok, %{result_summary_document: %{"replaces" => ^replaces}}} =
+             FleetPlanningRuns.fetch(@organization_id, @mission_id, run.fleet_planning_run_id)
 
     {:ok, repair_plan, _} =
       ManagementContacts.fetch_plan(@organization_id, @mission_id, repaired.plan.contact_plan_id)
