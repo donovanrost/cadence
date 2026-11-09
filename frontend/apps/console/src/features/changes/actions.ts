@@ -6,24 +6,29 @@ const { array, integer, nullable, object, oneOf, string, token } = decoders;
 const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/config`;
 const verdict = oneOf(["go", "hold", "no_go"]);
 
+// Items are diagnostics: ids and reasons may be absent or null without failing the preview (qa #18).
 const previewItem = object({
-  op_id: nullable(token),
-  change_id: nullable(token),
+  op_id: decoders.optional(nullable(token)),
+  change_id: decoders.optional(nullable(token)),
   kind: token,
-  entity_id: nullable(token),
-  reason: decoders.optional(token),
+  entity_id: decoders.optional(nullable(token)),
+  reason: decoders.optional(nullable(token)),
   errors: decoders.optional(array(object({ path: string, message: string }), 200)),
   // Compatibility HOLD (DECISIONS #33, domain): both values named.
-  spacecraft_count: decoders.optional(integer),
-  profile_value: decoders.optional(object({ path: string, value: (v: unknown) => v })),
+  // Absent or null: framing_unverified sends null values (domain 5fc08e7c).
+  spacecraft_count: decoders.optional(nullable(integer)),
+  profile_value: decoders.optional(nullable(object({ path: string, value: (v: unknown) => v }))),
   transport_value: decoders.optional(
-    object({
-      transport: object({ id: token, name: string }),
-      path: string,
-      value: (v: unknown) => v,
-    }),
+    nullable(
+      object({
+        transport: object({ id: token, name: string }),
+        path: string,
+        value: (v: unknown) => v,
+      }),
+    ),
   ),
-  sentence: decoders.optional(string),
+  sentence: decoders.optional(nullable(string)),
+  cause: decoders.optional(nullable(token)),
 });
 export type PreviewItem = Decoded<typeof previewItem>;
 
@@ -42,15 +47,13 @@ export function humanize(key: string): string {
 export function itemLine(item: PreviewItem): string {
   if (item.profile_value && item.transport_value) {
     const both = `profile ${item.profile_value.path} = ${shown(item.profile_value.value)} vs ${item.transport_value.transport.name} ${item.transport_value.path} = ${shown(item.transport_value.value)}`;
-    const count =
-      item.spacecraft_count === undefined ? "" : ` · ${item.spacecraft_count} spacecraft`;
+    const count = item.spacecraft_count == null ? "" : ` · ${item.spacecraft_count} spacecraft`;
     return `${item.sentence ? `${item.sentence} ` : ""}(${both}${count})`;
   }
   // framing_unverified (DECISIONS #40): only the profile side is known.
   if (item.profile_value && item.reason === "framing_unverified") {
     const head = item.sentence ?? "Can't verify against any transport.";
-    const count =
-      item.spacecraft_count === undefined ? "" : ` · ${item.spacecraft_count} spacecraft`;
+    const count = item.spacecraft_count == null ? "" : ` · ${item.spacecraft_count} spacecraft`;
     return `${head} (profile ${item.profile_value.path} = ${shown(item.profile_value.value)}${count})`;
   }
   if (item.sentence) return item.sentence;

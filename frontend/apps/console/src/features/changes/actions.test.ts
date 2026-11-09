@@ -13,6 +13,7 @@ const base: PreviewItem = {
   profile_value: undefined,
   transport_value: undefined,
   sentence: undefined,
+  cause: undefined,
 };
 
 describe("preview compatibility HOLD (DECISIONS #33)", () => {
@@ -65,6 +66,37 @@ describe("preview compatibility HOLD (DECISIONS #33)", () => {
     ).toBe(
       "Can't verify against any transport. (profile frame_parameters.frame_size = 1279 · 3 spacecraft)",
     );
+  });
+
+  it("decodes framing_unverified with null values and shows the sentence", () => {
+    const r = decode(previewReader, {
+      verdict: "hold",
+      checks: [
+        {
+          key: "compatibility",
+          verdict: "hold",
+          items: [
+            {
+              op_id: "o",
+              change_id: "c",
+              kind: "spacecraft_profile",
+              entity_id: "p",
+              reason: "framing_unverified",
+              cause: "no_inbound_route",
+              spacecraft_count: 12,
+              profile_value: null,
+              transport_value: null,
+              sentence: "No inbound route to check against.",
+            },
+          ],
+        },
+      ],
+      effects: [],
+    });
+    expect(r.ok).toBe(true);
+    const item = r.ok ? r.value.checks[0]?.items[0] : undefined;
+    if (!item) throw new Error("fixture");
+    expect(itemLine(item)).toBe("No inbound route to check against.");
   });
 
   it("falls back to field errors, then the reason", () => {
