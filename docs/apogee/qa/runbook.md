@@ -10,6 +10,7 @@ config, dependency or `dev.exs` change; code changes hot-reload).
 | --- | --- | --- | --- |
 | **Phoenix (this worktree)** | **http://127.0.0.1:4011** | `w0R:p7` qa-server | node `cadence_apogee` |
 | **Console Vite dev server** | http://127.0.0.1:5181/console/ | `w0R:p9` qa-console-vite | Phoenix fetches `index.html` from it in dev |
+| **LiveView Vite (sign-in etc.)** | http://127.0.0.1:5183 | started by Phoenix's watcher | needs `apps/cadence_web/node_modules` (`npm ci` there) |
 | **Earendil simulator (this worktree)** | http://127.0.0.1:4111 | `w0R:pA` qa-simulator | DETS under this worktree's `var/reflect_orbital/` |
 | Live telemetry feeds (**off by default**) | 10 spacecraft (EARENDIL-001…010) at 1 Hz | `w0R:pB` qa-live-feeds | run on request, short; see Known limits |
 | **QuestDB (history)** | REST http://127.0.0.1:9200 · PG wire 8822 · ILP 9209 | docker `cadence-apogee-questdb` | volume `var/questdb-apogee/` (gitignored) |
@@ -69,8 +70,10 @@ mise exec -- mix cadence.questdb.migrate
 
 # 4. Phoenix (leave running; boot creates the env admin user). Same exports as step 3, plus
 #    OTEL off (mise.toml points at a collector on :4318 that isn't running) and durable current
-#    values (the default ETS store forgets every last_received_at on restart; qa #7):
-CADENCE_TELEMETRY_CURRENT_VALUE_STORE=postgres OTEL_EXPORTER_OTLP_ENDPOINT= POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 PORT=4011 \
+#    values (the default ETS store forgets every last_received_at on restart; qa #7), and its own
+#    LiveView Vite (default 5173 is the main checkout's: our sign-in would run its JS).
+#    First time: (cd apps/cadence_web && npm ci), or the watcher can't start and sign-in breaks.
+CADENCE_LIVE_VUE_VITE_PORT=5183 CADENCE_TELEMETRY_CURRENT_VALUE_STORE=postgres OTEL_EXPORTER_OTLP_ENDPOINT= POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 PORT=4011 \
   mise exec -- iex --sname cadence_apogee --cookie cadence -S mix phx.server
 
 # 5. Seed (once; both are rerunnable)
