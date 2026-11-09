@@ -8,8 +8,7 @@ defmodule CadenceWeb.Console.OrganizationController do
   use CadenceWeb, :controller
 
   alias Cadence.Auth.Policy
-  alias Cadence.Management.OrganizationAudit
-  alias Cadence.Reads.OrganizationMissions
+  alias Cadence.Reads.{OrganizationAudit, OrganizationMissions}
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
   @kinds ~w(config commanding access alarms contacts data)

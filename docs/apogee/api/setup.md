@@ -320,8 +320,13 @@ first.
   - `config`: applied configuration revisions ("Applied r6 · 2 changes", "Rolled back to r4") and
     settings changes ("Changed Governance settings");
   - `commanding`: command requests and approval decisions;
-  - `access`: members joining, invitations sent.
-- `sources.missing` (`alarms`, `contacts`, `data`) is what isn't in the log yet; say so in the UI.
+  - `access`: members joining, invitations sent;
+  - `alarms`: people acknowledging, assigning, handing off and annotating episodes (the note is
+    the `reason`);
+  - `contacts`: contact plan approval decisions ("Approved contact plan v1"; the 100 newest plans
+    per mission);
+  - `data`: data-source definition changes.
+- `sources.missing` is empty now. Keep handling it: it names any source that isn't in the log.
 - Actions are server-made sentences.
 - Settings history carries only the actor's name, so its `actor.id` is `null`.
 - `403 forbidden` for non-admins; `422 invalid_params` (`kinds`, `from`/`to`, `limit`, `cursor`).

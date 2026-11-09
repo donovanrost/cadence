@@ -25,6 +25,36 @@ defmodule Cadence.Alarms.Queries do
           optional(:limit) => pos_integer()
         }
 
+  @human_kinds ~w(acknowledged assigned unassigned note handed_off)
+
+  @doc """
+  People's actions on the mission's alarm episodes in `[from, to)` (acknowledge, assign,
+  hand off, note), newest first, for the audit log. Raises, escalations and clears are the
+  system's, so they're left out.
+  """
+  @spec list_actions(String.t(), DateTime.t(), DateTime.t(), pos_integer()) :: [map()]
+  def list_actions(mission_id, from, to, limit \\ 500) do
+    EpisodeEventRow
+    |> join(:inner, [event], episode in EpisodeRow, on: episode.episode_id == event.episode_id)
+    |> where(
+      [event],
+      event.mission_id == ^mission_id and event.kind in ^@human_kinds and event.at >= ^from and
+        event.at < ^to
+    )
+    |> order_by([event], desc: event.at, desc: event.event_id)
+    |> limit(^min(limit, 1_000))
+    |> select([event, episode], %{
+      kind: event.kind,
+      actor: event.actor,
+      at: event.at,
+      episode_id: event.episode_id,
+      point_name: episode.point_name,
+      spacecraft_id: episode.spacecraft_id,
+      payload: event.payload
+    })
+    |> Repo.all()
+  end
+
   @spec list(String.t(), filters()) :: [map()]
   def list(mission_id, filters \\ %{}) do
     state = Map.get(filters, :state, "active")

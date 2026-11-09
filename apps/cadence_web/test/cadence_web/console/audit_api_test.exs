@@ -40,8 +40,8 @@ defmodule CadenceWeb.Console.AuditAPITest do
     data = c |> get_audit(c.admin, "") |> json_response(200) |> Map.fetch!("data")
 
     assert data["sources"] == %{
-             "included" => ["config", "commanding", "access"],
-             "missing" => ["alarms", "contacts", "data"]
+             "included" => ["config", "commanding", "access", "alarms", "contacts", "data"],
+             "missing" => []
            }
 
     actions = Enum.map(data["events"], & &1["action"])
@@ -66,5 +66,32 @@ defmodule CadenceWeb.Console.AuditAPITest do
 
     assert json_response(get_audit(c, c.admin, "?kinds=bogus"), 422)["error"]["details"]["kinds"]
     assert json_response(get_audit(c, c.member, ""), 403)
+  end
+
+  test "contact plan approvals appear under contacts" do
+    org = TestFixtures.persist_org!()
+    admin = TestFixtures.persist_user!(display_name: "Ada")
+    membership = TestFixtures.grant_membership!(admin, org, role: :organization_admin)
+    mission = TestFixtures.persist_mission!(org)
+    fixture = CadenceWeb.ContactPlanningFixtures.plan_fixture(org, admin, membership, mission)
+
+    admin
+    |> TestFixtures.member_conn()
+    |> post(
+      "/api/console/v1/missions/#{mission.mission_id}/contact-plans/#{fixture.plan.contact_plan_id}/submit",
+      %{"expected_version" => 1, "operation_id" => "op-audit"}
+    )
+    |> json_response(202)
+
+    events =
+      admin
+      |> TestFixtures.member_conn()
+      |> get(
+        "/api/console/v1/organizations/#{org.organization_id}/audit?kinds=contacts&from=2000-01-01T00:00:00Z"
+      )
+      |> json_response(200)
+      |> get_in(["data", "events"])
+
+    assert [%{"action" => "Approved contact plan v1", "actor" => %{"name" => "Ada"}} | _] = events
   end
 end
