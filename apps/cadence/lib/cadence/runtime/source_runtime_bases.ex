@@ -11,11 +11,15 @@ defmodule Cadence.Runtime.SourceRuntimeBases do
   @type t :: %__MODULE__{sources: %{binary() => non_neg_integer()}, models: map()}
   defstruct sources: %{}, models: %{}
 
-  @fields [:mission_model_revision_id, :mission_model_content_sha256, :runtime_plans]
+  # `framing` is present only for sources whose admitted entry has profile framing authority
+  # (DECISIONS #33); the partition overlays it on the transport's ingress metadata.
+  @fields [:mission_model_revision_id, :mission_model_content_sha256, :runtime_plans, :framing]
+  # Same bound as the fleet snapshot's total sources.
+  @max_sources 8_000
 
   @spec new(map()) :: {:ok, t()} | {:error, :invalid_source_runtime_bases}
   def new(%__MODULE__{sources: sources, models: models} = index)
-      when is_map(sources) and is_map(models) and map_size(sources) in 1..1000 do
+      when is_map(sources) and is_map(models) and map_size(sources) in 1..@max_sources do
     valid? =
       Enum.all?(sources, fn {source, key} ->
         valid_source?(source) and is_integer(key) and key >= 0 and Map.has_key?(models, key)
@@ -28,7 +32,7 @@ defmodule Cadence.Runtime.SourceRuntimeBases do
 
   def new(%__MODULE__{}), do: {:error, :invalid_source_runtime_bases}
 
-  def new(sources) when is_map(sources) and map_size(sources) in 1..1000 do
+  def new(sources) when is_map(sources) and map_size(sources) in 1..@max_sources do
     sources
     |> Enum.reduce_while({:ok, %__MODULE__{}, %{}}, fn {source, basis}, {:ok, index, keys} ->
       if valid_source?(source) and is_map(basis) do

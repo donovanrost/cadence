@@ -8,6 +8,7 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   require Logger
 
+  alias Cadence.Runtime.AdmittedFraming
   alias Cadence.Runtime.Cluster
 
   alias Cadence.ApplicationDispatch.{
@@ -1055,6 +1056,8 @@ defmodule Cadence.Runtime.PartitionOwner do
   end
 
   defp decode_tm_packet_records(protocol_family, %RawEvidence{} = raw_evidence, state) do
+    raw_evidence = AdmittedFraming.overlay(raw_evidence, state.active_activation.source_framing)
+
     case TMFrameIngress.process(
            raw_evidence,
            state.tm_pipeline_state,

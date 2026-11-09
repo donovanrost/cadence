@@ -91,13 +91,15 @@ defmodule Cadence.Control.SpacecraftModelBindings do
 
   defp resolve_entries(activation, entries) do
     entries
-    |> Enum.group_by(fn {_id, entry} -> entry["mission_model"] end)
-    |> Enum.reduce_while({:ok, %{}}, fn {manifest, grouped}, {:ok, bases} ->
+    |> Enum.group_by(fn {_id, entry} -> {entry["mission_model"], profile_framing(entry)} end)
+    |> Enum.reduce_while({:ok, %{}}, fn {{manifest, framing}, grouped}, {:ok, bases} ->
       case MissionModelPromotion.runtime_basis(%{
              activation
              | metadata: %{"mission_model" => manifest}
            }) do
         {:ok, basis} ->
+          basis = if framing, do: Map.put(basis, :framing, framing), else: basis
+
           additions =
             grouped
             |> Enum.flat_map(&Map.fetch!(elem(&1, 1), "source_endpoint_ids"))
@@ -110,6 +112,11 @@ defmodule Cadence.Control.SpacecraftModelBindings do
       end
     end)
   end
+
+  # Only entries produced with profile framing authority (change-set generations) carry framing
+  # into the runtime; legacy entries keep decoding with the transport's ingress metadata.
+  defp profile_framing(%{"framing_authority" => "profile", "framing" => %{} = framing}), do: framing
+  defp profile_framing(_entry), do: nil
 
   defp validate_endpoints(organization_id, mission_id, spacecraft_id, entry) do
     Enum.reduce_while(entry["source_endpoint_ids"], :ok, fn id, :ok ->
