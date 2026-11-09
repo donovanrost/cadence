@@ -131,7 +131,7 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
   {
     path: "setup/settings/:section?",
     name: "setup.settings",
-    component: pending,
+    component: () => import("@/features/settings/SettingsScreen.vue"),
     meta: { mode: "setup", nav: "mission-settings", title: "Mission settings" },
   },
 ];
@@ -177,7 +177,7 @@ export const setupOrgRoutes: RouteRecordRaw[] = [
   {
     path: "org/settings/:section?",
     name: "org.settings",
-    component: pending,
+    component: () => import("@/features/settings/SettingsScreen.vue"),
     meta: { mode: "setup", nav: "org-settings", title: "Organization settings" },
   },
   {
