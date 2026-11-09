@@ -97,6 +97,36 @@ defmodule Cadence.Configuration.FramingGenerationTest do
              Configuration.get_revision(c.scope, c.mission.mission_id, revision)
   end
 
+  test "unpinning a profile-framed spacecraft hands framing back in a new generation", c do
+    {:ok, before} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
+    {:ok, before_entry} = FleetSnapshot.entry(before.metadata, c.craft.spacecraft_id)
+    {:ok, %{state: :applied}} = apply_framing_profile(c, 1279)
+    {:ok, pinned} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
+
+    {:ok, staged} =
+      Configuration.stage(c.scope, c.mission.mission_id, %{summary: "Unpin"}, [
+        %{
+          kind: "spacecraft",
+          action: :update,
+          entity_id: c.craft.spacecraft_id,
+          changes: [
+            %{path: "spacecraft_type_id", value: nil},
+            %{path: "spacecraft_type_version", value: nil}
+          ]
+        }
+      ])
+
+    assert {:ok, %{state: :applied, generation: generation}} = submit(c, staged)
+    assert generation == pinned.generation + 1
+
+    {:ok, active} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
+    assert {:ok, entry} = FleetSnapshot.entry(active.metadata, c.craft.spacecraft_id)
+    refute Map.has_key?(entry, "framing_authority")
+    refute Map.has_key?(entry, "framing")
+    # Back to the spacecraft's own configuration, exactly as before the pin.
+    assert entry["document"]["protocol"] == before_entry["document"]["protocol"]
+  end
+
   describe "compatibility HOLD (qa #16)" do
     setup c do
       {:ok, _} =

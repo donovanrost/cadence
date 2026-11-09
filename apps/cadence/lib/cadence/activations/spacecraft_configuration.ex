@@ -15,7 +15,7 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
   # A change-set generation (DECISIONS #35/#36): the change set already validated and wrote
   # the configuration in this same transaction. Admission checks the fleet it admits: every
   # spacecraft the set didn't change keeps exactly its active entry, and every changed one is
-  # profile-framed.
+  # profile-framed, or hands profile framing back (unpinned) with nothing else changed.
   def admit(
         %{
           organization_id: org,
@@ -32,7 +32,7 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
            {:ok, mission} <- Missions.fetch_mission(org, attrs.mission_id),
            {:ok, active} <- ConfigurationActive.load(mission),
            true <- Map.drop(entries, ids) == Map.drop(active.entries, ids),
-           true <- Enum.all?(ids, &(get_in(entries, [&1, "framing_authority"]) == "profile")) do
+           true <- Enum.all?(ids, &framing_change?(entries[&1], active.entries[&1])) do
         {:ok, :admitted}
       else
         {:error, reason} -> {:error, reason}
@@ -187,5 +187,20 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
       {:ok, _} -> :ok
       error -> error
     end
+  end
+
+  @framing_fields ["framing", "framing_authority"]
+
+  defp framing_change?(%{"framing_authority" => "profile"}, _active), do: true
+
+  defp framing_change?(%{} = entry, %{"framing_authority" => "profile"} = active),
+    do: without_framing(entry) == without_framing(active)
+
+  defp framing_change?(_entry, _active), do: false
+
+  defp without_framing(entry) do
+    entry
+    |> Map.drop(@framing_fields)
+    |> Map.update("document", %{}, &Map.delete(&1, "protocol"))
   end
 end

@@ -14,7 +14,7 @@ defmodule Cadence.Control.ConfigurationGeneration do
   """
 
   alias Cadence.Activations
-  alias Cadence.Applications.SpacecraftConfiguration.Active
+  alias Cadence.Applications.SpacecraftConfiguration.{Active, Drafts}
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.Missions
@@ -132,13 +132,45 @@ defmodule Cadence.Control.ConfigurationGeneration do
     for {id, sc} <- spacecraft,
         entry = Map.get(active_entries, id),
         is_map(entry),
-        {:ok, profile} <- [pinned_profile(org, mission_id, sc)],
-        next = profile_framed(entry, Effective.resolve(profile, Map.get(overrides, id, %{}))),
-        next != entry,
+        next = next_entry(org, mission_id, sc, entry, Map.get(overrides, id, %{})),
+        is_map(next) and next != entry,
         into: %{} do
       {id, next}
     end
   end
+
+  defp next_entry(org, mission_id, spacecraft, entry, overrides) do
+    case pinned_profile(org, mission_id, spacecraft) do
+      {:ok, profile} -> profile_framed(entry, Effective.resolve(profile, overrides))
+      {:error, _no_profile} -> unprofiled(org, mission_id, entry)
+    end
+  end
+
+  # Unpinning a profile-framed spacecraft (or a rollback undoing its pin) hands framing back:
+  # the profile marks are dropped so the runtime uses transport framing again, and the protocol
+  # returns to the spacecraft's own configuration when it has one. Entries that were never
+  # profile-framed are left alone.
+  defp unprofiled(org, mission_id, %{"framing_authority" => "profile"} = entry) do
+    entry
+    |> Map.drop(["framing", "framing_authority"])
+    |> restore_protocol(org, mission_id)
+  end
+
+  defp unprofiled(_org, _mission_id, entry), do: entry
+
+  defp restore_protocol(%{"configuration_revision_id" => id} = entry, org, mission_id)
+       when is_binary(id) do
+    # Exactly as the configuration has it, including an explicit nil protocol.
+    case Drafts.fetch(org, mission_id, id) do
+      {:ok, %{document: %{} = document}} ->
+        put_in(entry, ["document", "protocol"], Map.get(document, "protocol"))
+
+      _configuration_missing ->
+        entry
+    end
+  end
+
+  defp restore_protocol(entry, _org, _mission_id), do: entry
 
   defp pinned_profile(_org, _mission_id, %{spacecraft_type_id: nil}), do: {:error, :no_profile}
 
