@@ -1,7 +1,7 @@
 import { computed, onScopeDispose, ref, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { decoders as d, useRemoteQuery, type ApiError } from "@/api";
-import { useChannelEvent } from "@/live";
+import { useChannelEvent, useMissionInvalidation } from "@/live";
 import {
   continueDraft,
   executePlan,
@@ -70,6 +70,11 @@ export function usePlanDay(missionId: Readonly<Ref<string>>, day: Readonly<Ref<s
       },
     },
   );
+  // Reservation changes (booking confirmations / rejections) invalidate `contacts` (S10).
+  useMissionInvalidation(missionId, ["contacts"], () => {
+    plans.refetch();
+    if (!runId.value) plan.refetch();
+  });
   const poll = setInterval(() => {
     const s = draft.state.value;
     if (runId.value && s.status === "ready" && ["queued", "running"].includes(s.value.run.state))
