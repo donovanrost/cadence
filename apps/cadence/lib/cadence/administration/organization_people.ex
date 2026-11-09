@@ -73,9 +73,7 @@ defmodule Cadence.Administration.OrganizationPeople do
           "No capabilities"
 
         list ->
-          list
-          |> Enum.map(&(&1 |> String.replace("_", " ") |> String.capitalize()))
-          |> Enum.join(", ")
+          Enum.map_join(list, ", ", &(&1 |> String.replace("_", " ") |> String.capitalize()))
       end
 
     if mission_name, do: "#{abilities} · #{mission_name}", else: "#{abilities} · all missions"
