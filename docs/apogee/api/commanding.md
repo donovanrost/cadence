@@ -204,7 +204,8 @@ Errors: `403 command_group_self_approval_not_allowed`, `403 not_the_requested_ap
 ### `POST /command-groups/:id/abort` · `POST /command-requests/:id/cancel` (M20)
 
 `{"reason": "…"}` (required). Abort cancels every member that hasn't started to radiate and
-returns the group with `abort_result: {canceled, already_started: [request ids]}`. Members already
+returns the group with `abort_result: {canceled: <count>, already_started: [request ids]}`
+(`canceled` is how many members were canceled; `already_started` lists the ones that kept running). Members already
 releasing or released keep running ("ABORT AVAILABLE UNTIL EACH UPLINK STARTS"). Any mission
 operator may abort or cancel (`Policy :operate_mission`, not two-person, DECISIONS #42), so this
 works for plain members even though requesting and approving need organization admin today. The
