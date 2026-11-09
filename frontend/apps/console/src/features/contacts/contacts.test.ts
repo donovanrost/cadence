@@ -19,6 +19,7 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   uplink_capable: null,
   source: { provider: "p", provider_name: "Simulator", synthetic: true },
   max_elevation_deg: null,
+  plan: null,
   ...overrides,
 });
 
@@ -28,7 +29,7 @@ describe("passes", () => {
       from: "2026-11-09T02:00:00Z",
       to: "2026-11-09T04:00:00Z",
       truncated: false,
-      passes: [pass("a")],
+      passes: [pass("a"), pass("b", { plan: { id: "contact_plan_1", version: 42 } })],
     };
     expect(decode(passesReader, body).ok).toBe(true);
     expect(decode(passesReader, { ...body, passes: [{ ...pass("a"), state: "maybe" }] }).ok).toBe(

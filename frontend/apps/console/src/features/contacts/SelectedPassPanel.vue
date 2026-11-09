@@ -6,6 +6,7 @@ import {
   formatCountdown,
   formatDuration,
   useNow,
+  ApButton,
   ApEmptyState,
   ApKeyValue,
   ApPanel,
@@ -37,6 +38,13 @@ const tag = computed(() =>
     ? null
     : { state: contactOpState(state.value), label: contactStateWord[state.value] },
 );
+/** K2: a rejected / failed reservation booked by a plan can be re-planned (lead, 4259c615). */
+const replan = computed(() => {
+  const p = props.pass;
+  return p?.plan && (p.state === "rejected" || p.state === "failed")
+    ? { name: "ops.contacts.replan", query: { plan: p.plan.id } }
+    : null;
+});
 const facts = computed(() => {
   const p = props.pass;
   if (!p) return [];
@@ -103,6 +111,7 @@ const countdown = computed(() => {
         <span class="text-readout">{{ countdown }}</span>
       </p>
       <ApKeyValue :items="facts" />
+      <ApButton v-if="replan" size="compact" :to="replan">Re-plan</ApButton>
     </div>
   </ApPanel>
 </template>

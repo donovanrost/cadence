@@ -40,6 +40,8 @@ const pass = d.object({
     synthetic: d.boolean,
   }),
   max_elevation_deg: d.nullable(d.number),
+  /** The contact plan revision that booked it; null for direct bookings. */
+  plan: d.nullable(d.object({ id: d.token, version: d.nullable(d.integer) })),
 });
 
 export const passesReader = d.object({
