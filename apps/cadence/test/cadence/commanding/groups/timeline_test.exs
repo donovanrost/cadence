@@ -80,10 +80,11 @@ defmodule Cadence.Commanding.Groups.TimelineTest do
 
     assert kinds(c, group) == [:submitted, :completed]
 
-    assert %{
-             actor: %{"actor_kind" => "system"},
-             payload: %{"members" => %{"no_verifier" => 1, "verified" => 1}}
-           } = event(c, group, :completed)
+    assert %{actor: actor, payload: %{"members" => %{"no_verifier" => 1, "verified" => 1}}} =
+             event(c, group, :completed)
+
+    # Explicit system actor, no invented user (director, qa #29).
+    assert actor == %{"actor_kind" => "system"}
   end
 
   test "a failed verification writes member_failed, counting the later members it stops", c do

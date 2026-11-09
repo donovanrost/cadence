@@ -197,16 +197,20 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   `changed_since_submit` (`hold` when the result no longer matches what was submitted). Its
   `conflicts` check leaves out the group's own members, so only other work on the lanes counts.
 - Compose "send back" clone: everything a new draft needs is in the show response.
-- **Timeline events** (`events[]`, oldest first), the group's audit record:
+- **Timeline events** (`events[]`, oldest first), the group's audit record. `actor` is one of
+  two shapes, told apart by `actor_kind`. Decode it as a variant on that key; a system actor has no
+  `user_id` key, since no user is invented for it:
+  - `{actor_kind: "user", user_id}`: a person did it;
+  - `{actor_kind: "system"}`: Cadence recorded an outcome (`member_failed`, `completed`).
   - `submitted`, `approved`, `approved_with_exclusions`, `sent_back`, `rejected`, `note`,
     `member_canceled`, `aborted`: written by the operator action, with `actor` the user.
   - `member_failed` (DECISIONS #51): once per member whose release failed or whose
-    verification failed or timed out. `actor: {actor_kind: "system", user_id: null}`. Payload:
+    verification failed or timed out. `actor: {actor_kind: "system"}`. Payload:
     `{command_request_id, command_id, spacecraft_id, target_index, position, reason:
     release_failed | verify_failed | verify_timed_out, later_members_stopped}`. The last field
     counts the later members of that target that won't release (stop on failure, #31).
   - `completed` (#51): once, when every member of a `queued` or `aborted` group is final.
-    `actor: {actor_kind: "system", user_id: null}`. Payload: `{members: {verified, no_verifier, verify_failed,
+    `actor: {actor_kind: "system"}`. Payload: `{members: {verified, no_verifier, verify_failed,
     verify_timed_out, release_failed, canceled, rejected: count}}` (only non-zero keys).
     Written right after the release, verification, halt or abort that finished the last member.
     A one-minute reconcile sweep backs it up. Each write invalidates `commanding`.
