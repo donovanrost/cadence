@@ -42,6 +42,8 @@ config :cadence,
     # Derived: framing compatibility HOLDs when the profile becomes framing authority.
     Cadence.Comms.ConfigKinds.FramingCompatibility
   ],
+  # Which spacecraft have had traffic, for the archive HOLD (#49/#50).
+  spacecraft_traffic: Cadence.Control.SpacecraftTraffic,
   # Builds runtime activations for profile-framed change-set applies (DECISIONS #36).
   configuration_generation: Cadence.Control.ConfigurationGeneration,
   ecto_repos: [Cadence.Repo],

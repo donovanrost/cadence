@@ -39,6 +39,54 @@ defmodule Cadence.Configuration.ConfigKindsTest do
     end
   end
 
+  describe "archiving spacecraft (#49/#50)" do
+    defmodule BusyTraffic do
+      @moduledoc false
+      def with_traffic(_org, _mission, ids), do: MapSet.new(ids)
+    end
+
+    test "deleting a spacecraft archives it: gone from lists, still found by id", ctx do
+      [id] = apply_ops(ctx, "Add", [create("spacecraft", spacecraft_doc("ARCHIVE-1", 901))])
+
+      assert [_] =
+               apply_ops(ctx, "Archive", [%{kind: "spacecraft", action: :delete, entity_id: id}])
+
+      refute Enum.any?(
+               SpacecraftStore.list_spacecraft(ctx.org, ctx.mission),
+               &(&1.spacecraft_id == id)
+             )
+
+      assert [%{lifecycle_state: :archived}] =
+               ctx.org
+               |> SpacecraftStore.list_spacecraft(ctx.mission, include_archived: true)
+               |> Enum.filter(&(&1.spacecraft_id == id))
+
+      assert {:ok, %{lifecycle_state: :archived, archived_at: %DateTime{}}} =
+               SpacecraftStore.fetch_spacecraft(ctx.org, ctx.mission, id)
+
+      assert Cadence.Spacecraft.ConfigKinds.Spacecraft.load(ctx.org, ctx.mission, [id]) == %{}
+      # Its SCID stays taken: history keeps pointing at it.
+      assert SpacecraftStore.scid_taken?(ctx.org, ctx.mission, 901)
+    end
+
+    test "archiving a spacecraft with traffic holds", ctx do
+      [id] = apply_ops(ctx, "Add", [create("spacecraft", spacecraft_doc("ARCHIVE-2", 902))])
+      previous = Application.get_env(:cadence, :spacecraft_traffic)
+      Application.put_env(:cadence, :spacecraft_traffic, BusyTraffic)
+      on_exit(fn -> Application.put_env(:cadence, :spacecraft_traffic, previous) end)
+
+      assert {:ok, %{verdict: :hold, checks: checks}} =
+               Configuration.preview(
+                 ctx.alice,
+                 ctx.mission,
+                 {:ops, [%{kind: "spacecraft", action: :delete, entity_id: id}]}
+               )
+
+      assert %{items: [%{reason: :spacecraft_has_traffic, entity_id: ^id}]} =
+               Enum.find(checks, &(&1.key == "compatibility"))
+    end
+  end
+
   describe "spacecraft and profiles" do
     test "a profile and its first spacecraft apply together", ctx do
       profile_id = "profile-" <> unique("block1")

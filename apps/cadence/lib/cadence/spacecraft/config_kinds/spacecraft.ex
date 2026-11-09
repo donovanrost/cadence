@@ -3,7 +3,9 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   Change-set kind for spacecraft identity and profile pin.
 
   Document: `%{"display_name", "scid", "spacecraft_type_id", "spacecraft_type_version",
-  "metadata"}`. Spacecraft can't be removed yet (there is no delete in the store).
+  "metadata"}`. Deleting a spacecraft archives it (#49/#50): it leaves the mission's lists, fleet
+  and planning but keeps its id, SCID and history. Archiving one that has had traffic (provider
+  reservations or command requests) raises a `spacecraft_has_traffic` HOLD.
 
   Rules carried over from `Cadence.Spacecraft.Identity`: a pin names an existing, active profile
   version; synthetic configuration profiles can't be chosen; a spacecraft whose framing is
@@ -38,12 +40,12 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
       {:ok, found} = SpacecraftStore.fetch_spacecrafts(organization_id, mission_id, chunk)
       Map.values(found)
     end)
+    |> Enum.reject(&SpacecraftAsset.archived?/1)
     |> Map.new(&{&1.spacecraft_id, document(&1)})
   end
 
   @impl true
-  def normalize(:delete, _id, nil),
-    do: {:error, [F.error("", "Spacecraft can't be removed yet")]}
+  def normalize(:delete, _id, nil), do: {:ok, nil}
 
   def normalize(_action, _id, %{} = document) do
     document = Map.put_new(document, "metadata", %{})
@@ -63,6 +65,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
     do: {:error, [F.error("", "Enter the spacecraft details")]}
 
   @impl true
+  def validate(_organization_id, _mission_id, :delete, _entity_id, _previous, nil), do: :ok
+
   def validate(organization_id, mission_id, _action, _entity_id, previous, proposed) do
     errors =
       scid_free(organization_id, mission_id, previous, proposed) ++
@@ -83,7 +87,47 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
     stored(SpacecraftStore.update_spacecraft(organization_id, spacecraft))
   end
 
+  def write(organization_id, mission_id, :delete, id, _previous, nil, options) do
+    actor = Map.get(options || %{}, :actor) || %{"kind" => "change_set"}
+
+    case SpacecraftStore.archive_spacecraft(organization_id, mission_id, id, actor) do
+      {:ok, _archived} -> {:ok, nil, []}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   @impl true
+  def holds(organization_id, mission_id, entries) do
+    archived =
+      for %{kind: "spacecraft", op: :delete, entity_id: id} <- entries, do: id
+
+    case {archived, Application.get_env(:cadence, :spacecraft_traffic)} do
+      {[], _traffic} ->
+        []
+
+      {_ids, nil} ->
+        []
+
+      {ids, traffic} ->
+        busy = traffic.with_traffic(organization_id, mission_id, ids)
+
+        for id <- ids, MapSet.member?(busy, id) do
+          %{
+            op_id: nil,
+            change_id: nil,
+            kind: "spacecraft",
+            entity_id: id,
+            reason: :spacecraft_has_traffic,
+            sentence:
+              "This spacecraft has had contacts or commands; it will be archived, not removed, " <>
+                "and its history stays."
+          }
+        end
+    end
+  end
+
+  @impl true
+  def summary(:delete, previous, nil), do: "Archive spacecraft #{previous["display_name"]}"
   def summary(:create, nil, proposed), do: "Add spacecraft #{proposed["display_name"]}"
   def summary(_action, previous, _proposed), do: "Edit spacecraft #{previous["display_name"]}"
 

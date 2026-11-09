@@ -227,19 +227,22 @@ defmodule Cadence.SpacecraftStore do
   def list_spacecraft(mission_id) when is_binary(mission_id) do
     SpacecraftRow
     |> where([row], row.mission_id == ^mission_id)
+    |> active()
     |> order_by([row], asc: row.spacecraft_id)
     |> Repo.all()
     |> Enum.map(&SpacecraftRow.to_domain/1)
   end
 
-  @spec list_spacecraft(binary(), binary()) :: [Spacecraft.t()]
-  def list_spacecraft(organization_id, mission_id)
+  @doc "A mission's spacecraft; archived ones only with `include_archived: true` (#49/#50)."
+  @spec list_spacecraft(binary(), binary(), keyword()) :: [Spacecraft.t()]
+  def list_spacecraft(organization_id, mission_id, opts \\ [])
       when is_binary(organization_id) and is_binary(mission_id) do
     SpacecraftRow
     |> where(
       [row],
       row.organization_id == ^organization_id and row.mission_id == ^mission_id
     )
+    |> then(&if(Keyword.get(opts, :include_archived, false), do: &1, else: active(&1)))
     |> order_by([row], asc: row.spacecraft_id)
     |> Repo.all()
     |> Enum.map(&SpacecraftRow.to_domain/1)
@@ -272,11 +275,44 @@ defmodule Cadence.SpacecraftStore do
       row.organization_id == ^organization_id and row.mission_id == ^mission_id and
         row.spacecraft_type_id == ^spacecraft_type_id
     )
+    |> active()
     |> pinned_filter(opts)
     |> order_by([row], asc: row.display_name, asc: row.spacecraft_id)
     |> Repo.all()
     |> Enum.map(&SpacecraftRow.to_domain/1)
   end
+
+  @doc """
+  Archives a spacecraft (#49/#50): it leaves the mission's lists, fleet and planning targets but
+  keeps its id, SCID and history. Reads by id still find it.
+  """
+  @spec archive_spacecraft(binary(), binary(), binary(), map()) ::
+          {:ok, Spacecraft.t()} | {:error, :spacecraft_not_found}
+  def archive_spacecraft(organization_id, mission_id, spacecraft_id, actor) do
+    SpacecraftRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.spacecraft_id == ^spacecraft_id
+    )
+    |> lock("FOR UPDATE")
+    |> Repo.one()
+    |> case do
+      nil ->
+        {:error, :spacecraft_not_found}
+
+      row ->
+        row
+        |> SpacecraftRow.archive_changeset(actor)
+        |> Repo.update()
+        |> case do
+          {:ok, archived} -> {:ok, SpacecraftRow.to_domain(archived)}
+          {:error, reason} -> {:error, reason}
+        end
+    end
+  end
+
+  defp active(query), do: where(query, [row], row.lifecycle_state == "active")
 
   defp pinned_filter(query, opts) do
     Enum.reduce(opts, query, fn
@@ -289,6 +325,7 @@ defmodule Cadence.SpacecraftStore do
   def count_organization_spacecraft(organization_id) when is_binary(organization_id) do
     SpacecraftRow
     |> where([row], row.organization_id == ^organization_id)
+    |> active()
     |> Repo.aggregate(:count, :spacecraft_id)
   end
 
@@ -309,6 +346,7 @@ defmodule Cadence.SpacecraftStore do
     filtered =
       SpacecraftRow
       |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+      |> active()
       |> apply_search(opts[:search])
       |> apply_filter(opts[:filter])
 
@@ -349,11 +387,9 @@ defmodule Cadence.SpacecraftStore do
   def fleet_summary(organization_id, mission_id)
       when is_binary(organization_id) and is_binary(mission_id) do
     base =
-      where(
-        SpacecraftRow,
-        [row],
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id
-      )
+      SpacecraftRow
+      |> where([row], row.organization_id == ^organization_id and row.mission_id == ^mission_id)
+      |> active()
 
     totals =
       base

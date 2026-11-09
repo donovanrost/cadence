@@ -13,7 +13,10 @@ defmodule Cadence.Spacecraft do
           scid: non_neg_integer() | nil,
           spacecraft_type_id: binary() | nil,
           spacecraft_type_version: pos_integer() | nil,
-          metadata: map()
+          metadata: map(),
+          lifecycle_state: :active | :archived,
+          archived_at: DateTime.t() | nil,
+          archived_by: map() | nil
         }
 
   defstruct [
@@ -24,7 +27,10 @@ defmodule Cadence.Spacecraft do
     :scid,
     :spacecraft_type_id,
     :spacecraft_type_version,
-    metadata: %{}
+    :archived_at,
+    :archived_by,
+    metadata: %{},
+    lifecycle_state: :active
   ]
 
   @spec new(map()) :: t()
@@ -40,7 +46,18 @@ defmodule Cadence.Spacecraft do
         Map.get(attrs, :spacecraft_type_id, Map.get(attrs, "spacecraft_type_id")),
       spacecraft_type_version:
         Map.get(attrs, :spacecraft_type_version, Map.get(attrs, "spacecraft_type_version")),
-      metadata: Map.get(attrs, :metadata, Map.get(attrs, "metadata", %{}))
+      metadata: Map.get(attrs, :metadata, Map.get(attrs, "metadata", %{})),
+      lifecycle_state:
+        lifecycle(Map.get(attrs, :lifecycle_state, Map.get(attrs, "lifecycle_state"))),
+      archived_at: Map.get(attrs, :archived_at, Map.get(attrs, "archived_at")),
+      archived_by: Map.get(attrs, :archived_by, Map.get(attrs, "archived_by"))
     }
   end
+
+  defp lifecycle(state) when state in [:archived, "archived"], do: :archived
+  defp lifecycle(_state), do: :active
+
+  @doc "Whether the spacecraft has been archived (#49/#50)."
+  @spec archived?(t()) :: boolean()
+  def archived?(%__MODULE__{lifecycle_state: state}), do: state == :archived
 end
