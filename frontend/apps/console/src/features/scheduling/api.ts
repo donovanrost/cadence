@@ -136,6 +136,8 @@ const planIssue = d.object({
   kind: d.optional(d.string),
 });
 
+const planRef = d.object({ id: d.token, version: d.integer });
+
 const unconfirmedReader = d.nullable(
   d.object({
     window_ms: d.integer,
@@ -203,6 +205,12 @@ export const planDetailReader = d.object({
   /** `station_degraded`: passes inside a degraded window; a warning only (U26). */
   at_risk: (value: unknown, path?: string) =>
     value === undefined ? [] : d.array(planIssue, 5_000)(value, path),
+  /** qa #30: the day's repair chain, root first then each applied repair; null on older servers. */
+  chain: (value: unknown, path?: string) =>
+    value === undefined ? null : d.array(planRef, 100)(value, path),
+  /** qa #30: the plan a new Re-plan starts from (latest applied repair, else the root). */
+  chain_head: (value: unknown, path?: string) =>
+    value === undefined ? null : d.nullable(planRef)(value, path),
   /** U30 (api b122f667): placed bookings unanswered past the window, on any state; else null. */
   unconfirmed: (value: unknown, path?: string) =>
     value === undefined ? null : unconfirmedReader(value, path),

@@ -33,6 +33,8 @@ const plan = (state: PlanDetail["state"], providers: readonly string[]): PlanDet
   unmet: [],
   conflicts: [],
   at_risk: [],
+  chain: null,
+  chain_head: null,
   unconfirmed: {
     window_ms: 600_000,
     booked: 36,
