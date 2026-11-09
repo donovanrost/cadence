@@ -29,3 +29,5 @@ field schema."). Items:
    (lead did the same for units on mobile).
 
 **Policy 1–5 closed** per 638a2ac1 + api 58f948ae (durations `48h 00m` with 48h/2d/90m input, amounts + an ISO currency select, Yes/No segmented with the default, Trade-offs summary, no raw keys/JSON in help); qa verified `48h 00m` live. Requirements 6/7 in progress (fe-setup).
+
+**Supersede preview (fe-setup b749005c):** accepted: `Saving v7 supersedes 1 open draft: Sun 15 Nov (r1, QA Operator). It'll need drafting again.` + `Save v7 · supersede 1 draft`; already-superseded drafts not counted; the policy save untouched (api: policy versions don't supersede). The template Edit button was dead (missing import) and now works.
