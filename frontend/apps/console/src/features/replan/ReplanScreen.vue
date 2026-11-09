@@ -5,6 +5,7 @@ import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession 
 import { ApButton, ApCallout, ApPanel, ApRemote, ApStationBar, plural } from "@/ui";
 import {
   DraftGantt,
+  bookingStoppedText,
   byAuthor,
   PlanFooter,
   PlanStatePanel,
@@ -22,7 +23,7 @@ import {
 import ChangesPanel from "./ChangesPanel.vue";
 import { replanErrorText } from "./errors.ts";
 import { lostWindow } from "./impact.ts";
-import { bookingRequests, bookingStoppedText } from "./applied.ts";
+import { bookingRequests } from "./applied.ts";
 import { useLostBookings } from "./useLostBookings.ts";
 import ImpactPanel from "./ImpactPanel.vue";
 import StationImpactPanel from "./StationImpactPanel.vue";
