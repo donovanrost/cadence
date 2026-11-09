@@ -76,6 +76,46 @@ defmodule Cadence.ContactPlanning.PlanSupersession do
     end)
   end
 
+  @doc """
+  Dry run for a save (ux ContactPlanning.md): the open drafts a new version of the template or
+  requirement would supersede, by the same rule as `check/4`. A new template version supersedes
+  drafts holding its future, untaken requirements; a new requirement version supersedes every
+  draft that references it. Booked or pending plans aren't drafts (they're K2's). Writes nothing.
+  """
+  @spec would_supersede(binary(), binary(), {:template | :requirement, binary()}) :: [
+          {map(), map()}
+        ]
+  def would_supersede(organization_id, mission_id, subject) do
+    drafts = ContactPlans.list(organization_id, mission_id, lifecycle_state: :draft)
+    refs = Map.new(drafts, fn {plan, version} -> {plan.contact_plan_id, refs(version)} end)
+    ids = refs |> Map.values() |> List.flatten() |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+    requirements = ContactRequirements.fetch_many(organization_id, mission_id, ids)
+
+    context = %{
+      uptake: ContactPlans.requirement_uptake(organization_id, mission_id, ids),
+      now: DateTime.utc_now()
+    }
+
+    Enum.filter(drafts, fn {plan, _version} ->
+      refs
+      |> Map.get(plan.contact_plan_id, [])
+      |> Enum.any?(fn {id, _used} ->
+        affected?(subject, id, Map.get(requirements, id), plan, context)
+      end)
+    end)
+  end
+
+  defp affected?({:requirement, requirement_id}, id, _requirement, _plan, _context),
+    do: id == requirement_id
+
+  defp affected?({:template, template_id}, id, {requirement, current}, plan, context) do
+    requirement.lifecycle_state == :active and
+      generation(current)["contact_requirement_template_id"] == template_id and
+      DateTime.after?(current.earliest_start, context.now) and not kept?(plan, id, context)
+  end
+
+  defp affected?(_subject, _id, nil, _plan, _context), do: false
+
   defp refs(version) do
     for %{"id" => id, "version" => used} <-
           (version.requirement_refs_document || %{})["requirements"] || [],

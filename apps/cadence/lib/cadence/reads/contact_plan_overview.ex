@@ -53,6 +53,30 @@ defmodule Cadence.Reads.ContactPlanOverview do
     |> Enum.filter(&on_day?(&1, filters[:day]))
   end
 
+  @doc """
+  The open drafts a save of `subject` (`{:template, id}` or `{:requirement, id}`) would
+  supersede: `[%{plan: %{id, version}, day, author, state}]`. Nothing is written.
+  """
+  @spec would_supersede(binary(), binary(), {:template | :requirement, binary()}) :: [map()]
+  def would_supersede(organization_id, mission_id, subject) do
+    ids =
+      organization_id
+      |> PlanSupersession.would_supersede(mission_id, subject)
+      |> MapSet.new(fn {plan, _version} -> plan.contact_plan_id end)
+
+    organization_id
+    |> list(mission_id, %{state: :draft})
+    |> Enum.filter(&MapSet.member?(ids, &1.id))
+    |> Enum.map(fn row ->
+      %{
+        plan: %{id: row.id, version: row.version},
+        day: row.window.from && DateTime.to_date(row.window.from),
+        author: row.author,
+        state: row.state
+      }
+    end)
+  end
+
   @doc "One plan at its current (or given) version, with totals and its selected passes."
   @spec plan(binary(), binary(), binary(), pos_integer() | nil) ::
           {:ok, map()} | {:error, :plan_not_found}

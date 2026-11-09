@@ -340,6 +340,44 @@ defmodule CadenceWeb.Console.TemplateSupersessionTest do
     end
   end
 
+  test "the dry run lists the open drafts a template or requirement save would supersede", c do
+    fixture =
+      ContactPlanningFixtures.plan_fixture(c.org, c.user, c.membership, c.mission,
+        metadata: %{
+          "generation" => %{
+            "contact_requirement_template_id" => "tmpl-dry",
+            "contact_requirement_template_version" => 1
+          }
+        }
+      )
+
+    base = "/api/console/v1/missions/#{c.mission.mission_id}/contact-planning"
+
+    read = fn path ->
+      c.user |> TestFixtures.member_conn() |> get(base <> path) |> json_response(200)
+    end
+
+    plan_id = fixture.plan.contact_plan_id
+
+    assert %{"data" => %{"drafts" => [draft]}} = read.("/templates/tmpl-dry/supersedes")
+
+    assert %{
+             "plan" => %{"id" => ^plan_id, "version" => 1},
+             "state" => "draft",
+             "day" => "2027-01-01"
+           } =
+             draft
+
+    assert %{"name" => _} = draft["author"]
+
+    requirement_id = fixture.requirement.contact_requirement_id
+    assert %{"data" => %{"drafts" => [_]}} = read.("/requirements/#{requirement_id}/supersedes")
+    assert %{"data" => %{"drafts" => []}} = read.("/templates/other/supersedes")
+
+    {:ok, _} = ContactPlans.submit(c.scope, c.mission.mission_id, plan_id, 1, "Book")
+    assert %{"data" => %{"drafts" => []}} = read.("/templates/tmpl-dry/supersedes")
+  end
+
   test "a fleet start leaves v1's requirements out of review and supersedes them after v2 materializes",
        c do
     ContactPlanningFixtures.active_policy!(c.scope, c.mission.mission_id)

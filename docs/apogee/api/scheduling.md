@@ -358,5 +358,15 @@ schedule, the requirement content each occurrence generates, and the catch-up bo
   that no plan has taken up (pending approval or later) are canceled with reason
   `template_versioned: …`. So are those for spacecraft that **left the target**
   (`left_template_target: …`). Requirements already started or planned are left alone.
+- **Dry run before saving** (ux ContactPlanning.md): `GET /templates/:id/supersedes` and
+  `GET /requirements/:id/supersedes` → `{drafts: [{plan: {id, version}, day, author, state}]}`,
+  writing nothing. They list the open drafts a new version would supersede, by the same rule as
+  the on-read `superseded` state:
+  - a template's new version supersedes drafts holding its future requirements that no plan has
+    taken up;
+  - a requirement's new version supersedes every draft that references it.
+
+  Plans past draft are K2's and aren't listed. A **policy** version doesn't supersede drafts:
+  each draft keeps the policy snapshot it was made with.
 - Templates aren't change sets: edits are versioned and audited on the template (planning policy,
   not mission configuration).

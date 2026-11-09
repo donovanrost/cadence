@@ -874,6 +874,19 @@ defmodule CadenceWeb.Router do
       post("/contact-planning/templates", ContactTemplateController, :create)
       post("/contact-planning/templates/preview", ContactTemplateController, :preview)
       get("/contact-planning/templates/schema", ContactTemplateController, :schema)
+
+      get(
+        "/contact-planning/templates/:template_id/supersedes",
+        ContactTemplateController,
+        :supersedes
+      )
+
+      get(
+        "/contact-planning/requirements/:requirement_id/supersedes",
+        ContactTemplateController,
+        :requirement_supersedes
+      )
+
       get("/contact-planning/templates/:template_id", ContactTemplateController, :show)
       post("/contact-planning/templates/:template_id", ContactTemplateController, :update)
 
