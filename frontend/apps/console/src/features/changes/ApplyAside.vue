@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import type { RemoteState } from "@/api";
 import { ApButton, ApCallout, ApField, ApPanel, ApStatTile } from "@/ui";
-import { rejectionSentence, submitChangeSet, type Preview, type SubmitResult } from "./actions.ts";
+import { failureOutcome, submitChangeSet, type Preview, type SubmitResult } from "./actions.ts";
 import type { ChangeSet, ConfigState } from "./shapes.ts";
 
 /** K3 Apply: why (required), holds acknowledgement, apply or request review (mission policy). */
@@ -48,7 +48,7 @@ async function apply() {
     });
     if (result.ok) emit("result", result.value);
     else {
-      failure.value = rejectionSentence(result.error);
+      failure.value = failureOutcome(result.error, "applied").sentence;
       emit("changed");
     }
   } finally {

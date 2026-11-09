@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { ApButton, ApCallout, ApField, ApPanel } from "@/ui";
-import { rejectionSentence, reviewChangeSet, type SubmitResult } from "./actions.ts";
+import { failureOutcome, reviewChangeSet, type SubmitResult } from "./actions.ts";
 import type { ChangeSet, ConfigState } from "./shapes.ts";
 
 /** Independent review (mission policy): approve & apply, or send back with a comment. */
@@ -23,7 +23,7 @@ async function decide(decision: "approve" | "send_back") {
     });
     if (result.ok) emit("result", result.value);
     else {
-      failure.value = rejectionSentence(result.error);
+      failure.value = failureOutcome(result.error, "changed").sentence;
       emit("changed");
     }
   } finally {

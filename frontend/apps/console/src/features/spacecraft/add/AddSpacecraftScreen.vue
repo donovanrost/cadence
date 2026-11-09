@@ -2,7 +2,7 @@
 import { computed, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
 import { ApCallout, ApRemote, ApStepBar } from "@/ui";
 import { fetchProfiles, type ProfileSummary } from "@/features/profiles/index.ts";
 import { fetchSpacecraftDirectory, type SpacecraftDirectory } from "../api.ts";
@@ -66,28 +66,22 @@ function go(next: Step) {
 
 <template>
   <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
-    <header class="flex flex-wrap items-center gap-4 border-b border-hairline pb-3">
-      <RouterLink
-        :to="{ name: 'setup.spacecraft' }"
-        aria-label="Close and keep draft"
-        class="inline-flex size-11 items-center justify-center border border-line text-text-3 no-underline hover:text-readout"
-        >×</RouterLink
-      >
-      <div class="flex flex-col gap-0.5">
-        <span class="font-mono text-xs text-text-4 uppercase"
-          >Setup · {{ scope.mission.name }} · spacecraft</span
-        >
-        <h1 class="m-0 font-display text-xl font-semibold tracking-head uppercase">
-          Add spacecraft
-        </h1>
-      </div>
-      <ApStepBar
-        class="min-w-[min(100%,560px)] flex-1"
-        :steps="steps.map((s) => stepLabels[s])"
-        :current="steps.indexOf(step)"
-        label="Steps"
-      />
-    </header>
+    <TakeoverHeader
+      title="Add spacecraft"
+      context="Setup · spacecraft"
+      :close="{ name: 'setup.spacecraft' }"
+      close-label="Close and keep draft"
+      title-as="h1"
+    >
+      <template #steps>
+        <ApStepBar
+          class="min-w-[min(100%,560px)] self-center px-3"
+          :steps="steps.map((s) => stepLabels[s])"
+          :current="steps.indexOf(step)"
+          label="Steps"
+        />
+      </template>
+    </TakeoverHeader>
     <ApCallout v-if="!canManage" tone="off">
       Only an organization admin can add spacecraft. You can prepare a batch here, but not create
       it.

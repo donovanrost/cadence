@@ -2,10 +2,11 @@
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import {
+  failureOutcome,
   invalidOpDetails,
   refreshConfigState,
-  rejectionSentence,
   stageChange,
+  type FailureOutcome,
 } from "@/features/changes/index.ts";
 import { useMissionScope } from "@/shell";
 import { ApButton, ApCallout, plural } from "@/ui";
@@ -19,7 +20,7 @@ const { proposal, profiles } = useDraft();
 const scope = useMissionScope();
 const router = useRouter();
 const busy = ref(false);
-const failure = ref<string | null>(null);
+const failure = ref<FailureOutcome | null>(null);
 
 const ready = computed(() => {
   const p = proposal();
@@ -55,14 +56,20 @@ async function stage() {
     if (result.ok) {
       clearDraft(missionId);
       refreshConfigState(missionId);
-      await router.push({ name: "setup.changes" });
+      await router.push({
+        name: "setup.changes",
+        query: { stagedSpacecraft: String(batch.ops.length) },
+      });
       return;
     }
     const detail = invalidOpDetails(result.error);
     const row = detail ? ready.value?.report.rows[detail.index] : undefined;
     failure.value = detail
-      ? `${row?.name ?? `Row ${detail.index + 1}`}: ${detail.errors.map((e) => e.message).join("; ")}`
-      : rejectionSentence(result.error);
+      ? {
+          changed: false,
+          sentence: `Nothing was staged. ${row?.name ?? `Row ${detail.index + 1}`}: ${detail.errors.map((e) => e.message).join("; ")}`,
+        }
+      : failureOutcome(result.error, "staged");
   } finally {
     busy.value = false;
   }
@@ -70,7 +77,15 @@ async function stage() {
 </script>
 
 <template>
-  <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
+  <ApCallout v-if="failure" :tone="failure.changed === null ? 'caution' : 'crit'">
+    {{ failure.sentence }} Your draft is kept.
+    <template #action>
+      <ApButton v-if="failure.changed === null" size="compact" :to="{ name: 'setup.changes' }"
+        >Staged changes</ApButton
+      >
+      <ApButton v-else size="compact" @click="stage">Retry</ApButton>
+    </template>
+  </ApCallout>
   <ApButton
     variant="primary"
     size="commit"

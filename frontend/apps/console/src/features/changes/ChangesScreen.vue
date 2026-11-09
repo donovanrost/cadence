@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
@@ -48,6 +49,17 @@ function reloadAll() {
   refetch();
   preview.refetch();
 }
+
+// One-time note after staging from another surface (ux: say what staging did and when it lands).
+const route = useRoute();
+const router = useRouter();
+const stagedNotice = ref<number | null>(
+  typeof route.query.stagedSpacecraft === "string" && /^\d+$/.test(route.query.stagedSpacecraft)
+    ? Number(route.query.stagedSpacecraft)
+    : null,
+);
+if (stagedNotice.value !== null)
+  void router.replace({ name: "setup.changes" }).catch(() => undefined);
 
 // Kept here so the outcome survives the set closing (the aside unmounts on apply).
 const outcome = ref<SubmitResult | null>(null);
@@ -99,6 +111,11 @@ function meta(config: ConfigState): string | null {
         sentence="This server doesn't serve mission change sets to the console yet."
       />
     </ApPanel>
+    <ApCallout v-if="stagedNotice !== null && state.status === 'ready' && !outcome" tone="nominal">
+      {{ plural(stagedNotice, "spacecraft", "spacecraft") }} staged. They're created when this
+      change set is applied as <span class="font-mono">r{{ state.value.head.revision + 1 }}</span
+      >.
+    </ApCallout>
     <ApCallout v-if="outcome?.state === 'applied'" tone="nominal">
       <span class="font-mono normal-case">r{{ outcome.revision }}</span> applied ·
       {{ plural(outcome.staged_count, "change")

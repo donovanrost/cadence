@@ -3,6 +3,8 @@ export { default as ConfigStatus } from "./ConfigStatus.vue";
 export { default as StagedBar } from "./StagedBar.vue";
 export {
   errorCode,
+  failureOutcome,
+  type FailureOutcome,
   invalidOpDetails,
   rejectionSentence,
   stageChange,

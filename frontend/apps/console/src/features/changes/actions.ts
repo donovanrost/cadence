@@ -186,3 +186,30 @@ export function invalidOpDetails(error: ApiError): Readonly<{
   );
   return parsed.ok ? parsed.value : null;
 }
+
+export type FailureOutcome = Readonly<{
+  /** false: the server rejected it, nothing changed. null: we can't tell (reply lost or unreadable). */
+  changed: false | null;
+  sentence: string;
+}>;
+
+/**
+ * Every stage/apply failure says whether anything changed (ux review 2026-11-09). A rejection
+ * means nothing changed; an unreadable reply or a lost connection means we can't tell.
+ */
+export function failureOutcome(
+  error: ApiError,
+  verb: "staged" | "applied" | "changed",
+): FailureOutcome {
+  if (error.kind === "malformed")
+    return {
+      changed: null,
+      sentence: `The server's reply wasn't understood, so it isn't clear whether anything was ${verb}. Check Staged changes before trying again.`,
+    };
+  if (error.kind === "unavailable" && error.status === 0)
+    return {
+      changed: null,
+      sentence: `The connection dropped, so it isn't clear whether anything was ${verb}. Check Staged changes before trying again.`,
+    };
+  return { changed: false, sentence: `Nothing was ${verb}. ${rejectionSentence(error)}` };
+}

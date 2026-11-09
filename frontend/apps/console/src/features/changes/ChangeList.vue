@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import { useSession } from "@/shell";
 import { ApButton, ApCallout, ApPanel, formatShort, plural } from "@/ui";
-import { discardChangeSet, rejectionSentence, withdrawChange } from "./actions.ts";
+import { discardChangeSet, failureOutcome, withdrawChange } from "./actions.ts";
 import type { Change, ChangeSet, ConfigState } from "./shapes.ts";
 
 /** K1: one row per staged change, collapsed; expanded shows what each op touches. */
@@ -17,16 +17,14 @@ const mayRemove = (change: Change) =>
   change.author.id === session.user.id || props.config.permissions.has("config.discard_any");
 
 async function run(
-  action: () => Promise<
-    { ok: true } | { ok: false; error: Parameters<typeof rejectionSentence>[0] }
-  >,
+  action: () => Promise<{ ok: true } | { ok: false; error: Parameters<typeof failureOutcome>[0] }>,
 ) {
   if (busy.value) return;
   busy.value = true;
   failure.value = null;
   try {
     const result = await action();
-    if (!result.ok) failure.value = rejectionSentence(result.error);
+    if (!result.ok) failure.value = failureOutcome(result.error, "changed").sentence;
   } finally {
     busy.value = false;
     emit("changed");
