@@ -158,6 +158,7 @@ describe("conflict sentences (api 062a73f8, ux rollback review #1)", () => {
     path: "frame_parameters.frame_size",
     label: "frame size",
     unit: "bytes",
+    format: null as string | null,
     base: 900,
     live: 1024,
     staged: 1115,
@@ -213,5 +214,31 @@ describe("compatibility lines (ux rollback review #7, api 76a66307)", () => {
     expect(groupedLines([mismatch("Santiago")])).toEqual([
       "1 spacecraft on Earendil Block 1 — Demo would decode 900-byte frames, but Santiago (Demo) S-band downlink sends 1,115-byte frames.",
     ]);
+  });
+});
+
+describe("version format (api 4721f61a)", () => {
+  it("renders a version as v4 in conflict sentences", () => {
+    const item: PreviewItem = {
+      ...base,
+      kind: "spacecraft",
+      entity_name: "EARENDIL-001",
+      paths: [
+        {
+          path: "spacecraft_type_version",
+          label: "Profile version",
+          unit: null,
+          format: "version",
+          base: 5,
+          live: 6,
+          staged: 4,
+          changed_in: 9,
+          changed_by: null,
+        },
+      ],
+    };
+    expect(itemLine(item, "r8")).toBe(
+      "EARENDIL-001 · Profile version is v6 now, not v5 as r8 left it (changed in r9). Roll back r9 first, or change it by hand.",
+    );
   });
 });

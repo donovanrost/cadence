@@ -42,8 +42,8 @@ const lines = computed((): readonly DiffEntry[] =>
         :key="f.path"
         class="pl-4 font-mono text-xs text-text-3"
         :title="f.path"
-        >{{ f.label ?? f.path }} · {{ showValue(f.before, f.unit) }} →
-        <span class="text-text-2">{{ showValue(f.after, f.unit) }}</span></span
+        >{{ f.label ?? f.path }} · {{ showValue(f.before, f.unit, f.format) }} →
+        <span class="text-text-2">{{ showValue(f.after, f.unit, f.format) }}</span></span
       >
     </li>
     <li v-if="lines.length > 20" class="text-text-3">and {{ lines.length - 20 }} more</li>

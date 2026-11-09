@@ -45,9 +45,9 @@ const verb = (op: string) => verbs[op] ?? humanize(op);
             <span class="truncate text-text-3" :title="f.path">{{ f.label ?? f.path }}</span>
             <span
               class="truncate font-mono"
-              :title="`${showValue(f.before, f.unit)} → ${showValue(f.after, f.unit)}`"
-              ><span class="text-text-3">{{ showValue(f.before, f.unit) }}</span> →
-              <span class="text-readout">{{ showValue(f.after, f.unit) }}</span></span
+              :title="`${showValue(f.before, f.unit, f.format)} → ${showValue(f.after, f.unit, f.format)}`"
+              ><span class="text-text-3">{{ showValue(f.before, f.unit, f.format) }}</span> →
+              <span class="text-readout">{{ showValue(f.after, f.unit, f.format) }}</span></span
             >
           </li>
         </ul>

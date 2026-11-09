@@ -125,6 +125,7 @@ const field = object({
   path: string,
   label: optional(nullable(string)),
   unit: optional(nullable(string)),
+  format: optional(nullable(string)),
   before: raw,
   after: raw,
 });

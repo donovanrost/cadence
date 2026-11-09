@@ -38,8 +38,10 @@ export function fetchRevision(
 }
 
 /** Field values are raw JSON; show them compactly and exactly. */
-export function showValue(value: unknown, unit?: string | null): string {
+/** Display value: thousands separators, the schema unit, and `format: "version"` as v4. */
+export function showValue(value: unknown, unit?: string | null, format?: string | null): string {
   if (value === null || value === undefined) return "—";
+  if (format === "version" && typeof value === "number") return `v${value}`;
   const text =
     typeof value === "number"
       ? value.toLocaleString("en-US")

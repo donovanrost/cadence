@@ -39,6 +39,7 @@ const previewItem = object({
         path: string,
         label: decoders.optional(nullable(string)),
         unit: decoders.optional(nullable(string)),
+        format: decoders.optional(nullable(string)),
         base: (v: unknown) => (v === undefined ? null : v),
         live: (v: unknown) => (v === undefined ? null : v),
         staged: (v: unknown) => (v === undefined ? null : v),
@@ -53,8 +54,9 @@ const previewItem = object({
 export type PreviewItem = Decoded<typeof previewItem>;
 
 /** 1115 → "1,115", with the schema unit when there is one. */
-function valueText(v: unknown, unit?: string | null): string {
+function valueText(v: unknown, unit?: string | null, format?: string | null): string {
   if (v === null || v === undefined) return "not set";
+  if (format === "version" && typeof v === "number") return `v${v}`;
   const text = typeof v === "number" ? v.toLocaleString("en-US") : shown(v);
   return unit && typeof v === "number" ? `${text} ${unit}` : text;
 }
@@ -72,7 +74,7 @@ export function conflictSentences(item: PreviewItem, leftBy?: string): string | 
         p.changed_in === "outside"
           ? "changed outside a change set"
           : `changed in r${p.changed_in}${p.changed_by ? ` by ${p.changed_by.name}` : ""}`;
-      const head = `${who} · ${p.label ?? p.path} is ${valueText(p.live, p.unit)} now, not ${valueText(p.base, p.unit)} as ${leftBy ?? "it was when staged"}${leftBy ? " left it" : ""} (${since}).`;
+      const head = `${who} · ${p.label ?? p.path} is ${valueText(p.live, p.unit, p.format)} now, not ${valueText(p.base, p.unit, p.format)} as ${leftBy ?? "it was when staged"}${leftBy ? " left it" : ""} (${since}).`;
       return p.changed_in === "outside"
         ? `${head} Change it by hand.`
         : `${head} Roll back r${p.changed_in} first, or change it by hand.`;
@@ -119,6 +121,7 @@ export const diffField = object({
   path: string,
   label: decoders.optional(nullable(string)),
   unit: decoders.optional(nullable(string)),
+  format: decoders.optional(nullable(string)),
   before: (v: unknown) => (v === undefined ? null : v),
   after: (v: unknown) => (v === undefined ? null : v),
 });
