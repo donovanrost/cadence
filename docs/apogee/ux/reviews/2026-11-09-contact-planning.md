@@ -27,3 +27,5 @@ field schema."). Items:
 7. **The rule line uppercases its units** (`1 DOWNLINK ≥ 5 MIN EACH · EVERY 6H00`). Keep the rule in mono
    **without** the uppercase transform, durations per U24/§4: `1 downlink ≥ 5 min each · every 6h 00m`
    (lead did the same for units on mobile).
+
+**Policy 1–5 closed** per 638a2ac1 + api 58f948ae (durations `48h 00m` with 48h/2d/90m input, amounts + an ISO currency select, Yes/No segmented with the default, Trade-offs summary, no raw keys/JSON in help); qa verified `48h 00m` live. Requirements 6/7 in progress (fe-setup).
