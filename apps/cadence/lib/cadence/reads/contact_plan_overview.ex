@@ -233,7 +233,9 @@ defmodule Cadence.Reads.ContactPlanOverview do
       window: %{from: starts, to: ends},
       author: actor(version.created_by || plan.created_by),
       counts: %{
-        passes: length(version.selected_snapshot_ids || []),
+        # The whole plan, kept (locked) passes included: what the Gantt shows.
+        passes: length(passes),
+        locked: length(version.locked_snapshot_ids || []),
         minutes:
           passes |> Enum.map(&DateTime.diff(&1.ends_at, &1.starts_at)) |> Enum.sum() |> div(60),
         conflicts: length(conflicts),

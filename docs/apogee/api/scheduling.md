@@ -105,6 +105,10 @@ The list row, plus:
   K2's (repairs). `counts.conflicts` and `ready_to_approve` include station conflicts on the detail
   read; the list rows count only overlaps.
 
+**Counts** describe the whole plan the Gantt shows: `counts.passes` and `minutes` include kept
+(locked) passes, and `counts.locked` says how many are locked. A repair proposal of 40 with 4
+moves reads `passes: 40, locked: 36`; the diff counts the moves.
+
 **Repair proposals** (U28): a plan that a repair run proposed carries `repair_of: {plan: {id,
 version}, run_id}`, where `plan` is the plan being repaired; every other plan has `repair_of:
 null`. This is on the plan detail and on list rows. `GET /contact-plans` returns them apart:
