@@ -33,6 +33,7 @@ defmodule CadenceWeb.Console.ActionQueueJSON do
       command: item.command,
       outcome: item.outcome && Atom.to_string(item.outcome),
       command_requests: Enum.map(item.command_requests, &request/1),
+      command_groups: item.command_groups,
       finding: finding(item.finding)
     }
   end

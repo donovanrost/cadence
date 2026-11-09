@@ -190,6 +190,37 @@ defmodule Cadence.Reads.ActionQueueTest do
       assert result.counts.spacecraft_p1 == 1
     end
 
+    test "a command group awaiting the viewer is one decision; its members aren't counted" do
+      group_member = %{
+        request("member", :approval_pending, "other")
+        | metadata: %{"group" => %{"id" => "g1"}}
+      }
+
+      result =
+        build(%{
+          requests: [group_member, request("solo", :approval_pending, "other")],
+          command_rows: [
+            command_row("member", :approval_pending),
+            command_row("solo", :approval_pending)
+          ],
+          groups_awaiting: [
+            %{
+              id: "g1",
+              title: "Load shed",
+              member_count: 40,
+              target_count: 40,
+              requested_by: %{"user_id" => "other"},
+              requested_at: ago(900)
+            }
+          ]
+        })
+
+      assert [%{id: "approval:viewer", count: 2, since: since} = item] = result.items
+      assert since == ago(900)
+      assert [%{id: "solo"}] = item.command_requests
+      assert [%{id: "g1", member_count: 40}] = item.command_groups
+    end
+
     test "approval-pending requests count only when another operator requested them" do
       result =
         build(%{

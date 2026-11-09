@@ -10,26 +10,40 @@ defmodule Cadence.Reads.CommandCounts do
   """
 
   alias Cadence.Commanding.CommandRequest
-  alias Cadence.Reads.Commands
+  alias Cadence.Commanding.Groups.GroupStore
+  alias Cadence.Reads.{CommandGroups, Commands}
 
   @spec load(binary(), binary(), binary() | nil) :: map()
   def load(organization_id, mission_id, viewer_user_id) do
     summary = Commands.summary(organization_id, mission_id)
     requests = Cadence.Commanding.list_command_requests(organization_id, mission_id)
+    groups = GroupStore.list(organization_id, mission_id, states: [:approval_pending])
 
-    build(summary, requests, viewer_user_id)
+    build(summary, requests, viewer_user_id, groups)
   end
 
-  @spec build(map(), [CommandRequest.t()], binary() | nil) :: map()
-  def build(summary, requests, viewer_user_id) do
-    pending = Enum.filter(requests, &(&1.lifecycle_state == :approval_pending))
+  @doc """
+  Approvals count **decisions**: a standalone request is one, and a command
+  group waiting for its second GO is one however many members it has.
+  """
+  @spec build(map(), [CommandRequest.t()], binary() | nil, [map()]) :: map()
+  def build(summary, requests, viewer_user_id, groups \\ []) do
+    pending =
+      Enum.filter(
+        requests,
+        &(&1.lifecycle_state == :approval_pending and is_nil(&1.metadata["group"]))
+      )
+
+    groups = Enum.filter(groups, &(&1.state == :approval_pending))
 
     %{
       queued: summary.queued_count + summary.release_pending_count,
       in_flight: summary.in_flight_count,
       failed: summary.failed_count + summary.indeterminate_count,
-      approval_pending: length(pending),
-      awaiting_viewer: Enum.count(pending, &(requester_id(&1) != viewer_user_id))
+      approval_pending: length(pending) + length(groups),
+      awaiting_viewer:
+        Enum.count(pending, &(requester_id(&1) != viewer_user_id)) +
+          Enum.count(groups, &CommandGroups.awaiting?(&1, viewer_user_id))
     }
   end
 

@@ -88,9 +88,11 @@ freshness to the second; at 1 Hz feeds, throttle that to about 10 s client-side)
   profile was deleted.
 - `commands.queued` counts queued plus release-pending requests. `commands.in_flight` counts
   released requests awaiting verification. `commands.failed` counts failed or indeterminate
-  requests. `commands.awaiting_viewer` counts approval-pending requests the viewer did not
-  request; this is the "await your GO" number (U11). It does not yet apply the D7 eligibility
-  policy.
+  requests. `commands.approval_pending` and `awaiting_viewer` count **decisions**: a standalone
+  approval-pending request is one, and a command group waiting for its second GO is one however
+  many members it has. `awaiting_viewer` is the viewer's share ("await your GO", U11): requests
+  they didn't make, and groups where they're an eligible approver (not the requester, and the
+  named approver if one was picked).
 - `limits.configured`: `false` when the mission has no limit definitions. Show the P3 "Limits &
   Alarming not configured" item and treat `limit_state` as `no_data`.
 - **Contact facts** (M7) come from **booked provider reservations** (see contacts.md), judged at
@@ -227,7 +229,7 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
 | --- | --- | --- | --- | --- |
 | `alarm` | 1 critical, 2 caution | `critical` / `caution` | `{source, severity, point, condition}` of each spacecraft's **worst** active alarm episode (critical, then unacknowledged, then newest) | `source` (`catalog_monitoring` / `ground_limit`), `acknowledged` (members acknowledged), `point` (with `unit`), `condition` (the episode's `source_state`), `spacecraft` (with `value` = last value, `first_crossed_at` = episode opened, `episode_id`, `status` `new`/`acknowledged`, `assignee`) |
 | `command_failed` | 1 | `critical` | `{command, outcome}`, failures within `failure_lookback_s` | `command {id, name}`, `outcome` (`failed` = release or verify failed, `indeterminate` = release uncertain), `command_requests`, `spacecraft` (resolved targets) |
-| `approval` | 2 | `caution` | one item: approval-pending requests **not** requested by the viewer | `command_requests`, `spacecraft` |
+| `approval` | 2 | `caution` | one item: decisions waiting on the viewer: standalone approval-pending requests they didn't make, plus **command groups** awaiting their GO (one each) | `command_requests` (standalone only), `command_groups [{id, title, member_count, target_count, requested_by, requested_at}]`, `spacecraft`; `count` = requests + groups |
 | `stale` | 2 | `stale` | plane (`plane: null` = no plane metadata) | `plane`, `spacecraft` |
 | `setup` | 3 | `off` | one per readiness finding with severity `blocker` or `not_set_up` | `finding` (the readiness finding: `id, area, severity, cause, title, body, affected_count, fix`) |
 | `limits_not_configured` | 3 | `off` | — (omitted when the limits app itself isn't installed; that is a `setup` item) | none |

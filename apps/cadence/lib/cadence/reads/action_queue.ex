@@ -27,7 +27,15 @@ defmodule Cadence.Reads.ActionQueue do
 
   alias Cadence.Auth.Scope
   alias Cadence.Reads.ActionQueue.{AlarmItems, Item}
-  alias Cadence.Reads.{AlarmEpisodes, CommandCounts, Commands, FleetStatus, Readiness}
+
+  alias Cadence.Reads.{
+    AlarmEpisodes,
+    CommandCounts,
+    CommandGroups,
+    Commands,
+    FleetStatus,
+    Readiness
+  }
 
   @default_failure_lookback_s 86_400
   @episode_limit 200
@@ -68,6 +76,8 @@ defmodule Cadence.Reads.ActionQueue do
           Enum.map(commands.rows, & &1.target)
         ),
       requests: requests,
+      groups_awaiting:
+        CommandGroups.list(organization_id, mission_id, viewer_user_id, awaiting_me: true),
       viewer_user_id: viewer_user_id,
       limits_configured?: Cadence.Limits.list_limit_definitions(mission_id) != [],
       findings: Readiness.evaluate(organization_id, mission_id).findings,
@@ -151,30 +161,53 @@ defmodule Cadence.Reads.ActionQueue do
       DateTime.compare(row.occurred_at, cutoff) != :lt
   end
 
-  defp approval_items(%{command_rows: rows, requests: requests, viewer_user_id: viewer}, targets) do
+  # A decision waiting on the viewer: standalone approval-pending requests they didn't make,
+  # and command groups awaiting their GO (one each, however many members).
+  defp approval_items(
+         %{command_rows: rows, requests: requests, viewer_user_id: viewer} = input,
+         targets
+       ) do
     others =
       requests
-      |> Enum.filter(&(&1.lifecycle_state == :approval_pending))
+      |> Enum.filter(&(&1.lifecycle_state == :approval_pending and is_nil(&1.metadata["group"])))
       |> Enum.reject(&(CommandCounts.requester_id(&1) == viewer))
       |> MapSet.new(& &1.command_request_id)
 
-    case rows
-         |> Enum.filter(&MapSet.member?(others, &1.command_request_id))
-         |> Enum.sort_by(&(&1.requested_at || &1.occurred_at), &Item.earlier?/2) do
-      [] ->
-        []
+    waiting =
+      rows
+      |> Enum.filter(&MapSet.member?(others, &1.command_request_id))
+      |> Enum.sort_by(&(&1.requested_at || &1.occurred_at), &Item.earlier?/2)
 
-      waiting ->
-        Item.new(%{
-          id: "approval:viewer",
-          priority: 2,
-          kind: :approval,
-          state: :caution,
-          since: waiting |> Enum.map(& &1.requested_at) |> Item.min_datetime(),
-          count: length(waiting),
-          spacecraft: target_members(waiting, targets),
-          command_requests: Enum.map(waiting, &request_ref(&1, targets))
-        })
+    groups = Map.get(input, :groups_awaiting, [])
+
+    if waiting == [] and groups == [] do
+      []
+    else
+      Item.new(%{
+        id: "approval:viewer",
+        priority: 2,
+        kind: :approval,
+        state: :caution,
+        since:
+          Item.min_datetime(
+            Enum.map(waiting, & &1.requested_at) ++ Enum.map(groups, & &1.requested_at)
+          ),
+        count: length(waiting) + length(groups),
+        spacecraft: target_members(waiting, targets),
+        command_requests: Enum.map(waiting, &request_ref(&1, targets)),
+        command_groups:
+          Enum.map(
+            groups,
+            &Map.take(&1, [
+              :id,
+              :title,
+              :member_count,
+              :target_count,
+              :requested_by,
+              :requested_at
+            ])
+          )
+      })
     end
   end
 
