@@ -25,6 +25,7 @@ defmodule Cadence.Contacts.ProviderReservations do
   alias Cadence.GroundNetworks.Validation
   alias Cadence.Missions
   alias Cadence.Persistence.JsonDocument
+  alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Repo
 
   alias Cadence.Platform.{ContentHash, ResolutionEvidence}
@@ -70,8 +71,28 @@ defmodule Cadence.Contacts.ProviderReservations do
       )
       |> Repo.update_all(set: [operator_review_document: JsonDocument.wrap_value(metadata_patch)])
 
+    if count > 0,
+      do: ScopedReadUpdates.publish(:contacts_changed, grant.organization_id, grant.mission_id)
+
     {:ok, count}
   end
+
+  # Console read invalidation (`:contacts_changed`) after a reservation write commits.
+  # `ScopedReadUpdates` skips publishing inside a transaction, so a write nested in a caller's
+  # transaction never announces a change that may still roll back.
+  defp published({:ok, _} = result, organization_id, mission_id) do
+    ScopedReadUpdates.publish(:contacts_changed, organization_id, mission_id)
+    result
+  end
+
+  defp published(result, _organization_id, _mission_id), do: result
+
+  defp published_reservation({:ok, %{mission_id: mission_id}, _outcome} = result, organization_id) do
+    ScopedReadUpdates.publish(:contacts_changed, organization_id, mission_id)
+    result
+  end
+
+  defp published_reservation(result, _organization_id), do: result
 
   @allowed_transitions %{
     requesting: ~w(requesting pending confirmed active completed unknown rejected failed)a,
@@ -95,6 +116,10 @@ defmodule Cadence.Contacts.ProviderReservations do
 
   @doc "Resolves durable reservation evidence without making a provider mutation."
   def resolve_attempt(org, mission, id, evidence) do
+    published(resolve_attempt_unpublished(org, mission, id, evidence), org, mission)
+  end
+
+  defp resolve_attempt_unpublished(org, mission, id, evidence) do
     Repo.transaction(fn -> resolve_attempt_locked(org, mission, id, evidence) end)
   end
 
@@ -261,6 +286,12 @@ defmodule Cadence.Contacts.ProviderReservations do
   @spec create_attempt_with_outcome(binary(), ProviderReservation.t() | map()) ::
           {:ok, ProviderReservation.t(), :created | :existing} | {:error, term()}
   def create_attempt_with_outcome(organization_id, attrs) when is_binary(organization_id) do
+    organization_id
+    |> create_attempt_with_outcome_unpublished(attrs)
+    |> published_reservation(organization_id)
+  end
+
+  defp create_attempt_with_outcome_unpublished(organization_id, attrs) do
     with {:ok, reservation} <- prepare_reservation(organization_id, attrs),
          {:ok, _mission} <- Missions.fetch_mission(organization_id, reservation.mission_id),
          :ok <- validate_documents(reservation) do
@@ -521,6 +552,17 @@ defmodule Cadence.Contacts.ProviderReservations do
           {:ok, ProviderReservation.t()} | {:error, term()}
   def record_provider_response(organization_id, mission_id, provider_reservation_id, response)
       when is_map(response) do
+    organization_id
+    |> record_provider_response_unpublished(mission_id, provider_reservation_id, response)
+    |> published(organization_id, mission_id)
+  end
+
+  defp record_provider_response_unpublished(
+         organization_id,
+         mission_id,
+         provider_reservation_id,
+         response
+       ) do
     with {:ok, reservation} <- fetch(organization_id, mission_id, provider_reservation_id),
          :ok <- validate_document(response, :response_document),
          {:ok, reservation, initial_response?} <- observe_provider_revision(reservation, response),
@@ -551,6 +593,17 @@ defmodule Cadence.Contacts.ProviderReservations do
           {:ok, ProviderReservation.t()} | {:error, term()}
   def record_provider_error(organization_id, mission_id, provider_reservation_id, error_document)
       when is_map(error_document) do
+    organization_id
+    |> record_provider_error_unpublished(mission_id, provider_reservation_id, error_document)
+    |> published(organization_id, mission_id)
+  end
+
+  defp record_provider_error_unpublished(
+         organization_id,
+         mission_id,
+         provider_reservation_id,
+         error_document
+       ) do
     with {:ok, reservation} <- fetch(organization_id, mission_id, provider_reservation_id),
          :ok <- validate_document(error_document, :last_error_document) do
       requested_state =
@@ -569,6 +622,10 @@ defmodule Cadence.Contacts.ProviderReservations do
   @spec mark_canceling(binary(), binary(), binary(), keyword()) ::
           {:ok, ProviderReservation.t()} | {:error, term()}
   def mark_canceling(org, mission, id, opts \\ []) do
+    published(mark_canceling_unpublished(org, mission, id, opts), org, mission)
+  end
+
+  defp mark_canceling_unpublished(org, mission, id, opts) do
     Repo.transaction(fn ->
       row =
         ProviderReservationRow
@@ -616,6 +673,16 @@ defmodule Cadence.Contacts.ProviderReservations do
            }}
           | {:error, term()}
   def materialize_scheduled_contact(organization_id, mission_id, provider_reservation_id) do
+    organization_id
+    |> materialize_scheduled_contact_unpublished(mission_id, provider_reservation_id)
+    |> published(organization_id, mission_id)
+  end
+
+  defp materialize_scheduled_contact_unpublished(
+         organization_id,
+         mission_id,
+         provider_reservation_id
+       ) do
     with {:ok, reservation} <- fetch(organization_id, mission_id, provider_reservation_id),
          :ok <- ensure_materializable(reservation) do
       Multi.new()
@@ -660,6 +727,17 @@ defmodule Cadence.Contacts.ProviderReservations do
           {:ok, ProviderReservation.t()} | {:error, term()}
   def apply_provider_status(organization_id, mission_id, provider_reservation_id, response)
       when is_map(response) do
+    organization_id
+    |> apply_provider_status_unpublished(mission_id, provider_reservation_id, response)
+    |> published(organization_id, mission_id)
+  end
+
+  defp apply_provider_status_unpublished(
+         organization_id,
+         mission_id,
+         provider_reservation_id,
+         response
+       ) do
     case record_provider_response(
            organization_id,
            mission_id,
