@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import type { ApiError, RemoteState } from "@/api";
 import { ApButton, ApCallout, ApCheckRows, ApPanel, ApRemote, plural, type ApCheckRow } from "@/ui";
-import { humanize, itemLine, type Preview } from "./actions.ts";
+import { groupedLines, humanize, type Preview } from "./actions.ts";
 
 /** K2 Checks: the server's dry run of the staged set (validation, conflicts; more kinds in P2). */
 /** `leftBy` names what the conflict's base came from ("r8"), for the conflict sentence. */
@@ -25,11 +25,8 @@ function rows(preview: Preview): readonly ApCheckRow[] {
           : check.key === "compatibility"
             ? "Profile framing matches every transport's ingress"
             : "Every change is valid"
-        : `${plural(check.items.length, "problem")}`,
-    detail: check.items
-      .slice(0, 5)
-      .map((i) => itemLine(i, props.leftBy))
-      .join(" · "),
+        : plural(groupedLines(check.items).length, "problem"),
+    detail: groupedLines(check.items, props.leftBy).slice(0, 5).join(" · "),
     ...(check.verdict === "go"
       ? { state: "nominal" as const, verdict: "GO" }
       : check.verdict === "hold"
@@ -55,6 +52,14 @@ function failureText(error: ApiError): string {
       return `Checks couldn't run: ${"message" in error ? error.message : "sign in again."}`;
   }
 }
+/** Raw comparisons behind the plain sentences (ux: machine detail goes to Technical details). */
+const technical = computed(() =>
+  props.preview.status === "ready"
+    ? props.preview.value.checks.flatMap((c) =>
+        c.items.flatMap((i) => (i.detail ? [i.detail] : [])),
+      )
+    : [],
+);
 const meta = computed(() =>
   props.preview.status === "ready"
     ? `Verdict ${props.preview.value.verdict.replace("_", "-")}`
@@ -71,7 +76,15 @@ const meta = computed(() =>
       >
     </ApCallout>
     <ApRemote v-else :state="preview" loading-label="Running checks…" @retry="$emit('retry')">
-      <template #default="{ value }"><ApCheckRows :rows="rows(value)" /></template>
+      <template #default="{ value }">
+        <ApCheckRows :rows="rows(value)" />
+        <details v-if="technical.length > 0" class="border-t border-hairline px-4 py-2.5">
+          <summary class="ap-label cursor-pointer">Technical details</summary>
+          <ul class="m-0 mt-2 flex list-none flex-col gap-1 p-0 font-mono text-xs text-text-3">
+            <li v-for="(t, i) in technical" :key="i">{{ t }}</li>
+          </ul>
+        </details>
+      </template>
     </ApRemote>
   </ApPanel>
 </template>

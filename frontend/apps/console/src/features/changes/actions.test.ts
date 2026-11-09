@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
-import { itemLine, previewReader, type PreviewItem } from "./actions.ts";
+import { groupedLines, itemLine, previewReader, type PreviewItem } from "./actions.ts";
 
 const base: PreviewItem = {
   op_id: null,
@@ -13,6 +13,7 @@ const base: PreviewItem = {
   profile_value: undefined,
   transport_value: undefined,
   sentence: undefined,
+  detail: undefined,
   cause: undefined,
   entity_name: undefined,
   paths: undefined,
@@ -183,5 +184,34 @@ describe("conflict sentences (api 062a73f8, ux rollback review #1)", () => {
     expect(itemLine(outside, "r8")).toBe(
       "Earendil Block 1 · frame size is 1,024 bytes now, not 900 bytes as r8 left it (changed outside a change set). Change it by hand.",
     );
+  });
+});
+
+describe("compatibility lines (ux rollback review #7, api 76a66307)", () => {
+  const mismatch = (station: string): PreviewItem => ({
+    ...base,
+    kind: "spacecraft_profile",
+    entity_id: "profile-earendil-block-1",
+    entity_name: "Earendil Block 1 — Demo",
+    reason: "framing_mismatch",
+    spacecraft_count: 1,
+    profile_value: { path: "frame_parameters.frame_size", value: 900 },
+    transport_value: {
+      transport: { id: `t-${station}`, name: `${station} (Demo) S-band downlink` },
+      path: "ingress_metadata.frame_size",
+      value: 1115,
+    },
+    sentence: `1 spacecraft on Earendil Block 1 — Demo would decode 900-byte frames, but ${station} (Demo) S-band downlink sends 1,115-byte frames.`,
+    detail: `frame_parameters.frame_size = 900 (profile) vs ingress_metadata.frame_size = 1115 (${station})`,
+  });
+  it("folds transports that differ only by name into one line", () => {
+    expect(groupedLines([mismatch("Santiago"), mismatch("Svalbard")])).toEqual([
+      "1 spacecraft on Earendil Block 1 — Demo would decode 900-byte frames, but 2 transports send 1,115-byte frames (Santiago, Svalbard).",
+    ]);
+  });
+  it("keeps a single mismatch as the server's sentence, without the raw detail", () => {
+    expect(groupedLines([mismatch("Santiago")])).toEqual([
+      "1 spacecraft on Earendil Block 1 — Demo would decode 900-byte frames, but Santiago (Demo) S-band downlink sends 1,115-byte frames.",
+    ]);
   });
 });

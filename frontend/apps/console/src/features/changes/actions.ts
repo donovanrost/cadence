@@ -28,6 +28,8 @@ const previewItem = object({
     ),
   ),
   sentence: decoders.optional(nullable(string)),
+  /** Raw comparison for Technical details (api 76a66307); the sentence is the plain reading. */
+  detail: decoders.optional(nullable(string)),
   cause: decoders.optional(nullable(token)),
   entity_name: decoders.optional(nullable(string)),
   // Conflict detail (api 062a73f8): what moved under a staged change, where and by whom.
@@ -93,6 +95,8 @@ export function humanize(key: string): string {
 export function itemLine(item: PreviewItem, leftBy?: string): string {
   const conflict = conflictSentences(item, leftBy);
   if (conflict) return conflict;
+  // A plain sentence with its raw detail split off reads on its own (ux rollback review #7).
+  if (item.sentence && item.detail) return item.sentence;
   if (item.profile_value && item.transport_value) {
     const both = `profile ${item.profile_value.path} = ${shown(item.profile_value.value)} vs ${item.transport_value.transport.name} ${item.transport_value.path} = ${shown(item.transport_value.value)}`;
     const count = item.spacecraft_count == null ? "" : ` · ${item.spacecraft_count} spacecraft`;
@@ -363,5 +367,49 @@ export function previewOps(
     method: "POST",
     body: { ops: key.ops },
     signal,
+  });
+}
+
+/** "Santiago (Demo) S-band downlink" → "Santiago": the station part names a transport in a list. */
+function shortTransport(name: string): string {
+  const cut = name.search(/ \(| S-band| X-band| Ka-band/);
+  return cut > 0 ? name.slice(0, cut) : name;
+}
+
+/**
+ * Check rows' lines, with framing mismatches that differ only by transport folded into one line:
+ * "… would decode 900-byte frames, but 2 transports send 1,115-byte frames (Santiago, Svalbard)."
+ */
+export function groupedLines(items: readonly PreviewItem[], leftBy?: string): readonly string[] {
+  const groups = new Map<string, PreviewItem[]>();
+  const order: string[] = [];
+  items.forEach((item, i) => {
+    const key =
+      item.reason === "framing_mismatch" && item.profile_value && item.transport_value
+        ? JSON.stringify([
+            item.entity_id,
+            item.profile_value.path,
+            item.profile_value.value,
+            item.transport_value.path,
+            item.transport_value.value,
+          ])
+        : `#${i}`;
+    if (!groups.has(key)) order.push(key);
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  });
+  return order.map((key) => {
+    const group = groups.get(key) ?? [];
+    const first = group[0];
+    if (!first) return "";
+    if (group.length === 1) return itemLine(first, leftBy);
+    const names = group.flatMap((g) =>
+      g.transport_value ? [g.transport_value.transport.name] : [],
+    );
+    const one = first.transport_value?.transport.name ?? "";
+    const sentence = first.sentence ?? "";
+    const folded = sentence.replace(`but ${one} sends`, `but ${group.length} transports send`);
+    return folded !== sentence
+      ? `${folded.replace(/\.$/, "")} (${names.map(shortTransport).join(", ")}).`
+      : group.map((g) => itemLine(g, leftBy)).join(" · ");
   });
 }
