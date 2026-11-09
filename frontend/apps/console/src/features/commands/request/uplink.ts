@@ -1,16 +1,11 @@
 import { plural } from "@/ui";
 import type { Group, MemberStage } from "../groups/show.ts";
-import type { PersonName } from "../groups/words.ts";
+import { NEEDS_YOU, type PersonName } from "../groups/words.ts";
 
 /**
  * Uplink & verify (CommandFlow C3) in v1: the per-target trail from the group read. Only Verify
  * is green; commands without a verifier read "not verifiable", never green.
  */
-export const NEEDS_YOU: readonly MemberStage[] = [
-  "verify_failed",
-  "release_failed",
-  "indeterminate",
-];
 const NOT_STARTED: readonly MemberStage[] = ["awaiting_go", "queued_for_contact"];
 
 export type Pipeline = Readonly<{

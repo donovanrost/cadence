@@ -1,5 +1,6 @@
 import {
   decoders as d,
+  DecodeError,
   request,
   type ApiError,
   type ApiResult,
@@ -108,6 +109,33 @@ export const preflightReader = d.object({
 });
 export type Preflight = Decoded<typeof preflightReader>;
 
+export const memberStages = [
+  "awaiting_go",
+  "queued_for_contact",
+  "radiating",
+  "executed",
+  "verified",
+  "no_verifier",
+  "verify_failed",
+  "release_failed",
+  "indeterminate",
+  "canceled",
+  "rejected",
+  "excluded",
+] as const;
+export type MemberStage = (typeof memberStages)[number];
+export const memberStage = d.oneOf(memberStages);
+
+/** `{stage: target count}`: keys must be known stages. */
+export const progressReader: Reader<Partial<Record<MemberStage, number>>> = (value, path = "") => {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    throw new DecodeError(path, "object");
+  const out: Partial<Record<MemberStage, number>> = {};
+  for (const [key, count] of Object.entries(value))
+    out[memberStage(key, `${path}.${key}`)] = d.integer(count, `${path}.${key}`);
+  return out;
+};
+
 export const groupStates = [
   "approval_pending",
   "queued",
@@ -130,6 +158,8 @@ export const groupRow = d.object({
   second_go_required: d.boolean,
   awaiting_me: d.boolean,
   operation_id: d.nullable(d.string),
+  // Not in the list contract yet (asked api-ops); the State cell says only "GO given" without it.
+  progress: d.optional(progressReader),
 });
 export type GroupRow = Decoded<typeof groupRow>;
 

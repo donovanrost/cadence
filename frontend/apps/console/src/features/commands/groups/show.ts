@@ -1,14 +1,9 @@
-import {
-  decoders as d,
-  DecodeError,
-  request,
-  type ApiResult,
-  type Decoded,
-  type Reader,
-} from "@/api/index.ts";
+import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
 import {
   actor,
   groupsBase,
+  memberStage as stage,
+  progressReader as progress,
   groupStates,
   outcomeOf,
   preflightReader,
@@ -18,22 +13,7 @@ import {
 
 /** One group (commanding.md §GET /command-groups/:id): Approve and Uplink & verify read this. */
 
-export const memberStages = [
-  "awaiting_go",
-  "queued_for_contact",
-  "radiating",
-  "executed",
-  "verified",
-  "no_verifier",
-  "verify_failed",
-  "release_failed",
-  "indeterminate",
-  "canceled",
-  "rejected",
-  "excluded",
-] as const;
-export type MemberStage = (typeof memberStages)[number];
-const stage = d.oneOf(memberStages);
+export { memberStages, type MemberStage } from "./api.ts";
 
 const member = d.object({
   position: d.integer,
@@ -97,16 +77,6 @@ const event = d.object({
   ),
 });
 export type GroupEvent = Decoded<typeof event>;
-
-/** `{stage: target count}`: keys must be known stages. */
-const progress: Reader<Partial<Record<MemberStage, number>>> = (value, path = "") => {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    throw new DecodeError(path, "object");
-  const out: Partial<Record<MemberStage, number>> = {};
-  for (const [key, count] of Object.entries(value))
-    out[stage(key, `${path}.${key}`)] = d.integer(count, `${path}.${key}`);
-  return out;
-};
 
 export const groupReader = d.object({
   id: d.token,

@@ -1,4 +1,5 @@
 import type { GroupRow, GroupState } from "../groups/api.ts";
+import { finished } from "../groups/words.ts";
 
 /**
  * Commands (IA rail 04): requests grouped by state. `?awaiting=me` is the GO-poll entry from Now
@@ -15,6 +16,7 @@ export const TAB_LABELS: Readonly<Record<CommandTab, string>> = {
 };
 
 const CLOSED: readonly GroupState[] = ["rejected", "sent_back", "aborted"];
+const done = (row: GroupRow) => finished(row.state, row.progress, row.target_count);
 
 export function inTab(row: GroupRow, tab: CommandTab): boolean {
   switch (tab) {
@@ -22,10 +24,12 @@ export function inTab(row: GroupRow, tab: CommandTab): boolean {
       return row.awaiting_me;
     case "pending":
       return row.state === "approval_pending";
+    // A released request leaves Released once every target is final (qa #28); its approval
+    // state stays `queued`, so this reads the row's progress.
     case "queued":
-      return row.state === "queued";
+      return row.state === "queued" && !done(row);
     case "closed":
-      return CLOSED.includes(row.state);
+      return CLOSED.includes(row.state) || done(row);
   }
 }
 

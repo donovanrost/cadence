@@ -2,7 +2,9 @@ import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { preflightReader, type Preflight } from "../groups/api.ts";
 import { groupOf, showBody } from "../groups/fixtures.ts";
-import { eventText, memberStageWord } from "../groups/words.ts";
+import { eventText, memberStageWord, statusTag } from "../groups/words.ts";
+import { inTab } from "../list/list.ts";
+import type { GroupRow } from "../groups/api.ts";
 import { cannotDecide, decisionOptions, flaggedTargets, noGoAfter } from "./decision.ts";
 import { abortable, headline, pipeline } from "./uplink.ts";
 
@@ -186,5 +188,50 @@ describe("closed requests and exclusions (qa matrix nits)", () => {
     expect(flaggedTargets(review([contactHold, conflict]), name)).toEqual([
       { spacecraftId: "sc-2", name: "SC-2" },
     ]);
+  });
+});
+
+describe("delivered requests stay 'queued' (approval-only state, qa #28)", () => {
+  it("tags a released request by its delivery, never just queued", () => {
+    expect(statusTag("queued", { queued_for_contact: 2 }, 2).label).toBe(
+      "GO given · released to the queue",
+    );
+    expect(statusTag("queued", { no_verifier: 1 }, 1)).toEqual({
+      label: "1/1 delivered",
+      state: "stale",
+    });
+    expect(statusTag("queued", { verified: 2 }, 2).state).toBe("nominal");
+    expect(statusTag("queued", { radiating: 1, queued_for_contact: 1 }, 2)).toEqual({
+      label: "0/2 delivered",
+      state: "live",
+    });
+    expect(statusTag("queued", { verified: 1, verify_failed: 1 }, 2)).toEqual({
+      label: "2/2 delivered · 1 need you",
+      state: "crit",
+    });
+    expect(statusTag("queued", undefined, 1).label).toBe("GO given");
+    expect(statusTag("rejected", { rejected: 1 }, 1).label).toBe("NO-GO");
+  });
+
+  it("moves a finished run from Released to Closed", () => {
+    const row = (progress: GroupRow["progress"]): GroupRow => ({
+      id: "g",
+      state: "queued",
+      title: "t",
+      requested_by: { actor_kind: "user", user_id: "u" },
+      requested_at: "2026-11-09T15:26:26Z",
+      requested_approver_user_id: null,
+      member_count: 1,
+      target_count: 1,
+      command_count: 1,
+      second_go_required: false,
+      awaiting_me: false,
+      operation_id: null,
+      progress,
+    });
+    expect(inTab(row({ no_verifier: 1 }), "closed")).toBe(true);
+    expect(inTab(row({ no_verifier: 1 }), "queued")).toBe(false);
+    expect(inTab(row({ queued_for_contact: 1 }), "queued")).toBe(true);
+    expect(inTab(row(undefined), "queued")).toBe(true);
   });
 });

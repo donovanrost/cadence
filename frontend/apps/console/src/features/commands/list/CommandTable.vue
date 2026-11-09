@@ -2,7 +2,7 @@
 import { RouterLink } from "vue-router";
 import { formatRelative, plural, useNow, ApTable, ApTag, type ApColumn } from "@/ui";
 import type { GroupRow } from "../groups/api.ts";
-import { GROUP_STATE, GROUP_STATE_WORDS, type PersonName } from "../groups/words.ts";
+import { statusTag, type PersonName } from "../groups/words.ts";
 
 /** Command requests. The Title cell links to the request (name-cell link); no row actions yet. */
 defineProps<{ rows: readonly GroupRow[]; nameOf: PersonName }>();
@@ -41,9 +41,9 @@ const view = (r: GroupRow) => (r.awaiting_me ? "review" : undefined);
       }}</time>
     </template>
     <template #cell-state="{ row }">
-      <ApTag
-        :state="row.awaiting_me ? 'caution' : GROUP_STATE[row.state]"
-        :label="row.awaiting_me ? 'Awaits your GO' : GROUP_STATE_WORDS[row.state]"
+      <ApTag v-if="row.awaiting_me" state="caution" label="Awaits your GO" /><ApTag
+        v-else
+        v-bind="statusTag(row.state, row.progress, row.target_count)"
       />
     </template>
   </ApTable>

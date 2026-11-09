@@ -1,6 +1,6 @@
 import { plural, type OpState } from "@/ui";
-import type { GroupState } from "./api.ts";
-import type { GroupEvent, MemberStage } from "./show.ts";
+import type { GroupState, MemberStage } from "./api.ts";
+import type { GroupEvent } from "./show.ts";
 
 /**
  * Words for command groups (CommandFlow: "sent is not done"; only Verify turns green). Progress
@@ -58,6 +58,57 @@ export const GROUP_STATE: Readonly<Record<GroupState, OpState>> = {
   sent_back: "off",
   aborted: "off",
 };
+
+/** `{stage: target count}`, from the show read or a list row. */
+export type Progress = Readonly<Partial<Record<MemberStage, number>>>;
+
+/** Stages a target can't leave. */
+export const FINAL_STAGES: readonly MemberStage[] = [
+  "verified",
+  "no_verifier",
+  "verify_failed",
+  "release_failed",
+  "indeterminate",
+  "canceled",
+  "rejected",
+  "excluded",
+];
+/** Reached the spacecraft (verify outcome aside). */
+const DELIVERED: readonly MemberStage[] = ["executed", "verified", "no_verifier", "verify_failed"];
+export const NEEDS_YOU: readonly MemberStage[] = [
+  "verify_failed",
+  "release_failed",
+  "indeterminate",
+];
+
+const count = (p: Progress, stages: readonly MemberStage[]) =>
+  stages.reduce((sum, s) => sum + (p[s] ?? 0), 0);
+
+/** A released request whose every target has reached a final stage (the run is over). */
+export const finished = (state: GroupState, p: Progress | undefined, targets: number) =>
+  state === "queued" && p !== undefined && targets > 0 && count(p, FINAL_STAGES) >= targets;
+
+/**
+ * A request's status tag. After GO the approval state stays `queued` for good (commanding.md:
+ * delivery lives in progress), so a released request reads its delivery, never just "queued".
+ * Without progress (list rows before api adds it) it says only what's certain: GO was given.
+ */
+export function statusTag(
+  state: GroupState,
+  p: Progress | undefined,
+  targets: number,
+): Readonly<{ label: string; state: OpState }> {
+  if (state !== "queued") return { label: GROUP_STATE_WORDS[state], state: GROUP_STATE[state] };
+  if (p === undefined) return { label: "GO given", state: "neutral" };
+  const final = count(p, FINAL_STAGES);
+  const started = count(p, DELIVERED) + count(p, ["radiating", "release_failed", "indeterminate"]);
+  if (started === 0 && final === 0) return { label: GROUP_STATE_WORDS.queued, state: "neutral" };
+  const needs = count(p, NEEDS_YOU);
+  const label = `${count(p, DELIVERED)}/${targets} delivered${needs ? ` · ${needs} need you` : ""}`;
+  if (needs) return { label, state: "crit" };
+  if (final >= targets) return { label, state: (p.verified ?? 0) >= targets ? "nominal" : "stale" };
+  return { label, state: p.radiating ? "live" : "neutral" };
+}
 
 export type PersonName = (userId: string | null) => string;
 

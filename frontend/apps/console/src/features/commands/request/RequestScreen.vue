@@ -5,7 +5,7 @@ import { TakeoverHeader } from "@/shell/index.ts";
 import { ApPageHeader, ApRemote, ApStationBar, ApTag } from "@/ui";
 import { useCommandAccess } from "../access.ts";
 import type { Group } from "../groups/show.ts";
-import { GROUP_STATE, GROUP_STATE_WORDS } from "../groups/words.ts";
+import { statusTag } from "../groups/words.ts";
 import ApproveView from "./ApproveView.vue";
 import UplinkView from "./UplinkView.vue";
 import { headline } from "./uplink.ts";
@@ -41,7 +41,7 @@ const queueRows = computed(() =>
     <template #default="{ value: g }">
       <TakeoverHeader
         :title="reviewing(g) ? 'Review command request' : 'Uplink & verify'"
-        :context="`${req.nameOf(g.requested_by.user_id)} · ${GROUP_STATE_WORDS[g.state]}`"
+        :context="`${req.nameOf(g.requested_by.user_id)} · ${statusTag(g.state, g.progress, g.target_count).label}`"
         :close="{ name: 'ops.commands' }"
         close-label="Close"
         title-as="p"
@@ -55,7 +55,7 @@ const queueRows = computed(() =>
         :title="reviewing(g) ? g.title : headline(g, req.nameOf)"
       >
         <template #status
-          ><ApTag :state="GROUP_STATE[g.state]" :label="GROUP_STATE_WORDS[g.state]"
+          ><ApTag v-bind="statusTag(g.state, g.progress, g.target_count)"
         /></template>
       </ApPageHeader>
       <ApproveView
