@@ -3,7 +3,7 @@ import { expectAccessible } from "./support/accessibility.ts";
 import { jsonProblem, missionApi, missionPath, openConsole } from "./support/console.ts";
 import { DEMO } from "./support/env.ts";
 import { allow, expect, test } from "./support/fixtures.ts";
-import { routeDegradedFleet, type Degradation } from "./support/fleet.ts";
+import { routeDegradedNow, type Degradation } from "./support/fleet.ts";
 
 // J1 · Now (fe-ops, 7cd1e7a4). Spec: docs/apogee/ux/screens/Now.md; data: /fleet (ops.md).
 const screen = missionPath("now");
@@ -48,7 +48,7 @@ function queue(page: Page): Locator {
 test.describe("Now (J1)", () => {
   test.describe("nothing received yet", () => {
     test.beforeEach(async ({ page }) => {
-      await routeDegradedFleet(page, nothingYet);
+      await routeDegradedNow(page, nothingYet);
     });
 
     test("is honest: no telemetry yet, unknowns shown as unknown", async ({ page }) => {
@@ -89,7 +89,7 @@ test.describe("Now (J1)", () => {
 
   test.describe("a bad shift (fixture over the real fleet)", () => {
     test.beforeEach(async ({ page }) => {
-      await routeDegradedFleet(page, badShift);
+      await routeDegradedNow(page, badShift);
       await openConsole(page, screen);
     });
 
@@ -140,7 +140,7 @@ test.describe("Now (J1)", () => {
   });
 
   test("all nominal says so plainly", async ({ page }) => {
-    await routeDegradedFleet(page, allNominal);
+    await routeDegradedNow(page, allNominal);
     await openConsole(page, screen);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       new RegExp(`all ${DEMO.spacecraftCount} nominal`, "i"),
@@ -166,7 +166,7 @@ test.describe("Now (J1)", () => {
     test.use({ viewport: { width: 390, height: 844 } });
 
     test("no horizontal scroll; the action queue comes first", async ({ page }) => {
-      await routeDegradedFleet(page, badShift);
+      await routeDegradedNow(page, badShift);
       await openConsole(page, screen);
       await expect(page.getByRole("heading", { level: 1 })).toHaveText(/need you/i);
       const [scrollWidth, innerWidth] = await page.evaluate(() => [

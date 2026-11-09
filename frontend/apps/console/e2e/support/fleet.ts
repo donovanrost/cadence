@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { missionApi } from "./console.ts";
+import { DEMO } from "./env.ts";
 
 /**
  * Fleet fixtures for Now / Fleet / Alarms specs. Contract: docs/apogee/api/ops.md (`/fleet`).
@@ -129,5 +130,173 @@ export async function routeDegradedFleet(page: Page, d: Degradation): Promise<vo
       // itself were broken, the screen would show its error state and the test would fail there.
       await route.abort().catch(() => undefined);
     }
+  });
+}
+
+type Row = Json;
+
+function member(row: Row) {
+  const worst = isJson(row["worst_point"]) ? row["worst_point"] : null;
+  return {
+    id: row["id"],
+    name: row["name"],
+    scid: row["scid"],
+    plane: row["plane"],
+    stale: row["stale"],
+    last_received_at: row["last_received_at"],
+    violating_points: row["violating_points"],
+    value: worst ? worst["value"] : null,
+    first_crossed_at: worst ? worst["received_at"] : null,
+  };
+}
+
+function item(fields: Json): Json {
+  return {
+    since: null,
+    due_at: null,
+    count: 0,
+    spacecraft: [],
+    point: null,
+    condition: null,
+    plane: null,
+    command: null,
+    outcome: null,
+    command_requests: [],
+    finding: null,
+    ...fields,
+  };
+}
+
+/**
+ * The `/action-queue` (M6, ops.md) a server would rank for a degraded fleet: alarm groups by
+ * {severity, point, condition}, one approval item, stale per plane, then P3 setup items.
+ */
+export function actionQueueFor(fleet: Json, awaitingViewer = 0): Json {
+  const rows = rowsOf(fleet);
+  const items: Json[] = [];
+  for (const severity of ["critical", "caution"] as const) {
+    const groups = new Map<string, Row[]>();
+    for (const row of rows.filter((r) => r["state"] === severity)) {
+      const worst = isJson(row["worst_point"]) ? row["worst_point"] : {};
+      const key = `${String(worst["point_name"])}:${String(worst["raw_limit_state"])}`;
+      groups.set(key, [...(groups.get(key) ?? []), row]);
+    }
+    for (const [key, group] of groups) {
+      const [pointName = "", condition = ""] = key.split(":");
+      const worst = isJson(group[0]?.["worst_point"]) ? group[0]["worst_point"] : {};
+      items.push(
+        item({
+          id: `alarm:${severity}:${String(worst["point_id"])}:${condition}`,
+          priority: severity === "critical" ? 1 : 2,
+          kind: "alarm",
+          state: severity,
+          since: worst["received_at"] ?? null,
+          count: group.length,
+          spacecraft: group.map(member),
+          point: { id: worst["point_id"], name: pointName, subsystem: "QA", unit: null },
+          condition,
+        }),
+      );
+    }
+  }
+  if (awaitingViewer > 0) {
+    const requests = Array.from({ length: awaitingViewer }, (_, i) => ({
+      id: `command_request_qa_${i + 1}`,
+      command_name: "SET_HEATER_SETPOINT",
+      target: { id: `spacecraft-earendil-00${i + 1}`, name: `EARENDIL-00${i + 1}` },
+      spacecraft_id: `spacecraft-earendil-00${i + 1}`,
+      requested_by: "QA Second Operator",
+      requested_at: new Date().toISOString(),
+      status: "approval_pending",
+      occurred_at: new Date().toISOString(),
+    }));
+    items.push(
+      item({
+        id: "approval",
+        priority: 2,
+        kind: "approval",
+        state: "caution",
+        count: awaitingViewer,
+        command_requests: requests,
+      }),
+    );
+  }
+  const stale = rows.filter((r) => r["state"] === "stale");
+  const planes = new Map<unknown, Row[]>();
+  for (const row of stale) planes.set(row["plane"], [...(planes.get(row["plane"]) ?? []), row]);
+  for (const [plane, group] of planes)
+    items.push(
+      item({
+        id: `stale:${String(plane)}`,
+        priority: 2,
+        kind: "stale",
+        state: "stale",
+        since: group[0]?.["last_received_at"] ?? null,
+        count: group.length,
+        plane,
+        spacecraft: group.map(member),
+      }),
+    );
+  if (isJson(fleet["limits"]) && fleet["limits"]["configured"] === false)
+    items.push(
+      item({
+        id: "limits_not_configured",
+        priority: 3,
+        kind: "limits_not_configured",
+        state: "off",
+      }),
+    );
+  const never = rows.filter((r) => r["state"] === "never_heard");
+  if (never.length > 0)
+    items.push(
+      item({
+        id: "never_heard",
+        priority: 3,
+        kind: "never_heard",
+        state: "off",
+        count: never.length,
+        spacecraft: never.map(member),
+      }),
+    );
+  const rank = (a: Json) => Number(a["priority"]);
+  items.sort((a, b) => rank(a) - rank(b));
+  const p1 = items.filter((i) => i["priority"] === 1);
+  return {
+    observed_at: new Date().toISOString(),
+    stale_after_s: fleet["stale_after_s"] ?? 900,
+    failure_lookback_s: 86400,
+    counts: {
+      p1: p1.length,
+      p2: items.filter((i) => i["priority"] === 2).length,
+      p3: items.filter((i) => i["priority"] === 3).length,
+      spacecraft_p1: new Set(
+        p1.flatMap((i) =>
+          (Array.isArray(i["spacecraft"]) ? i["spacecraft"] : []).map((s: Json) => s["id"]),
+        ),
+      ).size,
+    },
+    items,
+  };
+}
+
+/** Routes `/fleet` and `/action-queue` from one degraded fleet, so Now's panels agree. */
+export async function routeDegradedNow(page: Page, d: Degradation): Promise<void> {
+  let degraded: Json | null = null;
+  const fleetOnce = async (): Promise<Json> => {
+    if (degraded) return degraded;
+    const response = await page.request.get(`/api/console/v1/missions/${DEMO.missionId}/fleet`);
+    const body: unknown = await response.json();
+    if (!isJson(body) || !isJson(body["data"])) throw new Error("fleet fixture: unexpected body");
+    degraded = degradeFleet(body["data"], d);
+    return degraded;
+  };
+  await page.route(missionApi("fleet"), async (route) => {
+    await route.fulfill({ json: { data: await fleetOnce() } }).catch(() => undefined);
+  });
+  await page.route(missionApi("action-queue"), async (route) => {
+    const fleet = await fleetOnce();
+    await route
+      .fulfill({ json: { data: actionQueueFor(fleet, d.awaitingViewer ?? 0) } })
+      .catch(() => undefined);
   });
 }

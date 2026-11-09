@@ -4,8 +4,8 @@ import { missionPath, openConsole } from "./support/console.ts";
 import { DEMO, storageStateFor } from "./support/env.ts";
 import { expect, test } from "./support/fixtures.ts";
 
-// S2 · Add spacecraft wizard (fe-setup). Create is disabled until api's batch endpoint lands;
-// nothing here writes to the server. The draft lives in sessionStorage per mission.
+// S2 · Add spacecraft wizard (fe-setup). The batch is staged into the mission change set
+// (decision 1); nothing here clicks Stage, so nothing is written. The draft lives in sessionStorage per mission.
 const wizard = missionPath("setup/spacecraft/new");
 
 async function chooseProfile(page: Page) {
@@ -37,7 +37,7 @@ test.describe("Add spacecraft wizard, organization admin", () => {
     await expect(page.getByRole("textbox", { name: "Count" })).toBeVisible();
   });
 
-  test("walks a 4-spacecraft batch to review; create stays disabled with its reason", async ({
+  test("walks a 4-spacecraft batch to review; stage is enabled when every check passes", async ({
     page,
   }) => {
     await openConsole(page, wizard);
@@ -61,10 +61,10 @@ test.describe("Add spacecraft wizard, organization admin", () => {
     await expect(page.getByText("Batch preview")).toBeVisible();
     await expect(page.getByText("QA-SC-001")).toBeVisible();
 
-    const create = page.getByRole("button", { name: /create/i });
-    await expect(create).toHaveAttribute("aria-disabled", "true");
-    await expect(create).toHaveAccessibleDescription(/isn't available yet/);
-    await expect(page.getByText(/your draft is kept/i)).toBeVisible();
+    // Staging writes to the mission change set; this spec stops short of it (see changes.e2e.ts).
+    const stage = page.getByRole("button", { name: "Stage 4 spacecraft" });
+    await expect(stage).toBeVisible();
+    await expect(stage).not.toHaveAttribute("aria-disabled", "true");
     await expectAccessible(page);
   });
 
@@ -81,6 +81,9 @@ test.describe("Add spacecraft wizard, organization admin", () => {
     await continueTo(page, "orbit & routing");
     await continueTo(page, "review");
     await expect(page.getByText("NO-GO").first()).toBeVisible();
+    const stage = page.getByRole("button", { name: /^Stage/ });
+    await expect(stage).toHaveAttribute("aria-disabled", "true");
+    await expect(stage).toHaveAccessibleDescription(/Fix the NO-GO checks first/);
   });
 
   test("keeps the draft across a reload, and the close button keeps it too", async ({ page }) => {
@@ -102,15 +105,15 @@ test.describe("Add spacecraft wizard, organization admin", () => {
 test.describe("Add spacecraft wizard, organization member", () => {
   test.use({ storageState: storageStateFor("operator") });
 
-  test("can look but not create, and is told why", async ({ page }) => {
+  test("can look but not stage, and is told why", async ({ page }) => {
     await openConsole(page, wizard);
     await chooseProfile(page);
     await continueTo(page, "orbit & routing");
     await continueTo(page, "review");
-    const create = page.getByRole("button", { name: /create/i });
-    await expect(create).toHaveAttribute("aria-disabled", "true");
-    await expect(create).toHaveAccessibleDescription(
-      "Only an organization admin can create spacecraft.",
+    const stage = page.getByRole("button", { name: /^Stage/ });
+    await expect(stage).toHaveAttribute("aria-disabled", "true");
+    await expect(stage).toHaveAccessibleDescription(
+      "Only an organization admin can add spacecraft.",
     );
   });
 });

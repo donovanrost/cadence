@@ -1,5 +1,5 @@
 import { expectAccessible } from "./support/accessibility.ts";
-import { missionPath, openConsole } from "./support/console.ts";
+import { jsonData, jsonProblem, missionApi, missionPath, openConsole } from "./support/console.ts";
 import { allow, expect, test } from "./support/fixtures.ts";
 
 // Setup › Spacecraft detail, Profiles list, Catalog index (fe-setup).
@@ -39,15 +39,33 @@ test.describe("Setup profiles", () => {
 });
 
 test.describe("Setup catalog", () => {
-  test.use({ allowedDiagnostics: allow(/\/catalog -> 404/, /status of 404/) });
-
-  test("says the catalog index isn't available instead of showing an empty catalog", async ({
-    page,
-  }) => {
+  test("shows the seeded catalog's current revision and its last import", async ({ page }) => {
     await openConsole(page, missionPath("setup/catalog"));
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(/catalog/i);
-    await expect(page.getByText(/not available/i).first()).toBeVisible();
-    await expect(page.getByText(/no catalog|0 packets/i)).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByText(/revision 1/i).first()).toBeVisible();
+    await expect(page.getByText("demo_spacecraft.yaml").first()).toBeVisible();
+    await expect(page.getByText(/no catalog yet|not available/i)).toHaveCount(0);
     await expectAccessible(page);
+  });
+
+  test("a mission without a catalog says so and offers the import", async ({ page }) => {
+    await page.route(missionApi("catalog"), (route) =>
+      route.fulfill(jsonData({ databases: [], database: null })),
+    );
+    await openConsole(page, missionPath("setup/catalog"));
+    await expect(page.getByRole("heading", { level: 1, name: "No catalog yet" })).toBeVisible();
+  });
+
+  test.describe("on a server without the catalog endpoint", () => {
+    test.use({ allowedDiagnostics: allow(/\/catalog -> 404/, /status of 404/) });
+
+    test("says the catalog isn't available rather than showing an empty one", async ({ page }) => {
+      await page.route(missionApi("catalog"), (route) =>
+        route.fulfill(jsonProblem(404, "not_found")),
+      );
+      await openConsole(page, missionPath("setup/catalog"));
+      await expect(page.getByText("Catalog not available in the console yet")).toBeVisible();
+      await expect(page.getByText("No catalog yet")).toHaveCount(0);
+    });
   });
 });

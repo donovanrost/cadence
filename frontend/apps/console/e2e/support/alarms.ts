@@ -25,7 +25,7 @@ function row(spec: AlarmSpec) {
   return {
     id: `limit_event_qa_${spec.scid}_${spec.point.id}`,
     spacecraft_id: spacecraftId(spec.scid),
-    point: spec.point,
+    point: { ...spec.point, unit: "A", description: null },
     severity: spec.severity,
     active: true,
     condition: spec.condition,
