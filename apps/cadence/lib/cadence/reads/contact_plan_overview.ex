@@ -9,9 +9,16 @@ defmodule Cadence.Reads.ContactPlanOverview do
   and the latest end), since plans don't store a horizon.
   """
 
-  alias Cadence.ContactPlanning.{ContactOpportunitySnapshot, ContactPlan, ContactPlanVersion}
+  alias Cadence.Comms.StationRefs
+
+  alias Cadence.ContactPlanning.{
+    ContactOpportunitySnapshot,
+    ContactPlan,
+    ContactPlanVersion,
+    StationConflicts
+  }
+
   alias Cadence.Management.Contacts
-  alias Cadence.Reads.StationRefs
 
   @list_cap 100
 
@@ -46,15 +53,20 @@ defmodule Cadence.Reads.ContactPlanOverview do
         Contacts.selected_opportunities(organization_id, mission_id, plan_id, version.version)
 
       stations = StationRefs.index(organization_id, mission_id)
+      availability = StationConflicts.check(organization_id, mission_id, passes)
+      conflicts = conflicts(version) ++ availability.conflicts
+      summary = summary(plan, version, passes)
 
       {:ok,
-       plan
-       |> summary(version, passes)
+       summary
        |> Map.merge(%{
+         counts: %{summary.counts | conflicts: length(conflicts)},
+         ready_to_approve: summary.ready_to_approve and availability.conflicts == [],
          passes: Enum.map(passes, &pass(&1, version, stations)),
          demand: demand(organization_id, mission_id, version),
          unmet: unmet(organization_id, mission_id, version),
-         conflicts: conflicts(version)
+         conflicts: conflicts,
+         at_risk: availability.at_risk
        })}
     else
       _missing -> {:error, :plan_not_found}

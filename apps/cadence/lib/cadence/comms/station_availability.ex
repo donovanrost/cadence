@@ -148,6 +148,27 @@ defmodule Cadence.Comms.StationAvailability do
     )
   end
 
+  @doc """
+  Every active window (outage, maintenance and degraded) overlapping `[from, to]`, by station
+  id, with its `kind` (`:outage | :maintenance | :degraded`). For plan checks (U26).
+  """
+  @spec planning_windows(String.t(), String.t(), DateTime.t(), DateTime.t()) :: %{
+          String.t() => [map()]
+        }
+  def planning_windows(organization_id, mission_id, from, to) do
+    organization_id
+    |> active_windows(mission_id, :all, from, to)
+    |> Enum.group_by(
+      & &1.ground_station_id,
+      &%{
+        window_id: &1.window_id,
+        kind: Map.fetch!(@kind_atoms, &1.kind),
+        starts_at: &1.starts_at,
+        ends_at: &1.ends_at
+      }
+    )
+  end
+
   @doc "Whether `[starts_at, ends_at]` overlaps any of `windows` (open windows never end)."
   @spec overlaps?([map()], DateTime.t(), DateTime.t()) :: map() | nil
   def overlaps?(windows, starts_at, ends_at) do

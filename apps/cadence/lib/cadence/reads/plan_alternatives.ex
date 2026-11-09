@@ -10,9 +10,9 @@ defmodule Cadence.Reads.PlanAlternatives do
   `clashes_with` (selected passes of the same spacecraft that overlap it).
   """
 
+  alias Cadence.Comms.StationRefs
   alias Cadence.ContactPlanning.{ContactOpportunitySnapshot, Planner, RequirementEvaluator}
   alias Cadence.Management.Contacts
-  alias Cadence.Reads.StationRefs
 
   @spec load(binary(), binary(), binary(), binary()) :: {:ok, map()} | {:error, :plan_not_found}
   def load(organization_id, mission_id, plan_id, spacecraft_id) do

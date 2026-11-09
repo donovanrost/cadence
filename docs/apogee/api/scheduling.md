@@ -92,8 +92,17 @@ The list row, plus:
   window}]}` (S2, from the version's persisted coverage)
 - `unmet: [{requirement_id, requirement_version, spacecraft_id, why: [code]}]`: what an approver
   must acknowledge (DECISIONS #28)
-- `conflicts: [{code, spacecraft_id, snapshot_ids}]`: overlapping passes for one spacecraft, which
-  always block approval
+- `conflicts`: always block approval and submit (`422 plan_not_ready` carries them in
+  `details.conflicts`). Two codes:
+  - `{code: "selected_contacts_overlap", spacecraft_id, snapshot_ids}`: overlapping passes for one
+    spacecraft;
+  - `{code: "station_unavailable", ground_station_id, window_id, kind: "outage" | "maintenance",
+    snapshot_ids}`: passes inside an active outage or maintenance window on their station (U26),
+    grouped per window.
+- `at_risk: [{code: "station_degraded", ground_station_id, window_id, kind: "degraded",
+  snapshot_ids}]`: passes inside a degraded window. A warning; it doesn't block. Booked passes are
+  K2's (repairs). `counts.conflicts` and `ready_to_approve` include station conflicts on the detail
+  read; the list rows count only overlaps.
 
 `station` is `{ref, id, code, name}`: `ref` is the provider's ground-station ref, matched to a
 Cadence ground station by id, `metadata.code` or `metadata.provider_station_ref` (the same join as

@@ -1,6 +1,8 @@
 defmodule CadenceWeb.Console.ContactPlanSubmitTest do
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.Auth.Scope
+  alias Cadence.Comms.{GroundStation, GroundStationStore, StationAvailability}
   alias CadenceWeb.Console.SchedulingRunner
   alias CadenceWeb.{ContactPlanningFixtures, TestFixtures}
 
@@ -90,6 +92,59 @@ defmodule CadenceWeb.Console.ContactPlanSubmitTest do
       })
 
     assert json_response(conn, 422)["error"]["code"] == "plan_not_ready"
+  end
+
+  test "a pass at a station in an outage is a conflict that blocks submit (U26)", c do
+    fixture = ContactPlanningFixtures.plan_fixture(c.org, c.admin, c.admin_membership, c.mission)
+    plan_id = fixture.plan.contact_plan_id
+
+    {:ok, _station} =
+      GroundStationStore.persist_ground_station(
+        c.org.organization_id,
+        GroundStation.new(%{
+          ground_station_id: "gs-review",
+          mission_id: c.mission.mission_id,
+          display_name: "Review",
+          code: "REV",
+          metadata: %{"provider_station_ref" => "station-review"}
+        })
+      )
+
+    scope =
+      Scope.new(%{
+        user: c.admin,
+        organization_id: c.org.organization_id,
+        organization_membership: c.admin_membership
+      })
+
+    {:ok, %{id: window_id}} =
+      StationAvailability.schedule(scope, c.mission.mission_id, "gs-review", %{
+        kind: :outage,
+        starts_at: ContactPlanningFixtures.now(),
+        ends_at: DateTime.add(ContactPlanningFixtures.now(), 86_400),
+        reason: "Antenna down"
+      })
+
+    detail =
+      c.admin |> TestFixtures.member_conn() |> get("#{c.base}/#{plan_id}") |> json_response(200)
+
+    assert [conflict] = detail["data"]["conflicts"]
+
+    assert %{
+             "code" => "station_unavailable",
+             "ground_station_id" => "gs-review",
+             "window_id" => ^window_id,
+             "kind" => "outage",
+             "snapshot_ids" => [_]
+           } = conflict
+
+    assert detail["data"]["at_risk"] == []
+    assert detail["data"]["ready_to_approve"] == false
+
+    conn = submit(c, c.admin, plan_id, %{"expected_version" => 1, "operation_id" => "op-outage"})
+    error = json_response(conn, 422)["error"]
+    assert error["code"] == "plan_not_ready"
+    assert [%{"code" => "station_unavailable"}] = error["details"]["conflicts"]
   end
 
   test "validates the body", c do

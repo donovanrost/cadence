@@ -1,8 +1,8 @@
-defmodule Cadence.Reads.StationRefsTest do
+defmodule Cadence.Comms.StationRefsTest do
   use ExUnit.Case, async: true
 
   alias Cadence.Comms.GroundStation
-  alias Cadence.Reads.StationRefs
+  alias Cadence.Comms.StationRefs
 
   defp station(id, name, metadata),
     do: %GroundStation{ground_station_id: id, display_name: name, metadata: metadata}

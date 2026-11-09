@@ -1,4 +1,4 @@
-defmodule Cadence.Reads.StationRefs do
+defmodule Cadence.Comms.StationRefs do
   @moduledoc """
   A provider's station ref (`ground_station_ref`) resolved to the Cadence ground
   station it names, for console reads: `%{ref, id, code, name}`. A station

@@ -30,7 +30,8 @@ defmodule Cadence.Control.Scheduling do
     FleetRunActions,
     FleetRunLock,
     FleetRunRepairs,
-    FleetRunReviews
+    FleetRunReviews,
+    StationConflicts
   }
 
   # A queued run gets this long for its task to take the execution lock.
@@ -105,6 +106,7 @@ defmodule Cadence.Control.Scheduling do
         with {:ok, %ContactPlan{} = plan, version} <-
                ManagementContacts.fetch_plan(org, mission_id, plan_id),
              :ok <- expected(version.version, params[:expected_version]),
+             :ok <- stations_available(org, mission_id, plan_id, version),
              {:ok, plan} <- maybe_submit(scope, mission_id, plan, version, params[:reason]),
              {:ok, outcome} <- decide(scope, mission_id, plan, version, params),
              :ok <- ContactPlans.claim_operation(org, mission_id, plan_id, operation_id) do
@@ -115,6 +117,17 @@ defmodule Cadence.Control.Scheduling do
 
       _other_plan ->
         {:error, :operation_already_claimed}
+    end
+  end
+
+  # U26: a selected pass at a station that is down or in maintenance blocks submit (degraded
+  # only warns). The console reads the conflicts from the plan detail.
+  defp stations_available(org, mission_id, plan_id, version) do
+    passes = ManagementContacts.selected_opportunities(org, mission_id, plan_id, version.version)
+
+    case StationConflicts.check(org, mission_id, passes) do
+      %{conflicts: []} -> :ok
+      _blocked -> {:error, :contact_plan_not_satisfied}
     end
   end
 

@@ -13,10 +13,9 @@ defmodule Cadence.Reads.Passes do
   need a live provider search per spacecraft.
   """
 
-  alias Cadence.Comms.GroundStationStore
+  alias Cadence.Comms.{GroundStationStore, StationRefs}
   alias Cadence.Contacts.ProviderReservation
   alias Cadence.Control.Contacts
-  alias Cadence.Reads.StationRefs
 
   @default_limit 500
   @snapshots [

@@ -8,10 +8,11 @@ defmodule CadenceWeb.Console.ContactDraftController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.Comms.StationRefs
   alias Cadence.ContactPlanning.FleetPlanningRuns
   alias Cadence.Control.Scheduling
   alias Cadence.Management.Contacts, as: ManagementContacts
-  alias Cadence.Reads.{ContactPlanOverview, RepairDiff, StationRefs}
+  alias Cadence.Reads.{ContactPlanOverview, RepairDiff}
   alias CadenceWeb.Console.{ConfigJSON, Problem, SchedulingRunner}
 
   def create(conn, params) do

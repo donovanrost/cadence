@@ -10,8 +10,8 @@ defmodule Cadence.Reads.RepairDiff do
   - `dropped` / `added`: the rest.
   """
 
+  alias Cadence.Comms.StationRefs
   alias Cadence.ContactPlanning.ContactOpportunitySnapshot
-  alias Cadence.Reads.StationRefs
 
   @spec diff(
           [ContactOpportunitySnapshot.t()],
