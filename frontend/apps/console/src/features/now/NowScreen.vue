@@ -113,7 +113,7 @@ function openById(id: string) {
               @select-plane="selectPlane"
             />
           </ApPanel>
-          <PassesPanel class="max-md:hidden" />
+          <PassesPanel class="max-md:hidden" :spacecraft="value.spacecraft" />
         </div>
       </template>
     </ApRemote>

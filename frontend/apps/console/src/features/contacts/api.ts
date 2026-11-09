@@ -1,0 +1,68 @@
+import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+
+/** Contract: docs/apogee/api/contacts.md, `GET /missions/:mission_id/passes` (M7 / S1). */
+
+export const reservationStates = [
+  "requesting",
+  "pending",
+  "confirmed",
+  "active",
+  "completed",
+  "unknown",
+  "rejected",
+  "canceling",
+  "canceled",
+  "failed",
+] as const;
+
+const pass = d.object({
+  id: d.token,
+  kind: d.literal("contact"),
+  state: d.oneOf(reservationStates),
+  pass_phase: d.nullable(d.token),
+  delivery_state: d.nullable(d.token),
+  spacecraft_id: d.nullable(d.token),
+  station: d.object({
+    ref: d.nullable(d.string),
+    id: d.nullable(d.token),
+    code: d.nullable(d.string),
+    name: d.nullable(d.string),
+  }),
+  antenna: d.nullable(d.object({ id: d.nullable(d.string), label: d.nullable(d.string) })),
+  starts_at: d.timestamp,
+  ends_at: d.timestamp,
+  uplink_capable: d.nullable(d.boolean),
+  source: d.object({
+    provider: d.nullable(d.string),
+    provider_name: d.nullable(d.string),
+    synthetic: d.boolean,
+  }),
+  max_elevation_deg: d.nullable(d.number),
+});
+
+export const passesReader = d.object({
+  from: d.timestamp,
+  to: d.timestamp,
+  truncated: d.boolean,
+  passes: d.array(pass, 500),
+});
+export type Passes = Decoded<typeof passesReader>;
+export type Pass = Passes["passes"][number];
+
+export function fetchPasses(
+  missionId: string,
+  query: Readonly<{ from: Date; to: Date; spacecraftId?: string; station?: string }>,
+  signal?: AbortSignal,
+): Promise<ApiResult<Passes>> {
+  const params = new URLSearchParams({
+    from: query.from.toISOString(),
+    to: query.to.toISOString(),
+  });
+  if (query.spacecraftId) params.set("spacecraft_id", query.spacecraftId);
+  if (query.station) params.set("station", query.station);
+  return request(
+    `/missions/${encodeURIComponent(missionId)}/passes?${params.toString()}`,
+    passesReader,
+    signal ? { signal } : {},
+  );
+}
