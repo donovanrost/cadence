@@ -4,7 +4,8 @@ import type { OpState } from "@/ui";
 /** Contract: docs/apogee/api/contacts.md "Station availability (S7)". */
 const { array, boolean, integer, nullable, object, oneOf, string, timestamp, token } = decoders;
 
-const actor = nullable(object({ name: string }));
+// Provider/simulator reports may carry an actor without a name.
+const actor = nullable(object({ name: decoders.optional(nullable(string)) }));
 const window = object({
   id: token,
   ground_station_id: token,
