@@ -785,6 +785,7 @@ defmodule CadenceWeb.Router do
 
       post("/command-groups/:command_group_id/decision", CommandGroupController, :decision)
       post("/command-groups/:command_group_id/abort", CommandGroupController, :abort)
+      post("/command-groups/:command_group_id/notes", CommandGroupController, :add_note)
 
       post(
         "/command-requests/:command_request_id/cancel",

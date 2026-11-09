@@ -8,7 +8,7 @@ defmodule CadenceWeb.Console.CommandGroupController do
 
   alias Cadence.Commanding.CommandPolicy
   alias Cadence.Commanding.Groups.GroupStore
-  alias Cadence.Control.Commanding.{GroupAbort, GroupDecision, GroupSubmission}
+  alias Cadence.Control.Commanding.{GroupAbort, GroupDecision, GroupNotes, GroupSubmission}
   alias Cadence.Reads.{CommandGroups, CommandPreflight}
   alias CadenceWeb.Console.{CommandGroupJSON, CommandGroupParams, CommandGroupProblems}
 
@@ -83,6 +83,15 @@ defmodule CadenceWeb.Console.CommandGroupController do
   def abort(conn, %{"command_group_id" => id} = params) do
     with {:ok, reason} <- CommandGroupParams.note(params, "reason"),
          {:ok, _group} <- GroupAbort.abort(conn.assigns.current_scope, mission(conn), id, reason) do
+      show(conn, %{"command_group_id" => id})
+    else
+      error -> CommandGroupProblems.respond(conn, error)
+    end
+  end
+
+  def add_note(conn, %{"command_group_id" => id} = params) do
+    with {:ok, note} <- CommandGroupParams.note(params, "note"),
+         :ok <- GroupNotes.add(conn.assigns.current_scope, mission(conn), id, note) do
       show(conn, %{"command_group_id" => id})
     else
       error -> CommandGroupProblems.respond(conn, error)

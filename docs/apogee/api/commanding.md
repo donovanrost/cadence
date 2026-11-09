@@ -200,6 +200,12 @@ Errors: `422 reason_required`, `409 command_group_not_abortable`, `409 command_r
 Also new: a queued request whose model revision is no longer active **fails closed** at release
 (`canceled`, `end_reason: release_basis_changed`) instead of blocking its lane.
 
+### `POST /command-groups/:id/notes` (M19)
+
+`{"note": "…"}` (≤ 4,000 bytes, required). Appends a `note` event by the session operator. Allowed in
+any state, including finished groups. Returns the group. Errors: `422 note_required`,
+`404 command_group_not_found`.
+
 ### `GET /command-policies` (O4)
 
 `{"data": {"policies": [{"key": "command_classification", "parameters": {"classifications": ["hazardous", "critical"]}},

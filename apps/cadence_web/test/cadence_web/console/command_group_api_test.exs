@@ -139,6 +139,20 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
     assert aborted["data"]["state"] == "aborted"
     assert aborted["data"]["abort_result"] == %{"canceled" => 1, "already_started" => []}
 
+    noted =
+      as(c.requester)
+      |> post(base(c) <> "/command-groups/#{data["id"]}/notes", %{
+        "note" => "Logged for the shift"
+      })
+      |> json_response(200)
+
+    assert Enum.any?(noted["data"]["events"], &(&1["kind"] == "note"))
+
+    assert %{"error" => %{"code" => "note_required"}} =
+             as(c.requester)
+             |> post(base(c) <> "/command-groups/#{data["id"]}/notes", %{"note" => " "})
+             |> json_response(422)
+
     assert %{"data" => %{"policies" => policies}} =
              as(c.requester) |> get(base(c) <> "/command-policies") |> json_response(200)
 
