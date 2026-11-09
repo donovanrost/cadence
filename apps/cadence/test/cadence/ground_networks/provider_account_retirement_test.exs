@@ -8,6 +8,7 @@ defmodule Cadence.GroundNetworks.ProviderAccountRetirementTest do
     MissionProvider,
     MissionProviders,
     ProviderAccountGrants,
+    ProviderAccountRename,
     ProviderAccountRetirement,
     ProviderAccounts,
     ProviderCredentials
@@ -103,6 +104,23 @@ defmodule Cadence.GroundNetworks.ProviderAccountRetirementTest do
 
     assert {:error, :provider_account_not_found} =
              ProviderAccountRetirement.retire(ctx.scope, "no-such-account")
+  end
+
+  test "an admin renames an account without a new version; bad names and others are refused",
+       ctx do
+    assert {:ok, %{display_name: "Earendil KSAT", active_version: version}} =
+             ProviderAccountRename.rename(ctx.scope, @account, "  Earendil KSAT  ")
+
+    assert version == ctx.version.version
+
+    assert {:error, :invalid_display_name} =
+             ProviderAccountRename.rename(ctx.scope, @account, " ")
+
+    assert {:error, :provider_account_not_found} =
+             ProviderAccountRename.rename(ctx.scope, "no-such-account", "X")
+
+    assert {:error, :forbidden} =
+             ProviderAccountRename.rename(scope(ctx.organization, :member), @account, "X")
   end
 
   defp scope(organization, role) do
