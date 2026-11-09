@@ -17,7 +17,9 @@ import PlanStatePanel from "./PlanStatePanel.vue";
 import SelectedPanel from "./SelectedPanel.vue";
 import { isPlanSuperseded, planErrorText } from "./errors.ts";
 import SubmitSheet from "./SubmitSheet.vue";
+import PassResolutionsCallout from "./PassResolutionsCallout.vue";
 import ProposalCallout from "./ProposalCallout.vue";
+import { usePassResolutions } from "./usePassResolutions.ts";
 import SupersededCallout from "./SupersededCallout.vue";
 import UnconfirmedCallout from "./UnconfirmedCallout.vue";
 import { stationHits } from "./unavailable.ts";
@@ -36,6 +38,8 @@ const day = computed(() => {
     : new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
 });
 const focused = ref<string | null>(null);
+/** U31: the day's pass-resolution conflicts (needs-you items), linked to their contacts. */
+const resolutions = usePassResolutions(missionId, day);
 const {
   view,
   proposal,
@@ -143,6 +147,7 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
   </TakeoverHeader>
   <DayNav :day="day" />
   <p v-if="draftedBy" class="m-0 font-mono text-sm text-text-3">{{ draftedBy }}</p>
+  <PassResolutionsCallout :passes="resolutions" />
   <ProposalCallout v-if="proposal" :mission-id="missionId" :proposal="proposal" />
   <template v-if="view.kind === 'plan'">
     <SupersededCallout v-if="view.plan.superseded" :superseded="view.plan.superseded" />
