@@ -167,7 +167,13 @@ const barKinds = computed(() =>
             @focus="focusId = bar.id"
             @keydown="onKey($event, bar.id)"
           >
-            <span v-if="labelFits(bar)" aria-hidden="true">{{ bar.label }}</span>
+            <!-- A hatched bar's label sits on a clean base, not the stripes (qa U30 #4). -->
+            <span
+              v-if="labelFits(bar)"
+              aria-hidden="true"
+              :class="bar.kind === 'unconfirmed' ? 'bg-[var(--color-stale-deep)]' : ''"
+              >{{ bar.label }}</span
+            >
           </button>
         </div>
       </div>

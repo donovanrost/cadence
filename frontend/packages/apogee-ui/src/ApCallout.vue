@@ -17,8 +17,13 @@ defineProps<{ tone: "nominal" | "caution" | "crit" | "stale" | "off" | "info" }>
       'bg-raised': tone === 'info' || tone === 'off',
     }"
   >
-    <ApStatusMark v-if="tone !== 'info'" :state="tone" />
-    <span class="min-w-0 flex-1"><slot /></span>
+    <!-- The mark sits on the first line (1lh), not the middle of a long body (qa U30 #2). -->
+    <span class="flex min-w-0 flex-1 gap-3">
+      <span v-if="tone !== 'info'" class="flex h-[1lh] flex-none items-center"
+        ><ApStatusMark :state="tone"
+      /></span>
+      <span class="min-w-0 flex-1"><slot /></span>
+    </span>
     <slot name="action" />
   </div>
 </template>
