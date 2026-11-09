@@ -36,6 +36,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 29 | Uplink · system events | After b5d6ed6d, the Uplink page for any completed group fails to decode the system actor `{actor_kind: "system"}` (no `user_id`; ruled correct, contract updated in 57fe2d6c) | fe-ops (actor reader as a variant on `actor_kind`) | verified (c1fe0eb4: 3MKNW and I2DO decode; log reads 'Cadence closed the run · 1 not verifiable'; no console errors) |
 | 30 | K2 repair after an applied repair | Repairing r1 again after one booking was lost re-proposes K2's 4 already-applied HBK moves ("Apply · send 4 requests") and classifies the lost 004@KIR pass as kept, so Apply would duplicate 4 bookings and not rebook 004 | domain / api (plan), fe-setup (Impact wording) | open (not applied); attribution now 'Canceled at <provider>' (fe-setup); rebooked marker on /passes pending domain/api |
 | 31 | K1/K2 unconfirmed callout (U30) | The callout lists every unconfirmed booking (40) uncapped; at 1512×1000 Demand/Draft/Selected collapse to ~0 height and the Gantt disappears; icon centred on the list; axe scrollable-region-focusable; hatch drawn under the bar label (1.3:1 where a stroke crosses a stripe) | lead / ux | open |
+| 32 | Contact workspace · reserve after cancel | Reserving an opportunity whose booking was cancelled replays the cancelled reservation (id derived from the opportunity), so a freed slot can't be rebooked | api / domain | open |
 
 ## Details
 
@@ -283,5 +284,17 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   (serious): K1 2 nodes, K2 `#main`; (4) `.ap-bar--unconfirmed` paints the hatch on the label's own
   element: label rgb(189,179,255) is 9.8:1 on stale-deep rgb(20,15,38) and about 5.9:1 against the
   averaged hatch, but 1.3:1 on a stripe. Labels don't render at day scale (bars about 10 px wide).
+
+### 32. A cancelled opportunity can't be booked again
+
+- Repro (2026-11-09 20:38Z): cancel provider_reservation_LpG4taSuTU6w8RmM-MjLzT88 (004@KIR 11-10
+  00:54:34Z) via actions/cancel; actions/search still offers 00:54:34Z Kiruna; actions/reserve with
+  its fresh token (operation d16319e8…) completes with `{lifecycleState: canceled,
+  providerReservationId: provider_reservation_LpG4taSuTU6w8RmM-MjLzT88, providerRevision: 3}`.
+- Cause (likely): `ScheduleCommands` derives `provider_reservation_id` / `idempotency_key` from
+  `stable_booking_suffix(opportunity payload)`, so the same opportunity always maps to the
+  cancelled reservation. Domain noted the same for r1 re-execute.
+- Expected: a search that offers the slot can book it, or the search doesn't offer it.
+- Workaround used: booked 004@KIR 11-10 20:18:34Z instead (provider_reservation_Jgx1bbIKOxxt4TQmWtifmiLr).
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
