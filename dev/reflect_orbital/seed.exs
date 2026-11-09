@@ -197,7 +197,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
 
   defp seed_sites(provider, deliveries) do
     Enum.map(F.sites(), fn site ->
-      {:ok, _station} =
+      {:ok, station} =
         GroundStationStore.persist_ground_station(
           F.organization_id(),
           GroundStation.new(%{
@@ -219,6 +219,20 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
               )
           })
         )
+
+      # Insert is on_conflict: :nothing, so bring an existing station's code up to date (it may
+      # hold a code derived from its name by the profile-routing migration backfill).
+      code = F.station_code(site["id"])
+
+      if station.code != code do
+        {:ok, _station} =
+          GroundStationStore.update_ground_station(
+            F.organization_id(),
+            F.mission_id(),
+            site["id"],
+            %{code: code}
+          )
+      end
 
       delivery = Map.fetch!(deliveries, site["id"])
 
