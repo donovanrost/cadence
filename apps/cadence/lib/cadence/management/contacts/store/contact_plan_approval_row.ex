@@ -25,6 +25,7 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanApprovalRow do
     field(:automation_grant_id, :string)
     field(:automation_grant_content_sha256, :string)
     field(:decided_at, :utc_datetime_usec)
+    field(:exceptions_document, {:array, :map}, default: [])
 
     timestamps(updated_at: false)
   end
@@ -43,14 +44,17 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanApprovalRow do
     :actor_document,
     :automation_grant_id,
     :automation_grant_content_sha256,
-    :decided_at
+    :decided_at,
+    :exceptions_document
   ]
 
   @spec changeset(ContactPlanApproval.t()) :: Ecto.Changeset.t()
   def changeset(%ContactPlanApproval{} = approval) do
     %__MODULE__{}
     |> cast(domain_attrs(approval), @fields)
-    |> validate_required(@fields -- [:automation_grant_id, :automation_grant_content_sha256])
+    |> validate_required(
+      @fields -- [:automation_grant_id, :automation_grant_content_sha256, :exceptions_document]
+    )
     |> validate_number(:contact_plan_version, greater_than: 0)
     |> validate_inclusion(:decision, ~w(approved rejected))
     |> validate_inclusion(:actor_kind, ~w(user service))
@@ -83,7 +87,8 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanApprovalRow do
       automation_grant_id: row.automation_grant_id,
       automation_grant_content_sha256: row.automation_grant_content_sha256,
       decided_at: row.decided_at,
-      inserted_at: row.inserted_at
+      inserted_at: row.inserted_at,
+      exceptions: row.exceptions_document || []
     })
   end
 
@@ -102,7 +107,8 @@ defmodule Cadence.Management.Contacts.Store.ContactPlanApprovalRow do
       actor_document: JsonDocument.wrap_value(approval.actor_document),
       automation_grant_id: approval.automation_grant_id,
       automation_grant_content_sha256: approval.automation_grant_content_sha256,
-      decided_at: approval.decided_at
+      decided_at: approval.decided_at,
+      exceptions_document: approval.exceptions
     }
   end
 

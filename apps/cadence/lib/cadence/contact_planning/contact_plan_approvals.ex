@@ -183,8 +183,8 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
        ),
        do: :ok
 
-  defp maybe_revalidate(:approved, version, requirements, selected, actor, now, _opts) do
-    with :ok <- proposal_satisfied(version),
+  defp maybe_revalidate(:approved, version, requirements, selected, actor, now, opts) do
+    with :ok <- proposal_satisfied(version, Keyword.get(opts, :acknowledged_exceptions)),
          :ok <- approval_mode(requirements, actor),
          :ok <- unexpired(selected, now),
          {:ok, current_policy} <- ContactPlans.policy_snapshot(requirements, selected) do
@@ -221,6 +221,7 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
              context.actor,
              context.now
            ),
+         approval <- %{approval | exceptions: exceptions(context.decision, version, context.opts)},
          {:ok, approval_row} <- Repo.insert(ContactPlanApprovalRow.changeset(approval)),
          {:ok, updated_plan_row} <-
            update_plan(
@@ -250,12 +251,93 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovals do
     )
   end
 
-  defp proposal_satisfied(version) do
-    if version.conflict_document["clear"] == true and
-         version.unsatisfied_document["clear"] == true and
-         version.selected_snapshot_ids ++ version.locked_snapshot_ids != [],
-       do: :ok,
-       else: {:error, :contact_plan_not_satisfied}
+  # DECISIONS #28: conflicts and empty plans always block. Unsatisfied
+  # requirements block unless the approver acknowledges every one of them with a
+  # reason; without acknowledgements the original rule applies unchanged.
+  defp proposal_satisfied(version, acknowledged) do
+    cond do
+      version.conflict_document["clear"] != true ->
+        {:error, :contact_plan_not_satisfied}
+
+      version.selected_snapshot_ids ++ version.locked_snapshot_ids == [] ->
+        {:error, :contact_plan_not_satisfied}
+
+      unsatisfied_ids(version) == [] ->
+        :ok
+
+      acknowledged in [nil, []] ->
+        {:error, :contact_plan_not_satisfied}
+
+      true ->
+        exceptions_cover(version, acknowledged)
+    end
+  end
+
+  defp exceptions_cover(version, acknowledged) do
+    with {:ok, normalized} <- normalize_acknowledgements(acknowledged) do
+      unsatisfied = unsatisfied_ids(version)
+      acked = Enum.map(normalized, & &1["contact_requirement_id"])
+
+      cond do
+        (missing = unsatisfied -- acked) != [] ->
+          {:error, {:contact_plan_exceptions_required, missing}}
+
+        (extra = acked -- unsatisfied) != [] ->
+          {:error, {:contact_plan_exceptions_unknown, extra}}
+
+        true ->
+          :ok
+      end
+    end
+  end
+
+  defp exceptions(:approved, version, opts) do
+    case normalize_acknowledgements(Keyword.get(opts, :acknowledged_exceptions)) do
+      {:ok, acknowledged} ->
+        versions =
+          Map.new(
+            version.unsatisfied_document["requirements"] || [],
+            &{&1["contact_requirement_id"], &1["contact_requirement_version"]}
+          )
+
+        Enum.map(acknowledged, fn item ->
+          Map.put(item, "contact_requirement_version", versions[item["contact_requirement_id"]])
+        end)
+
+      {:error, _invalid} ->
+        []
+    end
+  end
+
+  defp exceptions(_decision, _version, _opts), do: []
+
+  defp unsatisfied_ids(version),
+    do:
+      (version.unsatisfied_document["requirements"] || [])
+      |> Enum.map(& &1["contact_requirement_id"])
+      |> Enum.uniq()
+
+  defp normalize_acknowledgements(nil), do: {:ok, []}
+
+  defp normalize_acknowledgements(items) when is_list(items) do
+    Enum.reduce_while(items, {:ok, []}, fn
+      item, {:ok, acc} when is_map(item) ->
+        acknowledge(item, acc)
+
+      _item, _acc ->
+        {:halt, {:error, {:contact_plan_exception_invalid, nil}}}
+    end)
+  end
+
+  defp normalize_acknowledgements(_items), do: {:error, {:contact_plan_exception_invalid, nil}}
+
+  defp acknowledge(item, acc) do
+    id = item[:requirement_id] || item["requirement_id"]
+    reason = (item[:reason] || item["reason"] || "") |> to_string() |> String.trim()
+
+    if is_binary(id) and byte_size(reason) in 10..2_000,
+      do: {:cont, {:ok, acc ++ [%{"contact_requirement_id" => id, "reason" => reason}]}},
+      else: {:halt, {:error, {:contact_plan_exception_invalid, id}}}
   end
 
   defp approval_mode(requirements, %{"kind" => "user"}) do

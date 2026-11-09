@@ -119,6 +119,103 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
     assert {:error, :contact_plan_not_pending_approval} = approve(context)
   end
 
+  describe "acknowledged exceptions (DECISIONS #28)" do
+    setup context do
+      # A second requirement whose window is searched but left unselected.
+      assert {:ok, gap, gap_version} =
+               ContactRequirements.create(
+                 context.member_scope,
+                 @mission_id,
+                 requirement_attrs(),
+                 now: @now
+               )
+
+      assert {:ok, gap_planning} =
+               Planner.run(
+                 context.member_scope,
+                 @mission_id,
+                 gap.contact_requirement_id,
+                 gap_version.version,
+                 now: @now,
+                 list_routes: fn _, _, _ -> {:ok, %{routes: [route()], findings: []}} end,
+                 search_opportunities: fn _, _, _, _, _ ->
+                   {:ok, %{opportunities: [opportunity(%{"id" => "opportunity-gap"})]}}
+                 end
+               )
+
+      assert {:ok, plan, plan_version} =
+               ContactPlans.create(
+                 context.member_scope,
+                 @mission_id,
+                 %{
+                   planning_run_ids: [
+                     context.snapshot.contact_planning_run_id,
+                     gap_planning.run.contact_planning_run_id
+                   ],
+                   selected_snapshot_ids: [context.snapshot.contact_opportunity_snapshot_id],
+                   rationale: "Accept the gap for the second requirement"
+                 },
+                 now: @now
+               )
+
+      assert {:ok, pending} =
+               ContactPlans.submit(
+                 context.member_scope,
+                 @mission_id,
+                 plan.contact_plan_id,
+                 plan.current_version,
+                 "Ready for administrator review",
+                 now: DateTime.add(@now, 1, :second)
+               )
+
+      %{gap: gap, gap_plan: pending, gap_version: plan_version}
+    end
+
+    test "an unsatisfied plan is refused without acknowledgements", context do
+      assert {:error, :contact_plan_not_satisfied} = approve_gap(context, nil)
+    end
+
+    test "every unsatisfied requirement must be acknowledged with a reason", context do
+      assert {:error, {:contact_plan_exception_invalid, _}} =
+               approve_gap(context, [
+                 %{requirement_id: context.gap.contact_requirement_id, reason: "short"}
+               ])
+
+      assert {:error, {:contact_plan_exceptions_unknown, ["nope"]}} =
+               approve_gap(context, [
+                 %{
+                   requirement_id: context.gap.contact_requirement_id,
+                   reason: "Weather window next pass"
+                 },
+                 %{requirement_id: "nope", reason: "Not part of this plan at all"}
+               ])
+    end
+
+    test "acknowledged gaps are approved and audited on the approval", context do
+      reason = "Recorder margin allows one missed pass"
+
+      assert {:ok, plan, _version, approval} =
+               approve_gap(context, [
+                 %{"requirement_id" => context.gap.contact_requirement_id, "reason" => reason}
+               ])
+
+      assert plan.lifecycle_state == :approved
+
+      assert [
+               %{
+                 "contact_requirement_id" => gap_id,
+                 "contact_requirement_version" => 1,
+                 "reason" => ^reason
+               }
+             ] = approval.exceptions
+
+      assert gap_id == context.gap.contact_requirement_id
+
+      assert [%{exceptions: [_]}] =
+               ContactPlanApprovals.list(@organization_id, @mission_id, plan.contact_plan_id)
+    end
+  end
+
   test "concurrent approval attempts serialize to one exact decision", context do
     results =
       1..2
@@ -324,6 +421,20 @@ defmodule Cadence.ContactPlanning.ContactPlanApprovalsTest do
       "Reviewed provider, station, policy, and expiry",
       now: DateTime.add(@now, 2, :second),
       resolve_route: route_resolver()
+    )
+  end
+
+  defp approve_gap(context, acknowledged) do
+    ContactPlanApprovals.approve(
+      context.admin_scope,
+      @mission_id,
+      context.gap_plan.contact_plan_id,
+      context.gap_plan.current_version,
+      context.gap_version.content_sha256,
+      "Reviewed provider, station, policy, and expiry",
+      now: DateTime.add(@now, 2, :second),
+      resolve_route: route_resolver(),
+      acknowledged_exceptions: acknowledged
     )
   end
 

@@ -20,7 +20,8 @@ defmodule Cadence.ContactPlanning.ContactPlanApproval do
           automation_grant_id: binary() | nil,
           automation_grant_content_sha256: binary() | nil,
           decided_at: DateTime.t(),
-          inserted_at: DateTime.t() | nil
+          inserted_at: DateTime.t() | nil,
+          exceptions: [map()]
         }
 
   defstruct [
@@ -38,7 +39,10 @@ defmodule Cadence.ContactPlanning.ContactPlanApproval do
     :automation_grant_id,
     :automation_grant_content_sha256,
     :decided_at,
-    :inserted_at
+    :inserted_at,
+    # Acknowledged unsatisfied requirements (DECISIONS #28):
+    # [%{"contact_requirement_id", "contact_requirement_version", "reason"}]
+    exceptions: []
   ]
 
   @spec new(map()) :: t()
@@ -60,7 +64,8 @@ defmodule Cadence.ContactPlanning.ContactPlanApproval do
       automation_grant_content_sha256:
         optional_string(value(attrs, :automation_grant_content_sha256)),
       decided_at: datetime(value(attrs, :decided_at, DateTime.utc_now()), :decided_at),
-      inserted_at: value(attrs, :inserted_at)
+      inserted_at: value(attrs, :inserted_at),
+      exceptions: value(attrs, :exceptions, []) || []
     }
     |> validate_automation_shape()
   end
