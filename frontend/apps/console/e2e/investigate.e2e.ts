@@ -44,10 +44,10 @@ test.describe("Investigate (J2), alarm on EARENDIL-001 with a sister on 002", ()
     await expect(page.getByRole("link", { name: "EARENDIL-002", exact: true })).toBeVisible();
   });
 
-  test("B2 says the event log isn't connected rather than showing an empty log", async ({
-    page,
-  }) => {
-    await expect(page.getByText("Event log not available")).toBeVisible();
+  test("B2 lists the spacecraft's events from the timeline", async ({ page }) => {
+    await expect(page.getByRole("heading", { name: "Event log" })).toBeVisible();
+    await expect(page.getByText(/event log not available/i)).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /full timeline/i })).toBeVisible();
   });
 
   test("[ and ] step through the plane; the buttons name their target", async ({ page }) => {

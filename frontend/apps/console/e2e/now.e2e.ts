@@ -46,6 +46,9 @@ function queue(page: Page): Locator {
 }
 
 test.describe("Now (J1)", () => {
+  // routeDegradedNow refuses the live socket so the fleet fixture isn't overwritten by pushes.
+  test.use({ allowedDiagnostics: allow(/socket\/console/) });
+
   test.describe("nothing received yet", () => {
     test.beforeEach(async ({ page }) => {
       await routeDegradedNow(page, nothingYet);
@@ -81,9 +84,8 @@ test.describe("Now (J1)", () => {
       await openConsole(page, screen);
       await expect(page.getByRole("heading", { name: "Fleet matrix" })).toBeVisible();
       await expect(page.getByText(`${DEMO.spacecraftCount} spacecraft`).first()).toBeVisible();
-      // Propagation is deferred (decision 4): passes say "not available", no fake AOS times.
-      await expect(page.getByText(/pass schedule not available/i)).toBeVisible();
-      await expect(page.getByText(/\bAOS\s+\d{2}:\d{2}/)).toHaveCount(0);
+      // A4 reads real passes (M7): either passes or an honest "no passes" line.
+      await expect(page.getByRole("heading", { name: /passes · next 2 h/i })).toBeVisible();
     });
   });
 
@@ -149,7 +151,7 @@ test.describe("Now (J1)", () => {
   });
 
   test.describe("when the fleet read fails", () => {
-    test.use({ allowedDiagnostics: allow(/\/fleet -> 500/, /status of 500/) });
+    test.use({ allowedDiagnostics: allow(/\/fleet -> 500/, /status of 500/, /socket\/console/) });
 
     test("says the fleet status is unavailable and offers retry", async ({ page }) => {
       await page.route(missionApi("fleet"), (route) =>

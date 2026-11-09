@@ -1,15 +1,18 @@
 import { expectAccessible } from "./support/accessibility.ts";
 import { jsonProblem, missionApi, missionPath, openConsole } from "./support/console.ts";
 import { allow, expect, test } from "./support/fixtures.ts";
+import { routeHistory } from "./support/history.ts";
 
-// Telemetry explore (fe-ops, 917f35a8). History is real for EARENDIL-001…010 (QuestDB).
+// Telemetry explore (fe-ops, 917f35a8). History is a deterministic fixture: the real QuestDB
+// samples (2026-11-08) age out of every relative window.
 const explore = (query = "") => missionPath(`telemetry${query}`);
 const selection = "?sc=1,2&p=EPS.sa1_current";
 
 test.describe("Telemetry explore", () => {
-  test("the URL selection plots real history and lists the latest values with units", async ({
+  test("the URL selection plots history and lists the latest values with units", async ({
     page,
   }) => {
+    await routeHistory(page);
     await openConsole(page, explore(selection));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(/explore/i);
     for (const name of ["Remove EARENDIL-001", "Remove EARENDIL-002", "Remove EPS.sa1_current"])
@@ -53,7 +56,7 @@ test.describe("Telemetry explore", () => {
         route.fulfill(jsonProblem(503, "history_unavailable")),
       );
       await openConsole(page, explore(selection));
-      await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+      await expect(page.getByText("History not available")).toBeVisible();
       await expect(page.getByRole("img", { name: /series over/i })).toHaveCount(0);
     });
   });

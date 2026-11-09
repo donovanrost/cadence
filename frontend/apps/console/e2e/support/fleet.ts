@@ -147,11 +147,18 @@ function member(row: Row) {
     violating_points: row["violating_points"],
     value: worst ? worst["value"] : null,
     first_crossed_at: worst ? worst["received_at"] : null,
+    // Alarm episode fields (null outside alarm items; alarm items set status below).
+    episode_id: null,
+    status: null,
+    assignee: null,
+    acknowledged_by: null,
   };
 }
 
 function item(fields: Json): Json {
   return {
+    source: null,
+    acknowledged: null,
     since: null,
     due_at: null,
     count: 0,
@@ -192,7 +199,13 @@ export function actionQueueFor(fleet: Json, awaitingViewer = 0): Json {
           state: severity,
           since: worst["received_at"] ?? null,
           count: group.length,
-          spacecraft: group.map(member),
+          source: "ground_limit",
+          acknowledged: 0,
+          spacecraft: group.map((row, i) => ({
+            ...member(row),
+            episode_id: `alarm_episode_qa_${severity}_${i}`,
+            status: "new",
+          })),
           point: { id: worst["point_id"], name: pointName, subsystem: "QA", unit: null },
           condition,
         }),
@@ -279,8 +292,18 @@ export function actionQueueFor(fleet: Json, awaitingViewer = 0): Json {
   };
 }
 
-/** Routes `/fleet` and `/action-queue` from one degraded fleet, so Now's panels agree. */
+/**
+ * Routes `/fleet` and `/action-queue` from one degraded fleet, so Now's panels agree.
+ *
+ * The fleet normally arrives over the live `fleet` push (realtime.md), which would overwrite the
+ * fixture with real data, so the console socket is refused here and the app falls back to polling
+ * GET /fleet. These specs therefore test presentation over the polling fallback; specs using this
+ * must allow `/socket\/console/` diagnostics.
+ */
 export async function routeDegradedNow(page: Page, d: Degradation): Promise<void> {
+  await page.routeWebSocket(/\/socket\/console\//, (ws) => {
+    void ws.close({ code: 1011, reason: "qa fixture: live socket disabled" });
+  });
   let degraded: Json | null = null;
   const fleetOnce = async (): Promise<Json> => {
     if (degraded) return degraded;
