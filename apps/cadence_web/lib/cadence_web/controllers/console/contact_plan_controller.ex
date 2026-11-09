@@ -6,7 +6,7 @@ defmodule CadenceWeb.Console.ContactPlanController do
 
   use CadenceWeb, :controller
 
-  alias Cadence.ContactPlanning.ContactPlan
+  alias Cadence.ContactPlanning.{ContactPlan, RepairChain}
   alias Cadence.Control.{PlanConfirmation, Scheduling}
   alias Cadence.Reads.{ContactPlanOverview, PlanAlternatives, PlanningSetup}
   alias CadenceWeb.Console.{ConfigJSON, Problem, SchedulingRunner}
@@ -258,6 +258,21 @@ defmodule CadenceWeb.Console.ContactPlanController do
       :unconfirmed,
       PlanConfirmation.unconfirmed(org_id(conn), mission_id(conn), plan.id)
     )
+    |> Map.merge(chain(conn, plan.id))
+  end
+
+  # qa #30: the day's repair chain (root first, then applied repairs) and its head.
+  defp chain(conn, plan_id) do
+    case RepairChain.load(org_id(conn), mission_id(conn), plan_id) do
+      {:ok, chain} ->
+        %{
+          chain: Enum.map(chain.plans, &%{id: &1, version: chain.versions[&1]}),
+          chain_head: chain.head
+        }
+
+      {:error, _not_found} ->
+        %{chain: [], chain_head: nil}
+    end
   end
 
   defp effective_state(conn, plan),

@@ -233,6 +233,11 @@ are the unconfirmed ones, soonest first (join `snapshot_id` to `passes[]` for sp
 and times); `sent_at` is when the booking was placed.
 Each pass also carries `item_id` (the execution item).
 
+Plan detail also carries the day's **repair chain** (qa #30): `chain: [{id, version}]` (the root
+plan first, then each applied repair in order; versions are the approved ones) and `chain_head`
+(the plan a new Re-plan starts from). A draft or a proposal that isn't applied reads the chain
+it belongs to; it isn't in `chain` itself.
+
 ### `POST /contact-plans/:plan_id/unconfirmed/:snapshot_id/resolve` (#53, U32)
 
 Body `{action: "booked" | "not_booked", note, provider_reference?}` (`provider_reference` only
