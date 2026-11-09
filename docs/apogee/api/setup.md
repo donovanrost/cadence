@@ -335,6 +335,26 @@ sources come first, then by name.
 - `credentials` is `null` for sources without a credential reference. There's no expiry data yet,
   so there's no `expiring`.
 
+### `GET /missions/:mission_id/apps` (A1)
+
+`{apps: [{key, name, description, platform, installed, state: "installed" | "disabled" |
+"not_installed", version, consequence_if_missing}], permissions: ["apps.install"]}`. These are the
+applications installable on a mission, platform ones first, then by name.
+
+- `platform: true` apps are always on and can't be changed.
+- `version` is the installed version, or `null` when the app isn't installed.
+- `consequence_if_missing` is always `null`: apps don't declare one yet.
+- `apps.install` comes from the check the actions enforce (`:operate_mission`, so any mission
+  operator today; DECISIONS #38).
+
+Actions stay direct, not a change-set kind: an installation is a host lifecycle record with its own
+audited lifecycle events.
+
+- `POST /apps/:key/install`, `/disable`, `/uninstall` (empty body) return the app's row (same
+  shape).
+- Errors: `404 app_not_found`, `403 forbidden`, `422` with the domain's code (for example
+  `application_dependency_missing`). Refetch on `invalidate` with `configuration`.
+
 ### `GET /missions/:mission_id/routing-rules/groups` (pass-2 #10)
 
 `{groups: [{transport: {id, name}, direction, role, enabled_count, disabled_count,
