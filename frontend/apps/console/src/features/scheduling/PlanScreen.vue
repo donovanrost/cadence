@@ -118,7 +118,10 @@ function headerFor(v: PlanView, d: string): string {
     case "plan":
       return v.plan.superseded
         ? `Contact plan · R${v.plan.version} draft · superseded`
-        : `Contact plan · R${v.plan.version} ${v.plan.state.replaceAll("_", " ")} · ${planHeaderTail(v.plan)}`;
+        : v.plan.state === "unconfirmed"
+          ? // U30: the tail carries the state ('R41 · unconfirmed', later '36 booked · 4 unconfirmed').
+            `Contact plan · R${v.plan.version} · ${planHeaderTail(v.plan)}`
+          : `Contact plan · R${v.plan.version} ${v.plan.state.replaceAll("_", " ")} · ${planHeaderTail(v.plan)}`;
   }
 }
 const headerLine = computed(() => headerFor(view.value, dayLabel(day.value)));
