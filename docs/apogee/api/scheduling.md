@@ -220,3 +220,29 @@ spacecraft's dropped and added passes in time order.
 **Apply** = `POST /contact-plans/<new plan id>/submit` (S5), with acknowledgements for any gaps.
 The repair yields a new plan; the source plan isn't superseded automatically (domain behavior).
 Not yet: station-outage entry (S7), provider billing terms, and the uplink impact read.
+
+## Contact planning setup (CP, Setup screen; DECISIONS #27)
+
+Base: `/api/console/v1/missions/:mission_id/contact-planning`.
+
+### `GET /policy` (CP2)
+
+`{policy_id, version, active_version, document, pending: {version, requested_by, requested_at} |
+null, schema: [field], defaults, permissions: ["planning.edit", "planning.approve"]}`. `document`
+groups the six policy sections: `horizon, scoring, resources, budgets, redundancy, automation`.
+It is `null` (and so is `version`) when the mission has no policy. `schema` fields use the
+kind-schema shape plus `group` and `advanced`; paths are `<group>.<field>`. `defaults` is what
+the server fills in for omitted fields. Permissions are organization-admin today.
+
+### `POST /policy`
+
+Body `{document, expected_version?, reason?}`. It saves the next version (or the first) and returns
+`201 {version, state: "pending_approval"}`. A version becomes active only after another admin
+approves it. Errors: `422 invalid_params` (details keyed by `<group>.<field>`),
+`409 version_conflict` (`details.expected_version` = current), `403 forbidden`.
+
+### `POST /policy/:version/decision`
+
+Body `{decision: "approve" | "reject", comment}`. Returns `{version, state: "active" | "rejected"}`.
+`409 reviewer_is_author` if you saved that version (a single-admin organization can't activate
+its own edits; that's by design per ux).

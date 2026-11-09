@@ -32,6 +32,10 @@ defmodule CadenceWeb.Console.Problem do
     plan_not_submittable: {409, "The plan can't be submitted in its current state."},
     plan_not_resumable: {409, "The plan isn't waiting to execute."},
     plan_not_editable: {422, "The plan can't be edited like that."},
+    version_conflict: {409, "The policy changed since you loaded it."},
+    reviewer_is_author: {409, "You can't approve a version you saved."},
+    policy_not_found: {404, "Policy or version not found."},
+    policy_rejected: {422, "The policy change was refused."},
     plan_not_repairable:
       {409,
        "This plan can't be re-planned (it must come from a draft and be executing, partially reserved or failed)."},

@@ -38,6 +38,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/missions.ex" => :composition,
     "lib/cadence/control/configuration.ex" => :composition,
     "lib/cadence/control/scheduling.ex" => :composition,
+    "lib/cadence/control/planning_policy.ex" => :composition,
     "lib/cadence/applications/telemetry_decom_catalog_contribution.ex" => :composition,
     "lib/cadence/semantic_runtime.ex" => :catalog,
     "lib/cadence/semantic_runtime/algorithm_plan.ex" => :catalog,
