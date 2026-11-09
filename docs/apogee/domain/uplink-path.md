@@ -1,6 +1,7 @@
 # #44 · Earendil uplink path (Compose → Approve → Uplink → Verify)
 
-Owner: **domain**. Status: **draft for review** (2026-11-09). Reviewer: director.
+Owner: **domain**. Status: **approved** (2026-11-09): D1 as DECISIONS #46 with conditions, D2 option
+(a). Reviewer: director.
 `L` = `apps/cadence/lib/cadence`, `S` = `apps/cadence_simulator/lib/cadence_simulator`.
 
 ## Why this is more than a seed change
@@ -52,7 +53,18 @@ plumbing. Two are decisions (**D1**, **D2**).
    `transport:completed`), in a demo copy of the yaml so the legacy reference stays untouched.
    Without verifiers, a command reads `not_required`, never `satisfied`.
 
-## D1 · Booking carries the uplink path (needs approval)
+## D1 · Booking carries the uplink path (approved, DECISIONS #46)
+
+**Decision:**
+- Attach the uplink path and `:command_window` **only when the provider reservation includes
+  uplink service, both requested and confirmed**.
+- Otherwise the pass stays downlink-only and shows the visible reason `uplink not booked`.
+- New bookings only; existing contacts keep their snapshot.
+- A selected uplink path is required only on contacts that carry `:command_window`.
+
+The provider contract therefore grows an optional uplink leg on the contact request,
+`uplink: {service_profile_ref, delivery_profile_ref}`, which the provider confirms or rejects
+on the contact. The simulator implements it with a default uplink TT&C service profile.
 
 Today a booked contact carries only the downlink path, and its intents are hard-coded to
 `[:telemetry_downlink]` (`provider_reservations.ex:970`). So commanding has no uplink path to
@@ -64,7 +76,7 @@ lands, the scheduled contact also gets that route's uplink path template plus in
 stay downlink-only. This changes what a booked pass is for every mission with outbound routes,
 not just the demo.
 
-## D2 · Session qualification in dev (needs your decision)
+## D2 · Session qualification in dev (decided: option a, no bypass in the tree)
 
 Every TCP uplink session starts `blocked: fencing_unproven`. Only a qualification policy can
 make it `ready`, and the default qualifies nothing (`L/runtime/session_qualification.ex`). Its
