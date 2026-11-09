@@ -6,7 +6,7 @@ defmodule Cadence.Reads.PlanAlternatives do
   is persisted). Callers authorize first.
 
   Effect: `rule_met_after` (every requirement of the spacecraft satisfied with
-  the pass added), `contacts_after` (selected contacts for the spacecraft), and
+  the pass added), `contacts_after` (`%{have, need}` for the spacecraft), and
   `clashes_with` (selected passes of the same spacecraft that overlap it).
   """
 
@@ -46,7 +46,7 @@ defmodule Cadence.Reads.PlanAlternatives do
       version: version.version,
       spacecraft_id: spacecraft_id,
       rule_met: rule_met?(requirements, mine),
-      contacts: length(mine),
+      contacts: contacts(requirements, mine),
       alternatives:
         Enum.map(candidates, fn candidate ->
           after_selection = [candidate | mine]
@@ -60,7 +60,7 @@ defmodule Cadence.Reads.PlanAlternatives do
             synthetic: candidate.synthetic,
             effect: %{
               rule_met_after: rule_met?(requirements, after_selection),
-              contacts_after: length(after_selection),
+              contacts_after: contacts(requirements, after_selection),
               clashes_with:
                 mine
                 |> Enum.filter(&overlap?(&1, candidate))
@@ -82,6 +82,12 @@ defmodule Cadence.Reads.PlanAlternatives do
       end
     end)
   end
+
+  defp contacts(requirements, selection),
+    do: %{
+      have: length(selection),
+      need: requirements |> Enum.map(&(&1.contact_count || 1)) |> Enum.sum()
+    }
 
   defp rule_met?([], _selection), do: false
 

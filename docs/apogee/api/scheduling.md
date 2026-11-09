@@ -189,9 +189,9 @@ code, e.g. a snapshot that doesn't belong to the plan's runs), `422 invalid_para
 
 ### `GET /contact-plans/:plan_id/alternatives?spacecraft_id=` (S4)
 
-`{plan_id, version, spacecraft_id, rule_met, contacts, alternatives: [{snapshot_id,
-requirement_id, station, starts_at, ends_at, synthetic, effect: {rule_met_after, contacts_after,
-clashes_with: [snapshot_id]}}]}`: eligible opportunities the plan's runs found for that
+`{plan_id, version, spacecraft_id, rule_met, contacts: {have, need}, alternatives: [{snapshot_id,
+requirement_id, station, starts_at, ends_at, synthetic, effect: {rule_met_after, contacts_after:
+{have, need}, clashes_with: [snapshot_id]}}]}`: eligible opportunities the plan's runs found for that
 spacecraft but didn't select, oldest first. Effects come from the same requirement evaluator the
 plan uses, and nothing is written. The "closes gap to 6h10" phrasing isn't computed (the rules
 have no gap measure); `rule_met_after` and `clashes_with` are.

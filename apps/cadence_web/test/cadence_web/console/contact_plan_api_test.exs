@@ -127,9 +127,17 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
         "data"
       ]
 
-    assert %{"rule_met" => false, "contacts" => 0, "alternatives" => [alternative]} = alternatives
+    assert %{
+             "rule_met" => false,
+             "contacts" => %{"have" => 0, "need" => 1},
+             "alternatives" => [alternative]
+           } = alternatives
 
-    assert %{"rule_met_after" => true, "contacts_after" => 1, "clashes_with" => []} =
+    assert %{
+             "rule_met_after" => true,
+             "contacts_after" => %{"have" => 1, "need" => 1},
+             "clashes_with" => []
+           } =
              alternative["effect"]
 
     post_edit = fn body ->
