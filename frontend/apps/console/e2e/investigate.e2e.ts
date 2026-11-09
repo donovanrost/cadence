@@ -67,10 +67,6 @@ test.describe("Investigate (J2), alarm on EARENDIL-001 with a sister on 002", ()
 
 test.describe("Investigate (J2), honest states", () => {
   test("no limits configured: doesn't reassure with a green 'no alarm'", async ({ page }) => {
-    test.fail(
-      true,
-      "qa issue #9: no-alarm callout is nominal while no limits are configured (U13)",
-    );
     await openConsole(page, screen(1));
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("EARENDIL-001");
     await expect(page.getByText(/limits (?:aren't|are not|not) configured/i)).toBeVisible();
