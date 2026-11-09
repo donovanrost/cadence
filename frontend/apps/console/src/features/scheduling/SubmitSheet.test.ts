@@ -105,3 +105,27 @@ describe("SubmitSheet per-spacecraft gaps (U23 amended)", () => {
     wrapper.unmount();
   });
 });
+
+describe("SubmitSheet dialog (ux K1 #8)", () => {
+  it("is a labelled modal and focuses the first reason on open", async () => {
+    const wrapper = mount(SubmitSheet, {
+      props: {
+        plan,
+        nameOf: () => null,
+        commitLabel: "Accept 2 gaps and submit",
+        confirm: "",
+        busy: false,
+      },
+      attachTo: document.body,
+    });
+    const dialog = wrapper.get("dialog");
+    expect(dialog.attributes("aria-modal")).toBe("true");
+    expect(wrapper.get(`#${dialog.attributes("aria-labelledby") ?? "missing"}`).text()).toContain(
+      "Accept 2 gaps",
+    );
+    wrapper.vm.open();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.activeElement?.tagName).toBe("TEXTAREA");
+    wrapper.unmount();
+  });
+});

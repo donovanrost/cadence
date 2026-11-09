@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { describeApiError, type ApiError } from "@/api";
 import { ApButton, ApCallout, ApTextarea, plural } from "@/ui";
 import {
@@ -36,9 +36,18 @@ const reasons = ref<Record<string, string>>({});
 const overrides = ref<Record<string, string>>({});
 const split = ref<Record<string, boolean>>({});
 const sameForAll = ref(false);
-const rules = computed(
-  () => new Map(props.plan.demand.rules.map((r) => [r.requirement_id, r.text])),
-);
+const rules = computed(() => new Map(props.plan.demand.rules.map((r) => [r.requirement_id, r])));
+/** `11 NOV 00:00–06:00Z · ≥ 1 contact`: each occurrence's window tells identical rules apart (ux #9). */
+function requirementLine(requirementId: string): string {
+  const r = rules.value.get(requirementId);
+  if (!r) return requirementId;
+  const { from, to } = r.window;
+  if (!from || !to) return r.text;
+  const day = new Date(from)
+    .toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" })
+    .toUpperCase();
+  return `${day} ${from.slice(11, 16)}–${to.slice(11, 16)}Z · ${r.text}`;
+}
 const valid = (text: string | undefined) => {
   const t = (text ?? "").trim();
   return t.length >= REASON_MIN && t.length <= REASON_MAX;
@@ -63,12 +72,27 @@ watch(sameForAll, (on) => {
     if (!valid(reasons.value[keyOf(g.spacecraftId)])) reasons.value[keyOf(g.spacecraftId)] = first;
 });
 
+let opener: HTMLElement | null = null;
+const titleId = `ap-submit-${Math.random().toString(36).slice(2, 9)}`;
 function open() {
   error.value = null;
+  opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   dialog.value?.showModal();
+  // Focus the first reason (or the commit when nothing is unmet) rather than the first control.
+  void nextTick(() =>
+    (
+      dialog.value?.querySelector<HTMLElement>("textarea") ??
+      dialog.value?.querySelector<HTMLElement>("footer button:last-child")
+    )?.focus(),
+  );
 }
 function close() {
   dialog.value?.close();
+}
+function onClosed() {
+  opener?.focus();
+  opener = null;
+  emit("close");
 }
 function submit() {
   if (missing.value > 0) return;
@@ -100,12 +124,15 @@ defineExpose({ open, close });
 <template>
   <dialog
     ref="dialog"
-    :aria-label="title"
+    :aria-labelledby="titleId"
+    aria-modal="true"
     class="m-auto w-[min(760px,calc(100vw-32px))] border border-line bg-panel p-0 text-readout backdrop:bg-[rgba(5,7,10,0.72)]"
-    @close="emit('close')"
+    @close="onClosed"
   >
     <div class="flex max-h-[70vh] flex-col gap-3 overflow-auto p-5">
-      <h2 class="m-0 font-display text-xl font-semibold tracking-tag uppercase">{{ title }}</h2>
+      <h2 :id="titleId" class="m-0 font-display text-xl font-semibold tracking-tag uppercase">
+        {{ title }}
+      </h2>
       <p v-if="groups.length === 0" class="m-0 text-base text-text-3">{{ confirm }}</p>
       <template v-else>
         <label class="flex items-center gap-2 text-md text-text-2">
@@ -130,7 +157,7 @@ defineExpose({ open, close });
           </p>
           <ul class="m-0 list-none p-0 font-mono text-xs text-text-3">
             <li v-for="u in group.unmet" :key="u.requirement_id">
-              {{ rules.get(u.requirement_id) ?? u.requirement_id }} ·
+              {{ requirementLine(u.requirement_id) }} ·
               {{ u.why.map(reasonText).join(" · ") || "rule not met" }}
             </li>
           </ul>
@@ -155,7 +182,7 @@ defineExpose({ open, close });
                 v-for="u in group.unmet"
                 :key="u.requirement_id"
                 :model-value="overrides[u.requirement_id] ?? ''"
-                :label="rules.get(u.requirement_id) ?? u.requirement_id"
+                :label="requirementLine(u.requirement_id)"
                 :rows="1"
                 :maxlength="REASON_MAX"
                 hint="Leave empty to use the reason above."

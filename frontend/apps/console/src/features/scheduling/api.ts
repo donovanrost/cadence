@@ -70,6 +70,7 @@ export const planDetailReader = d.object({
         spacecraft_id: d.nullable(d.token),
         text: d.string,
         source: d.string,
+        window: d.object({ from: d.nullable(d.timestamp), to: d.nullable(d.timestamp) }),
       }),
       5_000,
     ),

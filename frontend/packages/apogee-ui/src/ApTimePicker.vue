@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import ApButton from "./ApButton.vue";
 import ApCallout from "./ApCallout.vue";
 import ApKbd from "./ApKbd.vue";
@@ -59,7 +59,14 @@ function open() {
   const start = model.value ?? now.value.getTime();
   draft.value = props.dateOnly ? Math.floor(start / UTC_DAY) * UTC_DAY : start;
   preset.value = null;
+  opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   dialog.value?.showModal();
+  void nextTick(() => dialog.value?.querySelector<HTMLElement>("input")?.focus());
+}
+let opener: HTMLElement | null = null;
+function onClosed() {
+  opener?.focus();
+  opener = null;
 }
 function setDraft(at: number, presetId: string | null = null) {
   draft.value = props.dateOnly ? Math.floor(at / UTC_DAY) * UTC_DAY : at;
@@ -121,6 +128,8 @@ function commit() {
     <dialog
       ref="dialog"
       :aria-label="label"
+      aria-modal="true"
+      @close="onClosed"
       class="m-auto w-[min(920px,calc(100vw-32px))] border border-line bg-panel p-0 text-readout backdrop:bg-[rgba(5,7,10,0.72)]"
       @keydown.enter.exact="($event.target as HTMLElement | null)?.tagName !== 'BUTTON' && commit()"
     >
