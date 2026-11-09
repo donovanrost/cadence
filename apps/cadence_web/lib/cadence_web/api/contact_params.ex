@@ -71,10 +71,12 @@ defmodule CadenceWeb.API.ContactParams do
     end
   end
 
-  @spec contact_action(map()) :: {:ok, keyword()} | {:error, term()}
-  def contact_action(params) when is_map(params) do
+  # The actor always comes from the authenticated scope (DECISIONS #30/#32): a request that names
+  # one gets `actor_not_assignable`.
+  @spec contact_action(map(), map()) :: {:ok, keyword()} | {:error, term()}
+  def contact_action(params, scope_actor) when is_map(params) and is_map(scope_actor) do
     with {:ok, transition_time} <- optional_datetime(params, "transition_time"),
-         {:ok, actor} <- optional_map(params, "actor", %{}) do
+         {:ok, actor} <- scope_actor(params, scope_actor) do
       {:ok,
        []
        |> maybe_put_opt(:transition_time, transition_time)
@@ -182,5 +184,11 @@ defmodule CadenceWeb.API.ContactParams do
          metadata: map_value(params, "metadata")
        })}
     end
+  end
+
+  defp scope_actor(params, actor) do
+    if Map.has_key?(params, "actor"),
+      do: {:error, {:invalid_param, "actor", :actor_not_assignable}},
+      else: {:ok, actor}
   end
 end
