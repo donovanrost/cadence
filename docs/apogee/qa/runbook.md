@@ -53,7 +53,9 @@ From the repo root of this worktree, each long-running command in its own pane:
 ```sh
 # 1. Simulator (leave running)
 cd apps/cadence_simulator
-EARENDIL_SIMULATOR_PORT=4111 mise exec -- mix run --no-start --no-halt ../../dev/reflect_orbital_simulator.exs
+# --sname qa_sim makes it reachable over RPC (fault injection, e.g. UplinkSessions.arm/2, 9f09dd32).
+#    Its store is DETS, so a restart keeps bookings.
+EARENDIL_SIMULATOR_PORT=4111 mise exec -- elixir --sname qa_sim --cookie cadence -S mix run --no-start --no-halt ../../dev/reflect_orbital_simulator.exs
 
 # 2. QuestDB (once; it keeps running across reboots of the shell, not of OrbStack)
 docker run -d --name cadence-apogee-questdb \
