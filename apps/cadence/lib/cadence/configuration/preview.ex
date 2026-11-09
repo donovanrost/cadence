@@ -7,7 +7,7 @@ defmodule Cadence.Configuration.Preview do
   side-effect rule, nothing a preview does is observable outside its transaction.
   """
 
-  alias Cadence.Configuration.Pipeline
+  alias Cadence.Configuration.{Pipeline, Rollback}
   alias Cadence.Repo
 
   @statement_timeout_ms 15_000
@@ -25,7 +25,12 @@ defmodule Cadence.Configuration.Preview do
     Repo.transaction(
       fn ->
         Repo.query!("SET LOCAL statement_timeout = #{@statement_timeout_ms}")
-        result = Pipeline.run(organization_id, mission_id, base_revision, ops)
+
+        result =
+          organization_id
+          |> Pipeline.run(mission_id, base_revision, ops)
+          |> Map.update(:holds, Rollback.holds(ops), &(&1 ++ Rollback.holds(ops)))
+
         Repo.rollback({:preview, result})
       end,
       timeout: @statement_timeout_ms + 5_000

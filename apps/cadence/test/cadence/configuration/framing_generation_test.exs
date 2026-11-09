@@ -6,7 +6,7 @@ defmodule Cadence.Configuration.FramingGenerationTest do
   alias Cadence.Catalog.{FleetSnapshot, SpacecraftConfigurationInput}
   alias Cadence.Comms.{RoutingRule, RoutingRuleStore, TransportStore}
   alias Cadence.Control.Activations, as: ControlActivations
-  alias Cadence.Control.Configuration
+  alias Cadence.Control.{Configuration, ConfigurationRollback}
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
   alias Cadence.Platform.ConfigurationSettings
@@ -55,6 +55,46 @@ defmodule Cadence.Configuration.FramingGenerationTest do
 
     assert {:ok, %{framing: %{"frame_size" => 1279}}} =
              SourceRuntimeBases.fetch(spec.source_runtime_bases, source)
+  end
+
+  test "rolling back a framing change produces a generation too (DECISIONS #49)", c do
+    {:ok, _} =
+      ConfigurationSettings.put_profile_framing_generations(c.org, c.mission.mission_id, true, %{
+        id: "test",
+        name: "Test"
+      })
+
+    assert {:ok, %{state: :applied, revision: on_first}} = apply_framing_profile(c, 1279)
+    assert {:ok, %{state: :applied, generation: second}} = apply_framing_profile(c, 1024)
+
+    # Back to the 1279 profile: the craft is re-pinned and the 1024 profile removed.
+    assert {:ok, %{ops: ops}} =
+             ConfigurationRollback.preview(
+               c.scope,
+               c.mission.mission_id,
+               on_first
+             )
+
+    assert [
+             %{kind: "spacecraft", action: "update"},
+             %{kind: "spacecraft_profile", action: "delete"}
+           ] =
+             ops
+
+    assert {:ok, staged} =
+             ConfigurationRollback.stage(c.scope, c.mission.mission_id, on_first)
+
+    assert {:ok, %{state: :applied, generation: generation, revision: revision}} =
+             submit(c, staged)
+
+    assert generation == second + 1
+
+    {:ok, active} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
+    assert {:ok, entry} = FleetSnapshot.entry(active.metadata, c.craft.spacecraft_id)
+    assert entry["framing"]["frame_size"] == 1279
+
+    assert {:ok, %{kind: :rollback, rolls_back_to: ^on_first}} =
+             Configuration.get_revision(c.scope, c.mission.mission_id, revision)
   end
 
   describe "compatibility HOLD (qa #16)" do

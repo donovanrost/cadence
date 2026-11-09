@@ -190,7 +190,8 @@ defmodule Cadence.Configuration.Submission do
     Ledger.record(
       head,
       %{
-        kind: "change_set",
+        kind: if(rolls_back_to(changes), do: "rollback", else: "change_set"),
+        rolls_back_to: rolls_back_to(changes),
         change_set_id: set.change_set_id,
         applied_by: applier,
         applied_at: DateTime.utc_now(),
@@ -203,6 +204,16 @@ defmodule Cadence.Configuration.Submission do
       },
       result.entries
     )
+  end
+
+  # A rollback's single change carries its target in its source (Rollback, change-sets.md §8).
+  defp rolls_back_to(changes) do
+    Enum.find_value(changes, fn change ->
+      case change.source do
+        %{"rollback" => %{"to" => to}} when is_integer(to) -> to
+        _other -> nil
+      end
+    end)
   end
 
   defp clean(%{conflicts: [], errors: [], halted?: false}), do: :ok

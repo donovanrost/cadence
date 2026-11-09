@@ -71,3 +71,34 @@ There are no dedicated batch endpoints. Stage N `spacecraft` create ops in one `
 `POST /preview {ops}` as the server-side validation step first: it runs the ops in a sandbox in
 order, so a SCID repeated **within the batch** fails validation for the later op (`no_go`, with a
 `validation` item on `scid`), as does a SCID already used in the mission.
+
+## Rollback (DECISIONS #49; design: domain/change-sets.md §8)
+
+- `GET /config/rollback?to=N` previews rolling back to revision `N`, checked like any change.
+  Nothing is written. It returns `{target, head, reverts: [n], summary: "Roll back to r4 (reverts
+  r5, r6)", ops: [{kind, entity_id, action}], outside: [{kind, entity_id}], preview}`.
+  - `preview` is the usual checks (`verdict`, `checks`, `effects`, `diffs`), or `null` when
+    nothing differs.
+  - `outside` lists entities changed outside change sets since `N`. They come back as a HOLD
+    (`rollback_overwrites_outside_change`) that must be acknowledged on submit.
+- `POST /config/rollback` `{to: N}` stages the rollback as one change in a new change set and
+  returns the stage result (`change_set_id`, `version`, …). It then goes through
+  `submit`/`review` like any set (holds, approval policy, apply). The revision it applies has
+  `kind: "rollback"` and `rolls_back_to: N`.
+- Each op is the kind's own inverse against the current state:
+  - created after `N` → delete (stations, transports and profiles archive);
+  - deleted → re-created;
+  - changed → updated back.
+
+  Ops run creates, then updates, then deletes. A framing rollback produces a runtime generation
+  with the same HOLDs as any framing change. Catalog revisions are never deleted: pins move back.
+- Refusals:
+  - `422 invalid_rollback_target`: `N` must be from r1 up to the revision before the head;
+    there's no ledger before r1.
+  - `409 rollback_crosses_legacy` with `details.newest_legacy_revision`: the range holds a
+    legacy activation. You can roll back to it, not past it.
+  - `409 change_set_open`: finish or discard the open set first.
+  - `422 nothing_to_roll_back`.
+  - `403 forbidden`: needs `config.rollback`.
+- **Not yet:** reverting a spacecraft creation is NO-GO ("Spacecraft can't be removed yet") until
+  domain adds spacecraft archiving (with traffic, archive plus a HOLD; without, delete).

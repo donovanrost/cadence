@@ -101,12 +101,17 @@ defmodule Cadence.Configuration.ChangeSetStore do
     |> join(:inner, [op], change in ChangeRow, on: change.change_id == op.change_id)
     |> where([op, change], op.change_set_id == ^change_set_id and change.state == "staged")
     |> order_by([op, change], asc: change.position, asc: op.position)
-    |> select([op, change], %{op: op, author: change.author, author_key: change.author_key})
+    |> select([op, change], %{
+      op: op,
+      author: change.author,
+      author_key: change.author_key,
+      source: change.source
+    })
     |> Repo.all()
     |> Enum.map(fn %{op: op} = row ->
       op
       |> to_pipeline_op()
-      |> Map.merge(%{author: row.author, author_key: row.author_key})
+      |> Map.merge(%{author: row.author, author_key: row.author_key, source: row.source || %{}})
     end)
   end
 

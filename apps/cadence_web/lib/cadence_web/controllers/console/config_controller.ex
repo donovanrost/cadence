@@ -7,7 +7,7 @@ defmodule CadenceWeb.Console.ConfigController do
 
   use CadenceWeb, :controller
 
-  alias Cadence.Control.Configuration
+  alias Cadence.Control.{Configuration, ConfigurationRollback}
   alias Cadence.Reads.ConfigKindSchema
   alias CadenceWeb.Console.{ConfigJSON, ConfigParams, Problem}
 
@@ -113,6 +113,34 @@ defmodule CadenceWeb.Console.ConfigController do
         })
     end
   end
+
+  @doc "What rolling back to `to` would do (change-sets.md §8). Nothing is written."
+  def rollback_preview(conn, params) do
+    with {:ok, to} <- params(ConfigParams.revision_number(params["to"])),
+         {:ok, result} <-
+           rollback_error(ConfigurationRollback.preview(scope(conn), mission_id(conn), to)) do
+      ok(conn, result)
+    end
+    |> reply(conn)
+  end
+
+  @doc "Stages the rollback to `to` as a new change set (then submit / review like any set)."
+  def rollback(conn, params) do
+    with {:ok, to} <- params(ConfigParams.revision_number(params["to"])),
+         {:ok, result} <-
+           rollback_error(ConfigurationRollback.stage(scope(conn), mission_id(conn), to)) do
+      ok(conn, result)
+    end
+    |> reply(conn)
+  end
+
+  defp rollback_error({:error, {:rollback_crosses_legacy, newest}}),
+    do: {:error, {:rollback_crosses_legacy, %{newest_legacy_revision: newest}}}
+
+  defp rollback_error({:error, {:rollback_unknown_kind, kind}}),
+    do: {:error, {:rollback_unknown_kind, %{kind: kind}}}
+
+  defp rollback_error(result), do: result
 
   defp ok(conn, data), do: {:sent, json(conn, %{data: ConfigJSON.encode(data)})}
 

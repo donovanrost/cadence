@@ -42,6 +42,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/contact_planning/fleet_run_repairs.ex" => :contacts,
     "lib/cadence/control/missions.ex" => :composition,
     "lib/cadence/control/configuration.ex" => :composition,
+    "lib/cadence/control/configuration_rollback.ex" => :composition,
     "lib/cadence/control/configuration_generation.ex" => :composition,
     "lib/cadence/control/scheduling.ex" => :composition,
     "lib/cadence/control/planning_policy.ex" => :composition,

@@ -891,6 +891,8 @@ defmodule CadenceWeb.Router do
         post("/change-sets/:change_set_id/review", ConfigController, :review)
         post("/changes/:change_id/withdraw", ConfigController, :withdraw)
         post("/ops/:op_id/rebase", ConfigController, :rebase)
+        get("/rollback", ConfigController, :rollback_preview)
+        post("/rollback", ConfigController, :rollback)
         get("/revisions", ConfigController, :revisions)
         get("/revisions/:revision", ConfigController, :revision)
         get("/compare", ConfigController, :compare)

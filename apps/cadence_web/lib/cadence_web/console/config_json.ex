@@ -31,7 +31,12 @@ defmodule CadenceWeb.Console.ConfigJSON do
     change_not_found: 404,
     op_not_found: 404,
     mission_not_found: 404,
-    apply_interrupted: 503
+    apply_interrupted: 503,
+    invalid_rollback_target: 422,
+    nothing_to_roll_back: 422,
+    rollback_unknown_kind: 422,
+    rollback_crosses_legacy: 409,
+    change_set_open: 409
   }
 
   @messages %{
@@ -55,7 +60,13 @@ defmodule CadenceWeb.Console.ConfigJSON do
     change_not_found: "Change not found.",
     op_not_found: "Change not found.",
     mission_not_found: "Mission not found.",
-    apply_interrupted: "The apply was interrupted and did not take effect. Try again."
+    apply_interrupted: "The apply was interrupted and did not take effect. Try again.",
+    invalid_rollback_target: "Choose a revision from r1 up to the one before the current one.",
+    nothing_to_roll_back: "Nothing differs from that revision.",
+    rollback_unknown_kind: "A revision in that range has changes this version can't undo.",
+    rollback_crosses_legacy:
+      "The range includes a legacy activation; roll back to it, not past it.",
+    change_set_open: "Finish or discard the open change set first."
   }
 
   @doc "Deep-encodes a facade value for JSON."
