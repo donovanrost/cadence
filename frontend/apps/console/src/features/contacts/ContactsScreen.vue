@@ -204,7 +204,12 @@ const tabs = [
             </div>
           </ApRemote>
         </ApPanel>
-        <SelectedPassPanel :pass="selected" :spacecraft="selectedSpacecraft" />
+        <SelectedPassPanel
+          :mission-id="missionId"
+          :pass="selected"
+          :spacecraft="selectedSpacecraft"
+          @changed="passes.refetch"
+        />
       </div>
     </template>
   </div>

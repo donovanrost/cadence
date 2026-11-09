@@ -2,6 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { passesReader, type Pass } from "./api.ts";
 import { passGantt, passStatus } from "./gantt.ts";
+import type { Attention } from "@/features/now/index.ts";
+import { attentionErrorWords, resolutionRecord, whatToDo } from "./attention.ts";
 
 const now = Date.parse("2026-11-09T02:00:00Z");
 const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
@@ -22,6 +24,10 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   plan: null,
   ended_by: null,
   replaced_by: null,
+  booking_evidence: null,
+  attested_by: null,
+  uplink_confirmed: null,
+  attention: null,
   ...overrides,
 });
 
@@ -70,5 +76,68 @@ describe("passes", () => {
     // Without a fleet match, the row's own identity names it.
     const own = passGantt([pass("x")], () => null, now, null, "spacecraft");
     expect(own.rows[0]?.label).toBe("EARENDIL-312");
+  });
+});
+
+describe("attention block words (U32)", () => {
+  const item = (overrides: Partial<Attention> = {}): Attention => ({
+    id: "at-1",
+    source: "pass_resolution",
+    conflict: "contradicts_attestation",
+    state: "open",
+    acknowledged_by: null,
+    contact_id: null,
+    reservation_id: "pass-9",
+    station: { ref: "svb-1", id: "st-1", code: "SVB-1", name: "Svalbard 1" },
+    provider: { id: "p-1", name: "Northlight" },
+    starts_at: "2026-11-14T03:00:00Z",
+    raised_at: "2026-11-09T10:55:00Z",
+    provider_message: null,
+    resolution: {
+      action: "attested_booked",
+      actor: { kind: "user", id: "u-1", name: "Mira K." },
+      at: "2026-11-09T10:52:00Z",
+      note: "Called the Northlight ops desk.",
+      provider_reference: "NL-48213",
+    },
+    ...overrides,
+  });
+
+  it("reads the resolution record", () => {
+    expect(resolutionRecord(item())).toBe(
+      "Marked booked by Mira K. 10:52Z · ref NL-48213 · ‘Called the Northlight ops desk.’",
+    );
+    const notBooked = item({
+      conflict: "late_confirmation",
+      resolution: {
+        action: "marked_not_booked",
+        actor: { kind: "user", id: "u-1", name: "Mira K." },
+        at: "2026-11-09T10:52:00Z",
+        note: null,
+        provider_reference: null,
+      },
+    });
+    expect(resolutionRecord(notBooked)).toBe("Marked not booked by Mira K. 10:52Z");
+  });
+
+  it("says what to do per conflict, linking the plan only when re-planning helps", () => {
+    expect(whatToDo(item())).toEqual({
+      text: "Don't count on this contact. Re-plan the spacecraft if it needs this contact.",
+      plan: true,
+    });
+    expect(whatToDo(item({ conflict: "cancel_failed" })).text).toBe(
+      "Check with Northlight that the pass is canceled. If it can't be, keep it and record what you did.",
+    );
+  });
+
+  it("an already-resolved item says so and refreshes", () => {
+    expect(
+      attentionErrorWords({
+        kind: "conflict",
+        code: "attention_item_not_open",
+        message: "not open",
+        details: undefined,
+      }),
+    ).toEqual({ text: "This was already resolved.", refresh: true });
   });
 });

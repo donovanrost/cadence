@@ -3,3 +3,4 @@
  * client derivation until api-ops ships the ranked action queue (M6); its shape will be kept.
  */
 export { deriveQueue, GROUP_AT, nowHeadline, type QueueAction, type QueueItem } from "./queue.ts";
+export { attentionReader, attentionWords, type Attention } from "./attention.ts";

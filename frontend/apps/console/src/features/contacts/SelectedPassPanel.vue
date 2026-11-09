@@ -19,6 +19,7 @@ import {
   sourceLabel,
 } from "@/features/scheduling/index.ts";
 import type { Pass } from "./api.ts";
+import AttentionBlock from "./AttentionBlock.vue";
 import { stationLabel } from "./gantt.ts";
 
 /**
@@ -27,17 +28,26 @@ import { stationLabel } from "./gantt.ts";
  * Swap station / Release stay hidden until their endpoints exist.
  */
 const props = defineProps<{
+  missionId: string;
   pass: Pass | null;
   spacecraft: { name: string; scid: number } | null;
 }>();
+defineEmits<{ changed: [] }>();
 const now = useNow();
 
 const state = computed(() => (props.pass ? contactState(props.pass) : null));
-const tag = computed(() =>
-  state.value === null
-    ? null
-    : { state: contactOpState(state.value), label: contactStateWord[state.value] },
-);
+/** U32: an attested pass says whose word it rests on, not the provider's. */
+const tag = computed(() => {
+  if (state.value === null) return null;
+  const p = props.pass;
+  const label =
+    p?.booking_evidence === "operator_attested"
+      ? `Booked · attested by ${p.attested_by?.name ?? "an operator"}`
+      : contactStateWord[state.value];
+  return { state: contactOpState(state.value), label };
+});
+/** false only: null means no uplink leg was asked for (downlink only). */
+const uplinkUnconfirmed = computed(() => props.pass?.uplink_confirmed === false);
 /** K2: a rejected / failed reservation booked by a plan can be re-planned (lead, 4259c615). */
 const replan = computed(() => {
   const p = props.pass;
@@ -97,6 +107,12 @@ const countdown = computed(() => {
       sentence="Choose a bar in the schedule."
     />
     <div v-else class="flex flex-col gap-3 p-4">
+      <AttentionBlock
+        v-if="pass.attention"
+        :mission-id="missionId"
+        :attention="pass.attention"
+        @changed="$emit('changed')"
+      />
       <div class="flex flex-wrap items-center gap-3">
         <RouterLink
           v-if="spacecraft"
@@ -105,6 +121,7 @@ const countdown = computed(() => {
           >{{ spacecraft.name }}</RouterLink
         >
         <ApTag v-if="tag" :state="tag.state" :label="tag.label" />
+        <ApTag v-if="uplinkUnconfirmed" state="caution" label="Uplink unconfirmed" />
       </div>
       <p class="m-0 font-mono text-md text-text-2 uppercase">
         {{ pass.station.name ?? stationLabel(pass) }} ·
