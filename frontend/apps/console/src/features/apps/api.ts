@@ -11,7 +11,9 @@ const app = object({
   platform: decoders.optional(boolean),
   installed: boolean,
   state: oneOf(["installed", "disabled", "not_installed"]),
-  version: nullable(string),
+  /** Installed version (an integer today), shown as text; null when not installed. */
+  version: (v: unknown, path = "") =>
+    typeof v === "number" ? String(v) : nullable(string)(v === undefined ? null : v, path),
   consequence_if_missing: nullable(string),
 });
 export const appsReader = object({ apps: array(app, 200), permissions: array(token, 50) });

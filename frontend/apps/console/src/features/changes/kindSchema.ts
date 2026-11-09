@@ -8,7 +8,17 @@ const raw: Reader<unknown> = (value) => (value === undefined ? null : value);
 export const schemaFieldReader = object({
   path: string,
   label: string,
-  type: oneOf(["integer", "boolean", "enum", "string", "reference", "datetime", "time", "list"]),
+  type: oneOf([
+    "integer",
+    "number",
+    "boolean",
+    "enum",
+    "string",
+    "reference",
+    "datetime",
+    "time",
+    "list",
+  ]),
   unit: nullable(string),
   enum: nullable(array(object({ value: raw, label: string }), 200)),
   range: nullable(object({ min: optional(nullable(number)), max: optional(nullable(number)) })),
@@ -62,6 +72,7 @@ export function displayValue(f: SchemaField, v: unknown): string {
   if (Array.isArray(v))
     return v.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(", ");
   if (typeof v === "number" && f.unit === "micros") return (v / 1_000_000).toFixed(2);
+  if (typeof v === "number" && f.unit === "ratio") return `${trimNumber(v * 100)}%`;
   return typeof v === "string" ? v : JSON.stringify(v);
 }
 
@@ -135,6 +146,8 @@ export function toValue(f: SchemaField, text: string): FieldCheck {
         return { ok: false, message: `${f.label} is at most ${bound(f.range.max)}.` };
       return { ok: true, value: n };
     }
+    case "number":
+      return toNumber(f, t);
     case "boolean":
       return { ok: true, value: t === "true" };
     case "enum": {
@@ -189,6 +202,26 @@ export function diffEdits(schema: KindSchema, before: FormValues, after: FormVal
       changes.push({ path: f.path, value: checked.value });
   }
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, changes };
+}
+
+/** Decimal fields; `ratio` is written as a percent ("95%" or "95") and stored as 0.95. */
+function toNumber(f: SchemaField, t: string): FieldCheck {
+  const ratio = f.unit === "ratio";
+  const text = ratio ? t.replace(/%$/, "").trim() : t;
+  if (!/^-?\d+(\.\d+)?$/.test(text))
+    return { ok: false, message: `${f.label}: write a number${ratio ? " like 95%" : ""}.` };
+  const n = ratio ? Number(text) / 100 : Number(text);
+  const shown = (b: number) => (ratio ? `${trimNumber(b * 100)}%` : String(b));
+  if (f.range?.min != null && n < f.range.min)
+    return { ok: false, message: `${f.label} is at least ${shown(f.range.min)}.` };
+  if (f.range?.max != null && n > f.range.max)
+    return { ok: false, message: `${f.label} is at most ${shown(f.range.max)}.` };
+  return { ok: true, value: n };
+}
+
+/** 95.00000000000001 → "95"; keeps up to 4 decimals. */
+function trimNumber(n: number): string {
+  return String(Math.round(n * 10_000) / 10_000);
 }
 
 /** Server patterns are hints; an unparsable one never blocks (the server re-validates). */

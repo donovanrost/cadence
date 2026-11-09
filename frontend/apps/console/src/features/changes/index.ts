@@ -20,6 +20,7 @@ export { default as SchemaForm } from "./SchemaForm.vue";
 export { default as KindEditor } from "./KindEditor.vue";
 export {
   diffEdits,
+  displayValue,
   fetchKindSchema,
   fromDocument,
   schemaFieldReader,

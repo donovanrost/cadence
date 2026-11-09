@@ -19,7 +19,13 @@ function set(path: string, value: string) {
 const currencies = ["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "NZD", "NOK", "SEK"] as const;
 const isCurrency = (f: SchemaField) => f.type === "string" && /(^|\.)currency$/.test(f.path);
 const unitLabel = (f: SchemaField) =>
-  f.unit === "s" ? "duration" : f.unit === "micros" ? "amount" : (f.unit ?? undefined);
+  f.unit === "s"
+    ? "duration"
+    : f.unit === "micros"
+      ? "amount"
+      : f.unit === "ratio"
+        ? "%"
+        : (f.unit ?? undefined);
 const yesNo = (f: SchemaField) => {
   const def = f.default === true ? "true" : f.default === false ? "false" : null;
   return [
@@ -72,11 +78,15 @@ const hint = (f: SchemaField) =>
           :label="f.label"
           :model-value="values[f.path] ?? ''"
           :mono="
-            f.type === 'integer' || f.type === 'datetime' || f.type === 'time' || f.type === 'list'
+            f.type === 'integer' ||
+            f.type === 'number' ||
+            f.type === 'datetime' ||
+            f.type === 'time' ||
+            f.type === 'list'
           "
           :unit="unitLabel(f)"
           :inputmode="
-            f.unit === 'micros'
+            f.unit === 'micros' || f.type === 'number'
               ? 'decimal'
               : f.type === 'integer' && f.unit !== 's'
                 ? 'numeric'

@@ -6,7 +6,9 @@ import {
   fromDocument,
   kindSchemaReader,
   parseDuration,
+  toValue,
   visible,
+  type SchemaField,
 } from "./kindSchema.ts";
 
 const decoded = decode(kindSchemaReader, {
@@ -100,5 +102,34 @@ describe("U24 units", () => {
     expect(parseDuration("48h 00m")).toBe(172_800);
     expect(parseDuration("3600")).toBe(3_600);
     expect(parseDuration("2 weeks")).toBeNull();
+  });
+});
+
+describe("number fields (ST1 pass review)", () => {
+  const base: SchemaField = {
+    path: "realization_target",
+    label: "Target",
+    type: "number",
+    unit: null,
+    enum: null,
+    range: { min: 0, max: 1 },
+    default: 0.98,
+    required: false,
+    help: null,
+    visible_when: null,
+    pattern: undefined,
+  };
+  it("parses decimals within range", () => {
+    expect(toValue(base, "0.95")).toEqual({ ok: true, value: 0.95 });
+    expect(toValue(base, "1.5")).toEqual({ ok: false, message: "Target is at most 1." });
+    expect(toValue(base, "abc").ok).toBe(false);
+  });
+  it("writes a ratio as a percent", () => {
+    const ratio = { ...base, unit: "ratio" };
+    expect(toValue(ratio, "95%")).toEqual({ ok: true, value: 0.95 });
+    expect(toValue(ratio, "98")).toEqual({ ok: true, value: 0.98 });
+    expect(fromDocument({ kind: "s", fields: [ratio] }, { realization_target: 0.95 })).toEqual({
+      realization_target: "95%",
+    });
   });
 });

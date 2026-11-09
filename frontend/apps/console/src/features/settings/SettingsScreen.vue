@@ -3,10 +3,11 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useConsoleScope } from "@/shell";
-import { ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApTabLinks, formatShort } from "@/ui";
-import { fetchSettings, sourceLabel, valueText, type Settings, type SettingsScope } from "./api.ts";
+import { ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApTabLinks } from "@/ui";
+import SettingsSectionPanel from "./SettingsSectionPanel.vue";
+import { fetchSettings, type Settings, type SettingsScope } from "./api.ts";
 
-/** Mission or organization settings, sections from the server registry (read-only v1). */
+/** Mission or organization settings, sections from the server registry (editable with settings.edit; saves are direct (ST1)). */
 const route = useRoute();
 const scope = useConsoleScope();
 const target = computed((): SettingsScope | null => {
@@ -46,14 +47,7 @@ const label = computed(() => {
 
 <template>
   <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
-    <ApPageHeader :label="label" title="Settings" size="reading">
-      <template v-if="state.status === 'ready' && state.value.version" #subtitle>
-        <span class="font-mono text-sm text-text-3"
-          >v{{ state.value.version.version }} · {{ formatShort(new Date(state.value.version.at))
-          }}{{ state.value.version.actor ? ` by ${state.value.version.actor.name}` : "" }}</span
-        >
-      </template>
-    </ApPageHeader>
+    <ApPageHeader :label="label" title="Settings" size="reading" />
     <ApPanel v-if="notProvided" index="S1" title="Settings" flush>
       <ApEmptyState
         state="off"
@@ -69,40 +63,14 @@ const label = computed(() => {
           :active="active(value)"
           label="Settings sections"
         />
-        <ApPanel
+        <SettingsSectionPanel
           v-for="section in value.sections.filter((s) => s.key === active(value))"
           :key="section.key"
-          index="S1"
-          :title="section.title"
-          :meta="section.key"
-          flush
-        >
-          <p
-            v-if="section.purpose"
-            class="m-0 border-b border-hairline px-4 py-2.5 text-md text-text-3"
-          >
-            {{ section.purpose }}
-          </p>
-          <dl class="m-0 grid grid-cols-1 gap-px bg-hairline md:grid-cols-2">
-            <div
-              v-for="f in section.fields"
-              :key="f.path"
-              class="flex flex-col gap-1 bg-panel px-4 py-3"
-            >
-              <dt class="ap-label">{{ f.label }}</dt>
-              <dd
-                class="m-0 font-mono text-md"
-                :class="f.source === (target?.kind ?? 'mission') ? 'text-readout' : 'text-text-3'"
-              >
-                {{ valueText(f) }}
-              </dd>
-              <dd class="m-0 font-mono text-xs text-text-4 uppercase">
-                {{ sourceLabel(f, target?.kind ?? "mission") }}
-              </dd>
-              <dd v-if="f.help" class="m-0 text-sm text-text-3">{{ f.help }}</dd>
-            </div>
-          </dl>
-        </ApPanel>
+          :scope="target ?? { kind: 'mission', id: '' }"
+          :section="section"
+          :can-edit="value.permissions.includes('settings.edit')"
+          @saved="refetch"
+        />
         <p v-if="!value.permissions.includes('settings.edit')" class="m-0 text-sm text-text-3">
           Org admins change settings.
         </p>
