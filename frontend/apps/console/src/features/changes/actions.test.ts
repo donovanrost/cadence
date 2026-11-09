@@ -14,6 +14,8 @@ const base: PreviewItem = {
   transport_value: undefined,
   sentence: undefined,
   cause: undefined,
+  entity_name: undefined,
+  paths: undefined,
 };
 
 describe("preview compatibility HOLD (DECISIONS #33)", () => {
@@ -147,5 +149,39 @@ describe("failureOutcome invalid_params", () => {
         "changed",
       ).sentence,
     ).toBe("Nothing was changed. comment: is required");
+  });
+});
+
+describe("conflict sentences (api 062a73f8, ux rollback review #1)", () => {
+  const path = {
+    path: "frame_parameters.frame_size",
+    label: "frame size",
+    unit: "bytes",
+    base: 900,
+    live: 1024,
+    staged: 1115,
+    changed_in: 9 as number | "outside",
+    changed_by: { name: "Mira K." } as { name: string } | null,
+  };
+  const item: PreviewItem = {
+    ...base,
+    kind: "spacecraft_profile",
+    entity_id: "profile-earendil-block-1",
+    entity_name: "Earendil Block 1",
+    paths: [path],
+  };
+  it("names the field, both values, the revision and who changed it", () => {
+    expect(itemLine(item, "r8")).toBe(
+      "Earendil Block 1 · frame size is 1,024 bytes now, not 900 bytes as r8 left it (changed in r9 by Mira K.). Roll back r9 first, or change it by hand.",
+    );
+  });
+  it("says outside changes without a name or a rollback hint", () => {
+    const outside = {
+      ...item,
+      paths: [{ ...path, changed_in: "outside" as const, changed_by: null }],
+    };
+    expect(itemLine(outside, "r8")).toBe(
+      "Earendil Block 1 · frame size is 1,024 bytes now, not 900 bytes as r8 left it (changed outside a change set). Change it by hand.",
+    );
   });
 });

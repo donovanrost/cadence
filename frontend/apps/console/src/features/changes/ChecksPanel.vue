@@ -5,7 +5,8 @@ import { ApButton, ApCallout, ApCheckRows, ApPanel, ApRemote, plural, type ApChe
 import { humanize, itemLine, type Preview } from "./actions.ts";
 
 /** K2 Checks: the server's dry run of the staged set (validation, conflicts; more kinds in P2). */
-const props = defineProps<{ preview: RemoteState<Preview> }>();
+/** `leftBy` names what the conflict's base came from ("r8"), for the conflict sentence. */
+const props = defineProps<{ preview: RemoteState<Preview>; leftBy?: string | undefined }>();
 defineEmits<{ retry: [] }>();
 
 const labels: Readonly<Record<string, string>> = {
@@ -25,7 +26,10 @@ function rows(preview: Preview): readonly ApCheckRow[] {
             ? "Profile framing matches every transport's ingress"
             : "Every change is valid"
         : `${plural(check.items.length, "problem")}`,
-    detail: check.items.map(itemLine).slice(0, 5).join(" · "),
+    detail: check.items
+      .slice(0, 5)
+      .map((i) => itemLine(i, props.leftBy))
+      .join(" · "),
     ...(check.verdict === "go"
       ? { state: "nominal" as const, verdict: "GO" }
       : check.verdict === "hold"

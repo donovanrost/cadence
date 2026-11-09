@@ -29,8 +29,54 @@ const previewItem = object({
   ),
   sentence: decoders.optional(nullable(string)),
   cause: decoders.optional(nullable(token)),
+  entity_name: decoders.optional(nullable(string)),
+  // Conflict detail (api 062a73f8): what moved under a staged change, where and by whom.
+  paths: decoders.optional(
+    array(
+      object({
+        path: string,
+        label: decoders.optional(nullable(string)),
+        unit: decoders.optional(nullable(string)),
+        base: (v: unknown) => (v === undefined ? null : v),
+        live: (v: unknown) => (v === undefined ? null : v),
+        staged: (v: unknown) => (v === undefined ? null : v),
+        changed_in: (v: unknown, path = "") =>
+          v === "outside" ? ("outside" as const) : integer(v, path),
+        changed_by: decoders.optional(nullable(object({ name: string }))),
+      }),
+      200,
+    ),
+  ),
 });
 export type PreviewItem = Decoded<typeof previewItem>;
+
+/** 1115 → "1,115", with the schema unit when there is one. */
+function valueText(v: unknown, unit?: string | null): string {
+  if (v === null || v === undefined) return "not set";
+  const text = typeof v === "number" ? v.toLocaleString("en-US") : shown(v);
+  return unit && typeof v === "number" ? `${text} ${unit}` : text;
+}
+
+/**
+ * ux (rollback review #1): "<Entity> · <field> is <live> now, not <base> as <leftBy> left it
+ * (changed in r9 by Mira K.). Roll back r9 first, or change it by hand."
+ */
+export function conflictSentences(item: PreviewItem, leftBy?: string): string | null {
+  if (!item.paths || item.paths.length === 0) return null;
+  const who = item.entity_name ?? item.entity_id ?? humanize(item.kind);
+  return item.paths
+    .map((p) => {
+      const since =
+        p.changed_in === "outside"
+          ? "changed outside a change set"
+          : `changed in r${p.changed_in}${p.changed_by ? ` by ${p.changed_by.name}` : ""}`;
+      const head = `${who} · ${p.label ?? p.path} is ${valueText(p.live, p.unit)} now, not ${valueText(p.base, p.unit)} as ${leftBy ?? "it was when staged"}${leftBy ? " left it" : ""} (${since}).`;
+      return p.changed_in === "outside"
+        ? `${head} Change it by hand.`
+        : `${head} Roll back r${p.changed_in} first, or change it by hand.`;
+    })
+    .join(" ");
+}
 
 const shown = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
 
@@ -44,7 +90,9 @@ export function humanize(key: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-export function itemLine(item: PreviewItem): string {
+export function itemLine(item: PreviewItem, leftBy?: string): string {
+  const conflict = conflictSentences(item, leftBy);
+  if (conflict) return conflict;
   if (item.profile_value && item.transport_value) {
     const both = `profile ${item.profile_value.path} = ${shown(item.profile_value.value)} vs ${item.transport_value.transport.name} ${item.transport_value.path} = ${shown(item.transport_value.value)}`;
     const count = item.spacecraft_count == null ? "" : ` · ${item.spacecraft_count} spacecraft`;

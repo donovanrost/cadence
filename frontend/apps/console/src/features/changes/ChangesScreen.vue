@@ -157,7 +157,11 @@ function meta(config: ConfigState): string | null {
               :change-set="value.change_set"
               @changed="refetch"
             />
-            <ChecksPanel :preview="preview.state.value" @retry="reloadAll" />
+            <ChecksPanel
+              :preview="preview.state.value"
+              :left-by="value.change_set ? `r${value.change_set.base_revision}` : undefined"
+              @retry="reloadAll"
+            />
           </div>
           <ReviewPanel
             v-if="reviewing(value)"

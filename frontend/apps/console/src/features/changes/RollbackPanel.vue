@@ -99,7 +99,12 @@ async function stage() {
           <ApCallout v-if="noGo" tone="crit"
             >This rollback can't be staged: {{ noGoReason }}</ApCallout
           >
-          <ChecksPanel v-if="checks" :preview="checks" @retry="preview.refetch" />
+          <ChecksPanel
+            v-if="checks"
+            :preview="checks"
+            :left-by="`r${value.head}`"
+            @retry="preview.refetch"
+          />
         </template>
       </ApRemote>
       <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
