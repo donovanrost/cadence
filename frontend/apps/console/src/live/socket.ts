@@ -46,17 +46,29 @@ export function onReconnect(listener: () => void): () => void {
   return () => reconnectListeners.delete(listener);
 }
 
-type Entry = { channel: Channel; users: number };
+type Entry = { channel: Channel; users: number; joinListeners: Set<() => void> };
 const channels = new Map<string, Entry>();
 
 /** Ref-counted shared channel per topic, so several components can listen to one join. */
-export function acquireChannel(topic: string): { channel: Channel; release: () => void } {
+export type ChannelHandle = {
+  channel: Channel;
+  /** Runs on every successful (re)join of the shared channel; returns an unregister function. */
+  onJoin: (listener: () => void) => () => void;
+  joined: () => boolean;
+  release: () => void;
+};
+
+export function acquireChannel(topic: string): ChannelHandle {
   if (!socket) throw new Error("acquireChannel() before startSocket()");
   let entry = channels.get(topic);
   if (!entry) {
     const channel = socket.channel(topic, {});
-    channel.join();
-    entry = { channel, users: 0 };
+    const joinListeners = new Set<() => void>();
+    // The join push keeps its receive hooks across rejoins (reconnects), so this fires every time.
+    channel.join().receive("ok", () => {
+      for (const listener of joinListeners) listener();
+    });
+    entry = { channel, users: 0, joinListeners };
     channels.set(topic, entry);
   }
   entry.users += 1;
@@ -64,6 +76,11 @@ export function acquireChannel(topic: string): { channel: Channel; release: () =
   let released = false;
   return {
     channel: held.channel,
+    onJoin: (listener) => {
+      held.joinListeners.add(listener);
+      return () => held.joinListeners.delete(listener);
+    },
+    joined: () => held.channel.state === "joined",
     release: () => {
       if (released) return;
       released = true;
