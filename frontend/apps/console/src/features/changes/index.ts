@@ -24,6 +24,7 @@ export {
   fromDocument,
   schemaFieldReader,
   toValue,
+  visible,
   type SchemaField,
   type EditableKind,
   type FormValues,

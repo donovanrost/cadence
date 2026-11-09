@@ -3,6 +3,7 @@ import {
   fromDocument,
   schemaFieldReader,
   toValue,
+  visible,
   type FormValues,
   type SchemaField,
 } from "@/features/changes/index.ts";
@@ -113,6 +114,7 @@ export function buildDocument(
   const document: Record<string, unknown> = {};
   const errors: Record<string, string> = {};
   for (const f of policy.schema) {
+    if (!visible(f, values)) continue;
     const checked = toValue(f, values[f.path] ?? "");
     if (!checked.ok) {
       errors[f.path] = checked.message;

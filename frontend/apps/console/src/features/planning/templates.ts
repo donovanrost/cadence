@@ -2,6 +2,7 @@ import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/
 import {
   schemaFieldReader,
   toValue,
+  visible,
   type FormValues,
   type SchemaField,
 } from "@/features/changes/index.ts";
@@ -98,6 +99,8 @@ export function buildNested(
   const document = structuredClone((base ?? {}) as Record<string, unknown>);
   const errors: Record<string, string> = {};
   for (const f of fields) {
+    // Hidden fields (visible_when false) carry over from `base` unchecked.
+    if (!visible(f, values)) continue;
     const checked = toValue(f, values[f.path] ?? "");
     if (!checked.ok) {
       errors[f.path] = checked.message;

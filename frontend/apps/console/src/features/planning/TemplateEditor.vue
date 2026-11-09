@@ -69,6 +69,9 @@ function collect() {
     props.template?.document ?? schema.state.value.value.defaults,
   );
   errors.value = built.ok ? {} : built.errors;
+  const problems = (t.ok ? 0 : 1) + (built.ok ? 0 : Object.keys(built.errors).length);
+  if (problems > 0)
+    note.value = { tone: "caution", text: `Fix ${plural(problems, "highlighted field")} first.` };
   return t.ok && built.ok ? { target: t.target, document: built.document } : null;
 }
 
@@ -81,7 +84,7 @@ async function preview() {
     note.value = r.ok
       ? {
           tone: r.value.warnings.length > 0 ? "caution" : "nominal",
-          text: `${plural(r.value.spacecraft_count, "spacecraft", "spacecraft")} · ${formatCount(r.value.contacts)} contacts a day${r.value.warnings.length ? ` · ${r.value.warnings.map((w) => warningText[w.code] ?? w.code).join(" ")}` : ""}`,
+          text: `${plural(r.value.spacecraft_count, "spacecraft", "spacecraft")} · ${r.value.contacts_per_day !== null ? `${formatCount(Math.round(r.value.contacts_per_day))} contacts a day on average` : `${formatCount(r.value.contacts)} contacts in the next day`}${r.value.warnings.length ? ` · ${r.value.warnings.map((w) => warningText[w.code] ?? w.code).join(" ")}` : ""}`,
         }
       : { tone: "crit", text: failureOutcome(r.error, "changed").sentence };
   } finally {
