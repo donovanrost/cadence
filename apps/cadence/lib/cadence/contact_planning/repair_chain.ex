@@ -168,50 +168,51 @@ defmodule Cadence.ContactPlanning.RepairChain do
   @doc """
   One-time pairing for applied repairs created before pairings were persisted (qa #30): each
   such run pairs its new passes with its source chain's lost bookings, the same way
-  `RepairPairing` does at creation, and persists it. Returns the run ids it filled.
+  `RepairPairing` does at creation, and persists it. Returns the run ids it filled; a link that
+  can't be paired is skipped. Run once per mission with `mix cadence.repairs.backfill_pairing
+  ORG MISSION` after deploying the chain model; it only fills runs with no pairing, so a rerun
+  is harmless.
   """
   @spec backfill(binary(), binary()) :: [binary()]
   def backfill(organization_id, mission_id) do
-    for link <- RepairLinks.list(organization_id, mission_id),
-        link.replaces == %{},
-        plan = applied(organization_id, mission_id, link.plan_id),
-        plan != nil,
-        {:ok, chain} = load(organization_id, mission_id, link.source),
-        {:ok, version} =
-          ContactPlans.fetch_version(
-            organization_id,
-            mission_id,
-            plan.contact_plan_id,
-            plan.approved_version
-          ),
-        replaces =
-          RepairPairing.summary(
-            %{
-              organization_id: organization_id,
-              mission_id: mission_id,
-              input_document: %{
-                "repair" => %{
-                  "lost_bookings" =>
-                    lost_booking_inputs(
-                      %{
-                        chain
-                        | items:
-                            Enum.reject(
-                              chain.items,
-                              &(&1.contact_plan_id == plan.contact_plan_id)
-                            )
-                      },
-                      organization_id,
-                      mission_id
-                    )
-                }
-              }
-            },
-            version
-          ),
-        map_size(replaces) > 0,
-        :ok = RepairLinks.put_replaces(link.run_id, replaces["replaces"]) do
-      link.run_id
+    organization_id
+    |> RepairLinks.list(mission_id)
+    |> Enum.filter(&(&1.replaces == %{}))
+    |> Enum.flat_map(fn link ->
+      case backfill_link(organization_id, mission_id, link) do
+        :ok -> [link.run_id]
+        _skipped -> []
+      end
+    end)
+  end
+
+  # Skips (never raises on) a link that isn't applied, can't load or pairs nothing.
+  defp backfill_link(organization_id, mission_id, link) do
+    with %{} = plan <- applied(organization_id, mission_id, link.plan_id),
+         {:ok, chain} <- load(organization_id, mission_id, link.source),
+         {:ok, version} <-
+           ContactPlans.fetch_version(
+             organization_id,
+             mission_id,
+             plan.contact_plan_id,
+             plan.approved_version
+           ),
+         earlier = %{
+           chain
+           | items: Enum.reject(chain.items, &(&1.contact_plan_id == plan.contact_plan_id))
+         },
+         run = %{
+           organization_id: organization_id,
+           mission_id: mission_id,
+           input_document: %{
+             "repair" => %{
+               "lost_bookings" => lost_booking_inputs(earlier, organization_id, mission_id)
+             }
+           }
+         },
+         %{"replaces" => replaces} when map_size(replaces) > 0 <-
+           RepairPairing.summary(run, version) do
+      RepairLinks.put_replaces(link.run_id, replaces)
     end
   end
 
@@ -274,6 +275,7 @@ defmodule Cadence.ContactPlanning.RepairChain do
         snapshot != nil do
       %{
         "key" => lost_key(item),
+        "requirement_id" => snapshot.contact_requirement_id,
         "spacecraft_id" => (snapshot.route_binding_document || %{})["spacecraft_id"],
         "starts_at" => DateTime.to_iso8601(snapshot.starts_at)
       }

@@ -6,8 +6,10 @@ defmodule Cadence.ContactPlanning.RepairPairing do
 
   The repair records the lost bookings it started from in its input
   (`input_document["repair"]["lost_bookings"]`, from `RepairChain` at repair start). New passes
-  are the candidate's selected passes that aren't locked. They pair per spacecraft in time
-  order, the same way the repair diff pairs moves.
+  are the candidate's selected passes that aren't locked. Pairing (domain review R1, DECISIONS
+  #56): within the same `contact_requirement_id` first, nearest start first; then, only where a
+  side's requirement is unknown, within the same spacecraft, nearest start first. The rest stay
+  unpaired: a new pass for demand that was never lost replaces nothing.
   """
 
   alias Cadence.ContactPlanning.ContactPlans
@@ -27,6 +29,7 @@ defmodule Cadence.ContactPlanning.RepairPairing do
       |> Enum.map(
         &%{
           id: &1.contact_opportunity_snapshot_id,
+          requirement_id: &1.contact_requirement_id,
           spacecraft_id: (&1.route_binding_document || %{})["spacecraft_id"],
           starts_at: &1.starts_at
         }
@@ -35,7 +38,13 @@ defmodule Cadence.ContactPlanning.RepairPairing do
     lost =
       Enum.map(lost, fn booking ->
         {:ok, starts_at, _} = DateTime.from_iso8601(booking["starts_at"])
-        %{id: booking["key"], spacecraft_id: booking["spacecraft_id"], starts_at: starts_at}
+
+        %{
+          id: booking["key"],
+          requirement_id: booking["requirement_id"],
+          spacecraft_id: booking["spacecraft_id"],
+          starts_at: starts_at
+        }
       end)
 
     %{"replaces" => pair(lost, fresh)}
@@ -43,18 +52,44 @@ defmodule Cadence.ContactPlanning.RepairPairing do
 
   def summary(_run, _version), do: %{}
 
-  @doc "Pairs `%{id, spacecraft_id, starts_at}` lists per spacecraft in time order: `%{new id => lost id}`."
+  @doc """
+  Pairs `%{id, requirement_id, spacecraft_id, starts_at}` lists: `%{new id => lost id}`. Same
+  requirement first; then same spacecraft where either requirement is unknown; nearest start
+  first within each step (ties by id); the rest unpaired.
+  """
   @spec pair([map()], [map()]) :: %{binary() => binary()}
   def pair(lost, fresh) do
-    lost_by = Enum.group_by(lost, & &1.spacecraft_id)
+    {pairs, lost, fresh} = greedy(lost, fresh, %{}, &same_requirement?/2)
+    {pairs, _lost, _fresh} = greedy(lost, fresh, pairs, &same_spacecraft_unknown_requirement?/2)
+    pairs
+  end
 
-    for {spacecraft_id, new} <- Enum.group_by(fresh, & &1.spacecraft_id),
-        {to, from} <-
-          Enum.zip(
-            Enum.sort_by(new, & &1.starts_at, DateTime),
-            lost_by |> Map.get(spacecraft_id, []) |> Enum.sort_by(& &1.starts_at, DateTime)
-          ),
-        into: %{},
-        do: {to.id, from.id}
+  defp same_requirement?(l, f),
+    do: l.requirement_id != nil and l.requirement_id == f.requirement_id
+
+  defp same_spacecraft_unknown_requirement?(l, f),
+    do:
+      (l.requirement_id == nil or f.requirement_id == nil) and l.spacecraft_id != nil and
+        l.spacecraft_id == f.spacecraft_id
+
+  # Repeatedly takes the closest eligible (lost, new) pair until none is left.
+  defp greedy(lost, fresh, pairs, eligible?) do
+    candidates =
+      for l <- lost, f <- fresh, eligible?.(l, f) do
+        {abs(DateTime.diff(f.starts_at, l.starts_at, :millisecond)), l.id, f.id, l, f}
+      end
+
+    case Enum.min(candidates, fn -> nil end) do
+      nil ->
+        {pairs, lost, fresh}
+
+      {_distance, _lost_id, _new_id, l, f} ->
+        greedy(
+          List.delete(lost, l),
+          List.delete(fresh, f),
+          Map.put(pairs, f.id, l.id),
+          eligible?
+        )
+    end
   end
 end

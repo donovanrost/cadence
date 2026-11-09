@@ -136,20 +136,38 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
   # qa #30: the day's current bookings across the repair chain (root plan plus applied
   # repairs) are locked, so bookings an earlier repair made aren't re-sent, and a pass whose
   # booking was lost is re-planned even when a later plan had locked it.
+  # Also kept (review R3): a pass a chain version locks that no item in the chain booked, so
+  # nothing says it was lost (a lock carried from elsewhere). A locked pass whose booking is in
+  # the chain follows that booking: live stays locked, lost is re-planned.
   defp source_locked_commitments(plan, chain) do
     live =
       chain
       |> RepairChain.live_items()
       |> MapSet.new(&{&1.contact_plan_id, &1.contact_opportunity_snapshot_id})
 
+    booked = MapSet.new(chain.items, & &1.contact_opportunity_snapshot_id)
+
     chain.plans
     |> Enum.flat_map(fn plan_id ->
+      version = chain.versions[plan_id]
+      held = held_locks(plan, plan_id, version, booked)
+
       plan.organization_id
-      |> ContactPlans.selected_snapshots(plan.mission_id, plan_id, chain.versions[plan_id])
-      |> Enum.filter(&MapSet.member?(live, {plan_id, &1.contact_opportunity_snapshot_id}))
+      |> ContactPlans.selected_snapshots(plan.mission_id, plan_id, version)
+      |> Enum.filter(fn snapshot ->
+        id = snapshot.contact_opportunity_snapshot_id
+        MapSet.member?(live, {plan_id, id}) or MapSet.member?(held, id)
+      end)
     end)
     |> Enum.uniq_by(& &1.contact_opportunity_snapshot_id)
     |> Enum.sort_by(&{&1.starts_at, &1.contact_opportunity_snapshot_id})
+  end
+
+  defp held_locks(plan, plan_id, version, booked) do
+    case ContactPlans.fetch_version(plan.organization_id, plan.mission_id, plan_id, version) do
+      {:ok, %{locked_snapshot_ids: ids}} -> ids |> MapSet.new() |> MapSet.difference(booked)
+      _missing -> MapSet.new()
+    end
   end
 
   defp exact_source(run, plan, current_version, requested_version) do
