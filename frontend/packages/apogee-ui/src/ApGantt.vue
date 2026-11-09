@@ -207,6 +207,11 @@ async function onKey(event: KeyboardEvent, id: string) {
   background: var(--apogee-wash-scheduled);
   color: var(--color-text-2);
 }
+.ap-bar--done {
+  border: 1px solid var(--color-line);
+  background: transparent;
+  color: var(--color-text-4);
+}
 .ap-bar--selected {
   outline: 2px solid var(--color-readout);
   outline-offset: 3px;

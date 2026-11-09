@@ -1,0 +1,209 @@
+import { decoders as d, request, type ApiResult, type Decoded, type Reader } from "@/api";
+
+/** Contracts: docs/apogee/api/scheduling.md §4 (S3 drafts, S6 plans, plan detail with S2 demand). */
+const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/contact-plans`;
+
+export const planStates = [
+  "draft",
+  "pending_approval",
+  "approved",
+  "executing",
+  "partially_reserved",
+  "reserved",
+  "failed",
+  "canceled",
+  "superseded",
+] as const;
+export type PlanState = (typeof planStates)[number];
+
+const planRow = {
+  id: d.token,
+  version: d.integer,
+  state: d.oneOf(planStates),
+  window: d.object({ from: d.nullable(d.timestamp), to: d.nullable(d.timestamp) }),
+  author: d.nullable(d.object({ name: d.string })),
+  counts: d.object({
+    passes: d.integer,
+    minutes: d.integer,
+    conflicts: d.integer,
+    unsatisfied: d.integer,
+  }),
+  ready_to_approve: d.boolean,
+  updated_at: d.timestamp,
+};
+
+export const plansReader = d.object({ plans: d.array(d.object(planRow), 100) });
+export type PlanSummary = Decoded<typeof plansReader>["plans"][number];
+
+export const planDetailReader = d.object({
+  ...planRow,
+  passes: d.array(
+    d.object({
+      snapshot_id: d.token,
+      spacecraft_id: d.nullable(d.token),
+      station: d.nullable(d.string),
+      starts_at: d.timestamp,
+      ends_at: d.timestamp,
+      synthetic: d.boolean,
+      locked: d.boolean,
+    }),
+    5_000,
+  ),
+  demand: d.object({
+    rule_met: d.integer,
+    rule_total: d.integer,
+    spacecraft: d.array(
+      d.object({
+        spacecraft_id: d.token,
+        rule_met: d.boolean,
+        contacts: d.object({ have: d.integer, need: d.nullable(d.integer) }),
+        reasons: d.array(d.string),
+      }),
+      5_000,
+    ),
+    rules: d.array(
+      d.object({
+        requirement_id: d.token,
+        version: d.integer,
+        spacecraft_id: d.nullable(d.token),
+        text: d.string,
+        source: d.string,
+      }),
+      5_000,
+    ),
+  }),
+  unmet: d.array(
+    d.object({
+      requirement_id: d.token,
+      requirement_version: d.integer,
+      spacecraft_id: d.nullable(d.token),
+      why: d.array(d.string),
+    }),
+    5_000,
+  ),
+  conflicts: d.array(
+    d.object({
+      code: d.string,
+      spacecraft_id: d.nullable(d.token),
+      snapshot_ids: d.array(d.token),
+    }),
+    5_000,
+  ),
+});
+export type PlanDetail = Decoded<typeof planDetailReader>;
+export type PlanPass = PlanDetail["passes"][number];
+
+export const runStates = [
+  "queued",
+  "running",
+  "completed",
+  "partial",
+  "failed",
+  "canceled",
+  "interrupted",
+] as const;
+export type RunState = (typeof runStates)[number];
+
+/** `failure` is an opaque server document; only `code` / `message` are read when present. */
+const failure: Reader<{ code: string | null; message: string | null } | null> = (value) => {
+  if (value === null || value === undefined || typeof value !== "object" || Array.isArray(value))
+    return null;
+  const pick = (k: string) => {
+    const v: unknown = Reflect.get(value, k);
+    return typeof v === "string" ? v : null;
+  };
+  return { code: pick("code"), message: pick("message") };
+};
+
+export const draftReader = d.object({
+  run: d.object({
+    id: d.token,
+    state: d.oneOf(runStates),
+    phase: d.nullable(d.string),
+    horizon: d.object({ from: d.timestamp, to: d.timestamp }),
+    failure,
+    started_at: d.nullable(d.timestamp),
+    updated_at: d.timestamp,
+  }),
+  plan: d.nullable(planDetailReader),
+});
+export type Draft = Decoded<typeof draftReader>;
+
+const startReader = d.object({
+  run_id: d.token,
+  outcome: d.oneOf(["created", "replayed"]),
+  state: d.string,
+});
+
+export function fetchPlans(
+  missionId: string,
+  day: string,
+  signal?: AbortSignal,
+): Promise<ApiResult<{ plans: readonly PlanSummary[] }>> {
+  return request(
+    `${base(missionId)}?day=${encodeURIComponent(day)}`,
+    plansReader,
+    signal ? { signal } : {},
+  );
+}
+
+export function fetchPlan(
+  missionId: string,
+  planId: string,
+  signal?: AbortSignal,
+): Promise<ApiResult<PlanDetail>> {
+  return request(
+    `${base(missionId)}/${encodeURIComponent(planId)}`,
+    planDetailReader,
+    signal ? { signal } : {},
+  );
+}
+
+export function fetchDraft(
+  missionId: string,
+  runId: string,
+  signal?: AbortSignal,
+): Promise<ApiResult<Draft>> {
+  return request(
+    `${base(missionId)}/drafts/${encodeURIComponent(runId)}`,
+    draftReader,
+    signal ? { signal } : {},
+  );
+}
+
+/** S3: 202 with the run; the same operation_id replays the same run on any node. */
+export function startDraft(missionId: string, day: string, operationId: string) {
+  return request(`${base(missionId)}/drafts`, startReader, {
+    method: "POST",
+    body: { day, operation_id: operationId },
+  });
+}
+
+export function continueDraft(missionId: string, runId: string) {
+  return request(
+    `${base(missionId)}/drafts/${encodeURIComponent(runId)}/continue`,
+    d.object({ run_id: d.token, state: d.string }),
+    {
+      method: "POST",
+      body: {},
+    },
+  );
+}
+
+const REASONS: Readonly<Record<string, string>> = {
+  outside_requirement_window: "No window inside the required time",
+  direction_not_executable: "No window supports the required direction",
+  provider_unavailable: "Provider reports no availability",
+  opportunity_expired: "The window expired",
+  minimum_duration_not_met: "Windows are shorter than the minimum duration",
+  provider_not_allowed: "The rule excludes this provider",
+  station_not_allowed: "The rule excludes this station",
+  estimated_volume_unknown: "Expected volume unknown",
+  estimated_volume_unavailable: "Expected volume not reported",
+  preferred_duration_not_met: "Shorter than the preferred duration",
+};
+
+/** Plain words for a reason code; unknown codes are shown as words, never dropped. */
+export function reasonText(code: string): string {
+  return REASONS[code] ?? code.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase());
+}

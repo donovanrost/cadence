@@ -12,6 +12,7 @@ export type ContactState =
   | "requested"
   | "confirmed"
   | "in_contact"
+  | "ended"
   | "realized"
   | "partial"
   | "rejected"
@@ -20,9 +21,9 @@ export type ContactState =
   | "cancelled";
 
 /**
- * Booked-contact decoding (reservation lifecycle + provider pass phase). `partial` needs flown
- * data (S9) and `missed` needs the scheduled contact's expiry, so neither comes from this read yet:
- * a completed reservation reads as realized, failed as unknown (we don't know if it flew).
+ * Booked-contact decoding (reservation lifecycle + provider pass phase). `realized` / `partial`
+ * need flown data (S9) and `missed` needs the scheduled contact's expiry, so none come from this read
+ * yet: a completed reservation reads as `ended` (not verified), failed as unknown.
  */
 export function contactState(p: Pick<Pass, "state" | "pass_phase">): ContactState {
   switch (p.state) {
@@ -34,7 +35,8 @@ export function contactState(p: Pick<Pass, "state" | "pass_phase">): ContactStat
     case "active":
       return "in_contact";
     case "completed":
-      return "realized";
+      // ux: "Ended · not verified" until S9 brings flown data; never green without evidence.
+      return "ended";
     case "rejected":
       return "rejected";
     case "canceling":
@@ -52,6 +54,7 @@ export const contactStateWord: Readonly<Record<ContactState, string>> = {
   requested: "Requested",
   confirmed: "Confirmed",
   in_contact: "In contact",
+  ended: "Ended · not verified",
   realized: "Realized",
   partial: "Partial",
   rejected: "Rejected",
@@ -78,6 +81,7 @@ export function contactOpState(state: ContactState): OpState {
     case "drafted":
     case "requested":
     case "confirmed":
+    case "ended":
     case "cancelled":
       return "neutral";
   }

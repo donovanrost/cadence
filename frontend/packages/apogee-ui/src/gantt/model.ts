@@ -27,7 +27,9 @@ export type GanttBarKind =
   /** Problem contact (rejected, conflict): caution fill. */
   | "problem"
   /** Scheduled, not ours to edit (live Contacts view): outline + wash. */
-  | "scheduled";
+  | "scheduled"
+  /** Ended / past: drawn dimmer than scheduled. */
+  | "done";
 
 export type GanttBar = Readonly<{
   id: string;
