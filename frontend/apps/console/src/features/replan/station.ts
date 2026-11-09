@@ -94,7 +94,7 @@ export function outageWindow(a: StationAvailability, now: Date): StationWindow |
 export function stationTag(
   state: StationAvailability["status"]["state"],
   upcoming = false,
-): Readonly<{ state: OpState; label: string }> { state: OpState; label: string }> {
+): Readonly<{ state: OpState; label: string }> {
   switch (state) {
     case "down":
       return { state: "crit", label: "Down" };
