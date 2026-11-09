@@ -93,15 +93,17 @@ export function outageWindow(a: StationAvailability, now: Date): StationWindow |
 
 export function stationTag(
   state: StationAvailability["status"]["state"],
-): Readonly<{ state: OpState; label: string }> {
+  upcoming = false,
+): Readonly<{ state: OpState; label: string }> { state: OpState; label: string }> {
   switch (state) {
     case "down":
       return { state: "crit", label: "Down" };
     case "degraded":
       return { state: "caution", label: "Degraded" };
     case "up":
-      // S7: "up" means nothing is reported, not live telemetry (say so).
-      return { state: "neutral", label: "Nothing reported" };
+      // S7: "up" means nothing is reported, not live telemetry (say so). With an upcoming
+      // window it's "up now" (qa: "nothing reported" beside a listed outage read as a contradiction).
+      return { state: "neutral", label: upcoming ? "Up now" : "Nothing reported" };
   }
 }
 

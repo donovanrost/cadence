@@ -59,5 +59,6 @@ describe("station availability (S7)", () => {
 
   it("never calls 'up' live: it means nothing is reported", () => {
     expect(stationTag("up")).toEqual({ state: "neutral", label: "Nothing reported" });
+    expect(stationTag("up", true)).toEqual({ state: "neutral", label: "Up now" });
   });
 });
