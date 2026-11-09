@@ -163,11 +163,14 @@ journal semantics. Please document each in `docs/apogee/api/scheduling.md`.
 - **DECISIONS #27:** supervised task per draft/execute, but a run/plan with no live task reads as
   **interrupted · Continue**, never running forever; `operation_id` persisted on the run/plan row;
   admin submit = submit + approve + execute in one confirmed action, member submit →
-  `pending_approval`; unsatisfied/conflicting drafts → `422 plan_not_ready` (rule kept; revisit under
-  Cedar); planning setup becomes a fe-setup Setup screen ("Contact planning"), readiness surfaces
+  `pending_approval`; `422 plan_not_ready` returns the blockers; planning setup becomes a fe-setup Setup screen ("Contact planning"), readiness surfaces
   `planning_not_set_up`.
 
-## K1 state model (from #27)
+- **DECISIONS #28:** approve **with explicitly acknowledged exceptions**: each unmet requirement
+  needs an acknowledgement (reason, actor, time; audited). Conflicts still block. api implements,
+  domain reviews.
+
+## K1 state model (from #27/#28)
 One union in `features/scheduling/plan-state.ts`; every state has a header line and one primary.
 | State | Shows | Primary |
 | --- | --- | --- |
@@ -175,7 +178,8 @@ One union in `features/scheduling/plan-state.ts`; every state has a header line 
 | `no_draft` | the day, last plan for it if any | `Draft the day` |
 | `drafting` (phase from `scheduling_progress`) | materializing → searching → optimizing → plan, with elapsed | none (Cancel if the domain supports it) |
 | `interrupted` | "Drafting stopped when the server restarted." | `Continue` |
-| `draft` + blockers (`plan_not_ready`) | A Demand lists unmet spacecraft; footer shows conflicts and unmet count; Submit disabled **with the reason** | `Submit` disabled, reason: "6 spacecraft still miss their rule. Add passes or change the rule." |
+| `draft` + conflicts (`plan_not_ready`) | conflicts listed (station double-booked); Submit disabled **with the reason** | `Submit` disabled: "2 conflicts on SVB-1 and FBK-2. Remove or move a pass." |
+| `draft` + unmet requirements | A Demand lists them; Submit opens an **Accept gaps** sheet: one row per unmet requirement (spacecraft, why), a reason per row (with "same reason for all"), audited on approve | `Accept 6 gaps and submit` |
 | `draft` ready | totals, rule met n/n | admin: `Submit and book N passes` (confirm sheet); member: `Request approval` |
 | `pending_approval` | "Waiting for an admin" (member); admin sees ApDecision (reviewer ≠ author) | admin: `Approve and book` |
 | `executing` / `interrupted` | per-contact Requested → Confirmed / Rejected (S1 + S10) | interrupted: `Continue booking` |
