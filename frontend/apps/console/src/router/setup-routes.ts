@@ -183,7 +183,7 @@ export const setupOrgRoutes: RouteRecordRaw[] = [
   {
     path: "org/audit",
     name: "org.audit",
-    component: pending,
+    component: () => import("@/features/audit/AuditScreen.vue"),
     meta: { mode: "setup", nav: "audit", title: "Audit log" },
   },
 ];
