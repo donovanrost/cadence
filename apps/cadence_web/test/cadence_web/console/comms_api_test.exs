@@ -1,5 +1,6 @@
 defmodule CadenceWeb.Console.CommsAPITest do
-  use CadenceWeb.ConnCase, async: true
+  # Mutates :activation_governance application env in one test.
+  use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Comms.{GroundStation, GroundStationStore}
   alias CadenceWeb.TestFixtures
@@ -60,6 +61,64 @@ defmodule CadenceWeb.Console.CommsAPITest do
            } = row
   end
 
+  test "transport detail returns the editable document on the kind schema's paths", c do
+    previous = Application.get_env(:cadence, :activation_governance, [])
+    Application.put_env(:cadence, :activation_governance, approval_required: false)
+    on_exit(fn -> Application.put_env(:cadence, :activation_governance, previous) end)
+
+    op = %{
+      "kind" => "transport",
+      "action" => "create",
+      "document" => %{
+        "display_name" => "Svalbard X-band",
+        "configuration" => %{
+          "mode" => "listen",
+          "direction_capability" => "inbound",
+          "host" => "0.0.0.0",
+          "port" => "5000",
+          "framing_mode" => "raw",
+          "tls_enabled" => "false"
+        }
+      }
+    }
+
+    conn = TestFixtures.member_conn(c.user)
+
+    staged =
+      conn
+      |> post(c.base <> "/config/stage", %{"summary" => "Add", "ops" => [op]})
+      |> json_response(201)
+
+    %{"change_set_id" => set_id, "version" => version, "entity_ids" => [transport_id]} =
+      staged["data"]
+
+    c.user
+    |> TestFixtures.member_conn()
+    |> post("#{c.base}/config/change-sets/#{set_id}/submit", %{
+      "reason" => "Add the Svalbard transport",
+      "expected_version" => version
+    })
+    |> json_response(200)
+
+    detail = get_data(c, "/transports/#{transport_id}")
+    assert %{"id" => ^transport_id, "version" => 1, "lifecycle_state" => "active"} = detail
+    document = detail["document"]
+    assert document["display_name"] == "Svalbard X-band"
+
+    schema = get_data(c, "/config/kinds/transport/schema")
+
+    for path <-
+          ~w(configuration.mode configuration.host configuration.port configuration.framing.mode configuration.tls.enabled) do
+      assert Enum.any?(schema["fields"], &(&1["path"] == path)), "schema lacks #{path}"
+      assert get_in(document, String.split(path, ".")) != nil, "document lacks #{path}"
+    end
+
+    assert get_in(document, ~w(configuration tls enabled)) == false
+
+    conn = c.user |> TestFixtures.member_conn() |> get(c.base <> "/transports/nope")
+    assert json_response(conn, 404)["error"]["code"] == "transport_not_found"
+  end
+
   test "routing rules reject a bad page size", c do
     conn = c.user |> TestFixtures.member_conn() |> get(c.base <> "/routing-rules?limit=0")
     assert json_response(conn, 422)["error"]["details"]["limit"]
@@ -73,6 +132,10 @@ defmodule CadenceWeb.Console.CommsAPITest do
     paths = Enum.map(transport["fields"], & &1["path"])
     assert "configuration.mode" in paths
     assert "configuration.port" in paths
+    assert "configuration.framing.fixed_message_bytes" in paths
+
+    tls = Enum.find(transport["fields"], &(&1["path"] == "configuration.tls.enabled"))
+    assert %{"type" => "boolean", "default" => false, "enum" => nil} = tls
 
     port = Enum.find(transport["fields"], &(&1["path"] == "configuration.port"))
     assert %{"type" => "integer", "range" => %{"min" => 1, "max" => 65_535}} = port

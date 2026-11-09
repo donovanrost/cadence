@@ -6,14 +6,25 @@ defmodule Cadence.Reads.ConfigKindSchema do
 
   `ground_station` mirrors the kind's validation (name, provider, region).
   `transport` adds the transport kind's own configuration fields (today
-  `tcp_socket`) under `configuration.*`, using the keys its
-  `normalize_config/1` accepts.
+  `tcp_socket`) under `configuration.*`, addressing the stored, normalized
+  configuration document (e.g. `configuration.framing.mode`).
   """
 
   alias Cadence.Comms.TransportKind
 
-  # Definition field names that differ from the configuration keys accepted on write.
-  @config_keys %{tcp_mode: "mode"}
+  # Definition field names mapped to the paths of the stored (normalized)
+  # configuration document, so prefill, staged changes and conflict checks all
+  # address the same keys.
+  @config_keys %{
+    tcp_mode: "mode",
+    framing_mode: "framing.mode",
+    frame_size: "framing.fixed_message_bytes",
+    reconnect_policy: "reconnect.policy",
+    tls_enabled: "tls.enabled"
+  }
+
+  # Stored as a boolean even though the legacy form renders it as a select.
+  @boolean_fields [:tls_enabled]
 
   @spec fields(binary()) :: {:ok, [map()]} | {:error, :unknown_kind}
   def fields("ground_station") do
@@ -51,10 +62,17 @@ defmodule Cadence.Reads.ConfigKindSchema do
   defp configuration_field(definition_field, transport_kind) do
     key = Map.get(@config_keys, definition_field.field, to_string(definition_field.field))
 
-    field("configuration." <> key, definition_field.label, type(definition_field.type),
+    boolean? = definition_field.field in @boolean_fields
+    type = if boolean?, do: :boolean, else: type(definition_field.type)
+
+    field("configuration." <> key, definition_field.label, type,
       required: definition_field.required,
-      default: blank_to_nil(definition_field.default),
-      enum: enum(definition_field.options),
+      default:
+        if(boolean?,
+          do: definition_field.default == "true",
+          else: blank_to_nil(definition_field.default)
+        ),
+      enum: if(boolean?, do: nil, else: enum(definition_field.options)),
       range: range(definition_field.min, definition_field.max),
       help: definition_field.help,
       visible_when: visible_when(definition_field.visible_when, transport_kind)

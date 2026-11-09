@@ -9,6 +9,7 @@ defmodule Cadence.Reads.CommsDirectory do
   """
 
   alias Cadence.Comms.{GroundStation, GroundStationStore, RoutingRule, Transport, TransportStore}
+  alias Cadence.Configuration.Kinds
   alias Cadence.Reads.OperationalState
 
   @default_limit 100
@@ -56,6 +57,36 @@ defmodule Cadence.Reads.CommsDirectory do
         routing_rule_count: Map.get(rule_counts, transport.transport_id, 0)
       }
     end)
+  end
+
+  @doc """
+  One transport with its editable document, exactly as the `transport`
+  change-set kind loads it, so the edit form prefills with the same paths it
+  stages (see `Cadence.Reads.ConfigKindSchema`).
+  """
+  @spec transport(binary(), binary(), binary()) :: {:ok, map()} | {:error, :transport_not_found}
+  def transport(organization_id, mission_id, transport_id) do
+    with {:ok, %Transport{} = transport} <-
+           TransportStore.fetch_transport(organization_id, mission_id, transport_id),
+         %{} = document <-
+           "transport"
+           |> Kinds.fetch!()
+           |> then(& &1.load(organization_id, mission_id, [transport_id]))
+           |> Map.get(transport_id) do
+      {:ok,
+       %{
+         id: transport.transport_id,
+         version: transport.version,
+         lifecycle_state: transport.lifecycle_state,
+         document:
+           Map.take(
+             document,
+             ~w(display_name origin transport_kind direction_capability configuration)
+           )
+       }}
+    else
+      _missing -> {:error, :transport_not_found}
+    end
   end
 
   @doc "Paged routing rules. `cursor` is an opaque offset string from the previous page."

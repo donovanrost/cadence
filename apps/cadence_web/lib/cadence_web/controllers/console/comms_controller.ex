@@ -21,6 +21,13 @@ defmodule CadenceWeb.Console.CommsController do
         data: %{transports: encode(CommsDirectory.transports(org_id(conn), mission_id(conn)))}
       })
 
+  def transport(conn, %{"transport_id" => transport_id}) do
+    case CommsDirectory.transport(org_id(conn), mission_id(conn), transport_id) do
+      {:ok, transport} -> json(conn, %{data: encode(transport)})
+      {:error, :transport_not_found} -> Problem.respond(conn, :transport_not_found)
+    end
+  end
+
   def routing_rules(conn, params) do
     case CommsDirectory.routing_rules(org_id(conn), mission_id(conn), params) do
       {:ok, page} -> json(conn, %{data: encode(page)})

@@ -789,6 +789,7 @@ defmodule CadenceWeb.Router do
       get("/catalog/importers", CatalogImportController, :importers)
       get("/ground-stations", CommsController, :stations)
       get("/transports", CommsController, :transports)
+      get("/transports/:transport_id", CommsController, :transport)
       get("/routing-rules", CommsController, :routing_rules)
 
       # -- Change sets (owner: api). Contract: docs/apogee/api/changes.md

@@ -304,6 +304,10 @@ Edits go through change sets (`ground_station` and `transport` kinds; see change
   direction_capability, lifecycle_state, station: null, routing_rule_count}]}`.
   `routing_rule_count` counts active rules using the transport; `station` is `null` for the same
   reason as above.
+- `GET .../transports/:transport_id` → `{id, version, lifecycle_state, document: {display_name,
+  origin, transport_kind, direction_capability, configuration}}`. `document` is exactly what the
+  `transport` change-set kind loads, so prefill the edit form from it and stage
+  `changes: [{path, value}]` on the same paths. `404 transport_not_found`.
 - `GET .../routing-rules?spacecraft_id=&transport_id=&limit=&cursor=` → `{rules: [{id, display_name,
   purpose, direction, role, enabled, active, spacecraft: {id, name}, transport: {id, display_name,
   version}}], total, next_cursor}`. Sorted by spacecraft name, then rule name. `limit` is 1–500
@@ -318,8 +322,11 @@ gets `422 invalid_params`.
 
 - `ground_station`: `display_name` (required), `provider`, `region`.
 - `transport`: `display_name`, `transport_kind`, plus each transport kind's configuration fields
-  as `configuration.<key>` (today `tcp_socket`: `mode`, `direction_capability`, `host`, `port`,
-  `framing_mode`, `frame_size`, `reconnect_policy`, `tls_enabled`). Stage edits to those paths.
+  on the **stored document's paths** (today `tcp_socket`: `configuration.mode`,
+  `configuration.direction_capability`, `configuration.host`, `configuration.port`,
+  `configuration.framing.mode`, `configuration.framing.fixed_message_bytes`,
+  `configuration.reconnect.policy`, `configuration.tls.enabled` (boolean)). They match the transport
+  detail `document`, so stage edits to exactly these paths.
 - `visible_when: {path, equals}` says when to show a field (for example `frame_size` only when
   `configuration.framing_mode` is `fixed_size`, and each kind's fields only for its
   `transport_kind`).
