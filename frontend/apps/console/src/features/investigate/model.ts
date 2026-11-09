@@ -20,12 +20,19 @@ export function rangeWindow(range: RangeKey, now: Date): TimeWindow {
   return { from: now.getTime() - ms, to: now.getTime() };
 }
 
-/** The alarm B1 shows: the one named in the URL if present, else the worst (server order). */
-export function pickAlarm(alarms: readonly Alarm[], alarmId: string | null): Alarm | null {
-  if (alarmId !== null) {
-    const named = alarms.find((alarm) => alarm.id === alarmId);
-    if (named) return named;
-  }
+/**
+ * The alarm B1 shows: the one named in the URL (`?alarm=` id, or `?point=` from the episode-based
+ * Alarms list) if present, else the worst (server order).
+ */
+export function pickAlarm(
+  alarms: readonly Alarm[],
+  alarmId: string | null,
+  pointId: string | null = null,
+): Alarm | null {
+  const named =
+    (alarmId !== null ? alarms.find((alarm) => alarm.id === alarmId) : undefined) ??
+    (pointId !== null ? alarms.find((alarm) => alarm.point.id === pointId) : undefined);
+  if (named) return named;
   return alarms.find((alarm) => alarm.active) ?? null;
 }
 

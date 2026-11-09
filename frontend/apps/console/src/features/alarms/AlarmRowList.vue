@@ -1,35 +1,22 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
 import { formatCountdown, useNow, ApStatusMark } from "@/ui";
-import { conditionWords, crossedCondition } from "./api.ts";
+import { conditionWords } from "./api.ts";
 import { formatLimitLike, formatValue, withUnit } from "./format.ts";
 import type { AlarmListRow } from "./list.ts";
 
-/**
- * Alarms under 768px (two lines, like Fleet; ux pass 1 #3): spacecraft link + severity, then
- * point · condition · value / limit · first crossed. Ids never wrap.
- */
+/** Alarms under 768px: two lines (spacecraft + severity; point · condition · value / limit · opened · owner). */
 defineProps<{ rows: readonly AlarmListRow[] }>();
 const now = useNow();
 const tint = (row: AlarmListRow) =>
-  row.alarm.severity === "critical"
-    ? "text-crit-text"
-    : row.alarm.severity === "caution"
-      ? "text-caution-text"
-      : "text-text-2";
-const mark = (row: AlarmListRow) =>
-  row.alarm.severity === "critical"
-    ? "crit"
-    : row.alarm.severity === "caution"
-      ? "caution"
-      : "nominal";
+  row.episode.severity === "critical" ? "text-crit-text" : "text-caution-text";
 </script>
 
 <template>
-  <ul class="m-0 list-none p-0" aria-label="Active alarms">
+  <ul class="m-0 list-none p-0" aria-label="Alarms">
     <li
       v-for="row in rows"
-      :key="row.alarm.id"
+      :key="row.key"
       class="border-t border-hairline px-4 py-1 first:border-t-0"
     >
       <div class="flex min-h-11 items-center justify-between gap-3">
@@ -38,37 +25,37 @@ const mark = (row: AlarmListRow) =>
           :to="{
             name: 'ops.spacecraft',
             params: { scId: String(row.sc.scid) },
-            query: { alarm: row.alarm.id },
+            query: { point: row.episode.point.id },
           }"
           class="inline-flex min-h-11 items-center font-semibold whitespace-nowrap text-readout no-underline"
           >{{ row.sc.name }}</RouterLink
         >
-        <span v-else class="text-text-3">Mission</span>
+        <span v-else class="text-text-3">{{ row.episode.spacecraft?.name ?? "Mission" }}</span>
         <span
           class="inline-flex items-center gap-2 text-md whitespace-nowrap capitalize"
           :class="tint(row)"
         >
-          <ApStatusMark :state="mark(row)" />{{ row.alarm.severity }}
+          <ApStatusMark :state="row.episode.severity === 'critical' ? 'crit' : 'caution'" />{{
+            row.episode.severity
+          }}
         </span>
       </div>
       <p class="m-0 pb-1.5 text-md text-text-3">
-        <span class="font-mono text-readout">{{ row.alarm.point.name }}</span>
-        · {{ conditionWords(crossedCondition(row.alarm)) ?? "out of limits" }} ·
+        <span class="font-mono text-readout">{{ row.episode.point.name }}</span>
+        · {{ conditionWords(row.episode.source_state) ?? "out of limits" }} ·
         <span class="font-mono" :class="tint(row)">{{
-          withUnit(formatValue(row.alarm.value), row.alarm.point.unit) ?? "—"
+          withUnit(formatValue(row.episode.last_value), row.episode.point.unit) ?? "—"
         }}</span>
         <span class="font-mono text-text-4">
           /
           {{
-            withUnit(formatLimitLike(row.limit, row.alarm.value), row.alarm.point.unit) ?? "—"
+            withUnit(formatLimitLike(row.limit, row.episode.last_value), row.episode.point.unit) ??
+            "—"
           }}</span
         >
-        <template v-if="row.alarm.first_crossed_at">
-          ·
-          <span class="font-mono">{{
-            formatCountdown(new Date(row.alarm.first_crossed_at), now)
-          }}</span></template
-        >
+        ·
+        <span class="font-mono">{{ formatCountdown(new Date(row.episode.opened_at), now) }}</span> ·
+        <span class="font-mono text-xs uppercase">{{ row.owner }}</span>
       </p>
     </li>
   </ul>

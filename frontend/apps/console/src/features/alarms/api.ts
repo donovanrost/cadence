@@ -120,12 +120,15 @@ const CROSSED_BAND = {
   yellow_high: "yellow_high",
 } as const satisfies Record<string, keyof Thresholds>;
 
-/** The band that was crossed, for the limit readout. */
-export function crossedLimit(alarm: Alarm): number | null {
-  const condition = crossedCondition(alarm);
+/** The threshold for a raw condition (`red_low` → thresholds.red_low); null when unknown. */
+export function bandFor(thresholds: Thresholds | null, condition: string | null): number | null {
   const band =
     condition !== null && Object.hasOwn(CROSSED_BAND, condition)
       ? CROSSED_BAND[condition as keyof typeof CROSSED_BAND]
       : null;
-  return band === null || alarm.thresholds === null ? null : alarm.thresholds[band];
+  return band === null || thresholds === null ? null : thresholds[band];
 }
+
+/** The band that was crossed, for the limit readout. */
+export const crossedLimit = (alarm: Alarm): number | null =>
+  bandFor(alarm.thresholds, crossedCondition(alarm));

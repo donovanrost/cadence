@@ -1,77 +1,94 @@
 import { describe, expect, it } from "vite-plus/test";
 import { spacecraftRow } from "@/features/fleet/index.ts";
-import type { Alarm } from "./api.ts";
-import { conditionWords, crossedLimit } from "./api.ts";
-import { alarmRows, byPoint } from "./list.ts";
+import { bandFor, conditionWords } from "./api.ts";
+import type { Episode } from "./episodes.ts";
+import { alarmRows, byPoint, ownerText, tabCounts } from "./list.ts";
 
-const thresholds = { red_low: 24, yellow_low: 25, yellow_high: 33, red_high: 34 };
-function alarm(id: string, sc: string | null, overrides: Partial<Alarm> = {}): Alarm {
+const now = new Date("2026-11-09T02:00:00Z");
+function ep(id: string, overrides: Partial<Episode> = {}): Episode {
   return {
     id,
-    spacecraft_id: sc,
-    point: { id: "EPS.VBAT", name: "VBAT", subsystem: "EPS", unit: "V", description: null },
+    source: "ground_limit",
+    status: "new",
+    cleared_unacknowledged: false,
     severity: "critical",
-    active: true,
-    condition: "red_low",
-    value: 23.1,
-    limit_set_name: "DEFAULT",
-    thresholds,
-    first_crossed_at: "2026-11-08T02:35:00Z",
-    generation_time: null,
-    received_at: null,
+    peak_severity: "critical",
+    source_state: "red_low",
+    spacecraft_id: "spacecraft-earendil-001",
+    spacecraft: { id: "spacecraft-earendil-001", name: "EARENDIL-001", scid: 1 },
+    point: { id: "EPS.VBAT", name: "VBAT", unit: "V" },
+    thresholds: { red_low: 24, yellow_low: 25, yellow_high: 33, red_high: 34 },
+    opened_at: "2026-11-09T01:00:00Z",
+    cleared_at: null,
+    first_value: 23.4,
+    last_value: 23.1,
+    last_observed_at: null,
+    last_evaluated_at: null,
+    acknowledged_at: null,
+    acknowledged_by: null,
+    assignee: null,
+    assigned_at: null,
     ...overrides,
   };
 }
 
-describe("alarm rows", () => {
+describe("alarm list on episodes", () => {
   const fleet = [spacecraftRow(1), spacecraftRow(2)];
-
-  it("sorts by severity, then oldest crossing first, and joins spacecraft names", () => {
-    const rows = alarmRows(
-      [
-        alarm("caution", fleet[0]?.id ?? null, { severity: "caution", condition: "yellow_low" }),
-        alarm("newer", fleet[0]?.id ?? null, { first_crossed_at: "2026-11-08T03:00:00Z" }),
-        alarm("older", fleet[1]?.id ?? null),
-      ],
-      fleet,
-      null,
-    );
-    expect(rows.map((r) => r.alarm.id)).toEqual(["older", "newer", "caution"]);
-    expect(rows[0]?.sc?.name).toBe("EARENDIL-002");
-    expect(rows[2]?.limit).toBe(25);
+  const acked = ep("b", {
+    status: "acknowledged",
+    acknowledged_by: { kind: "user", id: "u", name: "Mira K." },
   });
+  const clearedRecent = ep("c", { status: "cleared", cleared_at: "2026-11-09T01:30:00Z" });
+  const clearedOld = ep("d", { status: "cleared", cleared_at: "2026-11-07T01:00:00Z" });
 
-  it("filters by point and keeps mission-scope alarms without a spacecraft", () => {
-    const other = alarm("x", null, {
-      point: { id: "GND.LINK", name: "LINK", subsystem: null, unit: "V", description: null },
+  it("splits tabs: New in Active, acknowledged, cleared within 24 h", () => {
+    const all = [ep("a"), acked, clearedRecent, clearedOld];
+    expect(alarmRows(all, fleet, "active", null, now).map((r) => r.key)).toEqual(["a"]);
+    expect(alarmRows(all, fleet, "acknowledged", null, now).map((r) => r.key)).toEqual(["b"]);
+    expect(alarmRows(all, fleet, "cleared", null, now).map((r) => r.key)).toEqual(["c"]);
+    expect(tabCounts([ep("a"), acked], [clearedRecent, clearedOld], now)).toEqual({
+      active: 1,
+      acknowledged: 1,
+      cleared: 1,
     });
-    const rows = alarmRows([alarm("a", null), other], fleet, "GND.LINK");
-    expect(rows.map((r) => [r.alarm.id, r.sc])).toEqual([["x", null]]);
+    expect(tabCounts([ep("a")], null, now).cleared).toBeNull();
   });
 
-  it("counts active alarms per point, most first", () => {
-    const counts = byPoint([
-      alarm("a", "1"),
-      alarm("b", "2", { severity: "caution" }),
-      alarm("c", "3", {
-        point: { id: "P2", name: "P2", subsystem: null, unit: "V", description: null },
-      }),
-      alarm("d", "4", { active: false }),
+  it("joins fleet identity, finds the limit and words the owner", () => {
+    const [row] = alarmRows(
+      [ep("a", { assignee: { id: "t", name: "Tomás R." } })],
+      fleet,
+      "active",
+      null,
+      now,
+    );
+    expect(row?.sc?.name).toBe("EARENDIL-001");
+    expect(row?.limit).toBe(24);
+    expect(row?.owner).toBe("→ Tomás R.");
+    expect(ownerText(acked)).toBe("Ack Mira K.");
+    expect(ownerText(ep("x"))).toBe("Unassigned");
+    expect(ownerText(ep("y", { status: "cleared", cleared_unacknowledged: true }))).toBe(
+      "Cleared unacknowledged",
+    );
+  });
+
+  it("filters by point and counts active episodes per point", () => {
+    const other = ep("o", { point: { id: "P2", name: "P2", unit: null } });
+    expect(alarmRows([ep("a"), other], fleet, "active", "P2", now).map((r) => r.key)).toEqual([
+      "o",
     ]);
-    expect(counts).toEqual([
+    expect(byPoint([ep("a"), ep("b", { severity: "caution" }), other, clearedRecent])).toEqual([
       { pointId: "EPS.VBAT", name: "VBAT", count: 2, critical: 1 },
       { pointId: "P2", name: "P2", count: 1, critical: 1 },
     ]);
   });
 
-  it("words conditions and finds the crossed band", () => {
+  it("words conditions and finds bands", () => {
     expect(conditionWords("red_high")).toBe("above red limit");
     expect(conditionWords("weird")).toBeNull();
-    expect(crossedLimit(alarm("a", null, { condition: "red_high" }))).toBe(34);
-    expect(crossedLimit(alarm("a", null, { thresholds: null }))).toBeNull();
-    // No condition from the server: inferred from value vs bands, worst band first.
-    expect(crossedLimit(alarm("a", null, { condition: null, value: 23.1 }))).toBe(24);
-    expect(crossedLimit(alarm("a", null, { condition: null, value: 24.5 }))).toBe(25);
-    expect(crossedLimit(alarm("a", null, { condition: null, value: 30 }))).toBeNull();
+    expect(
+      bandFor({ red_low: 24, yellow_low: 25, yellow_high: 33, red_high: 34 }, "red_high"),
+    ).toBe(34);
+    expect(bandFor(null, "red_low")).toBeNull();
   });
 });
