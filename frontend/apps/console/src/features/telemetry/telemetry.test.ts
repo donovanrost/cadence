@@ -4,6 +4,7 @@ import type { History } from "@/features/investigate/index.ts";
 import { latestRows, plotView } from "./plot.ts";
 import { MAX_SERIES, parseSelection, selectionQuery, seriesOf, STYLES } from "./selection.ts";
 import type { SeriesData } from "./useSeries.ts";
+import { parseWindow, resolveWindow, windowFromRange, windowQuery } from "./window.ts";
 
 describe("telemetry selection", () => {
   it("round-trips through the URL, dropping junk and the default range", () => {
@@ -13,7 +14,11 @@ describe("telemetry selection", () => {
       range: "bogus",
       tab: "a",
     });
-    expect(sel).toEqual({ scids: [1, 312], points: ["EPS.VBAT", "HK.mode"], range: "6h" });
+    expect(sel).toEqual({
+      scids: [1, 312],
+      points: ["EPS.VBAT", "HK.mode"],
+      window: { kind: "preset", key: "6h" },
+    });
     expect(selectionQuery(sel, { tab: "a", range: "24h" })).toEqual({
       tab: "a",
       sc: "1,312",
@@ -76,5 +81,28 @@ describe("plot view", () => {
       data(2, []),
     ]);
     expect(rows.map((r) => r.last?.mean ?? null)).toEqual([23, null]);
+  });
+});
+
+describe("plot window", () => {
+  const now = new Date("2026-11-08T12:00:00Z");
+  it("keeps presets sliding and custom ranges fixed in the URL", () => {
+    expect(parseWindow({ range: "24h" }, "6h")).toEqual({ kind: "preset", key: "24h" });
+    const custom = parseWindow({ from: "2026-11-08T01:00:00Z", to: "2026-11-08T02:00:00Z" }, "6h");
+    expect(custom.kind).toBe("custom");
+    expect(windowQuery(custom, { sc: "1", range: "1h" }, "6h")).toEqual({
+      sc: "1",
+      from: "2026-11-08T01:00:00.000Z",
+      to: "2026-11-08T02:00:00.000Z",
+    });
+    expect(windowQuery({ kind: "preset", key: "6h" }, { from: "x", to: "y" }, "6h")).toEqual({});
+  });
+
+  it("maps a picked range back to a preset when it matches one", () => {
+    const sixHours = resolveWindow({ kind: "preset", key: "6h" }, now);
+    expect(windowFromRange(sixHours, now)).toEqual({ kind: "preset", key: "6h" });
+    expect(windowFromRange({ from: sixHours.from + 3_600_000, to: sixHours.to }, now).kind).toBe(
+      "custom",
+    );
   });
 });

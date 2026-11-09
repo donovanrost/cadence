@@ -3,9 +3,10 @@ import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
-import { ApButton, ApPageHeader, ApRemote } from "@/ui";
+import { ApButton, ApPageHeader, ApRemote, type TimeRange } from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
-import { fetchLimitIntervals, rangeWindow, type RangeKey } from "@/features/investigate/index.ts";
+import { fetchLimitIntervals } from "@/features/investigate/index.ts";
+import { resolveWindow, windowFromRange, windowLabel, type WindowSel } from "./window.ts";
 import PlotPanel from "./PlotPanel.vue";
 import PointsPanel from "./PointsPanel.vue";
 import ValuesTable from "./ValuesTable.vue";
@@ -37,16 +38,20 @@ function update(patch: Partial<Selection>) {
     .replace({ query: selectionQuery({ ...selection.value, ...patch }, route.query) })
     .catch((error: unknown) => console.error("Navigation failed", error));
 }
-const range = computed({
-  get: () => selection.value.range,
-  set: (r: RangeKey) => update({ range: r }),
+/**
+ * The picker's window. `new Date()` is read without reactivity on purpose: the value only changes
+ * with the selection, so a preset doesn't rewrite the picker's fields every clock tick.
+ */
+const window = computed<TimeRange>({
+  get: () => resolveWindow(selection.value.window, new Date()),
+  set: (r) => update({ window: windowFromRange(r, new Date()) }),
 });
 
 const data = useSeries(
   missionId,
   computed(() => picked.value.series),
   fleetRows,
-  computed(() => selection.value.range),
+  computed(() => selection.value.window),
 );
 
 /** Limit bands only for a single plotted point on a single spacecraft. */
@@ -54,14 +59,14 @@ const single = computed(() => {
   const only = picked.value.series.length === 1 ? picked.value.series[0] : undefined;
   const sc = only ? fleetRows.value.find((row) => row.scid === only.scid) : undefined;
   return only && sc
-    ? JSON.stringify({ m: missionId.value, p: only.pointId, sc: sc.id, r: selection.value.range })
+    ? JSON.stringify({ m: missionId.value, p: only.pointId, sc: sc.id, w: selection.value.window })
     : null;
 });
 const intervals = useRemoteQuery(single, (k, signal) => {
   // Sound: produced by JSON.stringify above.
-  const { m, p, sc, r } = JSON.parse(k) as { m: string; p: string; sc: string; r: RangeKey };
-  const w = rangeWindow(r, new Date());
-  return fetchLimitIntervals(m, p, sc, { from: new Date(w.from), to: new Date(w.to) }, signal);
+  const { m, p, sc, w } = JSON.parse(k) as { m: string; p: string; sc: string; w: WindowSel };
+  const r = resolveWindow(w, new Date());
+  return fetchLimitIntervals(m, p, sc, { from: new Date(r.from), to: new Date(r.to) }, signal);
 });
 
 const view = computed(() => {
@@ -97,7 +102,8 @@ const rows = computed(() =>
         />
         <div class="flex flex-col gap-3 console:min-h-0">
           <PlotPanel
-            v-model:range="range"
+            v-model:window="window"
+            :window-label="windowLabel(selection.window)"
             class="min-h-[360px] flex-1"
             :state="data.state.value"
             :view="view"

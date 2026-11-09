@@ -2,19 +2,15 @@ import { computed, onScopeDispose, type Ref } from "vue";
 import { useRemoteQuery, type ApiResult } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { FLEET_TELEMETRY_GAP_MS, throttle, type FleetSpacecraft } from "@/features/fleet/index.ts";
-import {
-  fetchHistory,
-  rangeWindow,
-  type History,
-  type RangeKey,
-} from "@/features/investigate/index.ts";
+import { fetchHistory, type History } from "@/features/investigate/index.ts";
 import type { SeriesKey } from "./selection.ts";
+import { resolveWindow, type WindowSel } from "./window.ts";
 
 export type SeriesData = Readonly<{ key: SeriesKey; sc: FleetSpacecraft; history: History }>;
 
 type Request = Readonly<{
   m: string;
-  range: RangeKey;
+  w: WindowSel;
   series: readonly { scid: number; id: string; p: string }[];
 }>;
 
@@ -27,7 +23,7 @@ export function useSeries(
   missionId: Ref<string>,
   series: Ref<readonly SeriesKey[]>,
   fleet: Ref<readonly FleetSpacecraft[]>,
-  range: Ref<RangeKey>,
+  window: Ref<WindowSel>,
 ) {
   const byScid = computed(() => new Map(fleet.value.map((sc) => [sc.scid, sc])));
   const key = computed(() => {
@@ -36,15 +32,15 @@ export function useSeries(
       return sc ? [{ scid: s.scid, id: sc.id, p: s.pointId }] : [];
     });
     if (resolved.length === 0) return null;
-    const request: Request = { m: missionId.value, range: range.value, series: resolved };
+    const request: Request = { m: missionId.value, w: window.value, series: resolved };
     return JSON.stringify(request);
   });
 
   const query = useRemoteQuery(key, async (k, signal): Promise<ApiResult<SeriesData[]>> => {
     // Sound: k was produced by JSON.stringify(Request) above.
     const request = JSON.parse(k) as Request;
-    const window = rangeWindow(request.range, new Date());
-    const span = { from: new Date(window.from), to: new Date(window.to) };
+    const range = resolveWindow(request.w, new Date());
+    const span = { from: new Date(range.from), to: new Date(range.to) };
     const results = await Promise.all(
       request.series.map((s) => fetchHistory(request.m, s.p, s.id, span, signal)),
     );

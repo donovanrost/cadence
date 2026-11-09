@@ -1,16 +1,17 @@
 import type { LocationQuery, LocationQueryRaw } from "vue-router";
-import type { ComparisonSeries, RangeKey } from "@/features/investigate/index.ts";
+import type { ComparisonSeries } from "@/features/investigate/index.ts";
+import { parseWindow, windowQuery, type WindowSel } from "./window.ts";
 
 /**
  * Telemetry explore selection (OpsLists §Telemetry), kept in the URL:
- * ?sc=1,312&p=EPS.VBAT,EPS.sa1_current&range=6h. Series = every spacecraft × point, max 6.
+ * ?sc=1,312&p=EPS.VBAT,EPS.sa1_current&range=6h (or &from=&to=). Series = every spacecraft × point, max 6.
  */
 export const MAX_SERIES = 6;
 
 export type Selection = Readonly<{
   scids: readonly number[];
   points: readonly string[];
-  range: RangeKey;
+  window: WindowSel;
 }>;
 
 const one = (value: LocationQuery[string] | undefined) => (typeof value === "string" ? value : "");
@@ -21,7 +22,6 @@ const list = (value: LocationQuery[string] | undefined) =>
     .filter(Boolean);
 
 export function parseSelection(query: LocationQuery): Selection {
-  const range = one(query.range);
   return {
     scids: [
       ...new Set(
@@ -31,17 +31,16 @@ export function parseSelection(query: LocationQuery): Selection {
       ),
     ],
     points: [...new Set(list(query.p))],
-    range: range === "1h" || range === "24h" ? range : "6h",
+    window: parseWindow(query, "6h"),
   };
 }
 
 export function selectionQuery(selection: Selection, base: LocationQuery): LocationQueryRaw {
-  const { sc: _sc, p: _p, range: _r, ...rest } = base;
+  const { sc: _sc, p: _p, ...rest } = base;
   return {
-    ...rest,
+    ...windowQuery(selection.window, rest, "6h"),
     ...(selection.scids.length ? { sc: selection.scids.join(",") } : {}),
     ...(selection.points.length ? { p: selection.points.join(",") } : {}),
-    ...(selection.range === "6h" ? {} : { range: selection.range }),
   };
 }
 

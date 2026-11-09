@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { formatClock, ApEmptyState, ApPanel, ApRemote, ApSegmented } from "@/ui";
+import { formatClock, ApEmptyState, ApPanel, ApRemote, ApTimeRange, type TimeRange } from "@/ui";
 import type { RemoteState } from "@/api/index.ts";
 import { formatValue } from "@/features/alarms/index.ts";
-import { RANGES, TrendChart, type RangeKey } from "@/features/investigate/index.ts";
+import { TrendChart } from "@/features/investigate/index.ts";
+import { windowPresets } from "./window.ts";
 import type { PlotView } from "./plot.ts";
 import type { SeriesData } from "./useSeries.ts";
 
@@ -12,10 +13,12 @@ defineProps<{
   view: PlotView | null;
   empty: boolean;
   dropped: number;
+  windowLabel: string;
 }>();
 defineEmits<{ retry: [] }>();
-const range = defineModel<RangeKey>("range", { required: true });
-const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
+const window = defineModel<TimeRange>("window", { required: true });
+/** Presets resolve when the picker opens; choosing one goes back through the owner (sliding). */
+const presets = windowPresets(new Date());
 const tick = (t: number) => formatClock(new Date(t)).slice(0, 5);
 const value = (v: number) => formatValue(v) ?? "";
 const dashClass = {
@@ -41,7 +44,7 @@ const toneClass = {
   >
     <div class="flex flex-col gap-3 p-4">
       <div class="flex justify-end">
-        <ApSegmented v-model="range" :options="ranges" label="Window" variant="micro" />
+        <ApTimeRange v-model="window" label="Plot window" :presets="presets" />
       </div>
       <ApEmptyState
         v-if="empty"
@@ -57,7 +60,7 @@ const toneClass = {
           :window="view.window"
           :now="Date.now()"
           :step-ms="view.stepMs"
-          :label="`${view.legend.length} series over ${range}: ${view.legend.map((l) => l.label).join(', ')}`"
+          :label="`${view.legend.length} series over ${windowLabel}: ${view.legend.map((l) => l.label).join(', ')}`"
           :format-tick="tick"
           :format-value="value"
         >
