@@ -63,6 +63,62 @@ defmodule Cadence.Comms.FramingDrift do
     |> Enum.sort_by(&{&1.profile.name, &1.transport.name})
   end
 
+  @doc """
+  Spacecraft (of `only`) on a profile whose transport framing can't be determined: no enabled
+  inbound route, or no feeding transport with `ingress_metadata.frame_size`. DECISIONS #40:
+  a framing change reaching them must HOLD, not pass silently. Grouped by profile and cause.
+  """
+  @spec unverified(String.t(), String.t(), [String.t()]) :: [map()]
+  def unverified(organization_id, mission_id, only) do
+    transports =
+      organization_id
+      |> TransportStore.list_transports(mission_id)
+      |> Map.new(&{&1.transport_id, &1})
+
+    organization_id
+    |> SpacecraftStore.list_spacecraft(mission_id)
+    |> Enum.filter(&(&1.spacecraft_id in only and not is_nil(&1.spacecraft_type_id)))
+    |> Enum.flat_map(&unverified_cause(organization_id, &1, transports))
+    |> Enum.group_by(fn {profile, cause} -> {profile, cause} end)
+    |> Enum.map(fn {{profile, cause}, rows} ->
+      %{profile: profile, cause: cause, spacecraft_count: length(rows)}
+    end)
+  end
+
+  defp unverified_cause(organization_id, spacecraft, transports) do
+    feeding = feeding_transports(organization_id, spacecraft, transports)
+
+    cause =
+      cond do
+        feeding == [] ->
+          :no_inbound_route
+
+        not Enum.any?(feeding, &is_integer(ingress_metadata(&1)["frame_size"])) ->
+          :no_ingress_metadata
+
+        true ->
+          nil
+      end
+
+    case {cause, profile_ref(organization_id, spacecraft)} do
+      {nil, _} -> []
+      {_, nil} -> []
+      {cause, profile} -> [{profile, cause}]
+    end
+  end
+
+  defp profile_ref(organization_id, spacecraft) do
+    case SpacecraftTypeStore.fetch_spacecraft_type_version(
+           organization_id,
+           spacecraft.mission_id,
+           spacecraft.spacecraft_type_id,
+           spacecraft.spacecraft_type_version
+         ) do
+      {:ok, profile} -> %{id: profile.spacecraft_type_id, name: profile.display_name}
+      {:error, _} -> nil
+    end
+  end
+
   defp drifts(organization_id, spacecraft, overrides, transports) do
     case SpacecraftTypeStore.fetch_spacecraft_type_version(
            organization_id,

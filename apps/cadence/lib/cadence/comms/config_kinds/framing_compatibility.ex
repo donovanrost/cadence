@@ -48,12 +48,37 @@ defmodule Cadence.Comms.ConfigKinds.FramingCompatibility do
 
     if touched != [] and
          ConfigurationSettings.profile_framing_generations?(organization_id, mission_id) do
-      organization_id
-      |> FramingDrift.audit(mission_id, touched)
-      |> Enum.flat_map(&items/1)
+      Enum.flat_map(FramingDrift.audit(organization_id, mission_id, touched), &items/1) ++
+        Enum.map(
+          FramingDrift.unverified(organization_id, mission_id, touched),
+          &unverified_item/1
+        )
     else
       []
     end
+  end
+
+  # DECISIONS #40: fail closed when the transport framing can't be determined.
+  defp unverified_item(%{profile: profile, cause: cause, spacecraft_count: count}) do
+    why =
+      case cause do
+        :no_inbound_route -> "they have no inbound route"
+        :no_ingress_metadata -> "their transports declare no ingress frame size"
+      end
+
+    %{
+      op_id: nil,
+      kind: "spacecraft_profile",
+      entity_id: profile.id,
+      reason: :framing_unverified,
+      cause: cause,
+      spacecraft_count: count,
+      profile_value: nil,
+      transport_value: nil,
+      sentence:
+        "#{count} spacecraft on #{profile.name} will decode with the profile's framing, but " <>
+          "it can't be checked against their transports because #{why}."
+    }
   end
 
   defp items(drift) do

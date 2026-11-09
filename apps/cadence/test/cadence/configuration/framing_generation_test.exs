@@ -122,6 +122,40 @@ defmodule Cadence.Configuration.FramingGenerationTest do
       assert item.transport_value.value == 1115
     end
 
+    test "framing that can't be checked against a transport holds as framing_unverified", c do
+      [rule] =
+        RoutingRuleStore.list_routing_rules_for_spacecraft(
+          c.org,
+          c.mission.mission_id,
+          c.craft.spacecraft_id
+        )
+
+      {:ok, _} =
+        RoutingRuleStore.archive_routing_rule(
+          c.org,
+          c.mission.mission_id,
+          rule.routing_rule_id
+        )
+
+      edit = %{
+        kind: "spacecraft_profile",
+        action: :update,
+        entity_id: c.profile_id,
+        changes: [%{path: "frame_parameters.frame_size", value: 1024}],
+        options: %{rollout: "all"}
+      }
+
+      assert {:ok, %{verdict: :hold, checks: checks}} =
+               Configuration.preview(c.scope, c.mission.mission_id, {:ops, [edit]})
+
+      assert %{
+               items: [
+                 %{reason: :framing_unverified, cause: :no_inbound_route, spacecraft_count: 1}
+               ]
+             } =
+               Enum.find(checks, &(&1.key == "compatibility"))
+    end
+
     test "a frame_size override on one spacecraft holds too", c do
       override = %{
         kind: "spacecraft_override",
