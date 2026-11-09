@@ -196,6 +196,11 @@ Small counts for the shell (Ops rail, mobile on-call tabs), so the shell doesn't
   `null` when the mission has no reservations (not tracked).
 - A `null` count means "can't compute": omit it in the UI, never show `0`.
 
+- **Planned (DECISIONS #54, U31):** `attention: {open, acknowledged}`, counting the mission's
+  open "needs acknowledgment" items (pass-resolution conflicts for now). It feeds Now's queue header
+  and the mobile Now badge, not a rail count. `null` when the attention read can't be read.
+  Refetch on `invalidate` with `attention`.
+
 Errors: `404 mission_not_found`.
 
 ## `GET /api/console/v1/missions/:mission_id/action-queue`
@@ -256,6 +261,25 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
 - `counts.spacecraft_p1`: distinct spacecraft across P1 items (the "N spacecraft need you" headline).
 - **Not derived yet** (no source): critical flight events (safe mode), missed passes, degraded
   stations, no-ACK retries. Alarm items come from **alarm episodes** (both sources, DECISIONS #17).
+- **Planned: `attention` items (DECISIONS #54, U31).** Not built yet; it waits on domain's attention
+  read. One item per open or acknowledged item from that read, never grouped:
+  - `id` `attention:<source>:<attention id>`; `kind` `attention`; `source` is the subkind
+    (`pass_resolution` for now).
+  - `priority` 1 (`state` `critical`) when the pass starts within 2 h or is in progress;
+    otherwise 2 (`state` `caution`). Acknowledged items sort last within their priority (U21),
+    the same as fully acknowledged alarms.
+  - `due_at` is the pass's `starts_at`, the consequence time that Now's meta shows as "AOS T−01:12".
+    `since` is `raised_at`.
+  - `spacecraft` has one member with the **resolved name** (title `EARENDIL-001 · …`, never the id).
+  - A new field, `attention` (`null` on other kinds), holds `{id, source, conflict:
+    cancel_failed | late_confirmation | contradicts_attestation, state: open | acknowledged,
+    acknowledged_by: {kind, id, name} | null, contact_id, station {ref, id, code, name},
+    provider {id, name}, starts_at, raised_at, provider_message, resolution: {action, actor {kind,
+    id, name}, at, note, provider_reference} | null}`. `contact_id` is the `Review` target
+    (`M/contacts/:contactId`).
+  - The response gains `resolved: [{id, resolved_by {kind, id, name}, resolved_at}]`: attention items
+    resolved in the last 60 s, so the fade-out can read "Resolved by Mira K." after a refetch.
+  - Refetch on `invalidate` with `attention`.
 - `failure_lookback_s` is `config :cadence, :action_queue_failure_lookback_s` (default 24 h).
   Failures older than that drop off the queue; they stay on the commands pages.
 
