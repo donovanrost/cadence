@@ -81,6 +81,11 @@ CADENCE_DEV_DATABASE=cadence_apogee_dev EARENDIL_PROVIDER_URL=http://127.0.0.1:4
   mise exec -- mix run --no-start ../../dev/reflect_orbital_demo.exs
 CADENCE_DEV_DATABASE=cadence_apogee_dev \
   mise exec -- mix run --no-start ../../dev/apogee_qa_personas.exs
+# Contact planning (active fleet planning policy + 5-min recurring downlink templates for
+# EARENDIL-001..010; EARENDIL_PLANNING_SPACECRAFT=N to change). Rerunnable; the full Earendil
+# seed now includes it.
+CADENCE_DEV_DATABASE=cadence_apogee_dev \
+  mise exec -- mix run --no-start ../../dev/reflect_orbital_planning.exs
 
 # 6. Activate the fleet (once; rerunnable). From the repo root. --single-operator sets
 #    Earendil's *configuration activation* policy to direct, in this DB only (not commanding).
@@ -124,6 +129,11 @@ migrations behind and belongs to the main checkout).
 - **Live telemetry** covers EARENDIL-001…010 only; the other 490 stay `never_heard`. The feeds
   stop when their contacts end (2 h); rerun step 7. `dev/reflect_orbital_{live,activate}.exs`
   take `EARENDIL_CADENCE_NODE` (default `cadence`, i.e. the main checkout).
+- **Personas:** the env admin (`user_environment_admin`) has no Reflect Orbital membership; in
+  admin mode the console selects the org from the URL (qa #15). e2e runs as `qa-org-admin`.
+- **Planning drafts:** reseeding planning templates invalidates existing drafts (they disappear
+  from `/contact-plans`; ux is speccing a 'superseded' state). Drafting runs a real fleet planning
+  run against the simulator: do it under load 16.
 - **No limits configured** in the seed, so nothing goes critical/caution on its own. Specs use
   fixtures over the real `/fleet` read (`e2e/support/fleet.ts`).
 - **Ingress ports:** the Earendil seed binds delivery transports on 127.0.0.1:42100–42109. If the
