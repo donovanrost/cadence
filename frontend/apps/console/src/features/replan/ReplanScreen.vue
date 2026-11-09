@@ -325,8 +325,8 @@ async function onApply(acks: Acknowledgement[]) {
           plans with rejected or failed bookings.
         </ApCallout>
         <p v-else-if="repaired" class="m-0 mb-3 text-base text-text-3">
-          Live plan r{{ live.version }} was re-planned. A new re-plan starts from the applied repair
-          and covers only bookings that are still lost.
+          r{{ live.version }} was re-planned. A new re-plan starts from the applied repair and
+          covers only bookings that are still lost.
         </p>
         <p v-else class="m-0 mb-3 text-base text-text-3">
           Live plan r{{ live.version }} is {{ live.state.replaceAll("_", " ") }}:
