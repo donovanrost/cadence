@@ -75,3 +75,32 @@ ingest path and activation admission). `L` = `apps/cadence/lib/cadence`.
 
 OK to build in this order: (1) ingress overlay, (2) generation-producing applies? Or should (2)
 wait behind a flag until fe-setup's review page shows the HOLD?
+
+## Decisions and build notes (DECISIONS #33)
+
+- **(1) built** (`8087801f`, `bc234414`). The overlay applies only to fleet entries with
+  `"framing_authority" => "profile"` and an explicit `"framing"` map. Only change-set generations
+  write those. Legacy entries carry neither, so their decode is unchanged. Source runtime bases
+  now allow 8,000 sources; the old cap was 1,000 and would have broken fleets past it.
+- **(2) built** (`8f798dde`): `Cadence.Comms.FramingDrift.audit/2`,
+  `mix cadence.config.framing_drift`, and readiness finding `framing_drift` (caution, fix
+  `{profile, id}`).
+- **(3) build plan, behind the per-mission flag `cadence.configuration` →
+  `profile_framing_generations` (default off):**
+  - **Kinds:** `spacecraft_profile` edits that touch framing or catalog, and
+    `spacecraft_override` on those paths, report `:generation`. With the flag off they behave as
+    in P1 (no activation), and the preview says so.
+  - **Inside the apply transaction:** an injected composition builder
+    (`Cadence.Control.ConfigurationGeneration`) builds the affected spacecraft's entries from
+    effective config, marked `framing_authority: profile`. It stores the fleet, composes and
+    persists the binding set, and creates the activation request **pre-approved by the change
+    set**. That only happens when the set satisfied the activation policy: direct, or reviewed by
+    a non-author. Metadata v2 carries `"change_set" => %{id, revision, content_sha256}` instead of
+    per-spacecraft draft review evidence. Admission gets a matching branch: the change set must
+    be applied at that revision, the head must not have moved, and the fleet hash must match.
+  - **After commit:** the existing execution tail runs (admission + generation +
+    `apply_generation`). Execution therefore runs after the revision commits, as legacy reviews
+    do. If it fails, the revision stays applied and the runtime reports `:degraded`, with
+    retries.
+  - **Preview:** a compatibility HOLD for `framing_mismatch` in fe-setup's agreed item shape,
+    whenever a profile-authoritative change would differ from the transport's ingress metadata.
