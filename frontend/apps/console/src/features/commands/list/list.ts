@@ -16,7 +16,7 @@ export const TAB_LABELS: Readonly<Record<CommandTab, string>> = {
 };
 
 const CLOSED: readonly GroupState[] = ["rejected", "sent_back", "aborted"];
-const done = (row: GroupRow) => finished(row.state, row.progress, row.target_count);
+const done = (row: GroupRow) => row.finished ?? finished(row.state, row.progress, row.target_count);
 
 export function inTab(row: GroupRow, tab: CommandTab): boolean {
   switch (tab) {

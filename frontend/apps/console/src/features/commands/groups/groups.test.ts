@@ -7,7 +7,7 @@ import { splitArgs } from "../compose/resend.ts";
 import { newItem } from "../compose/stack.ts";
 import { resendFrom } from "../compose/useResend.ts";
 import { EMPTY_QUERY } from "../compose/targets.ts";
-import { fetchGroups, preflightReader, type Preflight } from "./api.ts";
+import { fetchGroups, groupRow, preflightReader, type Preflight } from "./api.ts";
 import { checkMeta, checkRows, noGoReason, routingProfile } from "./checks.ts";
 import { showBody } from "./fixtures.ts";
 import { groupReader } from "./show.ts";
@@ -227,6 +227,32 @@ describe("identity via routes (DECISIONS #41)", () => {
 });
 
 describe("group list", () => {
+  it("decodes live rows: progress/finished null unless queued (cfef9e9a)", () => {
+    const base = {
+      id: "g",
+      title: "t",
+      requested_by: { actor_kind: "user", user_id: "u" },
+      requested_at: "2026-11-09T15:26:26.296234Z",
+      requested_approver_user_id: null,
+      member_count: 1,
+      target_count: 1,
+      command_count: 1,
+      second_go_required: false,
+      awaiting_me: false,
+      operation_id: null,
+    };
+    expect(
+      decode(groupRow, { ...base, state: "rejected", progress: null, finished: null }).ok,
+    ).toBe(true);
+    const q = decode(groupRow, {
+      ...base,
+      state: "queued",
+      progress: { no_verifier: 1 },
+      finished: true,
+    });
+    expect(q.ok && q.value.finished).toBe(true);
+  });
+
   it("unwraps {groups: [...]}", async () => {
     const original = globalThis.fetch;
     globalThis.fetch = () =>

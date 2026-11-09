@@ -228,10 +228,13 @@ describe("delivered requests stay 'queued' (approval-only state, qa #28)", () =>
       awaiting_me: false,
       operation_id: null,
       progress,
+      finished: undefined,
     });
     expect(inTab(row({ no_verifier: 1 }), "closed")).toBe(true);
     expect(inTab(row({ no_verifier: 1 }), "queued")).toBe(false);
     expect(inTab(row({ queued_for_contact: 1 }), "queued")).toBe(true);
     expect(inTab(row(undefined), "queued")).toBe(true);
+    expect(inTab({ ...row(null), state: "rejected", finished: null }, "closed")).toBe(true);
+    expect(inTab({ ...row({ queued_for_contact: 1 }), finished: true }, "closed")).toBe(true);
   });
 });

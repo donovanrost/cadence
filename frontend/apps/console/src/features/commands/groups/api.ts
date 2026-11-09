@@ -158,8 +158,9 @@ export const groupRow = d.object({
   second_go_required: d.boolean,
   awaiting_me: d.boolean,
   operation_id: d.nullable(d.string),
-  // Not in the list contract yet (asked api-ops); the State cell says only "GO given" without it.
-  progress: d.optional(progressReader),
+  // cfef9e9a: null unless state is queued. `finished` = every target final (not success).
+  progress: d.optional(d.nullable(progressReader)),
+  finished: d.optional(d.nullable(d.boolean)),
 });
 export type GroupRow = Decoded<typeof groupRow>;
 

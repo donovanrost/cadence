@@ -84,22 +84,22 @@ export const NEEDS_YOU: readonly MemberStage[] = [
 const count = (p: Progress, stages: readonly MemberStage[]) =>
   stages.reduce((sum, s) => sum + (p[s] ?? 0), 0);
 
-/** A released request whose every target has reached a final stage (the run is over). */
-export const finished = (state: GroupState, p: Progress | undefined, targets: number) =>
-  state === "queued" && p !== undefined && targets > 0 && count(p, FINAL_STAGES) >= targets;
+/** A released request whose every target is final (the run is over; not "succeeded"). */
+export const finished = (state: GroupState, p: Progress | null | undefined, targets: number) =>
+  state === "queued" && p != null && targets > 0 && count(p, FINAL_STAGES) >= targets;
 
 /**
  * A request's status tag. After GO the approval state stays `queued` for good (commanding.md:
  * delivery lives in progress), so a released request reads its delivery, never just "queued".
- * Without progress (list rows before api adds it) it says only what's certain: GO was given.
+ * Without progress it says only what's certain: GO was given.
  */
 export function statusTag(
   state: GroupState,
-  p: Progress | undefined,
+  p: Progress | null | undefined,
   targets: number,
 ): Readonly<{ label: string; state: OpState }> {
   if (state !== "queued") return { label: GROUP_STATE_WORDS[state], state: GROUP_STATE[state] };
-  if (p === undefined) return { label: "GO given", state: "neutral" };
+  if (p == null) return { label: "GO given", state: "neutral" };
   const final = count(p, FINAL_STAGES);
   const started = count(p, DELIVERED) + count(p, ["radiating", "release_failed", "indeterminate"]);
   if (started === 0 && final === 0) return { label: GROUP_STATE_WORDS.queued, state: "neutral" };
