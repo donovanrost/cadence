@@ -1,0 +1,50 @@
+<script setup lang="ts">
+import { RouterLink } from "vue-router";
+import { formatRelative, plural, useNow, ApTable, ApTag, type ApColumn } from "@/ui";
+import type { GroupRow } from "../groups/api.ts";
+import { GROUP_STATE, GROUP_STATE_WORDS, type PersonName } from "../groups/words.ts";
+
+/** Command requests. The Title cell links to the request (name-cell link); no row actions yet. */
+defineProps<{ rows: readonly GroupRow[]; nameOf: PersonName }>();
+const now = useNow();
+const columns: readonly ApColumn[] = [
+  { key: "title", label: "Request" },
+  { key: "scope", label: "Scope", mono: true },
+  { key: "by", label: "Requested by" },
+  { key: "at", label: "Requested", mono: true },
+  { key: "state", label: "State" },
+];
+const view = (r: GroupRow) => (r.awaiting_me ? "review" : undefined);
+</script>
+
+<template>
+  <ApTable :columns="columns" :rows="rows" :row-key="(row) => row.id" caption="Command requests">
+    <template #cell-title="{ row }">
+      <RouterLink
+        :to="{ name: 'ops.commands.request', params: { requestId: row.id, view: view(row) } }"
+        class="max-md:hit-44 text-readout no-underline hover:text-bright hover:underline"
+        >{{ row.title }}</RouterLink
+      >
+      <ApTag v-if="row.second_go_required" class="ml-2" label="2-PERSON" />
+    </template>
+    <template #cell-scope="{ row }">
+      <span class="whitespace-nowrap text-text-2"
+        >{{ plural(row.target_count, "target") }} × {{ row.command_count }}</span
+      >
+    </template>
+    <template #cell-by="{ row }">
+      <span class="text-text-2">{{ nameOf(row.requested_by.user_id) }}</span>
+    </template>
+    <template #cell-at="{ row }">
+      <time :datetime="row.requested_at" class="text-text-3">{{
+        formatRelative(new Date(row.requested_at), now)
+      }}</time>
+    </template>
+    <template #cell-state="{ row }">
+      <ApTag
+        :state="row.awaiting_me ? 'caution' : GROUP_STATE[row.state]"
+        :label="row.awaiting_me ? 'Awaits your GO' : GROUP_STATE_WORDS[row.state]"
+      />
+    </template>
+  </ApTable>
+</template>

@@ -38,7 +38,7 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "commands",
     name: "ops.commands",
-    component: pending,
+    component: () => import("@/features/commands/list/CommandsScreen.vue"),
     meta: { mode: "ops", nav: "commands", title: "Commands", board: "CommandFlow" },
   },
   {

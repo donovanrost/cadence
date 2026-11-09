@@ -6,14 +6,19 @@ describe("command access (DECISIONS #38)", () => {
     expect(commandAccess(new Set(["organization_admin"]))).toEqual({
       request: false,
       approve: false,
+      abort: false,
     });
     expect(commandAccess(new Set(["command.request"]))).toEqual({
       request: true,
       approve: false,
+      abort: false,
     });
-    expect(commandAccess(new Set(["command.request", "command.approve"]))).toEqual({
-      request: true,
-      approve: true,
-    });
+    expect(commandAccess(new Set(["command.request", "command.approve", "command.abort"]))).toEqual(
+      {
+        request: true,
+        approve: true,
+        abort: true,
+      },
+    );
   });
 });

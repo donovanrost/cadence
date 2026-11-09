@@ -73,7 +73,7 @@ const queueRows = computed(() =>
         v-else
         :group="g"
         :name-of="req.nameOf"
-        :can-abort="access.request || access.approve"
+        :can-abort="access.abort"
         @changed="req.refetch"
       />
     </template>
