@@ -16,7 +16,10 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 10 | Investigate header | Prev/next links show "2 ]" but are named "Next spacecraft, EARENDIL-002" (WCAG 2.5.3) | fe-ops | fixed (d3a2e569), e2e updated |
 | 11 | Config API | First `GET /missions/:id/config` returned 500 during an e2e run; a later call 200 with a baseline created at that moment (suspected race in lazy baseline creation) | api / domain | fixed (0c037ba0) |
 | 15 | Session / shell | Env admin in admin mode (platform_admin) gets `organizations: []` and can't open any org by URL | api / lead | verified (lead: org selected from the URL slug) |
-| 16 | Framing HOLD (DECISIONS #36 gate) | A profile `frame_parameters.frame_size` change raises no COMPATIBILITY HOLD; Apply needs only a reason | domain | open (blocks the flag) |
+| 16 | Framing HOLD (DECISIONS #36 gate) | No COMPATIBILITY HOLD on dev for a profile frame_size change | domain / qa | cause: stale server config (FramingCompatibility registered in config.exs after the last restart); qa's code reading was wrong. Rerun pending |
+| 18 | Changes preview decode | Hold items lacked `change_id`; console couldn't decode the preview (K2 'reply wasn't understood', Apply stuck) | domain / fe-setup | verified (cc4afc5a, 86663423) |
+| 19 | Change-set submit | Submit answered 500 (DB pool timeout under load) after the apply had committed (r6, generation 4) | domain / api | open |
+| 17 | Planning policy API | `pending.requested_by` is a bare id (UI expects `{name}`: whole page fails to decode); after a reject, `pending` still lists the version and `document` shows its values while `active_version` = 1 | api / fe-setup | open |
 | 12 | Palette | 'Show all N' `<button>` inside `role=listbox` (axe aria-required-children) | fe-ops | verified (cb5b2d12) |
 | 13 | Palette | Focus leaves the `aria-modal` dialog after two Tabs (no focus trap) | fe-ops | verified (cb5b2d12) |
 | 14 | Catalog import | File picker shows no visible keyboard focus (WCAG 2.4.7) | fe-setup | verified (32c2cb4e) |
@@ -146,9 +149,33 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   v1 `frame_size` 1115 = transports' `fixed_message_bytes` 1115; drift task: no drift; generation 1.
 - Staged `spacecraft_profile` update `frame_parameters.frame_size` → 1024 (rollout all). Preview:
   `compatibility` GO, no holds; K2 shows no HOLD; Apply enabled with just a reason.
-- Cause (`comms/config_kinds/framing_compatibility.ex` `holds/3`): only `spacecraft` /
-  `spacecraft_override` update entries count as touched (a profile edit gives `[]`), and
-  `FramingDrift.audit` compares the live profile, not the staged value.
+- ~~Cause: holds/3 ignores profile entries / audits live values.~~ **Wrong** (domain, with line
+  refs): rollout returns moved craft as `spacecraft` update entries, and preview runs in a
+  rolled-back transaction where staged values are live. Actual cause: `fbbeba63` (22:57) registered
+  `FramingCompatibility` in `config/config.exs`; the dev server was last restarted 22:46 and the
+  code reloader doesn't reload config, so `holds/3` was never called. domain added regression tests
+  (58e25481).
 - Not applied; staged change discarded. Re-run the full DECISIONS #36 check after the fix.
+
+### 17. Planning policy: pending version breaks the page; reject doesn't clear it
+
+- Save a new policy version (org admin): `GET /contact-planning/policy` returns
+  `pending.requested_by: "user_…"` (a bare id). The console decodes `requested_by` as `{name}`, so
+  the whole Policy tab shows "The server sent data this console does not understand
+  (data.pending.requested_by: expected object)". Nobody can approve or reject in the UI.
+  scheduling.md doesn't fix the shape; elsewhere actors are `{kind, id, name}` (suggest that).
+- Reject v2 as another admin (`POST /policy/2/decision` → `200 {state: "rejected"}`), then
+  `GET /policy` still has `pending: {version: 2, …}` and `document.budgets.max_contacts: 1001`
+  (v2's value) while `active_version: 1`. Expected `pending: null` and the active document.
+
+### 19. Submit returns 500 after a committed apply
+
+- 2026-11-09 23:15 local, load ~37: `POST /config/change-sets/:id/submit` (restore frame_size 1115)
+  → 500 `DBConnection.ConnectionError` (pool checkout timeout). The apply had committed: head r6,
+  generation 4, pins moved, nothing staged.
+- An operator is told it failed when it succeeded. Either don't fail the response after commit
+  (post-commit work outside the request / tolerant), or make the response distinguish "applied,
+  follow-up failed"; and the console should treat a 5xx on submit as "unclear, check now", not
+  as failure.
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
