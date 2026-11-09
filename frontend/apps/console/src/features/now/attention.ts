@@ -1,4 +1,5 @@
 import { decoders as d, type Decoded } from "@/api/index.ts";
+import type { QueueItem } from "./queue.ts";
 
 /**
  * Attention items in Now's queue (U31, DECISIONS #54; ops.md §action-queue `attention`): mission
@@ -83,4 +84,48 @@ export function attentionMeta(a: Attention): string | null {
     a.state === "acknowledged" ? `Ack ${a.acknowledged_by?.name ?? ""}`.trim() : null,
   ].filter((p): p is string => Boolean(p));
   return parts.length ? parts.join(" · ").toUpperCase() : null;
+}
+
+export type Resolved = Decoded<typeof resolvedReader>;
+
+/** How long a resolved row stays, faded, before it leaves (U31). */
+export const RESOLVED_FADE_MS = 5_000;
+
+export type Fading = Readonly<{ item: QueueItem; index: number; until: number }>;
+
+/**
+ * Rows to fade after a read: a row seen last time, now gone, and listed in `resolved` reads
+ * "Resolved by Mira K." for 5 s at its old place. It never takes the primary action.
+ */
+export function newlyResolved(
+  previous: readonly QueueItem[],
+  current: readonly QueueItem[],
+  resolved: readonly Resolved[],
+  already: readonly Fading[],
+  now: number,
+): Fading[] {
+  const live = new Set(current.map((r) => r.key));
+  return resolved.flatMap((r) => {
+    const index = previous.findIndex((p) => p.key === r.id);
+    const prev = previous[index];
+    if (!prev || live.has(r.id) || already.some((f) => f.item.key === `${r.id}|resolved`))
+      return [];
+    const item: QueueItem = {
+      ...prev,
+      key: `${r.id}|resolved`,
+      state: "off",
+      sentence: `Resolved by ${noStop(r.resolved_by.name ?? "an operator")}.`,
+      meta: null,
+      acknowledged: true,
+    };
+    return [{ item, index, until: now + RESOLVED_FADE_MS }];
+  });
+}
+
+/** Current rows with the fading ones put back where they were. */
+export function withFading(rows: readonly QueueItem[], fading: readonly Fading[]): QueueItem[] {
+  const out = [...rows];
+  for (const f of [...fading].sort((a, b) => a.index - b.index))
+    out.splice(Math.min(f.index, out.length), 0, f.item);
+  return out;
 }

@@ -253,7 +253,6 @@ function rowFor(item: ServerItem): QueueItem[] {
       if (!a) return [];
       const w = attentionWords(a);
       const to: RouteLocationRaw = { name: "ops.contacts", query: { contact: a.contact_id } };
-      const meta = [attentionMeta(a), `AOS ${a.starts_at.slice(11, 16)}Z`].filter(Boolean);
       return [
         {
           ...base(item),
@@ -261,8 +260,9 @@ function rowFor(item: ServerItem): QueueItem[] {
           title: `${item.spacecraft[0]?.name ?? "Spacecraft"} · ${w.what}`,
           titleTo: to,
           sentence: w.evidence,
-          meta: meta.join(" · "),
+          meta: attentionMeta(a),
           acknowledged: a.state === "acknowledged",
+          due: { label: "AOS", at: a.starts_at },
           action: { label: "Review", to },
         },
       ];

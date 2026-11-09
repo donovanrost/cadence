@@ -23,6 +23,8 @@ export type QueueItem = Readonly<{
   action: QueueAction;
   /** Every alarm behind the row is acknowledged (U21): keeps its priority, action 'Open', never primary. */
   acknowledged?: boolean;
+  /** A consequence time the row counts down to live, after the meta (`AOS T−01:12:00`). */
+  due?: Readonly<{ label: string; at: string }>;
   /** Spacecraft this row is about (for the "N spacecraft need you" headline). */
   spacecraftIds: readonly string[];
 }>;

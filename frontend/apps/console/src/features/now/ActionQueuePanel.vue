@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
 import type { RemoteState } from "@/api/index.ts";
-import { ApButton, ApCallout, ApListRow, ApPanel, ApRemote } from "@/ui";
+import { ApButton, ApCallout, ApListRow, ApPanel, ApRemote, formatRelative, useNow } from "@/ui";
 import type { QueueItem } from "./queue.ts";
 
 /** A2 · Action queue: the server-ranked queue (M6), in server order. */
 defineProps<{ state: RemoteState<QueueItem[]>; nominal: number }>();
 defineEmits<{ retry: [] }>();
+const now = useNow();
+/** Static meta, then the live countdown when the row has a consequence time. */
+function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Record<string, never> {
+  const due = item.due
+    ? `${item.due.label} ${formatRelative(new Date(item.due.at), now.value)}`
+    : null;
+  const meta = [item.meta, due].filter((p): p is string => p !== null).join(" · ");
+  return meta ? { meta, metaLive: due !== null } : {};
+}
 </script>
 
 <template>
@@ -29,7 +38,7 @@ defineEmits<{ retry: [] }>();
             :priority="`P${item.priority}`"
             :state="item.state"
             :sentence="item.sentence"
-            v-bind="item.meta === null ? {} : { meta: item.meta }"
+            v-bind="metaProps(item)"
           >
             <template #title>
               <RouterLink

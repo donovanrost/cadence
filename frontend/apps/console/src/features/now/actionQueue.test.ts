@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
+import { newlyResolved, withFading } from "./attention.ts";
 
 const member = (scid: number, extra: Record<string, unknown> = {}) => ({
   id: `spacecraft-earendil-${String(scid).padStart(3, "0")}`,
@@ -148,5 +149,95 @@ describe("action queue (M6)", () => {
   it("rejects an unknown kind or priority", () => {
     expect(decode(actionQueueReader, body([item({ kind: "mystery" })])).ok).toBe(false);
     expect(decode(actionQueueReader, body([item({ priority: 4 })])).ok).toBe(false);
+  });
+});
+
+describe("attention rows (U31, fafe581a)", () => {
+  const attention = (overrides: Record<string, unknown> = {}) =>
+    item({
+      id: "attention:pass_resolution:at-1",
+      priority: 2,
+      kind: "attention",
+      state: "caution",
+      source: "pass_resolution",
+      since: "2026-11-09T10:55:00Z",
+      due_at: "2026-11-09T20:12:00Z",
+      spacecraft: [
+        member(1, {
+          violating_points: null,
+          value: null,
+          first_crossed_at: null,
+        }),
+      ],
+      attention: {
+        id: "at-1",
+        source: "pass_resolution",
+        conflict: "contradicts_attestation",
+        state: "open",
+        acknowledged_by: null,
+        contact_id: "contact-9",
+        station: { ref: "svb-1", id: "st-1", code: "SVB-1", name: "Svalbard 1" },
+        provider: { id: "p-1", name: "Northlight" },
+        starts_at: "2026-11-09T20:12:00Z",
+        raised_at: "2026-11-09T10:55:00Z",
+        provider_message: null,
+        resolution: {
+          action: "attested_booked",
+          actor: { kind: "user", id: "u-1", name: "Mira K." },
+          at: "2026-11-09T10:52:00Z",
+          note: null,
+          provider_reference: "NL-48213",
+        },
+        ...overrides,
+      },
+    });
+
+  it("reads in U31 copy and reviews the contact", () => {
+    const [row] = present([attention()]);
+    expect(row?.title).toBe("EARENDIL-001 · Northlight says a pass marked booked isn't.");
+    expect(row?.sentence).toBe(
+      "Marked booked by Mira K. 10:52Z with ref NL-48213. Don't count on this contact.",
+    );
+    expect(row?.meta).toBe("SVB-1");
+    expect(row?.due).toEqual({ label: "AOS", at: "2026-11-09T20:12:00Z" });
+    expect(row?.action).toEqual({
+      label: "Review",
+      to: { name: "ops.contacts", query: { contact: "contact-9" } },
+    });
+  });
+
+  it("cancel_failed quotes the provider without doubling the stop; ack marks the row", () => {
+    const [row] = present([
+      attention({
+        conflict: "cancel_failed",
+        provider_message: "Window locked.",
+        state: "acknowledged",
+        acknowledged_by: { kind: "user", id: "u-2", name: "Sam T." },
+      }),
+    ]);
+    expect(row?.sentence).toBe("Window locked. The pass may still be booked and billed.");
+    expect(row?.meta).toBe("SVB-1 · ACK SAM T.");
+    expect(row?.acknowledged).toBe(true);
+  });
+
+  it("a resolved row fades in place for 5 s", () => {
+    const before = present([item({ id: "setup:a", kind: "setup", priority: 3 }), attention()]);
+    const after = present([item({ id: "setup:a", kind: "setup", priority: 3 })]);
+    const resolved = [
+      {
+        id: "attention:pass_resolution:at-1",
+        resolved_by: { kind: "user", id: "u-1", name: "Mira K." },
+        resolved_at: "2026-11-09T11:00:00Z",
+      },
+    ];
+    const fading = newlyResolved(before, after, resolved, [], 1_000);
+    expect(fading.map((f) => [f.index, f.until, f.item.sentence, f.item.state])).toEqual([
+      [1, 6_000, "Resolved by Mira K.", "off"],
+    ]);
+    expect(withFading(after, fading).map((r) => r.key)).toEqual([
+      "setup:a",
+      "attention:pass_resolution:at-1|resolved",
+    ]);
+    expect(newlyResolved(before, after, resolved, fading, 2_000)).toEqual([]);
   });
 });
