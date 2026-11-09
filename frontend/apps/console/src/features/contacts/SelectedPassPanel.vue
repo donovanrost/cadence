@@ -32,6 +32,17 @@ const props = defineProps<{
 const now = useNow();
 
 const state = computed(() => (props.pass ? contactState(props.pass) : null));
+/**
+ * Until pass review (S9) compares planned vs flown, a completed reservation is only known to have
+ * ended: gray "Ended · not verified", never a green "realized" (ux Contacts review 1).
+ */
+const tag = computed(() =>
+  state.value === null
+    ? null
+    : state.value === "realized"
+      ? { state: "neutral" as const, label: "Ended · not verified" }
+      : { state: contactOpState(state.value), label: contactStateWord[state.value] },
+);
 const facts = computed(() => {
   const p = props.pass;
   if (!p) return [];
@@ -53,6 +64,15 @@ const facts = computed(() => {
     ...(p.max_elevation_deg === null
       ? []
       : [{ key: "el", label: "Max el", value: `${p.max_elevation_deg}°`, mono: true }]),
+    ...(p.uplink_capable === null
+      ? []
+      : [
+          {
+            key: "link",
+            label: "Link",
+            value: p.uplink_capable ? "Uplink capable" : "Downlink only",
+          },
+        ]),
     { key: "source", label: "Source", value: sourceLabel(p.source, "contact") },
     { key: "station", label: "Station", value: p.station.name ?? stationLabel(p) },
   ];
@@ -82,7 +102,7 @@ const countdown = computed(() => {
           class="max-md:hit-44 font-display text-lg font-semibold text-readout no-underline hover:underline"
           >{{ spacecraft.name }}</RouterLink
         >
-        <ApTag v-if="state" :state="contactOpState(state)" :label="contactStateWord[state]" />
+        <ApTag v-if="tag" :state="tag.state" :label="tag.label" />
       </div>
       <p class="m-0 font-mono text-md text-text-2 uppercase">
         {{ pass.station.name ?? stationLabel(pass) }} ·

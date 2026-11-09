@@ -31,7 +31,17 @@ const router = useRouter();
 const now = useNow();
 const missionId = computed(() => scope.value.mission.id);
 const fleet = useFleet(missionId);
-const passes = usePasses(missionId, 30 * 60_000, 6 * 3_600_000);
+const RANGES = [
+  { value: "2h", label: "2H", ms: 2 * 3_600_000 },
+  { value: "6h", label: "6H", ms: 6 * 3_600_000 },
+] as const;
+const range = computed(() => (route.query.range === "2h" ? RANGES[0] : RANGES[1]));
+const passes = usePasses(
+  missionId,
+  30 * 60_000,
+  computed(() => range.value.ms),
+);
+const rangeOptions = RANGES.map((r) => ({ value: r.value, label: r.label }));
 const stationsQuery = useRemoteQuery(missionId, (id, signal) => fetchStations(id, signal));
 useMissionInvalidation(missionId, ["configuration"], stationsQuery.refetch);
 /** null = unknown (not loaded or failed): the label omits the count rather than guess. */
@@ -93,7 +103,7 @@ const meta = computed(() => {
   const ahead = list.value.filter(
     (p) => Date.parse(p.starts_at) > t && passStatus(p, t) !== "canceled",
   ).length;
-  return `${plural(ahead, "pass", "passes")} next 6 h · ${live} AOS now`;
+  return `${plural(ahead, "pass", "passes")} next ${range.value.label.toLowerCase()} · ${live} AOS now`;
 });
 const tabs = [
   { key: "live", label: "Live", to: { name: "ops.contacts" } },
@@ -115,12 +125,21 @@ const tabs = [
     </ApPageHeader>
     <div class="flex flex-wrap items-center justify-between gap-3">
       <ApTabLinks :links="tabs" active="live" label="Contacts sections" />
-      <ApSegmented
-        :model-value="axis"
-        :options="axes"
-        label="Rows"
-        @update:model-value="(v) => go({ view: v === 'station' ? undefined : v })"
-      />
+      <div class="flex gap-3">
+        <ApSegmented
+          :model-value="range.value"
+          :options="rangeOptions"
+          label="Window"
+          variant="micro"
+          @update:model-value="(v) => go({ range: v === '6h' ? undefined : v })"
+        />
+        <ApSegmented
+          :model-value="axis"
+          :options="axes"
+          label="Rows"
+          @update:model-value="(v) => go({ view: v === 'station' ? undefined : v })"
+        />
+      </div>
     </div>
     <ApPanel v-if="stationCount === 0" index="D3" title="Pass schedule" flush>
       <ApEmptyState
@@ -131,6 +150,9 @@ const tabs = [
       </ApEmptyState>
     </ApPanel>
     <template v-else>
+      <ApCallout v-if="list.some((p) => p.source.synthetic)" tone="info">
+        These passes are the simulator's synthetic windows, not a real ground provider's.
+      </ApCallout>
       <ApPanel index="D1" title="Ground track" flush class="flex-none">
         <ApEmptyState
           state="off"
@@ -143,8 +165,8 @@ const tabs = [
       >
         <ApPanel
           index="D3"
-          title="Pass schedule · 6 h"
-          :meta="view ? `${view.bars.length} passes` : undefined"
+          :title="`Pass schedule · ${range.label.toLowerCase()}`"
+          :meta="view ? `${view.bars.length} in view` : undefined"
           pane
           flush
         >
