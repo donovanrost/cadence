@@ -69,12 +69,14 @@ mise exec -- mix ecto.migrate -r Cadence.Repo
 mise exec -- mix cadence.questdb.migrate
 
 # 4. Phoenix (leave running; boot creates the env admin user). Same exports as step 3, plus
-#    OTEL off (mise.toml points at a collector on :4318 that isn't running) and durable current
-#    values (the default ETS store forgets every last_received_at on restart; qa #7), and its own
-#    LiveView Vite (default 5173 is the main checkout's: our sign-in would run its JS).
+#    OTEL off (mise.toml points at a collector on :4318 that isn't running) and its own LiveView
+#    Vite (default 5173 is the main checkout's: our sign-in would run its JS). Keep the default
+#    ETS current-value store: Postgres current values need the Postgres packet-record archive, and
+#    since 4e755071 the server refuses the Postgres store + filesystem archive pair at boot. Durable
+#    last-heard comes from the history merge (qa #7). Output is teed to var/qa-server.log.
 #    First time: (cd apps/cadence_web && npm ci), or the watcher can't start and sign-in breaks.
-CADENCE_LIVE_VUE_VITE_PORT=5183 CADENCE_TELEMETRY_CURRENT_VALUE_STORE=postgres OTEL_EXPORTER_OTLP_ENDPOINT= POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 PORT=4011 \
-  mise exec -- iex --sname cadence_apogee --cookie cadence -S mix phx.server
+CADENCE_LIVE_VUE_VITE_PORT=5183 OTEL_EXPORTER_OTLP_ENDPOINT= POOL_SIZE=30 DB_QUEUE_TARGET_MS=1000 PORT=4011 \
+  mise exec -- iex --sname cadence_apogee --cookie cadence -S mix phx.server 2>&1 | tee -a ../../var/qa-server.log
 
 # 5. Seed (once; both are rerunnable)
 CADENCE_DEV_DATABASE=cadence_apogee_dev EARENDIL_PROVIDER_URL=http://127.0.0.1:4111 \
