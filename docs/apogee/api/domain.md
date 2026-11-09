@@ -208,3 +208,23 @@ present, `routing_model` becomes `:profile`.
 
 Not yet: lifting legacy per-spacecraft rules into profile rules (a reviewable change set), and
 profile framing feeding ingress (the next P2 steps).
+
+## Framing generations (DECISIONS #33/#35/#36, commit `fbbeba63`, flag default off)
+
+- **Flag:** `Cadence.Platform.ConfigurationSettings.profile_framing_generations?(org, mission)` /
+  `put_profile_framing_generations(org, mission, boolean, %{id, name})` (scoped settings
+  section `cadence.configuration`). Keep it off until fe-setup shows the HOLD and qa verifies one
+  framing change end to end on the simulator.
+- **With the flag on**, an apply that changes a configured spacecraft's effective profile
+  framing (by re-pinning it, editing the profile with rollout, or a framing override):
+  - produces generation N+1 in the same transaction. A rejection means nothing was applied.
+  - returns `activation_id`, `generation` and `runtime: :applied | :degraded`, and broadcasts
+    them on the runtime topic. `:converging` is the transient state while the apply runs.
+- **Preview:** `checks[key: "compatibility"]` has `verdict: :hold` with items
+  `%{op_id: nil, kind: "spacecraft_profile", entity_id: profile_id, reason: :framing_mismatch,
+  spacecraft_count, profile_value: %{path, value}, transport_value: %{transport: %{id, name},
+  path, value}, sentence}`. `submit` needs `acknowledged_holds: true` when the verdict is `:hold`.
+- **Catalog:** changes to `catalog_revision_id` (profile or override) are refused with a
+  validation error until catalog changes produce generations.
+- **Decode:** only entries marked `framing_authority: "profile"` decode with profile framing;
+  every other source keeps the transport's ingress metadata.
