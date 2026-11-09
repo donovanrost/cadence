@@ -253,6 +253,13 @@ export function failureOutcome(
       changed: null,
       sentence: `The connection dropped, so it isn't clear whether anything was ${verb}. Check Staged changes before trying again.`,
     };
+  // Field-level rejections (e.g. DECISIONS #36 catalog refusal) name the field and the route.
+  const fields = invalidOpDetails(error);
+  if (fields && fields.errors.length > 0)
+    return {
+      changed: false,
+      sentence: `Nothing was ${verb}. ${fields.errors.map((e) => (e.path ? `${e.path}: ${e.message}` : e.message)).join(" · ")}`,
+    };
   return { changed: false, sentence: `Nothing was ${verb}. ${rejectionSentence(error)}` };
 }
 

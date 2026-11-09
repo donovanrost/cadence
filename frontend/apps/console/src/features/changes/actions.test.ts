@@ -58,3 +58,31 @@ describe("preview compatibility HOLD (DECISIONS #33)", () => {
     expect(itemLine({ ...base, reason: "entity_gone" })).toBe("Entity gone");
   });
 });
+
+describe("failureOutcome", () => {
+  it("names the field and the server's message for invalid_op (DECISIONS #36)", async () => {
+    const { failureOutcome } = await import("./actions.ts");
+    const outcome = failureOutcome(
+      {
+        kind: "invalid",
+        code: "invalid_op",
+        message: "A staged change is invalid.",
+        details: {
+          index: 0,
+          errors: [
+            {
+              path: "catalog_revision_id",
+              message: "Change catalogs through the spacecraft configuration review",
+            },
+          ],
+        },
+      },
+      "staged",
+    );
+    expect(outcome).toEqual({
+      changed: false,
+      sentence:
+        "Nothing was staged. catalog_revision_id: Change catalogs through the spacecraft configuration review",
+    });
+  });
+});
