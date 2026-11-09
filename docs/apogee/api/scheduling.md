@@ -112,7 +112,9 @@ from_version, to_version}]}`. Otherwise `superseded` is `null`. It is computed *
 the current versions (U27), so bumping a template or requirement supersedes the draft at once.
 Reasons, strongest first: `template_changed` (a requirement's template has a newer version, or no
 longer targets its spacecraft), `requirement_changed` (a newer requirement version than the plan
-used), and `requirement_closed`. **Submit refuses a superseded draft** with `409 plan_superseded`
+used), and `requirement_closed`. A requirement that another plan (pending approval or later)
+has taken up is never stale, because supersession keeps it, so a repair plan built on a booked
+plan's requirements isn't superseded. **Submit refuses a superseded draft** with `409 plan_superseded`
 and `details.superseded`. The plan itself isn't changed, so its detail stays readable, and
 `ready_to_approve` is `false`. `?state=draft` filters on the stored state, so a superseded draft
 still comes back, as `superseded`. Re-draft the day to plan against the new versions.

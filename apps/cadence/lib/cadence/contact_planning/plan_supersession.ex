@@ -19,6 +19,7 @@ defmodule Cadence.ContactPlanning.PlanSupersession do
   alias Cadence.Accounts
 
   alias Cadence.ContactPlanning.{
+    ContactPlans,
     ContactRequirements,
     ContactRequirementTemplates,
     TemplateSupersession,
@@ -28,7 +29,7 @@ defmodule Cadence.ContactPlanning.PlanSupersession do
   @open [:draft, :pending_approval]
 
   @spec check(binary(), binary(), map(), map()) :: map() | nil
-  def check(organization_id, mission_id, %{lifecycle_state: state}, version)
+  def check(organization_id, mission_id, %{lifecycle_state: state} = plan, version)
       when state in @open do
     requirements =
       ((version.requirement_refs_document || %{})["requirements"] || [])
@@ -36,9 +37,19 @@ defmodule Cadence.ContactPlanning.PlanSupersession do
 
     templates = templates(organization_id, mission_id, requirements)
 
+    # Supersession keeps requirements another plan has taken up (a booked source plan's, which
+    # a repair re-plans), so they aren't stale here either.
+    kept =
+      ContactPlans.requirements_taken_up(
+        organization_id,
+        mission_id,
+        Enum.map(requirements, fn {requirement, _, _} -> requirement.contact_requirement_id end),
+        except_plan_id: plan.contact_plan_id
+      )
+
     requirements
     |> Enum.flat_map(fn {requirement, current, used} ->
-      requirement_change(requirement, current, used, templates)
+      requirement_change(requirement, current, used, templates, kept)
     end)
     |> summarize()
   end
@@ -76,7 +87,7 @@ defmodule Cadence.ContactPlanning.PlanSupersession do
 
   defp generation(current), do: (current.metadata || %{})["generation"] || %{}
 
-  defp requirement_change(requirement, current, used, templates) do
+  defp requirement_change(requirement, current, used, templates, kept) do
     reason = requirement.lifecycle_reason || ""
     template = Map.get(templates, generation(current)["contact_requirement_template_id"])
 
@@ -91,7 +102,9 @@ defmodule Cadence.ContactPlanning.PlanSupersession do
           )
         ]
 
-      requirement.lifecycle_state == :active and overtaken?(current, template) ->
+      requirement.lifecycle_state == :active and
+        not MapSet.member?(kept, requirement.contact_requirement_id) and
+          overtaken?(current, template) ->
         {version, _targets} = template
         [template_change(version.created_at, version.created_by, current, template)]
 

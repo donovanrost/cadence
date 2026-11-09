@@ -9,6 +9,7 @@ defmodule CadenceWeb.Console.TemplateSupersessionTest do
     ContactRequirements,
     ContactRequirementTemplates,
     FleetPlanningStarts,
+    PlanSupersession,
     TemplateSupersession
   }
 
@@ -202,6 +203,65 @@ defmodule CadenceWeb.Console.TemplateSupersessionTest do
              "details" => %{"superseded" => %{"reason" => "template_changed"}}
            } =
              json_response(conn, 409)["error"]
+  end
+
+  test "a draft sharing a requirement that a submitted plan keeps isn't superseded (repairs)",
+       c do
+    fixture =
+      ContactPlanningFixtures.plan_fixture(c.org, c.user, c.membership, c.mission,
+        metadata: %{
+          "generation" => %{
+            "contact_requirement_template_id" => "tmpl-kept-by-plan",
+            "contact_requirement_template_version" => 1
+          }
+        }
+      )
+
+    target = %{"kind" => "spacecraft_ids", "spacecraft_ids" => [fixture.craft.spacecraft_id]}
+
+    {:ok, _, _} =
+      ContactRequirementTemplates.create(
+        c.scope,
+        c.mission.mission_id,
+        Map.put(
+          attrs(target, ContactPlanningFixtures.now()),
+          :contact_requirement_template_id,
+          "tmpl-kept-by-plan"
+        )
+      )
+
+    {:ok, _} =
+      ContactPlans.submit(
+        c.scope,
+        c.mission.mission_id,
+        fixture.plan.contact_plan_id,
+        1,
+        "Book it"
+      )
+
+    {:ok, repair, repair_version} =
+      ContactPlans.create(c.scope, c.mission.mission_id, %{
+        planning_run_ids: [fixture.planning.run.contact_planning_run_id],
+        selected_snapshot_ids:
+          Enum.map(fixture.planning.snapshots, & &1.contact_opportunity_snapshot_id),
+        rationale: "Repair proposal"
+      })
+
+    {:ok, _, _} =
+      ContactRequirementTemplates.version(
+        c.scope,
+        c.mission.mission_id,
+        "tmpl-kept-by-plan",
+        1,
+        %{name: "v2"}
+      )
+
+    assert PlanSupersession.check(
+             c.org.organization_id,
+             c.mission.mission_id,
+             repair,
+             repair_version
+           ) == nil
   end
 
   test "a fleet start leaves v1's requirements out of review and supersedes them after v2 materializes",

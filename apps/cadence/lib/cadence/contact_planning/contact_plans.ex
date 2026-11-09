@@ -102,9 +102,13 @@ defmodule Cadence.ContactPlanning.ContactPlans do
 
   @taken_up ~w(pending_approval approved executing partially_reserved reserved)
 
+  defp except_plan(query, nil), do: query
+  defp except_plan(query, plan_id), do: where(query, [ref], ref.contact_plan_id != ^plan_id)
+
   @doc """
   The ids among `requirement_ids` that a plan in pending_approval or later
-  has taken up (template supersession keeps those). `lock: true` holds those
+  has taken up (template supersession keeps those). `except_plan_id:` leaves
+  one plan out (a plan doesn't keep its own requirements current). `lock: true` holds those
   plans `FOR SHARE`, so it serializes with `submit/6`, which takes the plan
   `FOR UPDATE`; call it inside the transaction that acts on the answer.
   """
@@ -125,6 +129,7 @@ defmodule Cadence.ContactPlanning.ContactPlans do
       ref.organization_id == ^organization_id and ref.mission_id == ^mission_id and
         ref.contact_requirement_id in ^requirement_ids and plan.lifecycle_state in ^@taken_up
     )
+    |> except_plan(Keyword.get(opts, :except_plan_id))
     |> select([ref, _plan], ref.contact_requirement_id)
     |> then(fn query ->
       if Keyword.get(opts, :lock, false),
