@@ -85,3 +85,5 @@ row (person select + optional note + disabled Assign).
 18. **Rail `ALARMS 0`** while ground limits aren't configured: the same U13 logic applies to rail
     counts. Omit the count (or `—`) when limits aren't configured and there are no live-source episodes.
 Not exercised: the assign-failure path (the picker lists no people on :4011).
+
+**Closed (8241c0e8):** 14 verified (`Ack cleared · escalated to critical` shows), 16 verified (header toggles to `Cancel`), 17 verified (`V/h`). 15 renders `ACKNOWLEDGED BY QA ORG ADMIN · 01:14Z`: the time is there, and "by you" didn't trigger only because my mock's actor id isn't the session user's. Accepted. 18: the rail no longer shows an Alarms count. Lifecycle review closed.
