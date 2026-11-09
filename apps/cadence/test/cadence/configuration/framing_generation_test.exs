@@ -127,6 +127,25 @@ defmodule Cadence.Configuration.FramingGenerationTest do
     assert entry["document"]["protocol"] == before_entry["document"]["protocol"]
   end
 
+  test "rolling back a pin hands framing back in a new generation (#49 with 0e5b17d4)", c do
+    {:ok, _} =
+      ConfigurationSettings.put_profile_framing_generations(c.org, c.mission.mission_id, true, %{
+        id: "test",
+        name: "Test"
+      })
+
+    assert {:ok, %{state: :applied, revision: pinned, generation: framed}} =
+             apply_framing_profile(c, 1279)
+
+    assert {:ok, staged} = ConfigurationRollback.stage(c.scope, c.mission.mission_id, pinned - 1)
+    assert {:ok, %{state: :applied, generation: generation}} = submit(c, staged)
+    assert generation == framed + 1
+
+    {:ok, active} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
+    assert {:ok, entry} = FleetSnapshot.entry(active.metadata, c.craft.spacecraft_id)
+    refute Map.has_key?(entry, "framing_authority")
+  end
+
   describe "compatibility HOLD (qa #16)" do
     setup c do
       {:ok, _} =
