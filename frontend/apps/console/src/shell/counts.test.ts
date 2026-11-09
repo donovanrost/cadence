@@ -14,6 +14,18 @@ describe("counts contract", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("reads attention when the server sends it (U31)", () => {
+    const result = decode(countsReader, {
+      observed_at: "2026-11-08T02:41:17Z",
+      alarms: null,
+      commands: null,
+      fleet: null,
+      contacts: null,
+      attention: { open: 2, acknowledged: 1 },
+    });
+    expect(result.ok && result.value.attention).toEqual({ open: 2, acknowledged: 1 });
+  });
+
   it("rejects a fractional count", () => {
     const result = decode(countsReader, {
       observed_at: "2026-11-08T02:41:17Z",

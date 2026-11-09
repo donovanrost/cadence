@@ -11,6 +11,8 @@ const palette = usePalette();
 
 const alarmCount = computed(() => props.counts?.alarms?.active ?? null);
 const goCount = computed(() => props.counts?.commands?.awaiting_viewer ?? null);
+/** U31: open attention items (pass-resolution conflicts) badge Now; acknowledged ones don't. */
+const attentionCount = computed(() => props.counts?.attention?.open ?? null);
 const goPolls = computed(() => route.name === "ops.commands" && route.query.awaiting === "me");
 const tabClass = (active: boolean) => [
   "flex min-h-12 flex-1 cursor-pointer items-center justify-center border-0 bg-transparent font-display text-xs font-semibold tracking-btn uppercase no-underline",
@@ -29,7 +31,9 @@ const tabClass = (active: boolean) => [
       :to="{ name: 'ops.now', params: { org, mission } }"
       :aria-current="route.meta.nav === 'now' ? 'page' : undefined"
       :class="tabClass(route.meta.nav === 'now')"
-      >Now</RouterLink
+      >Now<span v-if="attentionCount" class="ml-1.5 font-mono text-caution-text">{{
+        attentionCount
+      }}</span></RouterLink
     >
     <RouterLink
       :to="{ name: 'ops.alarms', params: { org, mission } }"

@@ -17,6 +17,9 @@ export const countsReader = d.object({
   commands: d.nullable(d.object({ open: d.integer, awaiting_viewer: d.integer })),
   fleet: d.nullable(d.object({ total: d.integer })),
   contacts: d.nullable(d.object({ in_contact: d.integer })),
+  // U31 (3d891b4b): open "needs acknowledgment" items, for the mobile Now badge. Optional so an
+  // older server's /counts still decodes.
+  attention: d.optional(d.nullable(d.object({ open: d.integer, acknowledged: d.integer }))),
 });
 export type OpsCounts = Decoded<typeof countsReader>;
 
@@ -43,7 +46,7 @@ export function useOpsCounts(missionId: Readonly<Ref<string | null>>) {
       query.refetch();
     }, wait);
   };
-  useMissionInvalidation(missionId, ["alarms", "commanding", "spacecraft"], refetch);
+  useMissionInvalidation(missionId, ["alarms", "attention", "commanding", "spacecraft"], refetch);
   onScopeDispose(() => {
     if (timer !== null) clearTimeout(timer);
   });
