@@ -266,6 +266,7 @@ shown as current or submitted.
 never a repair proposal. When a repair proposal exists for that day (`repair_of` set, api), K1 shows an
 info callout under the header: "A re-plan proposal is open for this day: 4 passes move off HBK · proposed
 10:32Z by Mira K. · `Open in Re-plan →`". K2 owns the proposal: its header names both sides, `RE-PLAN ·
-R1 → R2 PROPOSAL · 4 MOVES`, with a mono context line `REPAIR OF R1 (BOOKED 1,512 PASSES)`, and its primary
-applies the repair (`Apply R2 · send 4 requests`). Counts on any screen come from one plan only: never a
+R1 → PROPOSAL · 4 MOVES`, with a mono context line `REPAIR OF R1 (<base plan state>)`, and its primary
+applies the repair (`Apply proposal · send 4 requests`). No invented revision number for the proposal (U25):
+it gets one only if the server assigns it. Counts on any screen come from one plan only: never a
 header from one plan and a footer from another.
