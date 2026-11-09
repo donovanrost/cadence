@@ -144,7 +144,12 @@ export function rejectionSentence(error: ApiError): string {
 }
 
 export type StageOp = Readonly<{
-  kind: "ground_station" | "transport" | "spacecraft" | "spacecraft_profile";
+  kind:
+    | "ground_station"
+    | "transport"
+    | "spacecraft"
+    | "spacecraft_profile"
+    | "spacecraft_override";
   action: "create" | "update" | "delete";
   entity_id?: string;
   document?: Readonly<Record<string, unknown>>;

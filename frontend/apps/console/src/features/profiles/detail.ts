@@ -22,6 +22,36 @@ const field = object({
   overridden_by: integer,
 });
 
+/** Domain P2 (docs/apogee/api/domain.md "P2 additions"), ProfileRouting.rules/overrides. */
+const rule = object({
+  id: token,
+  label: string,
+  name_template: string,
+  enabled: boolean,
+  stations: array(
+    object({ id: token, code: nullable(string), name: string, transport_id: nullable(token) }),
+    500,
+  ),
+  legs: array(object({ direction: oneOf(["downlink", "uplink"]), role: token }), 20),
+  route_count: integer,
+  samples: array(string, 10),
+});
+export type ProfileRule = Decoded<typeof rule>;
+
+const override = object({
+  spacecraft: object({ id: token, name: string }),
+  section: token,
+  path: string,
+  profile_value: raw,
+  spacecraft_value: raw,
+  reason: nullable(string),
+  since_revision: nullable(integer),
+  set_at: nullable(timestamp),
+  actor: nullable(object({ name: string })),
+  redundant: boolean,
+});
+export type ProfileOverride = Decoded<typeof override>;
+
 const actorName = nullable(
   object({ kind: decoders.optional(token), id: decoders.optional(token), name: string }),
 );
@@ -42,8 +72,8 @@ export const profileDetailReader = object({
   override_count: integer,
   sections: array(object({ key: token, label: string, fields: array(field, 500) }), 50),
   applications: raw,
-  rules: array(raw, 500),
-  overrides: array(raw, 5000),
+  rules: array(rule, 200),
+  overrides: array(override, 5000),
   routing_model: oneOf(["per_spacecraft", "profile"]),
   versions: array(object({ version: integer, created_at: timestamp, actor: actorName }), 500),
 });
