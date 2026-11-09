@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import CommandKit from "./CommandKit.vue";
+import GanttKit from "./GanttKit.vue";
 import {
   ApPageHeader,
   ApPanel,
@@ -65,5 +66,6 @@ const warn = (t: number) =>
       <ApTimeRange v-model="plotWindow" label="Plot window" :presets="rangePresets" />
     </ApPanel>
     <CommandKit />
+    <GanttKit />
   </div>
 </template>

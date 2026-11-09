@@ -8,6 +8,7 @@ export { default as ApEmptyState } from "./ApEmptyState.vue";
 export { default as ApEventLine } from "./ApEventLine.vue";
 export { default as ApFact } from "./ApFact.vue";
 export { default as ApField } from "./ApField.vue";
+export { default as ApGantt } from "./ApGantt.vue";
 export { default as ApKbd } from "./ApKbd.vue";
 export { default as ApKeyValue, type ApKeyValueItem } from "./ApKeyValue.vue";
 export { default as ApListRow } from "./ApListRow.vue";
@@ -55,3 +56,13 @@ export { parseTime } from "./time/parse.ts";
 export type { RangePreset, TimePreset, TimeRange, TrackBand } from "./time/types.ts";
 export { readNumber, type NumberReading } from "./command/number.ts";
 export { stationItems, type StationItem, type StationState } from "./command/stations.ts";
+export {
+  extent,
+  hourTicks,
+  position,
+  type GanttBand,
+  type GanttBar,
+  type GanttBarKind,
+  type GanttRow,
+  type GanttWindow,
+} from "./gantt/model.ts";

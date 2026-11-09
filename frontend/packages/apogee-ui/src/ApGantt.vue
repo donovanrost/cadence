@@ -1,0 +1,206 @@
+<script setup lang="ts">
+import { computed, nextTick, ref } from "vue";
+import {
+  extent,
+  hourTicks,
+  neighbour,
+  position,
+  type GanttBand,
+  type GanttBar,
+  type GanttRow,
+  type GanttWindow,
+} from "./gantt/model.ts";
+import { formatClock } from "./lib/format.ts";
+
+/**
+ * Stations × time (design-language ApPassStrip/ApGantt). Bars are buttons with one roving tab stop:
+ * arrows move between bars (by time in a row, nearest in time across rows), Enter selects.
+ */
+const props = withDefaults(
+  defineProps<{
+    label: string;
+    rows: readonly GanttRow[];
+    bars: readonly GanttBar[];
+    window: GanttWindow;
+    bands?: readonly GanttBand[] | undefined;
+    now?: number | null | undefined;
+    selected?: string | null | undefined;
+    laneHeight?: number | undefined;
+  }>(),
+  { bands: () => [], now: null, selected: null, laneHeight: 30 },
+);
+const emit = defineEmits<{ select: [id: string] }>();
+
+const root = ref<HTMLElement | null>(null);
+const focusId = ref<string | null>(null);
+const tabStop = computed(() => focusId.value ?? props.selected ?? props.bars[0]?.id ?? null);
+const byRow = computed(() => {
+  const map = new Map<string, GanttBar[]>();
+  for (const bar of props.bars) map.set(bar.rowId, [...(map.get(bar.rowId) ?? []), bar]);
+  return map;
+});
+const bandsFor = (rowId: string) =>
+  props.bands.filter((b) => b.rowId === null || b.rowId === rowId);
+const ticks = computed(() => hourTicks(props.window));
+const nowPct = computed(() =>
+  props.now !== null && props.now >= props.window.from && props.now <= props.window.to
+    ? position(props.window, props.now)
+    : null,
+);
+const style = (from: number, to: number) => {
+  const e = extent(props.window, from, to);
+  return { left: `${e.left}%`, width: `${e.width}%` };
+};
+
+async function onKey(event: KeyboardEvent, id: string) {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    emit("select", id);
+    return;
+  }
+  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+  event.preventDefault();
+  const next = neighbour(props.rows, props.bars, id, event.key as "ArrowLeft");
+  if (next === null) return;
+  focusId.value = next;
+  await nextTick();
+  root.value?.querySelector<HTMLElement>(`[data-bar="${CSS.escape(next)}"]`)?.focus();
+}
+</script>
+
+<template>
+  <div ref="root" role="group" :aria-label="label" class="flex min-w-0 flex-col">
+    <div class="relative flex flex-col gap-px">
+      <div
+        v-for="row in rows"
+        :key="row.id"
+        role="group"
+        :aria-label="row.label"
+        class="flex items-stretch"
+      >
+        <div
+          class="flex w-[88px] flex-none items-center gap-1.5 pr-2 font-mono text-xs"
+          :class="row.degraded ? 'text-caution-text' : 'text-text-2'"
+        >
+          <span class="truncate">{{ row.label }}</span>
+          <span v-if="row.tag" class="text-2xs text-text-4">{{ row.tag }}</span>
+        </div>
+        <div
+          class="relative flex-1 border border-hairline-faint bg-well"
+          :style="{ height: `${laneHeight}px` }"
+        >
+          <span
+            v-for="(band, i) in bandsFor(row.id)"
+            :key="`b${i}`"
+            class="ap-band absolute inset-y-0"
+            :class="`ap-band--${band.kind}`"
+            :style="style(band.from, band.to)"
+            :title="band.label"
+          />
+          <button
+            v-for="bar in byRow.get(row.id) ?? []"
+            :key="bar.id"
+            type="button"
+            :data-bar="bar.id"
+            :tabindex="bar.id === tabStop ? 0 : -1"
+            :aria-label="bar.description"
+            :aria-pressed="bar.id === selected"
+            :title="bar.description"
+            class="ap-bar absolute top-1/2 h-4 -translate-y-1/2 overflow-hidden px-1 text-left font-mono text-2xs leading-4 whitespace-nowrap"
+            :class="[`ap-bar--${bar.kind}`, bar.id === selected ? 'ap-bar--selected' : '']"
+            :style="style(bar.from, bar.to)"
+            @click="emit('select', bar.id)"
+            @focus="focusId = bar.id"
+            @keydown="onKey($event, bar.id)"
+          >
+            <span aria-hidden="true">{{ bar.label }}</span>
+          </button>
+        </div>
+      </div>
+      <div
+        v-if="nowPct !== null"
+        aria-hidden="true"
+        class="pointer-events-none absolute -inset-y-1 right-0 left-[88px]"
+      >
+        <span class="absolute inset-y-0 w-px bg-readout" :style="{ left: `${nowPct}%` }" />
+      </div>
+    </div>
+    <div aria-hidden="true" class="relative mt-1 ml-[88px] h-4 font-mono text-2xs text-text-4">
+      <template v-for="tick in ticks" :key="tick.t">
+        <span
+          class="absolute top-0 w-px"
+          :class="tick.major ? 'h-1.5 bg-line-strong' : 'h-1 bg-hairline'"
+          :style="{ left: `${position(window, tick.t)}%` }"
+        />
+        <span
+          v-if="tick.major"
+          class="absolute top-1.5 -translate-x-1/2"
+          :style="{ left: `${position(window, tick.t)}%` }"
+          >{{ formatClock(new Date(tick.t)).slice(0, 5) }}Z</span
+        >
+      </template>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.ap-bar {
+  min-width: 5px;
+  border: 0;
+  padding-block: 0;
+  cursor: pointer;
+  box-sizing: border-box;
+  background: transparent;
+  color: var(--color-on-action);
+}
+.ap-bar--own,
+.ap-bar--focused,
+.ap-bar--live,
+.ap-bar--new {
+  background: var(--color-readout);
+}
+.ap-bar--live {
+  font-weight: 600;
+}
+.ap-bar--focused {
+  box-shadow:
+    0 0 0 2px var(--color-vacuum),
+    0 0 0 3px var(--color-readout);
+}
+.ap-bar--new {
+  box-shadow:
+    0 0 0 2px var(--color-vacuum),
+    0 0 0 3px var(--color-nominal-text);
+}
+.ap-bar--window {
+  border: 1px dashed var(--color-readout);
+  background: rgba(230, 237, 243, 0.06);
+  color: var(--color-text-2);
+}
+.ap-bar--clash {
+  border: 1px dashed var(--color-caution);
+  background: var(--apogee-wash-caution);
+  color: var(--color-caution-text);
+}
+.ap-bar--problem {
+  background: var(--color-caution);
+}
+.ap-bar--scheduled {
+  border: 1px solid var(--color-line-strong);
+  background: var(--apogee-wash-scheduled);
+  color: var(--color-text-2);
+}
+.ap-bar--selected {
+  outline: 2px solid var(--color-readout);
+  outline-offset: 3px;
+}
+.ap-band--outage {
+  background-image: var(--apogee-hatch-outage);
+}
+.ap-band--maintenance {
+  background-image: var(--apogee-hatch-maint);
+}
+.ap-band--unusable {
+  background-image: var(--apogee-hatch-unusable);
+}
+</style>
