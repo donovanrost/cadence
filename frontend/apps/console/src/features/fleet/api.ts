@@ -64,7 +64,8 @@ const commands = d.object({
   awaiting_viewer: count,
 });
 
-const fleetShape = d.object({
+/** GET /fleet's fields; the `fleet` channel push reuses them (live.ts). */
+export const fleetFields = {
   observed_at: d.timestamp,
   stale_after_s: d.integer,
   last_received_at: d.nullable(d.timestamp),
@@ -72,16 +73,24 @@ const fleetShape = d.object({
   commands,
   limits: d.object({ configured: d.boolean }),
   spacecraft: d.array(spacecraft, 20_000),
-});
+} as const;
+
+const fleetShape = d.object(fleetFields);
+
+/** True when the state counts partition the rows (the invariant fleetReader enforces). */
+export function countsPartition(fleet: Decoded<typeof fleetShape>): boolean {
+  const c = fleet.counts;
+  return (
+    c.total === fleet.spacecraft.length &&
+    c.critical + c.caution + c.stale + c.nominal + c.never_heard === c.total
+  );
+}
 
 /** Validates relationships a structural schema can't: the state counts partition the fleet. */
 export const fleetReader: d.Reader<Decoded<typeof fleetShape>> = (value, path = "") => {
   const fleet = fleetShape(value, path);
-  const c = fleet.counts;
-  if (c.total !== fleet.spacecraft.length)
-    throw new d.DecodeError(`${path}counts.total`, "the number of spacecraft rows");
-  if (c.critical + c.caution + c.stale + c.nominal + c.never_heard !== c.total)
-    throw new d.DecodeError(`${path}counts`, "state counts that sum to total");
+  if (!countsPartition(fleet))
+    throw new d.DecodeError(`${path}counts`, "state counts that partition the spacecraft rows");
   return fleet;
 };
 

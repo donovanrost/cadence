@@ -46,7 +46,7 @@ const toneClass = {
       <ApEmptyState
         v-if="empty"
         headline="Pick a point to plot"
-        sentence="Add a spacecraft and a point id in Points. Each spacecraft × point is one series."
+        sentence="Add a spacecraft and search for a point. Each spacecraft × point is one series."
       />
       <ApRemote v-else :state="state" loading-label="LOADING HISTORY…" @retry="$emit('retry')">
         <TrendChart
