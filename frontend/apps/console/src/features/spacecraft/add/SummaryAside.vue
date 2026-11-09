@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ApButton, ApPanel, ApStatTile, plural } from "@/ui";
+import StageBatchButton from "./StageBatchButton.vue";
 import { useDraft, stepLabels, steps, type Step } from "./context.ts";
 
-/** A4 What happens: counts, what creating does (option B wording, U2), and the step actions. */
+/** A4 What happens: counts, what staging does (change sets, Changes.md §1), and the step actions. */
 const props = defineProps<{ step: Step; canManage: boolean }>();
 const emit = defineEmits<{ go: [step: Step] }>();
 const { proposal, directory, profiles } = useDraft();
@@ -28,11 +29,6 @@ const continueReason = computed(() => {
   const first = Object.values(p.errors).find((message) => message !== undefined);
   return first ?? "Complete this step first.";
 });
-const commitLabel = computed(() =>
-  count.value === null
-    ? "Create spacecraft"
-    : `Create ${plural(count.value, "spacecraft", "spacecraft")}`,
-);
 </script>
 
 <template>
@@ -45,17 +41,14 @@ const commitLabel = computed(() =>
       </div>
       <ol class="m-0 flex list-none flex-col gap-2 p-0 text-md text-text-3">
         <li class="grid grid-cols-[24px_1fr]">
-          <span class="font-mono text-xs text-text-4">01</span> Creates
-          {{ count === null ? "the spacecraft" : plural(count, "spacecraft", "spacecraft") }} in one
-          step.
+          <span class="font-mono text-xs text-text-4">01</span> The batch joins the staged changes.
+          Nothing is live yet.
         </li>
         <li class="grid grid-cols-[24px_1fr]">
-          <span class="font-mono text-xs text-text-4">02</span>
-          {{
-            profile
-              ? `They pin profile ${profile.name} v${profile.version}.`
-              : "They pin the profile you choose."
-          }}
+          <span class="font-mono text-xs text-text-4">02</span> Applying the change set creates
+          {{ count === null ? "them" : plural(count, "spacecraft", "spacecraft") }} together{{
+            profile ? `, pinned to ${profile.name} v${profile.version}` : ""
+          }}.
         </li>
         <li class="grid grid-cols-[24px_1fr]">
           <span class="font-mono text-xs text-text-4">03</span> Each one shows as “awaiting first
@@ -74,25 +67,7 @@ const commitLabel = computed(() =>
       <p v-if="next && blockedAt <= index" class="m-0 font-mono text-xs text-text-4 uppercase">
         {{ continueReason }}
       </p>
-      <ApButton
-        v-else
-        variant="primary"
-        size="commit"
-        disabled
-        :disabled-reason="
-          canManage
-            ? 'Creating spacecraft from the console isn\'t available yet. The batch create endpoint is being built.'
-            : 'Only an organization admin can create spacecraft.'
-        "
-        >{{ commitLabel }}</ApButton
-      >
-      <p v-if="!next" class="m-0 text-sm text-text-3">
-        {{
-          canManage
-            ? "Creating spacecraft from the console isn't available yet: the batch endpoint is being built. Your draft is kept."
-            : "Only an organization admin can create spacecraft."
-        }}
-      </p>
+      <StageBatchButton v-if="!next" :can-manage="canManage" />
       <ApButton v-if="previous" @click="emit('go', previous)"
         >Back to {{ stepLabels[previous].toLowerCase() }}</ApButton
       >

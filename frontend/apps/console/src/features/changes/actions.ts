@@ -142,3 +142,47 @@ export function rejectionSentence(error: ApiError): string {
       return "message" in error ? error.message : "Request failed.";
   }
 }
+
+export type StageOp = Readonly<{
+  kind: "ground_station" | "transport" | "spacecraft" | "spacecraft_profile";
+  action: "create" | "update" | "delete";
+  entity_id?: string;
+  document?: Readonly<Record<string, unknown>>;
+  changes?: readonly Readonly<{ path: string; value: unknown }>[];
+  options?: Readonly<Record<string, unknown>>;
+}>;
+
+const stageResult = object({
+  change_set_id: token,
+  change_id: token,
+  version: integer,
+  staged_count: integer,
+  base_revision: integer,
+  entity_ids: array(token, 5000),
+});
+export type StageResult = Decoded<typeof stageResult>;
+
+/** Stage one change (any number of ops) into the mission's open change set. */
+export function stageChange(
+  missionId: string,
+  body: Readonly<{
+    summary: string;
+    source: Readonly<Record<string, unknown>>;
+    ops: readonly StageOp[];
+  }>,
+): Promise<ApiResult<StageResult>> {
+  return request(`${base(missionId)}/stage`, stageResult, { method: "POST", body });
+}
+
+/** `invalid_op` details: which op (by index) failed, and why. */
+export function invalidOpDetails(error: ApiError): Readonly<{
+  index: number;
+  errors: readonly Readonly<{ path: string; message: string }>[];
+}> | null {
+  if (errorCode(error) !== "invalid_op" || !("details" in error)) return null;
+  const parsed = decoders.decode(
+    object({ index: integer, errors: array(object({ path: string, message: string }), 200) }),
+    error.details,
+  );
+  return parsed.ok ? parsed.value : null;
+}

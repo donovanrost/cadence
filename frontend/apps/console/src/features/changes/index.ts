@@ -1,3 +1,12 @@
-/** Public API of the changes feature (shell slots in App.vue). */
+/** Public API of the changes feature. */
 export { default as ConfigStatus } from "./ConfigStatus.vue";
 export { default as StagedBar } from "./StagedBar.vue";
+export {
+  errorCode,
+  invalidOpDetails,
+  rejectionSentence,
+  stageChange,
+  type StageOp,
+  type StageResult,
+} from "./actions.ts";
+export { refreshConfigState, useConfigState } from "./useConfigState.ts";

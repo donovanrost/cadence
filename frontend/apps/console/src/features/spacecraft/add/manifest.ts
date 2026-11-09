@@ -108,7 +108,7 @@ export type ManifestRow = Readonly<{
 }>;
 
 const bounds: Readonly<Record<"scid" | "norad" | "plane" | "slot", readonly [number, number]>> = {
-  scid: [0, 65535],
+  scid: [0, 1023],
   norad: [1, 999_999_999],
   plane: [0, 999],
   slot: [0, 9999],

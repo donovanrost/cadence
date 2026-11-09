@@ -1,7 +1,14 @@
 import { decode, decoders, type Reader } from "@/api";
 import type { ProfileSummary } from "@/features/profiles/index.ts";
 import type { SpacecraftDirectory } from "../api.ts";
-import { checkClashes, generateRows, manifestRows, MAX_BATCH, type ClashReport } from "./batch.ts";
+import {
+  checkClashes,
+  generateRows,
+  manifestRows,
+  MAX_BATCH,
+  MAX_SCID,
+  type ClashReport,
+} from "./batch.ts";
 import { manifestFields, readRows, type ColumnMapping } from "./manifest.ts";
 import { parsePattern } from "./naming.ts";
 
@@ -169,10 +176,10 @@ export function propose(
   if (!pattern.ok) errors.pattern = pattern.message;
   else if (!pattern.pattern.unique && count !== null && count > 1)
     errors.pattern = "Add {scid} or {n} so each name is different.";
-  const start = int(draft.scidStart, 0, 65535);
-  if (start === null) errors.scidStart = "Enter a SCID from 0 to 65535.";
-  else if (count !== null && start + count - 1 > 65535)
-    errors.scidStart = "The range passes 65535.";
+  const start = int(draft.scidStart, 0, MAX_SCID);
+  if (start === null) errors.scidStart = `Enter a SCID from 0 to ${MAX_SCID}.`;
+  else if (count !== null && start + count - 1 > MAX_SCID)
+    errors.scidStart = `The range passes ${MAX_SCID}, the largest SCID.`;
   if (Object.keys(errors).length > 0 || count === null || start === null || !pattern.ok)
     return { status: "incomplete", step: "identity", errors };
 

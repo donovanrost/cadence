@@ -18,6 +18,8 @@ export type ProposedSpacecraft = Readonly<{
 export type PlaneFill = Readonly<{ firstPlane: number; perPlane: number }>;
 
 export const MAX_BATCH = 500;
+/** CCSDS TC spacecraft id is 10 bits; the server rejects anything above (spacecraft config kind). */
+export const MAX_SCID = 1023;
 
 /** Rows generated from a profile: names from the pattern, consecutive SCIDs, optional plane fill. */
 export function generateRows(
