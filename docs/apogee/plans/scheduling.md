@@ -1,6 +1,7 @@
 # Scheduling data plan (lead)
 
-Owner: lead. Status: draft 3, 2026-11-09 (ux U22, DECISIONS #25–#27 folded in). Scope (DECISIONS #24): ScheduleFlow, K0 Pass prediction,
+Owner: lead (K0/K1, shared plan pieces, ApGantt); **K2 Re-plan: fe-setup** (DECISIONS #43,
+`features/replan`, importing shared pieces from `features/scheduling/index.ts`). Status: draft 3, 2026-11-09 (ux U22, DECISIONS #25–#27 folded in). Scope (DECISIONS #24): ScheduleFlow, K0 Pass prediction,
 K1 Plan, K2 Re-plan, K3 Review. Design: `docs/apogee/ux/screens/ScheduleFlow.md`. Reference:
 `frontend/docs/contact-scheduling-architecture.md`, `frontend/modules/planning-and-contacts`.
 Missing items are numbered **S1…** and collected in the [ask list](#ask-list-for-api-ops). Related
