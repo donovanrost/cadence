@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref } from "vue";
 import { ApButton, ApEmptyState, ApPanel, ApTag } from "@/ui";
 import CatalogSearch from "./CatalogSearch.vue";
 import CommandForm from "./CommandForm.vue";
@@ -13,16 +12,12 @@ const emit = defineEmits<{
   move: [index: number, by: -1 | 1];
   remove: [key: string];
 }>();
-const open = ref<string | null>(null);
+/** The row whose form is open (owned by Compose so a newly added command opens itself). */
+const open = defineModel<string | null>("open", { required: true });
 </script>
 
 <template>
-  <ApPanel
-    index="C2"
-    title="Command stack"
-    :meta="revision ? `catalog ${revision.slice(-8)}` : undefined"
-    flush
-  >
+  <ApPanel index="C2" title="Command stack" :meta="revision ? 'active catalog' : undefined" flush>
     <ApEmptyState
       v-if="items.length === 0"
       headline="Empty"
@@ -51,36 +46,39 @@ const open = ref<string | null>(null);
             argSummary(item).join(" · ")
           }}</span>
           <span aria-hidden="true" class="flex-1" />
-          <ApButton
-            size="compact"
-            variant="ghost"
-            :disabled="i === 0"
-            disabled-reason="Already first"
-            :aria-label="`Move ${item.command.name} up`"
-            @click="emit('move', i, -1)"
-            >↑</ApButton
-          >
-          <ApButton
-            size="compact"
-            variant="ghost"
-            :disabled="i === items.length - 1"
-            disabled-reason="Already last"
-            :aria-label="`Move ${item.command.name} down`"
-            @click="emit('move', i, 1)"
-            >↓</ApButton
-          >
-          <ApButton
-            size="compact"
-            variant="ghost"
-            :aria-label="`Remove ${item.command.name}`"
-            @click="emit('remove', item.key)"
-            >✕</ApButton
-          >
+          <span class="flex flex-none gap-1">
+            <ApButton
+              size="compact"
+              variant="ghost"
+              :disabled="i === 0"
+              disabled-reason="Already first"
+              :aria-label="`Move ${item.command.name} up`"
+              @click="emit('move', i, -1)"
+              >↑</ApButton
+            >
+            <ApButton
+              size="compact"
+              variant="ghost"
+              :disabled="i === items.length - 1"
+              disabled-reason="Already last"
+              :aria-label="`Move ${item.command.name} down`"
+              @click="emit('move', i, 1)"
+              >↓</ApButton
+            >
+            <ApButton
+              size="compact"
+              variant="ghost"
+              :aria-label="`Remove ${item.command.name}`"
+              @click="emit('remove', item.key)"
+              >✕</ApButton
+            >
+          </span>
         </div>
         <CommandForm
           v-if="open === item.key"
           :item="item"
           @change="(v) => emit('change', item.key, v)"
+          @done="open = null"
         />
       </li>
     </ol>

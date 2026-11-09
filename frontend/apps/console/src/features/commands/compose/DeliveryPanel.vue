@@ -52,7 +52,8 @@ const noContact = computed(() => props.targets.filter((sc) => sc.next_aos_at ===
       </li>
     </ul>
     <p v-if="noContact" class="m-0 border-t border-hairline px-4 py-2 text-md text-caution-text">
-      {{ noContact }} without a booked contact: their uplinks wait until one is booked.
+      {{ noContact }} without a booked contact:
+      {{ noContact === 1 ? "its uplink waits" : "their uplinks wait" }} until one is booked.
       <RouterLink :to="{ name: 'ops.contacts' }" class="text-readout">Open contacts</RouterLink>
     </p>
   </ApPanel>

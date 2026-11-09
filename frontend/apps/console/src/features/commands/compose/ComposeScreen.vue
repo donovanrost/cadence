@@ -29,6 +29,8 @@ const rows = computed(() =>
 const query = ref<TargetQuery>(queryFromRoute(route.query));
 const targets = computed(() => resolveTargets(rows.value, query.value));
 const stack = ref<StackItem[]>([]);
+/** The stack row whose argument form is open; a newly added command opens itself (ux 5). */
+const openKey = ref<string | null>(null);
 const revision = ref<string | null>(null);
 const adding = ref(false);
 const addError = shallowRef<string | null>(null);
@@ -40,7 +42,9 @@ async function add(commandId: string) {
     if (!result.ok) addError.value = describeApiError(result.error);
     else if (result.value.command) {
       revision.value = result.value.revision_id;
-      stack.value = [...stack.value, newItem(result.value.command)];
+      const item = newItem(result.value.command);
+      stack.value = [...stack.value, item];
+      openKey.value = item.command.arguments.length ? item.key : null;
     }
   } finally {
     adding.value = false;
@@ -71,7 +75,13 @@ const steps = computed(() => [
   "GO / NO-GO",
   "Arm & uplink",
 ]);
-const current = computed(() => (targets.value.length === 0 ? 0 : stack.value.length === 0 ? 1 : 2));
+const current = computed(() =>
+  targets.value.length === 0
+    ? 0
+    : stack.value.length === 0 || stack.value.some((i) => !checkItem(i).ok)
+      ? 1
+      : 2,
+);
 const context = computed(() => {
   const only =
     query.value.explicit.length === 1
@@ -116,6 +126,7 @@ const close = computed(() => {
             >Couldn't add that command: {{ addError }}</ApCallout
           >
           <StackPanel
+            v-model:open="openKey"
             :items="stack"
             :revision="revision"
             :adding="adding"
