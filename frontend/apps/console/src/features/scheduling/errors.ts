@@ -9,6 +9,8 @@ const MESSAGES: Readonly<Record<string, string>> = {
   horizon_exceeds_policy:
     "This day is outside the planning policy's horizon. Pick a nearer day or extend the policy.",
   inputs_changed: "Planning inputs changed while you were drafting. Draft again.",
+  fleet_repair_horizon_exceeded:
+    "That re-plan window is longer than the planning policy allows. Narrow it to the lost bookings.",
   plan_changed: "Someone changed this plan meanwhile. It's reloaded; check it and try again.",
   plan_not_editable: "This plan can't be edited in its current state.",
   plan_not_submittable: "This plan can't be submitted in its current state.",

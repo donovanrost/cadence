@@ -431,11 +431,20 @@ export const repairableStates: readonly PlanState[] = [
   "interrupted",
 ];
 
-/** S8: start a repair run off the request; progress via scheduling_progress {kind: "draft"}. */
-export function startRepair(missionId: string, planId: string, operationId: string) {
+/**
+ * S8: start a repair run off the request; progress via scheduling_progress {kind: "draft"}.
+ * `window` (ISO-8601) narrows the repair; without it the server uses now → the plan's horizon end,
+ * which can exceed the policy's repair window (422 fleet_repair_horizon_exceeded).
+ */
+export function startRepair(
+  missionId: string,
+  planId: string,
+  operationId: string,
+  window?: Readonly<{ from: string; to: string }>,
+) {
   return request(`${base(missionId)}/${encodeURIComponent(planId)}/repairs`, startReader, {
     method: "POST",
-    body: { operation_id: operationId },
+    body: { operation_id: operationId, ...(window ? { from: window.from, to: window.to } : {}) },
   });
 }
 
