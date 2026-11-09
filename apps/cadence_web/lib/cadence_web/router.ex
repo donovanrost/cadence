@@ -909,6 +909,10 @@ defmodule CadenceWeb.Router do
       get("/audit", OrganizationController, :audit)
       get("/provider-accounts", ProviderAccountController, :index)
       post("/provider-accounts/:id/test", ProviderAccountController, :test)
+      post("/provider-accounts", ProviderAccountController, :create)
+      put("/provider-accounts/:id", ProviderAccountController, :update)
+      delete("/provider-accounts/:id", ProviderAccountController, :delete)
+      get("/provider-adapters/:key/schema", ProviderAccountController, :schema)
       get("/settings", SettingsController, :show)
       put("/settings/:section_key", SettingsController, :update)
     end

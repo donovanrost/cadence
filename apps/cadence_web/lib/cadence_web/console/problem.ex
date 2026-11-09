@@ -41,6 +41,9 @@ defmodule CadenceWeb.Console.Problem do
     app_not_found: {404, "App not found."},
     settings_section_not_found: {404, "Settings section not found."},
     provider_account_not_found: {404, "Provider account not found."},
+    provider_adapter_not_found: {404, "Provider adapter not found."},
+    in_use: {409, "Missions still use this. Move them to another account first."},
+    already_retired: {409, "This account was already removed."},
     settings_enforced_by_organization:
       {409, "The organization doesn't let missions change this setting."},
     app_action_failed: {422, "The app change was refused."},

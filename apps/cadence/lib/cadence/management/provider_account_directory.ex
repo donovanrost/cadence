@@ -34,20 +34,43 @@ defmodule Cadence.Management.ProviderAccountDirectory do
     end
   end
 
+  @doc """
+  Checks the account's credential reference: that it exists, isn't revoked, and resolves in its
+  secret backend. It doesn't call the provider itself yet, so `checked` is `["reference"]`.
+  `{ok, checked, failed: nil | "reference", reason, message}` (ux: say which part failed).
+  """
   @spec test(Scope.t(), binary()) :: {:ok, map()} | {:error, term()}
   def test(%Scope{} = scope, account_id) do
     case ProviderAccounts.validate(scope, account_id) do
       {:ok, _account} ->
-        {:ok, %{ok: true, message: "Connected: the provider accepted the credentials."}}
+        {:ok, result(true, nil, nil, "The secret reference resolves.")}
 
       {:error, reason}
       when reason in [:forbidden, :scope_mismatch, :provider_account_not_found] ->
         {:error, reason}
 
       {:error, reason} ->
-        {:ok, %{ok: false, message: "The provider refused the check (#{describe(reason)})."}}
+        {:ok, result(false, "reference", reason_code(reason), reference_message(reason))}
     end
   end
+
+  defp result(ok, failed, reason, message),
+    do: %{ok: ok, checked: ["reference"], failed: failed, reason: reason, message: message}
+
+  defp reference_message(:provider_credential_not_found),
+    do: "No credential is registered under this reference."
+
+  defp reference_message(:provider_account_credential_revoked),
+    do: "The credential was revoked. Register a new reference."
+
+  defp reference_message({:provider_account_credential_unavailable, reason}),
+    do: "The secret backend couldn't resolve the reference (#{describe(reason)})."
+
+  defp reference_message(reason), do: "The credential check failed (#{describe(reason)})."
+
+  defp reason_code({reason, _detail}) when is_atom(reason), do: Atom.to_string(reason)
+  defp reason_code(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp reason_code(_reason), do: "unknown"
 
   @spec permissions(Scope.t()) :: [binary()]
   def permissions(scope) do

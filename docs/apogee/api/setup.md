@@ -281,10 +281,29 @@ to every member.
   - `status` is `auth_failed` when the credential is revoked, and `not_checked` before a first
     successful test.
   - There's no `expiring`: credentials carry no expiry yet.
-- `POST /provider-accounts/:id/test` → `{ok, message}` from the real credential check.
+- `POST /provider-accounts/:id/test` → `{ok, checked: ["reference"], failed: null | "reference",
+  reason, message}`. It checks the credential reference exists, isn't revoked and resolves in its
+  secret backend. It doesn't call the provider itself yet, so `checked` says what was verified.
   `404 provider_account_not_found`.
-- **Not yet:** create, update, delete and the adapter schema. Those need the secrets path
-  (`ProviderCredentials`); next.
+- **Credentials are references, never secret values** (ux SettingsAuditProviders.md). Cadence
+  stores a reference into the external secret manager (`backend: "external"`, `key` such as
+  `providers/<org>/<account>`), or an environment-variable name (`backend: "env"`) where local
+  provider credentials are enabled (development). Elsewhere `env` is refused with
+  `details["credential.backend"]`.
+- `GET /provider-adapters/:key/schema` → `{key, fields}`: kind-schema fields `base_url`,
+  `environment_ref`, `region_ref`, `credential.backend`, `credential.key`. There's no secret-value
+  field. `404 provider_adapter_not_found`.
+- `POST /provider-accounts` `{provider_key, name, settings: {base_url, environment_ref, region_ref?},
+  credential: {backend, key}}` → `201 {id, version: 1}`. It registers the reference without
+  calling the provider; use Test afterwards.
+- `PUT /provider-accounts/:id` `{settings?, credential?}` → `201 {id, version}` (a new account
+  version; a sent `credential` registers a new reference). Renaming isn't supported yet:
+  `422 details.name`.
+- `DELETE /provider-accounts/:id` (optional `reason`) → `{id, state: "archived"}`. The account
+  drops out of the list. While missions use it: `409 in_use` with `details.missions: [{id,
+  name}]`. `409 already_retired`.
+- Writes need `provider_accounts.manage` (organization admin). Errors: `422 invalid_params`
+  (`provider_key`, `credential`, `settings`), `403 forbidden`.
 
 ### `GET /audit` (AU1, organization admins)
 
