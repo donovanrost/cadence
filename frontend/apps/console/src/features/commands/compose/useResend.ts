@@ -55,7 +55,8 @@ export function useResend(missionId: Ref<string>, fromId: string | null, into: R
         : "";
       notice.value = {
         tone: missing.length ? "caution" : "info",
-        text: `Resending “${group.title}”${note ? `, sent back with: “${note}”` : ""}.${gone}`,
+        // The quoted note ends the sentence itself; no period after the closing quote.
+        text: `Resending “${group.title}”${note ? `, sent back with: “${note}”` : "."}${gone}`,
       };
     })
     .catch((e: unknown) => console.error("Resend prefill failed", e));
