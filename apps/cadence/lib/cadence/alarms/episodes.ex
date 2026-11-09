@@ -62,7 +62,9 @@ defmodule Cadence.Alarms.Episodes do
     changed =
       observations
       |> Enum.group_by(&{&1.mission_id, scope(&1.spacecraft_id), &1.source, &1.subject_key})
-      |> Enum.flat_map(fn {_subject, group} -> Enum.sort_by(group, & &1.observed_at, DateTime) end)
+      |> Enum.flat_map(fn {_subject, group} ->
+        Enum.sort_by(group, & &1.observed_at, DateTime)
+      end)
       |> Enum.count(&(observe(repo, &1) == {:ok, :changed}))
 
     {:ok, changed}
@@ -92,7 +94,10 @@ defmodule Cadence.Alarms.Episodes do
 
     stale =
       EpisodeRow
-      |> where([e], e.mission_id == ^mission_id and e.source == "ground_limit" and e.state == "active")
+      |> where(
+        [e],
+        e.mission_id == ^mission_id and e.source == "ground_limit" and e.state == "active"
+      )
       |> spacecraft_filter(spacecraft_id)
       |> lock("FOR UPDATE")
       |> repo.all()
