@@ -83,6 +83,15 @@ defmodule Cadence.Reads.CatalogDeclarationsTest do
       assert CatalogDeclarations.argument_facts(decls, "/sc/arguments/n").valid_range ==
                %{minimum: 1, maximum: nil}
 
+      yaml =
+        index([
+          decl(:command_argument_type, "/sc/command_types/Y", %{valid_range: %{min: -5, max: 5}}),
+          decl(:command_argument, "/sc/arguments/y", %{}, type: "/sc/command_types/Y")
+        ])
+
+      assert CatalogDeclarations.argument_facts(yaml, "/sc/arguments/y").valid_range ==
+               %{minimum: -5, maximum: 5}
+
       assert CatalogDeclarations.argument_facts(decls, "/sc/arguments/none") ==
                %{valid_range: nil, unit: nil}
     end

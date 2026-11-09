@@ -19,10 +19,21 @@ defmodule Cadence.Reads.PointInfo do
   def by_id(organization_id, mission_id) do
     points = PointCatalog.list_points(organization_id, mission_id)
 
+    missing =
+      points
+      |> Enum.filter(&(blank_to_nil(&1.unit) == nil and is_binary(&1.parameter_id)))
+      |> Enum.map(& &1.parameter_id)
+
     declarations =
-      if Enum.any?(points, &(blank_to_nil(&1.unit) == nil and is_binary(&1.parameter_id))),
-        do: CatalogDeclarations.active(organization_id, mission_id),
-        else: %{}
+      if missing == [],
+        do: %{},
+        else:
+          CatalogDeclarations.closure(
+            organization_id,
+            mission_id,
+            CatalogDeclarations.active_revision_id(organization_id, mission_id),
+            missing
+          )
 
     Map.new(points, fn point ->
       unit =

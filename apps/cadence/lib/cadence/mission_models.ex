@@ -50,6 +50,11 @@ defmodule Cadence.MissionModels do
     to: Cadence.MissionModels.CommandArgumentChoices,
     as: :load
 
+  @doc "Reads only the named declarations (stored JSON) from one revision."
+  defdelegate declarations(organization_id, mission_id, revision_id, ids),
+    to: Cadence.MissionModels.DeclarationProjection,
+    as: :load
+
   @spec compile_layers([Layer.t()], keyword()) ::
           {:ok, CompilerResult.t()} | {:error, term()}
   def compile_layers(layers, opts \\ []) when is_list(layers) and is_list(opts) do

@@ -6,7 +6,8 @@ defmodule Cadence.Reads.CatalogDeclarations do
 
   Lowered runtime plans don't always carry these. XTCE import attaches a
   parameter's unit to its *parameter type*, which lowering doesn't follow, so
-  this read follows `parameter -> type -> unit` itself.
+  this read follows `parameter -> type -> unit` itself. Declarations are read
+  through a bounded projection (`closure/4`), never the whole revision.
   """
 
   alias Cadence.MissionModels
@@ -14,16 +15,54 @@ defmodule Cadence.Reads.CatalogDeclarations do
 
   @type declarations :: %{binary() => map()}
 
-  @doc "Declarations of the mission's active revision, keyed by semantic id (`%{}` when none is active)."
-  @spec active(binary(), binary()) :: declarations()
-  def active(organization_id, mission_id) do
-    with revision_id when is_binary(revision_id) <-
-           ActiveBasis.active_revision_id(organization_id, mission_id),
-         {:ok, revision} <- MissionModels.fetch_revision(organization_id, mission_id, revision_id) do
-      revision.declarations || %{}
-    else
-      _none -> %{}
+  @hops 2
+  @followed_roles ~w(type unit)
+
+  @doc "The active revision id (`nil` when nothing is active)."
+  @spec active_revision_id(binary(), binary()) :: binary() | nil
+  defdelegate active_revision_id(organization_id, mission_id), to: ActiveBasis
+
+  @doc """
+  The named declarations of a revision plus what their `type` and `unit`
+  references resolve to (two hops: parameter -> type -> unit), keyed by
+  semantic id. `%{}` when the revision is `nil` or unreadable.
+  """
+  @spec closure(binary(), binary(), binary() | nil, [binary()]) :: declarations()
+  def closure(_organization_id, _mission_id, nil, _ids), do: %{}
+
+  def closure(organization_id, mission_id, revision_id, ids) do
+    load = &MissionModels.declarations(organization_id, mission_id, revision_id, &1)
+    follow(load, Enum.uniq(ids), %{}, @hops)
+  end
+
+  defp follow(_load, [], acc, _hops), do: acc
+
+  defp follow(load, ids, acc, hops) do
+    case load.(ids) do
+      {:ok, found} ->
+        acc = Map.merge(acc, found)
+
+        next =
+          found
+          |> Map.values()
+          |> Enum.flat_map(&followed_ids/1)
+          |> Enum.uniq()
+          |> Enum.reject(&Map.has_key?(acc, &1))
+
+        if hops == 0, do: acc, else: follow(load, next, acc, hops - 1)
+
+      {:error, _reason} ->
+        acc
     end
+  end
+
+  defp followed_ids(declaration) do
+    declaration
+    |> field(:references)
+    |> List.wrap()
+    |> Enum.filter(&(to_string(field(&1, :role)) in @followed_roles))
+    |> Enum.map(&field(&1, :resolved_id))
+    |> Enum.filter(&is_binary/1)
   end
 
   @doc "The unit symbol of a parameter, from its own unit reference or its type's."
@@ -75,7 +114,11 @@ defmodule Cadence.Reads.CatalogDeclarations do
   end
 
   defp valid_range(%{} = range) do
-    case {number_or_nil(field(range, :minimum)), number_or_nil(field(range, :maximum))} do
+    # XTCE import writes minimum/maximum; the Cadence YAML importer writes min/max.
+    minimum = number_or_nil(field(range, :minimum)) || number_or_nil(field(range, :min))
+    maximum = number_or_nil(field(range, :maximum)) || number_or_nil(field(range, :max))
+
+    case {minimum, maximum} do
       {nil, nil} -> nil
       {minimum, maximum} -> %{minimum: minimum, maximum: maximum}
     end
