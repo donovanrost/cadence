@@ -792,6 +792,10 @@ defmodule CadenceWeb.Router do
       get("/transports/:transport_id", CommsController, :transport)
       get("/routing-rules", CommsController, :routing_rules)
 
+      # -- Events and scheduling (owner: api, DECISIONS #26). Contracts: ops.md, scheduling.md
+      get("/events", EventController, :index)
+      get("/events/density", EventController, :density)
+
       # -- Change sets (owner: api). Contract: docs/apogee/api/changes.md
       scope "/config" do
         get("/", ConfigController, :show)

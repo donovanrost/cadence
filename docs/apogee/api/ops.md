@@ -299,3 +299,38 @@ The limit-definition bands in effect over the window, for drawing bands behind t
   lifecycle event (some fixtures) has no interval, but the alarm row's `thresholds` still shows
   its bands.
 - Refetch on `invalidate` with `limits`.
+
+## `GET /api/console/v1/missions/:mission_id/events` (owner: api, DECISIONS #26)
+
+The event log for Investigate B2 and Timeline. It reads the canonical mission timeline (projected
+mission events merged with operational events). Refetch on `invalidate` with `events` or `alarms`.
+
+Query: `from`, `to` (ISO, default the last 24 h), `spacecraft_id`, `kind` (comma list of
+`limit, flight_event, contact, command, config, operator`), `limit` 1–500 (default 200), and
+`cursor` (opaque, from `meta.next_cursor`). Newest first.
+
+```json
+{"data": {"from": "…", "to": "…", "events": [{
+  "id": "mission_event:…", "at": "2026-11-08T02:08:11Z",
+  "kind": "limit", "raw_kind": "limit_violation", "severity": "critical",
+  "text": "VBAT crossed red low", "detail": "…",
+  "spacecraft": {"id": "spacecraft-earendil-312", "name": "EARENDIL-312", "scid": 312},
+  "refs": {"alarm_id": null, "point_id": "EPS.VBAT", "command_request_id": null, "contact_id": null}
+}]}, "meta": {"next_cursor": "…"}}
+```
+
+- `kind` is derived from the entry's source and category; `raw_kind` keeps the original.
+  `severity`: timeline critical/error → `critical`, warning → `caution`, cleared/resolved status →
+  `nominal`, everything else → `info`.
+- The `kind` filter is applied to each fetched page, so a page can hold fewer than `limit` events
+  while `next_cursor` is still set. Keep following the cursor. `plane` filtering isn't supported
+  (filter client-side with `/fleet` plane data).
+- `refs.alarm_id` is `null` (alarm episodes link by point; see alarms.md).
+- Errors: `422 invalid_params` (`kind`, `limit`, `cursor`, `from`/`to`).
+
+## `GET /api/console/v1/missions/:mission_id/events/density`
+
+`{"data": {"bucket_s": 900, "buckets": [{"t", "critical", "caution", "nominal", "info"}], "truncated": false}}`.
+Same filters (no cursor). `bucket_s` is 60–86400 (default: about 96 buckets over the window). Buckets
+are aligned to `from`; empty buckets are omitted. The window is at most 31 days, and at most 5,000
+events are counted (`truncated: true` beyond that).

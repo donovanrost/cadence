@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.WindowParams do
   @moduledoc """
   Parses the console's time-window query: `from`, `to` (ISO-8601, default the
-  last hour), `spacecraft_id`, and optionally `max_points` (default 500, at
+  last hour, or `default_span_s:`), `spacecraft_id`, and optionally `max_points` (default 500, at
   most 2000). Windows are capped at 31 days unless `max_span_s: nil` is given.
   """
 
@@ -15,7 +15,12 @@ defmodule CadenceWeb.Console.WindowParams do
     now = opts |> Keyword.get_lazy(:now, &DateTime.utc_now/0) |> DateTime.truncate(:millisecond)
 
     with {:ok, to} <- time(params, "to", now),
-         {:ok, from} <- time(params, "from", DateTime.add(to, -@default_span_s)),
+         {:ok, from} <-
+           time(
+             params,
+             "from",
+             DateTime.add(to, -Keyword.get(opts, :default_span_s, @default_span_s))
+           ),
          :ok <- span(from, to, Keyword.get(opts, :max_span_s, @max_span_s)),
          {:ok, max_points} <- max_points(params, Keyword.get(opts, :max_points, false)) do
       {:ok,
