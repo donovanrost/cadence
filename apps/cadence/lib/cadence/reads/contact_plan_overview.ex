@@ -243,6 +243,9 @@ defmodule Cadence.Reads.ContactPlanOverview do
         unsatisfied: length(unsatisfied)
       },
       ready_to_approve: ready?(superseded, version, passes),
+      # When the plan was first drafted, and when this version was made.
+      created_at: plan.inserted_at,
+      version_created_at: version.created_at,
       updated_at: plan.updated_at
     }
   end

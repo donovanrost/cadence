@@ -63,6 +63,7 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
 
     assert sc == fixture.craft.spacecraft_id
     assert detail["repair_of"] == nil
+    assert is_binary(detail["created_at"]) and is_binary(detail["version_created_at"])
     assert %{"kind" => "user", "name" => name} = detail["author"]
     assert name == c.user.display_name
     assert detail["unmet"] == []

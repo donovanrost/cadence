@@ -105,6 +105,9 @@ The list row, plus:
   K2's (repairs). `counts.conflicts` and `ready_to_approve` include station conflicts on the detail
   read; the list rows count only overlaps.
 
+**Times:** `created_at` is when the plan was first drafted, `version_created_at` when the shown
+version was made, and `updated_at` its last change.
+
 **Author** (`author` on rows and detail): `{kind: "user", id, name}` for a person (a repair
 proposal's author is whoever started the repair), `{kind: "system", name: "Cadence"}` for an
 automatic run, or `null` when it isn't known.
