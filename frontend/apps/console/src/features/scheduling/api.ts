@@ -117,16 +117,18 @@ const failure: Reader<{ code: string | null; message: string | null } | null> = 
   return { code: pick("code"), message: pick("message") };
 };
 
+const draftRunReader = d.object({
+  id: d.token,
+  state: d.oneOf(runStates),
+  phase: d.nullable(d.string),
+  horizon: d.object({ from: d.timestamp, to: d.timestamp }),
+  failure,
+  started_at: d.nullable(d.timestamp),
+  updated_at: d.timestamp,
+});
+
 export const draftReader = d.object({
-  run: d.object({
-    id: d.token,
-    state: d.oneOf(runStates),
-    phase: d.nullable(d.string),
-    horizon: d.object({ from: d.timestamp, to: d.timestamp }),
-    failure,
-    started_at: d.nullable(d.timestamp),
-    updated_at: d.timestamp,
-  }),
+  run: draftRunReader,
   plan: d.nullable(planDetailReader),
 });
 export type Draft = Decoded<typeof draftReader>;
@@ -345,3 +347,63 @@ export function fetchAlternatives(
 
 /** Plans whose selection can still change (editing a plan in review returns it to draft). */
 export const editableStates: readonly PlanState[] = ["draft", "pending_approval"];
+
+const repairPass = d.object({
+  snapshot_id: d.token,
+  spacecraft_id: d.nullable(d.token),
+  station: d.nullable(d.string),
+  starts_at: d.timestamp,
+  ends_at: d.timestamp,
+});
+
+export const repairReader = d.object({
+  run: draftRunReader,
+  plan: d.nullable(planDetailReader),
+  source_plan: d.object({ id: d.token, version: d.integer }),
+  diff: d.nullable(
+    d.object({
+      kept: d.array(repairPass, 5_000),
+      moved: d.array(
+        d.object({
+          spacecraft_id: d.nullable(d.token),
+          from: repairPass,
+          to: repairPass,
+          offset_s: d.integer,
+        }),
+        5_000,
+      ),
+      dropped: d.array(repairPass, 5_000),
+      added: d.array(repairPass, 5_000),
+      totals: (value: unknown) => value,
+    }),
+  ),
+});
+export type Repair = Decoded<typeof repairReader>;
+
+/** States a plan must be in to be repaired (scheduling.md S8). */
+export const repairableStates: readonly PlanState[] = [
+  "executing",
+  "partially_reserved",
+  "failed",
+  "interrupted",
+];
+
+/** S8: start a repair run off the request; progress via scheduling_progress {kind: "draft"}. */
+export function startRepair(missionId: string, planId: string, operationId: string) {
+  return request(`${base(missionId)}/${encodeURIComponent(planId)}/repairs`, startReader, {
+    method: "POST",
+    body: { operation_id: operationId },
+  });
+}
+
+export function fetchRepair(
+  missionId: string,
+  runId: string,
+  signal?: AbortSignal,
+): Promise<ApiResult<Repair>> {
+  return request(
+    `${base(missionId)}/repairs/${encodeURIComponent(runId)}`,
+    repairReader,
+    signal ? { signal } : {},
+  );
+}

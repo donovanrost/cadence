@@ -9,6 +9,11 @@ import type { SpacecraftName } from "./names.ts";
 const props = defineProps<{
   plan: PlanDetail;
   day: string;
+  /** Overrides the 00–24Z day (repair horizons). */
+  span?: { from: number; to: number } | undefined;
+  /** Panel heading and index (B1 live plan / B2 proposal). */
+  title?: string | undefined;
+  index?: string | undefined;
   nameOf: (id: string | null) => SpacecraftName | null;
   focused: string | null;
   selected: string | null;
@@ -19,6 +24,7 @@ defineEmits<{ select: [snapshotId: string] }>();
 const now = useNow();
 
 const window = computed(() => {
+  if (props.span) return props.span;
   const from = Date.parse(`${props.day}T00:00:00Z`);
   return { from, to: from + 86_400_000 };
 });
@@ -61,13 +67,18 @@ const draftedBars = computed<GanttBar[]>(() =>
   }),
 );
 const bars = computed(() => [...draftedBars.value, ...windowBars.value]);
+const rangeText = computed(() =>
+  props.span
+    ? `${new Date(props.span.from).toISOString().slice(11, 16)}–${new Date(props.span.to).toISOString().slice(11, 16)}Z`
+    : "00–24Z",
+);
 </script>
 
 <template>
   <ApPanel
-    index="B"
-    title="Draft · by station"
-    :meta="`${formatCount(plan.passes.length)} passes · ${rows.length} stations · 00–24Z`"
+    :index="index ?? 'B'"
+    :title="title ?? 'Draft · by station'"
+    :meta="`${formatCount(plan.passes.length)} passes · ${rows.length} stations · ${rangeText}`"
     pane
   >
     <ApGantt

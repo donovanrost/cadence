@@ -5,7 +5,13 @@ import type { PlanDetail } from "./api.ts";
 import { planPrimary } from "./plan-primary.ts";
 
 /** K1 footer: totals + the one primary for the plan's state (plan-primary.ts). */
-const props = defineProps<{ plan: PlanDetail; isAdmin: boolean; busy: boolean }>();
+const props = defineProps<{
+  plan: PlanDetail;
+  isAdmin: boolean;
+  busy: boolean;
+  /** Replaces the sheet primary's label (K2: "Apply r42 · book N passes"). */
+  sheetLabel?: string | undefined;
+}>();
 defineEmits<{ sheet: []; execute: [] }>();
 const primary = computed(() => planPrimary(props.plan, props.isAdmin));
 const conflicts = computed(() => props.plan.conflicts.length);
@@ -31,7 +37,7 @@ const conflicts = computed(() => props.plan.conflicts.length);
     <div class="flex min-w-[240px] flex-col justify-center gap-1.5">
       <template v-if="primary.kind === 'sheet'">
         <ApButton variant="primary" size="commit" :disabled="busy" @click="$emit('sheet')">{{
-          primary.label
+          sheetLabel ?? primary.label
         }}</ApButton>
       </template>
       <ApButton
