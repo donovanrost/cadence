@@ -42,11 +42,31 @@ export function fetchPeople(
   return request(`${base(organizationId)}/people`, peopleReader, { signal });
 }
 
+/** POST result: the invitation plus whether an email went out (`unavailable`: no mail delivery). */
+const invited = (value: unknown, path = "") => ({
+  invitation: invitation(value, path),
+  delivery: object({ delivery: oneOf(["submitted", "unavailable"]) })(value, path).delivery,
+});
+export type Invited = ReturnType<typeof invited>;
+
 export function sendInvitation(
   organizationId: string,
   body: Readonly<{ email: string; role: Role }>,
-): Promise<ApiResult<Invitation>> {
-  return request(`${base(organizationId)}/invitations`, invitation, { method: "POST", body });
+): Promise<ApiResult<Invited>> {
+  return request(`${base(organizationId)}/invitations`, invited, { method: "POST", body });
+}
+
+export function inviteFailure(code: string | null, message: string): string {
+  switch (code) {
+    case "already_member":
+      return "They're already a member of this organization.";
+    case "already_invited":
+      return "They already have a pending invitation.";
+    case "forbidden":
+      return "Only an organization admin can invite people.";
+    default:
+      return message;
+  }
 }
 
 export const roleLabel = (role: Role) => (role === "organization_admin" ? "Org admin" : "Member");

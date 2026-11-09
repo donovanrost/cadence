@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { describeApiError } from "@/api";
 import { ApButton, ApCallout, ApField, ApPanel, ApSelect } from "@/ui";
-import { sendInvitation, type Role } from "./api.ts";
+import { errorCode, failureOutcome } from "@/features/changes/index.ts";
+import { inviteFailure, sendInvitation, type Role } from "./api.ts";
 
 /** U2 Invite: email + role (the real roles, DECISIONS #2). Shown only with org.invite. */
 const props = defineProps<{ organizationId: string }>();
@@ -28,14 +28,21 @@ async function invite() {
       role: role.value,
     });
     if (result.ok) {
-      sent.value = result.value.email;
+      sent.value =
+        result.value.delivery === "submitted"
+          ? `Invite sent to ${result.value.invitation.email}.`
+          : `Invitation created for ${result.value.invitation.email}, but email delivery isn't set up here. Share the sign-up link with them directly.`;
       email.value = "";
       emit("invited");
     } else {
+      const outcome = failureOutcome(result.error, "changed");
       failure.value =
-        result.error.kind === "not_found"
-          ? "Inviting from the console isn't available yet."
-          : describeApiError(result.error);
+        outcome.changed === null
+          ? outcome.sentence
+          : inviteFailure(
+              errorCode(result.error),
+              "message" in result.error ? result.error.message : outcome.sentence,
+            );
     }
   } finally {
     busy.value = false;
@@ -48,7 +55,7 @@ async function invite() {
     <form class="flex flex-col gap-3" @submit.prevent="invite">
       <ApField v-model="email" label="Email" type="email" autocomplete="off" :error="failure" />
       <ApSelect v-model="role" label="Role" :options="options" />
-      <ApCallout v-if="sent" tone="nominal">Invite sent to {{ sent }}.</ApCallout>
+      <ApCallout v-if="sent" tone="nominal">{{ sent }}</ApCallout>
       <ApButton
         type="submit"
         variant="primary"
