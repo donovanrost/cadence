@@ -12,19 +12,26 @@ import {
 } from "@/ui";
 
 /** The chart area of B1: history unavailable (503), loading/failed, or the chart + legend. */
-const props = defineProps<{
-  pointName: string;
-  unit: string | null;
-  rangeLabel: string;
-  history: RemoteState<History>;
-  view: {
-    window: TimeWindow;
-    series: readonly SeriesPoint[];
-    limits: readonly LimitSegment[];
-    sentence: string;
-    stepMs: number;
-  } | null;
-}>();
+const props = withDefaults(
+  defineProps<{
+    pointName: string;
+    unit: string | null;
+    rangeLabel: string;
+    history: RemoteState<History>;
+    view: {
+      window: TimeWindow;
+      series: readonly SeriesPoint[];
+      limits: readonly LimitSegment[];
+      sentence: string;
+      stepMs: number;
+    } | null;
+    /** Plot height in px (B1: 220; Mobile sparkline: 80). */
+    height?: number;
+    /** Sparkline: no legend line and no "no samples" sentence. */
+    compact?: boolean;
+  }>(),
+  { height: 220, compact: false },
+);
 defineEmits<{ retry: [] }>();
 
 const unavailable = computed(() =>
@@ -53,12 +60,14 @@ const value = (v: number) => formatValue(v) ?? "";
         :label="view.sentence"
         :format-tick="tick"
         :format-value="value"
-        :height="220"
+        :height="height"
         :step-ms="view.stepMs"
       >
-        {{ pointName }}{{ unit ? ` (${unit})` : "" }} mean with min–max band · dashed: limits
+        <template v-if="!compact" #default>
+          {{ pointName }}{{ unit ? ` (${unit})` : "" }} mean with min–max band · dashed: limits
+        </template>
       </TrendChart>
-      <p v-if="view.series.length === 0" class="m-0 pt-2 text-md text-text-3">
+      <p v-if="!compact && view.series.length === 0" class="m-0 pt-2 text-md text-text-3">
         No samples for this point in the last {{ rangeLabel }}.
       </p>
     </template>

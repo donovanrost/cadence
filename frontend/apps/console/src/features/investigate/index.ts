@@ -1,5 +1,5 @@
 /**
- * Public API of the investigate feature used by other ops screens (Telemetry explore). The chart
+ * Public API of the investigate feature used by other ops screens (Telemetry explore, Mobile J6). The chart
  * now lives in @cadence/apogee-ui as ApTimeSeries; TrendChart stays as an alias for existing callers.
  */
 export {
@@ -16,4 +16,18 @@ export {
   type SeriesPoint,
   type TimeWindow,
 } from "@/ui";
-export { limitSegments, RANGES, rangeWindow, toSeries, type RangeKey } from "./model.ts";
+export {
+  DEFAULT_RANGE,
+  formatRate,
+  limitSegments,
+  pickAlarm,
+  RANGES,
+  rangeWindow,
+  ratePerHour,
+  sisters,
+  toSeries,
+  trendSentence,
+  type RangeKey,
+} from "./model.ts";
+export { usePointTrend, useSpacecraftAlarms } from "./useInvestigate.ts";
+export { default as TrendBlock } from "./TrendBlock.vue";
