@@ -277,8 +277,11 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
     provider {id, name}, starts_at, raised_at, provider_message, resolution: {action, actor {kind,
     id, name}, at, note, provider_reference} | null}`. `contact_id` is the `Review` target
     (`M/contacts/:contactId`).
-  - The response gains `resolved: [{id, resolved_by {kind, id, name}, resolved_at}]`: attention items
-    resolved in the last 60 s, so the fade-out can read "Resolved by Mira K." after a refetch.
+  - The response gains `resolved: [{id, resolved_by {kind: user | provider | system, id, name},
+    action, resolved_at}]`: attention items resolved in the last 60 s, so the fade-out can show
+    after a refetch. For a `user`, it reads "Resolved by Mira K.". Otherwise it says what closed it
+    (ux), e.g. `provider` Northlight with `action` `confirmed` reads "Resolved: Northlight
+    confirmed", never "by Cadence".
   - Refetch on `invalidate` with `attention`.
 - `failure_lookback_s` is `config :cadence, :action_queue_failure_lookback_s` (default 24 h).
   Failures older than that drop off the queue; they stay on the commands pages.
