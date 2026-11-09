@@ -159,3 +159,13 @@ takeover: `×` is the way out, and Esc does nothing destructive. Under 768 the h
 (`×`, title, UTC) with the station bar scrolling horizontally below it.
 **Why:** commanding screens hold still and need the height; a second header row says the same
 thing twice.
+
+### U20 · Failure copy states the outcome only when it's known (fe-setup correction)
+**Decision:** after any write (stage, apply, approve, release, ack), failure copy says what
+happened to the data, and only claims what is certain:
+- **Rejected** (the server answered with an error): "Nothing was staged." + `Retry`.
+- **Outcome unknown** (timeout, unreadable reply, a lost connection after the request was sent): "It
+  isn't clear whether anything was staged." + a link to where the truth lives (Staged changes, the
+  request page) instead of `Retry`, because a retry could duplicate the write.
+- **Partial** (only where the model allows it): name what changed and what didn't.
+**Why:** a 201 may already have staged it. "Nothing changed" is a promise; make it only when true.
