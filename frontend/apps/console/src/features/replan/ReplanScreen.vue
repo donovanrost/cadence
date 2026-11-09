@@ -5,6 +5,7 @@ import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession 
 import { ApButton, ApCallout, ApPanel, ApRemote, ApStationBar, plural } from "@/ui";
 import {
   DraftGantt,
+  byAuthor,
   PlanFooter,
   PlanStatePanel,
   SubmitSheet,
@@ -119,8 +120,13 @@ const context = computed(() => {
   if (s.status !== "ready") return "Re-plan";
   const state = s.value.state.replaceAll("_", " ");
   if (!proposal.value) return `Re-plan · live plan r${s.value.version} · ${state}`;
+  const started = repair.value.status === "ready" ? repair.value.value.run.started_at : null;
+  const proposed = started
+    ? `proposed ${started.slice(11, 16)}Z${byAuthor(proposal.value.plan?.author ?? null)}`
+    : null;
   return [
     `Repair of r${s.value.version} (${state})`,
+    proposed,
     station.stationId.value ? stationTitle.value : null,
   ]
     .filter(Boolean)
