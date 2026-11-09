@@ -169,3 +169,42 @@ The approval requirement is the mission's ADR-004 policy (`direct` → submit ap
 
 P1 applies run synchronously, so a client that reconnects after an apply can read the final state
 from `current/2` (the set is closed and the head moved). Persisted step history is not kept.
+
+## P2 additions: profile routing and overrides (commits `5360c974`, `d400294d`)
+
+**Kinds and documents**
+- `ground_station`: adds `"code"`, 2–8 capitals or digits (`SVB`), unique per mission.
+  Existing stations were backfilled from their names.
+- `transport`: adds `"ground_station_id"`, the station the transport reaches. It was
+  backfilled from metadata.
+- `spacecraft_profile`: adds `"catalog_revision_id"` and `"routing_rules"`. Each rule is
+  `%{"id", "label", "name_template", "enabled", "stations" => [%{"ground_station_id",
+  "transport_id" | nil}], "legs" => [%{"direction" => "downlink" | "uplink", "role"}]}`. The
+  name-template tokens are `{station}` (code), `{station_name}`, `{spacecraft}`, `{scid}` and
+  `{direction}`. Edit rules as one change at path `"routing_rules"` (the whole list). Rollout
+  works as for other profile edits.
+- **new** `spacecraft_override` (entity = spacecraft, `update` only). Change paths are override
+  paths with `.` written as `/`: `"frame_parameters/frame_size"`,
+  `"routing/<rule_id>/excluded_stations"` (list of station ids), `"routing/<rule_id>/enabled"`.
+  The value `%{"value" => term, "reason" => text}` sets an override; `nil` resets it to the
+  profile.
+- **derived** `spacecraft_routes`: never staged. After every apply (and in previews), affected
+  spacecraft's routes are re-materialized. They show up as revision entries and diffs with
+  `kind: "spacecraft_routes"` (`%{"routes" => [%{"id", "name", "rule", "station", "leg",
+  "transport", "role"}]}`). If a rule can't be materialized (unknown station, no or ambiguous
+  transport, wrong direction), the run is a NO-GO with a validation item of kind
+  `"spacecraft_routes"`.
+
+**Reads (`Cadence.Reads.ProfileRouting`, callers authorize first)**
+```elixir
+rules(org_id, mission_id, %SpacecraftType{}) :: [%{id, label, name_template, enabled,
+  stations: [%{id, code, name, transport_id}], legs: [%{direction, role}],
+  route_count, samples: [String.t()]}]          # counts/samples: spacecraft on the current version
+overrides(org_id, mission_id, %SpacecraftType{}) :: [%{spacecraft: %{id, name}, section,
+  path, profile_value, spacecraft_value, reason, since_revision | nil, set_at, actor, redundant}]
+```
+These fill the `rules` / `overrides` placeholders in `Cadence.Reads.ProfileDetail`. When
+present, `routing_model` becomes `:profile`.
+
+Not yet: lifting legacy per-spacecraft rules into profile rules (a reviewable change set), and
+profile framing feeding ingress (the next P2 steps).
