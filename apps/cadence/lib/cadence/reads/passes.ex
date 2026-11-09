@@ -13,9 +13,10 @@ defmodule Cadence.Reads.Passes do
   need a live provider search per spacecraft.
   """
 
-  alias Cadence.Comms.{GroundStation, GroundStationStore}
+  alias Cadence.Comms.GroundStationStore
   alias Cadence.Contacts.ProviderReservation
   alias Cadence.Control.Contacts
+  alias Cadence.Reads.StationRefs
 
   @default_limit 500
   @snapshots [
@@ -53,7 +54,7 @@ defmodule Cadence.Reads.Passes do
   @doc "Pure builder; see `load/5`."
   @spec build(map()) :: map()
   def build(%{reservations: reservations, stations: stations, filters: filters} = input) do
-    index = station_index(stations)
+    index = StationRefs.build(stations)
     crafts = Map.new(Map.get(input, :spacecraft, []), &{&1.spacecraft_id, &1})
     states = filters |> Map.get(:states) |> List.wrap() |> MapSet.new()
     station = Map.get(filters, :station)
@@ -93,7 +94,7 @@ defmodule Cadence.Reads.Passes do
       delivery_state: atom_text(reservation.delivery_state),
       spacecraft_id: reservation.spacecraft_id,
       spacecraft: spacecraft(reservation.spacecraft_id, crafts),
-      station: station(station_ref, index),
+      station: StationRefs.resolve(station_ref, index),
       antenna: antenna_ref && %{id: antenna_ref, label: nil},
       starts_at: reservation.starts_at,
       ends_at: reservation.ends_at,
@@ -122,35 +123,12 @@ defmodule Cadence.Reads.Passes do
     end)
   end
 
-  defp station_index(stations) do
-    Enum.reduce(stations, %{}, fn %GroundStation{} = station, acc ->
-      code = text(station.metadata, "code")
-
-      [station.ground_station_id, code, text(station.metadata, "provider_station_ref")]
-      |> Enum.reject(&is_nil/1)
-      |> Enum.reduce(
-        acc,
-        &Map.put_new(&2, &1, %{
-          id: station.ground_station_id,
-          code: code,
-          name: station.display_name
-        })
-      )
-    end)
-  end
-
   # Identity on every line (CommandFlow R01): name and SCID, nil when the spacecraft is gone.
   defp spacecraft(id, crafts) do
     case Map.get(crafts, id) do
       nil -> %{id: id, name: nil, scid: nil}
       craft -> %{id: id, name: craft.display_name, scid: craft.scid}
     end
-  end
-
-  defp station(nil, _index), do: %{ref: nil, id: nil, code: nil, name: nil}
-
-  defp station(ref, index) do
-    Map.merge(%{ref: ref, id: nil, code: nil, name: nil}, Map.get(index, ref, %{}))
   end
 
   defp cost(%{"amount" => amount, "currency" => currency})

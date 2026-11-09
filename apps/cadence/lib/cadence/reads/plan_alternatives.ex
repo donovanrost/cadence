@@ -12,6 +12,7 @@ defmodule Cadence.Reads.PlanAlternatives do
 
   alias Cadence.ContactPlanning.{ContactOpportunitySnapshot, Planner, RequirementEvaluator}
   alias Cadence.Management.Contacts
+  alias Cadence.Reads.StationRefs
 
   @spec load(binary(), binary(), binary(), binary()) :: {:ok, map()} | {:error, :plan_not_found}
   def load(organization_id, mission_id, plan_id, spacecraft_id) do
@@ -40,6 +41,7 @@ defmodule Cadence.Reads.PlanAlternatives do
       |> Enum.sort_by(& &1.starts_at, DateTime)
 
     requirements = requirements(organization_id, mission_id, mine ++ candidates)
+    stations = StationRefs.index(organization_id, mission_id)
 
     %{
       plan_id: plan_id,
@@ -54,7 +56,7 @@ defmodule Cadence.Reads.PlanAlternatives do
           %{
             snapshot_id: candidate.contact_opportunity_snapshot_id,
             requirement_id: candidate.contact_requirement_id,
-            station: (candidate.normalized_opportunity_document || %{})["ground_station_ref"],
+            station: StationRefs.of_snapshot(candidate, stations),
             starts_at: candidate.starts_at,
             ends_at: candidate.ends_at,
             synthetic: candidate.synthetic,

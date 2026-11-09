@@ -11,7 +11,7 @@ defmodule CadenceWeb.Console.ContactDraftController do
   alias Cadence.ContactPlanning.FleetPlanningRuns
   alias Cadence.Control.Scheduling
   alias Cadence.Management.Contacts, as: ManagementContacts
-  alias Cadence.Reads.{ContactPlanOverview, RepairDiff}
+  alias Cadence.Reads.{ContactPlanOverview, RepairDiff, StationRefs}
   alias CadenceWeb.Console.{ConfigJSON, Problem, SchedulingRunner}
 
   def create(conn, params) do
@@ -84,7 +84,15 @@ defmodule CadenceWeb.Console.ContactDraftController do
           |> draft(run)
           |> Map.merge(%{
             source_plan: %{id: source_id, version: run.source_contact_plan_version},
-            diff: if(run.candidate_contact_plan_id, do: RepairDiff.diff(old_passes, new_passes))
+            diff:
+              if(run.candidate_contact_plan_id,
+                do:
+                  RepairDiff.diff(
+                    old_passes,
+                    new_passes,
+                    StationRefs.index(org_id(conn), mission_id(conn))
+                  )
+              )
           })
 
         json(conn, %{data: ConfigJSON.encode(data)})

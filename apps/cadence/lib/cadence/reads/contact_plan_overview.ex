@@ -11,6 +11,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
 
   alias Cadence.ContactPlanning.{ContactOpportunitySnapshot, ContactPlan, ContactPlanVersion}
   alias Cadence.Management.Contacts
+  alias Cadence.Reads.StationRefs
 
   @list_cap 100
 
@@ -44,11 +45,13 @@ defmodule Cadence.Reads.ContactPlanOverview do
       passes =
         Contacts.selected_opportunities(organization_id, mission_id, plan_id, version.version)
 
+      stations = StationRefs.index(organization_id, mission_id)
+
       {:ok,
        plan
        |> summary(version, passes)
        |> Map.merge(%{
-         passes: Enum.map(passes, &pass(&1, version)),
+         passes: Enum.map(passes, &pass(&1, version, stations)),
          demand: demand(organization_id, mission_id, version),
          unmet: unmet(organization_id, mission_id, version),
          conflicts: conflicts(version)
@@ -203,13 +206,11 @@ defmodule Cadence.Reads.ContactPlanOverview do
     }
   end
 
-  defp pass(%ContactOpportunitySnapshot{} = snapshot, version) do
-    opportunity = snapshot.normalized_opportunity_document || %{}
-
+  defp pass(%ContactOpportunitySnapshot{} = snapshot, version, stations) do
     %{
       snapshot_id: snapshot.contact_opportunity_snapshot_id,
       spacecraft_id: (snapshot.route_binding_document || %{})["spacecraft_id"],
-      station: opportunity["ground_station_ref"],
+      station: StationRefs.of_snapshot(snapshot, stations),
       starts_at: snapshot.starts_at,
       ends_at: snapshot.ends_at,
       synthetic: snapshot.synthetic,

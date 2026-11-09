@@ -30,10 +30,13 @@ defmodule Cadence.Reads.RepairDiffTest do
       pass("d2", "sc-d", "w4", 30)
     ]
 
-    diff = RepairDiff.diff(before, after_passes)
+    stations = %{"SVB" => %{id: "gs_svb", code: "SVB", name: "Svalbard B"}}
+    diff = RepairDiff.diff(before, after_passes, stations)
 
     assert diff.totals == %{kept: 1, moved: 1, dropped: 1, added: 1}
-    assert [%{snapshot_id: "a2"}] = diff.kept
+
+    assert [%{snapshot_id: "a2", station: %{ref: "SVB", code: "SVB", name: "Svalbard B"}}] =
+             diff.kept
 
     assert [
              %{

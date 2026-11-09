@@ -95,7 +95,11 @@ The list row, plus:
 - `conflicts: [{code, spacecraft_id, snapshot_ids}]`: overlapping passes for one spacecraft, which
   always block approval
 
-`station` is the provider's ground-station ref. Errors: `404 plan_not_found`.
+`station` is `{ref, id, code, name}`: `ref` is the provider's ground-station ref, matched to a
+Cadence ground station by id, `metadata.code` or `metadata.provider_station_ref` (the same join as
+the passes read, `Reads.StationRefs`). `id`, `code` and `name` are `null` when nothing matches.
+The same shape is used on draft passes, alternatives and repair-diff passes. Errors:
+`404 plan_not_found`.
 
 ### `POST /contact-plans/drafts` (S3)
 
@@ -190,7 +194,7 @@ code, e.g. a snapshot that doesn't belong to the plan's runs), `422 invalid_para
 ### `GET /contact-plans/:plan_id/alternatives?spacecraft_id=` (S4)
 
 `{plan_id, version, spacecraft_id, rule_met, contacts: {have, need}, alternatives: [{snapshot_id,
-requirement_id, station, starts_at, ends_at, synthetic, effect: {rule_met_after, contacts_after:
+requirement_id, station: {ref, id, code, name}, starts_at, ends_at, synthetic, effect: {rule_met_after, contacts_after:
 {have, need}, clashes_with: [snapshot_id]}}]}`: eligible opportunities the plan's runs found for that
 spacecraft but didn't select, oldest first. Effects come from the same requirement evaluator the
 plan uses, and nothing is written. The "closes gap to 6h10" phrasing isn't computed (the rules
@@ -213,7 +217,7 @@ and a replay then starts another repair. (Drafts don't have this gap.)
 
 The draft read (`run`, `plan` = the **new** candidate plan), plus `source_plan: {id, version}` and
 `diff: {kept, moved: [{spacecraft_id, from, to, offset_s}], dropped, added, totals}` (each pass is
-`{snapshot_id, spacecraft_id, station, starts_at, ends_at}`). `diff` is `null` until the run has
+`{snapshot_id, spacecraft_id, station: {ref, id, code, name}, starts_at, ends_at}`). `diff` is `null` until the run has
 produced a plan. Passes are matched across runs by spacecraft + provider opportunity. "Moved" pairs a
 spacecraft's dropped and added passes in time order.
 

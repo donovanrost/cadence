@@ -2,6 +2,7 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Auth.Scope
+  alias Cadence.ContactPlanning.ContactRequirementTemplates
   alias CadenceWeb.{ContactPlanningFixtures, TestFixtures}
 
   setup do
@@ -51,8 +52,11 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
 
     detail = json_response(get_json(c, "/contact-plans/#{plan_id}"), 200)["data"]
 
-    assert [%{"spacecraft_id" => sc, "station" => "station-review", "synthetic" => true}] =
+    assert [%{"spacecraft_id" => sc, "station" => station, "synthetic" => true}] =
              detail["passes"]
+
+    # No Cadence station is named "station-review" in this fixture.
+    assert station == %{"ref" => "station-review", "id" => nil, "code" => nil, "name" => nil}
 
     assert sc == fixture.craft.spacecraft_id
     assert detail["unmet"] == []
@@ -110,6 +114,71 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
            ] == 0
 
     assert json_response(get_json(c, "/contact-plans/demand"), 422)["error"]["details"]["day"]
+  end
+
+  test "demand counts a template occurrence once, before and after it materializes", c do
+    scope =
+      Scope.new(%{
+        user: c.user,
+        organization_id: c.org.organization_id,
+        organization_membership: c.membership
+      })
+
+    craft = TestFixtures.persist_spacecraft!(c.mission)
+
+    {:ok, template, _version} =
+      ContactRequirementTemplates.create(scope, c.mission.mission_id, %{
+        spacecraft_id: craft.spacecraft_id,
+        schedule_document: %{
+          "type" => "fixed_interval",
+          "anchor_at" => "2027-01-01T00:00:00Z",
+          "interval_seconds" => 21_600,
+          "window_offset_seconds" => 0,
+          "window_duration_seconds" => 21_600
+        },
+        requirement_document: %{
+          "service_direction" => "downlink",
+          "contact_intent" => "recurring_payload_downlink",
+          "success_measure" => "minimum_duration",
+          "minimum_duration_seconds" => 300,
+          "preferred_duration_seconds" => 300,
+          "minimum_data_volume_bytes" => nil,
+          "contact_count" => 1,
+          "minimum_separation_seconds" => 0,
+          "priority" => "routine",
+          "provider_constraints_document" => %{"allowed" => [], "excluded" => []},
+          "station_constraints_document" => %{"allowed" => [], "excluded" => []},
+          "policy_constraints_document" => %{},
+          "approval_policy_document" => %{"mode" => "manual"},
+          "rationale" => "Demand test",
+          "metadata" => %{}
+        },
+        catch_up_policy_document: %{
+          "maximum_occurrences_per_run" => 8,
+          "maximum_lookback_seconds" => 86_400
+        }
+      })
+
+    needed = fn ->
+      json_response(get_json(c, "/contact-plans/demand?day=2027-01-03"), 200)["data"][
+        "contacts_needed"
+      ]
+    end
+
+    assert needed.() == 4
+
+    {:ok, materialized} =
+      ContactRequirementTemplates.materialize(
+        scope,
+        c.mission.mission_id,
+        template.contact_requirement_template_id,
+        ~U[2027-01-03 00:00:00Z],
+        ~U[2027-01-03 23:00:00Z]
+      )
+
+    assert length(materialized) == 4
+
+    assert needed.() == 4
   end
 
   test "alternatives show the effect of adding a pass; versions add and remove passes", c do

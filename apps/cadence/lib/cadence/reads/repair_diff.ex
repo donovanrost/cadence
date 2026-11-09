@@ -11,9 +11,14 @@ defmodule Cadence.Reads.RepairDiff do
   """
 
   alias Cadence.ContactPlanning.ContactOpportunitySnapshot
+  alias Cadence.Reads.StationRefs
 
-  @spec diff([ContactOpportunitySnapshot.t()], [ContactOpportunitySnapshot.t()]) :: map()
-  def diff(before, after_passes) do
+  @spec diff(
+          [ContactOpportunitySnapshot.t()],
+          [ContactOpportunitySnapshot.t()],
+          StationRefs.index()
+        ) :: map()
+  def diff(before, after_passes, stations \\ %{}) do
     before_keys = MapSet.new(before, &key/1)
     after_keys = MapSet.new(after_passes, &key/1)
 
@@ -21,13 +26,14 @@ defmodule Cadence.Reads.RepairDiff do
     gone = Enum.reject(before, &MapSet.member?(after_keys, key(&1)))
     new = Enum.reject(after_passes, &MapSet.member?(before_keys, key(&1)))
 
-    {moved, dropped, added} = pair(gone, new)
+    {moved, dropped, added} = pair(gone, new, stations)
+    pass = &pass(&1, stations)
 
     %{
-      kept: Enum.map(kept, &pass/1),
+      kept: Enum.map(kept, pass),
       moved: moved,
-      dropped: Enum.map(dropped, &pass/1),
-      added: Enum.map(added, &pass/1),
+      dropped: Enum.map(dropped, pass),
+      added: Enum.map(added, pass),
       totals: %{
         kept: length(kept),
         moved: length(moved),
@@ -37,7 +43,7 @@ defmodule Cadence.Reads.RepairDiff do
     }
   end
 
-  defp pair(gone, new) do
+  defp pair(gone, new, stations) do
     gone_by = Enum.group_by(gone, &spacecraft/1)
     new_by = Enum.group_by(new, &spacecraft/1)
 
@@ -53,8 +59,8 @@ defmodule Cadence.Reads.RepairDiff do
           Enum.map(pairs, fn {from, to} ->
             %{
               spacecraft_id: spacecraft_id,
-              from: pass(from),
-              to: pass(to),
+              from: pass(from, stations),
+              to: pass(to, stations),
               offset_s: DateTime.diff(to.starts_at, from.starts_at)
             }
           end),
@@ -64,11 +70,11 @@ defmodule Cadence.Reads.RepairDiff do
     end)
   end
 
-  defp pass(snapshot) do
+  defp pass(snapshot, stations) do
     %{
       snapshot_id: snapshot.contact_opportunity_snapshot_id,
       spacecraft_id: spacecraft(snapshot),
-      station: (snapshot.normalized_opportunity_document || %{})["ground_station_ref"],
+      station: StationRefs.of_snapshot(snapshot, stations),
       starts_at: snapshot.starts_at,
       ends_at: snapshot.ends_at
     }

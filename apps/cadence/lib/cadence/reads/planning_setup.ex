@@ -54,22 +54,35 @@ defmodule Cadence.Reads.PlanningSetup do
     from = DateTime.new!(day, ~T[00:00:00], "Etc/UTC")
     until = DateTime.new!(Date.add(day, 1), ~T[00:00:00], "Etc/UTC")
 
-    requirement_needs =
+    requirements =
       organization_id
       |> ContactRequirements.list(mission_id, lifecycle_state: :active)
       |> Enum.filter(fn {_requirement, version} -> overlaps?(version, from, until) end)
-      |> Enum.map(fn {_requirement, version} ->
+
+    requirement_needs =
+      Enum.map(requirements, fn {_requirement, version} ->
         {version.spacecraft_id, version.contact_count || 1}
       end)
+
+    # Occurrences already materialized are counted once, as their requirement.
+    materialized = requirements |> Enum.map(&generated_from/1) |> MapSet.new()
 
     template_needs =
       organization_id
       |> ContactRequirementTemplates.list(mission_id, lifecycle_state: :active)
-      |> Enum.flat_map(fn {_template, version} ->
+      |> Enum.flat_map(fn {template, version} ->
         count = (version.requirement_document || %{})["contact_count"] || 1
 
         version
         |> ContactRequirementTemplates.preview_occurrences(from, until)
+        # The schedule range includes `until`; that occurrence belongs to the next day.
+        |> Enum.filter(&DateTime.before?(&1, until))
+        |> Enum.reject(fn occurrence ->
+          MapSet.member?(
+            materialized,
+            {template.contact_requirement_template_id, DateTime.to_unix(occurrence)}
+          )
+        end)
         |> Enum.map(fn _occurrence -> {version.spacecraft_id, count} end)
       end)
 
@@ -84,6 +97,16 @@ defmodule Cadence.Reads.PlanningSetup do
       without_rule: max(total - MapSet.size(with_rules), 0),
       spacecraft_total: total
     }
+  end
+
+  defp generated_from({_requirement, version}) do
+    with %{"contact_requirement_template_id" => id, "occurrence_at" => at} <-
+           (version.metadata || %{})["generation"],
+         {:ok, at, _offset} <- DateTime.from_iso8601(at) do
+      {id, DateTime.to_unix(at)}
+    else
+      _not_generated -> nil
+    end
   end
 
   defp overlaps?(version, from, until),
