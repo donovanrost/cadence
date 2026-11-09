@@ -73,6 +73,20 @@ defmodule Cadence.Commanding.RequestValidation do
     end)
   end
 
+  @doc "The active command-catalog snapshot, read without the activation lock."
+  defdelegate authoring_snapshot(organization_id, mission_id),
+    to: Cadence.Reads.MissionModels.ActiveBasis,
+    as: :command_catalog_snapshot
+
+  @doc """
+  Validates one request against a snapshot (from `authoring_snapshot/2` or
+  `with_authoring_catalog/3`) with the exact authoring rules. Must run inside a
+  transaction: target identities are read `FOR SHARE`. Returns the enriched
+  request and `%{target, target_token, snapshot}`.
+  """
+  def validate_on_snapshot(%CommandRequest{} = request, snapshot, expected_target \\ nil),
+    do: resolve_authoring_request(request, snapshot, expected_target)
+
   @doc "Validates a finite batch under one admitted model and held target identities."
   def with_authoring_requests(
         [%CommandRequest{} = first | _] = requests,
