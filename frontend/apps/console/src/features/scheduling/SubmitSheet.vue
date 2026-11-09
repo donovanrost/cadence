@@ -6,6 +6,7 @@ import {
   reasonText,
   REASON_MAX,
   REASON_MIN,
+  stationCode,
   type Acknowledgement,
   type PlanDetail,
 } from "./api.ts";
@@ -118,6 +119,16 @@ const errorText = computed(() => {
     return "The plan changed since you opened this. Close it and review again.";
   return describeApiError(e);
 });
+/** U26/ux #13: passes on a degraded station, listed so booking them is an informed choice. */
+const atRisk = computed(() => {
+  const ids = new Set(props.plan.at_risk.flatMap((r) => r.snapshot_ids));
+  return props.plan.passes
+    .filter((p) => ids.has(p.snapshot_id))
+    .map((p) => ({
+      id: p.snapshot_id,
+      text: `${props.nameOf(p.spacecraft_id)?.name ?? p.spacecraft_id ?? "?"} · ${stationCode(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z`,
+    }));
+});
 defineExpose({ open, close });
 </script>
 
@@ -192,6 +203,17 @@ defineExpose({ open, close });
           </details>
         </div>
       </template>
+      <ApCallout v-if="atRisk.length > 0" tone="caution">
+        <span class="flex flex-col gap-1">
+          <span
+            >{{ plural(atRisk.length, "pass", "passes") }} on a degraded station may lose data.
+            Booking them is still allowed.</span
+          >
+          <span v-for="r in atRisk" :key="r.id" class="font-mono text-sm text-text-2">{{
+            r.text
+          }}</span>
+        </span>
+      </ApCallout>
       <ApCallout v-if="errorText" tone="caution">{{ errorText }}</ApCallout>
     </div>
     <footer class="flex flex-wrap items-center gap-3 border-t border-hairline px-5 py-3">

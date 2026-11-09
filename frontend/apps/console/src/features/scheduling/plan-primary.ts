@@ -93,7 +93,9 @@ export function planHeaderTail(plan: PlanDetail): string {
       const conflicts = plan.conflicts.length;
       if (conflicts > 0) return plural(conflicts, "conflict");
       const c = coverage(plan);
-      return c.spacecraft > 0 ? spacecraftNotCovered(c.spacecraft) : "ready";
+      const atRisk = plan.at_risk.flatMap((r) => r.snapshot_ids).length;
+      const base = c.spacecraft > 0 ? spacecraftNotCovered(c.spacecraft) : "ready";
+      return atRisk > 0 ? `${base} · ${atRisk} at risk` : base;
     }
     case "pending_approval":
       return "waiting for an admin";

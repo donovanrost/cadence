@@ -132,3 +132,46 @@ describe("SubmitSheet dialog (ux K1 #8)", () => {
     wrapper.unmount();
   });
 });
+
+describe("SubmitSheet at-risk passes (ux #13)", () => {
+  it("lists passes on a degraded station before booking", () => {
+    const risky = {
+      ...plan,
+      unmet: [],
+      passes: [
+        {
+          snapshot_id: "p1",
+          spacecraft_id: "sc-a",
+          station: { ref: "kir", id: "gs-kir", code: "KIR", name: "Kiruna" },
+          starts_at: "2026-11-11T00:12:00Z",
+          ends_at: "2026-11-11T00:20:00Z",
+          synthetic: true,
+          locked: false,
+        },
+      ],
+      at_risk: [
+        {
+          code: "station_degraded",
+          snapshot_ids: ["p1"],
+          spacecraft_id: undefined,
+          ground_station_id: "gs-kir",
+          window_id: "w",
+          kind: "degraded",
+        },
+      ],
+    };
+    const wrapper = mount(SubmitSheet, {
+      props: {
+        plan: risky,
+        nameOf: () => ({ name: "EARENDIL-003", scid: 3 }),
+        commitLabel: "Submit and book 1 pass",
+        confirm: "c",
+        busy: false,
+      },
+      attachTo: document.body,
+    });
+    expect(wrapper.text()).toContain("1 pass on a degraded station may lose data");
+    expect(wrapper.text()).toContain("EARENDIL-003 · KIR · 00:12–00:20Z");
+    wrapper.unmount();
+  });
+});
