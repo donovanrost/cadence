@@ -496,7 +496,8 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
       )
     end
 
-    now = DateTime.utc_now()
+    # Items were placed at the execution's `now` (@now + 2 s); the window counts from there.
+    now = DateTime.add(@now, 3, :second)
     assert state.(now: now) == :executing
     assert state.(now: DateTime.add(now, 11, :minute)) == :unconfirmed
 

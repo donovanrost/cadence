@@ -227,7 +227,9 @@ defmodule Cadence.Control.Scheduling do
   - `:interrupted` when any were never placed (`pending`/`requesting`). Execute resumes those
     and only re-reads `uncertain` ones; it never re-sends them.
   - `:unconfirmed` when an `uncertain` item (placed, provider hasn't answered) has waited past
-    the provider confirmation window. It needs operator resolution, not Execute.
+    the provider confirmation window, counted from placement (`started_at`, set when the item is
+    claimed just before the provider call), so later provider errors don't restart it. It needs
+    operator resolution, not Execute.
   - `:executing` when every unfinished item is `uncertain` within the window. Nothing to
     resume; the plan settles when the provider confirms.
 
@@ -261,7 +263,7 @@ defmodule Cadence.Control.Scheduling do
     cond do
       unfinished == [] -> :interrupted
       Enum.any?(unfinished, &(&1.lifecycle_state != :uncertain)) -> :interrupted
-      Enum.any?(unfinished, &(DateTime.compare(&1.updated_at, cutoff) == :lt)) -> :unconfirmed
+      Enum.any?(unfinished, &(DateTime.compare(&1.started_at, cutoff) == :lt)) -> :unconfirmed
       true -> :executing
     end
   end
