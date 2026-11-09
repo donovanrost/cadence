@@ -122,6 +122,32 @@ defmodule Cadence.ContactPlanning.FleetPlanningRuns do
     end
   end
 
+  @doc """
+  Repair runs that proposed the given plans: `%{candidate_plan_id => %{run_id, plan: %{id,
+  version}}}`, where `plan` is the plan being repaired (console: a draft that is a repair
+  proposal says so).
+  """
+  @spec repairs_for(binary(), binary(), [binary()]) :: %{binary() => map()}
+  def repairs_for(_organization_id, _mission_id, []), do: %{}
+
+  def repairs_for(organization_id, mission_id, plan_ids) do
+    FleetPlanningRunRow
+    |> where(
+      [run],
+      run.organization_id == ^organization_id and run.mission_id == ^mission_id and
+        run.candidate_contact_plan_id in ^plan_ids and not is_nil(run.source_contact_plan_id)
+    )
+    |> select(
+      [run],
+      {run.candidate_contact_plan_id, run.fleet_planning_run_id, run.source_contact_plan_id,
+       run.source_contact_plan_version}
+    )
+    |> Repo.all()
+    |> Map.new(fn {candidate, run_id, source, version} ->
+      {candidate, %{run_id: run_id, plan: %{id: source, version: version}}}
+    end)
+  end
+
   @spec list(binary(), binary(), keyword()) :: [FleetPlanningRun.t()]
   def list(organization_id, mission_id, opts \\ []) do
     FleetPlanningRunRow

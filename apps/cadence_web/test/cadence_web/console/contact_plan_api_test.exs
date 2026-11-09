@@ -23,7 +23,10 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
   defp get_json(c, path), do: c.user |> TestFixtures.member_conn() |> get(c.base <> path)
 
   test "an empty mission has no plans; an unknown plan is not found", c do
-    assert json_response(get_json(c, "/contact-plans"), 200)["data"] == %{"plans" => []}
+    assert json_response(get_json(c, "/contact-plans"), 200)["data"] == %{
+             "plans" => [],
+             "repair_proposals" => []
+           }
 
     assert json_response(get_json(c, "/contact-plans/nope"), 404)["error"]["code"] ==
              "plan_not_found"
@@ -59,6 +62,7 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
     assert station == %{"ref" => "station-review", "id" => nil, "code" => nil, "name" => nil}
 
     assert sc == fixture.craft.spacecraft_id
+    assert detail["repair_of"] == nil
     assert detail["unmet"] == []
     assert detail["conflicts"] == []
 

@@ -105,6 +105,13 @@ The list row, plus:
   K2's (repairs). `counts.conflicts` and `ready_to_approve` include station conflicts on the detail
   read; the list rows count only overlaps.
 
+**Repair proposals** (U28): a plan that a repair run proposed carries `repair_of: {plan: {id,
+version}, run_id}`, where `plan` is the plan being repaired; every other plan has `repair_of:
+null`. This is on the plan detail and on list rows. `GET /contact-plans` returns them apart:
+`{plans: [...], repair_proposals: [...]}`. `plans` holds base plans only, so K1 picks the day's
+plan from `plans` and points to its open repair from `repair_proposals`. Applying a repair is K2's
+(Re-plan).
+
 **Superseded drafts** (K1, ux ScheduleFlow): a `draft` or `pending_approval` plan whose
 requirements were overtaken reads as `state: "superseded"` (in the list rows and the detail), with
 `superseded: {at, by: {name} | null, reason, changes: [{kind: "requirement" | "template", id, name,

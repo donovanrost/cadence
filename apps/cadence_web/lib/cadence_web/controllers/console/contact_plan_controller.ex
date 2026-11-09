@@ -21,7 +21,10 @@ defmodule CadenceWeb.Console.ContactPlanController do
         |> ContactPlanOverview.list(mission_id(conn), %{day: day, state: state})
         |> Enum.map(&effective_state(conn, &1))
 
-      json(conn, %{data: ConfigJSON.encode(%{plans: plans})})
+      # U28: repair proposals come apart from the plans, so K1 picks the base plan and points to
+      # its repair.
+      {proposals, base} = Enum.split_with(plans, &(&1.repair_of != nil))
+      json(conn, %{data: ConfigJSON.encode(%{plans: base, repair_proposals: proposals})})
     else
       {:error, details} -> Problem.respond(conn, :invalid_params, details)
     end

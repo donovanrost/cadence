@@ -15,6 +15,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
     ContactOpportunitySnapshot,
     ContactPlan,
     ContactPlanVersion,
+    FleetPlanningRuns,
     PlanSupersession,
     StationConflicts
   }
@@ -29,10 +30,15 @@ defmodule Cadence.Reads.ContactPlanOverview do
     |> Contacts.list_plans(mission_id, list_opts(filters))
     |> Enum.take(@list_cap)
     |> then(fn plans ->
+      ids = Enum.map(plans, fn {plan, _} -> plan.contact_plan_id end)
       superseded = PlanSupersession.check_many(organization_id, mission_id, plans)
-      Enum.map(plans, &{&1, Map.get(superseded, elem(&1, 0).contact_plan_id)})
+      repairs = FleetPlanningRuns.repairs_for(organization_id, mission_id, ids)
+
+      Enum.map(plans, fn {plan, _version} = pair ->
+        {pair, Map.get(superseded, plan.contact_plan_id), Map.get(repairs, plan.contact_plan_id)}
+      end)
     end)
-    |> Enum.map(fn {{plan, version}, superseded} ->
+    |> Enum.map(fn {{plan, version}, superseded, repair_of} ->
       passes =
         Contacts.selected_opportunities(
           organization_id,
@@ -41,7 +47,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
           version.version
         )
 
-      summary(plan, version, passes, superseded)
+      plan |> summary(version, passes, superseded) |> Map.put(:repair_of, repair_of)
     end)
     |> Enum.filter(&on_day?(&1, filters[:day]))
   end
@@ -61,7 +67,11 @@ defmodule Cadence.Reads.ContactPlanOverview do
       availability = StationConflicts.check(organization_id, mission_id, passes)
       conflicts = conflicts(version) ++ availability.conflicts
       superseded = PlanSupersession.check(organization_id, mission_id, plan, version)
-      summary = summary(plan, version, passes, superseded)
+
+      repair_of =
+        FleetPlanningRuns.repairs_for(organization_id, mission_id, [plan_id])[plan_id]
+
+      summary = plan |> summary(version, passes, superseded) |> Map.put(:repair_of, repair_of)
 
       {:ok,
        summary
