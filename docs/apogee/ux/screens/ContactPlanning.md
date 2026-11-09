@@ -37,7 +37,9 @@ tabs: Requirements · Policy
   minimum separation = max gap, direction downlink / uplink / both, intent, priority, minimum data
   volume, station/provider constraints as chips, rationale). **Applies to** is a target query (same
   chips as Command C1: profile, plane, spacecraft). A live preview line: "3 contacts a day for 500
-  spacecraft = 1,500 passes a day". Save makes **template v3** (versions are immutable), and the history
+  spacecraft = 1,500 passes a day". Before saving, show what it supersedes (from a server dry-run): a caution callout "Saving v3 supersedes 2 open
+  drafts: Wed 11 Nov (R1, Mira K.), Thu 12 Nov (R1, you). They'll need drafting again." Save then reads
+  `Save v3 · supersede 2 drafts`. Booked plans are untouched (they go to K2 if needed). Save makes **template v3** (versions are immutable), and the history
   lists the versions with who/when/why.
 
 ## Tab · Policy
