@@ -8,22 +8,24 @@ Owner: **fe-setup**. Status: draft 1 (2026-11-08). Boards: `Setup` (S1), `AddSpa
 breadcrumbs, tone strings), so the plan asks **api** for purpose-built `/api/console/v1` JSON,
 reusing the underlying `L/reads/*` and stores. "Missing" means no backend data exists today.
 
-## Build status (2026-11-09)
+## Build status (2026-11-09, later)
 
 | Screen | Route | State | Data |
 | --- | --- | --- | --- |
-| S1 Readiness | `setup` | **live** | R |
-| Spacecraft list | `setup/spacecraft` | **live** | S |
-| Spacecraft detail | `setup/spacecraft/:id` | **live** (configuration placeholder) | SD |
-| S2 Add spacecraft | `setup/spacecraft/new/:step` | **live**: stages the batch into the change set | S, P, K stage |
-| Profiles list | `setup/profiles` | **live** | P |
-| S4 Profile | `setup/profiles/:id/:section` | **live, read-only** (DECISIONS #19); editing waits for P2 | PD |
-| S3 Catalog index | `setup/catalog` | **live** | C1 |
-| S3 Import run | `setup/catalog/import/:id` | **live** (diff when the server has one) | C3 |
-| S3 Upload | `setup/catalog/import` | not-available state | C2 (next) |
-| Changes (staged bar, `CONFIG rN`, review & apply) | `setup/changes` | **live**: checks, withdraw, discard, apply, review | K |
-| Revisions | `setup/revisions[/:n]` | **live**; rollback waits for domain P2 | K |
-| S5 People | `org/people` | not started | (5) planned |
+| S1 Readiness | `setup` | **live** (unknown fix kinds tolerated) | R |
+| Spacecraft list / detail | `setup/spacecraft[/:id]` | **live** | S, SD |
+| S2 Add spacecraft | `setup/spacecraft/new/:step` | **live**: server dry run at review, stages the batch | K preview + stage |
+| Profiles / S4 Profile | `setup/profiles[/:id/:section]` | **live**; profile read-only (#19), editing waits for domain P2 | P, PD |
+| S3 Catalog index / import run / upload | `setup/catalog[/import[/:id]]` | **live** (qa ran a real upload) | C1, C2, C3 |
+| Changes + Revisions | `setup/changes`, `setup/revisions[/:n]` | **live**; rollback waits for P2 | K |
+| Ground stations | `setup/stations[/:id\|new]` | **live**: edit and add through change sets | G1 + kind schema |
+| Comms & routing | `setup/comms[/transports[/:id]]` | **live**: transports editable, routing rules read-only (#3) | T1, T2, transport detail |
+| Data sources | `setup/data-sources` | built; not-available until D1 | D1 (api: after scheduling) |
+| Apps | `setup/apps` | built; not-available until A1; install model is domain's call | A1 |
+| S5 People & access | `org/people` | **live** (members, invitations, invite, service identities) | O1, O2, O3; O4 with api-ops |
+| Org missions | `org/missions` | **live** (from the session) | session |
+| Contact planning (#27) | tbd | waiting on ux spec + api | tbd |
+| Mission/org settings, audit log, provider accounts | | not started | need specs + endpoints |
 
 Shapes requested from api: `setup-shapes.md`. Contracts: `docs/apogee/api/setup.md`.
 
