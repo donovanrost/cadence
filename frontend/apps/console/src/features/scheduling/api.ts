@@ -446,6 +446,7 @@ const availabilityWindow = d.object({
   to: d.nullable(d.timestamp),
   eta: d.nullable(d.timestamp),
   source: d.string,
+  reported_at: d.nullable(d.timestamp),
   reason: d.nullable(d.string),
   cleared_at: d.nullable(d.timestamp),
 });

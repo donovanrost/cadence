@@ -21,6 +21,7 @@ import {
   type StationRef,
 } from "./api.ts";
 import type { SpacecraftName } from "./names.ts";
+import type { StationHits } from "./unavailable.ts";
 
 /** B · Draft by station: the plan's passes; the focused spacecraft ringed, conflicts dashed caution. */
 const props = defineProps<{
@@ -33,6 +34,8 @@ const props = defineProps<{
   index?: string | undefined;
   /** S7 station availability: windows become bands, down/degraded stations tint their row. */
   availability?: RemoteState<Availability> | undefined;
+  /** U26 station hits: blocking → conflict bar, atRisk → risk bar. */
+  hits?: StationHits | undefined;
   nameOf: (id: string | null) => SpacecraftName | null;
   focused: string | null;
   selected: string | null;
@@ -48,6 +51,8 @@ const window = computed(() => {
   return { from, to: from + 86_400_000 };
 });
 const clashing = computed(() => new Set(props.plan.conflicts.flatMap((c) => c.snapshot_ids)));
+const down = computed(() => new Set((props.hits?.blocking ?? []).map((h) => h.snapshotId)));
+const risky = computed(() => new Set((props.hits?.atRisk ?? []).map((h) => h.snapshotId)));
 const others = computed(() =>
   props.alternatives?.status === "ready"
     ? distinctWindows(props.alternatives.value.alternatives)
@@ -85,13 +90,16 @@ const draftedBars = computed<GanttBar[]>(() =>
       rowId: stationKey(p.station),
       from: Date.parse(p.starts_at),
       to: Date.parse(p.ends_at),
-      kind: clashing.value.has(p.snapshot_id)
-        ? "clash"
-        : p.spacecraft_id === props.focused
-          ? "focused"
-          : "own",
+      kind:
+        clashing.value.has(p.snapshot_id) || down.value.has(p.snapshot_id)
+          ? "clash"
+          : risky.value.has(p.snapshot_id)
+            ? "risk"
+            : p.spacecraft_id === props.focused
+              ? "focused"
+              : "own",
       label: sc ? String(sc.scid) : undefined,
-      description: `${who} · ${stationName(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z${clashing.value.has(p.snapshot_id) ? " · conflict" : ""}`,
+      description: `${who} · ${stationName(p.station)} · ${p.starts_at.slice(11, 16)}–${p.ends_at.slice(11, 16)}Z${clashing.value.has(p.snapshot_id) ? " · conflict" : ""}${down.value.has(p.snapshot_id) ? " · station down" : risky.value.has(p.snapshot_id) ? " · station degraded, may lose data" : ""}`,
     };
   }),
 );

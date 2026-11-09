@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { ApButton, ApStatStrip, ApStatTile } from "@/ui";
 import type { PlanDetail } from "./api.ts";
+import type { StationHits } from "./unavailable.ts";
 import { planPrimary } from "./plan-primary.ts";
 
 /** K1 footer: totals + the one primary for the plan's state (plan-primary.ts). */
@@ -11,10 +12,15 @@ const props = defineProps<{
   busy: boolean;
   /** Replaces the sheet primary's label (K2: "Apply r42 · book N passes"). */
   sheetLabel?: string | undefined;
+  /** U26: blocking station hits count as conflicts; at-risk passes are a caption. */
+  hits?: StationHits | undefined;
 }>();
 defineEmits<{ sheet: []; execute: [] }>();
-const primary = computed(() => planPrimary(props.plan, props.isAdmin));
-const conflicts = computed(() => props.plan.conflicts.length);
+const primary = computed(() =>
+  planPrimary(props.plan, props.isAdmin, props.hits?.blocking.length ?? 0),
+);
+const conflicts = computed(() => props.plan.conflicts.length + (props.hits?.blocking.length ?? 0));
+const atRisk = computed(() => props.hits?.atRisk.length ?? 0);
 </script>
 
 <template>
@@ -33,6 +39,8 @@ const conflicts = computed(() => props.plan.conflicts.length);
         label="Conflicts"
         :value="conflicts"
         :state="conflicts > 0 ? 'crit' : 'neutral'"
+        :caption="atRisk > 0 ? `${atRisk} at risk` : undefined"
+        :caption-state="atRisk > 0 ? 'caution' : undefined"
       />
     </ApStatStrip>
     <div class="flex min-w-[240px] flex-col justify-center gap-1.5">

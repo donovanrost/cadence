@@ -85,10 +85,34 @@ async function onKey(event: KeyboardEvent, id: string) {
   await nextTick();
   root.value?.querySelector<HTMLElement>(`[data-bar="${CSS.escape(next)}"]`)?.focus();
 }
+const BAND_WORDS: Readonly<Record<GanttBand["kind"], string>> = {
+  outage: "Outage",
+  maintenance: "Maintenance",
+  degraded: "Degraded",
+  unusable: "Unusable",
+};
+/** Legend for the band kinds on screen (ux K1 #11): swatch + word, never colour alone. */
+const bandKinds = computed(() =>
+  (["outage", "maintenance", "degraded", "unusable"] as const).filter((k) =>
+    props.bands.some((b) => b.kind === k),
+  ),
+);
 </script>
 
 <template>
   <div ref="root" role="group" :aria-label="label" class="flex min-w-0 flex-col">
+    <ul
+      v-if="bandKinds.length > 0"
+      class="m-0 mb-2 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 font-mono text-xs text-text-3 uppercase"
+    >
+      <li v-for="k in bandKinds" :key="k" class="flex items-center gap-1.5">
+        <span
+          aria-hidden="true"
+          class="ap-band relative inline-block h-3 w-5 border border-hairline"
+          :class="`ap-band--${k}`"
+        />{{ BAND_WORDS[k] }}
+      </li>
+    </ul>
     <div class="relative flex flex-col gap-px">
       <div
         v-for="row in rows"
@@ -214,6 +238,12 @@ async function onKey(event: KeyboardEvent, id: string) {
   border: 1px solid var(--color-line-strong);
   background: var(--apogee-wash-scheduled);
   color: var(--color-text-2);
+}
+.ap-bar--risk {
+  background: var(--color-readout);
+  box-shadow:
+    0 0 0 2px var(--color-vacuum),
+    0 0 0 3px var(--color-caution);
 }
 .ap-bar--done {
   border: 1px solid var(--color-line);

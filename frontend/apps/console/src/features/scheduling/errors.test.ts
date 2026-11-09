@@ -1,0 +1,23 @@
+import { describe, expect, it } from "vite-plus/test";
+import { planErrorText } from "./errors.ts";
+
+describe("planErrorText", () => {
+  it("names known refusals in plain words and falls back for the rest", () => {
+    expect(
+      planErrorText({
+        kind: "invalid",
+        code: "fleet_planning_requirement_not_active",
+        message: "x",
+        details: null,
+      }),
+    ).toContain("Contact rules aren't active for this day");
+    expect(
+      planErrorText({
+        kind: "invalid",
+        code: "something_new",
+        message: "Server says no.",
+        details: null,
+      }),
+    ).toBe("Server says no.");
+  });
+});

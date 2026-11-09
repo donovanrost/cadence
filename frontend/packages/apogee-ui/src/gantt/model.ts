@@ -31,7 +31,9 @@ export type GanttBarKind =
   /** Scheduled, not ours to edit (live Contacts view): outline + wash. */
   | "scheduled"
   /** Ended / past: drawn dimmer than scheduled. */
-  | "done";
+  | "done"
+  /** Drafted but at risk (e.g. a degraded station): white with a caution outline. */
+  | "risk";
 
 export type GanttBar = Readonly<{
   id: string;

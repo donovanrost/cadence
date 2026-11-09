@@ -14,7 +14,8 @@ export type PlanPrimary =
   | { kind: "blocked"; label: string; reason: string }
   | { kind: "none"; note: string | null };
 
-export function planPrimary(plan: PlanDetail, isAdmin: boolean): PlanPrimary {
+/** `stationBlocked`: drafted passes inside a station outage/maintenance (U26), which block like conflicts. */
+export function planPrimary(plan: PlanDetail, isAdmin: boolean, stationBlocked = 0): PlanPrimary {
   const n = plan.counts.passes;
   const gaps = coverage(plan).gaps;
   switch (plan.state) {
@@ -24,6 +25,12 @@ export function planPrimary(plan: PlanDetail, isAdmin: boolean): PlanPrimary {
           kind: "blocked",
           label: "Submit",
           reason: `${plural(plan.conflicts.length, "conflict")}. Move or remove a pass to submit.`,
+        };
+      if (stationBlocked > 0)
+        return {
+          kind: "blocked",
+          label: "Submit",
+          reason: `${plural(stationBlocked, "drafted pass", "drafted passes")} on a station that's down. Move or remove ${stationBlocked === 1 ? "it" : "them"} to submit.`,
         };
       if (n === 0) return { kind: "blocked", label: "Submit", reason: "The draft has no passes." };
       const label = isAdmin
@@ -74,10 +81,11 @@ export function planPrimary(plan: PlanDetail, isAdmin: boolean): PlanPrimary {
 }
 
 /** Header mono tail per plan state. */
-export function planHeaderTail(plan: PlanDetail): string {
+export function planHeaderTail(plan: PlanDetail, stationBlocked = 0): string {
   switch (plan.state) {
     case "draft": {
-      if (plan.conflicts.length > 0) return plural(plan.conflicts.length, "conflict");
+      const conflicts = plan.conflicts.length + stationBlocked;
+      if (conflicts > 0) return plural(conflicts, "conflict");
       const c = coverage(plan);
       return c.spacecraft > 0 ? spacecraftNotCovered(c.spacecraft) : "ready";
     }

@@ -3,6 +3,8 @@ import { computed } from "vue";
 import type { RemoteState } from "@/api";
 import { ApButton, ApEmptyState, ApKeyValue, ApPanel, ApTag, formatDuration } from "@/ui";
 import AlternativesList from "./AlternativesList.vue";
+import StationIssues from "./StationIssues.vue";
+import type { StationHits } from "./unavailable.ts";
 import { stationCode, stationName, type Alternatives, type PlanDetail } from "./api.ts";
 import type { SpacecraftName } from "./names.ts";
 
@@ -18,11 +20,13 @@ const props = defineProps<{
   nameOf: (id: string | null) => SpacecraftName | null;
   editable: boolean;
   busy: boolean;
+  hits: StationHits;
 }>();
 const emit = defineEmits<{
   add: [id: string];
   remove: [id: string];
   select: [id: string];
+  focus: [spacecraftId: string];
   retry: [];
 }>();
 
@@ -78,6 +82,15 @@ const items = computed(() => {
 
 <template>
   <ApPanel index="D" title="Selected" pane>
+    <StationIssues
+      :plan="plan"
+      :hits="hits"
+      :name-of="nameOf"
+      :editable="editable"
+      :busy="busy"
+      @remove="emit('remove', $event)"
+      @focus="emit('focus', $event)"
+    />
     <template v-if="pass">
       <div class="mb-3 flex flex-wrap items-center gap-2.5">
         <span class="font-mono text-base font-semibold">{{
