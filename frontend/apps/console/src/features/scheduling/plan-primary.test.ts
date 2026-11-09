@@ -85,7 +85,7 @@ describe("planPrimary", () => {
 
   it("lets only admins act on pending approval and offers Continue on interruption", () => {
     expect(planPrimary(plan({ state: "pending_approval" }), false).kind).toBe("none");
-    expect(planPrimary(plan({ state: "failed" }), true, "run_1")).toMatchObject({
+    expect(planPrimary(plan({ state: "failed" }), true, { openRepairRun: "run_1" })).toMatchObject({
       kind: "link",
       label: "Open the re-plan proposal",
       to: { query: { run: "run_1" } },
@@ -97,6 +97,18 @@ describe("planPrimary", () => {
       kind: "execute",
       label: "Continue booking",
     });
+  });
+});
+
+describe("planPrimary interrupted (ux 1a906155)", () => {
+  it("offers Continue booking unless nothing is left to send", () => {
+    expect(planPrimary(plan({ state: "interrupted" }), true).kind).toBe("execute");
+    expect(planPrimary(plan({ state: "interrupted" }), true, { requestsLeft: 3 }).kind).toBe(
+      "execute",
+    );
+    expect(planPrimary(plan({ state: "interrupted" }), true, { requestsLeft: 0 }).kind).toBe(
+      "none",
+    );
   });
 });
 

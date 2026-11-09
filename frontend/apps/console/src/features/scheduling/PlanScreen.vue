@@ -5,13 +5,13 @@ import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession 
 import type { ApiError } from "@/api";
 import { ApButton, ApCallout, ApStationBar } from "@/ui";
 import { draftedByOther, editableStates, type Acknowledgement } from "./api.ts";
-import BookingStopped from "./BookingStopped.vue";
 import DayNav from "./DayNav.vue";
 import DemandPanel from "./DemandPanel.vue";
 import DraftGantt from "./DraftGantt.vue";
 import { dayLabel, useSpacecraftNames } from "./names.ts";
 import PlanFooter from "./PlanFooter.vue";
 import { planHeaderTail } from "./plan-primary.ts";
+import { useBookingStopped } from "./useBookingStopped.ts";
 import PlanStatePanel from "./PlanStatePanel.vue";
 import SelectedPanel from "./SelectedPanel.vue";
 import { isPlanSuperseded, planErrorText } from "./errors.ts";
@@ -62,6 +62,11 @@ const hits = computed(() =>
   view.value.kind === "plan"
     ? stationHits(view.value.plan, availability.value)
     : { blocking: [], atRisk: [] },
+);
+/** U20: an interrupted execution's callout and how many requests are left. */
+const stopped = useBookingStopped(
+  missionId,
+  computed(() => (view.value.kind === "plan" ? view.value.plan : null)),
 );
 const primary = computed(() =>
   view.value.kind === "plan" ? planPrimary(view.value.plan, isAdmin.value) : null,
@@ -135,11 +140,7 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
   <ProposalCallout v-if="proposal" :mission-id="missionId" :proposal="proposal" />
   <template v-if="view.kind === 'plan'">
     <SupersededCallout v-if="view.plan.superseded" :superseded="view.plan.superseded" />
-    <BookingStopped
-      v-else-if="view.plan.state === 'interrupted'"
-      :mission-id="missionId"
-      :plan="view.plan"
-    />
+    <ApCallout v-else-if="stopped" :tone="stopped.tone">{{ stopped.text }}</ApCallout>
     <div
       class="grid min-h-0 flex-1 grid-cols-1 gap-3 console:grid-cols-[300px_minmax(0,1fr)_340px]"
     >
@@ -183,6 +184,7 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
       :open-repair-run="
         proposal?.repair_of?.plan.id === view.plan.id ? proposal.repair_of.run_id : null
       "
+      :requests-left="stopped?.left ?? null"
       @sheet="sheet?.open()"
       @redraft="draftDay"
       @execute="onExecute"

@@ -18,9 +18,16 @@ const props = defineProps<{
   redraftLabel?: string | undefined;
   /** U28: the open K2 proposal's run for this plan; the re-plan link opens it instead of a new one. */
   openRepairRun?: string | null | undefined;
+  /** bookingStopped's `left` on an interrupted plan (0 hides Continue booking). */
+  requestsLeft?: number | null | undefined;
 }>();
 defineEmits<{ sheet: []; execute: []; redraft: [] }>();
-const primary = computed(() => planPrimary(props.plan, props.isAdmin, props.openRepairRun ?? null));
+const primary = computed(() =>
+  planPrimary(props.plan, props.isAdmin, {
+    openRepairRun: props.openRepairRun ?? null,
+    requestsLeft: props.requestsLeft ?? null,
+  }),
+);
 const conflicts = computed(() => props.plan.conflicts.length);
 const atRisk = computed(() => props.plan.at_risk.flatMap((r) => r.snapshot_ids).length);
 </script>

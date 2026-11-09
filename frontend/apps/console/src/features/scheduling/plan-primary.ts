@@ -16,12 +16,17 @@ export type PlanPrimary =
   | { kind: "blocked"; label: string; reason: string }
   | { kind: "none"; note: string | null };
 
-/** `openRepairRun`: the run of an open K2 proposal repairing this plan (U28), which the re-plan link opens. */
+/**
+ * `openRepairRun`: the run of an open K2 proposal repairing this plan (U28), which the re-plan
+ * link opens. `requestsLeft`: from `bookingStopped` on an interrupted plan; 0 = nothing left to
+ * send, so no Continue booking (ux 1a906155).
+ */
 export function planPrimary(
   plan: PlanDetail,
   isAdmin: boolean,
-  openRepairRun: string | null = null,
+  options: Readonly<{ openRepairRun?: string | null; requestsLeft?: number | null }> = {},
 ): PlanPrimary {
+  const openRepairRun = options.openRepairRun ?? null;
   const n = plan.counts.passes;
   const gaps = coverage(plan).gaps;
   switch (plan.state) {
@@ -69,7 +74,9 @@ export function planPrimary(
     case "approved":
       return { kind: "execute", label: `Book ${plural(n, "pass", "passes")}` };
     case "interrupted":
-      return { kind: "execute", label: "Continue booking" };
+      return options.requestsLeft === 0
+        ? { kind: "none", note: "Nothing left to send." }
+        : { kind: "execute", label: "Continue booking" };
     case "executing":
       return {
         kind: "none",

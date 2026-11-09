@@ -9,7 +9,7 @@ export {
   sourceLabel,
   type ContactState,
 } from "./contact.ts";
-export { bookingStoppedText } from "./booking.ts";
+export { bookingStopped, bookingStoppedText, type BookingStopped } from "./booking.ts";
 export {
   byAuthor,
   continueDraft,
