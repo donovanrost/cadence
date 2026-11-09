@@ -248,7 +248,8 @@ const bandKinds = computed(() =>
 .ap-bar--done {
   border: 1px solid var(--color-line);
   background: transparent;
-  color: var(--color-text-4);
+  /* U27: dim the mark, not the text (labels stay ≥ text-3). */
+  color: var(--color-text-3);
 }
 .ap-bar--selected {
   outline: 2px solid var(--color-readout);

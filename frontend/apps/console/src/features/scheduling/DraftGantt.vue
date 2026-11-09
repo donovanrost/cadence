@@ -33,6 +33,8 @@ const props = defineProps<{
   index?: string | undefined;
   /** S7 station availability: windows become bands, down/degraded stations tint their row. */
   availability?: RemoteState<Availability> | undefined;
+  /** Superseded draft: dim the marks (not the text, which stays at full contrast). */
+  muted?: boolean | undefined;
   nameOf: (id: string | null) => SpacecraftName | null;
   focused: string | null;
   selected: string | null;
@@ -94,8 +96,9 @@ const draftedBars = computed<GanttBar[]>(() =>
       rowId: stationKey(p.station),
       from: Date.parse(p.starts_at),
       to: Date.parse(p.ends_at),
-      kind:
-        clashing.value.has(p.snapshot_id) || down.value.has(p.snapshot_id)
+      kind: props.muted
+        ? "done"
+        : clashing.value.has(p.snapshot_id) || down.value.has(p.snapshot_id)
           ? "clash"
           : risky.value.has(p.snapshot_id)
             ? "risk"

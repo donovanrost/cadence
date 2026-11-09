@@ -124,7 +124,6 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
     <SupersededCallout v-if="view.plan.superseded" :superseded="view.plan.superseded" />
     <div
       class="grid min-h-0 flex-1 grid-cols-1 gap-3 console:grid-cols-[300px_minmax(0,1fr)_340px]"
-      :class="view.plan.superseded ? 'opacity-60' : ''"
     >
       <DemandPanel
         :plan="view.plan"
@@ -140,6 +139,7 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
         :selected="selected"
         :alternatives="alternatives"
         :availability="availability"
+        :muted="view.plan.superseded !== null"
         @select="selected = $event"
       />
       <SelectedPanel
