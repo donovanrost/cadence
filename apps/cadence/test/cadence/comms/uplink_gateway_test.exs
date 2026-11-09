@@ -2,7 +2,7 @@ defmodule Cadence.Comms.UplinkGatewayTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Comms.{RoutingRule, RoutingRuleStore, Transport}
-  alias Cadence.Contacts.PathTemplateStore
+  alias Cadence.Contacts.{PathTemplateStore, UplinkLegs}
   alias Cadence.GroundNetworks.{MissionProvider, MissionProviders}
   alias Cadence.Management.Transports
   alias Cadence.Spacecraft
@@ -41,21 +41,7 @@ defmodule Cadence.Comms.UplinkGatewayTest do
 
   test "an outbound route releases through a per-spacecraft gateway linked to the listener", c do
     {:ok, transport} = uplink_transport(c)
-
-    {:ok, rule} =
-      RoutingRuleStore.create_routing_rule(
-        c.org,
-        RoutingRule.new(%{
-          mission_id: c.mission,
-          spacecraft_id: c.craft.spacecraft_id,
-          display_name: "Svalbard uplink",
-          purpose_label: "TT&C uplink",
-          direction: :outbound,
-          role: :primary,
-          transport_id: transport.transport_id,
-          transport_version: transport.version
-        })
-      )
+    {:ok, rule} = outbound_rule(c, transport)
 
     [template_id] = rule.metadata["materialized_path_template_ids"]
     {:ok, template} = PathTemplateStore.fetch(c.org, c.mission, template_id)
@@ -71,9 +57,53 @@ defmodule Cadence.Comms.UplinkGatewayTest do
     assert listener.configuration["ingress_transport_binding_id"] == gateway.transport_binding_id
   end
 
+  test "a booking at the primary uplink station requests the uplink leg", c do
+    {:ok, transport} = uplink_transport(c)
+    {:ok, _rule} = outbound_rule(c, transport)
+
+    assert %{
+             "service_profile_ref" => %{"id" => "service-uplink"},
+             "delivery_profile_ref" => %{"id" => "delivery-uplink"},
+             "path_template_id" => template_id
+           } =
+             UplinkLegs.for_booking(
+               c.org,
+               c.mission,
+               c.craft.spacecraft_id,
+               "station-svb",
+               c.provider.provider_id
+             )
+
+    assert is_binary(template_id)
+
+    assert UplinkLegs.for_booking(
+             c.org,
+             c.mission,
+             c.craft.spacecraft_id,
+             "station-elsewhere",
+             c.provider.provider_id
+           ) == nil
+  end
+
   test "a downlink service can't pair with an uplink delivery", c do
     assert {:error, :provider_profile_direction_not_supported} =
              uplink_transport(c, %{"id" => "service-downlink", "version" => 1})
+  end
+
+  defp outbound_rule(c, transport) do
+    RoutingRuleStore.create_routing_rule(
+      c.org,
+      RoutingRule.new(%{
+        mission_id: c.mission,
+        spacecraft_id: c.craft.spacecraft_id,
+        display_name: "Svalbard uplink",
+        purpose_label: "TT&C uplink",
+        direction: :outbound,
+        role: :primary,
+        transport_id: transport.transport_id,
+        transport_version: transport.version
+      })
+    )
   end
 
   defp uplink_transport(c, service_ref \\ %{"id" => "service-uplink", "version" => 1}) do
@@ -83,6 +113,7 @@ defmodule Cadence.Comms.UplinkGatewayTest do
         transport_id: "transport-uplink-#{c.suffix}",
         mission_id: c.mission,
         display_name: "Svalbard uplink",
+        ground_station_id: "station-svb",
         origin: :provider_managed,
         mission_provider_id: c.provider.provider_id,
         mission_provider_version: c.provider.version,

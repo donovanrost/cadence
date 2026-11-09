@@ -19,7 +19,8 @@ defmodule Cadence.Contacts.ProviderReservations do
     KnownAtom,
     ProviderReservation,
     ProviderReservationChanges,
-    ScheduledContact
+    ScheduledContact,
+    UplinkLegs
   }
 
   alias Cadence.Control.Contacts.Store.ProviderReservationRow
@@ -961,6 +962,9 @@ defmodule Cadence.Contacts.ProviderReservations do
         end
 
       {:error, :scheduled_contact_not_found} ->
+        {uplink_ids, uplink_refs, intents, uplink_metadata} =
+          UplinkLegs.scheduled_fields(reservation)
+
         Contacts.persist_scheduled_contact(
           reservation.organization_id,
           ScheduledContact.new(%{
@@ -968,23 +972,25 @@ defmodule Cadence.Contacts.ProviderReservations do
             mission_id: reservation.mission_id,
             scheduled_contact_id: reservation.scheduled_contact_id,
             source_endpoint_refs: reservation.source_endpoint_refs,
-            contact_intents: [:telemetry_downlink],
-            path_template_ids: reservation.path_template_ids,
-            path_template_refs: path_template_refs(reservation),
+            contact_intents: intents,
+            path_template_ids: reservation.path_template_ids ++ uplink_ids,
+            path_template_refs: path_template_refs(reservation) ++ uplink_refs,
             starts_at: reservation.starts_at,
             ends_at: reservation.ends_at,
             provider_contact_ref: reservation.provider_contact_ref,
-            metadata: %{
-              "provider_reservation_id" => reservation.provider_reservation_id,
-              "provider_id" => reservation.provider_id,
-              "provider_version" => reservation.provider_version,
-              "transport_id" => reservation.transport_id,
-              "transport_version" => reservation.transport_version,
-              "service_profile_ref" => reservation.service_profile_ref,
-              "delivery_profile_ref" => reservation.delivery_profile_ref,
-              "provider_profile_id" => reservation.provider_profile_id,
-              "provider_profile_version" => reservation.provider_profile_version
-            }
+            metadata:
+              %{
+                "provider_reservation_id" => reservation.provider_reservation_id,
+                "provider_id" => reservation.provider_id,
+                "provider_version" => reservation.provider_version,
+                "transport_id" => reservation.transport_id,
+                "transport_version" => reservation.transport_version,
+                "service_profile_ref" => reservation.service_profile_ref,
+                "delivery_profile_ref" => reservation.delivery_profile_ref,
+                "provider_profile_id" => reservation.provider_profile_id,
+                "provider_profile_version" => reservation.provider_profile_version
+              }
+              |> Map.merge(uplink_metadata)
           })
         )
     end

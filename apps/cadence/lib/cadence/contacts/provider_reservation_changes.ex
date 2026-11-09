@@ -36,6 +36,7 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
     provider_contact_ref provider_revision client_reference opportunity_ref spacecraft_ref
     ground_station_ref antenna_or_service_pool_ref service_profile_ref delivery_profile_ref
     starts_at ends_at status pass_phase delivery_state delivery_descriptor status_reason extensions
+    uplink
   )
 
   @spec observe(ProviderReservation.t(), map(), keyword()) ::
@@ -290,6 +291,7 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
       "status_reason" => present(response, previous, "status_reason"),
       "extensions" => snapshot_value(response, previous, "extensions", %{})
     }
+    |> put_uplink(present(response, previous, "uplink"))
     |> Map.take(@snapshot_fields)
     |> JsonDocument.encode()
   end
@@ -734,6 +736,11 @@ defmodule Cadence.Contacts.ProviderReservationChanges do
       _error -> nil
     end
   end
+
+  # Only a booked uplink leg (#44) adds the key: snapshots without one must stay identical to
+  # those stored before uplink legs existed, or every reservation reads as provider-changed.
+  defp put_uplink(snapshot, nil), do: snapshot
+  defp put_uplink(snapshot, uplink), do: Map.put(snapshot, "uplink", uplink)
 
   defp present(response, previous, key) do
     if Map.has_key?(response, key), do: response[key], else: previous[key]

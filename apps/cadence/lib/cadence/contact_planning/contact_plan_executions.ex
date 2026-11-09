@@ -15,7 +15,7 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
   alias Cadence.Management.Contacts.ApprovedContactPlan
 
   alias Cadence.Contacts.{ProviderBooking, ProviderReservation, ProviderReservations}
-  alias Cadence.Contacts.ProviderScheduling
+  alias Cadence.Contacts.{ProviderScheduling, UplinkLegs}
 
   alias Cadence.Control.Contacts.Store.ContactPlanExecutionItemRow
 
@@ -337,7 +337,15 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutions do
       "contact_requirement_version" => snapshot.contact_requirement_version,
       "contact_plan_id" => item.contact_plan_id,
       "contact_plan_version" => item.contact_plan_version,
-      "contact_opportunity_snapshot_id" => item.contact_opportunity_snapshot_id
+      "contact_opportunity_snapshot_id" => item.contact_opportunity_snapshot_id,
+      "uplink" =>
+        UplinkLegs.for_booking(
+          item.organization_id,
+          item.mission_id,
+          route.spacecraft_id,
+          opportunity["ground_station_ref"],
+          route.provider_id
+        )
     }
   end
 
