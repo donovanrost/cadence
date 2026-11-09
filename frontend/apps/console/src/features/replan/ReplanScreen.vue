@@ -196,7 +196,14 @@ async function onApply(acks: Acknowledgement[]) {
           @submit="onApply"
         />
       </template>
-      <ApPanel v-else index="A" title="Impact">
+      <StationImpactPanel
+        v-if="!proposal && station.stationId.value && station.availability.value.status === 'ready'"
+        :mission-id="missionId"
+        :station-id="station.stationId.value"
+        :station-name="station.stationName.value"
+        :availability="station.availability.value.value"
+      />
+      <ApPanel v-if="!runView && !proposal" index="A2" title="Live plan">
         <ApCallout v-if="!repairableStates.includes(live.state)" tone="info">
           Live plan r{{ live.version }} is {{ live.state.replaceAll("_", " ") }}. Re-plan applies to
           plans with rejected or failed bookings.
