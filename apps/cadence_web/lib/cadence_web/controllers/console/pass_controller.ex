@@ -6,6 +6,7 @@ defmodule CadenceWeb.Console.PassController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.ContactPlanning.RepairChain
   alias Cadence.Reads.Passes
   alias CadenceWeb.Console.{PassJSON, Problem, WindowParams}
 
@@ -23,10 +24,22 @@ defmodule CadenceWeb.Console.PassController do
           states: states
         })
 
-      json(conn, %{data: PassJSON.passes(result)})
+      json(conn, %{data: PassJSON.passes(with_replacements(conn, result))})
     else
       {:error, {:invalid_params, details}} -> Problem.respond(conn, :invalid_params, details)
     end
+  end
+
+  # qa #30: a lost booking that an applied repair replaced says by which plan and booking.
+  defp with_replacements(conn, %{passes: passes} = result) do
+    replaced =
+      RepairChain.replacements_for(
+        org_id(conn),
+        mission_id(conn),
+        for(%{plan: %{id: plan_id}, ended_by: %{}} <- passes, do: plan_id)
+      )
+
+    %{result | passes: Enum.map(passes, &Map.put(&1, :replaced_by, Map.get(replaced, &1.id)))}
   end
 
   # Passes look forward: by default `from` is now and `to` is a day later.

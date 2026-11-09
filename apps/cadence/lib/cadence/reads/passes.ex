@@ -16,6 +16,7 @@ defmodule Cadence.Reads.Passes do
   alias Cadence.Comms.{GroundStationStore, StationRefs}
   alias Cadence.Contacts.ProviderReservation
   alias Cadence.Control.Contacts
+  alias Cadence.Reads.PassEnders
 
   @default_limit 500
   @snapshots [
@@ -43,6 +44,7 @@ defmodule Cadence.Reads.Passes do
       from: from,
       to: to,
       reservations: reservations,
+      enders: PassEnders.load(organization_id, mission_id, reservations),
       truncated: truncated?,
       stations: GroundStationStore.list_ground_stations(organization_id, mission_id),
       spacecraft: Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id),
@@ -58,9 +60,15 @@ defmodule Cadence.Reads.Passes do
     states = filters |> Map.get(:states) |> List.wrap() |> MapSet.new()
     station = Map.get(filters, :station)
 
+    enders = Map.get(input, :enders, %{})
+
     passes =
       reservations
-      |> Enum.map(&row(&1, index, crafts))
+      |> Enum.map(
+        &(&1
+          |> row(index, crafts)
+          |> Map.put(:ended_by, PassEnders.ended_by(&1, enders)))
+      )
       |> Enum.filter(&(state_match?(&1, states) and station_match?(&1, station)))
 
     %{from: input.from, to: input.to, truncated: input.truncated, passes: passes}

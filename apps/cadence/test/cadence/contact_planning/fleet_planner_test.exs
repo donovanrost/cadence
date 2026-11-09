@@ -513,6 +513,14 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     alpha_id = alpha.contact_opportunity_snapshot_id
     assert [%{contact_opportunity_snapshot_id: ^alpha_id}] = RepairChain.lost_bookings(chain)
 
+    # The first repair's pass replaced beta's lost booking; the passes read names it.
+    repaired_plan_id = repaired.plan.contact_plan_id
+
+    assert [%{plan_id: ^repaired_plan_id}] =
+             @organization_id
+             |> RepairChain.replacements_for(@mission_id, [source.plan.contact_plan_id])
+             |> Map.values()
+
     assert {:ok, second} =
              FleetRepairs.repair(
                context.member_scope,

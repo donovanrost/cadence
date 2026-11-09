@@ -266,9 +266,13 @@ have no gap measure); `rule_met_after` and `clashes_with` are.
 ### `POST /contact-plans/:plan_id/repairs` (S8, K2 v1 "Re-plan after provider changes")
 
 Body `{operation_id, from?, to?}` (ISO-8601; default: now until the end of the source run's
-horizon). The plan must be the candidate of a fleet draft and be `executing`, `partially_reserved`
-or `failed`. This starts a **repair run** that keeps committed passes (reserved, uncertain or
-requesting) locked and re-plans the rest, **off the request**. `202 {run_id, outcome, state}`;
+horizon). `plan_id` is any plan of the day's **repair chain** (the root plan plus every applied
+repair in its `repair_of` chain, qa #30); the repair starts from the chain **head** (the latest
+applied repair, else the root). The day is repairable while the chain has lost bookings,
+whatever the head reads, or when the head is `executing`, `partially_reserved` or `failed`. This
+starts a **repair run** that keeps the day's current bookings (reserved, uncertain or requesting,
+across the whole chain) locked and re-plans the rest, **off the request**. Bookings an earlier
+repair made are therefore never re-sent. `202 {run_id, outcome, state}`;
 progress arrives as `scheduling_progress {kind: "draft"}`. Errors: `409 plan_not_repairable`,
 `422 invalid_params`, `422 planning_not_set_up`.
 
@@ -286,8 +290,13 @@ and a replay then starts another repair. (Drafts don't have this gap.)
 The draft read (`run`, `plan` = the **new** candidate plan), plus `source_plan: {id, version}` and
 `diff: {kept, moved: [{spacecraft_id, from, to, offset_s}], dropped, added, totals}` (each pass is
 `{snapshot_id, spacecraft_id, station: {ref, id, code, name}, starts_at, ends_at}`). `diff` is `null` until the run has
-produced a plan. Passes are matched across runs by spacecraft + provider opportunity. "Moved" pairs a
-spacecraft's dropped and added passes in time order.
+produced a plan. The diff compares the bookings the repair started from (the chain's live
+bookings plus its lost ones that no other repair replaced) with the candidate, by the candidate's
+**locked** passes: `kept` is exactly the locked passes. Every other candidate pass is a new
+booking, including one on the same freed opportunity as a lost pass, so `moved` + `added` is
+exactly what Apply sends. "Moved" pairs a spacecraft's lost and new passes in time order, and
+that pairing is persisted as what the repair *replaces* (see contacts.md `replaced_by`). The
+diff stays the same after Apply.
 
 **Apply** = `POST /contact-plans/<new plan id>/submit` (S5), with acknowledgements for any gaps.
 The repair yields a new plan; the source plan isn't superseded automatically (domain behavior).

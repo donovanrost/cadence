@@ -142,6 +142,28 @@ defmodule Cadence.ContactPlanning.RepairChain do
       item.lifecycle_state in @live or
         (lost?(item) and not MapSet.member?(replaced_elsewhere, lost_key(item)))
 
+  @doc """
+  The replacements across the chains of `plan_ids` (the passes read's `replaced_by`):
+  `%{lost key => %{plan_id, reservation_id}}`. Each chain loads once.
+  """
+  @spec replacements_for(binary(), binary(), [binary()]) :: %{binary() => map()}
+  def replacements_for(organization_id, mission_id, plan_ids) do
+    plan_ids
+    |> Enum.uniq()
+    |> Enum.reduce({MapSet.new(), %{}}, &add_chain(organization_id, mission_id, &1, &2))
+    |> elem(1)
+  end
+
+  defp add_chain(organization_id, mission_id, plan_id, {seen, acc}) do
+    with false <- MapSet.member?(seen, plan_id),
+         {:ok, chain} <- load(organization_id, mission_id, plan_id) do
+      {MapSet.union(seen, MapSet.new(chain.plans)), Map.merge(acc, replacements(chain))}
+    else
+      true -> {seen, acc}
+      {:error, _not_found} -> {MapSet.put(seen, plan_id), acc}
+    end
+  end
+
   @doc "Live items (the day's current bookings)."
   @spec live_items(t()) :: [struct()]
   def live_items(chain), do: Enum.filter(chain.items, &(&1.lifecycle_state in @live))

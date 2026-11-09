@@ -96,6 +96,49 @@ defmodule Cadence.Reads.PassesTest do
     end
   end
 
+  describe "ended_by (qa #30)" do
+    test "a workspace cancel or an operator's not-booked names the user; otherwise the provider" do
+      user = %{kind: "user", id: "u1", name: "QA Org Admin"}
+
+      resolution = %{
+        "operator_resolution" => %{
+          "action" => "not_booked",
+          "actor" => %{"kind" => "user", "id" => "u2", "name" => "Ops Admin"}
+        }
+      }
+
+      passes =
+        Passes.build(%{
+          from: ~U[2026-11-08 00:00:00Z],
+          to: ~U[2026-11-09 00:00:00Z],
+          truncated: false,
+          reservations: [
+            reservation("live", []),
+            reservation("ours", state: :canceled),
+            reservation("resolved", state: :failed, metadata: resolution),
+            reservation("theirs",
+              state: :canceled,
+              metadata: %{"provider_display_name" => "Earendil Demo Ground Network"}
+            )
+          ],
+          enders: %{"ours" => user},
+          stations: [],
+          filters: %{}
+        }).passes
+        |> Map.new(&{&1.id, &1.ended_by})
+
+      assert passes["live"] == nil
+      assert passes["ours"] == user
+      assert passes["resolved"] == %{kind: "user", id: "u2", name: "Ops Admin"}
+
+      assert passes["theirs"] == %{
+               kind: "provider",
+               id: "simulator",
+               name: "Earendil Demo Ground Network"
+             }
+    end
+  end
+
   describe "load/5" do
     setup do
       c = ProviderChangeFixtures.setup_contact()

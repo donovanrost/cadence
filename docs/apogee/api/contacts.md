@@ -37,7 +37,9 @@ Query: `from`, `to` (ISO-8601; default `from` = now, `to` = `from` + 24 h; at mo
     "cost": null,
     "plan": {"id": "contact_plan_…", "version": 42},
     "reservation_id": "provider_reservation_…",
-    "scheduled_contact_id": "scheduled_contact_…"
+    "scheduled_contact_id": "scheduled_contact_…",
+    "ended_by": null,
+    "replaced_by": null
   }]
 }}
 ```
@@ -60,6 +62,13 @@ Query: `from`, `to` (ISO-8601; default `from` = now, `to` = `from` + 24 h; at mo
   `cost` are `null` unless the provider supplied them in the snapshot. `source.synthetic` is `true`
   for the simulator's deterministic windows. Say so in the UI.
 - `plan`: the contact plan revision that booked it, or `null` for direct bookings.
+- `ended_by` (qa #30): who ended a `canceled`, `rejected` or `failed` booking, else `null`.
+  `{kind: "user", id, name}` for a cancel from the contact workspace or an operator's #53
+  "not booked" resolution; otherwise `{kind: "provider", id, name}`.
+- `replaced_by` (qa #30): on a lost booking that an applied repair replaced,
+  `{plan_id, reservation_id}` (`reservation_id` is `null` until that pass is placed), else
+  `null`. A lost row with `replaced_by: null` is still lost: that's what re-plan's Impact shows.
+  Replacement is persisted when the repair plan is created and never re-derived.
 - `truncated: true`: more than 500 reservations overlap the window. Narrow it.
 - Refetch on `invalidate` with `contacts` (below). AOS/LOS happen without an event; refresh a
   "now" line on a timer if you draw one.
