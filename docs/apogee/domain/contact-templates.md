@@ -1,6 +1,7 @@
 # Targeted contact requirement templates (DECISIONS #37)
 
-Author: **api**. Reviewer: **domain**. Status: **design for review**.
+Author: **api**. Reviewer: **domain**. Status: **approved with notes** (domain, 2026-11-09;
+folded in below).
 
 ## Problem
 
@@ -17,8 +18,10 @@ A template version gains:
 - `target_document`: one of
   - `{"kind": "profile", "spacecraft_type_id": id}`: every spacecraft pinned to that profile (any
     version) **when materializing**;
-  - `{"kind": "plane", "plane": n}`: spacecraft whose `metadata.plane == n` (until plane is
-    first-class);
+  - `{"kind": "plane", "plane": n}`: spacecraft whose `metadata.plane == n`. **Interim:**
+    `metadata.plane` is free-form and unvalidated until plane is first-class. So `n` must be a
+    positive integer (anything else is rejected), and a spacecraft whose `metadata.plane` is
+    missing or not an integer is never matched;
   - `{"kind": "spacecraft_ids", "spacecraft_ids": [id, …]}` (1–10,000, unique),
 
   plus an optional `"exclude_spacecraft_ids": [id, …]` for profile and plane.
@@ -28,7 +31,7 @@ A template version gains:
 Membership **resolves at materialization time** (it follows pins, metadata and new spacecraft),
 not when the template is saved. `ContactRequirementTemplates.resolve_targets/3` →
 `[spacecraft_id]` (pure over the spacecraft list, so preview and the console can count without
-writing).
+writing). Profile targets read `SpacecraftStore.list_pinned_to_profile/4`.
 
 ## Materialization
 
@@ -41,6 +44,13 @@ requirement. It becomes one row per `(template, version, occurrence_at, spacecra
 - `materialize/6` and `materialize_active/5` iterate occurrence × resolved spacecraft. Each
   generated requirement records the template id and version (as today, plus its spacecraft), so
   "superseded by template change" can name the template version.
+- **Membership changes:** on each materialization, future occurrences that aren't planned yet, for
+  spacecraft the template no longer targets (they left the profile, or are now excluded), are
+  superseded with cause `left_template_target`; otherwise they linger. Tested.
+- **New versions:** the same applies across versions. Not-yet-planned future requirements
+  generated from an older template version are superseded (cause `template_versioned`) when a
+  newer version materializes, so a re-seed doesn't leave the old rule active next to the new
+  one (qa, 2026-11-11).
 - Bounds: `catch_up_policy.maximum_occurrences_per_run` still limits occurrences. A new
   per-template cap of 10,000 spacecraft × occurrences per run fails the materialization with
   `{:template_fan_out_exceeded, n}` instead of silently truncating.
@@ -53,7 +63,9 @@ requirement. It becomes one row per `(template, version, occurrence_at, spacecra
    "spacecraft_ids": [spacecraft_id]}`, `name = "<spacecraft display name> recurring"` (falling
    back to the id).
 3. Add `spacecraft_id` to `contact_requirement_occurrences`, backfilled from the template version
-   (all existing templates are single-spacecraft), then swap the identity unique index.
+   (all existing templates are single-spacecraft), then swap the identity unique index. The new
+   unique index is built **before** the old one is dropped, in the same migration, so uniqueness
+   is never missing.
 
 Existing behavior is unchanged: a migrated template is an explicit one-spacecraft list.
 
@@ -64,13 +76,18 @@ Existing behavior is unchanged: a migrated template is an explicit one-spacecraf
   - the profile exists in the mission;
   - the plane is a positive integer;
   - the ids exist in the mission;
-  - excludes are only allowed with profile and plane.
-- `preview(scope, mission, attrs, from, until)` → `{spacecraft_count, occurrences, contacts}`;
-  nothing is written.
+  - excludes are only allowed with profile and plane, and must be mission spacecraft. An exclude
+    outside the target is allowed, and preview reports it (`excluded_outside_target`).
+- `preview(scope, mission, attrs, from, until)` → `{spacecraft_count, occurrences, contacts,
+  warnings}`; nothing is written. Warnings: `applies_to_nobody` (count 0) and
+  `excluded_outside_target`.
 - Reads: list with `{id, name, target, applies_to_count, version, rule_summary}`, where the
   `rule_summary` sentence is built on the server.
 
 ## Not in scope
 
-Profile-level demand (templates owned by the profile document), and moving plane to a
-first-class field.
+- Profile-level demand (templates owned by the profile document).
+- Moving plane to a first-class field.
+- Change sets for template edits. Templates are planning policy, not mission configuration, so
+  edits are versioned and audited on the template itself rather than reviewed in a change set.
+  This is a conscious choice for now (domain, 2026-11-09).
