@@ -16,6 +16,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 10 | Investigate header | Prev/next links show "2 ]" but are named "Next spacecraft, EARENDIL-002" (WCAG 2.5.3) | fe-ops | fixed (d3a2e569), e2e updated |
 | 11 | Config API | First `GET /missions/:id/config` returned 500 during an e2e run; a later call 200 with a baseline created at that moment (suspected race in lazy baseline creation) | api / domain | fixed (0c037ba0) |
 | 15 | Session / shell | Env admin in admin mode (platform_admin) gets `organizations: []` and can't open any org by URL | api / lead | verified (lead: org selected from the URL slug) |
+| 16 | Framing HOLD (DECISIONS #36 gate) | A profile `frame_parameters.frame_size` change raises no COMPATIBILITY HOLD; Apply needs only a reason | domain | open (blocks the flag) |
 | 12 | Palette | 'Show all N' `<button>` inside `role=listbox` (axe aria-required-children) | fe-ops | verified (cb5b2d12) |
 | 13 | Palette | Focus leaves the `aria-modal` dialog after two Tabs (no focus trap) | fe-ops | verified (cb5b2d12) |
 | 14 | Catalog import | File picker shows no visible keyboard focus (WCAG 2.4.7) | fe-setup | verified (32c2cb4e) |
@@ -138,5 +139,16 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   org from the URL for admin-mode sessions (or the session should list orgs the admin can open).
 - Suite: default persona switched to `orgAdmin`; shell "platform admin without a membership" is
   `test.fail` until fixed.
+
+### 16. No framing HOLD for a profile framing change
+
+- Earendil, flag `profile_framing_generations` on (mission scope). Profile `profile-earendil-block-1`
+  v1 `frame_size` 1115 = transports' `fixed_message_bytes` 1115; drift task: no drift; generation 1.
+- Staged `spacecraft_profile` update `frame_parameters.frame_size` → 1024 (rollout all). Preview:
+  `compatibility` GO, no holds; K2 shows no HOLD; Apply enabled with just a reason.
+- Cause (`comms/config_kinds/framing_compatibility.ex` `holds/3`): only `spacecraft` /
+  `spacecraft_override` update entries count as touched (a profile edit gives `[]`), and
+  `FramingDrift.audit` compares the live profile, not the staged value.
+- Not applied; staged change discarded. Re-run the full DECISIONS #36 check after the fix.
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
