@@ -227,6 +227,14 @@ defmodule Cadence.Reads.CommandGroups do
   defp stage(%{lifecycle_state: :approval_pending}, _row, _excluded), do: :awaiting_go
   defp stage(%{lifecycle_state: :rejected}, _row, true), do: :excluded
   defp stage(%{lifecycle_state: :rejected}, _row, false), do: :rejected
+  # A release refused by the uplink (#33) cancels the request and fails its attempt.
+  defp stage(
+         %{lifecycle_state: :canceled},
+         %{release_attempt: %{lifecycle_state: :release_failed}},
+         _
+       ),
+       do: :release_failed
+
   defp stage(%{lifecycle_state: :canceled}, _row, _excluded), do: :canceled
   defp stage(_request, nil, _excluded), do: :queued_for_contact
   defp stage(_request, row, _excluded), do: row_stage(row)

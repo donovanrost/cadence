@@ -126,6 +126,23 @@ defmodule Cadence.Commanding.Groups.TimelineTest do
              |> Enum.filter(&(&1.kind == :member_failed))
   end
 
+  test "a release the uplink refused (#33: attempt failed, request canceled) is a failure", c do
+    {group, [first, second]} = submit(c, [signed(c, 1)])
+    release_failed!(c, first)
+
+    CommandRequestRow
+    |> where([r], r.command_request_id == ^first.command_request_id)
+    |> Repo.update_all(set: [lifecycle_state: "canceled"])
+
+    released!(second, "not_required")
+    assert Timeline.settle(c.org, c.mission, group.command_group_id) == 2
+
+    assert %{payload: %{"reason" => "release_failed"}} = event(c, group, :member_failed)
+
+    assert %{payload: %{"members" => %{"release_failed" => 1, "no_verifier" => 1}}} =
+             event(c, group, :completed)
+  end
+
   test "a failed release is a member failure", c do
     {group, [first | _]} = submit(c, [signed(c, 1)])
     release_failed!(c, first)

@@ -134,9 +134,8 @@ defmodule Cadence.Commanding.Groups.Timeline do
     end)
   end
 
-  defp outcome(%{lifecycle_state: "canceled"}, _release_failed?), do: :canceled
-  defp outcome(%{lifecycle_state: "rejected"}, _release_failed?), do: :rejected
-
+  # A member that radiated is judged by its verification; otherwise a failed release attempt
+  # (including one the uplink refused, #33, which also cancels the request) is a failure.
   defp outcome(%{lifecycle_state: "released", verification_state: state}, _release_failed?) do
     case state do
       "failed" -> {:failed, "verify_failed"}
@@ -148,6 +147,8 @@ defmodule Cadence.Commanding.Groups.Timeline do
   end
 
   defp outcome(_member, true), do: {:failed, "release_failed"}
+  defp outcome(%{lifecycle_state: "canceled"}, false), do: :canceled
+  defp outcome(%{lifecycle_state: "rejected"}, false), do: :rejected
   defp outcome(_member, false), do: :open
 
   defp release_failed(_org, _mission, []), do: MapSet.new()

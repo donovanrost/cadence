@@ -114,6 +114,19 @@ defmodule Cadence.Reads.CommandGroupsTest do
              view.targets
   end
 
+  test "a release the uplink refused reads release_failed, not canceled (#33)", c do
+    group = submit(c, "SET_SIGNED", %{"counter" => 3})
+    [first | _] = GroupStore.members(c.org, c.mission, group.command_group_id)
+    release!(c, first, :release_failed)
+
+    Cadence.Commanding.CommandRequestRow
+    |> where([r], r.command_request_id == ^first.command_request_id)
+    |> Repo.update_all(set: [lifecycle_state: "canceled"])
+
+    {:ok, view} = CommandGroups.get(c.org, c.mission, group.command_group_id, nil)
+    assert [%{stage: :release_failed, members: [%{end_reason: nil}]}, _] = view.targets
+  end
+
   test "an operation id resolves to its group", c do
     group = submit(c, "SET_SIGNED", %{"counter" => 2}, %{}, operation_id: "op-42")
     assert {:ok, %{id: id}} = CommandGroups.fetch_by_operation(c.org, c.mission, "op-42")
