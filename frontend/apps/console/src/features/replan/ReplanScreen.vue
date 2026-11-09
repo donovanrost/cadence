@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { describeApiError, type ApiError } from "@/api";
+import { describeApiError, useRemoteQuery, type ApiError } from "@/api";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
 import { ApButton, ApCallout, ApPanel, ApRemote, ApStationBar, plural } from "@/ui";
 import {
@@ -16,9 +16,12 @@ import {
   type Acknowledgement,
   type PlanDetail,
   type PlanView,
+  fetchAvailability,
 } from "@/features/scheduling/index.ts";
 import ChangesPanel from "./ChangesPanel.vue";
 import ImpactPanel from "./ImpactPanel.vue";
+import StationImpactPanel from "./StationImpactPanel.vue";
+import { useStationEntry } from "./useStationEntry.ts";
 import { useReplan } from "./useReplan.ts";
 
 /** K2 v1 · Re-plan after provider changes (DECISIONS #25), entered from a plan (`?plan=`). */
@@ -27,6 +30,9 @@ const missionId = computed(() => scope.value.mission.id);
 const { planId, runId, source, repair, busy, actionError, propose, resume, apply } =
   useReplan(missionId);
 const nameOf = useSpacecraftNames(missionId);
+// Station-down entry (S7): resolves the plan to repair into ?plan=, then the plan flow continues.
+const station = useStationEntry(missionId);
+const availability = useRemoteQuery(missionId, (id, signal) => fetchAvailability(id, signal));
 const session = useSession();
 const isAdmin = computed(() => canAdministerOrganization(session, scope.value.organization));
 const sheet = ref<InstanceType<typeof SubmitSheet> | null>(null);
@@ -76,6 +82,11 @@ const context = computed(() => {
     ? `Re-plan · live plan r${s.value.version} · ${s.value.state.replaceAll("_", " ")}`
     : "Re-plan";
 });
+const title = computed(() =>
+  station.stationId.value
+    ? `${station.stationName.value} outage`
+    : "Re-plan after provider changes",
+);
 async function onApply(acks: Acknowledgement[]) {
   const plan = proposal.value?.plan;
   if (!plan) return;
@@ -87,7 +98,7 @@ async function onApply(acks: Acknowledgement[]) {
 
 <template>
   <TakeoverHeader
-    title="Re-plan after provider changes"
+    :title="title"
     :context="context"
     :close="{ name: 'ops.contacts' }"
     close-label="Close re-plan"
@@ -97,9 +108,26 @@ async function onApply(acks: Acknowledgement[]) {
       ><ApStationBar :steps="STEPS" :current="step" label="Re-plan steps"
     /></template>
   </TakeoverHeader>
-  <ApPanel v-if="!planId" index="A" title="Impact">
+  <template v-if="!planId && station.stationId.value">
+    <ApRemote :state="station.availability.value" loading-label="Loading station status…">
+      <template #default="{ value: avail }">
+        <StationImpactPanel
+          :mission-id="missionId"
+          :station-id="station.stationId.value"
+          :station-name="station.stationName.value"
+          :availability="avail"
+        />
+        <ApCallout v-if="station.resolved.value === 'none'" tone="info"
+          >No live plan has bookings at this station in the outage window, so there's nothing to
+          re-plan.</ApCallout
+        >
+      </template>
+    </ApRemote>
+  </template>
+  <ApPanel v-else-if="!planId" index="A" title="Impact">
     <ApCallout tone="info"
-      >Open a re-plan from a contact plan that has rejected or failed bookings.</ApCallout
+      >Open a re-plan from a contact plan that has rejected or failed bookings, or from a station
+      that's down.</ApCallout
     >
   </ApPanel>
   <ApRemote v-else :state="source" loading-label="Loading the live plan…">
@@ -109,7 +137,14 @@ async function onApply(acks: Acknowledgement[]) {
         <div
           class="grid min-h-0 flex-1 grid-cols-1 gap-3 console:grid-cols-[300px_minmax(0,1fr)_360px]"
         >
-          <ImpactPanel :mission-id="missionId" :live="live" />
+          <StationImpactPanel
+            v-if="station.stationId.value && station.availability.value.status === 'ready'"
+            :mission-id="missionId"
+            :station-id="station.stationId.value"
+            :station-name="station.stationName.value"
+            :availability="station.availability.value.value"
+          />
+          <ImpactPanel v-else :mission-id="missionId" :live="live" />
           <div class="flex min-h-0 flex-col gap-3">
             <DraftGantt
               :plan="live"
@@ -120,6 +155,7 @@ async function onApply(acks: Acknowledgement[]) {
               :name-of="nameOf"
               :focused="null"
               :selected="null"
+              :availability="availability.state.value"
             />
             <DraftGantt
               :plan="proposal.plan"
@@ -130,6 +166,7 @@ async function onApply(acks: Acknowledgement[]) {
               :name-of="nameOf"
               :focused="null"
               :selected="null"
+              :availability="availability.state.value"
             />
           </div>
           <ChangesPanel :diff="proposal.diff" :plan="proposal.plan" :name-of="nameOf" />

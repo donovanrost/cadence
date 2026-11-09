@@ -36,8 +36,7 @@ const impact = useRemoteQuery(impactKey, fetchStationImpact);
         <ApTag v-bind="stationTag(availability.status.state)" />
       </div>
       <p v-if="availability.status.state === 'up'" class="m-0 text-sm text-text-3">
-        {{ availability.status.basis ?? "No outage is reported for this station." }} That isn't live
-        telemetry.
+        Nothing reports this station down right now. That isn't live telemetry.
       </p>
       <p v-if="win" class="m-0 text-sm text-text-3">
         {{ win.kind === "maintenance" ? "Maintenance" : "Outage" }} from
