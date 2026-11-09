@@ -308,7 +308,8 @@ The event log for Investigate B2 and Timeline. It reads the canonical mission ti
 mission events merged with operational events). Refetch on `invalidate` with `events` or `alarms`.
 
 Query: `from`, `to` (ISO, default the last 24 h), `spacecraft_id`, `kind` (comma list of
-`limit, flight_event, contact, command, config, operator`), `limit` 1–500 (default 200), and
+`limit, flight_event, contact, command, config, operator, data`; `data` is data-plane housekeeping
+such as source watermarks and source health, which you'll usually filter out), `limit` 1–500 (default 200), and
 `cursor` (opaque, from `meta.next_cursor`). Newest first.
 
 ```json

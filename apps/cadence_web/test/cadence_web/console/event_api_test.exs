@@ -26,7 +26,7 @@ defmodule CadenceWeb.Console.EventAPITest do
 
     assert Enum.all?(
              events,
-             &(&1["kind"] in ~w(limit flight_event contact command config operator))
+             &(&1["kind"] in ~w(limit flight_event contact command config operator data))
            )
 
     assert Enum.all?(events, &(&1["severity"] in ~w(critical caution nominal info)))
