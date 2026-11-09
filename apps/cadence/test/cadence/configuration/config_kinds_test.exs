@@ -6,6 +6,7 @@ defmodule Cadence.Configuration.ConfigKindsTest do
   alias Cadence.Comms.TransportStore
   alias Cadence.Control.Configuration
   alias Cadence.Platform.ConfigurationSettings
+  alias Cadence.Spacecraft.ConfigKinds.Spacecraft, as: SpacecraftKind
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftTypeStore
 
@@ -64,7 +65,7 @@ defmodule Cadence.Configuration.ConfigKindsTest do
       assert {:ok, %{lifecycle_state: :archived, archived_at: %DateTime{}}} =
                SpacecraftStore.fetch_spacecraft(ctx.org, ctx.mission, id)
 
-      assert Cadence.Spacecraft.ConfigKinds.Spacecraft.load(ctx.org, ctx.mission, [id]) == %{}
+      assert SpacecraftKind.load(ctx.org, ctx.mission, [id]) == %{}
       # Its SCID stays taken: history keeps pointing at it.
       assert SpacecraftStore.scid_taken?(ctx.org, ctx.mission, 901)
     end
