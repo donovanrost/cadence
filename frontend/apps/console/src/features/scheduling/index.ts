@@ -31,6 +31,7 @@ export {
 } from "./api.ts";
 export { contactsShortText, coverage, gapGroups, spacecraftNotCovered } from "./coverage.ts";
 export { dayLabel, useSpacecraftNames, type SpacecraftName } from "./names.ts";
+export { planErrorText } from "./errors.ts";
 export { planHeaderTail, planPrimary, type PlanPrimary } from "./plan-primary.ts";
 export type { PlanView } from "./plan-state.ts";
 export { default as DraftGantt } from "./DraftGantt.vue";
