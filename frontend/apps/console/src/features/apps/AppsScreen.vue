@@ -4,6 +4,7 @@ import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
 import { ApEmptyState, ApListRow, ApPageHeader, ApPanel, ApRemote, ApTag } from "@/ui";
+import AppActions from "./AppActions.vue";
 import { fetchApps, type App } from "./api.ts";
 
 /** Setup › Apps (rail 08): what's installed and what's off because an app is missing. */
@@ -54,9 +55,17 @@ const word = (a: App) =>
               "
               :meta="a.version ? `v${a.version}` : undefined"
             >
-              <template #action
-                ><ApTag :state="a.state === 'installed' ? 'nominal' : 'off'" :label="word(a)"
-              /></template>
+              <template #action>
+                <div class="flex flex-col items-end gap-2">
+                  <ApTag :state="a.state === 'installed' ? 'nominal' : 'off'" :label="word(a)" />
+                  <AppActions
+                    v-if="value.permissions.includes('apps.install')"
+                    :mission-id="missionId"
+                    :app="a"
+                    @changed="refetch"
+                  />
+                </div>
+              </template>
             </ApListRow>
           </ul>
         </template>

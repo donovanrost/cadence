@@ -19,3 +19,30 @@ export type App = Decoded<typeof app>;
 export function fetchApps(missionId: string, signal: AbortSignal): Promise<ApiResult<Apps>> {
   return request(`/missions/${encodeURIComponent(missionId)}/apps`, appsReader, { signal });
 }
+
+export type AppAction = "install" | "disable" | "uninstall";
+
+/**
+ * The app-change seam (Changes.md §6, domain decision 2026-11-09): v1 applies directly
+ * (`applied`); when `application_installation` becomes a change-set kind this returns `staged`
+ * and the screen doesn't change.
+ */
+export type AppChangeOutcome =
+  | Readonly<{ kind: "applied"; app: App }>
+  | Readonly<{ kind: "staged" }>
+  | Readonly<{ kind: "failed"; error: import("@/api").ApiError }>;
+
+export async function changeApp(
+  missionId: string,
+  key: string,
+  action: AppAction,
+): Promise<AppChangeOutcome> {
+  const result = await request(
+    `/missions/${encodeURIComponent(missionId)}/apps/${encodeURIComponent(key)}/${action}`,
+    app,
+    { method: "POST", body: {} },
+  );
+  return result.ok
+    ? { kind: "applied", app: result.value }
+    : { kind: "failed", error: result.error };
+}
