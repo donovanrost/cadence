@@ -277,3 +277,16 @@ header from one plan and a footer from another.
 `Drafted by Mira K. · updated 10:52Z`; with it, `Drafted 10:40Z by Mira K. · updated 10:52Z` (drop
 `updated` when the times match). System authors read `by Cadence (automatic draft)` /
 `(automatic repair)` per the kind of run.
+
+### U30 · Unconfirmed bookings (DECISIONS #52) (fe-setup / lead / domain)
+**Decision:** `unconfirmed` means we sent the request and the provider didn't answer within the
+confirmation window. Cadence **doesn't know** whether the pass is booked, so the copy says exactly that
+(U20): neither "failed" nor "booked". Tone is **caution** (it needs a person and blocks Execute). The
+passes themselves are stale-hatched, because their truth is unknown. Header tail
+`R41 · 36 BOOKED · 4 UNCONFIRMED`. Callout: "Northlight hasn't confirmed 4 bookings after 10 min. They
+may or may not be booked, so Cadence won't send them again. Check them with Northlight." The passes are
+listed with the soonest first and a `T−` to it. **No re-plan for unconfirmed passes** in K2 or K1:
+re-planning a pass that may already be booked risks double-booking and double billing. They resolve first,
+as booked or as not booked. Not-booked ones then become Demand rows and re-plan normally. Until domain
+offers a resolution action (`Mark booked` / `Mark not booked` with a note, audited), the screen offers none,
+and no dead buttons. When it lands, it sits per pass in that list.
