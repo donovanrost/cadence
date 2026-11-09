@@ -22,6 +22,8 @@ const pass = d.object({
   pass_phase: d.nullable(d.token),
   delivery_state: d.nullable(d.token),
   spacecraft_id: d.nullable(d.token),
+  /** Identity on the row (5f02fd3d), so names never depend on a client join. */
+  spacecraft: d.nullable(d.object({ id: d.token, name: d.string, scid: d.nullable(d.integer) })),
   station: d.object({
     ref: d.nullable(d.string),
     id: d.nullable(d.token),

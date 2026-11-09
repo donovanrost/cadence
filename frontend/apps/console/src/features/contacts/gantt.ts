@@ -41,7 +41,9 @@ export function passGantt(
   for (const p of passes) {
     const kind = KIND[passStatus(p, now)];
     if (kind === null) continue;
-    const sc = p.spacecraft_id ? nameOf(p.spacecraft_id) : null;
+    const sc =
+      (p.spacecraft_id ? nameOf(p.spacecraft_id) : null) ??
+      (p.spacecraft ? { name: p.spacecraft.name, scid: p.spacecraft.scid ?? 0 } : null);
     const key = axis === "station" ? stationKey(p) : (p.spacecraft_id ?? "unknown");
     // A spacecraft the fleet doesn't know is still identified, never by a truncated raw id.
     const rowLabel = axis === "station" ? stationLabel(p) : (sc?.name ?? "Unknown spacecraft");

@@ -11,6 +11,7 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   pass_phase: "scheduled",
   delivery_state: "pending",
   spacecraft_id: "sc-312",
+  spacecraft: { id: "sc-312", name: "EARENDIL-312", scid: 312 },
   station: { ref: "SVL", id: "gs-svl", code: "SVB", name: "Svalbard" },
   antenna: null,
   starts_at: "2026-11-09T02:30:00Z",
@@ -63,5 +64,8 @@ describe("passes", () => {
       ["312", "scheduled"],
     ]);
     expect(bars[0]?.description).toBe("EARENDIL-312 at Svalbard, scheduled (synthetic window)");
+    // Without a fleet match, the row's own identity names it.
+    const own = passGantt([pass("x")], () => null, now, null, "spacecraft");
+    expect(own.rows[0]?.label).toBe("EARENDIL-312");
   });
 });

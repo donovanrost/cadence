@@ -82,6 +82,14 @@ const selected = computed(() => {
     null
   );
 });
+/** D2 identity: the fleet row (has state) else the pass's own {name, scid}. */
+const selectedSpacecraft = computed(() => {
+  const p = selected.value;
+  if (!p) return null;
+  const known = p.spacecraft_id ? byId.value.get(p.spacecraft_id) : undefined;
+  if (known) return known;
+  return p.spacecraft?.scid != null ? { name: p.spacecraft.name, scid: p.spacecraft.scid } : null;
+});
 const view = computed(() => {
   const s = passes.state.value;
   // Wait for the fleet too: rows and D2 are labelled by name (R01), never by raw id.
@@ -193,10 +201,7 @@ const tabs = [
             </div>
           </ApRemote>
         </ApPanel>
-        <SelectedPassPanel
-          :pass="selected"
-          :spacecraft="selected?.spacecraft_id ? (byId.get(selected.spacecraft_id) ?? null) : null"
-        />
+        <SelectedPassPanel :pass="selected" :spacecraft="selectedSpacecraft" />
       </div>
     </template>
   </div>
