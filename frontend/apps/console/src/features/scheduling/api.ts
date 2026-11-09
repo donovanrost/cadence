@@ -60,7 +60,9 @@ const planRow = {
   state: d.oneOf(planStates),
   window: d.object({ from: d.nullable(d.timestamp), to: d.nullable(d.timestamp) }),
   /** `kind: system` = an automatic run ("Cadence"); null only when unknown (api af0279d1). */
-  author: d.nullable(d.object({ kind: d.optional(d.string), name: d.string })),
+  author: d.nullable(
+    d.object({ kind: d.optional(d.string), id: d.optional(d.token), name: d.string }),
+  ),
   counts: d.object({
     passes: d.integer,
     minutes: d.integer,
@@ -83,9 +85,19 @@ const planRows = d.array(d.object(planRow), 100);
  * ux (api af0279d1): " by Cadence Administrator" for a person, " by Cadence (automatic repair)" for
  * a system run, "" only when the author is unknown. Leading space included, for appending.
  */
-export function byAuthor(author: PlanSummary["author"]): string {
+export function byAuthor(
+  author: PlanSummary["author"],
+  automatic: "automatic repair" | "automatic draft" = "automatic repair",
+): string {
   if (!author) return "";
-  return author.kind === "system" ? ` by ${author.name} (automatic repair)` : ` by ${author.name}`;
+  return author.kind === "system" ? ` by ${author.name} (${automatic})` : ` by ${author.name}`;
+}
+
+/** ux: K1 names the drafter only when it isn't you (a person other than `userId`, or the system). */
+export function draftedByOther(plan: PlanSummary, userId: string): string | null {
+  const a = plan.author;
+  if (!a || (a.kind !== "system" && a.id === userId)) return null;
+  return `Drafted ${plan.updated_at.slice(11, 16)}Z${byAuthor(a, "automatic draft")}`;
 }
 
 export const plansReader = d.object({

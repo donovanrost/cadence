@@ -39,10 +39,38 @@ describe("isPlanSuperseded", () => {
 describe("byAuthor (ux, api af0279d1)", () => {
   it("names a person, marks a system run as automatic, and says nothing when unknown", async () => {
     const { byAuthor } = await import("./api.ts");
-    expect(byAuthor({ kind: "user", name: "Cadence Administrator" })).toBe(
+    expect(byAuthor({ kind: "user", id: "u", name: "Cadence Administrator" })).toBe(
       " by Cadence Administrator",
     );
-    expect(byAuthor({ kind: "system", name: "Cadence" })).toBe(" by Cadence (automatic repair)");
+    expect(byAuthor({ kind: "system", id: undefined, name: "Cadence" })).toBe(
+      " by Cadence (automatic repair)",
+    );
     expect(byAuthor(null)).toBe("");
+  });
+});
+
+describe("draftedByOther (ux K1 drafter line)", () => {
+  it("names someone else's or the system's draft, never your own", async () => {
+    const { draftedByOther } = await import("./api.ts");
+    const row = (author: Parameters<typeof draftedByOther>[0]["author"]) =>
+      ({
+        id: "p",
+        version: 1,
+        state: "draft",
+        window: { from: null, to: null },
+        author,
+        counts: { passes: 1, minutes: 8, conflicts: 0, unsatisfied: 0 },
+        ready_to_approve: true,
+        updated_at: "2026-11-10T10:52:00Z",
+        superseded: null,
+        repair_of: null,
+      }) as const;
+    const mira = { kind: "user", id: "user_mira", name: "Mira K." };
+    expect(draftedByOther(row(mira), "user_me")).toBe("Drafted 10:52Z by Mira K.");
+    expect(draftedByOther(row(mira), "user_mira")).toBeNull();
+    expect(draftedByOther(row({ kind: "system", id: undefined, name: "Cadence" }), "user_me")).toBe(
+      "Drafted 10:52Z by Cadence (automatic draft)",
+    );
+    expect(draftedByOther(row(null), "user_me")).toBeNull();
   });
 });

@@ -2,7 +2,7 @@ import type { RouteLocationRaw } from "vue-router";
 import { plural } from "@/ui";
 import { coverage, spacecraftNotCovered } from "./coverage.ts";
 import { isStationConflict } from "./unavailable.ts";
-import type { PlanDetail } from "./api.ts";
+import { byAuthor, type PlanDetail } from "./api.ts";
 
 /**
  * The one primary per plan state (ScheduleFlow "K1 plan states"): a sheet, an execute call, a
@@ -109,7 +109,10 @@ export function planHeaderTail(plan: PlanDetail): string {
       return atRisk > 0 ? `${base} · ${atRisk} at risk` : base;
     }
     case "pending_approval":
-      return "waiting for an admin";
+      // ux: the approver needs the author (reviewer ≠ author).
+      return plan.author
+        ? `waiting for an admin · drafted${byAuthor(plan.author, "automatic draft")}`
+        : "waiting for an admin";
     case "approved":
       return "approved";
     case "executing":

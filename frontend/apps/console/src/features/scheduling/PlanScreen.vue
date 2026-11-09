@@ -4,7 +4,7 @@ import { useRoute } from "vue-router";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
 import type { ApiError } from "@/api";
 import { ApButton, ApCallout, ApStationBar } from "@/ui";
-import { editableStates, type Acknowledgement } from "./api.ts";
+import { draftedByOther, editableStates, type Acknowledgement } from "./api.ts";
 import DayNav from "./DayNav.vue";
 import DemandPanel from "./DemandPanel.vue";
 import DraftGantt from "./DraftGantt.vue";
@@ -48,6 +48,12 @@ const {
 } = usePlanDay(missionId, day, focused);
 const session = useSession();
 const isAdmin = computed(() => canAdministerOrganization(session, scope.value.organization));
+/** ux: someone else's draft names its drafter under the day picker; your own shows nothing. */
+const draftedBy = computed(() =>
+  view.value.kind === "plan" && view.value.plan.state === "draft"
+    ? draftedByOther(view.value.plan, session.user.id)
+    : null,
+);
 const sheet = ref<InstanceType<typeof SubmitSheet> | null>(null);
 const sheetError = ref<ApiError | null>(null);
 /** U26: drafted passes inside station outage/maintenance (blocking) or degraded (at risk) windows. */
@@ -124,6 +130,7 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
     <template #steps><ApStationBar :steps="STEPS" :current="step" label="Plan steps" /></template>
   </TakeoverHeader>
   <DayNav :day="day" />
+  <p v-if="draftedBy" class="m-0 font-mono text-sm text-text-3">{{ draftedBy }}</p>
   <ProposalCallout v-if="proposal" :mission-id="missionId" :proposal="proposal" />
   <template v-if="view.kind === 'plan'">
     <SupersededCallout v-if="view.plan.superseded" :superseded="view.plan.superseded" />

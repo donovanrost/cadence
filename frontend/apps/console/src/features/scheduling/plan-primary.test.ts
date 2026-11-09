@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PlanDetail } from "./api.ts";
-import { planPrimary } from "./plan-primary.ts";
+import { planHeaderTail, planPrimary } from "./plan-primary.ts";
 
 const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   id: "plan_1",
@@ -96,5 +96,16 @@ describe("planPrimary", () => {
       kind: "execute",
       label: "Continue booking",
     });
+  });
+});
+
+describe("planHeaderTail drafter (ux: reviewer ≠ author)", () => {
+  it("names the drafter while waiting for an admin", () => {
+    expect(
+      planHeaderTail(
+        plan({ state: "pending_approval", author: { kind: "user", id: "u", name: "Mira K." } }),
+      ),
+    ).toBe("waiting for an admin · drafted by Mira K.");
+    expect(planHeaderTail(plan({ state: "pending_approval" }))).toBe("waiting for an admin");
   });
 });
