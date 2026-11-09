@@ -175,3 +175,17 @@ prices.
   `limit`.
 - **Volume:** shown as provider vs received. `planned_bytes` is nil: no requirement or profile
   carries an expected volume today.
+
+## As built (b9fda6d8)
+
+- **Received volume is stored at close-out.** `Control.PassResultsCloseOut` (composition) reads
+  the ingress archive (bytes) and protocol archive (transfer frames) per realized contact. A pass
+  never realized has `received_*: nil` (unknown), not 0. Only a known 0 against provider bytes
+  triggers `not_ingested`.
+- **Close-out cadence:** every minute. Cancellations close at once. Other passes past LOS fetch
+  the provider result (`fetch_contact_result/3`) and stay `pending_report` with `closed_at: nil`
+  until it arrives.
+- **Facade:** `Cadence.Reads.PassReview.rows/5`, `summary/5` and `daily/5`, with filters as a
+  map: `outcome: [..], station, spacecraft_id, plan, limit, offset`. `next_cursor` is the
+  stringified offset. Settings live in `Cadence.Platform.PassReviewSettings`, edited through
+  `Management.PassReviewSettingsSection`.
