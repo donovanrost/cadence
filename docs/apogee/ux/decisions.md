@@ -270,3 +270,10 @@ R1 → PROPOSAL · 4 MOVES`, with a mono context line `REPAIR OF R1 (<base plan 
 applies the repair (`Apply proposal · send 4 requests`). No invented revision number for the proposal (U25):
 it gets one only if the server assigns it. Counts on any screen come from one plan only: never a
 header from one plan and a footer from another.
+
+### U29 · Who and when must refer to the same event (K1 drafter line)
+**Decision:** an actor and a time on one line describe one event. "Drafted 10:52Z by Mira K." needs the
+**creation** time, not `updated_at`, which may be someone else's later edit. Without `created_at`, write
+`Drafted by Mira K. · updated 10:52Z`; with it, `Drafted 10:40Z by Mira K. · updated 10:52Z` (drop
+`updated` when the times match). System authors read `by Cadence (automatic draft)` /
+`(automatic repair)` per the kind of run.
