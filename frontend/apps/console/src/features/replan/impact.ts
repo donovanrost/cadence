@@ -43,10 +43,13 @@ function why(p: Pass & { state: LostState }): string {
 }
 
 /**
- * The day's repair chain as far as the passes read shows it (qa #30): the plan, its parent, and
- * every applied repair that replaced a lost booking of a plan already in the chain.
+ * The day's repair chain (qa #30): the plan detail's own `chain` when the server sends it (api
+ * 22d83acd); otherwise as far as the passes read shows it: the plan, its parent, and every applied
+ * repair that replaced a lost booking of a plan already in the chain.
  */
 function chainOf(passes: readonly Pass[], plan: ImpactPlan): Set<string> {
+  if (plan.chain && plan.chain.length > 0)
+    return new Set([plan.id, ...plan.chain.map((c) => c.id)]);
   const chain = new Set([plan.id, ...(plan.repair_of ? [plan.repair_of.plan.id] : [])]);
   for (let grew = true; grew;) {
     grew = false;
@@ -61,7 +64,11 @@ function chainOf(passes: readonly Pass[], plan: ImpactPlan): Set<string> {
   return chain;
 }
 
-export type ImpactPlan = Readonly<{ id: string; repair_of: { plan: { id: string } } | null }>;
+export type ImpactPlan = Readonly<{
+  id: string;
+  repair_of: { plan: { id: string } } | null;
+  chain?: readonly Readonly<{ id: string }>[] | null | undefined;
+}>;
 
 /** The day's bookings that didn't hold and no applied repair replaced: what A Impact lists. */
 export function impactOf(passes: readonly Pass[], plan: ImpactPlan, truncated: boolean): Impact {

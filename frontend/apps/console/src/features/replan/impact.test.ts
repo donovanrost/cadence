@@ -57,6 +57,19 @@ describe("impactOf", () => {
       ["haw", "Marked not booked by Mira K."],
     ]);
   });
+  it("uses the server's chain when the plan carries one (api 22d83acd)", () => {
+    const rows = read([
+      pass("root", "canceled", "r0", "sc-1", "FAI"),
+      pass("mid", "canceled", "r1", "sc-2", "FAI"),
+      pass("off", "canceled", "elsewhere", "sc-3", "FAI"),
+    ]);
+    const plan = {
+      id: "rep2",
+      repair_of: { plan: { id: "r1" } },
+      chain: [{ id: "r0" }, { id: "r1" }, { id: "rep2" }],
+    };
+    expect(impactOf(rows, plan, false).rows.map((r) => r.id)).toEqual(["root", "mid"]);
+  });
   it("starts from the parent when opened on a repair, and names the provider only when it ended it", () => {
     const rows = read([
       {
