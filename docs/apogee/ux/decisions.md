@@ -233,4 +233,4 @@ requirement` disclosure in the row allows splitting when needed. The approver se
 the console shows the absence (`—` in the code column, with the name carrying identity) and, where the
 user can fix it, a `Not set · Add code` affordance. It never derives a stand-in (`HAR` from
 "Hartebeesthoek"): a derived code looks real, can collide, and differs from the one that gets set later,
-so one station ends up with two codes across screens.
+so one station ends up with two codes across screens. Applies to reads too: the server returns `null`, not a derived value (the HAR/PUN/SAN seen on Ground stations came from the stations read's fallback, per fe-setup).
