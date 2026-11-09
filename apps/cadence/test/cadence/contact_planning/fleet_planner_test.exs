@@ -12,7 +12,8 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
     FleetPlanner,
     FleetPlanningPolicies,
     FleetPlanningRuns,
-    FleetRepairs
+    FleetRepairs,
+    RepairChain
   }
 
   alias Cadence.Control.Contacts, as: ControlContacts
@@ -479,6 +480,54 @@ defmodule Cadence.ContactPlanning.FleetPlannerTest do
 
     refute hd(repair_items).contact_opportunity_snapshot_id ==
              locked_snapshot.contact_opportunity_snapshot_id
+
+    second_repair_from_the_chain(context, source, repaired, hd(repair_items), locked_snapshot)
+  end
+
+  # qa #30: the repair persisted which lost booking its new pass replaces; once a booking the
+  # source still held is lost too, the next repair starts from the chain head, keeps the first
+  # repair's booking and only replaces the newly lost one.
+  defp second_repair_from_the_chain(context, source, repaired, replacement, alpha) do
+    {:ok, run} =
+      FleetPlanningRuns.fetch(@organization_id, @mission_id, repaired.run.fleet_planning_run_id)
+
+    assert [{replacement_id, _lost}] = Map.to_list(run.result_summary_document["replaces"])
+    assert replacement_id == replacement.contact_opportunity_snapshot_id
+
+    {:ok, repair_plan, _} =
+      ManagementContacts.fetch_plan(@organization_id, @mission_id, repaired.plan.contact_plan_id)
+
+    {:ok, source_plan, _} =
+      ManagementContacts.fetch_plan(@organization_id, @mission_id, source.plan.contact_plan_id)
+
+    mark_execution_item!(
+      repair_plan,
+      %{contact_opportunity_snapshot_id: replacement_id},
+      :reserved
+    )
+
+    mark_execution_item!(source_plan, alpha, :rejected)
+
+    {:ok, chain} = RepairChain.load(@organization_id, @mission_id, source.plan.contact_plan_id)
+    assert chain.head == repaired.plan.contact_plan_id
+    alpha_id = alpha.contact_opportunity_snapshot_id
+    assert [%{contact_opportunity_snapshot_id: ^alpha_id}] = RepairChain.lost_bookings(chain)
+
+    assert {:ok, second} =
+             FleetRepairs.repair(
+               context.member_scope,
+               @mission_id,
+               repaired.run.fleet_planning_run_id,
+               repaired.plan.contact_plan_id,
+               repaired.plan_version.version,
+               run_attrs(),
+               now: DateTime.add(@now, 5, :second),
+               list_routes: &list_routes/3,
+               search_opportunities: &search_opportunities/5
+             )
+
+    assert second.plan_version.locked_snapshot_ids == [replacement_id]
+    assert length(second.plan_version.selected_snapshot_ids) == 1
   end
 
   defp create_requirement!(scope, suffix) do

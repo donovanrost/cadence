@@ -10,15 +10,14 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
   alias Cadence.Auth.Scope
 
   alias Cadence.ContactPlanning.{
-    ContactPlanExecutions,
     ContactPlans,
     FleetPlanner,
     FleetPlanningPolicies,
     FleetPlanningRun,
-    FleetPlanningRuns
+    FleetPlanningRuns,
+    RepairChain
   }
 
-  @locked_execution_states [:reserved, :uncertain, :requesting]
   @repairable_plan_states [:executing, :partially_reserved, :failed]
 
   @type source :: %{
@@ -26,6 +25,7 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
           required(:plan) => struct(),
           required(:plan_version) => struct(),
           required(:locked_commitments) => [struct()],
+          required(:chain) => RepairChain.t(),
           required(:repair_attempt) => pos_integer()
         }
 
@@ -117,39 +117,38 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
     with {:ok, run} <- FleetPlanningRuns.fetch(organization_id, mission_id, run_id),
          {:ok, plan, current_version} <- ContactPlans.fetch(organization_id, mission_id, plan_id),
          :ok <- exact_source(run, plan, current_version, plan_version),
-         :ok <- repairable_plan(plan),
+         {:ok, chain} <- RepairChain.load(organization_id, mission_id, plan_id),
+         :ok <- repairable(plan, chain),
          {:ok, attempt} <- repair_attempt(organization_id, mission_id, run),
-         locked <- source_locked_commitments(plan, current_version) do
+         locked <- source_locked_commitments(plan, chain) do
       {:ok,
        %{
          run: run,
          plan: plan,
          plan_version: current_version,
          locked_commitments: locked,
+         chain: chain,
          repair_attempt: attempt
        }}
     end
   end
 
-  defp source_locked_commitments(plan, version) do
-    execution_locked_ids =
+  # qa #30: the day's current bookings across the repair chain (root plan plus applied
+  # repairs) are locked, so bookings an earlier repair made aren't re-sent, and a pass whose
+  # booking was lost is re-planned even when a later plan had locked it.
+  defp source_locked_commitments(plan, chain) do
+    live =
+      chain
+      |> RepairChain.live_items()
+      |> MapSet.new(&{&1.contact_plan_id, &1.contact_opportunity_snapshot_id})
+
+    chain.plans
+    |> Enum.flat_map(fn plan_id ->
       plan.organization_id
-      |> ContactPlanExecutions.list(plan.mission_id, plan.contact_plan_id, version.version)
-      |> Enum.filter(&(&1.lifecycle_state in @locked_execution_states))
-      |> Enum.map(& &1.contact_opportunity_snapshot_id)
-
-    locked_ids =
-      version.locked_snapshot_ids
-      |> Enum.concat(execution_locked_ids)
-      |> MapSet.new()
-
-    plan.organization_id
-    |> ContactPlans.selected_snapshots(
-      plan.mission_id,
-      plan.contact_plan_id,
-      version.version
-    )
-    |> Enum.filter(&MapSet.member?(locked_ids, &1.contact_opportunity_snapshot_id))
+      |> ContactPlans.selected_snapshots(plan.mission_id, plan_id, chain.versions[plan_id])
+      |> Enum.filter(&MapSet.member?(live, {plan_id, &1.contact_opportunity_snapshot_id}))
+    end)
+    |> Enum.uniq_by(& &1.contact_opportunity_snapshot_id)
     |> Enum.sort_by(&{&1.starts_at, &1.contact_opportunity_snapshot_id})
   end
 
@@ -170,8 +169,15 @@ defmodule Cadence.ContactPlanning.FleetRepairs do
     end
   end
 
-  defp repairable_plan(%{lifecycle_state: state}) when state in @repairable_plan_states, do: :ok
-  defp repairable_plan(_plan), do: {:error, :fleet_repair_source_plan_not_repairable}
+  # A day is repairable while its chain has lost bookings, whatever the head plan reads.
+  defp repairable(%{lifecycle_state: state}, _chain) when state in @repairable_plan_states,
+    do: :ok
+
+  defp repairable(_plan, chain) do
+    if RepairChain.lost_bookings(chain) == [],
+      do: {:error, :fleet_repair_source_plan_not_repairable},
+      else: :ok
+  end
 
   defp repair_attempt(organization_id, mission_id, run) do
     repair_depth(organization_id, mission_id, run, 1, MapSet.new())
