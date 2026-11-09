@@ -36,6 +36,13 @@ export const STAGE_STATE: Readonly<Record<MemberStage, OpState>> = {
   excluded: "off",
 };
 
+/** A member's stage in words, in its group's terms: a sent-back member wasn't rejected. */
+export function memberStageWord(stage: MemberStage, group: GroupState): string {
+  if (stage === "rejected" && group === "sent_back") return "Sent back";
+  if (stage === "rejected" && group === "rejected") return "NO-GO";
+  return STAGE_WORDS[stage];
+}
+
 export const GROUP_STATE_WORDS: Readonly<Record<GroupState, string>> = {
   approval_pending: "Waiting for a second GO",
   queued: "GO given · released to the queue",

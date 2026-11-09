@@ -52,7 +52,7 @@ const queueRows = computed(() =>
       </TakeoverHeader>
       <ApPageHeader
         :label="reviewing(g) ? undefined : g.title"
-        :title="reviewing(g) ? g.title : headline(g)"
+        :title="reviewing(g) ? g.title : headline(g, req.nameOf)"
       >
         <template #status
           ><ApTag :state="GROUP_STATE[g.state]" :label="GROUP_STATE_WORDS[g.state]"

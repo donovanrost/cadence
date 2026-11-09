@@ -12,7 +12,7 @@ import {
   ApTag,
 } from "@/ui";
 import type { Group } from "../groups/show.ts";
-import { eventText, STAGE_STATE, STAGE_WORDS, type PersonName } from "../groups/words.ts";
+import { eventText, memberStageWord, STAGE_STATE, type PersonName } from "../groups/words.ts";
 import AbortPanel from "./AbortPanel.vue";
 import { abortable, pipeline } from "./uplink.ts";
 
@@ -90,10 +90,10 @@ const pos = (n: number) => String(n + 1).padStart(2, "0");
           <span class="min-w-0 truncate font-mono text-sm text-text-3">
             <template v-for="m in t.members" :key="m.request_id"
               >{{ pos(m.position) }} {{ m.command_name ?? m.command_id }} ·
-              {{ STAGE_WORDS[m.stage] }}&ensp;</template
+              {{ memberStageWord(m.stage, group.state) }}&ensp;</template
             >
           </span>
-          <ApTag :state="STAGE_STATE[t.stage]" :label="STAGE_WORDS[t.stage]" />
+          <ApTag :state="STAGE_STATE[t.stage]" :label="memberStageWord(t.stage, group.state)" />
         </li>
       </ul>
     </ApPanel>

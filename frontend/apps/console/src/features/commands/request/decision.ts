@@ -18,15 +18,20 @@ export type DecisionOption = Readonly<{
   commitLabel: string;
 }>;
 
-/** Targets any re-check marked HOLD or NO-GO. */
+/**
+ * Targets a re-check marked HOLD or NO-GO, i.e. candidates to exclude. The contact check doesn't
+ * count: waiting for a booked pass is the normal release path, not a reason to drop a target.
+ */
 export function flaggedTargets(
   review: Preflight | null,
   nameOf: (spacecraftId: string) => string,
 ): Flagged[] {
   if (!review) return [];
   const ids = new Set<string>();
-  for (const check of review.checks)
+  for (const check of review.checks) {
+    if (check.key === "contact") continue;
     for (const t of check.per_target) if (t.result !== "go") ids.add(t.spacecraft_id);
+  }
   return [...ids].map((spacecraftId) => ({ spacecraftId, name: nameOf(spacecraftId) }));
 }
 

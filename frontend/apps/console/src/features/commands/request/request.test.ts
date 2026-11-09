@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { preflightReader, type Preflight } from "../groups/api.ts";
 import { groupOf, showBody } from "../groups/fixtures.ts";
-import { eventText } from "../groups/words.ts";
+import { eventText, memberStageWord } from "../groups/words.ts";
 import { cannotDecide, decisionOptions, flaggedTargets, noGoAfter } from "./decision.ts";
 import { abortable, headline, pipeline } from "./uplink.ts";
 
@@ -40,10 +40,17 @@ const contactHold = {
   evidence: {},
 };
 const name = (id: string) => id.toUpperCase();
+const actorDoc = { actor_kind: "user", user_id: "user-2" };
 
 describe("approve decision", () => {
   it("offers GO excluding only the flagged targets", () => {
-    const flagged = flaggedTargets(review([contactHold]), name);
+    const identity = {
+      key: "identity",
+      result: "no_go",
+      per_target: [{ spacecraft_id: "sc-2", result: "no_go", reason: "no_uplink_route" }],
+      evidence: {},
+    };
+    const flagged = flaggedTargets(review([contactHold, identity]), name);
     expect(flagged).toEqual([{ spacecraftId: "sc-2", name: "SC-2" }]);
     const opts = decisionOptions(two, flagged);
     expect(opts.map((o) => [o.value, o.commitLabel])).toEqual([
@@ -86,7 +93,7 @@ describe("uplink", () => {
       progress: { no_verifier: 2 },
       targets: [target("sc-1", "no_verifier"), target("sc-2", "no_verifier")],
     });
-    expect(headline(g)).toBe("2 executed · not verifiable");
+    expect(headline(g, () => "Ana")).toBe("2 executed · not verifiable");
     expect(pipeline(g).find((t) => t.key === "verified")?.value).toBe(0);
     expect(abortable(g)).toBe(false);
   });
@@ -102,7 +109,7 @@ describe("uplink", () => {
         target("sc-3", "queued_for_contact"),
       ],
     });
-    expect(headline(g)).toBe("1 of 3 verified · 1 need you");
+    expect(headline(g, () => "Ana")).toBe("1 of 3 verified · 1 need you");
     expect(abortable(g)).toBe(true);
   });
 
@@ -149,5 +156,35 @@ describe("abort event (live shape)", () => {
     expect(aborted && eventText(aborted, () => "You")).toBe(
       "You aborted: “e2e” · 1 canceled, 0 already started",
     );
+  });
+});
+
+describe("closed requests and exclusions (qa matrix nits)", () => {
+  const people = () => "Ana";
+  it("says how a closed request closed", () => {
+    expect(headline(groupOf({ state: "rejected", decided_by: actorDoc }), people)).toBe(
+      "Rejected by Ana · nothing radiated",
+    );
+    expect(headline(groupOf({ state: "sent_back", decided_by: actorDoc }), people)).toBe(
+      "Sent back by Ana · edit and resend",
+    );
+    expect(headline(groupOf({ state: "aborted", progress: { canceled: 2 } }), people)).toBe(
+      "Aborted · nothing radiated",
+    );
+    expect(memberStageWord("rejected", "sent_back")).toBe("Sent back");
+    expect(memberStageWord("rejected", "rejected")).toBe("NO-GO");
+  });
+
+  it("doesn't offer exclusions for targets that only wait for a pass", () => {
+    expect(flaggedTargets(review([contactHold]), name)).toEqual([]);
+    const conflict = {
+      key: "identity",
+      result: "no_go",
+      per_target: [{ spacecraft_id: "sc-2", result: "no_go", reason: "no_uplink_route" }],
+      evidence: {},
+    };
+    expect(flaggedTargets(review([contactHold, conflict]), name)).toEqual([
+      { spacecraftId: "sc-2", name: "SC-2" },
+    ]);
   });
 });
