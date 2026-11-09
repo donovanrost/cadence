@@ -17,11 +17,12 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
       for i <- 1..2 do
         craft = TestFixtures.persist_spacecraft!(mission, display_name: "SC-#{i}")
 
-        CommandAuthoringFixtures.target!(org.organization_id, mission.mission_id, %{
-          spacecraft_id: craft.spacecraft_id
-        })
+        endpoint =
+          CommandAuthoringFixtures.target!(org.organization_id, mission.mission_id, %{
+            spacecraft_id: craft.spacecraft_id
+          })
 
-        craft.spacecraft_id
+        {craft.spacecraft_id, endpoint.source_endpoint_id}
       end
 
     %{
@@ -40,7 +41,10 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
     Map.merge(
       %{
         "title" => "Load shed",
-        "targets" => Enum.map(c.crafts, &%{"spacecraft_id" => &1}),
+        "targets" =>
+          Enum.map(c.crafts, fn {id, endpoint} ->
+            %{"spacecraft_id" => id, "source_endpoint_id" => endpoint}
+          end),
         "commands" => [
           %{"command_id" => c.ids[command], "argument_values_json" => Jason.encode!(args)}
         ]
@@ -194,5 +198,41 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
 
     assert %{"error" => %{"code" => "command_group_not_found"}} =
              as(c.requester) |> get(base(c) <> "/command-groups/nope") |> json_response(404)
+  end
+
+  test "command endpoints: route resolution and candidates per spacecraft", c do
+    [{id, endpoint} | _] = c.crafts
+
+    data =
+      as(c.requester)
+      |> get(base(c) <> "/command-endpoints?spacecraft_ids=#{id}")
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    # The fixture spacecraft have endpoints but no routing rules.
+    assert [
+             %{
+               "spacecraft_id" => ^id,
+               "failure" => "no_uplink_route",
+               "resolved_source_endpoint_id" => nil
+             } = row
+           ] =
+             data["spacecraft"]
+
+    assert [%{"id" => ^endpoint, "managed" => false}] = row["endpoints"]
+
+    # Without an explicit endpoint, preflight says the same thing.
+    pre =
+      preflight(
+        c,
+        Map.put(body(c, "SET_SIGNED", %{"counter" => 1}), "targets", [%{"spacecraft_id" => id}])
+      )
+
+    identity = Enum.find(pre["data"]["checks"], &(&1["key"] == "identity"))
+
+    assert %{
+             "result" => "no_go",
+             "per_target" => [%{"reason" => "no_uplink_route", "routes" => []}]
+           } = identity
   end
 end

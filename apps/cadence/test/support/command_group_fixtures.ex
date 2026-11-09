@@ -31,6 +31,7 @@ defmodule Cadence.CommandGroupFixtures do
           )
 
         CommandAuthoringFixtures.target!(c.org, c.mission, %{
+          source_endpoint_id: Cadence.SourceEndpoints.managed_source_endpoint_id(id),
           spacecraft_id: id,
           display_name: "SC-#{i}"
         })
@@ -47,7 +48,16 @@ defmodule Cadence.CommandGroupFixtures do
     Map.merge(
       %{
         title: "Load shed",
-        targets: Enum.map(spacecraft_ids, &%{spacecraft_id: &1}),
+        # The operator's explicit endpoint (an audited override); route-based resolution is
+        # covered by Cadence.Comms.UplinkResolutionTest.
+        targets:
+          Enum.map(
+            spacecraft_ids,
+            &%{
+              spacecraft_id: &1,
+              source_endpoint_id: Cadence.SourceEndpoints.managed_source_endpoint_id(&1)
+            }
+          ),
         commands: commands,
         priority: 3
       },

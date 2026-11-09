@@ -486,7 +486,9 @@ defmodule Cadence.SourceEndpoints do
     end
   end
 
-  defp managed_source_endpoint_id(spacecraft_id), do: "spacecraft_runtime:" <> spacecraft_id
+  @doc "The id of the spacecraft's managed source endpoint, which every route materializes on."
+  @spec managed_source_endpoint_id(binary()) :: binary()
+  def managed_source_endpoint_id(spacecraft_id), do: "spacecraft_runtime:" <> spacecraft_id
 
   defp update_managed_source_endpoint(
          %SourceEndpointRow{} = row,

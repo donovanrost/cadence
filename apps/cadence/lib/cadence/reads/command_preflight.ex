@@ -12,6 +12,7 @@ defmodule Cadence.Reads.CommandPreflight do
 
   alias Cadence.Commanding
   alias Cadence.Commanding.Groups.{CommandGroup, Validation}
+  alias Cadence.Comms.UplinkResolution
   alias Cadence.Reads.{CommandGroups, Passes}
 
   @contact_horizon_s 6 * 3_600
@@ -19,6 +20,11 @@ defmodule Cadence.Reads.CommandPreflight do
 
   @spec run(binary(), binary(), map(), map()) :: {:ok, map()} | {:error, term()}
   def run(organization_id, mission_id, requested_by, draft) do
+    draft = %{
+      draft
+      | targets: UplinkResolution.annotate(organization_id, mission_id, draft.targets)
+    }
+
     case Validation.validate(organization_id, mission_id, requested_by, draft) do
       {:ok, validated} ->
         {:ok, result(organization_id, mission_id, draft, validated)}
@@ -90,8 +96,16 @@ defmodule Cadence.Reads.CommandPreflight do
   defp identity_check(%{identity_failures: []}), do: check(:identity, :go, [], %{})
 
   defp identity_check(%{identity_failures: failures}) do
+    # `routes` names the competing (or missing) uplink routes for profile routing links.
     per_target =
-      Enum.map(failures, &%{spacecraft_id: &1.spacecraft_id, result: :no_go, reason: &1.failure})
+      Enum.map(failures, fn failure ->
+        %{
+          spacecraft_id: failure.spacecraft_id,
+          result: :no_go,
+          reason: failure.failure,
+          routes: Map.get(failure, :failure_detail, [])
+        }
+      end)
 
     check(:identity, :no_go, per_target, %{count: length(failures)})
   end

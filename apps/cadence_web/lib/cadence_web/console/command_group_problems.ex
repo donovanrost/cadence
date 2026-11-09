@@ -34,10 +34,13 @@ defmodule CadenceWeb.Console.CommandGroupProblems do
   defp failures_details(failures) do
     %{
       identity:
-        Enum.map(
-          Map.get(failures, :identity_failures, []),
-          &%{spacecraft_id: &1.spacecraft_id, reason: to_string(&1.failure)}
-        ),
+        Enum.map(Map.get(failures, :identity_failures, []), fn failure ->
+          %{
+            spacecraft_id: failure.spacecraft_id,
+            reason: to_string(failure.failure),
+            routes: Map.get(failure, :failure_detail, [])
+          }
+        end),
       catalog:
         Enum.map(Map.get(failures, :catalog_failures, []), fn failure ->
           %{

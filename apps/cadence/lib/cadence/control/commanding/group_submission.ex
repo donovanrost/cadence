@@ -13,6 +13,7 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
   require Logger
 
   alias Cadence.Commanding.{Dispatcher, ProcessNamespace, RequestValidation}
+  alias Cadence.Comms.UplinkResolution
   alias Cadence.Commanding.Groups.{Admission, CommandGroup, GroupStore, Validation}
   alias Cadence.Management.Commanding.{ApprovedCommand, RequestAuthoring}
   alias Cadence.Platform.ScopedReadUpdates
@@ -25,6 +26,7 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
          actor = %{"actor_kind" => "user", "user_id" => fresh.user.user_id},
          :ok <- not_replayed(org, mission_id, Keyword.get(opts, :operation_id)),
          :ok <- required_text(draft),
+         draft = %{draft | targets: UplinkResolution.annotate(org, mission_id, draft.targets)},
          {:ok, validated} <- Validation.validate(org, mission_id, actor, draft),
          :ok <- admissible(validated, draft, Keyword.get(opts, :preflight_digest)) do
       org

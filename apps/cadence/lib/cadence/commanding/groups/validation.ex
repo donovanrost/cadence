@@ -95,7 +95,7 @@ defmodule Cadence.Commanding.Groups.Validation do
       targets: Enum.map(resolved, &Map.delete(&1, :endpoint)),
       identity_failures:
         Enum.filter(resolved, & &1.failure)
-        |> Enum.map(&Map.take(&1, [:index, :spacecraft_id, :failure])),
+        |> Enum.map(&Map.take(&1, [:index, :spacecraft_id, :failure, :failure_detail])),
       catalog_failures: catalog_failures,
       commands: commands,
       members: members,
@@ -111,6 +111,22 @@ defmodule Cadence.Commanding.Groups.Validation do
     |> Enum.group_by(& &1.spacecraft_id)
   end
 
+  # A target the caller already resolved to a NO-GO (Comms.UplinkResolution) keeps that reason.
+  defp resolve_target(%{spacecraft_id: id, failure: failure} = target, index, _endpoints)
+       when not is_nil(failure) do
+    %{
+      index: index,
+      spacecraft_id: id,
+      source_endpoint_id: nil,
+      scid: nil,
+      name: nil,
+      endpoint: nil,
+      failure: failure,
+      failure_detail: Map.get(target, :failure_detail, []),
+      resolution: nil
+    }
+  end
+
   defp resolve_target(%{spacecraft_id: id} = target, index, endpoints) do
     {endpoint, failure} =
       choose_endpoint(Map.get(endpoints, id, []), Map.get(target, :source_endpoint_id))
@@ -122,7 +138,9 @@ defmodule Cadence.Commanding.Groups.Validation do
       scid: endpoint && endpoint.scid,
       name: endpoint && endpoint.display_name,
       endpoint: endpoint,
-      failure: failure || missing_scid(endpoint)
+      failure: failure || missing_scid(endpoint),
+      failure_detail: [],
+      resolution: Map.get(target, :resolution)
     }
   end
 

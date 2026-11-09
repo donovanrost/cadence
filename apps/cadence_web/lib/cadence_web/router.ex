@@ -772,6 +772,7 @@ defmodule CadenceWeb.Router do
       get("/commands", CommandCatalogController, :index)
       get("/commands/:command_id", CommandCatalogController, :show)
       get("/command-policies", CommandGroupController, :policies)
+      get("/command-endpoints", CommandGroupController, :endpoints)
       post("/command-groups/preflight", CommandGroupController, :preflight)
       get("/command-groups", CommandGroupController, :index)
       post("/command-groups", CommandGroupController, :create)

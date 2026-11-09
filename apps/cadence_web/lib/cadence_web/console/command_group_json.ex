@@ -53,6 +53,9 @@ defmodule CadenceWeb.Console.CommandGroupJSON do
     |> encode()
   end
 
+  @spec endpoints([map()]) :: map()
+  def endpoints(endpoints), do: encode(%{spacecraft: endpoints})
+
   @spec policies([map()]) :: map()
   def policies(policies), do: encode(%{policies: policies})
 

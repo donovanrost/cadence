@@ -9,7 +9,7 @@ defmodule CadenceWeb.Console.CommandGroupController do
   alias Cadence.Commanding.CommandPolicy
   alias Cadence.Commanding.Groups.GroupStore
   alias Cadence.Control.Commanding.{GroupAbort, GroupDecision, GroupNotes, GroupSubmission}
-  alias Cadence.Reads.{CommandGroups, CommandPreflight}
+  alias Cadence.Reads.{CommandEndpoints, CommandGroups, CommandPreflight}
   alias CadenceWeb.Console.{CommandGroupJSON, CommandGroupParams, CommandGroupProblems}
 
   def preflight(conn, params) do
@@ -106,6 +106,17 @@ defmodule CadenceWeb.Console.CommandGroupController do
     else
       error -> CommandGroupProblems.respond(conn, error)
     end
+  end
+
+  def endpoints(conn, params) do
+    ids =
+      case params["spacecraft_ids"] do
+        value when is_binary(value) -> value |> String.split(",", trim: true) |> Enum.take(1_000)
+        _other -> []
+      end
+
+    endpoints = CommandEndpoints.for_spacecraft(org(conn), mission(conn), ids)
+    json(conn, %{data: CommandGroupJSON.endpoints(endpoints)})
   end
 
   def policies(conn, _params) do

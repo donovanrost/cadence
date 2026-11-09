@@ -111,8 +111,14 @@ operator are always the session user (DECISIONS #30). Commanding needs organizat
  "requested_approver_user_id": null, "sent_back_from": null}
 ```
 
-- `targets[]`: `source_endpoint_id` is needed only when a spacecraft has several endpoints
-  (otherwise preflight says `ambiguous_source_endpoint`). `target_query` is stored as evidence.
+- `targets[]`: leave `source_endpoint_id` null and the server resolves the uplink endpoint from the
+  target's routes (DECISIONS #41): its **primary** active, enabled route with an outbound or
+  bidirectional leg (counted per profile rule, so one rule across several stations is one route).
+  Identity NO-GO reasons: `no_uplink_route` and `multiple_primary_uplink_routes`, with
+  `per_target[].routes[] {id, name, direction, role, origin, transport_id, ground_station_id,
+  profile_id, profile_rule_id}` naming the competing (or existing) routes, so you can link to the
+  profile's routing. Setting `source_endpoint_id` is an explicit override, stored as evidence on the
+  group target (`resolution.via: "override"`). `target_query` is stored as evidence too.
 - `argument_values_json`: a JSON object string, the same rules as single requests (64-bit safe).
 - Bounds: N ≤ 1,000, K ≤ 16, N×K ≤ 5,000.
 
@@ -215,6 +221,14 @@ Also new, at release time:
 `{"note": "…"}` (≤ 4,000 bytes, required). Appends a `note` event by the session operator. Allowed in
 any state, including finished groups. Returns the group. Errors: `422 note_required`,
 `404 command_group_not_found`.
+
+### `GET /command-endpoints?spacecraft_ids=a,b` (Compose's endpoint picker)
+
+Per spacecraft (≤ 1,000): `{spacecraft_id, resolved_source_endpoint_id, failure, routes[],
+endpoints: [{id, name, scid, managed}]}`. `resolved_source_endpoint_id` is what preflight will use
+when you send no override; `failure` (`no_uplink_route | multiple_primary_uplink_routes`) says why
+there's none. `endpoints` are the spacecraft's source endpoints to offer as an explicit override;
+`managed` marks the one routes materialize on.
 
 ### `GET /command-policies` (O4)
 

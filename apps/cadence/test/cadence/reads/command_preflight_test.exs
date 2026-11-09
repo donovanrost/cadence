@@ -58,7 +58,7 @@ defmodule Cadence.Reads.CommandPreflightTest do
 
     assert %{
              result: :no_go,
-             per_target: [%{spacecraft_id: "nobody", reason: :no_source_endpoint}]
+             per_target: [%{spacecraft_id: "nobody", reason: :source_endpoint_not_found}]
            } =
              result(preflight.checks, :identity)
 
