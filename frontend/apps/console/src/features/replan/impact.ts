@@ -29,7 +29,8 @@ function why(p: Pass & { state: LostState }): string {
     case "failed":
       return `Booking with ${provider} failed`;
     case "canceled":
-      return `Canceled by ${provider}`;
+      // U20: the passes read doesn't say who canceled (an operator can too; qa #30).
+      return `Canceled at ${provider}`;
     case "unknown":
       return `State unknown at ${provider}`;
   }
