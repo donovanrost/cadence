@@ -56,6 +56,31 @@ describe("SubmitSheet", () => {
     wrapper.unmount();
   });
 
+  it("ticked first, one shared box covers every gap (qa #27); causes print once (qa #26)", async () => {
+    const twice = { ...gap("r2"), why: ["provider_unavailable", "provider_unavailable"] };
+    const wrapper = mount(SubmitSheet, {
+      props: {
+        plan: { ...plan, unmet: [gap("r1"), twice] },
+        nameOf: () => null,
+        commitLabel: "Accept 2 gaps and submit",
+        confirm: "",
+        busy: false,
+      },
+      attachTo: document.body,
+    });
+    await wrapper.get("input[type=checkbox]").setValue(true);
+    expect(wrapper.findAll("textarea")).toHaveLength(1);
+    await wrapper.get("textarea").setValue("Past windows on today's draft.");
+    expect(wrapper.text()).not.toContain("still need");
+    expect(wrapper.findAll("li").at(-1)?.text()).toBe("r2 · Provider reports no availability");
+    await wrapper.findAll("footer button").at(-1)?.trigger("click");
+    expect(wrapper.emitted("submit")?.[0]?.[0]).toEqual([
+      { requirement_id: "r1", reason: "Past windows on today's draft." },
+      { requirement_id: "r2", reason: "Past windows on today's draft." },
+    ]);
+    wrapper.unmount();
+  });
+
   it("refuses reasons shorter than 10 characters", async () => {
     const wrapper = mount(SubmitSheet, {
       props: {

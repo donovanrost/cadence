@@ -37,7 +37,9 @@ const keyOf = (id: string | null) => id ?? "—";
 const reasons = ref<Record<string, string>>({});
 const overrides = ref<Record<string, string>>({});
 const split = ref<Record<string, boolean>>({});
+/** "Same reason for all" (qa #27): one shared reason replaces every per-spacecraft box. */
 const sameForAll = ref(false);
+const shared = ref("");
 const rules = computed(() => new Map(props.plan.demand.rules.map((r) => [r.requirement_id, r])));
 /** `11 NOV 00:00–06:00Z · ≥ 1 contact`: each occurrence's window tells identical rules apart (ux #9). */
 function requirementLine(requirementId: string): string {
@@ -56,6 +58,7 @@ const valid = (text: string | undefined) => {
 };
 /** The reason a requirement will be acknowledged with, or null when it has none yet. */
 function reasonFor(group: string, requirementId: string): string | null {
+  if (sameForAll.value) return valid(shared.value) ? shared.value.trim() : null;
   const own = split.value[group] ? overrides.value[requirementId] : undefined;
   const text = own !== undefined && own.trim() !== "" ? own : reasons.value[group];
   return valid(text) ? (text ?? "").trim() : null;
@@ -67,12 +70,17 @@ const missing = computed(
     ).length,
 );
 
+// Ticking seeds the shared reason from the first one already written; per-spacecraft reasons are
+// kept, so unticking brings them back.
 watch(sameForAll, (on) => {
-  const first = groups.value.map((g) => reasons.value[keyOf(g.spacecraftId)]).find((r) => valid(r));
-  if (!on || !first) return;
-  for (const g of groups.value)
-    if (!valid(reasons.value[keyOf(g.spacecraftId)])) reasons.value[keyOf(g.spacecraftId)] = first;
+  if (!on || valid(shared.value)) return;
+  shared.value =
+    groups.value.map((g) => reasons.value[keyOf(g.spacecraftId)]).find((r) => valid(r)) ?? "";
 });
+const requirementCount = computed(() => groups.value.reduce((n, g) => n + g.unmet.length, 0));
+/** The causes, once each (qa #26: the server can repeat one). */
+const causeText = (why: readonly string[]) =>
+  [...new Set(why.map(reasonText))].join(" · ") || "rule not met";
 
 let opener: HTMLElement | null = null;
 const titleId = `ap-submit-${Math.random().toString(36).slice(2, 9)}`;
@@ -155,6 +163,14 @@ defineExpose({ open, close });
           />
           Same reason for all
         </label>
+        <ApTextarea
+          v-if="sameForAll"
+          v-model="shared"
+          :label="`Reason for accepting all ${plural(groups.length, 'gap')}`"
+          :rows="2"
+          :maxlength="REASON_MAX"
+          :hint="`At least ${REASON_MIN} characters. Recorded for each of the ${plural(requirementCount, 'requirement')}.`"
+        />
         <div
           v-for="group in groups"
           :key="keyOf(group.spacecraftId)"
@@ -170,10 +186,11 @@ defineExpose({ open, close });
           <ul class="m-0 list-none p-0 font-mono text-xs text-text-3">
             <li v-for="u in group.unmet" :key="u.requirement_id">
               {{ requirementLine(u.requirement_id) }} ·
-              {{ u.why.map(reasonText).join(" · ") || "rule not met" }}
+              {{ causeText(u.why) }}
             </li>
           </ul>
           <ApTextarea
+            v-if="!sameForAll"
             :model-value="reasons[keyOf(group.spacecraftId)] ?? ''"
             :label="`Reason for accepting this gap`"
             :rows="2"
@@ -182,7 +199,7 @@ defineExpose({ open, close });
             @update:model-value="reasons[keyOf(group.spacecraftId)] = $event"
           />
           <details
-            v-if="group.unmet.length > 1"
+            v-if="!sameForAll && group.unmet.length > 1"
             :open="split[keyOf(group.spacecraftId)]"
             @toggle="split[keyOf(group.spacecraftId)] = ($event.target as HTMLDetailsElement).open"
           >
