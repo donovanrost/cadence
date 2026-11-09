@@ -54,7 +54,12 @@ today; another joins by implementing `source/0`, `items/2`, `resolved_since/3` a
 
 Names (spacecraft, station, provider) are resolved by the API layer; the read carries ids.
 
-## Open
+## Late uplink confirmation (#55, `Contacts.LateUplink`)
 
-A provider confirmation of an attested booking doesn't revise the already-scheduled contact, so
-that pass stays without `:command_window` (raised with the director).
+When the provider confirms an attested booking **including** its uplink leg (`uplink.status`
+`included`), the contact gains the uplink path templates and `:command_window` as a new
+scheduled-contact revision (reason `uplink_confirmed`), but only before AOS. After AOS the
+confirmation is recorded on the resolution (`provider_answer_document.uplink = "after_aos"`)
+and the contact stays as it flew. A confirmation without uplink service changes nothing.
+
+A repeated resolve returns `{:booking_already_resolved, actor}` so the UI can name who did it.
