@@ -25,6 +25,7 @@ Query: `from`, `to` (ISO-8601; default `from` = now, `to` = `from` + 24 h; at mo
     "id": "provider_reservation_…", "kind": "contact",
     "state": "confirmed", "pass_phase": "scheduled", "delivery_state": "pending",
     "spacecraft_id": "spacecraft-earendil-312",
+    "spacecraft": {"id": "spacecraft-earendil-312", "name": "EARENDIL-312", "scid": 312},
     "station": {"ref": "SVL", "id": "ground_station_…", "code": "SVL", "name": "Svalbard"},
     "antenna": {"id": "ant-3", "label": null},
     "starts_at": "…", "ends_at": "…",
@@ -39,6 +40,8 @@ Query: `from`, `to` (ISO-8601; default `from` = now, `to` = `from` + 24 h; at mo
 }}
 ```
 
+- `spacecraft`: identity on every line (R01). `name` and `scid` are `null` if the spacecraft was
+  deleted since the booking.
 - `kind` is always `contact` for now. **Opportunities** (provider windows not yet booked) need a
   live provider search per spacecraft and route; they come with scheduling S4 (alternatives), not
   this read.

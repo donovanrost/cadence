@@ -35,6 +35,14 @@ defmodule Cadence.Reads.PassesTest do
       truncated: false,
       reservations: reservations,
       stations: [station("gs-svalbard", "SVL", "Svalbard")],
+      spacecraft: [
+        %Cadence.Spacecraft{
+          spacecraft_id: "sc1",
+          mission_id: "m1",
+          display_name: "SC-1",
+          scid: 101
+        }
+      ],
       filters: filters
     })
   end
@@ -55,6 +63,7 @@ defmodule Cadence.Reads.PassesTest do
         ])
 
       assert pass.kind == "contact"
+      assert pass.spacecraft == %{id: "sc1", name: "SC-1", scid: 101}
       assert pass.state == "confirmed"
       assert pass.station == %{ref: "SVL", id: "gs-svalbard", code: "SVL", name: "Svalbard"}
       assert pass.antenna == %{id: "ant-3", label: nil}

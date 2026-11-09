@@ -45,6 +45,7 @@ defmodule Cadence.Reads.Passes do
       reservations: reservations,
       truncated: truncated?,
       stations: GroundStationStore.list_ground_stations(organization_id, mission_id),
+      spacecraft: Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id),
       filters: filters
     })
   end
@@ -53,12 +54,13 @@ defmodule Cadence.Reads.Passes do
   @spec build(map()) :: map()
   def build(%{reservations: reservations, stations: stations, filters: filters} = input) do
     index = station_index(stations)
+    crafts = Map.new(Map.get(input, :spacecraft, []), &{&1.spacecraft_id, &1})
     states = filters |> Map.get(:states) |> List.wrap() |> MapSet.new()
     station = Map.get(filters, :station)
 
     passes =
       reservations
-      |> Enum.map(&row(&1, index))
+      |> Enum.map(&row(&1, index, crafts))
       |> Enum.filter(&(state_match?(&1, states) and station_match?(&1, station)))
 
     %{from: input.from, to: input.to, truncated: input.truncated, passes: passes}
@@ -71,7 +73,7 @@ defmodule Cadence.Reads.Passes do
   defp station_match?(pass, station),
     do: station in [pass.station.ref, pass.station.id, pass.station.code]
 
-  defp row(%ProviderReservation{} = reservation, index) do
+  defp row(%ProviderReservation{} = reservation, index, crafts) do
     snapshot = snapshot(reservation)
 
     station_ref =
@@ -90,6 +92,7 @@ defmodule Cadence.Reads.Passes do
       pass_phase: atom_text(reservation.pass_phase),
       delivery_state: atom_text(reservation.delivery_state),
       spacecraft_id: reservation.spacecraft_id,
+      spacecraft: spacecraft(reservation.spacecraft_id, crafts),
       station: station(station_ref, index),
       antenna: antenna_ref && %{id: antenna_ref, label: nil},
       starts_at: reservation.starts_at,
@@ -134,6 +137,14 @@ defmodule Cadence.Reads.Passes do
         })
       )
     end)
+  end
+
+  # Identity on every line (CommandFlow R01): name and SCID, nil when the spacecraft is gone.
+  defp spacecraft(id, crafts) do
+    case Map.get(crafts, id) do
+      nil -> %{id: id, name: nil, scid: nil}
+      craft -> %{id: id, name: craft.display_name, scid: craft.scid}
+    end
   end
 
   defp station(nil, _index), do: %{ref: nil, id: nil, code: nil, name: nil}
