@@ -39,6 +39,8 @@ describe("telemetry selection", () => {
 
 const history = (buckets: [string, number][]): History => ({
   point_id: "EPS.VBAT",
+  unit: "V",
+  description: null,
   spacecraft_id: "sc",
   from: "2026-11-08T00:00:00Z",
   to: "2026-11-08T06:00:00Z",
@@ -60,8 +62,8 @@ describe("plot view", () => {
     expect(two?.comparison[0]).toMatchObject({ tone: "text-2", dash: "solid" });
     expect(two?.limits).toEqual([]);
     expect(two?.legend.map((l) => l.label)).toEqual([
-      "EARENDIL-001 › EPS.VBAT",
-      "EARENDIL-002 › EPS.VBAT",
+      "EARENDIL-001 › EPS.VBAT (V)",
+      "EARENDIL-002 › EPS.VBAT (V)",
     ]);
   });
 

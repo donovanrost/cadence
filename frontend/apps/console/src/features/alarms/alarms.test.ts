@@ -9,7 +9,7 @@ function alarm(id: string, sc: string | null, overrides: Partial<Alarm> = {}): A
   return {
     id,
     spacecraft_id: sc,
-    point: { id: "EPS.VBAT", name: "VBAT", subsystem: "EPS" },
+    point: { id: "EPS.VBAT", name: "VBAT", subsystem: "EPS", unit: "V", description: null },
     severity: "critical",
     active: true,
     condition: "red_low",
@@ -42,7 +42,9 @@ describe("alarm rows", () => {
   });
 
   it("filters by point and keeps mission-scope alarms without a spacecraft", () => {
-    const other = alarm("x", null, { point: { id: "GND.LINK", name: "LINK", subsystem: null } });
+    const other = alarm("x", null, {
+      point: { id: "GND.LINK", name: "LINK", subsystem: null, unit: "V", description: null },
+    });
     const rows = alarmRows([alarm("a", null), other], fleet, "GND.LINK");
     expect(rows.map((r) => [r.alarm.id, r.sc])).toEqual([["x", null]]);
   });
@@ -51,7 +53,9 @@ describe("alarm rows", () => {
     const counts = byPoint([
       alarm("a", "1"),
       alarm("b", "2", { severity: "caution" }),
-      alarm("c", "3", { point: { id: "P2", name: "P2", subsystem: null } }),
+      alarm("c", "3", {
+        point: { id: "P2", name: "P2", subsystem: null, unit: "V", description: null },
+      }),
       alarm("d", "4", { active: false }),
     ]);
     expect(counts).toEqual([

@@ -14,6 +14,7 @@ import {
 /** The chart area of B1: history unavailable (503), loading/failed, or the chart + legend. */
 const props = defineProps<{
   pointName: string;
+  unit: string | null;
   rangeLabel: string;
   history: RemoteState<History>;
   view: {
@@ -55,7 +56,7 @@ const value = (v: number) => formatValue(v) ?? "";
         :height="220"
         :step-ms="view.stepMs"
       >
-        {{ pointName }} mean with min–max band · dashed: limits
+        {{ pointName }}{{ unit ? ` (${unit})` : "" }} mean with min–max band · dashed: limits
       </TrendChart>
       <p v-if="view.series.length === 0" class="m-0 pt-2 text-md text-text-3">
         No samples for this point in the last {{ rangeLabel }}.

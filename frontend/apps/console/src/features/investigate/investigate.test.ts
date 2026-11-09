@@ -20,7 +20,7 @@ function alarmRow(id: string, spacecraftId: string, overrides: Partial<Alarm> = 
   return {
     id,
     spacecraft_id: spacecraftId,
-    point: { id: "EPS.VBAT", name: "VBAT", subsystem: "EPS" },
+    point: { id: "EPS.VBAT", name: "VBAT", subsystem: "EPS", unit: "V", description: null },
     severity: "critical",
     active: true,
     condition: "red_low",
@@ -73,6 +73,8 @@ describe("limitSegments", () => {
 describe("history decoding", () => {
   const body = (buckets: unknown[]) => ({
     point_id: "EPS.VBAT",
+    unit: "V",
+    description: null,
     spacecraft_id: "sc",
     from: "2026-11-08T00:00:00Z",
     to: "2026-11-08T01:00:00Z",
@@ -153,7 +155,7 @@ describe("investigate model", () => {
       alarmRow("a", me.id),
       alarmRow("b", "spacecraft-earendil-002"),
       alarmRow("c", "spacecraft-earendil-003", {
-        point: { id: "EPS.OTHER", name: "X", subsystem: null },
+        point: { id: "EPS.OTHER", name: "X", subsystem: null, unit: "V", description: null },
       }),
       alarmRow("d", "spacecraft-earendil-026"),
     ];

@@ -44,7 +44,10 @@ const present = (items: unknown[]) => {
   if (!result.ok) throw result.error;
   return presentQueue(result.value);
 };
-const vbat = { point: { id: "EPS.VBAT", name: "VBAT", subsystem: "EPS" }, condition: "red_low" };
+const vbat = {
+  point: { id: "EPS.VBAT", name: "VBAT", subsystem: "EPS", unit: "V" },
+  condition: "red_low",
+};
 
 describe("action queue (M6)", () => {
   it("expands small alarm groups into Engage rows and keeps big ones grouped", () => {

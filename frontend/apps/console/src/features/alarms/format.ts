@@ -28,3 +28,8 @@ export function formatLimitLike(
   const [int = "0", frac = ""] = Math.abs(limit).toFixed(decimals).split(".");
   return `${limit < 0 ? "−" : ""}${formatCount(Number(int))}.${frac}`;
 }
+
+/** `23.1 V`; the value alone when the unit is unknown (null) or the value is missing. */
+export function withUnit(text: string | null, unit: string | null): string | null {
+  return text === null || unit === null || unit === "" ? text : `${text} ${unit}`;
+}

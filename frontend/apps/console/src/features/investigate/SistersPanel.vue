@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
 import { ApCallout, ApEmptyState, ApListRow, ApPanel, ApRemote } from "@/ui";
-import { formatValue, type Alarm } from "@/features/alarms/index.ts";
+import { formatValue, withUnit, type Alarm } from "@/features/alarms/index.ts";
 import { fleetOpState, type FleetSpacecraft } from "@/features/fleet/index.ts";
 import { sisters } from "./model.ts";
 import { usePointAlarms } from "./useInvestigate.ts";
@@ -71,7 +71,7 @@ const rows = computed(() => {
         >
           <template #sentence>
             <span class="font-mono text-text-3 normal-case">{{ alarm.point.name }}</span>
-            {{ formatValue(row.alarm.value) ?? "—" }}
+            {{ withUnit(formatValue(row.alarm.value), row.alarm.point.unit) ?? "—" }}
           </template>
           <template #title>
             <RouterLink

@@ -9,7 +9,7 @@ import {
   type ApColumn,
 } from "@/ui";
 import { conditionWords, crossedCondition } from "./api.ts";
-import { formatLimitLike, formatValue } from "./format.ts";
+import { formatLimitLike, formatValue, withUnit } from "./format.ts";
 import type { AlarmListRow } from "./list.ts";
 
 /** L1 · Alarm table. The Spacecraft cell links to Investigate for that alarm (rule: name-cell link). */
@@ -70,8 +70,15 @@ const state = (row: AlarmListRow) =>
       >
     </template>
     <template #cell-value="{ row }">
-      <span :class="tint(row)">{{ formatValue(row.alarm.value) ?? "—" }}</span>
-      <span class="text-text-4"> / {{ formatLimitLike(row.limit, row.alarm.value) ?? "—" }}</span>
+      <span :class="tint(row)">{{
+        withUnit(formatValue(row.alarm.value), row.alarm.point.unit) ?? "—"
+      }}</span>
+      <span class="text-text-4">
+        /
+        {{
+          withUnit(formatLimitLike(row.limit, row.alarm.value), row.alarm.point.unit) ?? "—"
+        }}</span
+      >
     </template>
     <template #cell-crossed="{ row }">
       <time

@@ -1,7 +1,12 @@
 import type { RouteLocationRaw } from "vue-router";
 import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
 import { plural, type OpState } from "@/ui";
-import { conditionWords, engineeringValue, formatValue } from "@/features/alarms/index.ts";
+import {
+  conditionWords,
+  engineeringValue,
+  formatValue,
+  withUnit,
+} from "@/features/alarms/index.ts";
 import { GROUP_AT, type QueueItem } from "./queue.ts";
 
 /** Contract: docs/apogee/api/ops.md, `GET /missions/:mission_id/action-queue` (M6). Server-ranked. */
@@ -48,7 +53,14 @@ const itemReader = d.object({
   since: d.nullable(d.timestamp),
   count: d.integer,
   spacecraft: d.array(member, 1_000),
-  point: d.nullable(d.object({ id: d.token, name: d.string, subsystem: d.nullable(d.string) })),
+  point: d.nullable(
+    d.object({
+      id: d.token,
+      name: d.string,
+      subsystem: d.nullable(d.string),
+      unit: d.nullable(d.string),
+    }),
+  ),
   condition: d.nullable(d.token),
   plane: d.nullable(d.integer),
   command: d.nullable(d.object({ id: d.token, name: d.string })),
@@ -124,7 +136,7 @@ function alarmRows(item: ServerItem): QueueItem[] {
     key: `${item.id}|${sc.id}`,
     title: `${sc.name} · ${why}`,
     titleTo: investigate(sc),
-    sentence: `${point} reads ${formatValue(sc.value) ?? "—"}.`,
+    sentence: `${point} reads ${withUnit(formatValue(sc.value), item.point?.unit ?? null) ?? "—"}.`,
     meta: sc.stale ? "LAST KNOWN · TELEMETRY STALE" : null,
     action: { label: "Engage", to: investigate(sc) },
     spacecraftIds: [sc.id],

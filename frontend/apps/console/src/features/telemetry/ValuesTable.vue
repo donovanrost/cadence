@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { formatClock, ApPanel, ApTable, type ApColumn } from "@/ui";
-import { formatValue } from "@/features/alarms/index.ts";
+import { formatValue, withUnit } from "@/features/alarms/index.ts";
 import type { latestRows } from "./plot.ts";
 
 /** T3 · Latest bucket per series (mean, with the bucket's start time). */
@@ -19,7 +19,9 @@ const columns: readonly ApColumn[] = [
       <template #cell-series="{ row }"
         ><span class="font-mono normal-case">{{ row.label }}</span></template
       >
-      <template #cell-value="{ row }">{{ row.last ? formatValue(row.last.mean) : "—" }}</template>
+      <template #cell-value="{ row }">{{
+        row.last ? withUnit(formatValue(row.last.mean), row.unit) : "—"
+      }}</template>
       <template #cell-range="{ row }">{{
         row.last ? `${formatValue(row.last.min)} – ${formatValue(row.last.max)}` : "—"
       }}</template>

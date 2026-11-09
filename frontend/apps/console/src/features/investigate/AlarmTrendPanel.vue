@@ -106,21 +106,34 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
       <div v-else class="flex flex-col gap-3">
         <div class="flex flex-wrap items-end justify-between gap-3">
           <ApStatStrip :columns="3" label="Readouts" class="min-w-[360px] flex-1">
-            <ApStatTile label="Now" :value="formatValue(alarm.value)" :state="tone ?? 'neutral'" />
+            <ApStatTile
+              label="Now"
+              :value="formatValue(alarm.value)"
+              :unit="alarm.point.unit ?? undefined"
+              :state="tone ?? 'neutral'"
+            />
             <ApStatTile
               :label="condition?.startsWith('red') ? 'Red limit' : 'Limit'"
               :value="formatLimitLike(limit, alarm.value)"
+              :unit="alarm.point.unit ?? undefined"
             />
             <ApStatTile
               label="Rate"
               :value="view?.rate == null ? null : formatRate(view.rate)"
-              :caption="view?.rate == null ? 'needs 15 min of data' : 'per hour'"
+              :caption="
+                view?.rate == null
+                  ? 'needs 15 min of data'
+                  : alarm.point.unit
+                    ? `${alarm.point.unit} per hour`
+                    : 'per hour'
+              "
             />
           </ApStatStrip>
           <ApSegmented v-model="range" :options="ranges" label="Chart window" variant="micro" />
         </div>
         <TrendBlock
           :point-name="alarm.point.name"
+          :unit="alarm.point.unit"
           :range-label="rangeLabel"
           :history="trend.history.state.value"
           :view="view"

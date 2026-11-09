@@ -24,7 +24,8 @@ export type PlotView = Readonly<{
   legend: readonly { label: string; style: Style }[];
 }>;
 
-export const seriesLabel = (d: SeriesData) => `${d.sc.name} › ${d.key.pointId}`;
+export const seriesLabel = (d: SeriesData) =>
+  `${d.sc.name} › ${d.key.pointId}${d.history.unit ? ` (${d.history.unit})` : ""}`;
 
 export function plotView(
   data: readonly SeriesData[],
@@ -53,6 +54,7 @@ export function latestRows(data: readonly SeriesData[]) {
       label: seriesLabel(d),
       sc: d.sc,
       pointId: d.key.pointId,
+      unit: d.history.unit,
       last,
     };
   });

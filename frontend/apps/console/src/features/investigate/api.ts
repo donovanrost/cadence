@@ -16,6 +16,8 @@ const bucket = d.object({
 
 const historyShape = d.object({
   point_id: d.token,
+  unit: d.nullable(d.string),
+  description: d.nullable(d.string),
   spacecraft_id: d.nullable(d.token),
   from: d.timestamp,
   to: d.timestamp,

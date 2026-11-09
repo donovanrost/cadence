@@ -24,7 +24,13 @@ export type Thresholds = Decoded<typeof thresholdsReader>;
 const alarm = d.object({
   id: d.token,
   spacecraft_id: d.nullable(d.token),
-  point: d.object({ id: d.token, name: d.string, subsystem: d.nullable(d.string) }),
+  point: d.object({
+    id: d.token,
+    name: d.string,
+    subsystem: d.nullable(d.string),
+    unit: d.nullable(d.string),
+    description: d.nullable(d.string),
+  }),
   severity: d.oneOf(alarmSeverities),
   active: d.boolean,
   condition: d.nullable(d.token),
