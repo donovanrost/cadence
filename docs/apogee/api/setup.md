@@ -318,13 +318,23 @@ Edits go through change sets (`ground_station` and `transport` kinds; see change
   (default 100); pass `next_cursor` back as `cursor`, and `null` means the last page. This changes with
   DECISIONS #3 (rules on the profile).
 
+## `GET /api/console/v1/missions/:mission_id/providers`
+
+`{providers: [{id, name, provider_type, account: {id, name}, status: {lifecycle_state,
+last_validated_at, last_synced_at}, station_count}]}` for the Stations · Providers tab, sorted by
+name. `account.name` is `null` for members (only organization admins can read accounts).
+`station_count` counts active stations whose `provider` is this provider's name. `status` is
+the provider's own record; there is no inferred health.
+
 ## `GET /api/console/v1/missions/:mission_id/config/kinds/:kind/schema`
 
 `{kind, fields: [{path, label, type, unit, enum, range, default, required, help, visible_when}]}`
 for generating change-set edit forms. `kind` is `ground_station` or `transport`; anything else
 gets `422 invalid_params`.
 
-- `ground_station`: `display_name` (required), `provider`, `region`.
+- `ground_station`: `display_name` (required), `code` (required for new stations, `pattern`
+  `^[A-Z0-9]{2,8}$`, unique per mission), `provider` (an `enum` of the mission's provider names when
+  the mission has providers, otherwise free text), `region`.
 - `transport`: `display_name`, `transport_kind`, plus each transport kind's configuration fields
   on the **stored document's paths** (today `tcp_socket`: `configuration.mode`,
   `configuration.direction_capability`, `configuration.host`, `configuration.port`,

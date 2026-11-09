@@ -27,8 +27,9 @@ defmodule CadenceWeb.Console.CommsAPITest do
       |> json_response(200)
       |> Map.fetch!("data")
 
-  test "empty mission lists no stations, transports or rules", c do
+  test "empty mission lists no stations, transports, providers or rules", c do
     assert get_data(c, "/ground-stations") == %{"stations" => []}
+    assert get_data(c, "/providers") == %{"providers" => []}
     assert get_data(c, "/transports") == %{"transports" => []}
     assert get_data(c, "/routing-rules") == %{"rules" => [], "total" => 0, "next_cursor" => nil}
   end
@@ -126,7 +127,11 @@ defmodule CadenceWeb.Console.CommsAPITest do
 
   test "kind schemas generate station and transport forms", c do
     station = get_data(c, "/config/kinds/ground_station/schema")
-    assert Enum.map(station["fields"], & &1["path"]) == ~w(display_name provider region)
+    assert Enum.map(station["fields"], & &1["path"]) == ~w(display_name code provider region)
+    code = Enum.find(station["fields"], &(&1["path"] == "code"))
+    assert %{"required" => true, "pattern" => "^[A-Z0-9]{2,8}$"} = code
+    # No mission providers yet, so provider is free text rather than an empty enum.
+    assert Enum.find(station["fields"], &(&1["path"] == "provider"))["type"] == "string"
 
     transport = get_data(c, "/config/kinds/transport/schema")
     paths = Enum.map(transport["fields"], & &1["path"])

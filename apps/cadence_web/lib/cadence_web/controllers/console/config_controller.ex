@@ -103,7 +103,7 @@ defmodule CadenceWeb.Console.ConfigController do
   end
 
   def kind_schema(conn, %{"kind" => kind}) do
-    case ConfigKindSchema.fields(kind) do
+    case ConfigKindSchema.fields(kind, scope(conn).organization_id, mission_id(conn)) do
       {:ok, fields} ->
         json(conn, %{data: ConfigJSON.encode(%{kind: kind, fields: fields})})
 

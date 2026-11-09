@@ -789,6 +789,7 @@ defmodule CadenceWeb.Router do
       post("/catalog/imports", CatalogImportController, :create)
       get("/catalog/importers", CatalogImportController, :importers)
       get("/ground-stations", CommsController, :stations)
+      get("/providers", CommsController, :providers)
       get("/transports", CommsController, :transports)
       get("/transports/:transport_id", CommsController, :transport)
       get("/routing-rules", CommsController, :routing_rules)

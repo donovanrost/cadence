@@ -4,7 +4,8 @@ defmodule Cadence.Reads.ConfigKindSchema do
   `Cadence.SpacecraftType.Schema` (`path, label, type, unit, enum, range,
   default, required, help, visible_when`), so console edit forms are generated.
 
-  `ground_station` mirrors the kind's validation (name, provider, region).
+  `ground_station` mirrors the kind's validation (name, code, provider,
+  region), with provider options from the mission's ground-network providers.
   `transport` adds the transport kind's own configuration fields (today
   `tcp_socket`) under `configuration.*`, addressing the stored, normalized
   configuration document (e.g. `configuration.framing.mode`).
@@ -26,16 +27,34 @@ defmodule Cadence.Reads.ConfigKindSchema do
   # Stored as a boolean even though the legacy form renders it as a select.
   @boolean_fields [:tls_enabled]
 
-  @spec fields(binary()) :: {:ok, [map()]} | {:error, :unknown_kind}
-  def fields("ground_station") do
+  @doc "Fields for `kind`; `ground_station`'s provider options come from the mission's providers."
+  @spec fields(binary(), binary(), binary()) :: {:ok, [map()]} | {:error, :unknown_kind}
+  def fields("ground_station", organization_id, mission_id) do
+    providers =
+      organization_id
+      |> Cadence.GroundNetworks.list_providers(mission_id)
+      |> Enum.map(&%{value: &1.display_name, label: &1.display_name})
+
     {:ok,
      [
        field("display_name", "Name", :string, required: true, range: %{min: 1, max: 200}),
-       field("provider", "Provider", :string, range: %{max: 200}),
+       field("code", "Code", :string,
+         required: true,
+         range: %{min: 2, max: 8},
+         help: "2–8 capital letters or digits, unique in the mission (e.g. SVB)."
+       )
+       |> Map.put(:pattern, "^[A-Z0-9]{2,8}$"),
+       if(providers == [],
+         do: field("provider", "Provider", :string, range: %{max: 200}),
+         else: field("provider", "Provider", :enum, enum: providers)
+       ),
        field("region", "Region", :string, range: %{max: 200})
      ]}
   end
 
+  def fields(kind, _organization_id, _mission_id), do: fields(kind)
+
+  @spec fields(binary()) :: {:ok, [map()]} | {:error, :unknown_kind}
   def fields("transport") do
     {:ok,
      [

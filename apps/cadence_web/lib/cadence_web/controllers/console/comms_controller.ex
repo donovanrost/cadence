@@ -28,6 +28,15 @@ defmodule CadenceWeb.Console.CommsController do
     end
   end
 
+  def providers(conn, _params),
+    do:
+      json(conn, %{
+        data: %{
+          providers:
+            encode(CommsDirectory.providers(conn.assigns.current_scope, mission_id(conn)))
+        }
+      })
+
   def routing_rules(conn, params) do
     case CommsDirectory.routing_rules(org_id(conn), mission_id(conn), params) do
       {:ok, page} -> json(conn, %{data: encode(page)})

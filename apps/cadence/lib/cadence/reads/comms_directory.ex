@@ -10,6 +10,7 @@ defmodule Cadence.Reads.CommsDirectory do
 
   alias Cadence.Comms.{GroundStation, GroundStationStore, RoutingRule, Transport, TransportStore}
   alias Cadence.Configuration.Kinds
+  alias Cadence.GroundNetworks.ProviderAccounts
   alias Cadence.Reads.OperationalState
 
   @default_limit 100
@@ -32,6 +33,51 @@ defmodule Cadence.Reads.CommsDirectory do
         health: nil
       }
     end)
+  end
+
+  @doc """
+  The mission's ground-network providers with their account and station count.
+  `account.name` is `nil` when the scope can't read organization accounts
+  (organization admins can). Status fields are the provider's own: lifecycle
+  plus the last validation and sync times; nothing is inferred.
+  """
+  @spec providers(Cadence.Auth.Scope.t(), binary()) :: [map()]
+  def providers(scope, mission_id) do
+    organization_id = scope.organization_id
+
+    station_counts =
+      organization_id
+      |> GroundStationStore.list_ground_stations(mission_id)
+      |> Enum.frequencies_by(& &1.provider)
+
+    organization_id
+    |> Cadence.GroundNetworks.list_providers(mission_id)
+    |> Enum.map(fn provider ->
+      %{
+        id: provider.provider_id,
+        name: provider.display_name,
+        provider_type: provider.provider_type,
+        account: %{
+          id: provider.provider_account_id,
+          name: account_name(scope, provider.provider_account_id)
+        },
+        status: %{
+          lifecycle_state: provider.lifecycle_state,
+          last_validated_at: provider.last_validated_at,
+          last_synced_at: provider.last_synced_at
+        },
+        station_count: Map.get(station_counts, provider.display_name, 0)
+      }
+    end)
+  end
+
+  defp account_name(_scope, nil), do: nil
+
+  defp account_name(scope, account_id) do
+    case ProviderAccounts.fetch(scope, account_id) do
+      {:ok, account, _version} -> account.display_name
+      _unavailable -> nil
+    end
   end
 
   @spec transports(binary(), binary()) :: [map()]
