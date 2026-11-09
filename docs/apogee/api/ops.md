@@ -281,7 +281,8 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
     action, resolved_at}]`: attention items resolved in the last 60 s, so the fade-out can show
     after a refetch. For a `user`, it reads "Resolved by Mira K.". Otherwise it says what closed it
     (ux), e.g. `provider` Northlight with `action` `confirmed` reads "Resolved: Northlight
-    confirmed", never "by Cadence".
+    confirmed", never "by Cadence". A `system` closure reads its `action` alone, with no actor
+    ("Resolved: cancel confirmed").
   - Refetch on `invalidate` with `attention`.
 - `failure_lookback_s` is `config :cadence, :action_queue_failure_lookback_s` (default 24 h).
   Failures older than that drop off the queue; they stay on the commands pages.
