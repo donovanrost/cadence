@@ -325,3 +325,51 @@ Staleness comes from the server (U9): `stale` is null when there's no expectatio
 Install, disable and uninstall exist today as direct actions (`ApplicationInstallations`).
 **Question:** should they become a change-set kind (stage, then apply as rN), like stations, or
 stay direct? If direct: `POST /apps/:key/install|disable|uninstall` returning the app row.
+
+## CP · Contact planning (`ux/screens/ContactPlanning.md`, DECISIONS #27)
+
+All routes sit under `/api/console/v1/missions/:mission_id/contact-planning`. Field schemas use
+the kind-schema field shape (`path, label, type, unit, enum, range, default, required, help,
+visible_when`), plus `group` (the panel key) and `advanced: boolean`.
+
+### CP1 · `GET /` (summary)
+
+```json
+{"data": {
+  "policy": {"version": 3, "mode": "advisory", "approval_required": false,
+             "activated_at": "…", "actor": {"name"}|null} | null,
+  "coverage": {"spacecraft_total": 500, "covered": 488, "contacts_per_day": 1500|null,
+               "uplink_passes_per_day": 500|null},
+  "templates": [{"id", "name", "applies_to": "profile Earendil Block 1", "rule_summary":
+                 "≥ 3 contacts / day · no gap > 10h00 · ≥ 1 uplink", "priority": "routine|high|critical",
+                 "version": 2, "spacecraft_count": 500}],
+  "not_covered": [{"group": "profile|plane|none", "label": "Earendil Block 2", "count": 12,
+                   "suggested_target": {…query…}|null}],
+  "permissions": ["planning.edit", "planning.approve"]
+}}
+```
+`policy: null` means not set up. Rule summaries are server-made sentences, so the UI never
+re-derives them. Counts are null when they can't be computed.
+
+### CP2 · Policy
+
+- `GET /policy`:
+  `{document: {...}|null, version, schema: [field], defaults: {...}|null, pending: {version, requested_by, requested_at}|null}`
+- `POST /policy` with `{document, reason}`:
+  - `201 {version, state: "active"|"pending_approval"}`
+  - errors: `invalid_params` (details by path), `version_conflict` (with `expected_version`), `forbidden`
+- `POST /policy/:version/decision` with `{decision: "approve"|"reject", comment}`. The reviewer must
+  differ from the author: `reviewer_is_author`.
+
+### CP3 · Templates
+
+- `GET /templates/:id`: `{id, name, version, document, target: {query}, schema: [field], versions: [{version, created_at, actor, reason}]}`
+- `GET /templates/schema`: the requirement field schema, for the new-template form.
+- `POST /templates` with `{name, document, target, reason}`: `201 {id, version}`.
+- `POST /templates/:id` with `{document, target, reason, expected_version}`: `201 {version}`.
+- `target` is the same query as Command C1 (profile / plane / spacecraft ids). For an edit, also
+  return `preview: {spacecraft_count, contacts_per_day}` from `POST /templates/preview` with
+  `{document, target}`, which writes nothing.
+
+Writes follow U20. A rejection says nothing changed; an unreadable reply says the outcome is
+unclear.
