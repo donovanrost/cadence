@@ -19,6 +19,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 16 | Framing HOLD (DECISIONS #36 gate) | No COMPATIBILITY HOLD on dev for a profile frame_size change | domain / qa | cause: stale server config (FramingCompatibility registered in config.exs after the last restart); qa's code reading was wrong. Rerun pending |
 | 18 | Changes preview decode | Hold items lacked `change_id`; console couldn't decode the preview (K2 'reply wasn't understood', Apply stuck) | domain / fe-setup | verified (cc4afc5a, 86663423) |
 | 19 | Change-set submit | Submit answered 500 (DB pool timeout under load) after the apply had committed (r6, generation 4) | domain / api | open |
+| 20 | Station availability | Any OUTAGE window makes station-availability reads 500 (`binary_to_existing_atom("outage")`); the create returns 500 but persists | domain / api-ops | open (HIGH) |
 | 17 | Planning policy API | `pending.requested_by` is a bare id (UI expects `{name}`: whole page fails to decode); after a reject, `pending` still lists the version and `document` shows its values while `active_version` = 1 | api / fe-setup | fixed (58f948ae); reject path verified via API, UI pending view to re-verify |
 | 12 | Palette | 'Show all N' `<button>` inside `role=listbox` (axe aria-required-children) | fe-ops | verified (cb5b2d12) |
 | 13 | Palette | Focus leaves the `aria-modal` dialog after two Tabs (no focus trap) | fe-ops | verified (cb5b2d12) |
@@ -177,5 +178,15 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   (post-commit work outside the request / tolerant), or make the response distinguish "applied,
   follow-up failed"; and the console should treat a 5xx on submit as "unclear, check now", not
   as failure.
+
+### 20. Outage windows crash station availability
+
+- `Cadence.Comms.StationAvailability.view/1` (`station_availability.ex:328`, via `derive/3` :174 and
+  `published/3` :319) calls `:erlang.binary_to_existing_atom("outage")`; `:outage` isn't loaded
+  in the dev VM (`:maintenance` / `:degraded` are).
+- Repro (fresh boot): `POST /station-availability/earendil-svalbard/windows` `{kind: outage, …}`
+  → 500, yet the window persists (retry → 409 `window_overlaps`). Afterwards `GET
+  /station-availability` and `GET /station-availability/earendil-svalbard` → 500.
+- Fix: explicit kind mapping instead of `binary_to_existing_atom`.
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
