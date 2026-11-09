@@ -266,24 +266,29 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
   - `id` `attention:<source>:<attention id>`; `kind` `attention`; `source` is the subkind
     (`pass_resolution` for now).
   - `priority` 1 (`state` `critical`) when the pass starts within 2 h or is in progress;
-    otherwise 2 (`state` `caution`). Acknowledged items sort last within their priority (U21),
+    otherwise 2 (`state` `caution`). Computed on every read, so a row moves from P2 to P1 at
+    AOS−2h on the next refetch, without an invalidate. Acknowledged items sort last within their priority (U21),
     the same as fully acknowledged alarms.
   - `due_at` is the pass's `starts_at`, the consequence time that Now's meta shows as "AOS T−01:12".
     `since` is `raised_at`.
-  - `spacecraft` has one member with the **resolved name** (title `EARENDIL-001 · …`, never the id).
+  - `spacecraft` has one member with the **resolved name** (title `EARENDIL-001 · …`, never the id),
+    in the full member shape: `scid`, `plane`, `stale` and `last_received_at` filled, the alarm
+    fields `null`.
   - A new field, `attention` (`null` on other kinds), holds `{id, source, conflict:
     cancel_failed | late_confirmation | contradicts_attestation, state: open | acknowledged,
     acknowledged_by: {kind, id, name} | null, contact_id, station {ref, id, code, name},
     provider {id, name}, starts_at, raised_at, provider_message, resolution: {action, actor {kind,
     id, name}, at, note, provider_reference} | null}`. `contact_id` is the `Review` target
     (`M/contacts/:contactId`).
-  - The response gains `resolved: [{id, resolved_by {kind: user | provider | system, id, name},
+  - The response gains `resolved: [{id (the row's item id, `attention:<source>:<id>`), resolved_by {kind: user | provider | system, id, name},
     action, resolved_at}]`: attention items resolved in the last 60 s, so the fade-out can show
     after a refetch. For a `user`, it reads "Resolved by Mira K.". Otherwise it says what closed it
     (ux), e.g. `provider` Northlight with `action` `confirmed` reads "Resolved: Northlight
     confirmed", never "by Cadence". A `system` closure reads its `action` alone, with no actor
     ("Resolved: cancel confirmed").
   - Refetch on `invalidate` with `attention`.
+  - Ship order: fe-ops lands the reader (kind `attention`, source `pass_resolution`, the
+    `attention` object, top-level `resolved`) before the server sends any attention row.
 - `failure_lookback_s` is `config :cadence, :action_queue_failure_lookback_s` (default 24 h).
   Failures older than that drop off the queue; they stay on the commands pages.
 
