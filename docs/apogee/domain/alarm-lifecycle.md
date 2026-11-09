@@ -1,6 +1,6 @@
 # Minimal alarm lifecycle (DECISIONS #6)
 
-Owner: **domain**. Status: **draft 2, decided** (2026-11-08; DECISIONS #17: both sources labeled, escalation clears ack, assign any mission member; live ground-limit evaluation later). Built after change-sets P1. Reviewers: director, api, fe-ops.
+Owner: **domain**. Status: **draft 2, decided** (2026-11-08; DECISIONS #17: both sources labeled, escalation clears ack, assign any mission member; live ground-limit evaluation later). **Built** (commit `b2ba4d8c`; facade contract `docs/apogee/api/alarms.md`). Placement as built: episodes/sources/hooks/lifecycle in `L/alarms/` (telemetry, data plane; organization filled by DB trigger), operator facade `Cadence.Control.Alarms` (control plane), console read `Cadence.Reads.AlarmEpisodes`. `semantic_alarm_acknowledgements` not dropped yet (still unused). Reviewers: director, api, fe-ops.
 Screens: Investigate (J2: Acknowledge / Assign), Mobile (J6: Acknowledge / Hand off), Now action
 queue. Scope: ack, assign, hand-off note, auto-clear when back in limits. Not in scope: shelving,
 suppression, escalation timers, paging. `L` = `apps/cadence/lib/cadence`.
