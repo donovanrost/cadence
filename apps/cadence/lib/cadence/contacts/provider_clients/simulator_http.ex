@@ -110,6 +110,17 @@ defmodule Cadence.Contacts.ProviderClients.SimulatorHTTP do
     end
   end
 
+  @doc "Asks the provider to attest the uplink session of a contact (#44 D2)."
+  @impl true
+  def attest_uplink_session(%ProviderContext{} = context, provider_contact_ref, attrs, opts \\ []) do
+    request_data(
+      context,
+      :post,
+      "/provider/v1/contacts/#{provider_contact_ref}/uplink-attestation",
+      Keyword.put(opts, :json, attrs)
+    )
+  end
+
   @impl true
   def describe_contact(%ProviderContext{} = context, provider_contact_ref, opts \\ []) do
     with {:ok, data} <-

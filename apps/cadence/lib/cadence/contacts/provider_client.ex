@@ -57,7 +57,11 @@ defmodule Cadence.Contacts.ProviderClient do
   @callback events(ProviderContext.t(), binary() | non_neg_integer() | nil, keyword()) ::
               provider_result(event_page())
 
-  @optional_callbacks provision_delivery_profile: 3,
+  @callback attest_uplink_session(ProviderContext.t(), binary(), map(), keyword()) ::
+              provider_result(map())
+
+  @optional_callbacks attest_uplink_session: 4,
+                      provision_delivery_profile: 3,
                       modify_contact: 4,
                       find_contact_by_client_reference: 3,
                       events: 3

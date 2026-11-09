@@ -372,6 +372,12 @@ defmodule Cadence.Platform.RootComposition do
 
     captured_opts = [
       runtime_cluster: Application.get_env(:cadence, :runtime_cluster),
+      uplink_session_policy:
+        Application.get_env(
+          :cadence,
+          :uplink_session_policy,
+          Cadence.Runtime.SessionQualification
+        ),
       event_bus: event_bus,
       event_bus_child_opts: Application.get_env(:cadence, :event_bus, []),
       ingress_archive_config: Application.get_env(:cadence, :ingress_archive, []),

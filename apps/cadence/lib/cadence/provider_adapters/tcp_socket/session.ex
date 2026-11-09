@@ -26,7 +26,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Session do
       contact_id: state.realized_contact_id,
       path_id: state.path_id,
       binding_id: state.provider_binding_id,
-      configuration_sha256: state.session_configuration_sha256
+      configuration_sha256: state.session_configuration_sha256,
+      peer: peer(Map.get(state, :socket))
     }
 
     case SessionReadiness.register_provider(state.session_gate, state.session_resource, basis) do
@@ -37,6 +38,17 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Session do
         %{state | session_handle: nil, session_blocking_reason: reason}
     end
   end
+
+  # The connected peer's address, so qualification can bind provider evidence to this exact
+  # connection (#44 D2).
+  defp peer(socket) when is_port(socket) do
+    case :inet.peername(socket) do
+      {:ok, {ip, port}} -> "#{:inet.ntoa(ip)}:#{port}"
+      _error -> nil
+    end
+  end
+
+  defp peer(_socket), do: nil
 
   def block(%{session_handle: nil} = state, reason),
     do: %{state | session_blocking_reason: reason}

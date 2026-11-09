@@ -2,6 +2,10 @@ import Config
 
 config :opentelemetry, traces_exporter: :none
 
+# Uplink sessions are qualified only by signed provider attestations (#44 D2); without
+# provider evidence a session stays blocked (fencing_unproven).
+config :cadence, :uplink_session_policy, Cadence.Control.UplinkSessionQualification
+
 config :logger, :default_formatter,
   metadata: [
     :request_id,

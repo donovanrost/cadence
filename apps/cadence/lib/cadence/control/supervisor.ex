@@ -87,11 +87,26 @@ defmodule Cadence.Control.Supervisor do
         command_verifier_scheduler_children(composition) ++
         contact_scheduler_global_safety_children(composition) ++
         provider_reservation_reconciler_children(composition) ++
-        provider_event_ingestion_children(composition)
+        provider_event_ingestion_children(composition) ++
+        uplink_qualification_children(composition)
     else
       []
     end
   end
+
+  # Provider-attested uplink qualification runs only when that policy is configured (#44 D2).
+  defp uplink_qualification_children(
+         %RootComposition{uplink_session_policy: Cadence.Control.UplinkSessionQualification} =
+           composition
+       ) do
+    [
+      {Cadence.Control.UplinkQualification,
+       name: Cadence.Control.UplinkQualification,
+       process_namespace: composition.runtime_process_namespace}
+    ]
+  end
+
+  defp uplink_qualification_children(_composition), do: []
 
   defp mission_runtime_opts(
          opts,
