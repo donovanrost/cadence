@@ -9,7 +9,9 @@ import {
   type FormValues,
 } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApField, ApPanel, ApRemote, formatCount, plural } from "@/ui";
+import { useSession } from "@/shell";
 import TargetPicker from "./TargetPicker.vue";
+import { fetchTemplateSupersedes, supersedeSentence } from "./supersedes.ts";
 import type { TemplateDetail } from "./api.ts";
 import { asRecord, draftFromTarget, targetFromDraft, type TargetDraft } from "./targets.ts";
 import {
@@ -26,6 +28,25 @@ const props = defineProps<{ missionId: string; template: TemplateDetail | null }
 const emit = defineEmits<{ close: [] }>();
 const router = useRouter();
 const schema = useRemoteQuery(() => props.missionId, fetchTemplateSchema);
+const session = useSession();
+/** Edits only: which open drafts the next version supersedes (server dry run, writes nothing). */
+const supersedes = useRemoteQuery(
+  () => (props.template ? { missionId: props.missionId, templateId: props.template.id } : null),
+  fetchTemplateSupersedes,
+);
+const drafts = computed(() =>
+  // Already-superseded drafts aren't changed by this save; count only the open ones.
+  supersedes.state.value.status === "ready"
+    ? supersedes.state.value.value.filter((d) => d.state !== "superseded")
+    : [],
+);
+const saveLabel = computed(() => {
+  if (!props.template) return "Create template";
+  const next = `Save v${props.template.version + 1}`;
+  return drafts.value.length > 0
+    ? `${next} · supersede ${plural(drafts.value.length, "draft")}`
+    : next;
+});
 const name = ref(props.template?.name ?? "");
 const target = ref<TargetDraft>(draftFromTarget(props.template?.target ?? null));
 const values = ref<FormValues>({});
@@ -157,6 +178,9 @@ async function save() {
           </div>
         </details>
       </ApPanel>
+      <ApCallout v-if="template && drafts.length > 0" tone="caution">{{
+        supersedeSentence(drafts, template.version + 1, session.user.id)
+      }}</ApCallout>
       <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
       <div class="flex flex-wrap gap-2">
         <ApButton :disabled="busy" disabled-reason="Working…" @click="preview">Preview</ApButton>
@@ -165,7 +189,7 @@ async function save() {
           :disabled="busy || !canSave"
           :disabled-reason="canSave ? 'Saving…' : 'Name the template first.'"
           @click="save"
-          >{{ template ? `Save as v${template.version + 1}` : "Create template" }}</ApButton
+          >{{ saveLabel }}</ApButton
         >
         <ApButton variant="ghost" @click="emit('close')">Cancel</ApButton>
       </div>

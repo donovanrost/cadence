@@ -1,0 +1,60 @@
+import { decoders, request, type ApiResult, type Decoded } from "@/api";
+
+/** Contract: docs/apogee/api/scheduling.md, "Dry run before saving" (writes nothing). */
+const { array, integer, nullable, object, optional, string, token } = decoders;
+
+const reader = object({
+  drafts: array(
+    object({
+      plan: object({ id: token, version: integer }),
+      day: string,
+      author: nullable(object({ id: optional(nullable(token)), name: string })),
+      state: token,
+    }),
+    500,
+  ),
+});
+export type SupersededDraft = Decoded<typeof reader>["drafts"][number];
+
+export async function fetchTemplateSupersedes(
+  key: Readonly<{ missionId: string; templateId: string }>,
+  signal: AbortSignal,
+): Promise<ApiResult<readonly SupersededDraft[]>> {
+  const r = await request(
+    `/missions/${encodeURIComponent(key.missionId)}/contact-planning/templates/${encodeURIComponent(key.templateId)}/supersedes`,
+    reader,
+    { signal },
+  );
+  return r.ok ? { ok: true, value: r.value.drafts } : r;
+}
+
+/** "2026-11-15" → "Sun 15 Nov" (sentence case inside prose). */
+function dayText(day: string): string {
+  return new Date(`${day}T00:00:00Z`)
+    .toLocaleDateString("en-GB", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    })
+    .replace(",", "");
+}
+
+/**
+ * ux ContactPlanning.md: "Saving v3 supersedes 2 open drafts: Wed 11 Nov (R1, Mira K.), Thu 12 Nov
+ * (R1, you). They'll need drafting again."
+ */
+export function supersedeSentence(
+  drafts: readonly SupersededDraft[],
+  nextVersion: number,
+  userId: string,
+): string {
+  const n = drafts.length;
+  const list = drafts
+    .map((d) => {
+      const who = d.author ? (d.author.id === userId ? "you" : d.author.name) : null;
+      return `${dayText(d.day)} (r${d.plan.version}${who ? `, ${who}` : ""})`;
+    })
+    .join(", ");
+  return `Saving v${nextVersion} supersedes ${n === 1 ? "1 open draft" : `${n} open drafts`}: ${list}. ${n === 1 ? "It'll" : "They'll"} need drafting again.`;
+}
