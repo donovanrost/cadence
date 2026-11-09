@@ -113,7 +113,10 @@ defmodule CadenceWeb.ScheduledContactController do
              mission_id
            ),
          {:ok, cancellation_opts} <-
-           ContactParams.contact_action(Map.get(params, "cancellation", %{})),
+           ContactParams.contact_action(
+             Map.get(params, "cancellation", %{}),
+             ControlPlaneAccess.actor_document(conn.assigns.current_scope)
+           ),
          {:ok, scheduled_contact} <-
            Cadence.Contacts.cancel_scheduled_contact(
              organization_id,
