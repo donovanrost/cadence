@@ -801,6 +801,8 @@ defmodule CadenceWeb.Router do
       post("/contact-plans/drafts/:run_id/continue", ContactDraftController, :continue)
       get("/contact-plans", ContactPlanController, :index)
       get("/contact-plans/:plan_id", ContactPlanController, :show)
+      post("/contact-plans/:plan_id/submit", ContactPlanController, :submit)
+      post("/contact-plans/:plan_id/execute", ContactPlanController, :execute)
 
       # -- Change sets (owner: api). Contract: docs/apogee/api/changes.md
       scope "/config" do

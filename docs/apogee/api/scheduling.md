@@ -4,8 +4,8 @@ Owner: **api** (DECISIONS #26). Consumer: **lead** (K1 Plan, K2 Re-plan). S1 pas
 are api-ops'. Base: `/api/console/v1/missions/:mission_id`. Conventions: [README.md](README.md).
 
 Status: decisions agreed (DECISIONS #27, #28). **Implemented:** S6 list, plan detail with S2 demand,
-and S3 drafts (start/read/continue). **Next:** S5 submit (with acknowledged exceptions), S4 edits
-and alternatives, then S8 re-plan.
+S3 drafts (start/read/continue) and S5 submit/execute with acknowledged exceptions. **Next:** planning
+setup status and day demand (lead's asks), S4 edits and alternatives, then S8 re-plan.
 
 ## 1. What the domain actually does (survey)
 
@@ -124,3 +124,43 @@ runs the plan **off the request**.
 
 Resumes an interrupted run off the request and returns `202 {run_id, state: "running"}`.
 `409 draft_not_interrupted` otherwise.
+
+### `POST /contact-plans/:plan_id/submit` (S5)
+
+Body `{expected_version, operation_id, reason?, acknowledgements?: [{requirement_id,
+requirement_version?, reason}]}`. `reason` defaults to a console note; acknowledgement reasons are
+10–2000 characters. `requirement_version` is accepted and ignored, because the server pins the
+version from the plan.
+
+| Caller | What happens | Response |
+| --- | --- | --- |
+| member | draft → `pending_approval` (an admin reviews it) | `200 {plan_id, state: "pending_approval", outcome: "pending_approval"}` |
+| org admin | submit (if draft) → approve with the acknowledgements → execute **off the request** | `202 {plan_id, state: "executing", outcome: "executing"}`, then `scheduling_progress {kind: "execute"}` |
+| replay (same `operation_id` on this plan) | nothing | `200 {plan_id, state, outcome: "replayed"}` |
+
+An admin calling submit on a member's `pending_approval` plan is the review: it approves and
+executes. Per-item booking states show up in S1 passes and the plan detail.
+
+Errors:
+- `422 plan_not_ready`: unmet requirements without acknowledgements, any conflict, or an empty plan.
+  `details: {unmet, conflicts}`, as in the plan detail.
+- `422 acknowledgements_required` (`details.missing: [requirement_id]`): some, not all, unmet
+  requirements were acknowledged.
+- `422 invalid_params`: body shape, a reason outside 10–2000, or an acknowledgement for a
+  requirement that isn't unmet.
+- `409 plan_changed` (stale `expected_version`), `409 plan_not_submittable`,
+  `409 operation_conflict` (operation id used on another plan), `404 plan_not_found`.
+
+Acknowledgements are stored on the approval (`approval.exceptions`) with its actor and time
+(DECISIONS #28).
+
+### `POST /contact-plans/:plan_id/execute`
+
+Re-executes an approved plan whose execution was **interrupted**, or that was approved and never
+started. Items are idempotent, so booked passes aren't rebooked. Returns `202 {plan_id, state:
+"executing"}`, or `409 plan_not_resumable`.
+
+### Plan state `interrupted`
+
+List rows and plan detail report `state: "interrupted"` for a plan whose lifecycle is `executing`
+when no session holds its execution lock (cluster-wide). Offer Execute.
