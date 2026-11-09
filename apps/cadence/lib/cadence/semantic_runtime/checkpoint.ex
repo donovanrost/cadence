@@ -14,7 +14,7 @@ defmodule Cadence.SemanticRuntime.Checkpoint do
   alias Cadence.Platform.ContentHash
   alias Cadence.Repo
   alias Cadence.Runtime.PartitionKey
-  alias Cadence.SemanticRuntime.{CommitRow, State}
+  alias Cadence.SemanticRuntime.{CommitRow, State, Terms}
 
   @version 1
   @identity [:organization_scope_id, :mission_id, :partition_id, :runtime_basis_sha256]
@@ -87,7 +87,7 @@ defmodule Cadence.SemanticRuntime.Checkpoint do
     with %CommitRow{} <- row,
          true <- Map.take(checkpoint, @identity) == Map.take(row, @identity),
          true <- checkpoint.integrity_sha256 == checksum(row),
-         %State{} = state <- :erlang.binary_to_term(row.state_term, [:safe]) do
+         {:ok, %State{} = state} <- Terms.decode(row.state_term) do
       {:hit, state, row.commit_sequence}
     else
       _ -> {:invalid, %State{}, 0}
