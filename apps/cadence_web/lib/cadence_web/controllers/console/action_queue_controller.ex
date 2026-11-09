@@ -7,10 +7,7 @@ defmodule CadenceWeb.Console.ActionQueueController do
   alias CadenceWeb.Console.ActionQueueJSON
 
   def show(conn, _params) do
-    scope = conn.assigns.current_scope
-    mission = conn.assigns.current_mission
-
-    queue = ActionQueue.load(scope.organization_id, mission.mission_id, scope.user.user_id)
+    queue = ActionQueue.load(conn.assigns.current_scope, conn.assigns.current_mission.mission_id)
 
     json(conn, %{data: ActionQueueJSON.queue(queue)})
   end

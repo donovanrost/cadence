@@ -19,20 +19,22 @@ defmodule Cadence.Reads.ActionQueueTest do
     }
   end
 
-  defp alarm(spacecraft_id, severity, opts) do
+  defp episode(spacecraft_id, severity, opts) do
     %{
-      spacecraft_id: spacecraft_id,
-      active?: true,
+      id: "ep-#{spacecraft_id}-#{Keyword.get(opts, :point_id, "EPS.VBAT")}",
+      source: Keyword.get(opts, :source, :ground_limit),
+      status: Keyword.get(opts, :status, :new),
       severity: severity,
-      point_id: Keyword.get(opts, :point_id, "EPS.VBAT"),
-      point_name: Keyword.get(opts, :point_name, "VBAT"),
-      subsystem: "EPS",
-      unit: "V",
-      limit_state: Keyword.get(opts, :condition, :red_low),
-      evaluated_value: Keyword.get(opts, :value, 23.1),
-      first_crossed_at: Keyword.get(opts, :first_crossed_at),
-      generation_time: nil,
-      receipt_time: Keyword.get(opts, :received_at, ago(5))
+      source_state: Keyword.get(opts, :condition, "red_low"),
+      spacecraft_id: spacecraft_id,
+      point: %{
+        id: Keyword.get(opts, :point_id, "EPS.VBAT"),
+        name: Keyword.get(opts, :point_name, "VBAT"),
+        unit: "V"
+      },
+      opened_at: Keyword.get(opts, :opened_at, ago(5)),
+      last_value: Keyword.get(opts, :value, 23.1),
+      assignee: Keyword.get(opts, :assignee)
     }
   end
 
@@ -78,8 +80,8 @@ defmodule Cadence.Reads.ActionQueueTest do
 
   defp ids(result), do: Enum.map(result.items, & &1.id)
 
-  describe "build/1 limit alarms" do
-    test "groups each spacecraft's worst alarm by point and condition, critical first" do
+  describe "build/1 alarms" do
+    test "groups each spacecraft's worst episode by source, point and condition, critical first" do
       result =
         build(%{
           spacecraft: [
@@ -87,26 +89,28 @@ defmodule Cadence.Reads.ActionQueueTest do
             craft("b", :critical, plane: 1),
             craft("c", :caution, plane: 2)
           ],
-          alarms: [
-            alarm("a", :critical, first_crossed_at: ago(100)),
-            alarm("a", :caution, point_id: "THM.T1", condition: :yellow_high),
-            alarm("b", :critical, first_crossed_at: ago(400), value: 22.8),
-            alarm("c", :caution, point_id: "THM.T1", condition: :yellow_high)
+          episodes: [
+            episode("a", :critical, opened_at: ago(100)),
+            episode("a", :caution, point_id: "THM.T1", condition: "yellow_high"),
+            episode("b", :critical, opened_at: ago(400), value: 22.8),
+            episode("c", :caution, point_id: "THM.T1", condition: "yellow_high")
           ]
         })
 
       assert ids(result) == [
-               "alarm:critical:EPS.VBAT:red_low",
-               "alarm:caution:THM.T1:yellow_high"
+               "alarm:ground_limit:critical:EPS.VBAT:red_low",
+               "alarm:ground_limit:caution:THM.T1:yellow_high"
              ]
 
       [critical, caution] = result.items
       assert critical.priority == 1
+      assert critical.source == :ground_limit
       assert critical.count == 2
+      assert critical.acknowledged == 0
       assert critical.since == ago(400)
       assert Enum.map(critical.spacecraft, & &1.id) == ["b", "a"]
-      assert hd(critical.spacecraft).value == 22.8
-      assert critical.point == %{id: "EPS.VBAT", name: "VBAT", subsystem: "EPS", unit: "V"}
+      assert %{value: 22.8, episode_id: "ep-b-EPS.VBAT", status: :new} = hd(critical.spacecraft)
+      assert critical.point == %{id: "EPS.VBAT", name: "VBAT", subsystem: nil, unit: "V"}
       assert critical.condition == "red_low"
 
       assert caution.priority == 2
@@ -114,18 +118,39 @@ defmodule Cadence.Reads.ActionQueueTest do
       assert result.counts == %{p1: 1, p2: 1, p3: 0, spacecraft_p1: 2}
     end
 
-    test "ignores nominal and inactive rows and unknown spacecraft" do
+    test "sources don't merge; fully acknowledged items sort after the rest of their priority" do
       result =
         build(%{
-          spacecraft: [craft("a", :nominal)],
-          alarms: [
-            alarm("a", :nominal, []),
-            %{alarm("a", :critical, []) | active?: false},
-            alarm("ghost", :critical, [])
+          spacecraft: [craft("a", :critical), craft("b", :critical), craft("c", :critical)],
+          episodes: [
+            episode("a", :critical, status: :acknowledged, opened_at: ago(900)),
+            episode("b", :critical, source: :catalog_monitoring, opened_at: ago(10)),
+            episode("c", :critical, point_id: "EPS.I", opened_at: ago(20))
           ]
         })
 
-      assert result.items == []
+      assert ids(result) == [
+               "alarm:ground_limit:critical:EPS.I:red_low",
+               "alarm:catalog_monitoring:critical:EPS.VBAT:red_low",
+               "alarm:ground_limit:critical:EPS.VBAT:red_low"
+             ]
+
+      assert List.last(result.items).acknowledged == 1
+    end
+
+    test "prefers an unacknowledged episode as a spacecraft's worst; ignores cleared and unknown" do
+      result =
+        build(%{
+          spacecraft: [craft("a", :critical)],
+          episodes: [
+            episode("a", :critical, status: :acknowledged, opened_at: ago(1)),
+            episode("a", :critical, point_id: "EPS.I", opened_at: ago(50)),
+            %{episode("a", :critical, point_id: "X") | status: :cleared},
+            episode("ghost", :critical, [])
+          ]
+        })
+
+      assert [%{point: %{id: "EPS.I"}}] = result.items
     end
   end
 

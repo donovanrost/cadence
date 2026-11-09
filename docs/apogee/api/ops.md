@@ -189,6 +189,7 @@ throttled to about 10 s (stale groups change with time).
 ```json
 {"data": {
   "observed_at": "2026-11-08T02:41:17Z", "stale_after_s": 900, "failure_lookback_s": 86400,
+  "alarms_truncated": false,
   "counts": {"p1": 2, "p2": 3, "p3": 1, "spacecraft_p1": 4},
   "items": [{
     "id": "alarm:critical:EPS.VBAT:red_low",
@@ -197,7 +198,8 @@ throttled to about 10 s (stale groups change with time).
     "spacecraft": [{"id": "spacecraft-earendil-312", "name": "EARENDIL-312", "scid": 312, "plane": 13,
                     "stale": false, "last_received_at": "…", "violating_points": 1,
                     "value": 23.1, "first_crossed_at": "2026-11-08T02:35:02Z"}],
-    "point": {"id": "EPS.VBAT", "name": "VBAT", "subsystem": "EPS", "unit": "V"}, "condition": "red_low",
+    "point": {"id": "EPS.VBAT", "name": "VBAT", "subsystem": null, "unit": "V"}, "condition": "red_low",
+    "source": "ground_limit", "acknowledged": 0,
     "plane": null, "command": null, "outcome": null, "command_requests": [], "finding": null
   }]
 }}
@@ -207,7 +209,7 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
 
 | kind | priority | state | grouped by | filled fields |
 | --- | --- | --- | --- | --- |
-| `alarm` | 1 critical, 2 caution | `critical` / `caution` | `{severity, point, condition}` of each spacecraft's **worst** active alarm | `spacecraft` (with `value`, `first_crossed_at`), `point`, `condition` |
+| `alarm` | 1 critical, 2 caution | `critical` / `caution` | `{source, severity, point, condition}` of each spacecraft's **worst** active alarm episode (critical, then unacknowledged, then newest) | `source` (`catalog_monitoring` / `ground_limit`), `acknowledged` (members acknowledged), `point` (with `unit`), `condition` (the episode's `source_state`), `spacecraft` (with `value` = last value, `first_crossed_at` = episode opened, `episode_id`, `status` `new`/`acknowledged`, `assignee`) |
 | `command_failed` | 1 | `critical` | `{command, outcome}`, failures within `failure_lookback_s` | `command {id, name}`, `outcome` (`failed` = release or verify failed, `indeterminate` = release uncertain), `command_requests`, `spacecraft` (resolved targets) |
 | `approval` | 2 | `caution` | one item: approval-pending requests **not** requested by the viewer | `command_requests`, `spacecraft` |
 | `stale` | 2 | `stale` | plane (`plane: null` = no plane metadata) | `plane`, `spacecraft` |
@@ -216,7 +218,8 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
 | `never_heard` | 3 | `off` | one item | `spacecraft` |
 
 - `id` is stable across refetches (use it as the list key and for "seen" state).
-- Order: `priority`, then `due_at` (soonest first), then `since` (oldest first, `null` last), then `id`.
+- Order: `priority`, then alarm items whose episodes are **all acknowledged** after the rest of
+  that priority, then `due_at` (soonest first), then `since` (oldest first, `null` last), then `id`.
   The server returns the order; don't re-sort.
 - `since`: alarm = earliest `first_crossed_at` in the group; command = oldest failure / request time;
   stale = the oldest `last_received_at` (silent the longest); setup / never-heard = `null`.
@@ -227,10 +230,13 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
 - `spacecraft` members are ordered oldest-first by `since` for alarms, fleet order otherwise.
 - `command_requests[]`: `{id, command_name, target: {id, name}, spacecraft_id, requested_by, requested_at, status, occurred_at}`.
   `requested_by` is a display label. `status` uses the command-status vocabulary (`failed`, `indeterminate`, `approval_pending`, …).
+- `alarms_truncated`: the queue reads at most 200 active episodes (domain's page cap). `true` means
+  more are active, so alarm items may be incomplete; show "Showing the first 200 alarms" and link to Alarms.
+- Every item also has `source` and `acknowledged` (`null` for non-alarm kinds), and every
+  `spacecraft` member has `episode_id`, `status` and `assignee` (`null` outside alarm items).
 - `counts.spacecraft_p1`: distinct spacecraft across P1 items (the "N spacecraft need you" headline).
 - **Not derived yet** (no source): critical flight events (safe mode), missed passes, degraded
-  stations, no-ACK retries. Alarm items are limit-state based; they switch to alarm episodes (D6/#17)
-  when domain's lifecycle lands.
+  stations, no-ACK retries. Alarm items come from **alarm episodes** (both sources, DECISIONS #17).
 - `failure_lookback_s` is `config :cadence, :action_queue_failure_lookback_s` (default 24 h).
   Failures older than that drop off the queue; they stay on the commands pages.
 

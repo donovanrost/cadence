@@ -42,7 +42,17 @@ defmodule CadenceWeb.Console.ActionQueueAPITest do
              item = Enum.find(data["items"], &(&1["kind"] == "alarm"))
 
     assert item["point"]["id"] == "HK.counter"
-    assert [%{"id" => "spacecraft-001", "name" => "SC-001", "value" => 30}] = item["spacecraft"]
+    assert item["source"] == "ground_limit"
+    assert item["acknowledged"] == 0
+    assert data["alarms_truncated"] == false
+
+    assert [
+             %{"id" => "spacecraft-001", "name" => "SC-001", "value" => 30, "status" => "new"} =
+               member
+           ] =
+             item["spacecraft"]
+
+    assert is_binary(member["episode_id"])
     assert item["command_requests"] == []
     assert item["due_at"] == nil
     refute Enum.any?(data["items"], &(&1["id"] == "limits_not_configured"))

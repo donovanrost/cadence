@@ -4,29 +4,33 @@ defmodule Cadence.Reads.ActionQueue do
 
   Ranking follows ux ruling U11:
 
-    * **P1, act now:** critical limit alarms; failed or indeterminate commands
+    * **P1, act now:** critical alarms (active alarm episodes, both sources); failed or indeterminate commands
       (verify failed, release uncertain) within the failure lookback window.
-    * **P2, needs you soon:** caution limit alarms; approval-pending command
+    * **P2, needs you soon:** caution alarms; approval-pending command
       requests waiting on the viewer (not requested by them); stale spacecraft,
       grouped by plane.
     * **P3, when you can:** setup gaps (readiness `blocker` / `not_set_up`
       findings), ground limits not configured, spacecraft never heard from.
 
-  Identical causes are grouped into one item: limit alarms by
-  `{severity, point, condition}` on each spacecraft's worst active alarm, stale
+  Identical causes are grouped into one item: alarms by `{source, severity,
+  point, condition}` on each spacecraft's worst active episode (see
+  `ActionQueue.AlarmItems`), stale
   spacecraft by plane, failed commands by `{command, outcome}`. Within a
-  priority, items sort by `due_at` (time to consequence, soonest first), then
-  `since` (oldest first). `due_at` is always `nil` until contact and
+  priority, alarm items whose episodes are all acknowledged go last; then items
+  sort by `due_at` (time to consequence, soonest first), then `since` (oldest
+  first). `due_at` is always `nil` until contact and
   propagation data exist (M7, D1).
 
   Not derived yet: critical flight events (safe mode), missed passes, degraded
   stations and no-ACK retries, because there is no source for them.
   """
 
-  alias Cadence.Reads.{AlarmList, CommandCounts, Commands, FleetStatus, Readiness}
+  alias Cadence.Auth.Scope
+  alias Cadence.Reads.ActionQueue.{AlarmItems, Item}
+  alias Cadence.Reads.{AlarmEpisodes, CommandCounts, Commands, FleetStatus, Readiness}
 
   @default_failure_lookback_s 86_400
-  @limit_rank %{critical: 2, caution: 1}
+  @episode_limit 200
   @failed_statuses [:failed, :indeterminate]
   @setup_severities [:blocker, :not_set_up]
 
@@ -40,9 +44,11 @@ defmodule Cadence.Reads.ActionQueue do
           | :limits_not_configured
           | :never_heard
 
-  @doc "Loads every input and builds the queue for `viewer_user_id`."
-  @spec load(binary(), binary(), binary() | nil, keyword()) :: map()
-  def load(organization_id, mission_id, viewer_user_id, opts \\ []) do
+  @doc "Loads every input and builds the queue for the scope's user."
+  @spec load(Scope.t(), binary(), keyword()) :: map()
+  def load(%Scope{organization_id: organization_id} = scope, mission_id, opts \\ []) do
+    viewer_user_id = scope.user && scope.user.user_id
+    {episodes, truncated?} = episodes(scope, mission_id)
     requests = Cadence.Commanding.list_command_requests(organization_id, mission_id)
 
     commands =
@@ -52,7 +58,8 @@ defmodule Cadence.Reads.ActionQueue do
 
     build(%{
       fleet: FleetStatus.load(organization_id, mission_id, opts),
-      alarms: AlarmList.load(organization_id, mission_id, %{state: "active"}).alarms,
+      episodes: episodes,
+      alarms_truncated: truncated?,
       command_rows: commands.rows,
       target_spacecraft:
         Cadence.SourceEndpoints.spacecraft_for_source_endpoints(
@@ -69,6 +76,16 @@ defmodule Cadence.Reads.ActionQueue do
     })
   end
 
+  defp episodes(scope, mission_id) do
+    case AlarmEpisodes.list(scope, mission_id, %{state: "active", limit: @episode_limit}) do
+      {:ok, %{episodes: episodes, summary: summary}} ->
+        {episodes, summary.active > length(episodes)}
+
+      {:error, _reason} ->
+        {[], false}
+    end
+  end
+
   @doc "Lookback for failed commands, in seconds (`config :cadence, :action_queue_failure_lookback_s`)."
   @spec failure_lookback_s() :: pos_integer()
   def failure_lookback_s,
@@ -83,7 +100,7 @@ defmodule Cadence.Reads.ActionQueue do
 
     items =
       [
-        alarm_items(Map.get(input, :alarms, []), by_id),
+        AlarmItems.items(Map.get(input, :episodes, []), by_id),
         failed_items(Map.get(input, :command_rows, []), now, input.failure_lookback_s, targets),
         approval_items(input, targets),
         stale_items(fleet.spacecraft),
@@ -97,64 +114,10 @@ defmodule Cadence.Reads.ActionQueue do
       observed_at: now,
       stale_after_s: fleet.stale_after_s,
       failure_lookback_s: input.failure_lookback_s,
+      alarms_truncated: Map.get(input, :alarms_truncated, false),
       counts: counts(items),
       items: items
     }
-  end
-
-  # -- limit alarms ------------------------------------------------------------
-
-  defp alarm_items(alarms, by_id) do
-    alarms
-    |> Enum.filter(&queued_alarm?(&1, by_id))
-    |> Enum.group_by(& &1.spacecraft_id)
-    |> Enum.map(fn {_id, rows} -> Enum.max_by(rows, &alarm_rank/1) end)
-    |> Enum.group_by(&{&1.severity, &1.point_id, condition(&1)})
-    |> Enum.map(fn {{severity, point_id, condition}, worst} ->
-      members =
-        worst
-        |> Enum.sort_by(&(alarm_since(&1) || &1.receipt_time), &earlier?/2)
-        |> Enum.map(&alarm_member(&1, Map.fetch!(by_id, &1.spacecraft_id)))
-
-      first = hd(worst)
-
-      item(%{
-        id: "alarm:#{severity}:#{point_id}:#{condition}",
-        priority: if(severity == :critical, do: 1, else: 2),
-        kind: :alarm,
-        state: severity,
-        since: worst |> Enum.map(&alarm_since/1) |> min_datetime(),
-        count: length(members),
-        spacecraft: members,
-        point: %{
-          id: point_id,
-          name: first.point_name,
-          subsystem: first.subsystem,
-          unit: Map.get(first, :unit)
-        },
-        condition: condition
-      })
-    end)
-  end
-
-  defp queued_alarm?(row, by_id) do
-    row.active? and row.severity in [:critical, :caution] and
-      Map.has_key?(by_id, row.spacecraft_id)
-  end
-
-  defp alarm_rank(row) do
-    {Map.fetch!(@limit_rank, row.severity),
-     row.receipt_time && DateTime.to_unix(row.receipt_time, :microsecond)}
-  end
-
-  defp alarm_since(row), do: row.first_crossed_at || row.generation_time || row.receipt_time
-
-  defp condition(row), do: row.limit_state && to_string(row.limit_state)
-
-  defp alarm_member(row, craft) do
-    craft
-    |> member()
-    |> Map.merge(%{value: row.evaluated_value, first_crossed_at: row.first_crossed_at})
   end
 
   # -- commands ----------------------------------------------------------------
@@ -168,7 +131,7 @@ defmodule Cadence.Reads.ActionQueue do
     |> Enum.map(fn {{command_id, status}, group} ->
       group = Enum.sort_by(group, & &1.occurred_at, DateTime)
 
-      item(%{
+      Item.new(%{
         id: "command_failed:#{status}:#{command_id}",
         priority: 1,
         kind: :command_failed,
@@ -197,17 +160,17 @@ defmodule Cadence.Reads.ActionQueue do
 
     case rows
          |> Enum.filter(&MapSet.member?(others, &1.command_request_id))
-         |> Enum.sort_by(&(&1.requested_at || &1.occurred_at), &earlier?/2) do
+         |> Enum.sort_by(&(&1.requested_at || &1.occurred_at), &Item.earlier?/2) do
       [] ->
         []
 
       waiting ->
-        item(%{
+        Item.new(%{
           id: "approval:viewer",
           priority: 2,
           kind: :approval,
           state: :caution,
-          since: waiting |> Enum.map(& &1.requested_at) |> min_datetime(),
+          since: waiting |> Enum.map(& &1.requested_at) |> Item.min_datetime(),
           count: length(waiting),
           spacecraft: target_members(waiting, targets),
           command_requests: Enum.map(waiting, &request_ref(&1, targets))
@@ -225,7 +188,7 @@ defmodule Cadence.Reads.ActionQueue do
     |> Enum.uniq()
     |> Enum.flat_map(fn id ->
       case Map.fetch(targets.by_id, id) do
-        {:ok, craft} -> [member(craft)]
+        {:ok, craft} -> [Item.member(craft)]
         :error -> []
       end
     end)
@@ -251,15 +214,15 @@ defmodule Cadence.Reads.ActionQueue do
     |> Enum.filter(&(&1.state == :stale))
     |> Enum.group_by(& &1.plane)
     |> Enum.map(fn {plane, group} ->
-      item(%{
+      Item.new(%{
         id: "stale:plane:#{plane || "none"}",
         priority: 2,
         kind: :stale,
         state: :stale,
-        since: group |> Enum.map(& &1.last_received_at) |> min_datetime(),
+        since: group |> Enum.map(& &1.last_received_at) |> Item.min_datetime(),
         count: length(group),
         plane: plane,
-        spacecraft: Enum.map(group, &member/1)
+        spacecraft: Enum.map(group, &Item.member/1)
       })
     end)
   end
@@ -270,29 +233,15 @@ defmodule Cadence.Reads.ActionQueue do
         []
 
       group ->
-        item(%{
+        Item.new(%{
           id: "never_heard",
           priority: 3,
           kind: :never_heard,
           state: :off,
           count: length(group),
-          spacecraft: Enum.map(group, &member/1)
+          spacecraft: Enum.map(group, &Item.member/1)
         })
     end
-  end
-
-  defp member(craft) do
-    %{
-      id: craft.id,
-      name: craft.name,
-      scid: craft.scid,
-      plane: craft.plane,
-      stale: craft.stale,
-      last_received_at: craft.last_received_at,
-      violating_points: craft.violating_points,
-      value: nil,
-      first_crossed_at: nil
-    }
   end
 
   # -- setup -------------------------------------------------------------------
@@ -310,7 +259,7 @@ defmodule Cadence.Reads.ActionQueue do
         []
       else
         [
-          item(%{
+          Item.new(%{
             id: "limits_not_configured",
             priority: 3,
             kind: :limits_not_configured,
@@ -322,7 +271,7 @@ defmodule Cadence.Reads.ActionQueue do
 
     limits ++
       Enum.map(findings, fn finding ->
-        item(%{
+        Item.new(%{
           id: "setup:#{finding.id}",
           priority: 3,
           kind: :setup,
@@ -334,24 +283,6 @@ defmodule Cadence.Reads.ActionQueue do
   end
 
   # -- shared ------------------------------------------------------------------
-
-  defp item(fields) do
-    Map.merge(
-      %{
-        since: nil,
-        due_at: nil,
-        spacecraft: [],
-        point: nil,
-        condition: nil,
-        plane: nil,
-        command: nil,
-        outcome: nil,
-        command_requests: [],
-        finding: nil
-      },
-      fields
-    )
-  end
 
   defp counts(items) do
     frequencies = Enum.frequencies_by(items, & &1.priority)
@@ -369,22 +300,16 @@ defmodule Cadence.Reads.ActionQueue do
     }
   end
 
+  # Within a priority, items whose alarms are all acknowledged go after the rest.
   defp sort_key(item) do
-    {item.priority, unix(item.due_at), unix(item.since), item.id}
+    {item.priority, if(acknowledged_only?(item), do: 1, else: 0), unix(item.due_at),
+     unix(item.since), item.id}
   end
+
+  defp acknowledged_only?(%{kind: :alarm, acknowledged: n, count: n}), do: true
+  defp acknowledged_only?(_item), do: false
 
   # nil sorts after every time.
   defp unix(nil), do: :infinity
   defp unix(%DateTime{} = at), do: DateTime.to_unix(at, :microsecond)
-
-  defp earlier?(nil, _b), do: false
-  defp earlier?(_a, nil), do: true
-  defp earlier?(a, b), do: DateTime.compare(a, b) != :gt
-
-  defp min_datetime(datetimes) do
-    case Enum.reject(datetimes, &is_nil/1) do
-      [] -> nil
-      present -> Enum.min(present, DateTime)
-    end
-  end
 end
