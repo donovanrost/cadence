@@ -20,7 +20,8 @@ defmodule Cadence.Reads.Readiness.Rules do
         comms_findings(facts),
         station_findings(facts),
         data_source_findings(facts),
-        app_findings(facts)
+        app_findings(facts),
+        planning_findings(facts)
       ]
       |> List.flatten()
       |> Enum.sort_by(&{Map.fetch!(@severity_rank, &1.severity), area_index(&1.area)})
@@ -207,6 +208,29 @@ defmodule Cadence.Reads.Readiness.Rules do
 
   defp app_findings(_facts), do: []
 
+  # Contact planning has no area tile (the six areas are the contract); its
+  # finding still shows in the list (DECISIONS #27).
+  defp planning_findings(%{planning: %{ready: false, missing: missing}}) do
+    [
+      finding(
+        :planning,
+        :not_set_up,
+        :planning_not_set_up,
+        "Contact planning isn't set up",
+        "Drafting contact plans needs " <>
+          Enum.map_join(missing, " and ", &missing_label/1) <> ".",
+        0,
+        fix(:contact_planning)
+      )
+    ]
+  end
+
+  defp planning_findings(_facts), do: []
+
+  defp missing_label("fleet_planning_policy"), do: "an active fleet planning policy"
+  defp missing_label("contact_requirements"), do: "at least one contact requirement or template"
+  defp missing_label(other), do: other
+
   # -- areas ------------------------------------------------------------------
 
   defp area(key, facts, findings) do
@@ -350,7 +374,7 @@ defmodule Cadence.Reads.Readiness.Rules do
 
   defp fix(kind, id \\ nil), do: %{kind: kind, id: id, label: nil}
 
-  defp area_index(area), do: Enum.find_index(@area_order, &(&1 == area))
+  defp area_index(area), do: Enum.find_index(@area_order, &(&1 == area)) || length(@area_order)
 
   defp plural(1, word), do: word
   defp plural(_count, word), do: word <> "s"

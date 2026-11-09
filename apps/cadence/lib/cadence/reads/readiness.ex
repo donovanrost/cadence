@@ -55,7 +55,8 @@ defmodule Cadence.Reads.Readiness do
         count: length(GroundStationStore.list_ground_stations(organization_id, mission_id))
       },
       data_sources: %{statuses: data_source_statuses(organization_id, mission_id)},
-      apps: apps(organization_id, mission_id)
+      apps: apps(organization_id, mission_id),
+      planning: Cadence.Reads.PlanningSetup.setup(organization_id, mission_id)
     }
   end
 

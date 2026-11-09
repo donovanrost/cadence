@@ -140,6 +140,24 @@ defmodule Cadence.Reads.Readiness.RulesTest do
     assert [%{severity: :optional, fix: %{kind: :app, id: "derived"}}] = result.findings
   end
 
+  test "contact planning not set up is a not_set_up finding without its own area" do
+    result =
+      Rules.build(facts(%{planning: %{ready: false, missing: ["fleet_planning_policy"]}}))
+
+    assert length(result.areas) == 6
+
+    assert [
+             %{
+               cause: :planning_not_set_up,
+               severity: :not_set_up,
+               fix: %{kind: :contact_planning}
+             }
+           ] =
+             result.findings
+
+    assert Rules.build(facts(%{planning: %{ready: true, missing: []}})).findings == []
+  end
+
   test "degraded and unavailable data sources are separate causes" do
     statuses = [
       %{data_source_id: "a", health: :degraded},

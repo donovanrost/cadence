@@ -164,3 +164,16 @@ started. Items are idempotent, so booked passes aren't rebooked. Returns `202 {p
 
 List rows and plan detail report `state: "interrupted"` for a plan whose lifecycle is `executing`
 when no session holds its execution lock (cluster-wide). Offer Execute.
+
+### `GET /contact-plans/setup`
+
+`{setup: {ready, missing: ["fleet_planning_policy" | "contact_requirements"], policy: {id, version} |
+null, requirements: n, templates: n}}`. `ready` means drafting can start (an active policy plus at
+least one active requirement or template). Readiness reports the same condition as finding
+`planning_not_set_up` (fix kind `contact_planning`, which has no area tile).
+
+### `GET /contact-plans/demand?day=YYYY-MM-DD` (S2, no plan needed)
+
+`{day, spacecraft_with_rules, contacts_needed, without_rule, spacecraft_total}`. It counts active
+requirements whose window overlaps the UTC day, plus template occurrences due that day (previewed;
+nothing is materialized). Each one contributes its `contact_count`.

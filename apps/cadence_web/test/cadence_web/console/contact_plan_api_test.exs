@@ -69,6 +69,48 @@ defmodule CadenceWeb.Console.ContactPlanAPITest do
     assert rule["text"] =~ "at least 1 min"
   end
 
+  test "setup says what is missing before drafting, and demand counts the day", c do
+    setup = json_response(get_json(c, "/contact-plans/setup"), 200)["data"]["setup"]
+
+    assert %{
+             "ready" => false,
+             "missing" => ["fleet_planning_policy", "contact_requirements"],
+             "policy" => nil
+           } =
+             setup
+
+    scope =
+      Cadence.Auth.Scope.new(%{
+        user: c.user,
+        organization_id: c.org.organization_id,
+        organization_membership: c.membership
+      })
+
+    policy = ContactPlanningFixtures.active_policy!(scope, c.mission.mission_id)
+    ContactPlanningFixtures.plan_fixture(c.org, c.user, c.membership, c.mission)
+    TestFixtures.persist_spacecraft!(c.mission, display_name: "No rule craft")
+
+    setup = json_response(get_json(c, "/contact-plans/setup"), 200)["data"]["setup"]
+    assert %{"ready" => true, "missing" => [], "requirements" => 1, "templates" => 0} = setup
+    assert setup["policy"]["id"] == policy.fleet_planning_policy_id
+
+    demand = json_response(get_json(c, "/contact-plans/demand?day=2027-01-01"), 200)["data"]
+
+    assert %{
+             "spacecraft_with_rules" => 1,
+             "contacts_needed" => 1,
+             "without_rule" => 1,
+             "spacecraft_total" => 2
+           } =
+             demand
+
+    assert json_response(get_json(c, "/contact-plans/demand?day=2027-01-05"), 200)["data"][
+             "contacts_needed"
+           ] == 0
+
+    assert json_response(get_json(c, "/contact-plans/demand"), 422)["error"]["details"]["day"]
+  end
+
   test "a plan without its pass lists the requirement as unmet", c do
     fixture =
       ContactPlanningFixtures.plan_fixture(c.org, c.user, c.membership, c.mission, select?: false)

@@ -155,6 +155,7 @@ Rules (v1), by area:
 | comms | `no_transports` blocker → `comms` | |
 | stations | `no_ground_stations` not_set_up → `station` | `unknown` when stations exist, because station health isn't tracked (never ready by default) |
 | data_sources | `data_source_unavailable` blocker, `data_source_degraded` caution → `data_source` (id when it is just one) | `unknown` when no health has been reported |
+| planning (no tile) | `planning_not_set_up` not_set_up → `contact_planning` | from `/contact-plans/setup` |
 | apps | `app_not_installed:limits` not_set_up; other missing optional apps → optional; fix `app` with the app key | optional findings never degrade an area; detail names the missing apps ("A and B aren't installed") |
 
 - Units are singular when the count is 1.

@@ -800,6 +800,8 @@ defmodule CadenceWeb.Router do
       get("/contact-plans/drafts/:run_id", ContactDraftController, :show)
       post("/contact-plans/drafts/:run_id/continue", ContactDraftController, :continue)
       get("/contact-plans", ContactPlanController, :index)
+      get("/contact-plans/setup", ContactPlanController, :setup)
+      get("/contact-plans/demand", ContactPlanController, :demand)
       get("/contact-plans/:plan_id", ContactPlanController, :show)
       post("/contact-plans/:plan_id/submit", ContactPlanController, :submit)
       post("/contact-plans/:plan_id/execute", ContactPlanController, :execute)

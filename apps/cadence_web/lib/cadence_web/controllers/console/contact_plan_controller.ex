@@ -8,7 +8,7 @@ defmodule CadenceWeb.Console.ContactPlanController do
 
   alias Cadence.ContactPlanning.ContactPlan
   alias Cadence.Control.Scheduling
-  alias Cadence.Reads.ContactPlanOverview
+  alias Cadence.Reads.{ContactPlanOverview, PlanningSetup}
   alias CadenceWeb.Console.{ConfigJSON, Problem, SchedulingRunner}
 
   @states Map.new(ContactPlan.states(), &{Atom.to_string(&1), &1})
@@ -34,6 +34,29 @@ defmodule CadenceWeb.Console.ContactPlanController do
     else
       {:error, :plan_not_found} -> Problem.respond(conn, :plan_not_found)
       {:error, details} -> Problem.respond(conn, :invalid_params, details)
+    end
+  end
+
+  @doc "Whether drafting is possible (policy + requirements), before offering Draft."
+  def setup(conn, _params),
+    do:
+      json(conn, %{
+        data: ConfigJSON.encode(%{setup: PlanningSetup.setup(org_id(conn), mission_id(conn))})
+      })
+
+  @doc "Contact demand for a UTC day without a plan (S2)."
+  def demand(conn, params) do
+    case day(params["day"]) do
+      {:ok, %Date{} = day} ->
+        json(conn, %{
+          data: ConfigJSON.encode(PlanningSetup.demand(org_id(conn), mission_id(conn), day))
+        })
+
+      {:ok, nil} ->
+        Problem.respond(conn, :invalid_params, %{day: "is required (YYYY-MM-DD)"})
+
+      {:error, details} ->
+        Problem.respond(conn, :invalid_params, details)
     end
   end
 
