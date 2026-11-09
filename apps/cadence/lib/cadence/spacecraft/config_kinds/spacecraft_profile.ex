@@ -24,8 +24,10 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
 
   @fields ~w(display_name downlink_protocol uplink_protocol packet_protocol frame_parameters
              applications metadata catalog_revision_id routing_rules)
+  # `fecf` (frame error control field present) is carried by existing profiles and read by the
+  # TM frame codec.
   @frame_fields ~w(frame_size secondary_header_length insert_zone_length ocf_length
-                   truncated_primary_header)
+                   truncated_primary_header fecf)
   @governed_key "spacecraft_configuration_revision_id"
   @synthetic_prefix "spacecraft_configuration_profile_"
 
@@ -189,7 +191,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
       prefixed(F.one_of(frame, "ocf_length", [0, 4], label: "Operational control field")) ++
       prefixed(
         F.one_of(frame, "truncated_primary_header", [true, false], label: "Truncated header")
-      )
+      ) ++
+      prefixed(F.one_of(frame, "fecf", [true, false], label: "Frame error control field"))
   end
 
   defp framing(_document), do: [F.error("frame_parameters", "Must be an object")]

@@ -75,6 +75,21 @@ defmodule Cadence.Configuration.ConfigKindsTest do
       assert Enum.map(entries, & &1.kind) == ["spacecraft_profile", "spacecraft", "spacecraft"]
     end
 
+    test "profiles carrying the frame codec's fecf flag stay editable", ctx do
+      profile_id = "profile-" <> unique("fecf")
+
+      apply_ops(ctx, "FECF profile", [
+        create("spacecraft_profile", profile_doc("FECF", %{"fecf" => true}), profile_id)
+      ])
+
+      apply_ops(ctx, "Rename", [
+        update("spacecraft_profile", profile_id, "display_name", "FECF 2")
+      ])
+
+      assert {:ok, %{display_name: "FECF 2", frame_parameters: %{"fecf" => true}}} =
+               SpacecraftTypeStore.fetch_spacecraft_type(ctx.org, ctx.mission, profile_id)
+    end
+
     test "rollout none keeps every pin", ctx do
       {profile_id, [sc]} = block(ctx, 1)
       edit = update("spacecraft_profile", profile_id, "display_name", "Block 1b")
