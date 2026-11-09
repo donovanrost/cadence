@@ -88,8 +88,8 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "contacts/review",
     name: "ops.contacts.review",
-    component: pending,
-    // K3 waits for S9 (DECISIONS #25); not linked from anywhere until then.
+    // K3 Close the books over S9 (fe-setup, DECISIONS #43/#47).
+    component: () => import("@/features/review/ReviewScreen.vue"),
     meta: { mode: "ops", nav: "contacts", title: "Pass review", board: "PassReview (K3)" },
   },
   {
