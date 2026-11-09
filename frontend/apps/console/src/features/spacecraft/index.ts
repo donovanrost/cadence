@@ -1,2 +1,2 @@
-/** Public API of the spacecraft feature. */
-export { default as CheckRows, type CheckRow } from "./CheckRows.vue";
+/** Public API of the spacecraft feature. CheckRows now lives in @/ui as ApCheckRows. */
+export { ApCheckRows as CheckRows, type ApCheckRow as CheckRow } from "@/ui";

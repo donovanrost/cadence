@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ApPanel } from "@/ui";
-import CheckRows from "../CheckRows.vue";
+import { ApCheckRows as CheckRows } from "@/ui";
 import BatchPreview from "./BatchPreview.vue";
 import { batchChecks, checksMeta } from "./checks.ts";
 import { useDraft } from "./context.ts";

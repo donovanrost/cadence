@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ApPanel } from "@/ui";
-import CheckRows from "./CheckRows.vue";
+import { ApCheckRows as CheckRows } from "@/ui";
 import { checkRows, type ReadinessCheck } from "./detail.ts";
 
 /** D1 Readiness checks for one spacecraft (telemetry is informational). */

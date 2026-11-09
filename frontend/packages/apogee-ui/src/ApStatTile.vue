@@ -12,6 +12,8 @@ const props = withDefaults(
     label: string;
     value: number | string | null;
     denominator?: number | undefined;
+    /** Unit after the value, e.g. `V`, drawn like the denominator. */
+    unit?: string | undefined;
     caption?: string | undefined;
     state?: OpState | undefined;
     /** Tint the caption with the tile's own state (it's the call to action). */
@@ -47,7 +49,7 @@ const valueTone = computed(() =>
         {{ display
         }}<span v-if="denominator !== undefined" class="text-base text-text-4"
           >/{{ formatCount(denominator) }}</span
-        >
+        ><span v-if="unit" class="ml-1 text-base text-text-4">{{ unit }}</span>
       </template>
       <template v-else
         ><span aria-hidden="true" class="text-text-4">—</span

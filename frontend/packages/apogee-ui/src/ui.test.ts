@@ -1,6 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import ApButton from "./ApButton.vue";
+import ApCheckRows from "./ApCheckRows.vue";
 import ApField from "./ApField.vue";
 import ApPageHeader from "./ApPageHeader.vue";
 import ApSegmented from "./ApSegmented.vue";
@@ -78,5 +79,33 @@ describe("ApPageHeader", () => {
     });
     expect(wrapper.findAll("h1")).toHaveLength(1);
     expect(wrapper.get("h1 span.font-mono").text()).toBe("r6");
+  });
+});
+
+describe("ApStatTile unit", () => {
+  it("renders the unit after the value", () => {
+    const wrapper = mount(ApStatTile, { props: { label: "VBAT", value: "23.1", unit: "V" } });
+    expect(wrapper.text()).toContain("23.1V");
+  });
+});
+
+describe("ApCheckRows", () => {
+  it("renders an action per row when the slot is used", () => {
+    const wrapper = mount(ApCheckRows, {
+      props: {
+        rows: [
+          {
+            key: "a",
+            label: "Limits",
+            sentence: "VBAT within limits",
+            state: "nominal",
+            verdict: "Pass",
+          },
+        ],
+      },
+      slots: { action: '<button type="button">Review</button>' },
+    });
+    expect(wrapper.text()).toContain("Pass");
+    expect(wrapper.get("li button").text()).toBe("Review");
   });
 });

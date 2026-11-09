@@ -1,6 +1,6 @@
 import { decoders, request, type ApiResult, type Reader } from "@/api";
 import type { ApKeyValueItem } from "@/ui";
-import type { CheckRow } from "./CheckRows.vue";
+import type { ApCheckRow as CheckRow } from "@/ui";
 import { heardLabel, orbitLabel } from "./format.ts";
 
 /** Contract: docs/apogee/api/setup.md, `GET /missions/:mission_id/spacecraft/:spacecraft_id`. */

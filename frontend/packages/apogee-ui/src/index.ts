@@ -1,6 +1,7 @@
 export { default as ApBreadcrumb, type ApCrumb } from "./ApBreadcrumb.vue";
 export { default as ApButton } from "./ApButton.vue";
 export { default as ApCallout } from "./ApCallout.vue";
+export { default as ApCheckRows, type ApCheckRow } from "./ApCheckRows.vue";
 export { default as ApChip } from "./ApChip.vue";
 export { default as ApEmptyState } from "./ApEmptyState.vue";
 export { default as ApEventLine } from "./ApEventLine.vue";
