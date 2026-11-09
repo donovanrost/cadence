@@ -12,6 +12,7 @@ import { bindPaletteShortcut } from "./palette.ts";
 import { useConsoleScope } from "./scope.ts";
 import { canAdministerOrganization, useSession } from "./session.ts";
 import { useOpsCounts } from "./counts.ts";
+import { useAdminOrgSelect } from "./admin-org.ts";
 
 const route = useRoute();
 const scope = useConsoleScope();
@@ -31,6 +32,7 @@ const orgSlug = computed(() =>
     ? scope.value.organization.slug
     : null,
 );
+const { switching } = useAdminOrgSelect(scope, session);
 const unknownScope = computed(() => {
   const s = scope.value;
   if (s.kind === "unknown-organization")
@@ -107,7 +109,10 @@ watch(
             Setup is designed for a larger screen. You can read here; editing works best on a
             desktop.
           </ApCallout>
-          <NotFoundScreen v-if="unknownScope" :sentence="unknownScope" />
+          <p v-if="switching" role="status" class="m-0 font-mono text-sm text-text-3 uppercase">
+            Opening {{ switching }} as platform admin…
+          </p>
+          <NotFoundScreen v-else-if="unknownScope" :sentence="unknownScope" />
           <RouterView v-else />
         </main>
         <!-- Setup bottom bar (staged changes), composed in App.vue; stays put while main scrolls. -->
