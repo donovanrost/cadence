@@ -65,7 +65,10 @@ watch(
       class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-action focus:px-3 focus:py-2 focus:text-on-action"
       >Skip to content</a
     >
-    <TopBar :scope="scope">
+    <!-- U19: takeover screens replace the top bar with their own header (TakeoverHeader
+         teleports into this target, outside <main>). -->
+    <div v-if="mode === 'takeover'" id="ap-takeover-header" class="contents" />
+    <TopBar v-else :scope="scope">
       <template #status><slot name="topbar-status" /></template>
       <template #setup-status><slot name="topbar-setup-status" /></template>
     </TopBar>

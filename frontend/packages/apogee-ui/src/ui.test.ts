@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
+import ApBreadcrumb from "./ApBreadcrumb.vue";
 import ApButton from "./ApButton.vue";
 import ApCheckRows from "./ApCheckRows.vue";
 import ApField from "./ApField.vue";
@@ -107,5 +108,15 @@ describe("ApCheckRows", () => {
     });
     expect(wrapper.text()).toContain("Pass");
     expect(wrapper.get("li button").text()).toBe("Review");
+  });
+});
+
+describe("ApBreadcrumb literal", () => {
+  it("keeps the case of literal crumbs", () => {
+    const wrapper = mount(ApBreadcrumb, {
+      props: { crumbs: [{ label: "Catalog" }, { label: "demo_spacecraft.yaml", literal: true }] },
+      global: { stubs: { RouterLink: true } },
+    });
+    expect(wrapper.findAll("li")[1]?.classes()).toContain("normal-case");
   });
 });

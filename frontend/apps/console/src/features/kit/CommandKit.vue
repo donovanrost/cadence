@@ -91,10 +91,11 @@ const options: readonly ApDecisionOption<"go" | "exclude" | "back" | "nogo">[] =
         <ApNumberField v-model="setpoint" label="setpoint" unit="°C" :min="0" :max="12" />
         <ol class="m-0 list-none border border-hairline p-0 py-1">
           <ApEventLine time="04:31:02Z" state="nominal" mono
-            >EARENDIL-171 · VERIFIED · 1.8 s</ApEventLine
+            >EARENDIL-171 · <span class="text-nominal-text">VERIFIED</span> · 1.8 s</ApEventLine
           >
           <ApEventLine time="04:30:40Z" state="caution" mono
-            >EARENDIL-152 · NO ACK · retry 1 of 3</ApEventLine
+            >EARENDIL-152 · <span class="text-caution-text">NO ACK</span> · retry 1 of
+            3</ApEventLine
           >
         </ol>
       </div>
