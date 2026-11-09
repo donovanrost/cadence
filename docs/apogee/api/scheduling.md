@@ -211,10 +211,20 @@ Re-executes an approved plan whose execution was **interrupted**, or that was ap
 started. Items are idempotent, so booked passes aren't rebooked. Returns `202 {plan_id, state:
 "executing"}`, or `409 plan_not_resumable`.
 
-### Plan state `interrupted`
+### Plan states `interrupted` and `unconfirmed` (DECISIONS #52)
 
-List rows and plan detail report `state: "interrupted"` for a plan whose lifecycle is `executing`
-when no session holds its execution lock (cluster-wide). Offer Execute.
+A plan whose lifecycle is `executing` while no session holds its execution lock (cluster-wide)
+reads by its unfinished execution items. List rows, plan detail and the draft/repair reads all
+report it the same way:
+
+- `interrupted`: some item was never placed with the provider. Offer Execute: it places those and
+  re-reads (never re-sends) the rest.
+- `executing`: every unfinished item was placed and the provider hasn't answered yet, within the
+  confirmation window (`:provider_confirmation_window_ms`, default 10 min, from when the item was
+  placed). No Execute. The plan settles by itself when the provider confirms, rejects or fails the
+  bookings (`reserved`, `partially_reserved` or `failed`).
+- `unconfirmed`: a placed booking is still unanswered past the window. The operator resolves it
+  by checking that reservation with the provider. Execute answers `409 plan_not_resumable`.
 
 ### `GET /contact-plans/setup`
 

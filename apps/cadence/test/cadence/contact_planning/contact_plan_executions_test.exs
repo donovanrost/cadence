@@ -338,6 +338,20 @@ defmodule Cadence.ContactPlanning.ContactPlanExecutionsTest do
 
     assert Enum.all?(items, &(&1.lifecycle_state == :uncertain))
 
+    # Re-reading uncertain items (Execute resumes, end-of-execution re-check) doesn't rewrite
+    # them, so the confirmation window (#52) still runs from when they went uncertain.
+    assert {:ok, %{items: reread}} =
+             ContactPlanExecutions.execute(
+               context.member_scope,
+               context.mission_id,
+               context.plan.contact_plan_id,
+               now: DateTime.add(@now, 60, :second),
+               resolve_route: context.resolve_route,
+               reserve: pending
+             )
+
+    assert Enum.map(reread, & &1.updated_at) == Enum.map(items, & &1.updated_at)
+
     for item <- items do
       {:ok, reservation} =
         ProviderReservations.fetch(
