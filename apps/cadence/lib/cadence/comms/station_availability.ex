@@ -25,6 +25,10 @@ defmodule Cadence.Comms.StationAvailability do
 
   @kinds ~w(outage maintenance degraded)
   @blocking ~w(outage maintenance)
+  # Explicit maps, not String.to_existing_atom: an atom no loaded module mentions doesn't exist
+  # yet, and the read crashed on the first outage window (qa #20).
+  @kind_atoms %{"outage" => :outage, "maintenance" => :maintenance, "degraded" => :degraded}
+  @sources %{"operator" => :operator, "provider" => :provider}
 
   # -- scoped facade --------------------------------------------------------------------------
 
@@ -191,7 +195,7 @@ defmodule Cadence.Comms.StationAvailability do
       eta: window.ends_at || window.eta,
       reported_by: window.reported_by,
       reported_at: window.inserted_at,
-      source: String.to_existing_atom(window.source),
+      source: Map.fetch!(@sources, window.source),
       basis: "#{window.source} reported #{window.kind}"
     }
   end
@@ -325,11 +329,11 @@ defmodule Cadence.Comms.StationAvailability do
     %{
       id: row.window_id,
       ground_station_id: row.ground_station_id,
-      kind: String.to_existing_atom(row.kind),
+      kind: Map.fetch!(@kind_atoms, row.kind),
       from: row.starts_at,
       to: row.ends_at,
       eta: row.eta,
-      source: String.to_existing_atom(row.source),
+      source: Map.fetch!(@sources, row.source),
       reported_by: row.reported_by,
       created_by: row.reported_by,
       reported_at: row.inserted_at,
