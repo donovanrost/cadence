@@ -10,7 +10,7 @@ import {
   submitPlan,
   type Acknowledgement,
   type PlanDetail,
-} from "./api.ts";
+} from "@/features/scheduling/index.ts";
 
 const progressReader = d.object({ kind: d.string, id: d.token, state: d.string });
 

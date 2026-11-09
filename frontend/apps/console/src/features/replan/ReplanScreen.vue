@@ -3,16 +3,21 @@ import { computed, ref } from "vue";
 import { describeApiError, type ApiError } from "@/api";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
 import { ApButton, ApCallout, ApPanel, ApRemote, ApStationBar, plural } from "@/ui";
-import { repairableStates, type Acknowledgement, type PlanDetail } from "./api.ts";
+import {
+  DraftGantt,
+  PlanFooter,
+  PlanStatePanel,
+  SubmitSheet,
+  coverage,
+  planPrimary,
+  repairableStates,
+  spacecraftNotCovered,
+  useSpacecraftNames,
+  type Acknowledgement,
+  type PlanDetail,
+  type PlanView,
+} from "@/features/scheduling/index.ts";
 import ChangesPanel from "./ChangesPanel.vue";
-import { coverage, spacecraftNotCovered } from "./coverage.ts";
-import DraftGantt from "./DraftGantt.vue";
-import { useSpacecraftNames } from "./names.ts";
-import PlanFooter from "./PlanFooter.vue";
-import { planPrimary } from "./plan-primary.ts";
-import type { PlanView } from "./plan-state.ts";
-import PlanStatePanel from "./PlanStatePanel.vue";
-import SubmitSheet from "./SubmitSheet.vue";
 import { useReplan } from "./useReplan.ts";
 
 /** K2 v1 · Re-plan after provider changes (DECISIONS #25), entered from a plan (`?plan=`). */

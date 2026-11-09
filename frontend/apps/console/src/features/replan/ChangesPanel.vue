@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ApListRow, ApPanel, ApStatStrip, ApStatTile, formatDuration, plural } from "@/ui";
-import { reasonText, stationCode, type PlanDetail, type Repair } from "./api.ts";
-import type { SpacecraftName } from "./names.ts";
+import {
+  reasonText,
+  stationCode,
+  type PlanDetail,
+  type Repair,
+  type SpacecraftName,
+} from "@/features/scheduling/index.ts";
 
 /** C · Changes (K2): what the repair keeps, moves, drops and adds, then what needs a person. */
 const props = defineProps<{

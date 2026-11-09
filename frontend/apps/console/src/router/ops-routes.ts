@@ -76,7 +76,7 @@ export const opsRoutes: RouteRecordRaw[] = [
     // station-down entry (contacts/replan/:stationId) returns with S7.
     path: "contacts/replan",
     name: "ops.contacts.replan",
-    component: () => import("@/features/scheduling/ReplanScreen.vue"),
+    component: () => import("@/features/replan/ReplanScreen.vue"),
     meta: { mode: "takeover", nav: "contacts", title: "Re-plan", board: "Replan (K2)" },
   },
   {
