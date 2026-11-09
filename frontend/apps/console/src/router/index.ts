@@ -14,6 +14,16 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/features/account/AccountScreen.vue"),
     meta: { mode: "account", title: "Your account" },
   },
+  ...(import.meta.env.DEV
+    ? [
+        {
+          path: "/kit",
+          name: "kit",
+          component: () => import("@/features/kit/KitScreen.vue"),
+          meta: { mode: "account" as const, title: "Kit" },
+        },
+      ]
+    : []),
   {
     path: "/notifications",
     name: "notifications",

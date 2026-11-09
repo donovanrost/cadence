@@ -74,3 +74,26 @@ export function initials(name: string): string {
   const last = words.length > 1 ? (words.at(-1)?.[0] ?? "") : (words[0]?.[1] ?? "");
   return (first + last).toUpperCase() || "?";
 }
+
+/** `10-23 02:59:40Z` */
+export function formatDayTime(date: Date): string {
+  const p = parts(date);
+  return `${p.mo}-${p.d} ${p.h}:${p.mi}:${p.s}Z`;
+}
+
+/** `T−00:38:10`, `T+1d 02:00:00`: like formatCountdown but folds whole days. */
+export function formatRelative(target: Date, now: Date): string {
+  const delta = Math.round((target.getTime() - now.getTime()) / 1000);
+  const sign = delta > 0 ? MINUS : "+";
+  const total = Math.abs(delta);
+  const days = Math.floor(total / 86_400);
+  const rest = total % 86_400;
+  const clock = `${pad(rest / 3600)}:${pad((rest % 3600) / 60)}:${pad(rest % 60)}`;
+  return `T${sign}${days > 0 ? `${days}d ` : ""}${clock}`;
+}
+
+/** `MET 412:07:14:05` from a mission epoch (only when the mission defines one, decision U7). */
+export function formatMet(at: Date, epoch: Date): string {
+  const total = Math.max(0, Math.floor((at.getTime() - epoch.getTime()) / 1000));
+  return `MET ${Math.floor(total / 86_400)}:${pad((total % 86_400) / 3600)}:${pad((total % 3600) / 60)}:${pad(total % 60)}`;
+}
