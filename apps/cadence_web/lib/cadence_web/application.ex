@@ -11,6 +11,7 @@ defmodule CadenceWeb.Application do
       {Phoenix.PubSub, name: CadenceWeb.PubSub},
       CadenceWeb.FrontendReleasePublication.Janitor,
       CadenceWeb.Console.LimitTransitions,
+      CadenceWeb.Console.ContactChanges,
       CadenceWeb.Endpoint
     ]
 

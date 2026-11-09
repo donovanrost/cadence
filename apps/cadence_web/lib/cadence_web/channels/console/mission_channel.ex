@@ -16,6 +16,7 @@ defmodule CadenceWeb.Console.MissionChannel do
   alias Cadence.Platform.ScopedReadUpdates
   alias CadenceWeb.Console.Access
   alias CadenceWeb.Console.ConfigLive
+  alias CadenceWeb.Console.ContactChanges
   alias CadenceWeb.Console.FleetPush
   alias CadenceWeb.Console.LimitTransitions
 
@@ -24,6 +25,7 @@ defmodule CadenceWeb.Console.MissionChannel do
   @read_update_resources %{
     commanding_changed: "commanding",
     alarms_changed: "alarms",
+    contacts_changed: "contacts",
     spacecraft_configuration_changed: "spacecraft",
     dashboards_changed: "dashboards",
     settings_changed: "settings",
@@ -101,6 +103,12 @@ defmodule CadenceWeb.Console.MissionChannel do
     {:noreply, socket}
   end
 
+  def handle_info({:console_contacts_changed, mission_id}, socket) do
+    if mission_id == socket.assigns.mission_id,
+      do: {:noreply, mark(socket, "contacts")},
+      else: {:noreply, socket}
+  end
+
   def handle_info({:console_limit_transition, mission_id, _spacecraft_id}, socket) do
     if mission_id == socket.assigns.mission_id,
       do: {:noreply, mark(socket, "alarms")},
@@ -149,6 +157,7 @@ defmodule CadenceWeb.Console.MissionChannel do
     end)
 
     :ok = LimitTransitions.subscribe(mission_id)
+    :ok = ContactChanges.subscribe(mission_id)
     RuntimeInvalidation.subscribe(%{organization_id: organization_id, mission_id: mission_id})
   end
 end

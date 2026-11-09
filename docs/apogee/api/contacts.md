@@ -7,7 +7,7 @@ S8) are api's: [scheduling.md](scheduling.md). Conventions: [README.md](README.m
 | Ask | Endpoint | Status |
 | --- | --- | --- |
 | M7 / S1 | `GET /missions/:mission_id/passes` | **implemented** (booked contacts; opportunities not yet) |
-| S10 | `contacts` on the `mission:<id>` `invalidate` event | partial, see below |
+| S10 | `contacts` on the `mission:<id>` `invalidate` event | **implemented** for contact facts; reservation-only transitions pending domain |
 
 ## `GET /api/console/v1/missions/:mission_id/passes`
 
@@ -62,6 +62,8 @@ Errors: `422 invalid_params`, `404 mission_not_found`.
 
 ## S10: `contacts` invalidation
 
-Planned, partial: fires when a scheduled or realized contact or a contact action is committed
-(contact facts). Reservation-only transitions (for example `requesting → rejected`) don't publish
-anything yet; domain is adding a post-commit signal. Until then, also poll the passes read.
+`invalidate` with `contacts` fires when a scheduled or realized contact or a contact action is
+committed (relayed from `Cadence.Contacts.Facts` by `CadenceWeb.Console.ContactChanges`), and on
+the `:contacts_changed` read update. The read update is wired, but nothing publishes it yet:
+domain is adding it for reservation-only transitions (for example `requesting → rejected`) and
+for plans and runs. Until that lands, also poll the passes read (about 30 s).

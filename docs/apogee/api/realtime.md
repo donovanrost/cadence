@@ -47,6 +47,7 @@ pushes are not replayed.
 | `commanding` | command stages, requests, approvals, queue, release attempts, verifiers |
 | `spacecraft` | spacecraft and profile configuration, packet bindings, app installations |
 | `telemetry` | new samples committed (source watermark), backfills, revision-state changes. This fires about every 500 ms on live feeds, so throttle telemetry-driven refetches client-side |
+| `contacts` | contact facts (scheduled/realized contacts, contact actions) and, once domain publishes it, reservation, plan and run changes. See contacts.md |
 | `limits` | limit definition changes |
 | `events` | mission event changes |
 | `catalog` | catalog revision changes |
