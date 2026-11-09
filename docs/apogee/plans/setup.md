@@ -17,7 +17,7 @@ reusing the underlying `L/reads/*` and stores. "Missing" means no backend data e
 | S2 Add spacecraft | `setup/spacecraft/new/:step` | **live**: server dry run at review, stages the batch | K preview + stage |
 | Profiles / S4 Profile | `setup/profiles[/:id/:section]` | **live**; framing read-only (#19); routing rule editor + override reset stage live (domain P2) | P, PD, K |
 | S3 Catalog index / import run / upload | `setup/catalog[/import[/:id]]` | **live** (qa ran a real upload) | C1, C2, C3 |
-| Changes + Revisions | `setup/changes`, `setup/revisions[/:n]` | **live**; rollback waits for P2 | K |
+| Changes + Revisions | `setup/changes`, `setup/revisions[/:n]` | **live**; rollback (#49) on the revision page: preview → stage as a new change set | K, rollback |
 | Ground stations | `setup/stations[/:id\|new]` | **live**: edit and add through change sets; U25 suggested codes with Confirm (stages a code change) | G1 + kind schema |
 | Comms & routing | `setup/comms[/transports[/:id]]` | **live**: transports editable; routing rules as groups (pass-2 #10) with a group's rules below (`?group=`), read-only (#3) | T1, T2, groups, transport detail |
 | Data sources | `setup/data-sources` | **live** | D1 |
