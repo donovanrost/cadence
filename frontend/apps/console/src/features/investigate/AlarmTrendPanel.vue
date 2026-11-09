@@ -19,6 +19,8 @@ import {
   crossedLimit,
   type Alarm,
   type Alarms,
+  valueLabel,
+  type EpisodeDetail,
 } from "@/features/alarms/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import TrendBlock from "./TrendBlock.vue";
@@ -40,6 +42,8 @@ const props = defineProps<{
   alarm: Alarm | null;
   /** U13: without ground limits, "no active alarm" is unknown, not nominal (qa #9). */
   limitsConfigured: boolean;
+  /** Lifecycle episode for the shown alarm, when one exists (label: Now vs At evaluation). */
+  episode?: EpisodeDetail | null;
 }>();
 defineEmits<{ retry: [] }>();
 const range = defineModel<RangeKey>("range", { required: true });
@@ -104,10 +108,11 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
       </ApCallout>
       <ApCallout v-else-if="!alarm" tone="nominal">No active alarm on {{ sc.name }}.</ApCallout>
       <div v-else class="flex flex-col gap-3">
+        <slot name="lifecycle" />
         <div class="flex flex-wrap items-end justify-between gap-3">
           <ApStatStrip :columns="3" label="Readouts" class="min-w-[360px] flex-1">
             <ApStatTile
-              label="Now"
+              :label="valueLabel(episode ?? null)"
               :value="formatValue(alarm.value)"
               :unit="alarm.point.unit ?? undefined"
               :state="tone ?? 'neutral'"
@@ -138,6 +143,7 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
           :range-label="rangeLabel"
           :history="trend.history.state.value"
           :view="view"
+          :height="episode ? 170 : 220"
           @retry="trend.history.refetch"
         />
       </div>

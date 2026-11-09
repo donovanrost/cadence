@@ -1,0 +1,115 @@
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { decode } from "@/api/index.ts";
+import {
+  episodeFor,
+  episodesReader,
+  runEpisodeCommand,
+  type Episode,
+  type EpisodeDetail,
+} from "./episodes.ts";
+import { escalationNotice, eventText, sourceTag, statusLine, valueLabel } from "./episodeText.ts";
+
+const episode = (overrides: Partial<Episode> = {}): Episode => ({
+  id: "alarm_episode_1",
+  source: "ground_limit",
+  status: "new",
+  cleared_unacknowledged: false,
+  severity: "critical",
+  peak_severity: "critical",
+  source_state: "red_low",
+  spacecraft_id: "sc-312",
+  spacecraft: { id: "sc-312", name: "EARENDIL-312", scid: 312 },
+  point: { id: "EPS.VBAT", name: "VBAT", unit: "V" },
+  thresholds: { red_low: 24, yellow_low: 25, yellow_high: 33, red_high: 34 },
+  opened_at: "2026-11-08T02:35:02Z",
+  cleared_at: null,
+  first_value: 23.4,
+  last_value: 23.1,
+  last_observed_at: "2026-11-08T02:41:15Z",
+  last_evaluated_at: "2026-11-08T02:41:00Z",
+  acknowledged_at: null,
+  acknowledged_by: null,
+  assignee: null,
+  assigned_at: null,
+  ...overrides,
+});
+const now = new Date("2026-11-08T02:44:00Z");
+
+describe("alarm episodes", () => {
+  it("decodes the list and finds the episode behind an alarm row", () => {
+    const body = {
+      summary: { active: 1 },
+      permissions: ["alarm.acknowledge"],
+      episodes: [episode()],
+    };
+    const result = decode(episodesReader, body);
+    expect(result.ok).toBe(true);
+    expect(
+      episodeFor([episode(), episode({ id: "x", status: "cleared" })], "sc-312", "EPS.VBAT")?.id,
+    ).toBe("alarm_episode_1");
+    expect(episodeFor([episode({ status: "cleared" })], "sc-312", "EPS.VBAT")).toBeNull();
+  });
+
+  it("never implies ground limits are live (U16)", () => {
+    expect(sourceTag(episode(), now)).toBe("Ground limits · evaluated 02:41:00Z · T+00:03:00");
+    expect(sourceTag(episode({ source: "catalog_monitoring" }), now)).toBe("Live");
+    expect(valueLabel(episode())).toBe("At evaluation");
+    expect(valueLabel(null)).toBe("Now");
+  });
+
+  it("states status, ack and assignee in words", () => {
+    expect(statusLine(episode()).text).toBe("New");
+    const acked = episode({
+      status: "acknowledged",
+      acknowledged_by: { kind: "user", id: "u1", name: "Mira K." },
+      assignee: { id: "u2", name: "Ana P." },
+    });
+    expect(statusLine(acked).text).toBe("Acknowledged by Mira K. · assigned to Ana P.");
+    expect(statusLine(episode({ status: "cleared", cleared_unacknowledged: true })).text).toBe(
+      "Cleared before anyone acknowledged",
+    );
+  });
+
+  it("explains an escalation that cleared the acknowledgement", () => {
+    const detail: EpisodeDetail = {
+      ...episode(),
+      events: [
+        { id: "e1", kind: "raised", actor: null, at: "2026-11-08T02:35:02Z", payload: {} },
+        {
+          id: "e2",
+          kind: "escalated",
+          actor: null,
+          at: "2026-11-08T02:40:00Z",
+          payload: { from: "caution", to: "critical", acknowledgement_cleared: true },
+        },
+      ],
+    };
+    expect(escalationNotice(detail)).toBe("Ack cleared · escalated to critical");
+    const escalated = detail.events[1];
+    expect(escalated && eventText(escalated)).toBe(
+      "Escalated to critical · acknowledgement cleared",
+    );
+    expect(escalationNotice({ ...detail, status: "acknowledged" })).toBeNull();
+  });
+});
+
+describe("episode commands (U20 outcomes)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const respond = (status: number, body: unknown) =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify(body), { status })),
+    );
+
+  it("calls a 409 rejected (nothing changed) and a 503 unclear", async () => {
+    respond(409, { error: { code: "episode_cleared", message: "Already cleared." } });
+    expect((await runEpisodeCommand("m", "e", { kind: "acknowledge" })).status).toBe("rejected");
+    respond(503, { error: { code: "alarms_unavailable", message: "Down." } });
+    expect((await runEpisodeCommand("m", "e", { kind: "acknowledge" })).status).toBe("unclear");
+  });
+
+  it("treats an unreadable success as unclear, not done", async () => {
+    respond(200, { data: { nope: true } });
+    expect((await runEpisodeCommand("m", "e", { kind: "acknowledge" })).status).toBe("unclear");
+  });
+});

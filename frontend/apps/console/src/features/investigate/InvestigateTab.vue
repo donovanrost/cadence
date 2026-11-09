@@ -3,11 +3,14 @@ import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import type { RemoteState } from "@/api/index.ts";
 import { ApKeyValue } from "@/ui";
-import type { Alarms } from "@/features/alarms/index.ts";
+import { episodeFor, type Alarms } from "@/features/alarms/index.ts";
+import { useMissionScope } from "@/shell/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import AlarmTrendPanel from "./AlarmTrendPanel.vue";
 import EventLogPanel from "./EventLogPanel.vue";
+import EpisodeBar from "./EpisodeBar.vue";
 import SistersPanel from "./SistersPanel.vue";
+import { useEpisodeDetail, useSpacecraftEpisodes } from "./useInvestigate.ts";
 import { DEFAULT_RANGE, pickAlarm, type RangeKey } from "./model.ts";
 
 /** J2 · Investigate tab: B1 trend, B2 events, B4 same point in limits, technical details. */
@@ -26,6 +29,31 @@ const alarm = computed(() => {
   const id = typeof route.query.alarm === "string" ? route.query.alarm : null;
   return state.status === "ready" ? pickAlarm(state.value.alarms, id) : null;
 });
+
+const scope = useMissionScope();
+const missionId = computed(() => scope.value.mission.id);
+const episodes = useSpacecraftEpisodes(
+  missionId,
+  computed(() => props.sc.id),
+);
+/** The lifecycle episode behind the shown alarm (same spacecraft and point). */
+const episodeId = computed(() => {
+  const s = episodes.state.value;
+  return s.status === "ready" && alarm.value
+    ? (episodeFor(s.value.episodes, props.sc.id, alarm.value.point.id)?.id ?? null)
+    : null;
+});
+const detail = useEpisodeDetail(missionId, episodeId);
+const episode = computed(() =>
+  episodeId.value && detail.state.value.status === "ready" ? detail.state.value.value : null,
+);
+const permissions = computed(() =>
+  episodes.state.value.status === "ready" ? episodes.state.value.value.permissions : [],
+);
+function refreshEpisode() {
+  episodes.refetch();
+  detail.refetch();
+}
 
 const details = computed(() => [
   { key: "sc", label: "Spacecraft id", value: props.sc.id, mono: true },
@@ -52,9 +80,14 @@ const details = computed(() => [
         :alarms="alarms"
         :limits-configured="limitsConfigured"
         :alarm="alarm"
+        :episode="episode"
         @retry="$emit('retry')"
-      />
-      <EventLogPanel class="min-h-[120px] flex-1" />
+      >
+        <template v-if="episode" #lifecycle>
+          <EpisodeBar :episode="episode" :permissions="permissions" @changed="refreshEpisode" />
+        </template>
+      </AlarmTrendPanel>
+      <EventLogPanel class="min-h-[120px] flex-1" :events="episode?.events ?? null" />
     </div>
     <aside class="flex flex-col gap-2.5 console:min-h-0" aria-label="Context">
       <SistersPanel class="min-h-[120px] flex-1" :sc="sc" :fleet="fleet" :alarm="alarm" />

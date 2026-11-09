@@ -1,7 +1,7 @@
 import { computed, onScopeDispose, type Ref } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
-import { fetchAlarms } from "@/features/alarms/index.ts";
+import { fetchAlarms, fetchEpisode, fetchEpisodes } from "@/features/alarms/index.ts";
 import { FLEET_REFETCH_GAP_MS, throttle } from "@/features/fleet/index.ts";
 import { fetchHistory, fetchLimitIntervals } from "./api.ts";
 import { rangeWindow, type RangeKey } from "./model.ts";
@@ -75,4 +75,30 @@ export function usePointTrend(
 function toWindow(range: string) {
   const window = rangeWindow(range === "1h" || range === "24h" ? range : "6h", new Date());
   return { from: new Date(window.from), to: new Date(window.to) };
+}
+
+/** Alarm episodes of one spacecraft (lifecycle: status, ack, assignee) and the viewer's permissions. */
+export function useSpacecraftEpisodes(missionId: Ref<string>, spacecraftId: Ref<string | null>) {
+  const key = computed(() =>
+    keyOf(spacecraftId.value ? { m: missionId.value, sc: spacecraftId.value } : null),
+  );
+  const query = useRemoteQuery(key, (k, signal) => {
+    const { m = "", sc = "" } = parse(k);
+    return fetchEpisodes(m, { spacecraftId: sc }, signal);
+  });
+  useMissionInvalidation(missionId, ["alarms"], query.refetch);
+  return query;
+}
+
+/** One episode with its events (B2 and the escalation notice). */
+export function useEpisodeDetail(missionId: Ref<string>, episodeId: Ref<string | null>) {
+  const key = computed(() =>
+    keyOf(episodeId.value ? { m: missionId.value, e: episodeId.value } : null),
+  );
+  const query = useRemoteQuery(key, (k, signal) => {
+    const { m = "", e = "" } = parse(k);
+    return fetchEpisode(m, e, signal);
+  });
+  useMissionInvalidation(missionId, ["alarms"], query.refetch);
+  return query;
 }
