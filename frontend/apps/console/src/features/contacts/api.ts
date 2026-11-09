@@ -66,3 +66,20 @@ export function fetchPasses(
     signal ? { signal } : {},
   );
 }
+
+/** Active ground stations (api setup.md G1); only what Contacts needs: id, name, code. */
+const stationsReader = d.object({
+  stations: d.array(
+    d.object({ id: d.token, display_name: d.nullable(d.string), code: d.nullable(d.string) }),
+    1_000,
+  ),
+});
+export type GroundStation = Decoded<typeof stationsReader>["stations"][number];
+
+export function fetchStations(missionId: string, signal?: AbortSignal) {
+  return request(
+    `/missions/${encodeURIComponent(missionId)}/ground-stations`,
+    stationsReader,
+    signal ? { signal } : {},
+  );
+}

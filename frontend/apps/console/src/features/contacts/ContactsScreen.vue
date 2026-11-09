@@ -1,0 +1,180 @@
+<script setup lang="ts">
+import { computed } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useMissionScope } from "@/shell/index.ts";
+import {
+  plural,
+  useNow,
+  ApEmptyState,
+  ApGantt,
+  ApPageHeader,
+  ApPanel,
+  ApRemote,
+  ApSegmented,
+  ApTabLinks,
+} from "@/ui";
+import { useFleet } from "@/features/fleet/index.ts";
+import { passGantt, passStatus, type GanttAxis } from "./gantt.ts";
+import SelectedPassPanel from "./SelectedPassPanel.vue";
+import { usePasses } from "./usePasses.ts";
+import { fetchStations } from "./api.ts";
+import { useRemoteQuery } from "@/api/index.ts";
+import { useMissionInvalidation } from "@/live/index.ts";
+
+/**
+ * J4 · Contacts, Live (Contacts.md): 6 h pass schedule by station or spacecraft, the selected pass,
+ * and an honest collapsed ground-track strip (DECISIONS #4). D4 hides until conflict findings (M22).
+ */
+const scope = useMissionScope();
+const route = useRoute();
+const router = useRouter();
+const now = useNow();
+const missionId = computed(() => scope.value.mission.id);
+const fleet = useFleet(missionId);
+const passes = usePasses(missionId, 30 * 60_000, 6 * 3_600_000);
+const stationsQuery = useRemoteQuery(missionId, (id, signal) => fetchStations(id, signal));
+useMissionInvalidation(missionId, ["configuration"], stationsQuery.refetch);
+/** null = unknown (not loaded or failed): the label omits the count rather than guess. */
+const stationCount = computed(() =>
+  stationsQuery.state.value.status === "ready"
+    ? stationsQuery.state.value.value.stations.length
+    : null,
+);
+
+const go = (query: Record<string, string | undefined>) =>
+  router
+    .replace({ query: { ...route.query, ...query } })
+    .catch((e: unknown) => console.error("Navigation failed", e));
+const axis = computed<GanttAxis>(() =>
+  route.query.view === "spacecraft" ? "spacecraft" : "station",
+);
+const axes = [
+  { value: "station", label: "By station" },
+  { value: "spacecraft", label: "By spacecraft" },
+] as const;
+const selectedId = computed(() =>
+  typeof route.query.contact === "string" ? route.query.contact : null,
+);
+
+const byId = computed(() => {
+  const s = fleet.state.value;
+  return new Map((s.status === "ready" ? s.value.spacecraft : []).map((sc) => [sc.id, sc]));
+});
+const list = computed(() =>
+  passes.state.value.status === "ready" ? passes.state.value.value.passes : [],
+);
+/** Default selection: the pass named in the URL, else the next AOS fleet-wide. */
+const selected = computed(() => {
+  const t = now.value.getTime();
+  return (
+    list.value.find((p) => p.id === selectedId.value) ??
+    list.value.find((p) => Date.parse(p.starts_at) > t && passStatus(p, t) === "scheduled") ??
+    null
+  );
+});
+const view = computed(() => {
+  const s = passes.state.value;
+  if (s.status !== "ready") return null;
+  const window = { from: Date.parse(s.value.from), to: Date.parse(s.value.to) };
+  return {
+    window,
+    ...passGantt(
+      s.value.passes,
+      (id) => byId.value.get(id) ?? null,
+      now.value.getTime(),
+      selected.value?.id ?? null,
+      axis.value,
+    ),
+  };
+});
+const meta = computed(() => {
+  const t = now.value.getTime();
+  const live = list.value.filter((p) => passStatus(p, t) === "live").length;
+  const ahead = list.value.filter(
+    (p) => Date.parse(p.starts_at) > t && passStatus(p, t) !== "canceled",
+  ).length;
+  return `${plural(ahead, "pass", "passes")} next 6 h · ${live} AOS now`;
+});
+const tabs = [
+  { key: "live", label: "Live", to: { name: "ops.contacts" } },
+  { key: "plan", label: "Plan", to: { name: "ops.contacts.plan" } },
+];
+</script>
+
+<template>
+  <div class="flex min-h-0 flex-1 flex-col gap-3 max-console:overflow-auto">
+    <ApPageHeader
+      :label="
+        stationCount === null
+          ? 'Ground network'
+          : `Ground network · ${plural(stationCount, 'station')}`
+      "
+      title="Contacts"
+    >
+      <p class="m-0 font-mono text-sm text-text-3 uppercase">{{ meta }}</p>
+    </ApPageHeader>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <ApTabLinks :links="tabs" active="live" label="Contacts sections" />
+      <ApSegmented
+        :model-value="axis"
+        :options="axes"
+        label="Rows"
+        @update:model-value="(v) => go({ view: v === 'station' ? undefined : v })"
+      />
+    </div>
+    <ApPanel v-if="stationCount === 0" index="D3" title="Pass schedule" flush>
+      <ApEmptyState
+        headline="No ground stations yet"
+        sentence="Add a station before booking passes."
+      >
+        <ApButton size="compact" :to="{ name: 'setup.stations' }">Add a station</ApButton>
+      </ApEmptyState>
+    </ApPanel>
+    <template v-else>
+      <ApPanel index="D1" title="Ground track" flush class="flex-none">
+        <ApEmptyState
+          state="off"
+          headline="Ground track not available"
+          sentence="Station locations and orbit propagation aren't in Cadence yet. The schedule below is live."
+        />
+      </ApPanel>
+      <div
+        class="grid grid-cols-1 gap-3 console:min-h-0 console:flex-1 console:grid-cols-[minmax(0,1fr)_360px]"
+      >
+        <ApPanel
+          index="D3"
+          title="Pass schedule · 6 h"
+          :meta="view ? `${view.bars.length} passes` : undefined"
+          pane
+          flush
+        >
+          <ApRemote
+            :state="passes.state.value"
+            loading-label="LOADING PASSES…"
+            @retry="passes.refetch"
+          >
+            <ApEmptyState
+              v-if="view && view.bars.length === 0"
+              headline="No passes in the next 6 h"
+            />
+            <div v-else-if="view" class="p-3">
+              <ApGantt
+                label="Pass schedule for the next six hours"
+                :rows="view.rows"
+                :bars="view.bars"
+                :window="view.window"
+                :now="now.getTime()"
+                :selected="selected?.id ?? null"
+                @select="(id) => go({ contact: id })"
+              />
+            </div>
+          </ApRemote>
+        </ApPanel>
+        <SelectedPassPanel
+          :pass="selected"
+          :spacecraft="selected?.spacecraft_id ? (byId.get(selected.spacecraft_id) ?? null) : null"
+        />
+      </div>
+    </template>
+  </div>
+</template>

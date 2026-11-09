@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import { computed, onScopeDispose } from "vue";
-import { useRemoteQuery } from "@/api/index.ts";
-import { useMissionInvalidation } from "@/live/index.ts";
+import { computed } from "vue";
 import { useMissionScope } from "@/shell/index.ts";
 import { useNow, ApButton, ApEmptyState, ApGantt, ApPanel, ApRemote } from "@/ui";
-import { fetchPasses, passGantt } from "@/features/contacts/index.ts";
+import { passGantt, usePasses } from "@/features/contacts/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 
 /**
@@ -15,17 +13,7 @@ const props = defineProps<{ spacecraft: readonly FleetSpacecraft[] }>();
 const scope = useMissionScope();
 const now = useNow();
 const missionId = computed(() => scope.value.mission.id);
-const query = useRemoteQuery(missionId, (id, signal) => {
-  const t = Date.now();
-  return fetchPasses(
-    id,
-    { from: new Date(t - 15 * 60_000), to: new Date(t + 2 * 3_600_000) },
-    signal,
-  );
-});
-useMissionInvalidation(missionId, ["contacts"], query.refetch);
-const poll = setInterval(query.refetch, 30_000);
-onScopeDispose(() => clearInterval(poll));
+const query = usePasses(missionId, 15 * 60_000, 2 * 3_600_000);
 
 const byId = computed(() => new Map(props.spacecraft.map((sc) => [sc.id, sc])));
 const view = computed(() => {

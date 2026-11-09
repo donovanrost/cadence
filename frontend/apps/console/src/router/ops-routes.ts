@@ -56,7 +56,7 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "contacts",
     name: "ops.contacts",
-    component: pending,
+    component: () => import("@/features/contacts/ContactsScreen.vue"),
     meta: { mode: "ops", nav: "contacts", title: "Contacts", board: "Contacts (J4)" },
   },
   {
