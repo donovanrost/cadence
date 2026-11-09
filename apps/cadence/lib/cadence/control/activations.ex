@@ -12,6 +12,7 @@ defmodule Cadence.Control.Activations do
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Auth.Scope
+  alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.Activations.{ActivationExecution, ActivationExecutionRow}
   alias Cadence.Control.Activations.Review
   alias Cadence.Control.MissionModelPromotion
@@ -127,7 +128,11 @@ defmodule Cadence.Control.Activations do
                )
                |> Keyword.put(:metadata, approved_activation.metadata)
              ),
-           :ok <- TelemetryDecom.activation_applied(binding_set, approved_activation.metadata) do
+           :ok <-
+             TelemetryDecom.activation_applied(
+               binding_set,
+               applied_metadata(approved_activation.metadata)
+             ) do
         complete_execution(execution_row, activation, now(opts))
       end
 
@@ -235,4 +240,17 @@ defmodule Cadence.Control.Activations do
       opts
     )
   end
+
+  # TelemetryDecom runs in the data plane and can't read stored fleets; hand it the entries.
+  defp applied_metadata(%{"spacecraft_configuration_version" => 2} = metadata) do
+    case FleetSnapshot.entries(metadata) do
+      {:ok, entries} ->
+        %{"spacecraft_configuration_version" => 1, "spacecraft_configurations" => entries}
+
+      {:error, _reason} ->
+        metadata
+    end
+  end
+
+  defp applied_metadata(metadata), do: metadata
 end

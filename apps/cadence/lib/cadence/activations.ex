@@ -86,7 +86,10 @@ defmodule Cadence.Activations do
         |> where(
           [row],
           fragment("octet_length(?::text)", row.metadata) <= 65_536 or
-            (fragment("? #>> '{value,spacecraft_configuration_version}'", row.metadata) == "1" and
+            (fragment("? #>> '{value,spacecraft_configuration_version}'", row.metadata) in [
+               "1",
+               "2"
+             ] and
                fragment("octet_length(?::text)", row.metadata) <=
                  ^SpacecraftModelBindings.max_metadata_bytes())
         )
@@ -270,7 +273,9 @@ defmodule Cadence.Activations do
     |> Multi.run(:operational_event, fn repo, %{activation_record: activation_record} ->
       maybe_persist_activation_operational_event(repo, activation_record)
     end)
-    |> Repo.transaction()
+    # Admitting a fleet locks and re-checks every reviewed spacecraft (up to the review batch);
+    # the default 15 s transaction timeout is too short at fleet scale.
+    |> Repo.transaction(timeout: 120_000)
     |> case do
       {:ok, %{activation_record: %{row: activation_row, inserted?: inserted?}}} ->
         activation = BindingSetActivationRow.to_domain(activation_row)

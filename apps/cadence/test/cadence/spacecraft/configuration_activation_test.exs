@@ -3,6 +3,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
 
   alias Cadence.Activations.SpacecraftConfiguration, as: ConfigurationActivation
   alias Cadence.Applications.TelemetryDecom
+  alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.SpacecraftConfiguration
   alias Cadence.Control.SpacecraftModelBindings
@@ -150,10 +151,13 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
                }
              )
 
+    # The control plane hands TelemetryDecom the admitted entries (it can't read stored fleets).
+    {:ok, entries} = FleetSnapshot.entries(activation.metadata)
+
     assert :ok =
              TelemetryDecom.activation_applied(
                active.binding_set,
-               activation.metadata
+               %{"spacecraft_configuration_version" => 1, "spacecraft_configurations" => entries}
              )
 
     {:ok, first_config} =
@@ -410,21 +414,23 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
   test "activation still requires the exact artifacts stored during import", c do
     save(c, c.first, c.revision)
     assert {:ok, request} = review(c, c.first)
-    entry = request.metadata["spacecraft_configurations"][c.first.spacecraft_id]
+    assert {:ok, entry} = FleetSnapshot.entry(request.metadata, c.first.spacecraft_id)
     refute Map.has_key?(entry, "mission_model_comparison")
     assert :ok = SpacecraftModelBindings.validate(c.org, c.mission.mission_id, request.metadata)
 
+    # Tamper with the entries in their inline (v1) form; validation applies to both forms.
+    {:ok, entries} = FleetSnapshot.entries(request.metadata)
+    inline = %{"spacecraft_configuration_version" => 1, "spacecraft_configurations" => entries}
     path = ["spacecraft_configurations", c.first.spacecraft_id, "mission_model"]
 
-    wrong_revision =
-      put_in(request.metadata, path ++ ["content_sha256"], String.duplicate("0", 64))
+    wrong_revision = put_in(inline, path ++ ["content_sha256"], String.duplicate("0", 64))
 
     assert {:error, {:mission_model_manifest_mismatch, :revision_content}} =
              SpacecraftModelBindings.validate(c.org, c.mission.mission_id, wrong_revision)
 
     wrong_plan =
       put_in(
-        request.metadata,
+        inline,
         path ++ ["plans", "command", "content_sha256"],
         String.duplicate("0", 64)
       )

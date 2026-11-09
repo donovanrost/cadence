@@ -7,6 +7,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
   alias Cadence.Applications.ConfigurationLock
   alias Cadence.Applications.SpacecraftConfiguration.Active, as: ConfigurationActive
   alias Cadence.Applications.SpacecraftConfiguration.Drafts, as: ConfigurationDrafts
+  alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
   alias Cadence.Catalog.SpacecraftModelBindings
   alias Cadence.Control.Activations, as: ControlActivations
@@ -178,7 +179,10 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
         state: state,
         requester_id: request.requester_actor_id,
         version:
-          get_in(request.metadata, ["spacecraft_configurations", id, "configuration_version"])
+          case FleetSnapshot.entry(request.metadata, id) do
+            {:ok, entry} -> entry["configuration_version"]
+            {:error, _} -> nil
+          end
       }
     else
       nil

@@ -2,14 +2,14 @@ defmodule Cadence.Control.SpacecraftModelBindings do
   @moduledoc "Admits the exact model assigned to each spacecraft in an activation generation."
 
   alias Cadence.Catalog
-  alias Cadence.Catalog.SpacecraftModelBindings, as: ModelBindings
+  alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Control.MissionModelPromotion
   alias Cadence.MissionModels
   alias Cadence.SourceEndpoints
   alias Cadence.SpacecraftStore
 
   def validate(organization_id, mission_id, metadata) do
-    with {:ok, entries} <- ModelBindings.entries(metadata),
+    with {:ok, entries} <- FleetSnapshot.entries(metadata),
          :ok <-
            Enum.reduce_while(entries, :ok, fn {spacecraft_id, entry}, :ok ->
              validate_entry(organization_id, mission_id, spacecraft_id, entry)
@@ -45,7 +45,7 @@ defmodule Cadence.Control.SpacecraftModelBindings do
   end
 
   def runtime_basis(activation) do
-    with {:ok, entries} <- ModelBindings.entries(activation.metadata),
+    with {:ok, entries} <- FleetSnapshot.entries(activation.metadata),
          {:ok, bases} <- resolve_entries(activation, entries) do
       # The complete source map is part of the receiver's runtime identity. A
       # partition must select its own entry before executing any model plan.
@@ -55,7 +55,7 @@ defmodule Cadence.Control.SpacecraftModelBindings do
   end
 
   def runtime_basis(activation, source_endpoint_id) do
-    with {:ok, entry} <- ModelBindings.entry_for_source(activation.metadata, source_endpoint_id) do
+    with {:ok, entry} <- FleetSnapshot.entry_for_source(activation.metadata, source_endpoint_id) do
       MissionModelPromotion.runtime_basis(%{activation | metadata: entry})
     end
   end
@@ -77,7 +77,7 @@ defmodule Cadence.Control.SpacecraftModelBindings do
   defp commanding_entry?({_id, entry}), do: entry["commanding_enabled"]
 
   defp command_entry(metadata, nil) do
-    with {:ok, entries} <- ModelBindings.entries(metadata) do
+    with {:ok, entries} <- FleetSnapshot.commanding_entries(metadata) do
       case entries
            |> Enum.sort()
            |> Enum.find(&commanding_entry?/1) do
@@ -87,7 +87,7 @@ defmodule Cadence.Control.SpacecraftModelBindings do
     end
   end
 
-  defp command_entry(metadata, source), do: ModelBindings.entry_for_source(metadata, source)
+  defp command_entry(metadata, source), do: FleetSnapshot.entry_for_source(metadata, source)
 
   defp resolve_entries(activation, entries) do
     entries

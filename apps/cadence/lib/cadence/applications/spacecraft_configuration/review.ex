@@ -8,6 +8,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecom.Config
   alias Cadence.Catalog
+  alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Catalog.SpacecraftModelBindings
   alias Cadence.Governance
   alias Cadence.Management.Activations
@@ -55,14 +56,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
          binding_set <- replace_contributions(mission, active, prepared),
          {:ok, _} <- Governance.persist_binding_set(scope.organization_id, binding_set),
          entries <- Map.merge(active.entries, Map.new(prepared, &{&1.id, &1.entry})),
-         metadata <- %{
-           "spacecraft_configuration_version" => 1,
-           "spacecraft_configurations" => entries,
-           "configuration_review" => review_evidence(prepared, active)
-         },
-         {:ok, _} <- SpacecraftModelBindings.entries(metadata),
-         true <-
-           byte_size(Jason.encode!(metadata)) <= SpacecraftModelBindings.max_metadata_bytes() do
+         {:ok, fleet} <- FleetSnapshot.store(mission_id, entries),
+         metadata <- FleetSnapshot.metadata(fleet, review_evidence(prepared, active)) do
       Activations.request(
         scope,
         mission_id,
@@ -70,9 +65,6 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
         binding_set.version,
         Keyword.merge(opts, change_class: :mission_data_plane, metadata: metadata)
       )
-    else
-      false -> {:error, :spacecraft_configuration_review_unavailable}
-      {:error, reason} -> {:error, reason}
     end
   end
 

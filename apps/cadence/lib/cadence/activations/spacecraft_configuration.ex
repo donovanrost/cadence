@@ -4,6 +4,7 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
   alias Cadence.Applications.ConfigurationLock
   alias Cadence.Applications.SpacecraftConfiguration.Active, as: ConfigurationActive
   alias Cadence.Applications.SpacecraftConfiguration.Drafts, as: ConfigurationDrafts
+  alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
   alias Cadence.Catalog.SpacecraftModelBindings
   alias Cadence.Missions
@@ -14,13 +15,13 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
   # Called inside the activation transaction, after the generation lock. Runtime
   # reconciliation and broadcasts happen only after this transaction commits.
   def admit(
-        %{organization_id: org, metadata: %{"spacecraft_configuration_version" => 1} = metadata} =
+        %{organization_id: org, metadata: %{"spacecraft_configuration_version" => v} = metadata} =
           attrs
       )
-      when is_binary(org) do
+      when is_binary(org) and v in [1, 2] do
     ConfigurationLock.run(attrs.organization_id, attrs.mission_id, fn ->
       with {:ok, ids} <- SpacecraftModelBindings.reviewed_spacecraft_ids(metadata),
-           {:ok, entries} <- SpacecraftModelBindings.entries(metadata),
+           {:ok, entries} <- FleetSnapshot.entries(metadata),
            {:ok, mission} <- Missions.fetch_mission(attrs.organization_id, attrs.mission_id),
            {:ok, active} <- ConfigurationActive.load(mission),
            true <- Map.drop(entries, ids) == Map.drop(active.entries, ids) do
@@ -81,7 +82,7 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
          current = ConfigurationDrafts.snapshot(mission, spacecraft),
          :ok <- ConfigurationDrafts.exact_token(current.token, token),
          true <- current.row != nil and current.row.configuration_revision_id == revision_id,
-         entry when is_map(entry) <- metadata["spacecraft_configurations"][id],
+         {:ok, entry} <- reviewed_entry(metadata, id),
          true <- entry["document"] == current.row.document,
          true <-
            entry["configuration_revision_id"] == revision_id and
@@ -93,6 +94,13 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
     else
       {:error, reason} -> {:error, reason}
       _ -> {:error, :spacecraft_configuration_review_stale}
+    end
+  end
+
+  defp reviewed_entry(metadata, id) do
+    case FleetSnapshot.entry(metadata, id) do
+      {:ok, entry} -> {:ok, entry}
+      {:error, _} -> {:error, :spacecraft_configuration_review_stale}
     end
   end
 
