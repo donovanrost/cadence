@@ -41,8 +41,7 @@ defmodule Cadence.SpacecraftType.Schema do
   def value(%SpacecraftType{} = profile, "uplink_protocol"), do: string(profile.uplink_protocol)
   def value(%SpacecraftType{} = profile, "packet_protocol"), do: string(profile.packet_protocol)
 
-  def value(%SpacecraftType{} = profile, "catalog_revision_id"),
-    do: Map.get(profile.metadata || %{}, "catalog_revision_id")
+  def value(%SpacecraftType{} = profile, "catalog_revision_id"), do: profile.catalog_revision_id
 
   def value(%SpacecraftType{}, _path), do: nil
 

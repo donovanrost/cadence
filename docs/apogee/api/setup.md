@@ -197,9 +197,12 @@ Profile detail with **schema-driven sections** (`Cadence.SpacecraftType.Schema`,
   protocol, frame length, secondary header, insert zone, OCF, truncated primary header) and catalog.
   `type` is `integer | boolean | enum | string | reference`; `runtime_impact` is
   `generation | routes | none`. Enum options come as `[{value, label}]`.
-- `routing_model: "per_spacecraft"` with empty `rules`/`overrides` until DECISIONS #3 lands.
-- `catalog_revision` and the catalog field's `value` are `null` until the catalog moves onto the
-  profile. `versions[].actor` and `last_change.actor` are `null` because profile versions don't
+- `rules` and `overrides` come from domain's profile routing (DECISIONS #3, shapes in domain.md
+  "P2 additions"). `routing_model` is `"profile"` when the profile has rules, else
+  `"per_spacecraft"` (legacy per-spacecraft rules not yet lifted). `override_count` and each
+  field's `overridden_by` count the spacecraft overriding that path.
+- `catalog_revision` is `{id}` (or `null`), and the catalog field's `value` is the profile's
+  `catalog_revision_id`. `versions[].actor` and `last_change.actor` are `null` because profile versions don't
   record an author (change-set revisions do; `last_change.revision` fills in when profile edits go
   through change sets).
 - `applications`: the profile's app defaults as raw JSON. A typed app-config schema needs each

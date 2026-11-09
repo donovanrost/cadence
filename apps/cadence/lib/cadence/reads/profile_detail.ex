@@ -4,13 +4,14 @@ defmodule Cadence.Reads.ProfileDetail do
   sections with current values (`Cadence.SpacecraftType.Schema`), inherit
   counts and version history. Callers authorize first.
 
-  Profile-level routing rules and per-spacecraft overrides arrive with
-  DECISIONS #3; until then `rules` and `overrides` are empty and
-  `routing_model` is `:per_spacecraft`, so the UI can say routing is still
-  configured per spacecraft.
+  Profile-level routing rules and per-spacecraft overrides come from
+  `Cadence.Reads.ProfileRouting` (DECISIONS #3). `routing_model` is `:profile`
+  when the profile has rules, else `:per_spacecraft` (legacy per-spacecraft
+  rules not yet lifted onto the profile).
   """
 
   alias Cadence.SpacecraftType
+  alias Cadence.Reads.ProfileRouting
   alias Cadence.SpacecraftType.Schema
 
   @spec load(binary(), binary(), binary()) :: {:ok, map()} | {:error, :spacecraft_type_not_found}
@@ -31,7 +32,9 @@ defmodule Cadence.Reads.ProfileDetail do
                profile_id
              ),
            version_counts:
-             Cadence.SpacecraftStore.fleet_summary(organization_id, mission_id).profile_version_counts
+             Cadence.SpacecraftStore.fleet_summary(organization_id, mission_id).profile_version_counts,
+           rules: ProfileRouting.rules(organization_id, mission_id, profile),
+           overrides: ProfileRouting.overrides(organization_id, mission_id, profile)
          })}
 
       _missing ->
@@ -43,6 +46,8 @@ defmodule Cadence.Reads.ProfileDetail do
   @spec build(map()) :: map()
   def build(%{profile: %SpacecraftType{} = profile} = input) do
     versions = Map.get(input, :versions, [])
+    rules = Map.get(input, :rules, [])
+    overrides = Map.get(input, :overrides, [])
 
     pinned =
       input
@@ -56,7 +61,7 @@ defmodule Cadence.Reads.ProfileDetail do
         id: profile.spacecraft_type_id,
         name: profile.display_name,
         version: profile.version,
-        catalog_revision: nil,
+        catalog_revision: profile.catalog_revision_id && %{id: profile.catalog_revision_id},
         protocols: %{
           downlink: enum_value(profile.downlink_protocol),
           uplink: enum_value(profile.uplink_protocol),
@@ -70,17 +75,19 @@ defmodule Cadence.Reads.ProfileDetail do
         |> Enum.filter(&(&1.spacecraft_type_version < profile.version))
         |> Enum.map(& &1.count)
         |> Enum.sum(),
-      override_count: 0,
-      sections: sections(profile),
+      override_count: length(overrides),
+      sections: sections(profile, overrides),
       applications: profile.applications || %{},
-      rules: [],
-      overrides: [],
-      routing_model: :per_spacecraft,
+      rules: rules,
+      overrides: overrides,
+      routing_model: if(rules == [], do: :per_spacecraft, else: :profile),
       versions: Enum.map(versions, &%{version: &1.version, created_at: &1.created_at, actor: nil})
     }
   end
 
-  defp sections(profile) do
+  defp sections(profile, overrides) do
+    counts = Enum.frequencies_by(overrides, &(&1.path |> to_string() |> String.replace("/", ".")))
+
     Enum.map(Schema.sections(), fn section ->
       %{
         key: section.key,
@@ -89,7 +96,7 @@ defmodule Cadence.Reads.ProfileDetail do
           Enum.map(section.fields, fn field ->
             field
             |> Map.put(:value, Schema.value(profile, field.path))
-            |> Map.put(:overridden_by, 0)
+            |> Map.put(:overridden_by, Map.get(counts, field.path, 0))
           end)
       }
     end)
