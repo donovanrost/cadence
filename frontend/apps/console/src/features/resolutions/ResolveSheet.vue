@@ -27,6 +27,12 @@ const booked = computed(() => action.value === "booked");
 const title = computed(
   () => `Mark ${props.pass.text} as ${booked.value ? "booked" : "not booked"}`,
 );
+/** ux: one request does both for not-booked, and the client can't tell which step it's on. */
+const busyText = computed(() =>
+  booked.value
+    ? `Asking ${provider.value} first…`
+    : `Asking ${provider.value}, then sending the cancel…`,
+);
 const primary = computed(() =>
   booked.value ? "Mark booked" : `Cancel at ${provider.value} and mark not booked`,
 );
@@ -103,7 +109,7 @@ async function submit() {
         :failure="failure"
       />
       <!-- The provider re-ask takes seconds (qa: 4-6 s); say what's happening, not just disable. -->
-      <p v-if="busy" class="m-0 text-sm text-text-2" role="status">Asking {{ provider }} first…</p>
+      <p v-if="busy" class="m-0 text-sm text-text-2" role="status">{{ busyText }}</p>
       <footer class="flex items-center justify-end gap-3 border-t border-hairline pt-3">
         <ApButton variant="ghost" @click="dialog?.close()">{{
           outcome ? "Close" : "Cancel"
