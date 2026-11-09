@@ -10,7 +10,7 @@ defineProps<{ steps: readonly string[]; current: number; label: string }>();
         v-for="(step, i) in steps"
         :key="step"
         :aria-current="i === current ? 'step' : undefined"
-        class="flex h-11 flex-1 items-center gap-2.5 border-r border-hairline px-4 font-display text-md font-semibold tracking-tag uppercase last:border-r-0"
+        class="flex h-11 flex-1 items-center gap-2.5 whitespace-nowrap max-md:flex-none border-r border-hairline px-4 font-display text-md font-semibold tracking-tag uppercase last:border-r-0"
         :class="
           i === current
             ? 'bg-raised text-readout shadow-[inset_0_-2px_0_var(--color-readout)]'
