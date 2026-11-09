@@ -64,7 +64,7 @@ const unit = computed(() => props.alarm.point.unit ?? undefined);
         {{
           view?.rate == null
             ? "Rate needs 15 min of data"
-            : `${formatRate(view.rate)} ${unit ?? ""} per hour`
+            : `${formatRate(view.rate)} ${unit ?? ""}/h`.replace(" /h", "/h")
         }}
       </p>
     </div>
