@@ -8,7 +8,7 @@ defmodule CadenceWeb.Console.ConfigController do
   use CadenceWeb, :controller
 
   alias Cadence.Control.{Configuration, ConfigurationRollback}
-  alias Cadence.Reads.ConfigKindSchema
+  alias Cadence.Reads.{ConfigKindSchema, ConfigLabels}
   alias CadenceWeb.Console.{ConfigJSON, ConfigParams, Problem}
 
   def show(conn, _params) do
@@ -42,11 +42,16 @@ defmodule CadenceWeb.Console.ConfigController do
   end
 
   def preview_set(conn, %{"change_set_id" => id}),
-    do: Configuration.preview(scope(conn), mission_id(conn), id) |> wrap() |> reply(conn)
+    do:
+      Configuration.preview(scope(conn), mission_id(conn), id)
+      |> labelled(conn)
+      |> wrap()
+      |> reply(conn)
 
   def preview_ops(conn, body) do
     with {:ok, ops} <- params(ConfigParams.ops(body)),
-         {:ok, preview} <- Configuration.preview(scope(conn), mission_id(conn), {:ops, ops}) do
+         {:ok, preview} <-
+           labelled(Configuration.preview(scope(conn), mission_id(conn), {:ops, ops}), conn) do
       ok(conn, preview)
     end
     |> reply(conn)
@@ -88,7 +93,7 @@ defmodule CadenceWeb.Console.ConfigController do
   def revision(conn, %{"revision" => number}) do
     with {:ok, n} <- params(ConfigParams.revision_number(number)),
          {:ok, revision} <- Configuration.get_revision(scope(conn), mission_id(conn), n) do
-      ok(conn, revision)
+      ok(conn, ConfigLabels.revision(scope(conn).organization_id, mission_id(conn), revision))
     end
     |> reply(conn)
   end
@@ -118,8 +123,9 @@ defmodule CadenceWeb.Console.ConfigController do
   def rollback_preview(conn, params) do
     with {:ok, to} <- params(ConfigParams.revision_number(params["to"])),
          {:ok, result} <-
-           rollback_error(ConfigurationRollback.preview(scope(conn), mission_id(conn), to)) do
-      ok(conn, result)
+           rollback_error(ConfigurationRollback.preview(scope(conn), mission_id(conn), to)),
+         {:ok, preview} <- labelled({:ok, result.preview}, conn) do
+      ok(conn, %{result | preview: preview})
     end
     |> reply(conn)
   end
@@ -141,6 +147,12 @@ defmodule CadenceWeb.Console.ConfigController do
     do: {:error, {:rollback_unknown_kind, %{kind: kind}}}
 
   defp rollback_error(result), do: result
+
+  # Names and field labels for the console's sentences (ConfigLabels).
+  defp labelled({:ok, preview}, conn),
+    do: {:ok, ConfigLabels.preview(scope(conn).organization_id, mission_id(conn), preview)}
+
+  defp labelled(other, _conn), do: other
 
   defp ok(conn, data), do: {:sent, json(conn, %{data: ConfigJSON.encode(data)})}
 

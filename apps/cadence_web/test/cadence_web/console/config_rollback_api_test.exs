@@ -76,6 +76,10 @@ defmodule CadenceWeb.Console.ConfigRollbackAPITest do
              "preview" => %{"verdict" => "go"}
            } = preview
 
+    # Display fields for the console's sentences.
+    assert [%{"entity_name" => "Svalbard B", "fields" => fields}] = preview["preview"]["diffs"]
+    assert %{"label" => "Name"} = Enum.find(fields, &(&1["path"] == "display_name"))
+
     staged =
       c |> call(:post, "/rollback", %{"to" => 2}) |> json_response(200) |> Map.fetch!("data")
 
@@ -90,8 +94,9 @@ defmodule CadenceWeb.Console.ConfigRollbackAPITest do
              |> json_response(200)
              |> Map.fetch!("data")
 
-    assert %{"kind" => "rollback", "rolls_back_to" => 2} =
-             c |> call(:get, "/revisions/4") |> json_response(200) |> Map.fetch!("data")
+    revision = c |> call(:get, "/revisions/4") |> json_response(200) |> Map.fetch!("data")
+    assert %{"kind" => "rollback", "rolls_back_to" => 2} = revision
+    assert [%{"entity_name" => "Svalbard"}] = revision["entries"]
 
     assert json_response(call(c, :get, "/rollback?to=4"), 422)["error"]["code"] ==
              "invalid_rollback_target"

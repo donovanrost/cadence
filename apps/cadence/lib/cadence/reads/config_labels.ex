@@ -1,0 +1,120 @@
+defmodule Cadence.Reads.ConfigLabels do
+  @moduledoc """
+  Display fields for change-set previews and revision entries (fe-setup / ux): each item gets
+  `entity_name`, and each changed path gets the kind schema's `label` and `unit`, so the console
+  can say "Earendil Block 1 · TM frame length is 1,024 bytes now, not 900 bytes as r8 left it".
+  Names come from the documents (`display_name`), else the entity's current document; a
+  spacecraft-keyed kind (overrides, routes) takes the spacecraft's name. Unknown ones stay nil.
+  """
+
+  alias Cadence.Configuration.Kinds
+  alias Cadence.Reads.ConfigKindSchema
+
+  @spacecraft_keyed ~w(spacecraft_override spacecraft_routes)
+
+  @doc "Adds display fields to a preview's conflict items and diffs."
+  @spec preview(binary(), binary(), map() | nil) :: map() | nil
+  def preview(_organization_id, _mission_id, nil), do: nil
+
+  def preview(organization_id, mission_id, preview) do
+    items = Enum.flat_map(preview.checks, & &1.items) ++ preview.diffs
+    names = names(organization_id, mission_id, items, %{})
+    fields = schemas(organization_id, mission_id, items)
+
+    %{
+      preview
+      | checks:
+          Enum.map(preview.checks, fn check ->
+            %{check | items: Enum.map(check.items, &decorate(&1, names, fields))}
+          end),
+        diffs: Enum.map(preview.diffs, &decorate(&1, names, fields))
+    }
+  end
+
+  @doc "Adds display fields to a revision's entries."
+  @spec revision(binary(), binary(), map()) :: map()
+  def revision(organization_id, mission_id, %{entries: entries} = revision) do
+    documented =
+      Map.new(entries, fn entry ->
+        {{entry.kind, entry.entity_id}, name_of(entry.after) || name_of(entry.before)}
+      end)
+
+    names = names(organization_id, mission_id, entries, documented)
+    fields = schemas(organization_id, mission_id, entries)
+    %{revision | entries: Enum.map(entries, &decorate(&1, names, fields))}
+  end
+
+  def revision(_organization_id, _mission_id, revision), do: revision
+
+  defp decorate(%{kind: kind, entity_id: id} = item, names, fields) do
+    labels = Map.get(fields, kind, %{})
+
+    item
+    |> Map.put(:entity_name, Map.get(names, {kind, id}))
+    |> label_list(:paths, labels)
+    |> label_list(:fields, labels)
+  end
+
+  defp decorate(item, _names, _fields), do: item
+
+  defp label_list(item, key, labels) do
+    case Map.get(item, key) do
+      list when is_list(list) ->
+        Map.put(item, key, Enum.map(list, &label(&1, labels)))
+
+      _none ->
+        item
+    end
+  end
+
+  defp label(%{path: path} = entry, labels) do
+    field = Map.get(labels, path, %{})
+    Map.merge(entry, %{label: field[:label], unit: field[:unit]})
+  end
+
+  defp label(entry, _labels), do: entry
+
+  defp names(organization_id, mission_id, items, known) do
+    items
+    |> Enum.filter(&(is_map_key(&1, :kind) and is_map_key(&1, :entity_id)))
+    |> Enum.reject(&Map.get(known, {&1.kind, &1.entity_id}))
+    |> Enum.group_by(&lookup_kind(&1.kind), & &1.entity_id)
+    |> Enum.reduce(known, fn {kind, ids}, acc ->
+      Map.merge(acc, load_names(organization_id, mission_id, kind, Enum.uniq(ids), items))
+    end)
+  end
+
+  # Overrides and routes are keyed by the spacecraft: name them after it.
+  defp lookup_kind(kind) when kind in @spacecraft_keyed, do: "spacecraft"
+  defp lookup_kind(kind), do: kind
+
+  defp load_names(organization_id, mission_id, kind, ids, items) do
+    loaded =
+      case Kinds.fetch(kind) do
+        {:ok, module} -> module.load(organization_id, mission_id, ids)
+        _unknown -> %{}
+      end
+
+    for item <- items,
+        lookup_kind(item.kind) == kind,
+        name = name_of(Map.get(loaded, item.entity_id)),
+        into: %{},
+        do: {{item.kind, item.entity_id}, name}
+  end
+
+  defp schemas(organization_id, mission_id, items) do
+    items
+    |> Enum.map(&Map.get(&1, :kind))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> Map.new(fn kind ->
+      case ConfigKindSchema.fields(kind, organization_id, mission_id) do
+        {:ok, fields} -> {kind, Map.new(fields, &{&1.path, &1})}
+        _none -> {kind, %{}}
+      end
+    end)
+  end
+
+  defp name_of(%{"display_name" => name}) when is_binary(name), do: name
+  defp name_of(_document), do: nil
+end
