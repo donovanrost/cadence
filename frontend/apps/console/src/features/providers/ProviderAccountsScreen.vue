@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useConsoleScope } from "@/shell";
 import {
+  ApButton,
   ApEmptyState,
   ApPageHeader,
   ApPanel,
@@ -14,6 +15,7 @@ import {
   plural,
   type ApColumn,
 } from "@/ui";
+import AddAccountPanel from "./AddAccountPanel.vue";
 import ProviderAccountDetail from "./ProviderAccountDetail.vue";
 import { fetchProviderAccounts, statusTag } from "./api.ts";
 
@@ -29,12 +31,18 @@ const { state, refetch } = useRemoteQuery(
   fetchProviderAccounts,
 );
 const route = useRoute();
+const adding = computed(() => route.params.accountId === "new");
 const selected = computed(() => {
   const id = route.params.accountId;
   return state.value.status === "ready" && typeof id === "string"
     ? (state.value.value.accounts.find((a) => a.id === id) ?? null)
     : null;
 });
+const canManage = computed(
+  () =>
+    state.value.status === "ready" &&
+    state.value.value.permissions.includes("provider_accounts.manage"),
+);
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
 );
@@ -58,14 +66,27 @@ const columns: readonly ApColumn[] = [
           : 'Provider accounts'
       "
       size="reading"
-    />
+    >
+      <ApButton
+        v-if="canManage && !adding"
+        variant="primary"
+        :to="{ name: 'org.provider-accounts', params: { accountId: 'new' } }"
+        >Add provider account</ApButton
+      >
+    </ApPageHeader>
     <ProviderAccountDetail
       v-if="selected && organization && state.status === 'ready'"
       :key="selected.id"
       :organization="organization"
       :account="selected"
-      :can-manage="state.value.permissions.includes('provider_accounts.manage')"
-      @tested="refetch"
+      :can-manage="canManage"
+      @changed="refetch"
+    />
+    <AddAccountPanel
+      v-if="adding && canManage && organization && state.status === 'ready'"
+      :organization="organization"
+      :adapters="state.value.adapters"
+      @added="refetch"
     />
     <ApPanel index="V1" title="Provider accounts" flush>
       <ApEmptyState

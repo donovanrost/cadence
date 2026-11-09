@@ -3,7 +3,15 @@ import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
-import { ApCallout, ApPageHeader, ApRemote, ApSegmented, ApTimePicker, plural } from "@/ui";
+import {
+  ApCallout,
+  ApPageHeader,
+  ApRemote,
+  ApSegmented,
+  ApTabLinks,
+  ApTimePicker,
+  plural,
+} from "@/ui";
 import CausesPanel from "./CausesPanel.vue";
 import DailyPanel from "./DailyPanel.vue";
 import LostPanel from "./LostPanel.vue";
@@ -25,8 +33,7 @@ const key = computed(() => ({
 const summary = useRemoteQuery(key, fetchSummary);
 const lost = useRemoteQuery(key, fetchLost);
 const daily = useRemoteQuery(key, fetchDaily);
-// TODO(lead): "pass_results" once it's in missionResources; contact changes cover it until then.
-useMissionInvalidation(missionId, ["contacts"], () => {
+useMissionInvalidation(missionId, ["pass_results"], () => {
   summary.refetch();
   lost.refetch();
   daily.refetch();
@@ -46,6 +53,11 @@ const label = computed(() => {
     .filter(Boolean)
     .join(" · ");
 });
+const tabs = [
+  { key: "live", label: "Live", to: { name: "ops.contacts" } },
+  { key: "plan", label: "Plan", to: { name: "ops.contacts.plan" } },
+  { key: "review", label: "Review", to: { name: "ops.contacts.review" } },
+];
 const spans = [
   { value: "day", label: "Day" },
   { value: "week", label: "Week" },
@@ -84,6 +96,7 @@ const pickDay = (t: number | null) =>
         </div>
       </div>
     </ApPageHeader>
+    <ApTabLinks :links="tabs" active="review" label="Contacts sections" />
     <ApRemote
       :state="summary.state.value"
       loading-label="Loading pass results…"
