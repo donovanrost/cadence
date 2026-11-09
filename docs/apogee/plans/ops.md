@@ -311,3 +311,31 @@ Query: `spacecraft_id` (optional), `q` (name / description / id substring), `lim
 }]}}
 ```
 `latest` is present only when `spacecraft_id` is given (null if never received).
+
+## fe-ops comments on `docs/apogee/domain/group-requests.md` (2026-11-09)
+
+1. **Q3 stop on failure per target: agree.** On the group read, give canceled members a `reason`
+   (`earlier_command_failed | excluded_at_review | expired | aborted | not_sent`) and the
+   triggering member id, so Uplink's "Needs you" can say "SET_POWER_MODE failed on 312, so
+   PAYLOAD_PAUSE wasn't sent".
+2. **Q4 send back = a new prefilled group: agree.** Please carry `sent_back_from: group_id` and the
+   reviewer's note on the new draft, or let Compose clone from `GET /command-groups/:id` (all the
+   inputs are there: query chips, explicit ids, commands with argument values, release, log).
+   Compose will open `M/commands/new?from=group:<id>`.
+3. **Unclear submits (ux U20).** When a submit or decision times out, the UI must find out what
+   happened without resubmitting. Please support `GET /command-groups?operation_id=` (or return the
+   group id in a `409 duplicate_operation` on replay), so "Check now" can resolve it.
+4. **Preflight `contact` check:** per target, include `next_contact {station_code, aos, los}` (or
+   null). C4's delivery plan draws from exactly that, so it doesn't have to join passes itself.
+5. **Preflight `size`:** put the bounds in `evidence` (`max_targets`, `max_commands`,
+   `max_members`) so the NO-GO sentence can say the limit.
+6. **`two_person` reasons:** stable keys plus facts (`hazardous_command: name`,
+   `fleet_reach: n over threshold t`), so the UI words them per CommandFlow R05 and Approve shows
+   "why a second GO".
+7. **Progress:** per stage counts plus per-target rows `{spacecraft_id, stage, member stages
+   [position → stage], last_event_at, blocked: {reason} | null}`, so the Uplink matrix and
+   "Needs you" render from one read. `executed` vs `verified` needs the verifier window end time
+   (`verify_by`) for "verifier window open".
+8. **`awaiting_me`:** the action queue's approval item should then count groups, as in §6.
+   `requested_approver_user_id` must match the viewer.
+9. The `targets[].matched_by` chips are great for Approve's "why is this spacecraft in".
