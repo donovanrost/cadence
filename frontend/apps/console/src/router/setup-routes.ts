@@ -107,13 +107,13 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
   {
     path: "setup/data-sources/:sourceId?",
     name: "setup.data-sources",
-    component: pending,
+    component: () => import("@/features/sources/SourcesScreen.vue"),
     meta: { mode: "setup", nav: "data-sources", title: "Data sources" },
   },
   {
     path: "setup/apps/:appKey?",
     name: "setup.apps",
-    component: pending,
+    component: () => import("@/features/apps/AppsScreen.vue"),
     meta: { mode: "setup", nav: "apps", title: "Apps" },
   },
   {
