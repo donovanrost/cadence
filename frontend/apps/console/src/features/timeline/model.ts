@@ -26,8 +26,50 @@ export const KIND_WORDS: Readonly<Record<EventKind, string>> = {
   data: "Data pipeline",
 };
 
-/** One row: an event, or a run of consecutive identical events (× count, first–last). */
-export type LogRow = Readonly<{ key: string; event: MissionEvent; count: number; firstAt: string }>;
+/**
+ * One row: an event, a run of consecutive identical events (× count, first–last), or the same
+ * event across many spacecraft in one minute (`members`, expandable; ux Timeline review 6).
+ */
+export type LogRow = Readonly<{
+  key: string;
+  event: MissionEvent;
+  count: number;
+  firstAt: string;
+  members: readonly MissionEvent[];
+}>;
+
+/** More than this many spacecraft with the same event in one minute fold into one row. */
+export const FANOUT_AT = 3;
+
+function foldAcrossSpacecraft(rows: LogRow[]): LogRow[] {
+  const keyOf = (r: LogRow) => `${r.event.kind}|${r.event.text}|${r.event.at.slice(0, 16)}`;
+  const groups = new Map<string, LogRow[]>();
+  for (const row of rows) {
+    if (!row.event.spacecraft) continue;
+    groups.set(keyOf(row), [...(groups.get(keyOf(row)) ?? []), row]);
+  }
+  const out: LogRow[] = [];
+  const emitted = new Set<string>();
+  for (const row of rows) {
+    const key = keyOf(row);
+    const group = row.event.spacecraft ? groups.get(key) : undefined;
+    const distinct = new Set(group?.map((r) => r.event.spacecraft?.id)).size;
+    if (!group || distinct <= FANOUT_AT) {
+      out.push(row);
+      continue;
+    }
+    if (emitted.has(key)) continue;
+    emitted.add(key);
+    out.push({
+      key: `fanout:${row.key}`,
+      event: row.event,
+      count: group.reduce((n, r) => n + r.count, 0),
+      firstAt: group.at(-1)?.firstAt ?? row.firstAt,
+      members: group.map((r) => r.event),
+    });
+  }
+  return out;
+}
 export type HourGroup = Readonly<{ hour: string; rows: readonly LogRow[] }>;
 
 const same = (a: MissionEvent, b: MissionEvent) =>
@@ -44,7 +86,13 @@ export function byHour(events: readonly MissionEvent[]): HourGroup[] {
   const sorted = [...events].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   const groups: {
     hour: string;
-    rows: { key: string; event: MissionEvent; count: number; firstAt: string }[];
+    rows: {
+      key: string;
+      event: MissionEvent;
+      count: number;
+      firstAt: string;
+      members: MissionEvent[];
+    }[];
   }[] = [];
   for (const event of sorted) {
     const hour = `${event.at.slice(0, 10)} ${event.at.slice(11, 13)}:00Z`;
@@ -57,9 +105,9 @@ export function byHour(events: readonly MissionEvent[]): HourGroup[] {
     if (last && same(last.event, event)) {
       last.count += 1;
       last.firstAt = event.at;
-    } else group.rows.push({ key: event.id, event, count: 1, firstAt: event.at });
+    } else group.rows.push({ key: event.id, event, count: 1, firstAt: event.at, members: [] });
   }
-  return groups;
+  return groups.map((g) => ({ hour: g.hour, rows: foldAcrossSpacecraft(g.rows) }));
 }
 
 /** Bucket size giving at most ~96 bars over the window (15 min over 24 h). */

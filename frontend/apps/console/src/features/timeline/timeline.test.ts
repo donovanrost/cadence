@@ -54,6 +54,21 @@ describe("timeline", () => {
     ]);
   });
 
+  it("folds the same event across more than three spacecraft in one minute (ux 6)", () => {
+    const sc = (n: number) => ({ id: `sc-${n}`, name: `EARENDIL-${n}`, scid: n });
+    const realized = (n: number) => ({
+      ...ev(`r${n}`, "2026-11-08T02:30:05Z"),
+      kind: "contact" as const,
+      text: "Realized contact interval",
+      spacecraft: sc(n),
+    });
+    const [group] = byHour([1, 2, 3, 4, 5].map(realized));
+    expect(group?.rows).toHaveLength(1);
+    expect(group?.rows[0]?.members).toHaveLength(5);
+    const [few] = byHour([1, 2, 3].map(realized));
+    expect(few?.rows).toHaveLength(3);
+  });
+
   it("sizes density buckets and stacks severities", () => {
     expect(densityBucketS(24 * 3_600_000)).toBe(900);
     expect(densityBucketS(3_600_000)).toBe(60);
