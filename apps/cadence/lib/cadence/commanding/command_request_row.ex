@@ -43,6 +43,9 @@ defmodule Cadence.Commanding.CommandRequestRow do
     field(:opcode_document, :map, default: %{})
     field(:requested_at, :utc_datetime_usec)
     field(:metadata_document, :map, default: %{})
+    field(:command_group_id, :string)
+    field(:group_target_index, :integer)
+    field(:group_position, :integer)
 
     timestamps()
   end
@@ -169,7 +172,19 @@ defmodule Cadence.Commanding.CommandRequestRow do
       requested_at: command_request.requested_at,
       metadata_document: JsonDocument.wrap_value(command_request.metadata)
     }
+    |> Map.merge(group_columns(command_request.metadata))
   end
+
+  # A group member carries `metadata["group"] = %{"id", "target_index", "position"}`; the row
+  # mirrors it into indexed columns (docs/apogee/domain/group-requests.md §2).
+  defp group_columns(%{
+         "group" => %{"id" => id, "target_index" => target, "position" => position}
+       })
+       when is_binary(id) and is_integer(target) and is_integer(position),
+       do: %{command_group_id: id, group_target_index: target, group_position: position}
+
+  defp group_columns(_metadata),
+    do: %{command_group_id: nil, group_target_index: nil, group_position: nil}
 
   defp all_fields do
     [
@@ -203,6 +218,9 @@ defmodule Cadence.Commanding.CommandRequestRow do
       :service_subtype,
       :opcode_document,
       :requested_at,
+      :command_group_id,
+      :group_target_index,
+      :group_position,
       :metadata_document
     ]
   end
