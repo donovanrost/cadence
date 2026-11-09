@@ -8,18 +8,21 @@ Owner: **fe-setup**. Status: draft 1 (2026-11-08). Boards: `Setup` (S1), `AddSpa
 breadcrumbs, tone strings), so the plan asks **api** for purpose-built `/api/console/v1` JSON,
 reusing the underlying `L/reads/*` and stores. "Missing" means no backend data exists today.
 
-## Build status (2026-11-08)
+## Build status (2026-11-09)
 
 | Screen | Route | State | Data |
 | --- | --- | --- | --- |
-| S1 Readiness | `setup` | built; not-available state until R | R (planned, domain `Reads.Readiness`) |
+| S1 Readiness | `setup` | **live** | R |
 | Spacecraft list | `setup/spacecraft` | **live** | S |
 | Spacecraft detail | `setup/spacecraft/:id` | **live** (configuration placeholder) | SD |
-| S2 Add spacecraft | `setup/spacecraft/new/:step` | built; create disabled until batch | S, P; batch (4) planned |
+| S2 Add spacecraft | `setup/spacecraft/new/:step` | **live**: stages the batch into the change set | S, P, K stage |
 | Profiles list | `setup/profiles` | **live** | P |
-| S4 Profile | `setup/profiles/:id` | waiting on PD | PD (next) |
-| S3 Catalog index | `setup/catalog` | built; not-available state until C1 | C1 (planned) |
-| S3 Import + diff | `setup/catalog/import/:id` | not started | C2, C3 |
+| S4 Profile | `setup/profiles/:id/:section` | **live, read-only** (DECISIONS #19); editing waits for P2 | PD |
+| S3 Catalog index | `setup/catalog` | **live** | C1 |
+| S3 Import run | `setup/catalog/import/:id` | **live** (diff when the server has one) | C3 |
+| S3 Upload | `setup/catalog/import` | not-available state | C2 (next) |
+| Changes (staged bar, `CONFIG rN`, review & apply) | `setup/changes` | **live**: checks, withdraw, discard, apply, review | K |
+| Revisions | `setup/revisions[/:n]` | **live**; rollback waits for domain P2 | K |
 | S5 People | `org/people` | not started | (5) planned |
 
 Shapes requested from api: `setup-shapes.md`. Contracts: `docs/apogee/api/setup.md`.
