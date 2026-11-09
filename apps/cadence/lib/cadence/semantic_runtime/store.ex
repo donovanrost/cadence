@@ -9,7 +9,7 @@ defmodule Cadence.SemanticRuntime.Store do
   alias Cadence.Repo
   alias Cadence.Runtime.{MissionRuntimeSpec, PartitionKey}
   alias Cadence.SemanticRuntime
-  alias Cadence.SemanticRuntime.{Checkpoint, CommitRow, HeadRow, Result, State, Writer}
+  alias Cadence.SemanticRuntime.{Checkpoint, CommitRow, HeadRow, Result, State, Terms, Writer}
 
   @doc "Commits only if this ownership epoch still holds the exact recovered predecessor."
   def commit(
@@ -637,13 +637,10 @@ defmodule Cadence.SemanticRuntime.Store do
     })
   end
 
-  defp encode(term), do: :erlang.term_to_binary(term, compressed: 6)
+  defp encode(term), do: Terms.encode(term)
 
-  defp decode(binary) when is_binary(binary) do
-    {:ok, :erlang.binary_to_term(binary, [:safe])}
-  rescue
-    ArgumentError -> {:error, :semantic_runtime_commit_decode_failed}
-  end
+  # Safe decode that first loads the semantic runtime's modules if an atom is missing.
+  defp decode(binary) when is_binary(binary), do: Terms.decode(binary)
 
   defp organization_scope(nil), do: "__unscoped_organization__"
   defp organization_scope(organization_id), do: organization_id
