@@ -90,6 +90,33 @@ defmodule Cadence.Configuration.ConfigKindsTest do
                SpacecraftTypeStore.fetch_spacecraft_type(ctx.org, ctx.mission, profile_id)
     end
 
+    test "catalog changes are refused until they produce generations", ctx do
+      {profile_id, [sc]} = block(ctx, 1)
+
+      assert {:ok, %{verdict: :no_go, checks: checks}} =
+               Configuration.preview(
+                 ctx.alice,
+                 ctx.mission,
+                 {:ops,
+                  [update("spacecraft_profile", profile_id, "catalog_revision_id", "cat-15")]}
+               )
+
+      assert %{items: [%{errors: [%{path: "catalog_revision_id", message: message}]}]} =
+               Enum.find(checks, &(&1.key == "validation"))
+
+      assert message =~ "request activation there"
+
+      assert {:error, {:invalid_op, 0, [%{path: "catalog_revision_id"}]}} =
+               Configuration.stage(ctx.alice, ctx.mission, %{summary: "x"}, [
+                 %{
+                   kind: "spacecraft_override",
+                   action: :update,
+                   entity_id: sc,
+                   changes: [%{path: "catalog_revision_id", value: %{"value" => "cat-15"}}]
+                 }
+               ])
+    end
+
     test "rollout none keeps every pin", ctx do
       {profile_id, [sc]} = block(ctx, 1)
       edit = update("spacecraft_profile", profile_id, "display_name", "Block 1b")

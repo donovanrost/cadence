@@ -51,6 +51,15 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
     errors =
       Enum.flat_map(document, fn {key, value} ->
         cond do
+          path(key) == "catalog_revision_id" ->
+            [
+              F.error(
+                key,
+                "Catalog overrides can't go through change sets yet. Set the catalog revision " <>
+                  "in the spacecraft's configuration and request activation there."
+              )
+            ]
+
           not Overrides.overridable?(path(key)) ->
             [F.error(key, "#{path(key)} can't be overridden")]
 
