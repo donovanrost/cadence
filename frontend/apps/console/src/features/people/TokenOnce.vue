@@ -23,7 +23,9 @@ async function copy(token: string) {
     <span class="ap-label">API token</span>
     <code class="font-mono text-sm break-all text-readout select-all">{{ token }}</code>
     <div class="flex flex-wrap items-center gap-3">
-      <ApButton size="compact" @click="copy(token)">Copy</ApButton>
+      <ApButton size="compact" @click="copy(token)">{{
+        copied === "yes" ? "Copied" : "Copy"
+      }}</ApButton>
       <span v-if="copied === 'yes'" class="text-sm text-nominal-text" role="status">Copied.</span>
       <span v-else-if="copied === 'failed'" class="text-sm text-caution-text" role="status"
         >Couldn't copy; select the token and copy it by hand.</span
