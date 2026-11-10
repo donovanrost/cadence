@@ -389,8 +389,11 @@ and in Now's queue when it blocks queued commands. It's quiet when ready.
   - Reasons map from domain's keys to sentences. Unknown keys fall back to sentence case, never the token (pass-2 #4).
 - **Command group (Commands list row, request page `…/uplink`):**
   - When its pass is blocked, the row's secondary line reads "Can't command on the SVB-1 pass (AOS 00:54Z):
-    <reason>. Nothing will be sent until the uplink recovers."
-  - Claim only that. Don't say it will move or wait for another pass unless the server says so (U20).
+    <reason>. Nothing will be sent on this pass until the uplink recovers. Otherwise it goes on the next ready
+    pass (FBK 02:31Z) unless it expires at 03:00Z."
+  - The group stays queued for the spacecraft and releases on the next ready pass (domain).
+  - Name that pass only when the read carries it; otherwise "on the next ready pass".
+  - Add the expiry clause only when `not_after` is set.
   - The request page shows the same line as a callout above the uplink trail, with `Recover uplink`.
 - **`Recover uplink`:** a secondary button in the drawer and on the request page, for `operate_mission` only.
   - Members without it see "Operators with mission access can recover the uplink."
