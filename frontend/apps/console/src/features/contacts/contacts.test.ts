@@ -4,6 +4,7 @@ import { passesReader, type Pass } from "./api.ts";
 import { passGantt, passStatus } from "./gantt.ts";
 import type { Attention } from "@/features/now/index.ts";
 import { attentionErrorWords, resolutionRecord, whatToDo } from "./attention.ts";
+import { groupBlockedLine, readinessTag, recoverErrorWords } from "./readiness.ts";
 
 const now = Date.parse("2026-11-09T02:00:00Z");
 const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
@@ -141,5 +142,74 @@ describe("attention block words (U32)", () => {
         details: undefined,
       }),
     ).toEqual({ text: "This was already resolved.", refresh: true });
+  });
+});
+
+describe("uplink readiness (U33)", () => {
+  it("is quiet when ready except in the drawer; blocked is crit with queued groups", () => {
+    const r = (state: string, extra = {}) => ({
+      state,
+      reason: null,
+      since: null,
+      command_groups_queued: 0,
+      ...extra,
+    });
+    expect(readinessTag(r("ready"), "row")).toBeNull();
+    expect(readinessTag(r("ready"), "drawer")?.label).toBe("Uplink ready");
+    expect(readinessTag(r("recovering", { since: "2026-11-10T00:41:00Z" }), "row")).toEqual({
+      state: "neutral",
+      label: "Uplink recovering…",
+      sentence: "Recovering since 00:41Z.",
+    });
+    const blocked = r("blocked", {
+      reason: "protocol_state_restore_required",
+      command_groups_queued: 2,
+    });
+    expect(readinessTag(blocked, "row")).toEqual({
+      state: "crit",
+      label: "Can't command",
+      sentence: "Can't command: the session needs its protocol state restored.",
+    });
+    expect(
+      readinessTag({ ...blocked, command_groups_queued: 0, reason: "lane_held" }, "row"),
+    ).toEqual({
+      state: "caution",
+      label: "Can't command",
+      sentence: "Can't command: lane held.",
+    });
+  });
+
+  it("words a blocked group's line, naming the next pass and expiry only when known", () => {
+    const station = { ref: null, id: null, code: "SVB-1", name: null };
+    const uplink = {
+      pass: { reservation_id: "p1", contact_id: null, station, starts_at: "2026-11-10T00:54:00Z" },
+      next_pass: {
+        reservation_id: "p2",
+        contact_id: null,
+        station: { ...station, code: "FBK" },
+        starts_at: "2026-11-10T02:31:00Z",
+      },
+      readiness: { state: "blocked", reason: "protocol_state_restore_required", since: null },
+    };
+    expect(groupBlockedLine(uplink, "2026-11-10T03:00:00Z")).toBe(
+      "Can't command on the SVB-1 pass (AOS 00:54Z): the session needs its protocol state restored. Nothing will be sent on this pass until the uplink recovers. Otherwise it goes on the next ready pass (FBK 02:31Z) unless it expires at 03:00Z.",
+    );
+    expect(groupBlockedLine({ ...uplink, next_pass: null }, null)).toMatch(
+      /Otherwise it goes on the next ready pass\.$/,
+    );
+    expect(
+      groupBlockedLine({ ...uplink, readiness: { ...uplink.readiness, state: "ready" } }, null),
+    ).toBeNull();
+  });
+
+  it("words a refused recovery", () => {
+    expect(
+      recoverErrorWords({
+        kind: "conflict",
+        code: "uplink_recovery_refused",
+        message: "refused",
+        details: { reason: "provider_unreachable" },
+      }),
+    ).toEqual({ tone: "caution", text: "Recovery refused: provider unreachable." });
   });
 });

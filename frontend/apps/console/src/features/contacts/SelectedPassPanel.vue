@@ -20,6 +20,9 @@ import {
 } from "@/features/scheduling/index.ts";
 import type { Pass } from "./api.ts";
 import AttentionBlock from "./AttentionBlock.vue";
+import { readinessTag } from "./readiness.ts";
+import RecoverUplink from "./RecoverUplink.vue";
+import { useCommandAccess } from "@/features/commands/index.ts";
 import { stationLabel } from "./gantt.ts";
 
 /**
@@ -46,6 +49,13 @@ const tag = computed(() => {
       : contactStateWord[state.value];
   return { state: contactOpState(state.value), label };
 });
+/** U33: readiness in the drawer ("Uplink ready" too); Recover while blocked or recovering. */
+const readiness = computed(() => {
+  const r = props.pass?.uplink_readiness;
+  return r ? { ...r, tag: readinessTag(r, "drawer") } : null;
+});
+// Recover is operate_mission, the same policy as abort (DECISIONS #42).
+const access = useCommandAccess();
 /** false only: null means no uplink leg was asked for (downlink only). */
 const uplinkUnconfirmed = computed(() => props.pass?.uplink_confirmed === false);
 /** K2: a rejected / failed reservation booked by a plan can be re-planned (lead, 4259c615). */
@@ -128,6 +138,22 @@ const countdown = computed(() => {
         {{ pass.station.name ?? stationLabel(pass) }} ·
         <span class="text-readout">{{ countdown }}</span>
       </p>
+      <div v-if="readiness?.tag" class="flex flex-col gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <ApTag :state="readiness.tag.state" :label="readiness.tag.label" />
+          <span v-if="readiness.tag.sentence" class="text-sm text-text-2">{{
+            readiness.tag.sentence
+          }}</span>
+        </div>
+        <RecoverUplink
+          v-if="readiness.state === 'blocked' || readiness.state === 'recovering'"
+          :mission-id="missionId"
+          :pass-id="pass.id"
+          :recovering="readiness.state === 'recovering'"
+          :can-recover="access.abort"
+          @changed="$emit('changed')"
+        />
+      </div>
       <ApKeyValue :items="facts" />
       <ApButton v-if="replan" size="compact" :to="replan">Re-plan</ApButton>
     </div>

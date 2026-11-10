@@ -11,6 +11,8 @@ import {
   ApStatusMark,
   ApTag,
 } from "@/ui";
+import { groupBlockedLine } from "@/features/contacts/readiness.ts";
+import RecoverUplink from "@/features/contacts/RecoverUplink.vue";
 import type { Group } from "../groups/show.ts";
 import {
   eventState,
@@ -32,6 +34,7 @@ const props = defineProps<{
   canAbort: boolean;
   /** Anyone who may request can resend a sent-back request (DECISIONS #31 (4)). */
   canResend: boolean;
+  missionId: string;
 }>();
 defineEmits<{ changed: [] }>();
 const tiles = computed(() => pipeline(props.group));
@@ -40,6 +43,10 @@ const events = computed(() =>
 );
 const decisionNote = computed(() => props.group.decision?.note ?? null);
 const pos = (n: number) => String(n + 1).padStart(2, "0");
+/** U33: the group's pass is blocked; the same line as the list, with expiry, above the trail. */
+const blocked = computed(() =>
+  groupBlockedLine(props.group.uplink, props.group.release?.expires_at ?? null),
+);
 </script>
 
 <template>
@@ -69,6 +76,16 @@ const pos = (n: number) => String(n + 1).padStart(2, "0");
     <ApCallout v-else-if="group.state === 'aborted'" tone="off">
       Aborted by {{ nameOf(group.aborted_by?.user_id ?? null) }}: “{{ group.abort_reason }}”
     </ApCallout>
+    <div v-if="blocked && group.uplink" class="flex flex-col gap-2">
+      <ApCallout tone="crit">{{ blocked }}</ApCallout>
+      <RecoverUplink
+        :mission-id="missionId"
+        :pass-id="group.uplink.pass.reservation_id"
+        :recovering="false"
+        :can-recover="canAbort"
+        @changed="$emit('changed')"
+      />
+    </div>
     <!-- CommandFlow C3: Abort sits up top (header area), never below a long target list. -->
     <AbortPanel v-if="canAbort && abortable(group)" :group="group" @done="$emit('changed')" />
     <ApStatStrip :columns="tiles.length" label="Uplink pipeline">

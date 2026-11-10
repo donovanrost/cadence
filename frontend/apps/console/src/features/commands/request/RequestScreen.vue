@@ -75,6 +75,7 @@ const queueRows = computed(() =>
         :name-of="req.nameOf"
         :can-abort="access.abort"
         :can-resend="access.request"
+        :mission-id="req.missionId.value"
         @changed="req.refetch"
       />
     </template>

@@ -1,3 +1,4 @@
+import { readinessTag } from "./readiness.ts";
 import type { GanttBar, GanttRow } from "@/ui";
 import type { Pass } from "./api.ts";
 
@@ -16,7 +17,8 @@ function evidence(p: Pass): string {
     p.booking_evidence === "operator_attested"
       ? `, booked on the word of ${p.attested_by?.name ?? "an operator"}`
       : "";
-  return `${attested}${p.uplink_confirmed === false ? ", uplink unconfirmed" : ""}${p.attention ? ", needs attention" : ""}`;
+  const ready = p.uplink_readiness ? readinessTag(p.uplink_readiness, "row") : null;
+  return `${attested}${p.uplink_confirmed === false ? ", uplink unconfirmed" : ""}${ready ? `, ${(ready.sentence ?? ready.label).replace(/[.]$/, "").toLowerCase()}` : ""}${p.attention ? ", needs attention" : ""}`;
 }
 
 export function passStatus(p: Pass, now: number): PassStatus {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
 import { formatRelative, plural, useNow, ApTable, ApTag, type ApColumn } from "@/ui";
+import { groupBlockedLine } from "@/features/contacts/readiness.ts";
 import type { GroupRow } from "../groups/api.ts";
 import { statusTag, type PersonName } from "../groups/words.ts";
 
@@ -26,6 +27,13 @@ const view = (r: GroupRow) => (r.awaiting_me ? "review" : undefined);
         >{{ row.title }}</RouterLink
       >
       <ApTag v-if="row.second_go_required" class="ml-2" label="2-PERSON" />
+      <!-- U33: rows carry no expiry, so the line names it only on the request page. -->
+      <p
+        v-if="groupBlockedLine(row.uplink, null)"
+        class="m-0 mt-1 max-w-[60ch] text-sm text-crit-text"
+      >
+        {{ groupBlockedLine(row.uplink, null) }}
+      </p>
     </template>
     <template #cell-scope="{ row }">
       <span class="whitespace-nowrap text-text-2"
