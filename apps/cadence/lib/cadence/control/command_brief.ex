@@ -13,19 +13,12 @@ defmodule Cadence.Control.CommandBrief do
 
   alias Cadence.Auth.Scope
   alias Cadence.Commanding
-  alias Cadence.Commanding.Groups.GroupStore
-  alias Cadence.Commanding.RequestValidation
+  alias Cadence.Commanding.{ReleaseTargetGuard, RequestValidation}
   alias Cadence.Management.Commanding.RequestReview
-  alias Cadence.Repo
+  alias Cadence.MissionModels
   alias Cadence.Telemetry.CurrentValueStore
 
   @prior_limit 5
-
-  @point_query """
-  SELECT r.revision_document->'value'->'declarations'->$4->>'qualified_name'
-  FROM mission_model_revisions AS r
-  WHERE r.organization_id = $1 AND r.mission_id = $2 AND r.revision_id = $3
-  """
 
   # todo(authz): Cedar should decide who may see a request's brief (today: anyone who may review
   # the mission's requests, :operate_mission since #62).
@@ -70,13 +63,13 @@ defmodule Cadence.Control.CommandBrief do
         end)
 
       _not_active ->
-        # The request's revision isn't active: its catalog link can't be read, so name the
-        # values it sets and say there's no current value.
+        # The request's revision isn't active, so its catalog link can't be read: the values it
+        # sets, with no current value (same keys as describe/3).
         Enum.map(values, fn {name, value} ->
           %{
             argument_id: nil,
             name: name,
-            value: value,
+            value_json: json(value),
             current: nil,
             current_basis: "unavailable"
           }
@@ -128,7 +121,7 @@ defmodule Cadence.Control.CommandBrief do
       %{} = sample ->
         %{
           point: point,
-          value_json: json(sample.engineering_value || sample.raw_value),
+          value_json: json(sample_value(sample)),
           at: sample.generation_time || sample.receipt_time,
           reason: nil
         }
@@ -143,21 +136,23 @@ defmodule Cadence.Control.CommandBrief do
     end
   end
 
+  # An engineering value of `false` is a value; only a missing one falls back to raw.
+  defp sample_value(%{engineering_value: nil} = sample), do: sample.raw_value
+  defp sample_value(sample), do: sample.engineering_value
+
+  # (3) Through the domain's declaration read, so the storage shape stays the domain's.
   defp point_name(organization_id, mission_id, revision_id, point_id) do
-    case Repo.query(@point_query, [organization_id, mission_id, revision_id, point_id]) do
-      {:ok, %{rows: [[name]]}} when is_binary(name) -> name
+    case MissionModels.declarations(organization_id, mission_id, revision_id, [point_id]) do
+      {:ok, %{^point_id => %{"qualified_name" => name}}} when is_binary(name) -> name
       _none -> point_id
     end
   end
 
-  # The group target the request belongs to names its spacecraft.
+  # The request's target as release defines it (#38): its source endpoint's spacecraft.
   defp spacecraft_id(organization_id, mission_id, request) do
-    with %{"id" => group_id, "target_index" => index} <- (request.metadata || %{})["group"],
-         {:ok, group} <- GroupStore.fetch(organization_id, mission_id, group_id),
-         %{"spacecraft_id" => id} <- Enum.find(group.targets, &(&1["index"] == index)) do
-      id
-    else
-      _none -> nil
+    case ReleaseTargetGuard.target(organization_id, mission_id, request.source_endpoint_ref) do
+      {:ok, id} -> id
+      _unknown -> nil
     end
   end
 

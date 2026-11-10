@@ -117,6 +117,18 @@ defmodule CadenceWeb.Console.CommandEncodingAPITest do
              |> json_response(409)
 
     assert reason in ["revision_superseded", "revision_not_active"]
+
+    # The brief still names the values, as JSON text, with no current value (api-ops review).
+    assert %{
+             "arguments" => [
+               %{"name" => "counter", "value_json" => "7", "current_basis" => "unavailable"}
+             ]
+           } =
+             c
+             |> conn()
+             |> get(c.base <> "/command-requests/#{id}/brief")
+             |> json_response(200)
+             |> Map.fetch!("data")
   end
 
   test "the brief names the spacecraft, each argument's value, and the command's prior requests",
