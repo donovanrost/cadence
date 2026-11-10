@@ -1,34 +1,27 @@
 import type { ApiResult } from "@/api";
-import type { ReviewKey, ReviewRow, StationLine } from "./api.ts";
-import { stationText } from "./format.ts";
+import type { ReviewKey, ReviewRow } from "./api.ts";
+import { causeText, outcomeTag, ownerWord, stationText } from "./format.ts";
 
 /**
- * K3 Export CSV (lead, ux af1c78d1): R1 by-station lines plus every R4 missed/failed/partial pass
- * for the window, time and volume facts only (no money, DECISIONS #63). One table with a `record`
- * column so spreadsheets read it as-is.
+ * K3 Export CSV (lead; ux af1c78d1 + review): every R4 missed/failed/partial pass for the window,
+ * one row per pass (no summary rows, so sums don't double-count), time and volume facts only (no
+ * money, DECISIONS #63). Times are full ISO UTC; outcome, cause and owner are words.
  */
 const header = [
-  "record",
-  "station",
-  "provider",
-  "spacecraft",
-  "planned_aos",
-  "planned_los",
-  "actual_aos",
-  "actual_los",
-  "outcome",
-  "cause",
-  "owner",
-  "planned",
-  "realized",
-  "partial",
-  "missed",
-  "failed",
-  "canceled",
-  "planned_minutes",
-  "flown_minutes",
-  "provider_bytes",
-  "received_bytes",
+  "Station",
+  "Provider",
+  "Spacecraft",
+  "Planned AOS (UTC)",
+  "Planned LOS (UTC)",
+  "Actual AOS (UTC)",
+  "Actual LOS (UTC)",
+  "Outcome",
+  "Cause",
+  "Owner",
+  "Planned minutes",
+  "Flown minutes",
+  "Provider-reported bytes",
+  "Received bytes",
 ] as const;
 
 const cell = (v: string | number | null | undefined): string => {
@@ -37,6 +30,9 @@ const cell = (v: string | number | null | undefined): string => {
   return /[",\n\r]/.test(t) ? `"${t.replaceAll('"', '""')}"` : t;
 };
 const mins = (s: number | null) => (s === null ? null : Math.round((s / 60) * 10) / 10);
+/** "2026-11-10T02:59:40Z": full ISO UTC that spreadsheets parse. */
+const iso = (t: string | null) =>
+  t === null ? null : new Date(t).toISOString().replace(/\.\d{3}Z$/, "Z");
 
 /** What the CSV reads of a lost pass (ReviewRow fits). */
 export type LostLine = Pick<
@@ -57,59 +53,23 @@ export type LostLine = Pick<
   | "received_bytes"
 >;
 
-export function reviewCsv(
-  summary: Readonly<{ by_station: readonly StationLine[] }>,
-  lost: readonly LostLine[],
-): string {
-  const lines: (string | number | null)[][] = [];
-  for (const l of summary.by_station)
-    lines.push([
-      "station",
-      stationText(l.station),
-      l.provider?.name ?? null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      l.planned,
-      l.realized,
-      l.partial,
-      l.missed,
-      l.failed,
-      l.canceled,
-      mins(l.planned_seconds),
-      mins(l.flown_seconds),
-      null,
-      null,
-    ]);
-  for (const r of lost)
-    lines.push([
-      "pass",
-      stationText(r.station),
-      r.provider?.name ?? null,
-      r.spacecraft.name ?? r.spacecraft.id,
-      r.planned_aos,
-      r.planned_los,
-      r.actual_aos,
-      r.actual_los,
-      r.outcome,
-      r.cause,
-      r.owner,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      mins(r.planned_seconds),
-      mins(r.flown_seconds),
-      r.provider_bytes,
-      r.received_bytes,
-    ]);
+export function reviewCsv(lost: readonly LostLine[]): string {
+  const lines = lost.map((r) => [
+    stationText(r.station),
+    r.provider?.name ?? null,
+    r.spacecraft.name ?? r.spacecraft.id,
+    iso(r.planned_aos),
+    iso(r.planned_los),
+    iso(r.actual_aos),
+    iso(r.actual_los),
+    outcomeTag(r.outcome).label,
+    causeText(r.cause),
+    r.owner ? ownerWord[r.owner] : null,
+    mins(r.planned_seconds),
+    mins(r.flown_seconds),
+    r.provider_bytes,
+    r.received_bytes,
+  ]);
   return [header.join(","), ...lines.map((l) => l.map(cell).join(","))].join("\r\n") + "\r\n";
 }
 

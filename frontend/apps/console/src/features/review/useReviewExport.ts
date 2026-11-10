@@ -24,7 +24,7 @@ export function useReviewExport(
         failure.value = `The export didn't finish: ${describeApiError(lost.error)}`;
         return;
       }
-      const blob = new Blob([reviewCsv(s, lost.value)], { type: "text/csv;charset=utf-8" });
+      const blob = new Blob([reviewCsv(lost.value)], { type: "text/csv;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
