@@ -26,17 +26,10 @@ defmodule Cadence.Management.ProviderAccountHistory do
   def versions(%Scope{} = scope, provider_account_id) do
     with {:ok, account, current} <- ProviderAccounts.fetch(scope, provider_account_id) do
       versions =
-        1..current.version
-        |> Enum.flat_map(fn number ->
-          case ProviderAccounts.fetch_version(
-                 scope.organization_id,
-                 provider_account_id,
-                 number
-               ) do
-            {:ok, version} -> [version]
-            _missing -> []
-          end
-        end)
+        Enum.flat_map(
+          1..current.version,
+          &version(scope.organization_id, provider_account_id, &1)
+        )
 
       {:ok,
        %{
@@ -49,6 +42,13 @@ defmodule Cadence.Management.ProviderAccountHistory do
            |> Enum.map(fn {before, version} -> entry(before, version) end)
            |> Enum.reverse()
        }}
+    end
+  end
+
+  defp version(organization_id, provider_account_id, number) do
+    case ProviderAccounts.fetch_version(organization_id, provider_account_id, number) do
+      {:ok, version} -> [version]
+      _missing -> []
     end
   end
 

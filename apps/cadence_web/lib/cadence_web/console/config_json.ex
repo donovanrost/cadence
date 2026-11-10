@@ -76,6 +76,9 @@ defmodule CadenceWeb.Console.ConfigJSON do
   @spec encode(term()) :: term()
   def encode(%DateTime{} = value), do: value
   def encode(%Date{} = value), do: value
+  # Cadence stores naive timestamps as UTC; the console reads ISO-8601 with a zone (qa #37).
+  def encode(%NaiveDateTime{} = value), do: DateTime.from_naive!(value, "Etc/UTC")
+  def encode(%Time{} = value), do: value
   def encode(%Decimal{} = value), do: Decimal.to_float(value)
 
   def encode(value) when is_struct(value),
