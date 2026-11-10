@@ -20,7 +20,7 @@ import {
 } from "@/features/scheduling/index.ts";
 import type { Pass } from "./api.ts";
 import AttentionBlock from "./AttentionBlock.vue";
-import { readinessTag } from "./readiness.ts";
+import { readinessTag, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
 import { useCommandAccess } from "@/features/commands/index.ts";
 import { stationLabel } from "./gantt.ts";
@@ -52,7 +52,7 @@ const tag = computed(() => {
 /** U33: readiness in the drawer ("Uplink ready" too); Recover while blocked or recovering. */
 const readiness = computed(() => {
   const r = props.pass?.uplink_readiness;
-  return r ? { ...r, tag: readinessTag(r, "drawer") } : null;
+  return r ? { ...r, tag: readinessTag(r, "drawer", props.pass?.ends_at ?? null) } : null;
 });
 // Recover is operate_mission, the same policy as abort (DECISIONS #42).
 const access = useCommandAccess();
@@ -145,8 +145,14 @@ const countdown = computed(() => {
             readiness.tag.sentence
           }}</span>
         </div>
+        <p
+          v-if="readiness.state === 'blocked' && !recoverable(readiness.reason)"
+          class="m-0 text-sm text-text-2"
+        >
+          Recovery isn't possible on this pass.
+        </p>
         <RecoverUplink
-          v-if="readiness.state === 'blocked' || readiness.state === 'recovering'"
+          v-else-if="readiness.state === 'blocked' || readiness.state === 'recovering'"
           :mission-id="missionId"
           :pass-id="pass.id"
           :recovering="readiness.state === 'recovering'"

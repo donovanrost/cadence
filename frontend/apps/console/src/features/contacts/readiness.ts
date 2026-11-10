@@ -54,8 +54,18 @@ export const attentionUplinkReader = d.object({
 
 /** Domain's reason keys as sentences (no final stop). Unknown keys fall back to sentence case. */
 const REASONS: Readonly<Record<string, string>> = {
-  protocol_state_restore_required: "The session needs its protocol state restored",
+  protocol_state_restore_required: "The link restarted mid-pass and can't resume",
 };
+
+/**
+ * #59: Recover re-runs qualification only (fresh provider evidence), so it's offered only for
+ * reasons it can fix. A mid-pass restart can't be recovered on that pass.
+ */
+const UNRECOVERABLE: ReadonlySet<string> = new Set(["protocol_state_restore_required"]);
+export const recoverable = (reason: string | null) => reason === null || !UNRECOVERABLE.has(reason);
+
+/** Not blocked: the session is up and waiting for the spacecraft's first CLCW (U33 #59 b). */
+const AWAITING_CLCW = "cop1_awaiting_clcw";
 
 export function reasonSentence(key: string | null): string {
   if (key === null) return "The uplink isn't ready";
@@ -84,8 +94,21 @@ export function readinessTag(
     command_groups_queued?: number;
   },
   where: "drawer" | "row",
+  los: string | null = null,
 ): ReadinessTag | null {
   const since = r.since ? ` since ${hhmm(r.since)}` : "";
+  if (r.reason === AWAITING_CLCW)
+    return {
+      state: "neutral",
+      label: "Uplink qualifying…",
+      sentence: "Waiting for the spacecraft's first link report.",
+    };
+  if (r.state === "blocked" && r.reason === "protocol_state_restore_required")
+    return {
+      state: (r.command_groups_queued ?? 1) > 0 ? "crit" : "caution",
+      label: "Can't command",
+      sentence: `Can't command: the link restarted mid-pass and can't resume${los ? ` before LOS ${hhmm(los)}` : ""}. The next pass isn't affected.`,
+    };
   switch (r.state) {
     case "ready":
       return where === "drawer"
@@ -126,10 +149,13 @@ export function groupBlockedLine(
   if (!uplink || uplink.readiness.state !== "blocked") return null;
   const station = uplink.pass.station.code ?? uplink.pass.station.name ?? "its";
   const next = uplink.next_pass ?? null;
+  const onward = `the next ready pass${next ? ` (${next.station.code ?? next.station.name ?? "next"} ${hhmm(next.starts_at)})` : ""}${expiresAt ? ` unless it expires at ${hhmm(expiresAt)}` : ""}.`;
+  const fixable = recoverable(uplink.readiness.reason);
   return [
     `Can't command on the ${station} pass (AOS ${hhmm(uplink.pass.starts_at)}): ${reasonClause(uplink.readiness.reason)}.`,
-    "Nothing will be sent on this pass until the uplink recovers.",
-    `Otherwise it goes on the next ready pass${next ? ` (${next.station.code ?? next.station.name ?? "next"} ${hhmm(next.starts_at)})` : ""}${expiresAt ? ` unless it expires at ${hhmm(expiresAt)}` : ""}.`,
+    fixable
+      ? `Nothing will be sent on this pass until the uplink recovers. Otherwise it goes on ${onward}`
+      : `Nothing will be sent on this pass. It goes on ${onward}`,
   ].join(" ");
 }
 

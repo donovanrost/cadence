@@ -4,7 +4,7 @@ import { passesReader, type Pass } from "./api.ts";
 import { passGantt, passStatus } from "./gantt.ts";
 import type { Attention } from "@/features/now/index.ts";
 import { attentionErrorWords, resolutionRecord, whatToDo } from "./attention.ts";
-import { groupBlockedLine, readinessTag, recoverErrorWords } from "./readiness.ts";
+import { groupBlockedLine, readinessTag, recoverable, recoverErrorWords } from "./readiness.ts";
 
 const now = Date.parse("2026-11-09T02:00:00Z");
 const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
@@ -165,10 +165,11 @@ describe("uplink readiness (U33)", () => {
       reason: "protocol_state_restore_required",
       command_groups_queued: 2,
     });
-    expect(readinessTag(blocked, "row")).toEqual({
+    expect(readinessTag(blocked, "row", "2026-11-10T01:06:00Z")).toEqual({
       state: "crit",
       label: "Can't command",
-      sentence: "Can't command: the session needs its protocol state restored.",
+      sentence:
+        "Can't command: the link restarted mid-pass and can't resume before LOS 01:06Z. The next pass isn't affected.",
     });
     expect(
       readinessTag({ ...blocked, command_groups_queued: 0, reason: "lane_held" }, "row"),
@@ -192,14 +193,35 @@ describe("uplink readiness (U33)", () => {
       readiness: { state: "blocked", reason: "protocol_state_restore_required", since: null },
     };
     expect(groupBlockedLine(uplink, "2026-11-10T03:00:00Z")).toBe(
-      "Can't command on the SVB-1 pass (AOS 00:54Z): the session needs its protocol state restored. Nothing will be sent on this pass until the uplink recovers. Otherwise it goes on the next ready pass (FBK 02:31Z) unless it expires at 03:00Z.",
+      "Can't command on the SVB-1 pass (AOS 00:54Z): the link restarted mid-pass and can't resume. Nothing will be sent on this pass. It goes on the next ready pass (FBK 02:31Z) unless it expires at 03:00Z.",
     );
-    expect(groupBlockedLine({ ...uplink, next_pass: null }, null)).toMatch(
-      /Otherwise it goes on the next ready pass\.$/,
+    const evidence = { ...uplink.readiness, reason: "attestation_expired" };
+    expect(groupBlockedLine({ ...uplink, next_pass: null, readiness: evidence }, null)).toMatch(
+      /until the uplink recovers\. Otherwise it goes on the next ready pass\.$/,
     );
     expect(
       groupBlockedLine({ ...uplink, readiness: { ...uplink.readiness, state: "ready" } }, null),
     ).toBeNull();
+  });
+
+  it("cop1_awaiting_clcw is qualifying, not blocked; a mid-pass restart can't be recovered", () => {
+    expect(
+      readinessTag(
+        {
+          state: "qualifying",
+          reason: "cop1_awaiting_clcw",
+          since: null,
+          command_groups_queued: 1,
+        },
+        "row",
+      ),
+    ).toEqual({
+      state: "neutral",
+      label: "Uplink qualifying…",
+      sentence: "Waiting for the spacecraft's first link report.",
+    });
+    expect(recoverable("protocol_state_restore_required")).toBe(false);
+    expect(recoverable("attestation_expired")).toBe(true);
   });
 
   it("words a refused recovery", () => {

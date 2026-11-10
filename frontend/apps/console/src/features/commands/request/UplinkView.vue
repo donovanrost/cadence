@@ -11,7 +11,7 @@ import {
   ApStatusMark,
   ApTag,
 } from "@/ui";
-import { groupBlockedLine } from "@/features/contacts/readiness.ts";
+import { groupBlockedLine, recoverable } from "@/features/contacts/readiness.ts";
 import RecoverUplink from "@/features/contacts/RecoverUplink.vue";
 import type { Group } from "../groups/show.ts";
 import {
@@ -79,6 +79,7 @@ const blocked = computed(() =>
     <div v-if="blocked && group.uplink" class="flex flex-col gap-2">
       <ApCallout tone="crit">{{ blocked }}</ApCallout>
       <RecoverUplink
+        v-if="recoverable(group.uplink.readiness.reason)"
         :mission-id="missionId"
         :pass-id="group.uplink.pass.reservation_id"
         :recovering="false"
