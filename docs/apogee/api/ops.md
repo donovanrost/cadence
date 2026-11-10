@@ -289,6 +289,28 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
     confirmed", never "by Cadence". A `system` closure reads its `action` alone, with no actor
     ("Resolved: cancel confirmed").
   - Refetch on `invalidate` with `attention`.
+- **Proposed (§8, U11): `missed_pass` and `station` items.** Not built; fe-ops gets the shape
+  first (two new `kind` values).
+  - `missed_pass`: one row per spacecraft with a pass result `missed` or `failed` (S9) whose
+    planned AOS falls within `failure_lookback_s`.
+    - `id` is `missed_pass:<spacecraft_id>`, `count` the number of missed passes, `since` the
+      latest missed AOS, and `due_at` the AOS of the spacecraft's next booked pass (or `null`).
+    - **P1** (`critical`) per U11 when the next contact is beyond the allowed gap *or unknown*.
+      No allowed gap is modelled yet (contact requirements have only a minimum separation), so
+      every missed pass is P1 until one exists.
+    - New field `missed_passes: [{reservation_id, station {ref, id, code, name}, planned_aos,
+      outcome, cause, owner}]` (newest first).
+    - New field `next_contact: {reservation_id, station, aos} | null`.
+  - `station`: one row per ground station with an outage, maintenance or degraded window (S7)
+    that overlaps booked passes in the next 24 h.
+    - `id` is `station:<ground_station_id>`, **P2** (`caution`), `count` the affected passes,
+      `since` the window start, `due_at` the first affected AOS.
+    - `spacecraft` holds the affected spacecraft.
+    - New field `station_issue: {station {ref, id, code, name}, window {id, kind: outage |
+      maintenance | degraded, starts_at, ends_at, source}, affected: [{reservation_id,
+      spacecraft_id, aos}]}`. The `Station` action goes to the station / Re-plan.
+  - Both new fields are `null` on other kinds. Refetch on `invalidate` `contacts`, `stations` and
+    `pass_results`.
 - `failure_lookback_s` is `config :cadence, :action_queue_failure_lookback_s` (default 24 h).
   Failures older than that drop off the queue; they stay on the commands pages.
 
