@@ -14,6 +14,10 @@ const who = (a: { name: string | null } | null) => (a?.name ? ` · by ${a.name}`
 
 <template>
   <ApPanel index="V3" title="History" flush>
+    <!-- ux: renames make no version; the audit log has no provider-account source either. -->
+    <p class="m-0 px-4 pt-2.5 text-sm text-text-3">
+      Renames aren't versioned, so they don't appear here.
+    </p>
     <ApRemote :state="state" loading-label="Loading history…" @retry="refetch">
       <template #default="{ value }">
         <ApEmptyState v-if="value.versions.length === 0" state="off" headline="No versions yet" />
