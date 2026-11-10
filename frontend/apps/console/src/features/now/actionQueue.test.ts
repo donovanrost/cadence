@@ -152,6 +152,44 @@ describe("action queue (M6)", () => {
   });
 });
 
+describe("approval rows (backlog §2)", () => {
+  const group = (id: string) => ({
+    id,
+    title: `NOOP ${id}`,
+    member_count: 10,
+    target_count: 10,
+    requested_by: "QA Operator",
+    requested_at: "2026-11-09T20:00:00Z",
+  });
+  it("one group opens its review; several open the GO queue", () => {
+    const [one] = present([
+      item({
+        id: "approval",
+        kind: "approval",
+        priority: 2,
+        state: "caution",
+        command_groups: [group("g1")],
+      }),
+    ]);
+    expect(one?.title).toBe("1 command request awaits your GO");
+    expect(one?.sentence).toBe("NOOP g1 · 10 targets · by QA Operator");
+    expect(one?.action.to).toEqual({
+      name: "ops.commands.request",
+      params: { requestId: "g1", view: "review" },
+    });
+    const [two] = present([
+      item({
+        id: "approval",
+        kind: "approval",
+        priority: 2,
+        state: "caution",
+        command_groups: [group("g1"), group("g2")],
+      }),
+    ]);
+    expect(two?.action.to).toEqual({ name: "ops.commands", query: { awaiting: "me" } });
+  });
+});
+
 describe("attention rows (U31, fafe581a)", () => {
   const attention = (overrides: Record<string, unknown> = {}) =>
     item({

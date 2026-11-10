@@ -45,6 +45,27 @@ const commandRequest = d.object({
   status: d.token,
 });
 
+/** requested_by: a display label, or an actor with a name; read either (ops.md §approval). */
+const requester: d.Reader<string | null> = (value) => {
+  if (typeof value === "string") return value;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "name" in value &&
+    typeof value.name === "string"
+  )
+    return value.name;
+  return null;
+};
+const commandGroup = d.object({
+  id: d.token,
+  title: d.string,
+  member_count: d.integer,
+  target_count: d.integer,
+  requested_by: d.optional(requester),
+  requested_at: d.timestamp,
+});
+
 const itemReader = d.object({
   id: d.token,
   priority,
@@ -80,6 +101,8 @@ const itemReader = d.object({
   command: d.nullable(d.object({ id: d.token, name: d.string })),
   outcome: d.nullable(d.oneOf(["failed", "indeterminate"] as const)),
   command_requests: d.array(commandRequest, 1_000),
+  /** Approval items: command groups awaiting the viewer's GO (one each). */
+  command_groups: d.optional(d.array(commandGroup, 1_000)),
   finding: d.nullable(d.object({ id: d.token, title: d.string, body: d.nullable(d.string) })),
   // U31 (fafe581a): null on other kinds; optional until api ships it.
   attention: d.optional(d.nullable(attentionReader)),
@@ -190,17 +213,29 @@ function rowFor(item: ServerItem): QueueItem[] {
         },
       ];
     case "approval": {
+      // A single request opens its review; several go to the GO queue (backlog §2 Now).
+      const groups = item.command_groups ?? [];
+      const n = item.command_requests.length + groups.length;
+      const group = groups[0];
       const first = item.command_requests[0];
+      const one = n === 1 && group !== undefined;
       return [
         {
           ...base(item),
           key: item.id,
-          title: `${plural(item.command_requests.length, "command request")} ${item.command_requests.length === 1 ? "awaits" : "await"} your GO`,
+          title: `${plural(n, "command request")} ${n === 1 ? "awaits" : "await"} your GO`,
           titleTo: null,
-          sentence: first
-            ? `${first.command_name}${first.target ? ` · ${first.target.name}` : ""}${first.requested_by ? ` · by ${first.requested_by}` : ""}${item.command_requests.length > 1 ? " and more" : ""}`
-            : "Requested by another operator.",
-          action: { label: "Review", to: { name: "ops.commands", query: { awaiting: "me" } } },
+          sentence: group
+            ? `${group.title} · ${plural(group.target_count, "target")}${group.requested_by ? ` · by ${group.requested_by}` : ""}${n > 1 ? " and more" : ""}`
+            : first
+              ? `${first.command_name}${first.target ? ` · ${first.target.name}` : ""}${first.requested_by ? ` · by ${first.requested_by}` : ""}${n > 1 ? " and more" : ""}`
+              : "Requested by another operator.",
+          action: {
+            label: "Review",
+            to: one
+              ? { name: "ops.commands.request", params: { requestId: group.id, view: "review" } }
+              : { name: "ops.commands", query: { awaiting: "me" } },
+          },
         },
       ];
     }
