@@ -33,22 +33,38 @@ defmodule Cadence.Management.Commanding.ReviewAccess do
   enforces (DECISIONS #38). Requesting and reviewing share this one rule today
   (`command.abort` is `GroupAbort.capabilities/1`, DECISIONS #42);
   the two-person rule still forbids approving your own request. If one of them
-  moves to its own rule, its name moves with it. The rule doesn't
-  depend on the mission for human actors, so `scope.mission_id` (usually nil)
-  is checked.
+  moves to its own rule, its name moves with it. The rule needs a mission, so
+  for an organization-level answer it's evaluated against the organization's
+  missions (held if any passes), as abort's is.
   """
   @spec capabilities(Scope.t()) :: [binary()]
-  def capabilities(%Scope{actor_kind: :user, user: %User{lifecycle_state: :active}} = scope) do
-    if is_binary(scope.organization_id) and policy(scope, scope.mission_id) == :ok,
+  def capabilities(
+        %Scope{actor_kind: :user, user: %User{lifecycle_state: :active}, organization_id: org} =
+          scope
+      )
+      when is_binary(org) do
+    missions =
+      case scope.mission_id do
+        nil -> org |> Missions.list_missions() |> Enum.map(& &1.mission_id)
+        mission_id -> [mission_id]
+      end
+
+    if Enum.any?(missions, &(policy(scope, &1) == :ok)),
       do: ["command.request", "command.approve"],
       else: []
   end
 
   def capabilities(%Scope{}), do: []
 
+  # DECISIONS #62: any mission operator may request commands and decide on them (GO, NO-GO,
+  # send back), not only organization admins. Self-approval and the two-person rule are enforced
+  # separately and don't change.
+  # todo(authz): Cedar should decide per action (request, approve, no-go, send back, stage,
+  # queue) and per command: significance, hazardous/critical flags, subsystem and target set
+  # (e.g. a mission role allowed to request but not approve, or approve only non-hazardous).
   defp policy(scope, mission_id),
     do:
-      Policy.authorize(scope, :manage_mission, %{
+      Policy.authorize(scope, :operate_mission, %{
         organization_id: scope.organization_id,
         mission_id: mission_id
       })

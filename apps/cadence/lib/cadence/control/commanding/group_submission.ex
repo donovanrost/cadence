@@ -20,6 +20,8 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
 
   @spec submit(Cadence.Auth.Scope.t(), binary(), map(), keyword()) ::
           {:ok, CommandGroup.t()} | {:error, term()}
+  # todo(authz): Cedar should decide who may request this group (DECISIONS #62: any mission
+  # operator today), e.g. by command significance, hazard, target set or fleet reach.
   def submit(scope, mission_id, draft, opts) do
     with {:ok, fresh, _mission} <- RequestAuthoring.authorize(scope, mission_id),
          org = fresh.organization_id,

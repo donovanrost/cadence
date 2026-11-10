@@ -14,6 +14,8 @@ defmodule CadenceWeb.Console.AttentionController do
   @max_action_text 200
   @actor_keys ~w(actor actor_id actor_kind user_id resolved_by acknowledged_by by)
 
+  # todo(authz): Cedar should decide who may acknowledge or resolve each attention source (any
+  # mission operator today), e.g. only provider-account owners for pass resolutions.
   def acknowledge(conn, %{"source" => source, "id" => id} = params) do
     with :ok <- no_actor(params),
          {:ok, actions} <- source(source) do

@@ -97,8 +97,13 @@ Errors: `404 command_not_found`, `503 catalog_unavailable`, `404 mission_not_fou
 Design: [`domain/group-requests.md`](../domain/group-requests.md) (DECISIONS #29–#31). A group is
 N targets × K commands, decided and aborted as one unit. Every console-authored request is a
 group (1 × 1 included). Writes need `x-csrf-token`. The requester, approver and aborting
-operator are always the session user (DECISIONS #30). Commanding needs organization admin today
-(DECISIONS #38). Refetch on `invalidate` with `commanding`.
+operator are always the session user (DECISIONS #30). Any mission operator (`Policy
+:operate_mission`, an active member of the organization) may request, GO, NO-GO, send back, abort
+and add notes (DECISIONS #42, #62). Self-approval and the two-person rule are unchanged: the
+requester can't give a group's second GO. The session's `command.request`, `command.approve` and
+`command.abort` capabilities are that same check, held when the user can operate at least one of
+the organization's missions (#38), so an organization with no missions reports none. Refetch on
+`invalidate` with `commanding`.
 
 ### Draft (the body of preflight and create)
 
@@ -273,10 +278,10 @@ Errors: `403 command_group_self_approval_not_allowed`, `403 not_the_requested_ap
 returns the group with `abort_result: {canceled: <count>, already_started: [request ids]}`
 (`canceled` is how many members were canceled; `already_started` lists the ones that kept running). Members already
 releasing or released keep running ("ABORT AVAILABLE UNTIL EACH UPLINK STARTS"). Any mission
-operator may abort or cancel (`Policy :operate_mission`, not two-person, DECISIONS #42), so this
-works for plain members even though requesting and approving need organization admin today. The
-session's `command.abort` capability is that same check: held when the user can operate at least one
-of the organization's missions. Cancel works on any request (grouped or not) that hasn't started.
+operator may abort or cancel (`Policy :operate_mission`, not two-person, DECISIONS #42), the same
+check as requesting and approving (#62). The session's `command.abort` capability is held when the
+user can operate at least one of the organization's missions. Cancel works on any request (grouped
+or not) that hasn't started.
 
 Errors: `422 reason_required`, `409 command_group_not_abortable`, `409 command_request_already_started`,
 `404 command_request_not_found`, `404 command_group_not_found`.

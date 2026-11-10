@@ -52,6 +52,8 @@ defmodule Cadence.Control.Commanding.QueueSubmission do
   end
 
   # held is server state from load/3, never decoded from a browser payload.
+  # todo(authz): Cedar should decide who may queue or reorder released commands (any mission
+  # operator today, DECISIONS #62).
   def submit(scope, mission_id, held, %{"expected_queue" => expected} = input)
       when is_map(held) and map_size(input) == 1 do
     with {:ok, fresh, _} <- RequestReview.authorize(scope, mission_id),

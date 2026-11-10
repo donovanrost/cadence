@@ -131,7 +131,7 @@ defmodule CadenceWeb.OpsCommandAuthoringPageTest do
     refute Repo.get(CommandRequestRow, preview["request_id"])
   end
 
-  test "refresh invalidates a preview after activation changes, and role revocation removes access",
+  test "refresh invalidates a preview after activation changes; demotion keeps access (#62)",
        c do
     {:ok, view, _} = live(TestFixtures.member_conn(c.user), c.path)
     p = page(view)
@@ -151,21 +151,18 @@ defmodule CadenceWeb.OpsCommandAuthoringPageTest do
     |> Ecto.Changeset.change(role: "member")
     |> Repo.update!()
 
-    assert %{"snapshot" => %{"status" => "unavailable"}} = read(view, c.path, p)
-
-    assert %{"snapshot" => %{"status" => "rejected"}} =
-             action(view, c.path, p, "preview", input(changed))
-
+    # A plain member may author commands (DECISIONS #62).
+    assert %{"snapshot" => %{"status" => "ready"}} = read(view, c.path, p)
     refute Repo.get(CommandRequestRow, preview["request_id"])
   end
 
-  test "anonymous users redirect and members cannot read the privileged catalog", c do
+  test "anonymous users redirect and plain members can read the privileged catalog (#62)", c do
     assert {:error, {:redirect, %{to: "/sign-in"}}} = live(build_conn(), c.path)
     user = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(user, c.org)
     {:ok, view, _} = live(TestFixtures.member_conn(user), c.path)
-    assert page(view)["status"] == "unavailable"
-    refute Map.has_key?(page(view), "data")
+    assert page(view)["status"] == "ready"
+    assert Map.has_key?(page(view), "data")
   end
 
   test "a mission without an active command model renders setup guidance and cannot create", c do

@@ -105,6 +105,8 @@ defmodule Cadence.Auth.Policy do
     authorize_organization_capability(current_scope, organization_id, :organization_admin)
   end
 
+  # todo(authz): Cedar should decide mission access per user. Today any active member operates
+  # every mission of their organization (no mission-level grant is checked here).
   def authorize(%Scope{} = current_scope, :operate_mission, %{
         organization_id: organization_id,
         mission_id: mission_id

@@ -37,6 +37,8 @@ defmodule Cadence.Control.Commanding.GroupDecision do
 
   @spec decide(Cadence.Auth.Scope.t(), binary(), binary(), map()) ::
           {:ok, CommandGroup.t()} | {:error, term()}
+  # todo(authz): Cedar should decide who may GO / NO-GO / send back this group (DECISIONS #62:
+  # any mission operator today, minus self-approval), e.g. by hazard, fleet reach or subsystem.
   def decide(scope, mission_id, group_id, decision) do
     with {:ok, fresh, _mission} <- RequestAuthoring.authorize(scope, mission_id),
          :ok <- valid_decision(decision) do

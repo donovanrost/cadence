@@ -80,11 +80,12 @@ defmodule CadenceWeb.Console.SessionAPITest do
         |> get_in(["data", "organizations"])
 
       assert Enum.map(orgs, &{&1["name"], &1["role"], &1["capabilities"]}) == [
-               # command.abort is "can operate one of its missions" (DECISIONS #42): Another Org
-               # has no missions, while a plain member of Reflect Orbital may abort there.
+               # command.* is "can operate one of its missions" (DECISIONS #42, #62): Another Org
+               # has no missions to command, while a plain member of Reflect Orbital may request,
+               # approve and abort there.
                {"Another Org", "organization_admin",
-                ~w(command.approve command.request org.invite org.manage_members organization_admin)},
-               {"Reflect Orbital", "member", ["command.abort"]}
+                ~w(org.invite org.manage_members organization_admin)},
+               {"Reflect Orbital", "member", ~w(command.abort command.approve command.request)}
              ]
     end
   end

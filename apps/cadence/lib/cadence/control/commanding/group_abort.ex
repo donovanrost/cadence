@@ -156,6 +156,8 @@ defmodule Cadence.Control.Commanding.GroupAbort do
 
   defp authorize(_scope, _mission_id), do: {:error, :unavailable}
 
+  # todo(authz): Cedar should decide who may abort or cancel (any mission operator today, #42),
+  # e.g. per target set or only for groups in their area.
   defp operate(scope, mission_id) do
     Policy.authorize(scope, :operate_mission, %{
       organization_id: scope.organization_id,

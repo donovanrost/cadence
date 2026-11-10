@@ -12,6 +12,7 @@ defmodule Cadence.Control.Commanding.GroupNotes do
   @max_bytes 4_000
 
   @spec add(Cadence.Auth.Scope.t(), binary(), binary(), binary()) :: :ok | {:error, term()}
+  # todo(authz): Cedar should decide who may add notes to a group (any mission operator today).
   def add(scope, mission_id, group_id, note) do
     with {:ok, fresh, _mission} <- RequestAuthoring.authorize(scope, mission_id),
          {:ok, note} <- valid_note(note),

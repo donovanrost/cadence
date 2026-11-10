@@ -86,6 +86,8 @@ defmodule CadenceWeb.Console.PassController do
     }
 
   @doc "`POST …/passes/:id/recover-uplink` (U33): re-runs the pass's uplink qualification."
+  # todo(authz): Cedar should decide who may recover an uplink (any mission operator today,
+  # DECISIONS #58), e.g. only operators of that ground network or spacecraft.
   def recover_uplink(conn, %{"id" => id} = params) do
     with :ok <- no_actor(params),
          {:ok, %{scheduled_contact_id: contact_id}} when is_binary(contact_id) <-
