@@ -216,9 +216,10 @@ The shape is setup-shapes.md §C1. `?database_id=` selects a database (default: 
 `database` is `null` when the mission has none. Refetch on `invalidate` with `catalog`.
 
 - `revisions`: newest first, at most 50. `import_runs`: newest first, at most 20.
-- `revisions[].declaration_count` comes from the producing import run. `command_count` and
-  `telemetry_count` are **`null`**: importers report only a total so far, so show one
-  "Declarations" number.
+- `revisions[].declaration_count` comes from the producing import run. `current_revision`
+  also has `command_count` and `telemetry_count` (commands and telemetry parameters in its
+  declarations); they're `null` only when the revision's model can't be read. Revisions in the
+  list carry `null` for both (counting every revision would read every model).
 - `revisions[].spacecraft_count`: spacecraft whose latest saved configuration references the
   revision.
 - `revisions[].artifact.size_bytes` is `null` in the index (sizes would mean loading every file).
@@ -236,8 +237,23 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
 - `diagnostics[]`: `{severity: error|warning|info, code, message, path}`, where `path` is a
   " / "-joined XTCE path or `null`. A run can succeed with error diagnostics (unsupported items
   are skipped).
-- `base_revision` and `diff` are `null` until the server-side revision diff exists
-  (DECISIONS #9). The UI shows validation and diagnostics only.
+- `base_revision`: the revision before this run's revision in the same database, or `null` (first
+  revision, or no revision produced).
+- `diff` (DECISIONS #9 v1, from the two revisions alone): `null` when there's no base or either
+  revision can't be read. Otherwise `{summary: {commands: {before, after, added, changed,
+  removed}, telemetry: {…}, unchanged, total_before, breaking}, changes: [{op, kind, name, change,
+  breaking}], truncated}`.
+  - Items are what operators know: a **command** (with its arguments, argument types, encoding
+    and verifiers) or a **telemetry** parameter (with its type and calibrator). Declarations no
+    command or parameter references or names (containers, units, monitoring policies) are
+    `kind: "other"`. `name` is the qualified name (`/commands/SET_MODE`).
+  - `change` describes the first change, for example `arguments/duration/type: size_in_bits 8 →
+    16`, `verifiers/Accepted on board: added (+1 more)` or `units degC → V`. It's `null` for added
+    and removed items.
+  - **Breaking**: a command or parameter removed; a command whose argument, argument type or
+    encoding changed; a parameter whose type changed. Additions, descriptions, verifiers,
+    calibrators and units aren't breaking. `changes` lists breaking first, at most 500
+    (`truncated: true` beyond that).
 - Errors: `404 import_run_not_found`.
 - Live: refetch on `invalidate` with `catalog`.
 

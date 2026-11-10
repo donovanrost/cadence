@@ -12,6 +12,7 @@ defmodule Cadence.Reads.CatalogOverview do
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, ImportRun, Revision}
+  alias Cadence.Reads.CatalogDiff
 
   @revision_limit 50
   @run_limit 20
@@ -58,8 +59,8 @@ defmodule Cadence.Reads.CatalogOverview do
 
     %{
       id: id,
-      current_revision: current(List.first(revisions)),
-      revisions: Enum.map(revisions, &Map.delete(&1, :import_run_id)),
+      current_revision: current(organization_id, mission_id, List.first(revisions)),
+      revisions: Enum.map(revisions, &Map.drop(&1, [:import_run_id, :model_revision_id])),
       import_runs:
         runs |> Enum.take(@run_limit) |> Enum.map(&run_row(&1, revision_by_run, labels))
     }
@@ -85,13 +86,22 @@ defmodule Cadence.Reads.CatalogOverview do
       spacecraft_count: Map.get(usage, revision.catalog_revision_id, 0),
       imported_at: run && run.completed_at,
       actor: actor(revision.created_by),
-      import_run_id: revision.import_run_id
+      import_run_id: revision.import_run_id,
+      model_revision_id: revision.mission_model_revision_id
     }
   end
 
-  defp current(nil), do: nil
+  defp current(_organization_id, _mission_id, nil), do: nil
 
-  defp current(revision),
+  # The current revision's per-kind counts come from its declarations (CatalogDiff.counts/3).
+  defp current(organization_id, mission_id, revision) do
+    {commands, telemetry} =
+      CatalogDiff.counts(organization_id, mission_id, revision.model_revision_id)
+
+    %{current_fields(revision) | command_count: commands, telemetry_count: telemetry}
+  end
+
+  defp current_fields(revision),
     do:
       Map.take(revision, [
         :id,
@@ -144,17 +154,42 @@ defmodule Cadence.Reads.CatalogOverview do
       },
       declaration_count: run.imported_definition_count,
       failure_reason: failure_reason(run.failure_reason),
-      diagnostics: Enum.map(run.diagnostics || [], &diagnostic/1),
-      revision:
-        revision &&
-          %{
-            id: revision.catalog_revision_id,
-            number: revision.revision_number,
-            label: revision.revision_label
-          },
-      base_revision: nil,
-      diff: nil
+      diagnostics: Enum.map(run.diagnostics || [], &diagnostic/1)
     }
+    |> Map.merge(revision_fields(organization_id, mission_id, revision))
+  end
+
+  # C3's revision, the revision before it in its database, and the diff between them.
+  defp revision_fields(_organization_id, _mission_id, nil),
+    do: %{revision: nil, base_revision: nil, diff: nil}
+
+  defp revision_fields(organization_id, mission_id, %Revision{} = revision) do
+    base = base_revision(organization_id, mission_id, revision)
+
+    %{
+      revision: %{
+        id: revision.catalog_revision_id,
+        number: revision.revision_number,
+        label: revision.revision_label
+      },
+      base_revision: base && %{id: base.catalog_revision_id, number: base.revision_number},
+      diff:
+        base &&
+          CatalogDiff.diff(
+            organization_id,
+            mission_id,
+            base.mission_model_revision_id,
+            revision.mission_model_revision_id
+          )
+    }
+  end
+
+  # The revision before `revision` in its database (C3's diff base).
+  defp base_revision(organization_id, mission_id, %Revision{} = revision) do
+    organization_id
+    |> Catalog.list_revisions(mission_id, revision.catalog_database_id)
+    |> Enum.filter(&(&1.revision_number < revision.revision_number))
+    |> Enum.max_by(& &1.revision_number, fn -> nil end)
   end
 
   defp diagnostic(diagnostic) do
