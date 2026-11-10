@@ -15,6 +15,13 @@ const columns: readonly ApColumn[] = [
 
 <template>
   <ApTable :columns="columns" :rows="rows" :row-key="(i) => i.id" caption="Invitations">
+    <template #cell-email="{ row }">
+      <RouterLink
+        :to="{ name: 'org.people.invitation', params: { invitationId: row.id } }"
+        class="text-readout hover:underline"
+        >{{ row.email }}</RouterLink
+      >
+    </template>
     <template #cell-role="{ row }">{{ roleLabel(row.role) }}</template>
     <template #cell-by="{ row }">{{ row.invited_by?.name ?? "—" }}</template>
     <template #cell-sent="{ row }">{{ formatShort(new Date(row.sent_at)) }}</template>

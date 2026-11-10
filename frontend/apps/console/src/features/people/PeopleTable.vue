@@ -16,7 +16,11 @@ const columns: readonly ApColumn[] = [
   <ApTable :columns="columns" :rows="rows" :row-key="(m) => m.user_id" caption="People">
     <template #cell-name="{ row }">
       <span class="flex flex-col">
-        <span class="font-semibold text-readout">{{ row.display_name ?? row.email }}</span>
+        <RouterLink
+          :to="{ name: 'org.people.person', params: { userId: row.user_id } }"
+          class="font-semibold text-readout hover:underline"
+          >{{ row.display_name ?? row.email }}</RouterLink
+        >
         <span class="font-mono text-xs text-text-4">{{ row.email }}</span>
       </span>
     </template>

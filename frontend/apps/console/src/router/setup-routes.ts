@@ -163,6 +163,18 @@ export const setupOrgRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "people", title: "Service identities" },
   },
   {
+    path: "org/people/:userId",
+    name: "org.people.person",
+    component: () => import("@/features/people/PersonScreen.vue"),
+    meta: { mode: "setup", nav: "people", title: "Person" },
+  },
+  {
+    path: "org/people/invitations/:invitationId",
+    name: "org.people.invitation",
+    component: () => import("@/features/people/InvitationScreen.vue"),
+    meta: { mode: "setup", nav: "people", title: "Invitation" },
+  },
+  {
     path: "org/missions",
     name: "org.missions",
     component: () => import("@/features/missions/MissionsScreen.vue"),

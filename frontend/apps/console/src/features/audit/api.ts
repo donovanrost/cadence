@@ -37,6 +37,8 @@ export type AuditQuery = Readonly<{
   days: number;
   kinds: readonly AuditKind[];
   missionId: string | null;
+  /** One person's events (AU1 `actor_id`; People › person Activity). */
+  actorId?: string;
   /** Window end, fixed per query so later pages read the same window. */
   to: string;
   cursor?: string;
@@ -48,6 +50,7 @@ export function fetchAudit(q: AuditQuery, signal: AbortSignal): Promise<ApiResul
   const params = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
   if (q.kinds.length > 0) params.set("kinds", q.kinds.join(","));
   if (q.missionId) params.set("mission_id", q.missionId);
+  if (q.actorId) params.set("actor_id", q.actorId);
   if (q.cursor) params.set("cursor", q.cursor);
   return request(
     `/organizations/${encodeURIComponent(q.organizationId)}/audit?${params.toString()}`,
