@@ -169,12 +169,6 @@ export const setupOrgRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "missions", title: "Missions" },
   },
   {
-    path: "org/missions/new",
-    name: "org.missions.new",
-    component: pending,
-    meta: { mode: "takeover", nav: "missions", title: "New mission" },
-  },
-  {
     path: "org/provider-accounts/:accountId?",
     name: "org.provider-accounts",
     component: () => import("@/features/providers/ProviderAccountsScreen.vue"),

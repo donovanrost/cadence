@@ -48,3 +48,41 @@ describe("contact planning policy", () => {
     expect(buildDocument(policy, { ...values, "horizon.days": "700" }).ok).toBe(false);
   });
 });
+
+describe("money fields (DECISIONS #63, U34)", () => {
+  const withMoney = decode(policyReader, {
+    policy_id: "p",
+    version: 2,
+    active_version: 2,
+    document: {
+      budgets: { max_contacts: 40, currency: "USD", max_estimated_cost_micros: 5_000_000 },
+      scoring: { cost_efficiency_weight: 100 },
+    },
+    pending: null,
+    schema: [
+      field("budgets.max_contacts", "budgets", false),
+      field("budgets.currency", "budgets", false, "string"),
+      field("budgets.max_estimated_cost_micros", "budgets", false),
+      field("scoring.cost_efficiency_weight", "scoring", true),
+    ],
+    defaults: null,
+    permissions: ["planning.edit"],
+  });
+  if (!withMoney.ok) throw withMoney.error;
+  const p = withMoney.value;
+  it("hides them and drops a group left empty", () => {
+    expect(groups(p).map((g) => [g.key, g.fields.map((f) => f.path), g.advanced.length])).toEqual([
+      ["budgets", ["budgets.max_contacts"], 0],
+    ]);
+  });
+  it("still saves their server values unchanged", () => {
+    const built = buildDocument(p, initialValues(p));
+    expect(built).toEqual({
+      ok: true,
+      document: {
+        budgets: { max_contacts: 40, currency: "USD", max_estimated_cost_micros: 5_000_000 },
+        scoring: { cost_efficiency_weight: 100 },
+      },
+    });
+  });
+});

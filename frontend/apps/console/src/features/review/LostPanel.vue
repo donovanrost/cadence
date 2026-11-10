@@ -14,7 +14,7 @@ import { bytes, causeText, duration, outcomeTag, ownerWord, stationText } from "
 
 /**
  * R4 · Missed and partial passes. Volume is provider-reported vs what Cadence received (never a
- * planned figure: none exists). Disputes have no flow yet (no billing), so they're marked, not linked.
+ * planned figure: none exists). No dispute marks: billing is out of scope (DECISIONS #63, U34).
  */
 const props = defineProps<{
   page: ReviewRows;
@@ -65,19 +65,12 @@ const columns: readonly ApColumn[] = [
         <span class="text-text-3">/ {{ bytes(row.provider_bytes) }}</span></template
       >
       <template #cell-cause="{ row }">{{ causeText(row.cause) }}</template>
-      <template #cell-owner="{ row }"
-        >{{ row.owner ? ownerWord[row.owner] : "—"
-        }}<span v-if="row.disputable" class="block font-mono text-xs text-caution-text uppercase"
-          >Disputable</span
-        ></template
-      >
+      <template #cell-owner="{ row }">{{ row.owner ? ownerWord[row.owner] : "—" }}</template>
       <template #footer>
         <div
           class="flex flex-wrap items-center gap-3 border-t border-hairline px-4 py-2.5 font-mono text-xs text-text-3 uppercase"
         >
-          <span
-            >Showing {{ rows.length }} of {{ page.total }} · {{ page.disputable }} disputable</span
-          >
+          <span>Showing {{ rows.length }} of {{ page.total }}</span>
           <ApButton
             v-if="hasMore"
             size="compact"

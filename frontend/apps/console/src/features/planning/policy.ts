@@ -77,11 +77,23 @@ export function decidePolicy(
   );
 }
 
-/** Schema fields by group, in schema order; advanced fields separated (ux: collapsed). */
+/**
+ * DECISIONS #63 / U34: billing is out of scope, so money fields are hidden. They stay in the schema
+ * and form values, so a save sends their server values back unchanged.
+ */
+export const hiddenMoneyPaths: ReadonlySet<string> = new Set([
+  "budgets.max_estimated_cost_micros",
+  "budgets.currency",
+  "budgets.critical_cost_reserve_micros",
+  "scoring.cost_efficiency_weight",
+]);
+
+/** Shown schema fields by group, in schema order; advanced separated (ux: collapsed). No empty groups. */
 export function groups(policy: Policy): readonly PolicyGroup[] {
   const order: string[] = [];
   const byGroup = new Map<string, { fields: SchemaField[]; advanced: SchemaField[] }>();
   policy.schema.forEach((f, i) => {
+    if (hiddenMoneyPaths.has(f.path)) return;
     const meta = policy.groups[i];
     const key = meta?.group ?? "other";
     if (!byGroup.has(key)) {
@@ -90,11 +102,13 @@ export function groups(policy: Policy): readonly PolicyGroup[] {
     }
     (meta?.advanced ? byGroup.get(key)?.advanced : byGroup.get(key)?.fields)?.push(f);
   });
-  return order.map((key) => ({
-    key,
-    fields: byGroup.get(key)?.fields ?? [],
-    advanced: byGroup.get(key)?.advanced ?? [],
-  }));
+  return order
+    .map((key) => ({
+      key,
+      fields: byGroup.get(key)?.fields ?? [],
+      advanced: byGroup.get(key)?.advanced ?? [],
+    }))
+    .filter((g) => g.fields.length > 0 || g.advanced.length > 0);
 }
 
 export function initialValues(policy: Policy): FormValues {
@@ -113,17 +127,27 @@ export function buildDocument(
 > {
   const document: Record<string, unknown> = {};
   const errors: Record<string, string> = {};
+  const stored = policy.document ?? policy.defaults ?? {};
   for (const f of policy.schema) {
+    const [group, ...rest] = f.path.split(".");
+    if (!group || rest.length === 0) continue;
+    const put = (v: unknown) => {
+      const section = (document[group] ??= {}) as Record<string, unknown>;
+      section[rest.join(".")] = v;
+    };
+    // U34: hidden money fields go back exactly as stored; never validated, since no one can see them.
+    if (hiddenMoneyPaths.has(f.path)) {
+      const v = (stored[group] as Record<string, unknown> | undefined)?.[rest.join(".")];
+      if (v !== undefined) put(v);
+      continue;
+    }
     if (!visible(f, values)) continue;
     const checked = toValue(f, values[f.path] ?? "");
     if (!checked.ok) {
       errors[f.path] = checked.message;
       continue;
     }
-    const [group, ...rest] = f.path.split(".");
-    if (!group || rest.length === 0) continue;
-    const section = (document[group] ??= {}) as Record<string, unknown>;
-    section[rest.join(".")] = checked.value;
+    put(checked.value);
   }
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, document };
 }
@@ -132,7 +156,7 @@ export const groupTitles: Readonly<Record<string, string>> = {
   horizon: "Horizon",
   scoring: "Trade-offs",
   resources: "Resources",
-  budgets: "Limits & budgets",
+  budgets: "Limits & reserves",
   redundancy: "Diversity",
   automation: "Mode",
 };
@@ -140,5 +164,5 @@ export const groupTitles: Readonly<Record<string, string>> = {
 /** One line for panels whose fields are all advanced (ux review: no empty panels). */
 export const groupSummaries: Readonly<Record<string, string>> = {
   scoring:
-    "How the scheduler weighs cost, priority and coverage against each other. The defaults suit most missions.",
+    "How the scheduler weighs priority, deadlines and coverage against each other. The defaults suit most missions.",
 };

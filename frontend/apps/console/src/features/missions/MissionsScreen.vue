@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { fleetOpState, fleetStateWord } from "@/features/fleet/index.ts";
-import { useConsoleScope } from "@/shell";
+import { canAdministerOrganization, useConsoleScope, useSession } from "@/shell";
 import {
   ApButton,
   ApCallout,
@@ -27,6 +27,11 @@ const organization = computed(() =>
     ? scope.value.organization
     : null,
 );
+const session = useSession();
+/** DECISIONS #64: New mission opens the existing create page on the host (no console route). */
+const canCreate = computed(() =>
+  organization.value ? canAdministerOrganization(session, organization.value) : false,
+);
 const summaries = useRemoteQuery(() => organization.value?.id ?? null, fetchMissionSummaries);
 const summary = (id: string) =>
   summaries.state.value.status === "ready" ? summaries.state.value.value.get(id) : undefined;
@@ -44,7 +49,9 @@ const columns: readonly ApColumn[] = [
       :label="`${organization?.name ?? ''} · organization`"
       :title="organization ? plural(organization.missions.length, 'mission') : 'Missions'"
       size="reading"
-    />
+    >
+      <ApButton v-if="canCreate" variant="primary" href="/missions/new">New mission</ApButton>
+    </ApPageHeader>
     <ApPanel index="M1" title="Missions" flush>
       <ApEmptyState
         v-if="!organization || organization.missions.length === 0"
