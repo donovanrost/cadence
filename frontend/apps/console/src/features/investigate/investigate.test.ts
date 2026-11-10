@@ -1,4 +1,5 @@
 import { logLines } from "./eventLog.ts";
+import { mergeSamples, tailPoints } from "./tail.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { formatLimitLike, formatValue, type Alarm } from "@/features/alarms/index.ts";
@@ -238,5 +239,35 @@ describe("event log lines (B2)", () => {
 
   it("falls back to the whole episode history without the mission read", () => {
     expect(logLines(null, [raised, acked])).toHaveLength(2);
+  });
+});
+
+describe("M8 live tail", () => {
+  const s = (t: string, v: string | null, p = "p1") => ({
+    point_id: p,
+    value_json: v,
+    generation_time: t,
+    received_at: null,
+    limit_state: null,
+  });
+  it("merges pushes by generation time, so a backfill lands in place", () => {
+    const a = mergeSamples(new Map(), [
+      s("2026-11-10T01:00:02Z", "2"),
+      s("2026-11-10T01:00:01Z", "1"),
+    ]);
+    const b = mergeSamples(a, [s("2026-11-10T01:00:01.5Z", "1.5")]);
+    expect(b.get("p1")?.map((x) => x.value_json)).toEqual(["1", "1.5", "2"]);
+  });
+  it("plots numeric samples after the history's last bucket only", () => {
+    const after = Date.parse("2026-11-10T01:00:01Z");
+    const pts = tailPoints(
+      [
+        s("2026-11-10T01:00:00Z", "0"),
+        s("2026-11-10T01:00:02Z", "2"),
+        s("2026-11-10T01:00:03Z", '"SAFE"'),
+      ],
+      after,
+    );
+    expect(pts).toEqual([{ t: Date.parse("2026-11-10T01:00:02Z"), min: 2, mean: 2, max: 2 }]);
   });
 });

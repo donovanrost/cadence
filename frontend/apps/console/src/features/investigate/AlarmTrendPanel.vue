@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tailPoints, useSpacecraftTail } from "./tail.ts";
 import { computed } from "vue";
 import type { RemoteState } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
@@ -58,13 +59,25 @@ const trend = usePointTrend(
 const rangeLabel = computed(
   () => RANGES.find((r) => r.value === range.value)?.label ?? range.value,
 );
+/** M8 live tail for the shown point; history stays authoritative and refetches as before. */
+const tail = useSpacecraftTail(
+  computed(() => props.sc.id),
+  computed(() => (props.alarm ? [props.alarm.point.id] : [])),
+  () => trend.history.refetch(),
+);
 const view = computed(() => {
   const h = trend.history.state.value;
   const a = props.alarm;
   if (h.status !== "ready" || !a) return null;
-  const window = { from: Date.parse(h.value.from), to: Date.parse(h.value.to) };
+  const historySeries = toSeries(h.value);
+  const lastBucket = historySeries.at(-1)?.t ?? Date.parse(h.value.from);
+  const live = tailPoints(tail.tails.value.get(a.point.id) ?? [], lastBucket);
+  const series = [...historySeries, ...live];
+  const window = {
+    from: Date.parse(h.value.from),
+    to: Math.max(Date.parse(h.value.to), live.at(-1)?.t ?? 0),
+  };
   const i = trend.intervals.state.value;
-  const series = toSeries(h.value);
   const limits = limitSegments(i.status === "ready" ? i.value : null, window, a.thresholds);
   return {
     window,
