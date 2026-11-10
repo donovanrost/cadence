@@ -46,16 +46,31 @@ export const sectionOp = (
   changes: readonly Readonly<{ path: string; value: unknown }>[],
 ): StageOp => ({ kind: "spacecraft_profile", action: "update", entity_id: profileId, changes });
 
+/** "That catalog revision doesn't exist" + typed 16 → "Catalog revision 16 doesn't exist." */
+function errorLine(
+  e: Readonly<{ path: string; message: string }>,
+  labels: Readonly<Record<string, string>>,
+  typed: Readonly<Record<string, string>>,
+): string {
+  const label = labels[e.path] ?? e.path;
+  const value = typed[e.path];
+  if (value && /^That .+ doesn't exist\.?$/.test(e.message))
+    return `${label} ${value} doesn't exist.`;
+  return `${label}: ${e.message}`;
+}
+
 /** The server's dry run in one line (Changes.md §1): verdict, spacecraft changed / kept and why. */
 export function describePreview(
   p: Preview,
   /** Field labels by path, so errors read "Catalog revision: …" rather than the raw path (ux). */
   labels: Readonly<Record<string, string>> = {},
+  /** What was typed, by path: "Catalog revision 16 doesn't exist." (ux). */
+  typed: Readonly<Record<string, string>> = {},
 ): { tone: "nominal" | "caution" | "crit"; text: string } {
   const issues = p.checks.flatMap((c) =>
     c.items.flatMap((i) =>
       i.errors && i.errors.length > 0
-        ? i.errors.map((e) => `${labels[e.path] ?? e.path}: ${e.message}`)
+        ? i.errors.map((e) => errorLine(e, labels, typed))
         : [itemLine(i)],
     ),
   );

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
   diffEdits,
@@ -33,6 +33,9 @@ const dirty = computed(() =>
 );
 const errors = computed(() => (edits.value.ok ? {} : edits.value.errors));
 const labels = Object.fromEntries(fields.map((f) => [f.path, f.label]));
+/** ux: Stage edit is disabled while the last Check said NO-GO, with that line as the reason. */
+const noGo = computed(() => (outcome.value?.tone === "crit" ? outcome.value.text : null));
+watch(values, () => (outcome.value = null), { deep: true });
 
 async function check() {
   if (!edits.value.ok || busy.value) return;
@@ -43,7 +46,7 @@ async function check() {
       new AbortController().signal,
     );
     outcome.value = r.ok
-      ? describePreview(r.value, labels)
+      ? describePreview(r.value, labels, values.value)
       : { tone: "crit", text: failureOutcome(r.error, "changed").sentence };
   } finally {
     busy.value = false;
@@ -99,8 +102,8 @@ async function stage() {
         >
         <ApButton
           variant="primary"
-          :disabled="busy || !edits.ok"
-          disabled-reason="Fix the fields first"
+          :disabled="busy || !edits.ok || noGo !== null"
+          :disabled-reason="noGo ?? 'Fix the fields first'"
           @click="stage"
           >Stage edit</ApButton
         >

@@ -42,3 +42,37 @@ describe("profile section edit", () => {
     });
   });
 });
+
+describe("describePreview error lines (ux)", () => {
+  it("says 'Catalog revision 16 doesn't exist.' with the typed value", async () => {
+    const { decode } = await import("@/api");
+    const { previewReader } = await import("@/features/changes/actions.ts");
+    const { describePreview } = await import("./sectionEdit.ts");
+    const p = decode(previewReader, {
+      verdict: "no_go",
+      checks: [
+        {
+          key: "validation",
+          verdict: "no_go",
+          items: [
+            {
+              kind: "spacecraft_profile",
+              errors: [
+                { path: "catalog_revision_id", message: "That catalog revision doesn't exist" },
+              ],
+            },
+          ],
+        },
+      ],
+      effects: [],
+    });
+    if (!p.ok) throw p.error;
+    expect(
+      describePreview(
+        p.value,
+        { catalog_revision_id: "Catalog revision" },
+        { catalog_revision_id: "16" },
+      ),
+    ).toEqual({ tone: "crit", text: "NO-GO: Catalog revision 16 doesn't exist." });
+  });
+});
