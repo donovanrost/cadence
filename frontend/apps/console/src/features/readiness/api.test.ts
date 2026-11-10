@@ -129,3 +129,13 @@ describe("presentation", () => {
     );
   });
 });
+
+describe("change_set fix (#65 catalog_not_converged)", () => {
+  it("links to Changes, with or without an id", async () => {
+    const { fixLink } = await import("./present.ts");
+    expect(fixLink({ kind: "change_set", label: null }, "caution")).toEqual({
+      label: "Open changes",
+      to: { name: "setup.changes" },
+    });
+  });
+});

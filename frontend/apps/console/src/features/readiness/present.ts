@@ -107,6 +107,8 @@ export function fixLink(fix: FindingFix, severity: Severity): FixLink {
         return { label: "Open routing", to: { name: "setup.comms" } };
       case "contact_planning":
         return { label: "Set up contact planning", to: { name: "setup.contact-planning" } };
+      case "change_set":
+        return { label: "Open changes", to: { name: "setup.changes" } };
       case "spacecraft":
         return {
           label: "Open spacecraft",

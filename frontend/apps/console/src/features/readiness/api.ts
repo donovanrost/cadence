@@ -24,6 +24,7 @@ const fixKinds = [
   "catalog_import",
   "comms",
   "contact_planning",
+  "change_set",
   "station",
   "data_source",
   "app",
@@ -38,7 +39,8 @@ export type FindingFix =
         | "catalog"
         | "catalog_import"
         | "comms"
-        | "contact_planning";
+        | "contact_planning"
+        | "change_set";
       label: string | null;
     }>
   | Readonly<{
@@ -108,6 +110,10 @@ const fix: Reader<FindingFix | null> = (value, path = "") => {
     case "comms":
     case "contact_planning":
       if (raw.id !== null) throw new decoders.DecodeError(`${path}.id`, "null for a list target");
+      return { kind: raw.kind, label: raw.label };
+    // #65 catalog_not_converged: any change set touching the spacecraft converges it; an id, if
+    // the server ever sends one, isn't needed to get there.
+    case "change_set":
       return { kind: raw.kind, label: raw.label };
     case "spacecraft":
     case "profile":
