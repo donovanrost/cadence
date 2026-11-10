@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useConsoleScope } from "@/shell";
 import { ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented, plural } from "@/ui";
@@ -17,7 +18,12 @@ const organization = computed(() =>
     : null,
 );
 const { state, refetch } = useRemoteQuery(() => organization.value?.id ?? null, fetchPeople);
-const tab = ref<"people" | "invitations" | "services">("people");
+/** `?tab=` opens a section directly (service identity pages link back to it). */
+const route = useRoute();
+const initialTab = route.query["tab"];
+const tab = ref<"people" | "invitations" | "services">(
+  initialTab === "invitations" || initialTab === "services" ? initialTab : "people",
+);
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
 );

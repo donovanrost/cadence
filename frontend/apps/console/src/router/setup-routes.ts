@@ -159,8 +159,19 @@ export const setupOrgRoutes: RouteRecordRaw[] = [
   {
     path: "org/people/services",
     name: "org.people.services",
-    component: pending,
-    meta: { mode: "setup", nav: "people", title: "Service identities" },
+    redirect: (to) => ({ name: "org.people", params: to.params, query: { tab: "services" } }),
+  },
+  {
+    path: "org/people/services/new",
+    name: "org.people.services.new",
+    component: () => import("@/features/people/ServiceIdentityNewScreen.vue"),
+    meta: { mode: "setup", nav: "people", title: "New service identity" },
+  },
+  {
+    path: "org/people/services/:serviceId",
+    name: "org.people.service",
+    component: () => import("@/features/people/ServiceIdentityScreen.vue"),
+    meta: { mode: "setup", nav: "people", title: "Service identity" },
   },
   {
     path: "org/people/:userId",

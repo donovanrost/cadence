@@ -25,6 +25,11 @@ const columns: readonly ApColumn[] = [
 
 <template>
   <ApPanel index="U3" title="Service identities" flush>
+    <template #meta>
+      <RouterLink :to="{ name: 'org.people.services.new' }" class="text-text-3 hover:text-readout"
+        >New</RouterLink
+      >
+    </template>
     <ApRemote :state="state" loading-label="Loading service identities…" @retry="refetch">
       <template #default="{ value }">
         <ApEmptyState
@@ -40,7 +45,11 @@ const columns: readonly ApColumn[] = [
           caption="Service identities"
         >
           <template #cell-name="{ row }"
-            ><span class="font-semibold text-readout">{{ row.name }}</span></template
+            ><RouterLink
+              :to="{ name: 'org.people.service', params: { serviceId: row.id } }"
+              class="font-semibold text-readout hover:underline"
+              >{{ row.name }}</RouterLink
+            ></template
           >
           <template #cell-scope="{ row }">{{ row.scope_summary }}</template>
           <template #cell-key="{ row }">
