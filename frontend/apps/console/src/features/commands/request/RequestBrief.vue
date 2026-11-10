@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { formatClock, formatDayTime, plural, ApPanel, ApTag } from "@/ui";
+import { catalogRevisionWords } from "../api.ts";
 import type { Group } from "../groups/show.ts";
 import type { PersonName } from "../groups/words.ts";
 
@@ -31,7 +32,16 @@ const pos = (n: number) => String(n + 1).padStart(2, "0");
         {{ formatDayTime(new Date(group.requested_at)) }}
       </p>
     </div>
-    <ApPanel index="A1" title="What changes" :meta="plural(group.target_count, 'target')" flush>
+    <ApPanel
+      index="A1"
+      title="What changes"
+      :meta="
+        [plural(group.target_count, 'target'), catalogRevisionWords(group.catalog_revision)]
+          .filter(Boolean)
+          .join(' · ')
+      "
+      flush
+    >
       <ul class="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 px-4 py-3">
         <li v-for="t in targets" :key="t.spacecraft_id" class="font-mono text-sm text-readout">
           {{ t.name ?? "Unknown spacecraft" }}

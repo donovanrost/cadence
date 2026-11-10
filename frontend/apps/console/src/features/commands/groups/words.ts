@@ -38,7 +38,14 @@ export const STAGE_STATE: Readonly<Record<MemberStage, OpState>> = {
 };
 
 /** A member's stage in words, in its group's terms: a sent-back member wasn't rejected. */
-export function memberStageWord(stage: MemberStage, group: GroupState): string {
+export function memberStageWord(
+  stage: MemberStage,
+  group: GroupState,
+  endReason: string | null = null,
+): string {
+  // #65: a catalog change set canceled it before release.
+  if (stage === "canceled" && endReason === "catalog_changed")
+    return "Canceled: the catalog changed";
   if (stage === "rejected" && group === "sent_back") return "Sent back";
   if (stage === "rejected" && group === "rejected") return "NO-GO";
   return STAGE_WORDS[stage];
@@ -118,6 +125,7 @@ const OUTCOME_WORDS: Readonly<Record<string, string>> = {
   no_verifier: "not verifiable",
   verify_failed: "verify failed",
   verify_timed_out: "verify timed out",
+  catalog_changed: "canceled by a catalog change",
   release_failed: "release failed",
   canceled: "canceled",
   rejected: "rejected",

@@ -6,7 +6,7 @@ import { TakeoverHeader, useMissionScope } from "@/shell/index.ts";
 import { ApButton, ApCallout, ApEmptyState, ApPanel, ApRemote, ApStationBar } from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
 import { useCommandAccess } from "../access.ts";
-import { fetchCommand } from "../api.ts";
+import { catalogRevisionWords, fetchCommand } from "../api.ts";
 import { fetchEndpoints, type TargetEndpoints } from "../groups/api.ts";
 import DeliveryPanel from "./DeliveryPanel.vue";
 import PreflightPanel from "./PreflightPanel.vue";
@@ -39,6 +39,7 @@ const stack = ref<StackItem[]>([]);
 /** The stack row whose argument form is open; a newly added command opens itself (ux 5). */
 const openKey = ref<string | null>(null);
 const revision = ref<string | null>(null);
+const catalogRev = ref<string | null>(null);
 const adding = ref(false);
 const addError = shallowRef<string | null>(null);
 async function add(commandId: string) {
@@ -49,6 +50,7 @@ async function add(commandId: string) {
     if (!result.ok) addError.value = describeApiError(result.error);
     else if (result.value.command) {
       revision.value = result.value.revision_id;
+      catalogRev.value = catalogRevisionWords(result.value.catalog_revision);
       const item = newItem(result.value.command);
       stack.value = [...stack.value, item];
       openKey.value = item.command.arguments.length ? item.key : null;
@@ -199,6 +201,7 @@ const close = computed(() => {
               v-model:open="openKey"
               :items="stack"
               :revision="revision"
+              :catalog-rev="catalogRev"
               :adding="adding"
               @add="onAdd"
               @change="setValues"

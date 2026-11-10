@@ -477,3 +477,26 @@ describe("GO re-checks HOLDs (DECISIONS #61)", () => {
     expect(e && eventText(e, () => "Sam")).toBe("Sam acknowledged the Conflicts HOLD at GO: “ok”");
   });
 });
+
+describe("catalog_changed (#65)", () => {
+  it("words a member canceled by a catalog change, and the completed tally", () => {
+    expect(memberStageWord("canceled", "queued", "catalog_changed")).toBe(
+      "Canceled: the catalog changed",
+    );
+    expect(memberStageWord("canceled", "queued", null)).toBe("Canceled");
+    const [e] = groupOf({
+      events: [
+        {
+          id: "c",
+          kind: "completed",
+          actor: { actor_kind: "system" },
+          at: "2026-11-10T01:00:00Z",
+          payload: { members: { verified: 1, catalog_changed: 2 } },
+        },
+      ],
+    }).events;
+    expect(e && eventText(e, () => "Cadence")).toBe(
+      "Cadence closed the run · 1 verified · 2 canceled by a catalog change",
+    );
+  });
+});

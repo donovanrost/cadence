@@ -7,6 +7,7 @@ import {
   type Reader,
 } from "@/api/index.ts";
 import { groupUplinkReader } from "@/features/contacts/readiness.ts";
+import { catalogRevisionReader } from "../api.ts";
 import {
   actor,
   groupsBase,
@@ -130,6 +131,8 @@ export const groupReader = d.object({
   awaiting_me: d.boolean,
   operation_id: d.nullable(d.string),
   review_token: d.string,
+  /** The members' catalog revision ("Catalog rev 14"), null when none records it. */
+  catalog_revision: catalogRevisionReader,
   log_entry: d.nullable(d.string),
   sent_back_from: d.nullable(d.token),
   commands: d.array(command, 16),

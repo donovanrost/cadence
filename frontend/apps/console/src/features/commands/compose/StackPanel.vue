@@ -5,7 +5,13 @@ import CommandForm from "./CommandForm.vue";
 import { argSummary, checkItem, type StackItem } from "./stack.ts";
 
 /** C2 · Command stack: ordered commands from the catalog; one row open for editing. */
-defineProps<{ items: readonly StackItem[]; revision: string | null; adding: boolean }>();
+defineProps<{
+  items: readonly StackItem[];
+  revision: string | null;
+  /** "Catalog rev 14" when the catalog revision is recorded (backlog §2). */
+  catalogRev?: string | null;
+  adding: boolean;
+}>();
 const emit = defineEmits<{
   add: [commandId: string];
   change: [key: string, values: Record<string, string>];
@@ -17,7 +23,12 @@ const open = defineModel<string | null>("open", { required: true });
 </script>
 
 <template>
-  <ApPanel index="C2" title="Command stack" :meta="revision ? 'active catalog' : undefined" flush>
+  <ApPanel
+    index="C2"
+    title="Command stack"
+    :meta="revision ? (catalogRev ?? 'active catalog') : undefined"
+    flush
+  >
     <ApEmptyState
       v-if="items.length === 0"
       headline="Empty"

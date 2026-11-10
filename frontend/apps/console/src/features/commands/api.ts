@@ -2,9 +2,18 @@ import { decoders as d, request, type ApiResult, type Decoded } from "@/api/inde
 
 /** Contract: docs/apogee/api/commanding.md (M17, the active command catalog). */
 
+/** The human catalog revision ("CATALOG rev 14"); null when none records the model (commanding.md). */
+export const catalogRevisionReader = d.optional(
+  d.nullable(d.object({ id: d.token, number: d.nullable(d.integer), label: d.nullable(d.string) })),
+);
+export const catalogRevisionWords = (
+  r: Readonly<{ number: number | null; label: string | null }> | null | undefined,
+) => (r ? (r.number !== null ? `Catalog rev ${r.number}` : r.label) : null);
+
 const basis = {
   state: d.oneOf(["active", "not_active"] as const),
   revision_id: d.nullable(d.token),
+  catalog_revision: catalogRevisionReader,
   plan_id: d.nullable(d.token),
   activation_id: d.nullable(d.token),
 };
