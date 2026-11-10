@@ -109,6 +109,26 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
 
     assert renamed["name"] == "Sim (renamed)"
 
+    # PA1 history: newest first, with what each version changed.
+    history =
+      conn.()
+      |> get(base <> "/provider-accounts/#{id}/versions")
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert %{"current_version" => 2, "name" => "Sim (renamed)"} = history
+
+    assert [%{"version" => 2, "changes" => changes}, %{"version" => 1, "changes" => []}] =
+             history["versions"]
+
+    assert %{"label" => "Endpoint", "before" => "http://sim.test", "after" => "http://sim2.test"} =
+             Enum.find(changes, &(&1["field"] == "base_url"))
+
+    admin_id = admin.user_id
+    assert %{"actor" => %{"kind" => "user", "id" => ^admin_id}} = hd(history["versions"])
+
+    assert conn.() |> get(base <> "/provider-accounts/nope/versions") |> json_response(404)
+
     blank = conn.() |> put(base <> "/provider-accounts/" <> id, %{"name" => " "})
     assert json_response(blank, 422)["error"]["details"]["name"]
 

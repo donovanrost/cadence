@@ -948,6 +948,7 @@ defmodule CadenceWeb.Router do
       get("/audit", OrganizationController, :audit)
       get("/provider-accounts", ProviderAccountController, :index)
       post("/provider-accounts/:id/test", ProviderAccountController, :test)
+      get("/provider-accounts/:id/versions", ProviderAccountController, :versions)
       post("/provider-accounts", ProviderAccountController, :create)
       put("/provider-accounts/:id", ProviderAccountController, :update)
       delete("/provider-accounts/:id", ProviderAccountController, :delete)

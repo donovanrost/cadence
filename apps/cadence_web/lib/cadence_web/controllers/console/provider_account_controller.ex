@@ -7,7 +7,13 @@ defmodule CadenceWeb.Console.ProviderAccountController do
   use CadenceWeb, :controller
 
   alias Cadence.GroundNetworks.{ProviderAccountRename, ProviderAccountRetirement}
-  alias Cadence.Management.{ProviderAccountDirectory, ProviderAccountWrites}
+
+  alias Cadence.Management.{
+    ProviderAccountDirectory,
+    ProviderAccountHistory,
+    ProviderAccountWrites
+  }
+
   alias Cadence.Missions
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
@@ -22,6 +28,15 @@ defmodule CadenceWeb.Console.ProviderAccountController do
     case ProviderAccountDirectory.test(conn.assigns.current_scope, id) do
       {:ok, result} -> json(conn, %{data: ConfigJSON.encode(result)})
       {:error, reason} -> error(conn, reason)
+    end
+  end
+
+  @doc "PA1 history: versions newest first, with actor and changes from the previous one."
+  def versions(conn, %{"id" => id}) do
+    case ProviderAccountHistory.versions(conn.assigns.current_scope, id) do
+      {:ok, data} -> json(conn, %{data: ConfigJSON.encode(data)})
+      {:error, :forbidden} -> Problem.respond(conn, :forbidden)
+      {:error, _not_found} -> Problem.respond(conn, :provider_account_not_found)
     end
   end
 

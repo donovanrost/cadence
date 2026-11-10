@@ -302,6 +302,13 @@ to every member.
   - `status` is `auth_failed` when the credential is revoked, and `not_checked` before a first
     successful test.
   - There's no `expiring`: credentials carry no expiry yet.
+- `GET /provider-accounts/:id/versions` → `{id, name, current_version, versions: [{version,
+  created_at, actor: {kind: "user" | "system", id, name} | null, changes: [{field, label, before,
+  after}]}]}`, newest first. `changes` compares with the version before (`[]` for version 1).
+  Fields: endpoint, region, environment, client key, credential **reference** (never a secret),
+  event ingestion and its settings, request policy, guardrails, provider settings. A rename
+  changes the account's name without a new version, so it isn't listed. Errors: `404
+  provider_account_not_found`, `403 forbidden`.
 - `POST /provider-accounts/:id/test` → `{ok, checked: ["reference"], failed: null | "reference",
   reason, message}`. It checks the credential reference exists, isn't revoked and resolves in its
   secret backend. It doesn't call the provider itself yet, so `checked` says what was verified.
