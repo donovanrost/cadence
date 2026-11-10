@@ -66,7 +66,7 @@ const lookup = computed(() => {
             :fleet="fleet.state.value.status === 'ready' ? fleet.state.value.value.spacecraft : []"
             @retry="alarms.refetch"
           />
-          <NotBuiltTab v-else :tab="tab" />
+          <NotBuiltTab v-else :tab="tab" :sc="lookup.sc" />
         </template>
         <ApPanel v-else index="A1" title="Spacecraft" flush>
           <ApEmptyState
