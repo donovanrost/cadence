@@ -24,6 +24,8 @@ defmodule CadenceWeb.Console.ConfigJSON do
     not_in_review: 422,
     checks_failed: 422,
     holds_not_acknowledged: 422,
+    holds_blocking: 409,
+    catalog_command_in_flight: 409,
     invalid_range: 422,
     forbidden: 403,
     change_set_not_found: 404,
@@ -54,6 +56,10 @@ defmodule CadenceWeb.Console.ConfigJSON do
     not_in_review: "The change set isn't in review.",
     checks_failed: "Checks failed; nothing was applied.",
     holds_not_acknowledged: "Acknowledge the holds to apply.",
+    holds_blocking:
+      "This change can't apply yet: commands in flight or configurations pending block it.",
+    catalog_command_in_flight:
+      "A command started while applying; nothing was applied. Try again when it finishes.",
     invalid_range: "Choose an older revision first.",
     forbidden: "You do not have permission to do that.",
     change_set_not_found: "Change set not found.",
@@ -95,6 +101,9 @@ defmodule CadenceWeb.Console.ConfigJSON do
   @spec error(Plug.Conn.t(), term()) :: Plug.Conn.t()
   def error(conn, {:invalid_op, index, errors}),
     do: respond(conn, :invalid_op, %{index: index, errors: encode(errors)})
+
+  def error(conn, {:catalog_command_in_flight, ids}) when is_list(ids),
+    do: respond(conn, :catalog_command_in_flight, %{command_request_ids: ids})
 
   def error(conn, {tag, details}) when is_map_key(@status, tag),
     do: respond(conn, tag, encode(details))

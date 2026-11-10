@@ -35,7 +35,7 @@ ISO-8601, revision numbers are integers (render them as `rN`), and actors are `{
 
 | Status | Codes |
 | --- | --- |
-| 409 | `frozen_in_review`, `change_set_changed`, `path_already_staged` (details = `{change_id, author, kind, entity_id, path, value}`), `reviewer_is_author`, `activation_policy_changed`, `entity_gone` |
+| 409 | `holds_blocking` (details = the preview), `catalog_command_in_flight` (details = `{command_request_ids}`), `frozen_in_review`, `change_set_changed`, `path_already_staged` (details = `{change_id, author, kind, entity_id, path, value}`), `reviewer_is_author`, `activation_policy_changed`, `entity_gone` |
 | 422 | `invalid_op` (details = `{index, errors: [{path, message}]}`), `reason_required`, `comment_required`, `nothing_staged`, `not_in_review`, `checks_failed` and `holds_not_acknowledged` (details = the preview), `invalid_range`, `invalid_params` (malformed body; details keyed by field) |
 | 403 | `forbidden` |
 | 404 | `change_set_not_found`, `revision_not_found`, `change_not_found`, `op_not_found`, `mission_not_found` |
@@ -108,6 +108,23 @@ order, so a SCID repeated **within the batch** fails validation for the later op
     its set's only change.
   - `422 nothing_to_roll_back`.
   - `403 forbidden`: needs `config.rollback`.
+
+**Catalog generations (#65, domain `a01cf95f`).** A change to a profile's or override's
+`catalog_revision_id` previews a `compatibility` check whose items carry a `reason` and a
+`message` sentence:
+
+- `catalog_change` `{spacecraft_ids, from, to}`: which spacecraft move to which revision (HOLD).
+- `catalog_cancels_commands` `{requests: [{command_request_id, command_group_id, command_name,
+  lifecycle_state}]}`: queued requests the change cancels (HOLD).
+- `catalog_command_in_flight` `{requests}` and `catalog_configuration_pending`
+  `{spacecraft_ids}`: **blocking**. The check then has `blocking: true`, and acknowledging holds
+  doesn't let it apply.
+
+Submitting while a blocking item stands answers `409 holds_blocking` with the preview as
+`details` (show the blocking items: "can't apply yet"). If a command starts during the apply
+itself, nothing is applied and the answer is `409 catalog_command_in_flight` with `details:
+{command_request_ids}`; submit again when it finishes. An unknown revision is a validation error
+("That catalog revision doesn't exist").
 
 **Conflict detail.** Each `conflicts` item's `paths` entries are `{path, base, live, staged,
 changed_in, changed_by}`:
