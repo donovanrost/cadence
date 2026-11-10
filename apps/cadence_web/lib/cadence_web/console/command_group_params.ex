@@ -42,6 +42,46 @@ defmodule CadenceWeb.Console.CommandGroupParams do
 
   def draft(_params), do: invalid("draft", "must be an object")
 
+  @max_ack_note 1_000
+
+  @doc """
+  `acknowledged_holds: [{key, hold_basis, note}]` (DECISIONS #60). A note is required; the actor is
+  the session user.
+  """
+  @spec acknowledged_holds(map()) :: {:ok, [map()]} | {:error, {:invalid_params, map()}}
+  def acknowledged_holds(params) do
+    case Map.get(params, "acknowledged_holds") do
+      nil -> {:ok, []}
+      list when is_list(list) -> list |> Enum.map(&ack/1) |> collect_acks()
+      _other -> invalid("acknowledged_holds", "must be a list")
+    end
+  end
+
+  defp ack(%{"key" => key, "hold_basis" => basis, "note" => note})
+       when is_binary(key) and is_binary(basis) and is_binary(note) do
+    note = String.trim(note)
+
+    cond do
+      note == "" ->
+        {:error, "each acknowledgement needs a note"}
+
+      String.length(note) > @max_ack_note ->
+        {:error, "notes are at most #{@max_ack_note} characters"}
+
+      true ->
+        {:ok, %{key: key, hold_basis: basis, note: note}}
+    end
+  end
+
+  defp ack(_other), do: {:error, "each item needs key, hold_basis and note"}
+
+  defp collect_acks(results) do
+    case Enum.find(results, &match?({:error, _}, &1)) do
+      nil -> {:ok, Enum.map(results, fn {:ok, ack} -> ack end)}
+      {:error, message} -> invalid("acknowledged_holds", message)
+    end
+  end
+
   @spec decision(map()) :: {:ok, map()} | {:error, {:invalid_params, map()}}
   def decision(params) when is_map(params) do
     case Map.fetch(@decisions, params["kind"]) do

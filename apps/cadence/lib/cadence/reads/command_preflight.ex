@@ -16,6 +16,8 @@ defmodule Cadence.Reads.CommandPreflight do
   alias Cadence.Reads.{CommandGroups, Passes}
 
   @contact_horizon_s 6 * 3_600
+  # DECISIONS #60: HOLDs the submitter may acknowledge with a note. Every other HOLD is hard.
+  @ackable_holds [:conflicts]
   @open_queue_states [:pending, :release_pending]
 
   @doc """
@@ -173,18 +175,24 @@ defmodule Cadence.Reads.CommandPreflight do
       |> Enum.reject(&MapSet.member?(own, &1))
 
     result = if ids == [], do: :go, else: :hold
-    check(:conflicts, result, [], %{count: length(ids), command_request_ids: Enum.uniq(ids)})
+    ids = ids |> Enum.uniq() |> Enum.sort()
+    check(:conflicts, result, [], %{count: length(ids), command_request_ids: ids})
   end
 
+  # A commandable contact: a confirmed or active booking whose uplink leg the provider confirmed
+  # (it carries the command window), overlapping the release window [not_before or now,
+  # expires_at or +6 h] (qa #35: the window ignored not_before).
   defp contact_check(org, mission, draft, targets) do
     now = DateTime.utc_now()
-    until = Map.get(draft, :expires_at) || DateTime.add(now, @contact_horizon_s)
-    until = if DateTime.compare(until, now) == :gt, do: until, else: DateTime.add(now, 60)
+    from = later(Map.get(draft, :not_before), now)
+    until = Map.get(draft, :expires_at) || DateTime.add(from, @contact_horizon_s)
+    until = if DateTime.compare(until, from) == :gt, do: until, else: DateTime.add(from, 60)
 
     next =
       org
-      |> Passes.load(mission, now, until, %{states: ["confirmed", "active"]})
+      |> Passes.load(mission, from, until, %{states: ["confirmed", "active"]})
       |> Map.fetch!(:passes)
+      |> Enum.filter(&(&1.uplink_confirmed == true and DateTime.compare(&1.ends_at, from) == :gt))
       |> Enum.group_by(& &1.spacecraft_id)
       |> Map.new(fn {id, [first | _]} ->
         {id,
@@ -202,22 +210,73 @@ defmodule Cadence.Reads.CommandPreflight do
         %{
           spacecraft_id: target.spacecraft_id,
           result: if(contact, do: :go, else: :hold),
+          reason: if(contact, do: nil, else: :no_commandable_contact),
           next_contact: contact
         }
       end)
 
     result = if Enum.all?(per_target, &(&1.result == :go)), do: :go, else: :hold
-    check(:contact, result, per_target, %{until: until})
+    check(:contact, result, per_target, %{from: from, until: until})
   end
 
+  defp later(nil, now), do: now
+  defp later(%DateTime{} = at, now), do: if(DateTime.compare(at, now) == :gt, do: at, else: now)
+
+  # Not a HOLD (DECISIONS #60): the second GO is the approval step that satisfies it, so it never
+  # blocks submit. `second_go_required` and these reasons say the group goes to approval.
   defp two_person_check(%{second_go_required: false}),
     do: check(:two_person, :go, [], %{reasons: []})
 
   defp two_person_check(%{reasons: reasons}),
-    do: check(:two_person, :hold, [], %{reasons: reasons})
+    do: check(:two_person, :go, [], %{reasons: reasons})
 
-  defp check(key, result, per_target, evidence),
-    do: %{key: key, result: result, per_target: per_target, evidence: evidence}
+  defp check(key, result, per_target, evidence) do
+    hold? = result == :hold
+
+    %{
+      key: key,
+      result: result,
+      per_target: per_target,
+      evidence: evidence,
+      ackable: if(hold?, do: key in @ackable_holds),
+      hold_basis: if(hold?, do: hold_basis(key, per_target, evidence))
+    }
+  end
+
+  # The HOLD's facts, so an acknowledgement can't carry over to a changed HOLD (#60). Time-only
+  # evidence (the contact window) is left out of the hash.
+  defp hold_basis(key, per_target, evidence) do
+    {key, per_target, Map.drop(evidence, [:from, :until])}
+    |> :erlang.term_to_binary()
+    |> then(&:crypto.hash(:sha256, &1))
+    |> Base.encode16(case: :lower)
+    |> binary_part(0, 32)
+  end
+
+  @doc """
+  DECISIONS #60: the HOLDs of `preflight` that `acks` (`[%{key, hold_basis, note}]`) don't
+  satisfy, and the acks that do. An ack counts only for a current, acknowledgeable HOLD with the
+  same `hold_basis`; hard HOLDs must clear.
+  """
+  @spec holds(map(), [map()]) :: %{unsatisfied: [map()], accepted: [map()]}
+  def holds(%{checks: checks}, acks) do
+    by_key = Map.new(acks, &{to_string(&1.key), &1})
+
+    Enum.reduce(checks, %{unsatisfied: [], accepted: []}, fn
+      %{result: :hold} = check, acc ->
+        ack = Map.get(by_key, Atom.to_string(check.key))
+
+        if (check.ackable and ack) && ack.hold_basis == check.hold_basis,
+          do: %{acc | accepted: acc.accepted ++ [Map.put(ack, :evidence, check.evidence)]},
+          else: %{
+            acc
+            | unsatisfied: acc.unsatisfied ++ [Map.take(check, [:key, :ackable, :hold_basis])]
+          }
+
+      _check, acc ->
+        acc
+    end)
+  end
 
   defp reason_key({key, _detail}) when is_atom(key), do: key
   defp reason_key(key) when is_atom(key), do: key

@@ -20,6 +20,9 @@ defmodule CadenceWeb.Console.CommandGroupProblems do
   def respond(conn, {:error, {:duplicate_operation, id}}),
     do: Problem.respond(conn, :duplicate_operation, %{command_group_id: id})
 
+  def respond(conn, {:error, {:holds_unacknowledged, holds}}),
+    do: Problem.respond(conn, :holds_unacknowledged, %{holds: holds})
+
   def respond(conn, {:error, {:preflight_no_go, failures}}),
     do: Problem.respond(conn, :preflight_no_go, failures_details(failures))
 

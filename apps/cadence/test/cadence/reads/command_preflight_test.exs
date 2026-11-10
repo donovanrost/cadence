@@ -26,8 +26,16 @@ defmodule Cadence.Reads.CommandPreflightTest do
     for key <- [:identity, :catalog, :size, :conflicts, :two_person],
         do: assert(%{result: :go} = result(preflight.checks, key))
 
-    assert %{result: :hold, per_target: [%{next_contact: nil, result: :hold}, _]} =
-             result(preflight.checks, :contact)
+    # No commandable contact is a hard HOLD (DECISIONS #60).
+    assert %{
+             result: :hold,
+             ackable: false,
+             hold_basis: basis,
+             per_target: [%{next_contact: nil, result: :hold, reason: :no_commandable_contact}, _]
+           } = result(preflight.checks, :contact)
+
+    assert is_binary(basis)
+    assert %{ackable: nil, hold_basis: nil} = result(preflight.checks, :identity)
 
     assert %{evidence: %{max_targets: 1_000, max_commands: 16, max_members: 5_000}} =
              result(preflight.checks, :size)
@@ -35,11 +43,60 @@ defmodule Cadence.Reads.CommandPreflightTest do
     refute Enum.any?(preflight.checks, &(&1.key in [:plan_impact, :umbra_margin]))
   end
 
-  test "hazardous commands HOLD for a second GO with keyed reasons", c do
+  test "hazardous commands need a second GO, which isn't a HOLD (#60)", c do
     {:ok, preflight} = run(c, draft(c.spacecraft, [command(c, "SET_COUNTER", %{"amount" => 2})]))
 
-    assert %{result: :hold, evidence: %{reasons: [%{key: :hazardous_command}]}} =
+    assert %{result: :go, evidence: %{reasons: [%{key: :hazardous_command}]}} =
              result(preflight.checks, :two_person)
+
+    assert preflight.policy.second_go_required
+  end
+
+  test "the contact window starts at not_before and needs a confirmed uplink (qa #35)", c do
+    [sc1, sc2] = c.spacecraft
+    not_before = DateTime.add(DateTime.utc_now(), 8 * 3_600)
+
+    # sc1: a commandable pass 9 minutes after not_before, beyond the old now + 6 h horizon.
+    commandable_pass!(c.org, c.mission, sc1, DateTime.add(not_before, 540))
+    # sc2: a pass that ends before not_before can't carry the release.
+    commandable_pass!(c.org, c.mission, sc2, DateTime.add(not_before, -3_600))
+
+    stack = [command(c, "SET_SIGNED", %{"counter" => 1})]
+    {:ok, preflight} = run(c, draft(c.spacecraft, stack, %{not_before: not_before}))
+
+    assert %{result: :hold, per_target: per_target} = result(preflight.checks, :contact)
+    by_id = Map.new(per_target, &{&1.spacecraft_id, &1})
+    assert %{result: :go, next_contact: %{aos: _}} = by_id[sc1]
+    assert %{result: :hold, reason: :no_commandable_contact} = by_id[sc2]
+  end
+
+  test "holds/2 accepts an ack only for a current ackable HOLD with the same basis", c do
+    draft = draft(c.spacecraft, [command(c, "SET_SIGNED", %{"counter" => 1})])
+    Enum.each(c.spacecraft, &commandable_pass!(c.org, c.mission, &1))
+
+    {:ok, _group} =
+      GroupSubmission.submit(c.scope, c.mission, draft, preflight_digest: digest(c, draft))
+
+    {:ok, preflight} = run(c, draft)
+    %{hold_basis: basis} = result(preflight.checks, :conflicts)
+
+    assert %{unsatisfied: [%{key: :conflicts, ackable: true}], accepted: []} =
+             CommandPreflight.holds(preflight, [])
+
+    assert %{unsatisfied: [%{key: :conflicts}]} =
+             CommandPreflight.holds(preflight, [%{key: "conflicts", hold_basis: "old", note: "x"}])
+
+    assert %{unsatisfied: [], accepted: [%{key: "conflicts", note: "x", evidence: %{count: 2}}]} =
+             CommandPreflight.holds(preflight, [%{key: "conflicts", hold_basis: basis, note: "x"}])
+
+    # More work on the lanes changes the HOLD's facts, so the old ack no longer counts.
+    {:ok, _another} =
+      GroupSubmission.submit(c.scope, c.mission, draft, preflight_digest: digest(c, draft))
+
+    {:ok, changed} = run(c, draft)
+
+    assert %{unsatisfied: [%{key: :conflicts}]} =
+             CommandPreflight.holds(changed, [%{key: "conflicts", hold_basis: basis, note: "x"}])
   end
 
   test "work already on the lanes is a conflicts HOLD", c do
@@ -49,7 +106,9 @@ defmodule Cadence.Reads.CommandPreflightTest do
       GroupSubmission.submit(c.scope, c.mission, draft, preflight_digest: digest(c, draft))
 
     {:ok, preflight} = run(c, draft)
-    assert %{result: :hold, evidence: %{count: 2}} = result(preflight.checks, :conflicts)
+
+    assert %{result: :hold, ackable: true, evidence: %{count: 2}} =
+             result(preflight.checks, :conflicts)
   end
 
   test "unknown targets are NO-GO and oversize drafts report the bounds", c do

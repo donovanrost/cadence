@@ -22,17 +22,50 @@ defmodule CadenceWeb.Console.CommandGroupController do
   end
 
   def create(conn, params) do
+    operation_id = blank_to_nil(params["operation_id"])
+
     with {:ok, draft} <- CommandGroupParams.draft(params),
+         {:ok, acks} <- CommandGroupParams.acknowledged_holds(params),
+         {:ok, accepted} <- holds_satisfied(conn, draft, acks, operation_id),
          {:ok, group} <-
            GroupSubmission.submit(conn.assigns.current_scope, mission(conn), draft,
              preflight_digest: params["preflight_digest"],
-             operation_id: blank_to_nil(params["operation_id"])
+             operation_id: operation_id,
+             hold_acks: accepted
            ),
          {:ok, view} <-
            CommandGroups.get(org(conn), mission(conn), group.command_group_id, viewer(conn)) do
       conn |> put_status(:created) |> json(%{data: CommandGroupJSON.show(view)})
     else
       error -> CommandGroupProblems.respond(conn, error)
+    end
+  end
+
+  # DECISIONS #60: HOLDs hold. Every HOLD in the current preflight is either acknowledged (key and
+  # hold_basis match, with a note) or refuses the submit. A replay of a known operation skips this,
+  # so it still answers 409 duplicate_operation (U20).
+  defp holds_satisfied(conn, draft, acks, operation_id) do
+    with :new <- replay(conn, operation_id),
+         {:ok, preflight} <- CommandPreflight.run(org(conn), mission(conn), actor(conn), draft) do
+      case CommandPreflight.holds(preflight, acks) do
+        %{unsatisfied: [], accepted: accepted} ->
+          {:ok, Enum.map(accepted, &Map.put(&1, :preflight_digest, preflight.digest))}
+
+        %{unsatisfied: holds} ->
+          {:error, {:holds_unacknowledged, holds}}
+      end
+    else
+      :replay -> {:ok, []}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp replay(_conn, nil), do: :new
+
+  defp replay(conn, operation_id) do
+    case CommandGroups.fetch_by_operation(org(conn), mission(conn), operation_id) do
+      {:ok, _group} -> :replay
+      {:error, _none} -> :new
     end
   end
 

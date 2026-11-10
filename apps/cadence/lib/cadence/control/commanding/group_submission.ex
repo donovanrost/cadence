@@ -13,8 +13,8 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
   require Logger
 
   alias Cadence.Commanding.{Dispatcher, ProcessNamespace, RequestValidation}
-  alias Cadence.Comms.UplinkResolution
   alias Cadence.Commanding.Groups.{Admission, CommandGroup, GroupStore, Validation}
+  alias Cadence.Comms.UplinkResolution
   alias Cadence.Management.Commanding.{ApprovedCommand, RequestAuthoring}
   alias Cadence.Platform.ScopedReadUpdates
 
@@ -115,10 +115,31 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
             actor: actor,
             payload: %{"members" => length(members), "second_go_required" => second_go?}
           }
+          | hold_events(group, actor, Keyword.get(opts, :hold_acks, []))
         ])
 
       {:ok, %{group: group, lanes: queued |> Enum.map(& &1.queue_lane_key) |> Enum.uniq()}}
     end
+  end
+
+  # DECISIONS #60: each acknowledged preflight HOLD, with who acknowledged it, the note and the
+  # HOLD's basis, so the audit shows what was known when the group was armed.
+  defp hold_events(group, actor, acks) do
+    Enum.map(acks, fn ack ->
+      %{
+        command_group_id: group.command_group_id,
+        mission_id: group.mission_id,
+        kind: :hold_acknowledged,
+        actor: actor,
+        payload: %{
+          "key" => ack.key,
+          "note" => ack.note,
+          "hold_basis" => ack.hold_basis,
+          "preflight_digest" => Map.get(ack, :preflight_digest),
+          "evidence" => ack |> Map.get(:evidence, %{}) |> Jason.encode!() |> Jason.decode!()
+        }
+      }
+    end)
   end
 
   defp build_group(org, mission, actor, draft, validated, opts, second_go?) do

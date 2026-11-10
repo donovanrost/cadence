@@ -64,6 +64,9 @@ defmodule CadenceWeb.Console.Problem do
     pass_not_found: {404, "Pass not found."},
     attention_item_not_open: {409, "That attention item was already resolved."},
     actor_not_assignable: {422, "The actor is always the signed-in user."},
+    holds_unacknowledged:
+      {422,
+       "Some preflight HOLDs aren't acknowledged or cleared. Re-run preflight and resolve them."},
     episode_cleared: {409, "That alarm has already cleared."},
     note_required: {422, "A note is required."},
     assignee_not_member: {422, "That person isn't a member of this organization."},

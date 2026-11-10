@@ -6,8 +6,13 @@ defmodule Cadence.CommandGroupFixtures do
   alias Cadence.CommandAuthoringFixtures
   alias Cadence.Commanding.Groups.Validation
   alias Cadence.CommandReviewFixtures
+  alias Cadence.Comms.Transport
+  alias Cadence.Contacts.ProviderReservation
+  alias Cadence.Control.Contacts.Store.ProviderReservationRow
   alias Cadence.ExactCommandAuthoringFixtures
   alias Cadence.Ids
+  alias Cadence.Management.Transports
+  alias Cadence.ProviderChangeFixtures
   alias Cadence.Repo
 
   @doc "A mission with the exact-authoring catalog active and `count` commandable spacecraft."
@@ -43,6 +48,69 @@ defmodule Cadence.CommandGroupFixtures do
   end
 
   def command(c, name, args), do: %{command_id: c.ids[name], argument_values: args}
+
+  @doc """
+  A confirmed booking for `spacecraft_id` whose uplink leg the provider confirmed (it carries the
+  command window), so preflight's `contact` check is GO (DECISIONS #60). `org`/`mission` are ids.
+  """
+  def commandable_pass!(org, mission, spacecraft_id, starts_at \\ nil) do
+    starts_at = starts_at || DateTime.add(DateTime.utc_now(), 1_800)
+    suffix = System.unique_integer([:positive])
+    provider = ProviderChangeFixtures.persist_provider!(org, mission, suffix, %{})
+
+    {:ok, transport} =
+      Transports.persist_transport(
+        org,
+        Transport.new(%{
+          transport_id: "transport-pass-#{suffix}",
+          mission_id: mission,
+          display_name: "Provider uplink",
+          origin: :provider_managed,
+          mission_provider_id: provider.provider_id,
+          mission_provider_version: provider.version,
+          service_profile_ref: %{"id" => "service-downlink", "version" => 3},
+          delivery_profile_ref: %{"id" => "delivery-cadence", "version" => 7}
+        })
+      )
+
+    {:ok, profile} =
+      Cadence.Contacts.fetch_provider_profile(
+        org,
+        mission,
+        transport.materialized_provider_profile_id
+      )
+
+    id = "provider-reservation-pass-#{suffix}"
+
+    %ProviderReservation{
+      provider_reservation_id: id,
+      organization_id: org,
+      mission_id: mission,
+      provider_id: provider.provider_id,
+      provider_version: provider.version,
+      provider_revision: 1,
+      transport_id: transport.transport_id,
+      transport_version: transport.version,
+      service_profile_ref: transport.service_profile_ref,
+      delivery_profile_ref: transport.delivery_profile_ref,
+      provider_profile_id: profile.provider_profile_id,
+      provider_profile_version: profile.version,
+      scheduled_contact_id: "contact-" <> id,
+      provider_opportunity_ref: "opportunity-" <> id,
+      idempotency_key: "key-" <> id,
+      lifecycle_state: :confirmed,
+      pass_phase: :scheduled,
+      delivery_state: :pending,
+      spacecraft_id: spacecraft_id,
+      provider_spacecraft_ref: spacecraft_id,
+      starts_at: starts_at,
+      ends_at: DateTime.add(starts_at, 600),
+      request_document: %{"uplink" => %{"routing_rule_id" => "routing-rule-test"}},
+      provider_confirmed_snapshot_document: %{"uplink" => %{"status" => "included"}}
+    }
+    |> ProviderReservationRow.changeset()
+    |> Repo.insert!()
+  end
 
   def draft(spacecraft_ids, commands, extra \\ %{}) do
     Map.merge(

@@ -11,7 +11,7 @@ defmodule Cadence.Commanding.Groups.CommandGroupEventRow do
   @primary_key {:event_id, :string, autogenerate: false}
 
   @kinds ~w(submitted approved approved_with_exclusions sent_back rejected note member_canceled
-            aborted member_failed completed)
+            aborted member_failed completed hold_acknowledged)
 
   schema "command_group_events" do
     field(:command_group_id, :string)

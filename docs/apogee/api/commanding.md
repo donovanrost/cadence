@@ -143,9 +143,28 @@ No side effects. Returns:
   ]}}
 ```
 
-- `result`: `go | hold | no_go`. Any `no_go` blocks submit; `hold` names a requirement.
-- `contact`: the target's first `confirmed`/`active` booking before `expires_at` (or within 6 h).
-  `next_contact: null` → HOLD "no contact". C4 draws from it.
+- `result`: `go | hold | no_go`. Any `no_go` blocks submit. **HOLDs hold** (DECISIONS #60): submit
+  is refused while any HOLD in the current preflight is unacknowledged or not cleared (below).
+- Every check also has `ackable` and `hold_basis`, both `null` unless `result` is `hold`.
+  - `ackable: true`: the submitter may acknowledge the HOLD with a note.
+  - `ackable: false`: the HOLD is hard and must clear.
+  - `hold_basis`: a hash of that HOLD's facts. An acknowledgement names it, so it can't carry over
+    to a changed HOLD.
+
+  | HOLD | ackable | Why |
+  | --- | --- | --- |
+  | `conflicts` | yes | Other work on the same lanes is known and accepted; the group queues behind it. |
+  | `contact` | **no** | No commandable contact in the release window: nothing can be sent. Book one, or change the window. |
+  | `changed_since_submit` (review only) | no | Shown to the approver. It isn't enforced at GO yet. |
+
+- `contact`: the target's first `confirmed`/`active` booking whose uplink leg the provider
+  confirmed (it carries the command window). It must overlap the release window, which runs from
+  `not_before` (or now) to `expires_at` (or 6 h after that start). A HOLD has per-target
+  `reason: "no_commandable_contact"` and `next_contact: null`. C4 draws from it. Evidence
+  `{from, until}` is the window.
+- `two_person` is **not a HOLD**: its `result` is always `go`. The second GO is the approval step
+  that satisfies it. `evidence.reasons` and top-level `second_go_required` say the group goes to
+  approval.
 - `two_person` reason keys: `hazardous_command | critical_command | policy_hint | fleet_reach`.
 - Plan impact and umbra margin are absent (no data, DECISIONS #4).
 - Oversize drafts return only `size` (`no_go`, with the bounds) and `digest: null`.
@@ -155,6 +174,15 @@ No side effects. Returns:
 Body: the draft plus `preflight_digest` (from the preflight the operator saw) and
 `operation_id` (client idempotency key). `201` with the group (show shape).
 
+- `acknowledged_holds: [{key, hold_basis, note}]` (DECISIONS #60). `note` is required, at most
+  1000 characters; the actor is the session user.
+  - Submit re-runs preflight. Each HOLD needs an acknowledgement with the same `key` and current
+    `hold_basis`, and an `ackable` HOLD; hard HOLDs must clear.
+  - Otherwise: `422 holds_unacknowledged`, `details.holds: [{key, ackable, hold_basis}]`, listing
+    every unsatisfied HOLD, hard ones included. Re-run preflight and show them.
+  - Malformed items or a blank note: `422 invalid_params` (`details.acknowledged_holds`).
+  - Each accepted acknowledgement is a group event, `hold_acknowledged` (below).
+  - A replay of a known `operation_id` skips the HOLD check and answers `409 duplicate_operation`.
 - With no second GO required, members are **queued** at once, in stack order per target lane.
   Otherwise the group is `approval_pending`, and `log_entry` is required.
 - `409 preflight_stale`: something changed since that preflight. Re-run it.
@@ -204,6 +232,9 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   - `{actor_kind: "system"}`: Cadence recorded an outcome (`member_failed`, `completed`).
   - `submitted`, `approved`, `approved_with_exclusions`, `sent_back`, `rejected`, `note`,
     `member_canceled`, `aborted`: written by the operator action, with `actor` the user.
+  - `hold_acknowledged` (DECISIONS #60): written at submit, one per acknowledged HOLD, with
+    `actor` the submitter. Payload: `{key, note, hold_basis, preflight_digest, evidence}` (the
+    HOLD's facts when acknowledged).
   - `member_failed` (DECISIONS #51): once per member whose release failed or whose
     verification failed or timed out. `actor: {actor_kind: "system"}`. Payload:
     `{command_request_id, command_id, spacecraft_id, target_index, position, reason:

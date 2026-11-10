@@ -165,7 +165,8 @@ defmodule Cadence.ProviderChangeFixtures do
     )
   end
 
-  defp persist_provider!(organization_id, mission_id, suffix, policy_document) do
+  @doc false
+  def persist_provider!(organization_id, mission_id, suffix, policy_document) do
     provider =
       MissionProvider.new(%{
         provider_id: "provider-change-#{suffix}",

@@ -22,6 +22,13 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
             spacecraft_id: craft.spacecraft_id
           })
 
+        # A booked pass with a confirmed uplink, so preflight's hard contact HOLD clears (#60).
+        Cadence.CommandGroupFixtures.commandable_pass!(
+          org.organization_id,
+          mission.mission_id,
+          craft.spacecraft_id
+        )
+
         {craft.spacecraft_id, endpoint.source_endpoint_id}
       end
 
@@ -57,11 +64,115 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
     do:
       as(c.requester) |> post(base(c) <> "/command-groups/preflight", body) |> json_response(200)
 
+  # Submits with the preflight's digest, acknowledging every acknowledgeable HOLD it shows.
   defp create(c, body) do
-    digest = preflight(c, body)["data"]["digest"]
+    pre = preflight(c, body)["data"]
+
+    acks =
+      for %{"result" => "hold", "ackable" => true} = check <- pre["checks"],
+          do: %{"key" => check["key"], "hold_basis" => check["hold_basis"], "note" => "Seen."}
 
     as(c.requester)
-    |> post(base(c) <> "/command-groups", Map.put(body, "preflight_digest", digest))
+    |> post(
+      base(c) <> "/command-groups",
+      Map.merge(body, %{"preflight_digest" => pre["digest"], "acknowledged_holds" => acks})
+    )
+  end
+
+  defp submit_raw(c, body, acks) do
+    pre = preflight(c, body)["data"]
+
+    as(c.requester)
+    |> post(
+      base(c) <> "/command-groups",
+      Map.merge(body, %{"preflight_digest" => pre["digest"], "acknowledged_holds" => acks})
+    )
+  end
+
+  describe "HOLDs hold (DECISIONS #60)" do
+    test "an unacknowledged conflicts HOLD refuses the submit; acknowledging it arms and audits",
+         c do
+      first = body(c, "SET_SIGNED", %{"counter" => 1})
+      assert json_response(create(c, first), 201)
+
+      second = body(c, "SET_SIGNED", %{"counter" => 2})
+      pre = preflight(c, second)["data"]
+
+      assert %{"result" => "hold", "ackable" => true, "hold_basis" => basis} =
+               Enum.find(pre["checks"], &(&1["key"] == "conflicts"))
+
+      assert %{"result" => "go", "ackable" => nil} =
+               Enum.find(pre["checks"], &(&1["key"] == "contact"))
+
+      assert %{
+               "error" => %{
+                 "code" => "holds_unacknowledged",
+                 "details" => %{"holds" => [%{"key" => "conflicts", "ackable" => true}]}
+               }
+             } = c |> submit_raw(second, []) |> json_response(422)
+
+      # An acknowledgement of a different basis (a changed HOLD) doesn't count.
+      stale = [%{"key" => "conflicts", "hold_basis" => "stale", "note" => "Seen."}]
+
+      assert %{"error" => %{"code" => "holds_unacknowledged"}} =
+               c |> submit_raw(second, stale) |> json_response(422)
+
+      assert %{
+               "error" => %{"code" => "invalid_params", "details" => %{"acknowledged_holds" => _}}
+             } =
+               c
+               |> submit_raw(second, [
+                 %{"key" => "conflicts", "hold_basis" => basis, "note" => " "}
+               ])
+               |> json_response(422)
+
+      ack = [
+        %{"key" => "conflicts", "hold_basis" => basis, "note" => "Queued behind the load shed."}
+      ]
+
+      assert %{"data" => %{"events" => events}} =
+               c |> submit_raw(second, ack) |> json_response(201)
+
+      assert %{
+               "kind" => "hold_acknowledged",
+               "actor" => %{"actor_kind" => "user"},
+               "payload" => %{
+                 "key" => "conflicts",
+                 "note" => "Queued behind the load shed.",
+                 "hold_basis" => ^basis,
+                 "preflight_digest" => digest
+               }
+             } = Enum.find(events, &(&1["kind"] == "hold_acknowledged"))
+
+      assert is_binary(digest)
+    end
+
+    test "no commandable contact in the release window is a hard HOLD", c do
+      # After every booked pass ends: nothing can release in the window.
+      late = DateTime.utc_now() |> DateTime.add(2 * 86_400) |> DateTime.to_iso8601()
+      draft = body(c, "SET_SIGNED", %{"counter" => 1}, %{"not_before" => late})
+      pre = preflight(c, draft)["data"]
+
+      assert %{
+               "result" => "hold",
+               "ackable" => false,
+               "hold_basis" => basis,
+               "per_target" => [%{"reason" => "no_commandable_contact"} | _]
+             } = Enum.find(pre["checks"], &(&1["key"] == "contact"))
+
+      ack = [%{"key" => "contact", "hold_basis" => basis, "note" => "Will book one."}]
+
+      assert %{"error" => %{"code" => "holds_unacknowledged", "details" => %{"holds" => holds}}} =
+               c |> submit_raw(draft, ack) |> json_response(422)
+
+      assert [%{"key" => "contact", "ackable" => false}] = holds
+    end
+
+    test "two_person is not a HOLD: the group goes to approval", c do
+      pre = preflight(c, body(c, "SET_COUNTER", %{"amount" => 1}, %{"log_entry" => "x"}))["data"]
+      assert pre["second_go_required"] == true
+      assert %{"result" => "go"} = Enum.find(pre["checks"], &(&1["key"] == "two_person"))
+    end
   end
 
   test "preflight, submit and show a routine group", c do
