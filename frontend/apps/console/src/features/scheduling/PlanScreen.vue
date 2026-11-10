@@ -96,7 +96,11 @@ const sentBack = computed(() => {
   if (a?.decision !== "rejected") return null;
   const who = a.actor.name ?? "An org admin";
   const why = a.reason ? `: ${a.reason.trim().replace(/[.!?]+$/, "")}.` : ".";
-  return `Sent back by ${who} at ${a.at.slice(11, 16)}Z${why} Edit the draft and submit it again.`;
+  // The next step is the author's (qa): a reviewer looking at it just sees what was decided.
+  const author = view.value.plan.author;
+  const mine = author?.kind !== "system" && author?.id === session.user.id;
+  const next = mine || !isAdmin.value ? " Edit the draft and submit it again." : "";
+  return `Sent back by ${who} at ${a.at.slice(11, 16)}Z${why}${next}`;
 });
 
 async function onSubmit(acks: Acknowledgement[]) {
