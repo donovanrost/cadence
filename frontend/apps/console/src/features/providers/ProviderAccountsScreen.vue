@@ -1,25 +1,22 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useConsoleScope } from "@/shell";
-import {
-  ApButton,
-  ApEmptyState,
-  ApPageHeader,
-  ApPanel,
-  ApRemote,
-  ApTable,
-  ApTag,
-  formatShort,
-  plural,
-  type ApColumn,
-} from "@/ui";
+import { ApButton, ApPageHeader, plural } from "@/ui";
 import AddAccountPanel from "./AddAccountPanel.vue";
+import AccountHistory from "./AccountHistory.vue";
+import AccountsPanel from "./AccountsPanel.vue";
 import ProviderAccountDetail from "./ProviderAccountDetail.vue";
-import { fetchProviderAccounts, statusTag } from "./api.ts";
+import { fetchProviderAccounts } from "./api.ts";
 
 /** Organization › Provider accounts (org admins). Spec: SettingsAuditProviders.md. */
+const history = ref<InstanceType<typeof AccountHistory> | null>(null);
+/** An edit makes a new version: refresh the list and the history together. */
+function onChanged() {
+  refetch();
+  history.value?.refetch();
+}
 const scope = useConsoleScope();
 const organization = computed(() =>
   scope.value.kind === "organization" || scope.value.kind === "mission"
@@ -46,14 +43,6 @@ const canManage = computed(
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
 );
-const columns: readonly ApColumn[] = [
-  { key: "provider", label: "Provider" },
-  { key: "name", label: "Account" },
-  { key: "status", label: "Status" },
-  { key: "missions", label: "Missions", mono: true, align: "end" },
-  { key: "last", label: "Last successful call", mono: true },
-  { key: "added", label: "Added" },
-];
 </script>
 
 <template>
@@ -80,7 +69,14 @@ const columns: readonly ApColumn[] = [
       :organization="organization"
       :account="selected"
       :can-manage="canManage"
-      @changed="refetch"
+      @changed="onChanged"
+    />
+    <AccountHistory
+      v-if="selected && organization && state.status === 'ready'"
+      :key="`history-${selected.id}`"
+      ref="history"
+      :org-id="organization.id"
+      :account-id="selected.id"
     />
     <AddAccountPanel
       v-if="adding && canManage && organization && state.status === 'ready'"
@@ -88,58 +84,6 @@ const columns: readonly ApColumn[] = [
       :adapters="state.value.adapters"
       @added="refetch"
     />
-    <ApPanel index="V1" title="Provider accounts" flush>
-      <ApEmptyState
-        v-if="notProvided"
-        state="off"
-        headline="Provider accounts aren't available in the console yet"
-        sentence="This server doesn't serve provider accounts to the console yet."
-      />
-      <ApRemote v-else :state="state" loading-label="Loading provider accounts…" @retry="refetch">
-        <template #default="{ value }">
-          <ApEmptyState
-            v-if="value.accounts.length === 0"
-            state="off"
-            headline="No provider accounts"
-            sentence="A provider account lets missions book passes on a ground network."
-          />
-          <ApTable
-            v-else
-            :columns="columns"
-            :rows="value.accounts"
-            :row-key="(a) => a.id"
-            caption="Provider accounts"
-          >
-            <template #cell-provider="{ row }"
-              >{{ row.provider.label
-              }}<span class="font-mono text-xs text-text-4"> {{ row.provider.key }}</span></template
-            >
-            <template #cell-name="{ row }">
-              <RouterLink
-                :to="{ name: 'org.provider-accounts', params: { accountId: row.id } }"
-                class="font-semibold text-readout no-underline hover:text-bright hover:underline max-md:hit-44"
-                >{{ row.name }}</RouterLink
-              >
-            </template>
-            <template #cell-status="{ row }">
-              <ApTag v-bind="statusTag(row)" />
-              <span v-if="row.status_detail" class="block text-xs text-text-3">{{
-                row.status_detail
-              }}</span>
-            </template>
-            <template #cell-missions="{ row }">{{ row.missions.length }}</template>
-            <template #cell-last="{ row }">{{
-              row.last_success_at ? formatShort(new Date(row.last_success_at)) : "never"
-            }}</template>
-            <template #cell-added="{ row }"
-              ><span class="text-text-3"
-                >{{ formatShort(new Date(row.added_at))
-                }}{{ row.added_by ? ` by ${row.added_by.name}` : "" }}</span
-              ></template
-            >
-          </ApTable>
-        </template>
-      </ApRemote>
-    </ApPanel>
+    <AccountsPanel :state="state" :not-provided="notProvided" @retry="refetch" />
   </div>
 </template>

@@ -2,10 +2,12 @@
 import { ref } from "vue";
 import type { SessionOrganization } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
-import { ApButton, ApCallout, ApPanel, ApTag, formatShort } from "@/ui";
+import { ApButton, ApCallout, ApPanel } from "@/ui";
 import AccountEditForm from "./AccountEditForm.vue";
+import AccountMissions from "./AccountMissions.vue";
+import AccountStatusLine from "./AccountStatusLine.vue";
 import RemoveAccount from "./RemoveAccount.vue";
-import { statusTag, testAccount, testSentence, type ProviderAccount } from "./api.ts";
+import { testAccount, testSentence, type ProviderAccount } from "./api.ts";
 
 /** One provider account: facts, missions using it, and the real credential test. */
 const props = defineProps<{
@@ -35,7 +37,6 @@ async function test() {
     busy.value = false;
   }
 }
-const slugOf = (id: string) => props.organization.missions.find((m) => m.id === id)?.slug;
 </script>
 
 <template>
@@ -46,18 +47,7 @@ const slugOf = (id: string) => props.organization.missions.find((m) => m.id === 
       >
     </template>
     <div class="flex flex-col gap-4">
-      <div class="flex flex-wrap items-center gap-3">
-        <ApTag v-bind="statusTag(account)" />
-        <span v-if="account.status_detail" class="text-sm text-text-3">{{
-          account.status_detail
-        }}</span>
-        <span class="font-mono text-sm text-text-3"
-          >Last success
-          {{
-            account.last_success_at ? formatShort(new Date(account.last_success_at)) : "never"
-          }}</span
-        >
-      </div>
+      <AccountStatusLine :account="account" />
       <div v-if="canManage" class="flex flex-col gap-2">
         <div class="flex gap-2">
           <ApButton :disabled="busy" disabled-reason="Testing…" @click="test"
@@ -75,26 +65,7 @@ const slugOf = (id: string) => props.organization.missions.find((m) => m.id === 
           @cancel="editing = false"
         />
       </div>
-      <div class="flex flex-col gap-1.5">
-        <span class="ap-label">Missions using it</span>
-        <p v-if="account.missions.length === 0" class="m-0 text-sm text-text-3">
-          No mission uses this account yet.
-        </p>
-        <ul v-else class="m-0 flex list-none flex-col gap-1 p-0">
-          <li v-for="m in account.missions" :key="m.id">
-            <RouterLink
-              v-if="slugOf(m.id)"
-              :to="{
-                name: 'setup.stations.providers',
-                params: { org: organization.slug, mission: slugOf(m.id) },
-              }"
-              class="text-readout no-underline hover:text-bright hover:underline max-md:hit-44"
-              >{{ m.name }}</RouterLink
-            >
-            <span v-else>{{ m.name }}</span>
-          </li>
-        </ul>
-      </div>
+      <AccountMissions :organization="organization" :missions="account.missions" />
       <details>
         <summary class="ap-label cursor-pointer">Technical details</summary>
         <p class="m-0 mt-2 font-mono text-sm text-text-3">{{ account.id }}</p>
