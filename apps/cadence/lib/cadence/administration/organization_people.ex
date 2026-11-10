@@ -160,7 +160,7 @@ defmodule Cadence.Administration.OrganizationPeople do
   def change_role(%Scope{} = scope, organization_id, user_id, params) do
     with :ok <- authorize(scope, :manage_organization_members, organization_id),
          {:ok, role} <- role_param(params) do
-      MembershipAdministration.change_role(organization_id, user_id, role)
+      MembershipAdministration.change_role(organization_id, user_id, role, actor_id(scope))
     end
   end
 
@@ -168,7 +168,7 @@ defmodule Cadence.Administration.OrganizationPeople do
   @spec remove_member(Scope.t(), binary(), binary()) :: {:ok, map()} | {:error, term()}
   def remove_member(%Scope{} = scope, organization_id, user_id) do
     with :ok <- authorize(scope, :manage_organization_members, organization_id) do
-      MembershipAdministration.remove_member(organization_id, user_id)
+      MembershipAdministration.remove_member(organization_id, user_id, actor_id(scope))
     end
   end
 
@@ -176,7 +176,7 @@ defmodule Cadence.Administration.OrganizationPeople do
   @spec revoke_invitation(Scope.t(), binary(), binary()) :: :ok | {:error, term()}
   def revoke_invitation(%Scope{} = scope, organization_id, invitation_id) do
     with :ok <- authorize(scope, :manage_organization_members, organization_id) do
-      MembershipAdministration.revoke_invitation(organization_id, invitation_id)
+      MembershipAdministration.revoke_invitation(organization_id, invitation_id, actor_id(scope))
     end
   end
 
@@ -200,6 +200,9 @@ defmodule Cadence.Administration.OrganizationPeople do
   end
 
   def resend_invitation(%Scope{}, _organization_id, _invitation_id), do: {:error, :forbidden}
+
+  defp actor_id(%Scope{user: %{user_id: id}}), do: id
+  defp actor_id(_scope), do: nil
 
   defp role_param(params) do
     case Map.fetch(@roles, Map.get(params, "role")) do

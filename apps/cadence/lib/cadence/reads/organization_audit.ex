@@ -13,13 +13,15 @@ defmodule Cadence.Reads.OrganizationAudit do
   """
 
   alias Cadence.{Accounts, Missions}
+  alias Cadence.Accounts.MembershipAdministration
   alias Cadence.Alarms.Queries, as: Alarms
   alias Cadence.Configuration.Status
   alias Cadence.Management.{Commanding, Contacts, DataSources}
   alias Cadence.Platform.ScopedSettings
 
   @included ~w(config commanding access alarms contacts data)
-  @missing []
+  # Not audited yet; the console says so (ux).
+  @missing ~w(provider_accounts)
   @plan_cap 100
   @settings [
     {"cadence.governance", "Governance"},
@@ -215,39 +217,94 @@ defmodule Cadence.Reads.OrganizationAudit do
   defp humanize(value),
     do: value |> to_string() |> String.replace("_", " ") |> String.capitalize()
 
+  # Who joined, was invited, accepted, had their role changed or was removed, and by whom
+  # (MembershipAdministration.access_history/1).
   defp access_events(organization_id) do
-    joined =
-      organization_id
-      |> Accounts.list_member_directory()
-      |> Enum.map(fn member ->
-        event(
-          "access",
-          member.joined_at,
-          %{kind: "user", id: member.user_id, name: member.display_name || member.email},
-          "Joined as #{role(member.role)}",
-          target: %{
-            kind: "member",
-            id: member.user_id,
-            label: member.display_name || member.email
-          }
-        )
-      end)
+    %{invitations: invitations, memberships: memberships} =
+      MembershipAdministration.access_history(organization_id)
 
-    invited =
-      organization_id
-      |> Accounts.list_invitation_directory()
-      |> Enum.map(fn invitation ->
-        event(
-          "access",
-          invitation.sent_at,
-          %{kind: "user", id: nil, name: invitation.invited_by_name},
-          "Invited #{invitation.email} as #{role(invitation.role)}",
-          target: %{kind: "invitation", id: invitation.id, label: invitation.email}
-        )
-      end)
+    people = people(memberships)
+    accepted = for i <- invitations, i.accepted_by, into: MapSet.new(), do: i.accepted_by
 
-    joined ++ invited
+    Enum.flat_map(invitations, &invitation_events/1) ++
+      Enum.flat_map(memberships, &membership_events(&1, people, accepted))
   end
+
+  defp invitation_events(invitation) do
+    target = %{kind: "invitation", id: invitation.id, label: invitation.email}
+
+    [
+      event(
+        "access",
+        invitation.sent_at,
+        user(invitation.invited_by),
+        "Invited #{invitation.email} as #{role(invitation.role)}",
+        target: target
+      ),
+      invitation.accepted_at &&
+        event(
+          "access",
+          invitation.accepted_at,
+          user(invitation.accepted_by),
+          "Accepted the invitation and joined as #{role(invitation.role)}",
+          target: %{kind: "member", id: invitation.accepted_by, label: invitation.email}
+        ),
+      invitation.revoked_at &&
+        event(
+          "access",
+          invitation.revoked_at,
+          user(invitation.revoked_by),
+          "Revoked the invitation for #{invitation.email}",
+          target: target
+        )
+    ]
+    |> Enum.reject(&(&1 in [nil, false]))
+  end
+
+  defp membership_events(membership, people, accepted) do
+    label = Map.get(people, membership.user_id)
+    target = %{kind: "member", id: membership.user_id, label: label}
+
+    joined =
+      if MapSet.member?(accepted, membership.user_id),
+        do: [],
+        else: [
+          event(
+            "access",
+            membership.began_at,
+            %{kind: "user", id: membership.user_id, name: label},
+            "Joined as #{role(membership.role)}",
+            target: target
+          )
+        ]
+
+    joined ++
+      for %{"at" => %DateTime{} = at} = recorded <- membership.events,
+          do:
+            event("access", at, user(recorded["by"]), administration(recorded, label),
+              target: target
+            )
+  end
+
+  defp administration(%{"action" => "role_changed", "from" => from, "to" => to}, label),
+    do: "Changed #{label || "a member"}'s role from #{role(from)} to #{role(to)}"
+
+  defp administration(%{"action" => "removed"}, label),
+    do: "Removed #{label || "a member"} from the organization"
+
+  defp administration(%{"action" => action}, _label), do: to_string(action)
+
+  defp people(memberships) do
+    Map.new(memberships, fn %{user_id: id} ->
+      case Accounts.fetch_user(id) do
+        {:ok, user} -> {id, user.display_name || user.email}
+        _missing -> {id, nil}
+      end
+    end)
+  end
+
+  defp user(id) when is_binary(id), do: %{kind: "user", id: id, name: nil}
+  defp user(_none), do: nil
 
   defp event(kind, at, actor, action, opts) do
     %{

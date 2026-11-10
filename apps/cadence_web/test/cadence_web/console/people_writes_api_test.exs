@@ -2,6 +2,8 @@ defmodule CadenceWeb.Console.PeopleWritesAPITest do
   @moduledoc "People administration: role change, remove, invitation resend/revoke (backlog)."
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.Accounts
+  alias Cadence.Accounts.Authentication
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -115,5 +117,66 @@ defmodule CadenceWeb.Console.PeopleWritesAPITest do
 
     assert %{"error" => %{"code" => "invitation_not_found"}} =
              c.admin |> conn() |> delete(c.base <> "/invitations/#{second}") |> json_response(404)
+  end
+
+  test "the audit shows who invited, revoked, changed roles and removed (qa)", c do
+    %{"data" => %{"id" => invitation}} =
+      c.admin
+      |> conn()
+      |> post(c.base <> "/invitations", %{"email" => "late@example.com", "role" => "member"})
+      |> json_response(201)
+
+    assert c.admin |> conn() |> delete(c.base <> "/invitations/#{invitation}") |> response(204)
+
+    assert c.admin
+           |> conn()
+           |> put(c.base <> "/people/#{c.member.user_id}", %{"role" => "organization_admin"})
+           |> json_response(200)
+
+    assert c.admin
+           |> conn()
+           |> delete(c.base <> "/people/#{c.member.user_id}")
+           |> json_response(200)
+
+    actions =
+      c.admin
+      |> conn()
+      |> get(c.base <> "/audit?actor_id=#{c.admin.user_id}&kinds=access")
+      |> json_response(200)
+      |> get_in(["data", "events"])
+      |> Enum.map(& &1["action"])
+
+    assert "Invited late@example.com as member" in actions
+    assert "Revoked the invitation for late@example.com" in actions
+    assert "Changed Mira K.'s role from member to organization admin" in actions
+    assert "Removed Mira K. from the organization" in actions
+  end
+
+  test "an accepted invitation is the new member's audited access event (qa)", c do
+    email = "joiner-#{System.unique_integer([:positive])}@example.com"
+    org_id = c.base |> String.split("/") |> List.last()
+
+    {:ok, %{invitation_token: token}} =
+      Accounts.establish_organization_access(email, org_id,
+        membership_role: :member,
+        invited_by_user_id: c.admin.user_id
+      )
+
+    assert {:ok, _accepted} =
+             Accounts.accept_organization_invitation(token, %{
+               "display_name" => "Jo Joiner",
+               "password" => "a-long-enough-password"
+             })
+
+    {:ok, joiner} = Authentication.durable_user_by_email(email)
+
+    assert [%{"action" => "Accepted the invitation and joined as member", "actor" => actor}] =
+             c.admin
+             |> conn()
+             |> get(c.base <> "/audit?actor_id=#{joiner.user_id}&kinds=access")
+             |> json_response(200)
+             |> get_in(["data", "events"])
+
+    assert %{"kind" => "user", "name" => "Jo Joiner"} = actor
   end
 end
