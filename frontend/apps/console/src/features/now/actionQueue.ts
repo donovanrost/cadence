@@ -8,6 +8,14 @@ import {
   withUnit,
 } from "@/features/alarms/index.ts";
 import { attentionMeta, attentionReader, attentionWords, resolvedReader } from "./attention.ts";
+import {
+  missedPassReader,
+  missedPassRows,
+  nextContactReader,
+  stationIssueReader,
+  stationRow,
+  type MissedItem,
+} from "./sources.ts";
 import { GROUP_AT, type QueueItem } from "./queue.ts";
 
 /** Contract: docs/apogee/api/ops.md, `GET /missions/:mission_id/action-queue` (M6). Server-ranked. */
@@ -78,6 +86,8 @@ const itemReader = d.object({
     "limits_not_configured",
     "never_heard",
     "attention",
+    "missed_pass",
+    "station",
   ] as const),
   state: d.oneOf(["critical", "caution", "stale", "off"] as const),
   source: d.nullable(
@@ -106,6 +116,10 @@ const itemReader = d.object({
   finding: d.nullable(d.object({ id: d.token, title: d.string, body: d.nullable(d.string) })),
   // U31 (fafe581a): null on other kinds; optional until api ships it.
   attention: d.optional(d.nullable(attentionReader)),
+  // Queue sources (ops.md b7008dd6): null on other kinds; optional until api-ops ships them.
+  missed_passes: d.optional(d.nullable(d.array(missedPassReader, 100))),
+  next_contact: d.optional(d.nullable(nextContactReader)),
+  station_issue: d.optional(d.nullable(stationIssueReader)),
 });
 type ServerItem = Decoded<typeof itemReader>;
 
@@ -114,6 +128,8 @@ export const actionQueueReader = d.object({
   counts: d.object({ p1: d.integer, p2: d.integer, p3: d.integer, spacecraft_p1: d.integer }),
   items: d.array(itemReader, 1_000),
   resolved: d.optional(d.array(resolvedReader, 1_000)),
+  /** U35: a missed pass is P1 with no booked contact within this horizon (6 h). */
+  missed_pass_horizon_s: d.optional(d.integer),
 });
 export type ActionQueue = Decoded<typeof actionQueueReader>;
 
@@ -307,6 +323,11 @@ function rowFor(item: ServerItem): QueueItem[] {
         },
       ];
     }
+    case "station":
+      return item.station_issue ? [stationRow(item.id, item.station_issue, base(item))] : [];
+    case "missed_pass":
+      // Grouped across items in presentQueue (U35).
+      return [];
     case "never_heard":
       return [
         {
@@ -321,5 +342,37 @@ function rowFor(item: ServerItem): QueueItem[] {
   }
 }
 
-/** Server order is kept (contract: don't re-sort); small alarm groups expand in place. */
-export const presentQueue = (queue: ActionQueue): QueueItem[] => queue.items.flatMap(rowFor);
+const missedOf = (item: ServerItem): MissedItem | null => {
+  const sc = item.spacecraft[0];
+  return sc
+    ? {
+        id: item.id,
+        priority: item.priority,
+        state: STATE[item.state],
+        scName: sc.name,
+        scId: sc.id,
+        scid: sc.scid,
+        missed: item.missed_passes ?? [],
+        next: item.next_contact ?? null,
+      }
+    : null;
+};
+
+/**
+ * Server order is kept (contract: don't re-sort); small alarm groups expand in place. Missed-pass
+ * rows group across items (U35) and sit where the first of them was.
+ */
+export function presentQueue(queue: ActionQueue): QueueItem[] {
+  const missed = queue.items.flatMap((i) => {
+    const m = i.kind === "missed_pass" ? missedOf(i) : null;
+    return m ? [m] : [];
+  });
+  const missedRows = missedPassRows(missed, queue.missed_pass_horizon_s ?? 6 * 3600);
+  let placed = false;
+  return queue.items.flatMap((item) => {
+    if (item.kind !== "missed_pass") return rowFor(item);
+    if (placed) return [];
+    placed = true;
+    return missedRows;
+  });
+}

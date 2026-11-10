@@ -321,3 +321,93 @@ describe("attention rows (U31, fafe581a)", () => {
     expect(resolvedWords(r("user", "Mira K.", "resolved"))).toBe("Resolved by Mira K.");
   });
 });
+
+describe("queue sources (ops.md b7008dd6, U35)", () => {
+  const svb = {
+    ref: "earendil-svalbard",
+    id: "earendil-svalbard",
+    code: "SVB-1",
+    name: "Svalbard",
+  };
+  const missed = (scid: number, next: boolean, priority: 1 | 2) =>
+    item({
+      id: `missed_pass:sc-${scid}`,
+      kind: "missed_pass",
+      priority,
+      state: priority === 1 ? "critical" : "caution",
+      spacecraft: [member(scid, { violating_points: null, value: null, first_crossed_at: null })],
+      missed_passes: [
+        {
+          reservation_id: `r-${scid}`,
+          station: svb,
+          planned_aos: "2026-11-10T02:21:00Z",
+          outcome: "missed",
+          cause: "Antenna fault",
+          owner: "provider",
+        },
+      ],
+      next_contact: next
+        ? {
+            reservation_id: `n-${scid}`,
+            station: { ...svb, code: "KIR" },
+            aos: "2026-11-10T04:00:00Z",
+          }
+        : null,
+    });
+
+  it("one or two misses stay per spacecraft", () => {
+    const [row] = present([missed(4, false, 1)]);
+    expect(row?.title).toBe("EARENDIL-004 · 1 missed pass at SVB-1 · antenna fault");
+    expect(row?.sentence).toBe(
+      "Missed at 02:21Z (the provider's side). No booked contact in the next 6 h.",
+    );
+    expect(row?.action.to).toEqual({ name: "ops.contacts.review", query: { day: "2026-11-10" } });
+  });
+
+  it("3+ sharing a station and cause group, taking the highest priority", () => {
+    const rows = present([
+      missed(4, false, 1),
+      missed(11, true, 2),
+      missed(19, true, 2),
+      missed(23, false, 1),
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.priority).toBe(1);
+    expect(rows[0]?.title).toBe("4 missed passes at SVB-1 · antenna fault");
+    expect(rows[0]?.sentence).toBe(
+      "EARENDIL-004, -011, -019 and 1 more · 2 have no contact in the next 6 h",
+    );
+  });
+
+  it("a station issue reads its window and re-plans that station", () => {
+    const [row] = present([
+      item({
+        id: "station:earendil-svalbard",
+        kind: "station",
+        priority: 2,
+        state: "caution",
+        station_issue: {
+          station: svb,
+          window: {
+            id: "w1",
+            kind: "outage",
+            starts_at: "2026-11-10T03:00:00Z",
+            ends_at: null,
+            source: "provider",
+          },
+          affected: [
+            { reservation_id: "a", spacecraft_id: "sc-4", aos: "2026-11-10T03:30:00Z" },
+            { reservation_id: "b", spacecraft_id: "sc-5", aos: "2026-11-10T03:10:00Z" },
+          ],
+        },
+      }),
+    ]);
+    expect(row?.title).toBe("SVB-1 · outage overlaps 2 booked passes");
+    expect(row?.sentence).toBe("Outage from 03:00Z · no end reported (provider).");
+    expect(row?.due).toEqual({ label: "AOS", at: "2026-11-10T03:10:00Z" });
+    expect(row?.action.to).toEqual({
+      name: "ops.contacts.replan.station",
+      params: { stationId: "earendil-svalbard" },
+    });
+  });
+});
