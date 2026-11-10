@@ -113,6 +113,8 @@ defmodule CadenceWeb.Console.Problem do
     reason_required: {422, "A reason is required."},
     command_request_already_started: {409, "That command has already started."},
     command_request_not_found: {404, "Command request not found."},
+    encode_unavailable:
+      {409, "These bytes can't be shown: the request's catalog revision isn't the active one."},
     station_not_found: {404, "Ground station not found."},
     window_not_found: {404, "Availability window not found."},
     window_overlaps: {409, "That window overlaps another of the same kind at this station."},

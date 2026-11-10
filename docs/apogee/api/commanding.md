@@ -7,6 +7,7 @@ Owner: **api-ops**. Conventions: [README.md](README.md). Asks are tracked by the
 | --- | --- | --- |
 | M17 | `GET /missions/:mission_id/commands`, `GET /missions/:mission_id/commands/:command_id` | **implemented** |
 | M16 M18 M20 O4 | command groups: preflight, submit, list/show, decision, abort, cancel, policies | **implemented** |
+| M24 | `GET /missions/:mission_id/command-requests/:id/encoding` (owner: api) | **implemented** |
 
 ## The active catalog
 
@@ -321,3 +322,25 @@ The UI writes the sentences (title + sentence per key).
 Nothing outstanding from the design. Expired unstarted work is canceled by a sweep on every
 dispatcher reconcile (about a minute), with `end_reason: expired`. Live progress: the `command_group:<mission_id>:<command_group_id>` channel
 (realtime.md).
+
+## `GET /api/console/v1/missions/:mission_id/command-requests/:command_request_id/encoding` (M24, owner: api)
+
+The bytes release would send for one request (Approve A3), encoded exactly as release encodes
+them: the request's **own** model revision basis and its resolved argument values. Nothing is
+transmitted.
+
+```json
+{"data": {
+  "command_request_id": "…", "command_id": "…", "mission_model_revision_id": "…",
+  "scope": "command_payload", "size_bytes": 3, "hex": "0A0007", "base64": "CgAH",
+  "arguments": {"counter": 7}
+}}
+```
+
+- `scope: "command_payload"`: the command packet payload, **before** transport framing (no TC
+  frame, segment or CLTU). Say so next to the bytes.
+- It never encodes against another revision. If the request's revision isn't the active one, the
+  read fails closed like release does: `409 encode_unavailable` with `details: {reason:
+  "revision_superseded" | "revision_not_active" | "basis_unavailable" | "encode_failed", detail}`.
+  Show "These bytes can't be shown" with the reason; don't fall back to the current catalog.
+- `404 command_request_not_found`.
