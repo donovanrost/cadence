@@ -25,10 +25,25 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
     {:ok, source_endpoint: source_endpoint, command_model: command_model}
   end
 
-  test "loopback peer satisfies cop1 completion through the tcp provider", %{
-    source_endpoint: source_endpoint,
-    command_model: command_model
-  } do
+  test "loopback peer satisfies cop1 completion through the tcp provider", c do
+    snapshot = loopback_round_trip(c, %{}, [])
+    assert snapshot.tc_frame_count == 1 and snapshot.clcw_count == 2
+  end
+
+  test "#59: a pass's FOP takes V(S) from the FARM's first report (V(R) = 7), not 0", c do
+    snapshot =
+      loopback_round_trip(c, %{"cop1_initialization" => "first_clcw"}, farm_initial_vr: 7)
+
+    # The command's frame carried sequence number 7, and the FARM accepted it.
+    assert snapshot.last_tc_frame_seq == 7
+    assert snapshot.last_clcw_report_value == 8
+  end
+
+  defp loopback_round_trip(
+         %{source_endpoint: source_endpoint, command_model: command_model},
+         gateway_extra,
+         peer_extra
+       ) do
     SessionTestSupport.install_default_policy!()
 
     provider_binding =
@@ -48,14 +63,17 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
     realized_contact =
       persist_active_uplink_contact(
         source_endpoint.source_endpoint_id,
-        %{
-          "service_name" => "cop1",
-          "cop1_mode" => "fop",
-          "cop1_timeout_ms" => 500,
-          "cop1_max_retransmit" => 2,
-          "provider_binding_id" => provider_binding.provider_binding_id,
-          "provider_adapter_key" => "tcp_socket"
-        },
+        Map.merge(
+          %{
+            "service_name" => "cop1",
+            "cop1_mode" => "fop",
+            "cop1_timeout_ms" => 500,
+            "cop1_max_retransmit" => 2,
+            "provider_binding_id" => provider_binding.provider_binding_id,
+            "provider_adapter_key" => "tcp_socket"
+          },
+          gateway_extra
+        ),
         [provider_binding]
       )
 
@@ -71,9 +89,8 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
 
     {:ok, loopback_peer} =
       CadenceSimulator.start_cop1_loopback_peer(
-        host: "127.0.0.1",
-        port: provider_runtime_snapshot.port,
-        tc_frame_size: 32
+        [host: "127.0.0.1", port: provider_runtime_snapshot.port, tc_frame_size: 32] ++
+          peer_extra
       )
 
     on_exit(fn ->
@@ -145,10 +162,10 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
 
     assert_eventually(fn ->
       snapshot = LoopbackPeer.snapshot(loopback_peer)
-
-      snapshot.tc_frame_count == 1 and snapshot.clcw_count == 1 and
-        is_integer(snapshot.last_tc_frame_seq)
+      snapshot.tc_frame_count == 1 and is_integer(snapshot.last_tc_frame_seq)
     end)
+
+    LoopbackPeer.snapshot(loopback_peer)
   end
 
   defp persist_source_endpoint do

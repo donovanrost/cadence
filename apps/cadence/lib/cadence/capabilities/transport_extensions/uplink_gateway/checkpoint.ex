@@ -7,7 +7,8 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.Checkpoint do
 
   @dynamic_fields ~w(next_frame_seq packet_sequence_counts cop1 accepted_uplink_count
     started_uplink_count completed_uplink_count last_release_attempt_id last_command_request_id
-    last_command_name last_signal_phase last_signal_at last_control_at active_releases)a
+    last_command_name last_signal_phase last_signal_at last_control_at active_releases
+    cop1_awaiting_clcw)a
 
   def export(state, _context) do
     with :ok <- validate(state, state), {:ok, data} <- Data.encode(state) do

@@ -180,3 +180,41 @@ So a group `[A, B, C]` on one target:
 A Halt'd or refused head no longer waits for the 60 s safety poll: the lane goes on to the
 next entry at once. Recovering an alerted FOP (re-initializing the AD service) is an operator
 action and isn't automated here.
+
+## One uplink session per pass (#34, DECISIONS #59)
+
+A provider-managed pass is its own external uplink session, so its uplink resource is the
+booking's: `ContactRuntimeConfig` scopes each provider binding's `uplink_resource_id` to the
+pass (`<listener resource>:pass:<provider contact ref>`). Consequences:
+
+- **Across passes:** a new pass has no earlier sends on its resource, so it doesn't need a
+  protocol restore. Before #59 every pass after a route's first command was refused with
+  `protocol_state_restore_required` and could never command.
+- **Within a pass:** a restart still finds that pass's sends and fails closed
+  (`protocol_state_restore_required`). Readiness shows `blocked` with that reason. Recover
+  uplink re-runs qualification only; it can't restore protocol state (see the follow-up below).
+- **Listener exclusivity:** unchanged. A pass's TCP listener binds its port exclusively, so a
+  second concurrent session on the same listener can't start (`tcp_provider_listen_failed`).
+
+**FOP initialization.** A pass's FOP never assumes V(S) = 0: a real FARM keeps V(R) across
+passes. Provider-managed gateways are configured `cop1_initialization: first_clcw`. The FOP
+waits, and admission answers busy (`cop1_awaiting_clcw`), until the spacecraft's first CLCW
+arrives. Then V(S) and the next frame number take its N(R), and AD service is initiated with
+CLCW check against that report. A first report showing lockout leaves the FOP alerted, so
+releases fail and stop-on-failure applies. The simulator peer reports its CLCW on connect,
+as a spacecraft does continuously in the TM OCF. The `configured` mode (initiate from
+`initial_frame_seq` at start) stays the default for hand-built and test transports.
+
+### Follow-up for the runtime owner (main): restoring protocol state
+
+Not built here; logged for main's runtime owner. After a restart within a pass, main's API can
+install a checkpoint (`restore_protocol_checkpoint`) but nothing can complete recovery:
+`complete_session_recovery` refuses while a restoration is installed, and nothing clears it.
+That is main's planned "Recovery commit and readiness contract" in
+`docs/multi-node-runtime-plan.md`:
+1. apply the audited frame/attempt reconciliation;
+2. commit a recovered checkpoint revision;
+3. issue a readiness receipt bound to it.
+
+Until that exists, a mid-pass restart leaves the rest of that pass unable to command; the next
+pass is unaffected.

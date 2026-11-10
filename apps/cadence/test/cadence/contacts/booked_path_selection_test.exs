@@ -39,6 +39,57 @@ defmodule Cadence.Contacts.BookedPathSelectionTest do
              ContactRuntimeConfig.validate(manual)
   end
 
+  test "#59: each booked pass gets its own uplink resource; a manual contact keeps the route's",
+       %{c: c} do
+    [template_id] = c.reservation.path_template_ids
+    {:ok, template} = PathTemplateStore.fetch(c.organization_id, c.mission_id, template_id)
+    [ref] = template.provider_profile_refs
+
+    {:ok, profile} =
+      Cadence.Contacts.fetch_provider_profile(
+        c.organization_id,
+        c.mission_id,
+        ref["provider_profile_id"]
+      )
+
+    {:ok, uplink_profile} =
+      Cadence.Contacts.persist_provider_profile(c.organization_id, %{
+        profile
+        | version: profile.version + 1,
+          configuration:
+            Map.put(profile.configuration, "uplink_resource_id", "uplink:127.0.0.1:7001")
+      })
+
+    {:ok, uplink_template} =
+      PathTemplateStore.persist(c.organization_id, %{
+        template
+        | version: template.version + 1,
+          provider_profile_refs: [
+            %{
+              "provider_profile_id" => uplink_profile.provider_profile_id,
+              "version" => uplink_profile.version
+            }
+          ]
+      })
+
+    resource = fn contact ->
+      {:ok, [path]} = ContactRuntimeConfig.resolve_paths(contact)
+      [binding] = path.provider_bindings
+      binding.configuration["uplink_resource_id"]
+    end
+
+    pass = fn ref ->
+      %{
+        scheduled(c, uplink_template, %{"provider_reservation_id" => "reservation-" <> ref})
+        | provider_contact_ref: "contact-" <> ref
+      }
+    end
+
+    assert resource.(pass.("a")) == "uplink:127.0.0.1:7001:pass:contact-a"
+    assert resource.(pass.("b")) == "uplink:127.0.0.1:7001:pass:contact-b"
+    assert resource.(scheduled(c, uplink_template, %{})) == "uplink:127.0.0.1:7001"
+  end
+
   defp scheduled(c, template, metadata) do
     ScheduledContact.new(%{
       organization_id: c.organization_id,

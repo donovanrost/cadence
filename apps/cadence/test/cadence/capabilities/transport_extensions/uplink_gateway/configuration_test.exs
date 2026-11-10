@@ -18,6 +18,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.ConfigurationTe
              fecf: false,
              initial_frame_seq: 0,
              cop1_mode: :disabled,
+             cop1_initialization: :configured,
              cop1_timeout_ms: 5_000,
              cop1_max_retransmit: 3,
              cop1_window_size: 1,

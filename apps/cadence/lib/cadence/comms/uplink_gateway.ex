@@ -58,6 +58,8 @@ defmodule Cadence.Comms.UplinkGateway do
       "scid" => spacecraft.scid || 0,
       "vcid" => 0,
       "cop1_mode" => "fop",
+      # A provider-managed pass can't know the spacecraft FARM's V(R): learn it (#59).
+      "cop1_initialization" => "first_clcw",
       "provider_binding_id" => provider.provider_profile_id,
       "provider_adapter_key" => "tcp_socket"
     }

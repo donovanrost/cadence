@@ -39,6 +39,12 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.Configuration d
        initial_frame_seq:
          config_value_or_default(configuration, :initial_frame_seq, "initial_frame_seq", 0),
        cop1_mode: normalize_cop1_mode(config_value(configuration, :cop1_mode, "cop1_mode")),
+       # DECISIONS #59: `first_clcw` initializes V(S) from the pass's first FARM report;
+       # `configured` initiates AD at start from `initial_frame_seq`.
+       cop1_initialization:
+         normalize_cop1_initialization(
+           config_value(configuration, :cop1_initialization, "cop1_initialization")
+         ),
        cop1_timeout_ms:
          config_value_or_default(
            configuration,
@@ -118,6 +124,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.Configuration d
              :initial_frame_seq
            ),
          :ok <- validate_cop1_mode(normalized_configuration.cop1_mode),
+         :ok <- validate_cop1_initialization(normalized_configuration.cop1_initialization),
          :ok <-
            validate_positive_integer(normalized_configuration.cop1_timeout_ms, :cop1_timeout_ms),
          :ok <-
@@ -186,6 +193,19 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.Configuration d
 
   defp validate_transport_profile(profile),
     do: {:error, {:unsupported_uplink_gateway_transport_profile, profile}}
+
+  defp normalize_cop1_initialization(value) when value in [nil, :configured, "configured"],
+    do: :configured
+
+  defp normalize_cop1_initialization(value) when value in [:first_clcw, "first_clcw"],
+    do: :first_clcw
+
+  defp normalize_cop1_initialization(other), do: other
+
+  defp validate_cop1_initialization(value) when value in [:configured, :first_clcw], do: :ok
+
+  defp validate_cop1_initialization(value),
+    do: {:error, {:unsupported_uplink_gateway_cop1_initialization, value}}
 
   defp validate_cop1_mode(mode) when mode in [:disabled, :fop], do: :ok
   defp validate_cop1_mode(mode), do: {:error, {:unsupported_uplink_gateway_cop1_mode, mode}}

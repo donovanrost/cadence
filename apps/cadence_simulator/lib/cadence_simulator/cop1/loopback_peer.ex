@@ -175,7 +175,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
     case :gen_tcp.connect(String.to_charlist(state.host), state.port, @tcp_opts) do
       {:ok, socket} ->
         :ok = :inet.setopts(socket, active: :once)
-        %{state | socket: socket, last_error: nil}
+        report_current_clcw(%{state | socket: socket, last_error: nil})
 
       {:error, reason} ->
         Logger.warning(
@@ -275,6 +275,32 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
       nil
     else
       CLCWInjector.new(injector_opts)
+    end
+  end
+
+  # A spacecraft reports its CLCW continuously (in the TM OCF), so a fresh connection gets the
+  # FARM's current report at once and the ground FOP can initialize V(S) from it instead of
+  # assuming 0 (Cadence DECISIONS #59). Overrides apply as to any other report.
+  defp report_current_clcw(state) do
+    farm =
+      case Map.fetch(state.farm_by_vcid, 0) do
+        {:ok, farm} ->
+          farm
+
+        :error ->
+          {:ok, farm} = FARM.new(Map.put(state.farm_config, :vcid, 0))
+          farm
+      end
+
+    clcw = farm |> FARM.clcw() |> maybe_apply_injector(state.clcw_injector, state.tc_frame_count)
+
+    with {:ok, binary} <- CLCW.encode(clcw),
+         :ok <- :gen_tcp.send(state.socket, binary) do
+      %{state | clcw_count: state.clcw_count + 1, last_clcw_report_value: clcw.report_value}
+    else
+      {:error, reason} ->
+        Logger.warning("COP-1 loopback failed to report its CLCW on connect: #{inspect(reason)}")
+        %{state | last_error: inspect(reason)}
     end
   end
 

@@ -57,6 +57,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     end)
 
     {:ok, socket} = :gen_tcp.accept(listener)
+    # The peer reports its current CLCW as soon as it connects (DECISIONS #59).
+    assert {:ok, <<_::binary-size(4)>>} = :gen_tcp.recv(socket, 4, 1_000)
 
     on_exit(fn ->
       if Process.alive?(peer), do: CadenceSimulator.stop_simulator(peer)
@@ -91,7 +93,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     assert_eventually(fn ->
       snapshot = LoopbackPeer.snapshot(peer)
 
-      snapshot.fecf and snapshot.tc_frame_count == 1 and snapshot.clcw_count == 1 and
+      snapshot.fecf and snapshot.tc_frame_count == 1 and snapshot.clcw_count == 2 and
         snapshot.last_tc_frame_seq == tc_seq and snapshot.last_clcw_report_value == tc_seq + 1
     end)
   end
@@ -122,6 +124,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     end)
 
     {:ok, socket} = :gen_tcp.accept(listener)
+    # The peer reports its current CLCW as soon as it connects (DECISIONS #59).
+    assert {:ok, <<_::binary-size(4)>>} = :gen_tcp.recv(socket, 4, 1_000)
 
     on_exit(fn ->
       if Process.alive?(peer), do: CadenceSimulator.stop_simulator(peer)
@@ -145,7 +149,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     assert_eventually(fn ->
       snapshot = LoopbackPeer.snapshot(peer)
 
-      snapshot.tc_frame_count == 2 and snapshot.clcw_count == 2 and
+      snapshot.tc_frame_count == 2 and snapshot.clcw_count == 3 and
         snapshot.last_tc_frame_seq == 8 and snapshot.last_clcw_report_value == 8
     end)
   end
@@ -173,6 +177,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     end)
 
     {:ok, socket} = :gen_tcp.accept(listener)
+    # The peer reports its current CLCW as soon as it connects (DECISIONS #59).
+    assert {:ok, <<_::binary-size(4)>>} = :gen_tcp.recv(socket, 4, 1_000)
 
     on_exit(fn ->
       if Process.alive?(peer), do: CadenceSimulator.stop_simulator(peer)
@@ -251,6 +257,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     end)
 
     assert {:ok, socket} = :gen_tcp.accept(live_listener, 1_000)
+    # The peer reports its current CLCW as soon as it connects (DECISIONS #59).
+    assert {:ok, <<_::binary-size(4)>>} = :gen_tcp.recv(socket, 4, 1_000)
 
     on_exit(fn ->
       if Process.alive?(peer), do: CadenceSimulator.stop_simulator(peer)
@@ -297,6 +305,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     end)
 
     {:ok, socket} = :gen_tcp.accept(listener)
+    # The peer reports its current CLCW as soon as it connects (DECISIONS #59).
+    assert {:ok, <<_::binary-size(4)>>} = :gen_tcp.recv(socket, 4, 1_000)
 
     on_exit(fn ->
       if Process.alive?(peer), do: CadenceSimulator.stop_simulator(peer)
@@ -348,6 +358,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeerTest do
     end)
 
     {:ok, socket} = :gen_tcp.accept(listener)
+    # The peer reports its current CLCW as soon as it connects (DECISIONS #59).
+    assert {:ok, <<_::binary-size(4)>>} = :gen_tcp.recv(socket, 4, 1_000)
 
     on_exit(fn ->
       if Process.alive?(peer), do: CadenceSimulator.stop_simulator(peer)

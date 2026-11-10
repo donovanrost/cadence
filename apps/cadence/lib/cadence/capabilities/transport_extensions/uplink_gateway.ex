@@ -68,6 +68,10 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
            cop1_window_size: normalized_configuration.cop1_window_size,
            cop1_timeout_type: normalized_configuration.cop1_timeout_type,
            cop1: build_cop1_state(normalized_configuration),
+           # DECISIONS #59: each pass's FOP initializes from the spacecraft's first live CLCW.
+           cop1_awaiting_clcw:
+             normalized_configuration.cop1_mode == :fop and
+               normalized_configuration.cop1_initialization == :first_clcw,
            simulated_start_delay_ms: normalized_configuration.simulated_start_delay_ms,
            simulated_completion_delay_ms: normalized_configuration.simulated_completion_delay_ms,
            provider_binding_id: normalized_configuration.provider_binding_id,
@@ -95,8 +99,11 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
   it, so stop-on-failure fires.
   """
   @impl true
-  def uplink_readiness(%{cop1_mode: :fop, cop1: %FOP{} = fop}) do
+  def uplink_readiness(%{cop1_mode: :fop, cop1: %FOP{} = fop} = app_state) do
     cond do
+      Map.get(app_state, :cop1_awaiting_clcw, false) ->
+        {:error, {:uplink_busy, :cop1_awaiting_clcw}}
+
       fop.in_flight_release != nil ->
         {:error, {:uplink_busy, :cop1_release_in_flight}}
 
@@ -118,7 +125,7 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
       when is_map(app_state) do
     with {:ok, %CLCW{} = clcw} <- normalize_cop1_clcw_event(event),
          true <- cop1_enabled?(app_state),
-         {:ok, transition} <- FOP.apply_clcw(app_state.cop1, clcw) do
+         {:ok, app_state, transition} <- apply_clcw(app_state, clcw) do
       {:ok, build_cop1_execution_result(app_state, transition, ctx.current_time)}
     else
       false ->
@@ -232,8 +239,15 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
         lower_layer_mode: :synchronous
       })
 
-    {:ok, transition} = FOP.directive(state, :initiate_ad_without_clcw_check)
-    transition.state
+    case configuration.cop1_initialization do
+      # V(S) comes from the FARM's first report (#59), never assumed.
+      :first_clcw ->
+        state
+
+      :configured ->
+        {:ok, transition} = FOP.directive(state, :initiate_ad_without_clcw_check)
+        transition.state
+    end
   end
 
   defp build_cop1_state(_configuration), do: nil
@@ -517,6 +531,25 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
       nil -> release_metadata || %{}
       _other -> Map.merge(release_metadata || %{}, transition_metadata)
     end
+  end
+
+  # The pass's first CLCW initializes the FOP (DECISIONS #59): V(S) and the next frame number
+  # take the FARM's reported N(R) = V(R), then AD service is initiated with CLCW check against
+  # that same report. A report showing lockout leaves the FOP alerted (broken), not waiting.
+  defp apply_clcw(%{cop1_awaiting_clcw: true} = app_state, %CLCW{} = clcw) do
+    seq = clcw.report_value
+    %FOP{} = current = app_state.cop1
+    fop = %{current | vs: seq, nnr: seq}
+
+    with {:ok, initiating} <- FOP.directive(fop, :initiate_ad_with_clcw_check),
+         {:ok, transition} <- FOP.apply_clcw(initiating.state, clcw) do
+      {:ok, %{app_state | cop1_awaiting_clcw: false, next_frame_seq: seq}, transition}
+    end
+  end
+
+  defp apply_clcw(app_state, %CLCW{} = clcw) do
+    with {:ok, transition} <- FOP.apply_clcw(app_state.cop1, clcw),
+         do: {:ok, app_state, transition}
   end
 
   defp alert_signal(%{alerts: [reason | _]}), do: {:failure, %{cop1_alert: reason}}
