@@ -19,7 +19,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | **fe-setup** | Catalog C1 diff (api cab661fe); Profile edit → stage (op + preview exist); People command policies tab (O4 exists); Changes compare (`/config/compare`) + Keep mine / Take live (`rebase`); Readiness R2 from revisions; Audit actor filter; qa #19 copy ("unclear, check now" on 5xx) | api: catalog diff, people/invite/service-identity writes, account password/sessions, provider history; domain: catalog generations (C3) |
 | **ux** | Visual review of the unreviewed boards (§7); Compose C1 layout ruling (default: accept as built, #64) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
-| **api** | §8 list | — |
+| **api** | §8 queue clear | — |
 | **api-ops** | §8 list | domain #34 for uplink items |
 | **domain** | catalog-path generations (#36; plan to the director first, it touches activation) | — (done: qa #34 #59 e683b3e2; qa #19 server side 33529f29; #50 archive) |
 
@@ -87,7 +87,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Fleet: "in contact" filter, Next contact column; virtualization past 200 rows *(unverified)* | fe-ops | — |
 | Alarms: group identical point+condition across spacecraft, Next contact, "Last cleared…" empty state; Cleared tab re-check (investigate review #20) | fe-ops | — |
 | ~~Telemetry `Dashboards ↗` → existing pages (#11)~~ done (718fd269); empty state's three suggested points | fe-ops | — |
-| Timeline: ~~sc scope~~ done (cb5767c9); plane filter; custom range, E1 brush, live prepend + "N new events ↑" | fe-ops | plane: api (`GET …/events` takes `spacecraft_id`, not plane); live prepend: api-ops events topic *(unverified)* |
+| Timeline: ~~sc scope~~ done (cb5767c9); plane filter (api done); custom range, E1 brush, live prepend + "N new events ↑" | fe-ops | live prepend: api-ops events topic *(unverified)* |
 
 ## 3. Scheduling (`ScheduleFlow.md`)
 
@@ -138,7 +138,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | `setup/catalog/:databaseId` route (pending) | fe-setup | — |
 | C1 diff (UI ready, shows "not available") | fe-setup | — (api cab661fe) |
 | C3 Roll out to / `Request activation` | fe-setup | domain: catalog-path generations (#36) |
-| Commands vs Telemetry split; `Replace file`; warnings disclosure *(unverified)* | fe-setup | api: `command_count` / `telemetry_count` |
+| Commands vs Telemetry split (counts on `current_revision`, cab661fe); `Replace file`; warnings disclosure *(unverified)* | fe-setup | — |
 
 ### Profile (`Profile.md`, S4): partial
 | Item | Owner | Blocked on |
@@ -206,11 +206,11 @@ missing endpoint or decision; an item with no blocker can start now.
 
 **api**
 1. ~~Contact plans: send back, `approval`, run `stopped_at`~~ done (c7c7b277, 97523716, 413c8e18).
-2. ~~Catalog: server-side revision diff + breaking rules~~ done (cab661fe); `command_count` / `telemetry_count` *(check whether cab661fe covers them)*.
+2. ~~Catalog: server-side revision diff + breaking rules; `command_count` / `telemetry_count` on `current_revision`~~ done (cab661fe; revision list rows keep null).
 3. ~~People: role change, remove member, activity; invitations; service identities~~ done (api).
 4. ~~Account: password, sessions; provider history~~ done (api). (Console mission create dropped, #64.)
 5. ~~Readiness `recent_changes`~~ done (api).
-5b. Events read: a `plane` filter (Timeline), low priority.
+5b. ~~Events read: a `plane` filter (Timeline)~~ done.
 6. ~~Billing terms + budgets~~ out of scope (#63).
 7. ~~K3 Export CSV / Monthly close~~ not needed: CSV is client-side; Monthly close dropped (#63, ux af1c78d1).
 8. qa #19: map domain's `:apply_interrupted` (33529f29), in progress (api).
