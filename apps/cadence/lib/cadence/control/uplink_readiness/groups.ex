@@ -3,7 +3,8 @@ defmodule Cadence.Control.UplinkReadiness.Groups do
   The pass each command group waits for (#58). Requests queue per source-endpoint lane, not
   per contact: a release goes out on the target spacecraft's live uplink pass. So a group's
   `contact` is its spacecraft's live pass (any readiness), and `next_contact` the next booked
-  pass that can command after it. Both carry `starts_at`/`ends_at` (AOS/LOS) and, when live,
+  pass that can command after it. Both carry `ground_station_ref`, `starts_at`/`ends_at`
+  (AOS/LOS) and, when live,
   `readiness`. Groups are keyed by their first target; `targets` lists every target.
   """
 
@@ -54,6 +55,7 @@ defmodule Cadence.Control.UplinkReadiness.Groups do
   defp pass(pass, readiness),
     do: %{
       scheduled_contact_id: pass.scheduled_contact_id,
+      ground_station_ref: pass.ground_station_ref,
       starts_at: pass.starts_at,
       ends_at: pass.ends_at,
       readiness: readiness

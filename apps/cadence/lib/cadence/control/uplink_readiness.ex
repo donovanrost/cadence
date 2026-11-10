@@ -11,8 +11,10 @@ defmodule Cadence.Control.UplinkReadiness do
     connection isn't attached yet.
   - `protocol_state_restore_required` (blocked): the pass's uplink restarted after it had sent
     commands; this pass can't command again (no Recover).
+  - `provider_cannot_attest_uplink_sessions` (blocked): the provider can't vouch for uplink
+    sessions at all; no Recover.
   - attestation and provider failures (blocked), e.g. `attestation_signature_invalid`,
-    `uplink_farm_locked_out`, `provider_cannot_attest_uplink_sessions`; Recover retries.
+    `uplink_farm_locked_out`; Recover retries.
 
   `recover/3` re-runs qualification for one pass (operate_mission, audited).
   """
@@ -24,7 +26,8 @@ defmodule Cadence.Control.UplinkReadiness do
 
   @table __MODULE__
   @resolved_keep_s 300
-  @unrecoverable [:protocol_state_restore_required]
+  # Re-qualifying can't help: protocol state is gone, or the provider can't vouch at all.
+  @unrecoverable [:protocol_state_restore_required, :provider_cannot_attest_uplink_sessions]
 
   @doc false
   def table, do: @table

@@ -144,6 +144,8 @@ defmodule Cadence.Control.UplinkReadinessTest do
 
     assert %{scheduled_contact_id: "contact-live", readiness: %{state: :blocked}} = live
     assert next.scheduled_contact_id == reservation.scheduled_contact_id
+    assert live.ground_station_ref == "earendil-kiruna"
+    assert Map.has_key?(next, :ground_station_ref)
     assert next.starts_at == reservation.starts_at
 
     assert %{} == UplinkPasses.upcoming(c.org, c.mission, [], DateTime.utc_now())
@@ -169,6 +171,11 @@ defmodule Cadence.Control.UplinkReadinessTest do
     record(c, :blocked, :protocol_state_restore_required)
 
     assert {:error, {:refused, :protocol_state_restore_required}} =
+             UplinkReadiness.recover(c.scope, c.mission, "contact-live", opts)
+
+    record(c, :blocked, :provider_cannot_attest_uplink_sessions)
+
+    assert {:error, {:refused, :provider_cannot_attest_uplink_sessions}} =
              UplinkReadiness.recover(c.scope, c.mission, "contact-live", opts)
 
     record(c, :blocked, :attestation_signature_invalid)

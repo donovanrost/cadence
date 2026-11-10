@@ -13,7 +13,10 @@ defmodule Cadence.Contacts.UplinkPasses do
 
   @live ~w(requesting pending confirmed active unknown)
 
-  @doc "`%{spacecraft_id => [%{scheduled_contact_id, starts_at, ends_at}]}`, at most `limit` each."
+  @doc """
+  `%{spacecraft_id => [%{scheduled_contact_id, starts_at, ends_at, ground_station_ref}]}`, at
+  most `limit` each.
+  """
   @spec upcoming(binary(), binary(), [binary()], DateTime.t(), pos_integer()) :: map()
   def upcoming(org, mission, spacecraft_ids, now, limit \\ 2)
 
@@ -29,11 +32,22 @@ defmodule Cadence.Contacts.UplinkPasses do
           s.lifecycle_state == "scheduled" and s.starts_at > ^now and
           fragment("'command_window' = ANY(?)", s.contact_intents),
       order_by: [asc: s.starts_at, asc: s.scheduled_contact_id],
-      select: {r.spacecraft_id, s.scheduled_contact_id, s.starts_at, s.ends_at}
+      select:
+        {r.spacecraft_id, s.scheduled_contact_id, s.starts_at, s.ends_at,
+         fragment(
+           "coalesce(? -> 'value' ->> 'ground_station_ref', ? -> 'value' ->> 'ground_station_ref')",
+           r.provider_confirmed_snapshot_document,
+           r.request_document
+         )}
     )
     |> Repo.all()
-    |> Enum.group_by(&elem(&1, 0), fn {_sc, id, starts_at, ends_at} ->
-      %{scheduled_contact_id: id, starts_at: starts_at, ends_at: ends_at}
+    |> Enum.group_by(&elem(&1, 0), fn {_sc, id, starts_at, ends_at, station} ->
+      %{
+        scheduled_contact_id: id,
+        starts_at: starts_at,
+        ends_at: ends_at,
+        ground_station_ref: station
+      }
     end)
     |> Map.new(fn {spacecraft_id, passes} -> {spacecraft_id, Enum.take(passes, limit)} end)
   end
