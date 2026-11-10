@@ -143,6 +143,21 @@ defmodule CadenceWeb.Console.ProviderAccountAPITest do
 
     assert %{"id" => ^id, "state" => "archived"} = retired["data"]
 
+    # AU1: the account's changes are in the organization audit, by who made them.
+    audit =
+      conn.()
+      |> get(base <> "/audit?kinds=provider_accounts")
+      |> json_response(200)
+      |> get_in(["data", "events"])
+
+    actions = Enum.map(audit, & &1["action"])
+    # Events name the account by its current name; the rename says both.
+    assert "Added provider account Sim (renamed)" in actions
+    assert "Changed Sim (renamed)'s settings (version 2)" in actions
+    assert "Renamed provider account Sim to Sim (renamed)" in actions
+    assert "Retired provider account Sim (renamed)" in actions
+    assert Enum.all?(audit, &(&1["actor"]["kind"] == "user"))
+
     assert conn.()
            |> get(base <> "/provider-accounts")
            |> json_response(200)

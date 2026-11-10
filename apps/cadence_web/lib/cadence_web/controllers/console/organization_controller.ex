@@ -11,7 +11,6 @@ defmodule CadenceWeb.Console.OrganizationController do
   alias Cadence.Reads.{OrganizationAudit, OrganizationMissions}
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
-  @kinds ~w(config commanding access alarms contacts data)
   @default_window_s 7 * 86_400
 
   def missions(conn, _params) do
@@ -77,9 +76,11 @@ defmodule CadenceWeb.Console.OrganizationController do
   defp kinds(value) do
     list = value |> to_string() |> String.split(",", trim: true)
 
-    if Enum.all?(list, &(&1 in @kinds)),
+    if Enum.all?(list, &(&1 in OrganizationAudit.kinds())),
       do: {:ok, list},
-      else: {:error, {:invalid_params, %{kinds: "must be from #{Enum.join(@kinds, ", ")}"}}}
+      else:
+        {:error,
+         {:invalid_params, %{kinds: "must be from #{Enum.join(OrganizationAudit.kinds(), ", ")}"}}}
   end
 
   defp non_negative(nil, default, _key), do: {:ok, default}

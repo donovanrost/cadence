@@ -18,10 +18,10 @@ defmodule Cadence.Reads.OrganizationAudit do
   alias Cadence.Configuration.Status
   alias Cadence.Management.{Commanding, Contacts, DataSources}
   alias Cadence.Platform.ScopedSettings
+  alias Cadence.Reads.OrganizationAudit.ProviderAccountEvents
 
-  @included ~w(config commanding access alarms contacts data)
-  # Not audited yet; the console says so (ux).
-  @missing ~w(provider_accounts)
+  @included ~w(config commanding access alarms contacts data provider_accounts)
+  @missing []
   @plan_cap 100
   @settings [
     {"cadence.governance", "Governance"},
@@ -29,6 +29,10 @@ defmodule Cadence.Reads.OrganizationAudit do
     {"cadence.configuration", "Configuration"},
     {"cadence.pass_review", "Pass review"}
   ]
+
+  @doc "The event kinds the log can contain (the `kinds` filter's values)."
+  @spec kinds() :: [String.t()]
+  def kinds, do: @included
 
   @doc """
   Options: `from`, `to` (DateTimes), `actor_id`, `mission_id`, `kinds` (list), `limit`,
@@ -43,7 +47,9 @@ defmodule Cadence.Reads.OrganizationAudit do
 
     events =
       (Enum.flat_map(missions, &mission_events(organization_id, &1, opts)) ++
-         settings_events(organization_id, nil, nil) ++ access_events(organization_id))
+         settings_events(organization_id, nil, nil) ++
+         access_events(organization_id) ++
+         ProviderAccountEvents.list(organization_id))
       |> Enum.filter(&keep?(&1, opts))
       |> Enum.sort_by(& &1.at, {:desc, DateTime})
 

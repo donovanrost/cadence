@@ -40,8 +40,16 @@ defmodule CadenceWeb.Console.AuditAPITest do
     data = c |> get_audit(c.admin, "") |> json_response(200) |> Map.fetch!("data")
 
     assert data["sources"] == %{
-             "included" => ["config", "commanding", "access", "alarms", "contacts", "data"],
-             "missing" => ["provider_accounts"]
+             "included" => [
+               "config",
+               "commanding",
+               "access",
+               "alarms",
+               "contacts",
+               "data",
+               "provider_accounts"
+             ],
+             "missing" => []
            }
 
     actions = Enum.map(data["events"], & &1["action"])
