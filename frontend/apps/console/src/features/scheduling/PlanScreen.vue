@@ -95,7 +95,8 @@ const sentBack = computed(() => {
   const a = view.value.plan.approval;
   if (a?.decision !== "rejected") return null;
   const who = a.actor.name ?? "An org admin";
-  return `Sent back by ${who} at ${a.at.slice(11, 16)}Z${a.reason ? `: ${a.reason}` : "."}`;
+  const why = a.reason ? `: ${a.reason.trim().replace(/[.!?]+$/, "")}.` : ".";
+  return `Sent back by ${who} at ${a.at.slice(11, 16)}Z${why} Edit the draft and submit it again.`;
 });
 
 async function onSubmit(acks: Acknowledgement[]) {

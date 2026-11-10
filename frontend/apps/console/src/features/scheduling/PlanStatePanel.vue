@@ -95,10 +95,17 @@ const elapsed = computed(() =>
     </div>
     <ApCallout v-else-if="view.kind === 'interrupted'" tone="stale">
       <!-- U20: no cause unless the server reports one; the console can't know it. -->
-      Drafting stopped<span v-if="view.stoppedAt">
-        at or after {{ view.stoppedAt.slice(11, 16) }}Z</span
-      ><span v-if="view.phase"> during {{ view.phase.replaceAll("_", " ") }}</span
-      >. Nothing was submitted.
+      <!-- ux: state the fact we have. stopped_at on an interrupted run is its last recorded
+           progress (scheduling.md), not the moment it stopped. -->
+      <template v-if="view.stoppedAt"
+        >Drafting stopped. Last progress {{ view.stoppedAt.slice(11, 16) }}Z<span v-if="view.phase">
+          during {{ view.phase.replaceAll("_", " ") }}</span
+        >. Nothing was submitted.</template
+      >
+      <template v-else
+        >Drafting stopped<span v-if="view.phase"> during {{ view.phase.replaceAll("_", " ") }}</span
+        >. Nothing was submitted.</template
+      >
     </ApCallout>
     <ApCallout v-else-if="view.kind === 'draft_failed'" tone="caution">{{
       view.message

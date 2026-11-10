@@ -38,7 +38,9 @@ function acceptedText(spacecraftId: string): string | null {
   const reqs = props.plan.unmet.filter((u) => u.spacecraft_id === spacecraftId);
   if (reqs.length === 0 || !reqs.every((u) => accepted.value.has(u.requirement_id))) return null;
   const reasons = [...new Set(reqs.map((u) => accepted.value.get(u.requirement_id) ?? ""))];
-  return `Gap accepted · ${reasons.join(" · ")}`;
+  // U29: name who accepted it (the approval's actor records the acknowledgements).
+  const by = props.plan.approval?.actor.name;
+  return `Gap accepted${by ? ` by ${by}` : ""} · ${reasons.join(" · ")}`;
 }
 const meta = computed(() => {
   const c = coverage(props.plan);
