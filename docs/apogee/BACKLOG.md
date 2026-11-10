@@ -16,7 +16,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | --- | --- | --- |
 | **lead** | K1 C panel (focused spacecraft 24 h strip); `ApSheet` kit primitive (five hand-rolled dialogs today); `ApStatTile` `to` link; Palette `>` commands and `@` stations groups (with fe-ops) | — (api's K1 items shipped: send back, approval, stop time) |
 | **fe-ops** | Now tile links + A4 pass select + approval rows → request review; Investigate's five tabs link to the existing pages (#64) + add-point chips; Contacts D3 outage bands (S7 exists); Telemetry `Dashboards ↗` → existing pages (#11); Timeline sc/plane filter; Fleet/Alarms Next contact; Mobile GO block | api-ops: M8 spacecraft topic, M22 findings, M24 encode preview, M26 retries, catalog revision, Swap/Release; ux: Compose layout ruling |
-| **fe-setup** | Hide money (#63/U34): K2 footer cost + billed counts, K3 dispute amount / billed minutes / R5 / Dispute, Contact planning's money policy fields; layouts reflow. New mission → existing create page (#64). K2 Covered tile; Profile edit → stage (op + preview exist); People command policies tab (O4 exists); Changes compare (`/config/compare`) + Keep mine / Take live (`rebase`); Readiness R2 from revisions; Audit actor filter; qa #19 copy ("unclear, check now" on 5xx) | api: catalog diff, people/invite/service-identity writes, account password/sessions, provider history; domain: catalog generations (C3) |
+| **fe-setup** | Catalog C1 diff (api cab661fe); Profile edit → stage (op + preview exist); People command policies tab (O4 exists); Changes compare (`/config/compare`) + Keep mine / Take live (`rebase`); Readiness R2 from revisions; Audit actor filter; qa #19 copy ("unclear, check now" on 5xx) | api: catalog diff, people/invite/service-identity writes, account password/sessions, provider history; domain: catalog generations (C3) |
 | **ux** | Visual review of the unreviewed boards (§7); Compose C1 layout ruling (default: accept as built, #64) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
 | **api** | §8 list | — |
@@ -108,15 +108,15 @@ missing endpoint or decision; an item with no blocker can start now.
 ### K2 · Re-plan (`contacts/replan…`): built (fe-setup); gaps
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| `Covered N` tile (#56) | fe-setup | — (decoder 5925fb35) |
-| Hide the footer cost and the 'billed' counts; reflow (#63/U34) | fe-setup | — |
+| ~~`Covered N` tile (#56)~~ done (1f8ff914, d9c614da, 42c27039) | fe-setup | — |
+| ~~Hide money (#63)~~ done: K2 showed none (d50ca428) | fe-setup | — |
 | Live Propose → Apply after #52/#56 | qa + fe-setup | — |
 
 ### K3 · Close the books (`contacts/review`): built (fe-setup); gaps
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | `Export CSV`, `Monthly close` | fe-setup | api: export + close endpoints |
-| Hide the dispute amount, billed minutes, R5 reconciliation, `Dispute`; keep time facts (minutes flown, realized %); reflow (#63/U34) | fe-setup | — |
+| ~~Hide money (#63)~~ done: R4 Disputable tag/count removed (d50ca428) | fe-setup | — |
 
 ## 4. Setup
 
@@ -157,7 +157,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | qa #19: a 5xx on submit reads "Nothing was applied"; should read "unclear, check now" (server side done, domain 33529f29: `:apply_interrupted`) | fe-setup (copy), then qa closes | — |
 | Now P3 row when a set sits > 24 h; Timeline `Config r6 applied` | fe-ops | *(unverified)* |
 
-### Contact planning (`ContactPlanning.md`): built. Hide the money policy fields (max cost, currency, critical cost reserve, cost weight; #63/U34). Review 6/7 in progress (sort is in; uppercase rule line *(unverified)*). Owner fe-setup.
+### Contact planning (`ContactPlanning.md`): built. Money policy fields hidden (d50ca428, #63). Review 6/7 in progress (sort is in; uppercase rule line *(unverified)*). Owner fe-setup.
 
 ### People & access (`People.md`, S5): partial
 | Item | Owner | Blocked on |
@@ -177,7 +177,7 @@ missing endpoint or decision; an item with no blocker can start now.
 ### Org / account
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| `org/missions/new`: link `New mission` to the existing create page, drop the pending route (#64) | fe-setup | — |
+| ~~`New mission` → existing create page; pending route dropped (#64)~~ done (d50ca428) | fe-setup | — |
 | Account: password change, active sessions | fe-setup | api: no endpoints |
 | `/notifications`: **dropped** (#64; the Now attention queue is the notification surface). Route and menu item removed (lead) | — | done |
 
