@@ -14,6 +14,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
   alias Cadence.Applications.SpacecraftConfiguration.ApplicationInputs,
     as: ConfigurationApplications
 
+  alias Cadence.Applications.SpacecraftConfiguration.CatalogAuthority
   alias Cadence.Applications.SpacecraftConfiguration.RevisionRow, as: ConfigurationRevisionRow
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
 
@@ -192,7 +193,9 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
   end
 
   defp validate_references(mission, spacecraft, document) do
-    with :ok <- validate_catalog(mission, document["catalog_revision_id"]) do
+    with :ok <- validate_catalog(mission, document["catalog_revision_id"]),
+         # DECISIONS #65: a profile catalog is set through change sets only.
+         :ok <- CatalogAuthority.check(mission, spacecraft, document["catalog_revision_id"]) do
       validate_source(mission, spacecraft, document["telemetry_source_endpoint_id"])
     end
   end

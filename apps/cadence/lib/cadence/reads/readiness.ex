@@ -11,7 +11,7 @@ defmodule Cadence.Reads.Readiness do
 
   alias Cadence.Applications.ApplicationDefinition
   alias Cadence.Applications.ApplicationInstallations
-  alias Cadence.Applications.SpacecraftConfiguration.Drafts
+  alias Cadence.Applications.SpacecraftConfiguration.{CatalogAuthority, Drafts}
   alias Cadence.Auth.{Policy, Scope}
 
   alias Cadence.Comms.{
@@ -104,7 +104,9 @@ defmodule Cadence.Reads.Readiness do
     %{
       database_count: length(databases),
       revision_count: length(revisions),
-      latest_label: latest_label(organization_id, mission_id, List.first(revisions))
+      latest_label: latest_label(organization_id, mission_id, List.first(revisions)),
+      # DECISIONS #65: spacecraft not yet on the catalog their profile sets.
+      not_converged: CatalogAuthority.mismatches(organization_id, mission_id)
     }
   end
 

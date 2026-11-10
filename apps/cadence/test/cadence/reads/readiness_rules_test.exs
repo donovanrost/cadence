@@ -176,4 +176,34 @@ defmodule Cadence.Reads.Readiness.RulesTest do
 
     assert hd(result.findings).fix == %{kind: :data_source, id: "b", label: nil}
   end
+
+  test "spacecraft not yet on their profile's catalog are a caution with the list (DECISIONS #65)" do
+    mismatch = %{
+      spacecraft_id: "spacecraft-004",
+      effective_catalog_revision_id: "catalog-r5",
+      configured_catalog_revision_id: "catalog-r4"
+    }
+
+    result =
+      Rules.build(
+        facts(%{
+          catalog: %{
+            database_count: 1,
+            revision_count: 5,
+            latest_label: "Latest r5",
+            not_converged: [mismatch]
+          }
+        })
+      )
+
+    assert [
+             %{
+               id: "catalog.catalog_not_converged",
+               severity: :caution,
+               affected_count: 1,
+               affected: [^mismatch],
+               fix: %{kind: :change_set}
+             }
+           ] = Enum.filter(result.findings, &(&1.area == :catalog))
+  end
 end

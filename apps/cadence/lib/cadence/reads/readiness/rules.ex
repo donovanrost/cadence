@@ -121,6 +121,27 @@ defmodule Cadence.Reads.Readiness.Rules do
     ]
   end
 
+  defp catalog_findings(%{catalog: %{not_converged: [_ | _] = mismatches}}) do
+    count = length(mismatches)
+
+    [
+      Map.put(
+        finding(
+          :catalog,
+          :caution,
+          :catalog_not_converged,
+          "#{count} #{plural(count, "spacecraft runs", "spacecraft run")} a different catalog than #{plural(count, "its", "their")} profile sets",
+          "They keep decoding with their current catalog. A change set that touches them " <>
+            "(a pin or an override) moves them onto their profile's catalog.",
+          count,
+          fix(:change_set)
+        ),
+        :affected,
+        mismatches
+      )
+    ]
+  end
+
   defp catalog_findings(_facts), do: []
 
   defp comms_findings(%{comms: %{transport_count: 0}}) do

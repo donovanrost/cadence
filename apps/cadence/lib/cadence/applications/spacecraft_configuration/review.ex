@@ -4,6 +4,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Applications.ConfigurationLock
   alias Cadence.Applications.SpacecraftConfiguration.Active, as: ConfigurationActive
+  alias Cadence.Applications.SpacecraftConfiguration.CatalogAuthority
   alias Cadence.Applications.SpacecraftConfiguration.Drafts, as: ConfigurationDrafts
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecom.Config
@@ -75,6 +76,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
            :ok <- ConfigurationDrafts.exact_token(current.token, token),
            true <- not is_nil(current.row) and not current.external_changes,
            :ok <- ready(current.row.document),
+           :ok <- CatalogAuthority.check(mission, spacecraft, current.row.catalog_revision_id),
            {:ok, sources} <- ConfigurationActive.source_ids(mission, id),
            true <- sources != [],
            {:ok, contribution} <- contribution(mission, id, current.row),
