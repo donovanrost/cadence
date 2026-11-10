@@ -251,6 +251,7 @@ defmodule Cadence.Reads.MissionTimeline do
   end
 
   defp value_matches?(_value, nil), do: true
+  defp value_matches?(value, expected) when is_list(expected), do: value in expected
   defp value_matches?(value, expected), do: value == expected
 
   defp after_or_at?(_occurred_at, nil), do: true

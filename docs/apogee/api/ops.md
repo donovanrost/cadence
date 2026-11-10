@@ -356,7 +356,10 @@ The limit-definition bands in effect over the window, for drawing bands behind t
 The event log for Investigate B2 and Timeline. It reads the canonical mission timeline (projected
 mission events merged with operational events). Refetch on `invalidate` with `events` or `alarms`.
 
-Query: `from`, `to` (ISO, default the last 24 h), `spacecraft_id`, `kind` (comma list of
+Query: `from`, `to` (ISO, default the last 24 h), `spacecraft_id`, `plane` (an integer: the
+spacecraft in that orbital plane, from spacecraft metadata; an empty plane returns no events; with
+`spacecraft_id`, only that spacecraft if it's in the plane; `422 invalid_params` `details.plane` if
+it isn't an integer), `kind` (comma list of
 `limit, flight_event, contact, command, config, operator, data`; `data` is data-plane housekeeping
 such as source watermarks and source health, which you'll usually filter out), `limit` 1–500 (default 200), and
 `cursor` (opaque, from `meta.next_cursor`). Newest first.
@@ -402,7 +405,7 @@ such as source watermarks and source health, which you'll usually filter out), `
 ## `GET /api/console/v1/missions/:mission_id/events/density`
 
 `{"data": {"bucket_s": 900, "buckets": [{"t", "critical", "caution", "nominal", "info"}], "truncated": false}}`.
-Same filters (no cursor). `bucket_s` is 60–86400 (default: about 96 buckets over the window). Buckets
+Same filters, `plane` included (no cursor). `bucket_s` is 60–86400 (default: about 96 buckets over the window). Buckets
 are aligned to `from`; empty buckets are omitted. The window is at most 31 days, and at most 5,000
 events are counted (`truncated: true` beyond that).
 

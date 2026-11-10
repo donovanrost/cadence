@@ -15,7 +15,8 @@ defmodule Cadence.Reads.EventLog do
 
   alias Cadence.Dashboards.DocumentStore
   alias Cadence.MissionEvents.Entry
-  alias Cadence.Reads.{EventContacts, EventSentences, MissionTimeline}
+  alias Cadence.Reads.{EventContacts, EventSentences, MissionTimeline, SpacecraftMetadata}
+  alias Cadence.SpacecraftStore
 
   @kinds ~w(limit flight_event contact command config operator data)
   @no_names %{spacecraft: %{}, users: %{}, dashboards: %{}, contacts: %{}}
@@ -24,7 +25,11 @@ defmodule Cadence.Reads.EventLog do
   @spec kinds() :: [binary()]
   def kinds, do: @kinds
 
-  @doc "Options: `:from`, `:to`, `:spacecraft_id`, `:kinds` (console kinds), `:limit`, `:cursor`."
+  @doc """
+  Options: `:from`, `:to`, `:spacecraft_id`, `:plane` (the spacecraft in that orbital plane,
+  from spacecraft metadata; with `:spacecraft_id`, only that one if it's in the plane), `:kinds`
+  (console kinds), `:limit`, `:cursor`.
+  """
   @spec page(binary(), binary(), map()) :: {:ok, map()} | {:error, :invalid_cursor}
   def page(organization_id, mission_id, opts) do
     with {:ok, cursor} <- decode_cursor(opts[:cursor]) do
@@ -32,7 +37,7 @@ defmodule Cadence.Reads.EventLog do
         MissionTimeline.page_for_mission(organization_id, mission_id,
           from_occurred_at: opts.from,
           to_occurred_at: opts.to,
-          spacecraft_id: opts[:spacecraft_id],
+          spacecraft_id: spacecraft_filter(organization_id, mission_id, opts),
           limit: opts.limit,
           cursor: cursor
         )
@@ -59,7 +64,7 @@ defmodule Cadence.Reads.EventLog do
       MissionTimeline.list_for_mission(organization_id, mission_id,
         from_occurred_at: opts.from,
         to_occurred_at: opts.to,
-        spacecraft_id: opts[:spacecraft_id],
+        spacecraft_id: spacecraft_filter(organization_id, mission_id, opts),
         limit: @density_cap
       )
 
@@ -229,4 +234,23 @@ defmodule Cadence.Reads.EventLog do
       _invalid -> {:error, :invalid_cursor}
     end
   end
+
+  # A plane filter becomes the list of its spacecraft (an empty plane matches nothing).
+  defp spacecraft_filter(_organization_id, _mission_id, %{plane: nil} = opts),
+    do: opts[:spacecraft_id]
+
+  defp spacecraft_filter(organization_id, mission_id, %{plane: plane} = opts)
+       when is_integer(plane) do
+    in_plane =
+      for craft <- SpacecraftStore.list_spacecraft(organization_id, mission_id),
+          SpacecraftMetadata.integer(craft.metadata || %{}, "plane") == plane,
+          do: craft.spacecraft_id
+
+    case opts[:spacecraft_id] do
+      nil -> in_plane
+      id -> Enum.filter(in_plane, &(&1 == id))
+    end
+  end
+
+  defp spacecraft_filter(_organization_id, _mission_id, opts), do: opts[:spacecraft_id]
 end

@@ -1,6 +1,11 @@
 defmodule CadenceWeb.Console.EventAPITest do
   use CadenceWeb.ConnCase, async: false
 
+  import Ecto.Query
+
+  alias Cadence.Persistence.JsonDocument
+  alias Cadence.Repo
+  alias Cadence.SpacecraftStore.SpacecraftRow
   alias CadenceWeb.ControlPlaneApiFixtures
   alias CadenceWeb.TestFixtures
 
@@ -10,7 +15,13 @@ defmodule CadenceWeb.Console.EventAPITest do
     TestFixtures.grant_membership!(user, org)
     mission = TestFixtures.persist_mission!(org)
     ControlPlaneApiFixtures.seed_mission_read_models(org.organization_id, mission.mission_id)
-    %{user: user, base: "/api/console/v1/missions/#{mission.mission_id}"}
+
+    %{
+      user: user,
+      org: org,
+      mission: mission,
+      base: "/api/console/v1/missions/#{mission.mission_id}"
+    }
   end
 
   # seed_mission_read_models ingests and evaluates limits on 2023-11-15.
@@ -66,5 +77,33 @@ defmodule CadenceWeb.Console.EventAPITest do
     assert json_response(get_json(c, "/events/density?bucket_s=5"), 422)["error"]["details"][
              "bucket_s"
            ]
+  end
+
+  test "filters by orbital plane (Timeline); an empty plane matches nothing", c do
+    events =
+      &(c |> get_json("/events?" <> &1) |> json_response(200) |> get_in(["data", "events"]))
+
+    craft_id =
+      window()
+      |> events.()
+      |> Enum.map(&get_in(&1, ["spacecraft", "id"]))
+      |> Enum.find(&is_binary/1)
+
+    # Put the seeded spacecraft in plane 3 (plane lives in spacecraft metadata).
+    Repo.update_all(
+      from(r in SpacecraftRow,
+        where: r.spacecraft_id == ^craft_id and r.mission_id == ^c.mission.mission_id
+      ),
+      set: [metadata: JsonDocument.wrap_value(%{"plane" => 3})]
+    )
+
+    in_plane = events.("#{window()}&plane=3")
+    assert in_plane != []
+    assert Enum.all?(in_plane, &(get_in(&1, ["spacecraft", "id"]) == craft_id))
+
+    assert events.("#{window()}&plane=7") == []
+
+    assert %{"error" => %{"details" => %{"plane" => _}}} =
+             c |> get_json("/events?#{window()}&plane=north") |> json_response(422)
   end
 end

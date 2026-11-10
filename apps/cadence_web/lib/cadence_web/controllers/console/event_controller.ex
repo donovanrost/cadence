@@ -15,11 +15,13 @@ defmodule CadenceWeb.Console.EventController do
     with {:ok, window} <- WindowParams.parse(params, default_span_s: @day_s, max_span_s: nil),
          {:ok, kinds} <- kinds(params["kind"]),
          {:ok, limit} <- int(params["limit"], :limit, 200, 1..500),
+         {:ok, plane} <- int(params["plane"], :plane, nil, 0..10_000),
          {:ok, page} <-
            EventLog.page(org_id(conn), mission_id(conn), %{
              from: window.from,
              to: window.to,
              spacecraft_id: window.spacecraft_id,
+             plane: plane,
              kinds: kinds,
              limit: limit,
              cursor: params["cursor"]
@@ -37,12 +39,14 @@ defmodule CadenceWeb.Console.EventController do
     with {:ok, window} <-
            WindowParams.parse(params, default_span_s: @day_s, max_span_s: 31 * @day_s),
          {:ok, kinds} <- kinds(params["kind"]),
-         {:ok, bucket_s} <- int(params["bucket_s"], :bucket_s, default_bucket(window), 60..@day_s) do
+         {:ok, bucket_s} <- int(params["bucket_s"], :bucket_s, default_bucket(window), 60..@day_s),
+         {:ok, plane} <- int(params["plane"], :plane, nil, 0..10_000) do
       density =
         EventLog.density(org_id(conn), mission_id(conn), %{
           from: window.from,
           to: window.to,
           spacecraft_id: window.spacecraft_id,
+          plane: plane,
           kinds: kinds,
           bucket_s: bucket_s
         })
