@@ -23,4 +23,13 @@ defmodule CadenceWeb.Console.ConfigErrorsTest do
              }
            } = json_response(conn, 409)
   end
+
+  test "an interrupted apply that didn't land is 503 apply_interrupted (qa #19)" do
+    conn = ConfigJSON.error(build_conn(), :apply_interrupted)
+
+    assert %{"error" => %{"code" => "apply_interrupted", "message" => message}} =
+             json_response(conn, 503)
+
+    assert message =~ "did not take effect"
+  end
 end
