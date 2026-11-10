@@ -81,6 +81,10 @@ defmodule CadenceWeb.Console.Problem do
     member_not_found: {404, "That person isn't a member of this organization."},
     invitation_not_found: {404, "That invitation isn't pending (accepted, revoked or expired)."},
     service_identity_not_found: {404, "That service identity isn't active in this organization."},
+    current_password_incorrect: {422, "The current password isn't right."},
+    password_managed_externally:
+      {409, "This account's password is set by the environment and can't be changed here."},
+    session_not_found: {404, "That session isn't yours or has already ended."},
     last_admin:
       {409, "An organization needs at least one admin. Make someone else an admin first."},
     invalid_params: {422, "The request parameters are invalid."},

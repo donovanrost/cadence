@@ -756,6 +756,12 @@ defmodule CadenceWeb.Router do
     get("/session", SessionController, :show)
     put("/session/organization", SessionController, :update_organization)
 
+    # -- Account (owner: api): the signed-in user's own password and sessions.
+    put("/account/password", AccountController, :change_password)
+    get("/account/sessions", AccountController, :sessions)
+    delete("/account/sessions", AccountController, :revoke_others)
+    delete("/account/sessions/:session_id", AccountController, :revoke_session)
+
     scope "/missions/:mission_id" do
       pipe_through(:console_mission)
 

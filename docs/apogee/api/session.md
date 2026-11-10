@@ -98,3 +98,19 @@ Errors: `404 mission_not_found`.
 `DELETE /session` (the existing browser route) also broadcasts `disconnect` to that session's
 console sockets. After it, the next API call returns `401` and the SPA should redirect to
 `/sign-in`.
+
+## Account: password and sessions (backlog)
+
+The signed-in user's own account, under `/api/console/v1/account` (no organization or mission).
+
+- `PUT /account/password {current_password, new_password}` → `204`. The new password needs at
+  least 12 characters and must differ from the current one. Every **other** session of the user is
+  signed out; this one stays signed in. Errors: `422 current_password_incorrect`, `422
+  invalid_params` (`details.new_password`), `409 password_managed_externally` (the environment
+  admin's password comes from the environment).
+- `GET /account/sessions` → `{sessions: [{id, started_at, expires_at, current}]}`: the user's
+  unexpired sessions, newest first; `current` marks the one making the request. Sessions record no
+  device or address.
+- `DELETE /account/sessions/:id` → `204`: signs that session out. Revoking the current one signs
+  you out here too (the session cookie is dropped). Errors: `404 session_not_found`.
+- `DELETE /account/sessions` → `{revoked: n}`: signs out every session except the current one.
