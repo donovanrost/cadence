@@ -3,9 +3,11 @@ import { ApTable, ApTag, formatAbsolute, plural, type ApColumn } from "@/ui";
 import type { RevisionSummary } from "./shapes.ts";
 
 /** Mission configuration revisions, newest first; the live one is marked. */
-defineProps<{ rows: readonly RevisionSummary[] }>();
+defineProps<{ rows: readonly RevisionSummary[]; selected: readonly number[] }>();
+defineEmits<{ toggle: [revision: number] }>();
 
 const columns: readonly ApColumn[] = [
+  { key: "pick", label: "Compare", hiddenLabel: true },
   { key: "revision", label: "Revision", mono: true },
   { key: "applied", label: "Applied", mono: true },
   { key: "by", label: "By" },
@@ -35,6 +37,15 @@ function kindLabel(row: RevisionSummary): string {
     :row-key="(r) => String(r.revision)"
     caption="Configuration revisions"
   >
+    <template #cell-pick="{ row }">
+      <input
+        type="checkbox"
+        class="size-4 accent-[var(--color-readout)]"
+        :checked="selected.includes(row.revision)"
+        :aria-label="`Compare r${row.revision}`"
+        @change="$emit('toggle', row.revision)"
+      />
+    </template>
     <template #cell-revision="{ row }">
       <span class="inline-flex items-center gap-2"
         ><RouterLink

@@ -121,7 +121,7 @@ export const configStateReader = (value: unknown, path = "") => {
 export const revisionsReader = object({ revisions: array(revisionSummary, 200) });
 
 /** label/unit/entity_name arrive from the server with the readable-diff work (ux review #3). */
-const field = object({
+export const field = object({
   path: string,
   label: optional(nullable(string)),
   unit: optional(nullable(string)),

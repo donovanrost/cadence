@@ -75,6 +75,13 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "readiness", title: "Revisions" },
   },
   {
+    // Changes.md §4: `revisions/r4...r6`.
+    path: "setup/revisions/r:from(\\d+)...r:to(\\d+)",
+    name: "setup.revisions.compare",
+    component: () => import("@/features/changes/CompareScreen.vue"),
+    meta: { mode: "setup", nav: "readiness", title: "Compare revisions" },
+  },
+  {
     path: "setup/revisions/:revision(\\d+)",
     name: "setup.revision",
     component: () => import("@/features/changes/RevisionScreen.vue"),
