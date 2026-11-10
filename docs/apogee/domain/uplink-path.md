@@ -218,3 +218,10 @@ That is main's planned "Recovery commit and readiness contract" in
 
 Until that exists, a mid-pass restart leaves the rest of that pass unable to command; the next
 pass is unaffected.
+
+**Dev note (seed).** The Earendil seed creates uplink routes only when they're missing, so a
+change to the uplink gateway configuration (like #59's `cop1_initialization`) doesn't reach
+existing routes on a re-seed. Re-materialize their legs once on the node:
+`for r <- RoutingRuleStore.list_routing_rules(org, mission), r.direction == :outbound, do:
+RoutingRuleStore.update_routing_rule(org, mission, r.routing_rule_id, %{})`. Already-booked
+passes pick the new profile up when their contact starts.
