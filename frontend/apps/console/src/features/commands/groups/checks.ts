@@ -7,11 +7,13 @@ import type { CheckResult, Preflight, PreflightCheck, TwoPersonReason } from "./
  */
 export const RESULT_STATE: Readonly<Record<CheckResult, OpState>> = {
   go: "nominal",
+  second_go: "neutral",
   hold: "caution",
   no_go: "crit",
 };
 export const RESULT_WORD: Readonly<Record<CheckResult, string>> = {
   go: "GO",
+  second_go: "2ND GO",
   hold: "HOLD",
   no_go: "NO-GO",
 };
@@ -148,7 +150,7 @@ export function checkRows(pf: Preflight, nameOf: TargetName): CheckRow[] {
 /** Header meta `5 GO · 1 HOLD`. */
 export function checkMeta(pf: Preflight): string {
   const n = (r: CheckResult) => pf.checks.filter((c) => c.result === r).length;
-  return (["go", "hold", "no_go"] as const)
+  return (["go", "second_go", "hold", "no_go"] as const)
     .filter((r) => n(r) > 0)
     .map((r) => `${n(r)} ${RESULT_WORD[r]}`)
     .join(" · ");

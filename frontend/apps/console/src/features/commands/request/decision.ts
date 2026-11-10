@@ -29,7 +29,7 @@ export function flaggedTargets(
   if (!review) return [];
   const ids = new Set<string>();
   for (const check of review.checks) {
-    if (check.key === "contact") continue;
+    if (check.key === "contact" || check.key === "two_person") continue;
     for (const t of check.per_target) if (t.result !== "go") ids.add(t.spacecraft_id);
   }
   return [...ids].map((spacecraftId) => ({ spacecraftId, name: nameOf(spacecraftId) }));

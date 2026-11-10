@@ -34,7 +34,8 @@ export type Draft = Readonly<{
 export type HoldAck = Readonly<{ key: string; hold_basis: string | null; note: string }>;
 export const HOLD_NOTE_MAX = 1000;
 
-export const checkResults = ["go", "hold", "no_go"] as const;
+/** #61: second_go = "needs a second GO" (two_person only); informational, never blocks. */
+export const checkResults = ["go", "second_go", "hold", "no_go"] as const;
 export type CheckResult = (typeof checkResults)[number];
 const result = d.oneOf(checkResults);
 

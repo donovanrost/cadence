@@ -7,7 +7,7 @@ import { inTab } from "../list/list.ts";
 import type { GroupRow } from "../groups/api.ts";
 import { cannotDecide, decisionOptions, flaggedTargets, noGoAfter } from "./decision.ts";
 import { abortable, headline, pipeline } from "./uplink.ts";
-import { holdAcksToSend, holdReason } from "../groups/checks.ts";
+import { checkMeta, holdAcksToSend, holdReason } from "../groups/checks.ts";
 
 const target = (id: string, stage: string) => ({
   ...showBody.targets[0],
@@ -387,5 +387,15 @@ describe("HOLDs gate Arm until acked or cleared (DECISIONS #60, qa #35)", () => 
     expect(holdReason(pf, { contact: { basis: "c1", note: "trust me" } }, name)).toBe(
       "Contact HOLD: No booked contact with a confirmed uplink for SC-2 in the release window. Clear it to arm.",
     );
+  });
+});
+
+describe("two_person second_go (DECISIONS #61)", () => {
+  it("decodes, reads as 2ND GO, and never gates Arm", () => {
+    const pf = review([
+      { key: "two_person", result: "second_go", per_target: [], evidence: { reasons: [] } },
+    ]);
+    expect(holdReason(pf, {}, name)).toBeNull();
+    expect(checkMeta(pf)).toBe("1 2ND GO");
   });
 });
