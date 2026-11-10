@@ -1,7 +1,7 @@
 import { decoders, request, type ApiError, type ApiResult, type Decoded } from "@/api";
 
 /** Change-set writes and the dry run. Contract: docs/apogee/api/changes.md. */
-const { array, integer, nullable, object, oneOf, string, token } = decoders;
+const { array, boolean, integer, nullable, object, oneOf, string, token } = decoders;
 
 const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/config`;
 const verdict = oneOf(["go", "hold", "no_go"]);
@@ -94,7 +94,25 @@ export function humanize(key: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+/** #65 catalog generations: holds that acknowledging can't clear, and what clears them. */
+const blockingNext: Readonly<Record<string, string>> = {
+  catalog_command_in_flight: "Apply when those commands finish.",
+  catalog_configuration_pending: "Activate or discard the pending configuration first.",
+};
+
+/** The first blocking item's "can't apply yet" line, or null when nothing blocks. */
+export function blockingReason(preview: Preview): string | null {
+  for (const check of preview.checks)
+    for (const item of check.items) {
+      const next = item.reason ? blockingNext[item.reason] : undefined;
+      if (next) return `Can't apply yet: ${item.sentence ?? humanize(item.reason ?? "")} ${next}`;
+    }
+  return null;
+}
+
 export function itemLine(item: PreviewItem, leftBy?: string): string {
+  const next = item.reason ? blockingNext[item.reason] : undefined;
+  if (next) return `Can't apply yet: ${item.sentence ?? humanize(item.reason ?? "")} ${next}`;
   const conflict = conflictSentences(item, leftBy);
   if (conflict) return conflict;
   // A plain sentence with its raw detail split off reads on its own (ux rollback review #7).
@@ -137,7 +155,16 @@ export type DiffEntry = Decoded<typeof diffEntry>;
 export const previewReader = object({
   verdict,
   diffs: decoders.optional(array(diffEntry, 5000)),
-  checks: array(object({ key: token, verdict, items: array(previewItem, 500) }), 20),
+  checks: array(
+    object({
+      key: token,
+      verdict,
+      /** #65: true when an item can't be acknowledged away (apply waits for it to clear). */
+      blocking: decoders.optional(boolean),
+      items: array(previewItem, 500),
+    }),
+    20,
+  ),
   effects: array(
     object({
       op_id: token,
@@ -251,6 +278,10 @@ export function rejectionSentence(error: ApiError): string {
       return "Checks failed: nothing changed. Fix the NO-GO items and try again.";
     case "holds_not_acknowledged":
       return "Read and acknowledge the holds before applying.";
+    case "holds_blocking":
+      return "A blocking hold remains, so nothing was applied. It can't be acknowledged; apply once it clears (see the checks).";
+    case "catalog_command_in_flight":
+      return "Commands started on the affected spacecraft, so nothing was applied. Try again when they finish.";
     case "reason_required":
       return "Say why (10 characters or more).";
     case "comment_required":

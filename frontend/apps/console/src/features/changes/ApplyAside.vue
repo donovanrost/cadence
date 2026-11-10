@@ -2,7 +2,13 @@
 import { computed, ref } from "vue";
 import type { RemoteState } from "@/api";
 import { ApButton, ApCallout, ApField, ApPanel, ApStatTile } from "@/ui";
-import { failureOutcome, submitChangeSet, type Preview, type SubmitResult } from "./actions.ts";
+import {
+  blockingReason,
+  failureOutcome,
+  submitChangeSet,
+  type Preview,
+  type SubmitResult,
+} from "./actions.ts";
 import type { ChangeSet, ConfigState } from "./shapes.ts";
 
 /** K3 Apply: why (required), holds acknowledgement, apply or request review (mission policy). */
@@ -24,6 +30,10 @@ const verdict = computed(() =>
   props.preview.status === "ready" ? props.preview.value.verdict : null,
 );
 
+/** #65: a blocking hold can't be acknowledged away, so the checkbox doesn't show for it. */
+const blocking = computed(() =>
+  props.preview.status === "ready" ? blockingReason(props.preview.value) : null,
+);
 const blocked = computed((): string | null => {
   if (props.changeSet.state === "in_review")
     return `r${next.value} is in review; staging is paused.`;
@@ -31,6 +41,7 @@ const blocked = computed((): string | null => {
     return "You can stage changes but not apply them.";
   if (verdict.value === null) return "Waiting for checks.";
   if (verdict.value === "no_go") return "A NO-GO check blocks apply. Fix it first.";
+  if (blocking.value) return blocking.value;
   if (verdict.value === "hold" && !acknowledged.value) return "Acknowledge the holds first.";
   if (why.value.trim().length < 10) return "Say why (10 characters or more).";
   return null;
@@ -65,7 +76,10 @@ async function apply() {
         <ApStatTile label="Authors" :value="changeSet.authors.length" />
       </div>
       <ApField v-model="why" label="Why" placeholder="Goes in the revision and the audit log" />
-      <label v-if="verdict === 'hold'" class="flex items-center gap-2 text-md text-readout">
+      <label
+        v-if="verdict === 'hold' && !blocking"
+        class="flex items-center gap-2 text-md text-readout"
+      >
         <input
           v-model="acknowledged"
           type="checkbox"

@@ -258,3 +258,34 @@ describe("failureOutcome on 5xx (qa #19)", () => {
     );
   });
 });
+
+describe("#65 blocking holds", () => {
+  it("reads blocking items as 'can't apply yet' with what clears them", async () => {
+    const { blockingReason, rejectionSentence } = await import("./actions.ts");
+    const preview = decode(previewReader, {
+      verdict: "hold",
+      checks: [
+        {
+          key: "compatibility",
+          verdict: "hold",
+          blocking: true,
+          items: [
+            {
+              kind: "spacecraft",
+              reason: "catalog_command_in_flight",
+              sentence: "SET_MODE is radiating on EARENDIL-004.",
+            },
+          ],
+        },
+      ],
+      effects: [],
+    });
+    if (!preview.ok) throw preview.error;
+    expect(blockingReason(preview.value)).toBe(
+      "Can't apply yet: SET_MODE is radiating on EARENDIL-004. Apply when those commands finish.",
+    );
+    expect(
+      rejectionSentence({ kind: "conflict", code: "holds_blocking", message: "x", details: null }),
+    ).toContain("It can't be acknowledged");
+  });
+});
