@@ -130,3 +130,18 @@ export function groupDiagnostics(diagnostics: readonly Diagnostic[]): readonly D
     .map(([key, g]) => ({ key, ...g }))
     .sort((a, b) => rank[a.severity] - rank[b.severity] || b.count - a.count);
 }
+
+/** Catalog.md C1 strip: "212→218" with "+7 ~4 −1" (zero parts dropped; "no changes" when none). */
+export function kindTile(
+  c: Readonly<{ before: number; after: number; added: number; changed: number; removed: number }>,
+): Readonly<{ value: string; caption: string }> {
+  const parts = [
+    c.added > 0 ? `+${c.added}` : null,
+    c.changed > 0 ? `~${c.changed}` : null,
+    c.removed > 0 ? `−${c.removed}` : null,
+  ].filter(Boolean);
+  return {
+    value: c.before === c.after ? String(c.after) : `${c.before}→${c.after}`,
+    caption: parts.length > 0 ? parts.join(" ") : "no changes",
+  };
+}

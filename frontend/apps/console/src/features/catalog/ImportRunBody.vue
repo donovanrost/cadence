@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApCallout, ApStatTile, formatCount, plural } from "@/ui";
+import { ApCallout, plural } from "@/ui";
 import DiagnosticsPanel from "./DiagnosticsPanel.vue";
 import DiffPanel from "./DiffPanel.vue";
+import DiffStrip from "./DiffStrip.vue";
 import { formatBytes, severityCounts, type ImportRunDetail } from "./importRun.ts";
 
 /** File line, verdict, stats, diff (when available) and diagnostics for one import run. */
@@ -44,25 +45,7 @@ const fileLine = computed(() =>
     }}. Unsupported items were skipped; see the diagnostics.
   </ApCallout>
   <ApCallout v-else tone="nominal">Parsed and validated, no schema errors.</ApCallout>
-  <div
-    v-if="run.status === 'succeeded'"
-    class="grid w-fit auto-cols-[minmax(160px,220px)] grid-flow-col gap-px border border-hairline bg-hairline"
-  >
-    <!-- api: the importer's own count of what it read from the file, not a model total. -->
-    <ApStatTile label="Declarations" :value="run.declaration_count" caption="read from this file" />
-    <ApStatTile
-      v-if="run.diff"
-      label="Unchanged"
-      :value="run.diff.summary.unchanged"
-      :caption="`of ${formatCount(run.diff.summary.total_before)} commands and telemetry`"
-    />
-    <ApStatTile
-      v-if="run.diff?.summary.breaking != null"
-      label="Breaking"
-      :value="run.diff.summary.breaking"
-      :state="run.diff.summary.breaking > 0 ? 'caution' : 'neutral'"
-    />
-  </div>
+  <DiffStrip v-if="run.status === 'succeeded'" :run="run" />
   <DiffPanel v-if="run.diff" :diff="run.diff" :base-number="run.base_revision?.number ?? null" />
   <ApCallout v-else-if="run.status === 'succeeded'" tone="info">{{
     run.base_revision

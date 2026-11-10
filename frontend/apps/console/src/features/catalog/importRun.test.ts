@@ -47,3 +47,20 @@ describe("importRunReader diff (api cab661fe)", () => {
     expect(r.value.base_revision?.number).toBe(2);
   });
 });
+
+describe("kindTile (Catalog.md C1 strip)", () => {
+  it("shows before→after with +added ~changed −removed, or no changes", async () => {
+    const { kindTile } = await import("./importRun.ts");
+    expect(kindTile({ before: 212, after: 218, added: 7, changed: 4, removed: 1 })).toEqual({
+      value: "212→218",
+      caption: "+7 ~4 −1",
+    });
+    expect(kindTile({ before: 27, after: 27, added: 0, changed: 3, removed: 0 })).toEqual({
+      value: "27",
+      caption: "~3",
+    });
+    expect(kindTile({ before: 5, after: 5, added: 0, changed: 0, removed: 0 }).caption).toBe(
+      "no changes",
+    );
+  });
+});
