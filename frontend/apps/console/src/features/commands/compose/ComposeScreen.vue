@@ -162,7 +162,7 @@ const close = computed(() => {
     <ApEmptyState
       state="off"
       headline="You can't command on this mission"
-      :sentence="`Your access in ${scope.organization.name} doesn't include requesting commands. An organization admin can change that.`"
+      :sentence="`Requesting commands needs operate access to a mission in ${scope.organization.name}. An organization admin can grant it.`"
     >
       <ApButton size="compact" :to="close">Back</ApButton>
     </ApEmptyState>
