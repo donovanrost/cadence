@@ -42,9 +42,16 @@ const open = defineModel<string | null>("open", { required: true });
           </button>
           <ApTag v-if="item.command.hazardous" state="crit" label="Hazardous" />
           <ApTag v-if="!checkItem(item).ok" state="caution" label="Needs values" />
-          <span class="order-last min-w-0 basis-full truncate font-mono text-sm text-text-3">{{
-            argSummary(item).join(" · ")
-          }}</span>
+          <!-- ux Compose ruling #1: the value summary reopens the form. -->
+          <button
+            v-if="item.command.arguments.length"
+            type="button"
+            class="order-last min-w-0 basis-full cursor-pointer truncate text-left font-mono text-sm text-text-3 hover:text-readout hover:underline"
+            :aria-label="`Edit ${item.command.name} values: ${argSummary(item).join(', ') || 'none set'}`"
+            @click="open = item.key"
+          >
+            {{ argSummary(item).join(" · ") || "Set values" }}
+          </button>
           <span aria-hidden="true" class="flex-1" />
           <span class="flex flex-none gap-1">
             <ApButton

@@ -76,3 +76,23 @@ export function secondGoReasons(
     reasons.push(`${targetCount} targets is fleet reach (${fleetReach} or more)`);
   return reasons;
 }
+
+/**
+ * The verifier line in a command's form (ux Compose ruling #3, CommandFlow: only Verify turns
+ * green): "Verifies MODE_CHANGED within 60 s", or "No verifier: this command can't turn green".
+ * Completion verifiers name what green means; others are listed when there's no completion one.
+ */
+export function verifierLine(
+  command: Readonly<{
+    verifiers: readonly Readonly<{ name: string; phase: string; timeout_ms: number | null }>[];
+  }>,
+): Readonly<{ text: string; verifiable: boolean }> {
+  const all = command.verifiers;
+  if (all.length === 0)
+    return { text: "No verifier: this command can't turn green", verifiable: false };
+  const completion = all.filter((v) => v.phase === "completion");
+  const shown = completion.length ? completion : all;
+  const longest = Math.max(...shown.map((v) => v.timeout_ms ?? 0));
+  const within = longest > 0 ? ` within ${Math.round(longest / 1000)} s` : "";
+  return { text: `Verifies ${shown.map((v) => v.name).join(", ")}${within}`, verifiable: true };
+}

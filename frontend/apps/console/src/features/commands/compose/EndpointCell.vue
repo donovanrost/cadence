@@ -11,6 +11,8 @@ const props = defineProps<{
   name: string;
   info: TargetEndpoints | undefined;
   override: string | undefined;
+  /** ux Compose ruling #2: the route, as station · provider ("SVB-1 · Northlight"); null drops it. */
+  via: string | null;
 }>();
 const emit = defineEmits<{ change: [endpointId: string | null] }>();
 
@@ -37,7 +39,9 @@ const choice = computed({
 <template>
   <span v-if="info" class="flex items-center justify-end gap-2">
     <ApTag v-if="override" state="caution" label="OVERRIDE" />
-    <span v-else-if="resolved" class="font-mono text-sm text-text-3">via {{ resolved }}</span>
+    <template v-else-if="resolved"
+      ><span v-if="via" class="font-mono text-sm text-text-3">via {{ via }}</span></template
+    >
     <span v-else class="font-mono text-sm text-caution-text">{{
       FAILURE_WORDS[info.failure ?? ""] ?? "No uplink endpoint"
     }}</span>

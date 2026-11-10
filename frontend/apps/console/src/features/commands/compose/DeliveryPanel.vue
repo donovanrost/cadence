@@ -3,6 +3,8 @@ import { computed } from "vue";
 import { formatCountdown, useNow, ApEmptyState, ApPanel, ApStatusMark } from "@/ui";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import type { NextContact, TargetEndpoints } from "../groups/api.ts";
+import { useMissionScope } from "@/shell/index.ts";
+import { useStationCodes } from "@/features/contacts/useStationCodes.ts";
 import EndpointCell from "./EndpointCell.vue";
 
 /**
@@ -20,13 +22,26 @@ const props = defineProps<{
 defineEmits<{ override: [spacecraftId: string, endpointId: string | null] }>();
 const now = useNow();
 const LIMIT = 40;
-type Row = { sc: FleetSpacecraft; aos: string | null; station: string | null };
+type Row = { sc: FleetSpacecraft; aos: string | null; station: string | null; ref: string | null };
+const scope = useMissionScope();
+const stations = useStationCodes(computed(() => scope.value.mission.id));
+/** "SVB-1 · Northlight": the contact's station and its provider from the stations index. */
+const via = (r: Row) => {
+  if (!r.station) return null;
+  const provider = stations.provider(r.ref) ?? stations.provider(r.station);
+  return provider ? `${r.station} · ${provider}` : r.station;
+};
 const all = computed<Row[]>(() =>
   props.targets.map((sc) => {
     const c = props.contacts?.get(sc.id);
     return c === undefined
-      ? { sc, aos: sc.next_aos_at, station: null }
-      : { sc, aos: c?.aos ?? null, station: c?.station_code ?? null };
+      ? { sc, aos: sc.next_aos_at, station: null, ref: null }
+      : {
+          sc,
+          aos: c?.aos ?? null,
+          station: c?.station_code ?? null,
+          ref: c?.ground_station_ref ?? null,
+        };
   }),
 );
 const rows = computed(() =>
@@ -42,25 +57,22 @@ const noContact = computed(() => all.value.filter((r) => r.aos === null).length)
     <ApEmptyState v-if="targets.length === 0" headline="No targets yet" />
     <ul v-else class="m-0 list-none p-0">
       <li
-        v-for="{ sc, aos, station } in rows"
-        :key="sc.id"
+        v-for="row in rows"
+        :key="row.sc.id"
         class="flex items-center gap-3 border-t border-hairline-faint px-4 py-1.5 first:border-t-0"
       >
-        <ApStatusMark :state="aos ? 'live' : 'caution'" />
-        <span class="w-32 font-mono text-md text-readout">{{ sc.name }}</span>
-        <span class="font-mono text-sm" :class="aos ? 'text-text-2' : 'text-caution-text'">
-          {{
-            aos
-              ? `AOS ${formatCountdown(new Date(aos), now)}${station ? ` · ${station}` : ""}`
-              : "No booked contact"
-          }}
+        <ApStatusMark :state="row.aos ? 'live' : 'caution'" />
+        <span class="w-32 font-mono text-md text-readout">{{ row.sc.name }}</span>
+        <span class="font-mono text-sm" :class="row.aos ? 'text-text-2' : 'text-caution-text'">
+          {{ row.aos ? `AOS ${formatCountdown(new Date(row.aos), now)}` : "No booked contact" }}
         </span>
         <EndpointCell
           class="ml-auto"
-          :name="sc.name"
-          :info="endpoints.get(sc.id)"
-          :override="overrides[sc.id]"
-          @change="(id) => $emit('override', sc.id, id)"
+          :name="row.sc.name"
+          :info="endpoints.get(row.sc.id)"
+          :override="overrides[row.sc.id]"
+          :via="via(row)"
+          @change="(id) => $emit('override', row.sc.id, id)"
         />
       </li>
       <li

@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, useTemplateRef } from "vue";
 import { ApCallout } from "@/ui";
 import ArgField from "./ArgField.vue";
-import { checkItem, type StackItem } from "./stack.ts";
+import { checkItem, verifierLine, type StackItem } from "./stack.ts";
 
 /** Inline form for one stack row: every argument from the catalog, errors inline. */
 const props = defineProps<{ item: StackItem }>();
@@ -15,6 +15,23 @@ onMounted(() => {
   );
 });
 const check = computed(() => checkItem(props.item));
+const verifier = computed(() => verifierLine(props.item.command));
+/**
+ * ↵ closes the row only when every value checks (ux Compose ruling #1). Otherwise the form stays
+ * open and focus goes to the first invalid field, so nothing is left at NEEDS VALUES unseen.
+ */
+function submit() {
+  if (check.value.ok) {
+    emit("done");
+    return;
+  }
+  void nextTick(() =>
+    (
+      root.value?.querySelector<HTMLElement>("[aria-invalid='true']") ??
+      root.value?.querySelector<HTMLElement>("input, select, textarea, [role=radio]")
+    )?.focus(),
+  );
+}
 const set = (argId: string, value: string) =>
   emit("change", { ...props.item.values, [argId]: value });
 </script>
@@ -23,9 +40,15 @@ const set = (argId: string, value: string) =>
   <form
     ref="root"
     class="flex flex-col gap-3 border-t border-hairline-faint bg-vacuum/40 px-4 py-3"
-    @submit.prevent="emit('done')"
+    @submit.prevent="submit"
   >
     <button type="submit" class="sr-only">Done</button>
+    <p
+      class="m-0 font-mono text-xs uppercase"
+      :class="verifier.verifiable ? 'text-text-2' : 'text-stale-text'"
+    >
+      {{ verifier.text }}
+    </p>
     <p
       v-if="item.command.arguments.length === 0"
       class="m-0 font-mono text-xs text-text-4 uppercase"

@@ -69,12 +69,12 @@ function addFirst() {
               class="flex min-h-11 w-full cursor-pointer items-center gap-3 px-3 py-1.5 text-left hover:bg-raised"
               @click="emit('add', cmd.id)"
             >
-              <span class="font-mono text-md text-readout">{{ cmd.name }}</span>
+              <span class="flex-none font-mono text-md text-readout">{{ cmd.name }}</span>
               <span class="min-w-0 flex-1 truncate text-md text-text-3">{{
                 cmd.description ?? ""
               }}</span>
               <ApTag v-if="cmd.hazardous" state="crit" label="Hazardous" />
-              <span class="font-mono text-xs text-text-4">{{
+              <span class="flex-none font-mono text-xs whitespace-nowrap text-text-4">{{
                 plural(cmd.argument_count, "arg")
               }}</span>
             </button>

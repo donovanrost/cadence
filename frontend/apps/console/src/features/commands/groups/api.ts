@@ -45,7 +45,13 @@ export type MemberFailure = Decoded<typeof memberFailure>;
 const failureReason: Reader<string | readonly MemberFailure[]> = (value, path = "") =>
   typeof value === "string" ? d.token(value, path) : d.array(memberFailure, 16)(value, path);
 
-const nextContact = d.object({ station_code: d.string, aos: d.timestamp, los: d.timestamp });
+const nextContact = d.object({
+  station_code: d.string,
+  /** f57e5fff: the station's ref, to name its provider from the stations index. */
+  ground_station_ref: d.optional(d.nullable(d.token)),
+  aos: d.timestamp,
+  los: d.timestamp,
+});
 export type NextContact = Decoded<typeof nextContact>;
 
 /** A route named by an identity NO-GO (DECISIONS #41), so the screen can link to its routing. */

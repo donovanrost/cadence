@@ -14,7 +14,12 @@ export function useStationCodes(missionId: Ref<string | null>): StationLookup {
   useMissionInvalidation(missionId, ["configuration", "stations"], query.refetch);
   const byId = computed(() => {
     const s = query.state.value;
-    return new Map(s.status === "ready" ? s.value.stations.map((st) => [st.id, st] as const) : []);
+    // Keyed by id and by code, so a contact that names only its station code still resolves.
+    const rows = s.status === "ready" ? s.value.stations : [];
+    return new Map([
+      ...rows.map((st) => [st.id, st] as const),
+      ...rows.flatMap((st) => (st.code ? [[st.code, st] as const] : [])),
+    ]);
   });
   const get = (ref: string | null | undefined) => (ref ? byId.value.get(ref) : undefined);
   return {

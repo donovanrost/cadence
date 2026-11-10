@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import type { CommandDetail } from "../api.ts";
-import { argSummary, checkItem, move, newItem, secondGoReasons } from "./stack.ts";
+import { verifierLine, argSummary, checkItem, move, newItem, secondGoReasons } from "./stack.ts";
 import { chipWords, EMPTY_QUERY, queryFromRoute, resolveTargets } from "./targets.ts";
 
 const fleet = [
@@ -103,5 +103,22 @@ describe("compose stack", () => {
       "12 targets is fleet reach (10 or more)",
     ]);
     expect(secondGoReasons([newItem(command())], 3, 10)).toEqual([]);
+  });
+});
+
+describe("verifier line (ux Compose ruling #3)", () => {
+  it("names completion verifiers and their window, or says it can't turn green", () => {
+    expect(
+      verifierLine({
+        verifiers: [
+          { name: "ACCEPTED", phase: "acceptance", timeout_ms: 5000 },
+          { name: "MODE_CHANGED", phase: "completion", timeout_ms: 60_000 },
+        ],
+      }),
+    ).toEqual({ text: "Verifies MODE_CHANGED within 60 s", verifiable: true });
+    expect(verifierLine({ verifiers: [] })).toEqual({
+      text: "No verifier: this command can't turn green",
+      verifiable: false,
+    });
   });
 });

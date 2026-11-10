@@ -104,7 +104,7 @@ const notBefore = computed({
         v-model="title"
         label="Title"
         required
-        placeholder="Load shed after VBAT red on 312"
+        placeholder="e.g. Load shed after VBAT red on 312"
         hint="The headline your approver and the log see."
       />
       <ApTextarea
