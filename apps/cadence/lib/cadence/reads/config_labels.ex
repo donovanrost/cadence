@@ -38,12 +38,13 @@ defmodule Cadence.Reads.ConfigLabels do
     }
   end
 
-  @doc "Adds display fields to a revision's entries."
+  @doc "Adds display fields to a revision's entries (or a compare's, which carry no documents)."
   @spec revision(binary(), binary(), map()) :: map()
   def revision(organization_id, mission_id, %{entries: entries} = revision) do
     documented =
       Map.new(entries, fn entry ->
-        {{entry.kind, entry.entity_id}, name_of(entry.after) || name_of(entry.before)}
+        {{entry.kind, entry.entity_id},
+         name_of(Map.get(entry, :after)) || name_of(Map.get(entry, :before))}
       end)
 
     names = names(organization_id, mission_id, entries, documented)

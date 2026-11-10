@@ -106,6 +106,11 @@ defmodule CadenceWeb.Console.ConfigAPITest do
 
     compare = c.alice |> call(:get, c.base <> "/compare?from=1&to=2") |> json_response(200)
     assert %{"from" => 1, "to" => 2, "entries" => [_ | _]} = compare["data"]
+
+    # The same display fields as revision entries (fe-setup): the entity's name, field labels.
+    [entry | _] = compare["data"]["entries"]
+    assert Map.has_key?(entry, "entity_name")
+    assert Enum.all?(entry["fields"], &Map.has_key?(&1, "label"))
   end
 
   test "independent approval: the author can't review; another member approves", c do

@@ -102,7 +102,15 @@ defmodule CadenceWeb.Console.ConfigController do
     with {:ok, from} <- params(ConfigParams.revision_number(params["from"])),
          {:ok, to} <- params(ConfigParams.revision_number(params["to"])),
          {:ok, entries} <- Configuration.compare(scope(conn), mission_id(conn), from, to) do
-      ok(conn, %{from: from, to: to, entries: entries})
+      # The same display fields as a revision's entries (fe-setup).
+      ok(
+        conn,
+        ConfigLabels.revision(scope(conn).organization_id, mission_id(conn), %{
+          from: from,
+          to: to,
+          entries: entries
+        })
+      )
     end
     |> reply(conn)
   end

@@ -139,7 +139,7 @@ For example: "frame size is 1,024 now, not 900 as r8 left it (changed in r9 by M
 
 **Display fields.** Previews (set, ops and rollback) and revisions carry names for the console's
 sentences:
-- conflict items, preview diffs and revision entries have `entity_name`: the entity's name, a
+- conflict items, preview diffs, revision entries and compare entries have `entity_name`: the entity's name, a
   spacecraft's name for overrides and routes, or `null`;
 - each `paths[]` / `fields[]` entry has the kind schema's `label` and `unit`, or `null` when the
   path isn't a schema field. Kinds without an edit schema use their editors' labels: profile paths
