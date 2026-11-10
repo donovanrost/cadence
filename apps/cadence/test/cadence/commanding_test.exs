@@ -19,6 +19,7 @@ defmodule Cadence.CommandingTest do
     CommandStage,
     CommandVerifierInstance,
     ReleaseStore,
+    ReleaseTargetGuard,
     ReleaseTargetSelection,
     RequestQueueStore,
     StagedCommandItem
@@ -1300,7 +1301,8 @@ defmodule Cadence.CommandingTest do
           Spacecraft.new(%{
             spacecraft_id: "spacecraft-bravo",
             mission_id: @mission_id,
-            display_name: "SC Bravo"
+            display_name: "SC Bravo",
+            scid: 1
           })
         )
 
@@ -1388,9 +1390,67 @@ defmodule Cadence.CommandingTest do
 
       assert id == alpha.realized_contact_id
     end
+
+    test "a gateway that doesn't name a SCID is refused, never sent", c do
+      contact = uplink_contact_38([c.alpha], c.alpha, %{})
+
+      assert {:error,
+              {:command_release_refused, attempt_id,
+               {:uplink_gateway_scid_unknown, "uplink-gateway-alpha"}}} =
+               release_38(c, contact)
+
+      assert {:ok, %{lifecycle_state: :release_failed}} =
+               Cadence.Commanding.fetch_command_release_attempt(
+                 @organization_id,
+                 @mission_id,
+                 attempt_id
+               )
+
+      assert uplinks_sent_38(attempt_id) == 0
+    end
+
+    test "a gateway SCID is compared exactly: integer or whole-number string, else refused", c do
+      check = fn scid ->
+        config = if scid == :none, do: %{}, else: %{"scid" => scid}
+
+        contact =
+          RealizedContact.new(%{
+            realized_contact_id: "rc-38",
+            organization_id: @organization_id,
+            mission_id: @mission_id,
+            source_endpoint_refs: [c.alpha],
+            clock_mode: :replay,
+            initial_time: DateTime.from_unix!(1_700_400_000, :second)
+          })
+
+        ReleaseTargetGuard.check(
+          @organization_id,
+          @mission_id,
+          c.alpha,
+          contact,
+          Path.new(%{path_id: "uplink-38", direction: :uplink, source_endpoint_ref: c.alpha}),
+          TransportBinding.new(%{
+            transport_binding_id: "gw-38",
+            family_key: :uplink_gateway,
+            target_scope: :path,
+            configuration: config
+          })
+        )
+      end
+
+      assert check.(0) == :ok
+      assert check.("0") == :ok
+
+      for foreign <- [1, "1"],
+          do:
+            assert(check.(foreign) == {:error, {:release_gateway_not_target_spacecraft, "gw-38"}})
+
+      for unknown <- [:none, nil, "", "0x", " 0", "0 ", "zero", 0.0, [0]],
+          do: assert(check.(unknown) == {:error, {:uplink_gateway_scid_unknown, "gw-38"}})
+    end
   end
 
-  defp uplink_contact_38(contact_endpoints, path_endpoint) do
+  defp uplink_contact_38(contact_endpoints, path_endpoint, gateway_config \\ %{"scid" => 0}) do
     contact =
       RealizedContact.new(%{
         realized_contact_id:
@@ -1411,7 +1471,7 @@ defmodule Cadence.CommandingTest do
                 transport_binding_id: "uplink-gateway-alpha",
                 family_key: :uplink_gateway,
                 target_scope: :path,
-                configuration: %{"service_name" => "gateway"}
+                configuration: Map.put(gateway_config, "service_name", "gateway")
               })
             ]
           })
@@ -1452,7 +1512,8 @@ defmodule Cadence.CommandingTest do
       Spacecraft.new(%{
         spacecraft_id: @spacecraft_id,
         mission_id: @mission_id,
-        display_name: "SC Alpha"
+        display_name: "SC Alpha",
+        scid: 0
       })
 
     assert {:ok, _spacecraft} =
@@ -1640,7 +1701,8 @@ defmodule Cadence.CommandingTest do
                 transport_binding_id: "uplink-gateway-alpha",
                 family_key: :uplink_gateway,
                 target_scope: :path,
-                configuration: transport_configuration
+                # #38: a release gateway names its spacecraft (SC Alpha's SCID).
+                configuration: Map.put_new(transport_configuration, "scid", 0)
               })
             ]
           })
