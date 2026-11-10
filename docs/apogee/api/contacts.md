@@ -135,12 +135,14 @@ ships.
     Map it to words; an unknown key falls back to sentence case.
   - `since` is when the state began (`null` if unknown). `command_groups_queued` is the number of
     queued groups waiting for this pass; it makes `blocked` crit (> 0) or caution (0).
-  - The whole field is `null` when the pass has no uplink to be ready (downlink-only, or not
-    booked).
+  - The whole field is `null` when the pass has no live uplink session: a future pass before its
+    session starts, a downlink-only pass, or one that isn't booked. Show no tag then, as for `ready`.
+    Readiness comes from the live sessions (domain `Reads.UplinkReadiness`).
 - **Command groups** (list rows and show) gain `uplink`:
   `{pass: {reservation_id, contact_id, station {ref, id, code, name}, starts_at}, readiness:
-  {state, reason, since}}` for the pass the group is queued for, or `null` (no pass yet, or not
-  queued).
+  {state, reason, since} | null}` for the pass the group will release on, or `null` (no pass yet,
+  or not queued). Groups queue per spacecraft lane, not per contact, so the pass is the
+  spacecraft's current active uplink contact, else its next booked one (domain's rule).
 - **`POST /api/console/v1/missions/:mission_id/passes/:id/recover-uplink`** (no body,
   `operate_mission`, audited, safe to repeat) re-runs the automatic recovery.
   - Returns `{data: {state: ready | recovering, ready_at}}`.
@@ -156,7 +158,7 @@ ships.
   - plus `uplink: {state: "blocked", reason, since, command_group_ids: [...]}` (`null` on
     `pass_resolution` items).
   - `resolved[]` entries: `resolved_by {kind: "system"}`, `action` `uplink recovered` (or
-    `no command groups queued`).
+    `no groups queued`).
   - `/counts.attention` counts both sources.
 
 ## S10: `contacts` invalidation
