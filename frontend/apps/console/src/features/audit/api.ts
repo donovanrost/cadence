@@ -1,7 +1,7 @@
 import { decoders, request, type ApiResult, type Decoded } from "@/api";
 
 /** Contract: docs/apogee/api/setup.md, `GET /organizations/:id/audit` (AU1). */
-const { array, nullable, object, oneOf, string, timestamp, token } = decoders;
+const { array, nullable, object, string, timestamp, token } = decoders;
 
 export const auditKinds = ["config", "commanding", "access", "alarms", "contacts", "data"] as const;
 export type AuditKind = (typeof auditKinds)[number];
@@ -14,7 +14,8 @@ const event = object({
   at: timestamp,
   // Settings history carries only the actor's name (id null); some records have no actor.
   actor: nullable(object({ kind: token, id: nullable(token), name: string })),
-  kind: oneOf(auditKinds),
+  // A source the console doesn't know yet (api is adding more) decodes; kindText labels it.
+  kind: token,
   action: string,
   // Revision targets carry their integer number as the id; settings carry the section key.
   target: nullable(object({ kind: token, id: idText, label: string })),
@@ -24,8 +25,8 @@ const event = object({
 export const auditReader = object({
   events: array(event, 1000),
   sources: object({
-    included: array(oneOf(auditKinds), 10),
-    missing: array(oneOf(auditKinds), 10),
+    included: array(token, 20),
+    missing: array(token, 20),
   }),
   next_cursor: nullable(string),
 });
@@ -67,6 +68,14 @@ export const kindLabel: Readonly<Record<AuditKind, string>> = {
   contacts: "Contacts",
   data: "Data",
 };
+
+/** A kind or source in words: the known label, else the key humanized ("provider_accounts" → "Provider accounts"). */
+export function kindText(kind: string): string {
+  const known = auditKinds.find((k) => k === kind);
+  if (known) return kindLabel[known];
+  const words = kind.replaceAll("_", " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
 
 export type AuditRow = AuditEvent & Readonly<{ repeat: number }>;
 

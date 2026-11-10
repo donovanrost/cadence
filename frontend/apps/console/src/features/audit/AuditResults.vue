@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ApButton, ApCallout, ApEmptyState, ApPanel, formatCount } from "@/ui";
 import AuditTable from "./AuditTable.vue";
-import { kindLabel, listWords, type AuditEvent, type AuditPage } from "./api.ts";
+import { kindText, listWords, type AuditEvent, type AuditPage } from "./api.ts";
 
 /** Audit log results: missing-sources note, the table, and Load older (cursor paging). */
 defineProps<{
@@ -14,7 +14,7 @@ defineProps<{
 }>();
 defineEmits<{ older: [] }>();
 const words = (p: AuditPage, which: "included" | "missing") =>
-  listWords(p.sources[which].map((k) => kindLabel[k].toLowerCase()));
+  listWords(p.sources[which].map((k) => kindText(k).toLowerCase()));
 const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 </script>
 
