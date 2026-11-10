@@ -419,9 +419,21 @@ defmodule Cadence.Commanding do
       fn organization_id, mission_id ->
         VerifierStore.pending_entries(repo, organization_id, mission_id)
       end,
-      &VerifierStore.apply_updates(repo, &1)
+      &VerifierStore.apply_updates(repo, &1),
+      &verifier_target_spacecraft/3
     )
   end
+
+  # SAFETY (#38): a telemetry verifier reads only its command's target spacecraft.
+  defp verifier_target_spacecraft(organization_id, mission_id, source_endpoint_ref)
+       when is_binary(source_endpoint_ref) do
+    case ReleaseTargetGuard.target(organization_id, mission_id, source_endpoint_ref) do
+      {:ok, spacecraft_id} -> spacecraft_id
+      {:error, _unknown} -> nil
+    end
+  end
+
+  defp verifier_target_spacecraft(_organization_id, _mission_id, _source_endpoint_ref), do: nil
 
   @spec evaluate_transport_command_verifiers(
           [TransportCapabilityRecord.t()],

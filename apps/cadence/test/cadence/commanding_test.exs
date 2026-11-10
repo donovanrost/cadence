@@ -788,6 +788,21 @@ defmodule Cadence.CommandingTest do
         receipt_time: DateTime.add(release_attempt.released_at, 1, :second)
       }
 
+    # #38: the same point from another spacecraft, or from no known spacecraft, verifies nothing.
+    for other <- ["spacecraft-bravo", nil] do
+      assert {:ok, []} =
+               Cadence.Commanding.evaluate_command_verifiers([
+                 %Sample{sample | sample_id: "sample-mode-#{other}", spacecraft_id: other}
+               ])
+    end
+
+    assert {:ok, %{lifecycle_state: :pending}} =
+             Cadence.Commanding.fetch_command_verifier_instance(
+               @organization_id,
+               @mission_id,
+               completion_verifier_instance.command_verifier_instance_id
+             )
+
     assert {:ok, [%CommandVerifierInstance{} = satisfied_verifier_instance]} =
              Cadence.Commanding.evaluate_command_verifiers([sample])
 
