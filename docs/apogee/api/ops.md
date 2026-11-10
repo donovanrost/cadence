@@ -395,7 +395,10 @@ spacecraft in that orbital plane, from spacecraft metadata; an empty plane retur
 it isn't an integer), `kind` (comma list of
 `limit, flight_event, contact, command, config, operator, data`; `data` is data-plane housekeeping
 such as source watermarks and source health, which you'll usually filter out), `limit` 1–500 (default 200), and
-`cursor` (opaque, from `meta.next_cursor`). Newest first.
+`cursor` (opaque, from `meta.next_cursor`). Newest first. A page holds up to `limit` events of the
+requested kinds: the server reads further back until it has them (up to ten source pages per
+request), so housekeeping rows don't starve a filtered page. Fewer than `limit` with a
+`next_cursor` means keep paging.
 
 ```json
 {"data": {"from": "…", "to": "…", "events": [{

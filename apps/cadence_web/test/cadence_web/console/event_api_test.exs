@@ -106,4 +106,14 @@ defmodule CadenceWeb.Console.EventAPITest do
     assert %{"error" => %{"details" => %{"plane" => _}}} =
              c |> get_json("/events?#{window()}&plane=north") |> json_response(422)
   end
+
+  test "a kind filter fills the page from older rows, not just the newest one read (fe-ops)", c do
+    # The newest seeded event is a limit event; the contact is older. A page of one contact
+    # used to come back empty because the kind filter ran after the newest row was taken.
+    assert [%{"kind" => "contact"}] =
+             c
+             |> get_json("/events?#{window()}&kind=contact&limit=1")
+             |> json_response(200)
+             |> get_in(["data", "events"])
+  end
 end

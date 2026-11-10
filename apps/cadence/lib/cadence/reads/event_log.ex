@@ -20,6 +20,7 @@ defmodule Cadence.Reads.EventLog do
 
   @kinds ~w(limit flight_event contact command config operator data)
   @no_names %{spacecraft: %{}, users: %{}, dashboards: %{}, contacts: %{}}
+  @max_rounds 10
   @density_cap 5_000
 
   @spec kinds() :: [binary()]
@@ -33,27 +34,55 @@ defmodule Cadence.Reads.EventLog do
   @spec page(binary(), binary(), map()) :: {:ok, map()} | {:error, :invalid_cursor}
   def page(organization_id, mission_id, opts) do
     with {:ok, cursor} <- decode_cursor(opts[:cursor]) do
-      page =
-        MissionTimeline.page_for_mission(organization_id, mission_id,
-          from_occurred_at: opts.from,
-          to_occurred_at: opts.to,
-          spacecraft_id: spacecraft_filter(organization_id, mission_id, opts),
-          limit: opts.limit,
-          cursor: cursor
-        )
+      {entries, next_cursor} =
+        collect(organization_id, mission_id, opts, cursor, opts.limit, [], @max_rounds)
 
-      {entries, contacts} = EventContacts.enrich(organization_id, mission_id, page.entries)
+      {entries, contacts} = EventContacts.enrich(organization_id, mission_id, entries)
       context = Map.put(context(organization_id, mission_id, entries), :contacts, contacts)
 
       {:ok,
        %{
-         events:
-           entries
-           |> Enum.map(&event(&1, context))
-           |> dedupe()
-           |> Enum.filter(&kind_selected?(&1, opts[:kinds])),
-         next_cursor: encode_cursor(page.next_cursor)
+         events: entries |> Enum.map(&event(&1, context)) |> dedupe(),
+         next_cursor: encode_cursor(next_cursor)
        }}
+    end
+  end
+
+  # Kinds are derived per entry, so they can't be pushed into the source reads. Read timeline
+  # pages until `limit` selected entries or the end (fe-ops: housekeeping rows used to starve
+  # an unfiltered page), at most @max_rounds pages. Each round asks only for what's still
+  # needed, so a page never exceeds `limit`; the cursor continues where reading stopped.
+  defp collect(_org, _mission, _opts, cursor, remaining, acc, rounds)
+       when remaining <= 0 or rounds <= 0,
+       do: {acc, cursor}
+
+  defp collect(organization_id, mission_id, opts, cursor, remaining, acc, rounds) do
+    page =
+      MissionTimeline.page_for_mission(organization_id, mission_id,
+        from_occurred_at: opts.from,
+        to_occurred_at: opts.to,
+        spacecraft_id: spacecraft_filter(organization_id, mission_id, opts),
+        limit: remaining,
+        cursor: cursor
+      )
+
+    selected = Enum.filter(page.entries, &kind_selected?(%{kind: kind(&1)}, opts[:kinds]))
+    acc = acc ++ selected
+
+    case page.next_cursor do
+      nil ->
+        {acc, nil}
+
+      next ->
+        collect(
+          organization_id,
+          mission_id,
+          opts,
+          next,
+          remaining - length(selected),
+          acc,
+          rounds - 1
+        )
     end
   end
 
