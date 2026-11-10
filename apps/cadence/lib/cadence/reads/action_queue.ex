@@ -26,7 +26,7 @@ defmodule Cadence.Reads.ActionQueue do
   """
 
   alias Cadence.Auth.Scope
-  alias Cadence.Reads.ActionQueue.{AlarmItems, AttentionItems, Item}
+  alias Cadence.Reads.ActionQueue.{AlarmItems, AttentionItems, ContactItems, Item}
 
   alias Cadence.Reads.{
     AlarmEpisodes,
@@ -52,6 +52,8 @@ defmodule Cadence.Reads.ActionQueue do
           | :limits_not_configured
           | :never_heard
           | :attention
+          | :missed_pass
+          | :station
 
   @doc "Loads every input and builds the queue for the scope's user."
   @spec load(Scope.t(), binary(), keyword()) :: map()
@@ -67,10 +69,12 @@ defmodule Cadence.Reads.ActionQueue do
 
     fleet = FleetStatus.load(organization_id, mission_id, opts)
     now = Keyword.get_lazy(opts, :now, &DateTime.utc_now/0)
+    lookback_s = Keyword.get_lazy(opts, :failure_lookback_s, &failure_lookback_s/0)
 
     build(%{
       fleet: fleet,
       attention: AttentionItems.load(scope, mission_id, fleet, now),
+      contact_items: ContactItems.load(scope, mission_id, fleet, now, lookback_s),
       episodes: episodes,
       alarms_truncated: truncated?,
       command_rows: commands.rows,
@@ -87,7 +91,7 @@ defmodule Cadence.Reads.ActionQueue do
       limits_configured?: Cadence.Limits.list_limit_definitions(mission_id) != [],
       findings: Readiness.evaluate(organization_id, mission_id).findings,
       now: now,
-      failure_lookback_s: Keyword.get_lazy(opts, :failure_lookback_s, &failure_lookback_s/0)
+      failure_lookback_s: lookback_s
     })
   end
 
@@ -121,7 +125,8 @@ defmodule Cadence.Reads.ActionQueue do
         stale_items(fleet.spacecraft),
         setup_items(input),
         never_heard_items(fleet.spacecraft),
-        attention_input(input).items
+        attention_input(input).items,
+        Map.get(input, :contact_items, [])
       ]
       |> List.flatten()
       |> Enum.sort_by(&sort_key/1)
@@ -133,7 +138,8 @@ defmodule Cadence.Reads.ActionQueue do
       alarms_truncated: Map.get(input, :alarms_truncated, false),
       counts: counts(items),
       items: items,
-      resolved: attention_input(input).resolved
+      resolved: attention_input(input).resolved,
+      missed_pass_horizon_s: ContactItems.missed_pass_horizon_s()
     }
   end
 

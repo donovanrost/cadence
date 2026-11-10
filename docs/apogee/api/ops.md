@@ -289,8 +289,7 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
     confirmed", never "by Cadence". A `system` closure reads its `action` alone, with no actor
     ("Resolved: cancel confirmed").
   - Refetch on `invalidate` with `attention`.
-- **Final shape, not built yet (§8; U11 amended by U35): `missed_pass` and `station` items.** fe-ops
-  lands the reader first (two new `kind` values).
+- **`missed_pass` and `station` items** (§8; U11 amended by U35).
   - `missed_pass`: one row per spacecraft with a pass result `missed` or `failed` (S9) whose
     planned AOS falls within `failure_lookback_s`.
     - `id` is `missed_pass:<spacecraft_id>`, `count` the number of missed passes, `since` the
@@ -321,6 +320,7 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
       the station id; the window is there if Re-plan wants it.
   - `spacecraft` members on both kinds use the full member shape, alarm fields `null` (as for
     `attention`). `missed_passes`, `next_contact` and `station_issue` are `null` on other kinds.
+  - Station identity on `missed_passes[]` is resolved by id, code or provider ref, as on `/passes`.
   - Refetch on `invalidate` `contacts`, `stations` and `pass_results`.
 - `failure_lookback_s` is `config :cadence, :action_queue_failure_lookback_s` (default 24 h).
   Failures older than that drop off the queue; they stay on the commands pages.

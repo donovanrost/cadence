@@ -19,7 +19,10 @@ defmodule Cadence.Reads.ActionQueue.Item do
         command_requests: [],
         command_groups: [],
         finding: nil,
-        attention: nil
+        attention: nil,
+        missed_passes: nil,
+        next_contact: nil,
+        station_issue: nil
       },
       fields
     )

@@ -53,7 +53,7 @@ defmodule Cadence.CommandGroupFixtures do
   A confirmed booking for `spacecraft_id` whose uplink leg the provider confirmed (it carries the
   command window), so preflight's `contact` check is GO (DECISIONS #60). `org`/`mission` are ids.
   """
-  def commandable_pass!(org, mission, spacecraft_id, starts_at \\ nil) do
+  def commandable_pass!(org, mission, spacecraft_id, starts_at \\ nil, opts \\ []) do
     starts_at = starts_at || DateTime.add(DateTime.utc_now(), 1_800)
     suffix = System.unique_integer([:positive])
     provider = ProviderChangeFixtures.persist_provider!(org, mission, suffix, %{})
@@ -106,7 +106,10 @@ defmodule Cadence.CommandGroupFixtures do
       starts_at: starts_at,
       ends_at: DateTime.add(starts_at, 600),
       request_document: %{"uplink" => %{"routing_rule_id" => "routing-rule-test"}},
-      provider_confirmed_snapshot_document: %{"uplink" => %{"status" => "included"}}
+      provider_confirmed_snapshot_document: %{
+        "uplink" => %{"status" => "included"},
+        "ground_station_ref" => Keyword.get(opts, :station_ref)
+      }
     }
     |> ProviderReservationRow.changeset()
     |> Repo.insert!()

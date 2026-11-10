@@ -12,7 +12,8 @@ defmodule CadenceWeb.Console.ActionQueueJSON do
       alarms_truncated: queue.alarms_truncated,
       counts: queue.counts,
       items: Enum.map(queue.items, &item/1),
-      resolved: Map.get(queue, :resolved, [])
+      resolved: Map.get(queue, :resolved, []),
+      missed_pass_horizon_s: Map.get(queue, :missed_pass_horizon_s)
     }
   end
 
@@ -36,7 +37,10 @@ defmodule CadenceWeb.Console.ActionQueueJSON do
       command_requests: Enum.map(item.command_requests, &request/1),
       command_groups: item.command_groups,
       finding: finding(item.finding),
-      attention: item.attention
+      attention: item.attention,
+      missed_passes: item.missed_passes,
+      next_contact: item.next_contact,
+      station_issue: station_issue(item.station_issue)
     }
   end
 
@@ -49,6 +53,11 @@ defmodule CadenceWeb.Console.ActionQueueJSON do
   end
 
   defp request(request), do: %{request | status: to_string(request.status)}
+
+  defp station_issue(nil), do: nil
+
+  defp station_issue(%{window: window} = issue),
+    do: %{issue | window: %{window | kind: to_string(window.kind)}}
 
   defp finding(nil), do: nil
 
