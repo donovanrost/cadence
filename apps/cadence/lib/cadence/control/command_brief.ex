@@ -183,9 +183,9 @@ defmodule Cadence.Control.CommandBrief do
     )
   end
 
-  # Whether the request's latest release went over a contact serving only the target (#38's
-  # check, ReleaseTargetGuard.contact/4): a request that radiated on another spacecraft didn't
-  # set this one. nil: never released.
+  # Whether the request's latest *released* attempt went over a contact serving only the target
+  # (#38's check, ReleaseTargetGuard.contact/4): a request that radiated on another spacecraft
+  # didn't set this one. nil: nothing released (never sent, refused, failed or uncertain).
   defp reached_target(_organization_id, _mission_id, nil, _request), do: nil
 
   defp reached_target(organization_id, mission_id, target, request) do
@@ -193,6 +193,9 @@ defmodule Cadence.Control.CommandBrief do
          |> Commanding.list_command_release_attempts(mission_id,
            command_request_id: request.command_request_id
          )
+         # Only an attempt that released sent anything: a refused or failed one (e.g. the #38
+         # guard) didn't, and an uncertain one is unknown (api-ops review).
+         |> Enum.filter(&(&1.lifecycle_state == :released))
          |> List.last() do
       nil ->
         nil
