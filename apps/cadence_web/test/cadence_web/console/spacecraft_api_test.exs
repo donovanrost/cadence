@@ -1,6 +1,7 @@
 defmodule CadenceWeb.Console.SpacecraftAPITest do
   use CadenceWeb.ConnCase, async: true
 
+  alias Cadence.Reads.ProfileDetail
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -97,7 +98,7 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
 
     # With revisions, the field offers them (fe-setup), as built by the pure builder.
     choices = [%{value: "rev-3", label: "r3 · demo_spacecraft.yaml"}]
-    built = Cadence.Reads.ProfileDetail.build(%{profile: profile, catalog_choices: choices})
+    built = ProfileDetail.build(%{profile: profile, catalog_choices: choices})
 
     assert [%{path: "catalog_revision_id", enum: ^choices}] =
              Enum.find(built.sections, &(&1.key == :catalog)).fields
