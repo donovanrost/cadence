@@ -407,4 +407,16 @@ and in Now's queue when it blocks queued commands. It's quiet when ready.
   - Ranking: P1 when AOS is within 2 h or the pass is in progress, P2 otherwise.
   - Action `Review` → the contact drawer, where Recover lives. It resolves by itself when readiness returns to
     `ready` or no groups are queued; the fade reads "Resolved: uplink recovered".
+**Amendment (DECISIONS #59, domain):** `Recover uplink` re-runs qualification only, getting fresh provider
+attestations. Show it only for reasons it can fix (expired or missing evidence). For each reason:
+- `protocol_state_restore_required` (mid-pass restart):
+  - Tag `CAN'T COMMAND`: "Can't command: the link restarted mid-pass and can't resume before LOS 01:06Z.
+    The next pass isn't affected."
+  - No Recover button. In its place: "Recovery isn't possible on this pass."
+  - The group line drops "until the uplink recovers": "Nothing will be sent on this pass. It goes on the next
+    ready pass (FBK 02:31Z) unless it expires at 03:00Z."
+  - The queue row keeps U31 ranking and resolves at LOS ("Resolved: pass ended").
+- `cop1_awaiting_clcw`: not blocked. It shows as `UPLINK QUALIFYING… · waiting for the spacecraft's first link
+  report`, with no queue row.
+- Evidence reasons: the words come with domain's key list. Recover is offered.
 
