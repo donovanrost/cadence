@@ -26,7 +26,10 @@ async function saveRole() {
   try {
     const r = await setRole(props.orgId, props.member.user_id, role.value);
     note.value = r.ok
-      ? { tone: "nominal", text: `${name.value} is now ${roleLabel(r.value.role).toLowerCase()}.` }
+      ? {
+          tone: "nominal",
+          text: `${name.value} is now ${r.value.role === "organization_admin" ? "an org admin" : "a member"}.`,
+        }
       : { tone: "caution", text: adminErrorText(r.error) };
     emit("changed");
   } finally {
@@ -66,7 +69,7 @@ async function remove() {
       <div class="flex flex-col gap-2 border-t border-hairline pt-4">
         <p class="m-0 text-md text-text-2">
           Removing {{ name }} ends their access now. Their history stays, and inviting them again
-          restores the membership when they accept.
+          gives them access with the role you choose.
         </p>
         <div class="flex flex-wrap items-end gap-3">
           <div class="w-[320px]">

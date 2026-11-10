@@ -2,21 +2,12 @@
 import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useConsoleScope } from "@/shell";
-import {
-  ApEmptyState,
-  ApField,
-  ApPageHeader,
-  ApPanel,
-  ApRemote,
-  ApSegmented,
-  formatCount,
-  plural,
-} from "@/ui";
+import { ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented, plural } from "@/ui";
 import InvitationsTable from "./InvitationsTable.vue";
 import InvitePanel from "./InvitePanel.vue";
-import PeopleTable from "./PeopleTable.vue";
+import PeoplePanel from "./PeoplePanel.vue";
 import ServiceIdentitiesPanel from "./ServiceIdentitiesPanel.vue";
-import { fetchPeople, matchesPerson, type People } from "./api.ts";
+import { fetchPeople, type People } from "./api.ts";
 
 /** S5 · People & access (org-scoped). Spec: docs/apogee/ux/screens/People.md. */
 const scope = useConsoleScope();
@@ -27,7 +18,6 @@ const organization = computed(() =>
 );
 const { state, refetch } = useRemoteQuery(() => organization.value?.id ?? null, fetchPeople);
 const tab = ref<"people" | "invitations" | "services">("people");
-const query = ref("");
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
 );
@@ -68,29 +58,11 @@ const tabs = (p: People) => [
       <template #default="{ value }">
         <ApSegmented v-model="tab" :options="tabs(value)" label="Access sections" variant="tabs" />
         <div class="flex flex-wrap items-start gap-4">
-          <ApPanel
+          <PeoplePanel
             v-if="tab === 'people'"
-            index="U1"
-            title="People"
+            :members="value.members"
             class="min-w-0 flex-[999_1_560px]"
-            flush
-          >
-            <template #header
-              ><div class="w-[260px]">
-                <ApField
-                  v-model="query"
-                  label="Filter people"
-                  hidden-label
-                  type="search"
-                  placeholder="Filter by name, email or role"
-                /></div
-            ></template>
-            <template #meta
-              >{{ formatCount(value.members.filter((m) => matchesPerson(m, query)).length) }} of
-              {{ formatCount(value.members.length) }}</template
-            >
-            <PeopleTable :rows="value.members.filter((m) => matchesPerson(m, query))" />
-          </ApPanel>
+          />
           <ServiceIdentitiesPanel
             v-else-if="tab === 'services' && organization"
             :organization-id="organization.id"

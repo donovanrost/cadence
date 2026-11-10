@@ -3,10 +3,10 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useConsoleScope, useSession } from "@/shell";
-import { ApBreadcrumb, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApTag } from "@/ui";
+import { ApBreadcrumb, ApEmptyState, ApPageHeader, ApRemote, ApTag } from "@/ui";
+import PersonAccess from "./PersonAccess.vue";
 import PersonActivity from "./PersonActivity.vue";
 import PersonManage from "./PersonManage.vue";
-import { accessGroups } from "./admin.ts";
 import { fetchPeople, roleLabel } from "./api.ts";
 
 /** People.md person page: Access (capabilities in words), Activity, Manage (org admins). */
@@ -58,20 +58,13 @@ const crumbs = computed(() => [
             </span>
           </template>
         </ApPageHeader>
-        <ApPanel index="P1" title="Access">
-          <dl class="m-0 grid grid-cols-1 gap-x-8 gap-y-3 md:grid-cols-2">
-            <div v-for="g in accessGroups(member.capabilities)" :key="g.group">
-              <dt class="ap-label mb-1">{{ g.group }}</dt>
-              <dd v-for="l in g.lines" :key="l.text" class="m-0 flex justify-between gap-4 text-md">
-                <span class="text-text-2">{{ l.text }}</span>
-                <span class="font-mono" :class="l.yes ? 'text-readout' : 'text-text-4'">{{
-                  l.yes ? "YES" : "NO"
-                }}</span>
-              </dd>
-            </div>
-          </dl>
-        </ApPanel>
-        <PersonActivity v-if="org" :org-id="org.id" :user-id="member.user_id" />
+        <PersonAccess :capabilities="member.capabilities" />
+        <PersonActivity
+          v-if="org"
+          :org-id="org.id"
+          :user-id="member.user_id"
+          :name="member.display_name ?? member.email"
+        />
         <PersonManage
           v-if="org && canManage"
           :org-id="org.id"
