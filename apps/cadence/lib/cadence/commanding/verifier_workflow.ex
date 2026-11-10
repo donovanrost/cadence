@@ -18,20 +18,26 @@ defmodule Cadence.Commanding.VerifierWorkflow do
   @type fetch_pending_transport :: (binary(), binary(), [binary()] -> [pending_entry()])
   @type persist_updates :: ([pending_entry()] ->
                               {:ok, [CommandVerifierInstance.t()]} | {:error, term()})
+  @type spacecraft_of :: (binary(), binary(), binary() | nil -> binary() | nil)
 
-  @spec evaluate_telemetry([Sample.t()], fetch_pending(), persist_updates()) ::
+  @doc """
+  Evaluates pending telemetry verifiers against new samples. SAFETY (qa #38, DECISIONS #66): a
+  verifier only sees samples from its command's target spacecraft (`spacecraft_of` resolves the
+  request's source endpoint). A verifier whose target can't be resolved sees none, and a sample
+  without a spacecraft matches no verifier (fail closed: it times out rather than verifies).
+  """
+  @spec evaluate_telemetry([Sample.t()], fetch_pending(), persist_updates(), spacecraft_of()) ::
           {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
-  def evaluate_telemetry(telemetry_samples, fetch_pending, persist_updates)
+  def evaluate_telemetry(telemetry_samples, fetch_pending, persist_updates, spacecraft_of)
       when is_list(telemetry_samples) and is_function(fetch_pending, 2) and
-             is_function(persist_updates, 1) do
+             is_function(persist_updates, 1) and is_function(spacecraft_of, 3) do
     telemetry_samples
     |> Enum.group_by(& &1.mission_id)
     |> Enum.reduce_while({:ok, []}, fn {mission_id, mission_samples}, {:ok, acc} ->
       case evaluate_telemetry_for_mission(
              mission_id,
              mission_samples,
-             fetch_pending,
-             persist_updates
+             {fetch_pending, persist_updates, spacecraft_of}
            ) do
         {:ok, verifier_instances} ->
           {:cont, {:ok, acc ++ verifier_instances}}
@@ -79,8 +85,7 @@ defmodule Cadence.Commanding.VerifierWorkflow do
   defp evaluate_telemetry_for_mission(
          mission_id,
          telemetry_samples,
-         fetch_pending,
-         persist_updates
+         {fetch_pending, persist_updates, spacecraft_of}
        )
        when is_binary(mission_id) and is_list(telemetry_samples) do
     case OrganizationScope.organization_id_for_mission(mission_id) do
@@ -88,17 +93,37 @@ defmodule Cadence.Commanding.VerifierWorkflow do
         {:ok, []}
 
       organization_id ->
-        sorted_samples =
-          Enum.sort_by(telemetry_samples, &VerifierEvaluation.sample_sort_key/1, DateTime)
+        samples_by_spacecraft =
+          telemetry_samples
+          |> Enum.sort_by(&VerifierEvaluation.sample_sort_key/1, DateTime)
+          |> Enum.group_by(& &1.spacecraft_id)
 
-        organization_id
-        |> fetch_pending.(mission_id)
+        entries = fetch_pending.(organization_id, mission_id)
+        targets = targets(entries, &spacecraft_of.(organization_id, mission_id, &1))
+
+        entries
         |> build_updates(fn %CommandVerifierInstance{} = verifier_instance ->
-          VerifierEvaluation.evaluate_samples(verifier_instance, sorted_samples)
+          VerifierEvaluation.evaluate_samples(
+            verifier_instance,
+            target_samples(samples_by_spacecraft, targets[verifier_instance.source_endpoint_ref])
+          )
         end)
         |> persist_updates.()
     end
   end
+
+  # Each pending verifier's target spacecraft, once per source endpoint.
+  defp targets(entries, spacecraft_of) do
+    entries
+    |> Enum.map(fn {_ref, %CommandVerifierInstance{source_endpoint_ref: ref}} -> ref end)
+    |> Enum.uniq()
+    |> Map.new(&{&1, spacecraft_of.(&1)})
+  end
+
+  defp target_samples(_samples_by_spacecraft, nil), do: []
+
+  defp target_samples(samples_by_spacecraft, target),
+    do: Map.get(samples_by_spacecraft, target, [])
 
   defp evaluate_transport_for_mission(
          mission_id,

@@ -225,3 +225,31 @@ existing routes on a re-seed. Re-materialize their legs once on the node:
 `for r <- RoutingRuleStore.list_routing_rules(org, mission), r.direction == :outbound, do:
 RoutingRuleStore.update_routing_rule(org, mission, r.routing_rule_id, %{})`. Already-booked
 passes pick the new profile up when their contact starts.
+
+## A command releases only over its target spacecraft (SAFETY #38, DECISIONS #66)
+
+The target is the spacecraft of the request's source endpoint. `ReleaseTargetGuard` checks the
+contact, uplink path and gateway against it:
+
+| Piece | Must | Refusal |
+| --- | --- | --- |
+| Realized contact | serve only the target's endpoints, and at least one | `release_contact_not_target_spacecraft` |
+| Uplink path | name the target's endpoint, or (none named) come from a routing rule for the target | `release_path_not_target_spacecraft` |
+| Gateway binding | carry a SCID (integer, or a string that is exactly one) | `uplink_gateway_scid_unknown` |
+| Gateway binding | carry the target's SCID; the target has one | `release_gateway_not_target_spacecraft`, `release_target_scid_unknown` |
+
+- **Lane dispatch** only considers the target's own contacts, and runs the full check on what
+  it picks. A queued command with no own pass waits (`no_release_target`). It never borrows
+  another spacecraft's pass.
+- **At release**, the check runs again just before transmit. A refusal is `release_failed`
+  (never uncertain) with nothing sent, and the group's stop-on-failure applies.
+- **Verifiers**: a telemetry verifier only evaluates samples whose `spacecraft_id` is its
+  command's target. Another spacecraft's sample, or one with no spacecraft, verifies nothing,
+  so a missing confirmation times out rather than verifying falsely. Transport verifiers are
+  keyed by the release attempt, which the guard already binds.
+
+**Root cause.** The selection code treated an uplink path with no `source_endpoint_ref` as
+matching any request, and it walked every active contact in the mission. Route-materialized
+uplink paths have no endpoint, and each route's gateway carries its own spacecraft's SCID, so
+the other spacecraft accepted the frame. Main and develop have the same selection code and the
+same route materialization.
