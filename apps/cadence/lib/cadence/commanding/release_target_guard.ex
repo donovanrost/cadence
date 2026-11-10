@@ -8,7 +8,9 @@ defmodule Cadence.Commanding.ReleaseTargetGuard do
   - the uplink path: its own source endpoint is the target's, or (when it has none) the
     routing rule it was materialized from targets that spacecraft; a path that names neither
     is refused;
-  - the gateway binding: when it carries a SCID, it is the target's.
+  - the gateway binding: it carries a SCID (an integer, or a string that is exactly one), and
+    it is the target's SCID. A binding without one is refused (`uplink_gateway_scid_unknown`),
+    as is a target spacecraft without one (`release_target_scid_unknown`).
 
   Anything that can't be resolved is refused (fail closed).
   """
@@ -23,6 +25,8 @@ defmodule Cadence.Commanding.ReleaseTargetGuard do
           | {:release_contact_not_target_spacecraft, binary()}
           | {:release_path_not_target_spacecraft, binary()}
           | {:release_gateway_not_target_spacecraft, binary()}
+          | {:uplink_gateway_scid_unknown, binary()}
+          | {:release_target_scid_unknown, binary()}
 
   @doc "The spacecraft a source endpoint belongs to."
   @spec target(binary(), binary(), binary()) :: {:ok, binary()} | {:error, reason()}
@@ -72,24 +76,33 @@ defmodule Cadence.Commanding.ReleaseTargetGuard do
   end
 
   defp gateway(org, mission, target, %TransportBinding{} = binding) do
-    case scid(binding.configuration) do
-      nil ->
-        :ok
-
-      scid ->
-        case SpacecraftStore.fetch_spacecraft(org, mission, target) do
-          {:ok, %{scid: ^scid}} ->
-            :ok
-
-          _other ->
-            {:error, {:release_gateway_not_target_spacecraft, binding.transport_binding_id}}
-        end
+    with {:ok, scid} <- binding_scid(binding.configuration),
+         {:ok, %{scid: target_scid}} when is_integer(target_scid) <-
+           SpacecraftStore.fetch_spacecraft(org, mission, target) do
+      if scid == target_scid,
+        do: :ok,
+        else: {:error, {:release_gateway_not_target_spacecraft, binding.transport_binding_id}}
+    else
+      :unknown -> {:error, {:uplink_gateway_scid_unknown, binding.transport_binding_id}}
+      _no_target_scid -> {:error, {:release_target_scid_unknown, target}}
     end
   end
 
-  defp scid(%{"scid" => scid}) when is_integer(scid), do: scid
-  defp scid(%{scid: scid}) when is_integer(scid), do: scid
-  defp scid(_configuration), do: nil
+  # The binding's SCID, exactly: an integer, or a string that is one whole integer.
+  defp binding_scid(%{"scid" => scid}), do: parse_scid(scid)
+  defp binding_scid(%{scid: scid}), do: parse_scid(scid)
+  defp binding_scid(_configuration), do: :unknown
+
+  defp parse_scid(scid) when is_integer(scid), do: {:ok, scid}
+
+  defp parse_scid(scid) when is_binary(scid) do
+    case Integer.parse(scid) do
+      {parsed, ""} -> {:ok, parsed}
+      _unparseable -> :unknown
+    end
+  end
+
+  defp parse_scid(_other), do: :unknown
 
   defp endpoint_owner(org, mission, ref) do
     case SourceEndpoints.fetch_source_endpoint(org, mission, ref) do
