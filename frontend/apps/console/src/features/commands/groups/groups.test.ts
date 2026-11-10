@@ -11,6 +11,7 @@ import { fetchGroups, groupRow, preflightReader, type Preflight } from "./api.ts
 import { checkMeta, checkRows, noGoReason, routingProfile } from "./checks.ts";
 import { showBody } from "./fixtures.ts";
 import { groupReader } from "./show.ts";
+import { fetchEncoding, hexBytes } from "./encoding.ts";
 
 function arg(overrides: Partial<CommandArgument>): CommandArgument {
   return {
@@ -287,5 +288,33 @@ describe("resend", () => {
     expect(resendFrom("group:grp-1")).toBe("grp-1");
     expect(resendFrom("group:")).toBeNull();
     expect(resendFrom(undefined)).toBeNull();
+  });
+});
+
+describe("M24 encode preview", () => {
+  it("shows bytes in pairs and reads a fail-closed 409 as words", async () => {
+    expect(hexBytes("0a0007")).toBe("0A 00 07");
+    const original = globalThis.fetch;
+    globalThis.fetch = () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "encode_unavailable",
+              message: "x",
+              details: { reason: "revision_superseded", detail: null },
+            },
+          }),
+          { status: 409 },
+        ),
+      );
+    try {
+      expect(await fetchEncoding("m", "r")).toEqual({
+        ok: false,
+        reason: "the catalog revision it was submitted against has been superseded",
+      });
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });
