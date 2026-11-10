@@ -48,12 +48,13 @@ const fileLine = computed(() =>
     v-if="run.status === 'succeeded'"
     class="grid w-fit auto-cols-[minmax(160px,220px)] grid-flow-col gap-px border border-hairline bg-hairline"
   >
-    <ApStatTile label="Declarations" :value="run.declaration_count" />
+    <!-- api: the importer's own count of what it read from the file, not a model total. -->
+    <ApStatTile label="Declarations" :value="run.declaration_count" caption="read from this file" />
     <ApStatTile
       v-if="run.diff"
       label="Unchanged"
       :value="run.diff.summary.unchanged"
-      :caption="`of ${formatCount(run.diff.summary.total_before)}`"
+      :caption="`of ${formatCount(run.diff.summary.total_before)} commands and telemetry`"
     />
     <ApStatTile
       v-if="run.diff?.summary.breaking != null"
