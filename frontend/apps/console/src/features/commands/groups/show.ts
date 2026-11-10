@@ -6,6 +6,7 @@ import {
   type Decoded,
   type Reader,
 } from "@/api/index.ts";
+import { groupUplinkReader } from "@/features/contacts/readiness.ts";
 import {
   actor,
   groupsBase,
@@ -151,6 +152,8 @@ export const groupReader = d.object({
   abort_reason: d.nullable(d.string),
   targets: d.array(target, 1_000),
   progress,
+  finished: d.optional(d.boolean),
+  uplink: d.optional(d.nullable(groupUplinkReader)),
   events: d.array(event, 10_000),
 });
 export type Group = Decoded<typeof groupReader>;

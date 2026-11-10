@@ -109,7 +109,7 @@ const countdown = computed(() => {
     />
     <div v-else class="flex flex-col gap-3 p-4">
       <AttentionBlock
-        v-if="pass.attention"
+        v-if="pass.attention && pass.attention.source === 'pass_resolution'"
         :mission-id="missionId"
         :attention="pass.attention"
         @changed="$emit('changed')"

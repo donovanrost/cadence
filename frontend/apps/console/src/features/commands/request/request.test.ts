@@ -206,6 +206,7 @@ const rowOf = (progress: GroupRow["progress"]): GroupRow => ({
   operation_id: null,
   progress,
   finished: undefined,
+  uplink: undefined,
 });
 
 describe("delivered requests stay 'queued' (approval-only state, qa #28)", () => {

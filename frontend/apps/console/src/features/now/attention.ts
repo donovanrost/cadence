@@ -1,5 +1,7 @@
 import { decoders as d, type Decoded } from "@/api/index.ts";
 import type { QueueItem } from "./queue.ts";
+import { plural } from "@/ui";
+import { attentionUplinkReader, reasonSentence } from "@/features/contacts/readiness.ts";
 
 /**
  * Attention items in Now's queue (U31, DECISIONS #54; ops.md §action-queue `attention`): mission
@@ -12,7 +14,8 @@ const who = d.object({ kind: d.token, id: d.nullable(d.token), name: d.nullable(
 export const attentionReader = d.object({
   id: d.token,
   source: d.token,
-  conflict: d.token,
+  /** null on uplink_blocked (U33). */
+  conflict: d.nullable(d.token),
   state: d.oneOf(["open", "acknowledged"] as const),
   acknowledged_by: d.nullable(who),
   // d2632794: cancel_failed/late_confirmation may have no contact; reservation_id is the pass
@@ -29,6 +32,8 @@ export const attentionReader = d.object({
   starts_at: d.timestamp,
   raised_at: d.timestamp,
   provider_message: d.nullable(d.string),
+  /** U33 uplink_blocked only; null (or absent) on pass_resolution. */
+  uplink: d.optional(d.nullable(attentionUplinkReader)),
   resolution: d.nullable(
     d.object({
       action: d.token,
@@ -55,6 +60,15 @@ const noStop = (s: string) => s.trim().replace(/[.!?]+$/, "");
 /** Title tail and evidence sentence (U31 copy). Unknown conflicts still say who and where. */
 export function attentionWords(a: Attention): Readonly<{ what: string; evidence: string }> {
   const provider = a.provider.name ?? "The provider";
+  if (a.uplink) {
+    // U33: "EARENDIL-001 · Can't command on the SVB-1 pass." / "<reason>. 2 command groups are queued for it."
+    const n = a.uplink.command_group_ids.length;
+    const station = a.station.code ?? a.station.name ?? "this";
+    return {
+      what: `Can't command on the ${station} pass.`,
+      evidence: `${reasonSentence(a.uplink.reason)}.${n ? ` ${plural(n, "command group")} ${n === 1 ? "is" : "are"} queued for it.` : ""}`,
+    };
+  }
   const r = a.resolution;
   const by = r ? ` by ${r.actor.name ?? "an operator"} ${hhmm(r.at)}` : "";
   switch (a.conflict) {
@@ -73,6 +87,7 @@ export function attentionWords(a: Attention): Readonly<{ what: string; evidence:
         what: `${provider} didn't accept the cancel.`,
         evidence: `${a.provider_message ? `${noStop(a.provider_message)}. ` : ""}The pass may still be booked and billed.`,
       };
+    case null:
     default:
       return {
         what: `${provider} disagrees with this pass's booking.`,

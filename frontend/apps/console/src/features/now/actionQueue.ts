@@ -59,7 +59,9 @@ const itemReader = d.object({
     "attention",
   ] as const),
   state: d.oneOf(["critical", "caution", "stale", "off"] as const),
-  source: d.nullable(d.oneOf(["catalog_monitoring", "ground_limit", "pass_resolution"] as const)),
+  source: d.nullable(
+    d.oneOf(["catalog_monitoring", "ground_limit", "pass_resolution", "uplink_blocked"] as const),
+  ),
   /** Alarm items: how many members are acknowledged. */
   acknowledged: d.nullable(d.integer),
   since: d.nullable(d.timestamp),

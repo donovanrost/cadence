@@ -243,6 +243,30 @@ describe("attention rows (U31, fafe581a)", () => {
     expect(newlyResolved(before, after, resolved, fading, 2_000)).toEqual([]);
   });
 
+  it("uplink_blocked (U33): same envelope, nulls where it has no conflict", () => {
+    const [row] = present(
+      [
+        attention({
+          conflict: null,
+          provider_message: null,
+          resolution: null,
+          acknowledged_by: null,
+          uplink: {
+            state: "blocked",
+            reason: "protocol_state_restore_required",
+            since: "2026-11-09T20:00:00Z",
+            command_group_ids: ["g1", "g2"],
+          },
+        }),
+      ].map((i) => ({ ...i, source: "uplink_blocked", priority: 1, state: "critical" })),
+    );
+    expect(row?.title).toBe("EARENDIL-001 · Can't command on the SVB-1 pass.");
+    expect(row?.sentence).toBe(
+      "The session needs its protocol state restored. 2 command groups are queued for it.",
+    );
+    expect(row?.acknowledged).toBe(false);
+  });
+
   it("says what closed it, never 'by Cadence'", () => {
     const r = (kind: string, name: string | null, action: string | null) => ({
       id: "x",

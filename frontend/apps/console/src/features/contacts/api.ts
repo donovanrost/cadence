@@ -1,5 +1,6 @@
 import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
 import { attentionReader } from "@/features/now/index.ts";
+import { passReadinessReader } from "./readiness.ts";
 
 /** Contract: docs/apogee/api/contacts.md, `GET /missions/:mission_id/passes` (M7 / S1). */
 
@@ -69,6 +70,8 @@ const pass = d.object({
   uplink_confirmed: d.optional(d.nullable(d.boolean)),
   /** The pass's open or acknowledged attention item (U31/U32), the queue's object. */
   attention: d.optional(d.nullable(attentionReader)),
+  /** U33: null when the pass has no uplink to be ready; optional until api-ops ships it. */
+  uplink_readiness: d.optional(d.nullable(passReadinessReader)),
 });
 
 export const passesReader = d.object({

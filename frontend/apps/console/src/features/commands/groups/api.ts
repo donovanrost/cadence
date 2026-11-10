@@ -7,6 +7,7 @@ import {
   type Decoded,
   type Reader,
 } from "@/api/index.ts";
+import { groupUplinkReader } from "@/features/contacts/readiness.ts";
 
 /**
  * Command groups (docs/apogee/api/commanding.md §Command groups, DECISIONS #29–#31): preflight,
@@ -161,6 +162,8 @@ export const groupRow = d.object({
   // cfef9e9a: null unless state is queued. `finished` = every target final (not success).
   progress: d.optional(d.nullable(progressReader)),
   finished: d.optional(d.nullable(d.boolean)),
+  /** U33: the pass this group is queued for and its readiness; null with no pass yet. */
+  uplink: d.optional(d.nullable(groupUplinkReader)),
 });
 export type GroupRow = Decoded<typeof groupRow>;
 

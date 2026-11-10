@@ -28,6 +28,7 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   attested_by: null,
   uplink_confirmed: null,
   attention: null,
+  uplink_readiness: null,
   ...overrides,
 });
 
@@ -88,6 +89,7 @@ describe("attention block words (U32)", () => {
     acknowledged_by: null,
     contact_id: null,
     reservation_id: "pass-9",
+    uplink: null,
     station: { ref: "svb-1", id: "st-1", code: "SVB-1", name: "Svalbard 1" },
     provider: { id: "p-1", name: "Northlight" },
     starts_at: "2026-11-14T03:00:00Z",
