@@ -31,19 +31,19 @@ missing endpoint or decision; an item with no blocker can start now.
 | Stat tiles link (Critical/Caution/Stale → Alarms/Fleet, In contact → Contacts, Uplinks → Commands) | fe-ops + lead (`ApStatTile` gets `to`) | — |
 | Queue kinds `missed_pass`, `station`, `flight_event` and the `Station` (→ Re-plan) action | fe-ops | api-ops queue sources *(unverified)* |
 | Header meta names the worst station issue | fe-ops | — (S7 status exists) |
-| A4 pass bars open the contact drawer | fe-ops | — |
-| Approval rows open the request's review, not the Commands list | fe-ops | — |
+| ~~A4 pass bars open the contact drawer~~ done (51cc6133) | fe-ops | — |
+| ~~Approval rows open the request's review~~ done for a single group (a0e33fe1) | fe-ops | — |
 | New P1 rows slide in / flash (the 5 s "Resolved by" fade exists) | fe-ops | — |
 
 ### Investigate (`Investigate.md`, J2): J2 tab built; five tabs not started
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| Telemetry, Uplink, Passes, Configuration, History tabs link to the existing pages (#64); build later | fe-ops | — |
+| ~~Telemetry, Uplink, Passes, Configuration, History tabs link to the existing pages (#64)~~ done (0d05d195); build later | fe-ops | — |
 | B1 add points (chips, max 3, search this spacecraft's points) | fe-ops | — (M23 point search) |
 | No active alarm: show the latest resolved alarm "back in limits" | fe-ops | — |
 | B4 sisters: plane ring, sparklines, next AOS | fe-ops | — |
 | Live chart tail + event log | fe-ops | api-ops M8 `spacecraft:<id>` topic |
-| `FULL TIMELINE →` carries `?sc=` | fe-ops | — |
+| ~~`FULL TIMELINE →` carries `?sc=`~~ done (cb5767c9) | fe-ops | — |
 
 ### Command a group / Compose (`Command.md`, `CommandFlow.md` C1): partial
 | Item | Owner | Blocked on |
@@ -68,7 +68,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | D3 outage / maintenance bands (K1 already draws them from S7) | fe-ops | — |
-| `ops.contact` route (`contacts/:contactId`); today the drawer on `?contact=` covers it, so ship a redirect | fe-ops | — |
+| ~~`ops.contact` route~~ done: redirects to the drawer (abc4b36e) | fe-ops | — |
 | `sc any` filter chip, "highlight queued uplinks" | fe-ops | — |
 | D2: queued requests bound to the pass, state trail; `Swap station`, `Release` | fe-ops | api-ops: swap/release endpoints |
 | D4 "Needs a decision" | fe-ops | api-ops M22 conflict/gap findings |
@@ -86,8 +86,8 @@ missing endpoint or decision; an item with no blocker can start now.
 | --- | --- | --- |
 | Fleet: "in contact" filter, Next contact column; virtualization past 200 rows *(unverified)* | fe-ops | — |
 | Alarms: group identical point+condition across spacecraft, Next contact, "Last cleared…" empty state; Cleared tab re-check (investigate review #20) | fe-ops | — |
-| Telemetry: `Dashboards ↗` goes to the existing dashboard pages (#11), not the pending route; empty state's three suggested points | fe-ops | — |
-| Timeline: sc / plane filter (API supports plane), custom range, E1 brush, live prepend + "N new events ↑" | fe-ops | live prepend: api-ops events topic *(unverified)* |
+| ~~Telemetry `Dashboards ↗` → existing pages (#11)~~ done (718fd269); empty state's three suggested points | fe-ops | — |
+| Timeline: ~~sc scope~~ done (cb5767c9); plane filter; custom range, E1 brush, live prepend + "N new events ↑" | fe-ops | plane: api (`GET …/events` takes `spacecraft_id`, not plane); live prepend: api-ops events topic *(unverified)* |
 
 ## 3. Scheduling (`ScheduleFlow.md`)
 
@@ -210,6 +210,7 @@ missing endpoint or decision; an item with no blocker can start now.
 3. People: role change, remove member, per-person activity; invitation resend/revoke; service identity create/rotate/revoke.
 4. Account: password change, sessions. Provider accounts: version history. (Console mission create dropped, #64.)
 5. Readiness `recent_changes` (or agree fe-setup reads revisions).
+5b. Events read: a `plane` filter (Timeline), low priority.
 6. ~~Billing terms + budgets~~ out of scope (#63).
 7. K3 `Export CSV` / `Monthly close` (time facts only, no money).
 8. qa #19: map domain's `:apply_interrupted` (33529f29) if not already.
