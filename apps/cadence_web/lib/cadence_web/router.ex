@@ -776,6 +776,7 @@ defmodule CadenceWeb.Router do
       get("/action-queue", ActionQueueController, :show)
       get("/counts", OpsCountsController, :show)
       get("/passes", PassController, :index)
+      get("/contact-findings", ContactFindingsController, :index)
       get("/passes/:id", PassController, :show)
       post("/passes/:id/recover-uplink", PassController, :recover_uplink)
       get("/commands", CommandCatalogController, :index)

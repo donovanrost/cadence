@@ -180,6 +180,39 @@ and `attention`.
   - `/counts.attention` counts both sources. `POST /attention/uplink_blocked/…` answers
     `404 attention_item_not_found`, since these resolve by themselves.
 
+## `GET /api/console/v1/missions/:mission_id/contact-findings` (M22, Contacts D4)
+
+"Needs a decision": problems across the mission's live bookings (requesting, pending, confirmed,
+active) in a window. Query: `from`, `to` (default now to +6 h, at most 7 days), `max_gap_s`
+(coverage-gap threshold, 600–604800, default 14400 = 4 h).
+
+```json
+{"data": {"from": "…", "to": "…", "max_gap_s": 14400, "truncated": false,
+  "counts": {"conflicts": 1, "gaps": 1},
+  "findings": [
+    {"id": "station_double_booked:…:…", "kind": "station_double_booked", "severity": "caution",
+     "at": "…", "station": {"ref", "id", "code", "name"}, "spacecraft": null,
+     "passes": [{"id", "spacecraft", "starts_at", "ends_at", "state"}, …], "overlap_s": 180,
+     "message": "073 and 251 overlap by 3 minutes at SVB.", "fix": null},
+    {"kind": "booked_into_outage", "severity": "critical", "station": {…}, "spacecraft": {…},
+     "passes": [{…}], "message": "073's pass at SVB falls in a station outage.", "fix": null},
+    {"kind": "coverage_gap", "severity": "critical", "spacecraft": {"id", "name", "scid"},
+     "gap": {"from", "to", "seconds": 19860}, "passes": [],
+     "message": "389 has no pass for 5h 31m.", "fix": null}
+  ]}}
+```
+
+- `station_double_booked`: two live bookings at the same station overlap. Bookings on different
+  named antennas of the station don't conflict. Bookings without a known station aren't compared.
+- `booked_into_outage`: a live booking falls in a station outage or maintenance window (S7).
+- `coverage_gap`: a spacecraft has no live pass for longer than `max_gap_s`. A pass up to
+  `max_gap_s` before the window counts, so a gap is measured from the last pass, not from `from`.
+- `fix` is always `null` for now: proposals (another station, an opportunity) need a provider
+  search. Show the problem and `Open in Plan`.
+- Header counts: `counts.conflicts` (double-bookings + outage bookings), `counts.gaps`.
+- `truncated: true`: the passes read hit its 500-row cap; narrow the window.
+- Refetch on `invalidate` with `contacts` or `stations`.
+
 ## S10: `contacts` invalidation
 
 `invalidate` with `contacts` fires when a scheduled or realized contact or a contact action is
