@@ -115,7 +115,7 @@ missing endpoint or decision; an item with no blocker can start now.
 ### K3 · Close the books (`contacts/review`): built (fe-setup); gaps
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| `Export CSV` of what's on screen (R1 by station, R4 missed/partial, walking R4's pages), client-side, time facts only, file named `pass-review-<mission>-<day>.csv`; `Monthly close` dropped (#63, ux af1c78d1) | fe-setup | — |
+| ~~`Export CSV`~~ done, live-checked (review/export.ts); `Monthly close` dropped (#63, ux af1c78d1) | fe-setup | — |
 | ~~Hide money (#63)~~ done: R4 Disputable tag/count removed (d50ca428) | fe-setup | — |
 
 ## 4. Setup
