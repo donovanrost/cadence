@@ -5,7 +5,7 @@ import type { ImportRunDetail } from "./importRun.ts";
 
 /** C1 Diff: changes sorted by risk (breaking first), filterable (Catalog.md § C1). */
 type Diff = NonNullable<ImportRunDetail["diff"]>;
-const props = defineProps<{ diff: Diff }>();
+const props = defineProps<{ diff: Diff; baseNumber: number | null }>();
 type Filter = "all" | "breaking" | "added" | "changed" | "removed";
 const filter = ref<Filter>("all");
 const sorted = computed(() =>
@@ -40,7 +40,12 @@ const glyph = (op: string) => (op === "added" ? "+" : op === "removed" ? "−" :
 </script>
 
 <template>
-  <ApPanel index="C1" title="Diff" meta="Sorted by risk" flush>
+  <ApPanel
+    index="C1"
+    title="Diff"
+    :meta="baseNumber === null ? 'Sorted by risk' : `Against r${baseNumber} · sorted by risk`"
+    flush
+  >
     <div class="px-4 py-2.5">
       <ApSegmented v-model="filter" :options="options" label="Filter changes" variant="tabs" />
     </div>
@@ -58,8 +63,14 @@ const glyph = (op: string) => (op === "added" ? "+" : op === "removed" ? "−" :
         row.kind === "command" ? "CMD" : row.kind === "telemetry" ? "TLM" : "—"
       }}</template>
       <template #cell-change="{ row }"
-        ><span class="text-text-2">{{ row.change }}</span></template
+        ><span class="text-text-2">{{ row.change ?? "—" }}</span></template
       >
+      <template v-if="diff.truncated" #footer>
+        <p class="m-0 border-t border-hairline px-4 py-2.5 font-mono text-xs text-text-3 uppercase">
+          Showing the first {{ diff.changes.length }} changes, breaking first. The counts above
+          cover all of them.
+        </p>
+      </template>
     </ApTable>
   </ApPanel>
 </template>

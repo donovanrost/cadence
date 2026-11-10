@@ -1,7 +1,8 @@
 import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
 
 /** Contract: docs/apogee/api/setup.md (C3) = setup-shapes.md §C3 + declaration_count. */
-const { array, boolean, integer, nullable, object, oneOf, string, timestamp, token } = decoders;
+const { array, boolean, integer, nullable, object, oneOf, optional, string, timestamp, token } =
+  decoders;
 
 const count: Reader<number> = (value, path = "") => {
   const n = integer(value, path);
@@ -29,11 +30,14 @@ const diff = object({
       op: oneOf(["added", "changed", "removed"]),
       kind: oneOf(["command", "telemetry", "other"]),
       name: string,
-      change: string,
+      /** The first change, e.g. `arguments/duration/type: size_in_bits 8 → 16`; null when added/removed. */
+      change: nullable(string),
       breaking: boolean,
     }),
     20000,
   ),
+  /** api cab661fe: at most 500 changes, breaking first; true when more exist. */
+  truncated: optional(boolean),
 });
 
 export const importRunReader = object({

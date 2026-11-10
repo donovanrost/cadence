@@ -62,10 +62,11 @@ const fileLine = computed(() =>
       :state="run.diff.summary.breaking > 0 ? 'caution' : 'neutral'"
     />
   </div>
-  <DiffPanel v-if="run.diff" :diff="run.diff" />
-  <ApCallout v-else-if="run.status === 'succeeded'" tone="info">
-    A diff against the live catalog isn't available yet. It shows added, changed, removed and
-    breaking items once the server computes it.
-  </ApCallout>
+  <DiffPanel v-if="run.diff" :diff="run.diff" :base-number="run.base_revision?.number ?? null" />
+  <ApCallout v-else-if="run.status === 'succeeded'" tone="info">{{
+    run.base_revision
+      ? `This revision couldn't be compared with r${run.base_revision.number}, so there's no diff.`
+      : "This is the database's first revision, so there's nothing to compare it with."
+  }}</ApCallout>
   <DiagnosticsPanel v-if="run.diagnostics.length > 0" :diagnostics="run.diagnostics" index="C4" />
 </template>
