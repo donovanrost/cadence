@@ -1,3 +1,4 @@
+import { findingTitle, findingsMeta } from "./findings.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { passesReader, type Pass } from "./api.ts";
@@ -324,5 +325,31 @@ describe("D3 station bands (S7)", () => {
       ["gs-svl", "outage", Date.parse("2026-11-09T03:00:00Z"), "Outage: Antenna fault"],
       ["gs-svl", "maintenance", 99, "Maintenance · no end reported"],
     ]);
+  });
+});
+
+describe("D4 findings (M22)", () => {
+  const f = (kind: string, code: string | null, at: string | null) => ({
+    id: kind,
+    kind,
+    severity: "caution" as const,
+    at,
+    station: code ? { ref: null, id: null, code, name: null } : null,
+    message: "m",
+    passes: [],
+  });
+  it("titles rows by station, kind and time", () => {
+    expect(findingTitle(f("station_double_booked", "SVB", "2026-11-10T03:20:00Z"))).toBe(
+      "SVB double-booked 03:20Z",
+    );
+    expect(findingTitle(f("coverage_gap", null, null))).toBe("Coverage gap");
+  });
+  it("header meta names only non-zero counts", () => {
+    expect(
+      findingsMeta({ truncated: false, counts: { conflicts: 2, gaps: 1 }, findings: [] }),
+    ).toBe("2 conflicts · 1 coverage gap");
+    expect(
+      findingsMeta({ truncated: false, counts: { conflicts: 0, gaps: 0 }, findings: [] }),
+    ).toBeNull();
   });
 });

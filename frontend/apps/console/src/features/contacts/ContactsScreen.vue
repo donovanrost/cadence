@@ -19,6 +19,8 @@ import { useFleet } from "@/features/fleet/index.ts";
 import { availabilityBands, passGantt, passStatus, type GanttAxis } from "./gantt.ts";
 import { fetchAvailability } from "@/features/scheduling/index.ts";
 import SelectedPassPanel from "./SelectedPassPanel.vue";
+import FindingsPanel from "./FindingsPanel.vue";
+import { findingsMeta, useFindings } from "./findings.ts";
 import { usePasses } from "./usePasses.ts";
 import { fetchPass, fetchStations } from "./api.ts";
 import { useRemoteQuery } from "@/api/index.ts";
@@ -45,6 +47,14 @@ const passes = usePasses(
   computed(() => range.value.ms),
 );
 const rangeOptions = RANGES.map((r) => ({ value: r.value, label: r.label }));
+/** D4 (M22): hidden when the read isn't available (Contacts.md: "Unavailable: hide D4"). */
+const findings = useFindings(
+  missionId,
+  computed(() => range.value.ms),
+);
+const findingsReady = computed(() =>
+  findings.state.value.status === "ready" ? findings.state.value.value : null,
+);
 const stationsQuery = useRemoteQuery(missionId, (id, signal) => fetchStations(id, signal));
 useMissionInvalidation(missionId, ["configuration"], stationsQuery.refetch);
 /** S7 station availability → outage / maintenance / degraded bands on the station rows (D3). */
@@ -144,7 +154,8 @@ const meta = computed(() => {
   const ahead = list.value.filter(
     (p) => Date.parse(p.starts_at) > t && passStatus(p, t) !== "canceled",
   ).length;
-  return `${plural(ahead, "pass", "passes")} next ${range.value.label.toLowerCase()} · ${live} AOS now`;
+  const issues = findingsMeta(findingsReady.value);
+  return `${plural(ahead, "pass", "passes")} next ${range.value.label.toLowerCase()} · ${live} AOS now${issues ? ` · ${issues}` : ""}`;
 });
 const tabs = [
   { key: "live", label: "Live", to: { name: "ops.contacts" } },
@@ -235,12 +246,19 @@ const tabs = [
             </div>
           </ApRemote>
         </ApPanel>
-        <SelectedPassPanel
-          :mission-id="missionId"
-          :pass="selected"
-          :spacecraft="selectedSpacecraft"
-          @changed="refetchPass"
-        />
+        <div class="flex min-h-0 flex-col gap-3">
+          <SelectedPassPanel
+            :mission-id="missionId"
+            :pass="selected"
+            :spacecraft="selectedSpacecraft"
+            @changed="refetchPass"
+          />
+          <FindingsPanel
+            v-if="findingsReady"
+            :findings="findingsReady"
+            :label="range.label.toLowerCase().replace(/h$/, ' h')"
+          />
+        </div>
       </div>
     </template>
   </div>
