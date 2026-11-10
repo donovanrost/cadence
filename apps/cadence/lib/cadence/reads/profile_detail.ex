@@ -10,6 +10,7 @@ defmodule Cadence.Reads.ProfileDetail do
   rules not yet lifted onto the profile).
   """
 
+  alias Cadence.Catalog
   alias Cadence.Reads.ProfileRouting
   alias Cadence.SpacecraftType
   alias Cadence.SpacecraftType.Schema
@@ -34,7 +35,8 @@ defmodule Cadence.Reads.ProfileDetail do
            version_counts:
              Cadence.SpacecraftStore.fleet_summary(organization_id, mission_id).profile_version_counts,
            rules: ProfileRouting.rules(organization_id, mission_id, profile),
-           overrides: ProfileRouting.overrides(organization_id, mission_id, profile)
+           overrides: ProfileRouting.overrides(organization_id, mission_id, profile),
+           catalog_choices: catalog_choices(organization_id, mission_id)
          })}
 
       _missing ->
@@ -76,7 +78,7 @@ defmodule Cadence.Reads.ProfileDetail do
         |> Enum.map(& &1.count)
         |> Enum.sum(),
       override_count: length(overrides),
-      sections: sections(profile, overrides),
+      sections: sections(profile, overrides, Map.get(input, :catalog_choices)),
       applications: profile.applications || %{},
       rules: rules,
       overrides: overrides,
@@ -85,7 +87,7 @@ defmodule Cadence.Reads.ProfileDetail do
     }
   end
 
-  defp sections(profile, overrides) do
+  defp sections(profile, overrides, catalog_choices) do
     counts = Enum.frequencies_by(overrides, &(&1.path |> to_string() |> String.replace("/", ".")))
 
     Enum.map(Schema.sections(), fn section ->
@@ -95,10 +97,28 @@ defmodule Cadence.Reads.ProfileDetail do
         fields:
           Enum.map(section.fields, fn field ->
             field
+            |> with_choices(catalog_choices)
             |> Map.put(:value, Schema.value(profile, field.path))
             |> Map.put(:overridden_by, Map.get(counts, field.path, 0))
           end)
       }
+    end)
+  end
+
+  # fe-setup: the catalog field offers the mission's catalog revisions, newest first, so the
+  # form renders a select. Without any, the field keeps no enum.
+  defp with_choices(%{path: "catalog_revision_id"} = field, [_ | _] = choices),
+    do: Map.put(field, :enum, choices)
+
+  defp with_choices(field, _choices), do: field
+
+  defp catalog_choices(organization_id, mission_id) do
+    organization_id
+    |> Catalog.list_revisions(mission_id)
+    |> Enum.map(fn revision ->
+      source = (revision.metadata || %{})["source_artifact_name"] || revision.revision_label
+      label = Enum.join(Enum.reject(["r#{revision.revision_number}", source], &is_nil/1), " · ")
+      %{value: revision.catalog_revision_id, label: label}
     end)
   end
 

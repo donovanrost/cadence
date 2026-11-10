@@ -91,6 +91,17 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     assert data["rules"] == [] and data["overrides"] == []
     assert [%{"version" => 1, "created_at" => _, "actor" => nil}] = data["versions"]
 
+    # No catalog revisions in this mission: the catalog field has no choices.
+    catalog = Enum.find(data["sections"], &(&1["key"] == "catalog"))
+    assert [%{"path" => "catalog_revision_id", "enum" => nil}] = catalog["fields"]
+
+    # With revisions, the field offers them (fe-setup), as built by the pure builder.
+    choices = [%{value: "rev-3", label: "r3 · demo_spacecraft.yaml"}]
+    built = Cadence.Reads.ProfileDetail.build(%{profile: profile, catalog_choices: choices})
+
+    assert [%{path: "catalog_revision_id", enum: ^choices}] =
+             Enum.find(built.sections, &(&1.key == :catalog)).fields
+
     framing = Enum.find(data["sections"], &(&1["key"] == "framing"))
     frame_size = Enum.find(framing["fields"], &(&1["path"] == "frame_parameters.frame_size"))
 

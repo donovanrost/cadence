@@ -208,6 +208,9 @@ Profile detail with **schema-driven sections** (`Cadence.SpacecraftType.Schema`,
   "P2 additions"). `routing_model` is `"profile"` when the profile has rules, else
   `"per_spacecraft"` (legacy per-spacecraft rules not yet lifted). `override_count` and each
   field's `overridden_by` count the spacecraft overriding that path.
+- The catalog field's `enum` lists the mission's catalog revisions, newest first, as `[{value:
+  <catalog revision id>, label: "r3 · demo_spacecraft.yaml"}]` (render a select), or `null` when
+  the mission has none.
 - `catalog_revision` is `{id}` (or `null`), and the catalog field's `value` is the profile's
   `catalog_revision_id`. `versions[].actor` and `last_change.actor` are `null` because profile versions don't
   record an author (change-set revisions do; `last_change.revision` fills in when profile edits go
