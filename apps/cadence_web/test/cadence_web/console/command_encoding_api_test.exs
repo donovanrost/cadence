@@ -30,6 +30,7 @@ defmodule CadenceWeb.Console.CommandEncodingAPITest do
       requester: requester,
       base: "/api/console/v1/missions/#{mission.mission_id}",
       ids: model.commands_by_name,
+      spacecraft_id: craft.spacecraft_id,
       target: %{
         "spacecraft_id" => craft.spacecraft_id,
         "source_endpoint_id" => endpoint.source_endpoint_id
@@ -81,7 +82,8 @@ defmodule CadenceWeb.Console.CommandEncodingAPITest do
              "scope" => "command_payload",
              "size_bytes" => size,
              "hex" => hex,
-             "base64" => base64
+             "base64" => base64,
+             "arguments_json" => args_json
            } =
              c
              |> conn()
@@ -90,6 +92,7 @@ defmodule CadenceWeb.Console.CommandEncodingAPITest do
              |> Map.fetch!("data")
 
     assert size > 0
+    assert Jason.decode!(args_json) == %{"counter" => 7}
     assert Base.decode16!(hex) == Base.decode64!(base64)
     assert byte_size(Base.decode16!(hex)) == size
 
@@ -114,5 +117,35 @@ defmodule CadenceWeb.Console.CommandEncodingAPITest do
              |> json_response(409)
 
     assert reason in ["revision_superseded", "revision_not_active"]
+  end
+
+  test "the brief names the spacecraft, each argument's value, and the command's prior requests",
+       c do
+    first = request_id(c)
+    second = request_id(c)
+
+    assert %{
+             "command_request_id" => ^second,
+             "spacecraft_id" => spacecraft_id,
+             "arguments" => [
+               %{
+                 "name" => "counter",
+                 "value_json" => "7",
+                 "current" => nil,
+                 "current_basis" => "none"
+               }
+             ],
+             "prior_requests" => [%{"command_request_id" => ^first, "arguments_json" => args}]
+           } =
+             c
+             |> conn()
+             |> get(c.base <> "/command-requests/#{second}/brief")
+             |> json_response(200)
+             |> Map.fetch!("data")
+
+    assert spacecraft_id == c.spacecraft_id
+    assert Jason.decode!(args) == %{"counter" => 7}
+
+    assert c |> conn() |> get(c.base <> "/command-requests/nope/brief") |> json_response(404)
   end
 end

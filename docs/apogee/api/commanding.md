@@ -8,6 +8,7 @@ Owner: **api-ops**. Conventions: [README.md](README.md). Asks are tracked by the
 | M17 | `GET /missions/:mission_id/commands`, `GET /missions/:mission_id/commands/:command_id` | **implemented** |
 | M16 M18 M20 O4 | command groups: preflight, submit, list/show, decision, abort, cancel, policies | **implemented** |
 | M24 | `GET /missions/:mission_id/command-requests/:id/encoding` (owner: api) | **implemented** |
+| A1 | `GET /missions/:mission_id/command-requests/:id/brief` (owner: api) | **implemented** |
 
 ## The active catalog
 
@@ -333,7 +334,7 @@ transmitted.
 {"data": {
   "command_request_id": "…", "command_id": "…", "mission_model_revision_id": "…",
   "scope": "command_payload", "size_bytes": 3, "hex": "0A0007", "base64": "CgAH",
-  "arguments": {"counter": 7}
+  "arguments_json": "{\"counter\":7}"
 }}
 ```
 
@@ -343,4 +344,35 @@ transmitted.
   read fails closed like release does: `409 encode_unavailable` with `details: {reason:
   "revision_superseded" | "revision_not_active" | "basis_unavailable" | "encode_failed", detail}`.
   Show "These bytes can't be shown" with the reason; don't fall back to the current catalog.
-- `404 command_request_not_found`.
+- `arguments_json`: the resolved values as JSON text (64-bit safe, like `argument_values_json`).
+- Access: anyone who may review the mission's requests (`operate_mission`); otherwise `403
+  forbidden`. `404 command_request_not_found`.
+
+## `GET /api/console/v1/missions/:mission_id/command-requests/:command_request_id/brief` (A1, owner: api)
+
+Context for reviewing one request: each argument's value and that argument's **current value**
+on the request's spacecraft, plus the command's prior requests to the same target.
+
+```json
+{"data": {
+  "command_request_id": "…", "command_id": "…", "spacecraft_id": "spacecraft-earendil-004",
+  "arguments": [{"argument_id": "…", "name": "mode", "value_json": "3",
+                 "current": {"point": "/parameters/HK/sc_mode", "value_json": "1", "at": "…",
+                             "reason": null} | null,
+                 "current_basis": "state_effect" | "none" | "unavailable"}],
+  "prior_requests": [{"command_request_id", "command_group_id", "arguments_json", "state",
+                      "requested_at", "requested_by": {"kind", "id", "name"}}]
+}}
+```
+
+- A current value exists only where the catalog links the argument to a telemetry point: a
+  command `state_effect` with `operation: set` for that argument. Its point is read **for the
+  request's spacecraft only**, never mission-wide (#38). Nothing is inferred from verifiers or
+  names. `current_basis: "none"` means no such link: say "no current value known".
+- `current.reason`: `no_sample` (linked, but no value received yet) or `no_target_spacecraft`.
+  `current_basis: "unavailable"`: the request's revision isn't active, so the link can't be read.
+- Values are JSON text (`value_json`, `arguments_json`).
+- `prior_requests`: the same command to the same target, newest first, at most 5, excluding this
+  one.
+- Bounds (`valid_range`, unit) stay on the command catalog read (`GET /commands/:id`).
+- Access as for M24 (`403 forbidden`, `404 command_request_not_found`).

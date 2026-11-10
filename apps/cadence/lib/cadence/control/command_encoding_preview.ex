@@ -11,16 +11,23 @@ defmodule Cadence.Control.CommandEncodingPreview do
   frame, segment or CLTU around it); nothing is transmitted.
   """
 
+  alias Cadence.Auth.Scope
   alias Cadence.Commanding
   alias Cadence.Commanding.RequestValidation
   alias Cadence.Control.Commanding, as: ControlCommanding
+  alias Cadence.Management.Commanding.RequestReview
 
-  @spec preview(binary(), binary(), binary()) ::
+  # todo(authz): Cedar should decide who may see encoded command bytes (today: anyone who may
+  # review the mission's requests, :operate_mission since #62).
+  @spec preview(Scope.t(), binary(), binary()) ::
           {:ok, map()}
-          | {:error, :command_request_not_found}
+          | {:error, :forbidden | :command_request_not_found}
           | {:error, {:encode_unavailable, atom(), binary() | nil}}
-  def preview(organization_id, mission_id, command_request_id) do
-    with {:ok, request} <- fetch(organization_id, mission_id, command_request_id),
+  def preview(%Scope{} = scope, mission_id, command_request_id) do
+    organization_id = scope.organization_id
+
+    with :ok <- authorize(scope, mission_id),
+         {:ok, request} <- fetch(organization_id, mission_id, command_request_id),
          {:ok, basis} <- basis(organization_id, mission_id, request),
          {:ok, encoded} <- encode(basis, request) do
       {:ok,
@@ -32,8 +39,16 @@ defmodule Cadence.Control.CommandEncodingPreview do
          size_bytes: encoded.size_bytes,
          hex: Base.encode16(encoded.binary, case: :upper),
          base64: encoded.base64,
-         arguments: request.resolved_argument_values || %{}
+         # JSON text so 64-bit values survive JavaScript (commanding.md "Argument values").
+         arguments_json: Jason.encode!(request.resolved_argument_values || %{})
        }}
+    end
+  end
+
+  defp authorize(scope, mission_id) do
+    case RequestReview.authorize(scope, mission_id) do
+      {:ok, _fresh, _} -> :ok
+      _denied -> {:error, :forbidden}
     end
   end
 

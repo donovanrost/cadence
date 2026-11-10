@@ -828,6 +828,8 @@ defmodule CadenceWeb.Router do
         :show
       )
 
+      get("/command-requests/:command_request_id/brief", CommandEncodingController, :brief)
+
       get("/alarm-episodes", AlarmEpisodeController, :index)
       get("/alarm-episodes/:episode_id", AlarmEpisodeController, :show)
       post("/alarm-episodes/:episode_id/acknowledge", AlarmEpisodeController, :acknowledge)
