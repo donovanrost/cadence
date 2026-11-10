@@ -45,9 +45,9 @@ const events = computed(() =>
 const decisionNote = computed(() => props.group.decision?.note ?? null);
 const pos = (n: number) => String(n + 1).padStart(2, "0");
 /** U33: the group's pass is blocked; the same line as the list, with expiry, above the trail. */
-const codeOf = useStationCodes(computed(() => props.missionId));
+const stations = useStationCodes(computed(() => props.missionId));
 const blocked = computed(() =>
-  groupBlockedLine(props.group.uplink, props.group.release?.expires_at ?? null, codeOf),
+  groupBlockedLine(props.group.uplink, props.group.release?.expires_at ?? null, stations),
 );
 </script>
 

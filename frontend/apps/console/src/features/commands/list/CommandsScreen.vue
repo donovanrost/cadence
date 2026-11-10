@@ -18,7 +18,7 @@ const route = useRoute();
 const access = useCommandAccess();
 const missionId = computed(() => scope.value.mission.id);
 const groups = useRemoteQuery(missionId, (m, signal) => fetchGroups(m, {}, signal));
-const codeOf = useStationCodes(missionId);
+const stations = useStationCodes(missionId);
 useMissionInvalidation(
   computed<string | null>(() => missionId.value),
   ["commanding"],
@@ -79,7 +79,7 @@ const EMPTY: Record<string, string> = {
       >
         <template #default="{ value }">
           <ApEmptyState v-if="tabRows(value, tab).length === 0" :headline="EMPTY[tab] ?? ''" />
-          <CommandTable v-else :rows="tabRows(value, tab)" :name-of="nameOf" :code-of="codeOf" />
+          <CommandTable v-else :rows="tabRows(value, tab)" :name-of="nameOf" :stations="stations" />
         </template>
       </ApRemote>
     </ApPanel>

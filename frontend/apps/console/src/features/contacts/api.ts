@@ -117,7 +117,13 @@ export function fetchPasses(
 /** Active ground stations (api setup.md G1); only what Contacts needs: id, name, code. */
 const stationsReader = d.object({
   stations: d.array(
-    d.object({ id: d.token, display_name: d.nullable(d.string), code: d.nullable(d.string) }),
+    d.object({
+      id: d.token,
+      display_name: d.nullable(d.string),
+      code: d.nullable(d.string),
+      /** The station's provider, by name (U33: group lines name it without a new field). */
+      provider: d.optional(d.nullable(d.string)),
+    }),
     1_000,
   ),
 });

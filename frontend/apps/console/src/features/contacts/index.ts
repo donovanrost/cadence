@@ -5,7 +5,7 @@ export { usePasses } from "./usePasses.ts";
 export {
   groupBlockedLine,
   readinessTag,
-  type StationCode,
+  type StationLookup,
   type GroupUplink,
   type PassReadiness,
 } from "./readiness.ts";

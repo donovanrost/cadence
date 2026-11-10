@@ -250,8 +250,15 @@ describe("uplink readiness (U33)", () => {
       },
       readiness: { state: "blocked", reason: "attestation_peer", since: null },
     };
-    const codeOf = (ref: string | null | undefined) => (ref === "earendil-kiruna" ? "KIR" : null);
-    expect(groupBlockedLine(uplink, null, codeOf)).toMatch(
+    const stations = {
+      code: (ref: string | null | undefined) => (ref === "earendil-kiruna" ? "KIR" : null),
+      provider: (ref: string | null | undefined) =>
+        ref === "earendil-kiruna" ? "Northlight" : null,
+    };
+    expect(groupBlockedLine(uplink, null, stations)).toContain(
+      "(AOS 00:54Z): Northlight's proof for this session didn't check out.",
+    );
+    expect(groupBlockedLine(uplink, null, stations)).toMatch(
       /Otherwise it goes on the next pass \(KIR 02:31Z\)\.$/,
     );
     expect(groupBlockedLine(uplink, null)).toMatch(

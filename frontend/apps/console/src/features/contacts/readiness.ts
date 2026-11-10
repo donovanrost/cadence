@@ -121,12 +121,13 @@ export function reasonLink(reason: string | null) {
   return null;
 }
 
-/** A station's code: on the row when present, else from the stations index by ref (U33). */
-export type StationCode = (ref: string | null | undefined) => string | null;
-const codeFor = (
-  st: Readonly<{ ref: string | null; id: string | null; code: string | null }>,
-  codeOf: StationCode,
-) => st.code ?? codeOf(st.ref) ?? codeOf(st.id);
+/** The stations index by ref: code and provider name (U33). */
+type ByRef = (ref: string | null | undefined) => string | null;
+export type StationLookup = Readonly<{ code: ByRef; provider: ByRef }>;
+const NO_STATIONS: StationLookup = { code: () => null, provider: () => null };
+type StationRef = Readonly<{ ref: string | null; id: string | null; code: string | null }>;
+const codeFor = (st: StationRef, s: StationLookup) => st.code ?? s.code(st.ref) ?? s.code(st.id);
+const providerFor = (st: StationRef, s: StationLookup) => s.provider(st.ref) ?? s.provider(st.id);
 
 export type ReadinessTag = Readonly<{ state: OpState; label: string; sentence: string | null }>;
 
@@ -175,18 +176,19 @@ export function readinessTag(
 export function groupBlockedLine(
   uplink: GroupUplink | null | undefined,
   expiresAt: string | null,
-  codeOf: StationCode = () => null,
+  stations: StationLookup = NO_STATIONS,
 ): string | null {
   if (!uplink || uplink.readiness.state !== "blocked") return null;
-  const station = codeFor(uplink.pass.station, codeOf) ?? uplink.pass.station.name ?? "its";
+  const station = codeFor(uplink.pass.station, stations) ?? uplink.pass.station.name ?? "its";
+  const provider = providerFor(uplink.pass.station, stations);
   const next = uplink.next_pass ?? null;
   const fixable = recoverable(uplink.readiness.reason);
-  const head = `Can't command on the ${station} pass (AOS ${hhmm(uplink.pass.starts_at)}): ${reasonClause(uplink.readiness.reason)}.`;
+  const head = `Can't command on the ${station} pass (AOS ${hhmm(uplink.pass.starts_at)}): ${reasonClause(uplink.readiness.reason, { provider })}.`;
   const stop = fixable
     ? "Nothing will be sent on this pass until the uplink recovers."
     : "Nothing will be sent on this pass.";
   if (!next) return `${head} ${stop} No later pass is booked for it yet.`;
-  const code = codeFor(next.station, codeOf);
+  const code = codeFor(next.station, stations);
   const onward = code
     ? `the next pass (${code} ${hhmm(next.starts_at)})`
     : `the next pass at ${hhmm(next.starts_at)}`;
