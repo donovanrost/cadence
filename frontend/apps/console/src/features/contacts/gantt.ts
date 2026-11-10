@@ -17,7 +17,9 @@ function evidence(p: Pass): string {
     p.booking_evidence === "operator_attested"
       ? `, booked on the word of ${p.attested_by?.name ?? "an operator"}`
       : "";
-  const ready = p.uplink_readiness ? readinessTag(p.uplink_readiness, "row") : null;
+  const ready = p.uplink_readiness
+    ? readinessTag(p.uplink_readiness, "row", { provider: p.source.provider_name })
+    : null;
   return `${attested}${p.uplink_confirmed === false ? ", uplink unconfirmed" : ""}${ready ? `, ${(ready.sentence ?? ready.label).replace(/[.]$/, "").toLowerCase()}` : ""}${p.attention ? ", needs attention" : ""}`;
 }
 

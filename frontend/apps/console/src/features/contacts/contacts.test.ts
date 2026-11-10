@@ -158,25 +158,25 @@ describe("uplink readiness (U33)", () => {
     expect(readinessTag(r("ready"), "drawer")?.label).toBe("Uplink ready");
     expect(readinessTag(r("recovering", { since: "2026-11-10T00:41:00Z" }), "row")).toEqual({
       state: "neutral",
-      label: "Uplink recovering…",
-      sentence: "Recovering since 00:41Z.",
+      label: "Uplink qualifying…",
+      sentence: "Qualifying since 00:41Z.",
     });
     const blocked = r("blocked", {
       reason: "protocol_state_restore_required",
       command_groups_queued: 2,
     });
-    expect(readinessTag(blocked, "row", "2026-11-10T01:06:00Z")).toEqual({
+    expect(readinessTag(blocked, "row", { los: "2026-11-10T01:06:00Z" })).toEqual({
       state: "crit",
       label: "Can't command",
       sentence:
-        "Can't command: the link restarted mid-pass and can't resume before LOS 01:06Z. The next pass isn't affected.",
+        "Can't command: the uplink restarted after this pass had sent commands, and it can't resume before LOS 01:06Z. The next pass isn't affected.",
     });
     expect(
       readinessTag({ ...blocked, command_groups_queued: 0, reason: "lane_held" }, "row"),
     ).toEqual({
       state: "caution",
       label: "Can't command",
-      sentence: "Can't command: lane held.",
+      sentence: "Can't command: the provider returned an error (Lane held).",
     });
   });
 
@@ -193,11 +193,11 @@ describe("uplink readiness (U33)", () => {
       readiness: { state: "blocked", reason: "protocol_state_restore_required", since: null },
     };
     expect(groupBlockedLine(uplink, "2026-11-10T03:00:00Z")).toBe(
-      "Can't command on the SVB-1 pass (AOS 00:54Z): the link restarted mid-pass and can't resume. Nothing will be sent on this pass. It goes on the next ready pass (FBK 02:31Z) unless it expires at 03:00Z.",
+      "Can't command on the SVB-1 pass (AOS 00:54Z): the uplink restarted after this pass had sent commands, and it can't resume. Nothing will be sent on this pass. It goes on the next pass (FBK 02:31Z) unless it expires at 03:00Z.",
     );
     const evidence = { ...uplink.readiness, reason: "attestation_expired" };
     expect(groupBlockedLine({ ...uplink, next_pass: null, readiness: evidence }, null)).toMatch(
-      /until the uplink recovers\. Otherwise it goes on the next ready pass\.$/,
+      /until the uplink recovers\. No later pass is booked for it yet\.$/,
     );
     expect(
       groupBlockedLine({ ...uplink, readiness: { ...uplink.readiness, state: "ready" } }, null),
@@ -221,7 +221,42 @@ describe("uplink readiness (U33)", () => {
       sentence: "Waiting for the spacecraft's first link report.",
     });
     expect(recoverable("protocol_state_restore_required")).toBe(false);
-    expect(recoverable("attestation_expired")).toBe(true);
+    expect(recoverable("provider_cannot_attest_uplink_sessions")).toBe(false);
+    expect(recoverable("attestation_signature")).toBe(true);
+  });
+
+  it("words reasons per U33 amendment 2, naming the provider", () => {
+    const c = { provider: "Northlight" };
+    const tag = (reason: string, state = "blocked") =>
+      readinessTag({ state, reason, since: null, command_groups_queued: 1 }, "row", c)?.sentence;
+    expect(tag("attestation_peer")).toBe(
+      "Can't command: Northlight's proof for this session didn't check out.",
+    );
+    expect(tag("session_not_attached", "qualifying")).toBe(
+      "Waiting for Northlight's uplink connection.",
+    );
+    expect(tag("weird_thing")).toBe("Can't command: Northlight returned an error (Weird thing).");
+  });
+
+  it("names the next pass by station code from the index when the row lacks it", () => {
+    const station = { ref: "earendil-kiruna", id: null, code: null, name: null };
+    const uplink = {
+      pass: { reservation_id: "p1", contact_id: null, station, starts_at: "2026-11-10T00:54:00Z" },
+      next_pass: {
+        reservation_id: "p2",
+        contact_id: null,
+        station,
+        starts_at: "2026-11-10T02:31:00Z",
+      },
+      readiness: { state: "blocked", reason: "attestation_peer", since: null },
+    };
+    const codeOf = (ref: string | null | undefined) => (ref === "earendil-kiruna" ? "KIR" : null);
+    expect(groupBlockedLine(uplink, null, codeOf)).toMatch(
+      /Otherwise it goes on the next pass \(KIR 02:31Z\)\.$/,
+    );
+    expect(groupBlockedLine(uplink, null)).toMatch(
+      /Otherwise it goes on the next pass at 02:31Z\.$/,
+    );
   });
 
   it("words a refused recovery", () => {
@@ -232,6 +267,9 @@ describe("uplink readiness (U33)", () => {
         message: "refused",
         details: { reason: "provider_unreachable" },
       }),
-    ).toEqual({ tone: "caution", text: "Recovery refused: provider unreachable." });
+    ).toEqual({
+      tone: "caution",
+      text: "Recovery refused: the provider returned an error (Provider unreachable).",
+    });
   });
 });

@@ -12,6 +12,7 @@ import {
   ApTag,
 } from "@/ui";
 import { groupBlockedLine, recoverable } from "@/features/contacts/readiness.ts";
+import { useStationCodes } from "@/features/contacts/useStationCodes.ts";
 import RecoverUplink from "@/features/contacts/RecoverUplink.vue";
 import type { Group } from "../groups/show.ts";
 import {
@@ -44,8 +45,9 @@ const events = computed(() =>
 const decisionNote = computed(() => props.group.decision?.note ?? null);
 const pos = (n: number) => String(n + 1).padStart(2, "0");
 /** U33: the group's pass is blocked; the same line as the list, with expiry, above the trail. */
+const codeOf = useStationCodes(computed(() => props.missionId));
 const blocked = computed(() =>
-  groupBlockedLine(props.group.uplink, props.group.release?.expires_at ?? null),
+  groupBlockedLine(props.group.uplink, props.group.release?.expires_at ?? null, codeOf),
 );
 </script>
 

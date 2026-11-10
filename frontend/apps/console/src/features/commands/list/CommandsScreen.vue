@@ -8,6 +8,7 @@ import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApTabLinks } f
 import { useCommandAccess } from "../access.ts";
 import { fetchGroups } from "../groups/api.ts";
 import { usePeopleNames } from "../groups/usePeopleNames.ts";
+import { useStationCodes } from "@/features/contacts/useStationCodes.ts";
 import CommandTable from "./CommandTable.vue";
 import { COMMAND_TABS, TAB_LABELS, tabCounts, tabFromQuery, tabRows } from "./list.ts";
 
@@ -17,6 +18,7 @@ const route = useRoute();
 const access = useCommandAccess();
 const missionId = computed(() => scope.value.mission.id);
 const groups = useRemoteQuery(missionId, (m, signal) => fetchGroups(m, {}, signal));
+const codeOf = useStationCodes(missionId);
 useMissionInvalidation(
   computed<string | null>(() => missionId.value),
   ["commanding"],
@@ -77,7 +79,7 @@ const EMPTY: Record<string, string> = {
       >
         <template #default="{ value }">
           <ApEmptyState v-if="tabRows(value, tab).length === 0" :headline="EMPTY[tab] ?? ''" />
-          <CommandTable v-else :rows="tabRows(value, tab)" :name-of="nameOf" />
+          <CommandTable v-else :rows="tabRows(value, tab)" :name-of="nameOf" :code-of="codeOf" />
         </template>
       </ApRemote>
     </ApPanel>

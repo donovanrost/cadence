@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
 import { formatRelative, plural, useNow, ApTable, ApTag, type ApColumn } from "@/ui";
-import { groupBlockedLine } from "@/features/contacts/readiness.ts";
+import { groupBlockedLine, type StationCode } from "@/features/contacts/readiness.ts";
 import type { GroupRow } from "../groups/api.ts";
 import { statusTag, type PersonName } from "../groups/words.ts";
 
 /** Command requests. The Title cell links to the request (name-cell link); no row actions yet. */
-defineProps<{ rows: readonly GroupRow[]; nameOf: PersonName }>();
+defineProps<{ rows: readonly GroupRow[]; nameOf: PersonName; codeOf: StationCode }>();
 const now = useNow();
 const columns: readonly ApColumn[] = [
   { key: "title", label: "Request" },
@@ -29,10 +29,10 @@ const view = (r: GroupRow) => (r.awaiting_me ? "review" : undefined);
       <ApTag v-if="row.second_go_required" class="ml-2" label="2-PERSON" />
       <!-- U33: rows carry no expiry, so the line names it only on the request page. -->
       <p
-        v-if="groupBlockedLine(row.uplink, null)"
+        v-if="groupBlockedLine(row.uplink, null, codeOf)"
         class="m-0 mt-1 max-w-[60ch] text-sm text-crit-text"
       >
-        {{ groupBlockedLine(row.uplink, null) }}
+        {{ groupBlockedLine(row.uplink, null, codeOf) }}
       </p>
     </template>
     <template #cell-scope="{ row }">

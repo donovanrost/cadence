@@ -262,7 +262,7 @@ describe("attention rows (U31, fafe581a)", () => {
     );
     expect(row?.title).toBe("EARENDIL-001 · Can't command on the SVB-1 pass.");
     expect(row?.sentence).toBe(
-      "The link restarted mid-pass and can't resume. 2 command groups are queued for it.",
+      "The uplink restarted after this pass had sent commands, and it can't resume. 2 command groups are queued for it.",
     );
     expect(row?.acknowledged).toBe(false);
   });

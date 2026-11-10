@@ -66,7 +66,7 @@ export function attentionWords(a: Attention): Readonly<{ what: string; evidence:
     const station = a.station.code ?? a.station.name ?? "this";
     return {
       what: `Can't command on the ${station} pass.`,
-      evidence: `${reasonSentence(a.uplink.reason)}.${n ? ` ${plural(n, "command group")} ${n === 1 ? "is" : "are"} queued for it.` : ""}`,
+      evidence: `${reasonSentence(a.uplink.reason, { provider: a.provider.name })}.${n ? ` ${plural(n, "command group")} ${n === 1 ? "is" : "are"} queued for it.` : ""}`,
     };
   }
   const r = a.resolution;

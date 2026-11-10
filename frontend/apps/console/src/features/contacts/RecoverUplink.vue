@@ -5,7 +5,7 @@ import { recoverUplink, type RecoverOutcome } from "./readiness.ts";
 
 /**
  * `Recover uplink` (U33): a secondary button, no confirm; while it runs it's disabled with
- * "Recovering now". The outcome shows in words beside it.
+ * "Qualifying now". The outcome shows in words beside it.
  */
 const props = defineProps<{
   missionId: string;
@@ -38,7 +38,7 @@ async function recover() {
         >Recover uplink</ApButton
       >
       <span v-if="busy || recovering" class="font-mono text-xs text-text-2 uppercase"
-        >Recovering now</span
+        >Qualifying now</span
       >
     </div>
     <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>

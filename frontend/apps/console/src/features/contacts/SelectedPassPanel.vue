@@ -20,7 +20,7 @@ import {
 } from "@/features/scheduling/index.ts";
 import type { Pass } from "./api.ts";
 import AttentionBlock from "./AttentionBlock.vue";
-import { readinessTag, recoverable } from "./readiness.ts";
+import { readinessTag, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
 import { useCommandAccess } from "@/features/commands/index.ts";
 import { stationLabel } from "./gantt.ts";
@@ -52,7 +52,10 @@ const tag = computed(() => {
 /** U33: readiness in the drawer ("Uplink ready" too); Recover while blocked or recovering. */
 const readiness = computed(() => {
   const r = props.pass?.uplink_readiness;
-  return r ? { ...r, tag: readinessTag(r, "drawer", props.pass?.ends_at ?? null) } : null;
+  const p = props.pass;
+  if (!r || !p) return null;
+  const tag = readinessTag(r, "drawer", { provider: p.source.provider_name, los: p.ends_at });
+  return { ...r, tag, link: reasonLink(r.reason) };
 });
 // Recover is operate_mission, the same policy as abort (DECISIONS #42).
 const access = useCommandAccess();
@@ -144,6 +147,12 @@ const countdown = computed(() => {
           <span v-if="readiness.tag.sentence" class="text-sm text-text-2">{{
             readiness.tag.sentence
           }}</span>
+          <RouterLink
+            v-if="readiness.link"
+            :to="readiness.link.to"
+            class="max-md:hit-44 text-sm text-readout underline hover:text-bright"
+            >{{ readiness.link.label }}</RouterLink
+          >
         </div>
         <p
           v-if="readiness.state === 'blocked' && !recoverable(readiness.reason)"
@@ -152,13 +161,18 @@ const countdown = computed(() => {
           Recovery isn't possible on this pass.
         </p>
         <RecoverUplink
-          v-else-if="readiness.state === 'blocked' || readiness.state === 'recovering'"
+          v-else-if="readiness.state === 'blocked'"
           :mission-id="missionId"
           :pass-id="pass.id"
-          :recovering="readiness.state === 'recovering'"
+          :recovering="false"
           :can-recover="access.abort"
           @changed="$emit('changed')"
         />
+        <!-- U33 amendment 2: the raw key lives here only, never in the copy. -->
+        <details v-if="readiness.reason" class="text-xs text-text-3">
+          <summary class="cursor-pointer font-mono uppercase">Technical details</summary>
+          <p class="m-0 pt-1 font-mono">reason: {{ readiness.reason }}</p>
+        </details>
       </div>
       <ApKeyValue :items="facts" />
       <ApButton v-if="replan" size="compact" :to="replan">Re-plan</ApButton>
