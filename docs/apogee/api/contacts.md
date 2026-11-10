@@ -124,6 +124,41 @@ signed-in user (#30).
   `422 invalid_params` (`details.action_text`), `422 actor_not_assignable` (the body names an
   actor field), `404 mission_not_found`.
 
+### Uplink readiness (U33, DECISIONS #58): proposed, not built (waits on domain's readiness read)
+
+Field names may still change to fit what domain lands. fe-ops gets the final shape before anything
+ships.
+
+- **Pass rows** (`/passes`, `/passes/:id`) gain `uplink_readiness`:
+  `{state: ready | qualifying | recovering | blocked, reason, since, command_groups_queued}`.
+  - `reason` is a key (for example `protocol_state_restore_required`), `null` unless `blocked`.
+    Map it to words; an unknown key falls back to sentence case.
+  - `since` is when the state began (`null` if unknown). `command_groups_queued` is the number of
+    queued groups waiting for this pass; it makes `blocked` crit (> 0) or caution (0).
+  - The whole field is `null` when the pass has no uplink to be ready (downlink-only, or not
+    booked).
+- **Command groups** (list rows and show) gain `uplink`:
+  `{pass: {reservation_id, contact_id, station {ref, id, code, name}, starts_at}, readiness:
+  {state, reason, since}}` for the pass the group is queued for, or `null` (no pass yet, or not
+  queued).
+- **`POST /api/console/v1/missions/:mission_id/passes/:id/recover-uplink`** (no body,
+  `operate_mission`, audited, safe to repeat) re-runs the automatic recovery.
+  - Returns `{data: {state: ready | recovering, ready_at}}`.
+  - Errors: `409 uplink_recovery_refused` (`details.reason`: "Recovery refused: <reason>"),
+    `409 uplink_not_blocked`, `409 uplink_recovering` (already running), `403 forbidden`,
+    `404 pass_not_found`.
+- **Attention source `uplink_blocked`:** a pass that's `blocked` while command groups are queued
+  for it. The queue row has `source: "uplink_blocked"`, P1 within 2 h of AOS or in progress,
+  otherwise P2, and `due_at` = AOS. The `attention` object keeps the same envelope:
+  - `id`, `source`, `state: "open"` (it resolves by itself; no acknowledge), `contact_id`,
+    `reservation_id`, `station`, `provider`, `starts_at`, `raised_at`;
+  - `conflict`, `provider_message`, `resolution` and `acknowledged_by` are `null`;
+  - plus `uplink: {state: "blocked", reason, since, command_group_ids: [...]}` (`null` on
+    `pass_resolution` items).
+  - `resolved[]` entries: `resolved_by {kind: "system"}`, `action` `uplink recovered` (or
+    `no command groups queued`).
+  - `/counts.attention` counts both sources.
+
 ## S10: `contacts` invalidation
 
 `invalidate` with `contacts` fires when a scheduled or realized contact or a contact action is
