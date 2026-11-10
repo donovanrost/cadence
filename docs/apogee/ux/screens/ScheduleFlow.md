@@ -141,7 +141,7 @@ footer: Revision r41 → r42 │ Passes −N │ Cost today │ Rule met │ [Wa
 
 ## K3 · Close the books (`M/contacts/review`, reading)
 Header (not a takeover): back · mono `PASS REVIEW · PLAN R39 · 3 PROVIDERS` over the day ·
-`choice` `Day │ Week │ Month` · `Export CSV`, `Monthly close`.
+`choice` `Day │ Week │ Month` · `Export CSV` (time facts only: R1 by station, R4 missed/partial; built client-side). `Monthly close` is dropped with billing (#63, U34).
 - **h1:** `98.5% realized · $1,180 to dispute` (dispute amount in caution when > 0). Meta: provider
   report freshness (`REPORTS IN FROM ALL 3 PROVIDERS · LAST AT 01:12Z · 0 UNKNOWN`; unknown > 0 in
   stale text; an unreported provider makes the realized % provisional, said in words).
