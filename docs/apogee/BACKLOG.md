@@ -21,7 +21,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
 | **api** | §8 list | — |
 | **api-ops** | §8 list | domain #34 for uplink items |
-| **domain** | qa #19 server side; catalog-path generations (#36); spacecraft archive (#50) | — (qa #34 done: #59, e683b3e2) |
+| **domain** | catalog-path generations (#36; plan to the director first, it touches activation) | — (done: qa #34 #59 e683b3e2; qa #19 server side 33529f29; #50 archive) |
 
 ## 2. Ops
 
@@ -154,7 +154,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Compare revisions (`r4...r6`) | fe-setup | — (`GET /config/compare`) |
 | `Keep mine` / `Take live` on conflicts | fe-setup | — (`POST /ops/:op_id/rebase`) |
 | Staged bar conflict / applying / apply-failed states; top bar `CONVERGING` / `RUNTIME DEGRADED`; live apply steps | fe-setup | apply progress source *(unverified)* |
-| qa #19: a 5xx on submit reads "Nothing was applied"; should read "unclear, check now" | fe-setup (copy) + domain/api (the 500) | — |
+| qa #19: a 5xx on submit reads "Nothing was applied"; should read "unclear, check now" (server side done, domain 33529f29: `:apply_interrupted`) | fe-setup (copy), then qa closes | — |
 | Now P3 row when a set sits > 24 h; Timeline `Config r6 applied` | fe-ops | *(unverified)* |
 
 ### Contact planning (`ContactPlanning.md`): built. Hide the money policy fields (max cost, currency, critical cost reserve, cost weight; #63/U34). Review 6/7 in progress (sort is in; uppercase rule line *(unverified)*). Owner fe-setup.
@@ -212,7 +212,7 @@ missing endpoint or decision; an item with no blocker can start now.
 5. Readiness `recent_changes` (or agree fe-setup reads revisions).
 6. ~~Billing terms + budgets~~ out of scope (#63).
 7. K3 `Export CSV` / `Monthly close` (time facts only, no money).
-8. qa #19 (submit 500 after commit), with domain.
+8. qa #19: map domain's `:apply_interrupted` (33529f29) if not already.
 
 **api-ops**
 1. M8 `spacecraft:<id>` topic (Investigate live tail and log).
@@ -223,9 +223,9 @@ missing endpoint or decision; an item with no blocker can start now.
 
 **domain**
 1. ~~qa #34~~ done (#59, e683b3e2).
-2. qa #19 server side.
-3. Catalog-path generations (#36), which unblock Catalog C3 rollout.
-4. Spacecraft archive model (#50) for rollback of spacecraft creation.
+2. ~~qa #19 server side~~ done (33529f29).
+3. Catalog-path generations (#36), which unblock Catalog C3 rollout. Plan to the director first.
+4. ~~Spacecraft archive model (#50)~~ done (7dbd3994, e0232291, 5ee6d6e8; rollback of create verified c8526c57).
 
 ## 9. Deferred by decision (not backlog)
 #2 roles/Cedar · #4 propagation (K0, ground track, umbra, sky plot, max elevation) · #5 procedures ·
