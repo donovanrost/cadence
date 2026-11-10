@@ -47,11 +47,18 @@ export const sectionOp = (
 ): StageOp => ({ kind: "spacecraft_profile", action: "update", entity_id: profileId, changes });
 
 /** The server's dry run in one line (Changes.md §1): verdict, spacecraft changed / kept and why. */
-export function describePreview(p: Preview): {
-  tone: "nominal" | "caution" | "crit";
-  text: string;
-} {
-  const issues = p.checks.flatMap((c) => c.items.flatMap((i) => [itemLine(i)]));
+export function describePreview(
+  p: Preview,
+  /** Field labels by path, so errors read "Catalog revision: …" rather than the raw path (ux). */
+  labels: Readonly<Record<string, string>> = {},
+): { tone: "nominal" | "caution" | "crit"; text: string } {
+  const issues = p.checks.flatMap((c) =>
+    c.items.flatMap((i) =>
+      i.errors && i.errors.length > 0
+        ? i.errors.map((e) => `${labels[e.path] ?? e.path}: ${e.message}`)
+        : [itemLine(i)],
+    ),
+  );
   const changes = p.effects.reduce((n, e) => n + e.changes, 0);
   const keeps = p.effects.flatMap((e) => e.keeps);
   const reasons = [...new Set(keeps.map((k) => k.reason))].slice(0, 2).join("; ");

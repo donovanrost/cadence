@@ -32,6 +32,7 @@ const dirty = computed(() =>
   fields.filter((f) => (values.value[f.path] ?? "") !== (before[f.path] ?? "")),
 );
 const errors = computed(() => (edits.value.ok ? {} : edits.value.errors));
+const labels = Object.fromEntries(fields.map((f) => [f.path, f.label]));
 
 async function check() {
   if (!edits.value.ok || busy.value) return;
@@ -42,7 +43,7 @@ async function check() {
       new AbortController().signal,
     );
     outcome.value = r.ok
-      ? describePreview(r.value)
+      ? describePreview(r.value, labels)
       : { tone: "crit", text: failureOutcome(r.error, "changed").sentence };
   } finally {
     busy.value = false;
