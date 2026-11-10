@@ -103,6 +103,18 @@ CADENCE_DEV_DATABASE=cadence_apogee_dev \
 EARENDIL_CADENCE_NODE=cadence_apogee \
   mise exec -- elixir --sname earendil_setup_apogee --cookie cadence dev/reflect_orbital_activate.exs --single-operator
 
+# ARMED PASSES (director, 2026-11-10). When a command group waits for a real pass:
+#  - No simulator run pause/resume and no :4011 or simulator restart within 1 h of its AOS.
+#    Pausing adds the paused time to the run's paused_duration_seconds and the orchestrator plays
+#    every pass that much late (effective_now = now - offset); a :4011 restart drops COP-1 state
+#    (uplink session 'not qualified: :protocol_state_restore_required').
+#  - At T-15 min re-check: run offset is 0
+#      CadenceSimulator.Provider.Store.fetch(:run, "run-earendil-demo-v1") -> "paused_duration_seconds"
+#    (on node qa_sim; if non-zero, Store.put the run back with 0), the group is queued, the booking is
+#    confirmed with command_window, and any CLCW override is armed on the right contact ref.
+#  - To hold bookings 'pending' for unconfirmed-state checks, don't pause the run; find another way
+#    (ask domain), or pause only far from any armed pass and reset the offset afterwards.
+
 # 7. Live feeds (on request only; keep them short, e.g. EARENDIL_DEMO_CONTACT_SECONDS=600)
 cd apps/cadence_simulator
 CADENCE_DEV_DATABASE=cadence_apogee_dev EARENDIL_CADENCE_NODE=cadence_apogee EARENDIL_SIMULATOR_PORT=4111 \
