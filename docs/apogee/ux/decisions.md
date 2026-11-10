@@ -377,3 +377,31 @@ acknowledged_by?, spacecraft_id, contact_id, station, provider, starts_at, raise
 - **Names:** spacecraft, station and provider names are resolved client-side from their ids. A provider closure in
   `resolved[]` reads "Resolved: Northlight confirmed" / "…canceled".
 
+### U33 · Uplink readiness per pass (DECISIONS #58) (domain / api-ops / fe-ops)
+**Decision:** readiness is shown where commanding happens: on the pass, on each command group queued for it,
+and in Now's queue when it blocks queued commands. It's quiet when ready.
+- **Pass (contact drawer D2, Gantt bar inspector, K1/Contacts pass rows):**
+  - `ready`: no tag on bars and rows. The drawer reads `UPLINK READY` (nominal text).
+  - `qualifying` / `recovering`: neutral `UPLINK QUALIFYING…` / `UPLINK RECOVERING…`, with the start time
+    when known (`since 00:41Z`).
+  - `blocked`: a tag `CAN'T COMMAND` plus the reason in words: "Can't command: the session needs its protocol
+    state restored." It's **crit** when command groups are queued for that pass, and caution when none are.
+  - Reasons map from domain's keys to sentences. Unknown keys fall back to sentence case, never the token (pass-2 #4).
+- **Command group (Commands list row, request page `…/uplink`):**
+  - When its pass is blocked, the row's secondary line reads "Can't command on the SVB-1 pass (AOS 00:54Z):
+    <reason>. Nothing will be sent until the uplink recovers."
+  - Claim only that. Don't say it will move or wait for another pass unless the server says so (U20).
+  - The request page shows the same line as a callout above the uplink trail, with `Recover uplink`.
+- **`Recover uplink`:** a secondary button in the drawer and on the request page, for `operate_mission` only.
+  - Members without it see "Operators with mission access can recover the uplink."
+  - No confirm sheet: it re-runs the automatic recovery, is audited, and is safe to repeat.
+  - While it runs, the state reads `UPLINK RECOVERING…` and the button is disabled with the reason "Recovering now".
+  - Outcomes are in words: "Uplink recovered · ready at 00:43Z", or "Recovery refused: <reason>". Failure copy per U20.
+- **Now queue (U31 attention, subkind `uplink_blocked`):**
+  - Title: "EARENDIL-001 · Can't command on the SVB-1 pass."
+  - Secondary: "<reason>. 2 command groups are queued for it."
+  - Meta: `SVB-1 · AOS T−01:12:00`.
+  - Ranking: P1 when AOS is within 2 h or the pass is in progress, P2 otherwise.
+  - Action `Review` → the contact drawer, where Recover lives. It resolves by itself when readiness returns to
+    `ready` or no groups are queued; the fade reads "Resolved: uplink recovered".
+
