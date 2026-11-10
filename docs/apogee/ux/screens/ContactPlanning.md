@@ -27,14 +27,14 @@ tabs: Requirements · Policy
 - **P1 Coverage** (stat strip): Spacecraft covered `488/500` · Templates `4` · Contacts per day
   (sum of rule demand) · Uplink-capable passes required. A `—` + reason where it can't be computed (U13).
 - **P2 Templates** (ApTable): Name (link) · Applies to (`profile Earendil Block 1` / `planes 03–04` /
-  `12 spacecraft`) · Rule in words, mono: `≥ 3 CONTACTS / DAY · NO GAP > 10h00 · ≥ 1 UPLINK` (from
+  `12 spacecraft`) · Rule in words, mono: `≥ 3 CONTACTS / DAY · AT LEAST 2h00 APART · ≥ 1 UPLINK` (from
   `contact_count`, `minimum_separation_seconds`, `service_direction`) · Priority (`routine` / `high` /
   `critical`) · Version `v2` · Spacecraft count. Primary `New template`.
 - **P3 Not covered** (only when > 0): spacecraft with no rule, grouped by profile/plane ("12 in
   Earendil Block 2 have no contact rule"), action `Add a template for Block 2`.
 - **Template page:** the rule as a form generated from the requirement fields (contacts per day,
   window `earliest_start` → `latest_end` in UTC time-of-day, minimum and preferred duration,
-  minimum separation = max gap, direction downlink / uplink / both, intent, priority, minimum data
+  minimum separation (contacts at least this far apart; it's **not** a maximum gap, which isn't modelled), direction downlink / uplink / both, intent, priority, minimum data
   volume, station/provider constraints as chips, rationale). **Applies to** is a target query (same
   chips as Command C1: profile, plane, spacecraft). A live preview line: "3 contacts a day for 500
   spacecraft = 1,500 passes a day". Before saving, show what it supersedes (from a server dry-run): a caution callout "Saving v3 supersedes 2 open

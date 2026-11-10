@@ -181,7 +181,7 @@ an acked critical in with fresh cautions and hide severity. Sorting last keeps u
 
 ### U22 · Scheduling answers (lead's plan, Q1–Q9)
 1. **Day** = 00–24Z UTC. Shift-aligned windows can come later as a preset.
-2. **Rule source:** show the rule text (`≥ 3 CONTACTS A DAY · NO GAP OVER 10h00`) with its true source,
+2. **Rule source:** show the rule text (`≥ 3 CONTACTS A DAY · AT LEAST 2h00 APART`; corrected: `minimum_separation_seconds` is a minimum spacing, not a max gap) with its true source,
    `FROM REQUIREMENT TEMPLATE "BLOCK 1 DAILY" ↗` (link to the existing page) until profile demand
    exists. No IA home is added for templates.
 3. **Budgets:** confirmed. No denominators and no budget caution until a budget setting exists.
@@ -449,4 +449,18 @@ attestations. Show it only for reasons it can fix (expired or missing evidence).
 the product. Layouts reflow, with no empty slots. Time facts stay. Wording that only made sense with billing
 goes too ("22 inside 2 h are billed", "to dispute"). Contact planning hides its money policy fields; they
 keep their server values. When billing returns, the specs' money items come back as written.
+
+### U35 · Queue ranking without a modelled max gap (api-ops, amends U11)
+**Context:** U11's "next contact beyond its allowed gap" assumed a max gap. None is modelled.
+`minimum_separation_seconds` is the minimum spacing between contacts, and my earlier specs misread it as a
+max gap (corrected in ContactPlanning and U22).
+**Decision (interim, until contact requirements carry a max gap):**
+- **Missed pass:**
+  - **P1** when the spacecraft has no booked contact in the next **6 h**, or its next contact is unknown.
+  - **P2** otherwise.
+  - The evidence line says which: "Next contact SVB-1 in 1h 12m", or "No contact booked in the next 6 h".
+  - Keep 6 h as one named constant, so it can become the requirement's max gap later.
+- **Station outage, maintenance or degraded windows over booked passes:**
+  - Horizon **24 h**, **P2**.
+  - **P1** when an affected pass starts within **2 h** or is in progress (the same clock as U31/U33).
 
