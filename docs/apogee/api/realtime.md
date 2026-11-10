@@ -114,7 +114,9 @@ These are the shapes I plan to build, revised with fe-ops' comments (plans/ops.m
   Joined while one spacecraft is open (Investigate B1). It needs the same access as `mission:<id>`
   (`operate_mission` on the spacecraft's mission). Join errors: `{"reason":
   "spacecraft_not_found" | "forbidden" | "too_many_points"}`.
-  - **Join** payload `{"point_ids": [...]}`, at most 200 (`too_many_points` above that).
+  - **Join** payload `{"point_ids": [...]}`, at most 200 (`too_many_points` above that). An
+    empty payload (or no `point_ids`) selects none: the reply has `points: []` and nothing is
+    pushed until `points:set`.
     Reply `{"spacecraft_id", "mission_id", "points": [{"point_id", "unit", "type"}]}`.
     `type` is `numeric | enum | text`:
     - `uint`, `int` and `float` fields are `numeric`;
