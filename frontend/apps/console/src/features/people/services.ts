@@ -1,4 +1,11 @@
-import { decoders as d, request, type ApiError, type ApiResult, type Decoded } from "@/api";
+import {
+  decoders as d,
+  request,
+  type ApiError,
+  type ApiResult,
+  type Decoded,
+  outcomeUnknown,
+} from "@/api";
 
 /** O6 service identity writes (api, setup.md). Org admins only; the token appears ONCE. */
 const base = (orgId: string) => `/organizations/${encodeURIComponent(orgId)}/service-identities`;
@@ -67,7 +74,7 @@ export function serviceFailure(e: ApiError): ServiceFailure {
     };
   if (e.kind === "forbidden")
     return { text: "Only an organization admin can manage service identities.", fields: {} };
-  if (e.kind === "malformed" || (e.kind === "unavailable" && e.status === 0))
+  if (outcomeUnknown(e))
     return {
       text: "No clear answer from the server, so it may or may not have changed. Reload before trying again; a token issued meanwhile can't be shown again, so rotate if you need one.",
       fields: {},

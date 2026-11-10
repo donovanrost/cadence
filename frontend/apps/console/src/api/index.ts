@@ -3,6 +3,7 @@ export { DecodeError, decode, type Decoded, type Reader } from "./decode.ts";
 export {
   API_BASE,
   describeApiError,
+  outcomeUnknown,
   request,
   setCsrfToken,
   type ApiError,

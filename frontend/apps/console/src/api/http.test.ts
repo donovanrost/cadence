@@ -50,3 +50,13 @@ describe("request", () => {
     });
   });
 });
+
+describe("outcomeUnknown (qa #19)", () => {
+  it("treats 5xx, a dropped connection and an unreadable reply as unknown, not as failure", async () => {
+    const { outcomeUnknown } = await import("./http.ts");
+    expect(outcomeUnknown({ kind: "unavailable", status: 500, message: "" })).toBe(true);
+    expect(outcomeUnknown({ kind: "unavailable", status: 0, message: "" })).toBe(true);
+    expect(outcomeUnknown({ kind: "malformed", message: "" })).toBe(true);
+    expect(outcomeUnknown({ kind: "conflict", code: "x", message: "", details: null })).toBe(false);
+  });
+});

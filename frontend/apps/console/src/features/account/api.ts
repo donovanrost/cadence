@@ -1,4 +1,11 @@
-import { decoders as d, request, type ApiError, type ApiResult, type Decoded } from "@/api";
+import {
+  decoders as d,
+  request,
+  type ApiError,
+  type ApiResult,
+  type Decoded,
+  outcomeUnknown,
+} from "@/api";
 
 /** Account: password and sessions (api session.md "Account"). The signed-in user's own account. */
 export const sessionsReader = d.object({
@@ -64,7 +71,7 @@ export function passwordFailure(
     const t = Array.isArray(v) ? v.filter((x) => typeof x === "string").join(" ") : v;
     if (typeof t === "string" && t) return { text: null, fields: { next: t } };
   }
-  if (e.kind === "malformed" || (e.kind === "unavailable" && e.status === 0))
+  if (outcomeUnknown(e))
     return {
       text: "No clear answer from the server, so your password may or may not have changed. Try signing in with the new one in another window before changing it again.",
       fields: {},

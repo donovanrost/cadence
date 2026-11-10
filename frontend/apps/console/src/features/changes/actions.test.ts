@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
-import { groupedLines, itemLine, previewReader, type PreviewItem } from "./actions.ts";
+import {
+  failureOutcome,
+  groupedLines,
+  itemLine,
+  previewReader,
+  type PreviewItem,
+} from "./actions.ts";
 
 const base: PreviewItem = {
   op_id: null,
@@ -239,6 +245,16 @@ describe("version format (api 4721f61a)", () => {
     };
     expect(itemLine(item, "r8")).toBe(
       "EARENDIL-001 · Profile version is v6 now, not v5 as r8 left it (changed in r9). Roll back r9 first, or change it by hand.",
+    );
+  });
+});
+
+describe("failureOutcome on 5xx (qa #19)", () => {
+  it("says it's unclear and to check now, never that nothing changed", () => {
+    const o = failureOutcome({ kind: "unavailable", status: 500, message: "boom" }, "applied");
+    expect(o.changed).toBeNull();
+    expect(o.sentence).toBe(
+      "The server failed while answering, so it isn't clear whether anything was applied. Check Staged changes and Revisions now, before trying again.",
     );
   });
 });

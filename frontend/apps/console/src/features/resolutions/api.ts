@@ -1,4 +1,11 @@
-import { decoders as d, request, type ApiError, type ApiResult, type Decoded } from "@/api";
+import {
+  decoders as d,
+  request,
+  type ApiError,
+  type ApiResult,
+  type Decoded,
+  outcomeUnknown,
+} from "@/api";
 
 /**
  * DECISIONS #53 / ux U32: resolve a placed booking the provider hasn't answered past the #52 window.
@@ -98,7 +105,7 @@ export function failureText(e: ApiError, provider: string): ResolveFailure {
   }
   if (e.kind === "forbidden")
     return { text: "Org admins resolve unconfirmed bookings.", fields: {}, refresh: false };
-  if (e.kind === "malformed" || (e.kind === "unavailable" && e.status === 0))
+  if (outcomeUnknown(e))
     return {
       text: "No clear answer from the server, so it may or may not have been recorded. The list has been reloaded; check it before trying again.",
       fields: {},

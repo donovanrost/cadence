@@ -79,6 +79,18 @@ function toError(status: number, body: unknown): ApiError {
 }
 
 /**
+ * True when a write's outcome is unknown: the reply was unreadable, the connection dropped, or the
+ * server failed while answering (5xx). The write may have committed (qa #19: a 500 after a
+ * committed apply), so say "unclear, check now", never "nothing changed".
+ */
+export function outcomeUnknown(error: ApiError): boolean {
+  return (
+    error.kind === "malformed" ||
+    (error.kind === "unavailable" && (error.status === 0 || error.status >= 500))
+  );
+}
+
+/**
  * Calls a console API path (relative to API_BASE) and decodes the `data` member of a
  * successful response with `read`. Network failures and non-2xx responses become ApiError;
  * nothing undecoded leaves this function. Aborts propagate as AbortError rejections.

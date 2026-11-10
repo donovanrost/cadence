@@ -1,4 +1,4 @@
-import { request, type ApiError, type ApiResult } from "@/api";
+import { request, type ApiError, type ApiResult, outcomeUnknown } from "@/api";
 import { decoders as d } from "@/api";
 import { roles, type Role } from "./api.ts";
 
@@ -55,7 +55,7 @@ export function adminErrorText(e: ApiError): string {
     default:
       break;
   }
-  if (e.kind === "malformed" || (e.kind === "unavailable" && e.status === 0))
+  if (outcomeUnknown(e))
     return "No clear answer from the server, so it may or may not have changed. Reload before trying again.";
   return `Nothing changed. ${"message" in e ? e.message : ""}`.trim();
 }
