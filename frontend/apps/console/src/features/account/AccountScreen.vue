@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useSession } from "@/shell/index.ts";
-import { ApEmptyState, ApKeyValue, ApPageHeader, ApPanel, ApTable, type ApColumn } from "@/ui";
+import { ApKeyValue, ApPageHeader, ApPanel, ApTable, type ApColumn } from "@/ui";
+import PasswordPanel from "./PasswordPanel.vue";
+import SessionsPanel from "./SessionsPanel.vue";
 
-/** Your account: facts from the session bootstrap. Password and sessions have no API yet. */
+/** Your account: profile and organizations (session bootstrap), password, sessions (api Account). */
+const sessions = ref<InstanceType<typeof SessionsPanel> | null>(null);
 const session = useSession();
 
 const profile = computed(() => [
@@ -42,12 +45,9 @@ const columns: readonly ApColumn[] = [
         caption="Your organizations"
       />
     </ApPanel>
-    <ApPanel index="A3" title="Password and sessions" flush>
-      <ApEmptyState
-        state="off"
-        headline="Not available in the console yet"
-        sentence="Changing your password and signing out other sessions will move here. Until then, ask an organization admin."
-      />
-    </ApPanel>
+    <div class="grid grid-cols-1 gap-4 console:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      <PasswordPanel @changed="sessions?.refetch()" />
+      <SessionsPanel ref="sessions" />
+    </div>
   </div>
 </template>
