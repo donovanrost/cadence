@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApListRow, ApPanel, ApStatStrip, ApStatTile, formatDuration, plural } from "@/ui";
+import { ApListRow, ApPanel, ApStatStrip, ApStatTile, plural } from "@/ui";
 import type { Pass } from "@/features/contacts/index.ts";
 import {
   reasonText,
-  stationCode,
   type PlanDetail,
   type Repair,
   type SpacecraftName,
 } from "@/features/scheduling/index.ts";
 import CoveredList from "./CoveredList.vue";
+import { moveLine } from "./moves.ts";
 
 /** C · Changes (K2): what the repair keeps, moves, drops and adds, then what needs a person. */
 const props = defineProps<{
@@ -21,7 +21,6 @@ const props = defineProps<{
 }>();
 const name = (id: string | null) => props.nameOf(id)?.name ?? id ?? "Unknown spacecraft";
 const sample = computed(() => props.diff.moved.slice(0, 8));
-const sign = (s: number) => (s >= 0 ? `+${formatDuration(s)}` : `−${formatDuration(-s)}`);
 </script>
 
 <template>
@@ -41,9 +40,11 @@ const sign = (s: number) => (s >= 0 ? `+${formatDuration(s)}` : `−${formatDura
         <ApStatTile
           label="Covered"
           :value="diff.covered.length"
-          caption="already booked separately"
+          :caption="diff.covered.length > 0 ? 'already booked separately' : undefined"
         />
+        <!-- Spans the row's last two cells, so no empty cell shows the strip's fill. -->
         <ApStatTile
+          class="col-span-2"
           label="Dropped"
           :value="diff.dropped.length"
           :state="diff.dropped.length > 0 ? 'caution' : 'neutral'"
@@ -71,11 +72,8 @@ const sign = (s: number) => (s >= 0 ? `+${formatDuration(s)}` : `−${formatDura
         class="flex flex-wrap gap-x-2 border-t border-hairline-faint px-4 py-1.5 first:border-t-0"
       >
         <span class="text-readout">{{ name(m.spacecraft_id) }}</span>
-        <span class="text-text-3"
-          >{{ stationCode(m.from.station) }} {{ m.from.starts_at.slice(11, 16) }}Z →
-          {{ stationCode(m.to.station) }} {{ m.to.starts_at.slice(11, 16) }}Z</span
-        >
-        <span class="text-text-4">{{ sign(m.offset_s) }}</span>
+        <span class="text-text-3">{{ moveLine(m).route }}</span>
+        <span v-if="moveLine(m).offset" class="text-text-4">{{ moveLine(m).offset }}</span>
       </li>
     </ul>
     <p
