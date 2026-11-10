@@ -13,7 +13,7 @@ describe("moveLine (ux)", () => {
   it("calls a same-station, same-start pass a re-booking, with no offset", () => {
     const same = at("KIR", "2026-11-10T00:54:00Z");
     expect(moveLine({ spacecraft_id: "sc-4", from: same, to: same, offset_s: 0 })).toEqual({
-      route: "· re-booked · KIR 00:54Z",
+      route: "· KIR 00:54Z · same window, re-booked",
       offset: null,
     });
   });

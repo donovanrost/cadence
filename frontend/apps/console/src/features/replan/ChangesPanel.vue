@@ -9,7 +9,7 @@ import {
   type SpacecraftName,
 } from "@/features/scheduling/index.ts";
 import CoveredList from "./CoveredList.vue";
-import { moveLine } from "./moves.ts";
+import { moveLine, sameWindow } from "./moves.ts";
 
 /** C · Changes (K2): what the repair keeps, moves, drops and adds, then what needs a person. */
 const props = defineProps<{
@@ -21,6 +21,7 @@ const props = defineProps<{
 }>();
 const name = (id: string | null) => props.nameOf(id)?.name ?? id ?? "Unknown spacecraft";
 const sample = computed(() => props.diff.moved.slice(0, 8));
+const rebooked = computed(() => props.diff.moved.filter(sameWindow).length);
 </script>
 
 <template>
@@ -35,7 +36,11 @@ const sample = computed(() => props.diff.moved.slice(0, 8));
       <!-- ux: Kept · Moved · Added · Covered · Dropped; 3 columns (two rows) fit the 360px pane. -->
       <ApStatStrip :columns="3" label="Repair changes">
         <ApStatTile label="Kept" :value="diff.kept.length" />
-        <ApStatTile label="Moved" :value="diff.moved.length" />
+        <ApStatTile
+          label="Moved"
+          :value="diff.moved.length"
+          :caption="rebooked > 0 ? `${rebooked} in the same window` : undefined"
+        />
         <ApStatTile label="Added" :value="diff.added.length" />
         <ApStatTile
           label="Covered"
