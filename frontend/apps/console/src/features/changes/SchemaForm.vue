@@ -18,6 +18,9 @@ function set(path: string, value: string) {
 /** ISO 4217 codes offered for currency fields; the server validates the final value. */
 const currencies = ["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "NZD", "NOK", "SEK"] as const;
 const isCurrency = (f: SchemaField) => f.type === "string" && /(^|\.)currency$/.test(f.path);
+/** Enums, currencies, and reference fields the server offers choices for (e.g. catalog revisions). */
+const isSelect = (f: SchemaField) =>
+  f.type === "enum" || isCurrency(f) || (f.type === "reference" && (f.enum?.length ?? 0) > 0);
 const unitLabel = (f: SchemaField) =>
   f.unit === "s"
     ? "duration"
@@ -60,7 +63,7 @@ const hint = (f: SchemaField) =>
           <span v-if="f.help" class="text-sm text-text-3">{{ f.help }}</span>
         </div>
         <ApSelect
-          v-else-if="f.type === 'enum' || isCurrency(f)"
+          v-else-if="isSelect(f)"
           :label="f.label"
           :model-value="values[f.path] ?? ''"
           :options="
