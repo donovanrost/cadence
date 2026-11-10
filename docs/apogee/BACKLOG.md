@@ -115,7 +115,7 @@ missing endpoint or decision; an item with no blocker can start now.
 ### K3 · Close the books (`contacts/review`): built (fe-setup); gaps
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| `Export CSV`, `Monthly close` | fe-setup | api: export + close endpoints |
+| `Export CSV` of what's on screen (R1 by station, R4 missed/partial, walking R4's pages), built client-side; `Monthly close` treated as out under #63 (billing close), ux to confirm | fe-setup | ux confirm |
 | ~~Hide money (#63)~~ done: R4 Disputable tag/count removed (d50ca428) | fe-setup | — |
 
 ## 4. Setup
@@ -207,13 +207,13 @@ missing endpoint or decision; an item with no blocker can start now.
 **api**
 1. ~~Contact plans: send back, `approval`, run `stopped_at`~~ done (c7c7b277, 97523716, 413c8e18).
 2. ~~Catalog: server-side revision diff + breaking rules~~ done (cab661fe); `command_count` / `telemetry_count` *(check whether cab661fe covers them)*.
-3. People: role change, remove member, per-person activity; invitation resend/revoke; service identity create/rotate/revoke.
-4. Account: password change, sessions. Provider accounts: version history. (Console mission create dropped, #64.)
-5. Readiness `recent_changes` (or agree fe-setup reads revisions).
+3. ~~People: role change, remove member, activity; invitations; service identities~~ done (api).
+4. ~~Account: password, sessions; provider history~~ done (api). (Console mission create dropped, #64.)
+5. ~~Readiness `recent_changes`~~ done (api).
 5b. Events read: a `plane` filter (Timeline), low priority.
 6. ~~Billing terms + budgets~~ out of scope (#63).
-7. K3 `Export CSV` / `Monthly close` (time facts only, no money).
-8. qa #19: map domain's `:apply_interrupted` (33529f29) if not already.
+7. ~~K3 Export CSV / Monthly close~~ not needed: CSV is client-side from existing reads; Monthly close out under #63 (ux to confirm).
+8. qa #19: map domain's `:apply_interrupted` (33529f29), in progress (api).
 
 **api-ops**
 1. M8 `spacecraft:<id>` topic (Investigate live tail and log).
