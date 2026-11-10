@@ -136,7 +136,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | `setup/catalog/:databaseId` route (pending) | fe-setup | — |
-| C1 diff (UI ready, shows "not available") | fe-setup | api: server-side revision diff + breaking rules (#9 keeps v1 diff in scope) |
+| C1 diff (UI ready, shows "not available") | fe-setup | — (api cab661fe) |
 | C3 Roll out to / `Request activation` | fe-setup | domain: catalog-path generations (#36) |
 | Commands vs Telemetry split; `Replace file`; warnings disclosure *(unverified)* | fe-setup | api: `command_count` / `telemetry_count` |
 
@@ -206,7 +206,7 @@ missing endpoint or decision; an item with no blocker can start now.
 
 **api**
 1. ~~Contact plans: send back, `approval`, run `stopped_at`~~ done (c7c7b277, 97523716, 413c8e18).
-2. Catalog: server-side revision diff + breaking rules; `command_count` / `telemetry_count` (Catalog C1).
+2. ~~Catalog: server-side revision diff + breaking rules~~ done (cab661fe); `command_count` / `telemetry_count` *(check whether cab661fe covers them)*.
 3. People: role change, remove member, per-person activity; invitation resend/revoke; service identity create/rotate/revoke.
 4. Account: password change, sessions. Provider accounts: version history. (Console mission create dropped, #64.)
 5. Readiness `recent_changes` (or agree fe-setup reads revisions).
