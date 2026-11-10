@@ -64,6 +64,17 @@ defmodule CadenceWeb.Console.ConfigRollbackAPITest do
       "Rename"
     )
 
+    # Readiness R2 lists the applied revisions, newest first.
+    assert [
+             %{"version_label" => "r3", "summary" => "Rename", "actor" => %{"name" => "Alice"}}
+             | _
+           ] =
+             c.alice
+             |> TestFixtures.member_conn()
+             |> get(String.replace_suffix(c.base, "/config", "/readiness"))
+             |> json_response(200)
+             |> get_in(["data", "recent_changes"])
+
     preview = c |> call(:get, "/rollback?to=2") |> json_response(200) |> Map.fetch!("data")
 
     assert %{

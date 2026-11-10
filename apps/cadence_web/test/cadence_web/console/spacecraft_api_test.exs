@@ -149,7 +149,8 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     assert fleet["status"] == "blocker"
     assert fleet["count"] == 0
     assert data["verdict"]["blocker"] >= 2
-    assert data["recent_changes"] == nil
+    # Nothing applied yet: an empty change feed (R2), not null.
+    assert is_list(data["recent_changes"])
 
     causes = Enum.map(data["findings"], & &1["cause"])
     assert "no_spacecraft" in causes

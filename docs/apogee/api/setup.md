@@ -144,7 +144,8 @@ The shape is setup-shapes.md §R, with **singular** verdict keys (agreed with fe
      "body": "Ground limit checks are off. Alarms come only from flight events.", "affected_count": 0,
      "fix": {"kind": "app", "id": "limits", "label": null}}
   ],
-  "recent_changes": null
+  "recent_changes": [{"at": "…", "kind": "change_set", "version_label": "r3", "summary": "Rename",
+                      "actor": {"name": "Alice"}}]
 }}
 ```
 
@@ -163,7 +164,11 @@ Rules (v1), by area:
 - Units are singular when the count is 1.
 - `affected_count` is 0 for findings that aren't about a set of items.
 - Findings are sorted by severity (blocker first), then area order.
-- `recent_changes` stays `null` until a unified change feed exists (mission change sets).
+- `recent_changes` (R2): the mission's last 5 configuration revisions, newest first:
+  `[{at, kind: "change_set" | "rollback" | "legacy_activation", version_label: "r3", summary,
+  actor: {name} | null}]`. `[]` when nothing has been applied yet (show the panel empty, or omit
+  it). `version_label` is the revision number; open `GET /config/revisions/:n` for the detail.
+  It's `null` only if the revisions can't be read.
 
 ## `GET /api/console/v1/missions/:mission_id/profiles/:profile_id`
 
