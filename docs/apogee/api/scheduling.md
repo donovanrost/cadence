@@ -233,6 +233,16 @@ are the unconfirmed ones, soonest first (join `snapshot_id` to `passes[]` for sp
 and times); `sent_at` is when the booking was placed.
 Each pass also carries `item_id` (the execution item).
 
+Plan detail also carries `execution` (lead: K1/K2 headers, bookingStopped, K2's applied
+footer): `{requested, sent, never_sent, confirmed, uncertain, rejected, failed}`, counts of the
+approved version's bookings, or `null` before the plan has any (drafts, pending approval).
+`requested` is every pass the plan books; `requested = sent + never_sent`; `sent = confirmed +
+uncertain + rejected + failed`. `never_sent` is still waiting, was interrupted before the
+provider call, or failed before it (an expired opportunity); `failed` counts only bookings the
+provider failed or lost after they were placed. Header example: "booking · `confirmed` of
+`requested`"; bookingStopped: "`sent` requests went out; `never_sent` didn't". It changes with
+`contact_plans` invalidations (contacts.md S10).
+
 Plan detail also carries the day's **repair chain** (qa #30): `chain: [{id, version}]` (the root
 plan first, then each applied repair in order; versions are the approved ones) and
 `chain_head`: the **plan id as a bare string** (not `{id, version}`), naming the plan a new

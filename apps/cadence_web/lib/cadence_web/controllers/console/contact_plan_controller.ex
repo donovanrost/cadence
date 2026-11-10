@@ -254,10 +254,8 @@ defmodule CadenceWeb.Console.ContactPlanController do
   defp detail(conn, plan) do
     conn
     |> effective_state(plan)
-    |> Map.put(
-      :unconfirmed,
-      PlanConfirmation.unconfirmed(org_id(conn), mission_id(conn), plan.id)
-    )
+    # U30 unconfirmed and the execution summary (lead), from one read of the items.
+    |> Map.merge(PlanConfirmation.detail(org_id(conn), mission_id(conn), plan.id))
     |> Map.merge(chain(conn, plan.id))
   end
 
