@@ -143,6 +143,10 @@ ships.
   {state, reason, since} | null}` for the pass the group will release on, or `null` (no pass yet,
   or not queued). Groups queue per spacecraft lane, not per contact, so the pass is the
   spacecraft's current active uplink contact, else its next booked one (domain's rule).
+  `uplink.next_pass` (`{reservation_id, contact_id, station, starts_at}` or `null`) is the pass after
+  that one, where a blocked group goes next (U33). It's `null` when there's no later booked uplink
+  pass; then say "on the next ready pass" without naming one. Expiry comes from the group's
+  `release.expires_at`.
 - **`POST /api/console/v1/missions/:mission_id/passes/:id/recover-uplink`** (no body,
   `operate_mission`, audited, safe to repeat) re-runs the automatic recovery.
   - Returns `{data: {state: ready | recovering, ready_at}}`.
