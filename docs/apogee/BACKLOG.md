@@ -1,6 +1,8 @@
 # Apogee backlog: what's left, per screen, against the canvas
 
-Written by lead, 2026-11-09, for the director. Sources: the ux specs (`ux/screens/*.md`), the canvas
+Written by lead, 2026-11-09, for the director. **Updated** with DECISIONS #63/#64 (billing out
+of scope: money panels hidden; Compose per ux; Investigate tabs link out; Notifications dropped;
+New mission links to the existing create page; ux U34, 72f5a5f6). Sources: the ux specs (`ux/screens/*.md`), the canvas
 boards (`design-reference/`), `ux/decisions.md`, `DECISIONS.md`, open `qa/issues.md` rows, the
 ux reviews, and a read of the built code (`frontend/apps/console/src/features/`). Items marked
 *(unverified)* came from a code read that didn't settle them; owners should confirm before starting.
@@ -12,14 +14,14 @@ missing endpoint or decision; an item with no blocker can start now.
 
 | Who | Start now (unblocked) | Waiting on |
 | --- | --- | --- |
-| **lead** | K1 C panel (focused spacecraft 24 h strip); `ApSheet` kit primitive (four hand-rolled dialogs today); `ApStatTile` `to` link; Palette `>` commands and `@` stations groups (with fe-ops) | api: K1 send-back, `approval.exceptions`, interrupted-draft stop time |
-| **fe-ops** | Now tile links + A4 pass select + approval rows → request review; Investigate tabs link to existing pages (spec) + add-point chips; Contacts D3 outage bands (S7 exists); Telemetry `Dashboards ↗` → existing pages (#11); Timeline sc/plane filter; Fleet/Alarms Next contact; Mobile GO block | api-ops: M8 spacecraft topic, M22 findings, M24 encode preview, M26 retries, catalog revision, Swap/Release; ux: Compose layout ruling |
-| **fe-setup** | K2 Covered tile; Profile edit → stage (op + preview exist); People command policies tab (O4 exists); Changes compare (`/config/compare`) + Keep mine / Take live (`rebase`); Readiness R2 from revisions; Audit actor filter; qa #19 copy ("unclear, check now" on 5xx) | api: catalog diff, people/invite/service-identity writes, account password/sessions, provider history, mission create; domain: catalog generations (C3) |
-| **ux** | Visual review of the unreviewed boards (§9); Compose C1 layout ruling; specs for Notifications and New mission | — |
+| **lead** | K1 C panel (focused spacecraft 24 h strip); `ApSheet` kit primitive (five hand-rolled dialogs today); `ApStatTile` `to` link; Palette `>` commands and `@` stations groups (with fe-ops) | — (api's K1 items shipped: send back, approval, stop time) |
+| **fe-ops** | Now tile links + A4 pass select + approval rows → request review; Investigate's five tabs link to the existing pages (#64) + add-point chips; Contacts D3 outage bands (S7 exists); Telemetry `Dashboards ↗` → existing pages (#11); Timeline sc/plane filter; Fleet/Alarms Next contact; Mobile GO block | api-ops: M8 spacecraft topic, M22 findings, M24 encode preview, M26 retries, catalog revision, Swap/Release; ux: Compose layout ruling |
+| **fe-setup** | Hide money (#63/U34): K2 footer cost + billed counts, K3 dispute amount / billed minutes / R5 / Dispute, Contact planning's money policy fields; layouts reflow. New mission → existing create page (#64). K2 Covered tile; Profile edit → stage (op + preview exist); People command policies tab (O4 exists); Changes compare (`/config/compare`) + Keep mine / Take live (`rebase`); Readiness R2 from revisions; Audit actor filter; qa #19 copy ("unclear, check now" on 5xx) | api: catalog diff, people/invite/service-identity writes, account password/sessions, provider history; domain: catalog generations (C3) |
+| **ux** | Visual review of the unreviewed boards (§7); Compose C1 layout ruling (default: accept as built, #64) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
 | **api** | §8 list | — |
 | **api-ops** | §8 list | domain #34 for uplink items |
-| **domain** | qa #34 (uplink after the first command, #58/#59); qa #19 server side; catalog-path generations (#36) | — |
+| **domain** | qa #19 server side; catalog-path generations (#36); spacecraft archive (#50) | — (qa #34 done: #59, e683b3e2) |
 
 ## 2. Ops
 
@@ -36,7 +38,7 @@ missing endpoint or decision; an item with no blocker can start now.
 ### Investigate (`Investigate.md`, J2): J2 tab built; five tabs not started
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| Telemetry, Uplink, Passes, Configuration, History tabs: today `NotBuiltTab` without the spec's "link to the existing page"; ship the links first, then build | fe-ops | — |
+| Telemetry, Uplink, Passes, Configuration, History tabs link to the existing pages (#64); build later | fe-ops | — |
 | B1 add points (chips, max 3, search this spacecraft's points) | fe-ops | — (M23 point search) |
 | No active alarm: show the latest resolved alarm "back in limits" | fe-ops | — |
 | B4 sisters: plane ring, sparklines, next AOS | fe-ops | — |
@@ -46,7 +48,7 @@ missing endpoint or decision; an item with no blocker can start now.
 ### Command a group / Compose (`Command.md`, `CommandFlow.md` C1): partial
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| **Ruling first:** Compose follows Command.md's C1–C5; CommandFlow C1's three-column board (catalog listbox, form, clickable targets matrix, action bar, Manual release) isn't built. Accept or schedule. | ux → fe-ops | — |
+| Compose layout: ux rules; default is to accept Command.md's C1–C5 as built (#64) | ux | — |
 | Draft autosave / `Save draft` / `DRAFT SAVED` | fe-ops | api-ops: draft persistence *(unverified)* |
 | Per-target values (Same for all / Per target, Paste CSV, Now column) | fe-ops | — |
 | Verifier line / "No verifier: this command can't turn green" | fe-ops | catalog read carrying verifiers *(unverified)* |
@@ -60,7 +62,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | --- | --- | --- |
 | A1 `5.0 → 8.0` readout, histogram of current values, hand-set overwrite callouts | fe-ops | api-ops: current values + prior requests in the brief |
 | A3 encoded packet bytes (honest "not available" today) | fe-ops | api-ops M24 encode preview |
-| U2 verifier plot, "Needs you" cards with Re-send / Open, plane matrix, Pause, retry on no ACK | fe-ops | api-ops M26 retries + verifier series; domain qa #34 for live testing |
+| U2 verifier plot, "Needs you" cards with Re-send / Open, plane matrix, Pause, retry on no ACK | fe-ops | api-ops M26 retries + verifier series |
 
 ### Contacts (`Contacts.md`, J4): Live built; detail route pending
 | Item | Owner | Blocked on |
@@ -95,26 +97,26 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | C · focused spacecraft 24 h strip (rule chips, pass and gap strip) | lead | — |
-| Admin `pending_approval` review: ApDecision `Approve and book` / `Send back` with a comment | lead | api: reject / send-back on contact plans (S5 has submit/approve/execute only) |
-| Accepted gaps as `GAP ACCEPTED · <reason>` rows and in revision history | lead | api: `approval.exceptions` on plan detail |
+| Admin `pending_approval` review: `Send back` with a comment beside `Approve and book` | lead | in progress (api c7c7b277) |
+| Accepted gaps as `GAP ACCEPTED · <reason>` rows; a sent-back draft says who and why | lead | in progress (api 97523716) |
 | Per-contact Requested → Confirmed / Rejected on the Gantt; rejections become Demand rows | lead | — (passes read + `execution`, cf3cd37a) |
-| `Drafting stopped at 02:31Z` | lead | api: stop time on interrupted draft runs |
+| `Drafting stopped at or after 02:31Z` | lead | in progress (api 413c8e18) |
 | `PROVIDER FREEZE T−…` header clock | lead | api/domain: no provider freeze time in any read |
-| Minutes / Cost budgets in the footer; Cost, Link, Max el in D | lead | billing terms + budgets (api "not yet"); Max el only when provider-supplied |
+| Cost tiles / column: **hidden** (#63). Minutes `/ budget` and D's Link, Max el | lead | a minutes budget setting; Max el only when provider-supplied |
 | Done today: U26, U28, U30, U31, U32, superseded, execution header (live check pending, qa) | — | — |
 
 ### K2 · Re-plan (`contacts/replan…`): built (fe-setup); gaps
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | `Covered N` tile (#56) | fe-setup | — (decoder 5925fb35) |
-| Footer cost ("the footer shows the cost", acceptance) | fe-setup | billing terms (api) |
+| Hide the footer cost and the 'billed' counts; reflow (#63/U34) | fe-setup | — |
 | Live Propose → Apply after #52/#56 | qa + fe-setup | — |
 
 ### K3 · Close the books (`contacts/review`): built (fe-setup); gaps
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | `Export CSV`, `Monthly close` | fe-setup | api: export + close endpoints |
-| R5 provider reconciliation, `Dispute` / `Draft dispute`, money in h1 / R4, minutes flown vs billed | fe-setup | provider billing data (api "not yet"); no dispute flow exists |
+| Hide the dispute amount, billed minutes, R5 reconciliation, `Dispute`; keep time facts (minutes flown, realized %); reflow (#63/U34) | fe-setup | — |
 
 ## 4. Setup
 
@@ -155,7 +157,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | qa #19: a 5xx on submit reads "Nothing was applied"; should read "unclear, check now" | fe-setup (copy) + domain/api (the 500) | — |
 | Now P3 row when a set sits > 24 h; Timeline `Config r6 applied` | fe-ops | *(unverified)* |
 
-### Contact planning (`ContactPlanning.md`): built. Review 6/7 in progress (sort is in; uppercase rule line *(unverified)*). Owner fe-setup.
+### Contact planning (`ContactPlanning.md`): built. Hide the money policy fields (max cost, currency, critical cost reserve, cost weight; #63/U34). Review 6/7 in progress (sort is in; uppercase rule line *(unverified)*). Owner fe-setup.
 
 ### People & access (`People.md`, S5): partial
 | Item | Owner | Blocked on |
@@ -175,9 +177,9 @@ missing endpoint or decision; an item with no blocker can start now.
 ### Org / account
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| `org/missions/new` (pending) | ux (spec) → fe-setup | api: console mission-create endpoint |
+| `org/missions/new`: link `New mission` to the existing create page, drop the pending route (#64) | fe-setup | — |
 | Account: password change, active sessions | fe-setup | api: no endpoints |
-| `/notifications` (pending) | ux (spec) → lead | — no spec beyond the IA table |
+| `/notifications`: **dropped** (#64; the Now attention queue is the notification surface). Route and menu item removed (lead) | — | done |
 
 ## 5. Phase 4 · Mobile on call (`Mobile.md`, J6)
 | Item | Owner | Blocked on |
@@ -203,13 +205,13 @@ missing endpoint or decision; an item with no blocker can start now.
 ## 8. Endpoint queue per backend team (collected from above)
 
 **api**
-1. Contact plans: send-back / reject for `pending_approval`; `approval.exceptions` on plan detail; stop time on interrupted draft runs (K1).
+1. ~~Contact plans: send back, `approval`, run `stopped_at`~~ done (c7c7b277, 97523716, 413c8e18).
 2. Catalog: server-side revision diff + breaking rules; `command_count` / `telemetry_count` (Catalog C1).
 3. People: role change, remove member, per-person activity; invitation resend/revoke; service identity create/rotate/revoke.
-4. Account: password change, sessions. Org: console mission create. Provider accounts: version history.
+4. Account: password change, sessions. Provider accounts: version history. (Console mission create dropped, #64.)
 5. Readiness `recent_changes` (or agree fe-setup reads revisions).
-6. Billing terms + budgets (K1 cost, K2 footer cost, K3 money): needs a scope call first (see §10).
-7. K3 `Export CSV` / `Monthly close`.
+6. ~~Billing terms + budgets~~ out of scope (#63).
+7. K3 `Export CSV` / `Monthly close` (time facts only, no money).
 8. qa #19 (submit 500 after commit), with domain.
 
 **api-ops**
@@ -220,7 +222,7 @@ missing endpoint or decision; an item with no blocker can start now.
 5. Now queue sources: missed pass, station, flight event *(unverified)*.
 
 **domain**
-1. qa #34: uplink after the first command per route (#58/#59), which blocks live uplink testing.
+1. ~~qa #34~~ done (#59, e683b3e2).
 2. qa #19 server side.
 3. Catalog-path generations (#36), which unblock Catalog C3 rollout.
 4. Spacecraft archive model (#50) for rollback of spacecraft creation.
@@ -228,12 +230,10 @@ missing endpoint or decision; an item with no blocker can start now.
 ## 9. Deferred by decision (not backlog)
 #2 roles/Cedar · #4 propagation (K0, ground track, umbra, sky plot, max elevation) · #5 procedures ·
 #7 command policies read-only in v1 · #8 command waves/gates · #9 catalog impact / used-by ·
-#11 dashboards last · #15 profile limits and VC/FEC/randomizer fields · "save as group" on Compose.
+#11 dashboards last · #63 billing/money · #15 profile limits and VC/FEC/randomizer fields · "save as group" on Compose.
 
-## 10. Questions for the director
-1. **Billing:** K1 cost/budgets, K2 footer cost and all of K3's money and disputes need provider
-   prices. In scope for this project, or do those panels stay "not reported"?
-2. **Compose layout:** accept Command.md's C1–C5 as built, or schedule the CommandFlow C1 board?
-3. **Investigate:** ship the five missing tabs as links to the existing pages now (the spec's own
-   fallback), and build them later?
-4. **Pending routes** with no spec (Notifications, New mission): spec them, or drop them for now?
+## 10. Answered (DECISIONS #63/#64)
+1. **Billing:** out of scope (user). Money panels are hidden, not "not reported"; layouts reflow (U34).
+2. **Compose layout:** ux rules; default accept as built.
+3. **Investigate:** the five tabs link to the existing pages for now.
+4. **Notifications** dropped; **New mission** links to the existing create page.
