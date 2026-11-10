@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { passesReader, type Pass } from "./api.ts";
-import { passGantt, passStatus } from "./gantt.ts";
+import { availabilityBands, passGantt, passStatus } from "./gantt.ts";
 import type { Attention } from "@/features/now/index.ts";
 import { attentionErrorWords, resolutionRecord, whatToDo } from "./attention.ts";
 import { groupBlockedLine, readinessTag, recoverable, recoverErrorWords } from "./readiness.ts";
@@ -278,5 +278,51 @@ describe("uplink readiness (U33)", () => {
       tone: "caution",
       text: "Recovery refused: the provider returned an error (Provider unreachable).",
     });
+  });
+});
+
+describe("D3 station bands (S7)", () => {
+  it("draws uncleared windows on station rows that are shown", () => {
+    const window = (over: Record<string, unknown>) => ({
+      ground_station_id: "gs-svl",
+      kind: "outage",
+      from: "2026-11-09T02:00:00Z",
+      to: "2026-11-09T03:00:00Z",
+      source: "provider",
+      reported_at: null,
+      reason: "Antenna fault",
+      cleared_at: null,
+      ...over,
+    });
+    const av = {
+      at: "2026-11-09T02:00:00Z",
+      stations: [
+        {
+          ground_station_id: "gs-svl",
+          state: "down",
+          since: null,
+          eta: null,
+          basis: null,
+          windows: [
+            window({}),
+            window({ to: null, kind: "maintenance", reason: null }),
+            window({ cleared_at: "2026-11-09T02:10:00Z" }),
+          ],
+        },
+        {
+          ground_station_id: "gs-other",
+          state: "down",
+          since: null,
+          eta: null,
+          basis: null,
+          windows: [window({ ground_station_id: "gs-other" })],
+        },
+      ],
+    } as unknown as Parameters<typeof availabilityBands>[0];
+    const bands = availabilityBands(av, [{ id: "gs-svl", label: "SVB" }], 99);
+    expect(bands.map((b) => [b.rowId, b.kind, b.to, b.label])).toEqual([
+      ["gs-svl", "outage", Date.parse("2026-11-09T03:00:00Z"), "Outage: Antenna fault"],
+      ["gs-svl", "maintenance", 99, "Maintenance · no end reported"],
+    ]);
   });
 });

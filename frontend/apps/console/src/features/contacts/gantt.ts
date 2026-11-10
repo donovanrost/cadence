@@ -1,5 +1,6 @@
 import { readinessTag } from "./readiness.ts";
-import type { GanttBar, GanttRow } from "@/ui";
+import type { GanttBand, GanttBar, GanttRow } from "@/ui";
+import type { Availability } from "@/features/scheduling/index.ts";
 import type { Pass } from "./api.ts";
 
 /** Passes → ApGantt rows (stations) and bars (contacts), for Now A4 and Contacts J4. */
@@ -74,4 +75,31 @@ export function passGantt(
     });
   }
   return { rows: [...rows.values()].sort((a, b) => a.label.localeCompare(b.label)), bars };
+}
+
+/**
+ * D3 outage / maintenance / degraded bands (Contacts.md, S7): each uncleared window on a station
+ * that has a row (station axis only; K1 draws the same from the same read). An open-ended window
+ * runs to the edge of the view.
+ */
+export function availabilityBands(
+  availability: Availability | null,
+  rows: readonly GanttRow[],
+  windowTo: number,
+): GanttBand[] {
+  if (!availability) return [];
+  const shown = new Set(rows.map((r) => r.id));
+  return availability.stations
+    .filter((st) => shown.has(st.ground_station_id))
+    .flatMap((st) =>
+      st.windows
+        .filter((w) => w.cleared_at === null)
+        .map((w) => ({
+          rowId: w.ground_station_id,
+          from: Date.parse(w.from),
+          to: w.to ? Date.parse(w.to) : windowTo,
+          kind: w.kind,
+          label: `${w.kind.charAt(0).toUpperCase()}${w.kind.slice(1)}${w.reason ? `: ${w.reason}` : ""}${w.to ? "" : " · no end reported"}`,
+        })),
+    );
 }

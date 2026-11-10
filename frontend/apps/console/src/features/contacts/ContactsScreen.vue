@@ -16,7 +16,8 @@ import {
   ApTabLinks,
 } from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
-import { passGantt, passStatus, type GanttAxis } from "./gantt.ts";
+import { availabilityBands, passGantt, passStatus, type GanttAxis } from "./gantt.ts";
+import { fetchAvailability } from "@/features/scheduling/index.ts";
 import SelectedPassPanel from "./SelectedPassPanel.vue";
 import { usePasses } from "./usePasses.ts";
 import { fetchPass, fetchStations } from "./api.ts";
@@ -46,6 +47,16 @@ const passes = usePasses(
 const rangeOptions = RANGES.map((r) => ({ value: r.value, label: r.label }));
 const stationsQuery = useRemoteQuery(missionId, (id, signal) => fetchStations(id, signal));
 useMissionInvalidation(missionId, ["configuration"], stationsQuery.refetch);
+/** S7 station availability → outage / maintenance / degraded bands on the station rows (D3). */
+const availability = useRemoteQuery(missionId, (id, signal) => fetchAvailability(id, signal));
+useMissionInvalidation(missionId, ["stations"], availability.refetch);
+const bands = computed(() => {
+  const v = view.value;
+  const a = availability.state.value;
+  return v && axis.value === "station"
+    ? availabilityBands(a.status === "ready" ? a.value : null, v.rows, v.window.to)
+    : [];
+});
 /** null = unknown (not loaded or failed): the label omits the count rather than guess. */
 const stationCount = computed(() =>
   stationsQuery.state.value.status === "ready"
@@ -215,6 +226,7 @@ const tabs = [
                 label="Pass schedule for the next six hours"
                 :rows="view.rows"
                 :bars="view.bars"
+                :bands="bands"
                 :window="view.window"
                 :now="now.getTime()"
                 :selected="selected?.id ?? null"
