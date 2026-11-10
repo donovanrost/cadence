@@ -6,6 +6,7 @@ import { eventState, eventText, memberStageWord, statusTag } from "../groups/wor
 import { inTab } from "../list/list.ts";
 import type { GroupRow } from "../groups/api.ts";
 import { cannotDecide, decisionOptions, flaggedTargets, noGoAfter } from "./decision.ts";
+import { argChanges, overwriteCallouts } from "./brief.ts";
 import { abortable, headline, pipeline } from "./uplink.ts";
 import {
   checkMeta,
@@ -498,5 +499,66 @@ describe("catalog_changed (#65)", () => {
     expect(e && eventText(e, () => "Cadence")).toBe(
       "Cadence closed the run · 1 verified · 2 canceled by a catalog change",
     );
+  });
+});
+
+describe("A1 value changes (brief)", () => {
+  const brief = (
+    sc: string,
+    current: string | null,
+    basis = "state_effect",
+    prior: string | null = null,
+  ) => ({
+    command_request_id: `r-${sc}`,
+    spacecraft_id: sc,
+    arguments: [
+      {
+        name: "mode",
+        value_json: "3",
+        current:
+          current === null
+            ? { point: "/HK/sc_mode", value_json: null, at: null, reason: "no_sample" }
+            : { point: "/HK/sc_mode", value_json: current, at: null, reason: null },
+        current_basis: basis,
+      },
+    ],
+    prior_requests: prior
+      ? [
+          {
+            command_request_id: "p",
+            command_group_id: null,
+            arguments_json: prior,
+            state: "verified",
+            requested_at: "2026-09-14T10:02:00Z",
+            requested_by: { kind: "user", id: "u", name: "Mira K." },
+          },
+        ]
+      : [],
+  });
+  it("reads 1 → 3, a histogram when targets differ, and 'no current value known'", () => {
+    expect(argChanges([brief("a", "1"), brief("b", "1")])).toEqual([
+      { name: "mode", to: "3", from: "1", note: null },
+    ]);
+    expect(
+      argChanges([brief("a", "1"), brief("b", "1"), brief("c", "0"), brief("d", null)])[0]?.from,
+    ).toBe("1 ×2 · 0 ×1 · no value yet ×1");
+    expect(argChanges([brief("a", "1", "none")])[0]).toEqual({
+      name: "mode",
+      to: "3",
+      from: null,
+      note: "no current value known",
+    });
+  });
+  it("calls out targets a prior request set differently", () => {
+    expect(
+      overwriteCallouts(
+        [
+          brief("sc-117", "1", "state_effect", '{"mode":1}'),
+          brief("sc-2", "3", "state_effect", '{"mode": 3}'),
+        ],
+        '{"mode":3}',
+        (id) => id.toUpperCase(),
+      ),
+    ).toEqual(['SC-117 was set to {"mode":1} on 09-14 10:02:00Z by Mira K. This overwrites that.']);
   });
 });

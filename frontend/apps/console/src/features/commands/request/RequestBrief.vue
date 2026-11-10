@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { fetchEncoding, hexBytes, type EncodingView } from "../groups/encoding.ts";
+import ValueChanges from "./ValueChanges.vue";
 import { formatClock, formatDayTime, plural, ApPanel, ApTag } from "@/ui";
 import { catalogRevisionWords } from "../api.ts";
 import type { Group } from "../groups/show.ts";
@@ -88,6 +89,7 @@ const bytesLine = (position: number) => {
           and {{ group.targets.length - LIMIT }} more
         </li>
       </ul>
+      <ValueChanges :group="group" />
       <p class="m-0 border-t border-hairline px-4 py-2 text-md text-text-3">
         Release: {{ release }}.
       </p>
