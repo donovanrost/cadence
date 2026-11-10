@@ -19,6 +19,18 @@ defmodule Cadence.Runtime.UplinkSessions do
   end
 
   defdelegate review(runtime), to: TransportRuntime, as: :session_review
+
+  @doc "Whether the uplink's protocol is still waiting for the spacecraft's first report (#59)."
+  @spec awaiting_first_report?(pid()) :: boolean()
+  def awaiting_first_report?(runtime) do
+    case TransportRuntime.snapshot(runtime) do
+      {:ok, %{state: %{cop1_awaiting_clcw: true}}} -> true
+      _other -> false
+    end
+  catch
+    :exit, _ -> false
+  end
+
   defdelegate begin_recovery(runtime, evidence), to: TransportRuntime, as: :begin_session_recovery
 
   defdelegate complete_recovery(runtime, evidence),

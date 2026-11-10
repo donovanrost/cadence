@@ -15,6 +15,7 @@ defmodule Cadence.Control.UplinkQualification do
   require Logger
 
   alias Cadence.Control.UplinkQualification.Booking
+  alias Cadence.Control.UplinkReadiness
   alias Cadence.Runtime.{ProcessNamespace, UplinkSessions}
 
   @tick_ms 15_000
@@ -27,11 +28,17 @@ defmodule Cadence.Control.UplinkQualification do
   @spec qualify_now(GenServer.server()) :: map()
   def qualify_now(server \\ __MODULE__), do: GenServer.call(server, :qualify_now, 60_000)
 
+  @doc "Re-qualifies one session now, whether or not it's due (Recover uplink, #58)."
+  @spec requalify(GenServer.server(), tuple()) :: :ready | {:error, term()}
+  def requalify(server \\ __MODULE__, key), do: GenServer.call(server, {:requalify, key}, 60_000)
+
   @impl true
   def init(opts) do
     state = %{
       namespace: Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0),
       tick_ms: Keyword.get(opts, :tick_ms, @tick_ms),
+      readiness:
+        UplinkReadiness.create_table(Keyword.get(opts, :readiness_table, UplinkReadiness.table())),
       qualified: %{}
     }
 
@@ -43,6 +50,27 @@ defmodule Cadence.Control.UplinkQualification do
   def handle_call(:qualify_now, _from, state) do
     {results, state} = run(state)
     {:reply, results, state}
+  end
+
+  def handle_call({:requalify, key}, _from, state) do
+    case Enum.find(UplinkSessions.list(state.namespace), &(elem(&1, 0) == key)) do
+      nil ->
+        {:reply, {:error, :uplink_session_not_running}, state}
+
+      {key, pid} ->
+        result = qualify(pid, %{}, System.monotonic_time(:millisecond))
+        {_view, state} = observe(state, key, pid, result, System.monotonic_time(:millisecond))
+
+        reply =
+          case result do
+            {:qualified, _incarnation} -> :ready
+            {:kept, _incarnation} -> :ready
+            {:skipped, reason} -> {:error, reason}
+            {:error, reason} -> {:error, reason}
+          end
+
+        {:reply, reply, state}
+    end
   end
 
   @impl true
@@ -59,29 +87,91 @@ defmodule Cadence.Control.UplinkQualification do
 
   defp run(state) do
     now = System.monotonic_time(:millisecond)
+    sessions = UplinkSessions.list(state.namespace)
 
-    {results, qualified} =
-      state.namespace
-      |> UplinkSessions.list()
-      |> Enum.reduce({%{}, %{}}, fn {key, pid}, {results, qualified} ->
-        case qualify(pid, state.qualified, now) do
-          {:qualified, incarnation} ->
-            {Map.put(results, key, :qualified), Map.put(qualified, incarnation, now)}
+    {results, state} =
+      Enum.reduce(sessions, {%{}, %{state | qualified: %{}}}, fn {key, pid}, {results, acc} ->
+        result = qualify(pid, state.qualified, now)
 
-          {:kept, incarnation} ->
-            {Map.put(results, key, :ready),
-             Map.put(qualified, incarnation, state.qualified[incarnation])}
+        {view, acc} =
+          observe(
+            %{acc | qualified: Map.merge(state.qualified, acc.qualified)},
+            key,
+            pid,
+            result,
+            now
+          )
 
-          {:skipped, _reason} = skipped ->
-            {Map.put(results, key, skipped), qualified}
-
-          {:error, reason} ->
-            Logger.warning("uplink session #{inspect(key)} not qualified: #{inspect(reason)}")
-            {Map.put(results, key, {:error, reason}), qualified}
-        end
+        {Map.put(results, key, view), acc}
       end)
 
-    {results, %{state | qualified: qualified}}
+    live = MapSet.new(sessions, &elem(&1, 0))
+
+    state.readiness
+    |> UplinkReadiness.keys()
+    |> MapSet.difference(live)
+    |> Enum.each(&UplinkReadiness.forget(state.readiness, &1, DateTime.utc_now()))
+
+    {results, state}
+  end
+
+  # Records the session's readiness (#58) and keeps the qualified-at memory.
+  defp observe(state, key, pid, result, now) do
+    {view, qualified} =
+      case result do
+        {:qualified, incarnation} ->
+          {:qualified, Map.put(state.qualified, incarnation, now)}
+
+        {:kept, incarnation} ->
+          {:ready, Map.put(state.qualified, incarnation, state.qualified[incarnation] || now)}
+
+        {:skipped, _reason} = skipped ->
+          {skipped, state.qualified}
+
+        {:error, reason} ->
+          Logger.warning("uplink session #{inspect(key)} not qualified: #{inspect(reason)}")
+          {{:error, reason}, state.qualified}
+      end
+
+    record_readiness(state.readiness, key, pid, result)
+    {view, %{state | qualified: qualified}}
+  end
+
+  defp record_readiness(table, key, pid, result) do
+    with {:ok, review} <- review(pid),
+         {:ok, booking} <- booking(review.provider) do
+      {readiness, reason} = readiness(result, pid)
+      UplinkReadiness.record(table, key, pass(booking), readiness, reason, DateTime.utc_now())
+    else
+      # Not a provider-booked uplink: not this read's.
+      _not_provider_booked -> :ok
+    end
+  catch
+    :exit, _ -> :ok
+  end
+
+  defp readiness(result, pid) when elem(result, 0) in [:qualified, :kept] do
+    if UplinkSessions.awaiting_first_report?(pid),
+      do: {:qualifying, :cop1_awaiting_clcw},
+      else: {:ready, nil}
+  end
+
+  defp readiness({:skipped, reason}, _pid), do: {:qualifying, reason}
+  defp readiness({:error, reason}, _pid), do: {:blocked, reason}
+
+  defp pass(booking) do
+    Map.take(booking, [
+      :organization_id,
+      :mission_id,
+      :scheduled_contact_id,
+      :provider_reservation_id,
+      :provider_contact_ref,
+      :provider_id,
+      :spacecraft_id,
+      :ground_station_ref,
+      :starts_at,
+      :ends_at
+    ])
   end
 
   defp qualify(pid, qualified, now) do

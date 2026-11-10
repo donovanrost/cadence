@@ -16,6 +16,13 @@ defmodule Cadence.Control.UplinkQualification.Booking do
           organization_id: binary(),
           mission_id: binary(),
           provider_contact_ref: binary(),
+          scheduled_contact_id: binary(),
+          provider_reservation_id: binary(),
+          provider_id: binary(),
+          spacecraft_id: binary(),
+          ground_station_ref: binary() | nil,
+          starts_at: DateTime.t(),
+          ends_at: DateTime.t(),
           context: struct(),
           client: module(),
           call_opts: keyword()
@@ -49,6 +56,13 @@ defmodule Cadence.Control.UplinkQualification.Booking do
          organization_id: realized.organization_id,
          mission_id: mission_id,
          provider_contact_ref: ref,
+         scheduled_contact_id: scheduled.scheduled_contact_id,
+         provider_reservation_id: reservation.provider_reservation_id,
+         provider_id: reservation.provider_id,
+         spacecraft_id: reservation.spacecraft_id,
+         ground_station_ref: station_ref(reservation),
+         starts_at: reservation.starts_at,
+         ends_at: reservation.ends_at,
          context: context,
          client: client,
          call_opts: [credential_resolver: CredentialResolver.resolver([])]
@@ -68,6 +82,13 @@ defmodule Cadence.Control.UplinkQualification.Booking do
       {:ok, key} when is_binary(key) and key != "" -> {:ok, key}
       _other -> {:error, :provider_credential_unavailable}
     end
+  end
+
+  defp station_ref(reservation) do
+    Enum.find_value(
+      [reservation.provider_confirmed_snapshot_document, reservation.request_document],
+      &(is_map(&1) && &1["ground_station_ref"])
+    )
   end
 
   defp reservation_id(%{"provider_reservation_id" => id}) when is_binary(id), do: {:ok, id}
