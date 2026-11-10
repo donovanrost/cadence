@@ -2,8 +2,9 @@
 import { ref } from "vue";
 import { useSession } from "@/shell";
 import { ApButton, ApCallout, ApPanel, plural } from "@/ui";
-import { discardChangeSet, failureOutcome, withdrawChange } from "./actions.ts";
+import { discardChangeSet, failureOutcome, withdrawChange, type PreviewItem } from "./actions.ts";
 import ChangeConflict from "./ChangeConflict.vue";
+import { conflictRow } from "./rebase.ts";
 import ChangeOps from "./ChangeOps.vue";
 import ChangeRowHead from "./ChangeRowHead.vue";
 import type { Change, ChangeSet, ConfigState } from "./shapes.ts";
@@ -13,11 +14,16 @@ const props = defineProps<{
   missionId: string;
   config: ConfigState;
   changeSet: ChangeSet;
-  /** Op ids the Conflicts check flags (rebase.ts conflictOps). */
-  conflicts: ReadonlySet<string>;
+  /** The Conflicts check's items by op id (rebase.ts conflictOps). */
+  conflicts: ReadonlyMap<string, readonly PreviewItem[]>;
 }>();
 const conflicting = (change: Change) =>
   change.ops.filter((o) => props.conflicts.has(o.id)).map((o) => o.id);
+const rowOf = (change: Change) =>
+  conflictRow(
+    conflicting(change).flatMap((id) => props.conflicts.get(id) ?? []),
+    `r${props.changeSet.base_revision}`,
+  );
 const emit = defineEmits<{ changed: [] }>();
 const session = useSession();
 const failure = ref<string | null>(null);
@@ -90,6 +96,7 @@ function toggle(id: string) {
           v-if="changeSet.state === 'open' && conflicting(change).length > 0"
           :mission-id="missionId"
           :op-ids="conflicting(change)"
+          :row="rowOf(change)"
           :can-act="mayRemove(change)"
           @done="emit('changed')"
         />

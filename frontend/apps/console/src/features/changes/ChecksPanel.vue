@@ -68,7 +68,7 @@ const meta = computed(() =>
 </script>
 
 <template>
-  <ApPanel index="K2" title="Checks" :meta="meta" flush>
+  <ApPanel id="checks" index="K2" title="Checks" :meta="meta" flush>
     <ApCallout v-if="preview.status === 'failed'" tone="caution">
       {{ failureText(preview.error) }}
       <template #action

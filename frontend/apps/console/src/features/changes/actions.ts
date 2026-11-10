@@ -61,7 +61,7 @@ const previewItem = object({
 export type PreviewItem = Decoded<typeof previewItem>;
 
 /** 1115 → "1,115", with the schema unit when there is one. */
-function valueText(v: unknown, unit?: string | null, format?: string | null): string {
+export function valueText(v: unknown, unit?: string | null, format?: string | null): string {
   if (v === null || v === undefined) return "not set";
   if (format === "version" && typeof v === "number") return `v${v}`;
   const text = typeof v === "number" ? v.toLocaleString("en-US") : shown(v);
