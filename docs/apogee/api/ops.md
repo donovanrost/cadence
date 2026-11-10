@@ -289,28 +289,39 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
     confirmed", never "by Cadence". A `system` closure reads its `action` alone, with no actor
     ("Resolved: cancel confirmed").
   - Refetch on `invalidate` with `attention`.
-- **Proposed (§8, U11): `missed_pass` and `station` items.** Not built; fe-ops gets the shape
-  first (two new `kind` values).
+- **Final shape, not built yet (§8; U11 amended by U35): `missed_pass` and `station` items.** fe-ops
+  lands the reader first (two new `kind` values).
   - `missed_pass`: one row per spacecraft with a pass result `missed` or `failed` (S9) whose
     planned AOS falls within `failure_lookback_s`.
     - `id` is `missed_pass:<spacecraft_id>`, `count` the number of missed passes, `since` the
       latest missed AOS, and `due_at` the AOS of the spacecraft's next booked pass (or `null`).
-    - **P1** (`critical`) per U11 when the next contact is beyond the allowed gap *or unknown*.
-      No allowed gap is modelled yet (contact requirements have only a minimum separation), so
-      every missed pass is P1 until one exists.
-    - New field `missed_passes: [{reservation_id, station {ref, id, code, name}, planned_aos,
-      outcome, cause, owner}]` (newest first).
-    - New field `next_contact: {reservation_id, station, aos} | null`.
+    - **P1** (`critical`) when the spacecraft has no booked contact within
+      `missed_pass_horizon_s` (6 h, a named constant until a contact requirement's maximum gap
+      replaces it), or the next contact is unknown. **P2** (`caution`) otherwise (U35).
+    - The response carries `missed_pass_horizon_s` for the evidence line ("Next contact SVB-1 in
+      1h 12m" / "No contact booked in the next 6 h").
+    - `missed_passes: [{reservation_id, station {ref, id, code, name}, planned_aos, outcome:
+      missed | failed, cause, owner}]`, newest first.
+      - `cause` is a key: `no_acquisition`, `station_unavailable`, `provider_canceled`,
+        `provider_rejected`, `not_ingested`, or the provider's own failure reason (free text).
+        Word known keys, sentence-case anything else.
+      - `owner`: `provider | us | weather | unknown`.
+    - `next_contact: {reservation_id, station, aos} | null`.
+    - fe-ops may group rows client-side (three or more with the same station and cause).
   - `station`: one row per ground station with an outage, maintenance or degraded window (S7)
     that overlaps booked passes in the next 24 h.
-    - `id` is `station:<ground_station_id>`, **P2** (`caution`), `count` the affected passes,
-      `since` the window start, `due_at` the first affected AOS.
+    - `id` is `station:<ground_station_id>`, `count` the affected passes, `since` the window
+      start, `due_at` the first affected AOS.
+    - **P1** (`critical`) when an affected pass starts within 2 h or is in progress (the U31/U33
+      clock), else **P2** (`caution`).
     - `spacecraft` holds the affected spacecraft.
-    - New field `station_issue: {station {ref, id, code, name}, window {id, kind: outage |
-      maintenance | degraded, starts_at, ends_at, source}, affected: [{reservation_id,
-      spacecraft_id, aos}]}`. The `Station` action goes to the station / Re-plan.
-  - Both new fields are `null` on other kinds. Refetch on `invalidate` `contacts`, `stations` and
-    `pass_results`.
+    - `station_issue: {station {ref, id, code, name}, window {id, kind: outage | maintenance |
+      degraded, starts_at, ends_at, source}, affected: [{reservation_id, spacecraft_id, aos}]}`.
+      `ends_at` is `null` for an open-ended window. The `Station` action routes to Re-plan with
+      the station id; the window is there if Re-plan wants it.
+  - `spacecraft` members on both kinds use the full member shape, alarm fields `null` (as for
+    `attention`). `missed_passes`, `next_contact` and `station_issue` are `null` on other kinds.
+  - Refetch on `invalidate` `contacts`, `stations` and `pass_results`.
 - `failure_lookback_s` is `config :cadence, :action_queue_failure_lookback_s` (default 24 h).
   Failures older than that drop off the queue; they stay on the commands pages.
 
