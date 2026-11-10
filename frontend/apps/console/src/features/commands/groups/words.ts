@@ -167,7 +167,7 @@ export function eventText(e: GroupEvent, nameOf: PersonName, targets: EventTarge
     case "aborted":
       return `${who} aborted${p?.reason ? `: “${p.reason}”` : ""} · ${p?.canceled ?? 0} canceled, ${p?.already_started?.length ?? 0} already started`;
     case "hold_acknowledged":
-      return `${who} acknowledged the ${p?.key ? checkLabel(p.key) : "a"} HOLD${note}`;
+      return `${who} acknowledged the ${p?.key ? checkLabel(p.key) : "a"} HOLD${p?.at_decision ? " at GO" : ""}${note}`;
     case "member_canceled":
       return `${who} canceled one uplink${p?.reason ? `: “${p.reason}”` : ""}`;
     case "member_failed": {

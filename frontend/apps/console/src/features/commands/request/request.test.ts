@@ -7,7 +7,13 @@ import { inTab } from "../list/list.ts";
 import type { GroupRow } from "../groups/api.ts";
 import { cannotDecide, decisionOptions, flaggedTargets, noGoAfter } from "./decision.ts";
 import { abortable, headline, pipeline } from "./uplink.ts";
-import { checkMeta, holdAcksToSend, holdReason } from "../groups/checks.ts";
+import {
+  checkMeta,
+  goAcksToSend,
+  goHoldReason,
+  holdAcksToSend,
+  holdReason,
+} from "../groups/checks.ts";
 
 const target = (id: string, stage: string) => ({
   ...showBody.targets[0],
@@ -397,5 +403,77 @@ describe("two_person second_go (DECISIONS #61)", () => {
     ]);
     expect(holdReason(pf, {}, name)).toBeNull();
     expect(checkMeta(pf)).toBe("1 2ND GO");
+  });
+});
+
+describe("GO re-checks HOLDs (DECISIONS #61)", () => {
+  const conflicts = (basis: string) => ({
+    key: "conflicts",
+    result: "hold",
+    per_target: [],
+    evidence: { count: 2 },
+    ackable: true,
+    hold_basis: basis,
+  });
+  const submitted = (basis: string) =>
+    groupOf({
+      events: [
+        {
+          id: "e1",
+          kind: "hold_acknowledged",
+          actor: { actor_kind: "user", user_id: "user-1" },
+          at: "2026-11-10T01:00:00Z",
+          payload: { key: "conflicts", note: "fine", hold_basis: basis },
+        },
+      ],
+    }).events;
+
+  it("the author's ack covers an unchanged HOLD; nothing to send", () => {
+    const pf = review([conflicts("b1")]);
+    expect(goHoldReason(pf, submitted("b1"), {}, name)).toBeNull();
+    expect(goAcksToSend(pf, submitted("b1"), {})).toEqual([]);
+  });
+
+  it("a changed HOLD needs the approver's note", () => {
+    const pf = review([conflicts("b2")]);
+    expect(goHoldReason(pf, submitted("b1"), {}, name)).toBe(
+      "Acknowledge the Conflicts HOLD with a note first.",
+    );
+    const acks = { conflicts: { basis: "b2", note: "Checked the new ones." } };
+    expect(goHoldReason(pf, submitted("b1"), acks, name)).toBeNull();
+    expect(goAcksToSend(pf, submitted("b1"), acks)).toEqual([
+      { key: "conflicts", hold_basis: "b2", note: "Checked the new ones." },
+    ]);
+  });
+
+  it("a hard HOLD refuses GO", () => {
+    const pf = review([
+      {
+        key: "changed_since_submit",
+        result: "hold",
+        per_target: [],
+        evidence: {},
+        ackable: false,
+        hold_basis: "x",
+      },
+    ]);
+    expect(goHoldReason(pf, [], {}, name)).toBe(
+      "Since submit HOLD: Something changed since it was submitted (catalog, targets or values). GO is refused; send it back or give NO-GO.",
+    );
+  });
+
+  it("logs an approver's ack as at GO", () => {
+    const [e] = groupOf({
+      events: [
+        {
+          id: "e2",
+          kind: "hold_acknowledged",
+          actor: { actor_kind: "user", user_id: "user-2" },
+          at: "2026-11-10T01:05:00Z",
+          payload: { key: "conflicts", note: "ok", hold_basis: "b2", at_decision: true },
+        },
+      ],
+    }).events;
+    expect(e && eventText(e, () => "Sam")).toBe("Sam acknowledged the Conflicts HOLD at GO: “ok”");
   });
 });

@@ -1,5 +1,6 @@
 import { plural, type OpState } from "@/ui";
 import type { CheckResult, Preflight, PreflightCheck, TwoPersonReason } from "./api.ts";
+import type { GroupEvent } from "./show.ts";
 
 /**
  * Preflight checks → poll rows (Command.md C3, CommandFlow A2). Only checks the server computed
@@ -205,6 +206,56 @@ export function holdAcksToSend(
 ): { key: string; hold_basis: string | null; note: string }[] {
   return gatingHolds(pf)
     .filter((c) => ackCounts(c, acks))
+    .map((c) => ({
+      key: c.key,
+      hold_basis: c.hold_basis ?? null,
+      note: (acks[c.key]?.note ?? "").trim(),
+    }));
+}
+
+/**
+ * #61 Approve: GO re-runs the review preflight. Hard HOLDs (contact, changed_since_submit) refuse
+ * GO; an ackable HOLD is covered when a hold_acknowledged event already matches its key and
+ * basis, else the approver acks it. two_person never gates.
+ */
+export function reviewHolds(pf: Preflight | null, events: readonly GroupEvent[]) {
+  const holds = (pf?.checks ?? []).filter((c) => c.result === "hold" && c.key !== "two_person");
+  const covered = (c: PreflightCheck) =>
+    events.some(
+      (e) =>
+        e.kind === "hold_acknowledged" &&
+        e.payload?.key === c.key &&
+        (e.payload.hold_basis ?? null) === (c.hold_basis ?? null),
+    );
+  return {
+    hard: holds.filter((c) => c.ackable === false),
+    covered: holds.filter((c) => c.ackable !== false && covered(c)),
+    open: holds.filter((c) => c.ackable !== false && !covered(c)),
+  };
+}
+
+/** Why GO stays closed over the review's HOLDs, in words; null when GO may go. */
+export function goHoldReason(
+  pf: Preflight | null,
+  events: readonly GroupEvent[],
+  acks: HoldAcks,
+  nameOf: TargetName,
+): string | null {
+  if (!pf) return null;
+  const { hard, open } = reviewHolds(pf, events);
+  const h = hard[0];
+  if (h)
+    return `${checkLabel(h.key)} HOLD: ${sentence(h, pf, nameOf)}. GO is refused; send it back or give NO-GO.`;
+  const unacked = open.filter((c) => !ackCounts(c, acks));
+  return unacked.length
+    ? `Acknowledge the ${unacked.map((c) => checkLabel(c.key)).join(" and ")} HOLD with a note first.`
+    : null;
+}
+
+/** The approver's acks to send with GO: open HOLDs acked against their current basis. */
+export function goAcksToSend(pf: Preflight | null, events: readonly GroupEvent[], acks: HoldAcks) {
+  return reviewHolds(pf, events)
+    .open.filter((c) => ackCounts(c, acks))
     .map((c) => ({
       key: c.key,
       hold_basis: c.hold_basis ?? null,

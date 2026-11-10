@@ -4,6 +4,8 @@ import { describeApiError } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { formatClock, ApButton, ApCallout, ApDecision, ApEventLine, ApPanel } from "@/ui";
 import type { Preflight } from "../groups/api.ts";
+import { goAcksToSend, goHoldReason, reviewHolds, type HoldAcks } from "../groups/checks.ts";
+import HoldAckFields from "../compose/HoldAckFields.vue";
 import { decide, type DecisionKind, type Group } from "../groups/show.ts";
 import { eventText, type PersonName } from "../groups/words.ts";
 import {
@@ -35,13 +37,23 @@ type Outcome = { tone: "crit" | "caution"; text: string; reload: boolean } | nul
 const outcome = shallowRef<Outcome>(null);
 const flagged = computed(() => flaggedTargets(props.review, props.targetName));
 const options = computed(() => decisionOptions(props.group, flagged.value));
+/** #61: the approver's notes for review HOLDs the author's acks don't cover. */
+const acks = ref<HoldAcks>({});
+const holds = computed(() => reviewHolds(props.review, props.group.events));
+const goKind = computed(() => choice.value === "go" || choice.value === "go_excluding");
 const blocked = computed(() => {
   const who = cannotDecide(props.group, props.viewerId, props.canApprove, props.nameOf);
   if (who) return who;
-  if (choice.value === "go") return noGoAfter(props.review, new Set());
-  if (choice.value === "go_excluding")
-    return noGoAfter(props.review, new Set(flagged.value.map((f) => f.spacecraftId)));
-  return null;
+  const noGo =
+    choice.value === "go"
+      ? noGoAfter(props.review, new Set())
+      : choice.value === "go_excluding"
+        ? noGoAfter(props.review, new Set(flagged.value.map((f) => f.spacecraftId)))
+        : null;
+  if (noGo) return noGo;
+  return goKind.value
+    ? goHoldReason(props.review, props.group.events, acks.value, props.targetName)
+    : null;
 });
 const events = computed(() =>
   [...props.group.events].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)),
@@ -56,6 +68,10 @@ async function commit({ value, note }: { value: DecisionKind; note: string }) {
       excluded: value === "go_excluding" ? flagged.value.map((f) => f.spacecraftId) : [],
       note,
       expectedReview: props.group.review_token,
+      acknowledgedHolds:
+        value === "go" || value === "go_excluding"
+          ? goAcksToSend(props.review, props.group.events, acks.value)
+          : [],
     });
     if (result.status === "done") {
       choice.value = null;
@@ -68,7 +84,11 @@ async function commit({ value, note }: { value: DecisionKind; note: string }) {
         text: `Not recorded. Nothing changed: ${decisionErrorWords(code, describeApiError(e))}`,
         reload: false,
       };
-      if (code === "command_group_review_stale" || code === "command_group_not_pending")
+      if (
+        code === "command_group_review_stale" ||
+        code === "command_group_not_pending" ||
+        code === "holds_unacknowledged"
+      )
         emit("decided");
     } else
       outcome.value = {
@@ -92,6 +112,13 @@ const onCommit = (d: { value: DecisionKind; note: string }) =>
         ><ApButton size="compact" @click="emit('decided')">Reload</ApButton></template
       >
     </ApCallout>
+    <HoldAckFields
+      v-if="goKind"
+      :holds="holds.open"
+      :acks="acks"
+      hint="The author's notes don't cover this HOLD as it stands now. Say why GO is safe; it goes in the request's log."
+      @ack="(k, b, n) => (acks = { ...acks, [k]: { basis: b, note: n } })"
+    />
     <ApDecision
       v-model="choice"
       :options="options"

@@ -15,6 +15,7 @@ import {
   groupStates,
   outcomeOf,
   preflightReader,
+  type HoldAck,
   type Preflight,
   type WriteOutcome,
 } from "./api.ts";
@@ -104,6 +105,8 @@ const event = d.object({
       command_request_id: d.optional(d.token),
       // hold_acknowledged (#60)
       key: d.optional(d.token),
+      hold_basis: d.optional(d.nullable(d.string)),
+      at_decision: d.optional(d.boolean),
       // member_failed (#51)
       spacecraft_id: d.optional(d.token),
       position: d.optional(d.integer),
@@ -185,6 +188,8 @@ export type Decision = Readonly<{
   excluded: readonly string[];
   note: string;
   expectedReview: string;
+  /** #61: the approver's acks for HOLDs the author's acks don't cover (GO kinds only). */
+  acknowledgedHolds?: readonly HoldAck[];
 }>;
 
 export async function decide(
@@ -200,6 +205,7 @@ export async function decide(
         excluded: decision.excluded,
         note: decision.note,
         expected_review: decision.expectedReview,
+        acknowledged_holds: decision.acknowledgedHolds ?? [],
       },
     }),
   );

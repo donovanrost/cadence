@@ -109,5 +109,7 @@ const ERROR_WORDS: Readonly<Record<string, string>> = {
   command_group_not_pending: "Someone already decided it.",
   command_group_self_approval_not_allowed: "You can't approve your own request.",
   not_the_requested_approver: "Another operator was asked for this GO.",
+  holds_unacknowledged:
+    "A HOLD isn't acknowledged against the latest checks. They've been re-run; read them and acknowledge again.",
 };
 export const decisionErrorWords = (code: string, message: string) => ERROR_WORDS[code] ?? message;
