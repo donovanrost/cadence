@@ -244,7 +244,8 @@ defmodule Cadence.CommandingDispatcherTest do
       Spacecraft.new(%{
         spacecraft_id: dispatcher_scope.spacecraft_id,
         mission_id: dispatcher_scope.mission_id,
-        display_name: "SC Dispatcher"
+        display_name: "SC Dispatcher",
+        scid: 0
       })
 
     assert {:ok, _spacecraft} =
@@ -375,7 +376,7 @@ defmodule Cadence.CommandingDispatcherTest do
                 transport_binding_id: "uplink-gateway-dispatcher",
                 family_key: :uplink_gateway,
                 target_scope: :path,
-                configuration: %{"service_name" => "gateway"}
+                configuration: %{"service_name" => "gateway", "scid" => 0}
               })
             ]
           })
