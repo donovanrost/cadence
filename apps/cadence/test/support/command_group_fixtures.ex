@@ -142,7 +142,7 @@ defmodule Cadence.CommandGroupFixtures do
   end
 
   @doc "Another operator (a member of the same organization) with their own scope."
-  def operator!(c, name \\ "Second Operator") do
+  def operator!(c, name \\ "Second Operator", role \\ :organization_admin) do
     id = Ids.new("operator")
     user = User.new(%{user_id: id, email: "#{id}@example.test", display_name: name})
     Repo.insert!(UserRow.changeset(user))
@@ -151,7 +151,7 @@ defmodule Cadence.CommandGroupFixtures do
       OrganizationMembership.new(%{
         user_id: id,
         organization_id: c.org,
-        role: :organization_admin
+        role: role
       })
 
     Repo.insert!(OrganizationMembershipRow.changeset(member))

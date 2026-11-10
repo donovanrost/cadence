@@ -230,6 +230,58 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
     end
   end
 
+  test "a plain member submits a small group and it's queued; another member GOes a hazardous one (#62)",
+       c do
+    org = Cadence.Organizations.fetch_organization(c.mission.organization_id) |> elem(1)
+    member = TestFixtures.persist_user!(display_name: "Plain Member")
+    second = TestFixtures.persist_user!(display_name: "Second Member")
+    TestFixtures.grant_membership!(member, org, role: :member)
+    TestFixtures.grant_membership!(second, org, role: :member)
+
+    small = body(c, "SET_SIGNED", %{"counter" => 1})
+    pre = as(member) |> post(base(c) <> "/command-groups/preflight", small) |> json_response(200)
+
+    assert %{"data" => %{"state" => "queued", "requested_by" => %{"user_id" => requester}}} =
+             as(member)
+             |> post(
+               base(c) <> "/command-groups",
+               Map.put(small, "preflight_digest", pre["data"]["digest"])
+             )
+             |> json_response(201)
+
+    assert requester == member.user_id
+
+    hazardous = body(c, "SET_COUNTER", %{"amount" => 1}, %{"log_entry" => "x"})
+
+    pre =
+      as(member) |> post(base(c) <> "/command-groups/preflight", hazardous) |> json_response(200)
+
+    acks =
+      for %{"result" => "hold", "ackable" => true} = check <- pre["data"]["checks"],
+          do: %{"key" => check["key"], "hold_basis" => check["hold_basis"], "note" => "Seen."}
+
+    %{"data" => %{"id" => id, "state" => "approval_pending"}} =
+      as(member)
+      |> post(
+        base(c) <> "/command-groups",
+        Map.merge(hazardous, %{
+          "preflight_digest" => pre["data"]["digest"],
+          "acknowledged_holds" => acks
+        })
+      )
+      |> json_response(201)
+
+    assert %{"error" => %{"code" => "command_group_self_approval_not_allowed"}} =
+             as(member)
+             |> post(base(c) <> "/command-groups/#{id}/decision", %{"kind" => "go"})
+             |> json_response(403)
+
+    assert %{"data" => %{"state" => "queued"}} =
+             as(second)
+             |> post(base(c) <> "/command-groups/#{id}/decision", %{"kind" => "go"})
+             |> json_response(200)
+  end
+
   test "preflight, submit and show a routine group", c do
     pre = preflight(c, body(c, "SET_SIGNED", %{"counter" => 1}))["data"]
     assert pre["valid"] == true

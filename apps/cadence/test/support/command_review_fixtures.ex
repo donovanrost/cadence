@@ -10,7 +10,8 @@ defmodule Cadence.CommandReviewFixtures do
   alias Cadence.Organizations.Organization
   alias Cadence.Repo
 
-  def scope! do
+  @doc "A mission and a reviewer in it; `role` is the reviewer's organization role."
+  def scope!(role \\ :organization_admin) do
     id = Ids.new("review")
 
     {:ok, org} =
@@ -32,7 +33,7 @@ defmodule Cadence.CommandReviewFixtures do
     Repo.insert!(UserRow.changeset(user))
 
     member =
-      OrganizationMembership.new(%{user_id: id, organization_id: id, role: :organization_admin})
+      OrganizationMembership.new(%{user_id: id, organization_id: id, role: role})
 
     Repo.insert!(OrganizationMembershipRow.changeset(member))
 

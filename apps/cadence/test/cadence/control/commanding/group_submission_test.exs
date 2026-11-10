@@ -58,6 +58,24 @@ defmodule Cadence.Control.Commanding.GroupSubmissionTest do
     assert [%{kind: :submitted}] = GroupStore.events(c.mission, group.command_group_id)
   end
 
+  test "a plain member (role member) submits a small routine group and it's queued (#62)", c do
+    member = operator!(c, "Plain Member", :member)
+    draft = draft(c.spacecraft, [command(c, "SET_SIGNED", %{"counter" => 1})])
+
+    assert {:ok, group} =
+             GroupSubmission.submit(member, c.mission, draft, preflight_digest: digest(c, draft))
+
+    assert group.state == :queued
+    assert group.requested_by["user_id"] == member.user.user_id
+
+    queued =
+      CommandQueueEntryRow
+      |> where([q], q.mission_id == ^c.mission)
+      |> Repo.all()
+
+    assert length(queued) == 2
+  end
+
   test "a hazardous stack waits for a second GO and needs a log entry", c do
     draft = draft(c.spacecraft, [command(c, "SET_COUNTER", %{"amount" => 2})])
 
