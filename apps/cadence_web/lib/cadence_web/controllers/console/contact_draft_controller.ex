@@ -147,21 +147,30 @@ defmodule CadenceWeb.Console.ContactDraftController do
         _none -> nil
       end
 
+    state = state(conn, run)
+
     %{
       run: %{
         id: run.fleet_planning_run_id,
-        state: state(conn, run),
+        state: state,
         phase: run.phase,
         horizon: %{from: run.horizon_start, to: run.horizon_end},
         failure: if(run.failure_document == %{}, do: nil, else: run.failure_document),
         started_at: run.started_at,
-        updated_at: run.updated_at
+        updated_at: run.updated_at,
+        stopped_at: stopped_at(state, run)
       },
       plan: plan
     }
   end
 
   defp state(conn, run), do: Scheduling.draft_state(org_id(conn), mission_id(conn), run)
+
+  # Backlog: when the run stopped. A finished run's completion time; an interrupted run's last
+  # recorded progress (nothing records the moment a node dies, so it stopped at or after this).
+  defp stopped_at(:interrupted, run), do: run.updated_at
+  defp stopped_at(state, _run) when state in [:queued, :running], do: nil
+  defp stopped_at(_finished, run), do: run.completed_at || run.updated_at
 
   defp day(value) when is_binary(value) do
     case Date.from_iso8601(value) do

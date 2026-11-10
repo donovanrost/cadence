@@ -101,6 +101,8 @@ defmodule CadenceWeb.Console.ContactDraftAPITest do
     draft = json_response(get_json(c, "/#{run_id}"), 200)["data"]
     assert draft["run"]["id"] == run_id
     assert draft["run"]["state"] in ~w(completed partial failed)
+    # A finished run says when it stopped.
+    assert is_binary(draft["run"]["stopped_at"])
     assert %{"from" => "2027-01-01T00:00:00" <> _} = draft["run"]["horizon"]
 
     assert json_response(post_json(c, "/#{run_id}/continue", %{}), 409)["error"]["code"] ==

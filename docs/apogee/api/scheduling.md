@@ -161,8 +161,11 @@ hash. Later review pages pass `as_of` back; a review older than 15 minutes asks 
 
 ### `GET /contact-plans/drafts/:run_id`
 
-`{run: {id, state, phase, horizon: {from, to}, failure, started_at, updated_at}, plan: <plan detail>
-| null}`.
+`{run: {id, state, phase, horizon: {from, to}, failure, started_at, updated_at, stopped_at}, plan:
+<plan detail> | null}`. `stopped_at` is `null` while the run is queued or running. For a
+finished run (`completed | partial | failed | canceled`) it's the completion time. For an
+`interrupted` run it's the last time the run recorded progress: nothing records the moment a
+node stops, so say "stopped at or after".
 
 - `state`: `queued | running | completed | partial | failed | canceled | interrupted`.
   **`interrupted`** means the run is queued/running but nothing is executing it (no session holds
