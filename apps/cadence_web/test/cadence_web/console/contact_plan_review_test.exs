@@ -26,6 +26,12 @@ defmodule CadenceWeb.Console.ContactPlanReviewTest do
     do: user |> TestFixtures.member_conn() |> post(c.base <> path, body)
 
   test "an approver sends a pending plan back to draft with a reason; refusals are coded", c do
+    assert c.admin
+           |> TestFixtures.member_conn()
+           |> get(c.base <> "/" <> c.plan_id)
+           |> json_response(200)
+           |> get_in(["data", "approval"]) == nil
+
     assert %{"error" => %{"code" => "plan_not_pending"}} =
              c
              |> post_as(c.admin, "/#{c.plan_id}/reject", %{
@@ -69,5 +75,20 @@ defmodule CadenceWeb.Console.ContactPlanReviewTest do
              |> Map.fetch!("data")
 
     assert plan_id == c.plan_id
+
+    # Plan detail says who sent it back and why.
+    admin_id = c.admin.user_id
+
+    assert %{
+             "decision" => "rejected",
+             "reason" => "Move 004 off Kiruna first",
+             "actor" => %{"kind" => "user", "id" => ^admin_id},
+             "exceptions" => []
+           } =
+             c.admin
+             |> TestFixtures.member_conn()
+             |> get(c.base <> "/" <> c.plan_id)
+             |> json_response(200)
+             |> get_in(["data", "approval"])
   end
 end

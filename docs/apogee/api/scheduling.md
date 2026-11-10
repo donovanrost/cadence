@@ -203,7 +203,11 @@ Errors:
   `409 operation_conflict` (operation id used on another plan), `404 plan_not_found`.
 
 Acknowledgements are stored on the approval (`approval.exceptions`) with its actor and time
-(DECISIONS #28).
+(DECISIONS #28). Plan detail carries the latest decision on the shown version as `approval`:
+`{decision: "approved" | "rejected", actor: {kind, id, name}, at, reason, exceptions:
+[{requirement_id, requirement_version, reason}]} | null` (`null` until someone decides; a sent-back
+plan shows the rejection and its reason). Join `requirement_id` with `unmet[]` to describe the
+requirement.
 
 ### `POST /contact-plans/:plan_id/reject` (send back)
 

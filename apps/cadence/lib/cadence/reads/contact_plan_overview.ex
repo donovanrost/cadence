@@ -22,6 +22,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
   }
 
   alias Cadence.Management.Contacts
+  alias Cadence.Reads.PlanApproval
 
   @list_cap 100
 
@@ -107,7 +108,8 @@ defmodule Cadence.Reads.ContactPlanOverview do
          demand: demand(organization_id, mission_id, version),
          unmet: unmet(organization_id, mission_id, version),
          conflicts: conflicts,
-         at_risk: availability.at_risk
+         at_risk: availability.at_risk,
+         approval: PlanApproval.latest(organization_id, mission_id, plan_id, version.version)
        })}
     else
       _missing -> {:error, :plan_not_found}
