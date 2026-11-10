@@ -19,7 +19,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | **fe-setup** | Catalog C1 diff (api cab661fe); Profile edit → stage (op + preview exist); People command policies tab (O4 exists); Changes compare (`/config/compare`) + Keep mine / Take live (`rebase`); Readiness R2 from revisions; Audit actor filter; qa #19 copy ("unclear, check now" on 5xx) | api: catalog diff, people/invite/service-identity writes, account password/sessions, provider history; domain: catalog generations (C3) |
 | **ux** | Visual review of the unreviewed boards (§7); Compose C1 layout ruling (default: accept as built, #64) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
-| **api** | §8 queue clear | — |
+| **api** | M22 findings, A1 current values, M24 encode preview (§8, moved from api-ops) | — |
 | **api-ops** | §8 list | domain #34 for uplink items |
 | **domain** | catalog-path generations (#36; plan to the director first, it touches activation) | — (done: qa #34 #59 e683b3e2; qa #19 server side 33529f29; #50 archive) |
 
@@ -54,14 +54,14 @@ missing endpoint or decision; an item with no blocker can start now.
 | Verifier line / "No verifier: this command can't turn green" | fe-ops | catalog read carrying verifiers *(unverified)* |
 | Keep/Drop callout when a target leaves a live query | fe-ops | — |
 | Reorder by drag and Alt+↑/↓ | fe-ops | — |
-| `CATALOG rev N` meta | fe-ops | api-ops: catalog revision number |
+| `CATALOG rev N` meta | fe-ops | — (`catalog_revision` in the command-catalog basis) |
 | `ABORT AVAILABLE UNTIL…` caption *(unverified)* | fe-ops | — |
 
 ### Approve and Uplink (`CommandFlow.md` C2/C3): partial
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| A1 `5.0 → 8.0` readout, histogram of current values, hand-set overwrite callouts | fe-ops | api-ops: current values + prior requests in the brief |
-| A3 encoded packet bytes (honest "not available" today) | fe-ops | api-ops M24 encode preview |
+| A1 `5.0 → 8.0` readout, histogram of current values, hand-set overwrite callouts | fe-ops | api: current values + prior requests in the brief |
+| A3 encoded packet bytes (honest "not available" today) | fe-ops | api: M24 encode preview |
 | U2 verifier plot, "Needs you" cards with Re-send / Open, plane matrix, Pause, retry on no ACK | fe-ops | api-ops M26 retries + verifier series |
 
 ### Contacts (`Contacts.md`, J4): Live built; detail route pending
@@ -71,7 +71,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | ~~`ops.contact` route~~ done: redirects to the drawer (abc4b36e) | fe-ops | — |
 | `sc any` filter chip, "highlight queued uplinks" | fe-ops | — |
 | D2: queued requests bound to the pass, state trail; `Swap station`, `Release` | fe-ops | api-ops: swap/release endpoints |
-| D4 "Needs a decision" | fe-ops | api-ops M22 conflict/gap findings |
+| D4 "Needs a decision" | fe-ops | api: M22 conflict/gap findings |
 | `Book passes` | fe-ops | — (K1 Plan covers part) |
 
 ### Query line ⌘K (`Palette.md`, J5): partial
@@ -215,12 +215,17 @@ missing endpoint or decision; an item with no blocker can start now.
 7. ~~K3 Export CSV / Monthly close~~ not needed: CSV is client-side; Monthly close dropped (#63, ux af1c78d1).
 8. qa #19: map domain's `:apply_interrupted` (33529f29), in progress (api).
 
-**api-ops**
-1. M8 `spacecraft:<id>` topic (Investigate live tail and log).
-2. M22 conflict/gap findings (Contacts D4); swap / release (Contacts D2).
-3. Catalog revision number (Compose meta); current values + prior requests in the request brief (Approve A1).
-4. M24 encode preview (Approve A3); M26 retries + verifier series (Uplink U2).
-5. Now queue sources: missed pass, station, flight event *(unverified)*.
+**api-ops** (after #38/#65, in this order)
+1. Now queue sources: `missed_pass` (S9 results), `station` (S7 StationImpact); `flight_event` blocked on domain (no source).
+2. M8 `spacecraft:<id>` topic (Investigate live tail and log).
+3. Contacts swap / release (D2).
+4. M26 retries + verifier series (Uplink U2).
+5. ~~Catalog revision number~~ already there: `GET /command-catalog` basis carries `catalog_revision` (commanding.md §basis); fe-ops can show `CATALOG rev N`.
+
+**api** (moved from api-ops, director rebalance)
+9. M22 conflict/gap findings (Contacts D4).
+10. A1 current values + prior requests in the request brief (Approve A1).
+11. M24 encode preview (Approve A3).
 
 **domain**
 1. ~~qa #34~~ done (#59, e683b3e2).
