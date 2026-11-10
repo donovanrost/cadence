@@ -178,7 +178,7 @@ describe("preflight", () => {
       ["Plan impact", "GO"],
     ]);
     expect(rows[0]?.sentence).toBe("The target resolves · SCID 7");
-    expect(rows[2]?.sentence).toBe("No booked contact for SC-2 (SCID 8): its uplink waits for one");
+    expect(rows[2]?.sentence).toBe("No booked contact with a confirmed uplink for SC-2 (SCID 8) in the release window");
     expect(rows[3]?.sentence).toBe(
       "Needs a second operator's GO: SET_POWER_MODE is hazardous; 12 targets is fleet reach (10 or more)",
     );

@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { describeApiError, type RemoteState } from "@/api/index.ts";
-import { ApButton, ApCallout, ApCheckRows, ApEmptyState, ApPanel } from "@/ui";
-import type { Preflight } from "../groups/api.ts";
-import { checkMeta, checkRows, type TargetName } from "../groups/checks.ts";
+import { ApButton, ApCallout, ApCheckRows, ApEmptyState, ApPanel, ApTextarea } from "@/ui";
+import { HOLD_NOTE_MAX, type Preflight } from "../groups/api.ts";
+import {
+  checkLabel,
+  checkMeta,
+  checkRows,
+  gatingHolds,
+  type HoldAcks,
+  type TargetName,
+} from "../groups/checks.ts";
 
 /**
  * C3 · GO / NO-GO poll (Command.md): the server's preflight, re-run on every change. While it
@@ -14,8 +21,9 @@ const props = defineProps<{
   checking: boolean;
   ready: boolean;
   nameOf: TargetName;
+  acks: HoldAcks;
 }>();
-defineEmits<{ retry: [] }>();
+defineEmits<{ retry: []; ack: [key: string, basis: string | null, note: string] }>();
 
 const last = computed(() => (props.state.status === "ready" ? props.state.value : null));
 const rows = computed(() => {
@@ -26,6 +34,17 @@ const rows = computed(() => {
     ? all.map((r) => ({ ...r, state: "neutral" as const, verdict: "CHECKING…" }))
     : all;
 });
+/**
+ * #60: each ackable HOLD takes a note before Arm opens. A note written against facts that have
+ * since changed (new hold_basis) no longer counts until the operator re-confirms it.
+ */
+const ackable = computed(() =>
+  last.value && !props.checking ? gatingHolds(last.value).filter((c) => c.ackable !== false) : [],
+);
+const stale = (key: string, basis: string | null) => {
+  const a = props.acks[key];
+  return a !== undefined && a.note.trim() !== "" && a.basis !== basis;
+};
 /** The slot hands back an ApCheckRow, so look the link up by key. */
 const rowProfile = (key: string) => rows.value.find((r) => r.key === key)?.profileId ?? null;
 const meta = computed(() =>
@@ -63,5 +82,29 @@ const meta = computed(() =>
         >
       </template>
     </ApCheckRows>
+    <div
+      v-for="c in ackable"
+      :key="c.key"
+      class="flex flex-col gap-2 border-t border-hairline px-4 py-3"
+    >
+      <ApTextarea
+        :model-value="acks[c.key]?.note ?? ''"
+        :label="`Acknowledge the ${checkLabel(c.key)} HOLD`"
+        hint="Say why it's safe to send anyway. Your note goes in the request's log."
+        :maxlength="HOLD_NOTE_MAX"
+        :rows="2"
+        @update:model-value="(note: string) => $emit('ack', c.key, c.hold_basis ?? null, note)"
+      />
+      <ApCallout v-if="stale(c.key, c.hold_basis ?? null)" tone="caution">
+        This HOLD changed after you acknowledged it. Read it again.
+        <template #action
+          ><ApButton
+            size="compact"
+            @click="$emit('ack', c.key, c.hold_basis ?? null, acks[c.key]?.note ?? '')"
+            >Still acknowledge</ApButton
+          ></template
+        >
+      </ApCallout>
+    </div>
   </ApPanel>
 </template>

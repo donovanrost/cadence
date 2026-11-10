@@ -1,8 +1,14 @@
-import { computed, watch, type Ref } from "vue";
+import { computed, ref, watch, type Ref } from "vue";
 import { useRouter } from "vue-router";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import type { NextContact } from "../groups/api.ts";
-import { noGoReason, reasonWord } from "../groups/checks.ts";
+import {
+  holdAcksToSend,
+  holdReason,
+  noGoReason,
+  reasonWord,
+  type HoldAcks,
+} from "../groups/checks.ts";
 import { buildDraft, type Release } from "./draft.ts";
 import { checkItem, secondGoReasons, type StackItem } from "./stack.ts";
 import { FLEET_REACH, type TargetQuery } from "./targets.ts";
@@ -70,6 +76,12 @@ export function useComposeRequest(
     return secondGoReasons(stack.value, targets.value.length, FLEET_REACH);
   });
 
+  /** #60: the operator's HOLD acks, each stamped with the hold_basis it was written against. */
+  const acks = ref<HoldAcks>({});
+  function ack(key: string, basis: string | null, note: string) {
+    acks.value = { ...acks.value, [key]: { basis, note } };
+  }
+
   const blocked = computed(() => {
     if (targets.value.length === 0) return "Add at least one target.";
     if (stack.value.length === 0) return "Add a command from the catalog.";
@@ -84,6 +96,8 @@ export function useComposeRequest(
     if (!pf) return "The server's checks didn't run. Check again in C3.";
     const noGo = noGoReason(pf, nameOf);
     if (noGo) return noGo;
+    const hold = holdReason(pf, acks.value, nameOf);
+    if (hold) return hold;
     if (!pf.digest) return "The server's checks didn't return a digest. Check again in C3.";
     return null;
   });
@@ -101,11 +115,26 @@ export function useComposeRequest(
   });
   function send() {
     const d = draft.value;
-    const digest = preflight.current.value?.digest;
-    if (blocked.value !== null || !d || !digest) return;
-    submission.submit(d, digest).catch((e: unknown) => console.error("Submit failed", e));
+    const pf = preflight.current.value;
+    const digest = pf?.digest;
+    if (blocked.value !== null || !d || !pf || !digest) return;
+    submission
+      .submit(d, digest, holdAcksToSend(pf, acks.value))
+      .catch((e: unknown) => console.error("Submit failed", e));
   }
   const check = () => submission.check().catch((e: unknown) => console.error("Check failed", e));
 
-  return { draft, preflight, nameOf, contacts, secondGo, blocked, submission, send, check };
+  return {
+    draft,
+    preflight,
+    nameOf,
+    contacts,
+    secondGo,
+    acks,
+    ack,
+    blocked,
+    submission,
+    send,
+    check,
+  };
 }

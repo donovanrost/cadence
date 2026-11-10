@@ -102,6 +102,8 @@ const event = d.object({
       canceled: d.optional(d.integer),
       already_started: d.optional(d.array(d.token, 5_000)),
       command_request_id: d.optional(d.token),
+      // hold_acknowledged (#60)
+      key: d.optional(d.token),
       // member_failed (#51)
       spacecraft_id: d.optional(d.token),
       position: d.optional(d.integer),

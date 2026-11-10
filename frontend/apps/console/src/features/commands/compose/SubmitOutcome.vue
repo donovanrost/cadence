@@ -10,7 +10,7 @@ defineEmits<{ check: [] }>();
 <template>
   <ApCallout v-if="state.status === 'rejected'" tone="crit">
     Not sent. Nothing changed: {{ state.message }}
-    <template v-if="state.code === 'preflight_stale'">
+    <template v-if="state.code === 'preflight_stale' || state.code === 'holds_unacknowledged'">
       The checks ran again; review them and send.</template
     >
   </ApCallout>

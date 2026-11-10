@@ -30,6 +30,10 @@ export type Draft = Readonly<{
   sent_back_from: string | null;
 }>;
 
+/** #60: an operator's acknowledgement of one ackable HOLD, tied to that HOLD's facts. */
+export type HoldAck = Readonly<{ key: string; hold_basis: string | null; note: string }>;
+export const HOLD_NOTE_MAX = 1000;
+
 export const checkResults = ["go", "hold", "no_go"] as const;
 export type CheckResult = (typeof checkResults)[number];
 const result = d.oneOf(checkResults);
@@ -87,6 +91,10 @@ const check = d.object({
   result,
   per_target: d.array(perTarget, 1_000),
   evidence,
+  /** DECISIONS #60: null unless HOLD. false = hard (clear it); true = an operator may ack it. */
+  ackable: d.optional(d.nullable(d.boolean)),
+  /** That HOLD's facts, hashed: an ack counts only while it still matches. */
+  hold_basis: d.optional(d.nullable(d.string)),
 });
 export type PreflightCheck = Decoded<typeof check>;
 
@@ -237,11 +245,17 @@ export async function submitGroup(
   draft: Draft,
   digest: string,
   operationId: string,
+  acknowledgedHolds: readonly HoldAck[] = [],
 ): Promise<WriteOutcome<Created>> {
   return outcomeOf(
     await request(groupsBase(missionId), created, {
       method: "POST",
-      body: { ...draft, preflight_digest: digest, operation_id: operationId },
+      body: {
+        ...draft,
+        preflight_digest: digest,
+        operation_id: operationId,
+        acknowledged_holds: acknowledgedHolds,
+      },
     }),
   );
 }

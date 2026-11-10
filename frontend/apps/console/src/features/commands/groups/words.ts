@@ -1,5 +1,6 @@
 import { plural, type OpState } from "@/ui";
 import type { GroupState, MemberStage } from "./api.ts";
+import { checkLabel } from "./checks.ts";
 import type { GroupEvent } from "./show.ts";
 
 /**
@@ -165,6 +166,8 @@ export function eventText(e: GroupEvent, nameOf: PersonName, targets: EventTarge
       return `${who} noted${note}`;
     case "aborted":
       return `${who} aborted${p?.reason ? `: “${p.reason}”` : ""} · ${p?.canceled ?? 0} canceled, ${p?.already_started?.length ?? 0} already started`;
+    case "hold_acknowledged":
+      return `${who} acknowledged the ${p?.key ? checkLabel(p.key) : "a"} HOLD${note}`;
     case "member_canceled":
       return `${who} canceled one uplink${p?.reason ? `: “${p.reason}”` : ""}`;
     case "member_failed": {

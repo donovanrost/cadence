@@ -106,9 +106,10 @@ function sentence(check: PreflightCheck, pf: Preflight, nameOf: TargetName): str
         ? "No competing uplinks queued"
         : `${plural(ev.count ?? 0, "request")} already queued or awaiting GO on these targets`;
     case "contact":
+      // #60 (5): only bookings with a confirmed uplink leg count, from max(now, not_before).
       return check.result === "go"
-        ? "Every target has a booked contact"
-        : `No booked contact for ${list(names)}: ${names.length === 1 ? "its uplink waits" : "their uplinks wait"} for one`;
+        ? "Every target has a booked contact with a confirmed uplink"
+        : `No booked contact with a confirmed uplink for ${list(names)} in the release window`;
     case "two_person":
       return check.result === "go"
         ? "No second GO needed"
@@ -157,4 +158,54 @@ export function checkMeta(pf: Preflight): string {
 export function noGoReason(pf: Preflight, nameOf: TargetName): string | null {
   const bad = pf.checks.find((c) => c.result === "no_go");
   return bad ? `${LABELS[bad.key] ?? bad.key} NO-GO: ${sentence(bad, pf, nameOf)}.` : null;
+}
+
+export const checkLabel = (key: string) => LABELS[key] ?? words(key);
+
+/** An operator's acks so far, by check key: the note and the hold_basis it was written against. */
+export type HoldAcks = Readonly<Record<string, Readonly<{ basis: string | null; note: string }>>>;
+
+/**
+ * HOLDs that gate Arm (#60). two_person is the approval step itself, never a gate (older servers
+ * still send it as HOLD); changed_since_submit is review-only.
+ */
+export function gatingHolds(pf: Preflight): PreflightCheck[] {
+  return pf.checks.filter(
+    (c) => c.result === "hold" && c.key !== "two_person" && c.key !== "changed_since_submit",
+  );
+}
+
+/** An ack counts while its note is written and its basis matches the HOLD as it stands now. */
+export const ackCounts = (c: PreflightCheck, acks: HoldAcks) => {
+  const a = acks[c.key];
+  return (
+    c.ackable !== false &&
+    a !== undefined &&
+    a.note.trim() !== "" &&
+    a.basis === (c.hold_basis ?? null)
+  );
+};
+
+/** Why Arm stays closed over a HOLD, in words; null when every HOLD is acked or there are none. */
+export function holdReason(pf: Preflight, acks: HoldAcks, nameOf: TargetName): string | null {
+  const holds = gatingHolds(pf);
+  const hard = holds.find((c) => c.ackable === false);
+  if (hard) return `${checkLabel(hard.key)} HOLD: ${sentence(hard, pf, nameOf)}. Clear it to arm.`;
+  const open = holds.filter((c) => !ackCounts(c, acks));
+  if (!open.length) return null;
+  return `Acknowledge the ${open.map((c) => checkLabel(c.key)).join(" and ")} HOLD with a note, or clear it.`;
+}
+
+/** The acks to send: one per gating HOLD that's acked against its current facts. */
+export function holdAcksToSend(
+  pf: Preflight,
+  acks: HoldAcks,
+): { key: string; hold_basis: string | null; note: string }[] {
+  return gatingHolds(pf)
+    .filter((c) => ackCounts(c, acks))
+    .map((c) => ({
+      key: c.key,
+      hold_basis: c.hold_basis ?? null,
+      note: (acks[c.key]?.note ?? "").trim(),
+    }));
 }

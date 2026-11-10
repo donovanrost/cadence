@@ -7,6 +7,7 @@ import { inTab } from "../list/list.ts";
 import type { GroupRow } from "../groups/api.ts";
 import { cannotDecide, decisionOptions, flaggedTargets, noGoAfter } from "./decision.ts";
 import { abortable, headline, pipeline } from "./uplink.ts";
+import { holdAcksToSend, holdReason } from "../groups/checks.ts";
 
 const target = (id: string, stage: string) => ({
   ...showBody.targets[0],
@@ -313,5 +314,49 @@ describe("#51 system events (b5d6ed6d)", () => {
   it("an uncertain release isn't final", () => {
     expect(statusTag("queued", { indeterminate: 1 }, 1).state).toBe("crit");
     expect(inTab(rowOf({ indeterminate: 1 }), "queued")).toBe(true);
+  });
+});
+
+describe("HOLDs gate Arm until acked or cleared (DECISIONS #60, qa #35)", () => {
+  const conflicts = (basis: string) => ({
+    key: "conflicts",
+    result: "hold",
+    per_target: [],
+    evidence: { count: 3 },
+    ackable: true,
+    hold_basis: basis,
+  });
+  const twoPerson = {
+    key: "two_person",
+    result: "hold",
+    per_target: [],
+    evidence: { reasons: [] },
+  };
+
+  it("an unacked ackable HOLD closes Arm; a note against the current basis opens it", () => {
+    const pf = review([conflicts("b1"), twoPerson]);
+    expect(holdReason(pf, {}, name)).toBe(
+      "Acknowledge the Conflicts HOLD with a note, or clear it.",
+    );
+    expect(holdReason(pf, { conflicts: { basis: "b1", note: "  " } }, name)).not.toBeNull();
+    const acked = { conflicts: { basis: "b1", note: "Same mode; queued ones are no-ops." } };
+    expect(holdReason(pf, acked, name)).toBeNull();
+    expect(holdAcksToSend(pf, acked)).toEqual([
+      { key: "conflicts", hold_basis: "b1", note: "Same mode; queued ones are no-ops." },
+    ]);
+  });
+
+  it("an ack written against older facts no longer counts", () => {
+    const pf = review([conflicts("b2")]);
+    const old = { conflicts: { basis: "b1", note: "ok" } };
+    expect(holdReason(pf, old, name)).not.toBeNull();
+    expect(holdAcksToSend(pf, old)).toEqual([]);
+  });
+
+  it("a hard HOLD offers no ack and keeps Arm closed", () => {
+    const pf = review([{ ...contactHold, ackable: false, hold_basis: "c1" }]);
+    expect(holdReason(pf, { contact: { basis: "c1", note: "trust me" } }, name)).toBe(
+      "Contact HOLD: No booked contact with a confirmed uplink for SC-2 in the release window. Clear it to arm.",
+    );
   });
 });

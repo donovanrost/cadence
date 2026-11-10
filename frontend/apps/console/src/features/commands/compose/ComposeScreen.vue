@@ -91,15 +91,26 @@ const resend = useResend(missionId, resendFrom(route.query.from), {
   approver,
   release,
 });
-const { draft, preflight, nameOf, contacts, secondGo, blocked, submission, send, check } =
-  useComposeRequest(missionId, rows, targets, query, stack, {
-    title,
-    log,
-    release,
-    approver,
-    sentBackFrom: resend.sentBackFrom,
-    endpoints: overrides,
-  });
+const {
+  draft,
+  preflight,
+  nameOf,
+  contacts,
+  secondGo,
+  acks,
+  ack,
+  blocked,
+  submission,
+  send,
+  check,
+} = useComposeRequest(missionId, rows, targets, query, stack, {
+  title,
+  log,
+  release,
+  approver,
+  sentBackFrom: resend.sentBackFrom,
+  endpoints: overrides,
+});
 
 const steps = computed(() => [
   `Targets · ${targets.value.length}`,
@@ -200,7 +211,9 @@ const close = computed(() => {
             :checking="preflight.checking.value"
             :ready="draft !== null"
             :name-of="nameOf"
+            :acks="acks"
             @retry="preflight.refetch"
+            @ack="ack"
           />
           <DeliveryPanel
             :targets="targets"

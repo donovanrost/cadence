@@ -1,6 +1,7 @@
 import { shallowRef, type Ref } from "vue";
 import { describeApiError, decoders as d, decode } from "@/api/index.ts";
-import { fetchGroups, submitGroup, type Draft } from "../groups/api.ts";
+import { fetchGroups, submitGroup, type Draft, type HoldAck } from "../groups/api.ts";
+import { checkLabel } from "../groups/checks.ts";
 
 /**
  * Submit (M16) with ux U20 outcomes: a rejection says nothing changed (with the server's reason);
@@ -16,15 +17,25 @@ export type SubmitState =
   | { status: "unclear"; message: string };
 
 const duplicate = d.object({ command_group_id: d.token });
+const unacked = d.object({ holds: d.array(d.object({ key: d.token }), 50) });
+
+/** 422 holds_unacknowledged (#60): which HOLDs the server still counts as open. */
+function unackedWords(details: unknown): string {
+  const r = decode(unacked, details);
+  const names = r.ok ? [...new Set(r.value.holds.map((h) => checkLabel(h.key)))] : [];
+  return names.length
+    ? `the ${names.join(" and ")} HOLD isn't acknowledged against the latest checks.`
+    : "a HOLD isn't acknowledged against the latest checks.";
+}
 
 export function useSubmit(missionId: Ref<string>, onStale: () => void) {
   const state = shallowRef<SubmitState>({ status: "idle" });
   let operationId: string | null = null;
 
-  async function submit(draft: Draft, digest: string) {
+  async function submit(draft: Draft, digest: string, acks: readonly HoldAck[] = []) {
     operationId ??= crypto.randomUUID();
     state.value = { status: "sending" };
-    const outcome = await submitGroup(missionId.value, draft, digest, operationId);
+    const outcome = await submitGroup(missionId.value, draft, digest, operationId, acks);
     if (outcome.status === "done") {
       state.value = { status: "done", groupId: outcome.value.id };
       return;
@@ -44,8 +55,12 @@ export function useSubmit(missionId: Ref<string>, onStale: () => void) {
     }
     // Definitely not created: the next attempt is a new operation.
     operationId = null;
-    if (code === "preflight_stale") onStale();
-    state.value = { status: "rejected", code, message: describeApiError(e) };
+    if (code === "preflight_stale" || code === "holds_unacknowledged") onStale();
+    const message =
+      code === "holds_unacknowledged" && "details" in e
+        ? unackedWords(e.details)
+        : describeApiError(e);
+    state.value = { status: "rejected", code, message };
   }
 
   /** Resolve an unclear submit: did the server create the group? */
