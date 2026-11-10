@@ -37,4 +37,40 @@ defmodule CadenceWeb.Console.PeopleController do
         Problem.respond(conn, reason)
     end
   end
+
+  def change_role(conn, %{"organization_id" => organization_id, "user_id" => user_id} = params) do
+    conn.assigns.current_scope
+    |> OrganizationPeople.change_role(organization_id, user_id, params)
+    |> respond(conn, :ok)
+  end
+
+  def remove(conn, %{"organization_id" => organization_id, "user_id" => user_id}) do
+    conn.assigns.current_scope
+    |> OrganizationPeople.remove_member(organization_id, user_id)
+    |> respond(conn, :ok)
+  end
+
+  def revoke_invitation(conn, %{"organization_id" => org_id, "invitation_id" => id}) do
+    case OrganizationPeople.revoke_invitation(conn.assigns.current_scope, org_id, id) do
+      :ok -> send_resp(conn, :no_content, "")
+      error -> respond(error, conn, :ok)
+    end
+  end
+
+  def resend_invitation(conn, %{"organization_id" => org_id, "invitation_id" => id}) do
+    conn.assigns.current_scope
+    |> OrganizationPeople.resend_invitation(org_id, id)
+    |> respond(conn, :created)
+  end
+
+  defp respond({:ok, data}, conn, status),
+    do: conn |> put_status(status) |> json(%{data: ConfigJSON.encode(data)})
+
+  defp respond({:error, {:invalid, details}}, conn, _status),
+    do: Problem.respond(conn, :invalid_params, details)
+
+  defp respond({:error, :invalid_role}, conn, _status),
+    do: Problem.respond(conn, :invalid_params, %{role: "Choose member or organization_admin."})
+
+  defp respond({:error, reason}, conn, _status), do: Problem.respond(conn, reason)
 end

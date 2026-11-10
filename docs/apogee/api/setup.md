@@ -16,6 +16,7 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | O1 | `GET /organizations/:organization_id/people` | **implemented** |
 | O2 | `POST /organizations/:organization_id/invitations` | **implemented** |
 | O3 | `GET /organizations/:organization_id/service-identities` | **implemented** |
+| O5 | `PUT`/`DELETE /people/:user_id`, `POST /invitations/:id/resend`, `DELETE /invitations/:id` | **implemented** |
 | O4 | command policies (as text) | with api-ops (commanding policy, D7) |
 | G1, T1, T2 | `GET /missions/:mission_id/ground-stations`, `/transports`, `/routing-rules` | **implemented** |
 | kind schema | `GET /missions/:mission_id/config/kinds/:kind/schema` | **implemented** |
@@ -243,6 +244,9 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
   revision can't be read. Otherwise `{summary: {commands: {before, after, added, changed,
   removed}, telemetry: {…}, unchanged, total_before, breaking}, changes: [{op, kind, name, change,
   breaking}], truncated}`.
+  - `total_before` counts the base revision's commands plus telemetry parameters; `unchanged` is
+    how many of those didn't change. `other` declarations aren't in either count. They're not
+    `declaration_count`, which is the importer's figure for this run (what it read from the file).
   - Items are what operators know: a **command** (with its arguments, argument types, encoding
     and verifiers) or a **telemetry** parameter (with its type and calibrator). Declarations no
     command or parameter references or names (containers, units, monitoring policies) are
@@ -385,6 +389,27 @@ Body `{email, role: "member" | "organization_admin"}` (default `member`). Requir
 - `201` returns the invitation (same shape as above) plus `delivery: "submitted" | "unavailable"`.
 - Errors: `422 invalid_params` (`details.email` / `details.role`), `409 already_member`,
   `409 already_invited`, `403 forbidden`.
+
+### People administration (O5)
+
+All require `org.manage_members` (organization admin). An organization always keeps at least
+one active admin.
+
+- `PUT /people/:user_id {role: "member" | "organization_admin"}` → `200 {user_id, role, state:
+  "active"}`. Errors: `422 invalid_params` (`details.role`), `404 member_not_found`, `409
+  last_admin` (demoting the last admin), `403 forbidden`.
+- `DELETE /people/:user_id` → `200 {user_id, role, state: "revoked"}`. The membership is revoked,
+  not deleted (history keeps pointing at it); the person loses access to the organization on
+  their next request (the organization reads as `404 organization_not_found` to them). Inviting
+  them again restores the membership when they accept. Errors: `404 member_not_found`, `409
+  last_admin`, `403 forbidden`.
+- `POST /invitations/:invitation_id/resend` → `201` a fresh invitation (same shape as O2, new
+  `id`): same email and role, a new link (the old one stops working), delivered again. Errors:
+  `404 invitation_not_found` (not pending: accepted, revoked or expired), `403 forbidden`.
+- `DELETE /invitations/:invitation_id` → `204`; the link stops working. Errors: `404
+  invitation_not_found`, `403 forbidden`.
+- **Per-person activity**: the organization audit read filtered to them, `GET /audit?actor_id=<user_id>`
+  (AU1 below).
 
 ## Comms reads (G1, T1, T2)
 

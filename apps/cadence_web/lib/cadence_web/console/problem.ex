@@ -78,6 +78,10 @@ defmodule CadenceWeb.Console.Problem do
     import_failed: {422, "The import could not be started."},
     already_member: {409, "That person is already a member."},
     already_invited: {409, "That person already has a pending invitation."},
+    member_not_found: {404, "That person isn't a member of this organization."},
+    invitation_not_found: {404, "That invitation isn't pending (accepted, revoked or expired)."},
+    last_admin:
+      {409, "An organization needs at least one admin. Make someone else an admin first."},
     invalid_params: {422, "The request parameters are invalid."},
     history_unavailable: {503, "Telemetry history is unavailable right now."},
     catalog_unavailable: {503, "The command catalog is unavailable right now."},

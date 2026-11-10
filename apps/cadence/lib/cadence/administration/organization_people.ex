@@ -15,7 +15,7 @@ defmodule Cadence.Administration.OrganizationPeople do
   """
 
   alias Cadence.{Accounts, Organizations}
-  alias Cadence.Accounts.InvitationDelivery
+  alias Cadence.Accounts.{InvitationDelivery, MembershipAdministration, OrganizationMembership}
   alias Cadence.Auth.{Policy, Scope}
 
   @roles %{"member" => :member, "organization_admin" => :organization_admin}
@@ -119,13 +119,21 @@ defmodule Cadence.Administration.OrganizationPeople do
           {:ok, map()}
           | {:error, :forbidden | :organization_not_found | :already_member | :already_invited}
           | {:error, {:invalid, map()}}
-  def invite(%Scope{user: %{user_id: inviter_id}} = scope, organization_id, params) do
+  def invite(%Scope{user: %{}} = scope, organization_id, params) do
     with :ok <- authorize(scope, :manage_organization_members, organization_id),
          {:ok, organization} <- Organizations.fetch_organization(organization_id),
          {:ok, email, role} <- validate(params),
-         :ok <- not_already(organization_id, email),
-         {:ok, %{mode: :invited, invitation: invitation, invitation_token: token}} <-
-           Accounts.establish_organization_access(email, organization_id,
+         :ok <- not_already(organization_id, email) do
+      issue(scope, organization, email, role)
+    end
+  end
+
+  def invite(%Scope{}, _organization_id, _params), do: {:error, :forbidden}
+
+  # Creates the invitation (revoking any pending one for the email) and delivers it.
+  defp issue(%Scope{user: %{user_id: inviter_id}} = scope, organization, email, role) do
+    with {:ok, %{mode: :invited, invitation: invitation, invitation_token: token}} <-
+           Accounts.establish_organization_access(email, organization.organization_id,
              membership_role: role,
              invited_by_user_id: inviter_id,
              force_invitation: true
@@ -144,7 +152,61 @@ defmodule Cadence.Administration.OrganizationPeople do
     end
   end
 
-  def invite(%Scope{}, _organization_id, _params), do: {:error, :forbidden}
+  @doc """
+  Changes a member's role (`member | organization_admin`). The last organization admin can't be
+  demoted (`:last_admin`).
+  """
+  @spec change_role(Scope.t(), binary(), binary(), map()) :: {:ok, map()} | {:error, term()}
+  def change_role(%Scope{} = scope, organization_id, user_id, params) do
+    with :ok <- authorize(scope, :manage_organization_members, organization_id),
+         {:ok, role} <- role_param(params) do
+      MembershipAdministration.change_role(organization_id, user_id, role)
+    end
+  end
+
+  @doc "Removes a member (revokes the membership). The last organization admin can't be removed."
+  @spec remove_member(Scope.t(), binary(), binary()) :: {:ok, map()} | {:error, term()}
+  def remove_member(%Scope{} = scope, organization_id, user_id) do
+    with :ok <- authorize(scope, :manage_organization_members, organization_id) do
+      MembershipAdministration.remove_member(organization_id, user_id)
+    end
+  end
+
+  @doc "Revokes a pending invitation; its link stops working."
+  @spec revoke_invitation(Scope.t(), binary(), binary()) :: :ok | {:error, term()}
+  def revoke_invitation(%Scope{} = scope, organization_id, invitation_id) do
+    with :ok <- authorize(scope, :manage_organization_members, organization_id) do
+      MembershipAdministration.revoke_invitation(organization_id, invitation_id)
+    end
+  end
+
+  @doc """
+  Resends a pending invitation: a fresh link (the old one stops working) with the same email and
+  role, delivered again. Returns the new invitation like `invite/3`.
+  """
+  @spec resend_invitation(Scope.t(), binary(), binary()) :: {:ok, map()} | {:error, term()}
+  def resend_invitation(%Scope{user: %{}} = scope, organization_id, invitation_id) do
+    with :ok <- authorize(scope, :manage_organization_members, organization_id),
+         {:ok, organization} <- Organizations.fetch_organization(organization_id),
+         {:ok, pending} <-
+           MembershipAdministration.fetch_pending_invitation(organization_id, invitation_id) do
+      issue(
+        scope,
+        organization,
+        pending.email,
+        OrganizationMembership.normalize_role(pending.membership_role)
+      )
+    end
+  end
+
+  def resend_invitation(%Scope{}, _organization_id, _invitation_id), do: {:error, :forbidden}
+
+  defp role_param(params) do
+    case Map.fetch(@roles, Map.get(params, "role")) do
+      {:ok, role} -> {:ok, role}
+      :error -> {:error, {:invalid, %{role: "Choose member or organization_admin."}}}
+    end
+  end
 
   defp member(row, member_scope, extra) do
     %{

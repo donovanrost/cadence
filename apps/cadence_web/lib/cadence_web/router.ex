@@ -930,6 +930,10 @@ defmodule CadenceWeb.Router do
 
       get("/people", PeopleController, :index)
       post("/invitations", PeopleController, :invite)
+      put("/people/:user_id", PeopleController, :change_role)
+      delete("/people/:user_id", PeopleController, :remove)
+      delete("/invitations/:invitation_id", PeopleController, :revoke_invitation)
+      post("/invitations/:invitation_id/resend", PeopleController, :resend_invitation)
       get("/service-identities", PeopleController, :service_identities)
       get("/missions", OrganizationController, :missions)
       get("/audit", OrganizationController, :audit)
