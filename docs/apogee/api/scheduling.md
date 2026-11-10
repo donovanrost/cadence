@@ -205,6 +205,15 @@ Errors:
 Acknowledgements are stored on the approval (`approval.exceptions`) with its actor and time
 (DECISIONS #28).
 
+### `POST /contact-plans/:plan_id/reject` (send back)
+
+Body `{expected_version, reason}`. For a plan in `pending_approval`: an approver
+(`approve_contact_plans`) sends it back. The plan returns to `draft` (its author can edit and
+resubmit), and the decision is recorded as a rejected approval with the reason. Approving goes
+through S5 submit. Returns `200` plan detail (`state: "draft"`). Errors: `422 invalid_params`
+(`expected_version`, `reason` is required), `409 plan_changed` (another version is current),
+`409 plan_not_pending`, `404 plan_not_found`, `403 forbidden`.
+
 ### `POST /contact-plans/:plan_id/execute`
 
 Re-executes an approved plan whose execution was **interrupted**, or that was approved and never

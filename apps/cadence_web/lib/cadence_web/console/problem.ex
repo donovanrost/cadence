@@ -33,6 +33,7 @@ defmodule CadenceWeb.Console.Problem do
     plan_changed: {409, "The plan changed since you loaded it."},
     plan_not_submittable: {409, "The plan can't be submitted in its current state."},
     plan_not_resumable: {409, "The plan isn't waiting to execute."},
+    plan_not_pending: {409, "The plan isn't waiting for approval."},
     booking_not_found: {404, "That pass isn't a booking of this plan."},
     booking_not_unconfirmed:
       {409, "That booking isn't waiting on the provider past the confirmation window."},
