@@ -7,8 +7,9 @@ defmodule CadenceWeb.Console.PassController do
   use CadenceWeb, :controller
 
   alias Cadence.ContactPlanning.RepairChain
+  alias Cadence.Control.{Contacts, UplinkReadiness}
   alias Cadence.Reads.ActionQueue.AttentionItems
-  alias Cadence.Reads.{Attention, Passes}
+  alias Cadence.Reads.{Attention, Passes, PassUplink}
   alias CadenceWeb.Console.{PassJSON, Problem, WindowParams}
 
   @max_span_s 7 * 86_400
@@ -42,29 +43,83 @@ defmodule CadenceWeb.Console.PassController do
     end
   end
 
-  defp decorate(conn, result),
-    do: conn |> with_replacements(result) |> then(&with_attention(conn, &1))
+  defp decorate(conn, result) do
+    items =
+      case Attention.load(conn.assigns.current_scope, mission_id(conn)) do
+        {:ok, %{items: items}} -> items
+        _forbidden -> []
+      end
 
-  # U32: each booking's open or acknowledged attention item, for viewers who operate the mission.
-  defp with_attention(conn, %{passes: passes} = result) do
-    case Attention.load(conn.assigns.current_scope, mission_id(conn)) do
-      {:ok, %{items: [_ | _] = items}} ->
-        names = AttentionItems.lookups(org_id(conn), mission_id(conn))
-        by_reservation = Map.new(items, &{&1.provider_reservation_id, &1})
+    {resolutions, blocked} = Enum.split_with(items, &(&1.source == "pass_resolution"))
 
-        %{
-          result
-          | passes:
-              Enum.map(passes, fn pass ->
-                case Map.get(by_reservation, pass.id) do
-                  nil -> pass
-                  item -> %{pass | attention: AttentionItems.object(item, names)}
-                end
-              end)
-        }
+    conn
+    |> with_replacements(result)
+    |> with_attention(conn, resolutions)
+    |> with_readiness(conn, Map.new(blocked, &{&1.contact_id, &1}))
+  end
 
-      _none_or_forbidden ->
-        result
+  # U32: each booking's open or acknowledged pass-resolution item (the drawer's attention block),
+  # for viewers who operate the mission. A blocked uplink shows in `uplink_readiness` instead.
+  defp with_attention(result, _conn, []), do: result
+
+  defp with_attention(%{passes: passes} = result, conn, items) do
+    names = AttentionItems.lookups(org_id(conn), mission_id(conn))
+    by_reservation = Map.new(items, &{&1.provider_reservation_id, &1})
+
+    %{
+      result
+      | passes:
+          Enum.map(passes, fn pass ->
+            case Map.get(by_reservation, pass.id) do
+              nil -> pass
+              item -> %{pass | attention: AttentionItems.object(item, names)}
+            end
+          end)
+    }
+  end
+
+  # U33: live uplink readiness per pass.
+  defp with_readiness(%{passes: passes} = result, conn, blocked),
+    do: %{
+      result
+      | passes: PassUplink.put_readiness(org_id(conn), mission_id(conn), passes, blocked)
+    }
+
+  @doc "`POST …/passes/:id/recover-uplink` (U33): re-runs the pass's uplink qualification."
+  def recover_uplink(conn, %{"id" => id} = params) do
+    with :ok <- no_actor(params),
+         {:ok, %{scheduled_contact_id: contact_id}} when is_binary(contact_id) <-
+           Contacts.fetch_provider_reservation(org_id(conn), mission_id(conn), id),
+         {:ok, outcome} <-
+           UplinkReadiness.recover(conn.assigns.current_scope, mission_id(conn), contact_id) do
+      json(conn, %{
+        data: %{state: to_string(outcome.state), ready_at: Map.get(outcome, :ready_at)}
+      })
+    else
+      {:error, {:actor_not_assignable, keys}} ->
+        Problem.respond(conn, :actor_not_assignable, %{fields: keys})
+
+      {:error, {:refused, reason}} ->
+        Problem.respond(conn, :uplink_recovery_refused, %{reason: to_string(reason)})
+
+      {:error, :not_blocked} ->
+        Problem.respond(conn, :uplink_not_blocked)
+
+      {:error, :forbidden} ->
+        Problem.respond(conn, :forbidden)
+
+      _not_found ->
+        Problem.respond(conn, :pass_not_found)
+    end
+  end
+
+  defp no_actor(params) do
+    case Enum.filter(
+           ~w(actor actor_id actor_kind user_id recovered_by by),
+           &Map.has_key?(params, &1)
+         ) do
+      [] -> :ok
+      keys -> {:error, {:actor_not_assignable, keys}}
     end
   end
 

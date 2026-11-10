@@ -9,7 +9,7 @@ defmodule CadenceWeb.Console.CommandGroupController do
   alias Cadence.Commanding.CommandPolicy
   alias Cadence.Commanding.Groups.GroupStore
   alias Cadence.Control.Commanding.{GroupAbort, GroupDecision, GroupNotes, GroupSubmission}
-  alias Cadence.Reads.{CommandEndpoints, CommandGroups, CommandPreflight}
+  alias Cadence.Reads.{CommandEndpoints, CommandGroups, CommandPreflight, PassUplink}
   alias CadenceWeb.Console.{CommandGroupJSON, CommandGroupParams, CommandGroupProblems}
 
   def preflight(conn, params) do
@@ -116,14 +116,26 @@ defmodule CadenceWeb.Console.CommandGroupController do
         mine: params["mine"] == "true"
       )
 
+    groups = with_uplink(conn, groups)
     json(conn, %{data: %{groups: Enum.map(groups, &CommandGroupJSON.summary/1)}})
   end
 
   def show(conn, %{"command_group_id" => id}) do
     case CommandGroups.get(org(conn), mission(conn), id, viewer(conn)) do
-      {:ok, view} -> json(conn, %{data: CommandGroupJSON.show(view)})
-      error -> CommandGroupProblems.respond(conn, error)
+      {:ok, view} ->
+        [view] = with_uplink(conn, [view])
+        json(conn, %{data: CommandGroupJSON.show(view)})
+
+      error ->
+        CommandGroupProblems.respond(conn, error)
     end
+  end
+
+  # U33: the pass a queued, unfinished group releases on, with its live uplink readiness.
+  defp with_uplink(conn, groups) do
+    waiting = for %{state: :queued, finished: false, id: id} <- groups, do: id
+    uplink = PassUplink.for_groups(org(conn), mission(conn), waiting)
+    Enum.map(groups, &Map.put(&1, :uplink, Map.get(uplink, &1.id)))
   end
 
   def review_preflight(conn, %{"command_group_id" => id}) do

@@ -139,19 +139,32 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
     %{
       id: attention.id,
       source: attention.source,
-      conflict: attention.conflict,
+      conflict: Map.get(attention, :conflict),
       state: attention.state,
-      acknowledged_by: attention.acknowledged_by,
+      acknowledged_by: Map.get(attention, :acknowledged_by),
       contact_id: attention.contact_id,
       reservation_id: Map.get(attention, :provider_reservation_id),
       station: station(attention.ground_station_ref, names),
       provider: provider(attention.provider_id, names),
       starts_at: attention.starts_at,
       raised_at: attention.raised_at,
-      provider_message: attention.provider_message,
-      resolution: attention.resolution
+      provider_message: Map.get(attention, :provider_message),
+      resolution: Map.get(attention, :resolution),
+      uplink: uplink(attention)
     }
   end
+
+  # U33 / DECISIONS #58: a blocked pass holding queued command groups back.
+  defp uplink(%{source: "uplink_blocked"} = attention) do
+    %{
+      state: "blocked",
+      reason: attention.reason,
+      since: attention.raised_at,
+      command_group_ids: Map.get(attention, :command_group_ids, [])
+    }
+  end
+
+  defp uplink(_attention), do: nil
 
   # Within 2 h of the pass start, or the pass is under way (started, not ended).
   defp p1?(%{starts_at: %DateTime{} = starts_at} = attention, now) do

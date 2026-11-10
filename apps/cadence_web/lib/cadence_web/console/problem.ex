@@ -62,6 +62,8 @@ defmodule CadenceWeb.Console.Problem do
     episode_not_found: {404, "Alarm not found."},
     attention_item_not_found: {404, "That attention item wasn't found."},
     pass_not_found: {404, "Pass not found."},
+    uplink_not_blocked: {409, "The uplink on that pass isn't blocked."},
+    uplink_recovery_refused: {409, "Recovery was refused."},
     attention_item_not_open: {409, "That attention item was already resolved."},
     actor_not_assignable: {422, "The actor is always the signed-in user."},
     holds_unacknowledged:

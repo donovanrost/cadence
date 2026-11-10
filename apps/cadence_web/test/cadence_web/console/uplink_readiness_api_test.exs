@@ -1,0 +1,182 @@
+defmodule CadenceWeb.Console.UplinkReadinessAPITest do
+  @moduledoc "U33 / DECISIONS #58: pass readiness, group uplink, uplink_blocked attention, Recover."
+  use CadenceWeb.ConnCase, async: false
+
+  alias Cadence.{CommandAuthoringFixtures, CommandGroupFixtures, ExactCommandAuthoringFixtures}
+  alias Cadence.Control.UplinkReadiness
+  alias CadenceWeb.TestFixtures
+
+  setup do
+    org = TestFixtures.persist_org!()
+    admin = TestFixtures.persist_user!(display_name: "Mira K.")
+    TestFixtures.grant_membership!(admin, org, role: :organization_admin)
+    mission = TestFixtures.persist_mission!(org)
+    model = ExactCommandAuthoringFixtures.activate!(org.organization_id, mission.mission_id)
+    craft = TestFixtures.persist_spacecraft!(mission, display_name: "EARENDIL-001")
+
+    endpoint =
+      CommandAuthoringFixtures.target!(org.organization_id, mission.mission_id, %{
+        spacecraft_id: craft.spacecraft_id
+      })
+
+    reservation =
+      CommandGroupFixtures.commandable_pass!(
+        org.organization_id,
+        mission.mission_id,
+        craft.spacecraft_id,
+        DateTime.add(DateTime.utc_now(), -60)
+      )
+
+    UplinkReadiness.create_table()
+    key = {mission.mission_id, "realized-#{reservation.provider_reservation_id}", "path", "gw"}
+    on_exit(fn -> :ets.delete(UplinkReadiness.table(), {:session, key}) end)
+
+    %{
+      org: org,
+      admin: admin,
+      mission: mission,
+      ids: model.commands_by_name,
+      craft: craft,
+      endpoint: endpoint,
+      reservation: reservation,
+      key: key,
+      base: "/api/console/v1/missions/#{mission.mission_id}"
+    }
+  end
+
+  defp live!(c, state, reason) do
+    r = c.reservation
+
+    UplinkReadiness.record(
+      UplinkReadiness.table(),
+      c.key,
+      %{
+        organization_id: c.org.organization_id,
+        mission_id: c.mission.mission_id,
+        scheduled_contact_id: r.scheduled_contact_id,
+        provider_reservation_id: r.provider_reservation_id,
+        provider_contact_ref: nil,
+        provider_id: r.provider_id,
+        spacecraft_id: c.craft.spacecraft_id,
+        ground_station_ref: "SVB-1",
+        starts_at: r.starts_at,
+        ends_at: r.ends_at
+      },
+      state,
+      reason,
+      DateTime.utc_now()
+    )
+  end
+
+  defp conn(c), do: TestFixtures.member_conn(c.admin)
+
+  defp get_data(c, path),
+    do: c |> conn() |> get(c.base <> path) |> json_response(200) |> Map.fetch!("data")
+
+  defp queue_group!(c) do
+    body = %{
+      "title" => "Mode change",
+      "targets" => [
+        %{
+          "spacecraft_id" => c.craft.spacecraft_id,
+          "source_endpoint_id" => c.endpoint.source_endpoint_id
+        }
+      ],
+      "commands" => [
+        %{
+          "command_id" => c.ids["SET_SIGNED"],
+          "argument_values_json" => Jason.encode!(%{"counter" => 1})
+        }
+      ]
+    }
+
+    pre = c |> conn() |> post(c.base <> "/command-groups/preflight", body) |> json_response(200)
+
+    c
+    |> conn()
+    |> post(c.base <> "/command-groups", Map.put(body, "preflight_digest", pre["data"]["digest"]))
+    |> json_response(201)
+    |> get_in(["data", "id"])
+  end
+
+  test "a pass with no live uplink session has no readiness", c do
+    assert %{"uplink_readiness" => nil} =
+             get_data(c, "/passes/#{c.reservation.provider_reservation_id}")
+  end
+
+  test "a blocked pass with a queued group: readiness, the group's uplink and a queue row", c do
+    live!(c, :ready, nil)
+    group_id = queue_group!(c)
+    live!(c, :blocked, :attestation_signature_invalid)
+
+    pass = get_data(c, "/passes/#{c.reservation.provider_reservation_id}")
+
+    assert %{
+             "state" => "blocked",
+             "reason" => "attestation_signature_invalid",
+             "since" => since,
+             "command_groups_queued" => 1
+           } = pass["uplink_readiness"]
+
+    assert is_binary(since)
+
+    assert %{
+             "uplink" => %{
+               "pass" => %{"reservation_id" => reservation_id, "contact_id" => contact_id},
+               "readiness" => %{"state" => "blocked", "reason" => "attestation_signature_invalid"},
+               "next_pass" => nil
+             }
+           } = get_data(c, "/command-groups/#{group_id}")
+
+    assert reservation_id == c.reservation.provider_reservation_id
+    assert contact_id == c.reservation.scheduled_contact_id
+
+    queue = get_data(c, "/action-queue")
+
+    assert %{
+             "kind" => "attention",
+             "source" => "uplink_blocked",
+             "priority" => 1,
+             "spacecraft" => [%{"name" => "EARENDIL-001"}],
+             "attention" => %{
+               "conflict" => nil,
+               "state" => "open",
+               "reservation_id" => ^reservation_id,
+               "uplink" => %{
+                 "state" => "blocked",
+                 "reason" => "attestation_signature_invalid",
+                 "command_group_ids" => [^group_id]
+               }
+             }
+           } = Enum.find(queue["items"], &(&1["source"] == "uplink_blocked"))
+
+    assert %{"open" => 1} = get_data(c, "/counts")["attention"]
+
+    # The pass row's attention block stays for pass resolutions; readiness carries the block.
+    assert pass["attention"] == nil
+  end
+
+  test "Recover: refused when unrecoverable, not_blocked when ready, unknown pass", c do
+    path = "/passes/#{c.reservation.provider_reservation_id}/recover-uplink"
+
+    live!(c, :blocked, :protocol_state_restore_required)
+
+    assert %{
+             "error" => %{
+               "code" => "uplink_recovery_refused",
+               "details" => %{"reason" => "protocol_state_restore_required"}
+             }
+           } = c |> conn() |> post(c.base <> path) |> json_response(409)
+
+    live!(c, :ready, nil)
+
+    assert %{"error" => %{"code" => "uplink_not_blocked"}} =
+             c |> conn() |> post(c.base <> path) |> json_response(409)
+
+    assert %{"error" => %{"code" => "actor_not_assignable"}} =
+             c |> conn() |> post(c.base <> path, %{"user_id" => "someone"}) |> json_response(422)
+
+    assert %{"error" => %{"code" => "pass_not_found"}} =
+             c |> conn() |> post(c.base <> "/passes/nope/recover-uplink") |> json_response(404)
+  end
+end

@@ -151,7 +151,9 @@ defmodule Cadence.Reads.Passes do
       attested_by: attested_by(reservation),
       uplink_confirmed: uplink_confirmed(reservation),
       # The booking's open attention item (U32); the controller fills it for viewers who operate.
-      attention: nil
+      attention: nil,
+      # Live uplink readiness (U33); the controller fills it from the readiness view.
+      uplink_readiness: nil
     }
   end
 

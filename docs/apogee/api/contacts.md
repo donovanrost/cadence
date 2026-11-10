@@ -124,46 +124,61 @@ signed-in user (#30).
   `422 invalid_params` (`details.action_text`), `422 actor_not_assignable` (the body names an
   actor field), `404 mission_not_found`.
 
-### Uplink readiness (U33, DECISIONS #58): proposed, not built (waits on domain's readiness read)
+### Uplink readiness (U33, DECISIONS #58/#59)
 
-Field names may still change to fit what domain lands. fe-ops gets the final shape before anything
-ships.
+Readiness comes from domain's live view of uplink sessions (`Control.UplinkReadiness`). The
+driver ticks every 15 s, so it can be up to 15 s stale. Every transition publishes `contacts`
+and `attention`.
 
 - **Pass rows** (`/passes`, `/passes/:id`) gain `uplink_readiness`:
-  `{state: ready | qualifying | recovering | blocked, reason, since, command_groups_queued}`.
-  - `reason` is a key (for example `protocol_state_restore_required`), `null` unless `blocked`.
-    Map it to words; an unknown key falls back to sentence case.
-  - `since` is when the state began (`null` if unknown). `command_groups_queued` is the number of
-    queued groups waiting for this pass; it makes `blocked` crit (> 0) or caution (0).
+  `{state: ready | qualifying | blocked, reason, since, command_groups_queued}`.
+  - `reason` is a key (for example `protocol_state_restore_required`,
+    `attestation_signature_invalid`, `cop1_awaiting_clcw` while qualifying). Map it to words;
+    an unknown key falls back to sentence case.
+  - `since` is when this state began.
+  - `command_groups_queued`, only for `blocked`, is the number of queued groups it holds back:
+    `> 0` crit, `0` caution. It's `null` for other states.
   - The whole field is `null` when the pass has no live uplink session: a future pass before its
     session starts, a downlink-only pass, or one that isn't booked. Show no tag then, as for `ready`.
-    Readiness comes from the live sessions (domain `Reads.UplinkReadiness`).
-- **Command groups** (list rows and show) gain `uplink`:
-  `{pass: {reservation_id, contact_id, station {ref, id, code, name}, starts_at}, readiness:
-  {state, reason, since} | null}` for the pass the group will release on, or `null` (no pass yet,
-  or not queued). Groups queue per spacecraft lane, not per contact, so the pass is the
-  spacecraft's current active uplink contact, else its next booked one (domain's rule).
-  `uplink.next_pass` (`{reservation_id, contact_id, station, starts_at}` or `null`) is the pass after
-  that one, where a blocked group goes next (U33). It's `null` when there's no later booked uplink
-  pass; then say "on the next ready pass" without naming one. Expiry comes from the group's
-  `release.expires_at`.
-- **`POST /api/console/v1/missions/:mission_id/passes/:id/recover-uplink`** (no body,
-  `operate_mission`, audited, safe to repeat) re-runs the automatic recovery.
-  - Returns `{data: {state: ready | recovering, ready_at}}`.
-  - Errors: `409 uplink_recovery_refused` (`details.reason`: "Recovery refused: <reason>"),
-    `409 uplink_not_blocked`, `409 uplink_recovering` (already running), `403 forbidden`,
-    `404 pass_not_found`.
+  - A pass row's `attention` holds only `pass_resolution` items (the drawer's resolution block).
+    A blocked uplink shows through `uplink_readiness`.
+- **Command groups** (list rows and show) gain `uplink`, set on `queued` groups that aren't
+  `finished`, otherwise `null`:
+  `{pass: {reservation_id, contact_id, station {ref, id, code, name}, starts_at, ends_at},
+  readiness: {state, reason, since} | null, next_pass: <same pass shape> | null}`.
+  - Groups queue per spacecraft lane, not per contact, so `pass` is the first target's live uplink
+    pass (any readiness), else its next booked pass that can command (then `readiness` is
+    `null`).
+  - `next_pass` is the next commandable pass after a live one, where a blocked group goes next.
+    When it's `null`, say "on the next ready pass" without naming one.
+  - Expiry comes from the group's `release.expires_at`.
+  - Recover posts to `pass.reservation_id`.
+- **`POST /api/console/v1/missions/:mission_id/passes/:id/recover-uplink`** (`:id` = the pass row
+  `id`, a reservation). No body; `operate_mission`; audited; safe to repeat. It re-runs the pass's
+  uplink qualification.
+  - Returns `{data: {state: "ready", ready_at}}`.
+  - Errors:
+    - `409 uplink_recovery_refused` (`details.reason`, the key);
+    - `409 uplink_not_blocked`;
+    - `403 forbidden`;
+    - `404 pass_not_found` (also a pass with no scheduled contact);
+    - `422 actor_not_assignable`.
+  - `protocol_state_restore_required` and `provider_cannot_attest_uplink_sessions` are refused
+    without trying (#59), so hide Recover for those reasons (ux).
 - **Attention source `uplink_blocked`:** a pass that's `blocked` while command groups are queued
-  for it. The queue row has `source: "uplink_blocked"`, P1 within 2 h of AOS or in progress,
-  otherwise P2, and `due_at` = AOS. The `attention` object keeps the same envelope:
-  - `id`, `source`, `state: "open"` (it resolves by itself; no acknowledge), `contact_id`,
-    `reservation_id`, `station`, `provider`, `starts_at`, `raised_at`;
+  for it. Queue rows have `source: "uplink_blocked"` and id `attention:uplink_blocked:<contact_id>`.
+  They're P1 within 2 h of AOS or in progress, otherwise P2, with `due_at` = AOS. The `attention`
+  object keeps the same envelope:
+  - `id` (the scheduled contact id), `source`, `state: "open"` (it resolves by itself; no
+    acknowledge), `contact_id`, `reservation_id`, `station`, `provider`, `starts_at`, `raised_at`
+    (= `since`);
   - `conflict`, `provider_message`, `resolution` and `acknowledged_by` are `null`;
   - plus `uplink: {state: "blocked", reason, since, command_group_ids: [...]}` (`null` on
     `pass_resolution` items).
-  - `resolved[]` entries: `resolved_by {kind: "system"}`, `action` `uplink recovered` (or
-    `no groups queued`).
-  - `/counts.attention` counts both sources.
+  - `resolved[]` entries: `resolved_by {kind: "system"}`, `action` `uplink recovered` or
+    `pass ended` (at LOS). An item whose groups all leave simply stops being listed.
+  - `/counts.attention` counts both sources. `POST /attention/uplink_blocked/…` answers
+    `404 attention_item_not_found`, since these resolve by themselves.
 
 ## S10: `contacts` invalidation
 
