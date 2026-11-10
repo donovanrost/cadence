@@ -18,6 +18,7 @@ defmodule Cadence.CommandingTest do
     CommandRequest,
     CommandStage,
     CommandVerifierInstance,
+    ReleaseTargetSelection,
     StagedCommandItem
   }
 
@@ -1077,6 +1078,161 @@ defmodule Cadence.CommandingTest do
     assert initial_request.request_document["first_frame_seq"] == 0
     assert retransmit_request.request_document["metadata"]["cop1_release_kind"] == "retransmit"
     assert retransmit_request.request_document["first_frame_seq"] == 0
+  end
+
+  describe "#38 a command releases only over its target spacecraft's uplink" do
+    setup %{source_endpoint: source_endpoint, command_model: command_model} do
+      {:ok, _} =
+        Cadence.SpacecraftStore.persist_spacecraft(
+          @organization_id,
+          Spacecraft.new(%{
+            spacecraft_id: "spacecraft-bravo",
+            mission_id: @mission_id,
+            display_name: "SC Bravo"
+          })
+        )
+
+      {:ok, bravo} =
+        Cadence.SourceEndpoints.persist_source_endpoint(
+          @organization_id,
+          SourceEndpoint.new(%{
+            source_endpoint_id: "source-endpoint-bravo",
+            mission_id: @mission_id,
+            spacecraft_id: "spacecraft-bravo",
+            source_ref: "SC-BRAVO",
+            display_name: "SC Bravo Endpoint"
+          })
+        )
+
+      request =
+        persist_safe_command_request(command_model, source_endpoint, 1, %{"label" => "38"})
+
+      {:ok, %{queue_entry: entry}} =
+        Cadence.Commanding.enqueue_command_request(
+          @organization_id,
+          @mission_id,
+          request.command_request_id,
+          %{"user_id" => "queue-38"}
+        )
+
+      %{
+        alpha: source_endpoint.source_endpoint_id,
+        bravo: bravo.source_endpoint_id,
+        request: request,
+        entry: entry
+      }
+    end
+
+    test "qa's 004-on-007: only another spacecraft's pass is active, so nothing releases", c do
+      # Bravo's pass, its uplink path materialized from a route (no source endpoint of its own).
+      bravo = uplink_contact_38([c.bravo], nil)
+
+      assert {:error, {:command_queue_lane_no_release_target, _, _}} =
+               ReleaseTargetSelection.resolve_dispatch(
+                 @organization_id,
+                 @mission_id,
+                 CommandRequest.new(Map.from_struct(c.request))
+               )
+
+      # Even named explicitly, bravo's pass refuses alpha's command before anything is sent.
+      assert {:error,
+              {:command_release_refused, attempt_id, {:release_contact_not_target_spacecraft, _}}} =
+               release_38(c, bravo)
+
+      assert {:ok, %{lifecycle_state: :release_failed}} =
+               Cadence.Commanding.fetch_command_release_attempt(
+                 @organization_id,
+                 @mission_id,
+                 attempt_id
+               )
+
+      assert uplinks_sent_38(attempt_id) == 0
+    end
+
+    test "qa's 001-on-009: the contact is the target's but its uplink path belongs to another spacecraft",
+         c do
+      # A path that names another spacecraft's endpoint was never selectable: no attempt.
+      foreign_path = uplink_contact_38([c.alpha], c.bravo)
+
+      assert {:error, {:selected_uplink_path_not_found, _, _}} = release_38(c, foreign_path)
+
+      # A path that names no spacecraft at all (no endpoint, no route) is refused too.
+      unowned = uplink_contact_38([c.alpha], nil)
+
+      assert {:error, {:command_release_refused, _, {:release_path_not_target_spacecraft, _}}} =
+               release_38(c, unowned)
+    end
+
+    test "with both spacecraft's passes active, the lane picks the target's own", c do
+      _bravo = uplink_contact_38([c.bravo], nil)
+      alpha = uplink_contact_38([c.alpha], c.alpha)
+
+      assert {:ok, %{realized_contact: %{realized_contact_id: id}}} =
+               ReleaseTargetSelection.resolve_dispatch(
+                 @organization_id,
+                 @mission_id,
+                 CommandRequest.new(Map.from_struct(c.request))
+               )
+
+      assert id == alpha.realized_contact_id
+    end
+  end
+
+  defp uplink_contact_38(contact_endpoints, path_endpoint) do
+    contact =
+      RealizedContact.new(%{
+        realized_contact_id:
+          "realized-contact-38-" <> Integer.to_string(System.unique_integer([:positive])),
+        organization_id: @organization_id,
+        mission_id: @mission_id,
+        source_endpoint_refs: contact_endpoints,
+        clock_mode: :replay,
+        initial_time: DateTime.from_unix!(1_700_400_000, :second),
+        paths: [
+          Path.new(%{
+            path_id: "uplink-path-alpha",
+            direction: :uplink,
+            selection_role: :selected,
+            source_endpoint_ref: path_endpoint,
+            transport_bindings: [
+              TransportBinding.new(%{
+                transport_binding_id: "uplink-gateway-alpha",
+                family_key: :uplink_gateway,
+                target_scope: :path,
+                configuration: %{"service_name" => "gateway"}
+              })
+            ]
+          })
+        ]
+      })
+
+    assert {:ok, _} = Cadence.Contacts.persist_realized_contact(@organization_id, contact)
+
+    assert {:ok, _pid} =
+             Cadence.Contacts.start_realized_contact(
+               @organization_id,
+               @mission_id,
+               contact.realized_contact_id
+             )
+
+    contact
+  end
+
+  defp release_38(c, contact),
+    do:
+      Cadence.Commanding.release_command_queue_entry(
+        @organization_id,
+        @mission_id,
+        c.entry.command_queue_entry_id,
+        contact.realized_contact_id,
+        %{"user_id" => "release-38"},
+        attempted_at: DateTime.from_unix!(1_700_400_000, :second)
+      )
+
+  defp uplinks_sent_38(attempt_id) do
+    TransportActionRequestRow
+    |> where([row], row.command_release_attempt_id == ^attempt_id)
+    |> Repo.aggregate(:count)
   end
 
   defp persist_source_endpoint do

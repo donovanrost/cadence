@@ -6,8 +6,15 @@ defmodule Cadence.Commanding.ReleaseStore do
   import Ecto.Query
 
   alias Ecto.Changeset
+  alias Ecto.Multi
 
-  alias Cadence.Commanding.{CommandReleaseAttempt, CommandReleaseAttemptRow}
+  alias Cadence.Commanding.{
+    CommandQueueEntryRow,
+    CommandReleaseAttempt,
+    CommandReleaseAttemptRow,
+    CommandRequestRow
+  }
+
   alias Cadence.Repo
 
   @spec persist(binary(), CommandReleaseAttempt.t()) ::
@@ -25,6 +32,53 @@ defmodule Cadence.Commanding.ReleaseStore do
     else
       {:error, %Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Records a release refused before anything was sent (SAFETY #38: the contact, path or gateway
+  doesn't belong to the request's target spacecraft): the attempt fails and its request and
+  queue entry close, in one transaction.
+  """
+  @spec mark_refused(struct(), struct(), CommandReleaseAttempt.t(), term()) ::
+          {:ok, map()} | {:error, term()}
+  def mark_refused(
+        %CommandQueueEntryRow{} = queue_entry_row,
+        %CommandRequestRow{} = request_row,
+        %CommandReleaseAttempt{} = attempt,
+        reason
+      ) do
+    with {:ok, %CommandReleaseAttemptRow{} = attempt_row} <-
+           fetch_row(
+             attempt.organization_id,
+             attempt.mission_id,
+             attempt.command_release_attempt_id
+           ) do
+      refused = %CommandReleaseAttempt{
+        attempt
+        | lifecycle_state: :release_failed,
+          failure_reason: "refused: " <> inspect(reason),
+          released_at: nil
+      }
+
+      Multi.new()
+      |> Multi.update(
+        :command_release_attempt,
+        CommandReleaseAttemptRow.update_changeset(attempt_row, refused)
+      )
+      |> Multi.update(
+        :command_queue_entry,
+        CommandQueueEntryRow.lifecycle_changeset(queue_entry_row, :canceled)
+      )
+      |> Multi.update(
+        :command_request,
+        CommandRequestRow.lifecycle_changeset(request_row, :canceled)
+      )
+      |> Repo.transaction()
+      |> case do
+        {:ok, changes} -> {:ok, changes}
+        {:error, _operation, reason, _changes} -> {:error, reason}
+      end
     end
   end
 

@@ -25,6 +25,7 @@ defmodule Cadence.Commanding do
     ProcessNamespace,
     ReleaseArtifacts,
     ReleaseStore,
+    ReleaseTargetGuard,
     ReleaseTargetSelection,
     RequestQueueStore,
     RequestStore,
@@ -688,6 +689,47 @@ defmodule Cadence.Commanding do
 
   defp dispatch_release_attempt(release_context, %CommandReleaseAttempt{} = persisted_attempt)
        when is_map(release_context) do
+    # SAFETY #38 (DECISIONS #66): never radiate over another spacecraft's contact, path or
+    # gateway. A mismatch fails the attempt before anything is sent.
+    case target_guard(release_context) do
+      :ok -> transmit_and_complete(release_context, persisted_attempt)
+      {:error, reason} -> fail_refused_release(release_context, persisted_attempt, reason)
+    end
+  end
+
+  defp target_guard(context) do
+    ReleaseTargetGuard.check(
+      context.queue_entry_row.organization_id,
+      context.queue_entry_row.mission_id,
+      context.request_row.source_endpoint_ref,
+      context.realized_contact,
+      context.path,
+      context.transport_binding
+    )
+  end
+
+  # The attempt fails and its request and queue entry close, so the lane moves on. Unlike a
+  # transmission failure the entry doesn't go back to pending: it would be refused again.
+  defp fail_refused_release(context, %CommandReleaseAttempt{} = attempt, reason) do
+    case ReleaseStore.mark_refused(context.queue_entry_row, context.request_row, attempt, reason) do
+      {:ok, _refused} ->
+        maybe_schedule_queue_lane_dispatch(
+          context.process_namespace,
+          context.queue_entry_row.organization_id,
+          context.queue_entry_row.mission_id,
+          context.queue_entry_row.queue_lane_key
+        )
+
+        {:error, {:command_release_refused, attempt.command_release_attempt_id, reason}}
+
+      {:error, persistence_reason} ->
+        {:error,
+         {:command_release_refused, attempt.command_release_attempt_id,
+          %{refusal: reason, persistence: persistence_reason}}}
+    end
+  end
+
+  defp transmit_and_complete(release_context, %CommandReleaseAttempt{} = persisted_attempt) do
     case ControlCommanding.transmit_release_attempt(release_context, persisted_attempt) do
       {:ok, _transport_outputs} ->
         complete_release_success(
