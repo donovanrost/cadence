@@ -3,7 +3,7 @@ defmodule Cadence.Commanding.ReleaseTargetSelection do
   Selects eligible realized contacts, uplink paths, and transport bindings.
   """
 
-  alias Cadence.Commanding.CommandRequest
+  alias Cadence.Commanding.{CommandRequest, ReleaseTargetGuard}
   alias Cadence.Contacts
   alias Cadence.Contacts.{Path, RealizedContact, TransportBinding}
 
@@ -26,17 +26,29 @@ defmodule Cadence.Commanding.ReleaseTargetSelection do
            }}
           | {:error, term()}
   def resolve_dispatch(organization_id, mission_id, %CommandRequest{} = command_request) do
+    # SAFETY #38 (DECISIONS #66): only the target spacecraft's own contacts are candidates.
+    target =
+      case ReleaseTargetGuard.target(
+             organization_id,
+             mission_id,
+             command_request.source_endpoint_ref
+           ) do
+        {:ok, target} -> target
+        {:error, _unknown} -> nil
+      end
+
     organization_id
     |> Contacts.list_realized_contacts(mission_id)
     |> Enum.filter(fn %RealizedContact{} = realized_contact ->
-      ensure_realized_contact_releasable(realized_contact) == :ok
+      ensure_realized_contact_releasable(realized_contact) == :ok and target != nil and
+        ReleaseTargetGuard.contact(organization_id, mission_id, target, realized_contact) == :ok
     end)
     |> Enum.sort_by(&dispatch_contact_sort_key/1)
     |> Enum.reduce_while(
       {:error,
        {:command_queue_lane_no_release_target, command_request.source_endpoint_ref, mission_id}},
       fn %RealizedContact{} = realized_contact, _acc ->
-        case resolve(realized_contact, command_request, []) do
+        case guarded(organization_id, mission_id, realized_contact, command_request) do
           {:ok,
            %{path: %Path{} = path, transport_binding: %TransportBinding{} = transport_binding}} ->
             {:halt,
@@ -55,6 +67,22 @@ defmodule Cadence.Commanding.ReleaseTargetSelection do
         end
       end
     )
+  end
+
+  defp guarded(organization_id, mission_id, realized_contact, command_request) do
+    with {:ok, %{path: path, transport_binding: binding}} = resolved <-
+           resolve(realized_contact, command_request, []),
+         :ok <-
+           ReleaseTargetGuard.check(
+             organization_id,
+             mission_id,
+             command_request.source_endpoint_ref,
+             realized_contact,
+             path,
+             binding
+           ) do
+      resolved
+    end
   end
 
   @spec resolve(RealizedContact.t(), CommandRequest.t(), keyword()) ::
