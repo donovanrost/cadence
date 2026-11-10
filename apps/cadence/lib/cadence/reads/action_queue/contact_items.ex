@@ -12,7 +12,7 @@ defmodule Cadence.Reads.ActionQueue.ContactItems do
   """
 
   alias Cadence.Auth.Scope
-  alias Cadence.Comms.{StationAvailability, StationRefs}
+  alias Cadence.Comms.StationAvailability
   alias Cadence.Reads.ActionQueue.Item
   alias Cadence.Reads.{Passes, PassReview}
 
@@ -53,11 +53,8 @@ defmodule Cadence.Reads.ActionQueue.ContactItems do
     case PassReview.rows(scope, mission_id, from, now, filters) do
       {:ok, %{rows: [_ | _] = rows}} ->
         next = next_contacts(upcoming, now)
-        # Resolve by id, code or provider ref, as /passes does.
-        stations = StationRefs.index(scope.organization_id, mission_id)
 
         rows
-        |> Enum.map(&%{&1 | station: StationRefs.resolve(&1.station.ref, stations)})
         |> Enum.group_by(& &1.spacecraft.id)
         |> Enum.map(fn {spacecraft_id, missed} ->
           missed_item(spacecraft_id, missed, Map.get(next, spacecraft_id), now, by_id)

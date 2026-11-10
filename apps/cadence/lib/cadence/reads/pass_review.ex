@@ -10,7 +10,7 @@ defmodule Cadence.Reads.PassReview do
   """
 
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.Comms.GroundStationStore
+  alias Cadence.Comms.StationRefs
   alias Cadence.Contacts.PassResults
   alias Cadence.Contacts.PassResults.Queries
   alias Cadence.GroundNetworks.{MissionProviders, ProviderEventCursors}
@@ -139,10 +139,14 @@ defmodule Cadence.Reads.PassReview do
     end)
   end
 
+  # One row per resolved station (a station seen by id and by code is one), falling back to the
+  # raw ref when it doesn't resolve.
   defp by_station(entries, stations, providers) do
     entries
-    |> Enum.group_by(&{&1.ground_station_ref, &1.provider_id})
-    |> Enum.map(fn {{ref, provider_id}, group} ->
+    |> Enum.group_by(&{station_key(&1.ground_station_ref, stations), &1.provider_id})
+    |> Enum.map(fn {{_station, provider_id}, group} ->
+      ref = group |> Enum.map(& &1.ground_station_ref) |> Enum.min(fn -> nil end)
+
       outcome = fn names ->
         group |> Enum.filter(&(&1.outcome in names)) |> Enum.map(& &1.count) |> Enum.sum()
       end
@@ -160,6 +164,15 @@ defmodule Cadence.Reads.PassReview do
       }
     end)
     |> Enum.sort_by(&(&1.station.code || &1.station.name || ""))
+  end
+
+  defp station_key(nil, _stations), do: nil
+
+  defp station_key(ref, stations) do
+    case StationRefs.resolve(ref, stations) do
+      %{id: nil} -> {:ref, ref}
+      %{id: id} -> {:id, id}
+    end
   end
 
   defp by_cause(causes) do
@@ -274,22 +287,17 @@ defmodule Cadence.Reads.PassReview do
     }
   end
 
-  defp stations(org, mission_id),
-    do:
-      org
-      |> GroundStationStore.list_ground_stations(mission_id)
-      |> Map.new(&{&1.ground_station_id, &1})
+  # Matched by id, code or provider station ref, as `/passes` does (StationRefs).
+  defp stations(org, mission_id), do: StationRefs.index(org, mission_id)
 
-  # Identity never shows a suggested code (U25): the confirmed code or nil, plus the name.
+  # Identity never shows a suggested code (U25). `ref` stays the raw ref; an unmatched ref is
+  # shown as its own name.
   defp station(nil, _stations), do: %{ref: nil, id: nil, code: nil, name: nil}
 
   defp station(ref, stations) do
-    case Map.get(stations, ref) do
-      nil ->
-        %{ref: ref, id: nil, code: nil, name: ref}
-
-      station ->
-        %{ref: ref, id: station.ground_station_id, code: station.code, name: station.display_name}
+    case StationRefs.resolve(ref, stations) do
+      %{id: nil} -> %{ref: ref, id: nil, code: nil, name: ref}
+      resolved -> resolved
     end
   end
 
