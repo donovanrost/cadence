@@ -42,9 +42,6 @@ const itemClass =
       <RouterLink :to="{ name: 'account' }" :class="itemClass" @click="close"
         >Your account</RouterLink
       >
-      <RouterLink :to="{ name: 'notifications' }" :class="itemClass" @click="close"
-        >Notifications</RouterLink
-      >
       <template v-if="otherOrganizations.length > 1">
         <p class="ap-label px-3.5 pt-3 pb-1">Switch organization</p>
         <RouterLink
