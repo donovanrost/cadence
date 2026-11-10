@@ -9,7 +9,11 @@ export type ApiError =
   | { kind: "not_found"; code: string; message: string }
   | { kind: "conflict"; code: string; message: string; details: unknown }
   | { kind: "invalid"; code: string; message: string; details: unknown }
-  | { kind: "unavailable"; status: number; message: string }
+  /**
+   * `serverCode`: the server's error code when it answered with an error envelope (e.g. 503
+   * `apply_interrupted`). Not `code`, so `"code" in error` keeps meaning a 4xx-style refusal.
+   */
+  | { kind: "unavailable"; status: number; message: string; serverCode?: string | undefined }
   | { kind: "malformed"; message: string };
 
 export type ApiResult<T> = { ok: true; value: T } | { ok: false; error: ApiError };
@@ -74,7 +78,9 @@ function toError(status: number, body: unknown): ApiError {
     case 422:
       return { kind: "invalid", code, message, details };
     default:
-      return { kind: "unavailable", status, message };
+      return parsed.ok
+        ? { kind: "unavailable", status, message, serverCode: code }
+        : { kind: "unavailable", status, message };
   }
 }
 
@@ -84,11 +90,19 @@ function toError(status: number, body: unknown): ApiError {
  * committed apply), so say "unclear, check now", never "nothing changed".
  */
 export function outcomeUnknown(error: ApiError): boolean {
+  if (error.kind === "unavailable" && error.serverCode && SETTLED.has(error.serverCode))
+    return false;
   return (
     error.kind === "malformed" ||
     (error.kind === "unavailable" && (error.status === 0 || error.status >= 500))
   );
 }
+
+/**
+ * 5xx codes whose server has confirmed the outcome, so their own message is the answer:
+ * `apply_interrupted` = the change did NOT land (domain 33529f29, api: "Try again.").
+ */
+const SETTLED: ReadonlySet<string> = new Set(["apply_interrupted"]);
 
 /**
  * Calls a console API path (relative to API_BASE) and decodes the `data` member of a

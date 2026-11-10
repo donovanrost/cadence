@@ -59,4 +59,36 @@ describe("outcomeUnknown (qa #19)", () => {
     expect(outcomeUnknown({ kind: "malformed", message: "" })).toBe(true);
     expect(outcomeUnknown({ kind: "conflict", code: "x", message: "", details: null })).toBe(false);
   });
+
+  it("keeps a 5xx's serverCode; apply_interrupted is settled (did not land), so not unknown", async () => {
+    const { outcomeUnknown, request } = await import("./http.ts");
+    const { token } = await import("./decode.ts");
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "apply_interrupted",
+              message: "The apply was interrupted and did not take effect. Try again.",
+            },
+          }),
+          { status: 503 },
+        ),
+      ),
+    );
+    const result = await request("/x", token, { method: "POST", body: {} });
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        kind: "unavailable",
+        status: 503,
+        message: "The apply was interrupted and did not take effect. Try again.",
+        serverCode: "apply_interrupted",
+      },
+    });
+    expect(!result.ok && outcomeUnknown(result.error)).toBe(false);
+    expect(
+      outcomeUnknown({ kind: "unavailable", status: 503, message: "", serverCode: "other" }),
+    ).toBe(true);
+  });
 });
