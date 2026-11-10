@@ -137,6 +137,17 @@ const planIssue = d.object({
 });
 
 const planRef = d.object({ id: d.token, version: d.integer });
+const executionReader = d.nullable(
+  d.object({
+    requested: d.integer,
+    sent: d.integer,
+    never_sent: d.integer,
+    confirmed: d.integer,
+    uncertain: d.integer,
+    rejected: d.integer,
+    failed: d.integer,
+  }),
+);
 
 const unconfirmedReader = d.nullable(
   d.object({
@@ -205,6 +216,12 @@ export const planDetailReader = d.object({
   /** `station_degraded`: passes inside a degraded window; a warning only (U26). */
   at_risk: (value: unknown, path?: string) =>
     value === undefined ? [] : d.array(planIssue, 5_000)(value, path),
+  /**
+   * api cf3cd37a: counts of the approved version's bookings; null before there are any.
+   * requested = sent + never_sent; sent = confirmed + uncertain + rejected + failed.
+   */
+  execution: (value: unknown, path?: string) =>
+    value === undefined ? null : executionReader(value, path),
   /** qa #30: the day's repair chain, root first then each applied repair; null on older servers. */
   chain: (value: unknown, path?: string) =>
     value === undefined ? null : d.array(planRef, 100)(value, path),

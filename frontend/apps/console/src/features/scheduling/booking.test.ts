@@ -70,3 +70,25 @@ describe("bookingStopped (U20)", () => {
     });
   });
 });
+
+describe("bookingStopped from execution counts (api cf3cd37a)", () => {
+  const counts = (sent: number, never_sent: number) => ({
+    requested: sent + never_sent,
+    sent,
+    never_sent,
+    confirmed: sent,
+    uncertain: 0,
+    rejected: 0,
+    failed: 0,
+  });
+  it("uses the exact counts even without a passes read", () => {
+    expect(bookingStopped({ ...plan, execution: counts(812, 700) }, null)).toEqual({
+      text: "Booking stopped. 812 requests went out; 700 didn't.",
+      tone: "stale",
+      left: 700,
+    });
+    expect(bookingStopped({ ...plan, execution: counts(4, 0) }, read(2)).text).toBe(
+      "All 4 requests went out · waiting for Northlight to confirm.",
+    );
+  });
+});

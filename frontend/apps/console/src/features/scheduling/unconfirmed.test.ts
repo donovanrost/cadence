@@ -34,6 +34,7 @@ const plan = (state: PlanDetail["state"], providers: readonly string[]): PlanDet
   conflicts: [],
   at_risk: [],
   chain: null,
+  execution: null,
   chain_head: null,
   unconfirmed: {
     window_ms: 600_000,

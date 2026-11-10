@@ -1,5 +1,5 @@
 import type { RouteLocationRaw } from "vue-router";
-import { plural } from "@/ui";
+import { formatCount, plural } from "@/ui";
 import { coverage, spacecraftNotCovered } from "./coverage.ts";
 import { isStationConflict } from "./unavailable.ts";
 import { unconfirmedTail } from "./unconfirmed.ts";
@@ -137,9 +137,15 @@ function stateTail(plan: PlanDetail): string {
     case "approved":
       return "approved";
     case "executing":
-      return "booking";
+      // ux: 'R41 · booking · 812 of 1,512' (confirmed of requested, api cf3cd37a).
+      return plan.execution
+        ? `booking · ${formatCount(plan.execution.confirmed)} of ${formatCount(plan.execution.requested)}`
+        : "booking";
     case "interrupted":
-      return "booking stopped";
+      // ScheduleFlow: 'BOOKING STOPPED · 812 OF 1,512' (sent of requested).
+      return plan.execution
+        ? `booking stopped · ${formatCount(plan.execution.sent)} of ${formatCount(plan.execution.requested)}`
+        : "booking stopped";
     case "reserved":
       return "booked";
     case "partially_reserved":

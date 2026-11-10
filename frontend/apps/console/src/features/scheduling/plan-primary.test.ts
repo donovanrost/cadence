@@ -19,6 +19,7 @@ const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   at_risk: [],
   unconfirmed: null,
   chain: null,
+  execution: null,
   chain_head: null,
   superseded: null,
   repair_of: null,
