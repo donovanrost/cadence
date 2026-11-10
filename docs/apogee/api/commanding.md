@@ -361,7 +361,8 @@ on the request's spacecraft, plus the command's prior requests to the same targe
                              "reason": null} | null,
                  "current_basis": "state_effect" | "none" | "unavailable"}],
   "prior_requests": [{"command_request_id", "command_group_id", "arguments_json", "state",
-                      "requested_at", "requested_by": {"kind", "id", "name"}}]
+                      "requested_at", "requested_by": {"kind", "id", "name"},
+                      "reached_target": true | false | null}]
 }}
 ```
 
@@ -373,6 +374,8 @@ on the request's spacecraft, plus the command's prior requests to the same targe
   `current_basis: "unavailable"`: the request's revision isn't active, so the link can't be read.
 - Values are JSON text (`value_json`, `arguments_json`).
 - `prior_requests`: the same command to the same target, newest first, at most 5, excluding this
-  one.
+  one. Each has `reached_target`: `true` when its latest release went over a contact serving only
+  the target (#38's check), `false` when it went elsewhere (it didn't set this spacecraft: say so,
+  don't present its values as the spacecraft's state), `null` when it was never released.
 - Bounds (`valid_range`, unit) stay on the command catalog read (`GET /commands/:id`).
 - Access as for M24 (`403 forbidden`, `404 command_request_not_found`).

@@ -158,6 +158,14 @@ defmodule CadenceWeb.Console.CommandEncodingAPITest do
     assert spacecraft_id == c.spacecraft_id
     assert Jason.decode!(args) == %{"counter" => 7}
 
+    # Never released: nothing reached the spacecraft (fe-ops, #38).
+    assert [%{"reached_target" => nil}] =
+             c
+             |> conn()
+             |> get(c.base <> "/command-requests/#{second}/brief")
+             |> json_response(200)
+             |> get_in(["data", "prior_requests"])
+
     assert c |> conn() |> get(c.base <> "/command-requests/nope/brief") |> json_response(404)
   end
 end

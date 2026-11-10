@@ -14,6 +14,7 @@ defmodule Cadence.Control.CommandBrief do
   alias Cadence.Auth.Scope
   alias Cadence.Commanding
   alias Cadence.Commanding.{ReleaseTargetGuard, RequestValidation}
+  alias Cadence.Contacts
   alias Cadence.Management.Commanding.RequestReview
   alias Cadence.MissionModels
   alias Cadence.Telemetry.CurrentValueStore
@@ -157,6 +158,8 @@ defmodule Cadence.Control.CommandBrief do
   end
 
   defp prior(organization_id, mission_id, request) do
+    target = spacecraft_id(organization_id, mission_id, request)
+
     organization_id
     |> Commanding.list_command_requests(mission_id,
       source_endpoint_ref: request.source_endpoint_ref
@@ -174,9 +177,39 @@ defmodule Cadence.Control.CommandBrief do
         arguments_json: json(&1.resolved_argument_values || %{}),
         state: &1.lifecycle_state,
         requested_at: &1.requested_at,
-        requested_by: requester(&1.requested_by)
+        requested_by: requester(&1.requested_by),
+        reached_target: reached_target(organization_id, mission_id, target, &1)
       }
     )
+  end
+
+  # Whether the request's latest release went over a contact serving only the target (#38's
+  # check, ReleaseTargetGuard.contact/4): a request that radiated on another spacecraft didn't
+  # set this one. nil: never released.
+  defp reached_target(_organization_id, _mission_id, nil, _request), do: nil
+
+  defp reached_target(organization_id, mission_id, target, request) do
+    case organization_id
+         |> Commanding.list_command_release_attempts(mission_id,
+           command_request_id: request.command_request_id
+         )
+         |> List.last() do
+      nil ->
+        nil
+
+      attempt ->
+        case Contacts.fetch_realized_contact(
+               organization_id,
+               mission_id,
+               attempt.realized_contact_id
+             ) do
+          {:ok, contact} ->
+            ReleaseTargetGuard.contact(organization_id, mission_id, target, contact) == :ok
+
+          _missing ->
+            false
+        end
+    end
   end
 
   defp requester(%{} = doc),
