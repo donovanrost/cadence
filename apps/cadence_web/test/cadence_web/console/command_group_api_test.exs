@@ -168,10 +168,65 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
       assert [%{"key" => "contact", "ackable" => false}] = holds
     end
 
-    test "two_person is not a HOLD: the group goes to approval", c do
+    test "two_person is not a HOLD: it reads second_go until the second GO", c do
       pre = preflight(c, body(c, "SET_COUNTER", %{"amount" => 1}, %{"log_entry" => "x"}))["data"]
       assert pre["second_go_required"] == true
-      assert %{"result" => "go"} = Enum.find(pre["checks"], &(&1["key"] == "two_person"))
+
+      assert %{"result" => "second_go", "ackable" => nil} =
+               Enum.find(pre["checks"], &(&1["key"] == "two_person"))
+    end
+
+    test "GO carries the submitter's ack while the HOLD is unchanged (#61)", c do
+      assert json_response(create(c, body(c, "SET_SIGNED", %{"counter" => 1})), 201)
+
+      # Submitted behind the queued group, acknowledging the conflicts HOLD.
+      pending = body(c, "SET_COUNTER", %{"amount" => 1}, %{"log_entry" => "x"})
+      %{"data" => %{"id" => id}} = c |> create(pending) |> json_response(201)
+
+      assert %{"data" => %{"state" => "queued", "events" => events}} =
+               as(c.approver)
+               |> post(base(c) <> "/command-groups/#{id}/decision", %{"kind" => "go"})
+               |> json_response(200)
+
+      # Only the submitter's acknowledgement; the approver needed none.
+      assert [%{"actor" => %{"user_id" => requester_id}}] =
+               Enum.filter(events, &(&1["kind"] == "hold_acknowledged"))
+
+      assert requester_id == c.requester.user_id
+    end
+
+    test "a HOLD new since submit needs the approver's own ack at GO (#61)", c do
+      pending = body(c, "SET_COUNTER", %{"amount" => 1}, %{"log_entry" => "x"})
+      %{"data" => %{"id" => id}} = c |> create(pending) |> json_response(201)
+
+      # More work lands on the same lanes after the submit.
+      assert json_response(create(c, body(c, "SET_SIGNED", %{"counter" => 1})), 201)
+
+      go = as(c.approver) |> post(base(c) <> "/command-groups/#{id}/decision", %{"kind" => "go"})
+
+      assert %{"error" => %{"code" => "holds_unacknowledged", "details" => %{"holds" => holds}}} =
+               json_response(go, 422)
+
+      assert [%{"key" => "conflicts", "ackable" => true, "hold_basis" => basis}] = holds
+
+      ack = [
+        %{"key" => "conflicts", "hold_basis" => basis, "note" => "The load shed goes first."}
+      ]
+
+      assert %{"data" => %{"state" => "queued", "events" => events}} =
+               as(c.approver)
+               |> post(base(c) <> "/command-groups/#{id}/decision", %{
+                 "kind" => "go",
+                 "acknowledged_holds" => ack
+               })
+               |> json_response(200)
+
+      assert %{
+               "actor" => %{"user_id" => approver_id},
+               "payload" => %{"key" => "conflicts", "at_decision" => true}
+             } = Enum.find(events, &(&1["kind"] == "hold_acknowledged"))
+
+      assert approver_id == c.approver.user_id
     end
   end
 

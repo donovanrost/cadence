@@ -60,6 +60,38 @@ defmodule CadenceWeb.Console.CommandGroupController do
     end
   end
 
+  # DECISIONS #61: a GO re-runs the review preflight. Hard HOLDs refuse. An ackable HOLD carries the
+  # submitter's acknowledgement while its basis is unchanged; a new or changed one needs the
+  # approver's own (returned here to be recorded as the approver's event).
+  defp go_holds_satisfied(conn, id, %{kind: kind}, acks) when kind in [:go, :go_excluding] do
+    with {:ok, %{state: :approval_pending} = group} <-
+           GroupStore.fetch(org(conn), mission(conn), id),
+         {:ok, preflight} <- CommandPreflight.review(org(conn), mission(conn), group) do
+      carried =
+        for %{kind: :hold_acknowledged, payload: payload} <-
+              GroupStore.events(mission(conn), id),
+            do: %{key: payload["key"], hold_basis: payload["hold_basis"], carried: true}
+
+      case CommandPreflight.holds(preflight, carried ++ acks) do
+        %{unsatisfied: [], accepted: accepted} ->
+          {:ok,
+           accepted
+           |> Enum.reject(&Map.get(&1, :carried))
+           |> Enum.map(&Map.put(&1, :preflight_digest, preflight.digest))}
+
+        %{unsatisfied: holds} ->
+          {:error, {:holds_unacknowledged, holds}}
+      end
+    else
+      # Not pending (or gone): the decision itself answers.
+      {:ok, _decided} -> {:ok, []}
+      {:error, :command_group_not_found} -> {:ok, []}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp go_holds_satisfied(_conn, _id, _decision, _acks), do: {:ok, []}
+
   defp replay(_conn, nil), do: :new
 
   defp replay(conn, operation_id) do
@@ -105,8 +137,15 @@ defmodule CadenceWeb.Console.CommandGroupController do
 
   def decision(conn, %{"command_group_id" => id} = params) do
     with {:ok, decision} <- CommandGroupParams.decision(params),
+         {:ok, acks} <- CommandGroupParams.acknowledged_holds(params),
+         {:ok, hold_acks} <- go_holds_satisfied(conn, id, decision, acks),
          {:ok, _group} <-
-           GroupDecision.decide(conn.assigns.current_scope, mission(conn), id, decision) do
+           GroupDecision.decide(
+             conn.assigns.current_scope,
+             mission(conn),
+             id,
+             Map.put(decision, :hold_acks, hold_acks)
+           ) do
       show(conn, %{"command_group_id" => id})
     else
       error -> CommandGroupProblems.respond(conn, error)

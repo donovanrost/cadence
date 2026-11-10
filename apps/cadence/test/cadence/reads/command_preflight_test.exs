@@ -43,10 +43,10 @@ defmodule Cadence.Reads.CommandPreflightTest do
     refute Enum.any?(preflight.checks, &(&1.key in [:plan_impact, :umbra_margin]))
   end
 
-  test "hazardous commands need a second GO, which isn't a HOLD (#60)", c do
+  test "hazardous commands need a second GO, which isn't a HOLD (#60/#61)", c do
     {:ok, preflight} = run(c, draft(c.spacecraft, [command(c, "SET_COUNTER", %{"amount" => 2})]))
 
-    assert %{result: :go, evidence: %{reasons: [%{key: :hazardous_command}]}} =
+    assert %{result: :second_go, ackable: nil, evidence: %{reasons: [%{key: :hazardous_command}]}} =
              result(preflight.checks, :two_person)
 
     assert preflight.policy.second_go_required

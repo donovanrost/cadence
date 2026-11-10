@@ -172,10 +172,33 @@ defmodule Cadence.Control.Commanding.GroupDecision do
               "approved" => length(approved)
             }
           }
+          | hold_events(group, actor, now, Map.get(decision, :hold_acks, []))
         ])
 
       {:ok, %{group: updated, lanes: entries |> Enum.map(& &1.queue_lane_key) |> Enum.uniq()}}
     end
+  end
+
+  # DECISIONS #61: HOLDs the approver acknowledged at GO (new or changed since the submitter's),
+  # each its own event with the approver as actor.
+  defp hold_events(group, actor, at, acks) do
+    Enum.map(acks, fn ack ->
+      %{
+        command_group_id: group.command_group_id,
+        mission_id: group.mission_id,
+        kind: :hold_acknowledged,
+        actor: actor,
+        at: at,
+        payload: %{
+          "key" => ack.key,
+          "note" => ack.note,
+          "hold_basis" => ack.hold_basis,
+          "preflight_digest" => Map.get(ack, :preflight_digest),
+          "evidence" => ack |> Map.get(:evidence, %{}) |> Jason.encode!() |> Jason.decode!(),
+          "at_decision" => true
+        }
+      }
+    end)
   end
 
   defp split(members, _group, %{kind: kind}) when kind in [:send_back, :no_go], do: {[], members}

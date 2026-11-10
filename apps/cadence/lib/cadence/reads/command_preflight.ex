@@ -222,13 +222,13 @@ defmodule Cadence.Reads.CommandPreflight do
   defp later(nil, now), do: now
   defp later(%DateTime{} = at, now), do: if(DateTime.compare(at, now) == :gt, do: at, else: now)
 
-  # Not a HOLD (DECISIONS #60): the second GO is the approval step that satisfies it, so it never
-  # blocks submit. `second_go_required` and these reasons say the group goes to approval.
+  # Not a HOLD (DECISIONS #60/#61): it never blocks submit, and the second GO is what satisfies it.
+  # Until then it reads `second_go` ("needs a second GO"), never `go`.
   defp two_person_check(%{second_go_required: false}),
     do: check(:two_person, :go, [], %{reasons: []})
 
   defp two_person_check(%{reasons: reasons}),
-    do: check(:two_person, :go, [], %{reasons: reasons})
+    do: check(:two_person, :second_go, [], %{reasons: reasons})
 
   defp check(key, result, per_target, evidence) do
     hold? = result == :hold
@@ -254,19 +254,23 @@ defmodule Cadence.Reads.CommandPreflight do
   end
 
   @doc """
-  DECISIONS #60: the HOLDs of `preflight` that `acks` (`[%{key, hold_basis, note}]`) don't
+  DECISIONS #60/#61: the HOLDs of `preflight` that `acks` (`[%{key, hold_basis, note}]`) don't
   satisfy, and the acks that do. An ack counts only for a current, acknowledgeable HOLD with the
-  same `hold_basis`; hard HOLDs must clear.
+  same `hold_basis`; hard HOLDs must clear. With several acks for one key, the first whose basis
+  matches wins (list carried acks first so an unchanged HOLD isn't acknowledged twice).
   """
   @spec holds(map(), [map()]) :: %{unsatisfied: [map()], accepted: [map()]}
   def holds(%{checks: checks}, acks) do
-    by_key = Map.new(acks, &{to_string(&1.key), &1})
+    by_key = Enum.group_by(acks, &to_string(&1.key))
 
     Enum.reduce(checks, %{unsatisfied: [], accepted: []}, fn
       %{result: :hold} = check, acc ->
-        ack = Map.get(by_key, Atom.to_string(check.key))
+        ack =
+          by_key
+          |> Map.get(Atom.to_string(check.key), [])
+          |> Enum.find(&(&1.hold_basis == check.hold_basis))
 
-        if (check.ackable and ack) && ack.hold_basis == check.hold_basis,
+        if check.ackable && ack,
           do: %{acc | accepted: acc.accepted ++ [Map.put(ack, :evidence, check.evidence)]},
           else: %{
             acc

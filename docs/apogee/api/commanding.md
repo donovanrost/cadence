@@ -155,16 +155,16 @@ No side effects. Returns:
   | --- | --- | --- |
   | `conflicts` | yes | Other work on the same lanes is known and accepted; the group queues behind it. |
   | `contact` | **no** | No commandable contact in the release window: nothing can be sent. Book one, or change the window. |
-  | `changed_since_submit` (review only) | no | Shown to the approver. It isn't enforced at GO yet. |
+  | `changed_since_submit` (review only) | no | The validated group no longer matches what was submitted. GO is refused; send it back. |
 
 - `contact`: the target's first `confirmed`/`active` booking whose uplink leg the provider
   confirmed (it carries the command window). It must overlap the release window, which runs from
   `not_before` (or now) to `expires_at` (or 6 h after that start). A HOLD has per-target
   `reason: "no_commandable_contact"` and `next_contact: null`. C4 draws from it. Evidence
   `{from, until}` is the window.
-- `two_person` is **not a HOLD**: its `result` is always `go`. The second GO is the approval step
-  that satisfies it. `evidence.reasons` and top-level `second_go_required` say the group goes to
-  approval.
+- `two_person` is **not a HOLD** (DECISIONS #61): it never blocks submit. Its `result` is
+  `second_go` ("needs a second GO") while a second GO is required and not yet given, else `go`.
+  `evidence.reasons` and top-level `second_go_required` say why the group goes to approval.
 - `two_person` reason keys: `hazardous_command | critical_command | policy_hint | fleet_reach`.
 - Plan impact and umbra margin are absent (no data, DECISIONS #4).
 - Oversize drafts return only `size` (`no_go`, with the bounds) and `digest: null`.
@@ -256,6 +256,16 @@ Errors: `403 command_group_self_approval_not_allowed`, `403 not_the_requested_ap
 `409 command_group_not_pending`, `409 command_group_review_stale`, `409 command_group_basis_changed`
 (the active catalog changed since submit, so resubmit), `422 note_required`, `422 exclusions_required`,
 `422 unknown_excluded_target`, `422 invalid_params`.
+
+**HOLDs at GO** (DECISIONS #61): `go` and `go_excluding` re-run the review preflight
+(`GET …/preflight`) on a pending group.
+- Hard HOLDs refuse: `changed_since_submit`, and `contact` (no commandable contact).
+- An ackable HOLD whose `hold_basis` is unchanged since the submitter acknowledged it carries.
+- A new or changed one needs the approver's own acknowledgement: the body takes
+  `acknowledged_holds: [{key, hold_basis, note}]`, the same as submit. It's recorded as a
+  `hold_acknowledged` event with the approver as actor and `payload.at_decision: true`.
+- Otherwise `422 holds_unacknowledged`, with `details.holds` as for submit.
+- `send_back` and `no_go` don't check HOLDs.
 
 ### `POST /command-groups/:id/abort` · `POST /command-requests/:id/cancel` (M20)
 
