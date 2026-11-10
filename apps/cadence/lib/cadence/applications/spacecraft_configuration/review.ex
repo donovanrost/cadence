@@ -77,28 +77,44 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
            true <- not is_nil(current.row) and not current.external_changes,
            :ok <- ready(current.row.document),
            :ok <- CatalogAuthority.check(mission, spacecraft, current.row.catalog_revision_id),
-           {:ok, sources} <- ConfigurationActive.source_ids(mission, id),
-           true <- sources != [],
-           {:ok, contribution} <- contribution(mission, id, current.row),
-           {:ok, model} <- model_manifest(mission, current.row.catalog_revision_id) do
-        item = %{
-          id: id,
-          contribution: contribution,
-          entry: entry(current.row, sources, contribution, model),
-          review: %{
-            "spacecraft_id" => id,
-            "configuration_revision_id" => current.row.configuration_revision_id,
-            "configuration_token" => current.token
-          }
+           {:ok, item} <- compile(mission, id, current.row) do
+        review = %{
+          "spacecraft_id" => id,
+          "configuration_revision_id" => current.row.configuration_revision_id,
+          "configuration_token" => current.token
         }
 
-        {:cont, {:ok, [item | prepared]}}
+        {:cont, {:ok, [Map.put(item, :review, review) | prepared]}}
       else
         false -> {:halt, {:error, :spacecraft_configuration_review_unavailable}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
   end
+
+  @doc """
+  One spacecraft's activation contribution from a configuration revision row: its telemetry
+  capability instances and rules, and its fleet entry (catalog, mission model, sources).
+  Shared by the per-spacecraft review and change-set catalog generations (DECISIONS #65).
+  """
+  @spec compile(map(), binary(), struct()) :: {:ok, map()} | {:error, term()}
+  def compile(mission, spacecraft_id, row) do
+    with {:ok, sources} <- ConfigurationActive.source_ids(mission, spacecraft_id),
+         true <- sources != [] || {:error, :spacecraft_configuration_review_unavailable},
+         {:ok, contribution} <- contribution(mission, spacecraft_id, row),
+         {:ok, model} <- model_manifest(mission, row.catalog_revision_id) do
+      {:ok,
+       %{
+         id: spacecraft_id,
+         contribution: contribution,
+         entry: entry(row, sources, contribution, model)
+       }}
+    end
+  end
+
+  @doc "The next binding set: the active one with these spacecraft's contributions replaced."
+  @spec binding_set(map(), map(), [map()]) :: struct()
+  def binding_set(mission, active, items), do: replace_contributions(mission, active, items)
 
   defp review_evidence([item], active),
     do:

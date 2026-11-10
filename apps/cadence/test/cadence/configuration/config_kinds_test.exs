@@ -140,31 +140,22 @@ defmodule Cadence.Configuration.ConfigKindsTest do
                SpacecraftTypeStore.fetch_spacecraft_type(ctx.org, ctx.mission, profile_id)
     end
 
-    test "catalog changes are refused until they produce generations", ctx do
+    test "a catalog change must name a catalog revision that exists (DECISIONS #36/#65)", ctx do
       {profile_id, [sc]} = block(ctx, 1)
 
-      assert {:ok, %{verdict: :no_go, checks: checks}} =
-               Configuration.preview(
-                 ctx.alice,
-                 ctx.mission,
-                 {:ops,
-                  [update("spacecraft_profile", profile_id, "catalog_revision_id", "cat-15")]}
-               )
+      for op <- [
+            update("spacecraft_profile", profile_id, "catalog_revision_id", "cat-missing"),
+            update("spacecraft_override", sc, "catalog_revision_id", %{
+              "value" => "cat-missing",
+              "reason" => "Trial"
+            })
+          ] do
+        assert {:ok, %{verdict: :no_go, checks: checks}} =
+                 Configuration.preview(ctx.alice, ctx.mission, {:ops, [op]})
 
-      assert %{items: [%{errors: [%{path: "catalog_revision_id", message: message}]}]} =
-               Enum.find(checks, &(&1.key == "validation"))
-
-      assert message =~ "request activation there"
-
-      assert {:error, {:invalid_op, 0, [%{path: "catalog_revision_id"}]}} =
-               Configuration.stage(ctx.alice, ctx.mission, %{summary: "x"}, [
-                 %{
-                   kind: "spacecraft_override",
-                   action: :update,
-                   entity_id: sc,
-                   changes: [%{path: "catalog_revision_id", value: %{"value" => "cat-15"}}]
-                 }
-               ])
+        assert %{items: [%{errors: [%{message: "That catalog revision doesn't exist"}]}]} =
+                 Enum.find(checks, &(&1.key == "validation"))
+      end
     end
 
     test "rollout none keeps every pin", ctx do

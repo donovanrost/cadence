@@ -227,9 +227,11 @@ defmodule Cadence.Configuration.Submission do
         {:error, {:checks_failed, preview}}
 
       {:ok, %{verdict: :hold} = preview} ->
-        if Map.get(params, :acknowledged_holds) == true,
-          do: {:ok, preview},
-          else: {:error, {:holds_not_acknowledged, preview}}
+        cond do
+          Preview.blocked?(preview) -> {:error, {:holds_blocking, preview}}
+          Map.get(params, :acknowledged_holds) == true -> {:ok, preview}
+          true -> {:error, {:holds_not_acknowledged, preview}}
+        end
 
       {:ok, preview} ->
         {:ok, preview}

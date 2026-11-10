@@ -61,11 +61,24 @@ defmodule Cadence.Configuration.Preview do
     }
   end
 
+  @doc "Whether a HOLD can't be acknowledged away yet (a blocking item)."
+  @spec blocked?(t()) :: boolean()
+  def blocked?(%{checks: checks}), do: Enum.any?(checks, &(Map.get(&1, :blocking) == true))
+
   @spec go?(t()) :: boolean()
   def go?(%{verdict: verdict}), do: verdict != :no_go
 
-  defp hold_check(key, []), do: %{key: key, verdict: :go, items: []}
-  defp hold_check(key, items), do: %{key: key, verdict: :hold, items: items}
+  defp hold_check(key, []), do: %{key: key, verdict: :go, items: [], blocking: false}
+
+  # A blocking item (DECISIONS #65: a command in flight, a pending configuration) can't be
+  # acknowledged away: the apply waits until it clears.
+  defp hold_check(key, items),
+    do: %{
+      key: key,
+      verdict: :hold,
+      items: items,
+      blocking: Enum.any?(items, &(&1[:blocking] == true))
+    }
 
   defp check(key, []), do: %{key: key, verdict: :go, items: []}
   defp check(key, items), do: %{key: key, verdict: :no_go, items: items}

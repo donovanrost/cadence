@@ -89,6 +89,41 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
     |> Repo.all()
   end
 
+  @doc """
+  A new configuration revision that only moves the catalog (DECISIONS #65), written by a
+  change-set apply for the running configuration `running_id`. Refused while the spacecraft has
+  a newer configuration that isn't active yet (`:spacecraft_configuration_pending`): applying
+  would activate it unreviewed, and superseding it would bury it.
+  """
+  @spec derive_catalog(binary(), binary(), binary(), binary(), binary()) ::
+          {:ok, struct()} | {:error, term()}
+  def derive_catalog(organization_id, mission_id, running_id, catalog_revision_id, actor_id) do
+    with {:ok, running} <- fetch(organization_id, mission_id, running_id),
+         %{configuration_revision_id: ^running_id} = latest <-
+           latest(organization_id, mission_id, running.spacecraft_id) ||
+             {:error, :spacecraft_configuration_not_found} do
+      document = Map.put(running.document, "catalog_revision_id", catalog_revision_id)
+
+      Repo.insert(
+        ConfigurationRevisionRow.changeset(%{
+          configuration_revision_id: Ids.new("spacecraft_configuration"),
+          organization_id: organization_id,
+          mission_id: mission_id,
+          spacecraft_id: running.spacecraft_id,
+          version: latest.version + 1,
+          catalog_revision_id: catalog_revision_id,
+          document: document,
+          content_sha256: ContentHash.term_sha256(document),
+          application_basis: running.application_basis,
+          created_by: actor_id
+        })
+      )
+    else
+      {:error, reason} -> {:error, reason}
+      _newer -> {:error, :spacecraft_configuration_pending}
+    end
+  end
+
   def fetch(organization_id, mission_id, id) do
     case Repo.get_by(ConfigurationRevisionRow,
            organization_id: organization_id,

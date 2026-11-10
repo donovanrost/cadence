@@ -32,7 +32,12 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
            {:ok, mission} <- Missions.fetch_mission(org, attrs.mission_id),
            {:ok, active} <- ConfigurationActive.load(mission),
            true <- Map.drop(entries, ids) == Map.drop(active.entries, ids),
-           true <- Enum.all?(ids, &framing_change?(entries[&1], active.entries[&1])) do
+           true <- Enum.all?(ids, &framing_change?(entries[&1], active.entries[&1])),
+           true <-
+             Enum.all?(
+               ids,
+               &catalog_settled?(org, attrs.mission_id, entries[&1], active.entries[&1])
+             ) do
         {:ok, :admitted}
       else
         {:error, reason} -> {:error, reason}
@@ -190,6 +195,29 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
   end
 
   @framing_fields ["framing", "framing_authority"]
+
+  # DECISIONS #65: an entry that moves the catalog must be exactly the spacecraft's latest
+  # configuration (the one the change set derived), with that catalog.
+  defp catalog_settled?(_org, _mission_id, %{"catalog_revision_id" => same}, %{
+         "catalog_revision_id" => same
+       }),
+       do: true
+
+  defp catalog_settled?(org, mission_id, %{"configuration_revision_id" => id} = entry, _active)
+       when is_binary(id) do
+    case ConfigurationDrafts.fetch(org, mission_id, id) do
+      {:ok, row} ->
+        latest = ConfigurationDrafts.latest(org, mission_id, row.spacecraft_id)
+
+        latest != nil and latest.configuration_revision_id == id and
+          row.catalog_revision_id == entry["catalog_revision_id"]
+
+      _missing ->
+        false
+    end
+  end
+
+  defp catalog_settled?(_org, _mission_id, _entry, _active), do: false
 
   defp framing_change?(%{"framing_authority" => "profile"}, _active), do: true
 

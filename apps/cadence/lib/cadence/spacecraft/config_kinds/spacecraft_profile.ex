@@ -30,9 +30,6 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
   @frame_fields ~w(frame_size secondary_header_length insert_zone_length ocf_length
                    truncated_primary_header fecf)
   @governed_key "spacecraft_configuration_revision_id"
-  @catalog_route "Catalog changes can't go through change sets yet. Set the catalog revision in " <>
-                   "each spacecraft's configuration (Communications › Spacecraft configuration) " <>
-                   "and request activation there."
   @synthetic_prefix "spacecraft_configuration_profile_"
 
   @impl true
@@ -122,13 +119,15 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
     end
   end
 
-  # DECISIONS #36: catalog changes don't produce runtime generations yet, so a change set must
-  # not record a catalog as live while decode still uses the old one.
-  def validate(_organization_id, _mission_id, _action, _entity_id, previous, proposed)
+  # DECISIONS #36/#65: a catalog change goes through change sets and produces a runtime
+  # generation; it must name a catalog revision that exists.
+  def validate(organization_id, mission_id, _action, _entity_id, previous, proposed)
       when is_map(proposed) do
-    if Map.get(previous || %{}, "catalog_revision_id") == proposed["catalog_revision_id"],
+    catalog = proposed["catalog_revision_id"]
+
+    if catalog == Map.get(previous || %{}, "catalog_revision_id") or is_nil(catalog),
       do: :ok,
-      else: {:error, [F.error("catalog_revision_id", @catalog_route)]}
+      else: catalog_exists(organization_id, mission_id, catalog, "catalog_revision_id")
   end
 
   def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
@@ -313,5 +312,15 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
       "catalog_revision_id" => profile.catalog_revision_id,
       "routing_rules" => profile.routing_rules || []
     }
+  end
+
+  @doc false
+  def catalog_exists(organization_id, mission_id, catalog, path) do
+    catalogs = Application.fetch_env!(:cadence, :catalog_revisions)
+
+    case catalogs.fetch_revision(organization_id, mission_id, catalog) do
+      {:ok, _revision} -> :ok
+      {:error, _not_found} -> {:error, [F.error(path, "That catalog revision doesn't exist")]}
+    end
   end
 end

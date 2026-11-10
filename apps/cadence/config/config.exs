@@ -40,10 +40,15 @@ config :cadence,
     # Derived: re-materializes profile routes after the ops above (finalize/3).
     Cadence.Comms.ConfigKinds.SpacecraftRoutes,
     # Derived: framing compatibility HOLDs when the profile becomes framing authority.
-    Cadence.Comms.ConfigKinds.FramingCompatibility
+    Cadence.Comms.ConfigKinds.FramingCompatibility,
+    # Derived: catalog compatibility HOLDs when spacecraft move to another catalog (#36/#65).
+    Cadence.Spacecraft.ConfigKinds.CatalogCompatibility
   ],
   # Which spacecraft have had traffic, for the archive HOLD (#49/#50).
   spacecraft_traffic: Cadence.Control.SpacecraftTraffic,
+  # Catalog revision lookup for profile/override catalog changes (#36/#65), configured so the
+  # spacecraft kinds have no compile-time edge to the catalog context.
+  catalog_revisions: Cadence.Catalog,
   # Builds runtime activations for profile-framed change-set applies (DECISIONS #36).
   configuration_generation: Cadence.Control.ConfigurationGeneration,
   ecto_repos: [Cadence.Repo],

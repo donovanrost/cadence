@@ -12,6 +12,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
   @behaviour Cadence.Platform.ConfigKind
 
   alias Cadence.Platform.ConfigFields, as: F
+  alias Cadence.Spacecraft.ConfigKinds.SpacecraftProfile
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftStore.Overrides
 
@@ -51,15 +52,6 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
     errors =
       Enum.flat_map(document, fn {key, value} ->
         cond do
-          path(key) == "catalog_revision_id" ->
-            [
-              F.error(
-                key,
-                "Catalog overrides can't go through change sets yet. Set the catalog revision " <>
-                  "in the spacecraft's configuration and request activation there."
-              )
-            ]
-
           not Overrides.overridable?(path(key)) ->
             [F.error(key, "#{path(key)} can't be overridden")]
 
@@ -79,6 +71,25 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
     do: {:error, [F.error("", "Overrides are changed on an existing spacecraft")]}
 
   @impl true
+  # DECISIONS #36/#65: a catalog override moves the spacecraft's catalog through a generation;
+  # it must name a catalog revision that exists.
+  def validate(organization_id, mission_id, _action, _entity_id, _previous, proposed)
+      when is_map(proposed) do
+    errors =
+      Enum.flat_map(proposed, fn {key, value} ->
+        with "catalog_revision_id" <- path(key),
+             %{"value" => catalog} when is_binary(catalog) <- value,
+             {:error, errors} <-
+               SpacecraftProfile.catalog_exists(organization_id, mission_id, catalog, key) do
+          errors
+        else
+          _ok -> []
+        end
+      end)
+
+    if errors == [], do: :ok, else: {:error, errors}
+  end
+
   def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
 
   @impl true

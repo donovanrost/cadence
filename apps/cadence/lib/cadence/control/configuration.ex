@@ -15,6 +15,7 @@ defmodule Cadence.Control.Configuration do
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Auth.Scope
   alias Cadence.Catalog.FleetSnapshot
+  alias Cadence.Commanding.Groups
   alias Cadence.Configuration.{Access, Editing, Ledger, Preview, Staging, Status, Submission}
   alias Cadence.Configuration.ChangeSetStore
   alias Cadence.Contacts.Scheduler
@@ -236,6 +237,7 @@ defmodule Cadence.Control.Configuration do
   # and reports the runtime degraded; the mission reconciler keeps retrying.
   defp post_commit(mission, change_set_id, result) do
     notify_runtime(mission, result.impacts)
+    announce_canceled(mission, result)
     converge(mission, result)
   rescue
     error -> degraded_after_commit(mission, change_set_id, result, Exception.message(error))
@@ -251,6 +253,14 @@ defmodule Cadence.Control.Configuration do
 
     %{result | runtime: :degraded}
   end
+
+  # #65: commands a catalog change canceled with the apply (committed with it).
+  defp announce_canceled(mission, %{activation_payload: %{canceled_request_ids: [_ | _] = ids}}) do
+    ScopedReadUpdates.publish(:commanding_changed, mission.organization_id, mission.mission_id)
+    Groups.Timeline.settle_requests(mission.organization_id, mission.mission_id, ids)
+  end
+
+  defp announce_canceled(_mission, _result), do: :ok
 
   # Admission and the generation were committed with the revision; here the runtime converges
   # on it. A failure leaves the revision applied and the runtime degraded; the mission
