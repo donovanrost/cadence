@@ -29,6 +29,10 @@ export function useLostBookings(
     state: passes.state,
     refetch: passes.refetch,
     impact,
+    /** Every pass in the plan window (C · Changes names a covering separate booking from it). */
+    passes: computed(() =>
+      passes.state.value.status === "ready" ? passes.state.value.value.passes : [],
+    ),
     hasWindow: computed(() => key.value !== null),
   };
 }

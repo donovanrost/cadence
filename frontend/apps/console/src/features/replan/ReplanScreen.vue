@@ -282,7 +282,12 @@ async function onApply(acks: Acknowledgement[]) {
               :availability="availability.state.value"
             />
           </div>
-          <ChangesPanel :diff="proposal.diff" :plan="proposal.plan" :name-of="nameOf" />
+          <ChangesPanel
+            :diff="proposal.diff"
+            :plan="proposal.plan"
+            :name-of="nameOf"
+            :bookings="lost.passes.value"
+          />
         </div>
         <PlanFooter
           :plan="footerPlan ?? proposal.plan"

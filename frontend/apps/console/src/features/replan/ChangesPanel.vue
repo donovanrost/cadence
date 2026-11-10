@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ApListRow, ApPanel, ApStatStrip, ApStatTile, formatDuration, plural } from "@/ui";
+import type { Pass } from "@/features/contacts/index.ts";
 import {
   reasonText,
   stationCode,
@@ -8,12 +9,15 @@ import {
   type Repair,
   type SpacecraftName,
 } from "@/features/scheduling/index.ts";
+import CoveredList from "./CoveredList.vue";
 
 /** C · Changes (K2): what the repair keeps, moves, drops and adds, then what needs a person. */
 const props = defineProps<{
   diff: NonNullable<Repair["diff"]>;
   plan: PlanDetail;
   nameOf: (id: string | null) => SpacecraftName | null;
+  /** The passes read over the plan window: names the separate booking that covers a lost one. */
+  bookings: readonly Pass[];
 }>();
 const name = (id: string | null) => props.nameOf(id)?.name ?? id ?? "Unknown spacecraft";
 const sample = computed(() => props.diff.moved.slice(0, 8));
@@ -29,15 +33,21 @@ const sign = (s: number) => (s >= 0 ? `+${formatDuration(s)}` : `−${formatDura
     flush
   >
     <div class="p-3">
-      <ApStatStrip :columns="4" label="Repair changes">
+      <!-- ux: Kept · Moved · Added · Covered · Dropped; 3 columns (two rows) fit the 360px pane. -->
+      <ApStatStrip :columns="3" label="Repair changes">
         <ApStatTile label="Kept" :value="diff.kept.length" />
         <ApStatTile label="Moved" :value="diff.moved.length" />
+        <ApStatTile label="Added" :value="diff.added.length" />
+        <ApStatTile
+          label="Covered"
+          :value="diff.covered.length"
+          caption="already booked separately"
+        />
         <ApStatTile
           label="Dropped"
           :value="diff.dropped.length"
           :state="diff.dropped.length > 0 ? 'caution' : 'neutral'"
         />
-        <ApStatTile label="Added" :value="diff.added.length" />
       </ApStatStrip>
     </div>
     <h3 class="ap-label px-4 pt-2">Need you</h3>
@@ -74,5 +84,6 @@ const sign = (s: number) => (s >= 0 ? `+${formatDuration(s)}` : `−${formatDura
     >
       Showing {{ sample.length }} of {{ diff.moved.length }} moves
     </p>
+    <CoveredList :covered="diff.covered" :bookings="bookings" :name="name" />
   </ApPanel>
 </template>
