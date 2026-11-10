@@ -59,7 +59,7 @@ export type UplinkRoute = Decoded<typeof route>;
 const perTarget = d.object({
   spacecraft_id: d.token,
   result,
-  reason: d.optional(failureReason),
+  reason: d.optional(d.nullable(failureReason)),
   next_contact: d.optional(d.nullable(nextContact)),
   routes: d.optional(d.array(route, 100)),
 });

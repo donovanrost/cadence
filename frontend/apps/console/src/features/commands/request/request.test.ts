@@ -353,6 +353,35 @@ describe("HOLDs gate Arm until acked or cleared (DECISIONS #60, qa #35)", () => 
     expect(holdAcksToSend(pf, old)).toEqual([]);
   });
 
+  it("decodes a GO contact whose per-target reason is null (74a1b914, qa #35)", () => {
+    const pf = review([
+      {
+        key: "contact",
+        result: "go",
+        per_target: [
+          {
+            spacecraft_id: "sc-4",
+            result: "go",
+            reason: null,
+            next_contact: {
+              station_code: "KIR",
+              aos: "2026-11-11T01:09:34Z",
+              los: "2026-11-11T01:17:34Z",
+            },
+          },
+        ],
+        evidence: {},
+        ackable: null,
+        hold_basis: null,
+      },
+      conflicts("b1"),
+    ]);
+    expect(pf.checks[0]?.per_target[0]?.next_contact?.station_code).toBe("KIR");
+    expect(holdReason(pf, {}, name)).toBe(
+      "Acknowledge the Conflicts HOLD with a note, or clear it.",
+    );
+  });
+
   it("a hard HOLD offers no ack and keeps Arm closed", () => {
     const pf = review([{ ...contactHold, ackable: false, hold_basis: "c1" }]);
     expect(holdReason(pf, { contact: { basis: "c1", note: "trust me" } }, name)).toBe(
