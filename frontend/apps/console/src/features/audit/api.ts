@@ -36,7 +36,8 @@ export type AuditEvent = Decoded<typeof event>;
 export type AuditQuery = Readonly<{
   organizationId: string;
   days: number;
-  kinds: readonly AuditKind[];
+  /** Known kinds and any source the server adds later (filter chips come from both). */
+  kinds: readonly string[];
   missionId: string | null;
   /** One person's events (AU1 `actor_id`; People › person Activity). */
   actorId?: string;
@@ -75,6 +76,14 @@ export function kindText(kind: string): string {
   if (known) return kindLabel[known];
   const words = kind.replaceAll("_", " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** A source as a phrase for the sources callout: "config events", "provider account changes". */
+const sourcePhrases: Readonly<Record<string, string>> = {
+  provider_accounts: "provider account changes",
+};
+export function sourcePhrase(kind: string): string {
+  return sourcePhrases[kind] ?? `${kindText(kind).toLowerCase()} events`;
 }
 
 export type AuditRow = AuditEvent & Readonly<{ repeat: number }>;

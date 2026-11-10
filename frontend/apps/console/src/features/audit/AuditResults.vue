@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ApButton, ApCallout, ApEmptyState, ApPanel, formatCount } from "@/ui";
 import AuditTable from "./AuditTable.vue";
-import { kindText, listWords, type AuditEvent, type AuditPage } from "./api.ts";
+import { listWords, sourcePhrase, type AuditEvent, type AuditPage } from "./api.ts";
 
 /** Audit log results: missing-sources note, the table, and Load older (cursor paging). */
 defineProps<{
@@ -14,14 +14,14 @@ defineProps<{
 }>();
 defineEmits<{ older: [] }>();
 const words = (p: AuditPage, which: "included" | "missing") =>
-  listWords(p.sources[which].map((k) => kindText(k).toLowerCase()));
+  listWords(p.sources[which].map(sourcePhrase));
 const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 </script>
 
 <template>
   <ApCallout v-if="page.sources.missing.length > 0" tone="info">
-    Showing {{ words(page, "included") }} events. {{ capitalized(words(page, "missing")) }} events
-    aren't in the audit log yet.
+    Showing {{ words(page, "included") }}. {{ capitalized(words(page, "missing")) }} aren't in the
+    audit log yet.
   </ApCallout>
   <ApPanel index="L1" title="Audit" flush>
     <ApEmptyState

@@ -26,3 +26,12 @@ describe("audit kinds the console doesn't know yet", () => {
     expect(kindText("config")).toBe("Config");
   });
 });
+
+describe("sourcePhrase", () => {
+  it("reads known kinds as '<kind> events' and provider accounts as changes", async () => {
+    const { sourcePhrase } = await import("./api.ts");
+    expect(sourcePhrase("config")).toBe("config events");
+    expect(sourcePhrase("provider_accounts")).toBe("provider account changes");
+    expect(sourcePhrase("people")).toBe("people events");
+  });
+});

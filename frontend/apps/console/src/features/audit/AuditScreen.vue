@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useConsoleScope } from "@/shell";
 import { ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented } from "@/ui";
 import AuditFilters from "./AuditFilters.vue";
 import AuditResults from "./AuditResults.vue";
-import { auditKinds, kindLabel, type AuditKind } from "./api.ts";
+import { auditKinds, kindText } from "./api.ts";
 import { useAuditLog } from "./useAuditLog.ts";
 
 /** Organization › Audit log. Says which sources are missing until the read is unified (ux spec). */
@@ -16,13 +16,13 @@ const organization = computed(() =>
     : null,
 );
 const days = ref<"1" | "7" | "30">("7");
-const kind = ref<AuditKind | "all">("all");
+const kind = ref<string>("all");
 /** ApSegmented emits strings; keep only values this screen knows (typed v-model, lead c41e549d). */
 const setDays = (v: string) => {
   if (v === "1" || v === "7" || v === "30") days.value = v;
 };
 const setKind = (v: string) => {
-  kind.value = v === "all" ? "all" : (auditKinds.find((k) => k === v) ?? "all");
+  kind.value = kindOptions.value.some((o) => o.value === v) ? v : "all";
 };
 const missionId = ref("");
 /** `?actor=<user_id>&who=<name>`: one person's events (People › person › Activity links here). */
@@ -55,10 +55,18 @@ const rangeOptions = [
   { value: "7", label: "7d" },
   { value: "30", label: "30d" },
 ];
-const kindOptions = [
+/** Sources the server reports beyond the known six get their own chip (ux); remembered once seen. */
+const extraKinds = ref<readonly string[]>([]);
+watch(log.state, (s) => {
+  if (s.status !== "ready") return;
+  const known = new Set<string>([...auditKinds, ...extraKinds.value]);
+  const added = s.value.sources.included.filter((k) => !known.has(k));
+  if (added.length > 0) extraKinds.value = [...extraKinds.value, ...added];
+});
+const kindOptions = computed(() => [
   { value: "all", label: "All" },
-  ...auditKinds.map((k) => ({ value: k, label: kindLabel[k] })),
-];
+  ...[...auditKinds, ...extraKinds.value].map((k) => ({ value: k, label: kindText(k) })),
+]);
 const missionOptions = computed(() => [
   { value: "", label: "All missions" },
   ...(organization.value?.missions ?? []).map((m) => ({ value: m.id, label: m.name })),
