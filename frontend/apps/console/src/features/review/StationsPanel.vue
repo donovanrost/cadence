@@ -17,19 +17,15 @@ const columns = computed((): readonly ApColumn[] => [
   { key: "missed", label: "Missed", mono: true, align: "end" },
   { key: "flown", label: "Minutes flown", mono: true, align: "end" },
 ]);
+const meta = computed(() =>
+  providers.value.length === 1
+    ? `${providers.value[0]} · worst first`
+    : "Sorted by realization, worst first",
+);
 </script>
 
 <template>
-  <ApPanel
-    index="R1"
-    title="By station"
-    :meta="
-      providers.length === 1
-        ? `${providers[0]} · worst first`
-        : 'Sorted by realization, worst first'
-    "
-    flush
-  >
+  <ApPanel index="R1" title="By station" :meta="meta" flush>
     <ApTable
       :columns="columns"
       :rows="byRealization(lines)"

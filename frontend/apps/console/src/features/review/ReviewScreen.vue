@@ -3,23 +3,15 @@ import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
-import {
-  ApCallout,
-  ApPageHeader,
-  ApRemote,
-  ApSegmented,
-  ApTabLinks,
-  ApTimePicker,
-  plural,
-} from "@/ui";
-import CausesPanel from "./CausesPanel.vue";
+import { ApCallout, ApPageHeader, ApRemote, ApTabLinks, plural } from "@/ui";
 import DailyPanel from "./DailyPanel.vue";
 import LostPanel from "./LostPanel.vue";
-import ReviewStrip from "./ReviewStrip.vue";
-import StationsPanel from "./StationsPanel.vue";
-import { fetchDaily, fetchSummary, type Span } from "./api.ts";
-import { freshnessMeta, headline, provisionalText } from "./format.ts";
+import ReviewControls from "./ReviewControls.vue";
+import SummarySection from "./SummarySection.vue";
+import { fetchDaily, fetchSummary } from "./api.ts";
+import { freshnessMeta, headline } from "./format.ts";
 import { useLostRows } from "./useLostRows.ts";
+import { useReviewExport } from "./useReviewExport.ts";
 import { useReviewWindow } from "./useReviewWindow.ts";
 
 /** K3 · Close the books (reading page). Spec: ux/screens/ScheduleFlow.md §K3; data: S9. */
@@ -54,15 +46,15 @@ const label = computed(() => {
     .filter(Boolean)
     .join(" · ");
 });
+const exporter = useReviewExport(
+  key,
+  computed(() => scope.value.mission.slug),
+  s,
+);
 const tabs = [
   { key: "live", label: "Live", to: { name: "ops.contacts" } },
   { key: "plan", label: "Plan", to: { name: "ops.contacts.plan" } },
   { key: "review", label: "Review", to: { name: "ops.contacts.review" } },
-];
-const spans = [
-  { value: "day", label: "Day" },
-  { value: "week", label: "Week" },
-  { value: "month", label: "Month" },
 ];
 const dayAt = computed(() => Date.parse(`${win.day.value}T00:00:00Z`));
 const pickDay = (t: number | null) =>
@@ -80,40 +72,19 @@ const pickDay = (t: number | null) =>
           {{ freshnessMeta(s) }}
         </p>
       </template>
-      <div class="flex flex-wrap items-end gap-3">
-        <ApSegmented
-          :model-value="win.span.value"
-          label="Span"
-          :options="spans"
-          @update:model-value="win.set({ span: $event as Span })"
-        />
-        <div class="w-[200px]">
-          <ApTimePicker
-            :model-value="dayAt"
-            label="Ending"
-            date-only
-            @update:model-value="pickDay"
-          />
-        </div>
-      </div>
+      <ReviewControls
+        :span="win.span.value"
+        :day-at="dayAt"
+        :can-export="s !== null"
+        :exporting="exporter.busy.value"
+        @span="win.set({ span: $event })"
+        @day="pickDay"
+        @export="exporter.run"
+      />
     </ApPageHeader>
     <ApTabLinks :links="tabs" active="review" label="Contacts sections" />
-    <ApRemote
-      :state="summary.state.value"
-      loading-label="Loading pass results…"
-      @retry="summary.refetch"
-    >
-      <template #default="{ value }">
-        <ApCallout v-if="provisionalText(value)" tone="caution">{{
-          provisionalText(value)
-        }}</ApCallout>
-        <ReviewStrip :summary="value" />
-        <div class="grid grid-cols-1 gap-4 console:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <StationsPanel :lines="value.by_station" />
-          <CausesPanel :causes="value.by_cause" />
-        </div>
-      </template>
-    </ApRemote>
+    <ApCallout v-if="exporter.failure.value" tone="caution">{{ exporter.failure.value }}</ApCallout>
+    <SummarySection :state="summary.state.value" @retry="summary.refetch" />
     <ApRemote :state="daily.state.value" loading-label="Loading 30 days…" @retry="daily.refetch">
       <template #default="{ value }"><DailyPanel :daily="value" :day="win.day.value" /></template>
     </ApRemote>

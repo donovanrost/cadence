@@ -13,17 +13,30 @@ const counted = computed(() => props.summary.planned - props.summary.canceled);
 const flown = computed(() => props.summary.by_station.reduce((n, s) => n + s.flown_seconds, 0));
 const volume = computed(() => props.summary.volume ?? null);
 const planned = computed(() => props.summary.by_station.reduce((n, s) => n + s.planned_seconds, 0));
+const plannedCaption = computed(() =>
+  props.summary.canceled > 0 ? `${props.summary.canceled} canceled by us, not counted` : undefined,
+);
+/** Downlink tile: received vs provider-reported; unknown is said, never 0. */
+const volumeTile = computed(() => {
+  const v = volume.value;
+  if (!v) return { value: null, caption: undefined, state: undefined };
+  return {
+    value: v.received_bytes === null ? "Not known" : bytes(v.received_bytes),
+    caption:
+      v.provider_bytes === null
+        ? "No provider reports"
+        : `of ${bytes(v.provider_bytes)} provider-reported`,
+    state:
+      v.received_bytes !== null && v.provider_bytes !== null && v.received_bytes < v.provider_bytes
+        ? ("caution" as const)
+        : undefined,
+  };
+});
 </script>
 
 <template>
   <ApStatStrip :columns="volume ? 6 : 5" label="Pass review totals">
-    <ApStatTile
-      label="Planned"
-      :value="summary.planned"
-      :caption="
-        summary.canceled > 0 ? `${summary.canceled} canceled by us, not counted` : undefined
-      "
-    />
+    <ApStatTile label="Planned" :value="summary.planned" :caption="plannedCaption" />
     <ApStatTile
       label="Realized"
       :value="summary.realized"
@@ -46,19 +59,9 @@ const planned = computed(() => props.summary.by_station.reduce((n, s) => n + s.p
     <ApStatTile
       v-if="volume"
       label="Downlink received"
-      :value="volume.received_bytes === null ? 'Not known' : bytes(volume.received_bytes)"
-      :caption="
-        volume.provider_bytes === null
-          ? 'No provider reports'
-          : `of ${bytes(volume.provider_bytes)} provider-reported`
-      "
-      :state="
-        volume.received_bytes !== null &&
-        volume.provider_bytes !== null &&
-        volume.received_bytes < volume.provider_bytes
-          ? 'caution'
-          : undefined
-      "
+      :value="volumeTile.value"
+      :caption="volumeTile.caption"
+      :state="volumeTile.state"
     />
     <ApStatTile
       label="Minutes flown"

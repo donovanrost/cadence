@@ -1,4 +1,11 @@
-import { decoders, request, type ApiError, type ApiResult, type Decoded } from "@/api";
+import {
+  decoders,
+  outcomeUnknown,
+  request,
+  type ApiError,
+  type ApiResult,
+  type Decoded,
+} from "@/api";
 
 /** Change-set writes and the dry run. Contract: docs/apogee/api/changes.md. */
 const { array, boolean, integer, nullable, object, oneOf, string, token } = decoders;
@@ -368,7 +375,7 @@ export function failureOutcome(
       sentence: `The connection dropped, so it isn't clear whether anything was ${verb}. Check Staged changes before trying again.`,
     };
   // qa #19: a 500 can arrive after the write committed; it's unclear, never "nothing changed".
-  if (error.kind === "unavailable" && error.status >= 500)
+  if (error.kind === "unavailable" && outcomeUnknown(error))
     return {
       changed: null,
       sentence: `The server failed while answering, so it isn't clear whether anything was ${verb}. Check Staged changes and Revisions now, before trying again.`,
