@@ -24,9 +24,10 @@ const or = (items: readonly string[]) =>
   items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`;
 const strings = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+// ux (request_validation.ex): both hints simply require a second GO.
 const hintWords: Readonly<Record<string, string>> = {
-  confirmation_required: "needing confirmation",
-  approval_required: "needing approval",
+  confirmation_required: "confirmation",
+  approval_required: "approval",
 };
 
 /** People.md U4: each policy as a title and one sentence, from the server's effective policy. */
@@ -44,7 +45,7 @@ export function policyText(p: CommandPolicy): Readonly<{ title: string; sentence
       const hints = strings(params["hints"]).map((h) => hintWords[h] ?? h.replaceAll("_", " "));
       return {
         title: "Catalog markings",
-        sentence: `Commands the catalog marks as ${or(hints)} are held for it.`,
+        sentence: `Commands the catalog marks as needing ${or(hints)} also need a second GO.`,
       };
     }
     case "fleet_reach": {
@@ -54,7 +55,7 @@ export function policyText(p: CommandPolicy): Readonly<{ title: string; sentence
         sentence:
           n === null
             ? "Requests that reach many spacecraft need a second GO."
-            : `Any request to more than ${n} spacecraft needs a second GO.`,
+            : `Any request to ${n} or more spacecraft needs a second GO.`, // count >= threshold (ux)
       };
     }
     case "no_self_approval":

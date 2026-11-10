@@ -22,8 +22,8 @@ describe("policyText (U4)", () => {
     if (!r.ok) throw r.error;
     expect(r.value.policies.map((p) => policyText(p).sentence)).toEqual([
       "Hazardous and critical commands need a second GO from another person who can approve.",
-      "Commands the catalog marks as needing confirmation or needing approval are held for it.",
-      "Any request to more than 10 spacecraft needs a second GO.",
+      "Commands the catalog marks as needing confirmation or approval also need a second GO.",
+      "Any request to 10 or more spacecraft needs a second GO.",
       "Nobody can give the second GO on their own request.",
       "The server applies this policy; the console doesn't describe it yet.",
     ]);
