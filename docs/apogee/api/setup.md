@@ -17,6 +17,7 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | O2 | `POST /organizations/:organization_id/invitations` | **implemented** |
 | O3 | `GET /organizations/:organization_id/service-identities` | **implemented** |
 | O5 | `PUT`/`DELETE /people/:user_id`, `POST /invitations/:id/resend`, `DELETE /invitations/:id` | **implemented** |
+| O6 | `POST /service-identities`, `POST /service-identities/:id/rotate`, `DELETE /service-identities/:id` | **implemented** |
 | O4 | command policies (as text) | with api-ops (commanding policy, D7) |
 | G1, T1, T2 | `GET /missions/:mission_id/ground-stations`, `/transports`, `/routing-rules` | **implemented** |
 | kind schema | `GET /missions/:mission_id/config/kinds/:kind/schema` | **implemented** |
@@ -410,6 +411,23 @@ one active admin.
   invitation_not_found`, `403 forbidden`.
 - **Per-person activity**: the organization audit read filtered to them, `GET /audit?actor_id=<user_id>`
   (AU1 below).
+
+### Service identity writes (O6)
+
+All require an organization admin (the same access as the O3 read; offer them where O3 succeeds). The API token appears in the
+response **once** (create and rotate); Cadence stores only its digest and can't show it again.
+Responses carry `cache-control: no-store`.
+
+- `POST /service-identities {name, capabilities: ["organization_admin"] | ["mission_admin"],
+  mission_id?}` → `201 {service_identity: {id, name, capabilities, mission_id}, api_token}`.
+  `organization_admin` covers all missions (no `mission_id`); `mission_admin` needs a `mission_id`
+  of this organization. Errors: `422 invalid_params` (`name` 1-120 characters, `capabilities`,
+  `mission_id`), `403 forbidden`.
+- `POST /service-identities/:id/rotate` → `200 {service_identity, api_token}`. The old token
+  stops working immediately; the directory's `key_created_at` becomes the rotation time. Errors:
+  `404 service_identity_not_found` (not active), `403 forbidden`.
+- `DELETE /service-identities/:id` → `204`. The identity is disabled: its token stops working and
+  it leaves the directory (O3). Errors: `404 service_identity_not_found`, `403 forbidden`.
 
 ## Comms reads (G1, T1, T2)
 

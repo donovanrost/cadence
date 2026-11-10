@@ -236,7 +236,16 @@ defmodule Cadence.Auth do
       name: r.display_name,
       mission_id: r.mission_id,
       capabilities: r.capabilities,
-      key_created_at: r.inserted_at
+      # Rotation records its time (ServiceIdentityKeys); otherwise the key is the original.
+      key_created_at:
+        type(
+          fragment(
+            "coalesce((?->'value'->>'key_rotated_at')::timestamp, ?)",
+            r.metadata,
+            r.inserted_at
+          ),
+          :naive_datetime_usec
+        )
     })
     |> Repo.all()
   end

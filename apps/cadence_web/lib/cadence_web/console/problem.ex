@@ -80,6 +80,7 @@ defmodule CadenceWeb.Console.Problem do
     already_invited: {409, "That person already has a pending invitation."},
     member_not_found: {404, "That person isn't a member of this organization."},
     invitation_not_found: {404, "That invitation isn't pending (accepted, revoked or expired)."},
+    service_identity_not_found: {404, "That service identity isn't active in this organization."},
     last_admin:
       {409, "An organization needs at least one admin. Make someone else an admin first."},
     invalid_params: {422, "The request parameters are invalid."},
