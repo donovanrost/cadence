@@ -35,6 +35,12 @@ describe("request", () => {
     expect(result).toMatchObject({ ok: false, error: { kind: "invalid", code: "file_too_large" } });
   });
 
+  it("reads a 204 No Content through the reader with null (DELETE)", async () => {
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response(null, { status: 204 })));
+    const result = await request("/x", () => null, { method: "DELETE" });
+    expect(result).toEqual({ ok: true, value: null });
+  });
+
   it("keeps the server code on 422", async () => {
     stubFetch(422, { error: { code: "reason_required", message: "Give a reason." } });
     const result = await request("/x", ok, { method: "POST", body: {} });

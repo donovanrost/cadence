@@ -114,6 +114,13 @@ export async function request<T>(
 
   const body = await readJson(response);
   if (!response.ok) return { ok: false, error: toError(response.status, body) };
+  // 204 No Content (e.g. DELETE /invitations/:id): no envelope; the reader decides what null means.
+  if (response.status === 204) {
+    const empty = decode(read, null);
+    return empty.ok
+      ? { ok: true, value: empty.value }
+      : { ok: false, error: { kind: "malformed", message: empty.error.message } };
+  }
   const envelope = decode(object({ data: read }), body);
   if (!envelope.ok)
     return { ok: false, error: { kind: "malformed", message: envelope.error.message } };
