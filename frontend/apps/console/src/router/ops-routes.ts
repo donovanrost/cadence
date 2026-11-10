@@ -1,5 +1,4 @@
 import type { RouteRecordRaw } from "vue-router";
-import { pending } from "./pending.ts";
 import { responsive } from "./responsive.ts";
 
 /**
@@ -112,7 +111,7 @@ export const opsRoutes: RouteRecordRaw[] = [
   {
     path: "telemetry/dashboards/:dashboardId?",
     name: "ops.dashboards",
-    component: pending,
+    component: () => import("@/features/telemetry/DashboardsRedirect.vue"),
     meta: { mode: "ops", nav: "telemetry", title: "Dashboards" },
   },
   {
