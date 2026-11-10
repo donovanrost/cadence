@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useRouter } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
 import { useNow, ApButton, ApEmptyState, ApGantt, ApPanel, ApRemote } from "@/ui";
 import { passGantt, usePasses } from "@/features/contacts/index.ts";
@@ -14,6 +15,13 @@ const scope = useMissionScope();
 const now = useNow();
 const missionId = computed(() => scope.value.mission.id);
 const query = usePasses(missionId, 15 * 60_000, 2 * 3_600_000);
+const router = useRouter();
+/** A bar opens that pass in the Contacts drawer (backlog §2 Now). */
+function open(id: string) {
+  router
+    .push({ name: "ops.contacts", query: { contact: id } })
+    .catch((e: unknown) => console.error("Navigation failed", e));
+}
 
 const byId = computed(() => new Map(props.spacecraft.map((sc) => [sc.id, sc])));
 const view = computed(() => {
@@ -55,6 +63,7 @@ const view = computed(() => {
           :window="view.window"
           :now="now.getTime()"
           :lane-height="24"
+          @select="open"
         />
       </div>
     </ApRemote>
