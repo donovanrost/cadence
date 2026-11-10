@@ -82,3 +82,12 @@ describe("draftedByOther (ux K1 drafter line)", () => {
     expect(draftedByOther(row(null), "user_me")).toBeNull();
   });
 });
+
+describe("planErrorText on an unclear outcome (qa #19)", () => {
+  it("says a 5xx, a dropped connection or a garbled answer may have gone through", () => {
+    const unclear = "may or may not have gone through";
+    expect(planErrorText({ kind: "unavailable", status: 500, message: "x" })).toContain(unclear);
+    expect(planErrorText({ kind: "unavailable", status: 0, message: "x" })).toContain(unclear);
+    expect(planErrorText({ kind: "malformed", message: "x" })).toContain(unclear);
+  });
+});

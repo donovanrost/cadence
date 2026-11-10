@@ -12,6 +12,7 @@ const run = (state: Draft["run"]["state"]): Draft => ({
     failure: null,
     started_at: "2026-11-09T10:00:00Z",
     updated_at: "2026-11-09T10:01:00Z",
+    stopped_at: "2026-11-09T10:01:00Z",
   },
   plan: null,
 });
@@ -159,5 +160,20 @@ describe("plan detail chain_head (qa #30)", () => {
     expect(planDetailReader(detail({ id: "head", version: 2 })).chain_head).toBe("head");
     expect(planDetailReader(detail(undefined)).chain_head).toBeNull();
     expect(planDetailReader(detail(null)).chain_head).toBeNull();
+  });
+});
+
+describe("interrupted draft stop time (api 413c8e18)", () => {
+  it("carries the run's stopped_at into the view", async () => {
+    const { planView } = await import("./plan-state.ts");
+    expect(
+      planView({
+        notSetUp: null,
+        runId: "run_1",
+        draft: ready(run("interrupted")),
+        plans: noPlans,
+        plan: null,
+      }),
+    ).toEqual({ kind: "interrupted", phase: "searching", stoppedAt: "2026-11-09T10:01:00Z" });
   });
 });

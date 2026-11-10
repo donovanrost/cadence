@@ -16,6 +16,7 @@ import { useBookingStopped } from "./useBookingStopped.ts";
 import PlanStatePanel from "./PlanStatePanel.vue";
 import SelectedPanel from "./SelectedPanel.vue";
 import { isPlanSuperseded, planErrorText } from "./errors.ts";
+import SendBackSheet from "./SendBackSheet.vue";
 import SubmitSheet from "./SubmitSheet.vue";
 import PassResolutionsCallout from "./PassResolutionsCallout.vue";
 import ProposalCallout from "./ProposalCallout.vue";
@@ -50,6 +51,7 @@ const {
   submit,
   execute,
   edit,
+  sendBack,
   alternatives,
   availability,
   refresh,
@@ -78,6 +80,23 @@ const stopped = useBookingStopped(
 const primary = computed(() =>
   view.value.kind === "plan" ? planPrimary(view.value.plan, isAdmin.value) : null,
 );
+
+const sendBackSheet = ref<InstanceType<typeof SendBackSheet> | null>(null);
+const sendBackError = ref<ApiError | null>(null);
+async function onSendBack(reason: string) {
+  if (view.value.kind !== "plan") return;
+  const result = await sendBack(view.value.plan, reason);
+  if (result.ok) sendBackSheet.value?.close();
+  else sendBackError.value = result.error;
+}
+/** A draft an admin sent back: who, when and why, for its author (api 97523716). */
+const sentBack = computed(() => {
+  if (view.value.kind !== "plan" || view.value.plan.state !== "draft") return null;
+  const a = view.value.plan.approval;
+  if (a?.decision !== "rejected") return null;
+  const who = a.actor.name ?? "An org admin";
+  return `Sent back by ${who} at ${a.at.slice(11, 16)}Z${a.reason ? `: ${a.reason}` : "."}`;
+});
 
 async function onSubmit(acks: Acknowledgement[]) {
   if (view.value.kind !== "plan") return;
@@ -150,6 +169,7 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
   <ProposalCallout v-if="proposal" :mission-id="missionId" :proposal="proposal" />
   <template v-if="view.kind === 'plan'">
     <SupersededCallout v-if="view.plan.superseded" :superseded="view.plan.superseded" />
+    <ApCallout v-else-if="sentBack" tone="caution">{{ sentBack }}</ApCallout>
     <ApCallout v-else-if="stopped" :tone="stopped.tone">{{ stopped.text }}</ApCallout>
     <!-- U30: on any state that has unconfirmed bookings, on top of the state's own callout. -->
     <UnconfirmedCallout
@@ -217,9 +237,19 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
         proposal?.repair_of?.plan.id === view.plan.id ? proposal.repair_of.run_id : null
       "
       :requests-left="stopped?.left ?? null"
+      :can-send-back="isAdmin && view.plan.state === 'pending_approval'"
+      @send-back="sendBackSheet?.open()"
       @sheet="sheet?.open()"
       @redraft="draftDay"
       @execute="onExecute"
+    />
+    <SendBackSheet
+      v-if="isAdmin && view.plan.state === 'pending_approval'"
+      ref="sendBackSheet"
+      v-model:error="sendBackError"
+      :author="view.plan.author?.name ?? null"
+      :busy="busy"
+      @submit="onSendBack"
     />
     <SubmitSheet
       v-if="primary?.kind === 'sheet'"

@@ -29,6 +29,17 @@ function why(reasons: readonly string[], have: number): string {
     return `No window can cover it: ${reasonText(reasons[0] ?? "").toLowerCase()}`;
   return reasons.length > 0 ? reasons.map(reasonText).join(" · ") : "Rule not met";
 }
+/** U28/#28: requirements an admin accepted as gaps, with the reason (api 97523716). */
+const accepted = computed(
+  () => new Map((props.plan.approval?.exceptions ?? []).map((e) => [e.requirement_id, e.reason])),
+);
+/** `Gap accepted · <reason>` for a spacecraft whose unmet requirements were all accepted. */
+function acceptedText(spacecraftId: string): string | null {
+  const reqs = props.plan.unmet.filter((u) => u.spacecraft_id === spacecraftId);
+  if (reqs.length === 0 || !reqs.every((u) => accepted.value.has(u.requirement_id))) return null;
+  const reasons = [...new Set(reqs.map((u) => accepted.value.get(u.requirement_id) ?? ""))];
+  return `Gap accepted · ${reasons.join(" · ")}`;
+}
 const meta = computed(() => {
   const c = coverage(props.plan);
   return c.spacecraft > 0
@@ -44,7 +55,10 @@ const meta = computed(() => {
         v-for="row in unmet"
         :key="row.spacecraft_id"
         :state="row.contacts.have === 0 ? 'crit' : 'caution'"
-        :sentence="why(causes(row.spacecraft_id, row.reasons), row.contacts.have)"
+        :sentence="
+          acceptedText(row.spacecraft_id) ??
+          why(causes(row.spacecraft_id, row.reasons), row.contacts.have)
+        "
         :meta="`${row.contacts.have} / ${row.contacts.need ?? '?'} contacts`"
       >
         <template #title>

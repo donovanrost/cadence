@@ -13,6 +13,7 @@ import {
   fetchPlan,
   fetchPlans,
   fetchSetup,
+  rejectPlan,
   startDraft,
   submitPlan,
   type Acknowledgement,
@@ -191,6 +192,18 @@ export function usePlanDay(
       fetchAlternatives(missionId.value, currentPlanId.value ?? "", focused.value ?? "", signal),
   );
 
+  /** Send back (admin, pending_approval): the plan returns to draft with the reason. */
+  async function sendBack(plan: PlanDetail, reason: string) {
+    busy.value = true;
+    try {
+      const result = await rejectPlan(missionId.value, plan, reason);
+      refresh();
+      return result;
+    } finally {
+      busy.value = false;
+    }
+  }
+
   /** S4 edit: a new plan version. A stale version (409 plan_changed) reloads and says so. */
   async function edit(plan: PlanDetail, change: Readonly<{ add?: string[]; remove?: string[] }>) {
     busy.value = true;
@@ -215,6 +228,7 @@ export function usePlanDay(
     submit,
     execute,
     edit,
+    sendBack,
     alternatives: alternatives.state,
     availability: availability.state,
     refresh,

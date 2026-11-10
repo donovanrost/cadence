@@ -137,6 +137,22 @@ const planIssue = d.object({
 });
 
 const planRef = d.object({ id: d.token, version: d.integer });
+const approvalReader = d.nullable(
+  d.object({
+    decision: d.oneOf(["approved", "rejected"] as const),
+    actor: d.object({ kind: d.string, id: d.nullable(d.token), name: d.nullable(d.string) }),
+    at: d.timestamp,
+    reason: d.nullable(d.string),
+    exceptions: d.array(
+      d.object({
+        requirement_id: d.token,
+        requirement_version: d.nullable(d.integer),
+        reason: d.string,
+      }),
+      5_000,
+    ),
+  }),
+);
 const executionReader = d.nullable(
   d.object({
     requested: d.integer,
@@ -222,6 +238,9 @@ export const planDetailReader = d.object({
    */
   execution: (value: unknown, path?: string) =>
     value === undefined ? null : executionReader(value, path),
+  /** api 97523716: the latest decision on this version (a sent-back plan shows the rejection). */
+  approval: (value: unknown, path?: string) =>
+    value === undefined ? null : approvalReader(value, path),
   /** qa #30: the day's repair chain, root first then each applied repair; null on older servers. */
   chain: (value: unknown, path?: string) =>
     value === undefined ? null : d.array(planRef, 100)(value, path),
@@ -271,6 +290,9 @@ const draftRunReader = d.object({
   failure,
   started_at: d.nullable(d.timestamp),
   updated_at: d.timestamp,
+  /** api 413c8e18: completion time; for an interrupted run the last recorded progress. */
+  stopped_at: (value: unknown, path?: string) =>
+    value === undefined ? null : d.nullable(d.timestamp)(value, path),
 });
 
 export const draftReader = d.object({
@@ -440,6 +462,18 @@ export const REASON_MIN = 10;
 export const REASON_MAX = 2000;
 
 /** S4 edit: next plan version with the selection changed; returns the new plan detail. */
+/** Send back (api c7c7b277): a pending_approval plan returns to draft with the reviewer's reason. */
+export function rejectPlan(
+  missionId: string,
+  plan: Readonly<{ id: string; version: number }>,
+  reason: string,
+): Promise<ApiResult<PlanDetail>> {
+  return request(`${base(missionId)}/${encodeURIComponent(plan.id)}/reject`, planDetailReader, {
+    method: "POST",
+    body: { expected_version: plan.version, reason },
+  });
+}
+
 export function editPlan(
   missionId: string,
   plan: Readonly<{ id: string; version: number }>,

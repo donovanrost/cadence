@@ -11,7 +11,8 @@ export type PlanView =
   | { kind: "not_set_up"; missing: readonly string[] }
   | { kind: "no_draft"; last: PlanSummary | null; demand: DayDemand | null }
   | { kind: "drafting"; phase: string | null; startedAt: string | null }
-  | { kind: "interrupted"; phase: string | null }
+  /** `stoppedAt`: last recorded progress, so "stopped at or after" (api 413c8e18). */
+  | { kind: "interrupted"; phase: string | null; stoppedAt?: string | null | undefined }
   | { kind: "draft_failed"; message: string }
   | { kind: "plan"; plan: PlanDetail; fromRun: boolean };
 
@@ -64,7 +65,7 @@ export function planView(
       case "running":
         return { kind: "drafting", phase: run.phase, startedAt: run.started_at };
       case "interrupted":
-        return { kind: "interrupted", phase: run.phase };
+        return { kind: "interrupted", phase: run.phase, stoppedAt: run.stopped_at };
       case "failed":
       case "canceled":
         return {

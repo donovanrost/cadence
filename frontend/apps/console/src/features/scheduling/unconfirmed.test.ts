@@ -35,6 +35,7 @@ const plan = (state: PlanDetail["state"], providers: readonly string[]): PlanDet
   at_risk: [],
   chain: null,
   execution: null,
+  approval: null,
   chain_head: null,
   unconfirmed: {
     window_ms: 600_000,

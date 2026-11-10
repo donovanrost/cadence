@@ -20,8 +20,10 @@ const props = defineProps<{
   openRepairRun?: string | null | undefined;
   /** bookingStopped's `left` on an interrupted plan (0 hides Continue booking). */
   requestsLeft?: number | null | undefined;
+  /** Admin reviewing a pending_approval plan: a secondary Send back beside Approve. */
+  canSendBack?: boolean | undefined;
 }>();
-defineEmits<{ sheet: []; execute: []; redraft: [] }>();
+defineEmits<{ sheet: []; execute: []; redraft: []; sendBack: [] }>();
 const primary = computed(() =>
   planPrimary(props.plan, props.isAdmin, {
     openRepairRun: props.openRepairRun ?? null,
@@ -57,6 +59,9 @@ const atRisk = computed(() => props.plan.at_risk.flatMap((r) => r.snapshot_ids).
         <ApButton variant="primary" size="commit" :disabled="busy" @click="$emit('sheet')">{{
           sheetLabel ?? primary.label
         }}</ApButton>
+        <ApButton v-if="canSendBack" variant="ghost" :disabled="busy" @click="$emit('sendBack')"
+          >Send back…</ApButton
+        >
       </template>
       <ApButton
         v-else-if="primary.kind === 'execute'"
