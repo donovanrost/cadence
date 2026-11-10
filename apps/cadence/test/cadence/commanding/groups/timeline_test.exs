@@ -143,6 +143,31 @@ defmodule Cadence.Commanding.Groups.TimelineTest do
              event(c, group, :completed)
   end
 
+  test "a catalog change set's cancellation counts as catalog_changed when the group closes (#65)",
+       c do
+    {group, [first, second]} = submit(c, [signed(c, 1)])
+
+    {:ok, _} =
+      Repo.transaction(fn ->
+        Cancellation.cancel(
+          c.org,
+          c.mission,
+          [first.command_request_id],
+          "catalog_changed: cs-1",
+          %{
+            "actor_kind" => "system",
+            "id" => "change_set:cs-1"
+          }
+        )
+      end)
+
+    released!(second, "not_required")
+    Timeline.settle(c.org, c.mission, group.command_group_id)
+
+    assert %{payload: %{"members" => %{"catalog_changed" => 1, "no_verifier" => 1}}} =
+             event(c, group, :completed)
+  end
+
   test "a failed release is a member failure", c do
     {group, [first | _]} = submit(c, [signed(c, 1)])
     release_failed!(c, first)

@@ -127,6 +127,26 @@ defmodule Cadence.Reads.CommandGroupsTest do
     assert [%{stage: :release_failed, members: [%{end_reason: nil}]}, _] = view.targets
   end
 
+  test "a member canceled by a catalog change set reads end_reason catalog_changed (#65)", c do
+    group = submit(c, "SET_SIGNED", %{"counter" => 4})
+    [first | _] = GroupStore.members(c.org, c.mission, group.command_group_id)
+
+    {:ok, _} =
+      Repo.transaction(fn ->
+        Cadence.Commanding.Cancellation.cancel(
+          c.org,
+          c.mission,
+          [first.command_request_id],
+          "catalog_changed: change_set_1",
+          %{"actor_kind" => "system", "id" => "change_set:change_set_1"}
+        )
+      end)
+
+    {:ok, view} = CommandGroups.get(c.org, c.mission, group.command_group_id, nil)
+
+    assert [%{members: [%{stage: :canceled, end_reason: :catalog_changed}]}, _] = view.targets
+  end
+
   test "an operation id resolves to its group", c do
     group = submit(c, "SET_SIGNED", %{"counter" => 2}, %{}, operation_id: "op-42")
     assert {:ok, %{id: id}} = CommandGroups.fetch_by_operation(c.org, c.mission, "op-42")

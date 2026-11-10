@@ -225,7 +225,8 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
 - Member `stage`: `awaiting_go | queued_for_contact | radiating | executed | verified | no_verifier
   | verify_failed | release_failed | indeterminate | canceled | rejected | excluded`. A target's stage
   is its first unfinished member's. `end_reason`: `aborted | release_basis_changed |
-  earlier_command_failed | expired | excluded_at_review | canceled | rejected` (or null).
+  earlier_command_failed | expired | catalog_changed | excluded_at_review | canceled | rejected` (or
+  null). `catalog_changed` (DECISIONS #65): a catalog change set canceled it before release.
 - `…/preflight` re-runs preflight on the submitted inputs for Approve (A2) and adds
   `changed_since_submit` (`hold` when the result no longer matches what was submitted). Its
   `conflicts` check leaves out the group's own members, so only other work on the lanes counts.
@@ -247,7 +248,7 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
     counts the later members of that target that won't release (stop on failure, #31).
   - `completed` (#51): once, when every member of a `queued` or `aborted` group is final.
     `actor: {actor_kind: "system"}`. Payload: `{members: {verified, no_verifier, verify_failed,
-    verify_timed_out, release_failed, canceled, rejected: count}}` (only non-zero keys).
+    verify_timed_out, release_failed, canceled, catalog_changed, rejected: count}}` (only non-zero keys).
     Written right after the release, verification, halt or abort that finished the last member.
     A one-minute reconcile sweep backs it up. Each write invalidates `commanding`.
 

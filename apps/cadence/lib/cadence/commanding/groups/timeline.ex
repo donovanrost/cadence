@@ -147,7 +147,15 @@ defmodule Cadence.Commanding.Groups.Timeline do
   end
 
   defp outcome(_member, true), do: {:failed, "release_failed"}
-  defp outcome(%{lifecycle_state: "canceled"}, false), do: :canceled
+
+  defp outcome(%{lifecycle_state: "canceled"} = member, false) do
+    # DECISIONS #65: canceled by a catalog change set reads as its own outcome.
+    case JsonDocument.unwrap_value(member.metadata_document) do
+      %{"cancellation" => %{"reason" => "catalog_changed" <> _}} -> :catalog_changed
+      _other -> :canceled
+    end
+  end
+
   defp outcome(%{lifecycle_state: "rejected"}, false), do: :rejected
   defp outcome(_member, false), do: :open
 
