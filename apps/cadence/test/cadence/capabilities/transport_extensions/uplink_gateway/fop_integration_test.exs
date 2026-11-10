@@ -92,6 +92,32 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway.FOPIntegrationT
     assert stale_vc.action_requests == []
   end
 
+  test "a FARM lockout fails the release in flight instead of crashing the gateway" do
+    {:ok, initialized} = UplinkGateway.init_transport(configuration(), execution_context())
+
+    {:ok, transmitted} =
+      UplinkGateway.handle_control_input(uplink_request(), initialized.state, execution_context())
+
+    {:ok, alerted} =
+      UplinkGateway.handle_transport_event(
+        %{kind: :cop1_clcw, clcw: CLCW.new(vcid: 0, report_value: 1, lockout: 1)},
+        transmitted.state,
+        execution_context()
+      )
+
+    assert alerted.metadata[:signal_phase] == :failure
+    assert alerted.metadata[:cop1_alert] == :lockout
+    assert alerted.metadata[:command_release_attempt_id] == "release-1"
+    assert alerted.state.cop1.state == :initial
+
+    assert {:error, :cop1_not_initialized} =
+             UplinkGateway.handle_control_input(
+               uplink_request(),
+               alerted.state,
+               execution_context()
+             )
+  end
+
   defp configuration do
     %{
       "service_name" => "cop1",
