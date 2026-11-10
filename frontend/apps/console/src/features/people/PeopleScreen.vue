@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useConsoleScope } from "@/shell";
 import { ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented, plural } from "@/ui";
+import CommandPoliciesPanel from "./CommandPoliciesPanel.vue";
 import InvitationsTable from "./InvitationsTable.vue";
 import InvitePanel from "./InvitePanel.vue";
 import PeoplePanel from "./PeoplePanel.vue";
@@ -21,8 +22,10 @@ const { state, refetch } = useRemoteQuery(() => organization.value?.id ?? null, 
 /** `?tab=` opens a section directly (service identity pages link back to it). */
 const route = useRoute();
 const initialTab = route.query["tab"];
-const tab = ref<"people" | "invitations" | "services">(
-  initialTab === "invitations" || initialTab === "services" ? initialTab : "people",
+const tab = ref<"people" | "invitations" | "services" | "policies">(
+  initialTab === "invitations" || initialTab === "services" || initialTab === "policies"
+    ? initialTab
+    : "people",
 );
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
@@ -39,6 +42,7 @@ const tabs = (p: People) => [
   ...(p.permissions.includes("org.manage_members")
     ? [{ value: "services" as const, label: "Service identities" }]
     : []),
+  { value: "policies" as const, label: "Command policies" },
 ];
 </script>
 
@@ -64,20 +68,21 @@ const tabs = (p: People) => [
       <template #default="{ value }">
         <ApSegmented v-model="tab" :options="tabs(value)" label="Access sections" variant="tabs" />
         <div class="flex flex-wrap items-start gap-4">
-          <PeoplePanel
-            v-if="tab === 'people'"
-            :members="value.members"
-            class="min-w-0 flex-[999_1_560px]"
-          />
-          <ServiceIdentitiesPanel
-            v-else-if="tab === 'services' && organization"
-            :organization-id="organization.id"
-            class="min-w-0 flex-[999_1_560px]"
-          />
-          <ApPanel v-else index="U1" title="Invitations" class="min-w-0 flex-[999_1_560px]" flush>
-            <ApEmptyState v-if="value.invitations.length === 0" headline="No invitations" />
-            <InvitationsTable v-else :rows="value.invitations" />
-          </ApPanel>
+          <div class="min-w-0 flex-[999_1_560px]">
+            <PeoplePanel v-if="tab === 'people'" :members="value.members" />
+            <CommandPoliciesPanel
+              v-else-if="tab === 'policies' && organization"
+              :organization="organization"
+            />
+            <ServiceIdentitiesPanel
+              v-else-if="tab === 'services' && organization"
+              :organization-id="organization.id"
+            />
+            <ApPanel v-else index="U1" title="Invitations" flush>
+              <ApEmptyState v-if="value.invitations.length === 0" headline="No invitations" />
+              <InvitationsTable v-else :rows="value.invitations" />
+            </ApPanel>
+          </div>
           <InvitePanel
             v-if="organization && value.permissions.includes('org.invite')"
             :organization-id="organization.id"
