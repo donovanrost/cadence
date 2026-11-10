@@ -93,10 +93,15 @@ export const opsRoutes: RouteRecordRaw[] = [
     meta: { mode: "ops", nav: "contacts", title: "Pass review", board: "PassReview (K3)" },
   },
   {
+    // The Contacts drawer on ?contact= is the contact's page for now (backlog §2): keep the
+    // documented path working by redirecting to it.
     path: "contacts/:contactId",
     name: "ops.contact",
-    component: pending,
-    meta: { mode: "ops", nav: "contacts", title: "Contact" },
+    redirect: (to) => ({
+      name: "ops.contacts",
+      params: { org: to.params.org, mission: to.params.mission },
+      query: { ...to.query, contact: to.params.contactId },
+    }),
   },
   {
     path: "telemetry",
