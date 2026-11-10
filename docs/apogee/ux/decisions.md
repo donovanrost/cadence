@@ -443,3 +443,10 @@ attestations. Show it only for reasons it can fix (expired or missing evidence).
   - Use the station code: `next_contact.ground_station_ref` is resolved through the stations index (domain f57e5fff). Fall back to "the next pass at 02:31Z" only if it can't be resolved.
   - With no `next_contact`: "…until the uplink recovers. No later pass is booked for it yet."
 
+### U34 · Money is hidden, not "not reported" (DECISIONS #63)
+**Decision:** with billing out of scope, no screen shows a money panel, tile, column, budget or dispute.
+"Not reported" would imply that Cadence tracks money and is missing a number; hiding says it isn't part of
+the product. Layouts reflow, with no empty slots. Time facts stay. Wording that only made sense with billing
+goes too ("22 inside 2 h are billed", "to dispute"). Contact planning hides its money policy fields; they
+keep their server values. When billing returns, the specs' money items come back as written.
+

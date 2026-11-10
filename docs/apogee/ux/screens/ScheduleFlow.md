@@ -1,6 +1,11 @@
 # Scheduling flow: Prediction · Plan · Re-plan · Review (phase 3)
 
 Boards `ScheduleFlow`, `PassPrediction` (K0), `SchedulePlan` (K1), `Replan` (K2), `PassReview` (K3).
+
+> **Billing is out of scope (DECISIONS #63, U34).** Every money element below is **hidden**, not shown as
+> "not reported": K1 Cost and budget tiles and the Cost column, K2's footer cost and billed-cancel counts,
+> K3's dispute amount, billed minutes, R5 reconciliation and `Dispute` actions. Layouts reflow without them.
+> Time-based facts stay (minutes flown, realized %).
 Live view is `Contacts.md` (J4). Owner: fe-ops. Data: `docs/apogee/plans/ops.md` (requirements,
 planning runs, contact plans, provider reservations). Scope: DECISIONS #4 (**no propagation**:
 Cadence-computed prediction is deferred; opportunities come from providers).

@@ -59,7 +59,7 @@ org and mission (decision U1): `O = /console/:orgId`, `M = O/:missionId` (e.g.
 | 10 | **Mission settings** **[decision]** | `M/setup/settings[/:section]` | – |
 | | staged changes | `M/setup/changes` (review & apply) · `M/setup/revisions[/:rev]` (history, compare, roll back). Target design: `screens/Changes.md` (DECISIONS #1); hidden in v1 (U2). | Setup R2 + staged bar |
 | Org | **People & access** | `O/org/people` · `O/org/people/invite` · service identities `O/org/people/services` | People (S5) |
-| Org | **Missions** | `O/org/missions` · `O/org/missions/new` (takeover wizard, U5) | – |
+| Org | **Missions** | `O/org/missions` · `New mission` links to the existing mission-create page (DECISIONS #64; no console route for now) | – |
 | Org | **Provider accounts** **[decision]** | `O/org/provider-accounts[/:id]` | – |
 | Org | **Settings** | `O/org/settings[/:section]` | – |
 | Org | **Audit log** | `O/org/audit` | – |
@@ -68,7 +68,7 @@ org and mission (decision U1): `O = /console/:orgId`, `M = O/:missionId` (e.g.
 | Route | What |
 | --- | --- |
 | `/console/account` | Your profile, password, sessions (fixes review #18). From the account menu. |
-| `/console/notifications` | Notification list; account-menu item with unread count. |
+| ~~`/console/notifications`~~ | **Dropped (DECISIONS #64).** Now's attention queue (#54, U31) is the console's notification surface. |
 | `/sign-in`, `/invitations/:token`, `/no-organization`, `/admin-mode` | **Stay server-rendered** (auth layout). The SPA redirects to `/sign-in?return_to=…` on 401. |
 | `/admin/**` (platform admin) | **Stays on the existing host** in phase 1. Account menu shows "Platform admin ↗" only with the `platform_admin` capability. |
 
@@ -91,7 +91,7 @@ query (⌘K) → fleet status tag (Ops) → clocks → account.
   change set (U2)**; otherwise `UTC` alone.
 - **Fleet status tag** (Ops): worst state across the fleet (`◆ FLEET · ATTENTION`, `▲ FLEET ·
   CAUTION`, hatched `FLEET · STALE`, `■ FLEET · NOMINAL`); click → Now.
-- **Account menu**: name + role, Your account, Notifications (n), Switch organization, Platform
+- **Account menu**: name + role, Your account, Switch organization, Platform
   admin ↗ (capability-gated), Sign out.
 
 **Rail.** Ops 200px numbered 01–07 with live counts (Fleet size, Alarms open in crit tint,
@@ -153,7 +153,7 @@ stations, profiles, pages. Results are **actions**: open, plot, "Command EARENDI
 | `M/settings/**` | Setup › Mission settings | |
 | `/settings/**` | Org › Settings | |
 | `M/applications`, `M/applications/:key/:surface` | Setup › Apps; app surfaces open in the existing host (↗) in phase 1 | |
-| `/notifications` | `/console/notifications` (account menu) | |
+| `/notifications` | stays on the existing page (DECISIONS #64: no console route) | |
 | `/admin/**`, `/admin-mode` | Unchanged (existing host) | Linked from the account menu. |
 | Service identities (today in platform admin org detail) | Org › People & access › Service identities | Per S5 step 03. |
 
@@ -169,7 +169,7 @@ stations, profiles, pages. Results are **actions**: open, plot, "Command EARENDI
 | **Activation approvals** | Setup › Changes as approvals; Now action-queue item when it awaits *your* GO. | No |
 | **Provider accounts** (org) | Org › Provider accounts. | No |
 | **Mission settings** (governance etc.) | Setup › 09 Mission settings. | No |
-| **Notifications** | Account menu + `/console/notifications`; urgent ones already appear in the Now action queue. | No |
+| **Notifications** | Dropped (#64): the Now attention queue is the console's notification surface. | No |
 | **Federated app surfaces** | Setup › Apps lists apps; their surfaces open in the existing host (↗) until rebuilt. | No |
 | **Mission creation** | Org › Missions › New. Not on the canvas; build as a reading-layout form. | No |
 | **Platform admin** | Stays on the existing host, linked from the account menu for `platform_admin`. | Decided: DECISIONS #12 |
@@ -182,4 +182,4 @@ stations, profiles, pages. Results are **actions**: open, plot, "Command EARENDI
 Console (fits viewport, panes scroll): Now, Fleet, Alarms, spacecraft (all tabs), Commands, Compose,
 Approve/review, Uplink, Contacts live, Plan, Replan, Telemetry, Timeline.
 Reading (page scrolls): Readiness, Spacecraft list/add, Profiles, Catalog, Comms, Stations, Data
-sources, Apps, Settings, Changes/Revisions, all Org pages, Pass review, Account, Notifications.
+sources, Apps, Settings, Changes/Revisions, all Org pages, Pass review, Account.

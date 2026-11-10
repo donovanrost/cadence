@@ -43,6 +43,10 @@ tabs: Requirements · Policy
   lists the versions with who/when/why.
 
 ## Tab · Policy
+**Billing is out of scope (DECISIONS #63, U34):** the money fields (`max_estimated_cost_micros`, `currency`,
+`critical_cost_reserve_micros`, and the cost weight) are hidden and keep their server values. The rest of
+the Limits and Reserves panels stay.
+
 One panel per concern, with plain-language labels; the keys sit in `Technical details`:
 | Panel | Fields (`fleet_planning_policy_document`) | Notes |
 | --- | --- | --- |
