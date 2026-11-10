@@ -110,9 +110,33 @@ group must exist (`{"reason": "command_group_not_found"}` otherwise).
 
 These are the shapes I plan to build, revised with fe-ops' comments (plans/ops.md).
 
-- Topic `spacecraft:<spacecraft_id>`, joined while one spacecraft is open (Investigate):
-  `points` event `{"samples": [{"point_id", "value", "generation_time", "received_at", "limit_state"}]}`
-  for that spacecraft's subscribed points, throttled. `value` keeps its exact type and
-  `limit_state` uses the alarm vocabulary. The join payload `{"point_ids": [...]}` selects the
-  points (capped at 200), and the join reply carries each point's `unit`.
+- **Topic `spacecraft:<spacecraft_id>` (M8): final shape, building after qa's #38 freeze.**
+  Joined while one spacecraft is open (Investigate B1). It needs the same access as `mission:<id>`
+  (`operate_mission` on the spacecraft's mission). Join errors: `{"reason":
+  "spacecraft_not_found" | "forbidden" | "too_many_points"}`.
+  - **Join** payload `{"point_ids": [...]}`, at most 200 (`too_many_points` above that).
+    Reply `{"spacecraft_id", "mission_id", "points": [{"point_id", "unit", "type"}]}`.
+    `type` is `numeric | enum | text`:
+    - `uint`, `int` and `float` fields are `numeric`;
+    - `bool`, or a parameter whose catalog type is enumerated, is `enum`;
+    - `string` and `binary` are `text`.
+    - An unknown point has `type: null` and `unit: null`.
+  - **`points:set`** (client → server) `{"point_ids": [...]}` replaces the selection without
+    rejoining. Reply `{:ok, {"points": [...]}}` (same shape as the join reply), or
+    `{:error, {"reason": "too_many_points"}}`.
+  - **Event `points`** `{"seq", "samples": [{"point_id", "value_json", "generation_time",
+    "received_at", "limit_state"}]}`:
+    - Triggered by the mission's telemetry invalidation and throttled to at most once a second.
+      Latency is the ingest commit plus up to 1 s.
+    - A point appears when its latest sample differs from the last one pushed. Order is commit
+      order, so a backfilled sample can carry an older `generation_time`: insert by
+      `generation_time`.
+    - `value_json` is JSON text (64-bit safe).
+    - `limit_state` is `critical | caution | nominal`, or `null` when no limit is evaluated for
+      that point (distinct from no data, which simply has no sample).
+  - `seq` restarts at 1 on every join, and the first push after a join is the current value of
+    every selected point that has one. On reconnect, refetch the history window and continue from
+    the next push. Nothing is replayed.
+  - B2 (event log) has no stream of its own: refetch `/events` on the mission channel's
+    `invalidate` (`alarms`, `contacts`, `commanding`, `telemetry`).
 - (Done as `command_group:<mission_id>:<command_group_id>`, above.)
