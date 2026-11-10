@@ -165,10 +165,10 @@ describe("fan-out on kind + minute (ux timeline 7/8)", () => {
 
 describe("timeline scope (backlog §2)", () => {
   const fleet = [
-    { id: "sc-4", scid: 4, name: "EARENDIL-004" },
-    { id: "sc-21", scid: 21, name: "EARENDIL-021" },
+    { id: "sc-4", scid: 4, name: "EARENDIL-004", plane: 1 },
+    { id: "sc-21", scid: 21, name: "EARENDIL-021", plane: 2 },
   ];
-  it("reads ?sc= through the fleet, else the whole fleet", () => {
+  it("reads ?sc= through the fleet, ?plane=, else the fleet", () => {
     expect(timelineScope({ sc: "4" }, fleet)).toEqual({
       kind: "spacecraft",
       id: "sc-4",
@@ -176,12 +176,20 @@ describe("timeline scope (backlog §2)", () => {
       name: "EARENDIL-004",
     });
     expect(timelineScope({ sc: "999" }, fleet)).toEqual({ kind: "fleet" });
+    expect(timelineScope({ plane: "2" }, fleet)).toEqual({ kind: "plane", plane: 2 });
+    expect(timelineScope({ plane: "x" }, fleet)).toEqual({ kind: "fleet" });
     expect(timelineScope({}, fleet)).toEqual({ kind: "fleet" });
   });
-  it("offers the fleet and the chosen spacecraft; maps choices to the URL", () => {
+  it("offers the fleet, the chosen spacecraft and each plane; maps choices to the URL", () => {
     const s = timelineScope({ sc: "4" }, fleet);
-    expect(scopeOptions(s).map((o) => o.label)).toEqual(["Whole fleet", "EARENDIL-004"]);
+    expect(scopeOptions(fleet, s).map((o) => o.label)).toEqual([
+      "Whole fleet",
+      "EARENDIL-004",
+      "Plane 1",
+      "Plane 2",
+    ]);
     expect(scopeValue(s)).toBe("sc:4");
-    expect(scopeQuery("fleet")).toEqual({ sc: undefined });
+    expect(scopeQuery("plane:2")).toEqual({ plane: "2", sc: undefined });
+    expect(scopeQuery("fleet")).toEqual({ sc: undefined, plane: undefined });
   });
 });

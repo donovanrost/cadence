@@ -208,16 +208,22 @@ export function densityBars(density: Density): { bars: Bar[]; max: number } {
 }
 
 /**
- * Timeline scope from the URL (backlog §2): `?sc=<scid>` one spacecraft, else the whole fleet.
- * The scid resolves through the fleet read to the id the events read filters on; an unknown scid
- * falls back to the fleet so nothing is silently hidden. The events read has no plane filter
- * (ops.md §events), so planes aren't offered.
+ * Timeline scope from the URL (backlog §2): `?sc=<scid>` one spacecraft, `?plane=<n>` one orbital
+ * plane (api: events and density take plane), else the whole fleet. The scid resolves through the
+ * fleet read to the id the events read filters on; an unknown scid falls back to the fleet so
+ * nothing is silently hidden.
  */
 export type TimelineScope =
   | Readonly<{ kind: "fleet" }>
-  | Readonly<{ kind: "spacecraft"; id: string; scid: number; name: string }>;
+  | Readonly<{ kind: "spacecraft"; id: string; scid: number; name: string }>
+  | Readonly<{ kind: "plane"; plane: number }>;
 
-type ScopeFleet = readonly Readonly<{ id: string; scid: number; name: string }>[];
+type ScopeFleet = readonly Readonly<{
+  id: string;
+  scid: number;
+  name: string;
+  plane: number | null;
+}>[];
 
 export function timelineScope(
   query: Readonly<Record<string, unknown>>,
@@ -225,21 +231,30 @@ export function timelineScope(
 ): TimelineScope {
   const scid = typeof query.sc === "string" ? Number(query.sc) : NaN;
   const sc = Number.isInteger(scid) ? fleet.find((s) => s.scid === scid) : undefined;
-  return sc ? { kind: "spacecraft", id: sc.id, scid: sc.scid, name: sc.name } : { kind: "fleet" };
+  if (sc) return { kind: "spacecraft", id: sc.id, scid: sc.scid, name: sc.name };
+  const plane = typeof query.plane === "string" && query.plane !== "" ? Number(query.plane) : NaN;
+  return Number.isInteger(plane) ? { kind: "plane", plane } : { kind: "fleet" };
 }
 
-/** ApSelect value for a scope: "fleet" or "sc:4". */
-export const scopeValue = (s: TimelineScope) => (s.kind === "fleet" ? "fleet" : `sc:${s.scid}`);
+/** ApSelect value for a scope: "fleet", "plane:3", "sc:4". */
+export const scopeValue = (s: TimelineScope) =>
+  s.kind === "fleet" ? "fleet" : s.kind === "plane" ? `plane:${s.plane}` : `sc:${s.scid}`;
 
-/** Options: the fleet, and the current spacecraft when one is chosen (so it can be cleared). */
-export function scopeOptions(current: TimelineScope) {
+/** Options: the fleet, the current spacecraft when one is chosen, and each plane in the fleet. */
+export function scopeOptions(fleet: ScopeFleet, current: TimelineScope) {
+  const planes = [
+    ...new Set(fleet.map((s) => s.plane).filter((p): p is number => p !== null)),
+  ].sort((a, b) => a - b);
   return [
     { value: "fleet", label: "Whole fleet" },
     ...(current.kind === "spacecraft" ? [{ value: scopeValue(current), label: current.name }] : []),
+    ...planes.map((p) => ({ value: `plane:${p}`, label: `Plane ${p}` })),
   ];
 }
 
 /** URL query for a chosen scope value. */
-export const scopeQuery = (value: string): Record<string, string | undefined> => ({
-  sc: value.startsWith("sc:") ? value.slice(3) : undefined,
-});
+export function scopeQuery(value: string): Record<string, string | undefined> {
+  if (value.startsWith("sc:")) return { sc: value.slice(3), plane: undefined };
+  if (value.startsWith("plane:")) return { plane: value.slice(6), sc: undefined };
+  return { sc: undefined, plane: undefined };
+}

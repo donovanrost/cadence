@@ -32,7 +32,7 @@ const fleet = useFleet(missionId);
 const fleetRows = computed(() =>
   fleet.state.value.status === "ready" ? fleet.state.value.value.spacecraft : [],
 );
-/** ?sc= (backlog §2); Investigate's History tab and B2 link pass it. */
+/** ?sc= / ?plane= (backlog §2); Investigate's History tab and B2 link pass ?sc=. */
 const scope = computed(() => timelineScope(route.query, fleetRows.value));
 const scopeModel = computed<string>({
   get: () => scopeValue(scope.value),
@@ -42,9 +42,13 @@ const scopeModel = computed<string>({
       .catch((e: unknown) => console.error("Navigation failed", e));
   },
 });
-const scopeChoices = computed(() => scopeOptions(scope.value));
+const scopeChoices = computed(() => scopeOptions(fleetRows.value, scope.value));
 const scopeWords = computed(() =>
-  scope.value.kind === "spacecraft" ? ` · ${scope.value.name}` : "",
+  scope.value.kind === "spacecraft"
+    ? ` · ${scope.value.name}`
+    : scope.value.kind === "plane"
+      ? ` · plane ${scope.value.plane}`
+      : "",
 );
 const title = computed(
   () =>
@@ -72,12 +76,14 @@ const key = computed(() =>
         r: range.value,
         k: kinds.value,
         sc: scope.value.kind === "spacecraft" ? scope.value.id : null,
+        p: scope.value.kind === "plane" ? scope.value.plane : null,
       }),
 );
-type Key = { m: string; r: RangeKey; k: EventKind[]; sc: string | null };
+type Key = { m: string; r: RangeKey; k: EventKind[]; sc: string | null; p: number | null };
 const filters = (k: Key) => ({
   kinds: k.k,
   ...(k.sc ? { spacecraftId: k.sc } : {}),
+  ...(k.p !== null ? { plane: k.p } : {}),
 });
 const windowOf = (r: RangeKey) => {
   const w = rangeWindow(r, new Date());
