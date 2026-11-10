@@ -531,6 +531,7 @@ describe("A1 value changes (brief)", () => {
             state: "verified",
             requested_at: "2026-09-14T10:02:00Z",
             requested_by: { kind: "user", id: "u", name: "Mira K." },
+            reached_target: sc !== "sc-elsewhere",
           },
         ]
       : [],
@@ -560,5 +561,13 @@ describe("A1 value changes (brief)", () => {
         (id) => id.toUpperCase(),
       ),
     ).toEqual(['SC-117 was set to {"mode":1} on 09-14 10:02:00Z by Mira K. This overwrites that.']);
+    // A release that went over another spacecraft's contact (#38) never set this target.
+    expect(
+      overwriteCallouts(
+        [brief("sc-elsewhere", "1", "state_effect", '{"mode":1}')],
+        '{"mode":3}',
+        (id) => id,
+      ),
+    ).toEqual([]);
   });
 });

@@ -36,6 +36,8 @@ const briefReader = d.object({
       requested_by: d.nullable(
         d.object({ kind: d.token, id: d.nullable(d.token), name: d.nullable(d.string) }),
       ),
+      /** 488f867e: true = its latest release went over a contact serving only this target. */
+      reached_target: d.optional(d.nullable(d.boolean)),
     }),
     5,
   ),
@@ -93,18 +95,9 @@ export function argChanges(briefs: readonly Brief[]): ArgChange[] {
   });
 }
 
-const SET_STATES = new Set([
-  "verified",
-  "executed",
-  "no_verifier",
-  "released",
-  "queued",
-  "approval_pending",
-]);
-
 /**
  * "EARENDIL-117 was set to {"mode":1} on 14 Sep 10:02Z by Mira K. This overwrites that." for
- * targets whose newest prior request (sent or still pending) had different values.
+ * targets whose newest prior request that reached them (reached_target true) set other values.
  */
 export function overwriteCallouts(
   briefs: readonly Brief[],
@@ -114,7 +107,8 @@ export function overwriteCallouts(
 ): string[] {
   const norm = (j: string) => j.replace(/\s+/g, "");
   const hits = briefs.flatMap((b) => {
-    const prior = b.prior_requests.find((p) => SET_STATES.has(p.state));
+    // Only a release that reached this target set it (#38: one that went elsewhere never did).
+    const prior = b.prior_requests.find((p) => p.reached_target === true);
     return prior && norm(prior.arguments_json) !== norm(argsJson) ? [{ b, prior }] : [];
   });
   const lines = hits
