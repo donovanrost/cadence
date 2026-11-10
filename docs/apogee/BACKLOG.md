@@ -115,7 +115,7 @@ missing endpoint or decision; an item with no blocker can start now.
 ### K3 · Close the books (`contacts/review`): built (fe-setup); gaps
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| `Export CSV` of what's on screen (R1 by station, R4 missed/partial, walking R4's pages), built client-side; `Monthly close` treated as out under #63 (billing close), ux to confirm | fe-setup | ux confirm |
+| `Export CSV` of what's on screen (R1 by station, R4 missed/partial, walking R4's pages), client-side, time facts only, file named `pass-review-<mission>-<day>.csv`; `Monthly close` dropped (#63, ux af1c78d1) | fe-setup | — |
 | ~~Hide money (#63)~~ done: R4 Disputable tag/count removed (d50ca428) | fe-setup | — |
 
 ## 4. Setup
@@ -212,7 +212,7 @@ missing endpoint or decision; an item with no blocker can start now.
 5. ~~Readiness `recent_changes`~~ done (api).
 5b. Events read: a `plane` filter (Timeline), low priority.
 6. ~~Billing terms + budgets~~ out of scope (#63).
-7. ~~K3 Export CSV / Monthly close~~ not needed: CSV is client-side from existing reads; Monthly close out under #63 (ux to confirm).
+7. ~~K3 Export CSV / Monthly close~~ not needed: CSV is client-side; Monthly close dropped (#63, ux af1c78d1).
 8. qa #19: map domain's `:apply_interrupted` (33529f29), in progress (api).
 
 **api-ops**
