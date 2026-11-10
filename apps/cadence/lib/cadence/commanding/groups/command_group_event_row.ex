@@ -46,10 +46,16 @@ defmodule Cadence.Commanding.Groups.CommandGroupEventRow do
   def to_domain(%__MODULE__{} = row) do
     %{
       id: row.event_id,
-      kind: String.to_existing_atom(row.kind),
+      kind: kind(row.kind),
       actor: row.actor_document && JsonDocument.unwrap_value(row.actor_document),
       at: row.at,
       payload: JsonDocument.unwrap_value(row.payload_document)
     }
   end
+
+  # qa #39: never String.to_existing_atom on stored values. The atoms are made here at compile
+  # time from the known kinds, so they exist after a restart; an unknown kind stays a string.
+  @kind_atoms Map.new(@kinds, &{&1, String.to_atom(&1)})
+
+  defp kind(kind), do: Map.get(@kind_atoms, kind, kind)
 end
