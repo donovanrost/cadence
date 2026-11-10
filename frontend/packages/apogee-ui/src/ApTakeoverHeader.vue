@@ -23,12 +23,14 @@ const now = useNow();
 
 <template>
   <header
-    class="flex min-h-[52px] flex-none flex-wrap items-stretch border-b border-hairline bg-chrome"
+    class="flex min-h-[52px] flex-none flex-wrap items-stretch border-b border-hairline bg-chrome md:flex-nowrap"
   >
+    <!-- From 768 the row never wraps: the title block gives way (context truncates, then the
+         title), so steps and clocks keep their place (ux Compose ruling 198d12ca #5). -->
     <RouterLink
       :to="close"
       :aria-label="closeLabel"
-      class="flex w-[52px] items-center justify-center border-r border-hairline text-readout hover:bg-raised"
+      class="flex w-[52px] flex-none items-center justify-center border-r border-hairline text-readout hover:bg-raised"
     >
       <svg
         aria-hidden="true"
@@ -53,25 +55,28 @@ const now = useNow();
       >
       <component
         :is="titleAs"
-        class="m-0 font-display text-[19px] leading-tight font-bold tracking-[.14em] uppercase"
+        class="m-0 truncate font-display text-[19px] leading-tight font-bold tracking-[.14em] uppercase"
       >
         <slot name="title">{{ title }}</slot>
       </component>
     </div>
     <!-- Under 768: one 56px row; the station bar scrolls on its own row below (U19). -->
     <div
-      class="flex max-md:order-last max-md:w-full max-md:overflow-x-auto max-md:border-t max-md:border-hairline"
+      class="flex md:flex-none max-md:order-last max-md:w-full max-md:overflow-x-auto max-md:border-t max-md:border-hairline"
     >
       <slot name="steps" />
     </div>
-    <div class="ml-auto flex items-center gap-5 px-[18px] font-mono text-md">
+    <div class="ml-auto flex flex-none items-center gap-5 px-[18px] font-mono text-md">
       <span class="flex gap-[0.6em]"
         ><span class="text-text-4">UTC</span
         ><time :datetime="now.toISOString()" class="tabular">{{ formatClock(now) }}</time></span
       >
       <slot name="clocks" />
     </div>
-    <div v-if="$slots.actions" class="flex items-center gap-2 border-l border-hairline px-4">
+    <div
+      v-if="$slots.actions"
+      class="flex flex-none items-center gap-2 border-l border-hairline px-4"
+    >
       <slot name="actions" />
     </div>
   </header>
