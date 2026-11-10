@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onScopeDispose, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
@@ -18,7 +18,7 @@ import ApplyAside from "./ApplyAside.vue";
 import ChangeList from "./ChangeList.vue";
 import ChecksPanel from "./ChecksPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";
-import { previewChangeSet, type SubmitResult } from "./actions.ts";
+import { blockingReason, previewChangeSet, type SubmitResult } from "./actions.ts";
 import { refreshConfigState } from "./useConfigState.ts";
 import { fetchConfigState } from "./api.ts";
 import type { ConfigState } from "./shapes.ts";
@@ -44,6 +44,27 @@ const previewKey = computed(() => {
     : null;
 });
 const preview = useRemoteQuery(previewKey, previewChangeSet);
+
+/**
+ * #65 (ux): a blocking hold clears without the set changing (commands finish, a configuration is
+ * activated), so while one blocks, re-run the checks on those updates and every 15 s as a backstop.
+ */
+const blockingNow = computed(
+  () =>
+    preview.state.value.status === "ready" && blockingReason(preview.state.value.value) !== null,
+);
+useMissionInvalidation(
+  missionId,
+  ["commanding", "spacecraft", "configuration"],
+  () => {
+    if (blockingNow.value) preview.refetch();
+  },
+  { throttleMs: 2_000 },
+);
+const blockingPoll = setInterval(() => {
+  if (blockingNow.value) preview.refetch();
+}, 15_000);
+onScopeDispose(() => clearInterval(blockingPoll));
 
 function reloadAll() {
   refetch();
