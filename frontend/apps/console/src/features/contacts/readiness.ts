@@ -15,7 +15,8 @@ export const passReadinessReader = d.object({
   state: d.token,
   reason: d.nullable(d.token),
   since: d.nullable(d.timestamp),
-  command_groups_queued: d.integer,
+  /** A number only when blocked (>0 crit, 0 caution); null otherwise (22300c64). */
+  command_groups_queued: d.optional(d.nullable(d.integer)),
 });
 export type PassReadiness = Decoded<typeof passReadinessReader>;
 
@@ -36,11 +37,14 @@ export const groupUplinkReader = d.object({
   pass: passRef,
   /** 12792cb2: the next ready pass it would go on; named only when present. */
   next_pass: d.optional(d.nullable(passRef)),
-  readiness: d.object({
-    state: d.token,
-    reason: d.nullable(d.token),
-    since: d.nullable(d.timestamp),
-  }),
+  /** null when the spacecraft has no live pass: `pass` is then its next commandable pass. */
+  readiness: d.nullable(
+    d.object({
+      state: d.token,
+      reason: d.nullable(d.token),
+      since: d.nullable(d.timestamp),
+    }),
+  ),
 });
 export type GroupUplink = Decoded<typeof groupUplinkReader>;
 
@@ -138,7 +142,7 @@ export type ReadinessTag = Readonly<{ state: OpState; label: string; sentence: s
  */
 export function readinessTag(
   r: Readonly<{ state: string; reason: string | null; since: string | null }> & {
-    command_groups_queued?: number;
+    command_groups_queued?: number | null | undefined;
   },
   where: "drawer" | "row",
   c: ReasonContext = {},
@@ -178,12 +182,13 @@ export function groupBlockedLine(
   expiresAt: string | null,
   stations: StationLookup = NO_STATIONS,
 ): string | null {
-  if (!uplink || uplink.readiness.state !== "blocked") return null;
+  const readiness = uplink?.readiness ?? null;
+  if (!uplink || readiness?.state !== "blocked") return null;
   const station = codeFor(uplink.pass.station, stations) ?? uplink.pass.station.name ?? "its";
   const provider = providerFor(uplink.pass.station, stations);
   const next = uplink.next_pass ?? null;
-  const fixable = recoverable(uplink.readiness.reason);
-  const head = `Can't command on the ${station} pass (AOS ${hhmm(uplink.pass.starts_at)}): ${reasonClause(uplink.readiness.reason, { provider })}.`;
+  const fixable = recoverable(readiness.reason);
+  const head = `Can't command on the ${station} pass (AOS ${hhmm(uplink.pass.starts_at)}): ${reasonClause(readiness.reason, { provider })}.`;
   const stop = fixable
     ? "Nothing will be sent on this pass until the uplink recovers."
     : "Nothing will be sent on this pass.";
