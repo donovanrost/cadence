@@ -206,3 +206,40 @@ export function densityBars(density: Density): { bars: Bar[]; max: number } {
   });
   return { bars, max };
 }
+
+/**
+ * Timeline scope from the URL (backlog §2): `?sc=<scid>` one spacecraft, else the whole fleet.
+ * The scid resolves through the fleet read to the id the events read filters on; an unknown scid
+ * falls back to the fleet so nothing is silently hidden. The events read has no plane filter
+ * (ops.md §events), so planes aren't offered.
+ */
+export type TimelineScope =
+  | Readonly<{ kind: "fleet" }>
+  | Readonly<{ kind: "spacecraft"; id: string; scid: number; name: string }>;
+
+type ScopeFleet = readonly Readonly<{ id: string; scid: number; name: string }>[];
+
+export function timelineScope(
+  query: Readonly<Record<string, unknown>>,
+  fleet: ScopeFleet,
+): TimelineScope {
+  const scid = typeof query.sc === "string" ? Number(query.sc) : NaN;
+  const sc = Number.isInteger(scid) ? fleet.find((s) => s.scid === scid) : undefined;
+  return sc ? { kind: "spacecraft", id: sc.id, scid: sc.scid, name: sc.name } : { kind: "fleet" };
+}
+
+/** ApSelect value for a scope: "fleet" or "sc:4". */
+export const scopeValue = (s: TimelineScope) => (s.kind === "fleet" ? "fleet" : `sc:${s.scid}`);
+
+/** Options: the fleet, and the current spacecraft when one is chosen (so it can be cleared). */
+export function scopeOptions(current: TimelineScope) {
+  return [
+    { value: "fleet", label: "Whole fleet" },
+    ...(current.kind === "spacecraft" ? [{ value: scopeValue(current), label: current.name }] : []),
+  ];
+}
+
+/** URL query for a chosen scope value. */
+export const scopeQuery = (value: string): Record<string, string | undefined> => ({
+  sc: value.startsWith("sc:") ? value.slice(3) : undefined,
+});

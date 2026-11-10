@@ -103,6 +103,7 @@ const details = computed(() => [
         class="min-h-[120px] flex-1"
         :state="events.state.value"
         :lines="lines"
+        :scid="sc.scid"
         @retry="events.refetch"
       />
     </div>

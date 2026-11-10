@@ -4,20 +4,21 @@ import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
-import { useNow, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented } from "@/ui";
+import { useNow, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented, ApSelect } from "@/ui";
+import { useFleet } from "@/features/fleet/index.ts";
 import { RANGES, rangeWindow, type RangeKey } from "@/features/investigate/index.ts";
 import { DEFAULT_KINDS, eventKinds, fetchDensity, fetchEvents, type EventKind } from "./api.ts";
 import KindToggles from "./KindToggles.vue";
 import DensityStrip from "./DensityStrip.vue";
 import EventLog from "./EventLog.vue";
-import { densityBucketS } from "./model.ts";
+import { densityBucketS, scopeOptions, scopeQuery, scopeValue, timelineScope } from "./model.ts";
 
 /** Timeline (OpsLists §Timeline): fleet-wide events, newest first, with a density strip. */
-const scope = useMissionScope();
+const mission = useMissionScope();
 const route = useRoute();
 const router = useRouter();
 const now = useNow();
-const missionId = computed(() => scope.value.mission.id);
+const missionId = computed(() => mission.value.mission.id);
 
 const range = computed<RangeKey>({
   get: () => (route.query.range === "1h" || route.query.range === "6h" ? route.query.range : "24h"),
@@ -27,8 +28,27 @@ const range = computed<RangeKey>({
       .catch((e: unknown) => console.error("Navigation failed", e));
   },
 });
+const fleet = useFleet(missionId);
+const fleetRows = computed(() =>
+  fleet.state.value.status === "ready" ? fleet.state.value.value.spacecraft : [],
+);
+/** ?sc= (backlog §2); Investigate's History tab and B2 link pass it. */
+const scope = computed(() => timelineScope(route.query, fleetRows.value));
+const scopeModel = computed<string>({
+  get: () => scopeValue(scope.value),
+  set: (v) => {
+    router
+      .replace({ query: { ...route.query, ...scopeQuery(v) } })
+      .catch((e: unknown) => console.error("Navigation failed", e));
+  },
+});
+const scopeChoices = computed(() => scopeOptions(scope.value));
+const scopeWords = computed(() =>
+  scope.value.kind === "spacecraft" ? ` · ${scope.value.name}` : "",
+);
 const title = computed(
-  () => `Last ${RANGES.find((r) => r.value === range.value)?.label ?? range.value}`,
+  () =>
+    `Last ${RANGES.find((r) => r.value === range.value)?.label ?? range.value}${scopeWords.value}`,
 );
 /** Selected kinds from ?kind=limit,command; absent = every kind but `data` (opt-in housekeeping). */
 const kinds = computed<EventKind[]>(() => {
@@ -43,23 +63,37 @@ function setKinds(next: EventKind[]) {
     .replace({ query: { ...route.query, kind: isDefault ? undefined : next.join(",") } })
     .catch((e: unknown) => console.error("Navigation failed", e));
 }
-const key = computed(() => JSON.stringify({ m: missionId.value, r: range.value, k: kinds.value }));
-type Key = { m: string; r: RangeKey; k: EventKind[] };
+// While ?sc= waits on the fleet read to resolve, don't fetch fleet-wide events by mistake.
+const key = computed(() =>
+  typeof route.query.sc === "string" && fleet.state.value.status !== "ready"
+    ? null
+    : JSON.stringify({
+        m: missionId.value,
+        r: range.value,
+        k: kinds.value,
+        sc: scope.value.kind === "spacecraft" ? scope.value.id : null,
+      }),
+);
+type Key = { m: string; r: RangeKey; k: EventKind[]; sc: string | null };
+const filters = (k: Key) => ({
+  kinds: k.k,
+  ...(k.sc ? { spacecraftId: k.sc } : {}),
+});
 const windowOf = (r: RangeKey) => {
   const w = rangeWindow(r, new Date());
   return { from: new Date(w.from), to: new Date(w.to) };
 };
 // Sound: keys are produced by JSON.stringify(Key) above.
 const events = useRemoteQuery(key, (k, signal) => {
-  const { m, r, k: only } = JSON.parse(k) as Key;
-  return fetchEvents(m, { ...windowOf(r), kinds: only }, signal);
+  const parsed = JSON.parse(k) as Key;
+  return fetchEvents(parsed.m, { ...windowOf(parsed.r), ...filters(parsed) }, signal);
 });
 const density = useRemoteQuery(key, (k, signal) => {
-  const { m, r, k: only } = JSON.parse(k) as Key;
-  const w = windowOf(r);
+  const parsed = JSON.parse(k) as Key;
+  const w = windowOf(parsed.r);
   return fetchDensity(
-    m,
-    { ...w, kinds: only },
+    parsed.m,
+    { ...w, ...filters(parsed) },
     densityBucketS(w.to.getTime() - w.from.getTime()),
     signal,
   );
@@ -77,8 +111,11 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col gap-3 max-console:overflow-auto">
-    <ApPageHeader :label="`${scope.mission.name} · timeline`" :title="title">
-      <ApSegmented v-model="range" :options="ranges" label="Window" variant="micro" />
+    <ApPageHeader :label="`${mission.mission.name} · timeline`" :title="title">
+      <div class="flex flex-wrap items-end gap-3">
+        <ApSelect v-model="scopeModel" :options="scopeChoices" label="Scope" />
+        <ApSegmented v-model="range" :options="ranges" label="Window" variant="micro" />
+      </div>
     </ApPageHeader>
     <KindToggles class="flex-none" :selected="kinds" @change="setKinds" />
     <ApPanel v-if="missing" index="E2" title="Event log" flush>

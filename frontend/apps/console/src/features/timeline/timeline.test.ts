@@ -9,6 +9,10 @@ import {
   needsSpacecraftPrefix,
   severityState,
   subjectLink,
+  scopeOptions,
+  scopeQuery,
+  scopeValue,
+  timelineScope,
 } from "./model.ts";
 
 const ev = (id: string, at: string, severity: MissionEvent["severity"] = "info"): MissionEvent => ({
@@ -156,5 +160,28 @@ describe("fan-out on kind + minute (ux timeline 7/8)", () => {
     expect(kindLabel({ ...canceled(1, "info"), raw_kind: "station_went_dark" })).toBe(
       "Station went dark",
     );
+  });
+});
+
+describe("timeline scope (backlog §2)", () => {
+  const fleet = [
+    { id: "sc-4", scid: 4, name: "EARENDIL-004" },
+    { id: "sc-21", scid: 21, name: "EARENDIL-021" },
+  ];
+  it("reads ?sc= through the fleet, else the whole fleet", () => {
+    expect(timelineScope({ sc: "4" }, fleet)).toEqual({
+      kind: "spacecraft",
+      id: "sc-4",
+      scid: 4,
+      name: "EARENDIL-004",
+    });
+    expect(timelineScope({ sc: "999" }, fleet)).toEqual({ kind: "fleet" });
+    expect(timelineScope({}, fleet)).toEqual({ kind: "fleet" });
+  });
+  it("offers the fleet and the chosen spacecraft; maps choices to the URL", () => {
+    const s = timelineScope({ sc: "4" }, fleet);
+    expect(scopeOptions(s).map((o) => o.label)).toEqual(["Whole fleet", "EARENDIL-004"]);
+    expect(scopeValue(s)).toBe("sc:4");
+    expect(scopeQuery("fleet")).toEqual({ sc: undefined });
   });
 });

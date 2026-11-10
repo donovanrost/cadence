@@ -4,7 +4,7 @@ import { formatClock, ApEmptyState, ApEventLine, ApPanel, ApRemote } from "@/ui"
 import type { LogLine } from "./eventLog.ts";
 
 /** B2 · Event log: the spacecraft's last 24 h (mission events + this alarm's lifecycle actions). */
-defineProps<{ state: RemoteState<unknown>; lines: readonly LogLine[] }>();
+defineProps<{ state: RemoteState<unknown>; lines: readonly LogLine[]; scid: number }>();
 defineEmits<{ retry: [] }>();
 </script>
 
@@ -12,7 +12,7 @@ defineEmits<{ retry: [] }>();
   <ApPanel index="B2" title="Event log" pane flush>
     <template #meta>
       <RouterLink
-        :to="{ name: 'ops.timeline' }"
+        :to="{ name: 'ops.timeline', query: { sc: String(scid) } }"
         class="max-md:hit-44 text-text-3 no-underline hover:text-readout"
         >Full timeline →</RouterLink
       >
