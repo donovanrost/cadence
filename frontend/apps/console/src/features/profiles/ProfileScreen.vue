@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import { useMissionScope } from "@/shell";
+import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
 import { ApBreadcrumb, ApPageHeader, ApRemote, ApTabLinks } from "@/ui";
 import ProfileHistoryPanel from "./ProfileHistoryPanel.vue";
 import ProfileRoutingPanel from "./ProfileRoutingPanel.vue";
 import SchemaSectionPanel from "./SchemaSectionPanel.vue";
+import SectionEditor from "./SectionEditor.vue";
+import { editableSection } from "./sectionEdit.ts";
 import { fetchProfileDetail, type ProfileDetail } from "./detail.ts";
 import { profileSubline } from "./present.ts";
 
@@ -27,6 +29,10 @@ useMissionInvalidation(
   refetch,
 );
 
+const session = useSession();
+/** Profile.md: read-only without config.stage; same gate as the routing editor. */
+const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
+const editing = ref<string | null>(null);
 const sectionParam = computed(() =>
   typeof route.params.section === "string" ? route.params.section : null,
 );
@@ -71,12 +77,25 @@ const crumbs = computed(() => [
           :part="active(value) === 'routing' ? 'routing' : 'overrides'"
         />
         <template v-else>
-          <SchemaSectionPanel
+          <template
             v-for="section in value.sections.filter((s) => s.key === active(value))"
             :key="section.key"
-            :section="section"
-            :inherit-count="value.inherit_count"
-          />
+          >
+            <SectionEditor
+              v-if="editing === section.key"
+              :mission-id="scope.mission.id"
+              :profile="value.profile"
+              :section="section"
+              @cancel="editing = null"
+            />
+            <SchemaSectionPanel
+              v-else
+              :section="section"
+              :inherit-count="value.inherit_count"
+              :can-edit="canStage && editableSection(section.key)"
+              @edit="editing = section.key"
+            />
+          </template>
         </template>
       </template>
     </ApRemote>

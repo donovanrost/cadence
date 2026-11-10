@@ -8,15 +8,14 @@ import {
   previewOps,
   refreshConfigState,
   stageChange,
-  type Preview,
   type StageOp,
-  itemLine,
 } from "@/features/changes/index.ts";
 import { fetchStations } from "@/features/stations/index.ts";
 import { ApButton, ApCallout, ApPanel, ApRemote, ApSegmented, plural } from "@/ui";
 import RuleForm from "./RuleForm.vue";
 import type { ProfileDetail } from "./detail.ts";
 import { draftProblems, newRule, toDocument, toDrafts, type RuleDraft } from "./rulesDraft.ts";
+import { describePreview } from "./sectionEdit.ts";
 
 /** P2 edit: the whole rule list as one staged change at `routing_rules` (domain P2). */
 const props = defineProps<{ missionId: string; detail: ProfileDetail }>();
@@ -45,23 +44,6 @@ const op = (): StageOp => ({
   changes: [{ path: "routing_rules", value: toDocument(drafts.value) }],
   options: { rollout: rollout.value },
 });
-function describe(p: Preview): { tone: "nominal" | "caution" | "crit"; text: string } {
-  const issues = p.checks.flatMap((c) => c.items.flatMap((i) => [itemLine(i)]));
-  const changes = p.effects.reduce((n, e) => n + e.changes, 0);
-  const keeps = p.effects.flatMap((e) => e.keeps);
-  // Effect counts come from the server (Changes.md §1): say how many keep their setup, and why.
-  const reasons = [...new Set(keeps.map((k) => k.reason))].slice(0, 2).join("; ");
-  const keptText =
-    keeps.length > 0
-      ? ` · keeps ${plural(keeps.length, "spacecraft", "spacecraft")} (${reasons})`
-      : "";
-  if (p.verdict === "no_go")
-    return { tone: "crit", text: `NO-GO: ${issues.slice(0, 3).join(" · ")}` };
-  return {
-    tone: p.verdict === "hold" || (changes === 0 && keeps.length > 0) ? "caution" : "nominal",
-    text: `Checks pass · changes ${plural(changes, "spacecraft", "spacecraft")}${keptText}${issues.length ? ` · ${issues.join(" · ")}` : ""}`,
-  };
-}
 
 async function check() {
   if (problems.value.length > 0 || busy.value) return;
@@ -72,7 +54,7 @@ async function check() {
       new AbortController().signal,
     );
     outcome.value = result.ok
-      ? describe(result.value)
+      ? describePreview(result.value)
       : { tone: "crit", text: rejected(result.error, "changed") };
   } finally {
     busy.value = false;

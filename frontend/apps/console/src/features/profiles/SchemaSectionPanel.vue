@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ApCallout, ApChip, ApPanel, formatCount } from "@/ui";
+import { ApButton, ApCallout, ApChip, ApPanel, formatCount } from "@/ui";
 import { fieldText, type ProfileSection } from "./detail.ts";
 
 /** P1: one schema section as a read-only key/value grid (DECISIONS #19: framing read-only). */
-defineProps<{ section: ProfileSection; inheritCount: number }>();
+defineProps<{ section: ProfileSection; inheritCount: number; canEdit: boolean }>();
+defineEmits<{ edit: [] }>();
 </script>
 
 <template>
@@ -13,9 +14,12 @@ defineProps<{ section: ProfileSection; inheritCount: number }>();
     :meta="`Inherited by ${formatCount(inheritCount)}`"
     flush
   >
+    <template v-if="canEdit" #header>
+      <ApButton size="compact" variant="primary" @click="$emit('edit')">Edit</ApButton>
+    </template>
     <ApCallout v-if="section.key === 'catalog'" tone="info">
-      Catalog revisions can't change through change sets yet (DECISIONS #36): a change set that
-      would move a spacecraft to another catalog revision is refused with the supported route.
+      A catalog change goes through a change set: when it's applied, spacecraft on this profile move
+      to the new revision. Spacecraft still running another catalog show in Readiness.
     </ApCallout>
     <ApCallout v-else-if="section.key === 'framing'" tone="info">
       Decode uses each transport's frame settings today. Profile framing takes effect when the
@@ -26,6 +30,11 @@ defineProps<{ section: ProfileSection; inheritCount: number }>();
         <dt class="ap-label flex items-center gap-2">
           {{ f.label }}
           <ApChip v-if="f.overridden_by > 0">{{ f.overridden_by }} override</ApChip>
+          <ApChip
+            v-if="f.runtime_impact === 'generation'"
+            :title="'Changing it starts a runtime generation on apply'"
+            >Runtime</ApChip
+          >
         </dt>
         <dd
           class="m-0 font-mono text-md"
