@@ -86,11 +86,7 @@ const notProvided = computed(
         </section>
         <div class="flex flex-wrap items-start gap-4">
           <FindingsPanel :readiness="value" class="min-w-0 flex-[999_1_560px]" />
-          <RecentChangesPanel
-            v-if="value.recentChanges !== null"
-            :changes="value.recentChanges"
-            class="min-w-0 flex-[1_1_340px]"
-          />
+          <RecentChangesPanel :changes="value.recentChanges" class="min-w-0 flex-[1_1_340px]" />
         </div>
       </template>
     </ApRemote>

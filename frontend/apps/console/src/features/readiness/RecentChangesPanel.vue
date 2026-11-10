@@ -2,23 +2,32 @@
 import { formatShort, ApEmptyState, ApPanel } from "@/ui";
 import type { RecentChange } from "./api.ts";
 
-/** R2 (ux U2): replaces the canvas's mission revisions until change sets exist. */
-defineProps<{ changes: readonly RecentChange[] }>();
+/** R2 (ux U2, api): the last 5 applied config revisions; null means revisions couldn't be read. */
+defineProps<{ changes: readonly RecentChange[] | null }>();
+/** "r3" → 3, for the revision page; anything else stays plain text. */
+const revisionOf = (label: string | null) =>
+  label && /^r\d+$/.test(label) ? label.slice(1) : null;
 </script>
 
 <template>
   <ApPanel index="R2" title="Recent changes" flush>
     <template #meta>
       <RouterLink
-        :to="{ name: 'org.audit' }"
+        :to="{ name: 'setup.revisions' }"
         class="text-text-3 no-underline hover:text-readout max-md:hit-44"
-        >Audit log →</RouterLink
+        >All revisions →</RouterLink
       >
     </template>
     <ApEmptyState
-      v-if="changes.length === 0"
-      headline="No changes recorded yet"
-      sentence="Spacecraft, profile, catalog and app changes appear here as they're made."
+      v-if="changes === null"
+      state="off"
+      headline="Recent changes couldn't be read"
+      sentence="The revisions list is still on the Revisions page."
+    />
+    <ApEmptyState
+      v-else-if="changes.length === 0"
+      headline="Nothing applied yet"
+      sentence="Applied change sets and rollbacks appear here."
     />
     <ol v-else class="m-0 list-none p-0">
       <li
@@ -26,11 +35,15 @@ defineProps<{ changes: readonly RecentChange[] }>();
         :key="`${change.at}-${change.kind}-${change.summary}`"
         class="grid grid-cols-[56px_96px_minmax(0,1fr)] items-baseline gap-2 border-t border-hairline px-4 py-2.5 first:border-t-0"
       >
-        <span
-          class="truncate font-mono text-[12px] text-text-2"
-          :title="change.versionLabel ?? change.kind"
-          >{{ change.versionLabel ?? change.kind }}</span
+        <RouterLink
+          v-if="revisionOf(change.versionLabel)"
+          :to="{ name: 'setup.revision', params: { revision: revisionOf(change.versionLabel) } }"
+          class="truncate font-mono text-[12px] text-readout hover:underline"
+          >{{ change.versionLabel }}</RouterLink
         >
+        <span v-else class="truncate font-mono text-[12px] text-text-2" :title="change.kind">{{
+          change.versionLabel ?? change.kind
+        }}</span>
         <time :datetime="change.at" class="font-mono text-xs text-text-4">{{
           formatShort(new Date(change.at))
         }}</time>
