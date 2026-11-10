@@ -1,12 +1,23 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useSession } from "@/shell";
-import { ApButton, ApCallout, ApPanel, formatShort, plural } from "@/ui";
+import { ApButton, ApCallout, ApPanel, plural } from "@/ui";
 import { discardChangeSet, failureOutcome, withdrawChange } from "./actions.ts";
+import ChangeConflict from "./ChangeConflict.vue";
+import ChangeOps from "./ChangeOps.vue";
+import ChangeRowHead from "./ChangeRowHead.vue";
 import type { Change, ChangeSet, ConfigState } from "./shapes.ts";
 
 /** K1: one row per staged change, collapsed; expanded shows what each op touches. */
-const props = defineProps<{ missionId: string; config: ConfigState; changeSet: ChangeSet }>();
+const props = defineProps<{
+  missionId: string;
+  config: ConfigState;
+  changeSet: ChangeSet;
+  /** Op ids the Conflicts check flags (rebase.ts conflictOps). */
+  conflicts: ReadonlySet<string>;
+}>();
+const conflicting = (change: Change) =>
+  change.ops.filter((o) => props.conflicts.has(o.id)).map((o) => o.id);
 const emit = defineEmits<{ changed: [] }>();
 const session = useSession();
 const failure = ref<string | null>(null);
@@ -67,44 +78,22 @@ function toggle(id: string) {
         :key="change.id"
         class="border-t border-hairline first:border-t-0"
       >
-        <div
-          class="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 px-4 py-3 max-md:grid-cols-1 max-md:gap-1.5"
-        >
-          <span class="text-base font-semibold text-readout">{{ change.summary }}</span>
-          <span class="text-sm text-text-3"
-            >{{ change.author.name }} ·
-            <time class="font-mono text-xs" :datetime="change.staged_at">{{
-              formatShort(new Date(change.staged_at))
-            }}</time></span
-          >
-          <ApButton
-            v-if="changeSet.state === 'open' && mayRemove(change)"
-            size="compact"
-            variant="ghost"
-            :aria-label="`Withdraw ${change.summary}`"
-            :disabled="busy"
-            disabled-reason="Working…"
-            @click="withdraw(change)"
-            >Withdraw</ApButton
-          >
-          <ApButton
-            size="compact"
-            variant="ghost"
-            :aria-expanded="open.has(change.id)"
-            @click="toggle(change.id)"
-            >{{ open.has(change.id) ? "Hide" : "Details" }}</ApButton
-          >
-        </div>
-        <ul
-          v-if="open.has(change.id)"
-          class="m-0 list-none border-t border-hairline-faint bg-vacuum px-4 py-2.5 font-mono text-sm"
-        >
-          <li v-for="op in change.ops" :key="op.id" class="py-0.5 text-text-2">
-            <span class="text-text-4">{{ op.action }} {{ op.kind }}</span>
-            {{ op.entity_id ?? "new"
-            }}<template v-if="op.paths.length > 0"> · {{ op.paths.join(", ") }}</template>
-          </li>
-        </ul>
+        <ChangeRowHead
+          :change="change"
+          :can-withdraw="changeSet.state === 'open' && mayRemove(change)"
+          :open="open.has(change.id)"
+          :busy="busy"
+          @withdraw="withdraw(change)"
+          @toggle="toggle(change.id)"
+        />
+        <ChangeConflict
+          v-if="changeSet.state === 'open' && conflicting(change).length > 0"
+          :mission-id="missionId"
+          :op-ids="conflicting(change)"
+          :can-act="mayRemove(change)"
+          @done="emit('changed')"
+        />
+        <ChangeOps v-if="open.has(change.id)" :change="change" />
       </li>
     </ul>
   </ApPanel>

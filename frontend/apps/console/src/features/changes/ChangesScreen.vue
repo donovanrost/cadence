@@ -19,6 +19,7 @@ import ChangeList from "./ChangeList.vue";
 import ChecksPanel from "./ChecksPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";
 import { blockingReason, previewChangeSet, type SubmitResult } from "./actions.ts";
+import { conflictOps } from "./rebase.ts";
 import { refreshConfigState } from "./useConfigState.ts";
 import { fetchConfigState } from "./api.ts";
 import type { ConfigState } from "./shapes.ts";
@@ -49,6 +50,9 @@ const preview = useRemoteQuery(previewKey, previewChangeSet);
  * #65 (ux): a blocking hold clears without the set changing (commands finish, a configuration is
  * activated), so while one blocks, re-run the checks on those updates and every 15 s as a backstop.
  */
+const conflicts = computed(() =>
+  conflictOps(preview.state.value.status === "ready" ? preview.state.value.value : null),
+);
 const blockingNow = computed(
   () =>
     preview.state.value.status === "ready" && blockingReason(preview.state.value.value) !== null,
@@ -176,7 +180,8 @@ function meta(config: ConfigState): string | null {
               :mission-id="missionId"
               :config="value"
               :change-set="value.change_set"
-              @changed="refetch"
+              :conflicts="conflicts"
+              @changed="reloadAll"
             />
             <ChecksPanel
               :preview="preview.state.value"
