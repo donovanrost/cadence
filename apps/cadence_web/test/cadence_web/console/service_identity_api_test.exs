@@ -56,6 +56,8 @@ defmodule CadenceWeb.Console.ServiceIdentityAPITest do
     assert {:ok, _scope} = Auth.authenticate_api_token(first)
     assert id in listed(c)
     original_key = key_created_at(c, id)
+    # Timestamps are ISO strings (qa #37).
+    assert {:ok, _at, _offset} = DateTime.from_iso8601(original_key)
 
     assert %{"api_token" => second} =
              c.admin
@@ -69,6 +71,7 @@ defmodule CadenceWeb.Console.ServiceIdentityAPITest do
     assert {:ok, _scope} = Auth.authenticate_api_token(second)
     # The directory dates the key from its rotation.
     refute key_created_at(c, id) == original_key
+    assert {:ok, _at, _offset} = DateTime.from_iso8601(key_created_at(c, id))
 
     assert c.admin |> conn() |> delete(c.base <> "/#{id}") |> response(204)
     assert {:error, _} = Auth.authenticate_api_token(second)

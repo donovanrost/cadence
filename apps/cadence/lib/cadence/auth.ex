@@ -244,7 +244,7 @@ defmodule Cadence.Auth do
             r.metadata,
             r.inserted_at
           ),
-          :naive_datetime_usec
+          :utc_datetime_usec
         )
     })
     |> Repo.all()
