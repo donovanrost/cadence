@@ -39,6 +39,7 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
 | 32 | Contact workspace · reserve after cancel | Reserving an opportunity whose booking was cancelled replays the cancelled reservation (id derived from the opportunity), so a freed slot can't be rebooked | api / domain | fixed (9e836028, next-generation identity after cancel); not re-run via actions/reserve |
 | 33 | Uplink · back-to-back COP-1 releases | (domain, from code) The lane releases member k+1 while member k's COP-1 frame is in flight; the FOP refuses it (cop1_window_full / cop1_not_initialized) → release_uncertain and the lane holds, even without faults. Any multi-command group on a COP-1 uplink is affected; the 004 #44 pass was one member | domain | fixed (c9594a76 + b68d01ca); live test blocked by #34 |
 | 34 | Uplink · second contact on a route | After the first command on a route (004's 18:26Z SET_MODE left a prepared send), every later contact on route-spacecraft-earendil-004-uplink logs 'uplink session … not qualified: :protocol_state_restore_required' and nothing releases: the #44 qualification driver never runs restore + fenced recovery. Seen 11-10 00:59:41Z on 4FSOI | domain | open |
+| 35 | Compose · HOLD doesn't hold | Preflight '4 GO · 2 HOLD' (Conflicts: 3 requests already queued on 004; Contact: 'No booked contact for EARENDIL-004' although 004 KIR 11-11 01:09:34Z was booked with command_window) and 'Arm 3 uplinks' armed straight through: no acknowledgement, note or second step (#40 fail-closed). The Contact HOLD also looks wrong (horizon vs not-before 11-11 01:00Z?) | fe-ops / api-ops | open |
 
 ## Details
 
@@ -298,5 +299,18 @@ Status: `open` → `fixed` (owner says so) → `verified` (qa re-tested).
   cancelled reservation. Domain noted the same for r1 re-execute.
 - Expected: a search that offers the slot can book it, or the search doesn't offer it.
 - Workaround used: booked 004@KIR 11-10 20:18:34Z instead (provider_reservation_Jgx1bbIKOxxt4TQmWtifmiLr).
+
+### 35. A HOLD in the GO/NO-GO poll doesn't hold Arm
+
+- Repro (2026-11-10 01:10Z, orgAdmin): Compose `?targets=sc:spacecraft-earendil-004`, 3 × NOOP,
+  Release "Hold until a set time" → 2026-11-11 01:00Z. Poll: "4 GO · 2 HOLD":
+  Conflicts "3 requests already queued or awaiting GO on these targets" HOLD; Contact
+  "No booked contact for EARENDIL-004 (SCID 4): its uplink waits for one" HOLD; Delivery plan
+  "EARENDIL-004 No booked contact". "ARM 3 UPLINKS" was enabled; one click created
+  command_group_x5m5oyu33e_1XO8H (201, queued). No acknowledgement, note or confirm step.
+- Expected (director, #40 fail-closed): a HOLD blocks Arm until it clears or is explicitly
+  acknowledged; an informational conflict should say so and require the acknowledgement.
+- Also: the Contact HOLD is wrong. 004 has 11-11 01:09:34Z KIR booked (provider_reservation_siZKKEGcheAy7WsC8FArvRR4,
+  command_window) after the not-before time, and 11-10 20:18:34Z before it.
 
 <!-- One section per issue: ### N. title — repro steps, expected, actual, evidence (screenshot path / console error). -->
