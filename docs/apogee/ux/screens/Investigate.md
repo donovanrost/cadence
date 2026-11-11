@@ -40,8 +40,8 @@ spacecraft tabs; only the area below the tabs changes.
   Orbit (`P07 · slot 12 · #4,812` = plane, slot, orbit number; parts omitted if unknown) · Last LOS
   (`T+00:06:41 FBK`) · **Next AOS** (white top bar, readout: `T−00:38:10 FBK`) · Next eclipse
   (`T−00:59:30`). Unknown facts are omitted (U10); the strip reflows to the facts it has.
-- **Tabs** (ApSegmented `tabs`, `role="tablist"`, path segment per tab). Telemetry, Passes,
-  Configuration are specified separately (TBD); Uplink and History are below; until built they render an
+- **Tabs** (ApSegmented `tabs`, `role="tablist"`, path segment per tab). Telemetry and
+  Configuration are specified separately (TBD); Uplink, Passes and History are below; until built they render an
   ApEmptyState "Not built yet in the new console" + link to the existing page. **[temporary]**
 
 ## B1 · Alarm trend (panel, alert-crit variant: index colored, panel neutral)
@@ -123,6 +123,35 @@ the row's state color (`aria-hidden`).
   `No verifier`). Newest first. Empty: "Nothing was released to EARENDIL-001 in the last 24 h."
 - **Mobile:** U1 and U3, read-only. No Compose.
 - Words come from U33 (readiness), CommandFlow (delivery states) and U32 (attested). No new state words.
+
+## Tab · Passes (`M/fleet/:scId/passes`)
+**Question:** "When is this spacecraft heard, and how did its recent passes go?" Console layout, no page scroll
+at 1440×900. P3 and P4 scroll. No money (U34).
+```
+┌ P1 Coverage (strip) ────────────────────────────────────────────────────────────────────┐
+┌ P2 Passes · −24 h … +24 h (ApGantt, one lane, now-line) ────────────────────────────────┐
+┌ P3 Upcoming (scrolls) ───────────────┐ ┌ P4 Recent · 7 days (scrolls) ───────────────────┐
+```
+- **P1 Coverage:**
+  - Last contact (`LOS T+00:06:41 FBK`) and next contact (`AOS T−00:38:10 KIR`).
+  - Passes in the next 24 h (`9 passes`).
+  - Longest gap in the next 24 h (`5h 40m`, caution when no pass is booked in the next 6 h, per U35).
+  - Today against the contact rule (`3 of 3 contacts today · rule met`, or `2 of 3` caution). `—` with a
+    reason when no rule covers it (`no contact rule`, link → Contact planning).
+- **P2:** the Contacts Gantt for this spacecraft only, with the same bar grammar (done, missed, conflict,
+  unconfirmed hatched, now-line). Click a bar → the contact drawer (`M/contacts/:contactId`).
+- **P3 Upcoming:**
+  - Columns: station code · provider · AOS (§4 short) + `T−` · duration · `Up/down` or `Down only` · the state
+    word (`Requesting` / `Requested` / `Booked` / `Unconfirmed` / `Canceling`, per lead's contactStateWord).
+  - A U33 tag only when the uplink isn't ready, and the queued command groups count when > 0 (`2 queued`).
+  - Row → the contact drawer. Empty: "No passes booked for EARENDIL-001 in the next 24 h." + `Open Contacts`.
+- **P4 Recent · 7 days:**
+  - Columns: station · planned AOS–LOS · actual AOS–LOS · outcome (`Realized` / `Partial` / `Missed` /
+    `Ended · not verified`) · cause and owner in words · received bytes.
+  - Newest first. Each day header links to Pass review (K3) for that day.
+  - Empty: "No passes in the last 7 days."
+- **Actions:** none here (Release lives in the contact drawer). Links: `Open in Contacts`, and `Plan <day>` → K1.
+- **Mobile:** P1 + P3.
 
 ## Tab · History (`M/fleet/:scId/history[?episode=:id]`) (fe-ops' proposal, refined)
 **Question:** "Has this happened before, and how did it end?" v1 covers this spacecraft's **alarm episodes**.
