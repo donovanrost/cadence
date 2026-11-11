@@ -50,6 +50,7 @@ const value = (v: number) => formatValue(v) ?? "";
           :format-tick="tick"
           :format-value="value"
           :height="180"
+          :series-name="ready.point?.name ?? 'Value'"
         />
         <p v-if="ready.truncated" class="m-0 font-mono text-xs text-text-4">
           Showing {{ ready.targets.length }} of {{ ready.target_count }} targets.

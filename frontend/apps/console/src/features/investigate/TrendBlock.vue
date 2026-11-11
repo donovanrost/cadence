@@ -8,6 +8,7 @@ import {
   ApTimeSeries as TrendChart,
   type LimitSegment,
   type SeriesPoint,
+  type TimeBand,
   type TimeWindow,
 } from "@/ui";
 
@@ -29,9 +30,13 @@ const props = withDefaults(
     height?: number;
     /** Sparkline: no legend line and no "no samples" sentence. */
     compact?: boolean;
+    /** Pass / outage spans behind the series (kit e80c3fc8). */
+    bands?: readonly TimeBand[];
   }>(),
-  { height: 220, compact: false },
+  { height: 220, compact: false, bands: () => [] },
 );
+/** Shared crosshair time: stacked plots bind one ref so their readouts move together. */
+const hover = defineModel<number | null>("hover", { default: null });
 defineEmits<{ retry: [] }>();
 
 const unavailable = computed(() =>
@@ -62,6 +67,9 @@ const value = (v: number) => formatValue(v) ?? "";
         :format-value="value"
         :height="height"
         :step-ms="view.stepMs"
+        :bands="bands"
+        :series-name="unit ? `${pointName} (${unit})` : pointName"
+        v-model:hover="hover"
       >
         <template v-if="!compact" #default>
           {{ pointName }}{{ unit ? ` (${unit})` : "" }} mean with min–max band · dashed: limits

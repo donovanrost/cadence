@@ -8,6 +8,7 @@ import { fetchHistory, fetchLimitIntervals } from "../api.ts";
 import { limitSegments, rangeWindow, toSeries, trendSentence, type RangeKey } from "../model.ts";
 import { tailPoints, type TailSample } from "../tail.ts";
 import TrendBlock from "../TrendBlock.vue";
+import type { TimeBand } from "@/ui";
 
 /**
  * One T2 small multiple: a point's history over the range (M10) with its limit bands (M11) and the
@@ -21,7 +22,9 @@ const props = defineProps<{
   rangeLabel: string;
   tail: readonly TailSample[];
   height: number;
+  bands: readonly TimeBand[];
 }>();
+const hover = defineModel<number | null>("hover", { default: null });
 const key = computed(
   () => `${props.missionId}|${props.spacecraftId}|${props.point.id}|${props.range}`,
 );
@@ -76,6 +79,8 @@ const view = computed(() => {
     :history="history.state.value"
     :view="view"
     :height="height"
+    :bands="bands"
+    v-model:hover="hover"
     @retry="history.refetch"
   />
 </template>

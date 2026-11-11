@@ -18,6 +18,8 @@ import {
 } from "@/ui";
 import { formatValue, withUnit } from "@/features/alarms/index.ts";
 import { fetchPoints } from "@/features/telemetry/index.ts";
+import { fetchPasses } from "@/features/contacts/index.ts";
+import type { TimeBand } from "@/ui";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { fetchHistory } from "../api.ts";
 import { RANGES, rangeWindow, toSeries, type RangeKey } from "../model.ts";
@@ -96,6 +98,33 @@ const rangeLabel = computed(
   () => RANGES.find((r) => r.value === range.value)?.label ?? range.value,
 );
 const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
+
+/** Pass spans on every plot (kit bands): this spacecraft's passes in the range, by station code. */
+const passes = useRemoteQuery(
+  computed(() => (pinned.value.length ? `${missionId.value}|${props.sc.id}|${range.value}` : null)),
+  (_k, signal) => {
+    const w = rangeWindow(range.value, new Date());
+    return fetchPasses(
+      missionId.value,
+      { from: new Date(w.from), to: new Date(w.to), spacecraftId: props.sc.id },
+      signal,
+    );
+  },
+);
+const passBands = computed<TimeBand[]>(() =>
+  passes.state.value.status === "ready"
+    ? passes.state.value.value.passes
+        .filter((p) => !["canceled", "rejected", "failed"].includes(p.state))
+        .map((p) => ({
+          from: Date.parse(p.starts_at),
+          to: Date.parse(p.ends_at),
+          kind: "pass" as const,
+          label: p.station.code ?? p.station.name ?? undefined,
+        }))
+    : [],
+);
+/** One crosshair time shared by the stacked plots (kit v-model:hover). */
+const hoverT = ref<number | null>(null);
 
 /** M8 live tail for the plotted points. */
 const tail = useSpacecraftTail(
@@ -247,6 +276,8 @@ const latest = (p: (typeof all.value)[number]) =>
                 :range-label="rangeLabel"
                 :tail="tail.tails.value.get(p.id) ?? []"
                 :height="plotted.length === 1 ? 220 : 120"
+                :bands="passBands"
+                v-model:hover="hoverT"
               />
             </div>
           </div>

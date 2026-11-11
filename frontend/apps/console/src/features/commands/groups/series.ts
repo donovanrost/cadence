@@ -95,9 +95,11 @@ export function seriesChart(s: VerifierSeries): {
             ],
             tone: "readout",
             dash: "dashed",
+            name: "Commanded",
           },
         ];
   const lines: ComparisonSeries[] = s.targets.map((t) => ({
+    name: t.name ?? t.spacecraft_id,
     points: t.samples.flatMap((p) => {
       const v = num(p.value_json);
       return v === null ? [] : [{ t: Date.parse(p.t), min: v, mean: v, max: v }];
@@ -106,7 +108,7 @@ export function seriesChart(s: VerifierSeries): {
     dash: "solid",
   }));
   const band = [num(s.band?.min_json), num(s.band?.max_json)].flatMap((v) =>
-    flat(v).map((l) => ({ ...l, tone: "text-3" as const, dash: "dotted" as const })),
+    flat(v).map((l) => ({ ...l, tone: "text-3" as const, dash: "dotted" as const, name: "Band" })),
   );
   return { window, lines: [...lines, ...flat(num(s.commanded?.value_json)), ...band] };
 }
