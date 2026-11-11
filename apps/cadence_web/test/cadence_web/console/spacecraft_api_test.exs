@@ -106,6 +106,18 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     assert [%{path: "catalog_revision_id", enum: ^choices}] =
              Enum.find(built.sections, &(&1.key == :catalog)).fields
 
+    # ux U25 / Profile.md P3: "rev N" (never "rN", a change-set revision) and the import date
+    # (UTC); the source file only when the date isn't known.
+    revision = %{
+      revision_number: 4,
+      metadata: %{"source_artifact_name" => "earendil.xtce"},
+      inserted_at: ~U[2026-11-10 23:30:00Z]
+    }
+
+    assert ProfileDetail.catalog_label(revision) == "rev 4 · imported 11-10"
+    assert ProfileDetail.catalog_label(%{revision | inserted_at: nil}) == "rev 4 · earendil.xtce"
+    assert ProfileDetail.catalog_label(%{revision | inserted_at: nil, metadata: %{}}) == "rev 4"
+
     framing = Enum.find(data["sections"], &(&1["key"] == "framing"))
     frame_size = Enum.find(framing["fields"], &(&1["path"] == "frame_parameters.frame_size"))
 

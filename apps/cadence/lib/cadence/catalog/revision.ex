@@ -21,7 +21,8 @@ defmodule Cadence.Catalog.Revision do
           content_sha256: binary(),
           created_by: map(),
           notes: binary() | nil,
-          metadata: map()
+          metadata: map(),
+          inserted_at: DateTime.t() | nil
         }
 
   defstruct [
@@ -38,6 +39,7 @@ defmodule Cadence.Catalog.Revision do
     :mission_model_revision_id,
     :content_sha256,
     :notes,
+    :inserted_at,
     created_by: %{},
     metadata: %{}
   ]
@@ -59,7 +61,8 @@ defmodule Cadence.Catalog.Revision do
       content_sha256: fetch!(attrs, :content_sha256),
       created_by: get(attrs, :created_by, %{}),
       notes: get(attrs, :notes),
-      metadata: get(attrs, :metadata, %{})
+      metadata: get(attrs, :metadata, %{}),
+      inserted_at: get(attrs, :inserted_at)
     }
   end
 

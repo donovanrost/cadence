@@ -83,7 +83,8 @@ defmodule Cadence.Catalog.RevisionRow do
       content_sha256: row.content_sha256,
       created_by: JsonDocument.unwrap_value(row.created_by),
       notes: row.notes,
-      metadata: JsonDocument.unwrap_value(row.metadata)
+      metadata: JsonDocument.unwrap_value(row.metadata),
+      inserted_at: row.inserted_at
     })
   end
 

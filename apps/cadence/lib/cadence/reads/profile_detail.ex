@@ -115,11 +115,19 @@ defmodule Cadence.Reads.ProfileDetail do
   defp catalog_choices(organization_id, mission_id) do
     organization_id
     |> Catalog.list_revisions(mission_id)
-    |> Enum.map(fn revision ->
-      source = (revision.metadata || %{})["source_artifact_name"] || revision.revision_label
-      label = Enum.join(Enum.reject(["r#{revision.revision_number}", source], &is_nil/1), " · ")
-      %{value: revision.catalog_revision_id, label: label}
-    end)
+    |> Enum.map(&%{value: &1.catalog_revision_id, label: catalog_label(&1)})
+  end
+
+  # ux U25 / Profile.md P3 (611078ce): "rev 4 · imported 11-10", or "rev 4 · <source>" when the
+  # import date isn't known. Never "rN": that's a change-set revision ("since r3" on the same row).
+  @doc false
+  @spec catalog_label(map()) :: binary()
+  def catalog_label(%{revision_number: number} = revision) do
+    case {revision.inserted_at, (revision.metadata || %{})["source_artifact_name"]} do
+      {%{} = at, _source} -> "rev #{number} · imported " <> Calendar.strftime(at, "%m-%d")
+      {nil, source} when is_binary(source) -> "rev #{number} · #{source}"
+      {nil, nil} -> "rev #{number}"
+    end
   end
 
   defp last_change(profile, versions) do
