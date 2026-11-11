@@ -8,6 +8,7 @@ import {
   type Occurrence,
 } from "./history/api.ts";
 import { argsSummary, evidenceWords, releaseRule } from "./uplink/api.ts";
+import { byDay, bytesWords, ruleWords } from "./passes/api.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { formatLimitLike, formatValue, type Alarm } from "@/features/alarms/index.ts";
@@ -367,5 +368,40 @@ describe("Uplink tab words (aa1f493e)", () => {
     expect(evidenceWords({ ...p, uplink_evidence: "booked", uplink_confirmed: true }).text).toBe(
       "Booked",
     );
+  });
+});
+
+describe("Passes tab words (api 324428aa)", () => {
+  it("rule, day groups and bytes", () => {
+    expect(ruleWords({ state: "met", have: 3, need: 3, rules: [] })).toEqual({
+      text: "3 of 3 contacts today · rule met",
+      caution: false,
+    });
+    expect(ruleWords({ state: "short", have: 2, need: 3, rules: [] })?.caution).toBe(true);
+    expect(ruleWords({ state: "none", have: 0, need: 0, rules: [] })).toBeNull();
+    const row = (id: string, at: string) => ({
+      id,
+      station: null,
+      planned_aos: at,
+      planned_los: at,
+      actual_aos: null,
+      actual_los: null,
+      received_bytes: null,
+      outcome: "realized" as const,
+      cause: null,
+      owner: null,
+    });
+    expect(
+      byDay([
+        row("a", "2026-11-09T01:00:00Z"),
+        row("b", "2026-11-10T02:00:00Z"),
+        row("c", "2026-11-10T05:00:00Z"),
+      ]).map((g) => [g.day, g.rows.map((r) => r.id)]),
+    ).toEqual([
+      ["2026-11-10", ["c", "b"]],
+      ["2026-11-09", ["a"]],
+    ]);
+    expect(bytesWords(1_234_567)).toBe("1.2 MB");
+    expect(bytesWords(null)).toBe("—");
   });
 });
