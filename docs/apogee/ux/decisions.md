@@ -428,8 +428,8 @@ attestations. Show it only for reasons it can fix (expired or missing evidence).
 | --- | --- | --- | --- |
 | `cop1_awaiting_clcw` | qualifying | waiting for the spacecraft's first link report | – |
 | `cop1_clcw_stale` (a5004aa8) | qualifying | the spacecraft's link reports stopped; waiting for them to resume | – |
-| `cop1_no_clcw_report` (a5004aa8) | blocked | the spacecraft didn't send a link report within 15 s of the uplink connecting | yes, unless domain says re-qualifying can't help |
-| `uplink_state_unavailable` | per server state | Cadence can't read the uplink's state right now | as the state allows |
+| `cop1_no_clcw_report` (a5004aa8) | blocked | the spacecraft didn't send a link report within 15 s of the uplink connecting. It clears when the spacecraft reports or the link reconnects. | no ("Recovery won't help: it clears when the spacecraft reports."; the server refuses it, c7c79063) |
+| `uplink_state_unavailable` | qualifying (always) | Cadence can't read the uplink's state right now | – |
 | `session_not_attached` | qualifying | waiting for Northlight's uplink connection | – |
 | `protocol_state_restore_required` | blocked | the uplink restarted after this pass had sent commands, and it can't resume before LOS 01:06Z. The next pass isn't affected. | no ("Recovery isn't possible on this pass.") |
 | `attestation_*` (signature, challenge, peer, contact, validity, purpose) | blocked | Northlight's proof for this session didn't check out | yes |
