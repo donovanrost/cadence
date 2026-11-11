@@ -1,4 +1,5 @@
 import { findingTitle, findingsMeta } from "./findings.ts";
+import type { Availability, AvailabilityWindow } from "@/features/scheduling/index.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { passesReader, type Pass } from "./api.ts";
@@ -288,42 +289,41 @@ describe("uplink readiness (U33)", () => {
 
 describe("D3 station bands (S7)", () => {
   it("draws uncleared windows on station rows that are shown", () => {
-    const window = (over: Record<string, unknown>) => ({
+    const window = (over: Partial<AvailabilityWindow>): AvailabilityWindow => ({
+      id: "w",
       ground_station_id: "gs-svl",
       kind: "outage",
       from: "2026-11-09T02:00:00Z",
       to: "2026-11-09T03:00:00Z",
+      eta: null,
       source: "provider",
       reported_at: null,
       reason: "Antenna fault",
       cleared_at: null,
       ...over,
     });
-    const av = {
+    const station = (
+      id: string,
+      windows: AvailabilityWindow[],
+    ): Availability["stations"][number] => ({
+      ground_station_id: id,
+      state: "down",
+      since: null,
+      eta: null,
+      basis: null,
+      windows,
+    });
+    const av: Availability = {
       at: "2026-11-09T02:00:00Z",
       stations: [
-        {
-          ground_station_id: "gs-svl",
-          state: "down",
-          since: null,
-          eta: null,
-          basis: null,
-          windows: [
-            window({}),
-            window({ to: null, kind: "maintenance", reason: null }),
-            window({ cleared_at: "2026-11-09T02:10:00Z" }),
-          ],
-        },
-        {
-          ground_station_id: "gs-other",
-          state: "down",
-          since: null,
-          eta: null,
-          basis: null,
-          windows: [window({ ground_station_id: "gs-other" })],
-        },
+        station("gs-svl", [
+          window({}),
+          window({ to: null, kind: "maintenance", reason: null }),
+          window({ cleared_at: "2026-11-09T02:10:00Z" }),
+        ]),
+        station("gs-other", [window({ ground_station_id: "gs-other" })]),
       ],
-    } as unknown as Parameters<typeof availabilityBands>[0];
+    };
     const bands = availabilityBands(av, [{ id: "gs-svl", label: "SVB" }], 99);
     expect(bands.map((b) => [b.rowId, b.kind, b.to, b.label])).toEqual([
       ["gs-svl", "outage", Date.parse("2026-11-09T03:00:00Z"), "Outage: Antenna fault"],
