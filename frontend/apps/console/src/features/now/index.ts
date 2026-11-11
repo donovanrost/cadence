@@ -4,3 +4,4 @@
  */
 export { deriveQueue, GROUP_AT, nowHeadline, type QueueAction, type QueueItem } from "./queue.ts";
 export { attentionMeta, attentionReader, attentionWords, type Attention } from "./attention.ts";
+export { useSettlement } from "./useSettlement.ts";

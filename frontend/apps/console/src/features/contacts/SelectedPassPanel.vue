@@ -21,7 +21,7 @@ import {
 } from "@/features/scheduling/index.ts";
 import type { Pass } from "./api.ts";
 import AttentionBlock from "./AttentionBlock.vue";
-import { attentionWords } from "@/features/now/index.ts";
+import { attentionWords, useSettlement } from "@/features/now/index.ts";
 import { noRecoverText, readinessTag, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
 import ReleasePass from "./ReleasePass.vue";
@@ -64,6 +64,11 @@ const releaseIssue = computed(() => {
   const a = props.pass?.attention;
   return a && a.source === "pass_release" ? attentionWords(a) : null;
 });
+/** U37: telemetry from this pass still on disk (#71), from the queue; no actions. */
+const settlement = useSettlement(
+  computed(() => props.missionId),
+  computed(() => props.pass?.id ?? null),
+);
 // Recover is operate_mission, the same policy as abort (DECISIONS #42).
 const access = useCommandAccess();
 /** false only: null means no uplink leg was asked for (downlink only). */
@@ -132,6 +137,10 @@ const countdown = computed(() => {
       <ApCallout v-if="releaseIssue" tone="caution">
         <p class="m-0 font-semibold">{{ releaseIssue.what }}</p>
         <p class="m-0 text-text-2">{{ releaseIssue.evidence }}</p>
+      </ApCallout>
+      <ApCallout v-if="settlement" tone="caution">
+        <p class="m-0 font-semibold">Telemetry from this pass isn't stored yet.</p>
+        <p class="m-0 text-text-2">{{ settlement.evidence }}</p>
       </ApCallout>
       <AttentionBlock
         v-if="pass.attention && pass.attention.source === 'pass_resolution'"
