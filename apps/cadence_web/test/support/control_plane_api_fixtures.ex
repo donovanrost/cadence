@@ -270,7 +270,8 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
                 transport_binding_id: "uplink-gateway-commanding-api",
                 family_key: :uplink_gateway,
                 target_scope: :path,
-                configuration: %{"service_name" => "gateway"}
+                # The release guard (#38) requires the gateway to name its spacecraft's SCID.
+                configuration: %{"service_name" => "gateway", "scid" => 31}
               })
             ]
           })
