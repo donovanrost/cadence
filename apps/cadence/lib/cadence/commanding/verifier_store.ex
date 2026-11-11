@@ -83,6 +83,19 @@ defmodule Cadence.Commanding.VerifierStore do
     )
   end
 
+  @doc "Release attempts with a pending verifier due to time out (DECISIONS #72 reconcile)."
+  @spec due_release_attempts(module(), DateTime.t()) :: [{binary(), binary(), binary()}]
+  def due_release_attempts(repo, %DateTime{} = current_time) do
+    pending_timeout_query()
+    |> exclude(:order_by)
+    |> where([row], row.timeout_at <= ^current_time and not is_nil(row.organization_id))
+    |> select([row], {row.organization_id, row.mission_id, row.command_release_attempt_id})
+    |> distinct(true)
+    # The global lock order (ReleaseAttemptLock): mission, then attempt.
+    |> order_by([row], asc: row.mission_id, asc: row.command_release_attempt_id)
+    |> repo.all()
+  end
+
   @spec pending_timeout_instances(module(), binary(), binary(), binary()) :: [
           CommandVerifierInstance.t()
         ]
@@ -152,19 +165,22 @@ defmodule Cadence.Commanding.VerifierStore do
           {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
   def apply_updates(_repo, []), do: {:ok, []}
 
+  # Only the rows this call actually resolved are rolled up and returned (DECISIONS #72), so a
+  # verifier another evaluation already resolved isn't published twice.
   def apply_updates(repo, verifier_updates) when is_list(verifier_updates) do
-    affected_rollups =
-      verifier_updates
-      |> Enum.map(fn {%CommandVerifierInstanceRow{} = row, _updated_instance} ->
-        {row.organization_id, row.mission_id, row.command_request_id,
-         row.command_release_attempt_id}
-      end)
-      |> Enum.uniq()
-
     with {:ok, updated_rows} <- update_rows(repo, verifier_updates),
-         {:ok, _rollups} <- recompute_rollups(repo, affected_rollups) do
+         {:ok, _rollups} <- recompute_rollups(repo, rollup_keys(updated_rows)) do
       {:ok, Enum.map(updated_rows, &CommandVerifierInstanceRow.to_domain/1)}
     end
+  end
+
+  defp rollup_keys(rows) do
+    rows
+    |> Enum.map(fn %CommandVerifierInstanceRow{} = row ->
+      {row.organization_id, row.mission_id, row.command_request_id,
+       row.command_release_attempt_id}
+    end)
+    |> Enum.uniq()
   end
 
   defp pending_timeout_query do
@@ -178,15 +194,40 @@ defmodule Cadence.Commanding.VerifierStore do
     Enum.reduce_while(verifier_updates, {:ok, []}, fn
       {%CommandVerifierInstanceRow{} = row, %CommandVerifierInstance{} = updated_instance},
       {:ok, acc} ->
-        case repo.update(CommandVerifierInstanceRow.update_changeset(row, updated_instance)) do
+        case update_if_pending(
+               repo,
+               CommandVerifierInstanceRow.update_changeset(row, updated_instance)
+             ) do
+          {:ok, nil} -> {:cont, {:ok, acc}}
           {:ok, updated_row} -> {:cont, {:ok, [updated_row | acc]}}
-          {:error, %Changeset{} = changeset} -> {:halt, {:error, changeset}}
           {:error, reason} -> {:halt, {:error, reason}}
         end
     end)
     |> case do
       {:ok, updated_rows} -> {:ok, Enum.reverse(updated_rows)}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # DECISIONS #72: a verifier resolves once. The update applies only while the row is still
+  # pending, so when a concurrent match, catch-up or timeout already resolved it, this one is a
+  # no-op (`{:ok, nil}`) instead of overwriting that outcome.
+  defp update_if_pending(_repo, %Changeset{valid?: false} = changeset), do: {:error, changeset}
+
+  defp update_if_pending(repo, %Changeset{data: row, changes: changes}) do
+    set = changes |> Map.put(:updated_at, DateTime.utc_now()) |> Map.to_list()
+
+    CommandVerifierInstanceRow
+    |> where(
+      [current],
+      current.command_verifier_instance_id == ^row.command_verifier_instance_id and
+        current.lifecycle_state == "pending"
+    )
+    |> select([current], current)
+    |> repo.update_all(set: set)
+    |> case do
+      {1, [updated_row]} -> {:ok, updated_row}
+      {0, _rows} -> {:ok, nil}
     end
   end
 

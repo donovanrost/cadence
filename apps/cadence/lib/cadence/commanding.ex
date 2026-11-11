@@ -25,6 +25,7 @@ defmodule Cadence.Commanding do
     LifecyclePolicy,
     ProcessNamespace,
     ReleaseArtifacts,
+    ReleaseAttemptLock,
     ReleaseResolution,
     ReleaseStore,
     ReleaseTargetGuard,
@@ -615,6 +616,9 @@ defmodule Cadence.Commanding do
       transport_capability_records,
       transport_action_requests,
       fn organization_id, mission_id, command_release_attempt_ids ->
+        # DECISIONS #72: wait for a release still inserting these attempts' verifiers.
+        :ok = ReleaseAttemptLock.acquire(repo, mission_id, command_release_attempt_ids)
+
         VerifierStore.pending_transport_entries(
           repo,
           organization_id,
@@ -658,7 +662,28 @@ defmodule Cadence.Commanding do
   @spec timeout_command_verifier_instances(module(), DateTime.t()) ::
           {:ok, [CommandVerifierInstance.t()]} | {:error, term()}
   def timeout_command_verifier_instances(repo, %DateTime{} = current_time) do
-    VerifierStore.timeout(repo, current_time)
+    with {:ok, reconciled} <- reconcile_due_transport_verifiers(repo, current_time),
+         {:ok, timed_out} <- VerifierStore.timeout(repo, current_time) do
+      {:ok, reconciled ++ timed_out}
+    end
+  end
+
+  # DECISIONS #72: before a verifier times out, match its attempt's stored transport evidence
+  # once more, so evidence an evaluation missed resolves it instead of timing it out.
+  defp reconcile_due_transport_verifiers(repo, current_time) do
+    repo
+    |> VerifierStore.due_release_attempts(current_time)
+    |> Enum.reduce_while({:ok, []}, fn {organization_id, mission_id, attempt_id}, {:ok, acc} ->
+      case evaluate_transport_command_verifiers_for_release_attempt(
+             repo,
+             organization_id,
+             mission_id,
+             attempt_id
+           ) do
+        {:ok, resolved} -> {:cont, {:ok, acc ++ resolved}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
   end
 
   @spec release_command_queue_entry(binary(), binary(), binary(), binary(), map(), keyword()) ::
@@ -1058,7 +1083,8 @@ defmodule Cadence.Commanding do
     end
   end
 
-  defp release_success_multi(
+  @doc false
+  def release_success_multi(
          %CommandReleaseAttemptRow{} = release_attempt_row,
          %CommandQueueEntryRow{} = queue_entry_row,
          %CommandRequestRow{} = request_row,
@@ -1067,6 +1093,14 @@ defmodule Cadence.Commanding do
          initial_verification_state
        ) do
     Multi.new()
+    # DECISIONS #72: held to commit, so a concurrent evaluation of this attempt's transport
+    # records waits for the verifiers below, and the catch-up reads records it committed.
+    |> Multi.run(:release_attempt_lock, fn repo, _changes ->
+      {:ok,
+       ReleaseAttemptLock.acquire(repo, queue_entry_row.mission_id, [
+         completed_release_attempt.command_release_attempt_id
+       ])}
+    end)
     |> Multi.update(
       :command_release_attempt,
       CommandReleaseAttemptRow.update_changeset(release_attempt_row, completed_release_attempt)
