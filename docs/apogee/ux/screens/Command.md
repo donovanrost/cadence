@@ -94,7 +94,31 @@ Route to `M/commands/:requestId` (Uplink & verify view, phase 3): per-target sta
 from the existing command history.
 
 ## States
-Draft autosaves (`DRAFT · SAVED 02:44:31Z` mono in the takeover header; no number, U25). One current draft per user per mission, visible only to its author. Commands lists it for its author as `Your draft · saved 02:44Z · Resume`. Preflight running: poll rows
+Draft autosaves (`DRAFT · SAVED 02:44:31Z` mono in the takeover header; no number, U25). One current draft per user per mission, visible only to its author. Commands lists it for its author as `Your draft · saved 02:44Z · Resume`.
+
+Draft edge cases (fe-ops c0510343, ruled by ux):
+- **New request while a draft exists:** info callout "You have a draft saved 02:44Z. This request replaces
+  it once you start filling it in." [Resume draft] [Discard draft]. Replacement starts at the first
+  edit the user makes. Values prefilled from the origin (alarm, `?targets=`) don't count, so arriving
+  from an alarm never overwrites a draft by itself.
+- **Discard** (callout, or the ghost `Discard draft` in the header) asks first, using the existing confirm
+  pattern: "Discard the draft saved 02:44Z? It can't be recovered." [Discard draft] (danger) [Cancel]. Then
+  it deletes the draft and closes.
+- **Saved from another tab (409):** autosave pauses. Header `DRAFT · AUTOSAVE PAUSED`. Caution callout:
+  "This draft was saved from another tab at 02:51Z. Autosave is paused until you choose." [Load the 02:51Z
+  version] [Keep mine]. Keep mine saves this tab's version over the other one, and its caption says so:
+  "Replaces the 02:51Z save." Use the other save's time when the server gives it; otherwise "was saved
+  from another tab" with no time.
+- **Save failed:** header `DRAFT · NOT SAVED` (plus `· LAST SAVED 02:44Z` when an earlier save exists).
+  Caution callout: "Couldn't save the draft. Changes since 02:44Z are only in this tab." Use the server's
+  reason when it gives one (U20). [Try again]. Autosave still retries on the next change.
+- **Close (×):** it always returns to the origin. Its aria-label and tooltip add the draft state:
+  `Close and return to EARENDIL-312 · draft saved 02:44Z`, or `Close and return to EARENDIL-312` when
+  nothing has been entered. With unsaved changes (a pending or failed save), close saves first. If that
+  save fails, it asks "Close without saving? Changes since 02:44Z will be lost." [Close without saving]
+  [Stay]. Before any save, use "Your changes will be lost."
+
+Preflight running: poll rows
 show `CHECKING…`. Target over the batch cap (until M16): NO-GO "Up to 25 targets per request
 today" with the count. No permission (`command.request` missing): page renders read-only with "You
 can view this sequence. Commanding needs the operator capability."
