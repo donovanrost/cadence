@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { ApButton, ApCallout, ApChip, ApPanel, ApTag, formatCount } from "@/ui";
 import { fieldText, type ProfileSection } from "./detail.ts";
+import { generationNote } from "./present.ts";
 
 /** P1: one schema section as a read-only key/value grid (DECISIONS #19: framing read-only). */
 defineProps<{ section: ProfileSection; inheritCount: number; canEdit: boolean }>();
 defineEmits<{ edit: [] }>();
-/** domain (catalog generations): what applying a generation field does, from an operator's view. */
-const generationNote =
-  "From the moment it applies, telemetry decodes and commands build with the new value. Commands still waiting to release are canceled; commands in flight hold the apply until they finish. Nothing restarts and no link drops. Derived values and limit timers start fresh.";
 </script>
 
 <template>

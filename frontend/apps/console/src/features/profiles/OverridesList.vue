@@ -2,19 +2,20 @@
 import { ref } from "vue";
 import { failureOutcome, refreshConfigState, stageChange } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, formatShort } from "@/ui";
-import type { ProfileOverride } from "./detail.ts";
-import { overrideOp } from "./overrides.ts";
+import type { ProfileField, ProfileOverride } from "./detail.ts";
+import { overrideOp, valueText } from "./overrides.ts";
 
 /** P3 rows: spacecraft · what differs · since · Reset (stages a spacecraft_override reset). */
 const props = defineProps<{
   missionId: string;
   overrides: readonly ProfileOverride[];
+  /** The profile's fields, so a row reads "Catalog revision rev 4 instead of rev 3", not ids. */
+  fields: readonly ProfileField[];
   canStage: boolean;
 }>();
 const busy = ref<string | null>(null);
 const note = ref<string | null>(null);
-const show = (v: unknown) =>
-  v === null || v === undefined ? "—" : typeof v === "string" ? v : JSON.stringify(v);
+const fieldOf = (o: ProfileOverride) => props.fields.find((f) => f.path === o.path);
 const key = (o: ProfileOverride) => `${o.spacecraft.id}:${o.path}`;
 
 async function reset(o: ProfileOverride) {
@@ -22,7 +23,7 @@ async function reset(o: ProfileOverride) {
   note.value = null;
   try {
     const result = await stageChange(props.missionId, {
-      summary: `${o.spacecraft.name} · reset ${o.path} to the profile`,
+      summary: `${o.spacecraft.name} · reset ${fieldOf(o)?.label ?? o.path} to profile`,
       source: { surface: "profile_overrides" },
       ops: [overrideOp(o.spacecraft.id, o.path, null)],
     });
@@ -50,8 +51,11 @@ async function reset(o: ProfileOverride) {
         >{{ o.spacecraft.name }}</RouterLink
       >
       <span class="text-md text-readout">
-        <span class="font-mono text-text-3">{{ o.path }}</span>
-        {{ show(o.spacecraft_value) }} instead of {{ show(o.profile_value) }}
+        <span :class="fieldOf(o) ? 'text-text-2' : 'font-mono text-text-3'">{{
+          fieldOf(o)?.label ?? o.path
+        }}</span>
+        {{ valueText(fieldOf(o), o.spacecraft_value) }} instead of
+        {{ valueText(fieldOf(o), o.profile_value) }}
         <span v-if="o.reason" class="text-text-3"> · {{ o.reason }}</span>
         <span class="font-mono text-xs text-text-4">
           {{

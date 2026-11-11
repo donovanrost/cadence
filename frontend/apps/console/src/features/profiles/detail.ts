@@ -99,7 +99,8 @@ export function fieldText(f: ProfileField): string {
     return f.default === null
       ? "Not set"
       : `Not set · default ${fieldText({ ...f, value: f.default, default: null })}`;
-  if (f.type === "enum" && f.enum) {
+  // Enum and reference fields with choices (a catalog revision) read as the choice's label.
+  if (f.enum) {
     const option = f.enum.find((o) => o.value === f.value);
     if (option) return option.label;
   }

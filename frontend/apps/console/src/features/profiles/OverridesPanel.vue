@@ -1,38 +1,35 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { ApButton, ApEmptyState, ApPanel } from "@/ui";
+import { ApButton, ApCallout, ApEmptyState, ApPanel } from "@/ui";
 import OverrideCreate from "./OverrideCreate.vue";
 import OverridesList from "./OverridesList.vue";
 import type { ProfileDetail } from "./detail.ts";
 
-/** P3 Overrides: the spacecraft that differ from the profile, Reset, and Add override. */
+/**
+ * P3 Overrides: the spacecraft that differ from the profile, Reset, and Add override. Catalog and
+ * framing overrides don't depend on the routing model (qa #65); only routing overrides wait for it.
+ */
 defineProps<{ missionId: string; detail: ProfileDetail; canStage: boolean }>();
 const adding = ref(false);
 </script>
 
 <template>
-  <OverrideCreate
-    v-if="adding"
-    :mission-id="missionId"
-    :detail="detail"
-    @cancel="adding = false"
-  />
+  <OverrideCreate v-if="adding" :mission-id="missionId" :detail="detail" @cancel="adding = false" />
   <ApPanel
     index="P3"
     title="Overrides"
     :meta="`${detail.override_count} of ${detail.inherit_count} differ`"
     flush
   >
-    <template v-if="canStage && detail.routing_model === 'profile' && !adding" #header>
+    <template v-if="canStage && !adding" #header>
       <ApButton size="compact" @click="adding = true">Add override</ApButton>
     </template>
+    <ApCallout v-if="detail.routing_model === 'per_spacecraft'" tone="info">
+      Routing is still set per spacecraft, so routing overrides start once routing lives on the
+      profile. Catalog and framing overrides work now.
+    </ApCallout>
     <ApEmptyState
-      v-if="detail.routing_model === 'per_spacecraft'"
-      headline="Overrides aren't tracked yet"
-      sentence="Spacecraft-level differences from the profile are recorded once routing lives on the profile."
-    />
-    <ApEmptyState
-      v-else-if="detail.overrides.length === 0"
+      v-if="detail.overrides.length === 0"
       state="off"
       :headline="`All ${detail.inherit_count} spacecraft match the profile`"
     />
@@ -40,6 +37,7 @@ const adding = ref(false);
       v-else
       :mission-id="missionId"
       :overrides="detail.overrides"
+      :fields="detail.sections.flatMap((s) => s.fields)"
       :can-stage="canStage"
     />
   </ApPanel>

@@ -1,5 +1,10 @@
 import type { SchemaField, StageOp } from "@/features/changes/index.ts";
-import type { ProfileDetail, ProfileField } from "./detail.ts";
+import {
+  fieldText,
+  type ProfileDetail,
+  type ProfileField,
+  type ProfileOverride,
+} from "./detail.ts";
 import { schemaFieldOf } from "./sectionEdit.ts";
 
 /**
@@ -39,3 +44,24 @@ export const overrideSchemaField = (f: ProfileField): SchemaField => ({
   ...schemaFieldOf(f),
   required: true,
 });
+
+/** An override value in the profile schema's words: "rev 4 · …" for a catalog revision, not its id. */
+export function valueText(f: ProfileField | undefined, value: unknown): string {
+  if (f) return fieldText({ ...f, value: value ?? null, default: null });
+  return value == null ? "—" : typeof value === "string" ? value : JSON.stringify(value);
+}
+
+/** The override the spacecraft already holds on that path, if any (so nothing is replaced silently). */
+export const existingOverride = (
+  detail: Pick<ProfileDetail, "overrides">,
+  spacecraftId: string,
+  path: string,
+): ProfileOverride | null =>
+  detail.overrides.find((o) => o.spacecraft.id === spacecraftId && o.path === path) ?? null;
+
+/** "EARENDIL-001 already overrides this: rev 4 since r3 (Mira K.: canary for rev 4)" (ux P3). */
+export function existingLine(o: ProfileOverride, f: ProfileField | undefined): string {
+  const since = o.since_revision !== null ? ` since r${o.since_revision}` : "";
+  const why = o.reason ? ` (${o.actor ? `${o.actor.name}: ` : ""}${o.reason})` : "";
+  return `${o.spacecraft.name} already overrides this: ${valueText(f, o.spacecraft_value)}${since}${why}`;
+}

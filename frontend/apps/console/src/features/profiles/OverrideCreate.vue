@@ -1,57 +1,61 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { useRemoteQuery } from "@/api";
 import {
   displayValue,
   failureOutcome,
   previewOps,
   refreshConfigState,
-  SchemaForm,
   stageChange,
   toValue,
   type FormValues,
 } from "@/features/changes/index.ts";
-import { fetchSpacecraftDirectory } from "@/features/spacecraft/index.ts";
-import { ApButton, ApCallout, ApPanel, ApRemote, ApSelect, ApTextarea } from "@/ui";
-import { fieldText, type ProfileDetail } from "./detail.ts";
-import { overridableFields, overrideKey, overrideOp, overrideSchemaField } from "./overrides.ts";
+import { ApButton, ApCallout, ApPanel, ApTextarea } from "@/ui";
+import type { ProfileDetail } from "./detail.ts";
+import OverrideTarget from "./OverrideTarget.vue";
+import OverrideValue from "./OverrideValue.vue";
+import {
+  existingLine,
+  existingOverride,
+  overridableFields,
+  overrideKey,
+  overrideOp,
+  overrideSchemaField,
+} from "./overrides.ts";
 import { describePreview } from "./sectionEdit.ts";
 
-/** P3 Add override: one spacecraft, one profile field, its value and why; staged as a change. */
+/** P3 Add override (Profile.md): one spacecraft, one profile field, its value and why. */
 const props = defineProps<{ missionId: string; detail: ProfileDetail }>();
 const emit = defineEmits<{ cancel: [] }>();
 const router = useRouter();
-const missionId = computed(() => props.missionId);
-const { state, refetch } = useRemoteQuery(missionId, fetchSpacecraftDirectory);
-const spacecraft = computed(() =>
-  state.value.status === "ready"
-    ? state.value.value.spacecraft
-        .filter((r) => r.profile?.id === props.detail.profile.id)
-        .map((r) => ({ value: r.id, label: r.name }))
-    : [],
-);
+const target = ref<Readonly<{ id: string; name: string }> | null>(null);
+const spacecraftId = computed(() => target.value?.id ?? "");
 
 const fields = overridableFields(props.detail);
 const fieldOptions = fields.map((o) => ({
   value: o.field.path,
   label: `${o.field.label} · ${o.section}`,
 }));
-const spacecraftId = ref("");
 const path = ref(fields[0]?.field.path ?? "");
 const reason = ref("");
 const values = ref<FormValues>({});
 const chosen = computed(() => fields.find((o) => o.field.path === path.value)?.field ?? null);
 const field = computed(() => (chosen.value ? overrideSchemaField(chosen.value) : null));
-const schema = computed(() => ({
-  kind: "spacecraft_override",
-  fields: field.value ? [field.value] : [],
-}));
-/** The profile's value in form text, so the form starts there and "unchanged" is visible. */
-const profileText = computed(() =>
-  field.value && chosen.value?.value != null ? displayValue(field.value, chosen.value.value) : "",
+const asText = (v: unknown) => (field.value && v != null ? displayValue(field.value, v) : "");
+const profileText = computed(() => asText(chosen.value?.value));
+/** ux: an override the spacecraft already holds is shown and changed, never replaced silently. */
+const existing = computed(() => existingOverride(props.detail, spacecraftId.value, path.value));
+const existingText = computed(() =>
+  existing.value ? existingLine(existing.value, chosen.value ?? undefined) : null,
 );
-watch(path, () => (values.value = { [path.value]: profileText.value }), { immediate: true });
+watch(
+  [path, existing],
+  () => {
+    const start = existing.value ? asText(existing.value.spacecraft_value) : profileText.value;
+    values.value = { [path.value]: start };
+  },
+  { immediate: true },
+);
 
 const typed = computed(() =>
   field.value ? toValue(field.value, values.value[path.value] ?? "") : null,
@@ -62,21 +66,24 @@ const fieldErrors = computed((): Record<string, string> =>
     : {},
 );
 const blocked = computed((): string | null => {
+  const text = values.value[path.value] ?? "";
   if (spacecraftId.value === "") return "Choose a spacecraft.";
   if (!typed.value) return "Choose a field.";
   if (!typed.value.ok) return typed.value.message;
-  if ((values.value[path.value] ?? "") === profileText.value)
-    return "That's the profile's value. Choose the value this spacecraft should differ to.";
+  if (text === profileText.value)
+    return "Same as the profile's value. Enter the value this spacecraft should use.";
   if (reason.value.trim() === "") return "Say why this spacecraft differs.";
+  const same = existing.value;
+  if (same && text === asText(same.spacecraft_value) && reason.value.trim() === same.reason)
+    return "That's its override already.";
   return null;
 });
 
 const busy = ref(false);
 const outcome = ref<{ tone: "nominal" | "caution" | "crit"; text: string } | null>(null);
-watch([spacecraftId, path, values, reason], () => (outcome.value = null), { deep: true });
+watch([target, path, values, reason], () => (outcome.value = null), { deep: true });
 /** ux: Stage is disabled while the last Check said NO-GO, with that line as the reason. */
 const noGo = computed(() => (outcome.value?.tone === "crit" ? outcome.value.text : null));
-const name = () => spacecraft.value.find((o) => o.value === spacecraftId.value)?.label ?? "";
 const op = () =>
   overrideOp(spacecraftId.value, path.value, {
     value: typed.value?.ok ? typed.value.value : null,
@@ -108,13 +115,17 @@ async function stage() {
   if (blocked.value !== null || busy.value) return;
   busy.value = true;
   try {
+    const verb = existing.value ? "change override" : "override";
     const r = await stageChange(props.missionId, {
-      summary: `${name()} · override ${chosen.value?.label ?? path.value}`,
+      summary: `${target.value?.name ?? ""} · ${verb} ${chosen.value?.label ?? path.value}`,
       source: { surface: "profile_overrides" },
       ops: [op()],
     });
     if (!r.ok)
-      return void (outcome.value = { tone: "crit", text: failureOutcome(r.error, "staged").sentence });
+      return void (outcome.value = {
+        tone: "crit",
+        text: failureOutcome(r.error, "staged").sentence,
+      });
     refreshConfigState(props.missionId);
     await router.push({ name: "setup.changes" });
   } finally {
@@ -124,27 +135,27 @@ async function stage() {
 </script>
 
 <template>
-  <ApPanel index="P3" title="Add override">
+  <ApPanel title="Add override">
     <div class="flex flex-col gap-4">
-      <ApRemote :state="state" loading-label="Loading spacecraft…" @retry="refetch">
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <ApSelect
-            v-model="spacecraftId"
-            label="Spacecraft"
-            mono
-            placeholder="Choose…"
-            :options="spacecraft"
-            :hint="`${spacecraft.length} on ${detail.profile.name}`"
-          />
-          <ApSelect v-model="path" label="Field" :options="fieldOptions" />
-        </div>
-      </ApRemote>
-      <SchemaForm v-if="field" v-model="values" :schema="schema" :errors="fieldErrors" />
-      <p v-if="chosen" class="m-0 text-sm text-text-3">Profile value: {{ fieldText(chosen) }}</p>
+      <OverrideTarget
+        v-model:spacecraft="target"
+        v-model:path="path"
+        :mission-id="missionId"
+        :profile="detail.profile"
+        :field-options="fieldOptions"
+      />
+      <OverrideValue
+        v-if="field && chosen"
+        v-model="values"
+        :field="field"
+        :profile-field="chosen"
+        :errors="fieldErrors"
+        :existing="existingText"
+      />
       <ApTextarea
         v-model="reason"
         label="Why this spacecraft differs"
-        placeholder="Shown on the override and in the change set"
+        hint="Shown on the override and in the change set."
         :rows="2"
         :maxlength="500"
         required
@@ -162,7 +173,7 @@ async function stage() {
           :disabled="busy || blocked !== null || noGo !== null"
           :disabled-reason="noGo ?? blocked ?? 'Staging…'"
           @click="stage"
-          >Stage override</ApButton
+          >{{ existing ? "Stage change" : "Stage override" }}</ApButton
         >
         <ApButton variant="ghost" @click="emit('cancel')">Cancel</ApButton>
       </div>
