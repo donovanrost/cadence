@@ -9,6 +9,8 @@ import type { Pass } from "@/features/contacts/index.ts";
 export type ContactState =
   | "opportunity"
   | "drafted"
+  /** Cadence is still sending the request (ux: a word claims only what's done). */
+  | "requesting"
   | "requested"
   | "confirmed"
   | "in_contact"
@@ -30,6 +32,7 @@ export type ContactState =
 export function contactState(p: Pick<Pass, "state" | "pass_phase">): ContactState {
   switch (p.state) {
     case "requesting":
+      return "requesting";
     case "pending":
       return "requested";
     case "confirmed":
@@ -54,6 +57,7 @@ export function contactState(p: Pick<Pass, "state" | "pass_phase">): ContactStat
 export const contactStateWord: Readonly<Record<ContactState, string>> = {
   opportunity: "Opportunity",
   drafted: "Drafted",
+  requesting: "Requesting",
   requested: "Requested",
   confirmed: "Confirmed",
   in_contact: "In contact",
@@ -83,6 +87,7 @@ export function contactOpState(state: ContactState): OpState {
       return "stale";
     case "opportunity":
     case "drafted":
+    case "requesting":
     case "requested":
     case "confirmed":
     case "ended":

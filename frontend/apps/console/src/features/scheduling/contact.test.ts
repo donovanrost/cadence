@@ -23,6 +23,7 @@ const row = {
 
 describe("contact state", () => {
   it("maps reservation lifecycle and pass phase onto the UI model", () => {
+    expect(contactState({ state: "requesting", pass_phase: null })).toBe("requesting");
     expect(contactState({ state: "pending", pass_phase: null })).toBe("requested");
     expect(contactState({ state: "confirmed", pass_phase: "pass" })).toBe("in_contact");
     expect(contactState({ state: "completed", pass_phase: "closed" })).toBe("ended");
