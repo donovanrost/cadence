@@ -197,25 +197,29 @@ defmodule Cadence.Dev.SreObservabilityDemo do
           :ok
 
         {:error, :not_found} ->
-          membership =
-            OrganizationMembership.new(%{
-              user_id: user.user_id,
-              organization_id: ids.organization_id,
-              role: :organization_admin,
-              metadata: %{"source" => "sre_observability_demo"}
-            })
-
-          membership
-          |> OrganizationMembershipRow.changeset()
-          |> Cadence.Repo.insert()
-          |> case do
-            {:ok, _row} -> :ok
-            {:error, reason} -> {:error, reason}
-          end
+          grant_browser_membership(user, ids)
       end
     else
       nil -> :ok
       {:error, :not_found} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp grant_browser_membership(user, ids) do
+    membership =
+      OrganizationMembership.new(%{
+        user_id: user.user_id,
+        organization_id: ids.organization_id,
+        role: :organization_admin,
+        metadata: %{"source" => "sre_observability_demo"}
+      })
+
+    membership
+    |> OrganizationMembershipRow.changeset()
+    |> Cadence.Repo.insert()
+    |> case do
+      {:ok, _row} -> :ok
       {:error, reason} -> {:error, reason}
     end
   end
