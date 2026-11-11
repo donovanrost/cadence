@@ -66,6 +66,8 @@ defmodule Cadence.Commanding.VerifierWorkflow do
     transport_capability_records
     |> VerifierTransportSignals.build(transport_action_requests)
     |> Enum.group_by(& &1.mission_id)
+    # DECISIONS #72: missions in a global order, so release-attempt locks never cross.
+    |> Enum.sort_by(&elem(&1, 0))
     |> Enum.reduce_while({:ok, []}, fn {mission_id, mission_transport_signals}, {:ok, acc} ->
       case evaluate_transport_for_mission(
              mission_id,
