@@ -110,10 +110,10 @@ group must exist (`{"reason": "command_group_not_found"}` otherwise).
 
 These are the shapes I plan to build, revised with fe-ops' comments (plans/ops.md).
 
-- **Topic `spacecraft:<spacecraft_id>` (M8): final shape, building after qa's #38 freeze.**
-  Joined while one spacecraft is open (Investigate B1). It needs the same access as `mission:<id>`
-  (`operate_mission` on the spacecraft's mission). Join errors: `{"reason":
-  "spacecraft_not_found" | "forbidden" | "too_many_points"}`.
+- **Topic `spacecraft:<mission_id>:<spacecraft_id>` (M8)**, like `command_group:`: the console is
+  addressed by mission, so the mission is in the topic. Joined while one spacecraft is open
+  (Investigate B1). It needs the same access as `mission:<id>` (`operate_mission`). Join errors:
+  `{"reason": "mission_not_found" | "spacecraft_not_found" | "too_many_points"}`.
   - **Join** payload `{"point_ids": [...]}`, at most 200 (`too_many_points` above that). An
     empty payload (or no `point_ids`) selects none: the reply has `points: []` and nothing is
     pushed until `points:set`.
