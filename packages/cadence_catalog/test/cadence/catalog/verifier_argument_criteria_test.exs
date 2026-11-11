@@ -124,6 +124,7 @@ defmodule Cadence.Catalog.VerifierArgumentCriteriaTest do
               data_type: uint
               bit_offset: 0
               bit_length: 8
+              valid_values: [0, 1]
           verifiers:
             - name: Mode applied
               phase: completion

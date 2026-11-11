@@ -5,8 +5,9 @@ defmodule Cadence.Catalog.MissionModel.ArgumentCriteria do
 
   Types are compared by class (numeric, boolean, string, binary). A calibrated comparison
   (`use_calibrated`, the default) reads the parameter's engineering value, which is a label when
-  the parameter has enumerations (a state table): compare the raw value for those. Enumerated
-  arguments aren't supported yet: whether a request carries the label or the code is ambiguous.
+  the parameter has enumerations (a state table): compare the raw value for those. An enumerated
+  argument is numeric: the encoder sends its integer code (a request may carry "3" or 3, never a
+  label), and the runtime resolves it to that integer.
   """
 
   alias Cadence.Catalog.MissionModel.Reference
@@ -91,7 +92,6 @@ defmodule Cadence.Catalog.MissionModel.ArgumentCriteria do
       else: base_class(get(type.definition, :base_type))
   end
 
-  defp argument_class(base_type) when base_type in [:enumerated, "enumerated"], do: :unsupported
   defp argument_class(base_type), do: base_class(base_type)
 
   defp base_class(kind)

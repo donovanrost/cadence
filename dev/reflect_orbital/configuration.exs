@@ -76,11 +76,27 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
             value: true
   """
 
+  # SET_MODE also checks telemetry: the spacecraft's HK.sc_mode reads the mode it was sent
+  # (raw: sc_mode's state table makes the engineering value a label). Lets #38 verifier scope
+  # be tested live: only the target spacecraft's HK can satisfy it.
+  @mode_verifier """
+        - name: Mode applied
+          phase: completion
+          timeout_ms: 60000
+          success_criteria:
+            criteria_type: comparison
+            subject_ref: telemetry:HK.sc_mode
+            comparison: equal
+            value_from_argument: mode
+            use_calibrated: false
+  """
+
   defp with_demo_verifiers(source) do
     Enum.reduce(@verified_commands, source, fn name, acc ->
       line = "  - name: #{name}\n"
       ^line = if String.contains?(acc, line), do: line, else: raise("#{name} not found")
-      String.replace(acc, line, line <> @verifiers, global: false)
+      verifiers = if name == "SET_MODE", do: @verifiers <> @mode_verifier, else: @verifiers
+      String.replace(acc, line, line <> verifiers, global: false)
     end)
   end
 
