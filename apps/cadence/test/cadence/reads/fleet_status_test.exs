@@ -101,6 +101,13 @@ defmodule Cadence.Reads.FleetStatusTest do
     assert row.last_received_at == DateTime.add(@now, -86_400)
   end
 
+  test "telemetry is ok by default and degraded when the durable store didn't answer" do
+    assert build(%{spacecraft: [craft("a")]}).telemetry == :ok
+
+    assert build(%{spacecraft: [craft("a")], durable: %{receipts: %{}, telemetry: :degraded}}).telemetry ==
+             :degraded
+  end
+
   test "reports the worst violating point and freshness per spacecraft" do
     [row] =
       build(%{

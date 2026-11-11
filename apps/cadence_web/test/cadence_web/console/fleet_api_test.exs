@@ -24,6 +24,8 @@ defmodule CadenceWeb.Console.FleetAPITest do
       |> json_response(200)
       |> Map.fetch!("data")
 
+    assert data["telemetry"] == "ok"
+
     assert data["stale_after_s"] == FleetStatus.stale_after_s()
     assert data["last_received_at"] == nil
     assert data["limits"] == %{"configured" => false}

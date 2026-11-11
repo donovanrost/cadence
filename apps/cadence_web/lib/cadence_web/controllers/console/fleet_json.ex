@@ -8,6 +8,9 @@ defmodule CadenceWeb.Console.FleetJSON do
     %{
       observed_at: fleet.observed_at,
       stale_after_s: fleet.stale_after_s,
+      # "degraded": the durable history store didn't answer in time; freshness comes only from
+      # live values, so a spacecraft not heard since the last restart can read never heard.
+      telemetry: fleet |> Map.get(:telemetry, :ok) |> to_string(),
       last_received_at: fleet.last_received_at,
       # Not tracked yet: limit-transition history.
       counts: Map.put(fleet.counts, :critical_delta_1h, nil),

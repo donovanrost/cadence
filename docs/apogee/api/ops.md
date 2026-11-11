@@ -31,6 +31,7 @@ freshness to the second; at 1 Hz feeds, throttle that to about 10 s client-side)
   "data": {
     "observed_at": "2026-11-08T02:41:17Z",
     "stale_after_s": 900,
+    "telemetry": "ok",
     "last_received_at": "2026-11-08T02:41:15Z",
     "counts": {
       "total": 500, "critical": 3, "caution": 14, "stale": 12, "nominal": 471,
@@ -67,6 +68,13 @@ freshness to the second; at 1 Hz feeds, throttle that to about 10 s client-side)
 ```
 
 ### Semantics
+
+- `telemetry`: `ok`, or `degraded` when the durable history store (QuestDB) didn't answer within
+  3 s (`config :cadence, :fleet_durable_receipts_timeout_ms`). The read still answers, with
+  freshness taken from live values and limit states only, so a spacecraft not heard since the last
+  restart can read `never_heard`. Say "Telemetry history unavailable: freshness may be incomplete".
+  The same timeout protects `GET /spacecraft` and the spacecraft detail, which read the same
+  receipts.
 
 - `state`: `critical | caution | stale | nominal | never_heard`. It is the spacecraft's worst
   condition, in precedence order critical > caution > stale > nominal. `never_heard` means

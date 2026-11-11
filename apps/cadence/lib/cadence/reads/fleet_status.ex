@@ -24,6 +24,7 @@ defmodule Cadence.Reads.FleetStatus do
   alias Cadence.Telemetry.{Sample, SpacecraftReceipts}
 
   @default_stale_after_s 900
+  @durable_timeout_ms 3_000
   @limit_rank %{critical: 2, caution: 1, nominal: 0}
 
   @type state :: :critical | :caution | :stale | :nominal | :never_heard
@@ -61,7 +62,7 @@ defmodule Cadence.Reads.FleetStatus do
       profiles: Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id),
       limit_states: LimitReads.latest_states_for_mission(organization_id, mission_id, []),
       samples: TelemetryReads.latest_values_for_mission(organization_id, mission_id, []),
-      durable_receipts: durable_receipts(organization_id, mission_id),
+      durable: durable(organization_id, mission_id),
       now: now,
       stale_after_s: Keyword.get_lazy(opts, :stale_after_s, &stale_after_s/0)
     })
@@ -77,16 +78,25 @@ defmodule Cadence.Reads.FleetStatus do
     latest_receipts(
       TelemetryReads.latest_values_for_mission(organization_id, mission_id, []),
       LimitReads.latest_states_for_mission(organization_id, mission_id, []),
-      durable_receipts(organization_id, mission_id)
+      durable(organization_id, mission_id).receipts
     )
   end
 
-  defp durable_receipts(organization_id, mission_id) do
-    case SpacecraftReceipts.latest_by_spacecraft(organization_id, mission_id) do
-      {:ok, receipts} -> receipts
-      {:error, _unavailable} -> %{}
+  # The durable history store (QuestDB in production) can hang. Its receipts only fill in
+  # spacecraft not heard since the last restart, so a slow or failed store degrades to the live
+  # values and limit states instead of holding the whole read (fe-ops, Compose targets).
+  defp durable(organization_id, mission_id) do
+    task =
+      Task.async(fn -> SpacecraftReceipts.latest_by_spacecraft(organization_id, mission_id) end)
+
+    case Task.yield(task, durable_timeout_ms()) || Task.shutdown(task, :brutal_kill) do
+      {:ok, {:ok, receipts}} -> %{receipts: receipts, telemetry: :ok}
+      _unavailable_or_slow -> %{receipts: %{}, telemetry: :degraded}
     end
   end
+
+  defp durable_timeout_ms,
+    do: Application.get_env(:cadence, :fleet_durable_receipts_timeout_ms, @durable_timeout_ms)
 
   @doc "Configured staleness threshold in seconds (`config :cadence, :fleet_stale_after_s`)."
   @spec stale_after_s() :: pos_integer()
@@ -106,7 +116,9 @@ defmodule Cadence.Reads.FleetStatus do
       latest_receipts(
         Map.get(input, :samples, []),
         Map.get(input, :limit_states, []),
-        Map.get(input, :durable_receipts, %{})
+        input
+        |> Map.get(:durable, %{})
+        |> Map.get(:receipts, Map.get(input, :durable_receipts, %{}))
       )
 
     rows =
@@ -127,6 +139,8 @@ defmodule Cadence.Reads.FleetStatus do
     %{
       observed_at: now,
       stale_after_s: stale_after_s,
+      # :degraded when the durable history store didn't answer in time (see durable/2).
+      telemetry: input |> Map.get(:durable, %{}) |> Map.get(:telemetry, :ok),
       last_received_at: rows |> Enum.map(& &1.last_received_at) |> max_datetime(),
       counts: Map.merge(counts(rows), contact_counts(contacts, rows)),
       spacecraft: rows
