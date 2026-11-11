@@ -6,6 +6,10 @@ defmodule CadenceSimulator.Provider.UplinkSessions do
   uplink listener), receives TC frames, runs FARM and answers with CLCWs. Decoded commands go to
   the contact's TM stream (`command_target`), whose telemetry then reflects their effects, so
   Cadence can verify commands from telemetry. The peer reconnects on its own until stopped.
+
+  The caller (the Orchestrator) is linked to every peer it starts (DECISIONS #67): a peer can't
+  outlive the Orchestrator that tracks it. An orphaned peer kept reconnecting to its station's
+  uplink port and took the next pass's listener (qa #38 positive test).
   """
 
   alias CadenceSimulator.Provider.UplinkLeg
@@ -25,6 +29,7 @@ defmodule CadenceSimulator.Provider.UplinkSessions do
              command_target: stream_pid,
              clcw_overrides: armed(contact["id"])
            ) do
+      true = Process.link(pid)
       Map.put(sessions, contact["id"], %{pid: pid, reference: Process.monitor(pid)})
     else
       _running_or_not_uplinked -> sessions
@@ -54,6 +59,8 @@ defmodule CadenceSimulator.Provider.UplinkSessions do
 
       {%{pid: pid, reference: reference}, sessions} ->
         Process.demonitor(reference, [:flush])
+        # A deliberate stop isn't a failure: don't let its exit reach the caller (#67).
+        Process.unlink(pid)
         if Process.alive?(pid), do: CadenceSimulator.stop_simulator(pid)
         sessions
     end

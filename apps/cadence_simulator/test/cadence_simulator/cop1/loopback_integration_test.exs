@@ -173,7 +173,8 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
       Spacecraft.new(%{
         spacecraft_id: @spacecraft_id,
         mission_id: @mission_id,
-        display_name: "SC Simulator"
+        display_name: "SC Simulator",
+        scid: 0
       })
 
     assert {:ok, _spacecraft} =
@@ -292,7 +293,8 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
                 transport_binding_id: "uplink-gateway-alpha",
                 family_key: :uplink_gateway,
                 target_scope: :path,
-                configuration: transport_configuration
+                # #38: a release gateway names its spacecraft (SC Simulator's SCID).
+                configuration: Map.put_new(transport_configuration, "scid", 0)
               })
             ]
           })

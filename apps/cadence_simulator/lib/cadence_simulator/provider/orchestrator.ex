@@ -43,6 +43,9 @@ defmodule CadenceSimulator.Provider.Orchestrator do
 
   @impl true
   def init(opts) do
+    # Uplink peers are linked to this process (DECISIONS #67): if it dies they go with it; a
+    # peer's own exit arrives as a message (its monitor cleans up).
+    Process.flag(:trap_exit, true)
     tick_ms = Keyword.get(opts, :tick_ms, @tick_ms)
     schedule_tick(tick_ms)
 
@@ -73,6 +76,8 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     schedule_tick(state.tick_ms)
     {:noreply, reconcile_all(state, DateTime.utc_now())}
   end
+
+  def handle_info({:EXIT, _pid, _reason}, state), do: {:noreply, state}
 
   def handle_info({:DOWN, reference, :process, pid, reason}, state) do
     case UplinkSessions.down(state.uplinks, reference) do
