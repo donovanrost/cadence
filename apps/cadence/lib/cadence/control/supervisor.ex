@@ -89,11 +89,16 @@ defmodule Cadence.Control.Supervisor do
         provider_reservation_reconciler_children(composition) ++
         provider_event_ingestion_children(composition) ++
         uplink_qualification_children(composition) ++
-        [{Cadence.Control.PassResultsCloseOut, name: Cadence.Control.PassResultsCloseOut}]
+        pass_results_close_out_children(composition.control_process_namespace)
     else
       []
     end
   end
+
+  defp pass_results_close_out_children(%{pass_results_close_out: name}) when not is_nil(name),
+    do: [{Cadence.Control.PassResultsCloseOut, name: name}]
+
+  defp pass_results_close_out_children(_namespace), do: []
 
   # Provider-attested uplink qualification runs only when that policy is configured (#44 D2).
   defp uplink_qualification_children(
