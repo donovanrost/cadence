@@ -30,3 +30,18 @@ queued and released rows, History episodes, and G4 pending.
 
 ## Status
 - fe-ops 2145617b: #1–#6 accepted per commit (P3 and P2 load, next contact beyond 24 h, no fake gap, re-booked label, Telemetry wording and empty axis, slot format, G3 rows). I'll eyeball it on the next pass.
+
+## Live recheck (21:32Z, EARENDIL-001, 1440×900 and 390, writes blocked)
+#1–#6 hold: all five tabs load, next contact reads `AOS T−2d 03:01:40 SVA`, the gap says "No pass in the next
+24 h", the second booking says `re-booked`, Telemetry shows "No samples between …", slot reads `P01 · slot 01`,
+G3 names each role once. No horizontal scroll at 390. New findings (fe-ops), ranked:
+
+| # | Impact | Issue → fix |
+| --- | --- | --- |
+| 7 | Med | **P4: a rejected booking reads MISSED in crit** although the same window (SVA 18:57Z–19:05Z) was re-booked and flown. Crit there claims lost contact that didn't happen (U20). → When a later booking of the same window flew, the rejected row is `off` with the word `REJECTED`, not crit `MISSED`. Keep crit `MISSED` only when no booking of that window flew. |
+| 8 | Low | **P4: "Provider rejected (provider)"** names the party twice. → Drop the attribution suffix when the reason already names it: `Not flown · Provider rejected`. |
+| 9 | Low | **P1 Longest gap stacks "No pass in the next 24 h" over "No pass in the next 6 h".** The second line adds nothing. → Show the 6 h line only when a pass exists inside 24 h but none inside 6 h. |
+| 10 | Low | **T1: every point says "No value yet"** while the header says LAST TLM T+1d 15:22. "Yet" claims it never had one. → Show the last known value with the stale hatch and its age if the read has it; if not, `No recent value`. |
+| 11 | Low | **Telemetry empty plot says "between 11-11 15:31Z and 11-11 21:31Z"** on today's date. → §4 short time: `between 15:31Z and 21:31Z`; the date only when it isn't today. |
+| 12 | Low | **U2 "No other commandable pass is booked in the next 24 h"** when U1's pass is T−2d away, so "other" implies one inside 24 h. → Drop "other" when U1's pass is beyond 24 h. |
+| 13 | Low | **P2 row label truncates to `EARENDIL-0…`.** → Widen the label column to fit the name, or drop the label on a single-spacecraft track. |
