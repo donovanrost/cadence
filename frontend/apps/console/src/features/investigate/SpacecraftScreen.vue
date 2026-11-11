@@ -10,6 +10,7 @@ import HistoryTab from "./history/HistoryTab.vue";
 import UplinkTab from "./uplink/UplinkTab.vue";
 import PassesTab from "./passes/PassesTab.vue";
 import ConfigurationTab from "./configuration/ConfigurationTab.vue";
+import TelemetryTab from "./telemetry/TelemetryTab.vue";
 import SpacecraftHeader from "./SpacecraftHeader.vue";
 import { heroStatus, neighbours } from "./model.ts";
 import { useSpacecraftAlarms } from "./useInvestigate.ts";
@@ -69,6 +70,11 @@ const lookup = computed(() => {
             "
             :fleet="fleet.state.value.status === 'ready' ? fleet.state.value.value.spacecraft : []"
             @retry="alarms.refetch"
+          />
+          <TelemetryTab
+            v-else-if="tab === 'telemetry'"
+            :key="`t-${lookup.sc.id}`"
+            :sc="lookup.sc"
           />
           <ConfigurationTab
             v-else-if="tab === 'configuration'"

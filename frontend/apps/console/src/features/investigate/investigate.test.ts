@@ -10,6 +10,7 @@ import {
 import { argsSummary, evidenceWords, releaseRule } from "./uplink/api.ts";
 import { byDay, bytesWords, ruleWords } from "./passes/api.ts";
 import { catalogCaution, jsonWords, routingWords } from "./configuration/api.ts";
+import { filterCounts, pointMark, pointsFrom, toCsv, visiblePoints } from "./telemetry/model.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { formatLimitLike, formatValue, type Alarm } from "@/features/alarms/index.ts";
@@ -437,5 +438,29 @@ describe("Configuration tab words (api-ops 8d8f5c83)", () => {
         station: { id: "s", code: "SVB", name: "Svalbard" },
       }),
     ).toBe("SVB · primary · Primary downlink");
+  });
+});
+
+describe("Telemetry tab (Investigate.md §Telemetry)", () => {
+  const pt = (id: string, state: string | null, subsystem = "EPS") => ({
+    id,
+    name: id.toLowerCase(),
+    description: null,
+    unit: null,
+    subsystem,
+    type: "numeric" as const,
+    latest:
+      state === null ? null : { value: 1, received_at: null, limit_state: state as "nominal" },
+  });
+  it("filters, sorts out-of-limits first, caps pins at 3", () => {
+    const ps = [pt("A", "nominal"), pt("B", "critical"), pt("C", null), pt("D", "caution")];
+    expect(visiblePoints(ps, "all", "").map((p) => p.id)).toEqual(["B", "D", "A", "C"]);
+    expect(visiblePoints(ps, "out", "").map((p) => p.id)).toEqual(["B", "D"]);
+    expect(filterCounts(ps)).toEqual({ out: 2, stale: 1 });
+    expect(pointMark(pt("C", null))).toBe("stale");
+    expect(pointsFrom("a,b,c,d")).toEqual(["a", "b", "c"]);
+    expect(toCsv("P", [{ t: 0, min: 1, mean: 2, max: 3 }])).toBe(
+      "time,point,min,mean,max\n1970-01-01T00:00:00.000Z,P,1,2,3",
+    );
   });
 });

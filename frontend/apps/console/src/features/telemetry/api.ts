@@ -26,10 +26,10 @@ export type TelemetryPoint = Decoded<typeof point>;
 
 export function fetchPoints(
   missionId: string,
-  query: Readonly<{ spacecraftId?: string; q: string }>,
+  query: Readonly<{ spacecraftId?: string; q: string; limit?: number }>,
   signal?: AbortSignal,
 ): Promise<ApiResult<Decoded<typeof pointsReader>>> {
-  const params = new URLSearchParams({ q: query.q, limit: "50" });
+  const params = new URLSearchParams({ q: query.q, limit: String(query.limit ?? 50) });
   if (query.spacecraftId) params.set("spacecraft_id", query.spacecraftId);
   return request(
     `/missions/${encodeURIComponent(missionId)}/telemetry/points?${params.toString()}`,
