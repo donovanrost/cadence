@@ -15,7 +15,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Who | Start now (unblocked) | Waiting on |
 | --- | --- | --- |
 | **lead** | K1 C panel (focused spacecraft 24 h strip); `ApSheet` kit primitive (five hand-rolled dialogs today); `ApStatTile` `to` link; Palette `>` commands and `@` stations groups (with fe-ops) | — (api's K1 items shipped: send back, approval, stop time) |
-| **fe-ops** | Now tile links + A4 pass select + approval rows → request review; Investigate's five tabs link to the existing pages (#64) + add-point chips; Contacts D3 outage bands (S7 exists); Telemetry `Dashboards ↗` → existing pages (#11); Timeline sc/plane filter; Fleet/Alarms Next contact; Mobile GO block; Compose draft autosave (api a4d19e69) | — (api's M22, A1, M24 and drafts are in) |
+| **fe-ops** | Now tile links + A4 pass select + approval rows → request review; Investigate's five tabs link to the existing pages (#64) + add-point chips; Contacts D3 outage bands (S7 exists); Telemetry `Dashboards ↗` → existing pages (#11); Timeline sc/plane filter; Fleet/Alarms Next contact; Mobile GO block | — (api's M22, A1, M24 and drafts are in) |
 | **fe-setup** | Profile edit → stage (op + preview exist); People command policies tab (O4 exists); Changes compare (`/config/compare`) + Keep mine / Take live (`rebase`); Readiness R2 from revisions; Audit actor filter; qa #19 copy ("unclear, check now" on 5xx) | api: catalog diff, people/invite/service-identity writes, account password/sessions, provider history; domain: catalog generations (C3) |
 | **ux** | Visual review of the unreviewed boards (§7); Compose C1 layout ruling (default: accept as built, #64) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
@@ -30,7 +30,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | --- | --- | --- |
 | Stat tiles link (Critical/Caution/Stale → Alarms/Fleet, In contact → Contacts, Uplinks → Commands) | fe-ops + lead (`ApStatTile` gets `to`) | — |
 | ~~Queue kinds `missed_pass`, `station` + `Station` → Re-plan~~ done (de131e9b); `flight_event`: source landed (api-ops a02c2cee, 1b3be7f7, e07969bb), fe-ops reader 591bc06c | fe-ops | qa: a flight_event row seen live after the :4011 restart |
-| Attention source `contact_settlement` (#71): P2 row "N telemetry entries (size) are still on disk, not yet in the TSDB" with "Cadence stores them when telemetry storage is back", no Acknowledge, resolves as a system `replayed`; the contact drawer reads it by contact_id | fe-ops (reader first: widen the `source` enum), domain (source) | domain ships only after fe-ops' reader; ux wording |
+| ~~Attention source `contact_settlement` (#71) reader~~ done (14330a4a, U37 words, no Acknowledge, Review opens Contacts by contact_id); unknown kinds/sources now drop one row, not Now | fe-ops | domain: ship the source |
 | Header meta names the worst station issue | fe-ops | — (S7 status exists) |
 | ~~A4 pass bars open the contact drawer~~ done (51cc6133) | fe-ops | — |
 | ~~Approval rows open the request's review~~ done for a single group (a0e33fe1) | fe-ops | — |
@@ -50,7 +50,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | Compose layout: ux rules; default is to accept Command.md's C1–C5 as built (#64) | ux | — |
-| Draft autosave / `Save draft` / `DRAFT SAVED` | fe-ops | — (api a4d19e69: `GET/PUT/DELETE /missions/:id/command-draft`, `expected_revision` → 409 `command_draft_changed`; `draft_revision` on `POST /command-groups`) |
+| ~~Draft autosave / `Save draft` / `DRAFT SAVED`~~ done (c0510343, e262c233; ux 601a32f9; api a4d19e69) | fe-ops | — |
 | Per-target values (Same for all / Per target, Paste CSV, Now column) | fe-ops | — |
 | Verifier line / "No verifier: this command can't turn green" | fe-ops | catalog read carrying verifiers *(unverified)* |
 | Keep/Drop callout when a target leaves a live query | fe-ops | — |
@@ -238,7 +238,7 @@ missing endpoint or decision; an item with no blocker can start now.
 2. ~~qa #19 server side~~ done (33529f29).
 3. Catalog-path generations (#36), which unblock Catalog C3 rollout. Plan to the director first.
 4. ~~Spacecraft archive model (#50)~~ done (7dbd3994, e0232291, 5ee6d6e8; rollback of create verified c8526c57).
-5. #71 `contact_settlement` attention source (shape agreed with lead; sample sent to fe-ops). Ships after fe-ops widens the queue `source` enum. Replay follow-up next.
+5. #71 `contact_settlement` attention source: cleared to ship (fe-ops reader 14330a4a). Replay follow-up next.
 
 ## 9. Deferred by decision (not backlog)
 #2 roles/Cedar · #4 propagation (K0, ground track, umbra, sky plot, max elevation) · #5 procedures ·
