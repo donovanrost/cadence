@@ -6,7 +6,13 @@ Branch `ci/actions-develop`, based on `origin/develop` f9d89f83 (see
 
 Decided (director, 2026-11-11): Q4 yes, production console build in CI; Q6 yes, devops diagnoses
 the federation `integrity_failure` in delivery step 2; Q7 yes, `mix hex.audit` as a
-non-blocking step in `quality`. Q1–3 and Q5 are with the user.
+non-blocking step in `quality`.
+
+Decided (user, 2026-11-11): Q1 yes, `ci-ok` becomes required on `develop` **and** `main` after
+two green runs. Q3: pin OTP 29.0.5 / Elixir 1.20.4 in `mise.toml` as the one source of truth;
+CI reads the pins from it and `frontend.yml` is aligned, in a commit of its own. Q5: all specs
+run with writes gated off; the mutating serial job comes later. Q2 is pending the breakdown of
+the 46 findings (43 mechanical; 2 `CyclomaticComplexity`, 1 `Nesting`; no TODO/FIXME tags).
 
 Goal: PRs to `develop` and `main` get fast, trustworthy required checks, well under 15 min of
 wall clock. Build order is **Elixir first** (phases 1–3), then the Apogee console and its full
