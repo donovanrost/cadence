@@ -1,5 +1,12 @@
 import { logLines } from "./eventLog.ts";
 import { mergeSamples, tailPoints } from "./tail.ts";
+import {
+  conditionLine,
+  howItEnded,
+  occurrenceSummary,
+  peakFrom,
+  type Occurrence,
+} from "./history/api.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { formatLimitLike, formatValue, type Alarm } from "@/features/alarms/index.ts";
@@ -269,5 +276,58 @@ describe("M8 live tail", () => {
       after,
     );
     expect(pts).toEqual([{ t: Date.parse("2026-11-10T01:00:02Z"), min: 2, mean: 2, max: 2 }]);
+  });
+});
+
+describe("History tab (Investigate.md §History, api's episode reads)", () => {
+  const occ = (over: Partial<Occurrence> = {}): Occurrence => ({
+    id: "e1",
+    source: "ground_limit",
+    status: "cleared",
+    severity: "critical",
+    peak_severity: "critical",
+    condition: "red_low",
+    direction: "low",
+    point: { id: "EPS.VBAT", name: "VBAT", unit: "V" },
+    opened_at: "2026-11-09T03:00:00Z",
+    cleared_at: "2026-11-09T04:00:00Z",
+    duration_s: 3600,
+    ended: "back_in_limits",
+    cleared_unacknowledged: false,
+    acknowledged_by: null,
+    first_value: 23.5,
+    last_value: 24.2,
+    ...over,
+  });
+  it("words the condition and how it ended", () => {
+    expect(conditionLine(occ())).toBe("VBAT below red limit");
+    expect(howItEnded(occ())).toBe("Back in limits");
+    expect(howItEnded(occ({ ended: "source_stopped" }))).toBe("Source stopped reporting it");
+    expect(howItEnded(occ({ ended: null, cleared_at: null }))).toBe("Still open");
+  });
+  it("takes PEAK from the chart buckets inside the span, by direction; none for catalog", () => {
+    const t = (iso: string) => Date.parse(iso);
+    const buckets = [
+      { t: t("2026-11-09T02:30:00Z"), min: 20, max: 30 },
+      { t: t("2026-11-09T03:10:00Z"), min: 22.1, max: 24 },
+      { t: t("2026-11-09T03:40:00Z"), min: 22.6, max: 25 },
+    ];
+    expect(peakFrom(occ(), buckets, 0)).toEqual({ value: 22.1, t: t("2026-11-09T03:10:00Z") });
+    expect(peakFrom(occ({ direction: "high" }), buckets, 0)?.value).toBe(25);
+    expect(peakFrom(occ({ direction: null }), buckets, 0)).toBeNull();
+  });
+  it("summarises counts including this episode", () => {
+    const h = {
+      counts: { d7: 1, d30: 4, d90: 9 },
+      median_duration_s: 2280,
+      first_opened_at: null,
+      retention_days: null,
+      items: [],
+      next_before: null,
+    };
+    expect(occurrenceSummary(h)).toBe("4th time in 30 days · median 38m");
+    expect(occurrenceSummary({ ...h, counts: { d7: 1, d30: 1, d90: 1 } })).toBe(
+      "First time in 30 days · median 38m",
+    );
   });
 });
