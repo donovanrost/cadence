@@ -78,7 +78,11 @@ export const fleetFields = {
   spacecraft: d.array(spacecraft, 20_000),
 } as const;
 
-const fleetShape = d.object(fleetFields);
+const fleetShape = d.object({
+  ...fleetFields,
+  /** 17deb3c1: 'degraded' when the TSDB lookup timed out (live values and limits only). */
+  telemetry: d.optional(d.oneOf(["ok", "degraded"] as const)),
+});
 
 /** True when the state counts partition the rows (the invariant fleetReader enforces). */
 export function countsPartition(fleet: Decoded<typeof fleetShape>): boolean {

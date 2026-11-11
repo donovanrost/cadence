@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
 import { ApPanel, ApRemote } from "@/ui";
 import {
+  TelemetryDegraded,
   FleetMatrix,
   FleetStatStrip,
   layoutMatrix,
@@ -79,6 +80,7 @@ function openById(id: string) {
     <LiveStatusCallout />
     <ApRemote :state="fleet.state.value" loading-label="LOADING FLEET…" @retry="fleet.refetch">
       <template #default="{ value }">
+        <TelemetryDegraded :telemetry="value.telemetry" />
         <FleetStatStrip :fleet="value" />
         <div
           class="grid grid-cols-1 gap-3 md:grid-cols-[1.2fr_1fr] console:min-h-0 console:flex-1 console:grid-rows-[minmax(0,1fr)_min(var(--a3-need),45%)]"

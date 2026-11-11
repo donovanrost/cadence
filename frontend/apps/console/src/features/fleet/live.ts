@@ -37,6 +37,8 @@ const order = (a: FleetSpacecraft, b: FleetSpacecraft) =>
   a.name.localeCompare(b.name);
 
 const fleetOf = (push: FleetPush, spacecraft: readonly FleetSpacecraft[]): Fleet => ({
+  // Pushes carry live values only; the degraded flag belongs to GET /fleet.
+  telemetry: undefined,
   observed_at: push.observed_at,
   stale_after_s: push.stale_after_s,
   last_received_at: push.last_received_at,

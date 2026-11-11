@@ -33,6 +33,7 @@ export function spacecraftRow(
 export function fleetOf(rows: readonly FleetSpacecraft[], overrides: Partial<Fleet> = {}): Fleet {
   const n = (state: FleetSpacecraft["state"]) => rows.filter((sc) => sc.state === state).length;
   return {
+    telemetry: undefined,
     observed_at: "2026-11-08T02:41:17Z",
     stale_after_s: 900,
     last_received_at: "2026-11-08T02:41:15Z",

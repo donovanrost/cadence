@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
 import { plural, ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented } from "@/ui";
 import type { Fleet, FleetSpacecraft } from "./api.ts";
+import TelemetryDegraded from "./TelemetryDegraded.vue";
 import FleetFilters from "./FleetFilters.vue";
 import FleetMatrix from "./FleetMatrix.vue";
 import FleetStatStrip from "./FleetStatStrip.vue";
@@ -71,6 +72,7 @@ const title = computed(() => {
     </ApPageHeader>
     <ApRemote :state="fleet.state.value" loading-label="LOADING FLEET…" @retry="fleet.refetch">
       <template #default="{ value }">
+        <TelemetryDegraded :telemetry="value.telemetry" />
         <FleetFilters :filter="filter" :spacecraft="value.spacecraft" @change="setFilter" />
         <FleetStatStrip :fleet="narrowed(value).subset" />
         <ApPanel

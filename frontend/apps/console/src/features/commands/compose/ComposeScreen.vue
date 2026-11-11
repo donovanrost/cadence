@@ -4,7 +4,7 @@ import { useRoute } from "vue-router";
 import { describeApiError, useRemoteQuery } from "@/api/index.ts";
 import { TakeoverHeader, useMissionScope } from "@/shell/index.ts";
 import { ApButton, ApCallout, ApEmptyState, ApPanel, ApRemote, ApStationBar } from "@/ui";
-import { useFleet } from "@/features/fleet/index.ts";
+import { TelemetryDegraded, useFleet } from "@/features/fleet/index.ts";
 import { useCommandAccess } from "../access.ts";
 import { catalogRevisionWords, fetchCommand } from "../api.ts";
 import { fetchEndpoints, type TargetEndpoints } from "../groups/api.ts";
@@ -193,6 +193,10 @@ const close = computed(() => {
             loading-label="LOADING FLEET…"
             @retry="fleet.refetch"
           >
+            <TelemetryDegraded
+              v-if="fleet.state.value.status === 'ready'"
+              :telemetry="fleet.state.value.value.telemetry"
+            />
             <TargetsPanel
               :fleet="rows"
               :query="query"
