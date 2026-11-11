@@ -74,12 +74,23 @@ defmodule Cadence.Reads.FleetStatus do
   never reported as never heard after a restart.
   """
   @spec last_received_by_spacecraft(binary(), binary()) :: %{binary() => DateTime.t()}
-  def last_received_by_spacecraft(organization_id, mission_id) do
-    latest_receipts(
-      TelemetryReads.latest_values_for_mission(organization_id, mission_id, []),
-      LimitReads.latest_states_for_mission(organization_id, mission_id, []),
-      durable(organization_id, mission_id).receipts
-    )
+  def last_received_by_spacecraft(organization_id, mission_id),
+    do: organization_id |> last_received_with_status(mission_id) |> elem(0)
+
+  @doc """
+  `last_received_by_spacecraft/2` plus whether the durable history store answered: `:ok`, or
+  `:degraded` when it timed out or failed and only live receipts are included.
+  """
+  @spec last_received_with_status(binary(), binary()) ::
+          {%{binary() => DateTime.t()}, :ok | :degraded}
+  def last_received_with_status(organization_id, mission_id) do
+    durable = durable(organization_id, mission_id)
+
+    {latest_receipts(
+       TelemetryReads.latest_values_for_mission(organization_id, mission_id, []),
+       LimitReads.latest_states_for_mission(organization_id, mission_id, []),
+       durable.receipts
+     ), durable.telemetry}
   end
 
   # The durable history store (QuestDB in production) can hang. Its receipts only fill in

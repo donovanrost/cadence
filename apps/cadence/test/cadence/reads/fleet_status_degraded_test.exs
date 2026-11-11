@@ -16,10 +16,12 @@ defmodule Cadence.Reads.FleetStatusDegradedTest do
     Application.put_env(:cadence, :fleet_durable_receipts_timeout_ms, 0)
     assert %{telemetry: :degraded, spacecraft: _} = FleetStatus.load(c.org, c.mission)
     assert FleetStatus.last_received_by_spacecraft(c.org, c.mission) == %{}
+    assert FleetStatus.last_received_with_status(c.org, c.mission) == {%{}, :degraded}
   end
 
   test "a store that answers gives telemetry ok", c do
     Application.put_env(:cadence, :fleet_durable_receipts_timeout_ms, 5_000)
     assert %{telemetry: :ok} = FleetStatus.load(c.org, c.mission)
+    assert {%{}, :ok} = FleetStatus.last_received_with_status(c.org, c.mission)
   end
 end
