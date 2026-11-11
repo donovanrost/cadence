@@ -29,7 +29,7 @@ Not checked (no data on :4011): Telemetry with live samples (pass bands, crossha
 queued and released rows, History episodes, and G4 pending.
 
 ## Status
-- fe-ops 2145617b: #1–#6 accepted per commit (P3 and P2 load, next contact beyond 24 h, no fake gap, re-booked label, Telemetry wording and empty axis, slot format, G3 rows). I'll eyeball it on the next pass.
+- fe-ops 2145617b: #1–#6 accepted per commit (P3 and P2 load, next contact beyond 24 h, no fake gap, re-booked label, Telemetry wording and empty axis, slot format, G3 rows). Seen live at 21:32Z (below), before the CI-only browser rule.
 
 ## Live recheck (21:32Z, EARENDIL-001, 1440×900 and 390, writes blocked)
 #1–#6 hold: all five tabs load, next contact reads `AOS T−2d 03:01:40 SVA`, the gap says "No pass in the next

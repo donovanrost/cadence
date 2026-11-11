@@ -27,4 +27,4 @@ the desktop-only notice as specified.
 Not a finding: the floating `Sign in` widget at the bottom left is the dev-only Tidewave overlay, not the console.
 
 ## Status
-- fe-ops b8fe16e0: #1–#5 accepted per commit (the #5 header clock went to lead, TakeoverHeader). I'll check it live when load allows.
+- fe-ops b8fe16e0: #1–#5 accepted per commit (the #5 header clock went to lead, TakeoverHeader). No live recheck: browser checks run in CI now, not as routine checks (user rule, ARCHITECTURE.md "Working in the console").
