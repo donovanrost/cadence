@@ -430,6 +430,7 @@ attestations. Show it only for reasons it can fix (expired or missing evidence).
 | `session_not_attached` | qualifying | waiting for Northlight's uplink connection | – |
 | `protocol_state_restore_required` | blocked | the uplink restarted after this pass had sent commands, and it can't resume before LOS 01:06Z. The next pass isn't affected. | no ("Recovery isn't possible on this pass.") |
 | `attestation_*` (signature, challenge, peer, contact, validity, purpose) | blocked | Northlight's proof for this session didn't check out | yes |
+| `unverified_peer_connected` (#67) | blocked | an unverified connection took the uplink, so Cadence dropped it and is waiting for Northlight's verified one | yes |
 | `uplink_farm_locked_out` | blocked | the spacecraft's receiver reports a lockout | yes |
 | `provider_cannot_attest_uplink_sessions` | blocked | Northlight can't vouch for uplink sessions, so Cadence won't command through it. Choose a provider that can in Setup › Ground stations. | no (structural; domain f57e5fff refuses it) |
 | `provider_attestation_required` | blocked | Northlight didn't vouch for this session | yes |
