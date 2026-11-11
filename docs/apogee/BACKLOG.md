@@ -87,7 +87,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Fleet: "in contact" filter, Next contact column; virtualization past 200 rows *(unverified)* | fe-ops | — |
 | Alarms: group identical point+condition across spacecraft, Next contact, "Last cleared…" empty state; Cleared tab re-check (investigate review #20) | fe-ops | — |
 | ~~Telemetry `Dashboards ↗` → existing pages (#11)~~ done (718fd269); empty state's three suggested points | fe-ops | — |
-| Timeline: ~~sc scope~~ done (cb5767c9); plane filter (api done); custom range, E1 brush, live prepend + "N new events ↑" | fe-ops | live prepend: api-ops events topic *(unverified)* |
+| Timeline: ~~sc scope~~ done (cb5767c9); plane filter (api done); custom range, E1 brush, live prepend + "N new events ↑" (refetch the newest page on the existing `events` invalidation, throttled) | fe-ops | — |
 
 ## 3. Scheduling (`ScheduleFlow.md`)
 
@@ -221,7 +221,7 @@ missing endpoint or decision; an item with no blocker can start now.
 3. ~~Contacts Release~~ done (50c5e572, 04755d23; fe-ops a311cc8a, d43d2315). Swap station out (#68).
 4. ~~Catalog revision number~~ already there: `GET /command-catalog` basis carries `catalog_revision`.
 5. Investigate tab reads (director split): Uplink and Telemetry tabs. Agree shapes with fe-ops first.
-6. Timeline live prepend waits until someone confirms an events topic exists.
+6. ~~Timeline live prepend topic~~ not needed: `invalidate` with `events` already fires on mission:<id> (api-ops); a row push only if ux wants it.
 
 **api** (moved from api-ops, director rebalance)
 9. ~~M22 conflict/gap findings (Contacts D4)~~ done (985c00dc; fe-ops cab58d3d).
