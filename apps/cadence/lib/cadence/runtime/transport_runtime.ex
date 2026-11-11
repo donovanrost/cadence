@@ -135,6 +135,9 @@ defmodule Cadence.Runtime.TransportRuntime do
   def recovery_exchange(runtime, exchange, permit),
     do: GenServer.call(runtime, {:session_action, :exchange, [exchange, permit]})
 
+  def drop_session_peer(runtime, peer, reason),
+    do: GenServer.call(runtime, {:session_action, :drop_peer, [peer, reason]})
+
   def block_session(runtime, reason),
     do: GenServer.call(runtime, {:session_action, :block, [reason]})
 

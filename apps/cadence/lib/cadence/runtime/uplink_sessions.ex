@@ -33,6 +33,11 @@ defmodule Cadence.Runtime.UplinkSessions do
 
   defdelegate begin_recovery(runtime, evidence), to: TransportRuntime, as: :begin_session_recovery
 
+  @doc "Drops the session's connection to an unverified peer and keeps accepting (#67)."
+  defdelegate drop_unverified_peer(runtime, peer, reason),
+    to: TransportRuntime,
+    as: :drop_session_peer
+
   defdelegate complete_recovery(runtime, evidence),
     to: TransportRuntime,
     as: :complete_session_recovery

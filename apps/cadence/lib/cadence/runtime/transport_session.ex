@@ -138,6 +138,25 @@ defmodule Cadence.Runtime.TransportSession do
   defp run_action(state, :permit_recovery, [exchange, evidence]),
     do: {SessionReadiness.permit_recovery(state.session_handle, exchange, evidence), state}
 
+  # DECISIONS #67: the provider drops a connection whose peer qualification couldn't verify.
+  defp run_action(state, :drop_peer, [peer, reason]) do
+    {binding, adapter} = provider(state.configuration)
+
+    result =
+      ProviderAdapters.drop_unverified_peer(
+        state.process_namespace,
+        state.mission_id,
+        state.realized_contact_id,
+        state.path_id,
+        binding,
+        adapter,
+        peer,
+        reason
+      )
+
+    {result, cancel_timers(state)}
+  end
+
   defp run_action(state, :block, [reason]) do
     {SessionReadiness.block(state.session_handle, reason), cancel_timers(state)}
   end

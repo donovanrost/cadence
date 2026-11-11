@@ -195,7 +195,27 @@ defmodule Cadence.Control.UplinkQualification do
     :exit, reason -> {{:error, {:transport_runtime_unavailable, reason}}, nil}
   end
 
+  # DECISIONS #67: a peer the provider didn't attest holds the connection (a stray took the
+  # listener first). Drop it so the attested peer can connect; it reads blocked meanwhile.
   defp challenge(pid, review, booking, qualified, now) do
+    case challenge_session(pid, review, booking, qualified, now) do
+      {:error, :attestation_peer_mismatch} ->
+        drop_unverified_peer(pid, review.provider.peer)
+        {:error, :unverified_peer_connected}
+
+      result ->
+        result
+    end
+  end
+
+  defp drop_unverified_peer(pid, peer) do
+    _ = UplinkSessions.drop_unverified_peer(pid, peer, :attestation_peer_mismatch)
+    :ok
+  catch
+    :exit, _ -> :ok
+  end
+
+  defp challenge_session(pid, review, booking, qualified, now) do
     with :ok <- due(review, qualified, now),
          {:ok, fencing} <- evidence(booking, review, "fencing"),
          :ok <- UplinkSessions.begin_recovery(pid, fencing),

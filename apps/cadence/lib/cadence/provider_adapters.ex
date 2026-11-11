@@ -62,6 +62,27 @@ defmodule Cadence.ProviderAdapters do
     end
   end
 
+  @doc "Drops an unverified peer's connection on the path's provider runtime (DECISIONS #67)."
+  @spec drop_unverified_peer(
+          ProcessNamespace.t(),
+          binary(),
+          binary(),
+          binary(),
+          binary(),
+          atom(),
+          binary(),
+          term()
+        ) :: :ok | {:error, term()}
+  def drop_unverified_peer(namespace, mission, contact, path, binding, adapter_key, peer, reason) do
+    with {:ok, adapter} <- ProviderRegistry.fetch_module(adapter_key),
+         true <-
+           function_exported?(adapter, :drop_unverified_peer, 3) ||
+             {:error, :unsupported_by_adapter},
+         {:ok, runtime} <- provider_runtime(namespace, mission, contact, path, binding) do
+      adapter.drop_unverified_peer(runtime, peer, reason)
+    end
+  end
+
   @spec snapshot(binary(), binary(), binary(), binary(), atom()) ::
           {:ok, map()} | {:error, term()}
   def snapshot(mission_id, realized_contact_id, path_id, provider_binding_id, adapter_key)

@@ -4,6 +4,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Session do
   alias Cadence.Platform.ContentHash
   alias Cadence.Runtime.{ProcessNamespace, RecoveryExchange, SessionReadiness}
 
+  require Logger
+
   def initialize(state, opts) do
     config = Keyword.fetch!(opts, :configuration)
     namespace = Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
@@ -13,7 +15,10 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Session do
       session_resource: Map.get(config, :uplink_resource_id, config["uplink_resource_id"]),
       session_configuration_sha256: ContentHash.term_sha256(config),
       session_handle: nil,
-      session_blocking_reason: :tcp_provider_not_connected
+      session_blocking_reason: :tcp_provider_not_connected,
+      session_peer: nil,
+      # Last warning per {kind, peer IP} (monotonic ms): a reconnecting stray logs once a minute.
+      peer_warnings: %{}
     })
   end
 
@@ -29,6 +34,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Session do
       configuration_sha256: state.session_configuration_sha256,
       peer: peer(Map.get(state, :socket))
     }
+
+    state = Map.put(state, :session_peer, basis.peer)
 
     case SessionReadiness.register_provider(state.session_gate, state.session_resource, basis) do
       {:ok, handle} ->
@@ -49,6 +56,30 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Session do
   end
 
   defp peer(_socket), do: nil
+
+  @doc "The address of a socket's far end, `ip:port` (nil when unknown)."
+  def peer_of(socket), do: peer(socket)
+
+  @peer_warning_ms 60_000
+
+  @doc """
+  Logs a warning of `kind` about `peer`, at most once a minute per kind and peer IP
+  (DECISIONS #67), so a stray reconnecting every second doesn't flood the log.
+  """
+  def warn_peer(state, kind, peer, message) do
+    ip = {kind, peer |> to_string() |> String.split(":") |> List.first()}
+    now = System.monotonic_time(:millisecond)
+    warnings = Map.get(state, :peer_warnings, %{})
+
+    case warnings[ip] do
+      at when is_integer(at) and now - at < @peer_warning_ms ->
+        state
+
+      _due ->
+        Logger.warning(message)
+        Map.put(state, :peer_warnings, Map.put(warnings, ip, now))
+    end
+  end
 
   def block(%{session_handle: nil} = state, reason),
     do: %{state | session_blocking_reason: reason}
