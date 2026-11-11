@@ -651,7 +651,9 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
       |> post("/api/organizations/#{organization_id}/missions/#{mission_id}/spacecraft", %{
         "spacecraft" => %{
           "spacecraft_id" => "spacecraft-commanding-001",
-          "display_name" => "SC-CMD-001"
+          "display_name" => "SC-CMD-001",
+          # The release guard (#38) matches the gateway's SCID to the target's.
+          "scid" => 31
         }
       })
 
