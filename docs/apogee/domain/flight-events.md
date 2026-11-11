@@ -1,6 +1,8 @@
 # Flight events: a source for the Now queue
 
-Owner: **api-ops**. Reviewer: **domain** (model). Status: **v1 (form a) approved by domain** with the notes folded in below (BACKLOG f20fcad0).
+Owner: **api-ops**. Reviewer: **domain** (model). Status: **v1 (form a) built** (a02c2cee hook,
+1b3be7f7 queue items, e07969bb EventLog), approved by domain with the notes folded in below
+(BACKLOG f20fcad0). How it was built: §3a.
 The console wires the rows after (fe-ops). Ranking: ux U11. Queue contract: api/ops.md (action queue).
 
 ## 1. What a flight event is
@@ -102,6 +104,29 @@ There are two forms in real missions:
   never had the ground-limits gap.
 - **Wire.** Additive only: a new `kind` value, and on items an `event: {parameter, value,
   entered_at}`, `null` on other kinds. fe-ops gets the shape diff before anything ships.
+
+### 3a. As built (domain-approved)
+
+- **Where the rule is found.** Not on `MonitoringResult`: anything added to the Result changes
+  every stored commit's `result_term` and breaks `verify_replay`, and it feeds the hashed
+  evaluation document (docs/apogee/domain/semantic-runtime-replay.md). Not in
+  `semantic_observations` either: fetching the plan there is a data → management plane call.
+- **Instead,** the partition owner computes `SemanticRuntime.AlarmRules.for_result/2` from the
+  producing generation's `runtime_plans` (monitoring only) for transitions into an alarm state, as
+  `%{{policy_id, update_id} => %{kind, id, label}}`. The map travels beside
+  `observation_context` on the prepared result, never in the Result, the commit or a hash, on all
+  three paths: ingress, live timers, and re-projection on recovery
+  (`Persistence.persist_semantic_timer_result`). Recovered commits are scoped by
+  `runtime_basis_sha256`, so they get the plan they were evaluated under.
+- `MonitoringEvaluator.matched_rule/3` is pure. The worst matching rule by severity; `nil` when
+  the context is ambiguous (an unnamed context, or two contexts with the same name).
+  - `rule_id` = `"rule:"` + the first 16 hex of the sha256 of the canonical rule (key order and
+    atom/string keys don't change it).
+  - `rule_label` = `"<context or default>#<index>"`.
+- `Alarms.Sources.catalog/4` writes `rule_kind`, `rule_id` and `rule_label` into the episode
+  `context`.
+- `entered_at` is the episode's `opened_at`: that is already the triggering sample's generation
+  time (spacecraft time), so no separate `"entered_at"` key is written.
 
 **Later: form (b), onboard event messages.** It needs a model, so this is a separate review.
 
