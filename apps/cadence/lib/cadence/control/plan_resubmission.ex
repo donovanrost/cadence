@@ -21,7 +21,8 @@ defmodule Cadence.Control.PlanResubmission do
     ContactPlan,
     ContactPlanApprovals,
     ContactPlans,
-    PlanSubmissions
+    PlanSubmissions,
+    PlanUpdates
   }
 
   alias Cadence.Management.Contacts, as: ManagementContacts
@@ -54,8 +55,14 @@ defmodule Cadence.Control.PlanResubmission do
       end
     end)
     |> case do
-      {:ok, {plan, version}} -> {:ok, plan, version}
-      {:error, reason} -> {:error, reason}
+      {:ok, {plan, version}} ->
+        # After the commit (domain review): publishes from inside the transaction are delayed,
+        # but a slow commit could outlast that, and a rolled-back submit shouldn't be announced.
+        PlanUpdates.changed(scope.organization_id, mission_id)
+        {:ok, plan, version}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
