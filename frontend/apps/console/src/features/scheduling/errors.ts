@@ -14,6 +14,8 @@ const MESSAGES: Readonly<Record<string, string>> = {
   plan_changed: "Someone changed this plan meanwhile. It's reloaded; check it and try again.",
   plan_superseded:
     "Contact rules changed since this draft, so it's superseded and can't be submitted. Draft the day again.",
+  contact_plan_version_already_decided:
+    "This version was already decided (it was sent back), so it can't be submitted again as it is. Change the plan, then submit the new version.",
   plan_not_pending: "This plan isn't waiting for approval any more. It's reloaded.",
   plan_not_editable: "This plan can't be edited in its current state.",
   plan_not_submittable: "This plan can't be submitted in its current state.",

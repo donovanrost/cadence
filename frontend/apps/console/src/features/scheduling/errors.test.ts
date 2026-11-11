@@ -91,3 +91,16 @@ describe("planErrorText on an unclear outcome (qa #19)", () => {
     expect(planErrorText({ kind: "malformed", message: "x" })).toContain(unclear);
   });
 });
+
+describe("a sent-back version resubmitted unchanged (qa #40)", () => {
+  it("says why and what to do", () => {
+    expect(
+      planErrorText({
+        kind: "invalid",
+        code: "contact_plan_version_already_decided",
+        message: "The request could not be completed.",
+        details: null,
+      }),
+    ).toContain("Change the plan, then submit the new version.");
+  });
+});
