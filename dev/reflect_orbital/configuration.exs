@@ -52,6 +52,13 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
     %{mission: mission, revision: revision, apids: apids, fleet: fleet}
   end
 
+  @doc """
+  Imports the demo database as it reads now and returns its revision, without touching any
+  spacecraft configuration. For moving a fleet onto it with a change set (#65): the artifact id
+  is content-addressed, so this is a no-op returning the existing revision when nothing changed.
+  """
+  def import_revision(opts \\ []), do: import_database(opts)
+
   # The legacy reference database has no verifiers, so commands would never read satisfied.
   # The demo adds uplink verifiers to a few commands as it reads the file (#44); the reference
   # file itself stays untouched. COP-1 completion means the spacecraft's FARM accepted the frame.
