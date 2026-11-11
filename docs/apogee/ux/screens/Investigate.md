@@ -40,8 +40,8 @@ spacecraft tabs; only the area below the tabs changes.
   Orbit (`P07 · slot 12 · #4,812` = plane, slot, orbit number; parts omitted if unknown) · Last LOS
   (`T+00:06:41 FBK`) · **Next AOS** (white top bar, readout: `T−00:38:10 FBK`) · Next eclipse
   (`T−00:59:30`). Unknown facts are omitted (U10); the strip reflows to the facts it has.
-- **Tabs** (ApSegmented `tabs`, `role="tablist"`, path segment per tab). Telemetry is
-  specified separately (TBD); Uplink, Passes, Configuration and History are below; until built they render an
+- **Tabs** (ApSegmented `tabs`, `role="tablist"`, path segment per tab). All tabs are
+  specified below; until built they render an
   ApEmptyState "Not built yet in the new console" + link to the existing page. **[temporary]**
 
 ## B1 · Alarm trend (panel, alert-crit variant: index colored, panel neutral)
@@ -92,6 +92,36 @@ the row's state color (`aria-hidden`).
 - **Data:** `[{sc: {id, name, scid}, state, value_now, unit, next_aos?, spark: [v…]}]`, plane size.
 - **Empty:** `nominal` callout "No other spacecraft in plane 07 show this." **No plane metadata:**
   hide B4; B3 (if present) shows the single-target button only.
+
+## Tab · Telemetry (`M/fleet/:scId/telemetry[?points=a,b,c&range=6h]`) (fe-ops' layout, worded)
+**Question:** "What is every value on this spacecraft doing now, and how has one been trending?" Console
+layout. T1 scrolls. Reads only M23, M10, M11 and M8.
+```
+┌ T1 Points (360, pane, scrolls) ┐ ┌ T2 Plot · up to 3 points (ApTimePicker, default 6 h) ──────┐
+│ search · filter chips           │ ├ T3 Values · focused point (last 20 samples, scrolls) ──────┤
+└─────────────────────────────────┘ └──────────────────────────────────────────────────────────────┘
+```
+- **T1 Points:**
+  - Search (label, key).
+  - Chips: `Out of limits N` · `Stale N` · `All`. The default is All, sorted with out-of-limits first, then by
+    subsystem.
+  - Row: state mark (crit / caution / stale hatch / nominal; dashed `off` with `No limits`), label (600) with
+    the mono key under it, latest value + unit (U24 units, readout when live), age `T+2s` (stale per the
+    server, U9).
+  - A checkbox pins up to 3 points to T2. A 4th is disabled with the reason "Plot up to 3 points".
+- **T2 Plot:**
+  - One point: limit bands from M11, as on B1.
+  - 2–3 points: **stacked small multiples sharing the time axis**, one per point with its own unit and bands.
+    Never two y-axes on one plot.
+  - Pass spans as faint AOS–LOS bands with station codes, and the live tail from M8.
+  - Hover shows a crosshair readout of every plotted value at that time.
+  - Links: `Open in Explore` (same points and range), `Dashboards ↗` (DECISIONS #11).
+- **T3 Values:** the focused point's samples in the range (time to the second, value + unit, limit state),
+  newest first, plus `Export CSV`. Clicking a plot focuses it.
+- **Empty and errors:**
+  - No points: "EARENDIL-001 has no telemetry points yet (its profile defines none)."
+  - No data in range: "No samples between 11-12 02:00Z and 08:00Z.", with the plot axis kept.
+- **Mobile:** T1 only. A point opens its own plot view (1 point).
 
 ## Tab · Uplink (`M/fleet/:scId/uplink`) (api-ops' draft, worded)
 **Question:** "Can I command this spacecraft now, and what's going up?" Console layout, no page scroll at
