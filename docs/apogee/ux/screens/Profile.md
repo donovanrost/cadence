@@ -90,6 +90,25 @@ Header meta `3 OF 500 DIFFER FROM THE PROFILE`. Rows `ov` (`150px | 1fr | auto`)
   reason, since_revision, set_at, actor, redundant}]`. `redundant: true` (override equals the
   profile value) shows an `optional` row "Same as the profile now · Reset to inherit".
 - **Empty:** nominal callout "All 500 spacecraft match the profile."
+- **Add override** (director; fe-setup 15e3721f): compact header button `Add override` (only with `config.stage`).
+  It opens a form panel above the list. The form panel has no index of its own; the list keeps P3.
+  - Fields:
+    - `Spacecraft`: mono select of this profile's spacecraft, hint `500 on Earendil Block 1`.
+    - `Field`: `<label> · <section>`, with Catalog revision first.
+    - The value, generated from the schema. A catalog revision is a select of revisions (`rev 4 · imported
+      11-10`), never a raw id (U25). Fields with `runtime_impact: generation` carry the `RUNTIME` chip, as in P1.
+    - `Why this spacecraft differs`: required, with the hint "Shown on the override and in the change set."
+      and no placeholder.
+  - The value starts at the profile's value, with `Profile value: rev 3` under it. If the chosen spacecraft
+    already overrides that field, the value starts at its current override instead, and an info line reads
+    "EARENDIL-001 already overrides this: rev 4 since r3 (Mira K.: <reason>)". The primary then reads
+    `Stage change`, and the summary reads `EARENDIL-001 · change override Catalog revision`. Nothing is
+    replaced silently.
+  - Actions: `Check` (dry run), primary `Stage override`, ghost `Cancel`. Stage is disabled with its reason
+    until a spacecraft is chosen, the value is valid and differs from the profile ("Same as the profile's value.
+    Enter the value this spacecraft should use."), and the reason is filled in. It also stays disabled while
+    the last Check is NO-GO. Stage opens Changes.
+  - The change summary reads `EARENDIL-001 · override Catalog revision`.
 
 ### P4 · Staged edit (aside; only while there are dirty fields)
 As `Changes.md` §1: field path (mono), `− old` / `+ new`, tiles `Changes 499 SC` / `Keeps 1 SC`
