@@ -122,7 +122,8 @@ EARENDIL_CADENCE_NODE=cadence_apogee \
 #      caffeinate -dims -t <seconds>     # in a spare shell; touches neither lib nor the stack
 #    and check `pmset -g assertions | grep caffeinate` at T-15. A sleeping Mac lets the provider
 #    play the pass without Cadence: 037's 11-11 13:10:59Z contact expired unrealized and QuestDB got
-#    no TM while the host slept 12:57:30-17:09Z. Keep the lid open and on power.
+#    no TM while the host was in clamshell sleep 03:12-17:09Z (dark wakes only), and the 11-11 12:15Z
+#    010 retest (#38) ran on a sleeping host. Keep the lid open and on power.
 
 # 7. Live feeds (on request only; keep them short, e.g. EARENDIL_DEMO_CONTACT_SECONDS=600)
 cd apps/cadence_simulator
