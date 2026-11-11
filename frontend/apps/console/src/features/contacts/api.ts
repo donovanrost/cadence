@@ -74,7 +74,7 @@ const pass = d.object({
   uplink_readiness: d.optional(d.nullable(passReadinessReader)),
   /** Release (50c5e572): the booking revision to send back, and whether the viewer may release. */
   provider_revision: d.optional(d.nullable(d.integer)),
-  releasable: d.optional(d.boolean),
+  releasable: d.optional(d.nullable(d.boolean)),
 });
 export const passReader = pass;
 
