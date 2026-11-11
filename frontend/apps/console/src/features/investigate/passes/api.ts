@@ -6,7 +6,9 @@ import {
   type Decoded,
   type Reader,
 } from "@/api/index.ts";
-import { outcomes, owners } from "@/features/review/api.ts";
+import type { OpState } from "@/ui";
+import { outcomes, owners, type Owner } from "@/features/review/api.ts";
+import { causeText, outcomeTag, ownerWord } from "@/features/review/format.ts";
 
 /**
  * Investigate › Passes (Investigate.md §Passes; ops.md §spacecraft/:id/passes, api 324428aa):
@@ -136,11 +138,33 @@ export function bytesWords(n: number | null): string {
  * in the list says "re-booked" (ux review 4).
  */
 export function rebooked(rows: readonly RecentPass[], r: RecentPass): boolean {
-  const same = rows.filter(
-    (x) =>
-      x.planned_aos === r.planned_aos &&
-      x.planned_los === r.planned_los &&
-      (x.station?.code ?? x.station?.name) === (r.station?.code ?? r.station?.name),
-  );
+  const same = rows.filter((x) => sameWindow(x, r));
   return same.length > 1 && same[0]?.id !== r.id;
+}
+
+const sameWindow = (a: RecentPass, b: RecentPass) =>
+  a.planned_aos === b.planned_aos &&
+  a.planned_los === b.planned_los &&
+  (a.station?.code ?? a.station?.name) === (b.station?.code ?? b.station?.name);
+
+/**
+ * P4 tag (ux #7): a booking that didn't fly while another booking of the same window did was
+ * rejected and replaced, not a lost contact: off `Rejected`. Crit `Missed` only when none flew.
+ */
+export function recentTag(
+  rows: readonly RecentPass[],
+  r: RecentPass,
+): Readonly<{ state: OpState; label: string }> {
+  const flownElsewhere =
+    r.actual_aos === null &&
+    rows.some((x) => x.id !== r.id && x.actual_aos !== null && sameWindow(x, r));
+  return flownElsewhere ? { state: "off", label: "Rejected" } : outcomeTag(r.outcome);
+}
+
+/** P4 cause (ux #8): the owner in brackets only when the cause doesn't already name it. */
+export function causeWithOwner(cause: string | null, owner: Owner | null): string {
+  const text = causeText(cause);
+  if (!owner) return text;
+  const who = ownerWord[owner].toLowerCase();
+  return text.toLowerCase().includes(who) ? text : `${text} (${who})`;
 }

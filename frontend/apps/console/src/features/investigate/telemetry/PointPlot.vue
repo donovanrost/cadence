@@ -49,9 +49,11 @@ useMissionInvalidation(
   ["limits"],
   intervals.refetch,
 );
+/** §4 short (ux #11): `15:31Z` today, `11-10 15:31Z` otherwise. */
 const edge = (t: number) => {
   const iso = new Date(t).toISOString();
-  return `${iso.slice(5, 10)} ${iso.slice(11, 16)}Z`;
+  const today = iso.slice(0, 10) === new Date().toISOString().slice(0, 10);
+  return `${today ? "" : `${iso.slice(5, 10)} `}${iso.slice(11, 16)}Z`;
 };
 const view = computed(() => {
   const h = history.state.value;

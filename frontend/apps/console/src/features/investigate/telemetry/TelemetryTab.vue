@@ -223,7 +223,8 @@ const latest = (p: (typeof all.value)[number]) =>
             </label>
             <span class="text-right font-mono text-sm">
               <span v-if="p.latest" class="block text-readout">{{ latest(p) }}</span>
-              <span v-else class="block text-text-3">No value yet</span>
+              <!-- ux #10: null can mean "not in the read's window", so never claim "yet". -->
+              <span v-else class="block text-text-3">No recent value</span>
               <span v-if="p.latest?.received_at" class="block text-xs text-text-3">{{
                 formatRelative(new Date(p.latest.received_at), now)
               }}</span>

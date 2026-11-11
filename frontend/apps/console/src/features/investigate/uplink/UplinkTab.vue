@@ -69,6 +69,9 @@ const blockedLine = (u: SpacecraftUplink) =>
         null,
       )
     : null;
+/** ux #12: U2 says "other" only when U1's pass is itself inside the 24 h it counts. */
+const nowWithin24h = (u: SpacecraftUplink) =>
+  u.now !== null && Date.parse(u.now.pass.starts_at) - now.value.getTime() <= 86_400_000;
 const composeTo = computed(() => ({
   name: "ops.commands.new",
   query: { targets: `sc:${props.sc.id}` },
@@ -148,7 +151,7 @@ const composeTo = computed(() => ({
             >
               {{
                 u.next_passes.length === 0
-                  ? "No other commandable pass is booked in the next 24 h."
+                  ? `No ${nowWithin24h(u) ? "other " : ""}commandable pass is booked in the next 24 h.`
                   : `Only ${u.next_passes.length} commandable ${u.next_passes.length === 1 ? "pass is" : "passes are"} booked in the next 24 h.`
               }}
             </p>

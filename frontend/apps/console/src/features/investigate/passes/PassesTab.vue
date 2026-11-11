@@ -19,15 +19,16 @@ import {
 import { fetchPasses, passGantt, type Pass } from "@/features/contacts/index.ts";
 import { readinessTag } from "@/features/contacts/readiness.ts";
 import { contactOpState, contactState, contactStateWord } from "@/features/scheduling/index.ts";
-import { causeText, outcomeTag, ownerWord } from "@/features/review/format.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { minutes } from "../history/api.ts";
 import {
   byDay,
   bytesWords,
+  causeWithOwner,
   fetchCoverage,
   fetchRecentPasses,
   rebooked,
+  recentTag,
   ruleWords,
   type RecentPass,
   type SpacecraftCoverage,
@@ -119,7 +120,7 @@ const notReady = (p: Pass) => {
 const recentLine = (r: RecentPass) =>
   [
     r.actual_aos ? `Flown ${t(r.actual_aos)}–${r.actual_los ? t(r.actual_los) : "…"}` : "Not flown",
-    `${causeText(r.cause)}${r.owner ? ` (${ownerWord[r.owner].toLowerCase()})` : ""}`,
+    causeWithOwner(r.cause, r.owner),
     r.received_bytes !== null ? `${bytesWords(r.received_bytes)} received` : null,
   ]
     .filter(Boolean)
@@ -181,7 +182,10 @@ const days = computed(() =>
               :class="cov.coverage.none_within_6h ? 'text-caution-text' : 'text-readout'"
             >
               {{ gapWords(cov) }}
-              <span v-if="cov.coverage.none_within_6h" class="block text-xs"
+              <!-- ux #9: only when a pass exists inside 24 h but none inside 6 h. -->
+              <span
+                v-if="cov.coverage.none_within_6h && cov.coverage.passes_next_24h > 0"
+                class="block text-xs"
                 >No pass in the next 6 h</span
               >
             </dd>
@@ -216,6 +220,7 @@ const days = computed(() =>
           :window="gantt.window"
           :now="now.getTime()"
           :lane-height="26"
+          :label-width="Math.max(88, sc.name.length * 8 + 16)"
           @select="open"
         />
       </div>
@@ -291,15 +296,12 @@ const days = computed(() =>
               <ApListRow
                 v-for="r in g.rows"
                 :key="r.id"
-                :state="outcomeTag(r.outcome).state"
+                :state="recentTag(g.rows, r).state"
                 :title="`${code(r.station)} · ${t(r.planned_aos)}–${t(r.planned_los)}${rebooked(g.rows, r) ? ' · re-booked' : ''}`"
                 :sentence="recentLine(r)"
               >
                 <template #action>
-                  <ApTag
-                    :state="outcomeTag(r.outcome).state"
-                    :label="outcomeTag(r.outcome).label"
-                  />
+                  <ApTag :state="recentTag(g.rows, r).state" :label="recentTag(g.rows, r).label" />
                 </template>
               </ApListRow>
             </ul>

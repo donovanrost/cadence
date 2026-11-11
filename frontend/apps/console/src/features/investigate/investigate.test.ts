@@ -8,7 +8,7 @@ import {
   type Occurrence,
 } from "./history/api.ts";
 import { argsSummary, evidenceWords, releaseRule } from "./uplink/api.ts";
-import { byDay, bytesWords, rebooked, ruleWords } from "./passes/api.ts";
+import { byDay, bytesWords, causeWithOwner, rebooked, recentTag, ruleWords } from "./passes/api.ts";
 import { catalogCaution, jsonWords, routingWords } from "./configuration/api.ts";
 import { filterCounts, pointMark, pointsFrom, toCsv, visiblePoints } from "./telemetry/model.ts";
 import { describe, expect, it } from "vite-plus/test";
@@ -405,6 +405,16 @@ describe("Passes tab words (api 324428aa)", () => {
     ]);
     const twice = [row("m", "2026-11-10T18:57:00Z"), row("p", "2026-11-10T18:57:00Z")];
     expect(twice.map((r) => rebooked(twice, r))).toEqual([false, true]);
+    // ux #7: the rejected booking of a window that flew elsewhere is off 'Rejected', not Missed.
+    const at = "2026-11-10T18:57:00Z";
+    const rejected = { ...row("m", at), outcome: "missed" as const };
+    const flown = { ...row("p", at), actual_aos: at, outcome: "partial" as const };
+    expect(recentTag([rejected, flown], rejected)).toEqual({ state: "off", label: "Rejected" });
+    expect(recentTag([rejected], rejected)).toEqual({ state: "crit", label: "Missed" });
+    expect(recentTag([rejected, flown], flown).label).toBe("Partial");
+    // ux #8: no "(provider)" after a cause that already names the provider.
+    expect(causeWithOwner("provider_rejected", "provider")).toBe("Provider rejected");
+    expect(causeWithOwner("not_ingested", "us")).toBe("Delivered, not ingested (us)");
     expect(bytesWords(1_234_567)).toBe("1.2 MB");
     expect(bytesWords(null)).toBe("—");
   });
