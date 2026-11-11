@@ -338,6 +338,46 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
 
 Errors: `404 mission_not_found`.
 
+## `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/uplink` (Investigate Uplink tab): proposed
+
+"Can I command this spacecraft now, and what's going up?" (Investigate.md, Tab · Uplink.)
+
+```json
+{"data": {
+  "spacecraft": {"id": "…", "name": "EARENDIL-001", "scid": 1},
+  "route": {"routing_rule_id": "…", "name": "BLOCK 1 · ALL STATIONS", "transport_id": "…", "gateway_scid": 1},
+  "now": {"in_contact": true, "pass": {"reservation_id": "…", "contact_id": "…", "station": {…}, "provider": {"id", "name"}, "starts_at": "…", "ends_at": "…"},
+          "readiness": {"state": "ready", "reason": null, "since": "…"}},
+  "next_passes": [{"reservation_id": "…", "contact_id": "…", "station": {…}, "provider": {…}, "starts_at": "…", "ends_at": "…", "uplink_evidence": "booked"}],
+  "queue": [{"position": 1, "request_id": "…", "command_id": "…", "command_name": "SET_MODE", "arguments_json": "{\"mode\":3}",
+             "group": {"id": "…", "title": "…"}, "not_before": null, "expires_at": "…", "queued_at": "…"}],
+  "waits_for": {"pass": {…}, "readiness": {…} | null},
+  "released": [{"request_id": "…", "command_name": "NOOP", "group": {"id", "title"} | null, "released_at": "…",
+                "contact_id": "…", "status": "released", "verification_state": "satisfied"}]
+}}
+```
+
+- **U1 `now`:**
+  - `in_contact: true` when the spacecraft is inside a live commandable pass, which is then `pass`
+    with its readiness (U33 words).
+  - Otherwise `pass` is the next commandable pass, with readiness when its session is already up.
+  - `now: null` means no commandable pass is booked.
+- **U2 `next_passes`:** up to 3 commandable passes (with a command window) in the next 24 h after
+  `now.pass`. `uplink_evidence` is `booked` (the provider confirmed the uplink leg) or `attested`
+  (operator-attested, uplink unconfirmed, U32/#46).
+- **U3 `queue`:** this spacecraft's lane in release order (priority, then queue order), pending or
+  releasing.
+  - Release rule: `not_before` (null = at the next AOS); expiry: `expires_at`.
+  - `waits_for` is the pass the lane's head will release on (the same for every entry; a lane
+    releases in order), with its readiness for the U33 blocked line.
+- **U4 `released`:** releases in the last 24 h, newest first. `status` is the command status
+  (`released | in_flight | failed | indeterminate | release_pending`) and `verification_state`
+  is `satisfied | failed | timed_out | not_required | pending | null`. Map them to CommandFlow C3's
+  words.
+- **`route`:** the primary active uplink routing rule, or `null` (header meta).
+- Errors: `404 spacecraft_not_found`, `404 mission_not_found`. Refetch on `invalidate`
+  `commanding`, `contacts` and `attention`.
+
 ## Time windows (shared by M10 and M11)
 
 Query: `from` and `to` are ISO-8601 (default: the last hour ending now); `spacecraft_id` is
