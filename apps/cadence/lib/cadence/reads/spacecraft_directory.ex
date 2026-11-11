@@ -16,13 +16,30 @@ defmodule Cadence.Reads.SpacecraftDirectory do
   alias Cadence.SpacecraftType
 
   @spec load(binary(), binary()) :: [map()]
-  def load(organization_id, mission_id) do
-    build(%{
-      spacecraft: Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id),
-      profiles: Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id),
-      routing_rules: OperationalState.list_routing_rules(organization_id, mission_id),
-      last_received: FleetStatus.last_received_by_spacecraft(organization_id, mission_id)
-    })
+  def load(organization_id, mission_id),
+    do: organization_id |> index(mission_id) |> Map.fetch!(:spacecraft)
+
+  @doc """
+  The directory plus `telemetry: :ok | :degraded`: degraded when the durable history store
+  didn't answer in time, so `last_received_at` comes from live values only (api-ops 17deb3c1)
+  and may be missing for spacecraft not heard since the last restart.
+  """
+  @spec index(binary(), binary()) :: %{spacecraft: [map()], telemetry: :ok | :degraded}
+  def index(organization_id, mission_id) do
+    {last_received, telemetry} =
+      FleetStatus.last_received_with_status(organization_id, mission_id)
+
+    %{
+      spacecraft:
+        build(%{
+          spacecraft: Cadence.SpacecraftStore.list_spacecraft(organization_id, mission_id),
+          profiles:
+            Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id),
+          routing_rules: OperationalState.list_routing_rules(organization_id, mission_id),
+          last_received: last_received
+        }),
+      telemetry: telemetry
+    }
   end
 
   @doc "Pure builder; see `load/2` for the inputs."

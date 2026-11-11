@@ -28,6 +28,8 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
     assert row["routing_rule_count"] == 0
     assert row["ready"] == false
     assert row["last_received_at"] == nil
+    # Whether last_received_at had the durable store behind it (api-ops 17deb3c1).
+    assert data["telemetry"] in ["ok", "degraded"]
     assert Map.has_key?(row, "norad_id")
     assert Map.has_key?(row, "plane")
   end
@@ -50,6 +52,7 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
       |> Map.fetch!("data")
 
     assert data["spacecraft"]["name"] == "EARENDIL-009"
+    assert data["telemetry"] in ["ok", "degraded"]
     assert data["routing_rules"] == []
     assert data["configuration"] == nil
     assert data["readiness"]["ready"] == false

@@ -22,17 +22,20 @@ defmodule Cadence.Reads.SpacecraftDetail do
         |> OperationalState.list_routing_rules(mission_id)
         |> Enum.filter(&(&1.spacecraft_id == spacecraft_id))
 
+      {last_received, telemetry} =
+        FleetStatus.last_received_with_status(organization_id, mission_id)
+
       {:ok,
-       build(%{
+       %{
          spacecraft: craft,
          profiles: Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id),
          routing_rules: rules,
          transports: OperationalState.list_transports(organization_id, mission_id),
-         last_received_at:
-           organization_id
-           |> FleetStatus.last_received_by_spacecraft(mission_id)
-           |> Map.get(spacecraft_id)
-       })}
+         last_received_at: Map.get(last_received, spacecraft_id)
+       }
+       |> build()
+       # :degraded: the durable store didn't answer in time; last_received_at is live-only.
+       |> Map.put(:telemetry, telemetry)}
     end
   end
 

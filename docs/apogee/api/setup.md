@@ -48,6 +48,10 @@ The Setup spacecraft directory. It is unpaginated (the client filters) and sorte
 - `last_received_at`: newest telemetry or limit evaluation received, or null if never heard
   ("Awaiting first AOS"). It is the same source as `/fleet`. It replaces the requested
   `first_heard_at`, which needs a projection that doesn't exist yet.
+- `telemetry` (top level, on the list and on spacecraft detail): `"ok"`, or `"degraded"` when the
+  durable telemetry history didn't answer in time (3 s). Then `last_received_at` comes from live
+  values only and is `null` for spacecraft not heard since the last server restart: say "last
+  received may be incomplete" rather than "never heard".
 - **Not in v1:** `configuration` (`active_version`, `draft_status`) from the requested shape. The
   configuration draft and activation model is being reworked into mission change sets
   (DECISIONS #1), so this field arrives with that seam instead of shipping a shape that is about

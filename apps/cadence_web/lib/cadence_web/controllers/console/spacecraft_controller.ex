@@ -6,12 +6,12 @@ defmodule CadenceWeb.Console.SpacecraftController do
   alias Cadence.Reads.SpacecraftDirectory
 
   def index(conn, _params) do
-    rows =
-      SpacecraftDirectory.load(
+    directory =
+      SpacecraftDirectory.index(
         conn.assigns.current_scope.organization_id,
         conn.assigns.current_mission.mission_id
       )
 
-    json(conn, %{data: %{spacecraft: rows}})
+    json(conn, %{data: directory})
   end
 end
