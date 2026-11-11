@@ -11,6 +11,8 @@ import { fetchGroups, groupRow, preflightReader, type Preflight } from "./api.ts
 import { checkMeta, checkRows, noGoReason, routingProfile } from "./checks.ts";
 import { showBody } from "./fixtures.ts";
 import { groupReader } from "./show.ts";
+import { notPlottable, seriesChart, seriesMeta, type VerifierSeries } from "./series.ts";
+import { onlyFrom } from "../compose/useResend.ts";
 import { fetchEncoding, hexBytes } from "./encoding.ts";
 
 function arg(overrides: Partial<CommandArgument>): CommandArgument {
@@ -316,5 +318,53 @@ describe("M24 encode preview", () => {
     } finally {
       globalThis.fetch = original;
     }
+  });
+});
+
+describe("M26 verifier series (U2)", () => {
+  const base: VerifierSeries = {
+    telemetry: undefined,
+    verifier: { position: 1, command_id: "c", command_name: "SET_TEMP" },
+    point: { id: "THERM.sp", name: "batt_setpoint", unit: "°C", type: "numeric" },
+    reason: null,
+    commanded: { value_json: "8.0", comparison: "eq" },
+    band: null,
+    window: { from: "2026-11-10T01:00:00Z", to: "2026-11-10T01:05:00Z" },
+    targets: [
+      {
+        spacecraft_id: "a",
+        name: "A",
+        verifier_state: "satisfied",
+        samples: [{ t: "2026-11-10T01:01:00Z", value_json: "8.0" }],
+      },
+      {
+        spacecraft_id: "b",
+        name: "B",
+        verifier_state: "failed",
+        samples: [{ t: "2026-11-10T01:01:00Z", value_json: "5.0" }],
+      },
+    ],
+    target_count: 2,
+    truncated: false,
+    summary: { met: 1, not_met: 1, pending: 0 },
+  };
+  it("headers, plots, and says why not when it can't", () => {
+    expect(seriesMeta(base)).toBe("02 SET_TEMP · 1 met 8.0 · 1 did not");
+    const chart = seriesChart(base);
+    expect(chart?.lines.map((l) => [l.tone, l.dash, l.points.length])).toEqual([
+      ["text-4", "solid", 1],
+      ["text-2", "solid", 1],
+      ["readout", "dashed", 2],
+    ]);
+    expect(
+      notPlottable({ ...base, point: null, reason: "verified_by_uplink_acknowledgement" }),
+    ).toBe("Not plottable: verified by uplink acknowledgement only");
+    expect(notPlottable({ ...base, window: null })).toBe(
+      "Nothing to plot until the first uplink is released",
+    );
+  });
+  it("Re-send narrows to ?only=", () => {
+    expect(onlyFrom("a,b")).toEqual(["a", "b"]);
+    expect(onlyFrom(undefined)).toEqual([]);
   });
 });

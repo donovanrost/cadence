@@ -24,7 +24,13 @@ export function resendFrom(value: unknown): string | null {
  * Prefills Compose once from a sent-back group: its explicit targets, stack (values as sent),
  * title, log, approver and hold time. The reviewer's note shows above the form.
  */
-export function useResend(missionId: Ref<string>, fromId: string | null, into: ResendTargets) {
+export function useResend(
+  missionId: Ref<string>,
+  fromId: string | null,
+  into: ResendTargets,
+  /** Uplink N `Re-send` (DECISIONS #69): only these targets of the group. */
+  only: readonly string[] = [],
+) {
   const sentBackFrom = ref<string | null>(null);
   const notice = shallowRef<{ tone: "info" | "caution"; text: string } | null>(null);
   if (fromId === null) return { sentBackFrom, notice };
@@ -41,7 +47,9 @@ export function useResend(missionId: Ref<string>, fromId: string | null, into: R
         plane: null,
         profile: null,
         states: [],
-        explicit: group.targets.map((t) => t.spacecraft_id),
+        explicit: group.targets
+          .map((t) => t.spacecraft_id)
+          .filter((id) => only.length === 0 || only.includes(id)),
       };
       into.stack.value = stack;
       into.title.value = group.title;
@@ -56,9 +64,13 @@ export function useResend(missionId: Ref<string>, fromId: string | null, into: R
       notice.value = {
         tone: missing.length ? "caution" : "info",
         // The quoted note ends the sentence itself; no period after the closing quote.
-        text: `Resending “${group.title}”${note ? `, sent back with: “${note}”` : "."}${gone}`,
+        text: `Resending “${group.title}”${only.length ? ` to ${only.length} of ${group.targets.length} targets` : ""}${note ? `, sent back with: “${note}”` : "."}${gone}`,
       };
     })
     .catch((e: unknown) => console.error("Resend prefill failed", e));
   return { sentBackFrom, notice };
 }
+
+/** `?only=a,b` → the target ids to keep. */
+export const onlyFrom = (value: unknown): string[] =>
+  typeof value === "string" && value ? value.split(",").filter(Boolean) : [];

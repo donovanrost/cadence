@@ -17,7 +17,7 @@ import TargetsPanel from "./TargetsPanel.vue";
 import { checkItem, move, newItem, type StackItem } from "./stack.ts";
 import { queryFromRoute, resolveTargets, type TargetQuery } from "./targets.ts";
 import { useComposeRequest } from "./useComposeRequest.ts";
-import { resendFrom, useResend } from "./useResend.ts";
+import { onlyFrom, resendFrom, useResend } from "./useResend.ts";
 
 /**
  * C1 Compose / J3 Command a group (Command.md, DECISIONS #31: every request is a group). Targets
@@ -85,14 +85,19 @@ function setOverride(spacecraftId: string, endpointId: string | null) {
   const { [spacecraftId]: _drop, ...rest } = overrides.value;
   overrides.value = endpointId === null ? rest : { ...rest, [spacecraftId]: endpointId };
 }
-const resend = useResend(missionId, resendFrom(route.query.from), {
-  query,
-  stack,
-  title,
-  log,
-  approver,
-  release,
-});
+const resend = useResend(
+  missionId,
+  resendFrom(route.query.from),
+  {
+    query,
+    stack,
+    title,
+    log,
+    approver,
+    release,
+  },
+  onlyFrom(route.query.only),
+);
 const {
   draft,
   preflight,

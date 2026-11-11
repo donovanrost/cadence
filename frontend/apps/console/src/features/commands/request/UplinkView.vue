@@ -23,6 +23,8 @@ import {
   type PersonName,
 } from "../groups/words.ts";
 import AbortPanel from "./AbortPanel.vue";
+import NeedsYouPanel from "./NeedsYouPanel.vue";
+import VerifierPanel from "./VerifierPanel.vue";
 import { abortable, pipeline } from "./uplink.ts";
 
 /**
@@ -101,6 +103,8 @@ const blocked = computed(() =>
         :state="t.value ? t.state : undefined"
       />
     </ApStatStrip>
+    <NeedsYouPanel :group="group" />
+    <VerifierPanel :mission-id="missionId" :group-id="group.id" />
     <ApPanel index="U1" title="Targets" :meta="`${group.target_count}`" flush>
       <ul class="m-0 list-none p-0">
         <li
