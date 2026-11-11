@@ -93,6 +93,7 @@ describe("attention block words (U32)", () => {
     contact_id: null,
     reservation_id: "pass-9",
     uplink: null,
+    release: null,
     station: { ref: "svb-1", id: "st-1", code: "SVB-1", name: "Svalbard 1" },
     provider: { id: "p-1", name: "Northlight" },
     starts_at: "2026-11-14T03:00:00Z",
