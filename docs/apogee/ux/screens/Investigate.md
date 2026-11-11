@@ -40,8 +40,8 @@ spacecraft tabs; only the area below the tabs changes.
   Orbit (`P07 · slot 12 · #4,812` = plane, slot, orbit number; parts omitted if unknown) · Last LOS
   (`T+00:06:41 FBK`) · **Next AOS** (white top bar, readout: `T−00:38:10 FBK`) · Next eclipse
   (`T−00:59:30`). Unknown facts are omitted (U10); the strip reflows to the facts it has.
-- **Tabs** (ApSegmented `tabs`, `role="tablist"`, path segment per tab). Telemetry and
-  Configuration are specified separately (TBD); Uplink, Passes and History are below; until built they render an
+- **Tabs** (ApSegmented `tabs`, `role="tablist"`, path segment per tab). Telemetry is
+  specified separately (TBD); Uplink, Passes, Configuration and History are below; until built they render an
   ApEmptyState "Not built yet in the new console" + link to the existing page. **[temporary]**
 
 ## B1 · Alarm trend (panel, alert-crit variant: index colored, panel neutral)
@@ -152,6 +152,26 @@ at 1440×900. P3 and P4 scroll. No money (U34).
   - Empty: "No passes in the last 7 days."
 - **Actions:** none here (Release lives in the contact drawer). Links: `Open in Contacts`, and `Plan <day>` → K1.
 - **Mobile:** P1 + P3.
+
+## Tab · Configuration (`M/fleet/:scId/configuration`)
+**Question:** "What is this spacecraft running, and what changed?" It's **read-only** in Ops. Editing lives in
+Setup › Spacecraft (U6), linked as `Edit in Setup` (org admins).
+- **G1 Running:**
+  - Profile + pinned version (`Earendil Block 1 — Demo · v6`, link).
+  - Catalog revision **running** vs the profile's (`rev 15`; when they differ, caution "Running rev 14; the
+    profile is on rev 15. See Readiness.").
+  - Identity (name, SCID, NORAD id or `not set`), and plane · slot when known.
+- **G2 Differs from its profile:** this spacecraft's overrides only, as field label · profile value (text-4)
+  → this spacecraft's value. Units per U24. Empty: "Uses its profile as is."
+- **G3 Routing:** transports and routing rules that apply (station or provider · role · rule name), the same
+  words as Setup › Ground stations.
+- **G4 Pending:** staged or in-review change sets that touch it ("r9 · in review · changes TM frame length"),
+  linking to Changes. Hidden when there are none.
+- **G5 Recent revisions** (last 5 applied): `r8 · 11-09 10:52Z · Mira K. · Changed spacecraft profile …`, in the
+  same sentences as the Changes revision list (rollback review). Link `All revisions` → Changes.
+- Archived spacecraft: a stale callout "Archived 11-10 by Mira K. It isn't commanded or planned." with the
+  rest read-only as usual.
+- **Mobile:** G1 + G5.
 
 ## Tab · History (`M/fleet/:scId/history[?episode=:id]`) (fe-ops' proposal, refined)
 **Question:** "Has this happened before, and how did it end?" v1 covers this spacecraft's **alarm episodes**.
