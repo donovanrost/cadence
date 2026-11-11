@@ -7,6 +7,7 @@ import {
   peakFrom,
   type Occurrence,
 } from "./history/api.ts";
+import { argsSummary, evidenceWords, releaseRule } from "./uplink/api.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { formatLimitLike, formatValue, type Alarm } from "@/features/alarms/index.ts";
@@ -328,6 +329,43 @@ describe("History tab (Investigate.md §History, api's episode reads)", () => {
     expect(occurrenceSummary(h)).toBe("4th time in 30 days · median 38m");
     expect(occurrenceSummary({ ...h, counts: { d7: 1, d30: 1, d90: 1 } })).toBe(
       "First time in 30 days · median 38m",
+    );
+  });
+});
+
+describe("Uplink tab words (aa1f493e)", () => {
+  const now = new Date("2026-11-10T01:00:00Z");
+  it("release rule, evidence, route meta and args", () => {
+    const q = {
+      position: 1,
+      request_id: "r",
+      command_id: "c",
+      command_name: "SET_MODE",
+      arguments_json: '{"mode":3}',
+      group: null,
+      not_before: null,
+      expires_at: "2026-11-10T04:00:00Z",
+      queued_at: "2026-11-10T00:00:00Z",
+    };
+    expect(releaseRule(q, now)).toBe("At next AOS · expires 04:00Z");
+    expect(releaseRule({ ...q, not_before: "2026-11-11T03:00:00Z", expires_at: null }, now)).toBe(
+      "Not before 11-11 03:00Z",
+    );
+    expect(argsSummary('{"mode":3}')).toBe("mode 3");
+    const p = {
+      reservation_id: "p",
+      contact_id: null,
+      station: { ref: null, id: null, code: "KIR", name: null },
+      starts_at: "2026-11-10T02:31:00Z",
+      ends_at: "2026-11-10T02:39:00Z",
+      uplink_evidence: "attested",
+      uplink_confirmed: false,
+      attested_by: null,
+      provider: undefined,
+    };
+    expect(evidenceWords(p)).toEqual({ text: "Attested · uplink unconfirmed", caution: true });
+    expect(evidenceWords({ ...p, uplink_evidence: "booked", uplink_confirmed: true }).text).toBe(
+      "Booked",
     );
   });
 });
