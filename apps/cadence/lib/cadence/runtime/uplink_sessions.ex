@@ -21,20 +21,32 @@ defmodule Cadence.Runtime.UplinkSessions do
   defdelegate review(runtime), to: TransportRuntime, as: :session_review
 
   @doc """
-  Whether the uplink's protocol has the spacecraft's first report (#59): `:received`,
-  `:awaiting`, or `:unavailable` when the runtime can't say (it errored or didn't answer). A
-  caller deciding readiness treats `:unavailable` as not ready (#38: fail closed).
+  The uplink's CLCW stream (#38, #59 follow-up): `{:received, age_ms}` since the last CLCW,
+  `{:awaiting, waited_ms}` while the FOP still waits for the pass's first one, or
+  `:unavailable` when the runtime can't say.
   """
-  @spec first_report(pid()) :: :received | :awaiting | :unavailable
-  def first_report(runtime) do
+  @spec clcw_report(pid(), integer()) ::
+          {:received, non_neg_integer()} | {:awaiting, non_neg_integer()} | :unavailable
+  def clcw_report(runtime, now_ms \\ System.system_time(:millisecond)) do
     case TransportRuntime.snapshot(runtime) do
-      {:ok, %{state: %{cop1_awaiting_clcw: true}}} -> :awaiting
-      {:ok, %{state: %{}}} -> :received
-      _other -> :unavailable
+      {:ok, %{state: %{cop1_awaiting_clcw: true} = state}} ->
+        {:awaiting, age(now_ms, Map.get(state, :cop1_started_at))}
+
+      {:ok, %{state: %{cop1_clcw_at: at}}} when is_integer(at) ->
+        {:received, age(now_ms, at)}
+
+      {:ok, %{state: %{}}} ->
+        {:received, 0}
+
+      _other ->
+        :unavailable
     end
   catch
     :exit, _ -> :unavailable
   end
+
+  defp age(now_ms, at) when is_integer(at), do: max(now_ms - at, 0)
+  defp age(_now_ms, _at), do: 0
 
   defdelegate begin_recovery(runtime, evidence), to: TransportRuntime, as: :begin_session_recovery
 

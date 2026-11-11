@@ -20,6 +20,7 @@ defmodule Cadence.Control.UplinkQualification do
 
   @tick_ms 15_000
   @requalify_after_ms 180_000
+  @clcw_bound_ms 15_000
 
   def start_link(opts),
     do: GenServer.start_link(__MODULE__, opts, Keyword.take(opts, [:name]))
@@ -159,10 +160,15 @@ defmodule Cadence.Control.UplinkQualification do
   end
 
   # Ready only on a positive answer: a runtime that can't report its protocol state isn't (#38).
+  # #38, #59 follow-up: a qualified session is ready only while its CLCW stream is live. A
+  # spacecraft reports continuously, so no first report within the bound blocks the pass with a
+  # reason, and a report older than the bound reads qualifying, never ready.
   defp readiness(result, pid) when elem(result, 0) in [:qualified, :kept] do
-    case UplinkSessions.first_report(pid) do
-      :received -> {:ready, nil}
-      :awaiting -> {:qualifying, :cop1_awaiting_clcw}
+    case UplinkSessions.clcw_report(pid) do
+      {:received, age} when age > @clcw_bound_ms -> {:qualifying, :cop1_clcw_stale}
+      {:received, _age} -> {:ready, nil}
+      {:awaiting, waited} when waited > @clcw_bound_ms -> {:blocked, :cop1_no_clcw_report}
+      {:awaiting, _waited} -> {:qualifying, :cop1_awaiting_clcw}
       :unavailable -> {:qualifying, :uplink_state_unavailable}
     end
   end

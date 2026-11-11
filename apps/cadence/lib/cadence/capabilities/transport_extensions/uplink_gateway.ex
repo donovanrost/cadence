@@ -72,6 +72,10 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
            cop1_awaiting_clcw:
              normalized_configuration.cop1_mode == :fop and
                normalized_configuration.cop1_initialization == :first_clcw,
+           # When the FOP started waiting for, and last had, a CLCW (wall clock, ms): readiness
+           # tells a stalled CLCW stream from a working one (#38, #59 follow-up).
+           cop1_started_at: System.system_time(:millisecond),
+           cop1_clcw_at: nil,
            simulated_start_delay_ms: normalized_configuration.simulated_start_delay_ms,
            simulated_completion_delay_ms: normalized_configuration.simulated_completion_delay_ms,
            provider_binding_id: normalized_configuration.provider_binding_id,
@@ -543,14 +547,17 @@ defmodule Cadence.Capabilities.TransportExtensions.UplinkGateway do
 
     with {:ok, initiating} <- FOP.directive(fop, :initiate_ad_with_clcw_check),
          {:ok, transition} <- FOP.apply_clcw(initiating.state, clcw) do
-      {:ok, %{app_state | cop1_awaiting_clcw: false, next_frame_seq: seq}, transition}
+      {:ok, %{reported(app_state) | cop1_awaiting_clcw: false, next_frame_seq: seq}, transition}
     end
   end
 
   defp apply_clcw(app_state, %CLCW{} = clcw) do
     with {:ok, transition} <- FOP.apply_clcw(app_state.cop1, clcw),
-         do: {:ok, app_state, transition}
+         do: {:ok, reported(app_state), transition}
   end
+
+  defp reported(app_state),
+    do: Map.put(app_state, :cop1_clcw_at, System.system_time(:millisecond))
 
   defp alert_signal(%{alerts: [reason | _]}), do: {:failure, %{cop1_alert: reason}}
   defp alert_signal(_transition), do: nil

@@ -20,6 +20,9 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
 
   @tcp_opts [:binary, packet: 0, active: false, nodelay: true]
   @default_reconnect_interval_ms 250
+  # A spacecraft reports its CLCW continuously (in every downlink frame's OCF), so one lost
+  # report can't strand the ground's FOP for a whole pass (#38, DECISIONS #59 follow-up).
+  @default_clcw_report_interval_ms 1_000
 
   defstruct [
     :host,
@@ -30,6 +33,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
     :socket,
     :reconnect_interval_ms,
     :connect_timer_ref,
+    :clcw_report_interval_ms,
+    :clcw_timer_ref,
     :clcw_injector,
     :command_target,
     :segment_header_flag,
@@ -80,6 +85,8 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
         runtime_resolver: Keyword.get(opts, :runtime_resolver),
         reconnect_interval_ms:
           Keyword.get(opts, :reconnect_interval_ms, @default_reconnect_interval_ms),
+        clcw_report_interval_ms:
+          Keyword.get(opts, :clcw_report_interval_ms, @default_clcw_report_interval_ms),
         clcw_injector: build_clcw_injector(opts),
         command_target: Keyword.get(opts, :command_target),
         segment_header_flag: Keyword.get(opts, :segment_header_flag, 0),
@@ -126,6 +133,13 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
   def handle_info(:connect, state) do
     {:noreply, %{state | connect_timer_ref: nil} |> connect_or_schedule()}
   end
+
+  def handle_info({:report_clcw, ref}, %{clcw_timer_ref: ref, socket: socket} = state)
+      when is_port(socket) do
+    {:noreply, state |> report_current_clcw() |> schedule_clcw_report()}
+  end
+
+  def handle_info({:report_clcw, _stale}, state), do: {:noreply, state}
 
   def handle_info({:tcp, socket, data}, %{socket: socket} = state) when is_binary(data) do
     next_state =
@@ -175,7 +189,10 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
     case :gen_tcp.connect(String.to_charlist(state.host), state.port, @tcp_opts) do
       {:ok, socket} ->
         :ok = :inet.setopts(socket, active: :once)
-        report_current_clcw(%{state | socket: socket, last_error: nil})
+
+        %{state | socket: socket, last_error: nil}
+        |> report_current_clcw()
+        |> schedule_clcw_report()
 
       {:error, reason} ->
         Logger.warning(
@@ -299,7 +316,7 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
       %{state | clcw_count: state.clcw_count + 1, last_clcw_report_value: clcw.report_value}
     else
       {:error, reason} ->
-        Logger.warning("COP-1 loopback failed to report its CLCW on connect: #{inspect(reason)}")
+        Logger.warning("COP-1 loopback failed to report its CLCW: #{inspect(reason)}")
         %{state | last_error: inspect(reason)}
     end
   end
@@ -450,10 +467,20 @@ defmodule CadenceSimulator.COP1.LoopbackPeer do
     end
   end
 
+  defp schedule_clcw_report(%{clcw_report_interval_ms: interval} = state)
+       when is_integer(interval) and interval > 0 do
+    ref = make_ref()
+    Process.send_after(self(), {:report_clcw, ref}, interval)
+    %{state | clcw_timer_ref: ref}
+  end
+
+  defp schedule_clcw_report(state), do: state
+
   defp reset_connection_state(state) do
     %{
       state
       | socket: nil,
+        clcw_timer_ref: nil,
         receive_buffer: <<>>,
         tc_reassembly: %{state.tc_reassembly | buffers: %{}}
     }

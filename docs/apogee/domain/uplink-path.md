@@ -253,3 +253,37 @@ matching any request, and it walked every active contact in the mission. Route-m
 uplink paths have no endpoint, and each route's gateway carries its own spacecraft's SCID, so
 the other spacecraft accepted the frame. Main and develop have the same selection code and the
 same route materialization.
+
+## A lost CLCW can't strand a pass (#38, DECISIONS #59 follow-up)
+
+**What happened.** On 2026-11-11, 010's NOOP never released during its own pass. A
+provider-managed pass's FOP starts from the spacecraft's first CLCW (#59). The simulator peer
+sent that CLCW once, on connect, and the report was lost. The FOP then waited all pass
+(`uplink_busy: cop1_awaiting_clcw`), and readiness still read ready. api's 583aaafc made those
+waits visible and readiness fail closed when the runtime can't answer.
+
+**Decision.**
+
+- **The spacecraft reports continuously.** A real spacecraft puts its CLCW in every downlink
+  frame's OCF. The simulator's COP-1 peer now reports on connect and then every
+  `clcw_report_interval_ms` (default 1 s) while connected, so a lost report costs one interval.
+- **Readiness follows the CLCW stream.** The gateway stamps when it started waiting and when it
+  last had a CLCW (`cop1_started_at`, `cop1_clcw_at`; wall-clock ms, checkpointed as dynamic
+  state). A qualified session reads:
+
+  | CLCW stream | Readiness |
+  | --- | --- |
+  | waiting for the first report, under 15 s | qualifying `cop1_awaiting_clcw` |
+  | no first report within 15 s | **blocked** `cop1_no_clcw_report` (an `uplink_blocked` attention item when groups wait) |
+  | last report under 15 s old | ready |
+  | last report older than 15 s | qualifying `cop1_clcw_stale` |
+  | runtime can't say | qualifying `uplink_state_unavailable` |
+
+- Admission is unchanged: the gateway still refuses busy (`cop1_awaiting_clcw`) without claiming
+  a release, and the FOP's own timers handle a stream that stops mid-release.
+
+**TM ingest and commanding.** Profiles declare a 4-byte OCF (`ocf_length`), but Cadence only
+records that it's present. Today CLCWs reach the FOP only over the uplink socket, so TM ingest
+health doesn't gate commanding. Routing OCF CLCWs to the FOP (what a real ground segment does)
+would make it gate commanding: a stalled downlink would read `cop1_clcw_stale`. That's an open
+decision for the director.
