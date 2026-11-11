@@ -96,7 +96,8 @@ Header meta `3 OF 500 DIFFER FROM THE PROFILE`. Rows `ov` (`150px | 1fr | auto`)
     - `Spacecraft`: mono select of this profile's spacecraft, hint `500 on Earendil Block 1`.
     - `Field`: `<label> · <section>`, with Catalog revision first.
     - The value, generated from the schema. A catalog revision is a select of revisions (`rev 4 · imported
-      11-10`), never a raw id (U25). Fields with `runtime_impact: generation` carry the `RUNTIME` chip, as in P1.
+      11-10`), never a raw id (U25). Fields with `runtime_impact: generation` carry the same
+      generation tag as P1 (`Cancels queued commands`), beside `Profile value`.
     - `Why this spacecraft differs`: required, with the hint "Shown on the override and in the change set."
       and no placeholder.
   - The value starts at the profile's value, with `Profile value: rev 3` under it. If the chosen spacecraft
@@ -109,6 +110,12 @@ Header meta `3 OF 500 DIFFER FROM THE PROFILE`. Rows `ov` (`150px | 1fr | auto`)
     Enter the value this spacecraft should use."), and the reason is filled in. It also stays disabled while
     the last Check is NO-GO. Stage opens Changes.
   - The change summary reads `EARENDIL-001 · override Catalog revision`.
+  - Profiles whose spacecraft set their own routing (fe-setup 26e9ef92) list and offer catalog and framing
+    overrides only, with an info line: "This profile's spacecraft set their own routing, so routing isn't
+    overridden here. Catalog and framing overrides work." Don't promise a future change (U20).
+  - Rows and options use field and choice labels, never paths or ids. Catalog revisions read `rev 4 ·
+    imported 11-10` (server label, asked of api). `rN` is reserved for change-set revisions, so a catalog
+    revision is never `r4`.
 
 ### P4 · Staged edit (aside; only while there are dirty fields)
 As `Changes.md` §1: field path (mono), `− old` / `+ new`, tiles `Changes 499 SC` / `Keeps 1 SC`
