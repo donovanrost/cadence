@@ -15,11 +15,11 @@ missing endpoint or decision; an item with no blocker can start now.
 | Who | Start now (unblocked) | Waiting on |
 | --- | --- | --- |
 | **lead** | K1 C panel (focused spacecraft 24 h strip); `ApSheet` kit primitive (five hand-rolled dialogs today); `ApStatTile` `to` link; Palette `>` commands and `@` stations groups (with fe-ops) | — (api's K1 items shipped: send back, approval, stop time) |
-| **fe-ops** | Now tile links + A4 pass select + approval rows → request review; Investigate's five tabs link to the existing pages (#64) + add-point chips; Contacts D3 outage bands (S7 exists); Telemetry `Dashboards ↗` → existing pages (#11); Timeline sc/plane filter; Fleet/Alarms Next contact; Mobile GO block |  api: M22 findings, A1 current values, M24 encode preview. (`CATALOG rev N` is unblocked: `catalog_revision` in the catalog basis.) |
+| **fe-ops** | Now tile links + A4 pass select + approval rows → request review; Investigate's five tabs link to the existing pages (#64) + add-point chips; Contacts D3 outage bands (S7 exists); Telemetry `Dashboards ↗` → existing pages (#11); Timeline sc/plane filter; Fleet/Alarms Next contact; Mobile GO block; Compose draft autosave (api a4d19e69) | — (api's M22, A1, M24 and drafts are in) |
 | **fe-setup** | Profile edit → stage (op + preview exist); People command policies tab (O4 exists); Changes compare (`/config/compare`) + Keep mine / Take live (`rebase`); Readiness R2 from revisions; Audit actor filter; qa #19 copy ("unclear, check now" on 5xx) | api: catalog diff, people/invite/service-identity writes, account password/sessions, provider history; domain: catalog generations (C3) |
 | **ux** | Visual review of the unreviewed boards (§7); Compose C1 layout ruling (default: accept as built, #64) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
-| **api** | qa #42 verify race (DECISIONS #72 at 84d02e7c, final): `pg_advisory_xact_lock` per release attempt, in sorted id order (one record txn can carry several attempts), taken at the start of release_success_multi and before `pending_transport_entries` in the consumer's evaluation, held to commit; satisfy verifiers with a conditional `WHERE lifecycle_state = 'pending'` update (0 rows = already resolved); at timeout, re-run the catch-up from durable records before marking `timed_out`; test a completion committed between the instance insert and the commit; then port to `develop`. Compose draft persistence (director): one current draft per user per mission, autosave overwrites; inert (never visible to approvers, never queued/releasable); full revalidation on submit; shape agreed with fe-ops. Both land after the 21:30Z freeze | — (race fix approved by api-ops; follow-ups: lock-site tests, global lock order) |
+| **api** | Port the #42 fix to `develop` (DECISIONS #72). Done: #42 verify race 32b945f3 (advisory lock, mission-then-attempt order, timeout reconcile, call-site tests; api-ops reviewed); Compose drafts a4d19e69 (`GET/PUT/DELETE /missions/:id/command-draft`, migration). Next with the director | — |
 | **api-ops** | flight_event source: built and domain-approved; lands after the 21:30Z freeze (needs a :4011 restart); fe-ops reader in (591bc06c). Then review api's #42 verify-race PR (#72) | api: the #72 PR |
 | **domain** | catalog-path generations (#36; plan to the director first, it touches activation) | — (done: qa #34 #59 e683b3e2; qa #19 server side 33529f29; #50 archive) |
 
@@ -49,7 +49,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | Compose layout: ux rules; default is to accept Command.md's C1–C5 as built (#64) | ux | — |
-| Draft autosave / `Save draft` / `DRAFT SAVED` | fe-ops | api: draft persistence (in progress; one per user per mission) |
+| Draft autosave / `Save draft` / `DRAFT SAVED` | fe-ops | — (api a4d19e69: `GET/PUT/DELETE /missions/:id/command-draft`, `expected_revision` → 409 `command_draft_changed`; `draft_revision` on `POST /command-groups`) |
 | Per-target values (Same for all / Per target, Paste CSV, Now column) | fe-ops | — |
 | Verifier line / "No verifier: this command can't turn green" | fe-ops | catalog read carrying verifiers *(unverified)* |
 | Keep/Drop callout when a target leaves a live query | fe-ops | — |
@@ -214,7 +214,7 @@ missing endpoint or decision; an item with no blocker can start now.
 6. ~~Billing terms + budgets~~ out of scope (#63).
 7. ~~K3 Export CSV / Monthly close~~ not needed: CSV is client-side; Monthly close dropped (#63, ux af1c78d1).
 8. qa #19: map domain's `:apply_interrupted` (33529f29), in progress (api).
-8b. qa #42 verify race (DECISIONS #72; #38 release targeting itself verified live 21:15Z, issues 3953f19e): a verifier-instance insert commits after the FOP completion record, and each txn's catch-up misses the other (api-ops' trace, 023 at 21:07Z). Fix (#72 at 84d02e7c, final): sorted per-attempt advisory xact locks in both txns before their reads, held to commit; a conditional `WHERE pending` update; and a catch-up before the timeout. api builds it, api-ops reviews, and it lands after 21:30Z with Compose drafts in one :4011 restart; then qa reruns 'Accepted on board' on the next own pass. api-ops approved it to land at 21:30Z. Two non-blocking follow-ups for api: (1) site tests that pin both production lock acquires (a held ReleaseAttemptLock blocks `evaluate_transport_command_verifiers` and `complete_release_success` until commit), since today only the sweep tests fail on unfixed lib; (2) a global lock order: `due_release_attempts` ordered by mission_id, attempt id, and missions iterated sorted in `VerifierWorkflow.evaluate_transport` (a sweep/consumer deadlock is late but correct).
+8b. ~~qa #42 verify race~~ done (32b945f3, DECISIONS #72; api-ops reviewed; both follow-ups in: call-site lock tests and the global mission-then-attempt order). Waiting: the :4011 restart, then qa's 'Accepted on board' rerun on 023's next pass, and the port to `develop`. (#38 release targeting verified live 21:15Z, issues 3953f19e.)
 
 **api-ops** (director, in this order)
 1. ~~M26 retries + verifier series (Uplink U2)~~ done (2b50e7d1).
@@ -230,7 +230,7 @@ missing endpoint or decision; an item with no blocker can start now.
 10. ~~A1 current values + prior requests in the request brief~~ done (4f9cd275, a4c0e807).
 11. ~~M24 encode preview~~ done (4d0255f3; fe-ops 90d1c43c).
 12. ~~Now queue sources `missed_pass`, `station`~~ done by api-ops (81a4c8d0; fe-ops de131e9b). `flight_event`: api-ops leads (design note → domain review → build).
-13. ~~Investigate History (c839d0b9) and Passes (324428aa) reads~~ done; fe-ops History d80c8d5d. Waiting: Compose draft persistence, palette search endpoint.
+13. ~~Investigate History (c839d0b9) and Passes (324428aa) reads~~ done; fe-ops History d80c8d5d. ~~Compose draft persistence~~ done (a4d19e69). Waiting: palette search endpoint.
 
 **domain**
 1. ~~qa #34~~ done (#59, e683b3e2).
