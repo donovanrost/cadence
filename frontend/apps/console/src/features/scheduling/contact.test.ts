@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { contactState, sourceLabel } from "./contact.ts";
+import { contactState, contactStateWord, sourceLabel } from "./contact.ts";
 
 const row = {
   id: "provider_reservation_1",
@@ -27,6 +27,15 @@ describe("contact state", () => {
     expect(contactState({ state: "confirmed", pass_phase: "pass" })).toBe("in_contact");
     expect(contactState({ state: "completed", pass_phase: "closed" })).toBe("ended");
     expect(contactState({ state: "failed", pass_phase: null })).toBe("unknown");
+  });
+
+  it("says a cancel is in flight until the provider confirms it (ux)", () => {
+    expect(contactStateWord[contactState({ state: "canceling", pass_phase: null })]).toBe(
+      "Canceling",
+    );
+    expect(contactStateWord[contactState({ state: "canceled", pass_phase: null })]).toBe(
+      "Canceled",
+    );
   });
 
   it("names the simulator honestly", () => {

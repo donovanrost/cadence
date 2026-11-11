@@ -3,7 +3,7 @@ import type { Pass } from "@/features/contacts/index.ts";
 
 /**
  * The one UI contact state model (ScheduleFlow.md: Opportunity → Drafted → Requested → Confirmed →
- * In contact → Realized; off-ramps Partial, Rejected, Missed, Unknown, Cancelled), decoded from the
+ * In contact → Realized; off-ramps Partial, Rejected, Missed, Unknown, Canceling → Canceled), decoded from the
  * passes read that lives in features/contacts. Screens use `contactState`, never raw lifecycles.
  */
 export type ContactState =
@@ -18,7 +18,9 @@ export type ContactState =
   | "rejected"
   | "missed"
   | "unknown"
-  | "cancelled";
+  /** Cancel sent, provider hasn't confirmed it (ux: in-flight states say -ing). */
+  | "canceling"
+  | "canceled";
 
 /**
  * Booked-contact decoding (reservation lifecycle + provider pass phase). `realized` / `partial`
@@ -40,8 +42,9 @@ export function contactState(p: Pick<Pass, "state" | "pass_phase">): ContactStat
     case "rejected":
       return "rejected";
     case "canceling":
+      return "canceling";
     case "canceled":
-      return "cancelled";
+      return "canceled";
     case "unknown":
     case "failed":
       return "unknown";
@@ -60,7 +63,8 @@ export const contactStateWord: Readonly<Record<ContactState, string>> = {
   rejected: "Rejected",
   missed: "Missed",
   unknown: "Unknown",
-  cancelled: "Cancelled",
+  canceling: "Canceling",
+  canceled: "Canceled",
 };
 
 /** Progress states are gray; only outcomes carry status (CommandFlow M1 rule, reused for contacts). */
@@ -82,7 +86,8 @@ export function contactOpState(state: ContactState): OpState {
     case "requested":
     case "confirmed":
     case "ended":
-    case "cancelled":
+    case "canceling":
+    case "canceled":
       return "neutral";
   }
 }
