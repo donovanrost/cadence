@@ -32,10 +32,22 @@ export function useSubmit(missionId: Ref<string>, onStale: () => void) {
   const state = shallowRef<SubmitState>({ status: "idle" });
   let operationId: string | null = null;
 
-  async function submit(draft: Draft, digest: string, acks: readonly HoldAck[] = []) {
+  async function submit(
+    draft: Draft,
+    digest: string,
+    acks: readonly HoldAck[] = [],
+    draftRevision: number | null = null,
+  ) {
     operationId ??= crypto.randomUUID();
     state.value = { status: "sending" };
-    const outcome = await submitGroup(missionId.value, draft, digest, operationId, acks);
+    const outcome = await submitGroup(
+      missionId.value,
+      draft,
+      digest,
+      operationId,
+      acks,
+      draftRevision,
+    );
     if (outcome.status === "done") {
       state.value = { status: "done", groupId: outcome.value.id };
       return;

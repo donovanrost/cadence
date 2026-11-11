@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { describeApiError, useRemoteQuery } from "@/api/index.ts";
 import { TakeoverHeader, useMissionScope } from "@/shell/index.ts";
 import { ApButton, ApCallout, ApEmptyState, ApPanel, ApRemote, ApStationBar } from "@/ui";
@@ -9,6 +9,7 @@ import { useCommandAccess } from "../access.ts";
 import { catalogRevisionWords, fetchCommand } from "../api.ts";
 import { fetchEndpoints, type TargetEndpoints } from "../groups/api.ts";
 import DeliveryPanel from "./DeliveryPanel.vue";
+import DraftNotices from "./DraftNotices.vue";
 import PreflightPanel from "./PreflightPanel.vue";
 import StackPanel from "./StackPanel.vue";
 import type { Release } from "./draft.ts";
@@ -16,6 +17,8 @@ import SummaryPanel from "./SummaryPanel.vue";
 import TargetsPanel from "./TargetsPanel.vue";
 import { checkItem, move, newItem, type StackItem } from "./stack.ts";
 import { queryFromRoute, resolveTargets, type TargetQuery } from "./targets.ts";
+import type { ComposeFields, Restored } from "./saved.ts";
+import { draftLine, useComposeDraft } from "./useComposeDraft.ts";
 import { useComposeRequest } from "./useComposeRequest.ts";
 import { onlyFrom, resendFrom, useResend } from "./useResend.ts";
 
@@ -26,6 +29,7 @@ import { onlyFrom, resendFrom, useResend } from "./useResend.ts";
  */
 const scope = useMissionScope();
 const route = useRoute();
+const router = useRouter();
 const access = useCommandAccess();
 const missionId = computed(() => scope.value.mission.id);
 const fleet = useFleet(missionId);
@@ -98,6 +102,36 @@ const resend = useResend(
   },
   onlyFrom(route.query.only),
 );
+/** Autosave (commanding.md §Compose draft): `?draft=resume` from the Commands list restores it. */
+const fields = computed<ComposeFields>(() => ({
+  title: title.value,
+  log: log.value,
+  query: query.value,
+  endpoints: overrides.value,
+  stack: stack.value,
+  release: release.value,
+  approver: approver.value,
+  sentBackFrom: resend.sentBackFrom.value,
+}));
+function applyDraft(r: Restored) {
+  const f = r.fields;
+  title.value = f.title;
+  log.value = f.log;
+  query.value = f.query;
+  overrides.value = { ...f.endpoints };
+  stack.value = [...f.stack];
+  release.value = f.release;
+  approver.value = f.approver;
+  resend.sentBackFrom.value = f.sentBackFrom;
+  revision.value = r.revisionId;
+  catalogRev.value = r.catalogRev;
+  openKey.value = null;
+}
+const saved = useComposeDraft(missionId, fields, applyDraft, route.query.draft === "resume");
+async function discardAndClose() {
+  if (await saved.discard())
+    await router.push(close.value).catch((e: unknown) => console.error("Navigation failed", e));
+}
 const {
   draft,
   preflight,
@@ -110,14 +144,22 @@ const {
   submission,
   send,
   check,
-} = useComposeRequest(missionId, rows, targets, query, stack, {
-  title,
-  log,
-  release,
-  approver,
-  sentBackFrom: resend.sentBackFrom,
-  endpoints: overrides,
-});
+} = useComposeRequest(
+  missionId,
+  rows,
+  targets,
+  query,
+  stack,
+  {
+    title,
+    log,
+    release,
+    approver,
+    sentBackFrom: resend.sentBackFrom,
+    endpoints: overrides,
+  },
+  saved,
+);
 
 const steps = computed(() => [
   `Targets · ${targets.value.length}`,
@@ -139,7 +181,11 @@ const context = computed(() => {
     query.value.explicit.length === 1
       ? rows.value.find((sc) => sc.id === query.value.explicit[0])
       : undefined;
-  return only ? `Uplink sequence · for ${only.name}` : "Uplink sequence · new";
+  const line = draftLine(saved.status.value);
+  if (!only) return `Uplink sequence · ${line}`;
+  return line === "new"
+    ? `Uplink sequence · for ${only.name}`
+    : `Uplink sequence · for ${only.name} · ${line}`;
 });
 const close = computed(() => {
   const only =
@@ -157,9 +203,14 @@ const close = computed(() => {
     title="New command request"
     :context="context"
     :close="close"
-    close-label="Close and keep nothing"
+    :close-label="saved.owned.value ? 'Close; the draft stays saved' : 'Close and keep nothing'"
     title-as="h1"
   >
+    <template v-if="saved.owned.value" #actions
+      ><ApButton size="compact" variant="ghost" @click="discardAndClose"
+        >Discard draft</ApButton
+      ></template
+    >
     <template v-if="access.request" #steps
       ><ApStationBar :steps="steps" :current="current" label="Sequence steps"
     /></template>
@@ -188,6 +239,15 @@ const close = computed(() => {
       class="grid min-h-0 flex-1 grid-cols-1 gap-3 max-md:hidden console:grid-cols-[minmax(0,1fr)_360px]"
     >
       <div class="flex min-h-0 flex-col gap-3 overflow-auto">
+        <DraftNotices
+          :status="saved.status.value"
+          :offered="saved.offered.value"
+          :notice="saved.notice.value"
+          @resume="saved.load"
+          @discard="saved.discard"
+          @keep-mine="saved.keepMine"
+          @retry="saved.retry"
+        />
         <ApCallout v-if="resend.notice.value" :tone="resend.notice.value.tone">{{
           resend.notice.value.text
         }}</ApCallout>

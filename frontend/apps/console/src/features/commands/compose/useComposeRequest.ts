@@ -1,7 +1,7 @@
 import { computed, ref, watch, type Ref } from "vue";
 import { useRouter } from "vue-router";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
-import type { NextContact } from "../groups/api.ts";
+import type { Draft, NextContact, Preflight } from "../groups/api.ts";
 import {
   holdAcksToSend,
   holdReason,
@@ -36,6 +36,8 @@ export function useComposeRequest(
   query: Ref<TargetQuery>,
   stack: Ref<readonly StackItem[]>,
   form: ComposeForm,
+  /** Autosave's submit hooks: freeze returns the draft revision to delete with the group. */
+  saved: Readonly<{ freeze: () => Promise<number | null>; thaw: () => void }>,
 ) {
   const router = useRouter();
   const draft = computed(() =>
@@ -108,19 +110,24 @@ export function useComposeRequest(
     () => submission.reset(),
   );
   watch(submission.state, (s) => {
+    // Rejected (also after a check): nothing was created, so autosave picks up again. Unclear
+    // stays frozen until the check answers.
+    if (s.status === "rejected") saved.thaw();
     if (s.status === "done")
       router
         .push({ name: "ops.commands.request", params: { requestId: s.groupId } })
         .catch((e: unknown) => console.error("Navigation failed", e));
   });
+  async function submitNow(d: Draft, pf: Preflight, digest: string) {
+    const revision = await saved.freeze();
+    await submission.submit(d, digest, holdAcksToSend(pf, acks.value), revision);
+  }
   function send() {
     const d = draft.value;
     const pf = preflight.current.value;
     const digest = pf?.digest;
     if (blocked.value !== null || !d || !pf || !digest) return;
-    submission
-      .submit(d, digest, holdAcksToSend(pf, acks.value))
-      .catch((e: unknown) => console.error("Submit failed", e));
+    submitNow(d, pf, digest).catch((e: unknown) => console.error("Submit failed", e));
   }
   const check = () => submission.check().catch((e: unknown) => console.error("Check failed", e));
 

@@ -9,6 +9,8 @@ import { useCommandAccess } from "../access.ts";
 import { fetchGroups } from "../groups/api.ts";
 import { usePeopleNames } from "../groups/usePeopleNames.ts";
 import { useStationCodes } from "@/features/contacts/useStationCodes.ts";
+import { fetchComposeDraft } from "../compose/saved.ts";
+import { savedWhen } from "../compose/useComposeDraft.ts";
 import CommandTable from "./CommandTable.vue";
 import { COMMAND_TABS, TAB_LABELS, tabCounts, tabFromQuery, tabRows } from "./list.ts";
 
@@ -25,6 +27,14 @@ useMissionInvalidation(
   groups.refetch,
 );
 const nameOf = usePeopleNames();
+/** The author's Compose draft (ux 36cca988): `Your draft · saved 02:44Z · Resume`. */
+const draftQuery = useRemoteQuery(
+  computed(() => (access.value.request ? missionId.value : null)),
+  (m, signal) => fetchComposeDraft(m, signal),
+);
+const savedDraft = computed(() =>
+  draftQuery.state.value.status === "ready" ? draftQuery.state.value.value : null,
+);
 
 const tab = computed(() => tabFromQuery(route.query));
 const counts = computed(() =>
@@ -72,6 +82,17 @@ const EMPTY: Record<string, string> = {
     </ApPageHeader>
     <ApTabLinks :links="tabs" :active="tab" label="Request state" />
     <ApPanel index="L1" title="Requests" pane flush>
+      <div
+        v-if="savedDraft"
+        class="flex items-center justify-between gap-3 border-b border-hairline px-4 py-2.5"
+      >
+        <span class="font-mono text-sm text-readout"
+          >Your draft · saved {{ savedWhen(savedDraft.saved_at) }}</span
+        >
+        <ApButton size="compact" :to="{ name: 'ops.commands.new', query: { draft: 'resume' } }"
+          >Resume</ApButton
+        >
+      </div>
       <ApRemote
         :state="groups.state.value"
         loading-label="LOADING REQUESTS…"

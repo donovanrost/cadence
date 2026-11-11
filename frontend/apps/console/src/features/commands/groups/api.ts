@@ -253,6 +253,8 @@ export async function submitGroup(
   digest: string,
   operationId: string,
   acknowledgedHolds: readonly HoldAck[] = [],
+  /** The Compose draft revision this came from: the server deletes that draft if still current. */
+  draftRevision: number | null = null,
 ): Promise<WriteOutcome<Created>> {
   return outcomeOf(
     await request(groupsBase(missionId), created, {
@@ -262,6 +264,7 @@ export async function submitGroup(
         preflight_digest: digest,
         operation_id: operationId,
         acknowledged_holds: acknowledgedHolds,
+        ...(draftRevision === null ? {} : { draft_revision: draftRevision }),
       },
     }),
   );
