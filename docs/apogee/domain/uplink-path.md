@@ -285,5 +285,7 @@ waits visible and readiness fail closed when the runtime can't answer.
 **TM ingest and commanding.** Profiles declare a 4-byte OCF (`ocf_length`), but Cadence only
 records that it's present. Today CLCWs reach the FOP only over the uplink socket, so TM ingest
 health doesn't gate commanding. Routing OCF CLCWs to the FOP (what a real ground segment does)
-would make it gate commanding: a stalled downlink would read `cop1_clcw_stale`. That's an open
-decision for the director.
+would make it gate commanding: a stalled downlink would read `cop1_clcw_stale`. Decided in
+[DECISIONS #70](../DECISIONS.md) (not scheduled yet): when OCF CLCWs are routed to the FOP,
+they're extracted at frame ingest, before the projector/persistence gate, so TSDB health never
+gates commanding. Only the link itself (no frames arriving) does.
