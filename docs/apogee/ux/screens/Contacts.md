@@ -43,7 +43,7 @@ countdown). Sky plot: **omitted** (needs propagation). Key/values (`kv` rows): W
 03:08:52Z` · Duration `9m 12s` · Max el (omit without prediction) · Uplink (queued commands bound to
 this pass: "Low power safe · 2 cmds", link to the request; "None queued") · Downlink (actual volume
 for completed passes only; `~4 MB` estimates omitted until there's a real estimate). Actions:
-`Swap station` (→ Replan flow for this contact), `Release` (cancel the reservation; danger confirm).
+~~`Swap station`~~ (out of scope for v1, DECISIONS #68: hidden until domain has a 'replace booking' op), `Release` (cancel the reservation; danger confirm; org admins only, and members see "Org admins can release a booking.").
 Both hidden until their endpoints exist. State trail (ApStateTrail) for the contact: Requested →
 Confirmed → In contact → Realized (+ off-ramps per ScheduleFlow M1).
 - **Data:** `{id, spacecraft: {id, name, scid, state}, station: {code, name}, aos, los, state,
