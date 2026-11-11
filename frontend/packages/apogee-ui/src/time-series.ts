@@ -26,13 +26,15 @@ export type ComparisonSeries = Readonly<{
 }>;
 
 /**
- * A labelled span behind the plot (ux: pass spans AOS–LOS with the station code; outages).
- * `pass` is a faint wash, `outage` the outage hatch; the label sits at the top edge.
+ * A labelled span behind the plot (ux: pass spans AOS–LOS with the station code; outages;
+ * an alarm episode). `pass` is a faint wash, `outage` the outage hatch, `episode` the severity's
+ * wash (`severity`, default caution); the label sits at the top edge.
  */
 export type TimeBand = Readonly<{
   from: number;
   to: number;
-  kind: "pass" | "outage";
+  kind: "pass" | "outage" | "episode";
+  severity?: "caution" | "crit" | undefined;
   label?: string | undefined;
 }>;
 export type Domain = readonly [number, number];

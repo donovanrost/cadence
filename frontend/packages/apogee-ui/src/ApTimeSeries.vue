@@ -117,7 +117,15 @@ const bandBoxes = computed(() =>
   props.bands.map((b, i) => {
     const x0 = clampX(b.from);
     const x1 = clampX(b.to);
-    return { key: i, kind: b.kind, label: b.label, left: pct(x0, W), width: pct(x1 - x0, W) };
+    const cls =
+      b.kind === "pass"
+        ? "border-x border-hairline bg-readout/5"
+        : b.kind === "episode"
+          ? b.severity === "crit"
+            ? "border-x border-crit/40 bg-[var(--apogee-wash-crit)]"
+            : "border-x border-caution/40 bg-[var(--apogee-wash-caution)]"
+          : "";
+    return { key: i, kind: b.kind, cls, label: b.label, left: pct(x0, W), width: pct(x1 - x0, W) };
   }),
 );
 
@@ -180,7 +188,7 @@ const nowX = computed(() =>
           :key="band.key"
           aria-hidden="true"
           class="pointer-events-none absolute inset-y-0"
-          :class="band.kind === 'pass' ? 'border-x border-hairline bg-readout/5' : ''"
+          :class="band.cls"
           :style="{
             left: band.left,
             width: band.width,
