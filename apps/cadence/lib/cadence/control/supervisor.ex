@@ -3,6 +3,7 @@ defmodule Cadence.Control.Supervisor do
 
   use Supervisor
 
+  alias Cadence.Contacts.ContactSettler
   alias Cadence.Control.ProcessNamespace
   alias Cadence.Platform.RootComposition
   alias Cadence.Runtime.ProcessNamespace, as: RuntimeProcessNamespace
@@ -34,6 +35,9 @@ defmodule Cadence.Control.Supervisor do
     children =
       [
         {Registry, keys: :unique, name: process_namespace.registry},
+        # DECISIONS #71: ended contacts settle here, never in the contact scheduler.
+        {DynamicSupervisor,
+         strategy: :one_for_one, name: ContactSettler.supervisor_name(process_namespace)},
         {DynamicSupervisor,
          strategy: :one_for_one,
          name: process_namespace.mission_supervisor,

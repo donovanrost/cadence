@@ -424,6 +424,7 @@ defmodule Cadence.IngressJournal.FileSystem do
             {consumer, state.next_offset - cursor}
           end),
         minimum_cursor: min_cursor,
+        processing_backlog: processing_backlog(state),
         entry_count: :gb_trees.size(state.entries),
         segment_count: length(state.segments),
         appended_entries: state.appended_entries,
@@ -933,6 +934,29 @@ defmodule Cadence.IngressJournal.FileSystem do
 
   defp minimum_cursor(cursors) do
     cursors |> Map.values() |> Enum.min(fn -> 0 end)
+  end
+
+  # What the processing consumer hasn't durably passed (DECISIONS #71): a restart resumes from
+  # the durable cursor, so that is where the not-yet-stored entries start.
+  defp processing_backlog(state) do
+    from =
+      [Map.get(state.durable_cursors, :processing), Map.get(state.cursors, :processing)]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.min(fn -> state.next_offset end)
+
+    %{
+      from_offset: from,
+      to_offset: state.next_offset,
+      bytes: max(state.next_offset - from, 0),
+      entries: count_entries_from(:gb_trees.iterator_from(from, state.entries), 0)
+    }
+  end
+
+  defp count_entries_from(iterator, count) do
+    case :gb_trees.next(iterator) do
+      {_offset, _entry, next} -> count_entries_from(next, count + 1)
+      :none -> count
+    end
   end
 
   defp take_entries(iterator, max_entries, max_bytes, acc, count, bytes) do

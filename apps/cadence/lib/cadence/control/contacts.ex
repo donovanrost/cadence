@@ -206,6 +206,21 @@ defmodule Cadence.Control.Contacts do
   def stop_realized_contact_sync(mission_id, realized_contact_id),
     do: RuntimeContacts.stop_sync(mission_id, realized_contact_id)
 
+  @spec quiesce_realized_contact(binary(), binary()) :: :ok | {:error, term()}
+  def quiesce_realized_contact(mission_id, realized_contact_id),
+    do: RuntimeContacts.quiesce(mission_id, realized_contact_id)
+
+  @spec terminate_realized_contact(binary(), binary()) :: :ok | {:error, term()}
+  def terminate_realized_contact(mission_id, realized_contact_id),
+    do: RuntimeContacts.terminate(mission_id, realized_contact_id)
+
+  @spec realized_contact_journal_backlog(binary(), binary()) :: map()
+  def realized_contact_journal_backlog(mission_id, realized_contact_id),
+    do: RuntimeContacts.backlog(mission_id, realized_contact_id)
+
+  @spec running_realized_contact_ids(binary()) :: [binary()]
+  def running_realized_contact_ids(mission_id), do: RuntimeContacts.running_ids(mission_id)
+
   @spec realized_contact_running?(binary(), binary()) :: boolean()
   def realized_contact_running?(mission_id, realized_contact_id),
     do: RuntimeContacts.running?(mission_id, realized_contact_id)

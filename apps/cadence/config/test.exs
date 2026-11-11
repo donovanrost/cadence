@@ -54,7 +54,8 @@ config :cadence,
 
 config :cadence,
   telemetry_storage: [
-    writer: Cadence.Telemetry.Storage.Writers.PostgresReadModel,
+    # The Postgres read model, except while a test turns on an outage (DECISIONS #71).
+    writer: Cadence.OutageTelemetryWriter,
     organization_id: "org-test",
     realm: :flight,
     data_source_id: "managed_questdb_primary",

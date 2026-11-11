@@ -354,6 +354,54 @@ defmodule Cadence.IngressJournal.FileSystemTest do
     assert next_entry.start_offset == second.end_offset
   end
 
+  # DECISIONS #71: an ended contact's unstored telemetry is named by `unpersisted_journal`;
+  # nothing past the processing cursor is ever reclaimed, however far the archive got.
+  @tag :tmp_dir
+  test "never reclaims entries the processing consumer hasn't passed, and reports them", ctx do
+    opts = Keyword.merge(ctx.opts, segment_bytes: 100, checkpoint_interval_ms: 5)
+    start_supervised!({FileSystem, opts})
+
+    entries =
+      for byte <- 1..3 do
+        assert {:ok, entry} =
+                 FileSystem.append(ctx.name, :binary.copy(<<byte>>, 80), DateTime.utc_now(), %{})
+
+        entry
+      end
+
+    tail = List.last(entries).end_offset
+    assert :ok = FileSystem.acknowledge(ctx.name, :archive, tail)
+    Process.sleep(50)
+
+    assert {:ok, snapshot} = FileSystem.snapshot(ctx.name)
+    assert snapshot.reclaimed_segments == 0
+    assert snapshot.segment_count == 3
+    assert Enum.all?(entries, &File.exists?(&1.segment_path))
+
+    assert snapshot.processing_backlog == %{
+             from_offset: 0,
+             to_offset: tail,
+             bytes: tail,
+             entries: 3
+           }
+
+    # The backlog survives a restart; processing one entry shrinks it from the front.
+    assert :ok =
+             stop_supervised({:ingress_journal, Keyword.fetch!(ctx.opts, :provider_binding_id)})
+
+    start_supervised!({FileSystem, opts})
+    assert :ok = FileSystem.acknowledge(ctx.name, :processing, hd(entries).end_offset)
+
+    assert_eventually(fn ->
+      assert {:ok, recovered} = FileSystem.snapshot(ctx.name)
+      assert recovered.durable_cursors.processing == hd(entries).end_offset
+      assert recovered.processing_backlog.entries == 2
+      assert recovered.processing_backlog.bytes == tail - hd(entries).end_offset
+    end)
+
+    assert Enum.all?(tl(entries), &File.exists?(&1.segment_path))
+  end
+
   @tag :tmp_dir
   test "reports append queueing and bounded checkpoint reclamation work", ctx do
     test_pid = self()

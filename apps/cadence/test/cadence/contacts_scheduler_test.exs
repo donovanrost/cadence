@@ -491,7 +491,21 @@ defmodule Cadence.ContactsSchedulerTest do
     assert summary.restarted_realized_contact_ids == []
     assert summary.errors == []
 
+    # DECISIONS #71: completing hands the runtime to a settler and doesn't wait for it.
+    assert_settled(mission_id, realized_contact.realized_contact_id)
     refute Runtime.realized_contact_running?(mission_id, realized_contact.realized_contact_id)
+  end
+
+  defp assert_settled(mission_id, realized_contact_id, attempts \\ 100)
+  defp assert_settled(_mission_id, _realized_contact_id, 0), do: flunk("contact didn't settle")
+
+  defp assert_settled(mission_id, realized_contact_id, attempts) do
+    {:ok, contact} = Cadence.Contacts.fetch_realized_contact(mission_id, realized_contact_id)
+
+    unless match?(%{"settlement" => %{"state" => "settled"}}, contact.metadata) do
+      Process.sleep(50)
+      assert_settled(mission_id, realized_contact_id, attempts - 1)
+    end
   end
 
   test "reconcile expires missed scheduled contacts that were never realized", %{

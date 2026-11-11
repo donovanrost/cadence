@@ -153,7 +153,29 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
       uplink: uplink(attention),
       release: release(attention)
     }
+    |> Map.merge(settlement(attention))
   end
+
+  # DECISIONS #71 / ux U37: telemetry still on disk, not stored. The pass has ended, so the row
+  # is always P2; nothing expires it (the journal keeps it) and Cadence retries by itself.
+  @settlement_keys [
+    :reason,
+    :failure_kind,
+    :failure_message,
+    :realized_contact_id,
+    :spacecraft_id,
+    :ends_at,
+    :deadline_at,
+    :backlog,
+    :expires_at,
+    :retry,
+    :next_attempt_at
+  ]
+
+  defp settlement(%{source: "contact_settlement"} = attention),
+    do: Map.take(attention, @settlement_keys)
+
+  defp settlement(_attention), do: %{}
 
   # D2 Release whose cancel the provider didn't confirm (domain 548b8dd9).
   defp release(%{source: "pass_release"} = attention),
@@ -174,6 +196,8 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp uplink(_attention), do: nil
 
   # Within 2 h of the pass start, or the pass is under way (started, not ended).
+  defp p1?(%{source: "contact_settlement"}, _now), do: false
+
   defp p1?(%{starts_at: %DateTime{} = starts_at} = attention, now) do
     horizon = DateTime.add(now, @p1_horizon_s, :second)
 

@@ -5,6 +5,8 @@ defmodule Cadence.Contacts.ContactLifecycle do
 
   alias Cadence.Contacts.ContactAction
   alias Cadence.Contacts.ContactRuntimeConfig
+  alias Cadence.Contacts.ContactSettlement
+  alias Cadence.Contacts.ContactSettler
   alias Cadence.Contacts.ContactStore
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Contacts.ScheduledContact
@@ -162,6 +164,11 @@ defmodule Cadence.Contacts.ContactLifecycle do
       restart_candidates
       |> collect_reconcile_results(&restart_realized_for_reconcile(&1, reference_time))
 
+    {settling_realized_contact_ids, settle_errors} =
+      mission_id
+      |> ContactSettlement.sweep_candidates(running_realized_contact_ids(mission_id))
+      |> collect_reconcile_results(&settle_realized_for_reconcile/1)
+
     {:ok,
      %{
        reference_time: reference_time,
@@ -170,13 +177,38 @@ defmodule Cadence.Contacts.ContactLifecycle do
        realized_scheduled_contact_ids: Enum.reverse(realized_scheduled_contact_ids),
        completed_realized_contact_ids: Enum.reverse(completed_realized_contact_ids),
        restarted_realized_contact_ids: Enum.reverse(restarted_realized_contact_ids),
+       settling_realized_contact_ids: Enum.reverse(settling_realized_contact_ids),
        errors:
          Enum.reverse(expiration_errors) ++
            Enum.reverse(scheduled_completion_errors) ++
            Enum.reverse(realization_errors) ++
-           Enum.reverse(completion_errors) ++ Enum.reverse(restart_errors)
+           Enum.reverse(completion_errors) ++
+           Enum.reverse(restart_errors) ++ Enum.reverse(settle_errors)
      }}
   end
+
+  # DECISIONS #71 sweep: an ended contact with no settler gets one (idempotent), so a failed
+  # handoff or a lost settler is retried rather than leaving its runtime running.
+  defp settle_realized_for_reconcile(%RealizedContact{} = realized_contact) do
+    %{mission_id: mission_id, realized_contact_id: id} = realized_contact
+
+    if ContactSettler.settling?(mission_id, id) do
+      :skip
+    else
+      case ContactSettler.settle(realized_contact) do
+        :ok ->
+          {:ok, id}
+
+        {:error, reason} ->
+          {:error, reconcile_error(:realized_contact_settlement, realized_contact, reason)}
+      end
+    end
+  end
+
+  defp running_realized_contact_ids(nil), do: []
+
+  defp running_realized_contact_ids(mission_id),
+    do: Runtime.running_realized_contact_ids(mission_id)
 
   defp collect_reconcile_results(contacts, action) do
     Enum.reduce(contacts, {[], []}, fn contact, {ids, errors} ->
@@ -372,16 +404,14 @@ defmodule Cadence.Contacts.ContactLifecycle do
     end
   end
 
+  # DECISIONS #71: ending a contact records the end and hands its runtime to a settler; it never
+  # waits for the runtime to drain (a TSDB outage would hold every caller, the scheduler too).
   defp stop_realized_transition(%RealizedContact{} = realized_contact, metadata_patch) do
     with {:ok, %RealizedContact{} = persisted_realized_contact} <-
            ensure_persisted_realized(realized_contact),
          {:ok, %RealizedContact{} = stopped_realized_contact} <-
            mark_realized_stopped(persisted_realized_contact, metadata_patch),
-         :ok <-
-           Runtime.stop_realized_contact_sync(
-             stopped_realized_contact.mission_id,
-             stopped_realized_contact.realized_contact_id
-           ) do
+         :ok <- ContactSettler.settle(stopped_realized_contact) do
       {:ok, stopped_realized_contact}
     end
   end
@@ -394,7 +424,11 @@ defmodule Cadence.Contacts.ContactLifecycle do
        do: {:ok, realized_contact}
 
   defp mark_realized_stopped(%RealizedContact{} = realized_contact, metadata_patch) do
-    ContactStore.update_realized_lifecycle(realized_contact, :stopped, metadata_patch)
+    ContactStore.update_realized_lifecycle(
+      realized_contact,
+      :stopped,
+      Map.merge(metadata_patch, ContactSettlement.settling(DateTime.utc_now()))
+    )
   end
 
   defp complete_realized(%RealizedContact{} = realized_contact, metadata_patch) do
@@ -404,13 +438,9 @@ defmodule Cadence.Contacts.ContactLifecycle do
            ContactStore.update_realized_lifecycle(
              persisted_realized_contact,
              :completed,
-             metadata_patch
+             Map.merge(metadata_patch, ContactSettlement.settling(DateTime.utc_now()))
            ),
-         :ok <-
-           Runtime.stop_realized_contact_sync(
-             completed_realized_contact.mission_id,
-             completed_realized_contact.realized_contact_id
-           ) do
+         :ok <- ContactSettler.settle(completed_realized_contact) do
       {:ok, completed_realized_contact}
     end
   end

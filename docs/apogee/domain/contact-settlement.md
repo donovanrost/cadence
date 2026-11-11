@@ -1,6 +1,6 @@
 # Contact settlement: ending a contact never waits on the TSDB (DECISIONS #71)
 
-Status: design approved by director (2026-11-11), implementation after the #65 live run.
+Status: built 2026-11-11 (see "As built" below). Replay is the next item.
 Portable: Contacts/Runtime only, no Apogee-only modules; develop has the same bug.
 
 ## The bug
@@ -73,6 +73,48 @@ The host sleep made the outage. The freeze is the bug.
   stopped, its segments still on disk, and the attention item names it and the backlog.
 - Sweep: a completed contact with a live runtime is settled on the next reconcile.
 - Journal GC never reclaims a segment beyond the processing cursor.
+
+## As built
+
+- `ContactLifecycle.complete_realized` / `stop_realized_transition` record the end with
+  `settlement: %{state: "settling", started_at, deadline_at}` and call
+  `ContactSettler.settle/1`, which returns at once. Nothing on the scheduler's path quiesces.
+- `Cadence.Contacts.ContactSettler`: one registered, temporary GenServer per contact under a
+  `DynamicSupervisor` in `Control.Supervisor` (unlinked fallback when that supervisor isn't
+  there, e.g. after a code reload). It runs the existing quiesce (transports and providers
+  first, so intake stops at LOS) in a monitored worker, with a deadline timer:
+  - drained: stop the runtime, `settled`;
+  - deadline or quiesce error: read the backlog (`Runtime.ContactBacklog`: each journal's
+    durable processing cursor to its tail, plus the projectors' last errors), stop the runtime
+    without quiescing (`Runtime.terminate_realized_contact`), `unsettled` with `reason`,
+    `failure_kind` (`telemetry_storage_unavailable` when storing failed, else nil for a slow
+    drain, or `settle_failed`), `failure_message`, `unpersisted_journal` and `backlog` totals.
+  - Runtime not running when the settler starts: `settled` with `runtime: "absent"`. Its
+    journal on disk wasn't inspected. **Replay must inspect these** (and contacts ended before
+    #71), since a node restart mid-settle lands here.
+  - Already `settled`/`unsettled`: `settle/1` is a no-op, so a second stop can't hide a backlog.
+- Deadline: `config :cadence, :contact_settlement, deadline_ms:` (default 6 h). The projector
+  backs off 100 ms doubling to `:ingress_persistence_projector, retry_max_ms:` (default 30 s).
+- Sweep: every reconcile hands `settling` contacts with no settler, and pre-#71 ended contacts
+  whose runtime still runs, to a settler (`settling_realized_contact_ids` in the summary).
+- Attention source `contact_settlement` (`ContactSettlementAttention`, ux U37): one item per
+  `unsettled` contact, P2, no acknowledge (the controller 404s it), `retry: "automatic"`,
+  `expires_at: nil`; resolves as `replayed` when replay sets `settlement.replayed_at`.
+- Journal snapshot gains `processing_backlog: %{from_offset, to_offset, bytes, entries}`.
+- Known: while a path quiesces, its `PathCoordinator` is busy in the quiesce call, so a path
+  snapshot of a settling contact waits. Nothing on the scheduler's path takes one.
+
+- Test env: the telemetry writer is `Cadence.OutageTelemetryWriter` (Postgres read model
+  unless a test turns an outage on); the runtime reads its storage policy at boot, so a test
+  can't swap writers per test. The Postgres record archive (test-only; dev and prod use the
+  file-system archives) now inserts frames and packets with `on_conflict: :nothing`, like raw
+  evidence and anomalies, so a batch retried after a failed telemetry write doesn't hit its own
+  committed rows.
+
+Tests: `contact_settlement_test.exs` (outage across A's LOS while B realizes, completes and
+settles; deadline expiry with the backlog on disk and the attention item; the sweep),
+`file_system_test.exs` (no reclaim past the processing cursor, across a restart),
+`attention_api_test.exs` (acknowledge/resolve 404).
 
 ## Not covered by c732a2ba
 

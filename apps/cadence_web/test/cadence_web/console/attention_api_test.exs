@@ -123,9 +123,22 @@ defmodule CadenceWeb.Console.AttentionAPITest do
              |> post(path <> "/resolve", %{"action_text" => too_long})
              |> json_response(422)
 
-    for missing <- ["/attention/pass_resolution/nope", "/attention/provider_change/br-1"] do
+    # contact_settlement (#71) closes by itself: acknowledge and resolve are refused cleanly.
+    for missing <- [
+          "/attention/pass_resolution/nope",
+          "/attention/provider_change/br-1",
+          "/attention/contact_settlement/realized-1"
+        ] do
       assert %{"error" => %{"code" => "attention_item_not_found"}} =
                c |> conn() |> post(c.base <> missing <> "/acknowledge") |> json_response(404)
     end
+
+    assert %{"error" => %{"code" => "attention_item_not_found"}} =
+             c
+             |> conn()
+             |> post(c.base <> "/attention/contact_settlement/realized-1/resolve", %{
+               "action_text" => "stored"
+             })
+             |> json_response(404)
   end
 end
