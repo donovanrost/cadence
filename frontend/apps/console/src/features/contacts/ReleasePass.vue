@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
 import { ApButton, ApCallout } from "@/ui";
-import type { Pass } from "./api.ts";
+import { fetchQueuedGroups, type Pass, type QueuedGroups } from "./api.ts";
 import { releasePass, type ReleaseOutcome } from "./release.ts";
 import { stationLabel } from "./gantt.ts";
 
@@ -17,19 +17,34 @@ const titleId = `ap-release-${Math.random().toString(36).slice(2, 9)}`;
 const busy = ref(false);
 const outcome = ref<ReleaseOutcome | null>(null);
 
-/** §4 short form: "03:00Z" today, "11-12 03:00Z" otherwise. */
-const when = computed(() => {
-  const at = props.pass.starts_at;
-  const today = at.slice(0, 10) === props.now.toISOString().slice(0, 10);
-  return `${today ? "" : `${at.slice(5, 10)} `}${at.slice(11, 16)}Z`;
-});
 const inProgress = computed(
   () => props.pass.state === "active" || props.pass.pass_phase === "pass",
 );
-const queued = computed(() => props.pass.uplink_readiness?.command_groups_queued ?? 0);
+/** Read when the sheet opens: the single pass read carries the queued groups (04755d23). */
+const queued = ref<QueuedGroups | null>(null);
+/** §4 short form: "03:00Z" today, "11-12 03:00Z" otherwise. */
+const short = (iso: string) => {
+  const today = iso.slice(0, 10) === props.now.toISOString().slice(0, 10);
+  return `${today ? "" : `${iso.slice(5, 10)} `}${iso.slice(11, 16)}Z`;
+};
+const queuedLine = computed(() => {
+  const q = queued.value;
+  if (!q || q.count === 0) return null;
+  const head = `${q.count} ${q.count === 1 ? "command group is" : "command groups are"} queued for this pass.`;
+  const next = q.next_pass;
+  if (!next) return `${head} No later pass is booked for ${q.count === 1 ? "it" : "them"} yet.`;
+  const code = next.station.code ?? next.station.name;
+  return `${head} ${q.count === 1 ? "It goes" : "They'll go"} on the next pass (${code ? `${code} ` : ""}${short(next.starts_at)}).`;
+});
 
 function open() {
   outcome.value = null;
+  queued.value = null;
+  fetchQueuedGroups(props.missionId, props.pass.id)
+    .then((r) => {
+      if (r.ok) queued.value = r.value.queued_command_groups ?? null;
+    })
+    .catch((e: unknown) => console.error("Queued groups read failed", e));
   dialog.value?.showModal();
   void nextTick(() => dialog.value?.querySelector<HTMLElement>("footer button")?.focus());
 }
@@ -73,7 +88,7 @@ async function release() {
     >
       <div class="flex flex-col gap-3 p-5">
         <h2 :id="titleId" class="m-0 font-display text-xl font-semibold tracking-tag uppercase">
-          Release {{ spacecraft }} · {{ stationLabel(pass) }} · {{ when }}?
+          Release {{ spacecraft }} · {{ stationLabel(pass) }} · {{ short(pass.starts_at) }}?
         </h2>
         <p class="m-0 text-text-2">
           Cadence asks {{ provider }} to cancel this booking. If it accepts, the pass leaves the
@@ -82,10 +97,7 @@ async function release() {
         <ApCallout v-if="inProgress" tone="caution">
           This pass is in progress. Releasing it ends the contact now.
         </ApCallout>
-        <ApCallout v-if="queued > 0" tone="caution">
-          {{ queued }} {{ queued === 1 ? "command group is" : "command groups are" }} queued for
-          this pass. They'll go on the next pass.
-        </ApCallout>
+        <ApCallout v-if="queuedLine" tone="caution">{{ queuedLine }}</ApCallout>
       </div>
       <footer class="flex items-center justify-end gap-2 border-t border-hairline px-5 py-3">
         <ApButton variant="ghost" @click="dialog?.close()">Cancel</ApButton>

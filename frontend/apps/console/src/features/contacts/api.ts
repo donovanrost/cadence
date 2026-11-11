@@ -78,6 +78,32 @@ const pass = d.object({
 });
 export const passReader = pass;
 
+/** GET /passes/:id only (04755d23): command groups queued for this pass, and where they'd go. */
+const queuedReader = d.object({
+  queued_command_groups: d.optional(
+    d.nullable(
+      d.object({
+        count: d.integer,
+        next_pass: d.nullable(
+          d.object({
+            station: d.object({ code: d.nullable(d.string), name: d.nullable(d.string) }),
+            starts_at: d.timestamp,
+          }),
+        ),
+      }),
+    ),
+  ),
+});
+export type QueuedGroups = NonNullable<Decoded<typeof queuedReader>["queued_command_groups"]>;
+
+export function fetchQueuedGroups(missionId: string, passId: string, signal?: AbortSignal) {
+  return request(
+    `/missions/${encodeURIComponent(missionId)}/passes/${encodeURIComponent(passId)}`,
+    queuedReader,
+    signal ? { signal } : {},
+  );
+}
+
 export const passesReader = d.object({
   from: d.timestamp,
   to: d.timestamp,
