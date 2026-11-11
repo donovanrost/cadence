@@ -1,8 +1,12 @@
 # CI plan: GitHub Actions for Cadence
 
-Owner: devops. Status: **proposal, 2026-11-11**. No workflows are written yet; this doc is
-for review first. Branch `ci/github-actions` (rebased onto `origin/develop` f9d89f83, see
+Owner: devops. Status: **reviewed by the director, 2026-11-11**; delivery step 1 starts next.
+Branch `ci/actions-develop`, based on `origin/develop` f9d89f83 (see
 [Housekeeping](#housekeeping)).
+
+Decided (director, 2026-11-11): Q4 yes, production console build in CI; Q6 yes, devops diagnoses
+the federation `integrity_failure` in delivery step 2; Q7 yes, `mix hex.audit` as a
+non-blocking step in `quality`. Q1–3 and Q5 are with the user.
 
 Goal: PRs to `develop` and `main` get fast, trustworthy required checks, well under 15 min of
 wall clock. Build order is **Elixir first** (phases 1–3), then the Apogee console and its full
@@ -353,9 +357,9 @@ measured timings for every run.
 - This worktree's `ci/github-actions` branch was the user's **August** CI attempt (5 commits on
   66a0b1e1, 1,052 commits behind develop), not a branch off `origin/develop`. Those commits live
   on `origin/ci/github-actions`, and **PR #13 (`ci/github-actions` → `main`, open)** points at
-  them. I reset the local branch to `origin/develop`; nothing local was lost. Pushing this branch
-  means force-updating `origin/ci/github-actions`, which rewrites PR #13. The cleaner option is to
-  close #13 and open a new PR against `develop`. That's the director's call.
+  them. I reset the local branch to `origin/develop`; nothing local was lost. **Resolved:** the
+  local branch is renamed `ci/actions-develop` with no upstream, so `origin/ci/github-actions`
+  and PR #13 stay untouched. New work goes to a new PR against `develop`.
 - The August `ci.yml` is superseded by this plan. Its xmllint lesson is carried forward. Its
   both-env `mix setup` is no longer needed, because `precommit.checks` now runs the architecture
   check under `MIX_ENV=test`. I'll confirm that on the first run.
