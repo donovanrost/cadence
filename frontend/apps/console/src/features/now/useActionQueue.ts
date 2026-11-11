@@ -3,8 +3,15 @@ import { useRemoteQuery, type RemoteState } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { FLEET_REFETCH_GAP_MS, FLEET_TELEMETRY_GAP_MS, throttle } from "@/features/fleet/index.ts";
 import { fetchActionQueue, presentQueue } from "./actionQueue.ts";
-import { newlyResolved, RESOLVED_FADE_MS, withFading, type Fading } from "./attention.ts";
+import {
+  newlyResolved,
+  RESOLVED_FADE_MS,
+  withFading,
+  type Attention,
+  type Fading,
+} from "./attention.ts";
 import type { QueueItem } from "./queue.ts";
+import type { RetryOutcome } from "./useQueueCommand.ts";
 
 /** The viewer's ranked queue (M6), refetched per the contract: state changes promptly, telemetry every 10 s. */
 export function useActionQueue(missionId: Ref<string | null>) {
@@ -26,9 +33,26 @@ export function useActionQueue(missionId: Ref<string | null>) {
     prompt.call,
   );
   useMissionInvalidation(missionId, ["telemetry"], slow.call);
-  const rows = computed(() =>
-    query.state.value.status === "ready" ? presentQueue(query.state.value.value) : null,
+  /**
+   * Attention items a write returned (U37 Retry: ux, the row takes the returned state at once),
+   * by item id, until the next read replaces them.
+   */
+  const patches = shallowRef<ReadonlyMap<string, Attention>>(new Map());
+  watch(
+    () => query.state.value,
+    () => (patches.value = new Map()),
   );
+  const rows = computed(() => {
+    const s = query.state.value;
+    if (s.status !== "ready") return null;
+    const p = patches.value;
+    if (p.size === 0) return presentQueue(s.value);
+    const items = s.value.items.map((i) => {
+      const a = i.attention ? p.get(i.attention.id) : undefined;
+      return a ? { ...i, attention: a } : i;
+    });
+    return presentQueue({ ...s.value, items });
+  });
   // U31: a resolved attention row stays 5 s, faded, reading "Resolved by …".
   const fading = shallowRef<Fading[]>([]);
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -39,14 +63,37 @@ export function useActionQueue(missionId: Ref<string | null>) {
     const resolved = s.status === "ready" ? (s.value.resolved ?? []) : [];
     const added = newlyResolved(previous, current, resolved, fading.value, Date.now());
     previous = current;
-    if (!added.length) return;
-    fading.value = [...fading.value, ...added];
+    if (added.length) fade(added);
+  });
+  function fade(add: Fading[]) {
+    fading.value = [...fading.value, ...add];
     const timer = setTimeout(() => {
       timers.delete(timer);
       fading.value = fading.value.filter((f) => f.until > Date.now());
     }, RESOLVED_FADE_MS + 50);
     timers.add(timer);
-  });
+  }
+  /** After Retry: hold an emptied fold 5 s with its result (ux), then show the returned items. */
+  function applyRetry(row: QueueItem, outcome: RetryOutcome) {
+    if (outcome.emptied && outcome.text) {
+      const index = Math.max(
+        0,
+        (rows.value ?? []).findIndex((r) => r.key === row.key),
+      );
+      const { list: _l, command: _c, memberKeys: _m, ...rest } = row;
+      const item: QueueItem = {
+        ...rest,
+        key: `${row.key}|retried`,
+        state: "off",
+        sentence: outcome.text,
+        meta: null,
+        acknowledged: true,
+      };
+      fade([{ item, index, until: Date.now() + RESOLVED_FADE_MS }]);
+    }
+    if (outcome.items.length)
+      patches.value = new Map([...patches.value, ...outcome.items.map((a) => [a.id, a] as const)]);
+  }
   onScopeDispose(() => {
     prompt.cancel();
     slow.cancel();
@@ -58,5 +105,5 @@ export function useActionQueue(missionId: Ref<string | null>) {
     const value = withFading(rows.value ?? [], fading.value);
     return { status: "ready", value, receivedAt: s.receivedAt };
   });
-  return { state: query.state, items, refetch: query.refetch };
+  return { state: query.state, items, refetch: query.refetch, applyRetry };
 }

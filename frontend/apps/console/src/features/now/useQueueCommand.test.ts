@@ -1,44 +1,82 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type { Attention } from "./attention.ts";
+import { decode } from "@/api/index.ts";
+import { attentionReader, type Attention } from "./attention.ts";
 import { NO_ACCESS, retryTargets } from "./useQueueCommand.ts";
 
-const target = (id: string) =>
-  ({ id, source: "contact_settlement" }) as Pick<Attention, "id" | "source">;
+// domain's #71 sample item (refs shortened), as the queue and the retry endpoint send it.
+const sample = (id: string, retry: string) => ({
+  id,
+  source: "contact_settlement",
+  conflict: "unsettled",
+  state: "open",
+  acknowledged_by: null,
+  contact_id: "scheduled_contact_cd34",
+  reservation_id: `res-${id}`,
+  station: { ref: "svb", id: "st-1", code: "SVA", name: "Svalbard" },
+  provider: { id: "p-1", name: "Northlight" },
+  starts_at: "2026-11-11T18:49:00Z",
+  ends_at: "2026-11-11T18:57:00Z",
+  raised_at: "2026-11-12T00:57:00Z",
+  deadline_at: "2026-11-12T00:57:00Z",
+  backlog: { entries: 1204, bytes: 3355443, journals: 1 },
+  failure_kind: "telemetry_storage_unavailable",
+  failure_message: null,
+  retry,
+  attempts: retry === "manual" ? 6 : 0,
+  next_attempt_at: retry === "manual" ? null : "2026-11-11T23:20:00Z",
+  last_attempt_at: "2026-11-11T23:10:00Z",
+  provider_message: null,
+  resolution: null,
+});
+const read = (raw: unknown): Attention => {
+  const r = decode(attentionReader, raw);
+  if (!r.ok) throw new Error(r.error.message);
+  return r.value;
+};
+const manual = (id: string) => read(sample(id, "manual"));
 const reply = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-const err = (code: string, message: string) => ({ error: { code, message } });
+const err = (code: string, message: string, details?: unknown) => ({
+  error: { code, message, ...(details === undefined ? {} : { details }) },
+});
 
-describe("Retry storing (domain #71 final contract)", () => {
+describe("Retry storing (domain #71 final contract, ux c10265fd review)", () => {
   afterEach(() => vi.unstubAllGlobals());
   const stub = (...replies: Response[]) => {
     const fetch = vi.fn();
     for (const r of replies) fetch.mockResolvedValueOnce(r);
     vi.stubGlobal("fetch", fetch);
-    return fetch;
   };
-  // The 200 body is the attention object; an empty object fails decoding, so reuse 409 for "ok-ish".
-  it("counts 409 retry_not_manual as retried and drops a 404", async () => {
+
+  it("takes 200's item and 409's details.item as retried; a 404 drops out; an emptied fold", async () => {
     stub(
-      reply(409, err("retry_not_manual", "Already retrying.")),
+      reply(200, { data: sample("a", "automatic") }),
+      reply(409, err("retry_not_manual", "Already retrying.", { item: sample("b", "automatic") })),
       reply(404, err("attention_item_not_found", "Gone.")),
-      reply(409, err("retry_not_manual", "Already retrying.")),
     );
-    expect(await retryTargets("m", [target("a"), target("b"), target("c")] as Attention[])).toBe(
-      "Retried 2.",
-    );
+    const out = await retryTargets("m", [manual("a"), manual("b"), manual("c")]);
+    expect(out.text).toBe("Retried 2.");
+    expect(out.emptied).toBe(true);
+    expect(out.items.map((a) => [a.id, a.retry])).toEqual([
+      ["a", "automatic"],
+      ["b", "automatic"],
+    ]);
   });
 
-  it("names a failure with the server's sentence, and 403 reads the operators line", async () => {
+  it("names a failure with the server's sentence; 403 reads the operators line", async () => {
     stub(
-      reply(409, err("retry_not_manual", "x")),
+      reply(200, { data: sample("a", "automatic") }),
       reply(422, err("invalid_params", "Replay is busy.")),
     );
-    expect(await retryTargets("m", [target("a"), target("b")] as Attention[])).toBe(
+    const partial = await retryTargets("m", [manual("a"), manual("b")]);
+    expect([partial.text, partial.emptied]).toEqual([
       "Retried 1 of 2. 1 failed: Replay is busy.",
-    );
+      false,
+    ]);
     stub(reply(403, err("forbidden", "No.")));
-    expect(await retryTargets("m", [target("a")] as Attention[])).toBe(NO_ACCESS);
-    stub(reply(409, err("retry_not_manual", "x")));
-    expect(await retryTargets("m", [target("a")] as Attention[])).toBeNull();
+    expect((await retryTargets("m", [manual("a")])).text).toBe(NO_ACCESS);
+    stub(reply(200, { data: sample("a", "automatic") }));
+    const single = await retryTargets("m", [manual("a")]);
+    expect([single.text, single.emptied, single.items.length]).toEqual([null, false, 1]);
   });
 });

@@ -5,13 +5,13 @@ import type { RemoteState } from "@/api/index.ts";
 import { ApButton, ApCallout, ApListRow, ApPanel, ApRemote, formatRelative, useNow } from "@/ui";
 import type { QueueItem } from "./queue.ts";
 import QueueListSheet from "./QueueListSheet.vue";
-import { useQueueCommand } from "./useQueueCommand.ts";
+import { useQueueCommand, type RetryOutcome } from "./useQueueCommand.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { useCommandAccess } from "@/features/commands/index.ts";
 
 /** A2 · Action queue: the server-ranked queue (M6), in server order. */
 defineProps<{ state: RemoteState<QueueItem[]>; nominal: number }>();
-const emit = defineEmits<{ retry: []; changed: [] }>();
+const emit = defineEmits<{ retry: []; retried: [row: QueueItem, outcome: RetryOutcome] }>();
 const now = useNow();
 const sheet = ref<InstanceType<typeof QueueListSheet> | null>(null);
 /** U37 Retry storing: operate_mission, the same flag Recover uses (access.abort). */
@@ -19,7 +19,7 @@ const scope = useMissionScope();
 const access = useCommandAccess();
 const command = useQueueCommand(
   computed(() => scope.value.mission.id),
-  () => emit("changed"),
+  (row, outcome) => emit("retried", row, outcome),
 );
 /** Static meta, then the live countdown when the row has a consequence time. */
 function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Record<string, never> {
@@ -68,7 +68,7 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
                 v-if="item.command && access.abort"
                 size="compact"
                 variant="secondary"
-                :disabled="command.notes.value[item.key]?.running"
+                :disabled="command.running.value.has(item.key)"
                 @click="command.run(item)"
                 >{{ item.command.label }}</ApButton
               >

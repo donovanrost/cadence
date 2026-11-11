@@ -78,8 +78,10 @@ async function retryStoring() {
   retrying.value = true;
   retryNote.value = null;
   try {
-    retryNote.value = await retryTargets(props.missionId, [s.attention]);
-    settlementRead.refetch();
+    const outcome = await retryTargets(props.missionId, [s.attention]);
+    retryNote.value = outcome.text;
+    const returned = outcome.items[0];
+    if (returned) settlementRead.patch(returned);
   } finally {
     retrying.value = false;
   }

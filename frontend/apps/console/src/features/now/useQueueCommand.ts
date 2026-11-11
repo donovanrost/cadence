@@ -1,15 +1,7 @@
 import { shallowRef, type Ref } from "vue";
-import { describeApiError, request } from "@/api/index.ts";
+import { decoders as d, decode, describeApiError, request } from "@/api/index.ts";
 import { attentionReader, type Attention } from "./attention.ts";
 import type { QueueItem } from "./queue.ts";
-
-/** What a row shows about its command: in flight, or the outcome until the row changes. */
-export type CommandNote = Readonly<{
-  running: boolean;
-  /** The row's sentence when the command finished: "Retrying…" bridges until the read updates. */
-  sentence: string;
-  text: string | null;
-}>;
 
 export const NO_ACCESS = "Operators can retry storing.";
 
@@ -22,53 +14,81 @@ export function retrySettlement(missionId: string, a: Attention) {
   );
 }
 
+export type RetryOutcome = Readonly<{
+  /** The row's note: an error sentence, or the folded result; null when there's nothing to say. */
+  text: string | null;
+  /** Items as the server returned them (200, or 409's details.item): the row takes them now. */
+  items: readonly Attention[];
+  /** A fold where every item was retried: it empties, so hold it 5 s reading `text` (ux). */
+  emptied: boolean;
+}>;
+
+const conflictItem = d.object({ item: attentionReader });
+
 /**
  * U37 Retry storing / Retry all N (ux 294e67c6 + addendum; domain's final contract): one POST per
- * item. 200 and 409 retry_not_manual (someone already restarted it) count as retried; 404 means it
- * resolved meanwhile and drops out; 403 reads "Operators can retry storing."
+ * item. 200 and 409 retry_not_manual (someone already restarted it) count as retried and carry the
+ * item; 404 means it resolved meanwhile and drops out; 403 reads "Operators can retry storing."
  */
 export async function retryTargets(
   missionId: string,
   targets: readonly Attention[],
-): Promise<string | null> {
-  let retried = 0;
+): Promise<RetryOutcome> {
   let dropped = 0;
+  const items: Attention[] = [];
   const failed: string[] = [];
   for (const a of targets) {
     const r = await retrySettlement(missionId, a);
-    if (r.ok) retried += 1;
-    else if (r.error.kind === "conflict" && r.error.code === "retry_not_manual") retried += 1;
-    else if (r.error.kind === "not_found") dropped += 1;
-    else if (r.error.kind === "forbidden") return NO_ACCESS;
-    else failed.push(describeApiError(r.error));
+    if (r.ok) {
+      items.push(r.value);
+      continue;
+    }
+    const e = r.error;
+    if (e.kind === "conflict" && e.code === "retry_not_manual") {
+      const current = decode(conflictItem, e.details);
+      if (current.ok) items.push(current.value.item);
+    } else if (e.kind === "not_found") dropped += 1;
+    else if (e.kind === "forbidden") return { text: NO_ACCESS, items, emptied: false };
+    else failed.push(describeApiError(e));
   }
-  const total = targets.length - dropped;
-  if (targets.length === 1) return failed[0] ?? null;
-  if (failed.length === 0) return `Retried ${retried}.`;
+  const retried = targets.length - dropped - failed.length;
+  if (targets.length === 1) return { text: failed[0] ?? null, items, emptied: false };
+  if (failed.length === 0) return { text: `Retried ${retried}.`, items, emptied: retried > 0 };
   const reason = failed[0]?.replace(/[.!?]+$/, "");
-  return `Retried ${retried} of ${total}. ${failed.length} failed${reason ? `: ${reason}` : ""}.`;
+  return {
+    text: `Retried ${retried} of ${targets.length - dropped}. ${failed.length} failed${reason ? `: ${reason}` : ""}.`,
+    items,
+    emptied: false,
+  };
 }
 
-export function useQueueCommand(missionId: Ref<string>, onDone: () => void) {
-  const notes = shallowRef<Readonly<Record<string, CommandNote>>>({});
-  const set = (key: string, note: CommandNote) => (notes.value = { ...notes.value, [key]: note });
+/** Row commands for the queue panel: "Retrying…" only while the requests run (ux). */
+export function useQueueCommand(
+  missionId: Ref<string>,
+  onDone: (row: QueueItem, outcome: RetryOutcome) => void,
+) {
+  const running = shallowRef<ReadonlySet<string>>(new Set());
+  const notes = shallowRef<Readonly<Record<string, string>>>({});
 
   async function run(item: QueueItem) {
-    if (!item.command || notes.value[item.key]?.running) return;
-    set(item.key, { running: true, sentence: item.sentence, text: null });
-    const text = await retryTargets(missionId.value, item.command.targets);
-    set(item.key, { running: false, sentence: item.sentence, text });
-    onDone();
+    if (!item.command || running.value.has(item.key)) return;
+    running.value = new Set([...running.value, item.key]);
+    try {
+      const outcome = await retryTargets(missionId.value, item.command.targets);
+      const { [item.key]: _old, ...rest } = notes.value;
+      notes.value = outcome.text && !outcome.emptied ? { ...rest, [item.key]: outcome.text } : rest;
+      onDone(item, outcome);
+    } finally {
+      running.value = new Set([...running.value].filter((k) => k !== item.key));
+    }
   }
 
-  /** The row's sentence: "Retrying…" until the read moves on, then the outcome after it. */
   function sentenceFor(item: QueueItem, canRun: boolean): string {
-    const note = notes.value[item.key];
+    if (running.value.has(item.key)) return "Retrying…";
     const base = item.command && !canRun ? `${item.sentence} ${NO_ACCESS}` : item.sentence;
-    if (!note) return base;
-    if (note.running || (note.text === null && note.sentence === item.sentence)) return "Retrying…";
-    return note.text ? `${base} ${note.text}` : base;
+    const note = notes.value[item.key];
+    return note ? `${base} ${note}` : base;
   }
 
-  return { notes, run, sentenceFor };
+  return { running, run, sentenceFor };
 }
