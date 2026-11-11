@@ -5,6 +5,7 @@ import {
   formatCount,
   plural,
   ApButton,
+  ApCallout,
   ApEmptyState,
   ApField,
   ApPageHeader,
@@ -97,7 +98,13 @@ const summary = computed(() => {
             headline="No spacecraft match"
             :sentence="`Nothing matches “${query.trim()}”. Filter by name, SCID or profile.`"
           />
-          <SpacecraftTable v-else :rows="filtered(value)" />
+          <template v-else>
+            <ApCallout v-if="value.telemetry === 'degraded'" tone="caution"
+              >Last received may be incomplete: the telemetry history isn't answering, so only what
+              arrived since the last restart shows.</ApCallout
+            >
+            <SpacecraftTable :rows="filtered(value)" :degraded="value.telemetry === 'degraded'" />
+          </template>
         </template>
       </ApRemote>
     </ApPanel>

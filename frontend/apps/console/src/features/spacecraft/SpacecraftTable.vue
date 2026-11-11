@@ -4,7 +4,8 @@ import type { SpacecraftRow } from "./api.ts";
 import { orbitLabel } from "./format.ts";
 
 /** Directory rows. The Name cell is the row link (setup spacecraft detail). */
-defineProps<{ rows: readonly SpacecraftRow[] }>();
+/** `degraded`: the history store isn't answering, so a missing last-received isn't "never heard". */
+defineProps<{ rows: readonly SpacecraftRow[]; degraded?: boolean }>();
 
 const columns: readonly ApColumn[] = [
   { key: "name", label: "Name" },
@@ -61,6 +62,7 @@ const columns: readonly ApColumn[] = [
       <time v-if="row.lastReceivedAt" :datetime="row.lastReceivedAt" class="text-text-3">{{
         formatShort(new Date(row.lastReceivedAt))
       }}</time>
+      <span v-else-if="degraded" class="font-sans text-text-3">Not known right now</span>
       <span v-else class="inline-flex items-center gap-2 font-sans text-text-3"
         ><ApStatusMark state="off" />Awaiting first AOS</span
       >

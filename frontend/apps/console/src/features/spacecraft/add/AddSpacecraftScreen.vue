@@ -43,7 +43,7 @@ watch(profiles, (list) => {
   if (only && draft.profileId === "") draft.profileId = only.id;
 });
 
-const empty: SpacecraftDirectory = { spacecraft: [] };
+const empty: SpacecraftDirectory = { spacecraft: [], telemetry: "ok" };
 const proposal = computed(() => propose(draft, directory.value ?? empty, profiles.value));
 provideDraft({
   draft,

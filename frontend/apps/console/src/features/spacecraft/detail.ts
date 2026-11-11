@@ -1,6 +1,7 @@
 import { decoders, request, type ApiResult, type Reader } from "@/api";
 import type { ApKeyValueItem } from "@/ui";
 import type { ApCheckRow as CheckRow } from "@/ui";
+import { telemetryFreshness } from "./api.ts";
 import { heardLabel, orbitLabel } from "./format.ts";
 
 /** Contract: docs/apogee/api/setup.md, `GET /missions/:mission_id/spacecraft/:spacecraft_id`. */
@@ -49,6 +50,7 @@ export const detailReader = (value: unknown, path = "") => {
       }),
     ),
     configuration: nullOnly,
+    telemetry: telemetryFreshness,
     routing_rules: array(rule, 1000),
     readiness: object({ ready: boolean, checks: array(check, 20) }),
   })(value, path);
@@ -112,7 +114,11 @@ export function identityFacts(detail: SpacecraftDetail, now: Date): readonly ApK
       key: "heard",
       label: "Last heard",
       value:
-        sc.last_received_at === null ? "Awaiting first AOS" : heardLabel(sc.last_received_at, now),
+        sc.last_received_at !== null
+          ? heardLabel(sc.last_received_at, now)
+          : detail.telemetry === "degraded"
+            ? "Not known right now (history unavailable)"
+            : "Awaiting first AOS",
       mono: sc.last_received_at !== null,
     },
   ];

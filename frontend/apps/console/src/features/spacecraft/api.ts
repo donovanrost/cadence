@@ -23,7 +23,14 @@ export type SpacecraftRow = Readonly<{
   lastReceivedAt: string | null;
 }>;
 
-export type SpacecraftDirectory = Readonly<{ spacecraft: readonly SpacecraftRow[] }>;
+/** api: `degraded` = the history store didn't answer, so last-received is live-only (may be incomplete). */
+export type TelemetryFreshness = "ok" | "degraded";
+export const telemetryFreshness = (value: unknown): TelemetryFreshness =>
+  value === "degraded" ? "degraded" : "ok";
+export type SpacecraftDirectory = Readonly<{
+  spacecraft: readonly SpacecraftRow[];
+  telemetry: TelemetryFreshness;
+}>;
 
 const profileRef = object({ id: token, name: nullable(string), version: integer });
 
@@ -68,6 +75,7 @@ const directoryRow: Reader<SpacecraftRow> = (value, path = "") => {
 
 export const directoryReader: Reader<SpacecraftDirectory> = object({
   spacecraft: array(directoryRow, 20_000),
+  telemetry: telemetryFreshness,
 });
 
 export function fetchSpacecraftDirectory(
