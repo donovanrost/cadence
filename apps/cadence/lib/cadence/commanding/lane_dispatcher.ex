@@ -3,6 +3,8 @@ defmodule Cadence.Commanding.LaneDispatcher do
 
   use GenServer
 
+  require Logger
+
   alias Cadence.Commanding.ProcessNamespace
   alias Cadence.Control.Commanding
 
@@ -89,6 +91,8 @@ defmodule Cadence.Commanding.LaneDispatcher do
       dispatch_fun: Keyword.get(opts, :dispatch_fun, &Commanding.dispatch_queue_lane/5),
       run_on_boot?: Keyword.get(opts, :run_on_boot?, true),
       dispatch_timer: nil,
+      # What the lane last waited on, so a wait is logged once, not every poll.
+      waiting: nil,
       released_by:
         Keyword.get_lazy(opts, :released_by, fn ->
           %{
@@ -165,11 +169,11 @@ defmodule Cadence.Commanding.LaneDispatcher do
          ) do
       {:ok, _release_result} ->
         emit(:dispatch_result, state, %{count: 1}, %{result: :released})
-        drain_available(state, :continuation, released_count + 1)
+        drain_available(%{state | waiting: nil}, :continuation, released_count + 1)
 
       {:error, :command_queue_lane_empty} ->
         emit(:dispatch_result, state, %{count: 1}, %{result: :empty})
-        {:stop, quiescence_summary(:empty, released_count), state}
+        {:stop, quiescence_summary(:empty, released_count), %{state | waiting: nil}}
 
       {:error, {:command_queue_lane_waiting_for_not_before, _, %DateTime{} = next_not_before}} =
           _result ->
@@ -192,8 +196,14 @@ defmodule Cadence.Commanding.LaneDispatcher do
 
       # The uplink refused it before sending (#33): it failed and closed; go on to the next,
       # so stop-on-failure settles the rest of a group now.
-      {:error, {:command_release_refused, _attempt_id, _reason}} ->
+      {:error, {:command_release_refused, attempt_id, reason}} ->
         emit(:dispatch_result, state, %{count: 1}, %{result: :release_refused})
+
+        Logger.warning(
+          "command lane #{state.queue_lane_key}: release #{attempt_id} refused before send: " <>
+            inspect(reason)
+        )
+
         drain_available(state, :continuation, released_count)
 
       # The head was failed closed (stop-on-failure, or a basis that can't release): its entry
@@ -202,18 +212,38 @@ defmodule Cadence.Commanding.LaneDispatcher do
         emit(:dispatch_result, state, %{count: 1}, %{result: reason})
         drain_available(state, :continuation, released_count)
 
-      {:error, {:command_queue_lane_no_release_target, _source_endpoint_ref, _mission_id}} =
+      {:error, {:command_queue_lane_no_release_target, source_endpoint_ref, _mission_id}} =
           _result ->
         emit(:dispatch_result, state, %{count: 1}, %{result: :no_release_target})
-        state = schedule_dispatch(state, state.safety_poll_interval_ms, :safety)
+
+        state =
+          state
+          |> waiting(:no_release_target, fn ->
+            "command lane #{state.queue_lane_key}: waiting, no releasable uplink of " <>
+              "#{source_endpoint_ref}'s spacecraft (no active pass of its own, or not qualified)"
+          end)
+          |> schedule_dispatch(state.safety_poll_interval_ms, :safety)
 
         {:quiescent, quiescence_summary(:waiting_for_release_target, released_count), state}
 
       {:error, reason} ->
         emit(:dispatch_result, state, %{count: 1}, %{result: :error})
+
+        Logger.warning(
+          "command lane #{state.queue_lane_key}: dispatch failed: #{inspect(reason)}"
+        )
+
         state = schedule_dispatch(state, state.safety_poll_interval_ms, :safety)
         {:error, %{released_count: released_count, reason: reason}, state}
     end
+  end
+
+  # Logs a wait at info when the lane starts waiting on it (not on every poll).
+  defp waiting(%{waiting: kind} = state, kind, _message), do: state
+
+  defp waiting(state, kind, message) do
+    Logger.info(message.())
+    %{state | waiting: kind}
   end
 
   defp quiescence_summary(status, released_count, next_not_before \\ nil) do

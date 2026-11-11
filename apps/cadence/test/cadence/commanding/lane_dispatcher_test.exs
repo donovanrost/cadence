@@ -3,6 +3,8 @@ defmodule Cadence.Commanding.LaneDispatcherTest do
 
   alias Cadence.Commanding.LaneDispatcher
 
+  require Logger
+
   test "drain releases every immediately eligible command before reporting an empty lane" do
     test_pid = self()
 
@@ -112,6 +114,38 @@ defmodule Cadence.Commanding.LaneDispatcherTest do
     assert_receive :dispatch_attempt, 2_000
     assert_receive :dispatch_attempt, 2_000
     assert_receive {:DOWN, ^monitor, :process, ^lane_dispatcher, :normal}, 2_000
+  end
+
+  test "#38: a lane waiting for its target's pass logs once at info; a refusal logs at warning" do
+    no_target = {:error, {:command_queue_lane_no_release_target, "endpoint-25", "mission"}}
+
+    dispatch_fun =
+      dispatch_sequence([
+        no_target,
+        no_target,
+        {:error,
+         {:command_release_refused, "attempt-1", {:release_path_not_target_spacecraft, "p"}}},
+        no_target
+      ])
+
+    lane_dispatcher = start_lane_dispatcher!(dispatch_fun: dispatch_fun)
+    # The test config logs at :warning; let the info lines through for this test.
+    previous = Logger.level()
+    Logger.configure(level: :info)
+    on_exit(fn -> Logger.configure(level: previous) end)
+
+    log =
+      ExUnit.CaptureLog.capture_log([level: :info], fn ->
+        # Waits twice (logged once), then a refusal, then waits again (still the same wait).
+        for _drain <- 1..3 do
+          assert {:ok, %{status: :waiting_for_release_target}} =
+                   LaneDispatcher.drain(lane_dispatcher)
+        end
+      end)
+
+    waits = Regex.scan(~r/waiting, no releasable uplink of endpoint-25/, log)
+    assert length(waits) == 1
+    assert log =~ "release attempt-1 refused before send"
   end
 
   defp start_lane_dispatcher!(opts) do
