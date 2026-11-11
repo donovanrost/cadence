@@ -15,7 +15,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Who | Start now (unblocked) | Waiting on |
 | --- | --- | --- |
 | **lead** | K1 C panel (focused spacecraft 24 h strip); `ApSheet` kit primitive (five hand-rolled dialogs today); `ApStatTile` `to` link; Palette `>` commands and `@` stations groups (with fe-ops) | — (api's K1 items shipped: send back, approval, stop time) |
-| **fe-ops** | Now tile links + A4 pass select + approval rows → request review; Investigate's five tabs link to the existing pages (#64) + add-point chips; Contacts D3 outage bands (S7 exists); Telemetry `Dashboards ↗` → existing pages (#11); Timeline sc/plane filter; Fleet/Alarms Next contact; Mobile GO block | api-ops: M26 retries; api: M22 findings, A1 current values, M24 encode preview. (`CATALOG rev N` is unblocked: `catalog_revision` in the catalog basis.) |
+| **fe-ops** | Now tile links + A4 pass select + approval rows → request review; Investigate's five tabs link to the existing pages (#64) + add-point chips; Contacts D3 outage bands (S7 exists); Telemetry `Dashboards ↗` → existing pages (#11); Timeline sc/plane filter; Fleet/Alarms Next contact; Mobile GO block |  api: M22 findings, A1 current values, M24 encode preview. (`CATALOG rev N` is unblocked: `catalog_revision` in the catalog basis.) |
 | **fe-setup** | Profile edit → stage (op + preview exist); People command policies tab (O4 exists); Changes compare (`/config/compare`) + Keep mine / Take live (`rebase`); Readiness R2 from revisions; Audit actor filter; qa #19 copy ("unclear, check now" on 5xx) | api: catalog diff, people/invite/service-identity writes, account password/sessions, provider history; domain: catalog generations (C3) |
 | **ux** | Visual review of the unreviewed boards (§7); Compose C1 layout ruling (default: accept as built, #64) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
@@ -62,7 +62,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | --- | --- | --- |
 | A1 `5.0 → 8.0` readout, histogram of current values, hand-set overwrite callouts | fe-ops | api: current values + prior requests in the brief |
 | ~~A3 encoded packet bytes~~ done (90d1c43c) | fe-ops | — |
-| U2 verifier plot, "Needs you" cards with Re-send / Open, plane matrix, Pause, retry on no ACK | fe-ops | api-ops M26 retries + verifier series |
+| U2 verifier plot, "Needs you" cards with Re-send / Open, plane matrix, Pause, retry on no ACK | fe-ops | — (api-ops M26 2b50e7d1) |
 
 ### Contacts (`Contacts.md`, J4): Live built; detail route pending
 | Item | Owner | Blocked on |
@@ -216,7 +216,7 @@ missing endpoint or decision; an item with no blocker can start now.
 8. qa #19: map domain's `:apply_interrupted` (33529f29), in progress (api).
 
 **api-ops** (director, in this order)
-1. M26 retries + verifier series (Uplink U2), in progress.
+1. ~~M26 retries + verifier series (Uplink U2)~~ done (2b50e7d1).
 2. ~~M8 `spacecraft:<id>` topic~~ done (d79aaad4; Investigate live tail f38a4dfb).
 3. ~~Contacts Release~~ done (50c5e572, 04755d23; fe-ops a311cc8a, d43d2315). Swap station out (#68).
 4. ~~Catalog revision number~~ already there: `GET /command-catalog` basis carries `catalog_revision`.
