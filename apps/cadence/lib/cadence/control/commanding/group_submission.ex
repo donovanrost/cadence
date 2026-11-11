@@ -12,7 +12,7 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
 
   require Logger
 
-  alias Cadence.Commanding.{Dispatcher, ProcessNamespace, RequestValidation}
+  alias Cadence.Commanding.{Dispatcher, Drafts, ProcessNamespace, RequestValidation}
   alias Cadence.Commanding.Groups.{Admission, CommandGroup, GroupStore, Validation}
   alias Cadence.Comms.UplinkResolution
   alias Cadence.Management.Commanding.{ApprovedCommand, RequestAuthoring}
@@ -104,7 +104,8 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
       )
 
     with {:ok, group} <- GroupStore.insert_group(group),
-         :ok <- GroupStore.insert_members(members) do
+         :ok <- GroupStore.insert_members(members),
+         :ok <- Drafts.consume({org, mission, actor["user_id"]}, Keyword.get(opts, :draft_revision)) do
       queued =
         if second_go?, do: [], else: Admission.enqueue(members, actor, &auto_approved_hash/1)
 

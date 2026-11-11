@@ -408,3 +408,56 @@ on the request's spacecraft, plus the command's prior requests to the same targe
   don't present its values as the spacecraft's state), `null` when it was never released.
 - Bounds (`valid_range`, unit) stay on the command catalog read (`GET /commands/:id`).
 - Access as for M24 (`403 forbidden`, `404 command_request_not_found`).
+## Compose draft (owner: api; director, BACKLOG ac293f6c)
+
+Each user has one current draft per mission. Autosave overwrites it; there is no list and no
+number (ux 36cca988: the header reads `DRAFT · SAVED 02:44:31Z`). Only its author can see it. A
+draft is **inert**: approvers never see it, and it is never queued or releasable. Submitting a
+group revalidates the group body in full, so nothing is trusted from a draft. A draft idle for 30
+days reads as gone and is deleted on the next read or write.
+
+### `GET /command-draft`
+The caller's draft:
+
+```json
+{"revision": 3, "saved_at": "…", "document": {…},
+ "catalog": {"revision_saved": "<mission model revision>" | null, "revision_now": "…" | null,
+             "missing_command_ids": ["…"]}}
+```
+
+`missing_command_ids` lists stacked commands the active catalog no longer has. It's empty when no
+catalog is active.
+
+Errors: `404 command_draft_not_found`.
+
+### `PUT /command-draft`
+Body `{document, expected_revision}`. `expected_revision` is the revision you last saved, or null
+for a first save. The response is `{revision, saved_at}`. When the stored revision differs (another
+tab or device saved), the response is `409 command_draft_changed` with `details: {revision,
+saved_at}`. Reload, then save at that revision.
+
+The document is the editor's state and is opaque to the server, apart from a shape check
+(`schema_version: 1`, a `stack` of at most 500 items each with a `command_id`) and a 256 KB cap:
+
+```json
+{"schema_version": 1, "title": "…", "log_entry": "…",
+ "origin": {"kind": "alarm" | "spacecraft" | "sent_back", "id": "…"} | null,
+ "target_query": {"plane": 7, "profile": null, "states": [], "explicit": ["…"]},
+ "endpoints": {"<spacecraft_id>": "<source_endpoint_id>"},
+ "stack": [{"key": "…", "command_id": "…", "values": {"<arg_id>": "raw text"},
+            "per_target": {"<arg_id>": {"<spacecraft_id>": "raw text"}}}],
+ "release": {"mode": "next_contact" | "not_before", "not_before": "…" | null},
+ "requested_approver_user_id": "…" | null, "sent_back_from": "…" | null}
+```
+
+Values are stored as raw text, so invalid input survives a reload. Only preflight validates.
+
+Errors: `422 invalid_params` (`document`, `document.stack`, `expected_revision`).
+
+### `DELETE /command-draft`
+Discards the draft. The response is `204` (idempotent).
+
+### Submitting from a draft
+`POST /command-groups` takes an optional `draft_revision`. Once the group is created, the caller's
+draft is deleted in the same transaction, **only if it is still at that revision**, so a newer
+autosave from another tab survives.

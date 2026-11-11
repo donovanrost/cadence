@@ -42,6 +42,14 @@ defmodule CadenceWeb.Console.CommandGroupParams do
 
   def draft(_params), do: invalid("draft", "must be an object")
 
+  @doc "`draft_revision`: the Compose draft this group came from (deleted if still current)."
+  @spec draft_revision(map()) :: {:ok, pos_integer() | nil} | {:error, term()}
+  def draft_revision(%{"draft_revision" => n}) when is_integer(n) and n > 0, do: {:ok, n}
+  def draft_revision(%{"draft_revision" => nil}), do: {:ok, nil}
+  def draft_revision(%{"draft_revision" => _other}),
+    do: invalid("draft_revision", "must be a positive integer or null")
+  def draft_revision(_params), do: {:ok, nil}
+
   @max_ack_note 1_000
 
   @doc """

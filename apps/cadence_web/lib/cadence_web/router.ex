@@ -784,6 +784,10 @@ defmodule CadenceWeb.Router do
       get("/commands/:command_id", CommandCatalogController, :show)
       get("/command-policies", CommandGroupController, :policies)
       get("/command-endpoints", CommandGroupController, :endpoints)
+      # Compose draft (owner: api). Contract: docs/apogee/api/commanding.md §Compose draft
+      get("/command-draft", CommandDraftController, :show)
+      put("/command-draft", CommandDraftController, :update)
+      delete("/command-draft", CommandDraftController, :delete)
       get("/station-availability", StationAvailabilityController, :index)
       get("/pass-review", PassReviewController, :summary)
       get("/pass-review/rows", PassReviewController, :rows)

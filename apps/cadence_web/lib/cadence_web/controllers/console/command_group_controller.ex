@@ -33,13 +33,15 @@ defmodule CadenceWeb.Console.CommandGroupController do
     operation_id = blank_to_nil(params["operation_id"])
 
     with {:ok, draft} <- CommandGroupParams.draft(params),
+         {:ok, draft_revision} <- CommandGroupParams.draft_revision(params),
          {:ok, acks} <- CommandGroupParams.acknowledged_holds(params),
          {:ok, accepted} <- holds_satisfied(conn, draft, acks, operation_id),
          {:ok, group} <-
            GroupSubmission.submit(conn.assigns.current_scope, mission(conn), draft,
              preflight_digest: params["preflight_digest"],
              operation_id: operation_id,
-             hold_acks: accepted
+             hold_acks: accepted,
+             draft_revision: draft_revision
            ),
          {:ok, view} <-
            CommandGroups.get(org(conn), mission(conn), group.command_group_id, viewer(conn)) do

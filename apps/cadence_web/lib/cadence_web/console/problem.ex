@@ -21,6 +21,8 @@ defmodule CadenceWeb.Console.Problem do
     transport_not_found: {404, "Transport not found."},
     plan_not_found: {404, "Contact plan not found."},
     draft_not_found: {404, "Draft not found."},
+    command_draft_not_found: {404, "You have no saved draft for this mission."},
+    command_draft_changed: {409, "Your draft was saved from another tab. Reload it to continue."},
     draft_not_interrupted: {409, "The draft isn't interrupted; there is nothing to continue."},
     planning_not_set_up: {422, "Contact planning isn't set up for this mission."},
     horizon_exceeds_policy: {422, "The day is longer than the planning policy allows."},
