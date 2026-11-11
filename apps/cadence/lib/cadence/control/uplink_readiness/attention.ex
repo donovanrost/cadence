@@ -57,7 +57,7 @@ defmodule Cadence.Control.UplinkReadiness.Attention do
       id: entry.scheduled_contact_id,
       source: @source,
       state: "open",
-      reason: entry.reason && to_string(entry.reason),
+      reason: reason_key(entry.reason),
       spacecraft_id: entry.spacecraft_id,
       contact_id: entry.scheduled_contact_id,
       provider_reservation_id: entry.provider_reservation_id,
@@ -70,6 +70,16 @@ defmodule Cadence.Control.UplinkReadiness.Attention do
       command_group_ids: group_ids
     }
   end
+
+  # qa #41: a recorded reason can be a provider error struct, not only an atom.
+  defp reason_key(nil), do: nil
+  defp reason_key(reason) when is_atom(reason) or is_binary(reason), do: to_string(reason)
+
+  defp reason_key(%{category: category}) when is_atom(category) and not is_nil(category),
+    do: "provider_" <> Atom.to_string(category)
+
+  defp reason_key({reason, _detail}) when is_atom(reason), do: Atom.to_string(reason)
+  defp reason_key(_other), do: "unknown"
 
   defp endpoints_by_spacecraft(org, mission) do
     org

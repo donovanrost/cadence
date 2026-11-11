@@ -165,7 +165,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp uplink(%{source: "uplink_blocked"} = attention) do
     %{
       state: "blocked",
-      reason: attention.reason,
+      reason: Cadence.Reads.PassUplink.reason_key(attention.reason),
       since: attention.raised_at,
       command_group_ids: Map.get(attention, :command_group_ids, [])
     }

@@ -42,7 +42,16 @@ defmodule Cadence.Reads.PassUplink do
 
   defp readiness_view(nil, _pass, _blocked), do: nil
 
-  defp readiness_view(view, pass, blocked) do
+  # An ended pass has no uplink to be ready (qa #41).
+  defp readiness_view(%{ends_at: %DateTime{} = ends_at} = view, pass, blocked) do
+    if DateTime.compare(ends_at, DateTime.utc_now()) == :gt,
+      do: live_view(view, pass, blocked),
+      else: nil
+  end
+
+  defp readiness_view(view, pass, blocked), do: live_view(view, pass, blocked)
+
+  defp live_view(view, pass, blocked) do
     view
     |> wire_readiness()
     |> Map.put(:command_groups_queued, queued(view, pass, blocked))
@@ -109,7 +118,15 @@ defmodule Cadence.Reads.PassUplink do
   def for_groups(_org, _mission, []), do: %{}
 
   def for_groups(org, mission, group_ids) do
-    waiting = Groups.for_command_groups(org, mission, group_ids)
+    now = DateTime.utc_now()
+
+    # qa #41: a live entry whose pass has ended isn't the group's pass any more (the readiness
+    # view can still hold it until the driver forgets it).
+    waiting =
+      org
+      |> Groups.for_command_groups(mission, group_ids)
+      |> Map.new(fn {id, entry} -> {id, drop_ended(entry, now)} end)
+
     passes = waiting |> Map.values() |> Enum.flat_map(&[&1.contact, &1.next_contact])
     refs = pass_refs(org, mission, Enum.reject(passes, &is_nil/1))
 
@@ -120,6 +137,12 @@ defmodule Cadence.Reads.PassUplink do
 
   # The pass a group releases on is its spacecraft's live pass, else the next booked one that
   # can command; `next_pass` is the one after a live pass (where a blocked group goes next).
+  defp drop_ended(%{contact: %{ends_at: %DateTime{} = ends_at}} = entry, now) do
+    if DateTime.compare(ends_at, now) == :gt, do: entry, else: %{entry | contact: nil}
+  end
+
+  defp drop_ended(entry, _now), do: entry
+
   defp group_uplink(nil, _refs), do: nil
   defp group_uplink(%{contact: nil, next_contact: nil}, _refs), do: nil
 
@@ -168,8 +191,21 @@ defmodule Cadence.Reads.PassUplink do
   defp wire_readiness(view) do
     %{
       state: view.state && to_string(view.state),
-      reason: view.reason && to_string(view.reason),
+      reason: reason_key(view.reason),
       since: view.since
     }
   end
+
+  # qa #41: a readiness reason can be a provider error struct, not only a key. The wire carries a
+  # key the console can word (unknown keys show in sentence case).
+  @doc false
+  @spec reason_key(term()) :: binary() | nil
+  def reason_key(nil), do: nil
+  def reason_key(reason) when is_atom(reason) or is_binary(reason), do: to_string(reason)
+
+  def reason_key(%{category: category}) when is_atom(category) and not is_nil(category),
+    do: "provider_" <> Atom.to_string(category)
+
+  def reason_key({reason, _detail}) when is_atom(reason), do: Atom.to_string(reason)
+  def reason_key(_other), do: "unknown"
 end

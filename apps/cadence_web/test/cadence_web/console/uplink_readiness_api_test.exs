@@ -175,6 +175,64 @@ defmodule CadenceWeb.Console.UplinkReadinessAPITest do
              get_data(c, "/passes/#{second.provider_reservation_id}")
   end
 
+  test "a provider-error readiness reason reads as a key, not a crash (qa #41)", c do
+    live!(c, :ready, nil)
+    group_id = queue_group!(c)
+
+    error = %Cadence.GroundNetworks.ProviderError{
+      category: :conflict,
+      detail: "contact has no active included uplink leg"
+    }
+
+    live!(c, :blocked, error)
+
+    assert %{
+             "uplink" => %{
+               "readiness" => %{"state" => "blocked", "reason" => "provider_conflict"}
+             }
+           } =
+             get_data(c, "/command-groups/#{group_id}")
+
+    assert %{"uplink_readiness" => %{"reason" => "provider_conflict"}} =
+             get_data(c, "/passes/#{c.reservation.provider_reservation_id}")
+
+    queue = get_data(c, "/action-queue")
+
+    assert %{"attention" => %{"uplink" => %{"reason" => "provider_conflict"}}} =
+             Enum.find(queue["items"], &(&1["source"] == "uplink_blocked"))
+  end
+
+  test "after LOS a stale readiness entry gives no uplink section, not an error (qa #41)", c do
+    live!(c, :ready, nil)
+    group_id = queue_group!(c)
+
+    # The driver hasn't forgotten the session yet, but its pass ended a minute ago.
+    r = c.reservation
+
+    UplinkReadiness.record(
+      UplinkReadiness.table(),
+      c.key,
+      %{
+        organization_id: c.org.organization_id,
+        mission_id: c.mission.mission_id,
+        scheduled_contact_id: r.scheduled_contact_id,
+        provider_reservation_id: r.provider_reservation_id,
+        provider_contact_ref: nil,
+        provider_id: r.provider_id,
+        spacecraft_id: c.craft.spacecraft_id,
+        ground_station_ref: "SVB1",
+        starts_at: DateTime.add(DateTime.utc_now(), -900),
+        ends_at: DateTime.add(DateTime.utc_now(), -60)
+      },
+      :blocked,
+      %Cadence.GroundNetworks.ProviderError{category: :conflict, detail: "no active uplink leg"},
+      DateTime.utc_now()
+    )
+
+    assert %{"uplink" => nil} = get_data(c, "/command-groups/#{group_id}")
+    assert %{"uplink_readiness" => nil} = get_data(c, "/passes/#{r.provider_reservation_id}")
+  end
+
   test "a pass with no live uplink session has no readiness", c do
     assert %{"uplink_readiness" => nil} =
              get_data(c, "/passes/#{c.reservation.provider_reservation_id}")
