@@ -40,8 +40,8 @@ spacecraft tabs; only the area below the tabs changes.
   Orbit (`P07 · slot 12 · #4,812` = plane, slot, orbit number; parts omitted if unknown) · Last LOS
   (`T+00:06:41 FBK`) · **Next AOS** (white top bar, readout: `T−00:38:10 FBK`) · Next eclipse
   (`T−00:59:30`). Unknown facts are omitted (U10); the strip reflows to the facts it has.
-- **Tabs** (ApSegmented `tabs`, `role="tablist"`, path segment per tab). Telemetry, Uplink,
-  Passes, Configuration are specified separately (TBD); History is below; until built they render an
+- **Tabs** (ApSegmented `tabs`, `role="tablist"`, path segment per tab). Telemetry, Passes,
+  Configuration are specified separately (TBD); Uplink and History are below; until built they render an
   ApEmptyState "Not built yet in the new console" + link to the existing page. **[temporary]**
 
 ## B1 · Alarm trend (panel, alert-crit variant: index colored, panel neutral)
@@ -92,6 +92,37 @@ the row's state color (`aria-hidden`).
 - **Data:** `[{sc: {id, name, scid}, state, value_now, unit, next_aos?, spark: [v…]}]`, plane size.
 - **Empty:** `nominal` callout "No other spacecraft in plane 07 show this." **No plane metadata:**
   hide B4; B3 (if present) shows the single-target button only.
+
+## Tab · Uplink (`M/fleet/:scId/uplink`) (api-ops' draft, worded)
+**Question:** "Can I command this spacecraft now, and what's going up?" Console layout, no page scroll at
+1440×900. U3 and U4 scroll. The header meta carries the route: `ROUTE · CCSDS TC · RULE "BLOCK 1 · ALL STATIONS"`
+(details in Technical details).
+```
+┌ U1 Now (strip): live or next commandable pass · readiness · Recover ───────────────────────┐
+┌ U2 Next commandable passes (3) ┐ ┌ U3 Queued on its lane (scrolls) ──────────────────────┐
+└────────────────────────────────┘ └───────────────────────────────────────────────────────┘
+┌ U4 Released · last 24 h (scrolls) ──────────────────────────────────────────────────────┐
+```
+- **U1 Now:** one row.
+  - In contact: `IN CONTACT · KIR · LOS T−00:06:12`, then readiness in U33 words (`UPLINK READY`, or
+    `CAN'T COMMAND: <reason>` with `Recover uplink` when it can help).
+  - Not in contact: `NEXT COMMANDABLE PASS · KIR 02:31Z · T−01:12:00`, readiness if already known.
+  - No commandable pass booked: caution "No pass with uplink is booked for EARENDIL-001.", with the link
+    `Open Contacts`.
+  - Primary `Command EARENDIL-001` → Compose prefilled (desktop only; hidden under 768).
+- **U2 Next commandable passes (3):** station code · provider · AOS (§4 short) + `T−` · duration · uplink
+  evidence (`Booked`, or `Attested · uplink unconfirmed` in caution, per U32/#46). A pass without a command
+  window isn't listed. Fewer than 3 → "Only 1 commandable pass is booked in the next 24 h."
+- **U3 Queued on its lane** (release order):
+  - Position (mono `01`), command mnemonic + args summary, and its group (link → request).
+  - Release rule (`At next AOS` / `Not before 03:00Z`), expiry (`expires 04:00Z` when `not_after` is set),
+    and the pass it's waiting for.
+  - When that pass is blocked, the U33 group line. Empty: "Nothing is queued for EARENDIL-001."
+- **U4 Released · last 24 h:** time (§4) · command · group link · delivery and verification in CommandFlow C3's
+  state words (`Sent`, `Acknowledged`, `■ VERIFIED`, `◆ VERIFY FAILED`, hatched `UNVERIFIABLE · NO TLM`,
+  `No verifier`). Newest first. Empty: "Nothing was released to EARENDIL-001 in the last 24 h."
+- **Mobile:** U1 and U3, read-only. No Compose.
+- Words come from U33 (readiness), CommandFlow (delivery states) and U32 (attested). No new state words.
 
 ## Tab · History (`M/fleet/:scId/history[?episode=:id]`) (fe-ops' proposal, refined)
 **Question:** "Has this happened before, and how did it end?" v1 covers this spacecraft's **alarm episodes**.
