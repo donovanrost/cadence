@@ -611,7 +611,7 @@ must be a mission spacecraft), and `limit` 1–200 (default 50).
 {"data": {"points": [{
   "id": "EPS.VBAT", "name": "VBAT", "description": null, "unit": "V",
   "subsystem": "EPS", "type": "numeric",
-  "latest": {"value": 23.1, "received_at": "…", "limit_state": "critical"}
+  "latest": {"value": 23.1, "received_at": "…", "limit_state": "critical", "source": "live"}
 }]}}
 ```
 
@@ -619,7 +619,14 @@ must be a mission spacecraft), and `limit` 1–200 (default 50).
   definitions (`subsystem` is the packet name) plus governed derived telemetry (`subsystem:
   "Derived"`). It's the same set the LiveView point picker offers, sorted by id.
 - `type`: `numeric | enum | text`, from the field's data type.
-- `latest` appears only with `spacecraft_id`, and is `null` if that point was never received.
-  `limit_state` is `critical | caution | nominal | no_data`.
+- `latest` appears only with `spacecraft_id`. `source` is `live | history`:
+  - `live`: from the current-value store. On :4011 that store is in memory, and every server
+    restart empties it until the spacecraft sends telemetry again.
+  - `history`: the store has no value since the restart, so it's the newest stored sample from
+    the telemetry history (551cb796). Its `received_at` can be days old; show it as such.
+  - `null`: no stored sample for that point and spacecraft (never received, or past retention).
+    If the history store can't be read, it's also `null` for that request.
+  - `limit_state` is `critical | caution | nominal | no_data`, from the limit projection on
+    either source; never `null`.
 - `description` is often `null`: packet fields don't carry one yet.
 - Errors: `422 invalid_params` (`limit`, `spacecraft_id`).
