@@ -268,8 +268,11 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
   `spacecraft` member has `episode_id`, `status`, `acknowledged_by` (`{kind, id, name}`) and
   `assignee` (`null` outside alarm items). Acknowledged rows show "ACK <name>" (ux U21).
 - `counts.spacecraft_p1`: distinct spacecraft across P1 items (the "N spacecraft need you" headline).
-- **Not derived yet** (no source): critical flight events (safe mode), missed passes, degraded
-  stations, no-ACK retries. Alarm items come from **alarm episodes** (both sources, DECISIONS #17).
+- **Not derived:**
+  - critical flight events (safe mode): no source yet;
+  - no-ACK retries: there's no automatic retry (DECISIONS #69).
+  - Missed passes and stations are derived (below). Alarm items come from **alarm episodes** (both
+    sources, DECISIONS #17).
 - **`attention` items (DECISIONS #54, U31).** One item per open or acknowledged item from domain's
   attention read (`Cadence.Reads.Attention`), never grouped. The queue's `invalidate` list includes
   `attention`:

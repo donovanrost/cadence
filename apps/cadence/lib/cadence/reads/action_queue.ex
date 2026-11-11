@@ -21,8 +21,10 @@ defmodule Cadence.Reads.ActionQueue do
   first). `due_at` is always `nil` until contact and
   propagation data exist (M7, D1).
 
-  Not derived yet: critical flight events (safe mode), missed passes, degraded
-  stations and no-ACK retries, because there is no source for them.
+  Missed passes and stations with issues come from `ActionQueue.ContactItems`, and
+  needs-acknowledgment items from `ActionQueue.AttentionItems`. Not derived: critical flight
+  events (safe mode), because there is no source yet; and no-ACK retries, because there's no
+  automatic retry (DECISIONS #69).
   """
 
   alias Cadence.Auth.Scope
