@@ -30,6 +30,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | --- | --- | --- |
 | Stat tiles link (Critical/Caution/Stale → Alarms/Fleet, In contact → Contacts, Uplinks → Commands) | fe-ops + lead (`ApStatTile` gets `to`) | — |
 | ~~Queue kinds `missed_pass`, `station` + `Station` → Re-plan~~ done (de131e9b); `flight_event`: source landed (api-ops a02c2cee, 1b3be7f7, e07969bb), fe-ops reader 591bc06c | fe-ops | qa: a flight_event row seen live after the :4011 restart |
+| Attention source `contact_settlement` (#71): P2 row "N telemetry entries (size) are still on disk, not yet in the TSDB" with "Cadence stores them when telemetry storage is back", no Acknowledge, resolves as a system `replayed`; the contact drawer reads it by contact_id | fe-ops (reader first: widen the `source` enum), domain (source) | domain ships only after fe-ops' reader; ux wording |
 | Header meta names the worst station issue | fe-ops | — (S7 status exists) |
 | ~~A4 pass bars open the contact drawer~~ done (51cc6133) | fe-ops | — |
 | ~~Approval rows open the request's review~~ done for a single group (a0e33fe1) | fe-ops | — |
@@ -237,6 +238,7 @@ missing endpoint or decision; an item with no blocker can start now.
 2. ~~qa #19 server side~~ done (33529f29).
 3. Catalog-path generations (#36), which unblock Catalog C3 rollout. Plan to the director first.
 4. ~~Spacecraft archive model (#50)~~ done (7dbd3994, e0232291, 5ee6d6e8; rollback of create verified c8526c57).
+5. #71 `contact_settlement` attention source (shape agreed with lead; sample sent to fe-ops). Ships after fe-ops widens the queue `source` enum. Replay follow-up next.
 
 ## 9. Deferred by decision (not backlog)
 #2 roles/Cedar · #4 propagation (K0, ground track, umbra, sky plot, max elevation) · #5 procedures ·
