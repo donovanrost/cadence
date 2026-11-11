@@ -9,6 +9,7 @@ import {
 } from "./history/api.ts";
 import { argsSummary, evidenceWords, releaseRule } from "./uplink/api.ts";
 import { byDay, bytesWords, ruleWords } from "./passes/api.ts";
+import { catalogCaution, jsonWords, routingWords } from "./configuration/api.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { formatLimitLike, formatValue, type Alarm } from "@/features/alarms/index.ts";
@@ -403,5 +404,38 @@ describe("Passes tab words (api 324428aa)", () => {
     ]);
     expect(bytesWords(1_234_567)).toBe("1.2 MB");
     expect(bytesWords(null)).toBe("—");
+  });
+});
+
+describe("Configuration tab words (api-ops 8d8f5c83)", () => {
+  it("values, catalog drift and routing", () => {
+    expect(jsonWords("892", "bytes")).toBe("892 bytes");
+    expect(jsonWords('"SAFE"', null)).toBe("SAFE");
+    expect(jsonWords(null, "bytes")).toBe("not set");
+    expect(
+      catalogCaution({
+        running: { id: "a", revision_number: 14 },
+        profile: { id: "b", revision_number: 15 },
+      }),
+    ).toBe("Running rev 14; the profile is on rev 15.");
+    expect(
+      catalogCaution({
+        running: { id: "a", revision_number: 15 },
+        profile: { id: "b", revision_number: 15 },
+      }),
+    ).toBeNull();
+    expect(
+      routingWords({
+        id: "r",
+        name: "Primary downlink",
+        purpose: "TM",
+        direction: "inbound",
+        role: "primary",
+        enabled: true,
+        active: true,
+        transport: { id: "t", name: "Svalbard X-band" },
+        station: { id: "s", code: "SVB", name: "Svalbard" },
+      }),
+    ).toBe("SVB · primary · Primary downlink");
   });
 });
