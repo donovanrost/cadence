@@ -19,7 +19,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | **fe-setup** | Profile edit → stage (op + preview exist); People command policies tab (O4 exists); Changes compare (`/config/compare`) + Keep mine / Take live (`rebase`); Readiness R2 from revisions; Audit actor filter; qa #19 copy ("unclear, check now" on 5xx) | api: catalog diff, people/invite/service-identity writes, account password/sessions, provider history; domain: catalog generations (C3) |
 | **ux** | Visual review of the unreviewed boards (§7); Compose C1 layout ruling (default: accept as built, #64) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
-| **api** | queue empty; next with the director | — |
+| **api** | Compose draft persistence (director): one current draft per user per mission, autosave overwrites; inert (never visible to approvers, never queued/releasable); full revalidation on submit; shape agreed with fe-ops | — |
 | **api-ops** | Investigate Configuration tab read; shape agreed with fe-ops first | — |
 | **domain** | catalog-path generations (#36; plan to the director first, it touches activation) | — (done: qa #34 #59 e683b3e2; qa #19 server side 33529f29; #50 archive) |
 
@@ -49,7 +49,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | Compose layout: ux rules; default is to accept Command.md's C1–C5 as built (#64) | ux | — |
-| Draft autosave / `Save draft` / `DRAFT SAVED` | fe-ops | api-ops: draft persistence *(unverified)* |
+| Draft autosave / `Save draft` / `DRAFT SAVED` | fe-ops | api: draft persistence (in progress; one per user per mission) |
 | Per-target values (Same for all / Per target, Paste CSV, Now column) | fe-ops | — |
 | Verifier line / "No verifier: this command can't turn green" | fe-ops | catalog read carrying verifiers *(unverified)* |
 | Keep/Drop callout when a target leaves a live query | fe-ops | — |
