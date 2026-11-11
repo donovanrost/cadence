@@ -7,6 +7,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
   alias CadenceWeb.FrontendReleaseActivation
   alias CadenceWeb.FrontendReleaseCatalog
   alias CadenceWeb.FrontendReleasePublication
+  alias Ecto.Adapters.SQL.Sandbox
 
   @artifact_origin "https://cdn.example.com"
   @release_seed "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
@@ -712,7 +713,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
 
     {:ok, {_address, port}} = :inet.sockname(socket)
     pid = spawn(fn -> lifecycle_loop(socket, admitted) end)
-    :ok = Ecto.Adapters.SQL.Sandbox.allow(Cadence.Repo, sandbox_owner, pid)
+    :ok = Sandbox.allow(Cadence.Repo, sandbox_owner, pid)
 
     %{pid: pid, socket: socket, url: "http://127.0.0.1:#{port}"}
   end

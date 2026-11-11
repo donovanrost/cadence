@@ -3,6 +3,9 @@ Code.require_file(Path.expand("../../support/dashboard_rendered_viewport_runner.
 defmodule CadenceWeb.Assets.OpsInitialStateBrowserTest do
   use CadenceWeb.ConnCase, async: false
   import Ecto.Query
+  alias Cadence.Dashboards.DocumentCodec
+  alias Cadence.Dashboards.Documents
+  alias CadenceWeb.Assets.DashboardRenderedViewportRunner, as: Runner
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -28,7 +31,7 @@ defmodule CadenceWeb.Assets.OpsInitialStateBrowserTest do
     TestFixtures.grant_membership!(user, org, role: :organization_admin)
 
     base =
-      Cadence.Dashboards.DocumentCodec.load!(
+      DocumentCodec.load!(
         Path.expand(
           "../../../../cadence/test/fixtures/dashboards/value_tile_latest.v1.json",
           __DIR__
@@ -36,7 +39,7 @@ defmodule CadenceWeb.Assets.OpsInitialStateBrowserTest do
       )
 
     {:ok, _} =
-      Cadence.Dashboards.Documents.persist(org.organization_id, %{
+      Documents.persist(org.organization_id, %{
         base
         | organization_id: org.organization_id,
           mission_id: mission.mission_id,
@@ -54,13 +57,10 @@ defmodule CadenceWeb.Assets.OpsInitialStateBrowserTest do
 
     File.mkdir_p!(output_dir)
 
-    port =
-      CadenceWeb.Assets.DashboardRenderedViewportRunner.start_browser_endpoint_on_ephemeral_port!(
-        c.sandbox_owner
-      )
+    port = Runner.start_browser_endpoint_on_ephemeral_port!(c.sandbox_owner)
 
     {output, status} =
-      CadenceWeb.Assets.DashboardRenderedViewportRunner.run_dashboard_viewport_smoke(
+      Runner.run_dashboard_viewport_smoke(
         [
           Path.expand(
             "../../../../../frontend/tools/phoenix/ops_initial_state_browser.mjs",

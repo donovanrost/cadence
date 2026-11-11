@@ -19,7 +19,9 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   alias Cadence.Organizations.Organization
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
+  alias Cadence.Telemetry.DataManagement
   alias Cadence.Telemetry.PacketDefinition
+  alias Cadence.Telemetry.Profiler
   alias Cadence.Runtime.MissionRuntimeSpec
 
   require Logger
@@ -759,7 +761,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   end
 
   defp persist_historical_data_context(ids, observed_at) do
-    Cadence.Telemetry.DataManagement.record_historical_data_workflow_request(
+    DataManagement.record_historical_data_workflow_request(
       :backfill,
       %{
         organization_id: ids.organization_id,
@@ -1004,7 +1006,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   defp monitor(state) do
     Process.sleep(10_000)
 
-    profiler = Cadence.Telemetry.Profiler.snapshot(state.ids.mission_id)
+    profiler = Profiler.snapshot(state.ids.mission_id)
     simulator = CadenceSimulator.simulator_stats(state.simulator)
 
     IO.puts(

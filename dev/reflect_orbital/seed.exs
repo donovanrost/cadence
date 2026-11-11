@@ -9,9 +9,12 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     GroundStationStore,
     RoutingRule,
     RoutingRuleStore,
-    Transport
+    Transport,
+    TransportStore
   }
 
+  alias Cadence.Contacts.ProviderScheduling
+  alias Cadence.Dev.ReflectOrbital.Configuration
   alias Cadence.GroundNetworks
 
   alias Cadence.GroundNetworks.{
@@ -21,6 +24,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     ProviderCredentials
   }
 
+  alias Cadence.Management.Transports
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
   alias Cadence.SourceEndpoints.SourceEndpoint
@@ -45,7 +49,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
     provider = seed_provider(scope)
     transports = seed_sites(provider, deliveries)
     seed_fleet(transports)
-    Cadence.Dev.ReflectOrbital.Configuration.prepare(scope)
+    Configuration.prepare(scope)
     verify!()
 
     IO.puts("""
@@ -222,13 +226,13 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
 
       transport =
         ensure_record(
-          Cadence.Comms.TransportStore.fetch_transport(
+          TransportStore.fetch_transport(
             F.organization_id(),
             F.mission_id(),
             "transport-#{site["id"]}"
           ),
           fn ->
-            Cadence.Management.Transports.persist_transport(
+            Transports.persist_transport(
               F.organization_id(),
               Transport.new(%{
                 transport_id: "transport-#{site["id"]}",
@@ -324,7 +328,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
 
     Enum.each(fleet, fn craft ->
       {:ok, %{routes: routes, findings: []}} =
-        Cadence.Contacts.ProviderScheduling.list_ready_downlink_routes(
+        ProviderScheduling.list_ready_downlink_routes(
           F.organization_id(),
           F.mission_id(),
           craft.spacecraft_id

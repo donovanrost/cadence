@@ -2,10 +2,19 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
   @moduledoc "Activates and verifies the complete Earendil configuration through the governed APIs."
   alias Cadence.Applications.SpacecraftConfiguration.{Active, Drafts, Review}
   alias Cadence.Applications.TelemetryDecom
+  alias Cadence.Auth.Scope
+  alias Cadence.Contacts.ProviderScheduling
   alias Cadence.Control.SpacecraftModelBindings
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
   alias Cadence.Governance.ActivationPolicy
-  alias Cadence.Runtime.{MissionModelPlanDecoder, MissionRuntimeSpec, PartitionKey}
+
+  alias Cadence.Runtime.{
+    MissionModelPlanDecoder,
+    MissionRuntime,
+    MissionRuntimeSpec,
+    PartitionKey,
+    SourceRuntimeBases
+  }
 
   def run(single_operator?) do
     unless F.chaos_lab?() or
@@ -97,7 +106,7 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
     # second observation timeout while a release is recovering the fleet.
     {:ok, spec} =
       GenServer.call(
-        Cadence.Runtime.MissionRuntime.coordinator_name(F.mission_id()),
+        MissionRuntime.coordinator_name(F.mission_id()),
         :active_spec,
         600_000
       )
@@ -152,7 +161,7 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
       telemetry_packet_bindings: length(spec.binding_set.capability_instances),
       commands_per_spacecraft: 27,
       catalog_revision_id: revision.catalog_revision_id,
-      source_runtime_bases: Cadence.Runtime.SourceRuntimeBases.count(spec.source_runtime_bases)
+      source_runtime_bases: SourceRuntimeBases.count(spec.source_runtime_bases)
     }
   end
 
@@ -163,7 +172,7 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
       source = entries[craft.spacecraft_id]["document"]["telemetry_source_endpoint_id"]
 
       {:ok, %{routes: routes, findings: []}} =
-        Cadence.Contacts.ProviderScheduling.list_ready_downlink_routes(
+        ProviderScheduling.list_ready_downlink_routes(
           F.organization_id(),
           F.mission_id(),
           craft.spacecraft_id
@@ -186,7 +195,7 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
     {:ok, organization} = Cadence.Organizations.fetch_organization(F.organization_id())
     {:ok, membership} = Cadence.Accounts.fetch_user_membership(user.user_id, F.organization_id())
 
-    Cadence.Auth.Scope.new(%{
+    Scope.new(%{
       user: user,
       organization: organization,
       organization_membership: membership

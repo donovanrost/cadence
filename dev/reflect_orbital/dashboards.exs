@@ -1,5 +1,6 @@
 defmodule Cadence.Dev.ReflectOrbital.Dashboards do
   @moduledoc "Saved, native telemetry dashboards for the Earendil rehearsal."
+  alias Cadence.Control.DataSources
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
 
   alias Cadence.Dashboards.{
@@ -58,14 +59,14 @@ defmodule Cadence.Dev.ReflectOrbital.Dashboards do
     }
 
     with {:ok, prepared} <-
-           Cadence.Control.DataSources.prepare_probe("managed_questdb_primary", attrs,
+           DataSources.prepare_probe("managed_questdb_primary", attrs,
              questdb_probe?: true,
              materialize_adapter_capabilities?: true,
              actor_id: "user_environment_admin"
            ),
          %{source_health: :healthy, reason: :source_probe_succeeded} = probe <-
-           Cadence.Control.DataSources.observe_probe(prepared),
-         {:ok, _, _} <- Cadence.Control.DataSources.persist_probe(prepared, probe) do
+           DataSources.observe_probe(prepared),
+         {:ok, _, _} <- DataSources.persist_probe(prepared, probe) do
       for invalidate <- [:invalidate_plans, :invalidate_source_results, :invalidate_frames] do
         apply(Cadence.Dashboards.RuntimeCache, invalidate, [[mission_id: F.mission_id()]])
       end
