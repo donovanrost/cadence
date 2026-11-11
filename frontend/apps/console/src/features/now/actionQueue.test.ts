@@ -539,6 +539,52 @@ describe("contact_settlement (U37, #71)", () => {
     ).toBe("Resolved: telemetry stored.");
   });
 
+  it("folds two or more of one failure_kind into a Show all row (U37)", () => {
+    const two = (id: string, starts: string, extra: Record<string, unknown> = {}) => ({
+      ...settlement({ id, starts_at: starts, ...extra }),
+      id: `attention:contact_settlement:${id}`,
+    });
+    const rows = present([
+      two("a", "2026-11-11T18:49:00Z"),
+      item({ id: "setup:a", kind: "setup", priority: 3 }),
+      two("b", "2026-11-11T06:01:00Z"),
+      two("c", "2026-11-11T07:00:00Z", { failure_kind: "settle_failed" }),
+    ]);
+    expect(rows.map((r) => r.key)).toEqual([
+      "settlement:telemetry_storage_unavailable",
+      "setup:a",
+      "attention:contact_settlement:c",
+    ]);
+    const [fold] = rows;
+    expect(fold?.title).toBe("Telemetry from 2 passes isn't stored yet.");
+    expect(fold?.sentence).toBe(
+      "2,408 entries (6.7 MB) are on disk. Telemetry storage is unavailable; Cadence stores them when it's back.",
+    );
+    expect(fold?.action.label).toBe("Show all 2");
+    expect(fold?.list?.rows.map((r) => r.key)).toEqual([
+      "attention:contact_settlement:b",
+      "attention:contact_settlement:a",
+    ]);
+    // It fades only when its last member resolves.
+    const done = (id: string) => ({
+      id: `attention:contact_settlement:${id}`,
+      resolved_by: { kind: "system", id: null, name: null },
+      action: "replayed",
+      resolved_at: "2026-11-12T01:00:00Z",
+    });
+    const one = present([two("a", "2026-11-11T18:49:00Z")]);
+    expect(newlyResolved(rows, one, [done("b")], [], 0)).toEqual([]);
+    const fading = newlyResolved(one, [], [done("a")], [], 0);
+    expect(fading.map((f) => [f.item.key, f.item.sentence])).toEqual([
+      ["attention:contact_settlement:a|resolved", "Resolved: telemetry stored."],
+    ]);
+    expect(
+      newlyResolved(rows, [], [done("a"), done("b")], [], 0).filter((f) =>
+        f.item.key.startsWith("settlement:"),
+      ),
+    ).toHaveLength(1);
+  });
+
   it("an unknown kind or source drops one row, not the whole read", () => {
     const r = decode(actionQueueReader, {
       observed_at: "2026-11-11T22:00:00Z",

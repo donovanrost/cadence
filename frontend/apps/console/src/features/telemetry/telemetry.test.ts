@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
+import { decode } from "@/api/index.ts";
+import { pointsReader } from "./api.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import type { History } from "@/features/investigate/index.ts";
 import { latestRows, plotView } from "./plot.ts";
@@ -104,5 +106,24 @@ describe("plot window", () => {
     expect(windowFromRange({ from: sixHours.from + 3_600_000, to: sixHours.to }, now).kind).toBe(
       "custom",
     );
+  });
+});
+
+describe("M23 points reader", () => {
+  it("reads a null limit_state on a latest as no_data (unknown, never nominal)", () => {
+    const r = decode(pointsReader, {
+      points: [
+        {
+          id: "p",
+          name: "MODE",
+          description: null,
+          unit: null,
+          subsystem: null,
+          type: "numeric",
+          latest: { value: 1, received_at: "2026-11-10T21:00:00Z", limit_state: null },
+        },
+      ],
+    });
+    expect(r.ok && r.value.points[0]?.latest?.limit_state).toBe("no_data");
   });
 });

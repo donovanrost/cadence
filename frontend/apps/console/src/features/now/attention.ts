@@ -22,7 +22,8 @@ export const attentionReader = d.object({
   // d2632794: cancel_failed/late_confirmation may have no contact; reservation_id is the pass
   // row id, which the Contacts drawer selects on.
   contact_id: d.nullable(d.token),
-  reservation_id: d.optional(d.token),
+  // Null when a contact has no provider booking (domain, #71).
+  reservation_id: d.optional(d.nullable(d.token)),
   station: d.object({
     ref: d.nullable(d.string),
     id: d.nullable(d.token),
@@ -69,7 +70,7 @@ export const resolvedReader = d.object({
 
 const hhmm = (iso: string) => `${iso.slice(11, 16)}Z`;
 /** §4 short: `18:49Z`, with the date when it isn't today. */
-const short = (iso: string, now: Date) =>
+export const short = (iso: string, now: Date) =>
   `${iso.slice(0, 10) === now.toISOString().slice(0, 10) ? "" : `${iso.slice(5, 10)} `}${hhmm(iso)}`;
 
 /**
@@ -215,15 +216,21 @@ export function newlyResolved(
   already: readonly Fading[],
   now: number,
 ): Fading[] {
-  const live = new Set(current.map((r) => r.key));
+  const live = new Set(current.flatMap((r) => [r.key, ...(r.memberKeys ?? [])]));
+  const seen = new Set(already.map((f) => f.item.key));
   return resolved.flatMap((r) => {
-    const index = previous.findIndex((p) => p.key === r.id);
+    // A folded row (U37) fades only once none of its members is still on screen.
+    const index = previous.findIndex((p) => p.key === r.id || p.memberKeys?.includes(r.id));
     const prev = previous[index];
-    if (!prev || live.has(r.id) || already.some((f) => f.item.key === `${r.id}|resolved`))
-      return [];
+    if (!prev) return [];
+    const key = `${prev.key}|resolved`;
+    const members = prev.memberKeys ?? [prev.key];
+    if (live.has(prev.key) || members.some((k) => live.has(k)) || seen.has(key)) return [];
+    seen.add(key);
+    const { list: _list, memberKeys: _members, ...rest } = prev;
     const item: QueueItem = {
-      ...prev,
-      key: `${r.id}|resolved`,
+      ...rest,
+      key,
       state: "off",
       sentence: resolvedWords(r),
       meta: null,

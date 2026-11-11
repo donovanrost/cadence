@@ -17,6 +17,7 @@ import {
   type MissedItem,
 } from "./sources.ts";
 import { GROUP_AT, type QueueItem } from "./queue.ts";
+import { FOLD_AT, foldedSettlementRow, foldKey, type Settlement } from "./settlement.ts";
 
 /** Contract: docs/apogee/api/ops.md, `GET /missions/:mission_id/action-queue` (M6). Server-ranked. */
 
@@ -402,17 +403,42 @@ const missedOf = (item: ServerItem): MissedItem | null => {
  * Server order is kept (contract: don't re-sort); small alarm groups expand in place. Missed-pass
  * rows group across items (U35) and sit where the first of them was.
  */
-export function presentQueue(queue: ActionQueue): QueueItem[] {
+export function presentQueue(queue: ActionQueue, now: Date = new Date()): QueueItem[] {
   const missed = queue.items.flatMap((i) => {
     const m = i.kind === "missed_pass" ? missedOf(i) : null;
     return m ? [m] : [];
   });
   const missedRows = missedPassRows(missed, queue.missed_pass_horizon_s ?? 6 * 3600);
+  // U37: settlements sharing a failure_kind fold into one row, where the first of them was.
+  const folds = new Map<string, Settlement[]>();
+  for (const i of queue.items) {
+    const s = settlementOf(i);
+    if (s) folds.set(foldKey(s), [...(folds.get(foldKey(s)) ?? []), s]);
+  }
+  const placedFolds = new Set<string>();
   let placed = false;
   return queue.items.flatMap((item) => {
+    const s = settlementOf(item);
+    const fold = s ? folds.get(foldKey(s)) : undefined;
+    if (s && fold && fold.length >= FOLD_AT) {
+      if (placedFolds.has(foldKey(s))) return [];
+      placedFolds.add(foldKey(s));
+      return [foldedSettlementRow(fold, now)];
+    }
     if (item.kind !== "missed_pass") return rowFor(item);
     if (placed) return [];
     placed = true;
     return missedRows;
   });
+}
+
+function settlementOf(item: ServerItem): Settlement | null {
+  const a = item.attention;
+  if (item.kind !== "attention" || !a?.backlog) return null;
+  const sc = item.spacecraft[0];
+  return {
+    itemId: item.id,
+    spacecraft: sc ? { id: sc.id, name: sc.name } : null,
+    attention: { ...a, backlog: a.backlog },
+  };
 }

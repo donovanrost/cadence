@@ -3,6 +3,14 @@ import { engineeringValue } from "@/features/alarms/index.ts";
 
 /** M23 point search (docs/apogee/api/ops.md, 5939f15d): the mission's canonical point set. */
 
+const limitStates = d.oneOf(["critical", "caution", "nominal", "no_data"] as const);
+/**
+ * A history-sourced latest (api, after a restart) has no live limit evaluation. If it comes as
+ * null, it reads as `no_data`: unknown, never nominal.
+ */
+const limitState: d.Reader<Decoded<typeof limitStates>> = (value, path = "") =>
+  value === null ? "no_data" : limitStates(value, path);
+
 const point = d.object({
   id: d.token,
   name: d.string,
@@ -15,7 +23,7 @@ const point = d.object({
       d.object({
         value: d.nullable(engineeringValue),
         received_at: d.nullable(d.timestamp),
-        limit_state: d.oneOf(["critical", "caution", "nominal", "no_data"] as const),
+        limit_state: limitState,
       }),
     ),
   ),

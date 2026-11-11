@@ -27,6 +27,17 @@ export type QueueItem = Readonly<{
   due?: Readonly<{ label: string; at: string }>;
   /** Spacecraft this row is about (for the "N spacecraft need you" headline). */
   spacecraftIds: readonly string[];
+  /** A folded row's item ids (U37): it fades when the last of them resolves. */
+  memberKeys?: readonly string[];
+  /** A folded row's members: its action opens them in a sheet (U30 pattern) instead of routing. */
+  list?: Readonly<{ title: string; rows: readonly QueueListRow[] }>;
+}>;
+
+export type QueueListRow = Readonly<{
+  key: string;
+  text: string;
+  detail: string | null;
+  to: RouteLocationRaw;
 }>;
 
 /** Groups at or above this size collapse into one row (U11: group identical causes). */
