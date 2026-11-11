@@ -28,3 +28,4 @@ Not a finding: the floating `Sign in` widget at the bottom left is the dev-only 
 
 ## Status
 - fe-ops b8fe16e0: #1–#5 accepted per commit (the #5 header clock went to lead, TakeoverHeader). No live recheck: browser checks run in CI now, not as routine checks (user rule, ARCHITECTURE.md "Working in the console").
+- fe-ops e262c233: draft edge-case rulings (601a32f9) accepted per commit and copy read: both Discards confirm, close saves first, autosave-paused and not-saved headers, Load/Keep mine.
