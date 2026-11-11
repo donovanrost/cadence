@@ -101,10 +101,27 @@ export type Fleet = Decoded<typeof fleetReader>;
 export type FleetSpacecraft = Fleet["spacecraft"][number];
 export type FleetWorstPoint = NonNullable<FleetSpacecraft["worst_point"]>;
 
-export function fetchFleet(missionId: string, signal?: AbortSignal): Promise<ApiResult<Fleet>> {
-  return request(
-    `/missions/${encodeURIComponent(missionId)}/fleet`,
-    fleetReader,
-    signal ? { signal } : {},
-  );
+/** A fleet read that hasn't answered by now is reported, not waited on (qa: a hung TSDB held it 2 min). */
+export const FLEET_TIMEOUT_MS = 20_000;
+
+export async function fetchFleet(
+  missionId: string,
+  signal?: AbortSignal,
+): Promise<ApiResult<Fleet>> {
+  const timeout = AbortSignal.timeout(FLEET_TIMEOUT_MS);
+  const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  const result = await request(`/missions/${encodeURIComponent(missionId)}/fleet`, fleetReader, {
+    signal: combined,
+  });
+  // request() reports a timed-out fetch as unreachable; say what actually happened.
+  return !result.ok && timeout.aborted && !signal?.aborted
+    ? {
+        ok: false,
+        error: {
+          kind: "unavailable",
+          status: 0,
+          message: `The fleet read didn't answer within ${FLEET_TIMEOUT_MS / 1000} s. The telemetry store may be slow.`,
+        },
+      }
+    : result;
 }

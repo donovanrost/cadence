@@ -179,67 +179,72 @@ const close = computed(() => {
         <ApButton size="compact" :to="close">Back</ApButton>
       </ApEmptyState>
     </ApPanel>
-    <ApRemote :state="fleet.state.value" loading-label="LOADING FLEET…" @retry="fleet.refetch">
-      <div
-        class="grid min-h-0 flex-1 grid-cols-1 gap-3 max-md:hidden console:grid-cols-[minmax(0,1fr)_360px]"
-      >
-        <div class="flex min-h-0 flex-col gap-3 overflow-auto">
-          <ApCallout v-if="resend.notice.value" :tone="resend.notice.value.tone">{{
-            resend.notice.value.text
-          }}</ApCallout>
-          <div class="grid grid-cols-1 items-start gap-3 console:grid-cols-2">
+    <div
+      class="grid min-h-0 flex-1 grid-cols-1 gap-3 max-md:hidden console:grid-cols-[minmax(0,1fr)_360px]"
+    >
+      <div class="flex min-h-0 flex-col gap-3 overflow-auto">
+        <ApCallout v-if="resend.notice.value" :tone="resend.notice.value.tone">{{
+          resend.notice.value.text
+        }}</ApCallout>
+        <div class="grid grid-cols-1 items-start gap-3 console:grid-cols-2">
+          <!-- Only targets need the fleet read; the stack and catalog work while it loads or fails. -->
+          <ApRemote
+            :state="fleet.state.value"
+            loading-label="LOADING FLEET…"
+            @retry="fleet.refetch"
+          >
             <TargetsPanel
               :fleet="rows"
               :query="query"
               :targets="targets"
               @change="(q) => (query = q)"
             />
-            <ApCallout v-if="addError" tone="caution"
-              >Couldn't add that command: {{ addError }}</ApCallout
-            >
-            <StackPanel
-              v-model:open="openKey"
-              :items="stack"
-              :revision="revision"
-              :catalog-rev="catalogRev"
-              :adding="adding"
-              @add="onAdd"
-              @change="setValues"
-              @move="(i, by) => (stack = move(stack, i, by))"
-              @remove="(key) => (stack = stack.filter((s) => s.key !== key))"
-            />
-          </div>
-          <PreflightPanel
-            :state="preflight.state.value"
-            :checking="preflight.checking.value"
-            :ready="draft !== null"
-            :name-of="nameOf"
-            :acks="acks"
-            @retry="preflight.refetch"
-            @ack="ack"
-          />
-          <DeliveryPanel
-            :targets="targets"
-            :contacts="contacts"
-            :endpoints="endpoints"
-            :overrides="overrides"
-            @override="setOverride"
+          </ApRemote>
+          <ApCallout v-if="addError" tone="caution"
+            >Couldn't add that command: {{ addError }}</ApCallout
+          >
+          <StackPanel
+            v-model:open="openKey"
+            :items="stack"
+            :revision="revision"
+            :catalog-rev="catalogRev"
+            :adding="adding"
+            @add="onAdd"
+            @change="setValues"
+            @move="(i, by) => (stack = move(stack, i, by))"
+            @remove="(key) => (stack = stack.filter((s) => s.key !== key))"
           />
         </div>
-        <SummaryPanel
-          v-model:release="release"
-          v-model:approver="approver"
-          v-model:log="log"
-          v-model:title="title"
-          :targets="targets.length"
-          :commands="stack.length"
-          :second-go="secondGo"
-          :blocked="blocked"
-          :submit="submission.state.value"
-          @send="send"
-          @check="check"
+        <PreflightPanel
+          :state="preflight.state.value"
+          :checking="preflight.checking.value"
+          :ready="draft !== null"
+          :name-of="nameOf"
+          :acks="acks"
+          @retry="preflight.refetch"
+          @ack="ack"
+        />
+        <DeliveryPanel
+          :targets="targets"
+          :contacts="contacts"
+          :endpoints="endpoints"
+          :overrides="overrides"
+          @override="setOverride"
         />
       </div>
-    </ApRemote>
+      <SummaryPanel
+        v-model:release="release"
+        v-model:approver="approver"
+        v-model:log="log"
+        v-model:title="title"
+        :targets="targets.length"
+        :commands="stack.length"
+        :second-go="secondGo"
+        :blocked="blocked"
+        :submit="submission.state.value"
+        @send="send"
+        @check="check"
+      />
+    </div>
   </template>
 </template>
