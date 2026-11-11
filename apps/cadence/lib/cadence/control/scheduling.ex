@@ -17,6 +17,7 @@ defmodule Cadence.Control.Scheduling do
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Control.Contacts, as: ControlContacts
+  alias Cadence.Control.PlanResubmission
   alias Cadence.Management.Contacts, as: ManagementContacts
 
   alias Cadence.ContactPlanning.{
@@ -104,11 +105,16 @@ defmodule Cadence.Control.Scheduling do
         {:ok, :replayed}
 
       nil ->
-        with {:ok, %ContactPlan{} = plan, version} <-
-               ManagementContacts.fetch_plan(org, mission_id, plan_id),
-             :ok <- expected(version.version, params[:expected_version]),
-             :ok <- stations_available(org, mission_id, plan_id, version),
-             {:ok, plan} <- maybe_submit(scope, mission_id, plan, version, params[:reason]),
+        # U36: lock, expected version, cut-if-sent-back, submit and round record are one
+        # transaction (PlanResubmission); approval and execution follow it.
+        with {:ok, plan, version} <-
+               PlanResubmission.submit(
+                 scope,
+                 mission_id,
+                 plan_id,
+                 params,
+                 &stations_available(org, mission_id, plan_id, &1)
+               ),
              {:ok, outcome} <- decide(scope, mission_id, plan, version, params),
              :ok <- ContactPlans.claim_operation(org, mission_id, plan_id, operation_id) do
           # Claimed only after the action succeeded, so a failed attempt can be retried
@@ -282,37 +288,6 @@ defmodule Cadence.Control.Scheduling do
     do:
       Policy.authorize(scope, :approve_contact_plans, %{organization_id: scope.organization_id}) ==
         :ok
-
-  defp maybe_submit(
-         scope,
-         mission_id,
-         %ContactPlan{lifecycle_state: :draft} = plan,
-         version,
-         reason
-       ) do
-    case ManagementContacts.submit_plan(
-           scope,
-           mission_id,
-           plan.contact_plan_id,
-           version.version,
-           reason(reason)
-         ) do
-      {:ok, submitted} -> {:ok, submitted}
-      {:error, _reason} = error -> error
-    end
-  end
-
-  defp maybe_submit(
-         _scope,
-         _mission_id,
-         %ContactPlan{lifecycle_state: :pending_approval} = plan,
-         _version,
-         _reason
-       ),
-       do: {:ok, plan}
-
-  defp maybe_submit(_scope, _mission_id, %ContactPlan{}, _version, _reason),
-    do: {:error, :contact_plan_not_submittable}
 
   defp decide(scope, mission_id, plan, version, params) do
     if approver?(scope, mission_id),

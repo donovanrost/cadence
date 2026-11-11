@@ -176,16 +176,31 @@ defmodule CadenceWeb.Console.ContactPlanController do
   defp submit_params(params) do
     with {:ok, version} <- positive(params["expected_version"], :expected_version),
          {:ok, operation_id} <- operation_id(params["operation_id"]),
-         {:ok, acknowledgements} <- acknowledgements(params["acknowledgements"]) do
+         {:ok, acknowledgements} <- acknowledgements(params["acknowledgements"]),
+         {:ok, note} <- note(params["note"]) do
       {:ok,
        %{
          expected_version: version,
          operation_id: operation_id,
          reason: if(is_binary(params["reason"]), do: params["reason"]),
+         note: note,
          acknowledgements: acknowledgements
        }}
     end
   end
+
+  # U36: an optional one-line note for the reviewer ("What changed").
+  defp note(nil), do: {:ok, nil}
+
+  defp note(note) when is_binary(note) do
+    case String.trim(note) do
+      "" -> {:ok, nil}
+      trimmed when byte_size(trimmed) <= 500 -> {:ok, trimmed}
+      _long -> {:error, %{note: "must be at most 500 characters"}}
+    end
+  end
+
+  defp note(_note), do: {:error, %{note: "must be text"}}
 
   defp acknowledgements(nil), do: {:ok, []}
 

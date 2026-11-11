@@ -22,7 +22,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
   }
 
   alias Cadence.Management.Contacts
-  alias Cadence.Reads.PlanApproval
+  alias Cadence.Reads.{PlanApproval, PlanRounds}
 
   @list_cap 100
 
@@ -97,6 +97,8 @@ defmodule Cadence.Reads.ContactPlanOverview do
       repair_of =
         FleetPlanningRuns.repairs_for(organization_id, mission_id, [plan_id])[plan_id]
 
+      approval = PlanApproval.latest(organization_id, mission_id, plan_id, version.version)
+
       summary = plan |> summary(version, passes, superseded) |> Map.put(:repair_of, repair_of)
 
       {:ok,
@@ -109,8 +111,10 @@ defmodule Cadence.Reads.ContactPlanOverview do
          unmet: unmet(organization_id, mission_id, version),
          conflicts: conflicts,
          at_risk: availability.at_risk,
-         approval: PlanApproval.latest(organization_id, mission_id, plan_id, version.version)
-       })}
+         approval: approval
+       })
+       # U36: the round that submitted this version, and the one before it.
+       |> Map.merge(PlanRounds.load(organization_id, mission_id, plan_id, version.version))}
     else
       _missing -> {:error, :plan_not_found}
     end

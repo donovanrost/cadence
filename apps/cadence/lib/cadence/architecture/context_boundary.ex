@@ -48,6 +48,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/plan_confirmation.ex" => :composition,
     "lib/cadence/control/command_encoding_preview.ex" => :composition,
     "lib/cadence/control/command_brief.ex" => :composition,
+    "lib/cadence/control/plan_resubmission.ex" => :composition,
     "lib/cadence/control/scheduling.ex" => :composition,
     "lib/cadence/control/planning_policy.ex" => :composition,
     "lib/cadence/control/planning_templates.ex" => :composition,

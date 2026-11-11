@@ -212,6 +212,29 @@ Acknowledgements are stored on the approval (`approval.exceptions`) with its act
 plan shows the rejection and its reason). Join `requirement_id` with `unmet[]` to describe the
 requirement.
 
+### Resubmitting after a send back (U36, qa #40)
+
+Submitting a draft whose current version was sent back (its latest decision is `rejected`) is
+allowed as is: the server cuts the next version with the same selected and locked passes
+(`rationale: "Resubmitted after send back"`) and submits that. The rejection stays on the old
+version. Send the `expected_version` you were shown (the sent-back one); the reply's plan detail
+has the new `version`. Approved or undecided versions submit as before.
+
+The lock, the version check, the cut, the submit and the round record are one transaction: a
+second click with the same `expected_version` gets `409 plan_changed` and never cuts another
+version.
+
+Submit takes an optional `note` (one line, at most 500 characters: what changed, for the
+reviewer). Plan detail carries the review rounds:
+
+- `submission`: `{round, actor: {kind, id, name}, at, note, unchanged} | null`, the round that
+  submitted the shown version. `unchanged`: the selected and locked passes equal the previous
+  version's (a resubmission without edits). Header: "v2 · resubmitted"; "Resubmitted unchanged"
+  when `unchanged`.
+- `previous_round`: `{round, version, approval: <approval shape>, acknowledgements:
+  [{requirement_id, reason}]} | null`: the round before, with its decision (who sent it back and
+  why) and the gap reasons the author gave then (prefill the gaps sheet).
+
 ### `POST /contact-plans/:plan_id/reject` (send back)
 
 Body `{expected_version, reason}`. For a plan in `pending_approval`: an approver
