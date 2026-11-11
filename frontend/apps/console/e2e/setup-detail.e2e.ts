@@ -13,9 +13,12 @@ test.describe("Setup spacecraft detail", () => {
 
     await expect(page.getByText("SCID 1", { exact: true })).toBeVisible();
     await expect(page.getByText("Earendil Block 1").first()).toBeVisible();
-    // The seed gives every spacecraft a primary and a backup downlink route.
-    await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(2);
-    await expect(page.getByRole("cell", { name: /^primary$/i })).toBeVisible();
+    // The seed gives every spacecraft a primary and a candidate downlink route, plus an uplink
+    // route since the uplink legs (domain 0a08bcbc).
+    const rows = page.getByRole("table").locator("tbody tr");
+    await expect(rows).toHaveCount(3);
+    await expect(rows.filter({ hasText: /downlink/i }).filter({ hasText: /primary/i })).toHaveCount(1);
+    await expect(rows.filter({ hasText: /TT&C uplink/i })).toHaveCount(1);
 
     // Decision 1: no mission revision numbers until change sets exist.
     await expect(page.getByText(/configuration arrives with change sets/i)).toBeVisible();

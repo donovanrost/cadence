@@ -69,7 +69,10 @@ test.describe("Now (J1)", () => {
         await expect(statTile(page, label)).toContainText("unknown");
         await expect(statTile(page, label)).toContainText(/no telemetry yet|limits not configured/);
       }
-      await expect(statTile(page, "In contact")).toContainText("not tracked yet");
+      // In contact comes from passes, not telemetry: a count when the server tracks passes.
+      await expect(statTile(page, "In contact")).toContainText(
+        /not tracked yet|\d+ pass(es)? next 2 h/,
+      );
 
       await expect(queue(page)).toHaveCount(2);
       await expect(queue(page).nth(1)).toContainText(

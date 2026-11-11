@@ -177,8 +177,8 @@ test.describe("setup readiness", () => {
     // Each finding offers at most one fix; server labels override the default verb.
     await expect(page.getByRole("link", { name: "Open profile" })).toHaveCount(1);
     await expect(page.getByRole("link", { name: "Add a source" })).toHaveCount(1);
-    // No unified change feed yet: R2 is omitted, not faked (decision 1).
-    await expect(page.getByText("Recent changes")).toHaveCount(0);
+    // R2 reads real configuration revisions (d03eea14), not the readiness fixture.
+    await expect(page.getByText("Recent changes").first()).toBeVisible();
 
     await expectAccessible(page);
   });
