@@ -114,11 +114,14 @@ counts strip: ALARM EPISODES · 7 DAYS 3 · 30 DAYS 11 · 90 DAYS 24
 - **H2:** B1's chart component for the episode's point.
   - Window: from 2 h before the episode opened to 2 h after it cleared (or now).
   - Limit bands from M11, and the episode's span shaded with its severity wash.
-  - Header meta: `PEAK 22.1 V · 11-09 03:12Z`.
+  - Header meta: `PEAK 22.1 V · 11-09 03:12Z`. The server doesn't record a peak, so it's derived from the chart's
+    min/max buckets (min for low conditions, max for high). Omit it for catalog alarms, which have no direction.
   - Link `Open in Telemetry` with the same range.
 - **H3:** the same point and condition, newest first.
-  - Columns: opened · cleared · duration · peak (value + unit) · first → last value · acknowledged by (`—` if
-    not) · how it ended (`Back in limits` / `Cleared by Mira K.` / `Still open`).
+  - Columns: opened · cleared · duration · first → last value · acknowledged by (`—` if not) · how it ended
+    (`Back in limits` / `Source stopped reporting it` / `Still open`).
+  - Clearing is always automatic. The human act is acknowledging, which has its own column.
+  - No peak column: it would need each prior episode's telemetry.
   - Summary line above it: "4th time in 30 days · median 38m".
   - A `choice` `This alarm │ All conditions on VBAT` widens it to every condition on the point.
 - **Empty:** "No alarm episodes on EARENDIL-001 in the last 90 days." (neutral, not nominal: no alarms isn't
