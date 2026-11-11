@@ -15,11 +15,11 @@ missing endpoint or decision; an item with no blocker can start now.
 | Who | Start now (unblocked) | Waiting on |
 | --- | --- | --- |
 | **lead** | K1 C panel (focused spacecraft 24 h strip); `ApSheet` kit primitive (five hand-rolled dialogs today); `ApStatTile` `to` link; Palette `>` commands and `@` stations groups (with fe-ops) | — (api's K1 items shipped: send back, approval, stop time) |
-| **fe-ops** | Now tile links + A4 pass select + approval rows → request review; Investigate's five tabs link to the existing pages (#64) + add-point chips; Contacts D3 outage bands (S7 exists); Telemetry `Dashboards ↗` → existing pages (#11); Timeline sc/plane filter; Fleet/Alarms Next contact; Mobile GO block | api-ops: M8 spacecraft topic, M26 retries; api: M22 findings, A1 current values, M24 encode preview. (`CATALOG rev N` is unblocked: `catalog_revision` in the catalog basis.) |
+| **fe-ops** | Now tile links + A4 pass select + approval rows → request review; Investigate's five tabs link to the existing pages (#64) + add-point chips; Contacts D3 outage bands (S7 exists); Telemetry `Dashboards ↗` → existing pages (#11); Timeline sc/plane filter; Fleet/Alarms Next contact; Mobile GO block | api-ops: M26 retries; api: M22 findings, A1 current values, M24 encode preview. (`CATALOG rev N` is unblocked: `catalog_revision` in the catalog basis.) |
 | **fe-setup** | Profile edit → stage (op + preview exist); People command policies tab (O4 exists); Changes compare (`/config/compare`) + Keep mine / Take live (`rebase`); Readiness R2 from revisions; Audit actor filter; qa #19 copy ("unclear, check now" on 5xx) | api: catalog diff, people/invite/service-identity writes, account password/sessions, provider history; domain: catalog generations (C3) |
 | **ux** | Visual review of the unreviewed boards (§7); Compose C1 layout ruling (default: accept as built, #64) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
-| **api** | Now queue sources: missed_pass, station (§8 #12) | — |
+| **api** | §8 clear; next item with the director | — |
 | **api-ops** | §8 list | domain #34 for uplink items |
 | **domain** | catalog-path generations (#36; plan to the director first, it touches activation) | — (done: qa #34 #59 e683b3e2; qa #19 server side 33529f29; #50 archive) |
 
@@ -29,7 +29,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | Stat tiles link (Critical/Caution/Stale → Alarms/Fleet, In contact → Contacts, Uplinks → Commands) | fe-ops + lead (`ApStatTile` gets `to`) | — |
-| Queue kinds `missed_pass`, `station` and the `Station` (→ Re-plan) action; `flight_event` | fe-ops | api: queue sources (in progress); flight_event: domain (no source) |
+| ~~Queue kinds `missed_pass`, `station` + `Station` → Re-plan~~ done (de131e9b); `flight_event` | fe-ops | flight_event: domain (no source) |
 | Header meta names the worst station issue | fe-ops | — (S7 status exists) |
 | ~~A4 pass bars open the contact drawer~~ done (51cc6133) | fe-ops | — |
 | ~~Approval rows open the request's review~~ done for a single group (a0e33fe1) | fe-ops | — |
@@ -42,7 +42,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | B1 add points (chips, max 3, search this spacecraft's points) | fe-ops | — (M23 point search) |
 | No active alarm: show the latest resolved alarm "back in limits" | fe-ops | — |
 | B4 sisters: plane ring, sparklines, next AOS | fe-ops | — |
-| Live chart tail + event log | fe-ops | api-ops M8 `spacecraft:<id>` topic |
+| ~~Live chart tail~~ done (f38a4dfb); live event log | fe-ops | *(check whether M8 covers events)* |
 | ~~`FULL TIMELINE →` carries `?sc=`~~ done (cb5767c9) | fe-ops | — |
 
 ### Command a group / Compose (`Command.md`, `CommandFlow.md` C1): partial
@@ -70,7 +70,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | D3 outage / maintenance bands (K1 already draws them from S7) | fe-ops | — |
 | ~~`ops.contact` route~~ done: redirects to the drawer (abc4b36e) | fe-ops | — |
 | `sc any` filter chip, "highlight queued uplinks" | fe-ops | — |
-| D2: queued requests bound to the pass, state trail; ~~`Swap station`, `Release`~~ out (#68) | fe-ops | — |
+| D2: queued requests bound to the pass, state trail; ~~`Release`~~ done (a311cc8a); `Swap station` out (#68) | fe-ops | — |
 | ~~D4 "Needs a decision"~~ done (cab58d3d) | fe-ops | — |
 | `Book passes` | fe-ops | — (K1 Plan covers part) |
 
@@ -217,15 +217,15 @@ missing endpoint or decision; an item with no blocker can start now.
 
 **api-ops** (director, in this order)
 1. M26 retries + verifier series (Uplink U2), in progress.
-2. M8 `spacecraft:<id>` topic (Investigate live tail and log).
-3. ~~Contacts swap / release~~ out (#68).
+2. ~~M8 `spacecraft:<id>` topic~~ done (d79aaad4; Investigate live tail f38a4dfb).
+3. ~~Contacts Release~~ done (50c5e572, 04755d23; fe-ops a311cc8a, d43d2315). Swap station out (#68).
 4. ~~Catalog revision number~~ already there: `GET /command-catalog` basis carries `catalog_revision`.
 
 **api** (moved from api-ops, director rebalance)
 9. ~~M22 conflict/gap findings (Contacts D4)~~ done (985c00dc; fe-ops cab58d3d).
 10. ~~A1 current values + prior requests in the request brief~~ done (4f9cd275, a4c0e807).
 11. ~~M24 encode preview~~ done (4d0255f3; fe-ops 90d1c43c).
-12. Now queue sources (moved from api-ops, director): `missed_pass` (S9 results), `station` (S7 StationImpact); `flight_event` blocked on domain (no source).
+12. ~~Now queue sources `missed_pass`, `station`~~ done by api-ops (81a4c8d0; fe-ops de131e9b). `flight_event` blocked on domain (no source).
 
 **domain**
 1. ~~qa #34~~ done (#59, e683b3e2).
