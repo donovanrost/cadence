@@ -104,6 +104,18 @@ export function planPrimary(
   }
 }
 
+/**
+ * ux (b30600e7 follow-up): sending and confirming overlap. While requests still go out:
+ * 'booking · 812 of 1,512 sent · 300 booked'; all sent: 'booking · 1,490 of 1,512 booked';
+ * settled: '1,490 of 1,512 booked'.
+ */
+function bookingProgress(e: NonNullable<PlanDetail["execution"]>): string {
+  const of = (n: number) => `${formatCount(n)} of ${formatCount(e.requested)}`;
+  if (e.never_sent > 0)
+    return `booking · ${of(e.sent)} sent${e.confirmed > 0 ? ` · ${formatCount(e.confirmed)} booked` : ""}`;
+  return e.uncertain > 0 ? `booking · ${of(e.confirmed)} booked` : `${of(e.confirmed)} booked`;
+}
+
 /** K2 entry: the open proposal's run when there is one (U28), else a new re-plan. */
 function replanLink(planId: string, openRepairRun: string | null): PlanPrimary {
   return openRepairRun
@@ -149,10 +161,7 @@ function stateTail(plan: PlanDetail): string {
     case "approved":
       return "approved";
     case "executing":
-      // qa: confirmations arrive after sending, so while executing the count that moves is sent.
-      return plan.execution
-        ? `booking · ${formatCount(plan.execution.sent)} of ${formatCount(plan.execution.requested)} sent`
-        : "booking";
+      return plan.execution ? bookingProgress(plan.execution) : "booking";
     case "interrupted":
       // ScheduleFlow: 'BOOKING STOPPED · 812 OF 1,512' (sent of requested).
       return plan.execution
@@ -160,13 +169,9 @@ function stateTail(plan: PlanDetail): string {
         : "booking stopped";
     case "reserved":
       return "booked";
-    case "partially_reserved": {
-      // Also the state while confirmations arrive (qa): 'booking · N of M booked' until settled.
-      const e = plan.execution;
-      if (!e) return "partly booked";
-      const booked = `${formatCount(e.confirmed)} of ${formatCount(e.requested)} booked`;
-      return e.uncertain > 0 ? `booking · ${booked}` : booked;
-    }
+    case "partially_reserved":
+      // Also the state while confirmations arrive (qa), so it reads as progress until settled.
+      return plan.execution ? bookingProgress(plan.execution) : "partly booked";
     case "failed":
       return "booking failed";
     case "canceled":

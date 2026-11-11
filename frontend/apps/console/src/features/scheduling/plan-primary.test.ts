@@ -152,6 +152,14 @@ describe("booking progress (qa: the count must climb)", () => {
     expect(planHeaderTail(plan({ state: "executing", execution: exec({ sent: 12 }) }))).toBe(
       "booking · 12 of 40 sent",
     );
+    expect(
+      planHeaderTail(
+        plan({
+          state: "executing",
+          execution: exec({ sent: 30, never_sent: 10, confirmed: 5, uncertain: 25 }),
+        }),
+      ),
+    ).toBe("booking · 30 of 40 sent · 5 booked");
     const settling = plan({
       state: "partially_reserved",
       execution: exec({ sent: 40, never_sent: 0, confirmed: 7, uncertain: 33 }),
