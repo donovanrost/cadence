@@ -22,7 +22,7 @@ import {
 import type { Pass } from "./api.ts";
 import AttentionBlock from "./AttentionBlock.vue";
 import { attentionWords } from "@/features/now/index.ts";
-import { readinessTag, reasonLink, recoverable } from "./readiness.ts";
+import { noRecoverText, readinessTag, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
 import ReleasePass from "./ReleasePass.vue";
 import { useCommandAccess } from "@/features/commands/index.ts";
@@ -170,7 +170,7 @@ const countdown = computed(() => {
           v-if="readiness.state === 'blocked' && !recoverable(readiness.reason)"
           class="m-0 text-sm text-text-2"
         >
-          Recovery isn't possible on this pass.
+          {{ noRecoverText(readiness.reason) }}
         </p>
         <RecoverUplink
           v-else-if="readiness.state === 'blocked'"

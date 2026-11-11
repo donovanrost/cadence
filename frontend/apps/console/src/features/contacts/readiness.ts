@@ -79,6 +79,8 @@ const QUALIFYING: Readonly<Record<string, (c: ReasonContext, p: string) => strin
 
 const RESTART = "protocol_state_restore_required";
 const CANNOT_ATTEST = "provider_cannot_attest_uplink_sessions";
+/** domain c7c79063: only the spacecraft's report (or a new connection) clears it; Recover can't. */
+const NO_CLCW = "cop1_no_clcw_report";
 
 const BLOCKED: Readonly<Record<string, (c: ReasonContext, p: string) => string>> = {
   [RESTART]: (c) =>
@@ -90,8 +92,7 @@ const BLOCKED: Readonly<Record<string, (c: ReasonContext, p: string) => string>>
   malformed_provider_attestation: (_c, p) => `${p}'s proof for this session couldn't be read`,
   provider_credential_unavailable: (_c, p) => `Cadence couldn't read the credential for ${p}`,
   transport_runtime_unavailable: () => "the uplink transport isn't running",
-  cop1_no_clcw_report: () =>
-    "the spacecraft didn't send a link report within 15 s of the uplink connecting",
+  [NO_CLCW]: () => "the spacecraft didn't send a link report within 15 s of the uplink connecting",
   uplink_state_unavailable: () => "Cadence can't read the uplink's state right now",
   // #67 (domain a258d4fe; ux 000086ae): recoverable, like attestation_*.
   unverified_peer_connected: (_c, p) =>
@@ -119,7 +120,13 @@ export function reasonSentence(key: string | null, c: ReasonContext = {}): strin
  * provider that can't attest uplink sessions, can't be recovered on this pass.
  */
 export const recoverable = (reason: string | null) =>
-  reason !== RESTART && reason !== CANNOT_ATTEST;
+  reason !== RESTART && reason !== CANNOT_ATTEST && reason !== NO_CLCW;
+
+/** What shows in Recover's place when it can't help (ux d6ba032b). */
+export const noRecoverText = (reason: string | null) =>
+  reason === NO_CLCW
+    ? "Recovery won't help: it clears when the spacecraft reports."
+    : "Recovery isn't possible on this pass.";
 
 /** Where to fix a reason, when it names one. */
 export function reasonLink(reason: string | null) {
@@ -172,7 +179,12 @@ export function readinessTag(
   if (r.state === "ready")
     return where === "drawer" ? { state: "nominal", label: "Uplink ready", sentence: null } : null;
   if (r.state !== "blocked") return null;
-  const tail = r.reason === RESTART ? " The next pass isn't affected." : "";
+  const tail =
+    r.reason === RESTART
+      ? " The next pass isn't affected."
+      : r.reason === NO_CLCW
+        ? " It clears when the spacecraft reports or the link reconnects."
+        : "";
   return {
     state: (r.command_groups_queued ?? 1) > 0 ? "crit" : "caution",
     label: "Can't command",

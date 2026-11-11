@@ -247,8 +247,9 @@ describe("uplink readiness (U33)", () => {
     );
     expect(recoverable("unverified_peer_connected")).toBe(true);
     expect(tag("cop1_no_clcw_report")).toBe(
-      "Can't command: the spacecraft didn't send a link report within 15 s of the uplink connecting.",
+      "Can't command: the spacecraft didn't send a link report within 15 s of the uplink connecting. It clears when the spacecraft reports or the link reconnects.",
     );
+    expect(recoverable("cop1_no_clcw_report")).toBe(false);
     expect(tag("cop1_clcw_stale", "qualifying")).toBe(
       "The spacecraft's link reports stopped; waiting for them to resume.",
     );
