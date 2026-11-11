@@ -21,6 +21,8 @@ const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   chain: null,
   execution: null,
   approval: null,
+  submission: null,
+  previous_round: null,
   chain_head: null,
   superseded: null,
   repair_of: null,

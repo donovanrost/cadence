@@ -92,8 +92,8 @@ describe("planErrorText on an unclear outcome (qa #19)", () => {
   });
 });
 
-describe("a sent-back version resubmitted unchanged (qa #40)", () => {
-  it("says why and what to do", () => {
+describe("the U36 race: a version decided meanwhile", () => {
+  it("names who decided when the server says", () => {
     expect(
       planErrorText({
         kind: "invalid",
@@ -101,6 +101,14 @@ describe("a sent-back version resubmitted unchanged (qa #40)", () => {
         message: "The request could not be completed.",
         details: null,
       }),
-    ).toContain("Change the plan, then submit the new version.");
+    ).toBe("This version was already decided. Reload to see it.");
+    expect(
+      planErrorText({
+        kind: "invalid",
+        code: "contact_plan_version_already_decided",
+        message: "x",
+        details: { decided_by: { kind: "user", id: "u", name: "Mira K." } },
+      }),
+    ).toBe("This version was already decided by Mira K. Reload to see it.");
   });
 });

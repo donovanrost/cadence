@@ -137,10 +137,15 @@ const planIssue = d.object({
 });
 
 const planRef = d.object({ id: d.token, version: d.integer });
+const actorReader = d.object({
+  kind: d.string,
+  id: d.nullable(d.token),
+  name: d.nullable(d.string),
+});
 const approvalReader = d.nullable(
   d.object({
     decision: d.oneOf(["approved", "rejected"] as const),
-    actor: d.object({ kind: d.string, id: d.nullable(d.token), name: d.nullable(d.string) }),
+    actor: actorReader,
     at: d.timestamp,
     reason: d.nullable(d.string),
     exceptions: d.array(
@@ -151,6 +156,23 @@ const approvalReader = d.nullable(
       }),
       5_000,
     ),
+  }),
+);
+const submissionReader = d.nullable(
+  d.object({
+    round: d.integer,
+    actor: actorReader,
+    at: d.timestamp,
+    note: d.nullable(d.string),
+    unchanged: d.boolean,
+  }),
+);
+const previousRoundReader = d.nullable(
+  d.object({
+    round: d.integer,
+    version: d.integer,
+    approval: approvalReader,
+    acknowledgements: d.array(d.object({ requirement_id: d.token, reason: d.string }), 5_000),
   }),
 );
 const executionReader = d.nullable(
@@ -239,6 +261,12 @@ export const planDetailReader = d.object({
   execution: (value: unknown, path?: string) =>
     value === undefined ? null : executionReader(value, path),
   /** api 97523716: the latest decision on this version (a sent-back plan shows the rejection). */
+  /** U36 (api 75e84d5d): the round that submitted this version. */
+  submission: (value: unknown, path?: string) =>
+    value === undefined ? null : submissionReader(value, path),
+  /** U36: the round before (who sent it back, why, and the author's gap reasons then). */
+  previous_round: (value: unknown, path?: string) =>
+    value === undefined ? null : previousRoundReader(value, path),
   approval: (value: unknown, path?: string) =>
     value === undefined ? null : approvalReader(value, path),
   /** qa #30: the day's repair chain, root first then each applied repair; null on older servers. */
@@ -434,6 +462,8 @@ export function submitPlan(
   plan: Readonly<{ id: string; version: number }>,
   operationId: string,
   acknowledgements: readonly Acknowledgement[],
+  /** U36: one line for the reviewer when resubmitting (≤ 500). */
+  note?: string,
 ): Promise<ApiResult<SubmitResult>> {
   return request(`${base(missionId)}/${encodeURIComponent(plan.id)}/submit`, submitReader, {
     method: "POST",
@@ -441,6 +471,7 @@ export function submitPlan(
       expected_version: plan.version,
       operation_id: operationId,
       ...(acknowledgements.length > 0 ? { acknowledgements } : {}),
+      ...(note ? { note } : {}),
     },
   });
 }

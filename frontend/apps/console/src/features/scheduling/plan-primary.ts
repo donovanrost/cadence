@@ -49,13 +49,17 @@ export function planPrimary(
           reason: `${plural(onDownStation, "drafted pass", "drafted passes")} on a station that's down. Move or remove ${onDownStation === 1 ? "it" : "them"} to submit.`,
         };
       if (n === 0) return { kind: "blocked", label: "Submit", reason: "The draft has no passes." };
+      // U36: a sent-back draft is submitted again as is (the server cuts the next version).
+      const again = plan.approval?.decision === "rejected";
       const label = isAdmin
         ? gaps > 0
-          ? `Accept ${plural(gaps, "gap")} and submit`
-          : `Submit and book ${plural(n, "pass", "passes")}`
+          ? `Accept ${plural(gaps, "gap")} and submit${again ? " again" : ""}`
+          : `Submit${again ? " again" : ""} and book ${plural(n, "pass", "passes")}`
         : gaps > 0
-          ? `Accept ${plural(gaps, "gap")} and request approval`
-          : "Request approval";
+          ? `Accept ${plural(gaps, "gap")} and ${again ? "submit again" : "request approval"}`
+          : again
+            ? "Submit again"
+            : "Request approval";
       const confirm = isAdmin
         ? `This approves the plan and books ${n} passes with the providers.`
         : "An organization admin reviews it before anything is booked.";
@@ -153,11 +157,16 @@ function stateTail(plan: PlanDetail): string {
       const base = c.spacecraft > 0 ? spacecraftNotCovered(c.spacecraft) : "ready";
       return atRisk > 0 ? `${base} · ${atRisk} at risk` : base;
     }
-    case "pending_approval":
-      // ux: the approver needs the author (reviewer ≠ author).
-      return plan.author
-        ? `waiting for an admin · drafted${byAuthor(plan.author, "automatic draft")}`
-        : "waiting for an admin";
+    case "pending_approval": {
+      // ux: the approver needs the author (reviewer ≠ author). U36: a later round says so.
+      const state =
+        (plan.submission?.round ?? 1) > 1
+          ? plan.submission?.unchanged
+            ? "resubmitted unchanged"
+            : "resubmitted"
+          : "waiting for an admin";
+      return plan.author ? `${state} · drafted${byAuthor(plan.author, "automatic draft")}` : state;
+    }
     case "approved":
       return "approved";
     case "executing":

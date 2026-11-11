@@ -89,6 +89,26 @@ async function onSendBack(reason: string) {
   if (result.ok) sendBackSheet.value?.close();
   else sendBackError.value = result.error;
 }
+/** U36 for the reviewer: who resubmitted, with their note, and the earlier round in text-3. */
+const resubmitted = computed(() => {
+  if (view.value.kind !== "plan" || view.value.plan.state !== "pending_approval") return null;
+  const { submission: sub, previous_round: prev } = view.value.plan;
+  if (!sub || sub.round < 2) return null;
+  const who = sub.actor.name ?? "The author";
+  const at = `${sub.at.slice(11, 16)}Z`;
+  const line = sub.note
+    ? `Resubmitted by ${who} · ${at}: ${sub.note}`
+    : sub.unchanged
+      ? `Resubmitted unchanged by ${who} · ${at}`
+      : `Resubmitted by ${who} · ${at}`;
+  const a = prev?.approval;
+  const earlier =
+    a?.decision === "rejected"
+      ? `Round ${prev?.round ?? sub.round - 1}: sent back by ${a.actor.name ?? "an org admin"} at ${a.at.slice(11, 16)}Z${a.reason ? `: ${a.reason}` : ""}`
+      : null;
+  return { line, earlier };
+});
+
 /** A draft an admin sent back: who, when and why, for its author (api 97523716). */
 const sentBack = computed(() => {
   if (view.value.kind !== "plan" || view.value.plan.state !== "draft") return null;
@@ -99,13 +119,14 @@ const sentBack = computed(() => {
   // The next step is the author's (qa): a reviewer looking at it just sees what was decided.
   const author = view.value.plan.author;
   const mine = author?.kind !== "system" && author?.id === session.user.id;
-  const next = mine || !isAdmin.value ? " Edit the draft and submit it again." : "";
+  const next =
+    mine || !isAdmin.value ? " Change the plan or its gap reasons, then submit it again." : "";
   return `Sent back by ${who} at ${a.at.slice(11, 16)}Z${why}${next}`;
 });
 
-async function onSubmit(acks: Acknowledgement[]) {
+async function onSubmit(acks: Acknowledgement[], note?: string) {
   if (view.value.kind !== "plan") return;
-  const result = await submit(view.value.plan, acks);
+  const result = await submit(view.value.plan, acks, note);
   // A draft superseded meanwhile (409 plan_superseded): submit already re-read the plan, so close
   // the sheet and let it land in the superseded state, which says nothing was submitted.
   if (result.ok || isPlanSuperseded(result.error)) sheet.value?.close();
@@ -175,6 +196,14 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
   <template v-if="view.kind === 'plan'">
     <SupersededCallout v-if="view.plan.superseded" :superseded="view.plan.superseded" />
     <ApCallout v-else-if="sentBack" tone="caution">{{ sentBack }}</ApCallout>
+    <ApCallout v-else-if="resubmitted" tone="info">
+      <span class="flex flex-col gap-1">
+        <span>{{ resubmitted.line }}</span>
+        <span v-if="resubmitted.earlier" class="text-sm text-text-3">{{
+          resubmitted.earlier
+        }}</span>
+      </span>
+    </ApCallout>
     <ApCallout v-else-if="stopped" :tone="stopped.tone">{{ stopped.text }}</ApCallout>
     <!-- U30: on any state that has unconfirmed bookings, on top of the state's own callout. -->
     <UnconfirmedCallout

@@ -131,10 +131,20 @@ export function usePlanDay(
   }
 
   /** S5: admin → approve + execute (202); member → pending_approval. The caller shows errors. */
-  async function submit(plan: PlanDetail, acknowledgements: readonly Acknowledgement[]) {
+  async function submit(
+    plan: PlanDetail,
+    acknowledgements: readonly Acknowledgement[],
+    note?: string,
+  ) {
     busy.value = true;
     try {
-      const result = await submitPlan(missionId.value, plan, crypto.randomUUID(), acknowledgements);
+      const result = await submitPlan(
+        missionId.value,
+        plan,
+        crypto.randomUUID(),
+        acknowledgements,
+        note,
+      );
       refresh();
       return result;
     } finally {

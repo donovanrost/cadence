@@ -36,6 +36,8 @@ const plan = (state: PlanDetail["state"], providers: readonly string[]): PlanDet
   chain: null,
   execution: null,
   approval: null,
+  submission: null,
+  previous_round: null,
   chain_head: null,
   unconfirmed: {
     window_ms: 600_000,

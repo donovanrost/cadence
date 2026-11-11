@@ -1,3 +1,4 @@
+import { nextTick } from "vue";
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import type { PlanDetail } from "./api.ts";
@@ -28,6 +29,8 @@ const plan: PlanDetail = {
   chain: null,
   execution: null,
   approval: null,
+  submission: null,
+  previous_round: null,
   chain_head: null,
   superseded: null,
   repair_of: null,
@@ -204,6 +207,50 @@ describe("SubmitSheet at-risk passes (ux #13)", () => {
     });
     expect(wrapper.text()).toContain("1 pass on a degraded station may lose data");
     expect(wrapper.text()).toContain("EARENDIL-003 · KIR · 00:12–00:20Z");
+    wrapper.unmount();
+  });
+});
+
+describe("SubmitSheet resubmission (U36)", () => {
+  it("prefills last round's reasons and sends the optional note", async () => {
+    const sentBack = {
+      ...plan,
+      approval: {
+        decision: "rejected" as const,
+        actor: { kind: "user", id: "u", name: "Mira K." },
+        at: "2026-11-09T10:52:00Z",
+        reason: "Move 004 off HBK",
+        exceptions: [],
+      },
+      previous_round: {
+        round: 1,
+        version: 41,
+        approval: null,
+        acknowledgements: [
+          { requirement_id: "r1", reason: "Outage at HBK, accepted by ops." },
+          { requirement_id: "r2", reason: "Outage at HBK, accepted by ops." },
+        ],
+      },
+    };
+    const wrapper = mount(SubmitSheet, {
+      props: {
+        plan: sentBack,
+        nameOf: () => null,
+        commitLabel: "Accept 2 gaps and submit again",
+        confirm: "",
+        busy: false,
+      },
+      attachTo: document.body,
+    });
+    // oxlint-disable-next-line typescript/no-unsafe-call, typescript/no-unsafe-member-access -- vue-tsc checks the exposed open(); the lint type service can't resolve SFC instances.
+    wrapper.vm.open();
+    await nextTick();
+    expect(wrapper.text()).not.toContain("still need");
+    await wrapper.get("input[type=text]").setValue("Moved 004 to KIR.");
+    await wrapper.findAll("footer button").at(-1)?.trigger("click");
+    const [acks, note] = wrapper.emitted("submit")?.[0] ?? [];
+    expect(note).toBe("Moved 004 to KIR.");
+    expect(acks).toHaveLength(2);
     wrapper.unmount();
   });
 });

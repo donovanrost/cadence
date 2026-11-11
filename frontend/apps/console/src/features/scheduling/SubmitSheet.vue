@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import type { ApiError } from "@/api";
-import { ApButton, ApCallout, ApTextarea, plural } from "@/ui";
+import { ApButton, ApCallout, ApField, ApTextarea, plural } from "@/ui";
 import {
   reasonText,
   REASON_MAX,
@@ -27,7 +27,14 @@ const props = defineProps<{
   confirm: string;
   busy: boolean;
 }>();
-const emit = defineEmits<{ submit: [acks: Acknowledgement[]]; close: [] }>();
+const emit = defineEmits<{ submit: [acks: Acknowledgement[], note?: string]; close: [] }>();
+/** U36: resubmitting a sent-back draft: previous reasons prefilled, an optional note. */
+const again = computed(() => props.plan.approval?.decision === "rejected");
+const note = ref("");
+const NOTE_MAX = 500;
+const noteError = computed(() =>
+  note.value.trim().length > NOTE_MAX ? `At most ${NOTE_MAX} characters.` : null,
+);
 const error = defineModel<ApiError | null>("error", { default: null });
 
 const dialog = ref<HTMLDialogElement | null>(null);
@@ -84,8 +91,30 @@ const causeText = (why: readonly string[]) =>
 
 let opener: HTMLElement | null = null;
 const titleId = `ap-submit-${Math.random().toString(36).slice(2, 9)}`;
+/** U36: the reasons the author gave last round, per spacecraft (same text) or per requirement. */
+function prefill() {
+  const before = new Map(
+    (props.plan.previous_round?.acknowledgements ?? []).map((a) => [a.requirement_id, a.reason]),
+  );
+  if (before.size === 0) return;
+  for (const g of groups.value) {
+    const key = keyOf(g.spacecraftId);
+    if (reasons.value[key]) continue;
+    const texts = g.unmet.map((u) => before.get(u.requirement_id));
+    const first = texts[0];
+    if (first && texts.every((t) => t === first)) reasons.value[key] = first;
+    else {
+      for (const u of g.unmet) {
+        const t = before.get(u.requirement_id);
+        if (t && !overrides.value[u.requirement_id]) overrides.value[u.requirement_id] = t;
+      }
+      if (texts.some((t) => t)) split.value[key] = true;
+    }
+  }
+}
 function open() {
   error.value = null;
+  if (again.value) prefill();
   opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   dialog.value?.showModal();
   // Focus the first reason (or the commit when nothing is unmet) rather than the first control.
@@ -105,16 +134,16 @@ function onClosed() {
   emit("close");
 }
 function submit() {
-  if (missing.value > 0) return;
-  emit(
-    "submit",
-    groups.value.flatMap((g) =>
-      g.unmet.map((u) => ({
-        requirement_id: u.requirement_id,
-        reason: reasonFor(keyOf(g.spacecraftId), u.requirement_id) ?? "",
-      })),
-    ),
+  if (missing.value > 0 || noteError.value) return;
+  const acks = groups.value.flatMap((g) =>
+    g.unmet.map((u) => ({
+      requirement_id: u.requirement_id,
+      reason: reasonFor(keyOf(g.spacecraftId), u.requirement_id) ?? "",
+    })),
   );
+  const text = again.value ? note.value.trim() : "";
+  if (text) emit("submit", acks, text);
+  else emit("submit", acks);
 }
 const title = computed(() =>
   groups.value.length > 0
@@ -221,6 +250,13 @@ defineExpose({ open, close });
           </details>
         </div>
       </template>
+      <ApField
+        v-if="again"
+        v-model="note"
+        label="What changed for the reviewer"
+        hint="Optional. One line, shown to the reviewer with this round."
+        :error="noteError"
+      />
       <ApCallout v-if="atRisk.length > 0" tone="caution">
         <span class="flex flex-col gap-1">
           <span
@@ -245,8 +281,14 @@ defineExpose({ open, close });
         <ApButton variant="ghost" @click="close">Cancel</ApButton>
         <ApButton
           variant="primary"
-          :disabled="missing > 0 || busy"
-          :disabled-reason="busy ? 'Submitting…' : 'Every gap needs a reason first.'"
+          :disabled="missing > 0 || busy || noteError !== null"
+          :disabled-reason="
+            busy
+              ? 'Submitting…'
+              : noteError
+                ? 'Shorten the note first.'
+                : 'Every gap needs a reason first.'
+          "
           @click="submit"
           >{{ commitLabel }}</ApButton
         >

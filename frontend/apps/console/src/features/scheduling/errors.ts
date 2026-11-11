@@ -1,4 +1,7 @@
-import { describeApiError, outcomeUnknown, type ApiError } from "@/api";
+import { decode, decoders as d, describeApiError, outcomeUnknown, type ApiError } from "@/api";
+
+/** U36 race: `details.decided_by` names who decided the version (api, once shipped). */
+const decidedBy = d.object({ decided_by: d.object({ name: d.nullable(d.string) }) });
 
 /** Plain words for scheduling refusals the planner can act on; anything else falls back. */
 const MESSAGES: Readonly<Record<string, string>> = {
@@ -14,8 +17,6 @@ const MESSAGES: Readonly<Record<string, string>> = {
   plan_changed: "Someone changed this plan meanwhile. It's reloaded; check it and try again.",
   plan_superseded:
     "Contact rules changed since this draft, so it's superseded and can't be submitted. Draft the day again.",
-  contact_plan_version_already_decided:
-    "This version was already decided (it was sent back), so it can't be submitted again as it is. Change the plan, then submit the new version.",
   plan_not_pending: "This plan isn't waiting for approval any more. It's reloaded.",
   plan_not_editable: "This plan can't be edited in its current state.",
   plan_not_submittable: "This plan can't be submitted in its current state.",
@@ -32,6 +33,13 @@ const UNCLEAR =
 
 export function planErrorText(error: ApiError): string {
   if (outcomeUnknown(error)) return UNCLEAR;
+  // U36: after resubmission exists, this only means someone decided the version meanwhile.
+  if ("code" in error && error.code === "contact_plan_version_already_decided") {
+    const read = decode(decidedBy, "details" in error ? error.details : null);
+    const by = read.ok ? read.value.decided_by.name : null;
+    const sentence = `This version was already decided${by ? ` by ${by}` : ""}`;
+    return `${sentence}${sentence.endsWith(".") ? "" : "."} Reload to see it.`;
+  }
   const code = "code" in error ? error.code : null;
   return (code && MESSAGES[code]) ?? describeApiError(error);
 }
