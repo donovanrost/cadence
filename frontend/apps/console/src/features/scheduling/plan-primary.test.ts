@@ -136,3 +136,33 @@ describe("unconfirmed and unknown states (#52, U30)", () => {
     expect(planPrimary(plan({ state: "unrecognized" }), true).kind).toBe("none");
   });
 });
+
+describe("booking progress (qa: the count must climb)", () => {
+  const exec = (o: Partial<NonNullable<PlanDetail["execution"]>>) => ({
+    requested: 40,
+    sent: 0,
+    never_sent: 40,
+    confirmed: 0,
+    uncertain: 0,
+    rejected: 0,
+    failed: 0,
+    ...o,
+  });
+  it("counts sent while executing, booked while confirmations arrive, then settles", () => {
+    expect(planHeaderTail(plan({ state: "executing", execution: exec({ sent: 12 }) }))).toBe(
+      "booking · 12 of 40 sent",
+    );
+    const settling = plan({
+      state: "partially_reserved",
+      execution: exec({ sent: 40, never_sent: 0, confirmed: 7, uncertain: 33 }),
+    });
+    expect(planHeaderTail(settling)).toBe("booking · 7 of 40 booked");
+    expect(planPrimary(settling, true)).toEqual({ kind: "none", note: null });
+    const settled = plan({
+      state: "partially_reserved",
+      execution: exec({ sent: 40, never_sent: 0, confirmed: 38, rejected: 2 }),
+    });
+    expect(planHeaderTail(settled)).toBe("38 of 40 booked");
+    expect(planPrimary(settled, true).kind).toBe("link");
+  });
+});

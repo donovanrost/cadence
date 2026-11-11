@@ -89,18 +89,12 @@ export function planPrimary(
         note: "Booking with the providers. Confirmations arrive on this plan.",
       };
     case "partially_reserved":
+      // Mid-settle (qa): confirmations still arriving and nothing lost yet; nothing to re-plan.
+      return plan.execution && plan.execution.uncertain > 0 && lost(plan.execution) === 0
+        ? { kind: "none", note: null }
+        : replanLink(plan.id, openRepairRun);
     case "failed":
-      return openRepairRun
-        ? {
-            kind: "link",
-            label: "Open the re-plan proposal",
-            to: { name: "ops.contacts.replan", query: { plan: plan.id, run: openRepairRun } },
-          }
-        : {
-            kind: "link",
-            label: "Re-plan after provider changes",
-            to: { name: "ops.contacts.replan", query: { plan: plan.id } },
-          };
+      return replanLink(plan.id, openRepairRun);
     case "reserved":
       return { kind: "link", label: "Open Contacts", to: { name: "ops.contacts" } };
     case "superseded":
@@ -109,6 +103,24 @@ export function planPrimary(
       return { kind: "none", note: "This plan is no longer current." };
   }
 }
+
+/** K2 entry: the open proposal's run when there is one (U28), else a new re-plan. */
+function replanLink(planId: string, openRepairRun: string | null): PlanPrimary {
+  return openRepairRun
+    ? {
+        kind: "link",
+        label: "Open the re-plan proposal",
+        to: { name: "ops.contacts.replan", query: { plan: planId, run: openRepairRun } },
+      }
+    : {
+        kind: "link",
+        label: "Re-plan after provider changes",
+        to: { name: "ops.contacts.replan", query: { plan: planId } },
+      };
+}
+
+/** Bookings the provider rejected or lost: what a re-plan would act on. */
+const lost = (e: NonNullable<PlanDetail["execution"]>) => e.rejected + e.failed;
 
 /** Header mono tail per plan state, plus U30's `· 4 unconfirmed` on any state that has them. */
 export function planHeaderTail(plan: PlanDetail): string {
@@ -137,9 +149,9 @@ function stateTail(plan: PlanDetail): string {
     case "approved":
       return "approved";
     case "executing":
-      // ux: 'R41 · booking · 812 of 1,512' (confirmed of requested, api cf3cd37a).
+      // qa: confirmations arrive after sending, so while executing the count that moves is sent.
       return plan.execution
-        ? `booking · ${formatCount(plan.execution.confirmed)} of ${formatCount(plan.execution.requested)}`
+        ? `booking · ${formatCount(plan.execution.sent)} of ${formatCount(plan.execution.requested)} sent`
         : "booking";
     case "interrupted":
       // ScheduleFlow: 'BOOKING STOPPED · 812 OF 1,512' (sent of requested).
@@ -148,8 +160,13 @@ function stateTail(plan: PlanDetail): string {
         : "booking stopped";
     case "reserved":
       return "booked";
-    case "partially_reserved":
-      return "partly booked";
+    case "partially_reserved": {
+      // Also the state while confirmations arrive (qa): 'booking · N of M booked' until settled.
+      const e = plan.execution;
+      if (!e) return "partly booked";
+      const booked = `${formatCount(e.confirmed)} of ${formatCount(e.requested)} booked`;
+      return e.uncertain > 0 ? `booking · ${booked}` : booked;
+    }
     case "failed":
       return "booking failed";
     case "canceled":
