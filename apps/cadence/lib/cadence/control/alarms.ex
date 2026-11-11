@@ -10,7 +10,7 @@ defmodule Cadence.Control.Alarms do
   """
 
   alias Cadence.Accounts
-  alias Cadence.Alarms.{Lifecycle, Notify, Queries}
+  alias Cadence.Alarms.{History, Lifecycle, Notify, Queries}
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Missions
   alias Cadence.Missions.Mission
@@ -26,6 +26,44 @@ defmodule Cadence.Control.Alarms do
   def get_episode(%Scope{} = scope, mission_id, episode_id) do
     with {:ok, mission} <- authorize(scope, mission_id, :read),
          do: Queries.get(mission.mission_id, episode_id)
+  end
+
+  @doc """
+  A spacecraft's past episodes for Investigate's History tab (`Cadence.Alarms.History`):
+  `%{stats, page}`, optionally for one point. `opts`: `point_id`, `before`, `limit`, `now`.
+  """
+  @spec spacecraft_history(Scope.t(), String.t(), String.t(), map()) ::
+          {:ok, map()} | {:error, term()}
+  def spacecraft_history(%Scope{} = scope, mission_id, spacecraft_id, opts) do
+    with {:ok, mission} <- authorize(scope, mission_id, :read) do
+      filter = %{spacecraft_id: spacecraft_id, point_id: Map.get(opts, :point_id)}
+      {:ok, history(mission.mission_id, filter, opts)}
+    end
+  end
+
+  @doc """
+  An episode with the same alarm's (`scope: :alarm`) or point's (`:point`) earlier episodes:
+  `%{episode, stats, page}`. `opts` as `spacecraft_history/4`, plus `scope`.
+  """
+  @spec episode_history(Scope.t(), String.t(), String.t(), map()) ::
+          {:ok, map()} | {:error, term()}
+  def episode_history(%Scope{} = scope, mission_id, episode_id, opts) do
+    with {:ok, mission} <- authorize(scope, mission_id, :read),
+         {:ok, episode} <- Queries.get(mission.mission_id, episode_id),
+         {:ok, filter} <-
+           History.filter_for(mission.mission_id, episode_id, Map.get(opts, :scope, :alarm)) do
+      {:ok, Map.put(history(mission.mission_id, filter, opts), :episode, episode)}
+    end
+  end
+
+  defp history(mission_id, filter, opts) do
+    now = Map.get_lazy(opts, :now, &DateTime.utc_now/0)
+
+    %{
+      stats: History.stats(mission_id, filter, now),
+      page:
+        History.page(mission_id, filter, Map.get(opts, :before), Map.get(opts, :limit, 50), now)
+    }
   end
 
   @spec summary(Scope.t(), String.t()) :: {:ok, map()} | {:error, term()}

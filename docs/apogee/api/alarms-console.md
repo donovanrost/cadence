@@ -64,6 +64,73 @@ has `cause`, `unacknowledged`; notes carry the text in the payload.
 
 Errors: `404 episode_not_found`.
 
+## History (Investigate's History tab; owner: api)
+
+Two reads for `ux/screens/Investigate.md` §History. The chart around an episode uses the point
+reads (`GET /telemetry/points/:point_id/history`, `GET /limits/points/:point_id/intervals`);
+there is no peak value server-side. Derive the peak from the decimated buckets over
+`[opened_at, cleared_at || now]`, taking `min` when `direction` is `low` and `max` when it is
+`high`; there is no peak when `direction` is null.
+
+### `GET /spacecraft/:spacecraft_id/alarm-episodes?point_id=&before=&limit=`
+
+The spacecraft's episodes in every state, opened in the last 90 days, newest opened first.
+`point_id` narrows the items and counts to one point. `limit` is 1–200 (default 50); `before` is
+a `next_before` from the previous page.
+
+```json
+{"counts": {"d7": 3, "d30": 4, "d90": 5}, "retention_days": null,
+ "items": [occurrence], "next_before": "opaque" | null}
+```
+
+`counts` counts episodes opened in the last 7, 30 and 90 days. `retention_days` is how long
+episodes are kept; it's null while they are never pruned.
+
+### `GET /alarm-episodes/:episode_id/history?scope=alarm|point&before=&limit=`
+
+The episode, and the same alarm's earlier episodes on this spacecraft. With `scope=alarm` (the
+default) that means the same source and subject: point plus policy for catalog alarms, point
+alone for ground limits. With `scope=point` it means the same point under any condition.
+
+```json
+{"episode": {episode, show shape}, "counts": {"d7": 2, "d30": 3, "d90": 4},
+ "first_opened_at": "…", "median_duration_s": 210, "retention_days": null,
+ "items": [occurrence], "next_before": "opaque" | null}
+```
+
+- `counts` include the episode itself.
+- `items` are only the episodes opened before it, within 90 days.
+- `first_opened_at` is the earliest occurrence, at any age.
+- `median_duration_s` is over all cleared occurrences, including the episode itself once it has
+  cleared.
+
+**Occurrence**: a subset of the episode shape plus four fields:
+
+```json
+{"id": "…", "source": "ground_limit", "status": "cleared", "severity": "critical",
+ "peak_severity": "critical", "condition": "red_low", "direction": "low",
+ "point": {"id": "…", "name": "…", "unit": "V"}, "opened_at": "…", "cleared_at": "…",
+ "duration_s": 60, "ended": "back_in_limits", "cleared_unacknowledged": false,
+ "acknowledged_by": {"kind": "user", "id": "…", "name": "…"} | null,
+ "first_value": 21.5, "last_value": 24.2}
+```
+
+- `condition` is the source state. For ground limits that's `yellow_low`, `yellow_high`,
+  `red_low` or `red_high`; for catalog alarms it's `watch`, `warning`, `distress`, `critical` or
+  `severe`.
+- `direction` is `low`, `high`, or null for catalog states.
+- `duration_s` is null while the episode is open.
+- `ended` is how the episode ended:
+  - `back_in_limits`;
+  - `source_stopped`: the source stopped reporting the condition, so the episode was reconciled;
+  - null while the episode is open.
+
+  Clears are always automatic. Acknowledgement is the human action, recorded in
+  `acknowledged_by`.
+- Values are bare scalars; the unit is on `point`.
+
+Errors: `422 invalid_params` for `limit`, `before` or `scope`; `404 episode_not_found`.
+
 ## Commands
 
 Each returns `200` with the updated episode **including `events`** (the show shape).
