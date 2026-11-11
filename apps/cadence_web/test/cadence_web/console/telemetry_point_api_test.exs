@@ -2,6 +2,7 @@ defmodule CadenceWeb.Console.TelemetryPointAPITest do
   @moduledoc "M23 point search."
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.Telemetry.CurrentValueStore
   alias CadenceWeb.{ControlPlaneApiFixtures, TestFixtures}
 
   setup do
@@ -58,5 +59,25 @@ defmodule CadenceWeb.Console.TelemetryPointAPITest do
            ]
 
     assert json_response(get_json(c, "?limit=0"), 422)["error"]["details"]["limit"]
+  end
+
+  test "after a restart empties the live store, latest falls back to the stored history", c do
+    live = c |> get_json("?q=COUNT&spacecraft_id=spacecraft-001") |> json_response(200)
+    assert [%{"latest" => %{"source" => "live", "value" => value}}] = live["data"]["points"]
+
+    # What a :4011 restart does to the ETS current-value store.
+    :ok = CurrentValueStore.reset(c.mission.mission_id)
+
+    stored = c |> get_json("?q=COUNT&spacecraft_id=spacecraft-001") |> json_response(200)
+
+    assert [
+             %{
+               "latest" => %{"source" => "history", "value" => ^value, "limit_state" => state}
+             }
+           ] =
+             stored["data"]["points"]
+
+    # The limit state still comes from the limit projection; never null.
+    assert state in ~w(critical caution nominal no_data)
   end
 end

@@ -4,7 +4,10 @@ defmodule Cadence.Reads.PointSearch do
   canonical points (active decom fields and governed derived telemetry, the
   same set as the LiveView `CanonicalTelemetryPoints` provider), filtered by a
   substring of id, name or description. With a `spacecraft_id`, each point
-  also carries its latest value and limit state for that spacecraft.
+  also carries its latest value and limit state for that spacecraft: live from
+  the current-value store, or (`source: :history`) the newest stored sample when
+  the live store has none since a restart. The limit state comes from the limit
+  projection either way (`no_data` when it has none for the point).
   Callers authorize first.
   """
 
@@ -12,6 +15,7 @@ defmodule Cadence.Reads.PointSearch do
   alias Cadence.Limits.Event
   alias Cadence.Ops.PointCatalog
   alias Cadence.Reads.{Limits, Telemetry}
+  alias Cadence.Telemetry.PointLatest
 
   @max_limit 200
   @text_types [:string, :bytes, :text]
@@ -65,10 +69,12 @@ defmodule Cadence.Reads.PointSearch do
   end
 
   defp with_latest(organization_id, mission_id, spacecraft_id, points) do
-    samples =
+    live =
       organization_id
       |> Telemetry.latest_values_for_mission(mission_id, spacecraft_id: spacecraft_id)
-      |> Map.new(&{&1.point_id, &1})
+      |> Map.new(&{&1.point_id, {:live, &1}})
+
+    samples = Map.merge(stored(organization_id, mission_id, spacecraft_id, points, live), live)
 
     limits =
       organization_id
@@ -81,16 +87,28 @@ defmodule Cadence.Reads.PointSearch do
           nil ->
             nil
 
-          sample ->
+          {source, sample} ->
             %{
               value: sample.engineering_value || sample.raw_value,
               received_at: sample.receipt_time,
-              limit_state: limit_state(Map.get(limits, point.id, []))
+              limit_state: limit_state(Map.get(limits, point.id, [])),
+              source: source
             }
         end
 
       Map.put(point, :latest, latest)
     end)
+  end
+
+  # The live store is empty for a point until its spacecraft sends telemetry after a restart;
+  # the history store still has the newest stored sample (`source: :history`).
+  defp stored(organization_id, mission_id, spacecraft_id, points, live) do
+    missing = for point <- points, not Map.has_key?(live, point.id), do: point.id
+
+    case PointLatest.for_spacecraft(organization_id, mission_id, spacecraft_id, missing) do
+      {:ok, samples} -> Map.new(samples, &{&1.point_id, {:history, &1}})
+      {:error, _reason} -> %{}
+    end
   end
 
   defp limit_state([]), do: :no_data
