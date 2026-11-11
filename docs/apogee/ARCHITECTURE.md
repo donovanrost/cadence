@@ -155,6 +155,10 @@ Feature engineers compose these; ask lead before adding a new shared primitive.
   (from `frontend/`). Open `http://127.0.0.1:4011/console/`. Checks before commit, from `frontend/`:
   `node_modules/.bin/vp fmt apps/console && node_modules/.bin/vp check apps/console`,
   `cd apps/console && npx vue-tsc -b && corepack pnpm test`. (Use `mise exec --` if node isn't on PATH.)
+  That is the whole routine check: format, lint, typecheck, unit tests. Browser and e2e tests
+  (`test:e2e`, Playwright, headless browser checks) are **not** part of routine validation:
+  not before commit, not on iterative checks, not after a restart. CI runs them. Running a spec
+  locally is fine only while writing or fixing that spec (user rule, via the director).
   vue-tsc runs with `checkUnknownComponents`: a component used in a template but not imported is
   an error (otherwise it renders as an inert unknown element). `strictTemplates` stays off: it
   also rejects `aria-*`/`data-*` fallthrough on Ap components.
