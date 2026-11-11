@@ -20,7 +20,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | **ux** | Visual review of the unreviewed boards (§7); Compose C1 layout ruling (default: accept as built, #64) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
 | **api** | Port the #42 fix to `develop` (DECISIONS #72). Done: #42 verify race 32b945f3 (advisory lock, mission-then-attempt order, timeout reconcile, call-site tests; api-ops reviewed); Compose drafts a4d19e69 (`GET/PUT/DELETE /missions/:id/command-draft`, migration). Next with the director | — |
-| **api-ops** | flight_event source: built and domain-approved; lands after the 21:30Z freeze (needs a :4011 restart); fe-ops reader in (591bc06c). Then review api's #42 verify-race PR (#72) | api: the #72 PR |
+| **api-ops** | queue empty; next with the director. Done: flight_event v1 (a02c2cee AlarmRules hook, 1b3be7f7 queue items, e07969bb EventLog, docs 291744b7); #42 review (32b945f3) | flight_event: qa sees a row live after the combined :4011 restart |
 | **domain** | catalog-path generations (#36; plan to the director first, it touches activation) | — (done: qa #34 #59 e683b3e2; qa #19 server side 33529f29; #50 archive) |
 
 ## 2. Ops
@@ -29,7 +29,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | Stat tiles link (Critical/Caution/Stale → Alarms/Fleet, In contact → Contacts, Uplinks → Commands) | fe-ops + lead (`ApStatTile` gets `to`) | — |
-| ~~Queue kinds `missed_pass`, `station` + `Station` → Re-plan~~ done (de131e9b); `flight_event` | fe-ops | flight_event: domain (no source) |
+| ~~Queue kinds `missed_pass`, `station` + `Station` → Re-plan~~ done (de131e9b); `flight_event`: source landed (api-ops a02c2cee, 1b3be7f7, e07969bb), fe-ops reader 591bc06c | fe-ops | qa: a flight_event row seen live after the :4011 restart |
 | Header meta names the worst station issue | fe-ops | — (S7 status exists) |
 | ~~A4 pass bars open the contact drawer~~ done (51cc6133) | fe-ops | — |
 | ~~Approval rows open the request's review~~ done for a single group (a0e33fe1) | fe-ops | — |
@@ -229,7 +229,7 @@ missing endpoint or decision; an item with no blocker can start now.
 9. ~~M22 conflict/gap findings (Contacts D4)~~ done (985c00dc; fe-ops cab58d3d).
 10. ~~A1 current values + prior requests in the request brief~~ done (4f9cd275, a4c0e807).
 11. ~~M24 encode preview~~ done (4d0255f3; fe-ops 90d1c43c).
-12. ~~Now queue sources `missed_pass`, `station`~~ done by api-ops (81a4c8d0; fe-ops de131e9b). `flight_event`: api-ops leads (design note → domain review → build).
+12. ~~Now queue sources `missed_pass`, `station`~~ done by api-ops (81a4c8d0; fe-ops de131e9b). `flight_event` landed (a02c2cee, 1b3be7f7, e07969bb; flight-events.md §3a as built, 291744b7); closes when qa sees a row live.
 13. ~~Investigate History (c839d0b9) and Passes (324428aa) reads~~ done; fe-ops History d80c8d5d. ~~Compose draft persistence~~ done (a4d19e69). Waiting: palette search endpoint.
 
 **domain**
