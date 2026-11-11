@@ -7,6 +7,10 @@ defmodule CadenceWeb.Console.CommandGroupJSON do
 
   alias Cadence.Control.Commanding.GroupDecision
 
+  @doc "M26 verifier series (atoms to strings; values already JSON text)."
+  @spec verifier_series(map()) :: map()
+  def verifier_series(series), do: encode(series)
+
   @spec preflight(map()) :: map()
   def preflight(preflight) do
     %{

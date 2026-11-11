@@ -275,29 +275,34 @@ Errors: `403 command_group_self_approval_not_allowed`, `403 not_the_requested_ap
 - Otherwise `422 holds_unacknowledged`, with `details.holds` as for submit.
 - `send_back` and `no_go` don't check HOLDs.
 
-### M26 (Uplink U2 / N): proposed, not built
+### M26 (Uplink U2 / N; DECISIONS #69)
 
-**Verifier series**, `GET /command-groups/:id/verifier-series`: what U2 plots.
-- `point: {id, name, unit} | null`: the telemetry point of the group's first telemetry-subject
-  verifier. `null` when the command's verifiers are transport-only (`transport:started |
-  completed`, as for the demo catalog's NOOP / SET_MODE / RESET_COUNTERS). Say "Not plottable:
-  this command is verified by the uplink acknowledgement" then.
-- `commanded: {value_json, comparison} | null`: the expected value (the argument it was sent with
-  when the verifier takes its value from an argument) and its comparison.
-- `band: {min_json, max_json} | null`: for range criteria.
-- `window: {from, to}`: the first release to the last verifier timeout.
-- `targets: [{spacecraft_id, verifier_state: pending | satisfied | failed | timed_out | null,
-  samples: [{t, value_json}]}]`: per target, that spacecraft's own samples only (#38), at most
-  300 per target, decimated.
-- `summary: {met, not_met, pending}`: U2's header meta.
-- `telemetry: ok | degraded`: the history store timed out (3 s, as on `/fleet`), so `samples`
-  may be empty.
+**Verifier series**, `GET /command-groups/:id/verifier-series[?targets=<id,id,…>]`: what U2 plots.
+Refetch on `invalidate` `commanding`, plus `telemetry` throttled to 10 s.
+- `verifier: {position, command_id, command_name}`: the plotted command, the first in stack order
+  whose verifier watches a telemetry point (from its catalog verifier plans, so it's known before
+  release). Header: `02 SET_TEMP · 34 stepped to 8.0 · 1 did not`.
+- `point: {id, name, unit, type: numeric | enum | text} | null`. `null` means nothing to plot:
+  `reason` is `verified_by_uplink_acknowledgement` (transport-only verifiers, as for the demo
+  catalog's NOOP / SET_MODE / RESET_COUNTERS) or `no_verifier`. Say "Not plottable: verified by
+  uplink acknowledgement only".
+- `commanded: {value_json, comparison} | null`: the expected value (the value sent, once released)
+  and its comparison. `band: {min_json, max_json} | null` for range criteria.
+- `window: {from, to} | null`: the first release to the last verifier timeout; `null` before
+  release, when there's nothing to plot yet.
+- `targets: [{spacecraft_id, name, verifier_state: pending | satisfied | failed | timed_out | null,
+  samples: [{t, value_json}]}]`: per target, that spacecraft's own samples only (#38), at most 300
+  per target, decimated.
+  - At most 100 targets. `?targets=` picks which (100 max); `target_count` is the group's total,
+    and `truncated` is true when not all are included.
+- `summary: {met, not_met, pending}`, from the plotted command's verifiers.
+- `telemetry: ok | degraded`: the history store didn't answer within 3 s, so `samples` are empty.
+- Errors: `404 command_group_not_found`.
 
-**Retries (`Retry 1 of 3 queued`, `Re-send at 04:47Z AWA`):** there is no retry mechanism in
-the domain today; a no-ACK member just fails. Automatic retry is a domain policy (how many
-attempts, on which pass, under which approval) that needs a decision. Until then, `Re-send` can be
-Compose's clone (`?from=group:<id>`) narrowed to the failed targets, with no endpoint, and N shows
-no automatic recoveries.
+**No automatic retry** (DECISIONS #69): re-sending a command without a fresh GO is a safety
+policy for the user to decide. `Re-send` is Compose's clone (`?from=group:<id>`) narrowed to the
+failed targets, through the normal approval flow. N lists no automatic recoveries, and there's no
+`Retry 1 of 3`.
 
 ### `POST /command-groups/:id/abort` · `POST /command-requests/:id/cancel` (M20)
 

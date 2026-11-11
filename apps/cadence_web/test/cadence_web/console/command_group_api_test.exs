@@ -282,6 +282,34 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
              |> json_response(200)
   end
 
+  test "M26 verifier series: honest when there's nothing to plot; unknown groups 404", c do
+    %{"data" => %{"id" => id}} =
+      c |> create(body(c, "SET_SIGNED", %{"counter" => 1})) |> json_response(201)
+
+    assert %{
+             "data" => %{
+               "point" => nil,
+               "reason" => reason,
+               "targets" => [],
+               "target_count" => 2,
+               "truncated" => false,
+               "summary" => %{"met" => 0, "not_met" => 0, "pending" => 0},
+               "telemetry" => "ok",
+               "verifier" => %{"position" => 0, "command_name" => _}
+             }
+           } =
+             as(c.requester)
+             |> get(base(c) <> "/command-groups/#{id}/verifier-series")
+             |> json_response(200)
+
+    assert reason in ["verified_by_uplink_acknowledgement", "no_verifier"]
+
+    assert %{"error" => %{"code" => "command_group_not_found"}} =
+             as(c.requester)
+             |> get(base(c) <> "/command-groups/nope/verifier-series")
+             |> json_response(404)
+  end
+
   test "preflight, submit and show a routine group", c do
     pre = preflight(c, body(c, "SET_SIGNED", %{"counter" => 1}))["data"]
     assert pre["valid"] == true

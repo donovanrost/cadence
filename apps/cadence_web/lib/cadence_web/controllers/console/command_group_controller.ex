@@ -9,7 +9,15 @@ defmodule CadenceWeb.Console.CommandGroupController do
   alias Cadence.Commanding.CommandPolicy
   alias Cadence.Commanding.Groups.GroupStore
   alias Cadence.Control.Commanding.{GroupAbort, GroupDecision, GroupNotes, GroupSubmission}
-  alias Cadence.Reads.{CommandEndpoints, CommandGroups, CommandPreflight, PassUplink}
+
+  alias Cadence.Reads.{
+    CommandEndpoints,
+    CommandGroups,
+    CommandPreflight,
+    PassUplink,
+    VerifierSeries
+  }
+
   alias CadenceWeb.Console.{CommandGroupJSON, CommandGroupParams, CommandGroupProblems}
 
   def preflight(conn, params) do
@@ -137,6 +145,21 @@ defmodule CadenceWeb.Console.CommandGroupController do
     uplink = PassUplink.for_groups(org(conn), mission(conn), waiting)
     Enum.map(groups, &Map.put(&1, :uplink, Map.get(uplink, &1.id)))
   end
+
+  @doc "M26: what Uplink U2 plots. `?targets=` (comma list of spacecraft ids) picks up to 100."
+  def verifier_series(conn, %{"command_group_id" => id} = params) do
+    case VerifierSeries.load(org(conn), mission(conn), id,
+           target_ids: target_ids(params["targets"])
+         ) do
+      {:ok, series} -> json(conn, %{data: CommandGroupJSON.verifier_series(series)})
+      error -> CommandGroupProblems.respond(conn, error)
+    end
+  end
+
+  defp target_ids(value) when is_binary(value) and value != "",
+    do: value |> String.split(",", trim: true) |> Enum.map(&String.trim/1)
+
+  defp target_ids(_value), do: nil
 
   def review_preflight(conn, %{"command_group_id" => id}) do
     with {:ok, group} <- GroupStore.fetch(org(conn), mission(conn), id),

@@ -814,6 +814,12 @@ defmodule CadenceWeb.Router do
         :review_preflight
       )
 
+      get(
+        "/command-groups/:command_group_id/verifier-series",
+        CommandGroupController,
+        :verifier_series
+      )
+
       post("/command-groups/:command_group_id/decision", CommandGroupController, :decision)
       post("/command-groups/:command_group_id/abort", CommandGroupController, :abort)
       post("/command-groups/:command_group_id/notes", CommandGroupController, :add_note)
