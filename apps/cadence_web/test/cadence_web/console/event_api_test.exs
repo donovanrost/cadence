@@ -47,6 +47,29 @@ defmodule CadenceWeb.Console.EventAPITest do
     assert Map.has_key?(body["meta"], "next_cursor")
   end
 
+  test "ground health is data and limit-definition lifecycle is config, never flight_event", c do
+    now = DateTime.utc_now()
+
+    recent =
+      "from=#{DateTime.add(now, -3_600)}&to=#{DateTime.add(now, 60)}"
+      |> String.replace("+", "%2B")
+
+    events =
+      Enum.flat_map([window(), recent], fn range ->
+        c |> get_json("/events?" <> range) |> json_response(200) |> get_in(["data", "events"])
+      end)
+
+    refute Enum.any?(events, &(&1["kind"] == "flight_event"))
+
+    for %{"raw_kind" => "limit_definition_" <> _} = event <- events,
+        do: assert(event["kind"] == "config")
+
+    for %{"raw_kind" => "source_health_recovered"} = event <- events,
+        do: assert(event["severity"] == "nominal")
+
+    assert Enum.any?(events, &match?(%{"raw_kind" => "limit_definition_" <> _}, &1))
+  end
+
   test "pages with an opaque cursor and filters by kind", c do
     first = c |> get_json("/events?#{window()}&limit=1") |> json_response(200)
     assert [_one] = first["data"]["events"]

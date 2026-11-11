@@ -8,9 +8,12 @@ defmodule Cadence.Reads.EventLog do
   - `kind`: `limit | flight_event | contact | command | config | operator | data`
     (`data` = data-plane housekeeping such as source watermarks and source health)
     (derived from the timeline entry's source and category; the original kind
-    is kept as `raw_kind`).
+    is kept as `raw_kind`). `flight_event` is reserved for what the spacecraft itself
+    reports (docs/apogee/domain/flight-events.md); no timeline entry is one yet. Ground
+    health entries are `data`, limit-definition lifecycle entries `config`.
   - `severity`: `critical | caution | nominal | info` (timeline `critical`/`error`
-    → critical, `warning` → caution, cleared/resolved statuses → nominal).
+    → critical, `warning` → caution, cleared/resolved statuses and a source's health
+    recovering → nominal).
   """
 
   alias Cadence.Dashboards.DocumentStore
@@ -151,6 +154,7 @@ defmodule Cadence.Reads.EventLog do
 
     cond do
       housekeeping?(raw) -> "data"
+      String.starts_with?(raw, "limit_definition_") -> "config"
       String.contains?(raw, "contact") -> "contact"
       true -> classify(entry)
     end
@@ -188,11 +192,15 @@ defmodule Cadence.Reads.EventLog do
   defp classify(%Entry{kind: :binding_set_activated}), do: "config"
   defp classify(%Entry{category: :transport}), do: "contact"
   defp classify(%Entry{category: :runtime}), do: "config"
-  defp classify(%Entry{category: :health}), do: "flight_event"
+  defp classify(%Entry{category: :health}), do: "data"
   defp classify(%Entry{}), do: "operator"
 
   defp severity(%Entry{status: status})
        when status in [:cleared, :resolved, "cleared", "resolved"],
+       do: :nominal
+
+  defp severity(%Entry{kind: kind})
+       when kind in [:source_health_recovered, "source_health_recovered"],
        do: :nominal
 
   defp severity(%Entry{severity: severity}) when severity in [:critical, :error], do: :critical
