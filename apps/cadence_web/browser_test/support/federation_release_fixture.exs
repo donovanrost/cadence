@@ -753,16 +753,14 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
   end
 
   defp lifecycle_connection(connection, admitted) do
-    try do
-      request = receive_request!(connection)
-      response = lifecycle_response!(request, admitted)
-      send_json_response(connection, 200, response)
-    rescue
-      exception ->
-        send_json_response(connection, 500, %{"error" => Exception.message(exception)})
-    after
-      :gen_tcp.close(connection)
-    end
+    request = receive_request!(connection)
+    response = lifecycle_response!(request, admitted)
+    send_json_response(connection, 200, response)
+  rescue
+    exception ->
+      send_json_response(connection, 500, %{"error" => Exception.message(exception)})
+  after
+    :gen_tcp.close(connection)
   end
 
   defp receive_request!(connection, buffer \\ <<>>) do
