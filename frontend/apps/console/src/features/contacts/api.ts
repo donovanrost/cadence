@@ -39,7 +39,7 @@ const pass = d.object({
   source: d.object({
     provider: d.nullable(d.string),
     provider_name: d.nullable(d.string),
-    synthetic: d.boolean,
+    synthetic: d.nullable(d.boolean),
   }),
   max_elevation_deg: d.nullable(d.number),
   /** The contact plan revision that booked it; null for direct bookings. */

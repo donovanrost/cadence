@@ -94,8 +94,11 @@ const focusId = computed(() => {
   return f && pinned.value.includes(f) ? f : (pinned.value[0] ?? null);
 });
 const focused = computed(() => plotted.value.find((p) => p.id === focusId.value) ?? null);
-const rangeLabel = computed(
-  () => RANGES.find((r) => r.value === range.value)?.label ?? range.value,
+/** "6 h" in sentences (ux review 5); the segmented control keeps its compact labels. */
+const rangeLabel = computed(() =>
+  (RANGES.find((r) => r.value === range.value)?.label ?? range.value)
+    .toLowerCase()
+    .replace(/h$/, " h"),
 );
 const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
 
@@ -219,7 +222,8 @@ const latest = (p: (typeof all.value)[number]) =>
               <span class="block font-mono text-xs text-text-3">{{ p.id }}</span>
             </label>
             <span class="text-right font-mono text-sm">
-              <span class="block text-readout">{{ latest(p) }}</span>
+              <span v-if="p.latest" class="block text-readout">{{ latest(p) }}</span>
+              <span v-else class="block text-text-3">No value yet</span>
               <span v-if="p.latest?.received_at" class="block text-xs text-text-3">{{
                 formatRelative(new Date(p.latest.received_at), now)
               }}</span>
@@ -307,7 +311,7 @@ const latest = (p: (typeof all.value)[number]) =>
             <ApEmptyState
               v-if="valueRows.length === 0"
               state="off"
-              :headline="`No samples in the last ${rangeLabel.toLowerCase()}.`"
+              :headline="`No samples in the last ${rangeLabel}.`"
             />
             <ApTable
               v-else

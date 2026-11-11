@@ -59,7 +59,7 @@ const facts = (c: SpacecraftConfiguration) => [
         {
           key: "orbit",
           label: "Plane · slot",
-          value: `P${String(c.spacecraft.plane).padStart(2, "0")}${c.spacecraft.slot === null ? "" : ` · slot ${c.spacecraft.slot}`}`,
+          value: `P${String(c.spacecraft.plane).padStart(2, "0")}${c.spacecraft.slot === null ? "" : ` · slot ${String(c.spacecraft.slot).padStart(2, "0")}`}`,
           mono: true,
         },
       ]),
@@ -150,17 +150,21 @@ const facts = (c: SpacecraftConfiguration) => [
               state="off"
               headline="No routing applies."
             />
+            <!-- ux review 6: plain rows (no status gutter), role said once. -->
             <ul v-else class="m-0 list-none p-0">
-              <ApListRow
+              <li
                 v-for="r in c.routing_rules"
                 :key="r.id"
-                :title="routingWords(r)"
-                :sentence="[r.purpose, r.direction, r.transport?.name].filter(Boolean).join(' · ')"
+                class="flex items-baseline gap-3 border-t border-hairline-faint px-4 py-2 first:border-t-0"
               >
-                <template #action>
-                  <ApTag v-if="!r.enabled || !r.active" label="Inactive" state="off" />
-                </template>
-              </ApListRow>
+                <span class="min-w-0 flex-1">
+                  <span class="block text-readout">{{ routingWords(r) }}</span>
+                  <span class="block text-sm text-text-3">{{
+                    [r.purpose, r.direction, r.transport?.name].filter(Boolean).join(" · ")
+                  }}</span>
+                </span>
+                <ApTag v-if="!r.enabled || !r.active" label="Inactive" state="off" />
+              </li>
             </ul>
           </ApPanel>
           <ApPanel v-if="c.pending.length" index="G4" title="Pending" flush class="max-md:hidden">

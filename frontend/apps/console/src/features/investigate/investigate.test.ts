@@ -8,7 +8,7 @@ import {
   type Occurrence,
 } from "./history/api.ts";
 import { argsSummary, evidenceWords, releaseRule } from "./uplink/api.ts";
-import { byDay, bytesWords, ruleWords } from "./passes/api.ts";
+import { byDay, bytesWords, rebooked, ruleWords } from "./passes/api.ts";
 import { catalogCaution, jsonWords, routingWords } from "./configuration/api.ts";
 import { filterCounts, pointMark, pointsFrom, toCsv, visiblePoints } from "./telemetry/model.ts";
 import { describe, expect, it } from "vite-plus/test";
@@ -403,6 +403,8 @@ describe("Passes tab words (api 324428aa)", () => {
       ["2026-11-10", ["c", "b"]],
       ["2026-11-09", ["a"]],
     ]);
+    const twice = [row("m", "2026-11-10T18:57:00Z"), row("p", "2026-11-10T18:57:00Z")];
+    expect(twice.map((r) => rebooked(twice, r))).toEqual([false, true]);
     expect(bytesWords(1_234_567)).toBe("1.2 MB");
     expect(bytesWords(null)).toBe("—");
   });
@@ -437,7 +439,7 @@ describe("Configuration tab words (api-ops 8d8f5c83)", () => {
         transport: { id: "t", name: "Svalbard X-band" },
         station: { id: "s", code: "SVB", name: "Svalbard" },
       }),
-    ).toBe("SVB · primary · Primary downlink");
+    ).toBe("SVB · Primary downlink");
   });
 });
 

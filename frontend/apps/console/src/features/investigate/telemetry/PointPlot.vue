@@ -49,6 +49,10 @@ useMissionInvalidation(
   ["limits"],
   intervals.refetch,
 );
+const edge = (t: number) => {
+  const iso = new Date(t).toISOString();
+  return `${iso.slice(5, 10)} ${iso.slice(11, 16)}Z`;
+};
 const view = computed(() => {
   const h = history.state.value;
   if (h.status !== "ready") return null;
@@ -72,7 +76,12 @@ const view = computed(() => {
 </script>
 
 <template>
+  <!-- ux review 5: no empty 0–1 axis; say which window had no samples. -->
+  <p v-if="view && view.series.length === 0" class="m-0 px-1 py-6 text-center text-sm text-text-3">
+    No samples between {{ edge(view.window.from) }} and {{ edge(view.window.to) }}.
+  </p>
   <TrendBlock
+    v-else
     :point-name="point.name"
     :unit="point.unit"
     :range-label="rangeLabel"

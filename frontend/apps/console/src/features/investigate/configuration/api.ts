@@ -113,5 +113,8 @@ export function catalogCaution(c: SpacecraftConfiguration["catalog"]): string | 
 /** G3: "SVB · primary · Primary downlink" (station or transport · role · rule). */
 export function routingWords(r: SpacecraftConfiguration["routing_rules"][number]): string {
   const where = r.station?.code ?? r.station?.name ?? r.transport?.name ?? "No station";
-  return [where, r.role, r.name].filter(Boolean).join(" · ");
+  // Say the role once: skip it when the rule's name already carries it ("Primary downlink").
+  const role =
+    r.role && !(r.name ?? "").toLowerCase().includes(r.role.toLowerCase()) ? r.role : null;
+  return [where, role, r.name].filter(Boolean).join(" · ");
 }

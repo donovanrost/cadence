@@ -7,6 +7,7 @@ import { useMissionScope } from "@/shell/index.ts";
 import {
   formatCountdown,
   formatDuration,
+  formatRelative,
   useNow,
   ApButton,
   ApEmptyState,
@@ -22,7 +23,16 @@ import { contactOpState, contactState, contactStateWord } from "@/features/sched
 import { causeText, outcomeTag, ownerWord } from "@/features/review/format.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { minutes } from "../history/api.ts";
-import { byDay, bytesWords, fetchCoverage, fetchRecentPasses, ruleWords } from "./api.ts";
+import {
+  byDay,
+  bytesWords,
+  fetchCoverage,
+  fetchRecentPasses,
+  rebooked,
+  ruleWords,
+  type RecentPass,
+  type SpacecraftCoverage,
+} from "./api.ts";
 
 /** Tab · Passes (Investigate.md): when is it heard, and how did its recent passes go? */
 const props = defineProps<{ sc: FleetSpacecraft }>();
@@ -56,6 +66,23 @@ useMissionInvalidation(missionId, ["contacts", "commanding", "pass_results"], ()
 const cov = computed(() =>
   coverage.state.value.status === "ready" ? coverage.state.value.value : null,
 );
+/**
+ * P1 next contact (ux review 2): not limited to 24 h. Coverage names one only within its window,
+ * so fall back to the fleet's next AOS (without a station) beyond it.
+ */
+function nextContact(c: SpacecraftCoverage): string {
+  const n = c.coverage.next_contact;
+  if (n) return `AOS ${formatCountdown(new Date(n.aos_at), now.value)} ${code(n.station)}`;
+  return props.sc.next_aos_at
+    ? `AOS ${formatRelative(new Date(props.sc.next_aos_at), now.value)}`
+    : "None booked";
+}
+/** P1 longest gap (ux review 3): with no pass at all the "gap" is the whole window. */
+function gapWords(c: SpacecraftCoverage): string {
+  if (c.coverage.passes_next_24h === 0) return "No pass in the next 24 h";
+  const g = c.coverage.longest_gap;
+  return g ? `${minutes(g.seconds)} from ${short(g.from)}` : "None";
+}
 const code = (s: { code: string | null; name: string | null } | null) => s?.code ?? s?.name ?? "—";
 const t = (iso: string) => `${iso.slice(11, 16)}Z`;
 const short = (iso: string) =>
@@ -93,6 +120,15 @@ const notReady = (p: Pass) => {
   const r = p.uplink_readiness;
   return r && r.state !== "ready" ? readinessTag(r, "row") : null;
 };
+/** P4 line: flown window, cause and owner, received bytes only when known (ux review 4). */
+const recentLine = (r: RecentPass) =>
+  [
+    r.actual_aos ? `Flown ${t(r.actual_aos)}–${r.actual_los ? t(r.actual_los) : "…"}` : "Not flown",
+    `${causeText(r.cause)}${r.owner ? ` (${ownerWord[r.owner].toLowerCase()})` : ""}`,
+    r.received_bytes !== null ? `${bytesWords(r.received_bytes)} received` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 const days = computed(() =>
   recent.state.value.status === "ready" ? byDay(recent.state.value.value.rows) : [],
 );
@@ -133,11 +169,7 @@ const days = computed(() =>
               class="m-0"
               :class="cov.coverage.next_contact ? 'text-readout' : 'text-caution-text'"
             >
-              {{
-                cov.coverage.next_contact
-                  ? `AOS ${formatCountdown(new Date(cov.coverage.next_contact.aos_at), now)} ${code(cov.coverage.next_contact.station)}`
-                  : "None booked"
-              }}
+              {{ nextContact(cov) }}
             </dd>
           </div>
           <div>
@@ -153,11 +185,7 @@ const days = computed(() =>
               class="m-0"
               :class="cov.coverage.none_within_6h ? 'text-caution-text' : 'text-readout'"
             >
-              {{
-                cov.coverage.longest_gap
-                  ? `${minutes(cov.coverage.longest_gap.seconds)} from ${short(cov.coverage.longest_gap.from)}`
-                  : "None"
-              }}
+              {{ gapWords(cov) }}
               <span v-if="cov.coverage.none_within_6h" class="block text-xs"
                 >No pass in the next 6 h</span
               >
@@ -269,8 +297,8 @@ const days = computed(() =>
                 v-for="r in g.rows"
                 :key="r.id"
                 :state="outcomeTag(r.outcome).state"
-                :title="`${code(r.station)} · ${t(r.planned_aos)}–${t(r.planned_los)}`"
-                :sentence="`Flown ${r.actual_aos ? `${t(r.actual_aos)}–${r.actual_los ? t(r.actual_los) : '…'}` : '—'} · ${causeText(r.cause)}${r.owner ? ` (${ownerWord[r.owner].toLowerCase()})` : ''} · ${bytesWords(r.received_bytes)}`"
+                :title="`${code(r.station)} · ${t(r.planned_aos)}–${t(r.planned_los)}${rebooked(g.rows, r) ? ' · re-booked' : ''}`"
+                :sentence="recentLine(r)"
               >
                 <template #action>
                   <ApTag

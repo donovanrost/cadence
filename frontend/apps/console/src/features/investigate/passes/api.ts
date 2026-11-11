@@ -130,3 +130,17 @@ export function bytesWords(n: number | null): string {
   }
   return `${i === 0 ? v : v.toFixed(1)} ${units[i]}`;
 }
+
+/**
+ * Two bookings of the same window at the same station (one missed, one re-booked): the later one
+ * in the list says "re-booked" (ux review 4).
+ */
+export function rebooked(rows: readonly RecentPass[], r: RecentPass): boolean {
+  const same = rows.filter(
+    (x) =>
+      x.planned_aos === r.planned_aos &&
+      x.planned_los === r.planned_los &&
+      (x.station?.code ?? x.station?.name) === (r.station?.code ?? r.station?.name),
+  );
+  return same.length > 1 && same[0]?.id !== r.id;
+}
