@@ -34,6 +34,8 @@ export const attentionReader = d.object({
   provider_message: d.nullable(d.string),
   /** U33 uplink_blocked only; null (or absent) on pass_resolution. */
   uplink: d.optional(d.nullable(attentionUplinkReader)),
+  /** pass_release only (api-ops, ahead of domain): what happened to the Release's cancel. */
+  release: d.optional(d.nullable(d.object({ outcome: d.token, reason: d.nullable(d.string) }))),
   resolution: d.nullable(
     d.object({
       action: d.token,
@@ -60,6 +62,20 @@ const noStop = (s: string) => s.trim().replace(/[.!?]+$/, "");
 /** Title tail and evidence sentence (U31 copy). Unknown conflicts still say who and where. */
 export function attentionWords(a: Attention): Readonly<{ what: string; evidence: string }> {
   const provider = a.provider.name ?? "The provider";
+  if (a.release) {
+    // A Release whose cancel the provider refused or didn't answer: the booking may still stand.
+    const what =
+      a.release.outcome === "refused"
+        ? `${provider} refused the cancel`
+        : a.release.outcome === "not_sent"
+          ? "the cancel wasn't sent"
+          : `no answer from ${provider} to the cancel`;
+    const why = a.release.reason ?? a.provider_message;
+    return {
+      what: `Release not confirmed: ${what}.`,
+      evidence: `${why ? `${noStop(why)}. ` : ""}The pass may still be booked and billed.`,
+    };
+  }
   if (a.uplink) {
     // U33: "EARENDIL-001 · Can't command on the SVB-1 pass." / "<reason>. 2 command groups are queued for it."
     const n = a.uplink.command_group_ids.length;

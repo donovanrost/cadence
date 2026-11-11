@@ -305,6 +305,21 @@ describe("attention rows (U31, fafe581a)", () => {
     expect(row?.acknowledged).toBe(false);
   });
 
+  it("pass_release reads the release outcome", () => {
+    const [row] = present(
+      [
+        attention({
+          conflict: "cancel_failed",
+          resolution: null,
+          provider_message: null,
+          release: { outcome: "refused", reason: "Window locked." },
+        }),
+      ].map((i) => ({ ...i, source: "pass_release" })),
+    );
+    expect(row?.title).toBe("EARENDIL-001 · Release not confirmed: Northlight refused the cancel.");
+    expect(row?.sentence).toBe("Window locked. The pass may still be booked and billed.");
+  });
+
   it("says what closed it, never 'by Cadence'", () => {
     const r = (kind: string, name: string | null, action: string | null) => ({
       id: "x",
