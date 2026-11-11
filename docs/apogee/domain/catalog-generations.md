@@ -42,6 +42,10 @@ the apply does the following inside its transaction:
 
 Rollback takes the same path back.
 
+One apply is one generation. The #65 canary (r9, 2026-11-11) went 7 to 8; its "6 to 8" read
+the previous change set's generation and missed 7, the Nov 9 activation of all 500 spacecraft
+configurations, which was made through per-spacecraft review rather than a change set.
+
 ## Preview: `compatibility` check (`CatalogCompatibility`)
 
 | Reason | Blocking | Meaning |
