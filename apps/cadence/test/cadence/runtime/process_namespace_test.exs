@@ -31,7 +31,8 @@ defmodule Cadence.Runtime.ProcessNamespaceTest do
                mission_supervisor: Cadence.Control.MissionSupervisor,
                mission_recovery: Cadence.Control.MissionRecovery,
                contact_fact_consumer: Cadence.Control.ContactFactConsumer,
-               runtime_fact_consumer: Cadence.Control.RuntimeFactConsumer
+               runtime_fact_consumer: Cadence.Control.RuntimeFactConsumer,
+               pass_results_close_out: Cadence.Control.PassResultsCloseOut
              )
 
     assert MissionRuntime.runtime_name(@mission_id) ==
