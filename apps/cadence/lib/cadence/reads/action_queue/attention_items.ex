@@ -20,7 +20,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   alias Cadence.Comms.StationRefs
   alias Cadence.GroundNetworks.MissionProviders
   alias Cadence.Reads.ActionQueue.Item
-  alias Cadence.Reads.Attention
+  alias Cadence.Reads.{Attention, PassUplink}
   alias Cadence.SpacecraftStore
 
   @p1_horizon_s 2 * 3600
@@ -165,7 +165,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp uplink(%{source: "uplink_blocked"} = attention) do
     %{
       state: "blocked",
-      reason: Cadence.Reads.PassUplink.reason_key(attention.reason),
+      reason: PassUplink.reason_key(attention.reason),
       since: attention.raised_at,
       command_group_ids: Map.get(attention, :command_group_ids, [])
     }
