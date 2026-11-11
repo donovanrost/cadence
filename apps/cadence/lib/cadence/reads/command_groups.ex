@@ -239,17 +239,19 @@ defmodule Cadence.Reads.CommandGroups do
   defp stage(_request, nil, _excluded), do: :queued_for_contact
   defp stage(_request, row, _excluded), do: row_stage(row)
 
-  defp row_stage(%{status: :release_pending}), do: :radiating
-  defp row_stage(%{status: :in_flight}), do: :executed
-  defp row_stage(%{status: :indeterminate}), do: :indeterminate
+  # A command status row's member stage (also Investigate's Uplink tab, released rows).
+  @doc false
+  def row_stage(%{status: :release_pending}), do: :radiating
+  def row_stage(%{status: :in_flight}), do: :executed
+  def row_stage(%{status: :indeterminate}), do: :indeterminate
 
-  defp row_stage(%{status: :failed, release_attempt: %{lifecycle_state: :release_failed}}),
+  def row_stage(%{status: :failed, release_attempt: %{lifecycle_state: :release_failed}}),
     do: :release_failed
 
-  defp row_stage(%{status: :failed}), do: :verify_failed
-  defp row_stage(%{status: :released, verification_state: :satisfied}), do: :verified
-  defp row_stage(%{status: :released}), do: :no_verifier
-  defp row_stage(_row), do: :queued_for_contact
+  def row_stage(%{status: :failed}), do: :verify_failed
+  def row_stage(%{status: :released, verification_state: :satisfied}), do: :verified
+  def row_stage(%{status: :released}), do: :no_verifier
+  def row_stage(_row), do: :queued_for_contact
 
   defp end_reason(request, :canceled) do
     case request.metadata["cancellation"]["reason"] do

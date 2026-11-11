@@ -338,22 +338,23 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
 
 Errors: `404 mission_not_found`.
 
-## `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/uplink` (Investigate Uplink tab): proposed
+## `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/uplink` (Investigate Uplink tab): built
 
 "Can I command this spacecraft now, and what's going up?" (Investigate.md, Tab · Uplink.)
 
 ```json
 {"data": {
   "spacecraft": {"id": "…", "name": "EARENDIL-001", "scid": 1},
-  "route": {"routing_rule_id": "…", "name": "BLOCK 1 · ALL STATIONS", "transport_id": "…", "gateway_scid": 1},
+  "route": {"routing_rule_id": "…", "name": "BLOCK 1 · ALL STATIONS", "transport_id": "…", "transport_name": "S-band TC", "gateway_scid": 1},
   "now": {"in_contact": true, "pass": {"reservation_id": "…", "contact_id": "…", "station": {…}, "provider": {"id", "name"}, "starts_at": "…", "ends_at": "…"},
-          "readiness": {"state": "ready", "reason": null, "since": "…"}},
-  "next_passes": [{"reservation_id": "…", "contact_id": "…", "station": {…}, "provider": {…}, "starts_at": "…", "ends_at": "…", "uplink_evidence": "booked"}],
+          "readiness": {"state": "ready", "reason": null, "since": "…", "command_groups_queued": null}},
+  "next_passes": [{"reservation_id": "…", "contact_id": "…", "station": {…}, "provider": {…}, "starts_at": "…", "ends_at": "…", "uplink_evidence": "booked",
+                   "uplink_confirmed": true, "attested_by": null}],
   "queue": [{"position": 1, "request_id": "…", "command_id": "…", "command_name": "SET_MODE", "arguments_json": "{\"mode\":3}",
              "group": {"id": "…", "title": "…"}, "not_before": null, "expires_at": "…", "queued_at": "…"}],
   "waits_for": {"pass": {…}, "readiness": {…} | null},
   "released": [{"request_id": "…", "command_name": "NOOP", "group": {"id", "title"} | null, "released_at": "…",
-                "contact_id": "…", "status": "released", "verification_state": "satisfied"}]
+                "contact_id": "…", "status": "released", "verification_state": "verified"}]
 }}
 ```
 
@@ -362,9 +363,12 @@ Errors: `404 mission_not_found`.
     with its readiness (U33 words).
   - Otherwise `pass` is the next commandable pass, with readiness when its session is already up.
   - `now: null` means no commandable pass is booked.
+  - `readiness` is the same object as a `/passes` row's `uplink_readiness` (`command_groups_queued`
+    is known only when `blocked`), or `null` when the pass has no live uplink session yet.
 - **U2 `next_passes`:** up to 3 commandable passes (with a command window) in the next 24 h after
   `now.pass`. `uplink_evidence` is `booked` (the provider confirmed the uplink leg) or `attested`
-  (operator-attested, uplink unconfirmed, U32/#46).
+  (operator-attested, uplink unconfirmed, U32/#46); `uplink_confirmed` and `attested_by` are the
+  `/passes` row's.
 - **U3 `queue`:** this spacecraft's lane in release order (priority, then queue order), pending or
   releasing.
   - Release rule: `not_before` (null = at the next AOS); expiry: `expires_at`.
@@ -372,9 +376,10 @@ Errors: `404 mission_not_found`.
     releases in order), with its readiness for the U33 blocked line.
 - **U4 `released`:** releases in the last 24 h, newest first. `status` is the command status
   (`released | in_flight | failed | indeterminate | release_pending`) and `verification_state`
-  is `satisfied | failed | timed_out | not_required | pending | null`. Map them to CommandFlow C3's
-  words.
-- **`route`:** the primary active uplink routing rule, or `null` (header meta).
+  is the group member `stage` vocabulary (`radiating | executed | verified | no_verifier |
+  verify_failed | release_failed | indeterminate`), so C3's words map one to one.
+- **`route`:** the primary active uplink routing rule, or `null` (header meta). `name` is the
+  rule's display name; `transport_name` is `null` if the transport is archived.
 - Errors: `404 spacecraft_not_found`, `404 mission_not_found`. Refetch on `invalidate`
   `commanding`, `contacts` and `attention`.
 

@@ -157,7 +157,8 @@ defmodule Cadence.Reads.PassUplink do
     }
   end
 
-  defp pass_ref(pass, refs) do
+  @doc false
+  def pass_ref(pass, refs) do
     row = Map.get(refs.rows, pass.scheduled_contact_id)
 
     %{
@@ -171,9 +172,10 @@ defmodule Cadence.Reads.PassUplink do
   end
 
   # Reservations of those passes, by scheduled contact, from the window they span.
-  defp pass_refs(org, mission, []), do: %{rows: %{}, stations: StationRefs.index(org, mission)}
+  @doc false
+  def pass_refs(org, mission, []), do: %{rows: %{}, stations: StationRefs.index(org, mission)}
 
-  defp pass_refs(org, mission, passes) do
+  def pass_refs(org, mission, passes) do
     from = passes |> Enum.map(& &1.starts_at) |> Enum.min(DateTime)
     to = passes |> Enum.map(& &1.ends_at) |> Enum.max(DateTime)
     wanted = MapSet.new(passes, & &1.scheduled_contact_id)

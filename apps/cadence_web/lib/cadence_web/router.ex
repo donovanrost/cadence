@@ -853,6 +853,7 @@ defmodule CadenceWeb.Router do
       # -- Setup (owner: api). Contracts: docs/apogee/api/setup.md
       get("/spacecraft", SpacecraftController, :index)
       get("/spacecraft/:spacecraft_id", SpacecraftDetailController, :show)
+      get("/spacecraft/:spacecraft_id/uplink", SpacecraftUplinkController, :show)
       get("/profiles", ProfileController, :index)
       get("/profiles/:profile_id", ProfileDetailController, :show)
       get("/readiness", ReadinessController, :show)
