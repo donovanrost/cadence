@@ -18,6 +18,9 @@ case :rpc.call(
        ["--single-operator" in System.argv()],
        :infinity
      ) do
-  %{spacecraft: 500} = result -> IO.inspect(result, label: "Verified active Earendil fleet")
-  error -> raise "Earendil activation failed: #{inspect(error, limit: 20)}"
+  %{spacecraft: 500} = result ->
+    IO.puts("Verified active Earendil fleet: " <> inspect(result, pretty: true))
+
+  error ->
+    raise "Earendil activation failed: #{inspect(error, limit: 20)}"
 end

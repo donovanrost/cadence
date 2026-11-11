@@ -10,7 +10,8 @@ case System.fetch_env!("LAB_ACTION") do
 
   "activate" ->
     # Explicitly synthetic mission; this changes only the lab Earendil policy.
-    IO.inspect(Cadence.Dev.ReflectOrbital.Activation.run(true), label: "Fleet activation")
+    result = Cadence.Dev.ReflectOrbital.Activation.run(true)
+    IO.puts("Fleet activation: " <> inspect(result, pretty: true))
 
   "contacts" ->
     contacts = Cadence.Dev.ReflectOrbital.LiveContacts.run(28_800)
@@ -19,5 +20,5 @@ case System.fetch_env!("LAB_ACTION") do
   "questdb" ->
     {:ok, _} = Application.ensure_all_started(:req)
     {:ok, result} = Cadence.Telemetry.Storage.QuestDB.SchemaMigrator.apply_pending()
-    IO.inspect(result)
+    IO.puts(inspect(result, pretty: true))
 end
