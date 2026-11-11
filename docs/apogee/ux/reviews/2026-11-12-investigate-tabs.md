@@ -27,3 +27,6 @@ were blocked. Load was under 16.
 
 Not checked (no data on :4011): Telemetry with live samples (pass bands, crosshair), the U33 readiness states,
 queued and released rows, History episodes, and G4 pending.
+
+## Status
+- fe-ops 2145617b: #1–#6 accepted per commit (P3 and P2 load, next contact beyond 24 h, no fake gap, re-booked label, Telemetry wording and empty axis, slot format, G3 rows). I'll eyeball it on the next pass.
