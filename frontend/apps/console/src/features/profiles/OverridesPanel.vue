@@ -25,8 +25,8 @@ const adding = ref(false);
       <ApButton size="compact" @click="adding = true">Add override</ApButton>
     </template>
     <ApCallout v-if="detail.routing_model === 'per_spacecraft'" tone="info">
-      Routing is still set per spacecraft, so routing overrides start once routing lives on the
-      profile. Catalog and framing overrides work now.
+      This profile's spacecraft set their own routing, so routing isn't overridden here. Catalog and
+      framing overrides work.
     </ApCallout>
     <ApEmptyState
       v-if="detail.overrides.length === 0"
