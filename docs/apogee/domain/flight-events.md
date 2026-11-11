@@ -1,6 +1,6 @@
 # Flight events: a source for the Now queue
 
-Owner: **api-ops**. Reviewer: **domain** (model). Status: **draft 1, for review** (BACKLOG f20fcad0).
+Owner: **api-ops**. Reviewer: **domain** (model). Status: **v1 (form a) approved by domain** with the notes folded in below (BACKLOG f20fcad0).
 The console wires the rows after (fe-ops). Ranking: ux U11. Queue contract: api/ops.md (action queue).
 
 ## 1. What a flight event is
@@ -50,23 +50,38 @@ There are two forms in real missions:
 
 - **Classify.** A `catalog_monitoring` episode whose matched rule is `enumerated`, `boolean` or
   `string` is a flight event. One whose rule is `comparison` or `range` stays an alarm.
-  - Domain change, small: `Alarms.Sources.catalog/3` records the matched rule kind in the episode
-    `context` (`"rule_kind"`). The evaluator already knows which rules matched.
+  - Domain change, small: at write time, `Alarms.Sources.catalog/3` records in the episode
+    `context` the matched rule's `"rule_kind"` (a stable string: `enumerated | boolean | string |
+    comparison | range`) and `"rule_id"`, so Investigate can show which rule fired. The evaluator
+    already knows which rules matched.
+  - Write time, not read time (domain): the monitoring plan changes under catalog generations
+    (#65), so classifying against today's plan would misfile episodes opened under an older one.
   - Episodes opened before the change have no `rule_kind`. Fall back to the value's type: a
-    non-numeric `last_value` → flight event.
+    non-numeric `last_value` → flight event. Known gap: an enumerated rule evaluated on raw codes
+    (numeric `last_value`) is filed as an alarm. That's acceptable, because those episodes are
+    short-lived.
+  - Rule kind is a proxy and misfiles both ways: an enumerated ground-ish status reads as a flight
+    event, and a numeric reset counter doesn't. Later: an explicit parameter-level override in the
+    catalog (`flight_state: true | false`, e.g. from XTCE `AncillaryData`). v1 doesn't wait for it.
   - Ground limits are numeric by construction, so `ground_limit` episodes are always alarms.
 - **Queue item.**
   - `kind: "flight_event"`, everything else as alarm items: same member shape, `episode_id`, ack
     state and assignee. So Acknowledge, Assign and the U21 "ACK <name>" work unchanged.
   - Title: `<SPACECRAFT> · <PARAM> <VALUE>` (`EARENDIL-001 · MODE SAFE`). Evidence: "Entered SAFE
-    at 02:08:11Z" (the episode's `opened_at`; `first_value` → `last_value` when it changed since).
+    at 02:08:11Z". The time is the triggering sample's generation time (spacecraft time),
+    recorded in the episode `context` (`"entered_at"`) next to `rule_kind`. It isn't `opened_at`,
+    because with a backfill or a late pass `opened_at` can be hours after the spacecraft entered
+    SAFE. Episodes from before the change fall back to `opened_at`.
   - Target: Investigate with `?alarm=<episode_id>`, as alarm rows.
 - **Dedupe.** The episode already is the dedupe: one active episode per `(mission, spacecraft,
   source, parameter/policy)` (the partial unique index).
   - Repeats of the same state while active don't open new rows.
   - A different alarmed state on the same parameter escalates or de-escalates the same episode.
-  - Grouping across spacecraft (U11 "identical causes"): `{severity, parameter, value}`, so
-    "3 spacecraft · MODE SAFE" is one row with three members, like alarm groups.
+  - Grouping across spacecraft (U11 "identical causes"): `{severity, qualified parameter name,
+    value}`, so "3 spacecraft · MODE SAFE" is one row with three members, like alarm groups. The key
+    uses the qualified name, not the semantic id, because fleets on different catalog revisions
+    (#65) have different ids for the same MODE.
+  - Episodes are per spacecraft, so cross-spacecraft bleed (#38) can't happen here.
 - **Resolution.**
   - The row clears when the episode clears: the parameter leaves the alarmed state for
     `minConsecutiveValuesToLeaveAlarm` samples. That's the auto-clear of the alarm lifecycle
@@ -78,8 +93,10 @@ There are two forms in real missions:
   - `critical` → **P1**; `caution` (catalog `watch | warning`) → **P2**.
   - Within a priority, flight events rank with alarms on the same keys: unacknowledged first, then
     `due_at` (null until D1/M7), then oldest `since`.
-  - Proposal: at equal keys, a flight event goes before a numeric alarm. A mode change usually
-    explains the limit alarms that follow it.
+  - At otherwise equal keys, a flight event goes before a numeric alarm, as a pure tiebreak (domain
+    OK). A mode change usually explains the limit alarms that follow it. True ties are rare, since
+    `since` is a key. Putting all flight events ahead of alarms within the same priority and ack
+    state would be a stronger rule, and that's ux's call. It isn't proposed here.
 - **Counts.** Flight-event criticals count in `counts.spacecraft_p1` and in the Now Critical tile
   even when ground limits aren't configured (U13). They come from catalog monitoring, so they
   never had the ground-limits gap.
@@ -92,8 +109,9 @@ There are two forms in real missions:
   the first preset), plus a severity map (`CRITICAL` → critical, `ERROR` → caution, `INFO | DEBUG`
   → timeline only).
 - **Store:** `flight_events`, append-only, one row per spacecraft event.
-  - Idempotency key `(spacecraft, generation_time, app, event_id)`, because the same packet arrives
-    again through retransmission, a second station or a backfill.
+  - Idempotency key `(spacecraft, generation_time, app, event_id, packet sequence count)`, because
+    the same packet arrives again through retransmission, a second station or a backfill. The
+    sequence count is in the key so two events in the same tick don't collide (domain).
   - Rate dedupe for the queue: one row per `(spacecraft, app, event_id)` while unacknowledged, with
     `count` and `last_at`.
 - **Resolution:** events don't clear. A row resolves on acknowledgement, or when an operator marks
@@ -102,7 +120,13 @@ There are two forms in real missions:
   two rows in this design. Correlating them (same spacecraft, within N s) is a follow-up, once
   real event traffic shows what's useful.
 
-## 4. Questions for domain
+## 4. Questions for domain (answered; domain's review)
+
+Answers: (1) record at the hook, with `rule_id`; (2) rule kind is the v1 default, with a catalog
+override later; (3) OK as a pure tiebreak; (4) (b) is later, and domain reviews its model when it
+comes. Domain also agreed that `EventLog` `:health` → `data` fixes a misnomer.
+The original questions:
+
 
 1. **Classification:** is recording `rule_kind` in the episode `context` at the catalog hook OK, or
    would you rather classify from the monitoring plan at read time?
