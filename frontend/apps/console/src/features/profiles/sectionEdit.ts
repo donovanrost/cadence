@@ -7,7 +7,7 @@ import {
   type StageOp,
 } from "@/features/changes/index.ts";
 import { plural } from "@/ui";
-import type { ProfileSection } from "./detail.ts";
+import type { ProfileField, ProfileSection } from "./detail.ts";
 
 /**
  * Profile.md P1/P4: a section's fields come from the server's section schema, so the form is
@@ -15,21 +15,22 @@ import type { ProfileSection } from "./detail.ts";
  */
 export const editableSection = (key: string) => key !== "framing" && key !== "limits";
 
-export function schemaFieldsOf(section: ProfileSection): SchemaField[] {
-  return section.fields.map((f) => ({
-    path: f.path,
-    label: f.label,
-    type: f.type,
-    unit: f.unit,
-    enum: f.enum,
-    range: f.range,
-    default: f.default,
-    required: false,
-    help: f.help,
-    visible_when: null,
-    pattern: null,
-  }));
-}
+export const schemaFieldOf = (f: ProfileField): SchemaField => ({
+  path: f.path,
+  label: f.label,
+  type: f.type,
+  unit: f.unit,
+  enum: f.enum,
+  range: f.range,
+  default: f.default,
+  required: false,
+  help: f.help,
+  visible_when: null,
+  pattern: null,
+});
+
+export const schemaFieldsOf = (section: ProfileSection): SchemaField[] =>
+  section.fields.map(schemaFieldOf);
 
 export function sectionValues(section: ProfileSection, fields: readonly SchemaField[]): FormValues {
   const out: FormValues = {};

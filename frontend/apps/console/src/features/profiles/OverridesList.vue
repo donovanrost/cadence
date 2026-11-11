@@ -3,6 +3,7 @@ import { ref } from "vue";
 import { failureOutcome, refreshConfigState, stageChange } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, formatShort } from "@/ui";
 import type { ProfileOverride } from "./detail.ts";
+import { overrideOp } from "./overrides.ts";
 
 /** P3 rows: spacecraft · what differs · since · Reset (stages a spacecraft_override reset). */
 const props = defineProps<{
@@ -23,14 +24,7 @@ async function reset(o: ProfileOverride) {
     const result = await stageChange(props.missionId, {
       summary: `${o.spacecraft.name} · reset ${o.path} to the profile`,
       source: { surface: "profile_overrides" },
-      ops: [
-        {
-          kind: "spacecraft_override",
-          action: "update",
-          entity_id: o.spacecraft.id,
-          changes: [{ path: o.path, value: null }],
-        },
-      ],
+      ops: [overrideOp(o.spacecraft.id, o.path, null)],
     });
     if (result.ok) {
       note.value = `Reset staged for ${o.spacecraft.name}. It applies with the change set.`;

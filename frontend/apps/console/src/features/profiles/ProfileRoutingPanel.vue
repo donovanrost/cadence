@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
 import { ApButton, ApEmptyState, ApPanel } from "@/ui";
-import OverridesList from "./OverridesList.vue";
+import OverridesPanel from "./OverridesPanel.vue";
 import RuleBlock from "./RuleBlock.vue";
 import RulesEditor from "./RulesEditor.vue";
 import type { ProfileDetail } from "./detail.ts";
@@ -51,28 +51,10 @@ const editing = ref(false);
       />
     </template>
   </template>
-  <ApPanel
+  <OverridesPanel
     v-else
-    index="P3"
-    title="Overrides"
-    :meta="`${detail.override_count} of ${detail.inherit_count} differ`"
-    flush
-  >
-    <ApEmptyState
-      v-if="perSpacecraft"
-      headline="Overrides aren't tracked yet"
-      sentence="Spacecraft-level differences from the profile are recorded once routing lives on the profile."
-    />
-    <ApEmptyState
-      v-else-if="detail.overrides.length === 0"
-      state="off"
-      :headline="`All ${detail.inherit_count} spacecraft match the profile`"
-    />
-    <OverridesList
-      v-else
-      :mission-id="scope.mission.id"
-      :overrides="detail.overrides"
-      :can-stage="canStage"
-    />
-  </ApPanel>
+    :mission-id="scope.mission.id"
+    :detail="detail"
+    :can-stage="canStage"
+  />
 </template>
