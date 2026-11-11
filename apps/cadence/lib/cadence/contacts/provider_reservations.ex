@@ -670,6 +670,50 @@ defmodule Cadence.Contacts.ProviderReservations do
 
   defp attested?(_reservation), do: false
 
+  @doc """
+  A cancel that failed, never read as a lost booking (rejected/failed). The error is the
+  reservation's `last_error` (`"action" => "cancel"`). `"outcome" => "refused"` or `"not_sent"`:
+  the cancel didn't happen, so the reservation goes back to the state it was canceled from and
+  isn't marked a Cadence cancellation. `"unknown"`: it reads `unknown` for the reconciler's next
+  read to settle; if the booking turns out gone, the cancellation was ours.
+  """
+  @spec cancel_failed(ProviderReservation.t(), map()) ::
+          {:ok, ProviderReservation.t()} | {:error, term()}
+  def cancel_failed(%ProviderReservation{} = reservation, error_document) do
+    %{organization_id: org, mission_id: mission} = reservation
+    published(cancel_failed_unpublished(reservation, error_document), org, mission)
+  end
+
+  defp cancel_failed_unpublished(reservation, error_document) do
+    with {:ok, current} <-
+           fetch(
+             reservation.organization_id,
+             reservation.mission_id,
+             reservation.provider_reservation_id
+           ),
+         :ok <- validate_document(error_document, :last_error_document) do
+      metadata = JsonDocument.unwrap_value(current.metadata) || %{}
+      happened? = error_document["outcome"] == "unknown"
+
+      restored =
+        if happened?,
+          do: :unknown,
+          else: normalize_state(metadata["cancel_from_state"] || "confirmed")
+
+      metadata =
+        if happened?,
+          do: metadata,
+          else: Map.drop(metadata, ["cancel_initiator", "cancel_requested_at"])
+
+      transition(current, restored, %{
+        last_error_document: JsonDocument.wrap_value(error_document),
+        attempt_count: current.attempt_count + 1,
+        last_reconciled_at: DateTime.utc_now(),
+        metadata: JsonDocument.wrap_value(Map.delete(metadata, "cancel_from_state"))
+      })
+    end
+  end
+
   @spec mark_canceling(binary(), binary(), binary(), keyword()) ::
           {:ok, ProviderReservation.t()} | {:error, term()}
   def mark_canceling(org, mission, id, opts \\ []) do
@@ -710,7 +754,9 @@ defmodule Cadence.Contacts.ProviderReservations do
     |> Kernel.||(%{})
     |> Map.merge(%{
       "cancel_initiator" => "cadence",
-      "cancel_requested_at" => DateTime.to_iso8601(DateTime.utc_now())
+      "cancel_requested_at" => DateTime.to_iso8601(DateTime.utc_now()),
+      # A failed cancel puts the reservation back where it was.
+      "cancel_from_state" => row.lifecycle_state
     })
     |> JsonDocument.wrap_value()
   end

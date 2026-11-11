@@ -108,7 +108,7 @@ defmodule Cadence.Contacts.ProviderBooking do
           complete_cancellation(reservation, response)
 
         {:error, reason} ->
-          persist_saga_error(reservation, reason, error_lifecycle(reason))
+          cancel_failed(reservation, reason)
       end
     end
   end
@@ -326,6 +326,44 @@ defmodule Cadence.Contacts.ProviderBooking do
 
     {:ok, %{provider_reservation: reservation, scheduled_contact: scheduled_contact}}
   end
+
+  # A failed cancel leaves the booking as it was (api-ops, D2 Release): the provider still has
+  # it. Never the booking path's rejected/failed, which read as a lost booking.
+  defp cancel_failed(reservation, reason) do
+    error_document = %{
+      "action" => "cancel",
+      "outcome" => cancel_outcome(reason),
+      "reason" => encode_error(reason),
+      "recorded_at" => DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+
+    case ProviderReservations.cancel_failed(reservation, error_document) do
+      {:ok, updated} ->
+        {:error, {:provider_reservation_not_confirmed, updated}}
+
+      {:error, persistence_reason} ->
+        {:error, {:provider_saga_persistence_failed, reason, persistence_reason}}
+    end
+  end
+
+  # "not_sent"/"refused": the cancel didn't happen, the booking stands. "unknown": it may have
+  # (the provider may already have dropped it on not_found), the reconciler settles it.
+  defp cancel_outcome(%ProviderError{category: :provider_unavailable}), do: "not_sent"
+
+  defp cancel_outcome(%ProviderError{category: category})
+       when category in [
+              :invalid_request,
+              :authentication_failed,
+              :authorization_failed,
+              :unsupported_capability,
+              :conflict,
+              :no_capacity,
+              :provider_not_ready,
+              :rate_limited
+            ],
+       do: "refused"
+
+  defp cancel_outcome(_reason), do: "unknown"
 
   defp persist_saga_error(reservation, reason, lifecycle_state) do
     error_document = %{

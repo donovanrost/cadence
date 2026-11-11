@@ -291,6 +291,40 @@ defmodule Cadence.Contacts.ProviderBookingTest do
     assert scheduled_contact.lifecycle_state == :scheduled
   end
 
+  test "a refused cancellation leaves the booking as it was: confirmed, with the error, never lost",
+       context do
+    attrs = booking_attrs(context)
+    assert {:ok, booking} = reserve(context, attrs)
+    id = booking.provider_reservation.provider_reservation_id
+    before = booking.provider_reservation.lifecycle_state
+
+    refused = %ProviderError{category: :conflict, detail: "too late to cancel", retryable: false}
+
+    assert {:error, {:provider_reservation_not_confirmed, kept}} =
+             ProviderBooking.cancel(
+               context.organization_id,
+               context.mission_id,
+               id,
+               client: FakeProviderClient,
+               cancel_response: {:error, refused}
+             )
+
+    assert kept.lifecycle_state == before
+    assert kept.last_error_document["action"] == "cancel"
+    assert kept.last_error_document["outcome"] == "refused"
+    refute Map.has_key?(kept.metadata || %{}, "cancel_initiator")
+
+    assert {:ok, %{lifecycle_state: ^before}} =
+             ProviderReservations.fetch(context.organization_id, context.mission_id, id)
+
+    assert {:ok, %{lifecycle_state: :scheduled}} =
+             Cadence.Contacts.fetch_scheduled_contact(
+               context.organization_id,
+               context.mission_id,
+               booking.scheduled_contact.scheduled_contact_id
+             )
+  end
+
   defp reserve(context, attrs, opts \\ []) do
     ProviderBooking.reserve(
       context.organization_id,
