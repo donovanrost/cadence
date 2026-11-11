@@ -4,7 +4,7 @@ import { acquireChannel, onReconnect, type ChannelHandle } from "@/live/socket.t
 import type { SeriesPoint } from "@/ui";
 
 /**
- * M8 live tail (realtime.md 474f3350): `spacecraft:<id>` pushes `points {seq, samples}` for the
+ * M8 live tail (realtime.md 474f3350, 26d6623f): `spacecraft:<mission_id>:<spacecraft_id>` pushes `points {seq, samples}` for the
  * selected points, at most once a second, in commit order. The first push after a join is the
  * current value of each point; a reconnect refetches history (nothing is replayed). Selection is
  * set with `points:set {point_ids}` after every join.
@@ -54,6 +54,7 @@ export function tailPoints(tail: readonly TailSample[], after: number): SeriesPo
 }
 
 export function useSpacecraftTail(
+  missionId: Ref<string | null>,
   spacecraftId: Ref<string | null>,
   pointIds: Ref<readonly string[]>,
   onResync: () => void,
@@ -65,7 +66,10 @@ export function useSpacecraftTail(
   };
 
   const stopTopic = watch(
-    () => (M8_LIVE && spacecraftId.value ? `spacecraft:${spacecraftId.value}` : null),
+    () =>
+      M8_LIVE && missionId.value && spacecraftId.value
+        ? `spacecraft:${missionId.value}:${spacecraftId.value}`
+        : null,
     (topic) => {
       current?.stop();
       current = null;

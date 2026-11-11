@@ -61,6 +61,7 @@ const rangeLabel = computed(
 );
 /** M8 live tail for the shown point; history stays authoritative and refetches as before. */
 const tail = useSpacecraftTail(
+  computed(() => scope.value.mission.id),
   computed(() => props.sc.id),
   computed(() => (props.alarm ? [props.alarm.point.id] : [])),
   () => trend.history.refetch(),
