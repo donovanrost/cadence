@@ -31,7 +31,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Stat tiles link (Critical/Caution/Stale → Alarms/Fleet, In contact → Contacts, Uplinks → Commands) | fe-ops + lead (`ApStatTile` gets `to`) | — |
 | ~~Queue kinds `missed_pass`, `station` + `Station` → Re-plan~~ done (de131e9b); `flight_event`: source landed (api-ops a02c2cee, 1b3be7f7, e07969bb), fe-ops reader 591bc06c | fe-ops | qa: a flight_event row seen live after the :4011 restart |
 | ~~Attention source `contact_settlement` (#71) reader~~ done (14330a4a, U37 words, no Acknowledge, Review opens Contacts by contact_id); unknown kinds/sources now drop one row, not Now | fe-ops | — (source live 22:14Z) |
-| `contact_settlement` manual retry (#71 replay): the needs-operator line and Retry action in the row and the drawer; 'next try HH:MMZ' while backing off | fe-ops | ux: U37 wording; domain ships the state after this |
+| `contact_settlement` manual retry (#71 replay): the needs-operator line and Retry action in the row and the drawer; 'next try HH:MMZ' while backing off | fe-ops | — (ux wording 294e67c6: '… Cadence stopped after 6 failed tries: <reason>.' + `Retry storing`; `Retrying…` only while the request runs; automatic 'Next try at HH:MMZ.'; manual items fold separately and sort first within P2). Domain ships the state after this |
 | Header meta names the worst station issue | fe-ops | — (S7 status exists) |
 | ~~A4 pass bars open the contact drawer~~ done (51cc6133) | fe-ops | — |
 | ~~Approval rows open the request's review~~ done for a single group (a0e33fe1) | fe-ops | — |
