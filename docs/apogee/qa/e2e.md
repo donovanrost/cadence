@@ -19,6 +19,10 @@ E2E_MUTATE=1 corepack pnpm --filter @cadence/console test:e2e changes catalog-im
 E2E_WORKERS=4 …                                                   # when the laptop is idle
 ```
 
+**When.** After every :4011 restart that brings lib changes, run the whole read-only suite once
+(load permitting; otherwise the `real` specs first). qa #43: a Readiness 500 sat for two days
+because `setup-readiness` wasn't re-run after the server change that broke it.
+
 Report: `frontend/apps/console/playwright-report/index.html`; traces and failure screenshots in
 `test-results/` (both gitignored, as is `e2e/.auth/`).
 
