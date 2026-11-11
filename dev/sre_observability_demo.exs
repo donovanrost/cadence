@@ -2,27 +2,27 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   @moduledoc false
 
-  alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Accounts.OrganizationMembership
   alias Cadence.Accounts.OrganizationMembershipRow
-  alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact, ScheduledContact}
+  alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Commanding.{CommandQueueEntry, CommandQueueEntryRow}
   alias Cadence.Commanding.{CommandRequest, CommandRequestRow}
+  alias Cadence.Contacts.{Path, ProviderBinding, RealizedContact, ScheduledContact}
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.Missions, as: ControlMissions
   alias Cadence.Dashboards.{Document, Management, Placement, Section, WidgetDef}
-  alias Cadence.Management.DataSources
   alias Cadence.Limits.Event, as: LimitEvent
   alias Cadence.Limits.Store, as: LimitStore
+  alias Cadence.Management.DataSources
   alias Cadence.Missions.Mission
   alias Cadence.Observability
   alias Cadence.Organizations.Organization
+  alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
   alias Cadence.Telemetry.DataManagement
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.Profiler
-  alias Cadence.Runtime.MissionRuntimeSpec
 
   require Logger
 

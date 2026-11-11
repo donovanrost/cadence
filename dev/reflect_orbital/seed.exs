@@ -1,6 +1,5 @@
 defmodule Cadence.Dev.ReflectOrbital.Seed do
   @moduledoc false
-  alias Cadence.Dev.ReflectOrbital.Fixture, as: F
   alias Cadence.Accounts.{OrganizationMembership, OrganizationMembershipRow}
   alias Cadence.Auth.Scope
 
@@ -15,20 +14,21 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
 
   alias Cadence.Contacts.ProviderScheduling
   alias Cadence.Dev.ReflectOrbital.Configuration
+  alias Cadence.Dev.ReflectOrbital.Fixture, as: F
   alias Cadence.GroundNetworks
 
   alias Cadence.GroundNetworks.{
     MissionProvider,
-    ProviderAccounts,
     ProviderAccountGrants,
+    ProviderAccounts,
     ProviderCredentials
   }
 
   alias Cadence.Management.Transports
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
-  alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.{Repo, Spacecraft, SpacecraftType}
+  alias Cadence.SourceEndpoints.SourceEndpoint
 
   @token_key "EARENDIL_DEMO_PROVIDER_TOKEN"
 

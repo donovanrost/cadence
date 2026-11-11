@@ -2,8 +2,8 @@ Code.require_file(Path.expand("../../support/dashboard_rendered_viewport_runner.
 
 defmodule CadenceWeb.Assets.SettingsBrowserTest do
   use CadenceWeb.ConnCase, async: false
-  alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
+  alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Auth.Scope
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Governance.ActivationPolicy
