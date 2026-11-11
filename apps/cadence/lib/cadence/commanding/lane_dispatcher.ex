@@ -184,14 +184,28 @@ defmodule Cadence.Commanding.LaneDispatcher do
           next_not_before: next_not_before
         })
 
-        state = schedule_dispatch(state, delay_ms, :not_before)
+        state =
+          state
+          |> waiting({:not_before, next_not_before}, fn ->
+            "command lane #{state.queue_lane_key}: waiting for the head's not_before " <>
+              DateTime.to_iso8601(next_not_before)
+          end)
+          |> schedule_dispatch(delay_ms, :not_before)
 
         {:quiescent, quiescence_summary(:waiting_for_not_before, released_count, next_not_before),
          state}
 
-      {:error, {:uplink_busy, _reason}} ->
+      {:error, {:uplink_busy, busy}} ->
         emit(:dispatch_result, state, %{count: 1}, %{result: :uplink_busy})
-        state = schedule_dispatch(state, @uplink_busy_retry_ms, :uplink_busy)
+
+        state =
+          state
+          |> waiting({:uplink_busy, busy}, fn ->
+            "command lane #{state.queue_lane_key}: waiting, uplink busy (#{busy}); " <>
+              "retrying every #{@uplink_busy_retry_ms}ms"
+          end)
+          |> schedule_dispatch(@uplink_busy_retry_ms, :uplink_busy)
+
         {:quiescent, quiescence_summary(:waiting_for_release_target, released_count), state}
 
       # The uplink refused it before sending (#33): it failed and closed; go on to the next,

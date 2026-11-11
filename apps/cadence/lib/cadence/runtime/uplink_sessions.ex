@@ -20,15 +20,20 @@ defmodule Cadence.Runtime.UplinkSessions do
 
   defdelegate review(runtime), to: TransportRuntime, as: :session_review
 
-  @doc "Whether the uplink's protocol is still waiting for the spacecraft's first report (#59)."
-  @spec awaiting_first_report?(pid()) :: boolean()
-  def awaiting_first_report?(runtime) do
+  @doc """
+  Whether the uplink's protocol has the spacecraft's first report (#59): `:received`,
+  `:awaiting`, or `:unavailable` when the runtime can't say (it errored or didn't answer). A
+  caller deciding readiness treats `:unavailable` as not ready (#38: fail closed).
+  """
+  @spec first_report(pid()) :: :received | :awaiting | :unavailable
+  def first_report(runtime) do
     case TransportRuntime.snapshot(runtime) do
-      {:ok, %{state: %{cop1_awaiting_clcw: true}}} -> true
-      _other -> false
+      {:ok, %{state: %{cop1_awaiting_clcw: true}}} -> :awaiting
+      {:ok, %{state: %{}}} -> :received
+      _other -> :unavailable
     end
   catch
-    :exit, _ -> false
+    :exit, _ -> :unavailable
   end
 
   defdelegate begin_recovery(runtime, evidence), to: TransportRuntime, as: :begin_session_recovery

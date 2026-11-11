@@ -65,6 +65,41 @@ defmodule Cadence.Control.UplinkReadinessTest do
       do: {:reply, {:error, :attestation_peer_mismatch}, %{state | refused?: true}}
   end
 
+  defmodule ReadySession do
+    @moduledoc false
+    # A qualified provider uplink session with deliveries pending (kept, not re-challenged),
+    # whose snapshot answers with the given reply, or exits when it is `:exit`.
+    use GenServer
+    def start_link(args), do: GenServer.start_link(__MODULE__, args)
+
+    def init({registry, {m, c, p, b} = key, snapshot}) do
+      {:ok, _} = Registry.register(registry, {:transport_runtime, m, c, p, b}, nil)
+      {:ok, %{key: key, snapshot: snapshot}}
+    end
+
+    def handle_call({:session_action, :review, []}, _from, %{key: {m, c, _p, _b}} = state) do
+      provider = %{
+        adapter_key: :tcp_socket,
+        peer: "127.0.0.1:50124",
+        mission_id: m,
+        contact_id: c
+      }
+
+      {:reply,
+       {:ok,
+        %{
+          provider: provider,
+          status: :ready,
+          pending_delivery_count: 1,
+          incarnation: 1,
+          basis_sha256: "basis"
+        }}, state}
+    end
+
+    def handle_call(:snapshot, _from, %{snapshot: :exit} = state), do: {:stop, :normal, state}
+    def handle_call(:snapshot, _from, state), do: {:reply, state.snapshot, state}
+  end
+
   defmodule AttestingClient do
     @moduledoc false
     def attest_uplink_session(_context, _contact, _attrs, _opts),
@@ -286,6 +321,50 @@ defmodule Cadence.Control.UplinkReadinessTest do
                command_group_ids: [^group_id]
              }
            ] = Attention.items(c.org, c.mission, c.table)
+  end
+
+  test "#38: a qualified pass reads ready only when its uplink runtime reports its first CLCW",
+       c do
+    registry = :"uplink_qualification_registry_#{System.unique_integer([:positive])}"
+    start_supervised!({Registry, keys: :unique, name: registry})
+    namespace = %ProcessNamespace{ProcessNamespace.default() | registry: registry}
+    booking = Map.merge(pass(c), %{client: AttestingClient, context: nil, call_opts: []})
+
+    for {snapshot, expected} <- [
+          {{:ok, %{state: %{cop1_awaiting_clcw: false}}}, {:ready, nil}},
+          {{:ok, %{state: %{cop1_awaiting_clcw: true}}}, {:qualifying, :cop1_awaiting_clcw}},
+          {{:error, :snapshot_failed}, {:qualifying, :uplink_state_unavailable}},
+          {:exit, {:qualifying, :uplink_state_unavailable}}
+        ] do
+      session =
+        start_supervised!(
+          Supervisor.child_spec({ReadySession, {registry, c.key, snapshot}},
+            id: make_ref(),
+            restart: :temporary
+          )
+        )
+
+      driver =
+        start_supervised!(
+          Supervisor.child_spec(
+            {UplinkQualification,
+             process_namespace: namespace,
+             readiness_table: c.table,
+             tick_ms: nil,
+             booking: fn _provider -> {:ok, booking} end},
+            id: make_ref()
+          )
+        )
+
+      UplinkQualification.qualify_now(driver)
+      {state, reason} = expected
+
+      assert %{"contact-live" => %{state: ^state, reason: ^reason}} =
+               UplinkReadiness.for_contacts(c.org, c.mission, ["contact-live"], c.table),
+             "snapshot #{inspect(snapshot)}"
+
+      if Process.alive?(session), do: GenServer.stop(session)
+    end
   end
 
   defp scheduled_contact!(c, reservation, intents) do

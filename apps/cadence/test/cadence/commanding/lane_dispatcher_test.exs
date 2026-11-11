@@ -3,8 +3,6 @@ defmodule Cadence.Commanding.LaneDispatcherTest do
 
   alias Cadence.Commanding.LaneDispatcher
 
-  require Logger
-
   test "drain releases every immediately eligible command before reporting an empty lane" do
     test_pid = self()
 
@@ -146,6 +144,50 @@ defmodule Cadence.Commanding.LaneDispatcherTest do
     waits = Regex.scan(~r/waiting, no releasable uplink of endpoint-25/, log)
     assert length(waits) == 1
     assert log =~ "release attempt-1 refused before send"
+  end
+
+  test "#38: a lane logs each wait once (not_before, then each busy reason), not every retry" do
+    busy = {:error, {:uplink_busy, :cop1_awaiting_clcw}}
+    test_pid = self()
+
+    not_before = DateTime.add(DateTime.utc_now(), 50, :millisecond)
+
+    dispatch_fun =
+      dispatch_sequence([
+        {:error, {:command_queue_lane_waiting_for_not_before, "entry-1", not_before}},
+        busy,
+        busy,
+        busy,
+        {:error, {:uplink_busy, :cop1_release_in_flight}},
+        {:error, :command_queue_lane_empty}
+      ])
+
+    previous = Logger.level()
+    Logger.configure(level: :info)
+    on_exit(fn -> Logger.configure(level: previous) end)
+
+    log =
+      ExUnit.CaptureLog.capture_log([level: :info], fn ->
+        lane_dispatcher =
+          start_lane_dispatcher!(
+            dispatch_fun: fn org, mission, lane, released_by, opts ->
+              send(test_pid, :dispatch_attempt)
+              dispatch_fun.(org, mission, lane, released_by, opts)
+            end
+          )
+
+        monitor = Process.monitor(lane_dispatcher)
+
+        assert {:ok, %{status: :waiting_for_not_before}} = LaneDispatcher.drain(lane_dispatcher)
+
+        # The not_before timer, then the 500 ms retries, run on their own until the lane empties.
+        for _ <- 1..6, do: assert_receive(:dispatch_attempt, 2_000)
+        assert_receive {:DOWN, ^monitor, :process, ^lane_dispatcher, :normal}, 2_000
+      end)
+
+    assert log =~ "waiting for the head's not_before #{DateTime.to_iso8601(not_before)}"
+    assert length(Regex.scan(~r/waiting, uplink busy \(cop1_awaiting_clcw\)/, log)) == 1
+    assert length(Regex.scan(~r/waiting, uplink busy \(cop1_release_in_flight\)/, log)) == 1
   end
 
   defp start_lane_dispatcher!(opts) do

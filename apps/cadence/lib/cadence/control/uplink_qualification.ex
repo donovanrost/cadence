@@ -158,10 +158,13 @@ defmodule Cadence.Control.UplinkQualification do
     UplinkReadiness.record(table, key, pass(booking), readiness, reason, DateTime.utc_now())
   end
 
+  # Ready only on a positive answer: a runtime that can't report its protocol state isn't (#38).
   defp readiness(result, pid) when elem(result, 0) in [:qualified, :kept] do
-    if UplinkSessions.awaiting_first_report?(pid),
-      do: {:qualifying, :cop1_awaiting_clcw},
-      else: {:ready, nil}
+    case UplinkSessions.first_report(pid) do
+      :received -> {:ready, nil}
+      :awaiting -> {:qualifying, :cop1_awaiting_clcw}
+      :unavailable -> {:qualifying, :uplink_state_unavailable}
+    end
   end
 
   defp readiness({:skipped, reason}, _pid), do: {:qualifying, reason}

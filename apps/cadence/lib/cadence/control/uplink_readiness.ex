@@ -7,6 +7,8 @@ defmodule Cadence.Control.UplinkReadiness do
 
   Reason keys:
   - `cop1_awaiting_clcw` (qualifying): the uplink waits for the spacecraft's first link report.
+  - `uplink_state_unavailable` (qualifying): the uplink runtime didn't report its protocol state
+    (busy or unresponsive), so the pass isn't shown ready until it does (#38).
   - `session_not_attached` and other session review failures (qualifying): the provider
     connection isn't attached yet.
   - `protocol_state_restore_required` (blocked): the pass's uplink restarted after it had sent
