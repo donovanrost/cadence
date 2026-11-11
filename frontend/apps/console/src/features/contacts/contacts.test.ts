@@ -238,7 +238,7 @@ describe("uplink readiness (U33)", () => {
     );
     expect(tag("weird_thing")).toBe("Can't command: Northlight returned an error (Weird thing).");
     expect(tag("unverified_peer_connected")).toBe(
-      "Can't command: an unverified peer connected, so Cadence dropped it and is waiting for the peer Northlight attested.",
+      "Can't command: an unverified connection took the uplink, so Cadence dropped it and is waiting for Northlight's verified one.",
     );
     expect(recoverable("unverified_peer_connected")).toBe(true);
   });
