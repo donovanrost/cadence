@@ -4,6 +4,7 @@ defmodule Cadence.Contacts.ProviderBookingTest do
   alias Cadence.Management.Transports
 
   alias Cadence.Comms.Transport
+  alias Cadence.Contacts.PassReleaseAttention
   alias Cadence.Contacts.{PathTemplate, ProviderBooking, ProviderReservations}
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.{MissionProvider, ProviderError}
@@ -322,6 +323,35 @@ defmodule Cadence.Contacts.ProviderBookingTest do
                context.organization_id,
                context.mission_id,
                booking.scheduled_contact.scheduled_contact_id
+             )
+
+    # The pass_release attention item stays open while the booking stands...
+    since = DateTime.add(DateTime.utc_now(), -60)
+
+    assert [
+             %{
+               source: "pass_release",
+               id: ^id,
+               conflict: "cancel_failed",
+               reason: "refused",
+               provider_message: "too late to cancel"
+             }
+           ] = PassReleaseAttention.items(context.organization_id, context.mission_id)
+
+    # ...and resolves once a later cancel goes through.
+    assert {:ok, _canceled} =
+             ProviderBooking.cancel(context.organization_id, context.mission_id, id,
+               client: FakeProviderClient,
+               cancel_response: {:ok, provider_response(attrs, "canceled")}
+             )
+
+    assert PassReleaseAttention.items(context.organization_id, context.mission_id) == []
+
+    assert [%{id: ^id, action: "canceled"}] =
+             PassReleaseAttention.resolved_since(
+               context.organization_id,
+               context.mission_id,
+               since
              )
   end
 

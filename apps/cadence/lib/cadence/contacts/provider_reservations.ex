@@ -705,12 +705,25 @@ defmodule Cadence.Contacts.ProviderReservations do
           do: metadata,
           else: Map.drop(metadata, ["cancel_initiator", "cancel_requested_at"])
 
-      transition(current, restored, %{
-        last_error_document: JsonDocument.wrap_value(error_document),
-        attempt_count: current.attempt_count + 1,
-        last_reconciled_at: DateTime.utc_now(),
-        metadata: JsonDocument.wrap_value(Map.delete(metadata, "cancel_from_state"))
-      })
+      # Durable, unlike last_error (the next provider read clears it): the pass_release
+      # attention item stays open until the booking is canceled or the pass ends.
+      failure = Map.take(error_document, ["outcome", "reason", "recorded_at"])
+
+      metadata =
+        metadata
+        |> Map.delete("cancel_from_state")
+        |> Map.put("cancel_failure", failure)
+
+      with {:ok, _} = result <-
+             transition(current, restored, %{
+               last_error_document: JsonDocument.wrap_value(error_document),
+               attempt_count: current.attempt_count + 1,
+               last_reconciled_at: DateTime.utc_now(),
+               metadata: JsonDocument.wrap_value(metadata)
+             }) do
+        ScopedReadUpdates.publish(:attention_changed, current.organization_id, current.mission_id)
+        result
+      end
     end
   end
 
