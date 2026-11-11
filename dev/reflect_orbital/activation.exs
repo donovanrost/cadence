@@ -35,12 +35,7 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
     500 = length(fleet)
     snapshots = Map.new(fleet, &{&1.spacecraft_id, Drafts.snapshot(mission, &1)})
 
-    Enum.each(snapshots, fn {_id, snapshot} ->
-      true = snapshot.row != nil and not snapshot.external_changes
-      true = snapshot.document["catalog_revision_id"] == revision.catalog_revision_id
-      true = snapshot.document["telemetry_enabled"] and snapshot.document["commanding_enabled"]
-      [0, 1, 10, 20, 30, 40, 50, 100, 101, 255] = snapshot.document["handled_apids"]
-    end)
+    verify_drafts!(snapshots, revision)
 
     policy = ActivationPolicy.load(F.organization_id(), F.mission_id())
 
@@ -97,6 +92,15 @@ defmodule Cadence.Dev.ReflectOrbital.Activation do
     end
 
     verify(mission, fleet, revision)
+  end
+
+  defp verify_drafts!(snapshots, revision) do
+    Enum.each(snapshots, fn {_id, snapshot} ->
+      true = snapshot.row != nil and not snapshot.external_changes
+      true = snapshot.document["catalog_revision_id"] == revision.catalog_revision_id
+      true = snapshot.document["telemetry_enabled"] and snapshot.document["commanding_enabled"]
+      [0, 1, 10, 20, 30, 40, 50, 100, 101, 255] = snapshot.document["handled_apids"]
+    end)
   end
 
   defp verify(mission, fleet, revision) do
