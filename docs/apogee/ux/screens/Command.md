@@ -94,7 +94,7 @@ Route to `M/commands/:requestId` (Uplink & verify view, phase 3): per-target sta
 from the existing command history.
 
 ## States
-Draft autosaves (`DRAFT SAVED 02:44:31Z` mono in the takeover header). Preflight running: poll rows
+Draft autosaves (`DRAFT · SAVED 02:44:31Z` mono in the takeover header; no number, U25). One current draft per user per mission, visible only to its author. Commands lists it for its author as `Your draft · saved 02:44Z · Resume`. Preflight running: poll rows
 show `CHECKING…`. Target over the batch cap (until M16): NO-GO "Up to 25 targets per request
 today" with the count. No permission (`command.request` missing): page renders read-only with "You
 can view this sequence. Commanding needs the operator capability."

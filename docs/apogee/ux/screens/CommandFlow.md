@@ -8,7 +8,7 @@ same request model.
 **Principle: sent is not done.** A request passes seven stations: Compose (operator) → Check
 (Cadence) → Approve (second operator) → Release (Cadence) → Radiate (station) → Acknowledge
 (spacecraft) → Verify (telemetry). Only Verify turns it green. All three screens share a
-**takeover header**: back/close · mono request line (`REQ-0421 · DRAFT · DONOVAN R.`) over a title ·
+**takeover header**: back/close · mono request line (`DRAFT · SAVED 02:44:31Z` while composing: no number, because a draft isn't a request yet (U25); after submit, the group's own identity as the server gives it) over a title ·
 **ApStepBar of the stations** (current `●`, done `✓`, future `○`; `05 · 06 · 07` collapsed until
 release) · clocks. Progress states are gray; outcomes carry status (ApStateTrail, CommandFlow M1).
 
