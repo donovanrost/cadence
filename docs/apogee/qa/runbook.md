@@ -118,6 +118,11 @@ EARENDIL_CADENCE_NODE=cadence_apogee \
 #    confirmed with command_window, and any CLCW override is armed on the right contact ref.
 #  - To hold bookings 'pending' for unconfirmed-state checks, don't pause the run; find another way
 #    (ask domain), or pause only far from any armed pass and reset the offset afterwards.
+#  - Keep the host awake from arming until after LOS + the post-pass checks (director, 2026-11-11):
+#      caffeinate -dims -t <seconds>     # in a spare shell; touches neither lib nor the stack
+#    and check `pmset -g assertions | grep caffeinate` at T-15. A sleeping Mac lets the provider
+#    play the pass without Cadence: 037's 11-11 13:10:59Z contact expired unrealized and QuestDB got
+#    no TM while the host slept 12:57:30-17:09Z. Keep the lid open and on power.
 
 # 7. Live feeds (on request only; keep them short, e.g. EARENDIL_DEMO_CONTACT_SECONDS=600)
 cd apps/cadence_simulator
