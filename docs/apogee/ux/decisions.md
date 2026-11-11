@@ -513,5 +513,20 @@ is still on disk and not in telemetry history. It's always **P2**: the journal i
   A folded row counts down as items resolve, then fades the same way.
 - **Contact drawer:** a caution block reads "Telemetry from this pass isn't stored yet." plus the evidence line.
   It has no actions.
+- **Retries (domain #71 replay delta, director: stop after 6 failed replays):**
+  - **Automatic, backing off** (`retry: "automatic"`, `next_attempt_at` set): the evidence line ends with
+    "Next try at 23:40Z." in place of "Cadence stores them when it's back". When `attempts` > 0 it adds
+    "<n> of 6 tries failed." With `next_attempt_at` ≤ now: "Trying now."
+  - **Manual** (`retry: "manual"`): the row needs a person. It stays P2 (nothing is lost) but sorts above the
+    automatic items in P2. Evidence: "1,204 entries (3.4 MB) are on disk. Cadence stopped after 6 failed
+    tries: <failure_message>." With storage unavailable, the reason reads "telemetry storage was unavailable
+    at the last try, 23:10Z". The action is `Retry storing` (POST …/retry). While it's in flight the row
+    reads `Retrying…`, then it returns to the automatic form ("Trying now."). An error is shown in the row
+    with the server's sentence (U20).
+  - Without the capability, there's no button and the row reads "Operators can retry storing."
+  - **Folding:** the fold key is `failure_kind` + `retry`, so manual items never hide inside an automatic
+    fold. A folded manual row: "Cadence stopped retrying for 37 passes." with `Retry all 37`. The result reads
+    "Retried 37." or "Retried 35 of 37. 2 failed: <reason>."
+  - **Drawer block:** adds "Tried 6 times, last at 23:10Z." and, when manual, the same `Retry storing`.
 - **Later, not in this step:** contacts showing "settling" after LOS (realized-contact `metadata.settlement`). It
   gets wording when a read carries it.
