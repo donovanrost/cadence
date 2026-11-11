@@ -7,7 +7,6 @@ import { useMissionScope } from "@/shell/index.ts";
 import {
   formatCountdown,
   formatDuration,
-  formatRelative,
   useNow,
   ApButton,
   ApEmptyState,
@@ -66,15 +65,11 @@ useMissionInvalidation(missionId, ["contacts", "commanding", "pass_results"], ()
 const cov = computed(() =>
   coverage.state.value.status === "ready" ? coverage.state.value.value : null,
 );
-/**
- * P1 next contact (ux review 2): not limited to 24 h. Coverage names one only within its window,
- * so fall back to the fleet's next AOS (without a station) beyond it.
- */
+/** P1 next contact: coverage looks 7 days ahead (api ec39e09d). */
 function nextContact(c: SpacecraftCoverage): string {
   const n = c.coverage.next_contact;
-  if (n) return `AOS ${formatCountdown(new Date(n.aos_at), now.value)} ${code(n.station)}`;
-  return props.sc.next_aos_at
-    ? `AOS ${formatRelative(new Date(props.sc.next_aos_at), now.value)}`
+  return n
+    ? `AOS ${formatCountdown(new Date(n.aos_at), now.value)} ${code(n.station)}`
     : "None booked";
 }
 /** P1 longest gap (ux review 3): with no pass at all the "gap" is the whole window. */
