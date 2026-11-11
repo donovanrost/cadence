@@ -20,7 +20,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | **ux** | Visual review of the unreviewed boards (§7); Compose C1 layout ruling (default: accept as built, #64) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
 | **api** | Investigate tab reads: History → Passes → Configuration; shapes agreed with fe-ops first | — |
-| **api-ops** | Investigate tab reads: Uplink, Telemetry; shapes agreed with fe-ops first | — |
+| **api-ops** | free (Uplink read aa1f493e; Telemetry needs none) | — |
 | **domain** | catalog-path generations (#36; plan to the director first, it touches activation) | — (done: qa #34 #59 e683b3e2; qa #19 server side 33529f29; #50 archive) |
 
 ## 2. Ops
@@ -220,7 +220,7 @@ missing endpoint or decision; an item with no blocker can start now.
 2. ~~M8 `spacecraft:<id>` topic~~ done (d79aaad4; Investigate live tail f38a4dfb).
 3. ~~Contacts Release~~ done (50c5e572, 04755d23; fe-ops a311cc8a, d43d2315). Swap station out (#68).
 4. ~~Catalog revision number~~ already there: `GET /command-catalog` basis carries `catalog_revision`.
-5. Investigate tab reads (director split): Uplink and Telemetry tabs. Agree shapes with fe-ops first.
+5. ~~Investigate Uplink tab read~~ done (aa1f493e); Telemetry tab needs no new endpoint (M23 + M10 + M11 + M8, agreed with fe-ops).
 6. ~~Timeline live prepend topic~~ not needed: `invalidate` with `events` already fires on mission:<id> (api-ops); a row push only if ux wants it.
 
 **api** (moved from api-ops, director rebalance)
