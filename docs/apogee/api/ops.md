@@ -370,6 +370,10 @@ shape). The passes come from existing reads, so the row logic isn't copied:
   shows every live state.
 - `last_contact` is the most recent pass that has ended and flew (`active` or `completed`), within
   7 days.
+- `next_contact` looks 7 days ahead. The 24-hour figures (`passes_next_24h`, `longest_gap`,
+  `none_within_6h`) don't, so a next contact two days out can sit beside `passes_next_24h: 0`.
+- Pass rows' `source.synthetic` and `uplink_capable` are null when the provider didn't say. Read
+  null as unknown, never as false.
 - `longest_gap` is the longest stretch of `[now, now+24h]` with no booked pass, edges included. It
   is null only when booked passes cover the whole day.
 - `none_within_6h` is U35's caution: no booked pass starts within 6 h.

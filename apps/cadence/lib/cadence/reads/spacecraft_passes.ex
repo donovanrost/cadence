@@ -5,8 +5,8 @@ defmodule Cadence.Reads.SpacecraftPasses do
 
   - `last_contact`: the most recent pass that has ended and flew (`active`/`completed`), within
     7 days.
-  - `next_contact`, `passes_next_24h` and `longest_gap`: booked passes (`confirmed`/`active`, as
-    in Now's queue). The gap is the longest stretch of `[now, now + 24 h]` with no booked pass,
+  - `next_contact` (within 7 days), `passes_next_24h` and `longest_gap`: booked passes
+    (`confirmed`/`active`, as in Now's queue). The gap is the longest stretch of `[now, now + 24 h]` with no booked pass,
     edges included. `none_within_6h` is U35's caution.
   - `contact_rule`: the spacecraft's active contact requirements whose window overlaps today
     (UTC). Each window's `have` is the booked or flown passes inside it, capped at its count:
@@ -150,10 +150,11 @@ defmodule Cadence.Reads.SpacecraftPasses do
     "#{count} #{direction || "contact"} #{if count == 1, do: "contact", else: "contacts"}"
   end
 
-  # Passes from 7 days back (last contact) to 24 h ahead, widened to cover today's rule windows.
+  # Passes from 7 days back (last contact) to 7 days ahead (next contact), widened to cover
+  # today's rule windows.
   defp span(rules, now) do
     from = Enum.reduce(rules, DateTime.add(now, -@lookback_s), &earliest(&2, &1.window.from))
-    to = Enum.reduce(rules, DateTime.add(now, @horizon_s), &latest(&2, &1.window.to))
+    to = Enum.reduce(rules, DateTime.add(now, @lookback_s), &latest(&2, &1.window.to))
 
     {latest(from, DateTime.add(now, -2 * @lookback_s)),
      earliest(to, DateTime.add(now, 2 * @lookback_s))}

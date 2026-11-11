@@ -68,6 +68,15 @@ defmodule Cadence.Reads.SpacecraftPassesTest do
     assert coverage.last_contact == nil
   end
 
+  test "the next contact can be days out while the 24 h figures stay empty" do
+    coverage = SpacecraftPasses.coverage([pass("later", "confirmed", 48)], [], @now)
+
+    assert %{pass_id: "later"} = coverage.next_contact
+    assert coverage.passes_next_24h == 0
+    assert coverage.none_within_6h
+    assert coverage.longest_gap.seconds == 86_400
+  end
+
   test "the contact rule counts booked or flown passes inside each window, capped at its need" do
     passes = [
       pass("m1", "completed", -10),
