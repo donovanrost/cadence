@@ -263,6 +263,11 @@ defmodule Cadence.Control.UplinkReadinessTest do
     assert {:error, {:refused, :provider_cannot_attest_uplink_sessions}} =
              UplinkReadiness.recover(c.scope, c.mission, "contact-live", opts)
 
+    record(c, :blocked, :cop1_no_clcw_report)
+
+    assert {:error, {:refused, :cop1_no_clcw_report}} =
+             UplinkReadiness.recover(c.scope, c.mission, "contact-live", opts)
+
     record(c, :blocked, :attestation_signature_invalid)
 
     assert {:error, _forbidden} =

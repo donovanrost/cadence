@@ -11,6 +11,10 @@ defmodule Cadence.Control.UplinkReadiness do
     (busy or unresponsive), so the pass isn't shown ready until it does (#38).
   - `session_not_attached` and other session review failures (qualifying): the provider
     connection isn't attached yet.
+  - `cop1_awaiting_clcw` (qualifying): the FOP is waiting for the spacecraft's first CLCW (#59).
+  - `cop1_no_clcw_report` (blocked): no first CLCW within 15 s of the uplink connecting; no
+    Recover (re-qualifying doesn't help, only the spacecraft's report does).
+  - `cop1_clcw_stale` (qualifying): the spacecraft's CLCW reports stopped for more than 15 s.
   - `protocol_state_restore_required` (blocked): the pass's uplink restarted after it had sent
     commands; this pass can't command again (no Recover).
   - `provider_cannot_attest_uplink_sessions` (blocked): the provider can't vouch for uplink
@@ -29,7 +33,13 @@ defmodule Cadence.Control.UplinkReadiness do
   @table __MODULE__
   @resolved_keep_s 300
   # Re-qualifying can't help: protocol state is gone, or the provider can't vouch at all.
-  @unrecoverable [:protocol_state_restore_required, :provider_cannot_attest_uplink_sessions]
+  @unrecoverable [
+    :protocol_state_restore_required,
+    :provider_cannot_attest_uplink_sessions,
+    # #59 follow-up: re-qualifying neither reconnects nor resets the FOP's wait; only the
+    # spacecraft's report (or a new connection) clears it.
+    :cop1_no_clcw_report
+  ]
 
   @doc false
   def table, do: @table
