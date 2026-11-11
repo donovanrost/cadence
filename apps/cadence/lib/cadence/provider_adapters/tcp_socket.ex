@@ -21,7 +21,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   alias Cadence.ActionRequests.ProviderRequest
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressJournal.FileSystem, as: IngressJournal
-  alias Cadence.ProviderAdapters.TCPSocket.{Instrumentation, Session}
+  alias Cadence.ProviderAdapters.TCPSocket.{IngressDrops, Instrumentation, Session}
 
   alias Cadence.Runtime.{
     IngressArchiveConsumer,
@@ -948,6 +948,30 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
      }}
   end
 
+  # #38: CLCWs with no gateway to go to are dropped, with a rate-limited warning.
+  defp consume_socket_data(
+         %{
+           ingress_protocol_family: :cop1_clcw,
+           fixed_message_bytes: bytes,
+           ingress_transport_binding_id: nil
+         } = state,
+         data,
+         receipt_time
+       )
+       when is_integer(bytes) and bytes > 0 do
+    {messages, rest} = split_fixed_messages(state.receive_buffer <> data, bytes, [])
+    state = IngressDrops.note(state, :clcw_unlinked, length(messages), byte_size(data))
+
+    {%{state | receive_buffer: rest},
+     %{
+       bytes_received: byte_size(data),
+       read_count: 1,
+       message_count: 0,
+       last_ingress_at: receipt_time,
+       last_ingress_error: "missing_ingress_transport_binding_id"
+     }}
+  end
+
   defp consume_socket_data(
          %{ingress_protocol_family: :cop1_clcw, fixed_message_bytes: bytes} = state,
          data,
@@ -970,8 +994,10 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
      }}
   end
 
+  # #38: bytes the binding can't decode are dropped (not buffered without bound), with a
+  # rate-limited warning.
   defp consume_socket_data(state, data, _receipt_time) do
-    {%{state | receive_buffer: state.receive_buffer <> data},
+    {IngressDrops.note(state, :undecoded, 1, byte_size(data)),
      %{
        bytes_received: byte_size(data),
        read_count: 1,
@@ -1018,13 +1044,6 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       {:error, reason} -> {0, inspect(reason)}
     end
   end
-
-  defp enqueue_transport_event_messages(
-         %{ingress_transport_binding_id: nil},
-         _messages,
-         _receipt_time
-       ),
-       do: {0, "missing_ingress_transport_binding_id"}
 
   defp enqueue_transport_event_messages(_state, [], _receipt_time), do: {0, nil}
 

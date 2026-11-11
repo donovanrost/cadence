@@ -49,6 +49,19 @@ defmodule Cadence.Commanding.LaneDispatcher do
     end
   end
 
+  @doc """
+  What the lane last saw and when it dispatches next (#38), for operators: `last_result`
+  (`%{result, at}` or nil before its first dispatch), `next_dispatch` (`%{reason, at}` or nil)
+  and the wait it last logged. `{:error, :busy}` when the lane is mid-dispatch past `timeout`.
+  """
+  @spec status(GenServer.server(), timeout()) :: {:ok, map()} | {:error, :busy | :noproc}
+  def status(server, timeout \\ 1_000) do
+    GenServer.call(server, :status, timeout)
+  catch
+    :exit, {:timeout, _} -> {:error, :busy}
+    :exit, _ -> {:error, :noproc}
+  end
+
   @spec dispatch_now(GenServer.server()) ::
           {:ok, drain_summary()} | {:error, drain_error() | :noproc}
   def dispatch_now(server) do
@@ -91,6 +104,7 @@ defmodule Cadence.Commanding.LaneDispatcher do
       dispatch_fun: Keyword.get(opts, :dispatch_fun, &Commanding.dispatch_queue_lane/5),
       run_on_boot?: Keyword.get(opts, :run_on_boot?, true),
       dispatch_timer: nil,
+      last_result: nil,
       # What the lane last waited on, so a wait is logged once, not every poll.
       waiting: nil,
       released_by:
@@ -117,6 +131,17 @@ defmodule Cadence.Commanding.LaneDispatcher do
   end
 
   @impl true
+  def handle_call(:status, _from, state) do
+    next =
+      case state.dispatch_timer do
+        %{reason: reason, at: at} -> %{reason: reason, at: at}
+        nil -> nil
+      end
+
+    {:reply,
+     {:ok, %{last_result: state.last_result, next_dispatch: next, waiting: state.waiting}}, state}
+  end
+
   def handle_call(:drain, _from, state) do
     state = cancel_dispatch_timer(state)
 
@@ -160,13 +185,18 @@ defmodule Cadence.Commanding.LaneDispatcher do
 
     emit(:dispatch_attempt, state, %{count: 1}, %{reason: reason})
 
-    case state.dispatch_fun.(
-           state.organization_id,
-           state.mission_id,
-           state.queue_lane_key,
-           state.released_by,
-           attempted_at: attempted_at
-         ) do
+    result =
+      state.dispatch_fun.(
+        state.organization_id,
+        state.mission_id,
+        state.queue_lane_key,
+        state.released_by,
+        attempted_at: attempted_at
+      )
+
+    state = %{state | last_result: %{result: summarize(result), at: attempted_at}}
+
+    case result do
       {:ok, _release_result} ->
         emit(:dispatch_result, state, %{count: 1}, %{result: :released})
         drain_available(%{state | waiting: nil}, :continuation, released_count + 1)
@@ -252,6 +282,21 @@ defmodule Cadence.Commanding.LaneDispatcher do
     end
   end
 
+  # The dispatch result as `status/2` reports it: the outcome, without the release payload.
+  defp summarize({:ok, _release_result}), do: :released
+  defp summarize({:error, :command_queue_lane_empty}), do: :empty
+
+  defp summarize({:error, {:command_queue_lane_waiting_for_not_before, _entry, not_before}}),
+    do: {:waiting_for_not_before, not_before}
+
+  defp summarize({:error, {:command_queue_lane_no_release_target, source_endpoint_ref, _}}),
+    do: {:no_release_target, source_endpoint_ref}
+
+  defp summarize({:error, {:command_release_refused, attempt_id, reason}}),
+    do: {:release_refused, attempt_id, reason}
+
+  defp summarize({:error, reason}), do: {:error, reason}
+
   # Logs a wait at info when the lane starts waiting on it (not on every poll).
   defp waiting(%{waiting: kind} = state, kind, _message), do: state
 
@@ -275,7 +320,8 @@ defmodule Cadence.Commanding.LaneDispatcher do
 
     emit(:timer_scheduled, state, %{count: 1, delay_ms: delay_ms}, %{reason: reason})
 
-    %{state | dispatch_timer: %{ref: ref, token: token}}
+    at = DateTime.add(state.reference_time_fun.(), delay_ms, :millisecond)
+    %{state | dispatch_timer: %{ref: ref, token: token, reason: reason, at: at}}
   end
 
   defp cancel_dispatch_timer(%{dispatch_timer: nil} = state), do: state
