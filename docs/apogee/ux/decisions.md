@@ -483,3 +483,33 @@ want better gap reasons (acknowledgements are per submit), so a forced, meaningl
 - `contact_plan_version_already_decided` should then only occur in a race (someone else decided first): "This
   version was already decided by <actor>. Reload to see it."
 
+
+### U37 · Telemetry not yet stored after a pass (DECISIONS #71, domain shape) (domain / api-ops / fe-ops)
+A U31 attention source, `contact_settlement`. It's raised 6 h after LOS (`deadline_at`) while the pass's telemetry
+is still on disk and not in telemetry history. It's always **P2**: the journal is never pruned before it's stored
+(`expires_at` null), so nothing is lost by waiting. No person action and no Acknowledge. Cadence retries by itself
+(`retry: "automatic"`), and the system closes the item.
+- **Row** (title / evidence / meta):
+  - Title: `EARENDIL-001 · Telemetry from the SVA 18:49Z pass isn't stored yet.` The time is the AOS (`starts_at`),
+    with the §4 date prefix when it isn't today. Drop the station when it's null.
+  - Evidence, by `failure_kind`:
+    - `telemetry_storage_unavailable`: "1,204 entries (3.4 MB) are on disk. Telemetry storage is unavailable;
+      Cadence stores them when it's back."
+    - `settle_failed`: "1,204 entries (3.4 MB) are on disk. Cadence couldn't store them: <failure_message>."
+    - null (deadline passed with no failure): "1,204 entries (3.4 MB) are on disk, past the 00:57Z deadline for
+      storing them."
+  - Meta: `SVA · Northlight · 18:49Z–18:57Z`. Drop any part that's null (U20).
+  - Action: `Review` goes to the contact drawer (`contact_id`).
+  - The UI never shows "TSDB", "journal", "settlement" or the journals count. `failure_message` is shown only for
+    `settle_failed`; for storage outages it goes in Technical details.
+  - Bytes use the console's decimal formatter (`formatBytes`, add a GB tier at ≥ 1e9).
+- **Folding:** two or more open items with the same `failure_kind` fold into one row:
+  `Telemetry from 37 passes isn't stored yet.` / "48,210 entries (4.1 GB) are on disk. Telemetry storage is
+  unavailable; Cadence stores them when it's back." The meta is the earliest and latest pass (`11-11 06:01Z … 18:49Z`).
+  `Show all 37` opens the U30-style sheet, which lists the passes soonest-first and links each to its drawer.
+- **Resolved:** the row fades for 5 s with `Resolved: telemetry stored` (a system closure states the action only, U31).
+  A folded row counts down as items resolve, then fades the same way.
+- **Contact drawer:** a caution block reads "Telemetry from this pass isn't stored yet." plus the evidence line.
+  It has no actions.
+- **Later, not in this step:** contacts showing "settling" after LOS (realized-contact `metadata.settlement`). It
+  gets wording when a read carries it.
