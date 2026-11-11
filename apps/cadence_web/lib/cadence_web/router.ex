@@ -847,6 +847,7 @@ defmodule CadenceWeb.Router do
       # Investigate History (owner: api). Contract: docs/apogee/api/alarms-console.md §History
       get("/alarm-episodes/:episode_id/history", AlarmHistoryController, :episode)
       get("/spacecraft/:spacecraft_id/alarm-episodes", AlarmHistoryController, :spacecraft)
+      get("/spacecraft/:spacecraft_id/passes", SpacecraftPassesController, :show)
       post("/attention/:source/:id/acknowledge", AttentionController, :acknowledge)
       post("/attention/:source/:id/resolve", AttentionController, :resolve)
 

@@ -338,6 +338,49 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
 
 Errors: `404 mission_not_found`.
 
+## `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/passes` (Investigate Passes tab, owner: api): built
+
+This endpoint covers P1 and the queued counts for P3 (ux Investigate.md 24a160b8; fe-ops agreed the
+shape). The passes come from existing reads, so the row logic isn't copied:
+
+- P2 Gantt and P3 Upcoming: `GET /passes?spacecraft_id=&from=now-24h&to=now+24h`. P3 is the rows
+  with `ends_at > now`.
+- P4 Recent: `GET /pass-review/rows?spacecraft_id=&from=now-7d&to=now`, grouped by day on the client.
+
+```json
+{"observed_at": "…",
+ "coverage": {
+   "last_contact": {"pass_id": "…", "station": {"id", "code", "name"}, "los_at": "…"} | null,
+   "next_contact": {"pass_id": "…", "station": {…}, "aos_at": "…"} | null,
+   "passes_next_24h": 9,
+   "longest_gap": {"seconds": 19860, "from": "…", "to": "…"} | null,
+   "none_within_6h": false,
+   "contact_rule": {"state": "met" | "short" | "none", "have": 2, "need": 3,
+                    "rules": [{"requirement_id": "…", "version": 1, "text": "3 downlink contacts",
+                               "window": {"from": "…", "to": "…"}, "have": 2, "need": 3, "met": false}]}},
+ "queued": {"<pass id>": 2}}
+```
+
+- **Booked** means `confirmed` or `active`, as in Now's queue. It's what `next_contact`,
+  `passes_next_24h`, `longest_gap` and `none_within_6h` count. The upcoming list (from `/passes`)
+  shows every live state.
+- `last_contact` is the most recent pass that has ended and flew (`active` or `completed`), within
+  7 days.
+- `longest_gap` is the longest stretch of `[now, now+24h]` with no booked pass, edges included. It
+  is null only when booked passes cover the whole day.
+- `none_within_6h` is U35's caution: no booked pass starts within 6 h.
+- `contact_rule` covers the spacecraft's active contact requirements whose window overlaps today
+  (UTC):
+  - each window's `have` counts the booked or flown passes inside it, capped at its `need`;
+  - `short` means at least one window is short of its `need`;
+  - `none` means no requirement covers today, so the UI shows `—` with a link to Contact planning.
+- `queued` maps each `/passes` row id to the queued, unfinished command groups bound to it. Only
+  counts above 0 appear.
+- `uplink_capable` null on a `/passes` row means the provider didn't say. Show it blank, not
+  `Down only`.
+
+Errors: `404 spacecraft_not_found`.
+
 ## `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/uplink` (Investigate Uplink tab): built
 
 "Can I command this spacecraft now, and what's going up?" (Investigate.md, Tab · Uplink.)
