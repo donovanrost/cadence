@@ -767,6 +767,12 @@ defmodule Cadence.Runtime do
           await_runtime_unregistered(registered?, 500, timeout_reason)
         end
 
+      # Already exited (e.g. a contact settler stopped it first, DECISIONS #71): the caller's
+      # goal holds once it's unregistered.
+      {:error, :not_found} ->
+        Process.demonitor(monitor_ref, [:flush])
+        await_runtime_unregistered(registered?, 500, timeout_reason)
+
       {:error, _reason} = error ->
         Process.demonitor(monitor_ref, [:flush])
         error
