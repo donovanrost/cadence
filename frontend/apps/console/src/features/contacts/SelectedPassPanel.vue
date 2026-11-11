@@ -22,6 +22,7 @@ import type { Pass } from "./api.ts";
 import AttentionBlock from "./AttentionBlock.vue";
 import { readinessTag, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
+import ReleasePass from "./ReleasePass.vue";
 import { useCommandAccess } from "@/features/commands/index.ts";
 import { stationLabel } from "./gantt.ts";
 
@@ -176,6 +177,13 @@ const countdown = computed(() => {
       </div>
       <ApKeyValue :items="facts" />
       <ApButton v-if="replan" size="compact" :to="replan">Re-plan</ApButton>
+      <ReleasePass
+        :mission-id="missionId"
+        :pass="pass"
+        :spacecraft="spacecraft?.name ?? pass.spacecraft?.name ?? 'Unknown spacecraft'"
+        :now="now"
+        @changed="$emit('changed')"
+      />
     </div>
   </ApPanel>
 </template>

@@ -1,5 +1,6 @@
 import { findingTitle, findingsMeta } from "./findings.ts";
 import type { Availability, AvailabilityWindow } from "@/features/scheduling/index.ts";
+import { releaseErrorWords } from "./release.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { passesReader, type Pass } from "./api.ts";
@@ -32,6 +33,8 @@ const pass = (id: string, overrides: Partial<Pass> = {}): Pass => ({
   uplink_confirmed: null,
   attention: null,
   uplink_readiness: null,
+  provider_revision: null,
+  releasable: undefined,
   ...overrides,
 });
 
@@ -356,5 +359,27 @@ describe("D4 findings (M22)", () => {
     expect(
       findingsMeta({ truncated: false, counts: { conflicts: 0, gaps: 0 }, findings: [] }),
     ).toBeNull();
+  });
+});
+
+describe("D2 Release words (50c5e572, ux)", () => {
+  it("refused and not-sent change nothing; unknown is unclear", () => {
+    const e = (outcome: string) =>
+      ({
+        kind: "conflict",
+        code: "provider_cancel_failed",
+        message: "x",
+        details: { outcome, reason: "Window locked.", state: "confirmed" },
+      }) as const;
+    expect(releaseErrorWords(e("refused"), "Northlight").text).toBe(
+      "Nothing changed: Northlight refused the cancel (Window locked).",
+    );
+    expect(releaseErrorWords(e("not_sent"), "Northlight").text).toBe(
+      "Nothing changed: the cancel wasn't sent (Window locked).",
+    );
+    expect(releaseErrorWords(e("unknown"), "Northlight")).toEqual({
+      tone: "caution",
+      text: "It's unclear whether Northlight canceled it (Window locked). The pass reads Unknown until Northlight answers.",
+    });
   });
 });

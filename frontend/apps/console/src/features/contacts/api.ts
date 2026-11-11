@@ -72,7 +72,11 @@ const pass = d.object({
   attention: d.optional(d.nullable(attentionReader)),
   /** U33: null when the pass has no uplink to be ready; optional until api-ops ships it. */
   uplink_readiness: d.optional(d.nullable(passReadinessReader)),
+  /** Release (50c5e572): the booking revision to send back, and whether the viewer may release. */
+  provider_revision: d.optional(d.nullable(d.integer)),
+  releasable: d.optional(d.boolean),
 });
+export const passReader = pass;
 
 export const passesReader = d.object({
   from: d.timestamp,
