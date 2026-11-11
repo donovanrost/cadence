@@ -74,6 +74,18 @@ defmodule Cadence.Reads.CatalogDeclarations do
     end
   end
 
+  @doc "The `base_type` of a parameter's type (for example `integer` or `enumerated`), or `nil`."
+  @spec parameter_base_type(declarations(), binary() | nil) :: binary() | nil
+  def parameter_base_type(declarations, parameter_id) do
+    with %{} = parameter <- Map.get(declarations, parameter_id || ""),
+         %{} = type <- referenced(declarations, parameter, :type),
+         %{} = definition <- field(type, :definition) do
+      blank_to_nil(to_string(field(definition, :base_type) || ""))
+    else
+      _none -> nil
+    end
+  end
+
   @doc "Valid range (`%{minimum, maximum}` or `nil`) and unit of a command argument, from its type."
   @spec argument_facts(declarations(), binary()) :: %{
           valid_range: map() | nil,

@@ -16,6 +16,7 @@ defmodule CadenceWeb.ConsoleSocket do
 
   channel("mission:*", CadenceWeb.Console.MissionChannel)
   channel("command_group:*", CadenceWeb.Console.CommandGroupChannel)
+  channel("spacecraft:*", CadenceWeb.Console.SpacecraftChannel)
 
   @impl true
   def connect(_params, socket, %{session: session}) do

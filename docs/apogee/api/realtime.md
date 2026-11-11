@@ -106,7 +106,7 @@ group must exist (`{"reason": "command_group_not_found"}` otherwise).
   the view changed**. Replace your copy wholesale; `seq` increases by one per push.
 - After a reconnect, rejoin; the first push is the full view again.
 
-## Planned (with fe-ops, for M8)
+## Spacecraft live values (M8)
 
 These are the shapes I plan to build, revised with fe-ops' comments (plans/ops.md).
 
