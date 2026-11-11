@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { useHeldNewest } from "./useHeldNewest.ts";
 import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
@@ -104,10 +105,26 @@ const density = useRemoteQuery(key, (k, signal) => {
     signal,
   );
 });
-useMissionInvalidation(missionId, ["events", "alarms"], () => {
-  events.refetch();
-  density.refetch();
+useMissionInvalidation(
+  missionId,
+  ["events", "alarms"],
+  () => {
+    events.refetch();
+    density.refetch();
+  },
+  { throttleMs: 2000 },
+);
+/** Live prepend: hold new events while the reader is scrolled away (lead 79ec6dc6). */
+const logAnchor = ref<HTMLElement | null>(null);
+const scroller = computed(() => {
+  let el = logAnchor.value?.parentElement ?? null;
+  while (el && !/(auto|scroll)/.test(getComputedStyle(el).overflowY)) el = el.parentElement;
+  return el;
 });
+const held = useHeldNewest(
+  computed(() => (events.state.value.status === "ready" ? events.state.value.value.events : null)),
+  scroller,
+);
 
 const missing = computed(
   () => events.state.value.status === "failed" && events.state.value.error.kind === "not_found",
@@ -156,7 +173,18 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
               v-if="value.events.length === 0"
               :headline="`No events in the ${title.toLowerCase()}`"
             />
-            <EventLog v-else :events="value.events" />
+            <template v-else>
+              <div ref="logAnchor" aria-hidden="true" />
+              <button
+                v-if="held.pending.value > 0"
+                type="button"
+                class="sticky top-0 z-10 w-full cursor-pointer border-b border-hairline bg-raised px-4 py-2 text-left font-mono text-xs text-readout uppercase hover:text-bright"
+                @click="held.showNew"
+              >
+                {{ held.pending.value }} new {{ held.pending.value === 1 ? "event" : "events" }} ↑
+              </button>
+              <EventLog :events="held.shown.value ?? value.events" />
+            </template>
           </template>
         </ApRemote>
       </ApPanel>

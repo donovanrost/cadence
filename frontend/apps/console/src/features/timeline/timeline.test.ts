@@ -1,3 +1,5 @@
+import { effectScope, nextTick, ref } from "vue";
+import { useHeldNewest } from "./useHeldNewest.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { eventsReader, type MissionEvent } from "./api.ts";
@@ -191,5 +193,28 @@ describe("timeline scope (backlog §2)", () => {
     expect(scopeValue(s)).toBe("sc:4");
     expect(scopeQuery("plane:2")).toEqual({ plane: "2", sc: undefined });
     expect(scopeQuery("fleet")).toEqual({ sc: undefined, plane: undefined });
+  });
+});
+
+describe("live prepend hold (lead 79ec6dc6)", () => {
+  it("shows new events at the top, holds them when scrolled away", async () => {
+    const scope = effectScope();
+    const incoming = ref<readonly { id: string }[] | null>([{ id: "a" }]);
+    const el = document.createElement("div");
+    const held = scope.run(() => useHeldNewest(incoming, ref(el)));
+    if (!held) throw new Error("no scope");
+    incoming.value = [{ id: "b" }, { id: "a" }];
+    await nextTick();
+    expect(held.shown.value?.map((e) => e.id)).toEqual(["b", "a"]);
+    el.scrollTop = 400;
+    el.dispatchEvent(new Event("scroll"));
+    incoming.value = [{ id: "d" }, { id: "c" }, { id: "b" }, { id: "a" }];
+    await nextTick();
+    expect(held.shown.value?.map((e) => e.id)).toEqual(["b", "a"]);
+    expect(held.pending.value).toBe(2);
+    el.scrollTop = 0;
+    el.dispatchEvent(new Event("scroll"));
+    expect(held.shown.value?.map((e) => e.id)).toEqual(["d", "c", "b", "a"]);
+    scope.stop();
   });
 });
