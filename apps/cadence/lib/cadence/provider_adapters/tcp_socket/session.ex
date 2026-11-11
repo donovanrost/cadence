@@ -4,6 +4,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Session do
   alias Cadence.Platform.ContentHash
   alias Cadence.Runtime.{ProcessNamespace, RecoveryExchange, SessionReadiness}
 
+  require Logger
+
   def initialize(state, opts) do
     config = Keyword.fetch!(opts, :configuration)
     namespace = Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
@@ -13,12 +15,16 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Session do
       session_resource: Map.get(config, :uplink_resource_id, config["uplink_resource_id"]),
       session_configuration_sha256: ContentHash.term_sha256(config),
       session_handle: nil,
-      session_blocking_reason: :tcp_provider_not_connected
+      session_blocking_reason: :tcp_provider_not_connected,
+      session_peer: nil,
+      # Last warning per {kind, peer IP} (monotonic ms): a reconnecting stray logs once a minute.
+      peer_warnings: %{}
     })
   end
 
   def connected(state) do
     block(state, :connection_replaced)
+    state = Map.put(state, :session_peer, peer(Map.get(state, :socket)))
 
     basis = %{
       adapter_key: :tcp_socket,
@@ -35,6 +41,39 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Session do
 
       {:error, reason} ->
         %{state | session_handle: nil, session_blocking_reason: reason}
+    end
+  end
+
+  @doc "The address of a socket's far end, `ip:port` (nil when unknown)."
+  def peer_of(socket), do: peer(socket)
+
+  defp peer(socket) when is_port(socket) do
+    case :inet.peername(socket) do
+      {:ok, {ip, port}} -> "#{:inet.ntoa(ip)}:#{port}"
+      _error -> nil
+    end
+  end
+
+  defp peer(_socket), do: nil
+
+  @peer_warning_ms 60_000
+
+  @doc """
+  Logs a warning of `kind` about `peer`, at most once a minute per kind and peer IP,
+  so a stray peer reconnecting every second doesn't flood the log.
+  """
+  def warn_peer(state, kind, peer, message) do
+    ip = {kind, peer |> to_string() |> String.split(":") |> List.first()}
+    now = System.monotonic_time(:millisecond)
+    warnings = Map.get(state, :peer_warnings, %{})
+
+    case warnings[ip] do
+      at when is_integer(at) and now - at < @peer_warning_ms ->
+        state
+
+      _due ->
+        Logger.warning(message)
+        Map.put(state, :peer_warnings, Map.put(warnings, ip, now))
     end
   end
 

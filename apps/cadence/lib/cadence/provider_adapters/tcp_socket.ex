@@ -333,16 +333,29 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       ) do
     case current_socket(state) do
       {:ok, _existing_socket} ->
+        # DECISIONS #67: never refuse silently; a second peer on a listener is a finding.
+        state =
+          Session.warn_peer(
+            state,
+            :refused,
+            Session.peer_of(socket),
+            "TCP provider #{state.provider_binding_id} refused a second connection from " <>
+              "#{Session.peer_of(socket)}; #{state.session_peer} is connected"
+          )
+
         :gen_tcp.close(socket)
         {:noreply, schedule_accept(%{state | accept_ref: nil})}
 
       {:error, :tcp_provider_not_connected} ->
+        # Keep one accept pending while connected, so a later peer is refused (and logged)
+        # rather than left in the listen backlog believing it's connected.
         {:noreply,
          state
          |> Map.put(:socket, socket)
          |> Session.connected()
          |> Map.put(:accept_ref, nil)
-         |> start_socket_receiver!(socket)}
+         |> start_socket_receiver!(socket)
+         |> schedule_accept()}
     end
   end
 
@@ -361,9 +374,12 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         {:accept_result, accept_ref, {:error, reason}},
         %{accept_ref: accept_ref} = state
       ) do
-    Logger.warning(
-      "TCP provider accept failed for #{state.provider_binding_id}: #{inspect(reason)}"
-    )
+    # The pending accept (#67) ends with :closed when the listener is quiesced: not a fault.
+    if state.lifecycle_status == :active do
+      Logger.warning(
+        "TCP provider accept failed for #{state.provider_binding_id}: #{inspect(reason)}"
+      )
+    end
 
     {:noreply, %{state | accept_ref: nil}}
   end
@@ -530,6 +546,9 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       {:error, _reason} -> fallback_port
     end
   end
+
+  # One accept at a time: a second would leave the first's result stale (and closed).
+  defp schedule_accept(%{accept_ref: ref} = state) when is_reference(ref), do: state
 
   defp schedule_accept(%{lifecycle_status: :active, listener: listener} = state)
        when not is_nil(listener) do
