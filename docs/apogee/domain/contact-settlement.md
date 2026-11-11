@@ -116,6 +116,42 @@ settles; deadline expiry with the backlog on disk and the attention item; the sw
 `file_system_test.exs` (no reclaim past the processing cursor, across a restart),
 `attention_api_test.exs` (acknowledge/resolve 404).
 
+## Replay settled journal (design; next after the #65 armed pass)
+
+Goal: stranded telemetry reaches the TSDB without a human. Nothing new is needed on disk: an
+ended contact's journals live at a path derived from `{mission, realized contact, path,
+binding}`, with checkpointed cursors, and recovery already resumes from the durable processing
+cursor.
+
+1. **Replay runtime = the contact runtime without intake.** `RealizedContactRuntimeSpec`
+   gains `intake: false`. `PathCoordinator` then starts journal, persistence projector,
+   executor, journal consumer and archive consumer as now, but no provider adapter and no
+   transports. The consumer resumes from the durable cursor and drains through the normal
+   executor and projector; nothing about decoding or persistence forks.
+2. **The settler settles it.** Replay is `start (intake: false)` then the existing settler with
+   the same quiesce, deadline (shorter: 30 min default), backlog read and terminate.
+   - Drained: `settled`, plus `replayed_at` (resolves the attention item as `replayed`).
+   - Not drained: back to `unsettled`, the backlog re-read, `attempts + 1`, and
+     `next_attempt_at` = now + backoff (5 min doubling to 2 h). The attention item then shows
+     `next_attempt_at` (ux U37).
+3. **Who replays.** Reconcile's sweep, at most one replay per mission at a time:
+   - `unsettled` contacts whose `next_attempt_at` has passed;
+   - `settled` with `runtime: "absent"` and no `inspected_at`, and contacts ended before #71
+     (`settlement` nil, ended): only if a journal directory exists for one of their downlink
+     provider bindings. A replay with nothing to drain settles at once and records
+     `inspected_at`, so each is inspected once.
+   No TSDB health probe is needed: a failing replay just backs off, and the first attempt after
+   storage returns drains it.
+4. **Bounded.** One replay per mission at a time; pre-#71 contacts are checked oldest first, a
+   few per reconcile; a replay never runs while the same contact's settler runs.
+5. **Tests.** Unsettled contact (deadline test setup), outage off, reconcile: replayed,
+   `settled` + `replayed_at`, samples stored exactly once (idempotent persistence), attention
+   resolved as `replayed`. Still failing: back to `unsettled` with `next_attempt_at`. A
+   pre-#71 contact with a journal backlog on disk is found and drained; one without a
+   journal directory is skipped.
+
+Open question for the director: the default replay deadline (30 min) and backoff cap (2 h).
+
 ## Not covered by c732a2ba
 
 c732a2ba is partition-owner initialization backoff in `MissionCoordinator`. It doesn't touch
