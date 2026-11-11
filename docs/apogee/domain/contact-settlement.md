@@ -116,7 +116,7 @@ settles; deadline expiry with the backlog on disk and the attention item; the sw
 `file_system_test.exs` (no reclaim past the processing cursor, across a restart),
 `attention_api_test.exs` (acknowledge/resolve 404).
 
-## Replay settled journal (design; next after the #65 armed pass)
+## Replay settled journal (design approved by director 2026-11-11; build after the #65 armed pass)
 
 Goal: stranded telemetry reaches the TSDB without a human. Nothing new is needed on disk: an
 ended contact's journals live at a path derived from `{mission, realized contact, path,
@@ -150,7 +150,14 @@ cursor.
    pre-#71 contact with a journal backlog on disk is found and drained; one without a
    journal directory is skipped.
 
-Open question for the director: the default replay deadline (30 min) and backoff cap (2 h).
+6. **Give up after 6 failed replays** (about half a day with the backoff). The contact stays
+   `unsettled` with `replay: "stopped"`; the attention item turns to needs-operator
+   (`retry: "manual"`, `next_attempt_at: nil`, `attempts: 6`) and offers one operator action:
+   retry replay now (`POST /attention/contact_settlement/:id/retry`), which resets the count.
+   The backlog stays on disk either way.
+
+Director (2026-11-11): 30 min deadline per replay, backoff 5 min doubling to 2 h, one replay
+per mission at a time, stop after 6 failures.
 
 ## Not covered by c732a2ba
 
