@@ -133,7 +133,8 @@ defmodule Cadence.Commanding do
           CommandRequestRow.to_domain(request),
           completed,
           basis.verifier_plans,
-          at
+          at,
+          basis.runtime_definition.argument_specs
         )
 
       attempt
@@ -907,7 +908,7 @@ defmodule Cadence.Commanding do
                release_context.queue_entry_row,
                release_context.request_row,
                persisted_attempt,
-               release_context.request_basis.verifier_plans,
+               release_context.request_basis,
                release_context.attempted_at,
                release_context.process_namespace
              ) do
@@ -1000,7 +1001,7 @@ defmodule Cadence.Commanding do
          %CommandQueueEntryRow{} = queue_entry_row,
          %CommandRequestRow{} = request_row,
          %CommandReleaseAttempt{} = command_release_attempt,
-         verifier_plans,
+         %{verifier_plans: verifier_plans} = request_basis,
          %DateTime{} = attempted_at,
          %ProcessNamespace{} = process_namespace
        )
@@ -1030,7 +1031,8 @@ defmodule Cadence.Commanding do
             CommandRequestRow.to_domain(current_request),
             completed_release_attempt,
             verifier_plans,
-            attempted_at
+            attempted_at,
+            request_basis.runtime_definition.argument_specs
           )
 
         release_attempt_row
