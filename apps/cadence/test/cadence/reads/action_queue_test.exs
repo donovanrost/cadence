@@ -159,6 +159,79 @@ defmodule Cadence.Reads.ActionQueueTest do
     end
   end
 
+  describe "build/1 flight events" do
+    test "catalog state alarms are flight events, grouped by point name and value across revisions" do
+      result =
+        build(%{
+          spacecraft: [craft("a", :critical), craft("b", :critical), craft("c", :critical)],
+          episodes: [
+            mode("a", "rev1:MODE", "enumerated", ago(300)),
+            mode("b", "rev2:MODE", "enumerated", ago(100)),
+            # Opened before rule kinds were recorded: a state value is a flight event.
+            mode("c", "rev1:MODE", nil, ago(50))
+          ]
+        })
+
+      assert [
+               %{
+                 kind: :flight_event,
+                 id: ~s(flight_event:critical:MODE:"SAFE"),
+                 priority: 1,
+                 count: 3,
+                 source: :catalog_monitoring,
+                 event: %{value_json: ~s("SAFE"), entered_at: entered},
+                 spacecraft: [%{id: "a", first_crossed_at: entered} | _]
+               }
+             ] = result.items
+
+      assert entered == ago(300)
+      assert result.counts.spacecraft_p1 == 3
+    end
+
+    test "numeric catalog alarms and ground limits stay alarms" do
+      result =
+        build(%{
+          spacecraft: [craft("a", :critical), craft("b", :critical), craft("c", :critical)],
+          episodes: [
+            with_rule(episode("a", :critical, source: :catalog_monitoring), "comparison"),
+            episode("b", :critical, source: :catalog_monitoring),
+            episode("c", :critical, value: "SAFE")
+          ]
+        })
+
+      assert Enum.all?(result.items, &(&1.kind == :alarm and &1.event == nil))
+    end
+
+    test "a spacecraft gives its worst alarm and its worst flight event; ties put the event first" do
+      result =
+        build(%{
+          spacecraft: [craft("a", :critical)],
+          episodes: [
+            episode("a", :critical, source: :catalog_monitoring, opened_at: ago(60)),
+            mode("a", "rev1:MODE", "enumerated", ago(60))
+          ]
+        })
+
+      assert [%{kind: :flight_event}, %{kind: :alarm}] = result.items
+    end
+  end
+
+  defp mode(spacecraft_id, point_id, rule_kind, opened_at) do
+    spacecraft_id
+    |> episode(:critical,
+      source: :catalog_monitoring,
+      point_id: point_id,
+      point_name: "MODE",
+      value: "SAFE",
+      condition: "critical",
+      opened_at: opened_at
+    )
+    |> with_rule(rule_kind)
+  end
+
+  defp with_rule(episode, nil), do: episode
+  defp with_rule(episode, kind), do: Map.put(episode, :context, %{"rule_kind" => kind})
+
   describe "build/1 commands" do
     test "failed and indeterminate commands in the lookback are P1, grouped by command" do
       result =

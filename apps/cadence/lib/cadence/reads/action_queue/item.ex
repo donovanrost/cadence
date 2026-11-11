@@ -22,7 +22,8 @@ defmodule Cadence.Reads.ActionQueue.Item do
         attention: nil,
         missed_passes: nil,
         next_contact: nil,
-        station_issue: nil
+        station_issue: nil,
+        event: nil
       },
       fields
     )

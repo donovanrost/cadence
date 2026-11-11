@@ -4,9 +4,10 @@ defmodule Cadence.Reads.ActionQueue do
 
   Ranking follows ux ruling U11:
 
-    * **P1, act now:** critical alarms (active alarm episodes, both sources); failed or indeterminate commands
+    * **P1, act now:** critical alarms (active alarm episodes, both sources) and critical flight
+      events (a catalog state alarm such as `MODE = SAFE`); failed or indeterminate commands
       (verify failed, release uncertain) within the failure lookback window.
-    * **P2, needs you soon:** caution alarms; approval-pending command
+    * **P2, needs you soon:** caution alarms and flight events; approval-pending command
       requests waiting on the viewer (not requested by them); stale spacecraft,
       grouped by plane.
     * **P3, when you can:** setup gaps (readiness `blocker` / `not_set_up`
@@ -18,13 +19,13 @@ defmodule Cadence.Reads.ActionQueue do
   spacecraft by plane, failed commands by `{command, outcome}`. Within a
   priority, alarm items whose episodes are all acknowledged go last; then items
   sort by `due_at` (time to consequence, soonest first), then `since` (oldest
-  first). `due_at` is always `nil` until contact and
+  first), then a flight event before any other kind (a mode change usually explains the alarms
+  after it). `due_at` is always `nil` until contact and
   propagation data exist (M7, D1).
 
   Missed passes and stations with issues come from `ActionQueue.ContactItems`, and
-  needs-acknowledgment items from `ActionQueue.AttentionItems`. Not derived: critical flight
-  events (safe mode), because there is no source yet; and no-ACK retries, because there's no
-  automatic retry (DECISIONS #69).
+  needs-acknowledgment items from `ActionQueue.AttentionItems`. Not derived: no-ACK retries,
+  because there's no automatic retry (DECISIONS #69).
   """
 
   alias Cadence.Auth.Scope
@@ -47,6 +48,7 @@ defmodule Cadence.Reads.ActionQueue do
   @type priority :: 1 | 2 | 3
   @type kind ::
           :alarm
+          | :flight_event
           | :command_failed
           | :approval
           | :stale
@@ -353,10 +355,13 @@ defmodule Cadence.Reads.ActionQueue do
   # Within a priority, items whose alarms are all acknowledged go after the rest.
   defp sort_key(item) do
     {item.priority, if(acknowledged_only?(item), do: 1, else: 0), unix(item.due_at),
-     unix(item.since), item.id}
+     unix(item.since), if(item.kind == :flight_event, do: 0, else: 1), item.id}
   end
 
-  defp acknowledged_only?(%{kind: :alarm, acknowledged: n, count: n}), do: true
+  defp acknowledged_only?(%{kind: kind, acknowledged: n, count: n})
+       when kind in [:alarm, :flight_event],
+       do: true
+
   defp acknowledged_only?(%{kind: :attention, attention: %{state: "acknowledged"}}), do: true
   defp acknowledged_only?(_item), do: false
 

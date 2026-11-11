@@ -40,7 +40,8 @@ defmodule CadenceWeb.Console.ActionQueueJSON do
       attention: item.attention,
       missed_passes: item.missed_passes,
       next_contact: item.next_contact,
-      station_issue: station_issue(item.station_issue)
+      station_issue: station_issue(item.station_issue),
+      event: item.event
     }
   end
 
