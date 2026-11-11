@@ -53,7 +53,12 @@ defmodule CadenceWeb.Console.PassController do
         _forbidden -> []
       end
 
-    {resolutions, blocked} = Enum.split_with(items, &(&1.source == "pass_resolution"))
+    # A pass row carries its booking's pass_resolution item, else a pass_release one (a Release the
+    # provider didn't confirm); a blocked uplink shows through uplink_readiness instead.
+    {resolutions, blocked} =
+      items
+      |> Enum.sort_by(&if(&1.source == "pass_resolution", do: 1, else: 0))
+      |> Enum.split_with(&(&1.source in ["pass_resolution", "pass_release"]))
 
     conn
     |> with_replacements(result)

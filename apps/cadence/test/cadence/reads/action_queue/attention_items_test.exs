@@ -111,6 +111,28 @@ defmodule Cadence.Reads.ActionQueue.AttentionItemsTest do
     assert queue.counts.p2 == 2
   end
 
+  test "a pass_release item carries its cancel outcome as release; others have release nil" do
+    release =
+      "r"
+      |> attention(600)
+      |> Map.merge(%{
+        source: "pass_release",
+        conflict: "cancel_failed",
+        outcome: "refused",
+        provider_reason: "conflict"
+      })
+
+    %{items: [released, resolution]} = build([release, attention("a", 600)])
+
+    assert %{
+             id: "attention:pass_release:r",
+             attention: %{release: %{outcome: "refused", reason: "conflict"}}
+           } =
+             released
+
+    assert resolution.attention.release == nil
+  end
+
   test "resolved entries match row ids and say who or what closed them" do
     resolved =
       [

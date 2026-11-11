@@ -73,5 +73,27 @@ defmodule CadenceWeb.Console.PassReleaseAPITest do
     assert details["outcome"] in ["refused", "not_sent", "unknown"]
     assert %{"state" => state} = pass(c, c.admin)
     assert state == details["state"]
+
+    # It raises a pass_release item (domain 548b8dd9), in Now and on the pass row.
+    queue =
+      c.admin
+      |> TestFixtures.member_conn()
+      |> get(c.base <> "/action-queue")
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert %{
+             "kind" => "attention",
+             "source" => "pass_release",
+             "attention" => %{
+               "conflict" => "cancel_failed",
+               "reservation_id" => id,
+               "release" => %{"outcome" => outcome}
+             }
+           } = Enum.find(queue["items"], &(&1["source"] == "pass_release"))
+
+    assert id == c.id
+    assert outcome == details["outcome"]
+    assert %{"attention" => %{"source" => "pass_release"}} = pass(c, c.admin)
   end
 end

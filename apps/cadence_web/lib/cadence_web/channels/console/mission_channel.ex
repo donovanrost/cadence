@@ -86,8 +86,15 @@ defmodule CadenceWeb.Console.MissionChannel do
          {socket.assigns.organization_id, socket.assigns.mission_id} do
       socket = mark(socket, Map.fetch!(@read_update_resources, event))
 
-      # Pass rows carry their attention item (U32), so an attention change is a contacts change.
-      socket = if event == :attention_changed, do: mark(socket, "contacts"), else: socket
+      # Pass rows carry their attention item (U32), so an attention change is a contacts change; and
+      # a booking that settles (canceled, pass ended) can close a pass_release item without an
+      # attention event of its own (domain 548b8dd9).
+      socket =
+        case event do
+          :attention_changed -> mark(socket, "contacts")
+          :contacts_changed -> mark(socket, "attention")
+          _other -> socket
+        end
 
       socket =
         if event == :configuration_changed,

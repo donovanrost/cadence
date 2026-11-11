@@ -235,7 +235,11 @@ active) in a window. Query: `from`, `to` (default now to +6 h, at most 7 days), 
       sent".
     - `outcome: unknown`: `state` is `unknown` until the provider's next answer settles it. Say
       it's unclear.
-    - A `pass_release` attention item follows in Now (domain, once landed).
+    - A `pass_release` attention item follows in Now and on the pass row (domain 548b8dd9):
+      `conflict: cancel_failed`, `attention.release: {outcome, reason}` (`null` on other
+      sources), no acknowledge. It stays open until the booking is canceled or ended, or the pass
+      ends. `invalidate` `contacts` also invalidates `attention`, because that settle publishes
+      only `contacts`.
   - Other errors:
     - `409 pass_changed`: revision mismatch, reload.
     - `409 pass_not_releasable`: not `pending | confirmed | active`, or no provider contact ref.

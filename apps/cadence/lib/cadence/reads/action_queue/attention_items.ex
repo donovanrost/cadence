@@ -150,9 +150,16 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
       raised_at: attention.raised_at,
       provider_message: Map.get(attention, :provider_message),
       resolution: Map.get(attention, :resolution),
-      uplink: uplink(attention)
+      uplink: uplink(attention),
+      release: release(attention)
     }
   end
+
+  # D2 Release whose cancel the provider didn't confirm (domain 548b8dd9).
+  defp release(%{source: "pass_release"} = attention),
+    do: %{outcome: Map.get(attention, :outcome), reason: Map.get(attention, :provider_reason)}
+
+  defp release(_attention), do: nil
 
   # U33 / DECISIONS #58: a blocked pass holding queued command groups back.
   defp uplink(%{source: "uplink_blocked"} = attention) do
