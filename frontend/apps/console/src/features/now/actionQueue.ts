@@ -88,6 +88,7 @@ const itemReader = d.object({
     "attention",
     "missed_pass",
     "station",
+    "flight_event",
   ] as const),
   state: d.oneOf(["critical", "caution", "stale", "off"] as const),
   source: d.nullable(
@@ -126,6 +127,8 @@ const itemReader = d.object({
   missed_passes: d.optional(d.nullable(d.array(missedPassReader, 100))),
   next_contact: d.optional(d.nullable(nextContactReader)),
   station_issue: d.optional(d.nullable(stationIssueReader)),
+  /** flight_event (02cdde37): the state the spacecraft entered, and when (spacecraft time). */
+  event: d.optional(d.nullable(d.object({ value_json: d.string, entered_at: d.timestamp }))),
 });
 type ServerItem = Decoded<typeof itemReader>;
 
@@ -188,7 +191,11 @@ function memberMeta(sc: Member): string | null {
 /** Alarm groups under GROUP_AT members become one row per spacecraft (contract: UI's call). */
 function alarmRows(item: ServerItem): QueueItem[] {
   const point = item.point?.name ?? "Point";
-  const why = `${point} ${conditionWords(item.condition) ?? "out of limits"}`;
+  // flight_event: a catalog state rule matched ("MODE is SAFE"), not a limit crossing.
+  const state = item.event ? flightValue(item.event.value_json) : null;
+  const why = state
+    ? `${point} is ${state}`
+    : `${point} ${conditionWords(item.condition) ?? "out of limits"}`;
   if (item.spacecraft.length >= GROUP_AT)
     return [
       {
@@ -222,6 +229,7 @@ function alarmRows(item: ServerItem): QueueItem[] {
 function rowFor(item: ServerItem): QueueItem[] {
   switch (item.kind) {
     case "alarm":
+    case "flight_event":
       return alarmRows(item);
     case "command_failed":
       return [
@@ -345,6 +353,16 @@ function rowFor(item: ServerItem): QueueItem[] {
           action: { label: "Fleet", to: { name: "ops.fleet", query: { state: "never_heard" } } },
         },
       ];
+  }
+}
+
+/** A flight event's state as text: JSON strings unquoted ("SAFE"), else as sent. */
+function flightValue(json: string): string {
+  try {
+    const v: unknown = JSON.parse(json);
+    return typeof v === "string" ? v : json;
+  } catch {
+    return json;
   }
 }
 

@@ -152,6 +152,22 @@ describe("action queue (M6)", () => {
   });
 });
 
+describe("flight_event rows (02cdde37)", () => {
+  it("read like alarm rows, worded as the state entered", () => {
+    const [row] = present([
+      item({
+        id: "flight_event:x",
+        kind: "flight_event",
+        source: "catalog_monitoring",
+        point: { id: "HK.MODE", name: "MODE", subsystem: "HK", unit: null },
+        spacecraft: [member(4)],
+        event: { value_json: '"SAFE"', entered_at: "2026-11-10T03:12:00Z" },
+      }),
+    ]);
+    expect(row?.title).toBe("EARENDIL-004 · MODE is SAFE");
+  });
+});
+
 describe("approval rows (backlog §2)", () => {
   const group = (id: string) => ({
     id,
