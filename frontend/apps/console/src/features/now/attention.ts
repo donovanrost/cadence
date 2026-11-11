@@ -1,6 +1,7 @@
 import { decoders as d, type Decoded } from "@/api/index.ts";
 import type { QueueItem } from "./queue.ts";
 import { plural } from "@/ui";
+import { formatBytes } from "@/features/catalog/importRun.ts";
 import { attentionUplinkReader, reasonSentence } from "@/features/contacts/readiness.ts";
 
 /**
@@ -36,6 +37,16 @@ export const attentionReader = d.object({
   uplink: d.optional(d.nullable(attentionUplinkReader)),
   /** pass_release only (api-ops, ahead of domain): what happened to the Release's cancel. */
   release: d.optional(d.nullable(d.object({ outcome: d.token, reason: d.nullable(d.string) }))),
+  /** contact_settlement (#71): telemetry still on disk, not yet in the TSDB; null elsewhere. */
+  backlog: d.optional(
+    d.nullable(d.object({ entries: d.integer, bytes: d.integer, journals: d.integer })),
+  ),
+  ends_at: d.optional(d.timestamp),
+  deadline_at: d.optional(d.nullable(d.timestamp)),
+  /** telemetry_storage_unavailable | settle_failed | null (a slow drain past the deadline). */
+  failure_kind: d.optional(d.nullable(d.token)),
+  failure_message: d.optional(d.nullable(d.string)),
+  retry: d.optional(d.nullable(d.token)),
   resolution: d.nullable(
     d.object({
       action: d.token,
@@ -57,10 +68,36 @@ export const resolvedReader = d.object({
 });
 
 const hhmm = (iso: string) => `${iso.slice(11, 16)}Z`;
+/** §4 short: `18:49Z`, with the date when it isn't today. */
+const short = (iso: string, now: Date) =>
+  `${iso.slice(0, 10) === now.toISOString().slice(0, 10) ? "" : `${iso.slice(5, 10)} `}${hhmm(iso)}`;
+
+/**
+ * U37 evidence by failure_kind: what's on disk and why it isn't stored. Never "TSDB", "journal" or
+ * "settlement"; the storage outage's own message stays out of the line (Technical details).
+ */
+export function settlementEvidence(
+  backlog: Readonly<{ entries: number; bytes: number }>,
+  failureKind: string | null,
+  failureMessage: string | null,
+  opts: Readonly<{ deadline: string | null }>,
+): string {
+  const one = backlog.entries === 1;
+  const disk = `${backlog.entries.toLocaleString("en-US")} ${one ? "entry" : "entries"} (${formatBytes(backlog.bytes)}) ${one ? "is" : "are"} on disk`;
+  const them = one ? "it" : "them";
+  if (failureKind === null)
+    return `${disk}, past the ${opts.deadline ? `${opts.deadline} ` : ""}deadline for storing ${them}.`;
+  if (failureKind === "telemetry_storage_unavailable")
+    return `${disk}. Telemetry storage is unavailable; Cadence stores ${them} when it's back.`;
+  return `${disk}. Cadence couldn't store ${them}${failureMessage ? `: ${noStop(failureMessage)}` : ""}.`;
+}
 const noStop = (s: string) => s.trim().replace(/[.!?]+$/, "");
 
 /** Title tail and evidence sentence (U31 copy). Unknown conflicts still say who and where. */
-export function attentionWords(a: Attention): Readonly<{ what: string; evidence: string }> {
+export function attentionWords(
+  a: Attention,
+  now: Date = new Date(),
+): Readonly<{ what: string; evidence: string }> {
   const provider = a.provider.name ?? "The provider";
   if (a.release) {
     // A Release whose cancel the provider refused or didn't answer: the booking may still stand.
@@ -74,6 +111,16 @@ export function attentionWords(a: Attention): Readonly<{ what: string; evidence:
     return {
       what: `Release not confirmed: ${what}.`,
       evidence: `${why ? `${noStop(why)}. ` : ""}The pass may still be booked and billed.`,
+    };
+  }
+  if (a.backlog) {
+    // U37 (#71 contact_settlement): system-closed, no person action, no Acknowledge.
+    const station = a.station.code ?? a.station.name;
+    return {
+      what: `Telemetry from the ${station ? `${station} ` : ""}${short(a.starts_at, now)} pass isn't stored yet.`,
+      evidence: settlementEvidence(a.backlog, a.failure_kind ?? null, a.failure_message ?? null, {
+        deadline: a.deadline_at ? hhmm(a.deadline_at) : null,
+      }),
     };
   }
   if (a.uplink) {
@@ -105,15 +152,26 @@ export function attentionWords(a: Attention): Readonly<{ what: string; evidence:
       };
     case null:
     default:
-      return {
-        what: `${provider} disagrees with this pass's booking.`,
-        evidence: "Review the contact before counting on it.",
-      };
+      // A source this console doesn't know yet says only that the contact needs a look.
+      return a.source === "pass_resolution"
+        ? {
+            what: `${provider} disagrees with this pass's booking.`,
+            evidence: "Review the contact before counting on it.",
+          }
+        : { what: "This contact needs attention.", evidence: "Review the contact." };
   }
 }
 
 /** Meta before the live AOS countdown: station code, and who acknowledged (U21). */
-export function attentionMeta(a: Attention): string | null {
+export function attentionMeta(a: Attention, now: Date = new Date()): string | null {
+  // U37: `SVA · Northlight · 18:49Z–18:57Z`, dropping any null part (U20).
+  if (a.backlog) {
+    const window = `${short(a.starts_at, now)}${a.ends_at ? `–${short(a.ends_at, now)}` : ""}`;
+    return [a.station.code ?? a.station.name, a.provider.name, window]
+      .filter((p): p is string => Boolean(p))
+      .join(" · ")
+      .toUpperCase();
+  }
   const parts = [
     a.station.code ?? a.station.name,
     a.state === "acknowledged" ? `Ack ${a.acknowledged_by?.name ?? ""}`.trim() : null,
@@ -123,13 +181,17 @@ export function attentionMeta(a: Attention): string | null {
 
 export type Resolved = Decoded<typeof resolvedReader>;
 
+/** Server actions that read better in words: U37's system 'replayed' = the telemetry got stored. */
+const ACTION_WORDS: Readonly<Record<string, string>> = { replayed: "telemetry stored" };
+
 /**
  * What closed it (ops.md §resolved, U32): a person reads "Resolved by Mira K."; a provider
  * "Resolved: Northlight confirmed"; the system its action alone ("Resolved: cancel confirmed").
  * Never "by Cadence".
  */
 export function resolvedWords(r: Resolved): string {
-  const action = r.action ? noStop(r.action.replaceAll("_", " ")) : null;
+  const said = r.action ? (ACTION_WORDS[r.action] ?? r.action.replaceAll("_", " ")) : null;
+  const action = said ? noStop(said) : null;
   const name = r.resolved_by.name ? noStop(r.resolved_by.name) : null;
   if (r.resolved_by.kind === "user") return `Resolved by ${name ?? "an operator"}.`;
   if (r.resolved_by.kind === "provider")

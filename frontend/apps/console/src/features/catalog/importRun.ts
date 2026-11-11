@@ -76,8 +76,9 @@ export function fetchImportRun(
   );
 }
 
-/** `1.8 MB`, `412 KB`, `900 B` (decimal units, like file managers). */
+/** `4.1 GB`, `1.8 MB`, `412 KB`, `900 B` (decimal units, like file managers). */
 export function formatBytes(bytes: number): string {
+  if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
   if (bytes >= 1_000) return `${Math.round(bytes / 1_000)} KB`;
   return `${bytes} B`;

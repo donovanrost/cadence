@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { actionQueueReader, presentQueue } from "./actionQueue.ts";
-import { newlyResolved, resolvedWords, withFading } from "./attention.ts";
+import {
+  attentionMeta,
+  attentionReader,
+  attentionWords,
+  newlyResolved,
+  resolvedWords,
+  withFading,
+} from "./attention.ts";
 
 const member = (scid: number, extra: Record<string, unknown> = {}) => ({
   id: `spacecraft-earendil-${String(scid).padStart(3, "0")}`,
@@ -146,8 +153,7 @@ describe("action queue (M6)", () => {
     expect(rows[1]?.sentence).toBe("HEATER_SET · EARENDIL-140 · by Ana P.");
   });
 
-  it("rejects an unknown kind or priority", () => {
-    expect(decode(actionQueueReader, body([item({ kind: "mystery" })])).ok).toBe(false);
+  it("rejects an unknown priority (an unknown kind only drops its row: lead, #71)", () => {
     expect(decode(actionQueueReader, body([item({ priority: 4 })])).ok).toBe(false);
   });
 });
@@ -440,5 +446,109 @@ describe("queue sources (ops.md b7008dd6, U35)", () => {
       name: "ops.contacts.replan.station",
       params: { stationId: "earendil-svalbard" },
     });
+  });
+});
+
+describe("contact_settlement (U37, #71)", () => {
+  // domain's sample item, verbatim apart from refs.
+  const sample = {
+    id: "realized_contact_ab12",
+    source: "contact_settlement",
+    conflict: "unsettled",
+    state: "open",
+    reason: "settle_deadline",
+    failure_kind: "telemetry_storage_unavailable",
+    failure_message: "telemetry storage unreachable (connection refused)",
+    spacecraft_id: "spacecraft-earendil-001",
+    contact_id: "scheduled_contact_cd34",
+    realized_contact_id: "realized_contact_ab12",
+    ground_station_ref: "svb",
+    provider_id: "p-1",
+    station: { ref: "svb", id: "st-1", code: "SVA", name: "Svalbard" },
+    provider: { id: "p-1", name: "Northlight" },
+    starts_at: "2026-11-11T18:49:00Z",
+    ends_at: "2026-11-11T18:57:00Z",
+    raised_at: "2026-11-12T00:57:00Z",
+    deadline_at: "2026-11-12T00:57:00Z",
+    backlog: { entries: 1204, bytes: 3355443, journals: 1 },
+    expires_at: null,
+    retry: "automatic",
+    next_attempt_at: null,
+    acknowledged_by: null,
+    provider_message: null,
+    resolution: null,
+  };
+  const settlement = (overrides: Record<string, unknown> = {}) =>
+    item({
+      id: "attention:contact_settlement:realized_contact_ab12",
+      priority: 2,
+      kind: "attention",
+      state: "caution",
+      source: "contact_settlement",
+      spacecraft: [member(1, { violating_points: null, value: null, first_crossed_at: null })],
+      attention: { ...sample, ...overrides },
+    });
+  const today = new Date("2026-11-11T22:00:00Z");
+  const read = (o: Record<string, unknown> = {}) => {
+    const r = decode(attentionReader, { ...sample, ...o });
+    if (!r.ok) throw new Error(r.error.message);
+    return r.value;
+  };
+
+  it("reads domain's sample and words it per U37", () => {
+    const a = read();
+    expect(attentionWords(a, today)).toEqual({
+      what: "Telemetry from the SVA 18:49Z pass isn't stored yet.",
+      evidence:
+        "1,204 entries (3.4 MB) are on disk. Telemetry storage is unavailable; Cadence stores them when it's back.",
+    });
+    expect(attentionMeta(a, today)).toBe("SVA · NORTHLIGHT · 18:49Z–18:57Z");
+    expect(attentionWords(a, new Date("2026-11-12T01:00:00Z")).what).toBe(
+      "Telemetry from the SVA 11-11 18:49Z pass isn't stored yet.",
+    );
+  });
+
+  it("evidence by failure_kind; the outage's own message stays out", () => {
+    expect(
+      attentionWords(read({ failure_kind: "settle_failed", failure_message: "disk full." }), today)
+        .evidence,
+    ).toBe("1,204 entries (3.4 MB) are on disk. Cadence couldn't store them: disk full.");
+    expect(
+      attentionWords(read({ failure_kind: null, failure_message: null }), today).evidence,
+    ).toBe("1,204 entries (3.4 MB) are on disk, past the 00:57Z deadline for storing them.");
+    expect(
+      attentionWords(read({ station: { ref: null, id: null, code: null, name: null } }), today)
+        .what,
+    ).toBe("Telemetry from the 18:49Z pass isn't stored yet.");
+  });
+
+  it("is a Review row with no AOS countdown; resolves as 'telemetry stored'", () => {
+    const [row] = present([settlement()]);
+    expect(row?.due).toBeUndefined();
+    expect(row?.action).toEqual({
+      label: "Review",
+      to: { name: "ops.contacts", query: { contact: "scheduled_contact_cd34" } },
+    });
+    expect(
+      resolvedWords({
+        id: "x",
+        resolved_by: { kind: "system", id: null, name: null },
+        action: "replayed",
+        resolved_at: "2026-11-12T01:00:00Z",
+      }),
+    ).toBe("Resolved: telemetry stored.");
+  });
+
+  it("an unknown kind or source drops one row, not the whole read", () => {
+    const r = decode(actionQueueReader, {
+      observed_at: "2026-11-11T22:00:00Z",
+      counts: { p1: 0, p2: 2, p3: 0, spacecraft_p1: 0 },
+      items: [
+        item({ id: "future:1", kind: "something_new", source: "brand_new_source", priority: 2 }),
+        item({ id: "setup:a", kind: "setup", priority: 3, source: "brand_new_source" }),
+      ],
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(presentQueue(r.value).map((q) => q.key)).toEqual(["setup:a"]);
   });
 });

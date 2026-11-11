@@ -25,6 +25,17 @@ const priority: d.Reader<1 | 2 | 3> = (value, path = "") => {
   throw new d.DecodeError(path, "1 | 2 | 3");
 };
 
+/**
+ * An enum that may grow server-side (lead, #71): an unknown value reads as null so one new kind or
+ * source drops its own row instead of failing the whole Now read.
+ */
+const tolerantOneOf =
+  <const T extends readonly string[]>(values: T): d.Reader<T[number] | null> =>
+  (value, path = "") => {
+    const v = d.token(value, path);
+    return values.find((candidate) => candidate === v) ?? null;
+  };
+
 const member = d.object({
   id: d.token,
   name: d.string,
@@ -77,7 +88,7 @@ const commandGroup = d.object({
 const itemReader = d.object({
   id: d.token,
   priority,
-  kind: d.oneOf([
+  kind: tolerantOneOf([
     "alarm",
     "command_failed",
     "approval",
@@ -92,12 +103,13 @@ const itemReader = d.object({
   ] as const),
   state: d.oneOf(["critical", "caution", "stale", "off"] as const),
   source: d.nullable(
-    d.oneOf([
+    tolerantOneOf([
       "catalog_monitoring",
       "ground_limit",
       "pass_resolution",
       "uplink_blocked",
       "pass_release",
+      "contact_settlement",
     ] as const),
   ),
   /** Alarm items: how many members are acknowledged. */
@@ -228,6 +240,9 @@ function alarmRows(item: ServerItem): QueueItem[] {
 
 function rowFor(item: ServerItem): QueueItem[] {
   switch (item.kind) {
+    case null:
+      // A kind this console doesn't know yet: no row rather than a wrong one.
+      return [];
     case "alarm":
     case "flight_event":
       return alarmRows(item);
@@ -332,7 +347,8 @@ function rowFor(item: ServerItem): QueueItem[] {
           sentence: w.evidence,
           meta: attentionMeta(a),
           acknowledged: a.state === "acknowledged",
-          due: { label: "AOS", at: a.starts_at },
+          // A settlement is about a past pass: no AOS countdown.
+          ...(a.backlog ? {} : { due: { label: "AOS", at: a.starts_at } }),
           action: { label: "Review", to },
         },
       ];
