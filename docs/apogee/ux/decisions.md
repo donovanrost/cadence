@@ -498,6 +498,8 @@ is still on disk and not in telemetry history. It's always **P2**: the journal i
     - `settle_failed`: "1,204 entries (3.4 MB) are on disk. Cadence couldn't store them: <failure_message>."
     - null (deadline passed with no failure): "1,204 entries (3.4 MB) are on disk, past the 00:57Z deadline for
       storing them."
+      Domain confirms: a slow drain, not a failure, and `failure_message` is null too. Null items fold together;
+      the folded line is "… are on disk, past the deadline for storing them."
   - Meta: `SVA · Northlight · 18:49Z–18:57Z`. Drop any part that's null (U20).
   - Action: `Review` goes to the contact drawer (`contact_id`).
   - The UI never shows "TSDB", "journal", "settlement" or the journals count. `failure_message` is shown only for
