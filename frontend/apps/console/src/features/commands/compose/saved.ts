@@ -60,7 +60,10 @@ export function discardComposeDraft(missionId: string) {
   return request(draftPath(missionId), () => null, { method: "DELETE" });
 }
 
-/** 409 command_draft_changed: the revision another tab or device saved. */
+/**
+ * 409 command_draft_changed: the revision another tab or device saved. Null when the draft is gone
+ * (details `{revision: null, saved_at: null}`: submitted or discarded elsewhere, api).
+ */
 export function changedBy(details: unknown): DraftSaved | null {
   const r = decode(savedReader, details);
   return r.ok ? r.value : null;

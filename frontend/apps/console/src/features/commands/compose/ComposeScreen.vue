@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { computed, nextTick, ref, shallowRef, watch } from "vue";
+import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import { describeApiError, useRemoteQuery } from "@/api/index.ts";
 import { TakeoverHeader, useMissionScope } from "@/shell/index.ts";
 import { ApButton, ApCallout, ApEmptyState, ApPanel, ApRemote, ApStationBar } from "@/ui";
@@ -8,6 +8,7 @@ import { TelemetryDegraded, useFleet } from "@/features/fleet/index.ts";
 import { useCommandAccess } from "../access.ts";
 import { catalogRevisionWords, fetchCommand } from "../api.ts";
 import { fetchEndpoints, type TargetEndpoints } from "../groups/api.ts";
+import ConfirmDialog from "./ConfirmDialog.vue";
 import DeliveryPanel from "./DeliveryPanel.vue";
 import DraftNotices from "./DraftNotices.vue";
 import PreflightPanel from "./PreflightPanel.vue";
@@ -18,7 +19,7 @@ import TargetsPanel from "./TargetsPanel.vue";
 import { checkItem, move, newItem, type StackItem } from "./stack.ts";
 import { queryFromRoute, resolveTargets, type TargetQuery } from "./targets.ts";
 import type { ComposeFields, Restored } from "./saved.ts";
-import { draftLine, useComposeDraft } from "./useComposeDraft.ts";
+import { closeLabel, draftLine, savedWhen, useComposeDraft } from "./useComposeDraft.ts";
 import { useComposeRequest } from "./useComposeRequest.ts";
 import { onlyFrom, resendFrom, useResend } from "./useResend.ts";
 
@@ -128,10 +129,26 @@ function applyDraft(r: Restored) {
   openKey.value = null;
 }
 const saved = useComposeDraft(missionId, fields, applyDraft, route.query.draft === "resume");
-async function discardAndClose() {
-  if (await saved.discard())
-    await router.push(close.value).catch((e: unknown) => console.error("Navigation failed", e));
+// ux (1): a resend's prefill is the origin's values, not the operator's first edit.
+watch(resend.sentBackFrom, (id) => {
+  if (id !== null) void nextTick(saved.rebase);
+});
+/** ux (3): both Discards confirm first; closing saves first and asks only if that fails. */
+const discardDialog = ref<InstanceType<typeof ConfirmDialog> | null>(null);
+const leaveDialog = ref<InstanceType<typeof ConfirmDialog> | null>(null);
+const discardAt = ref<string | null>(null);
+async function confirmDiscard(at: string | null) {
+  discardAt.value = at;
+  return (await discardDialog.value?.ask()) === true;
 }
+async function discardAndClose() {
+  if (!(await confirmDiscard(saved.savedAt.value)) || !(await saved.discard())) return;
+  await router.push(close.value).catch((e: unknown) => console.error("Navigation failed", e));
+}
+async function discardOffered() {
+  if (await confirmDiscard(saved.offered.value?.saved_at ?? null)) await saved.discard();
+}
+onBeforeRouteLeave(async () => (await saved.flush()) || (await leaveDialog.value?.ask()) === true);
 const {
   draft,
   preflight,
@@ -176,26 +193,25 @@ const current = computed(() =>
         ? 3
         : 2,
 );
+/** A single explicit target names the request and is where close returns. */
+const only = computed(() =>
+  query.value.explicit.length === 1
+    ? rows.value.find((sc) => sc.id === query.value.explicit[0])
+    : undefined,
+);
 const context = computed(() => {
-  const only =
-    query.value.explicit.length === 1
-      ? rows.value.find((sc) => sc.id === query.value.explicit[0])
-      : undefined;
+  const sc = only.value;
   const line = draftLine(saved.status.value);
-  if (!only) return `Uplink sequence · ${line}`;
+  if (!sc) return `Uplink sequence · ${line}`;
   return line === "new"
-    ? `Uplink sequence · for ${only.name}`
-    : `Uplink sequence · for ${only.name} · ${line}`;
+    ? `Uplink sequence · for ${sc.name}`
+    : `Uplink sequence · for ${sc.name} · ${line}`;
 });
-const close = computed(() => {
-  const only =
-    query.value.explicit.length === 1
-      ? rows.value.find((sc) => sc.id === query.value.explicit[0])
-      : undefined;
-  return only
-    ? { name: "ops.spacecraft", params: { scId: String(only.scid) } }
-    : { name: "ops.commands" };
-});
+const close = computed(() =>
+  only.value
+    ? { name: "ops.spacecraft", params: { scId: String(only.value.scid) } }
+    : { name: "ops.commands" },
+);
 </script>
 
 <template>
@@ -203,10 +219,10 @@ const close = computed(() => {
     title="New command request"
     :context="context"
     :close="close"
-    :close-label="saved.owned.value ? 'Close; the draft stays saved' : 'Close and keep nothing'"
+    :close-label="closeLabel(only?.name ?? 'Commands', saved.savedAt.value)"
     title-as="h1"
   >
-    <template v-if="saved.owned.value" #actions
+    <template v-if="saved.savedAt.value !== null" #actions
       ><ApButton size="compact" variant="ghost" @click="discardAndClose"
         >Discard draft</ApButton
       ></template
@@ -244,7 +260,7 @@ const close = computed(() => {
           :offered="saved.offered.value"
           :notice="saved.notice.value"
           @resume="saved.load"
-          @discard="saved.discard"
+          @discard-offered="discardOffered"
           @keep-mine="saved.keepMine"
           @retry="saved.retry"
         />
@@ -316,4 +332,24 @@ const close = computed(() => {
       />
     </div>
   </template>
+  <ConfirmDialog
+    ref="discardDialog"
+    :question="
+      discardAt ? `Discard the draft saved ${savedWhen(discardAt)}?` : 'Discard the draft?'
+    "
+    body="It can't be recovered."
+    confirm="Discard draft"
+    cancel="Cancel"
+  />
+  <ConfirmDialog
+    ref="leaveDialog"
+    question="Close without saving?"
+    :body="
+      saved.savedAt.value
+        ? `Changes since ${savedWhen(saved.savedAt.value)} will be lost.`
+        : 'Your changes will be lost.'
+    "
+    confirm="Close without saving"
+    cancel="Stay"
+  />
 </template>

@@ -3,7 +3,7 @@ import type { CommandDetail } from "../api.ts";
 import { changedBy, isBlank, restoreDraft, toDocument, type ComposeFields } from "./saved.ts";
 import { newItem } from "./stack.ts";
 import { EMPTY_QUERY } from "./targets.ts";
-import { draftLine, savedWhen } from "./useComposeDraft.ts";
+import { closeLabel, draftLine, savedWhen } from "./useComposeDraft.ts";
 
 const fetchCommand = vi.hoisted(() => vi.fn());
 vi.mock("../api.ts", async (original) => ({
@@ -121,5 +121,25 @@ describe("compose draft document", () => {
     const now = new Date("2026-11-11T20:00:00Z");
     expect(savedWhen("2026-11-11T02:44:31Z", now)).toBe("02:44Z");
     expect(savedWhen("2026-11-10T02:44:31Z", now)).toBe("11-10 02:44Z");
+  });
+});
+
+describe("compose draft gone elsewhere", () => {
+  it("reads 409 details {revision: null} as gone", () => {
+    expect(changedBy({ revision: null, saved_at: null })).toBeNull();
+    expect(draftLine({ kind: "conflict", theirs: null })).toBe("Draft · autosave paused");
+  });
+
+  it("words a failed save and the close button (ux 601a32f9)", () => {
+    const at = new Date().toISOString();
+    const hhmm = `${at.slice(11, 16)}Z`;
+    expect(draftLine({ kind: "failed", reason: null, lastSaved: null })).toBe("Draft · not saved");
+    expect(draftLine({ kind: "failed", reason: null, lastSaved: at })).toBe(
+      `Draft · not saved · last saved ${hhmm}`,
+    );
+    expect(closeLabel("EARENDIL-312", at)).toBe(
+      `Close and return to EARENDIL-312 · draft saved ${hhmm}`,
+    );
+    expect(closeLabel("Commands", null)).toBe("Close and return to Commands");
   });
 });
