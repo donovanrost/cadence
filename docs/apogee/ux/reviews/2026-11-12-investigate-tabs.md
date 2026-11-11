@@ -45,3 +45,4 @@ G3 names each role once. No horizontal scroll at 390. New findings (fe-ops), ran
 | 11 | Low | **Telemetry empty plot says "between 11-11 15:31Z and 11-11 21:31Z"** on today's date. → §4 short time: `between 15:31Z and 21:31Z`; the date only when it isn't today. |
 | 12 | Low | **U2 "No other commandable pass is booked in the next 24 h"** when U1's pass is T−2d away, so "other" implies one inside 24 h. → Drop "other" when U1's pass is beyond 24 h. |
 | 13 | Low | **P2 row label truncates to `EARENDIL-0…`.** → Widen the label column to fit the name, or drop the label on a single-spacecraft track. |
+- fe-ops 699689f6: #7–#13 accepted per commit (Rejected vs Missed, suffix, 6 h line, "No recent value" since the read has no last value outside its window, today-less window, "other", label width).
