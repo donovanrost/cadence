@@ -426,7 +426,7 @@ Errors: `404 spacecraft_not_found`.
 - Errors: `404 spacecraft_not_found`, `404 mission_not_found`. Refetch on `invalidate`
   `commanding`, `contacts` and `attention`.
 
-## `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/configuration` (Investigate Configuration tab): proposed
+## `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/configuration` (Investigate Configuration tab): built
 
 "What is this spacecraft running, and what changed?" (Investigate.md, Tab · Configuration). Read-only.
 
@@ -445,10 +445,9 @@ Errors: `404 spacecraft_not_found`.
                      "transport": {"id": "…", "name": "Svalbard X-band", "version": 2},
                      "station": {"id": "…", "code": "SVB", "name": "Svalbard"} | null}],
   "pending": [{"change_set_id": "…", "state": "in_review", "base_revision": 8,
-               "changes": [{"id": "…", "summary": "Change TM frame length", "via": "spacecraft"}]}],
-  "recent_revisions": [{"revision": 8, "kind": "change_set", "applied_at": "…",
-                        "applied_by": {"kind": "user", "id": "…", "name": "Mira K."},
-                        "summary": "…", "reason": "…", "via": ["spacecraft_override"]}]
+               "changes": [{<change, as /config/change-sets/:id>, "via": "spacecraft_override"}]}],
+  "recent_revisions": [{<revision_summary + labelled entries, as /config/revisions/:n>,
+                        "via": ["spacecraft_override"]}]
 }}
 ```
 
@@ -460,16 +459,18 @@ Errors: `404 spacecraft_not_found`.
     both are set and differ, show the "Running rev 14; the profile is on rev 15" caution (the same
     rule as the Readiness catalog finding, DECISIONS #65).
 - **G2 `overrides`:** this spacecraft's overrides only, labelled from the profile schema (`label`,
-  `unit` may be null). Values are JSON strings. `[]` → "Uses its profile as is."
+  `unit` may be null). Values are JSON text; `null` means not set. `[]` → "Uses its profile as is."
 - **G3 `routing_rules`:** as `/spacecraft/:id`, plus the transport's `station` (null when the
   transport names none).
 - **G4 `pending`:** the mission's open or in-review change set when it has changes touching this
-  spacecraft. `via` is `spacecraft`, `spacecraft_override` or `spacecraft_profile` (an edit to its
+  spacecraft. Each change is exactly `/config/change-sets/:id`'s (`id, summary, author, staged_at,
+  source, state, ops`), plus `via`, so Setup's sentences apply. `via` is `spacecraft`, `spacecraft_override` or `spacecraft_profile` (an edit to its
   profile). `[]` → hide G4. A change set has no revision number until applied; `base_revision`
   is the head it was staged on.
 - **G5 `recent_revisions`:** the last 5 applied revisions with an entry for this spacecraft
-  (spacecraft, override or derived routes), newest first. `revision_summary` fields as
-  `/config/revisions`; `via` lists the entry kinds. `All revisions` → Changes.
+  (spacecraft, override or derived routes), newest first. Each is exactly `/config/revisions/:n`
+  (revision_summary plus `entries`, labelled), with only this spacecraft's entries; `via` lists
+  their kinds. `All revisions` → Changes.
 - "Edit in Setup": show it from the session's capabilities (org admins), as Setup does.
 - Errors: `404 spacecraft_not_found`, `404 mission_not_found`. Refetch on `invalidate`
   `spacecraft`, `catalog` and `configuration`.
