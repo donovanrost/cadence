@@ -6,8 +6,11 @@ defmodule CadenceWeb.Console.PassController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.Auth.Policy
   alias Cadence.ContactPlanning.RepairChain
+  alias Cadence.Contacts.ScheduleCommands
   alias Cadence.Control.{Contacts, UplinkReadiness}
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.ActionQueue.AttentionItems
   alias Cadence.Reads.{Attention, Passes, PassUplink}
   alias CadenceWeb.Console.{PassJSON, Problem, WindowParams}
@@ -56,7 +59,106 @@ defmodule CadenceWeb.Console.PassController do
     |> with_replacements(result)
     |> with_attention(conn, resolutions)
     |> with_readiness(conn, Map.new(blocked, &{&1.contact_id, &1}))
+    |> with_releasable(conn)
   end
+
+  @releasable_states ~w(pending confirmed active)
+
+  # D2: org admins may release a live booking (the contact workspace's cancel rule).
+  defp with_releasable(%{passes: passes} = result, conn) do
+    admin? = may_release?(conn)
+
+    %{
+      result
+      | passes: Enum.map(passes, &%{&1 | releasable: admin? and &1.state in @releasable_states})
+    }
+  end
+
+  # todo(authz): Cedar should decide who may release (cancel) a booking: today organization admins
+  # (:manage_missions); perhaps per provider account or per spacecraft.
+  defp may_release?(conn) do
+    Policy.authorize(conn.assigns.current_scope, :manage_missions, %{
+      organization_id: org_id(conn)
+    }) == :ok
+  end
+
+  @doc "`POST …/passes/:id/release` (D2): cancels the booking at the provider."
+  def release(conn, %{"id" => id} = params) do
+    with :ok <- no_actor(params),
+         {:ok, expected} <- expected_revision(params["expected_provider_revision"]),
+         {:ok, reservation} <- reservation(conn, id),
+         :ok <- releasable(reservation),
+         :ok <- same_revision(reservation, expected),
+         {:ok, _booking} <-
+           ScheduleCommands.execute(conn.assigns.current_scope, mission_id(conn), "cancel", %{
+             "reservation_evidence" => evidence(conn, reservation)
+           }) do
+      show(conn, %{"id" => id})
+    else
+      {:error, reason} -> release_problem(conn, reason)
+    end
+  end
+
+  defp expected_revision(value) when is_integer(value) and value > 0, do: {:ok, value}
+
+  defp expected_revision(_value),
+    do:
+      {:error, {:invalid_params, %{"expected_provider_revision" => "must be a positive integer"}}}
+
+  defp reservation(conn, id) do
+    case Contacts.fetch_provider_reservation(org_id(conn), mission_id(conn), id) do
+      {:ok, reservation} -> {:ok, reservation}
+      _missing -> {:error, :pass_not_found}
+    end
+  end
+
+  defp releasable(%{lifecycle_state: state, provider_contact_ref: ref}) when is_binary(ref) do
+    if to_string(state) in @releasable_states, do: :ok, else: {:error, :pass_not_releasable}
+  end
+
+  defp releasable(_reservation), do: {:error, :pass_not_releasable}
+
+  defp same_revision(%{provider_revision: revision}, revision), do: :ok
+  defp same_revision(_reservation, _expected), do: {:error, :pass_changed}
+
+  # The exact booking the viewer saw (ScheduleCancellations' reviewed evidence).
+  defp evidence(conn, reservation),
+    do: %{
+      "contract_version" => 1,
+      "organization_id" => org_id(conn),
+      "mission_id" => mission_id(conn),
+      "reservation_id" => reservation.provider_reservation_id,
+      "provider_revision" => reservation.provider_revision,
+      "lifecycle_state" => to_string(reservation.lifecycle_state),
+      "provider_contact_ref" => reservation.provider_contact_ref
+    }
+
+  defp release_problem(conn, {:invalid_params, details}),
+    do: Problem.respond(conn, :invalid_params, details)
+
+  defp release_problem(conn, {:actor_not_assignable, keys}),
+    do: Problem.respond(conn, :actor_not_assignable, %{fields: keys})
+
+  # The provider refused, or the outcome is unknown: the booking is as domain left it (4b18d046).
+  defp release_problem(conn, {:provider_reservation_not_confirmed, reservation}) do
+    error = JsonDocument.unwrap_value(reservation.last_error_document) || %{}
+
+    Problem.respond(conn, :provider_cancel_failed, %{
+      outcome: error["outcome"],
+      reason: error["reason"],
+      state: to_string(reservation.lifecycle_state)
+    })
+  end
+
+  defp release_problem(conn, reason)
+       when reason in [:pass_not_found, :pass_not_releasable, :pass_changed],
+       do: Problem.respond(conn, reason)
+
+  defp release_problem(conn, :invalid_reservation_cancellation_evidence),
+    do: Problem.respond(conn, :pass_changed)
+
+  defp release_problem(conn, reason) when reason in [:forbidden, :scope_mismatch],
+    do: Problem.respond(conn, :forbidden)
 
   # U32: each booking's open or acknowledged pass-resolution item (the drawer's attention block),
   # for viewers who operate the mission. A blocked uplink shows in `uplink_readiness` instead.

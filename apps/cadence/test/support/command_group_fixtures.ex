@@ -96,6 +96,7 @@ defmodule Cadence.CommandGroupFixtures do
       provider_profile_id: profile.provider_profile_id,
       provider_profile_version: profile.version,
       scheduled_contact_id: "contact-" <> id,
+      provider_contact_ref: "provider-contact-" <> id,
       provider_opportunity_ref: "opportunity-" <> id,
       idempotency_key: "key-" <> id,
       lifecycle_state: :confirmed,

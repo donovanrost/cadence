@@ -213,7 +213,7 @@ active) in a window. Query: `from`, `to` (default now to +6 h, at most 7 days), 
 - `truncated: true`: the passes read hit its 500-row cap; narrow the window.
 - Refetch on `invalidate` with `contacts` or `stations`.
 
-### Contact drawer D2 actions: `Release` and `Swap station` (BACKLOG §8): proposed, not built
+### Contact drawer D2 actions: `Release` and `Swap station` (BACKLOG §8)
 
 - **`Swap station`: hidden** (ux). K2 re-plans only lost bookings and keeps committed passes
   locked (S8), so it can't replace a healthy booking. A "replace this booking" operation is
@@ -229,9 +229,18 @@ active) in a window. Query: `from`, `to` (default now to +6 h, at most 7 days), 
     changed it, so reload.
   - Returns `{data: <pass row>}` after the provider answers. `state` is `canceling` or
     `canceled`, and `ended_by` is the viewer.
-  - Errors: `409 pass_changed` (revision mismatch), `409 pass_not_releasable` (state),
-    `403 forbidden`, `404 pass_not_found`, `502 provider_cancel_failed` (`details.reason`; the
-    booking stays as the provider left it), `422 actor_not_assignable`.
+  - `502 provider_cancel_failed`, `details: {outcome, reason, state}` (domain 4b18d046):
+    - `outcome: refused | not_sent`: the cancel didn't happen and the booking is back in `state`
+      (as before). Say "Nothing changed: <provider> refused the cancel" or "the cancel wasn't
+      sent".
+    - `outcome: unknown`: `state` is `unknown` until the provider's next answer settles it. Say
+      it's unclear.
+    - A `pass_release` attention item follows in Now (domain, once landed).
+  - Other errors:
+    - `409 pass_changed`: revision mismatch, reload.
+    - `409 pass_not_releasable`: not `pending | confirmed | active`, or no provider contact ref.
+    - `403 forbidden`, `404 pass_not_found`.
+    - `422 invalid_params` (`details.expected_provider_revision`), `422 actor_not_assignable`.
   - Refetch on `invalidate` `contacts`.
 
 ## S10: `contacts` invalidation

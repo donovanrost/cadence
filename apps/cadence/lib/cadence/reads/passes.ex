@@ -153,7 +153,11 @@ defmodule Cadence.Reads.Passes do
       # The booking's open attention item (U32); the controller fills it for viewers who operate.
       attention: nil,
       # Live uplink readiness (U33); the controller fills it from the readiness view.
-      uplink_readiness: nil
+      uplink_readiness: nil,
+      # D2 Release: the revision the client sends back, and whether this viewer may release it
+      # (the controller fills `releasable`).
+      provider_revision: reservation.provider_revision,
+      releasable: nil
     }
   end
 
