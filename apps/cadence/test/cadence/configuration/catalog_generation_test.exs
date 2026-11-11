@@ -159,6 +159,53 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
              )
   end
 
+  # qa #43: a fleet with more configured spacecraft than SpacecraftStore reads in one batch
+  # crashed the mismatch read, and with it the console's Readiness.
+  test "mismatches read a fleet larger than one spacecraft batch", c do
+    profile!(c, c.rev2)
+    latest = Drafts.latest(c.org, c.mission.mission_id, c.craft.spacecraft_id)
+
+    Repo.query!(
+      "UPDATE spacecraft_configuration_revisions SET catalog_revision_id = $1 " <>
+        "WHERE configuration_revision_id = $2",
+      [c.rev1, latest.configuration_revision_id]
+    )
+
+    clones = Cadence.SpacecraftStore.max_batch_size()
+
+    Repo.query!(
+      "INSERT INTO mission_spacecraft (spacecraft_id, organization_id, mission_id, display_name, " <>
+        "metadata, inserted_at, scid, spacecraft_type_id, spacecraft_type_version, lifecycle_state) " <>
+        "SELECT spacecraft_id || '-clone-' || n, organization_id, mission_id, " <>
+        "display_name || ' ' || n, metadata, inserted_at, NULL, spacecraft_type_id, " <>
+        "spacecraft_type_version, lifecycle_state " <>
+        "FROM mission_spacecraft, generate_series(1, $2) AS n WHERE spacecraft_id = $1",
+      [c.craft.spacecraft_id, clones]
+    )
+
+    Repo.query!(
+      "INSERT INTO spacecraft_configuration_revisions (configuration_revision_id, " <>
+        "organization_id, mission_id, spacecraft_id, version, catalog_revision_id, document, " <>
+        "content_sha256, application_basis, created_by, inserted_at) " <>
+        "SELECT configuration_revision_id || '-clone-' || n, organization_id, mission_id, " <>
+        "spacecraft_id || '-clone-' || n, version, catalog_revision_id, document, " <>
+        "content_sha256, application_basis, created_by, inserted_at " <>
+        "FROM spacecraft_configuration_revisions, generate_series(1, $2) AS n " <>
+        "WHERE configuration_revision_id = $1",
+      [latest.configuration_revision_id, clones]
+    )
+
+    mismatches = CatalogAuthority.mismatches(c.org, c.mission.mission_id)
+
+    assert length(mismatches) == clones + 1
+
+    assert Enum.all?(
+             mismatches,
+             &(&1.effective_catalog_revision_id == c.rev2 and
+                 &1.configured_catalog_revision_id == c.rev1)
+           )
+  end
+
   ## Helpers
 
   # A profile with `catalog`, the craft pinned to it.

@@ -153,6 +153,10 @@ defmodule Cadence.SpacecraftStore do
     end
   end
 
+  @doc "The most spacecraft ids `fetch_spacecrafts/3` takes in one call."
+  @spec max_batch_size() :: pos_integer()
+  def max_batch_size, do: @max_batch_size
+
   @doc "Fetches at most one bounded batch of mission spacecraft in one query."
   @spec fetch_spacecrafts(binary(), binary(), [binary()]) ::
           {:ok, %{optional(binary()) => Spacecraft.t()}} | {:error, :batch_bounds_exceeded}

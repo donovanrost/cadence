@@ -67,7 +67,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.CatalogAuthority do
     else
       spacecraft =
         ids
-        |> Enum.chunk_every(500)
+        |> Enum.chunk_every(SpacecraftStore.max_batch_size())
         |> Enum.reduce(%{}, fn chunk, acc ->
           {:ok, found} = SpacecraftStore.fetch_spacecrafts(org, mission_id, chunk)
           Map.merge(acc, found)
