@@ -7,6 +7,7 @@ import {
   formatDuration,
   useNow,
   ApButton,
+  ApCallout,
   ApEmptyState,
   ApKeyValue,
   ApPanel,
@@ -20,6 +21,7 @@ import {
 } from "@/features/scheduling/index.ts";
 import type { Pass } from "./api.ts";
 import AttentionBlock from "./AttentionBlock.vue";
+import { attentionWords } from "@/features/now/index.ts";
 import { readinessTag, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
 import ReleasePass from "./ReleasePass.vue";
@@ -57,6 +59,10 @@ const readiness = computed(() => {
   if (!r || !p) return null;
   const tag = readinessTag(r, "drawer", { provider: p.source.provider_name, los: p.ends_at });
   return { ...r, tag, link: reasonLink(r.reason) };
+});
+const releaseIssue = computed(() => {
+  const a = props.pass?.attention;
+  return a && a.source === "pass_release" ? attentionWords(a) : null;
 });
 // Recover is operate_mission, the same policy as abort (DECISIONS #42).
 const access = useCommandAccess();
@@ -122,6 +128,11 @@ const countdown = computed(() => {
       sentence="Choose a bar in the schedule."
     />
     <div v-else class="flex flex-col gap-3 p-4">
+      <!-- pass_release (1a87609e): no acknowledge; it stays open until the booking settles. -->
+      <ApCallout v-if="releaseIssue" tone="caution">
+        <p class="m-0 font-semibold">{{ releaseIssue.what }}</p>
+        <p class="m-0 text-text-2">{{ releaseIssue.evidence }}</p>
+      </ApCallout>
       <AttentionBlock
         v-if="pass.attention && pass.attention.source === 'pass_resolution'"
         :mission-id="missionId"
