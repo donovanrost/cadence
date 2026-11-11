@@ -135,6 +135,46 @@ defmodule CadenceWeb.Console.UplinkReadinessAPITest do
     assert pass["reservation_id"] == upcoming.provider_reservation_id
   end
 
+  defp upcoming_pass!(c, starts_in_s) do
+    reservation =
+      CommandGroupFixtures.commandable_pass!(
+        c.org.organization_id,
+        c.mission.mission_id,
+        c.craft.spacecraft_id,
+        DateTime.add(DateTime.utc_now(), starts_in_s)
+      )
+
+    %{
+      scheduled_contact_id: reservation.scheduled_contact_id,
+      organization_id: c.org.organization_id,
+      mission_id: c.mission.mission_id,
+      source_endpoint_refs: [c.endpoint.source_endpoint_id],
+      contact_intents: [:telemetry_downlink, :command_window],
+      starts_at: reservation.starts_at,
+      ends_at: reservation.ends_at
+    }
+    |> ScheduledContact.new()
+    |> ScheduledContactRow.changeset()
+    |> Ecto.Changeset.apply_changes()
+    |> Repo.insert!()
+
+    reservation
+  end
+
+  test "the single-pass read counts the groups queued for it and names the next pass (ux)", c do
+    first = upcoming_pass!(c, 3_600)
+    second = upcoming_pass!(c, 3 * 3_600)
+    queue_group!(c)
+
+    assert %{"queued_command_groups" => %{"count" => 1, "next_pass" => next}} =
+             get_data(c, "/passes/#{first.provider_reservation_id}")
+
+    assert next["reservation_id"] == second.provider_reservation_id
+
+    assert %{"queued_command_groups" => %{"count" => 0}} =
+             get_data(c, "/passes/#{second.provider_reservation_id}")
+  end
+
   test "a pass with no live uplink session has no readiness", c do
     assert %{"uplink_readiness" => nil} =
              get_data(c, "/passes/#{c.reservation.provider_reservation_id}")

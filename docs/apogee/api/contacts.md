@@ -108,6 +108,12 @@ One pass by its reservation id (the row `id`, or the attention object's `reserva
 same row shape including `attention`, whatever its window. Review opens passes days out with it.
 Returns `{data: <row>}`. Errors: `404 pass_not_found`, `404 mission_not_found`.
 
+This read alone adds `queued_command_groups: {count, next_pass}` for the D2 Release sheet (ux):
+- `count` is how many queued, unfinished command groups release on this pass, whatever its
+  readiness;
+- `next_pass` (`{reservation_id, contact_id, station, starts_at, ends_at}` or `null`) is the
+  spacecraft's next commandable pass after it, where they'd go if this one were released.
+
 ### `POST /api/console/v1/missions/:mission_id/attention/:source/:id/acknowledge` · `…/resolve`
 
 `:source` and `:id` are the attention object's `source` and `id` (`pass_resolution`, the

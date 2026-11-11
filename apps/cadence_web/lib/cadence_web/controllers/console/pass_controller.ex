@@ -39,7 +39,10 @@ defmodule CadenceWeb.Console.PassController do
     case Passes.fetch(org_id(conn), mission_id(conn), id) do
       {:ok, pass} ->
         %{passes: [pass]} = decorate(conn, %{passes: [pass]})
-        json(conn, %{data: pass})
+
+        # D2 Release sheet: the groups that would lose this pass, and where they'd go instead.
+        queued = PassUplink.queued_for_pass(org_id(conn), mission_id(conn), pass)
+        json(conn, %{data: Map.put(pass, :queued_command_groups, queued)})
 
       {:error, :pass_not_found} ->
         Problem.respond(conn, :pass_not_found)

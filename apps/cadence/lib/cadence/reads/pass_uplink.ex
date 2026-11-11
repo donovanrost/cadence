@@ -14,8 +14,9 @@ defmodule Cadence.Reads.PassUplink do
 
   alias Cadence.Comms.StationRefs
   alias Cadence.Control.UplinkReadiness
+  alias Cadence.Contacts.UplinkPasses
   alias Cadence.Control.UplinkReadiness.Groups
-  alias Cadence.Reads.Passes
+  alias Cadence.Reads.{CommandGroups, Passes}
 
   @doc """
   Puts `uplink_readiness` on pass rows. `blocked` is the mission's `uplink_blocked` attention
@@ -55,6 +56,53 @@ defmodule Cadence.Reads.PassUplink do
   end
 
   defp queued(_view, _pass, _blocked), do: nil
+
+  @doc """
+  For one pass row (the D2 Release sheet): how many queued, unfinished command groups will release
+  on it, whatever its readiness, and the spacecraft's next commandable pass after it, where they'd
+  go if it were released. `%{count, next_pass | nil}`.
+  """
+  @spec queued_for_pass(binary(), binary(), map()) :: %{
+          count: non_neg_integer(),
+          next_pass: map() | nil
+        }
+  def queued_for_pass(org, mission, %{scheduled_contact_id: contact_id} = pass)
+      when is_binary(contact_id) do
+    group_ids =
+      for %{finished: false, id: id} <- CommandGroups.list(org, mission, nil, states: [:queued]),
+          do: id
+
+    count =
+      org
+      |> Groups.for_command_groups(mission, group_ids)
+      |> Enum.count(fn {_id, %{targets: targets}} ->
+        Enum.any?(targets, &(target_pass_id(&1) == contact_id))
+      end)
+
+    %{count: count, next_pass: next_after(org, mission, pass)}
+  end
+
+  def queued_for_pass(_org, _mission, _pass), do: %{count: 0, next_pass: nil}
+
+  defp target_pass_id(%{contact: %{scheduled_contact_id: id}}), do: id
+  defp target_pass_id(%{next_contact: %{scheduled_contact_id: id}}), do: id
+  defp target_pass_id(_target), do: nil
+
+  defp next_after(org, mission, pass) do
+    org
+    |> UplinkPasses.upcoming(mission, [pass.spacecraft_id], pass.starts_at, 3)
+    |> Map.get(pass.spacecraft_id, [])
+    |> Enum.reject(&(&1.scheduled_contact_id == pass.scheduled_contact_id))
+    |> List.first()
+    |> case do
+      nil ->
+        nil
+
+      next ->
+        refs = pass_refs(org, mission, [Map.put(next, :ground_station_ref, nil)])
+        pass_ref(Map.put(next, :ground_station_ref, nil), refs)
+    end
+  end
 
   @doc "`%{group_id => uplink | nil}` for the given (queued) groups."
   @spec for_groups(binary(), binary(), [binary()]) :: %{binary() => map() | nil}
