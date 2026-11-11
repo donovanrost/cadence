@@ -15,6 +15,7 @@ import {
   scopeQuery,
   scopeValue,
   timelineScope,
+  withAlertingData,
 } from "./model.ts";
 
 const ev = (id: string, at: string, severity: MissionEvent["severity"] = "info"): MissionEvent => ({
@@ -216,5 +217,20 @@ describe("live prepend hold (lead 79ec6dc6)", () => {
     el.dispatchEvent(new Event("scroll"));
     expect(held.shown.value?.map((e) => e.id)).toEqual(["d", "c", "b", "a"]);
     scope.stop();
+  });
+});
+
+describe("default view shows failing data events (ux)", () => {
+  it("merges caution/critical data events, newest first, and drops routine ones", () => {
+    const e = (id: string, at: string, severity: string) => ({ id, at, severity });
+    const merged = withAlertingData(
+      [e("a", "2026-11-10T01:00:00Z", "info")],
+      [
+        e("d1", "2026-11-10T02:00:00Z", "caution"),
+        e("d2", "2026-11-10T03:00:00Z", "info"),
+        e("a", "2026-11-10T01:00:00Z", "critical"),
+      ],
+    );
+    expect(merged.map((x) => x.id)).toEqual(["d1", "a"]);
   });
 });

@@ -12,7 +12,14 @@ import { DEFAULT_KINDS, eventKinds, fetchDensity, fetchEvents, type EventKind } 
 import KindToggles from "./KindToggles.vue";
 import DensityStrip from "./DensityStrip.vue";
 import EventLog from "./EventLog.vue";
-import { densityBucketS, scopeOptions, scopeQuery, scopeValue, timelineScope } from "./model.ts";
+import {
+  densityBucketS,
+  scopeOptions,
+  scopeQuery,
+  scopeValue,
+  timelineScope,
+  withAlertingData,
+} from "./model.ts";
 
 /** Timeline (OpsLists §Timeline): fleet-wide events, newest first, with a density strip. */
 const mission = useMissionScope();
@@ -55,7 +62,10 @@ const title = computed(
   () =>
     `Last ${RANGES.find((r) => r.value === range.value)?.label ?? range.value}${scopeWords.value}`,
 );
-/** Selected kinds from ?kind=limit,command; absent = every kind but `data` (opt-in housekeeping). */
+/**
+ * Selected kinds from ?kind=limit,command. Absent = every kind but `data` (housekeeping), plus any
+ * caution/critical data event (ux): failures show by default, routine noise doesn't.
+ */
 const kinds = computed<EventKind[]>(() => {
   if (typeof route.query.kind !== "string") return [...DEFAULT_KINDS];
   const raw = route.query.kind.split(",");
@@ -111,6 +121,7 @@ useMissionInvalidation(
   () => {
     events.refetch();
     density.refetch();
+    if (defaultView.value) dataAlerts.refetch();
   },
   { throttleMs: 2000 },
 );
@@ -121,10 +132,26 @@ const scroller = computed(() => {
   while (el && !/(auto|scroll)/.test(getComputedStyle(el).overflowY)) el = el.parentElement;
   return el;
 });
-const held = useHeldNewest(
-  computed(() => (events.state.value.status === "ready" ? events.state.value.value.events : null)),
-  scroller,
+/** Default view only: the data kind's caution/critical events, merged in (ux). */
+const defaultView = computed(() => typeof route.query.kind !== "string");
+const dataAlerts = useRemoteQuery(
+  computed(() => (defaultView.value && key.value ? `${key.value}|data` : null)),
+  (k, signal) => {
+    const parsed = JSON.parse(k.slice(0, -5)) as Key;
+    return fetchEvents(
+      parsed.m,
+      { ...windowOf(parsed.r), ...filters({ ...parsed, k: ["data"] }) },
+      signal,
+    );
+  },
 );
+const shownEvents = computed(() => {
+  if (events.state.value.status !== "ready") return null;
+  const main = events.state.value.value.events;
+  const d = dataAlerts.state.value;
+  return defaultView.value && d.status === "ready" ? withAlertingData(main, d.value.events) : main;
+});
+const held = useHeldNewest(shownEvents, scroller);
 
 const missing = computed(
   () => events.state.value.status === "failed" && events.state.value.error.kind === "not_found",
@@ -170,7 +197,7 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
         >
           <template #default="{ value }">
             <ApEmptyState
-              v-if="value.events.length === 0"
+              v-if="(shownEvents ?? value.events).length === 0"
               :headline="`No events in the ${title.toLowerCase()}`"
             />
             <template v-else>
@@ -183,7 +210,7 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
               >
                 {{ held.pending.value }} new {{ held.pending.value === 1 ? "event" : "events" }} ↑
               </button>
-              <EventLog :events="held.shown.value ?? value.events" />
+              <EventLog :events="held.shown.value ?? shownEvents ?? value.events" />
             </template>
           </template>
         </ApRemote>

@@ -258,3 +258,19 @@ export function scopeQuery(value: string): Record<string, string | undefined> {
   if (value.startsWith("plane:")) return { plane: value.slice(6), sc: undefined };
   return { sc: undefined, plane: undefined };
 }
+
+/**
+ * ux (Timeline default view): routine data events stay hidden by default, but a caution or
+ * critical one shows whatever its kind (a source going down, a credential failing). Merged newest
+ * first, without duplicates.
+ */
+export function withAlertingData<T extends { id: string; at: string; severity: string }>(
+  main: readonly T[],
+  data: readonly T[],
+): T[] {
+  const seen = new Set(main.map((e) => e.id));
+  const alerting = data.filter(
+    (e) => !seen.has(e.id) && (e.severity === "caution" || e.severity === "critical"),
+  );
+  return [...main, ...alerting].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+}
