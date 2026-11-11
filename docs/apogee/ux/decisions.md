@@ -464,3 +464,18 @@ max gap (corrected in ContactPlanning and U22).
   - Horizon **24 h**, **P2**.
   - **P1** when an affected pass starts within **2 h** or is in progress (the same clock as U31/U33).
 
+### U36 · Resubmitting a sent-back plan (qa #40) (lead / api / domain)
+**Decision:** lead's recommendation. A sent-back draft can be submitted again **unchanged**: on submit, the server
+creates a new version (vN+1, same selection). The rejection stays on vN for the audit trail. A reviewer may only
+want better gap reasons (acknowledgements are per submit), so a forced, meaningless edit would be worse.
+- **Author callout:** "Sent back by Mira K. at 10:52Z: <reason>. Change the plan or its gap reasons, then submit
+  it again."
+- **Primary:** `Submit again` (admins: `Submit again and book N passes`). The accept-gaps sheet reopens with the
+  previous reasons prefilled and editable.
+- **Optional note** in the sheet: `What changed for the reviewer` (one line). The reviewer sees it as
+  "Resubmitted by Tomás R. · 11:20Z: <note>", or "Resubmitted unchanged" when it's empty.
+- **Reviewer view:** the header context includes `v2 · RESUBMITTED`, and a text-3 line shows the earlier round:
+  "v1 sent back by Mira K. at 10:52Z: <reason>".
+- `contact_plan_version_already_decided` should then only occur in a race (someone else decided first): "This
+  version was already decided by <actor>. Reload to see it."
+
