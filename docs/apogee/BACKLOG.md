@@ -19,7 +19,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | **fe-setup** | Profile edit → stage (op + preview exist); People command policies tab (O4 exists); Changes compare (`/config/compare`) + Keep mine / Take live (`rebase`); Readiness R2 from revisions; Audit actor filter; qa #19 copy ("unclear, check now" on 5xx) | api: catalog diff, people/invite/service-identity writes, account password/sessions, provider history; domain: catalog generations (C3) |
 | **ux** | Visual review of the unreviewed boards (§7); Compose C1 layout ruling (default: accept as built, #64) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
-| **api** | Investigate tab reads: History → Passes; shapes agreed with fe-ops first | — |
+| **api** | queue empty; next with the director | — |
 | **api-ops** | Investigate Configuration tab read; shape agreed with fe-ops first | — |
 | **domain** | catalog-path generations (#36; plan to the director first, it touches activation) | — (done: qa #34 #59 e683b3e2; qa #19 server side 33529f29; #50 archive) |
 
@@ -229,7 +229,7 @@ missing endpoint or decision; an item with no blocker can start now.
 10. ~~A1 current values + prior requests in the request brief~~ done (4f9cd275, a4c0e807).
 11. ~~M24 encode preview~~ done (4d0255f3; fe-ops 90d1c43c).
 12. ~~Now queue sources `missed_pass`, `station`~~ done by api-ops (81a4c8d0; fe-ops de131e9b). `flight_event` blocked on domain (no source).
-13. Investigate tab reads (director): History (the alarm point's telemetry around the alarm and its prior occurrences) → Passes. Agree shapes with fe-ops first. Waiting: Compose draft persistence, palette search endpoint.
+13. ~~Investigate History (c839d0b9) and Passes (324428aa) reads~~ done; fe-ops History d80c8d5d. Waiting: Compose draft persistence, palette search endpoint.
 
 **domain**
 1. ~~qa #34~~ done (#59, e683b3e2).
