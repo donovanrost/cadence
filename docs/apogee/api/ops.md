@@ -383,6 +383,54 @@ Errors: `404 mission_not_found`.
 - Errors: `404 spacecraft_not_found`, `404 mission_not_found`. Refetch on `invalidate`
   `commanding`, `contacts` and `attention`.
 
+## `GET /api/console/v1/missions/:mission_id/spacecraft/:spacecraft_id/configuration` (Investigate Configuration tab): proposed
+
+"What is this spacecraft running, and what changed?" (Investigate.md, Tab · Configuration). Read-only.
+
+```json
+{"data": {
+  "spacecraft": {"id": "…", "name": "EARENDIL-312", "scid": 312, "norad_id": null, "plane": 7, "slot": 12,
+                 "archived": null},
+  "profile": {"id": "…", "name": "Earendil Block 1 — Demo", "version": 6, "latest_version": 6},
+  "catalog": {"running": {"id": "…", "revision_number": 14},
+              "profile": {"id": "…", "revision_number": 15}},
+  "overrides": [{"section": "Framing", "path": "frame_parameters.frame_size", "label": "TM frame length",
+                 "unit": "bytes", "profile_value_json": "1115", "spacecraft_value_json": "892",
+                 "reason": "…", "set_at": "…", "actor": {"kind": "user", "id": "…", "name": "Mira K."}}],
+  "routing_rules": [{"id": "…", "name": "Primary downlink", "purpose": "TM", "direction": "inbound",
+                     "role": "primary", "enabled": true, "active": true,
+                     "transport": {"id": "…", "name": "Svalbard X-band", "version": 2},
+                     "station": {"id": "…", "code": "SVB", "name": "Svalbard"} | null}],
+  "pending": [{"change_set_id": "…", "state": "in_review", "base_revision": 8,
+               "changes": [{"id": "…", "summary": "Change TM frame length", "via": "spacecraft"}]}],
+  "recent_revisions": [{"revision": 8, "kind": "change_set", "applied_at": "…",
+                        "applied_by": {"kind": "user", "id": "…", "name": "Mira K."},
+                        "summary": "…", "reason": "…", "via": ["spacecraft_override"]}]
+}}
+```
+
+- **G1:** `spacecraft` as `/spacecraft/:id` (identity, plane/slot null when unknown). `archived` is
+  `{at, by: actor | null}` for an archived spacecraft, else `null`. `profile` as `/spacecraft/:id`
+  (null when unbound).
+  - `catalog.running` is the catalog revision the spacecraft's active configuration uses;
+    `catalog.profile` is the one its profile (with its overrides) sets. Either can be `null`. When
+    both are set and differ, show the "Running rev 14; the profile is on rev 15" caution (the same
+    rule as the Readiness catalog finding, DECISIONS #65).
+- **G2 `overrides`:** this spacecraft's overrides only, labelled from the profile schema (`label`,
+  `unit` may be null). Values are JSON strings. `[]` → "Uses its profile as is."
+- **G3 `routing_rules`:** as `/spacecraft/:id`, plus the transport's `station` (null when the
+  transport names none).
+- **G4 `pending`:** the mission's open or in-review change set when it has changes touching this
+  spacecraft. `via` is `spacecraft`, `spacecraft_override` or `spacecraft_profile` (an edit to its
+  profile). `[]` → hide G4. A change set has no revision number until applied; `base_revision`
+  is the head it was staged on.
+- **G5 `recent_revisions`:** the last 5 applied revisions with an entry for this spacecraft
+  (spacecraft, override or derived routes), newest first. `revision_summary` fields as
+  `/config/revisions`; `via` lists the entry kinds. `All revisions` → Changes.
+- "Edit in Setup": show it from the session's capabilities (org admins), as Setup does.
+- Errors: `404 spacecraft_not_found`, `404 mission_not_found`. Refetch on `invalidate`
+  `spacecraft`, `catalog` and `configuration`.
+
 ## Time windows (shared by M10 and M11)
 
 Query: `from` and `to` are ISO-8601 (default: the last hour ending now); `spacecraft_id` is
