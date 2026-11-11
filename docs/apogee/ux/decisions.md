@@ -528,5 +528,10 @@ is still on disk and not in telemetry history. It's always **P2**: the journal i
     fold. A folded manual row: "Cadence stopped retrying for 37 passes." with `Retry all 37`. The result reads
     "Retried 37." or "Retried 35 of 37. 2 failed: <reason>."
   - **Drawer block:** adds "Tried 6 times, last at 23:10Z." and, when manual, the same `Retry storing`.
+  - **Server answers** (domain): Retry needs `operate_mission` (403 otherwise). There's no bulk endpoint: `Retry
+    all` sends one POST per item, and each one stands alone. A 409 `retry_not_manual` means someone else already
+    restarted it. That isn't a failure: the row takes `details.item`, and in a fold it counts as retried. A 404
+    means it was resolved meanwhile and the item drops out. `failure_*` and `last_attempt_at` describe the latest
+    attempt. `first_failure_kind` goes in Technical details only.
 - **Later, not in this step:** contacts showing "settling" after LOS (realized-contact `metadata.settlement`). It
   gets wording when a read carries it.
