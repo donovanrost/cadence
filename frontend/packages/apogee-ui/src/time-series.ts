@@ -21,6 +21,19 @@ export type ComparisonSeries = Readonly<{
   points: readonly SeriesPoint[];
   tone: "readout" | "text-2" | "text-3" | "text-4";
   dash: "solid" | "dashed" | "dotted";
+  /** Name in the hover readout. */
+  name?: string | undefined;
+}>;
+
+/**
+ * A labelled span behind the plot (ux: pass spans AOS–LOS with the station code; outages).
+ * `pass` is a faint wash, `outage` the outage hatch; the label sits at the top edge.
+ */
+export type TimeBand = Readonly<{
+  from: number;
+  to: number;
+  kind: "pass" | "outage";
+  label?: string | undefined;
 }>;
 export type Domain = readonly [number, number];
 
@@ -46,6 +59,20 @@ export function yDomain(
   }
   const margin = (hi - lo) * pad;
   return [lo - margin, hi + margin];
+}
+
+/**
+ * The point a crosshair at `t` reads: the nearest one, and only within half a bucket (or
+ * `maxGapMs`) of `t`, so a readout never claims a value inside a gap.
+ */
+export function pointAt(
+  points: readonly SeriesPoint[],
+  t: number,
+  maxGapMs: number,
+): SeriesPoint | null {
+  let best: SeriesPoint | null = null;
+  for (const p of points) if (!best || Math.abs(p.t - t) < Math.abs(best.t - t)) best = p;
+  return best && Math.abs(best.t - t) <= maxGapMs ? best : null;
 }
 
 export const scale =

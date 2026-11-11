@@ -72,3 +72,17 @@ describe("gaps with few buckets (qa #8)", () => {
     expect(linePath(points, id, id, 54_000).match(/M/g)).toHaveLength(2);
   });
 });
+
+describe("pointAt (crosshair readout)", () => {
+  const pts = [
+    { t: 0, min: 1, mean: 1, max: 1 },
+    { t: 60_000, min: 2, mean: 2, max: 2 },
+    { t: 300_000, min: 3, mean: 3, max: 3 },
+  ];
+  it("reads the nearest point, but never inside a gap", async () => {
+    const { pointAt } = await import("./time-series.ts");
+    expect(pointAt(pts, 50_000, 45_000)?.mean).toBe(2);
+    expect(pointAt(pts, 180_000, 45_000)).toBeNull();
+    expect(pointAt([], 0, 45_000)).toBeNull();
+  });
+});

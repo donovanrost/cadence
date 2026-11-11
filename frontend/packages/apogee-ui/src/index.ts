@@ -42,6 +42,7 @@ export * from "./lib/index.ts";
 export {
   envelopePath,
   linePath,
+  pointAt,
   runs,
   scale,
   timeTicks,
@@ -50,6 +51,7 @@ export {
   type ComparisonSeries,
   type LimitSegment,
   type SeriesPoint,
+  type TimeBand,
   type TimeWindow,
 } from "./time-series.ts";
 export { parseTime } from "./time/parse.ts";
