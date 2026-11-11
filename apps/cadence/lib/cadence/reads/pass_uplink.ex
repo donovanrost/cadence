@@ -13,8 +13,8 @@ defmodule Cadence.Reads.PassUplink do
   """
 
   alias Cadence.Comms.StationRefs
-  alias Cadence.Control.UplinkReadiness
   alias Cadence.Contacts.UplinkPasses
+  alias Cadence.Control.UplinkReadiness
   alias Cadence.Control.UplinkReadiness.Groups
   alias Cadence.Reads.{CommandGroups, Passes}
 
