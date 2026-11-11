@@ -88,6 +88,9 @@ const BLOCKED: Readonly<Record<string, (c: ReasonContext, p: string) => string>>
   malformed_provider_attestation: (_c, p) => `${p}'s proof for this session couldn't be read`,
   provider_credential_unavailable: (_c, p) => `Cadence couldn't read the credential for ${p}`,
   transport_runtime_unavailable: () => "the uplink transport isn't running",
+  // #67 (domain a258d4fe): recoverable, like attestation_*.
+  unverified_peer_connected: (_c, p) =>
+    `an unverified peer connected, so Cadence dropped it and is waiting for the peer ${p} attested`,
 };
 
 /** The clause for a key, in context. Unknown keys: "<provider> returned an error (Key words)". */
