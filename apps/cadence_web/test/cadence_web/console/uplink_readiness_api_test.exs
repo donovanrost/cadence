@@ -3,7 +3,10 @@ defmodule CadenceWeb.Console.UplinkReadinessAPITest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.{CommandAuthoringFixtures, CommandGroupFixtures, ExactCommandAuthoringFixtures}
+  alias Cadence.Contacts.ContactStore.ScheduledContactRow
+  alias Cadence.Contacts.ScheduledContact
   alias Cadence.Control.UplinkReadiness
+  alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -97,6 +100,39 @@ defmodule CadenceWeb.Console.UplinkReadinessAPITest do
     |> post(c.base <> "/command-groups", Map.put(body, "preflight_digest", pre["data"]["digest"]))
     |> json_response(201)
     |> get_in(["data", "id"])
+  end
+
+  test "before its pass, a queued group's uplink names the next commandable pass (U33)", c do
+    upcoming =
+      CommandGroupFixtures.commandable_pass!(
+        c.org.organization_id,
+        c.mission.mission_id,
+        c.craft.spacecraft_id,
+        DateTime.add(DateTime.utc_now(), 3_600)
+      )
+
+    # The scheduled contact the booking materialized (only its facts matter to the read).
+    %{
+      scheduled_contact_id: upcoming.scheduled_contact_id,
+      organization_id: c.org.organization_id,
+      mission_id: c.mission.mission_id,
+      source_endpoint_refs: [c.endpoint.source_endpoint_id],
+      contact_intents: [:telemetry_downlink, :command_window],
+      starts_at: upcoming.starts_at,
+      ends_at: upcoming.ends_at
+    }
+    |> ScheduledContact.new()
+    |> ScheduledContactRow.changeset()
+    |> Ecto.Changeset.apply_changes()
+    |> Repo.insert!()
+
+    group_id = queue_group!(c)
+
+    assert %{"uplink" => %{"pass" => pass, "readiness" => nil}} =
+             get_data(c, "/command-groups/#{group_id}")
+
+    assert pass["contact_id"] == upcoming.scheduled_contact_id
+    assert pass["reservation_id"] == upcoming.provider_reservation_id
   end
 
   test "a pass with no live uplink session has no readiness", c do
