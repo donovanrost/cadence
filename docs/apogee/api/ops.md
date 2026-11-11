@@ -248,6 +248,7 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
 | `setup` | 3 | `off` | one per readiness finding with severity `blocker` or `not_set_up` | `finding` (the readiness finding: `id, area, severity, cause, title, body, affected_count, fix`) |
 | `limits_not_configured` | 3 | `off` | — (omitted when the limits app itself isn't installed; that is a `setup` item) | none |
 | `never_heard` | 3 | `off` | one item | `spacecraft` |
+| `flight_event` (**proposed**, flight-events.md) | 1 critical, 2 caution | `critical` / `caution` | `{severity, point name, value}` of active `catalog_monitoring` episodes on a state rule (`enumerated`/`boolean`/`string`) | as `alarm` (`source` always `catalog_monitoring`; `spacecraft[].first_crossed_at` = the spacecraft-time `entered_at`), plus `event {value_json, entered_at}` (`entered_at` = earliest in the group) |
 
 - `id` is stable across refetches (use it as the list key and for "seen" state).
 - Order: `priority`, then alarm items whose episodes are **all acknowledged** after the rest of
@@ -269,7 +270,10 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
   `assignee` (`null` outside alarm items). Acknowledged rows show "ACK <name>" (ux U21).
 - `counts.spacecraft_p1`: distinct spacecraft across P1 items (the "N spacecraft need you" headline).
 - **Not derived:**
-  - critical flight events (safe mode): no source yet;
+  - critical flight events (safe mode): **proposed** as `flight_event` items (table above): a
+    catalog alarm on a state such as `MODE = SAFE` moves from an `alarm` row to a `flight_event`
+    row. At otherwise equal keys a flight event sorts before an alarm. New field `event`, `null` on
+    other kinds;
   - no-ACK retries: there's no automatic retry (DECISIONS #69).
   - Missed passes and stations are derived (below). Alarm items come from **alarm episodes** (both
     sources, DECISIONS #17).
