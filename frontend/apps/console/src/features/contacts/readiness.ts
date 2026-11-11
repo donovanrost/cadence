@@ -72,6 +72,8 @@ const sentenceCase = (key: string) => {
 /** Not blocked: these read as "Uplink qualifying…", with no queue row. */
 const QUALIFYING: Readonly<Record<string, (c: ReasonContext, p: string) => string>> = {
   cop1_awaiting_clcw: () => "waiting for the spacecraft's first link report",
+  // a5004aa8 / ux d85b7c3c
+  cop1_clcw_stale: () => "the spacecraft's link reports stopped; waiting for them to resume",
   session_not_attached: (_c, p) => `waiting for ${p}'s uplink connection`,
 };
 
@@ -88,6 +90,9 @@ const BLOCKED: Readonly<Record<string, (c: ReasonContext, p: string) => string>>
   malformed_provider_attestation: (_c, p) => `${p}'s proof for this session couldn't be read`,
   provider_credential_unavailable: (_c, p) => `Cadence couldn't read the credential for ${p}`,
   transport_runtime_unavailable: () => "the uplink transport isn't running",
+  cop1_no_clcw_report: () =>
+    "the spacecraft didn't send a link report within 15 s of the uplink connecting",
+  uplink_state_unavailable: () => "Cadence can't read the uplink's state right now",
   // #67 (domain a258d4fe; ux 000086ae): recoverable, like attestation_*.
   unverified_peer_connected: (_c, p) =>
     `an unverified connection took the uplink, so Cadence dropped it and is waiting for ${p}'s verified one`,
@@ -155,7 +160,8 @@ export function readinessTag(
     r.state === "recovering" ||
     (r.reason !== null && r.reason in QUALIFYING);
   if (qualifying) {
-    const why = r.reason !== null && r.reason in QUALIFYING ? reasonSentence(r.reason, c) : null;
+    // The server's state sets the tone (ux d85b7c3c); any reason it gives is worded.
+    const why = r.reason !== null ? reasonSentence(r.reason, c) : null;
     const since = r.since ? `Qualifying since ${hhmm(r.since)}` : null;
     return {
       state: "neutral",

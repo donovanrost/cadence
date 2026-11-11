@@ -246,6 +246,12 @@ describe("uplink readiness (U33)", () => {
       "Can't command: an unverified connection took the uplink, so Cadence dropped it and is waiting for Northlight's verified one.",
     );
     expect(recoverable("unverified_peer_connected")).toBe(true);
+    expect(tag("cop1_no_clcw_report")).toBe(
+      "Can't command: the spacecraft didn't send a link report within 15 s of the uplink connecting.",
+    );
+    expect(tag("cop1_clcw_stale", "qualifying")).toBe(
+      "The spacecraft's link reports stopped; waiting for them to resume.",
+    );
   });
 
   it("names the next pass by station code from the index when the row lacks it", () => {
