@@ -2,7 +2,7 @@ defmodule CadenceWeb.Console.ConfigErrorsTest do
   @moduledoc "Change-set error codes for catalog generations (#65)."
   use CadenceWeb.ConnCase, async: true
 
-  alias CadenceWeb.Console.ConfigJSON
+  alias CadenceWeb.Console.{ConfigJSON, Problem}
 
   test "holds_blocking carries the preview; an in-flight race names the requests" do
     preview = %{verdict: :hold, checks: [%{key: "compatibility", blocking: true, items: []}]}
@@ -31,5 +31,12 @@ defmodule CadenceWeb.Console.ConfigErrorsTest do
              json_response(conn, 503)
 
     assert message =~ "did not take effect"
+  end
+
+  test "an already-decided contact plan version is a coded 422 with its message (U36)" do
+    assert {422, "contact_plan_version_already_decided", message} =
+             Problem.describe(:contact_plan_version_already_decided)
+
+    assert message =~ "already decided"
   end
 end

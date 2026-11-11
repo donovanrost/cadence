@@ -235,6 +235,9 @@ reviewer). Plan detail carries the review rounds:
   [{requirement_id, reason}]} | null`: the round before, with its decision (who sent it back and
   why) and the gap reasons the author gave then (prefill the gaps sheet).
 
+`422 contact_plan_version_already_decided` now only means someone decided the version at the same
+moment; `details.decided_by: {kind, id, name} | null` names them ("already decided by Mira K.").
+
 ### `POST /contact-plans/:plan_id/reject` (send back)
 
 Body `{expected_version, reason}`. For a plan in `pending_approval`: an approver

@@ -260,6 +260,18 @@ defmodule CadenceWeb.Console.ContactPlanController do
 
   defp submit_error(conn, _plan_id, :forbidden), do: Problem.respond(conn, :forbidden)
 
+  # U36: after a send back resubmits as a new version, this only means someone decided the
+  # version concurrently; say who (lead's K1 reader: details.decided_by.name).
+  defp submit_error(conn, plan_id, :contact_plan_version_already_decided) do
+    decided_by =
+      case ContactPlanOverview.plan(org_id(conn), mission_id(conn), plan_id) do
+        {:ok, %{approval: %{actor: actor}}} -> actor
+        _unknown -> nil
+      end
+
+    Problem.respond(conn, :contact_plan_version_already_decided, %{decided_by: decided_by})
+  end
+
   defp submit_error(conn, _plan_id, reason) when is_atom(reason),
     do: Problem.respond(conn, reason)
 
