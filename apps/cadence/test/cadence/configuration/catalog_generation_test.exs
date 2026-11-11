@@ -53,7 +53,11 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
              )
 
     assert %{items: items, blocking: false} = Enum.find(checks, &(&1.key == "compatibility"))
-    assert Enum.any?(items, &(&1.reason == :catalog_change and &1.to == c.rev2))
+
+    assert %{sentence: sentence} =
+             Enum.find(items, &(&1.reason == :catalog_change and &1.to == c.rev2))
+
+    assert sentence =~ ~r/with catalog rev \d+ instead of rev \d+\./
 
     assert {:ok, %{state: :applied, generation: generation, revision: revision}} =
              submit(c, staged)

@@ -22,6 +22,7 @@ defmodule Cadence.Control.ConfigurationGeneration do
 
   alias Cadence.Activations
   alias Cadence.Applications.SpacecraftConfiguration.{Active, CatalogAuthority, Drafts, Review}
+  alias Cadence.Catalog
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Commanding.{Cancellation, RequestActivity}
   alias Cadence.Governance
@@ -140,10 +141,26 @@ defmodule Cadence.Control.ConfigurationGeneration do
 
     %{
       changes: changes,
+      labels: revision_labels(organization_id, mission_id, changes),
       waiting: RequestActivity.waiting(organization_id, mission_id, endpoints),
       in_flight: RequestActivity.in_flight(organization_id, mission_id, endpoints),
       pending: pending_configuration(organization_id, mission_id, changed)
     }
+  end
+
+  # "rev N" for each catalog revision a change names, as the catalog pages name them.
+  defp revision_labels(org, mission_id, changes) do
+    changes
+    |> Map.values()
+    |> Enum.flat_map(&[&1.from, &1.to])
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> Map.new(fn id ->
+      case Catalog.fetch_revision(org, mission_id, id) do
+        {:ok, %{revision_number: number}} when is_integer(number) -> {id, "rev #{number}"}
+        _missing -> {id, id}
+      end
+    end)
   end
 
   defp pending_configuration(_org, _mission_id, []), do: []

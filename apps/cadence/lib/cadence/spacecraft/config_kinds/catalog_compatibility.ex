@@ -58,7 +58,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.CatalogCompatibility do
          builder when builder != nil <- Application.get_env(:cadence, :configuration_generation),
          %{changes: changes} = impact when map_size(changes) > 0 <-
            builder.catalog_impact(organization_id, mission_id, touched) do
-      change_items(changes) ++
+      change_items(changes, Map.get(impact, :labels, %{})) ++
         waiting_items(impact.waiting) ++
         in_flight_items(impact.in_flight) ++ pending_items(impact.pending)
     else
@@ -66,7 +66,10 @@ defmodule Cadence.Spacecraft.ConfigKinds.CatalogCompatibility do
     end
   end
 
-  defp change_items(changes) do
+  # Revisions read "rev N" (qa: raw ids read badly); the builder names them.
+  defp change_items(changes, labels) do
+    label = fn id -> if id, do: Map.get(labels, id, id), else: "none" end
+
     changes
     |> Enum.group_by(fn {_id, change} -> {change.from, change.to} end, &elem(&1, 0))
     |> Enum.map(fn {{from, to}, ids} ->
@@ -74,8 +77,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.CatalogCompatibility do
         from: from,
         to: to,
         sentence:
-          "#{count(ids)} will decode telemetry and build commands with catalog #{to} " <>
-            "instead of #{from || "none"}."
+          "#{count(ids)} will decode telemetry and build commands with catalog " <>
+            "#{label.(to)} instead of #{label.(from)}."
       })
     end)
   end
