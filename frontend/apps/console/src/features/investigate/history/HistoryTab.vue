@@ -12,6 +12,7 @@ import {
   ApRemote,
   ApSegmented,
   ApTag,
+  type TimeBand,
 } from "@/ui";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { fetchHistory, fetchLimitIntervals } from "../api.ts";
@@ -122,6 +123,20 @@ const view = computed(() => {
     stepMs: h.value.bucket_width_ms,
     sentence: trendSentence(o.point.name, "episode window", series, limits),
   };
+});
+/** H2: the episode's own span, shaded with its severity (kit fcae7025). */
+const episodeBand = computed<TimeBand[]>(() => {
+  const o = selected.value;
+  if (!o) return [];
+  return [
+    {
+      from: Date.parse(o.opened_at),
+      to: o.cleared_at ? Date.parse(o.cleared_at) : now.value.getTime(),
+      kind: "episode",
+      severity: o.severity === "critical" ? "crit" : "caution",
+      label: o.cleared_at ? undefined : "Open",
+    },
+  ];
 });
 const peakMeta = computed(() => {
   const o = selected.value;
@@ -239,6 +254,7 @@ const live = (o: Occurrence) => `OPEN · ${formatRelative(new Date(o.opened_at),
                 :history="history.state.value"
                 :view="view"
                 :height="180"
+                :bands="episodeBand"
                 @retry="history.refetch"
               />
             </div>
