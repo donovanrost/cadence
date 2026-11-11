@@ -41,7 +41,7 @@ spacecraft tabs; only the area below the tabs changes.
   (`T+00:06:41 FBK`) · **Next AOS** (white top bar, readout: `T−00:38:10 FBK`) · Next eclipse
   (`T−00:59:30`). Unknown facts are omitted (U10); the strip reflows to the facts it has.
 - **Tabs** (ApSegmented `tabs`, `role="tablist"`, path segment per tab). Telemetry, Uplink,
-  Passes, Configuration, History are specified separately (TBD); until built they render an
+  Passes, Configuration are specified separately (TBD); History is below; until built they render an
   ApEmptyState "Not built yet in the new console" + link to the existing page. **[temporary]**
 
 ## B1 · Alarm trend (panel, alert-crit variant: index colored, panel neutral)
@@ -92,6 +92,39 @@ the row's state color (`aria-hidden`).
 - **Data:** `[{sc: {id, name, scid}, state, value_now, unit, next_aos?, spark: [v…]}]`, plane size.
 - **Empty:** `nominal` callout "No other spacecraft in plane 07 show this." **No plane metadata:**
   hide B4; B3 (if present) shows the single-target button only.
+
+## Tab · History (`M/fleet/:scId/history[?episode=:id]`) (fe-ops' proposal, refined)
+**Question:** "Has this happened before, and how did it end?" v1 covers this spacecraft's **alarm episodes**.
+Everything else that happened to it (commands, config revisions, passes) is in Timeline: the link
+`Everything on EARENDIL-001 → Timeline` opens Timeline filtered to this spacecraft.
+```
+counts strip: ALARM EPISODES · 7 DAYS 3 · 30 DAYS 11 · 90 DAYS 24
+┌ H1 Episodes (360, pane, scrolls) ┐ ┌ H2 Selected episode (chart) ─────────────────────────────┐
+│ newest first                     │ ├ H3 Prior occurrences of this alarm (table, scrolls) ──────┤
+└──────────────────────────────────┘ └───────────────────────────────────────────────────────────┘
+```
+- **Counts strip:** episodes (not alarms, U23) per window. Show `—` with a reason if a window is longer than
+  retention ("kept for 30 days").
+- **H1 rows:**
+  - Status mark (crit diamond / caution triangle, U16 source tag `CATALOG` / `GROUND LIMITS`).
+  - Point and condition in words ("VBAT below red low").
+  - Opened (§4 short form) and duration (`2h 14m`, or `OPEN · T+00:42:10` in readout while active).
+  - `ACK MIRA K.` chip when acknowledged.
+  - Default selection: the active episode, else the most recent. The URL carries `?episode=`.
+- **H2:** B1's chart component for the episode's point.
+  - Window: from 2 h before the episode opened to 2 h after it cleared (or now).
+  - Limit bands from M11, and the episode's span shaded with its severity wash.
+  - Header meta: `PEAK 22.1 V · 11-09 03:12Z`.
+  - Link `Open in Telemetry` with the same range.
+- **H3:** the same point and condition, newest first.
+  - Columns: opened · cleared · duration · peak (value + unit) · first → last value · acknowledged by (`—` if
+    not) · how it ended (`Back in limits` / `Cleared by Mira K.` / `Still open`).
+  - Summary line above it: "4th time in 30 days · median 38m".
+  - A `choice` `This alarm │ All conditions on VBAT` widens it to every condition on the point.
+- **Empty:** "No alarm episodes on EARENDIL-001 in the last 90 days." (neutral, not nominal: no alarms isn't
+  the same as healthy).
+- **Mobile:** H1 only. An episode opens as its own view (chart, then table).
+- Layout: console layout (no page scroll at 1440×900); H1 and H3 scroll.
 
 ## Technical details (`<details>`)
 Mono key/values: point id, profile id, spacecraft id, alarm id. Collapsed by default.
