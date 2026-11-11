@@ -11,5 +11,6 @@
 | qa | QA & accessibility | `w0R:p6` |
 | domain | Domain-model engineer (apps/cadence) | `w0R:p8` |
 | api-ops | Backend engineer, Ops + commanding endpoints | `w0R:pC` |
+| devops | CI on GitHub Actions (own worktree `ci-github-actions`, branch `ci/github-actions` off develop) | `w0S:p1` |
 
 Message someone: `herdr pane run <pane> "[from <you>] <message>"`
