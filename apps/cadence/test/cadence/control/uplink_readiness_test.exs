@@ -9,9 +9,10 @@ defmodule Cadence.Control.UplinkReadinessTest do
   alias Cadence.Contacts.ContactStore.ScheduledContactRow
   alias Cadence.Contacts.{ScheduledContact, UplinkPasses}
   alias Cadence.Control.Commanding.GroupSubmission
-  alias Cadence.Control.UplinkReadiness
+  alias Cadence.Control.{UplinkQualification, UplinkReadiness}
   alias Cadence.Control.UplinkReadiness.{Attention, Groups}
   alias Cadence.GroundNetworks.ProviderAudit
+  alias Cadence.Runtime.ProcessNamespace
 
   defmodule FakeDriver do
     @moduledoc false
@@ -19,6 +20,50 @@ defmodule Cadence.Control.UplinkReadinessTest do
     def start_link(reply), do: GenServer.start_link(__MODULE__, reply)
     def init(reply), do: {:ok, reply}
     def handle_call({:requalify, key}, _from, reply), do: {:reply, reply.(key), reply}
+  end
+
+  defmodule FakeSession do
+    @moduledoc false
+    # A provider uplink session whose recovery is refused, and which can't be reviewed after
+    # (as a failed challenge can leave it).
+    use GenServer
+    def start_link({registry, key}), do: GenServer.start_link(__MODULE__, {registry, key})
+
+    def init({registry, {m, c, p, b} = key}) do
+      {:ok, _} = Registry.register(registry, {:transport_runtime, m, c, p, b}, nil)
+      {:ok, %{key: key, refused?: false}}
+    end
+
+    def handle_call({:session_action, :review, []}, _from, %{refused?: true} = state),
+      do: {:reply, {:error, :session_blocked}, state}
+
+    def handle_call({:session_action, :review, []}, _from, %{key: {m, c, _p, _b}} = state) do
+      provider = %{
+        adapter_key: :tcp_socket,
+        peer: "127.0.0.1:50123",
+        mission_id: m,
+        contact_id: c
+      }
+
+      {:reply,
+       {:ok,
+        %{
+          provider: provider,
+          status: :blocked,
+          pending_delivery_count: 0,
+          incarnation: 1,
+          basis_sha256: "basis"
+        }}, state}
+    end
+
+    def handle_call({:session_action, :begin_recovery, [_evidence]}, _from, state),
+      do: {:reply, {:error, :attestation_peer_mismatch}, %{state | refused?: true}}
+  end
+
+  defmodule AttestingClient do
+    @moduledoc false
+    def attest_uplink_session(_context, _contact, _attrs, _opts),
+      do: {:ok, %{"valid_until" => DateTime.to_iso8601(DateTime.add(DateTime.utc_now(), 240))}}
   end
 
   setup do
@@ -200,6 +245,39 @@ defmodule Cadence.Control.UplinkReadinessTest do
       |> Enum.filter(&(&1.action == "uplink_session.recover"))
 
     assert Enum.sort(Enum.map(audits, & &1.outcome)) == ["recovered", "refused"]
+  end
+
+  test "a session the driver can't qualify reads blocked with its reason, and raises uplink_blocked",
+       c do
+    registry = :"uplink_qualification_registry_#{System.unique_integer([:positive])}"
+    start_supervised!({Registry, keys: :unique, name: registry})
+    namespace = %ProcessNamespace{ProcessNamespace.default() | registry: registry}
+    start_supervised!({FakeSession, {registry, c.key}})
+    booking = Map.merge(pass(c), %{client: AttestingClient, context: nil, call_opts: []})
+
+    driver =
+      start_supervised!(
+        {UplinkQualification,
+         process_namespace: namespace,
+         readiness_table: c.table,
+         tick_ms: nil,
+         booking: fn _provider -> {:ok, booking} end}
+      )
+
+    group_id = queued_group!(c)
+
+    assert %{} = UplinkQualification.qualify_now(driver)
+
+    assert %{"contact-live" => %{state: :blocked, reason: :attestation_peer_mismatch}} =
+             UplinkReadiness.for_contacts(c.org, c.mission, ["contact-live"], c.table)
+
+    assert [
+             %{
+               source: "uplink_blocked",
+               reason: "attestation_peer_mismatch",
+               command_group_ids: [^group_id]
+             }
+           ] = Attention.items(c.org, c.mission, c.table)
   end
 
   defp scheduled_contact!(c, reservation, intents) do

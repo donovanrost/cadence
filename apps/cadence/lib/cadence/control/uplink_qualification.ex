@@ -39,7 +39,9 @@ defmodule Cadence.Control.UplinkQualification do
       tick_ms: Keyword.get(opts, :tick_ms, @tick_ms),
       readiness:
         UplinkReadiness.create_table(Keyword.get(opts, :readiness_table, UplinkReadiness.table())),
-      qualified: %{}
+      qualified: %{},
+      # The provider booking of a session's contact (injectable for tests).
+      booking: Keyword.get(opts, :booking, &Booking.for_session/1)
     }
 
     schedule(state)
@@ -58,8 +60,10 @@ defmodule Cadence.Control.UplinkQualification do
         {:reply, {:error, :uplink_session_not_running}, state}
 
       {key, pid} ->
-        result = qualify(pid, %{}, System.monotonic_time(:millisecond))
-        {_view, state} = observe(state, key, pid, result, System.monotonic_time(:millisecond))
+        {result, _booking} =
+          qualified = qualify(pid, %{}, System.monotonic_time(:millisecond), state.booking)
+
+        {_view, state} = observe(state, key, pid, qualified, System.monotonic_time(:millisecond))
 
         reply =
           case result do
@@ -91,7 +95,7 @@ defmodule Cadence.Control.UplinkQualification do
 
     {results, state} =
       Enum.reduce(sessions, {%{}, %{state | qualified: %{}}}, fn {key, pid}, {results, acc} ->
-        result = qualify(pid, state.qualified, now)
+        result = qualify(pid, state.qualified, now, state.booking)
 
         {view, acc} =
           observe(
@@ -116,7 +120,7 @@ defmodule Cadence.Control.UplinkQualification do
   end
 
   # Records the session's readiness (#58) and keeps the qualified-at memory.
-  defp observe(state, key, pid, result, now) do
+  defp observe(state, key, pid, {result, booking}, now) do
     {view, qualified} =
       case result do
         {:qualified, incarnation} ->
@@ -133,21 +137,25 @@ defmodule Cadence.Control.UplinkQualification do
           {{:error, reason}, state.qualified}
       end
 
-    record_readiness(state.readiness, key, pid, result)
+    record_readiness(state.readiness, key, pid, booking, result)
     {view, %{state | qualified: qualified}}
   end
 
-  defp record_readiness(table, key, pid, result) do
-    with {:ok, review} <- review(pid),
-         {:ok, booking} <- booking(review.provider) do
-      {readiness, reason} = readiness(result, pid)
-      UplinkReadiness.record(table, key, pass(booking), readiness, reason, DateTime.utc_now())
-    else
-      # Not a provider-booked uplink: not this read's.
-      _not_provider_booked -> :ok
-    end
-  catch
-    :exit, _ -> :ok
+  # Recorded from the booking found before the challenge, so a session the challenge leaves
+  # unreviewable (a failed recovery) still reads blocked with its reason (#38 positive test).
+  defp record_readiness(_table, key, _pid, nil, {:error, reason}) do
+    Logger.warning(
+      "uplink session #{inspect(key)} readiness not recorded (no provider booking): " <>
+        inspect(reason)
+    )
+  end
+
+  # Not a provider-booked uplink: not this read's.
+  defp record_readiness(_table, _key, _pid, nil, _result), do: :ok
+
+  defp record_readiness(table, key, pid, booking, result) do
+    {readiness, reason} = readiness(result, pid)
+    UplinkReadiness.record(table, key, pass(booking), readiness, reason, DateTime.utc_now())
   end
 
   defp readiness(result, pid) when elem(result, 0) in [:qualified, :kept] do
@@ -174,11 +182,21 @@ defmodule Cadence.Control.UplinkQualification do
     ])
   end
 
-  defp qualify(pid, qualified, now) do
+  # `{result, booking | nil}`: the booking is kept even when the challenge fails.
+  defp qualify(pid, qualified, now, lookup) do
     with {:ok, review} <- review(pid),
          :ok <- provider_managed(review),
-         :ok <- due(review, qualified, now),
-         {:ok, booking} <- booking(review.provider),
+         {:ok, booking} <- booking(lookup, review.provider) do
+      {challenge(pid, review, booking, qualified, now), booking}
+    else
+      other -> {other, nil}
+    end
+  catch
+    :exit, reason -> {{:error, {:transport_runtime_unavailable, reason}}, nil}
+  end
+
+  defp challenge(pid, review, booking, qualified, now) do
+    with :ok <- due(review, qualified, now),
          {:ok, fencing} <- evidence(booking, review, "fencing"),
          :ok <- UplinkSessions.begin_recovery(pid, fencing),
          {:ok, review} <- review(pid),
@@ -214,8 +232,8 @@ defmodule Cadence.Control.UplinkQualification do
   defp due(_review, _qualified, _now), do: :ok
 
   # Sessions that no provider booked (hand-built contacts, tests) aren't this driver's to qualify.
-  defp booking(provider_basis) do
-    case Booking.for_session(provider_basis) do
+  defp booking(lookup, provider_basis) do
+    case lookup.(provider_basis) do
       {:ok, booking} -> {:ok, booking}
       {:error, reason} -> {:skipped, reason}
     end
