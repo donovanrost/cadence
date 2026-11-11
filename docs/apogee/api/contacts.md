@@ -213,6 +213,25 @@ active) in a window. Query: `from`, `to` (default now to +6 h, at most 7 days), 
 - `truncated: true`: the passes read hit its 500-row cap; narrow the window.
 - Refetch on `invalidate` with `contacts` or `stations`.
 
+### Contact drawer D2 actions: `Release` and `Swap station` (BACKLOG §8): proposed, not built
+
+- **`Swap station`** needs no endpoint: it opens the existing Re-plan flow (K2) for this pass's
+  spacecraft and day, with the pass as the one to replace (ux to confirm).
+- **`Release`** cancels the booking at the provider (danger confirm).
+  - Pass rows gain `provider_revision` (integer) and `releasable` (boolean). `releasable` is true
+    when `state` is `pending | confirmed | active` and the viewer may cancel bookings
+    (organization admin, `:manage_missions`, as for the contact workspace's cancel).
+  - `POST /api/console/v1/missions/:mission_id/passes/:id/release` with body
+    `{"expected_provider_revision": <the row's provider_revision>}`. The server builds the
+    cancellation evidence from the stored booking; a different revision means the provider
+    changed it, so reload.
+  - Returns `{data: <pass row>}` after the provider answers. `state` is `canceling` or
+    `canceled`, and `ended_by` is the viewer.
+  - Errors: `409 pass_changed` (revision mismatch), `409 pass_not_releasable` (state),
+    `403 forbidden`, `404 pass_not_found`, `502 provider_cancel_failed` (`details.reason`; the
+    booking stays as the provider left it), `422 actor_not_assignable`.
+  - Refetch on `invalidate` `contacts`.
+
 ## S10: `contacts` invalidation
 
 `invalidate` with `contacts` fires when a scheduled or realized contact or a contact action is
