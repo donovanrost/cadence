@@ -533,5 +533,9 @@ is still on disk and not in telemetry history. It's always **P2**: the journal i
     restarted it. That isn't a failure: the row takes `details.item`, and in a fold it counts as retried. A 404
     means it was resolved meanwhile and the item drops out. `failure_*` and `last_attempt_at` describe the latest
     attempt. `first_failure_kind` goes in Technical details only.
+  - **After a retry** (fe-ops c10265fd): a 200 updates the row from the returned item at once. If every item in a
+    fold was retried, the emptied fold stays for 5 s with "Retried 37." and fades like a resolved row. On a
+    partial result, the remaining fold keeps "Retried 35 of 37. 2 failed: …" in its evidence. Without
+    `operate_mission`, rows keep `Review` / `Show all N` and add "Operators can retry storing."
 - **Later, not in this step:** contacts showing "settling" after LOS (realized-contact `metadata.settlement`). It
   gets wording when a read carries it.
