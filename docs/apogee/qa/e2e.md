@@ -19,9 +19,11 @@ E2E_MUTATE=1 corepack pnpm --filter @cadence/console test:e2e changes catalog-im
 E2E_WORKERS=4 …                                                   # when the laptop is idle
 ```
 
-**When.** After every :4011 restart that brings lib changes, run the whole read-only suite once
-(load permitting; otherwise the `real` specs first). qa #43: a Readiness 500 sat for two days
-because `setup-readiness` wasn't re-run after the server change that broke it.
+**When (user, 2026-11-11).** Browser tests are not part of agents' routine validation: no runs
+after a server restart, before a commit, or inside another agent's iterate-and-check loop. The
+suite runs in CI (devops; `docs/apogee/qa/ci-handoff.md`), which is what catches regressions such
+as qa #43 (a Readiness 500 that sat for two days). Run specs locally only while developing or
+debugging the suite itself (qa), or to reproduce a specific reported bug.
 
 Report: `frontend/apps/console/playwright-report/index.html`; traces and failure screenshots in
 `test-results/` (both gitignored, as is `e2e/.auth/`).
