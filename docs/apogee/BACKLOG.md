@@ -20,7 +20,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | **ux** | Visual review of the unreviewed boards (§7); Compose C1 layout ruling (default: accept as built, #64) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
 | **api** | Compose draft persistence (director): one current draft per user per mission, autosave overwrites; inert (never visible to approvers, never queued/releasable); full revalidation on submit; shape agreed with fe-ops | — |
-| **api-ops** | flight_event source for the Now queue (director): design note in docs/apogee/domain/ first (what it is, where it comes from, dedupe, resolution), domain reviews before coding | domain review |
+| **api-ops** | flight_event source: built and domain-approved; lands after the 21:30Z freeze (needs a :4011 restart); fe-ops reader in (591bc06c) | — |
 | **domain** | catalog-path generations (#36; plan to the director first, it touches activation) | — (done: qa #34 #59 e683b3e2; qa #19 server side 33529f29; #50 archive) |
 
 ## 2. Ops
