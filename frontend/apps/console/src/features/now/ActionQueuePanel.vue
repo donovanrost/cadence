@@ -1,16 +1,26 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import type { RemoteState } from "@/api/index.ts";
 import { ApButton, ApCallout, ApListRow, ApPanel, ApRemote, formatRelative, useNow } from "@/ui";
 import type { QueueItem } from "./queue.ts";
 import QueueListSheet from "./QueueListSheet.vue";
+import { useQueueCommand } from "./useQueueCommand.ts";
+import { useMissionScope } from "@/shell/index.ts";
+import { useCommandAccess } from "@/features/commands/index.ts";
 
 /** A2 · Action queue: the server-ranked queue (M6), in server order. */
 defineProps<{ state: RemoteState<QueueItem[]>; nominal: number }>();
-defineEmits<{ retry: [] }>();
+const emit = defineEmits<{ retry: []; changed: [] }>();
 const now = useNow();
 const sheet = ref<InstanceType<typeof QueueListSheet> | null>(null);
+/** U37 Retry storing: operate_mission, the same flag Recover uses (access.abort). */
+const scope = useMissionScope();
+const access = useCommandAccess();
+const command = useQueueCommand(
+  computed(() => scope.value.mission.id),
+  () => emit("changed"),
+);
 /** Static meta, then the live countdown when the row has a consequence time. */
 function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Record<string, never> {
   const due = item.due
@@ -40,7 +50,7 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
             :key="item.key"
             :priority="`P${item.priority}`"
             :state="item.state"
-            :sentence="item.sentence"
+            :sentence="command.sentenceFor(item, access.abort)"
             v-bind="metaProps(item)"
           >
             <template #title>
@@ -53,9 +63,18 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
               <template v-else>{{ item.title }}</template>
             </template>
             <template #action>
+              <!-- U37: a write (Retry storing / Retry all N) where the operator may run it. -->
+              <ApButton
+                v-if="item.command && access.abort"
+                size="compact"
+                variant="secondary"
+                :disabled="command.notes.value[item.key]?.running"
+                @click="command.run(item)"
+                >{{ item.command.label }}</ApButton
+              >
               <!-- A folded row (U37) opens its members in a sheet instead of routing. -->
               <ApButton
-                v-if="item.list"
+                v-else-if="item.list"
                 size="compact"
                 variant="secondary"
                 @click="sheet?.open(item)"

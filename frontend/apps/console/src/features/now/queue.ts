@@ -1,6 +1,7 @@
 import type { RouteLocationRaw } from "vue-router";
 import { plural, type OpState } from "@/ui";
 import type { Fleet, FleetSpacecraft } from "@/features/fleet/index.ts";
+import type { Attention } from "./attention.ts";
 
 /**
  * Interim action queue for Now (A2), derived from the fleet read until api's ranked
@@ -29,6 +30,11 @@ export type QueueItem = Readonly<{
   spacecraftIds: readonly string[];
   /** A folded row's item ids (U37): it fades when the last of them resolves. */
   memberKeys?: readonly string[];
+  /**
+   * A write in place of the route action (U37 Retry storing): POST per target. The panel shows it
+   * only with operate access, else "Operators can retry storing."
+   */
+  command?: Readonly<{ label: string; targets: readonly Attention[] }>;
   /** A folded row's members: its action opens them in a sheet (U30 pattern) instead of routing. */
   list?: Readonly<{ title: string; rows: readonly QueueListRow[] }>;
 }>;

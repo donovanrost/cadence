@@ -5,6 +5,8 @@ import {
   attentionMeta,
   attentionReader,
   attentionWords,
+  settlementEvidence,
+  type SettlementFacts,
   newlyResolved,
   resolvedWords,
   withFading,
@@ -449,35 +451,37 @@ describe("queue sources (ops.md b7008dd6, U35)", () => {
   });
 });
 
+// domain's #71 sample item, verbatim apart from refs.
+const settlementSample = {
+  id: "realized_contact_ab12",
+  source: "contact_settlement",
+  conflict: "unsettled",
+  state: "open",
+  reason: "settle_deadline",
+  failure_kind: "telemetry_storage_unavailable",
+  failure_message: "telemetry storage unreachable (connection refused)",
+  spacecraft_id: "spacecraft-earendil-001",
+  contact_id: "scheduled_contact_cd34",
+  realized_contact_id: "realized_contact_ab12",
+  ground_station_ref: "svb",
+  provider_id: "p-1",
+  station: { ref: "svb", id: "st-1", code: "SVA", name: "Svalbard" },
+  provider: { id: "p-1", name: "Northlight" },
+  starts_at: "2026-11-11T18:49:00Z",
+  ends_at: "2026-11-11T18:57:00Z",
+  raised_at: "2026-11-12T00:57:00Z",
+  deadline_at: "2026-11-12T00:57:00Z",
+  backlog: { entries: 1204, bytes: 3355443, journals: 1 },
+  expires_at: null,
+  retry: "automatic",
+  next_attempt_at: null,
+  acknowledged_by: null,
+  provider_message: null,
+  resolution: null,
+};
+
 describe("contact_settlement (U37, #71)", () => {
-  // domain's sample item, verbatim apart from refs.
-  const sample = {
-    id: "realized_contact_ab12",
-    source: "contact_settlement",
-    conflict: "unsettled",
-    state: "open",
-    reason: "settle_deadline",
-    failure_kind: "telemetry_storage_unavailable",
-    failure_message: "telemetry storage unreachable (connection refused)",
-    spacecraft_id: "spacecraft-earendil-001",
-    contact_id: "scheduled_contact_cd34",
-    realized_contact_id: "realized_contact_ab12",
-    ground_station_ref: "svb",
-    provider_id: "p-1",
-    station: { ref: "svb", id: "st-1", code: "SVA", name: "Svalbard" },
-    provider: { id: "p-1", name: "Northlight" },
-    starts_at: "2026-11-11T18:49:00Z",
-    ends_at: "2026-11-11T18:57:00Z",
-    raised_at: "2026-11-12T00:57:00Z",
-    deadline_at: "2026-11-12T00:57:00Z",
-    backlog: { entries: 1204, bytes: 3355443, journals: 1 },
-    expires_at: null,
-    retry: "automatic",
-    next_attempt_at: null,
-    acknowledged_by: null,
-    provider_message: null,
-    resolution: null,
-  };
+  const sample = settlementSample;
   const settlement = (overrides: Record<string, unknown> = {}) =>
     item({
       id: "attention:contact_settlement:realized_contact_ab12",
@@ -551,7 +555,7 @@ describe("contact_settlement (U37, #71)", () => {
       two("c", "2026-11-11T07:00:00Z", { failure_kind: "settle_failed" }),
     ]);
     expect(rows.map((r) => r.key)).toEqual([
-      "settlement:telemetry_storage_unavailable",
+      "settlement:telemetry_storage_unavailable:automatic",
       "setup:a",
       "attention:contact_settlement:c",
     ]);
@@ -596,5 +600,81 @@ describe("contact_settlement (U37, #71)", () => {
     });
     expect(r.ok).toBe(true);
     if (r.ok) expect(presentQueue(r.value).map((q) => q.key)).toEqual(["setup:a"]);
+  });
+});
+
+describe("contact_settlement retries (ux 294e67c6, domain #71 replay)", () => {
+  const facts = (o: Partial<SettlementFacts> = {}): SettlementFacts => ({
+    backlog: { entries: 1204, bytes: 3355443 },
+    failureKind: "telemetry_storage_unavailable",
+    failureMessage: "connection refused",
+    deadline: "00:57Z",
+    retry: "automatic",
+    attempts: 0,
+    nextAttemptAt: null,
+    lastAttemptAt: null,
+    ...o,
+  });
+  const now = new Date("2026-11-11T23:20:00Z");
+
+  it("backing off: next try and failed count replace 'when it's back'", () => {
+    expect(
+      settlementEvidence(facts({ attempts: 2, nextAttemptAt: "2026-11-11T23:40:00Z" }), now),
+    ).toBe(
+      "1,204 entries (3.4 MB) are on disk. Telemetry storage is unavailable. 2 of 6 tries failed. Next try at 23:40Z.",
+    );
+    expect(settlementEvidence(facts({ nextAttemptAt: "2026-11-11T23:19:00Z" }), now)).toBe(
+      "1,204 entries (3.4 MB) are on disk. Telemetry storage is unavailable. Trying now.",
+    );
+    expect(settlementEvidence(facts(), now)).toBe(
+      "1,204 entries (3.4 MB) are on disk. Telemetry storage is unavailable; Cadence stores them when it's back.",
+    );
+  });
+
+  it("manual: says it stopped and why, from the last try", () => {
+    expect(
+      settlementEvidence(
+        facts({ retry: "manual", attempts: 6, lastAttemptAt: "2026-11-11T23:10:00Z" }),
+        now,
+      ),
+    ).toBe(
+      "1,204 entries (3.4 MB) are on disk. Cadence stopped after 6 failed tries: telemetry storage was unavailable at the last try, 23:10Z.",
+    );
+    expect(
+      settlementEvidence(
+        facts({
+          retry: "manual",
+          attempts: 6,
+          failureKind: "settle_failed",
+          failureMessage: "disk full.",
+        }),
+        now,
+      ),
+    ).toBe("1,204 entries (3.4 MB) are on disk. Cadence stopped after 6 failed tries: disk full.");
+  });
+
+  it("manual items fold apart from automatic ones and offer Retry all", () => {
+    const one = (id: string, retry: string) => ({
+      ...item({
+        id: `attention:contact_settlement:${id}`,
+        priority: 2,
+        kind: "attention",
+        state: "caution",
+        source: "contact_settlement",
+        spacecraft: [member(1, { violating_points: null, value: null, first_crossed_at: null })],
+      }),
+      attention: { ...settlementSample, id, retry, attempts: retry === "manual" ? 6 : 1 },
+    });
+    const rows = present([one("a", "manual"), one("b", "manual"), one("c", "automatic")]);
+    expect(rows.map((r) => [r.key, r.title, r.command?.label ?? null])).toEqual([
+      [
+        "settlement:telemetry_storage_unavailable:manual",
+        "Cadence stopped retrying for 2 passes.",
+        "Retry all 2",
+      ],
+      ["attention:contact_settlement:c", expect.stringContaining("isn't stored yet."), null],
+    ]);
+    const [single] = present([one("a", "manual")]);
+    expect(single?.command?.label).toBe("Retry storing");
   });
 });

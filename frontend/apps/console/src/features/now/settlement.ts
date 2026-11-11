@@ -16,7 +16,9 @@ export type Settlement = Readonly<{
   attention: Attention & { backlog: NonNullable<Attention["backlog"]> };
 }>;
 
-export const foldKey = (s: Settlement) => s.attention.failure_kind ?? "none";
+/** ux 294e67c6: cause + retry, so manual items never hide inside an automatic fold. */
+export const foldKey = (s: Settlement) =>
+  `${s.attention.failure_kind ?? "none"}:${s.attention.retry === "manual" ? "manual" : "automatic"}`;
 
 const drawer = (a: Attention): RouteLocationRaw => {
   const pass = a.reservation_id ?? a.contact_id;
@@ -51,16 +53,34 @@ export function foldedSettlementRow(
   const messages = new Set(sorted.map((m) => m.attention.failure_message ?? null));
   const message = messages.size === 1 ? (first?.failure_message ?? null) : null;
   const n = sorted.length;
+  const manual = first?.retry === "manual";
   return {
-    key: `settlement:${first ? (first.failure_kind ?? "none") : "none"}`,
+    key: `settlement:${sorted[0] ? foldKey(sorted[0]) : "none"}`,
     priority: 2,
     state: "caution",
-    title: `Telemetry from ${plural(n, "pass", "passes")} isn't stored yet.`,
+    title: manual
+      ? `Cadence stopped retrying for ${plural(n, "pass", "passes")}.`
+      : `Telemetry from ${plural(n, "pass", "passes")} isn't stored yet.`,
     titleTo: null,
-    // Folded, the null kind drops the deadline time (ux 3f61ef71).
-    sentence: settlementEvidence(total, first?.failure_kind ?? null, message, { deadline: null }),
+    // Folded: summed backlog, no deadline time (ux 3f61ef71), no per-item try times.
+    sentence: settlementEvidence(
+      {
+        backlog: total,
+        failureKind: first?.failure_kind ?? null,
+        failureMessage: message,
+        deadline: null,
+        retry: first?.retry ?? null,
+        attempts: null,
+        nextAttemptAt: null,
+        lastAttemptAt: null,
+      },
+      now,
+    ),
     meta: first && last ? span(first.starts_at, last.starts_at, now).toUpperCase() : null,
     action: { label: `Show all ${n}`, to: { name: "ops.contacts" } },
+    ...(manual
+      ? { command: { label: `Retry all ${n}`, targets: sorted.map((m) => m.attention) } }
+      : {}),
     spacecraftIds: [...new Set(sorted.flatMap((m) => (m.spacecraft ? [m.spacecraft.id] : [])))],
     memberKeys: sorted.map((m) => m.itemId),
     list: {

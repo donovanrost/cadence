@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import {
   formatClock,
@@ -21,7 +21,7 @@ import {
 } from "@/features/scheduling/index.ts";
 import type { Pass } from "./api.ts";
 import AttentionBlock from "./AttentionBlock.vue";
-import { attentionWords, useSettlement } from "@/features/now/index.ts";
+import { attentionWords, NO_ACCESS, retryTargets, useSettlement } from "@/features/now/index.ts";
 import { noRecoverText, readinessTag, reasonLink, recoverable } from "./readiness.ts";
 import RecoverUplink from "./RecoverUplink.vue";
 import ReleasePass from "./ReleasePass.vue";
@@ -65,10 +65,25 @@ const releaseIssue = computed(() => {
   return a && a.source === "pass_release" ? attentionWords(a) : null;
 });
 /** U37: telemetry from this pass still on disk (#71), from the queue; no actions. */
-const settlement = useSettlement(
+const settlementRead = useSettlement(
   computed(() => props.missionId),
   computed(() => props.pass?.id ?? null),
 );
+const settlement = settlementRead.item;
+const retrying = ref(false);
+const retryNote = ref<string | null>(null);
+async function retryStoring() {
+  const s = settlement.value;
+  if (!s || retrying.value) return;
+  retrying.value = true;
+  retryNote.value = null;
+  try {
+    retryNote.value = await retryTargets(props.missionId, [s.attention]);
+    settlementRead.refetch();
+  } finally {
+    retrying.value = false;
+  }
+}
 // Recover is operate_mission, the same policy as abort (DECISIONS #42).
 const access = useCommandAccess();
 /** false only: null means no uplink leg was asked for (downlink only). */
@@ -140,7 +155,17 @@ const countdown = computed(() => {
       </ApCallout>
       <ApCallout v-if="settlement" tone="caution">
         <p class="m-0 font-semibold">Telemetry from this pass isn't stored yet.</p>
-        <p class="m-0 text-text-2">{{ settlement.evidence }}</p>
+        <p class="m-0 text-text-2">{{ retrying ? "Retrying…" : settlement.evidence }}</p>
+        <p v-if="settlement.tried" class="m-0 text-sm text-text-3">{{ settlement.tried }}</p>
+        <p v-if="settlement.manual && !access.abort" class="m-0 text-sm text-text-3">
+          {{ NO_ACCESS }}
+        </p>
+        <p v-if="retryNote" class="m-0 text-sm text-caution-text">{{ retryNote }}</p>
+        <template v-if="settlement.manual && access.abort" #action>
+          <ApButton size="compact" :disabled="retrying" @click="retryStoring"
+            >Retry storing</ApButton
+          >
+        </template>
       </ApCallout>
       <AttentionBlock
         v-if="pass.attention && pass.attention.source === 'pass_resolution'"

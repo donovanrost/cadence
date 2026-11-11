@@ -97,6 +97,7 @@ function openById(id: string) {
             class="order-first min-h-[320px] md:order-none console:min-h-0"
             :state="actionQueue.items.value"
             @retry="actionQueue.refetch"
+            @changed="actionQueue.refetch"
             :nominal="value.counts.nominal"
           />
           <ApPanel

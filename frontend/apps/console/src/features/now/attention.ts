@@ -47,7 +47,12 @@ export const attentionReader = d.object({
   /** telemetry_storage_unavailable | settle_failed | null (a slow drain past the deadline). */
   failure_kind: d.optional(d.nullable(d.token)),
   failure_message: d.optional(d.nullable(d.string)),
+  /** automatic | manual (domain #71 replay: manual after 6 failed replays, operator retries). */
   retry: d.optional(d.nullable(d.token)),
+  attempts: d.optional(d.nullable(d.integer)),
+  /** Set while automatic and backing off (5 min doubling to 2 h); null when manual. */
+  next_attempt_at: d.optional(d.nullable(d.timestamp)),
+  last_attempt_at: d.optional(d.nullable(d.timestamp)),
   resolution: d.nullable(
     d.object({
       action: d.token,
@@ -77,21 +82,65 @@ export const short = (iso: string, now: Date) =>
  * U37 evidence by failure_kind: what's on disk and why it isn't stored. Never "TSDB", "journal" or
  * "settlement"; the storage outage's own message stays out of the line (Technical details).
  */
-export function settlementEvidence(
-  backlog: Readonly<{ entries: number; bytes: number }>,
-  failureKind: string | null,
-  failureMessage: string | null,
-  opts: Readonly<{ deadline: string | null }>,
-): string {
-  const one = backlog.entries === 1;
-  const disk = `${backlog.entries.toLocaleString("en-US")} ${one ? "entry" : "entries"} (${formatBytes(backlog.bytes)}) ${one ? "is" : "are"} on disk`;
+export function settlementEvidence(f: SettlementFacts, now: Date = new Date()): string {
+  const one = f.backlog.entries === 1;
+  const disk = `${f.backlog.entries.toLocaleString("en-US")} ${one ? "entry" : "entries"} (${formatBytes(f.backlog.bytes)}) ${one ? "is" : "are"} on disk`;
   const them = one ? "it" : "them";
-  if (failureKind === null)
-    return `${disk}, past the ${opts.deadline ? `${opts.deadline} ` : ""}deadline for storing ${them}.`;
-  if (failureKind === "telemetry_storage_unavailable")
-    return `${disk}. Telemetry storage is unavailable; Cadence stores ${them} when it's back.`;
-  return `${disk}. Cadence couldn't store ${them}${failureMessage ? `: ${noStop(failureMessage)}` : ""}.`;
+  if (f.retry === "manual") {
+    // ux 294e67c6: replay stopped after MAX_TRIES; the reason is the last try's.
+    const why =
+      f.failureKind === "telemetry_storage_unavailable"
+        ? `telemetry storage was unavailable at the last try${f.lastAttemptAt ? `, ${short(f.lastAttemptAt, now)}` : ""}`
+        : f.failureMessage
+          ? noStop(f.failureMessage)
+          : null;
+    return `${disk}. Cadence stopped after ${f.attempts ?? MAX_TRIES} failed tries${why ? `: ${why}` : ""}.`;
+  }
+  const failed = f.attempts ? `${f.attempts} of ${MAX_TRIES} tries failed.` : null;
+  const next = f.nextAttemptAt
+    ? Date.parse(f.nextAttemptAt) <= now.getTime()
+      ? "Trying now."
+      : `Next try at ${short(f.nextAttemptAt, now)}.`
+    : null;
+  const tail = [failed, next].filter(Boolean).join(" ");
+  const end = tail ? ` ${tail}` : "";
+  if (f.failureKind === null)
+    return `${disk}, past the ${f.deadline ? `${f.deadline} ` : ""}deadline for storing ${them}.${end}`;
+  if (f.failureKind === "telemetry_storage_unavailable")
+    return next
+      ? `${disk}. Telemetry storage is unavailable.${end}`
+      : `${disk}. Telemetry storage is unavailable; Cadence stores ${them} when it's back.${end}`;
+  return `${disk}. Cadence couldn't store ${them}${f.failureMessage ? `: ${noStop(f.failureMessage)}` : ""}.${end}`;
 }
+
+/** Replay stops after this many failed tries and hands to an operator (director, #71). */
+export const MAX_TRIES = 6;
+
+export type SettlementFacts = Readonly<{
+  backlog: Readonly<{ entries: number; bytes: number }>;
+  failureKind: string | null;
+  failureMessage: string | null;
+  /** `00:57Z`; null on a folded line (ux 3f61ef71). */
+  deadline: string | null;
+  retry: string | null;
+  attempts: number | null;
+  nextAttemptAt: string | null;
+  lastAttemptAt: string | null;
+}>;
+
+/** One item's facts for the evidence line. */
+export const settlementFacts = (a: Attention & { backlog: NonNullable<Attention["backlog"]> }) =>
+  ({
+    backlog: a.backlog,
+    failureKind: a.failure_kind ?? null,
+    failureMessage: a.failure_message ?? null,
+    deadline: a.deadline_at ? hhmm(a.deadline_at) : null,
+    retry: a.retry ?? null,
+    attempts: a.attempts ?? null,
+    nextAttemptAt: a.next_attempt_at ?? null,
+    lastAttemptAt: a.last_attempt_at ?? null,
+  }) satisfies SettlementFacts;
+
 const noStop = (s: string) => s.trim().replace(/[.!?]+$/, "");
 
 /** Title tail and evidence sentence (U31 copy). Unknown conflicts still say who and where. */
@@ -119,9 +168,7 @@ export function attentionWords(
     const station = a.station.code ?? a.station.name;
     return {
       what: `Telemetry from the ${station ? `${station} ` : ""}${short(a.starts_at, now)} pass isn't stored yet.`,
-      evidence: settlementEvidence(a.backlog, a.failure_kind ?? null, a.failure_message ?? null, {
-        deadline: a.deadline_at ? hhmm(a.deadline_at) : null,
-      }),
+      evidence: settlementEvidence(settlementFacts({ ...a, backlog: a.backlog }), now),
     };
   }
   if (a.uplink) {
