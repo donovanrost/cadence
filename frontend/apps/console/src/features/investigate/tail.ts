@@ -11,7 +11,7 @@ import type { SeriesPoint } from "@/ui";
  *
  * Off until api-ops' M8 lands: joining a topic the server doesn't know makes Phoenix retry the join.
  */
-export const M8_LIVE = false;
+export const M8_LIVE = true;
 
 const sample = d.object({
   point_id: d.token,
