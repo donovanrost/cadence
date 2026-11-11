@@ -21,9 +21,13 @@ defmodule Cadence.Alarms.Sources do
     "severe" => :critical
   }
 
-  @doc "Observation for one catalog monitoring transition."
-  @spec catalog(map(), map(), String.t()) :: map()
-  def catalog(evaluation_attrs, update, transition_id) do
+  @doc """
+  Observation for one catalog monitoring transition. `match` is the rule that opened or escalated
+  it (`MonitoringEvaluator.matched_rule/3`, or `nil`); its kind, id and label go into the episode
+  `context` as `rule_kind`, `rule_id` and `rule_label` (flight events).
+  """
+  @spec catalog(map(), map(), String.t(), map() | nil) :: map()
+  def catalog(evaluation_attrs, update, transition_id, match \\ nil) do
     to_state = evaluation_attrs.effective_state
     observed_at = update.generation_time || update.receipt_time
 
@@ -41,12 +45,21 @@ defmodule Cadence.Alarms.Sources do
       observed_at: observed_at,
       evaluated_at: update.receipt_time,
       ref: transition_id,
-      context: %{
-        "policy_id" => evaluation_attrs.policy_id,
-        "mission_model_revision_id" => evaluation_attrs.mission_model_revision_id
-      }
+      context:
+        Map.merge(
+          %{
+            "policy_id" => evaluation_attrs.policy_id,
+            "mission_model_revision_id" => evaluation_attrs.mission_model_revision_id
+          },
+          rule_context(match)
+        )
     }
   end
+
+  defp rule_context(%{kind: kind, id: id, label: label}),
+    do: %{"rule_kind" => kind, "rule_id" => id, "rule_label" => label}
+
+  defp rule_context(_none), do: %{}
 
   @doc "Observation for one ground-limit evaluation event."
   @spec ground(Event.t(), DateTime.t()) :: map()

@@ -40,7 +40,7 @@ defmodule Cadence.Runtime.PartitionOwner do
   }
 
   alias Cadence.SemanticRuntime
-  alias Cadence.SemanticRuntime.{PlanDecoder, Result, Scope, State, Store, Update}
+  alias Cadence.SemanticRuntime.{AlarmRules, PlanDecoder, Result, Scope, State, Store, Update}
 
   alias Cadence.Runtime.PartitionOwner.{PartitionBuilder, RuntimeRecords}
 
@@ -578,6 +578,8 @@ defmodule Cadence.Runtime.PartitionOwner do
          semantic_result: semantic_result,
          observation_context:
            MissionRuntimeSpec.observation_context(next_state.active_activation),
+         alarm_rules:
+           AlarmRules.for_result(next_state.active_activation.runtime_plans, semantic_result),
          runtime_records: all_runtime_records
        }, %{next_state | pending_runtime_records: pending_runtime_records}}
     end
