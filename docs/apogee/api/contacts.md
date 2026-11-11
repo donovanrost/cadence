@@ -215,12 +215,14 @@ active) in a window. Query: `from`, `to` (default now to +6 h, at most 7 days), 
 
 ### Contact drawer D2 actions: `Release` and `Swap station` (BACKLOG §8): proposed, not built
 
-- **`Swap station`** needs no endpoint: it opens the existing Re-plan flow (K2) for this pass's
-  spacecraft and day, with the pass as the one to replace (ux to confirm).
+- **`Swap station`: hidden** (ux). K2 re-plans only lost bookings and keeps committed passes
+  locked (S8), so it can't replace a healthy booking. A "replace this booking" operation is
+  backlog with the director; until then there's no endpoint and no control.
 - **`Release`** cancels the booking at the provider (danger confirm).
   - Pass rows gain `provider_revision` (integer) and `releasable` (boolean). `releasable` is true
     when `state` is `pending | confirmed | active` and the viewer may cancel bookings
-    (organization admin, `:manage_missions`, as for the contact workspace's cancel).
+    (organization admin, `:manage_missions`, as for the contact workspace's cancel). Members don't
+    see the button; D2 shows "Org admins can release a booking." (ux).
   - `POST /api/console/v1/missions/:mission_id/passes/:id/release` with body
     `{"expected_provider_revision": <the row's provider_revision>}`. The server builds the
     cancellation evidence from the stored booking; a different revision means the provider
