@@ -31,7 +31,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Stat tiles link (Critical/Caution/Stale → Alarms/Fleet, In contact → Contacts, Uplinks → Commands) | fe-ops + lead (`ApStatTile` gets `to`) | — |
 | ~~Queue kinds `missed_pass`, `station` + `Station` → Re-plan~~ done (de131e9b); `flight_event`: source landed (api-ops a02c2cee, 1b3be7f7, e07969bb), fe-ops reader 591bc06c | fe-ops | qa: a flight_event row seen live after the :4011 restart |
 | ~~Attention source `contact_settlement` (#71) reader~~ done (14330a4a, U37 words, no Acknowledge, Review opens Contacts by contact_id); unknown kinds/sources now drop one row, not Now | fe-ops | — (source live 22:14Z) |
-| `contact_settlement` manual retry (#71 replay): the needs-operator line and Retry action in the row and the drawer; 'next try HH:MMZ' while backing off | fe-ops | — (ux wording 294e67c6: '… Cadence stopped after 6 failed tries: <reason>.' + `Retry storing`; `Retrying…` only while the request runs; automatic 'Next try at HH:MMZ.'; manual items fold separately and sort first within P2). Domain ships the state after this |
+| ~~`contact_settlement` manual retry (#71 replay): needs-operator line, `Retry storing`, 'Next try at HH:MMZ.'~~ done (c10265fd; ux 294e67c6) | fe-ops | — (domain ships the manual state after 00:30Z) |
 | Header meta names the worst station issue | fe-ops | — (S7 status exists) |
 | ~~A4 pass bars open the contact drawer~~ done (51cc6133) | fe-ops | — |
 | ~~Approval rows open the request's review~~ done for a single group (a0e33fe1) | fe-ops | — |
@@ -240,7 +240,7 @@ missing endpoint or decision; an item with no blocker can start now.
 3. Catalog-path generations (#36), which unblock Catalog C3 rollout. Plan to the director first.
 4. ~~Spacecraft archive model (#50)~~ done (7dbd3994, e0232291, 5ee6d6e8; rollback of create verified c8526c57).
 5. ~~#71 `contact_settlement` attention source~~ landed (9e8145fa, 551cb796, 8f7066b1; live on :4011 22:14Z; fe-ops reader 14330a4a). Replay follow-up next.
-6. #71 replay (after 00:30Z): automatic retries back off from 5 min, doubling to 2 h; after 6 failed retries `retry: "manual"` and POST `…/attention/contact_settlement/:id/retry`. The manual state ships after fe-ops' copy and Retry action (ux wording). Agreed: a retry on a non-manual item gets 409 `retry_not_manual` with the current item in `error.details.item`, no side effect; unknown or resolved gets 404 `attention_item_not_found`; gated by `operate_mission`; `failure_kind`/`failure_message` follow the latest attempt, plus `first_failure_kind` when it differs; every change publishes `attention` on the mission topic.
+6. #71 replay (after 00:30Z): automatic retries back off from 5 min, doubling to 2 h; after 6 failed retries `retry: "manual"` and POST `…/attention/contact_settlement/:id/retry`. fe-ops' copy and Retry action are in (c10265fd), so domain ships it after 00:30Z. Agreed: a retry on a non-manual item gets 409 `retry_not_manual` with the current item in `error.details.item`, no side effect; unknown or resolved gets 404 `attention_item_not_found`; gated by `operate_mission`; `failure_kind`/`failure_message` follow the latest attempt, plus `first_failure_kind` when it differs; every change publishes `attention` on the mission topic.
 
 ## 9. Deferred by decision (not backlog)
 #2 roles/Cedar · #4 propagation (K0, ground track, umbra, sky plot, max elevation) · #5 procedures ·
