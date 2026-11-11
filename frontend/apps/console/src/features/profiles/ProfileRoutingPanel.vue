@@ -51,10 +51,5 @@ const editing = ref(false);
       />
     </template>
   </template>
-  <OverridesPanel
-    v-else
-    :mission-id="scope.mission.id"
-    :detail="detail"
-    :can-stage="canStage"
-  />
+  <OverridesPanel v-else :mission-id="scope.mission.id" :detail="detail" :can-stage="canStage" />
 </template>
