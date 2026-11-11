@@ -87,7 +87,14 @@ describe("palette telemetry (M23)", () => {
   it("writes `312 › VBAT` rows with the latest value and plots on ↵", () => {
     const sc = fleet.find((s) => s.scid === 312) ?? null;
     const [row] = pointItems(
-      [point("EPS.VBAT", { value: 23.1, received_at: null, limit_state: "critical" })],
+      [
+        point("EPS.VBAT", {
+          value: 23.1,
+          received_at: null,
+          limit_state: "critical",
+          source: undefined,
+        }),
+      ],
       sc,
     );
     expect(row).toMatchObject({

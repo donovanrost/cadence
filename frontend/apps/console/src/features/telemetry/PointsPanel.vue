@@ -15,7 +15,7 @@ import {
 import { describeApiError } from "@/api/index.ts";
 import { formatValue, withUnit } from "@/features/alarms/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
-import { fetchPoints, type TelemetryPoint } from "./api.ts";
+import { fetchPoints, latestMark, type TelemetryPoint } from "./api.ts";
 
 /**
  * T1 · Spacecraft chips + point search (M23). An empty search lists the mission's points; with a
@@ -72,14 +72,9 @@ const search = useRemoteQuery(
     return fetchPoints(m, { q: text, ...(sc ? { spacecraftId: sc } : {}) }, signal);
   },
 );
-const LIMIT_STATE = {
-  critical: "crit",
-  caution: "caution",
-  nominal: "nominal",
-  no_data: "stale",
-} as const;
+// Null can mean the stored history couldn't be read (b8181eb9), so never "yet".
 const latestText = (p: TelemetryPoint) =>
-  p.latest ? (withUnit(formatValue(p.latest.value), p.unit) ?? "—") : "No data yet";
+  p.latest ? (withUnit(formatValue(p.latest.value), p.unit) ?? "—") : "No recent value";
 
 const manual = ref("");
 function addManual() {
@@ -163,7 +158,7 @@ function addManual() {
           @click="emit('addPoint', point.id)"
         >
           <span class="flex items-center gap-2 font-mono text-sm text-readout normal-case">
-            <ApStatusMark v-if="point.latest" :state="LIMIT_STATE[point.latest.limit_state]" />
+            <ApStatusMark v-if="point.latest" :state="latestMark(point.latest)" />
             {{ point.id }}
             <span v-if="points.includes(point.id)" class="text-xs text-text-4 uppercase"
               >added</span

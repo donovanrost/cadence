@@ -1,4 +1,5 @@
 import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import type { OpState } from "@/ui";
 import { engineeringValue } from "@/features/alarms/index.ts";
 
 /** M23 point search (docs/apogee/api/ops.md, 5939f15d): the mission's canonical point set. */
@@ -24,10 +25,31 @@ const point = d.object({
         value: d.nullable(engineeringValue),
         received_at: d.nullable(d.timestamp),
         limit_state: limitState,
+        /** b8181eb9: live | history (newest stored sample, maybe days old). Unknown reads as is. */
+        source: d.optional(d.token),
       }),
     ),
   ),
 });
+
+export type PointLatest = NonNullable<Decoded<typeof point>["latest"]>;
+
+const LIMIT_MARK: Readonly<Record<PointLatest["limit_state"], OpState>> = {
+  critical: "crit",
+  caution: "caution",
+  nominal: "nominal",
+  no_data: "stale",
+};
+
+/** A history value (api 551cb796) is old: stale, unless its limits are out right now. */
+export const isHistorical = (l: PointLatest) => l.source === "history";
+
+/** The status mark for a point's latest: null latest is stale (no recent value). */
+export function latestMark(l: PointLatest | null | undefined): OpState {
+  if (!l) return "stale";
+  const mark = LIMIT_MARK[l.limit_state];
+  return isHistorical(l) && mark !== "crit" && mark !== "caution" ? "stale" : mark;
+}
 
 export const pointsReader = d.object({ points: d.array(point, 200) });
 export type TelemetryPoint = Decoded<typeof point>;

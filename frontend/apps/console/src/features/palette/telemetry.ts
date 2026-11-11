@@ -1,7 +1,6 @@
-import type { OpState } from "@/ui";
 import { formatValue, withUnit } from "@/features/alarms/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
-import type { TelemetryPoint } from "@/features/telemetry/index.ts";
+import { latestMark, type TelemetryPoint } from "@/features/telemetry/index.ts";
 import type { PaletteItem } from "./results.ts";
 
 /**
@@ -28,13 +27,6 @@ export function telemetryQuery(
   return q.length >= 2 ? { q, spacecraft: null } : null;
 }
 
-const LIMIT_STATE: Readonly<Record<string, OpState>> = {
-  critical: "crit",
-  caution: "caution",
-  nominal: "nominal",
-  no_data: "stale",
-};
-
 export function pointItems(
   points: readonly TelemetryPoint[],
   spacecraft: FleetSpacecraft | null,
@@ -47,11 +39,11 @@ export function pointItems(
       key: `pt-${spacecraft?.id ?? "any"}-${p.id}`,
       group: "Telemetry",
       title: spacecraft ? `${spacecraft.scid} › ${p.name}` : p.name,
-      subtitle: [spacecraft ? (value ?? "No data yet") : null, p.description, where]
+      subtitle: [spacecraft ? (value ?? "No recent value") : null, p.description, where]
         .filter((s): s is string => Boolean(s))
         .join(" · "),
       hint: "PLOT",
-      state: latest ? (LIMIT_STATE[latest.limit_state] ?? null) : null,
+      state: latest ? latestMark(latest) : null,
       to: {
         name: "ops.telemetry",
         query: { ...(spacecraft ? { sc: String(spacecraft.scid) } : {}), p: p.id },

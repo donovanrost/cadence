@@ -1,5 +1,11 @@
 /** Public API of the telemetry feature used by other ops screens (Timeline, ⌘K). */
-export { fetchPoints, type TelemetryPoint } from "./api.ts";
+export {
+  fetchPoints,
+  isHistorical,
+  latestMark,
+  type PointLatest,
+  type TelemetryPoint,
+} from "./api.ts";
 export {
   parseWindow,
   resolveWindow,

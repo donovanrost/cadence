@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
-import { pointsReader } from "./api.ts";
+import { latestMark, pointsReader } from "./api.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import type { History } from "@/features/investigate/index.ts";
 import { latestRows, plotView } from "./plot.ts";
@@ -125,5 +125,21 @@ describe("M23 points reader", () => {
       ],
     });
     expect(r.ok && r.value.points[0]?.latest?.limit_state).toBe("no_data");
+  });
+});
+
+describe("M23 latest.source (551cb796, b8181eb9)", () => {
+  const latest = (limit_state: "critical" | "nominal" | "no_data", source?: string) => ({
+    value: 1,
+    received_at: "2026-11-10T21:00:00Z",
+    limit_state,
+    source,
+  });
+  it("marks a history value stale unless its limits are out now", () => {
+    expect(latestMark(latest("nominal", "history"))).toBe("stale");
+    expect(latestMark(latest("critical", "history"))).toBe("crit");
+    expect(latestMark(latest("nominal", "live"))).toBe("nominal");
+    expect(latestMark(latest("nominal"))).toBe("nominal");
+    expect(latestMark(null)).toBe("stale");
   });
 });

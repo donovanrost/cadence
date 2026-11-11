@@ -462,7 +462,14 @@ describe("Telemetry tab (Investigate.md §Telemetry)", () => {
     subsystem,
     type: "numeric" as const,
     latest:
-      state === null ? null : { value: 1, received_at: null, limit_state: state as "nominal" },
+      state === null
+        ? null
+        : {
+            value: 1,
+            received_at: null,
+            limit_state: state as "nominal",
+            source: undefined,
+          },
   });
   it("filters, sorts out-of-limits first, caps pins at 3", () => {
     const ps = [pt("A", "nominal"), pt("B", "critical"), pt("C", null), pt("D", "caution")];
