@@ -17,7 +17,9 @@ test.describe("Setup spacecraft detail", () => {
     // route since the uplink legs (domain 0a08bcbc).
     const rows = page.getByRole("table").locator("tbody tr");
     await expect(rows).toHaveCount(3);
-    await expect(rows.filter({ hasText: /downlink/i }).filter({ hasText: /primary/i })).toHaveCount(1);
+    await expect(rows.filter({ hasText: /downlink/i }).filter({ hasText: /primary/i })).toHaveCount(
+      1,
+    );
     await expect(rows.filter({ hasText: /TT&C uplink/i })).toHaveCount(1);
 
     // Decision 1: no mission revision numbers until change sets exist.
