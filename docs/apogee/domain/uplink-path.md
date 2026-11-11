@@ -248,6 +248,15 @@ contact, uplink path and gateway against it:
   so a missing confirmation times out rather than verifying falsely. Transport verifiers are
   keyed by the release attempt, which the guard already binds.
 
+**Live check of verifier scope (SET_MODE "Mode applied", #65 option A).** In the simulator,
+`HK.sc_mode` cycles every state with no command, 10 s each from BOOT at stream start (80 s),
+so the target's own HK reads SCIENCE (raw 4) for 10 s of every 80 s. A 60 s verifier can be
+satisfied by that cycle before the command takes. "Satisfied" alone doesn't prove it. The
+evidence is: the satisfying sample is the target's, and it was generated after "Accepted on
+board"; after it, `HK.sc_mode` holds the commanded value for the rest of the pass. The value
+override lives in that contact's TM stream only, so it ends at LOS and the next pass cycles from
+BOOT. There's nothing to restore.
+
 **Root cause.** The selection code treated an uplink path with no `source_endpoint_ref` as
 matching any request, and it walked every active contact in the mission. Route-materialized
 uplink paths have no endpoint, and each route's gateway carries its own spacecraft's SCID, so
