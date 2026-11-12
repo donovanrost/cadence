@@ -364,7 +364,7 @@ function rowFor(item: ServerItem): QueueItem[] {
           acknowledged: a.state === "acknowledged",
           // A settlement is about a past pass: no AOS countdown.
           ...(a.backlog || !a.starts_at ? {} : { due: { label: "AOS", at: a.starts_at } }),
-          ...(a.backlog && a.retry === "manual"
+          ...(a.backlog && !a.backlog.lost && a.retry === "manual"
             ? { command: { label: "Retry storing", targets: [a] } }
             : {}),
           action: { label: "Review", to },

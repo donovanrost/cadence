@@ -103,6 +103,7 @@ describe("attention block words (U32)", () => {
     failure_kind: undefined,
     failure_message: undefined,
     retry: undefined,
+    journal: undefined,
     attempts: undefined,
     next_attempt_at: undefined,
     last_attempt_at: undefined,

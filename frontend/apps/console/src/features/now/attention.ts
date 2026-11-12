@@ -43,8 +43,20 @@ export const attentionReader = d.object({
   release: d.optional(d.nullable(d.object({ outcome: d.token, reason: d.nullable(d.string) }))),
   /** contact_settlement (#71): telemetry still on disk, not yet in the TSDB; null elsewhere. */
   backlog: d.optional(
-    d.nullable(d.object({ entries: d.integer, bytes: d.integer, journals: d.integer })),
+    d.nullable(
+      d.object({
+        entries: d.integer,
+        bytes: d.integer,
+        journals: d.integer,
+        /** Journal off (domain 96307ac5): batches that were in memory when the runtime stopped. */
+        queued: d.optional(d.nullable(d.integer)),
+        /** true: those batches are gone, not on disk (U37 journal off). */
+        lost: d.optional(d.nullable(d.boolean)),
+      }),
+    ),
   ),
+  /** enabled | disabled: whether the mission keeps a disk copy of incoming telemetry. */
+  journal: d.optional(d.nullable(d.token)),
   ends_at: d.optional(d.timestamp),
   deadline_at: d.optional(d.nullable(d.timestamp)),
   /** telemetry_storage_unavailable | settle_failed | null (a slow drain past the deadline). */
@@ -86,6 +98,7 @@ export const short = (iso: string, now: Date) =>
  * "settlement"; the storage outage's own message stays out of the line (Technical details).
  */
 export function settlementEvidence(f: SettlementFacts, now: Date = new Date()): string {
+  if (f.lost) return lostEvidence(f.queued);
   const one = f.backlog.entries === 1;
   const disk = `${f.backlog.entries.toLocaleString("en-US")} ${one ? "entry" : "entries"} (${formatBytes(f.backlog.bytes)}) ${one ? "is" : "are"} on disk`;
   const them = one ? "it" : "them";
@@ -116,11 +129,24 @@ export function settlementEvidence(f: SettlementFacts, now: Date = new Date()): 
   return `${disk}. Cadence couldn't store ${them}${f.failureMessage ? `: ${noStop(f.failureMessage)}` : ""}.${end}`;
 }
 
+/**
+ * U37 journal off (ux 4f8b796c): never "on disk", never Retry. `queued` null: the count is unknown.
+ */
+export function lostEvidence(queued: number | null): string {
+  if (queued === null)
+    return "Telemetry in memory when the runtime stopped wasn't stored. This mission doesn't keep a disk copy, so it can't be recovered.";
+  const one = queued === 1;
+  return `${queued.toLocaleString("en-US")} telemetry ${one ? "batch was" : "batches were"} in memory when the runtime stopped and ${one ? "wasn't" : "weren't"} stored. This mission doesn't keep a disk copy, so ${one ? "it" : "they"} can't be recovered.`;
+}
+
 /** Replay stops after this many failed tries and hands to an operator (director, #71). */
 export const MAX_TRIES = 6;
 
 export type SettlementFacts = Readonly<{
   backlog: Readonly<{ entries: number; bytes: number }>;
+  /** Journal off: the batches are gone (U37); `queued` counts them. */
+  lost: boolean;
+  queued: number | null;
   failureKind: string | null;
   failureMessage: string | null;
   /** `00:57Z`; null on a folded line (ux 3f61ef71). */
@@ -135,6 +161,8 @@ export type SettlementFacts = Readonly<{
 export const settlementFacts = (a: Attention & { backlog: NonNullable<Attention["backlog"]> }) =>
   ({
     backlog: a.backlog,
+    lost: a.backlog.lost === true,
+    queued: a.backlog.queued ?? null,
     failureKind: a.failure_kind ?? null,
     failureMessage: a.failure_message ?? null,
     deadline: a.deadline_at ? hhmm(a.deadline_at) : null,
@@ -170,7 +198,7 @@ export function attentionWords(
     // U37 (#71 contact_settlement): system-closed, no person action, no Acknowledge.
     const station = a.station?.code ?? a.station?.name;
     return {
-      what: `Telemetry from the ${station ? `${station} ` : ""}${a.starts_at ? `${short(a.starts_at, now)} ` : ""}pass isn't stored yet.`,
+      what: `Telemetry from the ${station ? `${station} ` : ""}${a.starts_at ? `${short(a.starts_at, now)} ` : ""}pass ${a.backlog.lost ? "was lost" : "isn't stored yet"}.`,
       evidence: settlementEvidence(settlementFacts({ ...a, backlog: a.backlog }), now),
     };
   }

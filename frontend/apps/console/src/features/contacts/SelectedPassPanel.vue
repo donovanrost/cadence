@@ -156,7 +156,9 @@ const countdown = computed(() => {
         <p class="m-0 text-text-2">{{ releaseIssue.evidence }}</p>
       </ApCallout>
       <ApCallout v-if="settlement" tone="caution">
-        <p class="m-0 font-semibold">Telemetry from this pass isn't stored yet.</p>
+        <p class="m-0 font-semibold">
+          Telemetry from this pass {{ settlement.lost ? "was lost" : "isn't stored yet" }}.
+        </p>
         <p class="m-0 text-text-2">{{ retrying ? "Retrying…" : settlement.evidence }}</p>
         <p v-if="settlement.tried" class="m-0 text-sm text-text-3">{{ settlement.tried }}</p>
         <p v-if="settlement.manual && !access.abort" class="m-0 text-sm text-text-3">

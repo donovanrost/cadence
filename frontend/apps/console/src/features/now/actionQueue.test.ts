@@ -623,6 +623,39 @@ describe("contact_settlement (U37, #71)", () => {
     expect(rows.find((q) => q.key === "attention:mission_runtime:m")?.due).toBeUndefined();
   });
 
+  it("journal off: a lost item never says on disk, never offers Retry, folds apart (ux 4f8b796c)", () => {
+    const lostOne = (id: string) => ({
+      ...item({
+        id: `attention:contact_settlement:${id}`,
+        priority: 2,
+        kind: "attention",
+        state: "caution",
+        source: "contact_settlement",
+        spacecraft: [member(1, { violating_points: null, value: null, first_crossed_at: null })],
+      }),
+      attention: {
+        ...settlementSample,
+        id,
+        journal: "disabled",
+        retry: "manual",
+        backlog: { entries: 0, bytes: 0, journals: 0, queued: 412, lost: true },
+      },
+    });
+    const [row] = present([lostOne("a")]);
+    expect(row?.title).toMatch(/· Telemetry from the SVA .*18:49Z pass was lost\.$/);
+    expect(row?.sentence).toBe(
+      "412 telemetry batches were in memory when the runtime stopped and weren't stored. This mission doesn't keep a disk copy, so they can't be recovered.",
+    );
+    expect(row?.command).toBeUndefined();
+    const [fold] = present([lostOne("a"), lostOne("b")]);
+    expect([fold?.key, fold?.title, fold?.sentence, fold?.command]).toEqual([
+      "settlement:lost",
+      "Telemetry from 2 passes was lost.",
+      "824 batches weren't stored and can't be recovered.",
+      undefined,
+    ]);
+  });
+
   it("an unknown kind or source drops one row, not the whole read", () => {
     const r = decode(actionQueueReader, {
       observed_at: "2026-11-11T22:00:00Z",
@@ -640,6 +673,8 @@ describe("contact_settlement (U37, #71)", () => {
 describe("contact_settlement retries (ux 294e67c6, domain #71 replay)", () => {
   const facts = (o: Partial<SettlementFacts> = {}): SettlementFacts => ({
     backlog: { entries: 1204, bytes: 3355443 },
+    lost: false,
+    queued: null,
     failureKind: "telemetry_storage_unavailable",
     failureMessage: "connection refused",
     deadline: "00:57Z",

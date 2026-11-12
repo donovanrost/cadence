@@ -19,7 +19,9 @@ export type Settlement = Readonly<{
 
 /** ux 294e67c6: cause + retry, so manual items never hide inside an automatic fold. */
 export const foldKey = (s: Settlement) =>
-  `${s.attention.failure_kind ?? "none"}:${s.attention.retry === "manual" ? "manual" : "automatic"}`;
+  s.attention.backlog.lost
+    ? "lost"
+    : `${s.attention.failure_kind ?? "none"}:${s.attention.retry === "manual" ? "manual" : "automatic"}`;
 
 const drawer = (a: Attention): RouteLocationRaw => {
   const pass = a.reservation_id ?? a.contact_id;
@@ -54,29 +56,37 @@ export function foldedSettlementRow(
   const messages = new Set(sorted.map((m) => m.attention.failure_message ?? null));
   const message = messages.size === 1 ? (first?.failure_message ?? null) : null;
   const n = sorted.length;
-  const manual = first?.retry === "manual";
+  const lost = first?.backlog.lost === true;
+  const manual = !lost && first?.retry === "manual";
+  const queued = sorted.reduce((acc, m) => acc + (m.attention.backlog.queued ?? 0), 0);
   return {
     key: `settlement:${sorted[0] ? foldKey(sorted[0]) : "none"}`,
     priority: 2,
     state: "caution",
-    title: manual
-      ? `Cadence stopped retrying for ${plural(n, "pass", "passes")}.`
-      : `Telemetry from ${plural(n, "pass", "passes")} isn't stored yet.`,
+    title: lost
+      ? `Telemetry from ${plural(n, "pass", "passes")} was lost.`
+      : manual
+        ? `Cadence stopped retrying for ${plural(n, "pass", "passes")}.`
+        : `Telemetry from ${plural(n, "pass", "passes")} isn't stored yet.`,
     titleTo: null,
     // Folded: summed backlog, no deadline time (ux 3f61ef71), no per-item try times.
-    sentence: settlementEvidence(
-      {
-        backlog: total,
-        failureKind: first?.failure_kind ?? null,
-        failureMessage: message,
-        deadline: null,
-        retry: first?.retry ?? null,
-        attempts: null,
-        nextAttemptAt: null,
-        lastAttemptAt: null,
-      },
-      now,
-    ),
+    sentence: lost
+      ? `${queued.toLocaleString("en-US")} ${queued === 1 ? "batch wasn't" : "batches weren't"} stored and can't be recovered.`
+      : settlementEvidence(
+          {
+            lost: false,
+            queued: null,
+            backlog: total,
+            failureKind: first?.failure_kind ?? null,
+            failureMessage: message,
+            deadline: null,
+            retry: first?.retry ?? null,
+            attempts: null,
+            nextAttemptAt: null,
+            lastAttemptAt: null,
+          },
+          now,
+        ),
     meta: first && last ? span(first.starts_at, last.starts_at, now).toUpperCase() : null,
     action: { label: `Show all ${n}`, to: { name: "ops.contacts" } },
     ...(manual
@@ -85,7 +95,7 @@ export function foldedSettlementRow(
     spacecraftIds: [...new Set(sorted.flatMap((m) => (m.spacecraft ? [m.spacecraft.id] : [])))],
     memberKeys: sorted.map((m) => m.itemId),
     list: {
-      title: `Telemetry from ${plural(n, "pass", "passes")} isn't stored yet`,
+      title: `Telemetry from ${plural(n, "pass", "passes")} ${lost ? "was lost" : "isn't stored yet"}`,
       rows: sorted.map((m) => {
         const a = m.attention;
         const station = a.station?.code ?? a.station?.name;

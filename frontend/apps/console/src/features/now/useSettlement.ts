@@ -39,7 +39,9 @@ export function useSettlement(missionId: Ref<string>, passId: Ref<string | null>
         n > 0 && last
           ? `Tried ${n === 1 ? "once" : `${n} times`}, last at ${short(last, new Date())}.`
           : null,
-      manual: a.retry === "manual",
+      // Journal off: lost, never on disk, never Retry (U37).
+      lost: a.backlog?.lost === true,
+      manual: a.retry === "manual" && a.backlog?.lost !== true,
     };
   });
   return { item, patch: (a: Attention) => (patched.value = a) };
