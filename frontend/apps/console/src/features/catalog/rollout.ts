@@ -9,7 +9,7 @@ import { overrideOp } from "@/features/profiles/index.ts";
 export type RolloutChoice =
   | Readonly<{
       kind: "profiles";
-      /** allVersions: also move spacecraft pinned to older profile versions (domain; off by default). */
+      /** allVersions: also move spacecraft pinned to older profile versions (domain; ux: off by default). */
       profiles: readonly Readonly<{ id: string; allVersions: boolean }>[];
     }>
   | Readonly<{ kind: "spacecraft"; ids: readonly string[]; reason: string }>;
@@ -24,8 +24,8 @@ export function rolloutOps(revisionId: string, choice: RolloutChoice): StageOp[]
     action: "update",
     entity_id: p.id,
     changes: [{ path: "catalog_revision_id", value: revisionId }],
-    // Pending domain/api: the server expands all_versions, so the read's moves_all is what moves.
-    ...(p.allVersions ? { options: { rollout: { all_versions: true } } } : {}),
+    // domain 2ef4ca79: expanded when the set applies, so api's moves_all is what moves.
+    ...(p.allVersions ? { options: { rollout: "all_versions" } } : {}),
   }));
 }
 
@@ -42,3 +42,20 @@ export const rolloutMoves = (p: Preview, revisionId: string): number =>
 /** Queued commands the apply cancels (the catalog_cancels_commands hold, acknowledged on Changes). */
 export const rolloutCancels = (p: Preview): number =>
   catalogItems(p, "catalog_cancels_commands").reduce((n, i) => n + (i.requests?.length ?? 0), 0);
+
+export type KeepCode = "older_profile_version" | "catalog_override" | "framing_governed" | "other";
+
+/** Spacecraft the dry run leaves alone, counted by the server's code (domain 2ef4ca79). */
+export function rolloutKeeps(p: Preview): ReadonlyMap<KeepCode, number> {
+  const counts = new Map<KeepCode, number>();
+  for (const keep of p.effects.flatMap((e) => e.keeps)) {
+    const code = keepCode(keep.code);
+    counts.set(code, (counts.get(code) ?? 0) + 1);
+  }
+  return counts;
+}
+
+const keepCode = (code: string | null | undefined): KeepCode =>
+  code === "older_profile_version" || code === "catalog_override" || code === "framing_governed"
+    ? code
+    : "other";

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
 import { previewReader } from "@/features/changes/index.ts";
-import { rolloutCancels, rolloutMoves, rolloutOps } from "./rollout.ts";
+import { rolloutCancels, rolloutKeeps, rolloutMoves, rolloutOps } from "./rollout.ts";
 
 describe("C3 rollout ops", () => {
   it("stages one profile op per profile, all_versions only when asked", () => {
@@ -25,7 +25,7 @@ describe("C3 rollout ops", () => {
         action: "update",
         entity_id: "prof_2",
         changes: [{ path: "catalog_revision_id", value: "cat_15" }],
-        options: { rollout: { all_versions: true } },
+        options: { rollout: "all_versions" },
       },
     ]);
   });
@@ -71,7 +71,40 @@ describe("C3 dry-run counts", () => {
         ],
       },
     ],
-    effects: [],
+    effects: [
+      {
+        op_id: "o1",
+        changes: 3,
+        keeps: [
+          {
+            spacecraft: { id: "sc_3", name: "E-3" },
+            reason: "stays on v3",
+            code: "older_profile_version",
+          },
+          {
+            spacecraft: { id: "sc_4", name: "E-4" },
+            reason: "stays on v4",
+            code: "older_profile_version",
+          },
+          {
+            spacecraft: { id: "sc_5", name: "E-5" },
+            reason: "its own override sets its catalog",
+            code: "catalog_override",
+          },
+          { spacecraft: { id: "sc_6", name: "E-6" }, reason: "something new" },
+        ],
+      },
+    ],
+  });
+
+  it("groups the spacecraft that stay by the server's code", () => {
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    expect([...rolloutKeeps(preview.value)]).toEqual([
+      ["older_profile_version", 2],
+      ["catalog_override", 1],
+      ["other", 1],
+    ]);
   });
 
   it("counts moves onto this revision and the commands the apply cancels", () => {

@@ -93,7 +93,12 @@ export const previewReader = object({
       op_id: token,
       changes: integer,
       keeps: array(
-        object({ spacecraft: object({ id: token, name: string }), reason: string }),
+        object({
+          spacecraft: object({ id: token, name: string }),
+          reason: string,
+          /** domain 2ef4ca79: older_profile_version | catalog_override | framing_governed. */
+          code: decoders.optional(nullable(token)),
+        }),
         5000,
       ),
     }),
