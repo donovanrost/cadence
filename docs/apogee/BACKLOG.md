@@ -31,7 +31,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | **ux** | In progress: §7 visual review of the unreviewed boards (read-only browser pass, load-gated). Done: Compose C1 accepted as built (#64, reviews/2026-11-09-compose-ruling.md; fe-ops b8fe16e0) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
 | **api** | Port the lane fix (b7cc12de, 4ae3fd8e) to `develop`; then §8 8d (Now P3 stale-change-set source, Timeline `config` applied events). Done: C3 rollout read + profiles `catalog_revision` (34b8cc27). Done: #42 port to `develop` (f9d89f83). Done: #42 verify race 32b945f3 (advisory lock, mission-then-attempt order, timeout reconcile, call-site tests; api-ops reviewed); Compose drafts a4d19e69 (`GET/PUT/DELETE /missions/:id/command-draft`, migration). Next with the director | — |
-| **api-ops** | queue empty; next with the director. Done: qa #46 simulator Orchestrator survives Store timeouts (3ea527b2: ETS-mirrored Store reads, guarded tick steps, linked-stream sweep; live after qa's sim restart); flight_event v1 (a02c2cee, 1b3be7f7, e07969bb, docs 291744b7); #42 review (32b945f3) | flight_event: qa sees a row live; #46: qa sim restart |
+| **api-ops** | §8 api-ops 8: sign-in and current-password attempt limit, then Audit entries for password change and session revoke. Done: qa #46 simulator Orchestrator survives Store timeouts (3ea527b2: ETS-mirrored Store reads, guarded tick steps, linked-stream sweep; live after qa's sim restart); flight_event v1 (a02c2cee, 1b3be7f7, e07969bb, docs 291744b7); #42 review (32b945f3) | flight_event: qa sees a row live; #46: qa sim restart |
 | **domain** | the monitoring-enabled fixture with the end-to-end catalog-rule test, then catalog-path generations (#36; plan to the director first, it touches activation) | — (done tonight: #71 settlement + replay 1d6be29f, mission_runtime 7a6c596a, lost-item acknowledge e99cd89d, reconciler rescue 292c8e6b) |
 
 ## 2. Ops
@@ -241,6 +241,7 @@ missing endpoint or decision; an item with no blocker can start now.
 4. ~~Catalog revision number~~ already there: `GET /command-catalog` basis carries `catalog_revision`.
 5. ~~Investigate Uplink tab read~~ done (aa1f493e); Telemetry tab needs no new endpoint (M23 + M10 + M11 + M8, agreed with fe-ops).
 7. ~~Investigate Configuration tab read~~ done (8d8f5c83).
+8. Account security (api-ops review of 386438bf, lead 11-12): (a) a per-user attempt limit on the `current_password` check and on `/sign-in` (a stolen cookie can brute-force the password today); a `429` with a stable code and `retry_after`, shape to fe-setup first; (b) password changes and session revokes written to the Audit log.
 6. ~~Timeline live prepend topic~~ not needed: `invalidate` with `events` already fires on mission:<id> (api-ops); a row push only if ux wants it.
 
 **api** (moved from api-ops, director rebalance)
