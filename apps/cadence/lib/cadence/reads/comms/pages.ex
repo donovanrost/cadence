@@ -1134,7 +1134,7 @@ defmodule Cadence.Reads.Comms.Pages do
 
   defp fetch_spacecraft_names(rules, organization_id, mission_id) do
     with {:ok, spacecrafts} <-
-           SpacecraftStore.fetch_spacecrafts(
+           SpacecraftStore.fetch_spacecrafts_in_batches(
              organization_id,
              mission_id,
              Enum.map(rules, & &1.spacecraft_id)

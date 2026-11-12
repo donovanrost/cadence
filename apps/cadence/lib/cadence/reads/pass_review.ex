@@ -275,7 +275,7 @@ defmodule Cadence.Reads.PassReview do
     ids = rows |> Enum.map(& &1.spacecraft_id) |> Enum.uniq()
 
     spacecraft =
-      case SpacecraftStore.fetch_spacecrafts(org, mission_id, ids) do
+      case SpacecraftStore.fetch_spacecrafts_in_batches(org, mission_id, ids) do
         {:ok, found} -> Map.new(found, fn {id, sc} -> {id, sc.display_name} end)
         _error -> %{}
       end

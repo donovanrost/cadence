@@ -153,6 +153,25 @@ defmodule Cadence.SpacecraftStore do
     end
   end
 
+  @doc """
+  `fetch_spacecrafts/3` over any number of ids, one bounded batch per query (qa #43, #49: a
+  500-spacecraft fleet exceeds one batch). Ids that aren't valid binaries are an error, as there.
+  """
+  @spec fetch_spacecrafts_in_batches(binary(), binary(), [binary()]) ::
+          {:ok, %{optional(binary()) => Spacecraft.t()}} | {:error, :batch_bounds_exceeded}
+  def fetch_spacecrafts_in_batches(organization_id, mission_id, spacecraft_ids)
+      when is_list(spacecraft_ids) do
+    spacecraft_ids
+    |> Enum.uniq()
+    |> Enum.chunk_every(@max_batch_size)
+    |> Enum.reduce_while({:ok, %{}}, fn chunk, {:ok, acc} ->
+      case fetch_spacecrafts(organization_id, mission_id, chunk) do
+        {:ok, found} -> {:cont, {:ok, Map.merge(acc, found)}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
   @doc "The most spacecraft ids `fetch_spacecrafts/3` takes in one call."
   @spec max_batch_size() :: pos_integer()
   def max_batch_size, do: @max_batch_size

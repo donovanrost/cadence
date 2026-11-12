@@ -183,10 +183,10 @@ defmodule Cadence.Control.ConfigurationGeneration do
     ids = Enum.filter(ids, &Map.has_key?(entries, &1))
 
     {:ok, spacecraft} =
-      SpacecraftStore.fetch_spacecrafts(
+      SpacecraftStore.fetch_spacecrafts_in_batches(
         mission.organization_id,
         mission.mission_id,
-        Enum.take(ids, 500)
+        ids
       )
 
     for {id, sc} <- spacecraft,
@@ -337,7 +337,7 @@ defmodule Cadence.Control.ConfigurationGeneration do
   # when they differ from what's active.
   defp changed_entries(org, mission_id, ids, base, active_entries) do
     overrides = Overrides.list(org, mission_id, ids)
-    {:ok, spacecraft} = SpacecraftStore.fetch_spacecrafts(org, mission_id, Enum.take(ids, 500))
+    {:ok, spacecraft} = SpacecraftStore.fetch_spacecrafts_in_batches(org, mission_id, ids)
 
     for {id, sc} <- spacecraft,
         entry = Map.get(base, id),

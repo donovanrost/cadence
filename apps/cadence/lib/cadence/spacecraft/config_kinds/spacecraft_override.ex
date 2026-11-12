@@ -33,7 +33,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftOverride do
   @impl true
   def load(organization_id, mission_id, ids) do
     {:ok, existing} =
-      SpacecraftStore.fetch_spacecrafts(organization_id, mission_id, Enum.take(ids, 100))
+      SpacecraftStore.fetch_spacecrafts_in_batches(organization_id, mission_id, ids)
 
     overrides = Overrides.list(organization_id, mission_id, Map.keys(existing))
 

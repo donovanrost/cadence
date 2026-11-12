@@ -77,7 +77,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   defp outside_fleet(org, mission_id, wanted, in_fleet) do
     missing = wanted |> Enum.reject(&Map.has_key?(in_fleet, &1))
 
-    case missing != [] && SpacecraftStore.fetch_spacecrafts(org, mission_id, missing) do
+    case missing != [] && SpacecraftStore.fetch_spacecrafts_in_batches(org, mission_id, missing) do
       {:ok, found} ->
         Map.new(found, fn {id, craft} ->
           {id,
