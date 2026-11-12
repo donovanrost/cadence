@@ -20,8 +20,12 @@ export function outageText(runtime: RuntimeStatus, mission: string): string {
   const what = runtime.activated_at
     ? `configuration activated at ${at(runtime.activated_at)}`
     : "active configuration";
-  return `Telemetry isn't being processed for ${mission}${since}. The runtime hasn't applied the ${what}.`;
+  // Retrying can't clear these (domain), so the operator knows it waits on a fix (ux U38).
+  const fix = NEEDS_FIX.has(runtime.reason ?? "") ? " It needs a configuration fix." : "";
+  return `Telemetry isn't being processed for ${mission}${since}. The runtime hasn't applied the ${what}.${fix}`;
 }
+
+const NEEDS_FIX: ReadonlySet<string> = new Set(["spec_mismatch", "reconcile_crashed"]);
 
 /** "Telemetry processing resumed at 23:26Z." Null without the server's applied_at (U20). */
 export function resumedText(runtime: RuntimeStatus | null | undefined): string | null {

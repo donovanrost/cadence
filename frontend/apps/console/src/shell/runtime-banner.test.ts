@@ -5,7 +5,7 @@ import { outageText, RESUMED_MS, resumedText, useRuntimeBanner } from "./runtime
 
 const down: RuntimeStatus = {
   state: "not_applied",
-  reason: "mission_runtime_spec_mismatch",
+  reason: "runtime_not_running",
   desired_generation: 8,
   applied_generation: 7,
   since: "2026-11-12T23:11:00Z",
@@ -25,6 +25,15 @@ describe("U38 runtime banner words", () => {
     expect(outageText({ ...down, since: null, activated_at: null }, "EARENDIL")).toBe(
       "Telemetry isn't being processed for EARENDIL. The runtime hasn't applied the active configuration.",
     );
+  });
+
+  it("adds the fix line only where retrying can't clear it", () => {
+    for (const reason of ["spec_mismatch", "reconcile_crashed"])
+      expect(outageText({ ...down, reason }, "EARENDIL")).toMatch(
+        / at 23:10Z\. It needs a configuration fix\.$/,
+      );
+    for (const reason of ["runtime_not_running", "apply_failed", null])
+      expect(outageText({ ...down, reason }, "EARENDIL")).not.toMatch(/configuration fix/);
   });
 
   it("says resumed only with the server's applied_at", () => {
