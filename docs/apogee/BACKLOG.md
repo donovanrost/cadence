@@ -27,8 +27,8 @@ missing endpoint or decision; an item with no blocker can start now.
 | --- | --- | --- |
 | **lead** | K1 C panel (focused spacecraft 24 h strip); `ApSheet` kit primitive (five hand-rolled dialogs today); `ApStatTile` `to` link; Palette `>` commands and `@` stations groups (with fe-ops) | — (api's K1 items shipped: send back, approval, stop time) |
 | **fe-ops** | Now tile links + A4 pass select + approval rows → request review; Investigate's five tabs link to the existing pages (#64) + add-point chips; Contacts D3 outage bands (S7 exists); Telemetry `Dashboards ↗` → existing pages (#11); Timeline sc/plane filter; Fleet/Alarms Next contact; Mobile GO block | — (api's M22, A1, M24 and drafts are in) |
-| **fe-setup** | Profile edit → stage (op + preview exist); People command policies tab (O4 exists); Changes compare (`/config/compare`) + Keep mine / Take live (`rebase`); Readiness R2 from revisions; Audit actor filter; qa #19 copy ("unclear, check now" on 5xx) | api: catalog diff, people/invite/service-identity writes, account password/sessions, provider history; domain: catalog generations (C3) |
-| **ux** | Visual review of the unreviewed boards (§7); Compose C1 layout ruling (default: accept as built, #64) | — |
+| **fe-setup** | In order: P4 Changes N / Keeps M tiles; Audit actor select; New profile + Duplicate as new profile; `setup/catalog/:databaseId`; then Readiness R2 from revisions. Already built: P1 edit + P4 Stage edit (217feb23), Changes Compare (8b58f513), Keep mine / Take live (3ced6cea, 433bcd0f), People Command policies tab (11374b5a). fe-setup updates the §4 rows as each lands | qa: C3 live check. (api's People, Account and provider-history writes are in and built: f9e79c71, 19b2ba55, a3df522d, 2fdd2692; qa #19 copy c16546c4) |
+| **ux** | In progress: §7 visual review of the unreviewed boards (read-only browser pass, load-gated). Done: Compose C1 accepted as built (#64, reviews/2026-11-09-compose-ruling.md; fe-ops b8fe16e0) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
 | **api** | Done: C3 rollout read + profiles `catalog_revision` (34b8cc27). Done: #42 port to `develop` (f9d89f83). Done: #42 verify race 32b945f3 (advisory lock, mission-then-attempt order, timeout reconcile, call-site tests; api-ops reviewed); Compose drafts a4d19e69 (`GET/PUT/DELETE /missions/:id/command-draft`, migration). Next with the director | — |
 | **api-ops** | queue empty; next with the director. Done: qa #46 simulator Orchestrator survives Store timeouts (3ea527b2: ETS-mirrored Store reads, guarded tick steps, linked-stream sweep; live after qa's sim restart); flight_event v1 (a02c2cee, 1b3be7f7, e07969bb, docs 291744b7); #42 review (32b945f3) | flight_event: qa sees a row live; #46: qa sim restart |
@@ -76,7 +76,7 @@ missing endpoint or decision; an item with no blocker can start now.
 ### Approve and Uplink (`CommandFlow.md` C2/C3): partial
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| A1 `5.0 → 8.0` readout, histogram of current values, hand-set overwrite callouts | fe-ops | api: current values + prior requests in the brief |
+| ~~A1 `5.0 → 8.0` readout, histogram of current values, hand-set overwrite callouts~~ built (512c96f2 on api 4f9cd275, a4c0e807) | fe-ops | — |
 | ~~A3 encoded packet bytes~~ done (90d1c43c) | fe-ops | — |
 | U2 verifier plot, "Needs you" cards with Re-send / Open, plane matrix, Pause, retry on no ACK | fe-ops | — (api-ops M26 2b50e7d1) |
 
@@ -170,7 +170,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Compare revisions (`r4...r6`) | fe-setup | — (`GET /config/compare`) |
 | `Keep mine` / `Take live` on conflicts | fe-setup | — (`POST /ops/:op_id/rebase`) |
 | Staged bar conflict / applying / apply-failed states; top bar `CONVERGING` / `RUNTIME DEGRADED`; live apply steps | fe-setup | apply progress source *(unverified)* |
-| qa #19: a 5xx on submit reads "Nothing was applied"; should read "unclear, check now" (server side done, domain 33529f29: `:apply_interrupted`) | fe-setup (copy), then qa closes | — |
+| ~~qa #19: a 5xx on submit reads "Nothing was applied"; should read "unclear, check now"~~ copy done (c16546c4; domain 33529f29) | qa closes | — |
 | Now P3 row when a set sits > 24 h; Timeline `Config r6 applied` | fe-ops | *(unverified)* |
 
 ### Contact planning (`ContactPlanning.md`): built. Money policy fields hidden (d50ca428, #63). Review 6/7 in progress (sort is in; uppercase rule line *(unverified)*). Owner fe-setup.
@@ -180,21 +180,21 @@ missing endpoint or decision; an item with no blocker can start now.
 | --- | --- | --- |
 | Command policies tab / aside (U4); `GET /command-policies` (O4) exists, unused | fe-setup | — |
 | `org.people.invite` / `org.people.services` routes are pending though both render inline: wire or drop | fe-setup | — |
-| Person page (Access, Activity, change role, remove) | fe-setup | api: role change, remove member, per-person activity |
-| Invitation Resend / Revoke; service identity create / rotate / revoke (secret shown once) | fe-setup | api: write endpoints (reads + invite only today) |
+| ~~Person page (Access, Activity, change role, remove)~~ done (f9e79c71; api 1b4defb8, activity `GET /audit?actor_id=`) | fe-setup | — |
+| ~~Invitation Resend / Revoke; service identity create / rotate / revoke (secret shown once)~~ done (f9e79c71, 19b2ba55) | fe-setup | — |
 
 ### Settings, Audit log, Provider accounts (`SettingsAuditProviders.md`): built; gaps
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | Settings: `Override` on inherited fields *(unverified)* | fe-setup | — |
 | Audit: actor filter (api supports `actor_id`), kind chips, `Export CSV` | fe-setup | export: api or client-side |
-| Provider accounts: version history | fe-setup | api: history read |
+| ~~Provider accounts: version history~~ done (2fdd2692, dded6585) | fe-setup | — |
 
 ### Org / account
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | ~~`New mission` → existing create page; pending route dropped (#64)~~ done (d50ca428) | fe-setup | — |
-| Account: password change, active sessions | fe-setup | api: no endpoints |
+| ~~Account: password change, active sessions~~ done (a3df522d; api 386438bf) | fe-setup | — |
 | `/notifications`: **dropped** (#64; the Now attention queue is the notification surface). Route and menu item removed (lead) | — | done |
 
 ## 5. Phase 4 · Mobile on call (`Mobile.md`, J6)
