@@ -32,7 +32,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
 | **api** | Port the #42 fix to `develop` (DECISIONS #72). Done: #42 verify race 32b945f3 (advisory lock, mission-then-attempt order, timeout reconcile, call-site tests; api-ops reviewed); Compose drafts a4d19e69 (`GET/PUT/DELETE /missions/:id/command-draft`, migration). Next with the director | — |
 | **api-ops** | queue empty; next with the director. Done: qa #46 simulator Orchestrator survives Store timeouts (3ea527b2: ETS-mirrored Store reads, guarded tick steps, linked-stream sweep; live after qa's sim restart); flight_event v1 (a02c2cee, 1b3be7f7, e07969bb, docs 291744b7); #42 review (32b945f3) | flight_event: qa sees a row live; #46: qa sim restart |
-| **domain** | catalog-path generations (#36; plan to the director first, it touches activation) | — (done: qa #34 #59 e683b3e2; qa #19 server side 33529f29; #50 archive) |
+| **domain** | the monitoring-enabled fixture with the end-to-end catalog-rule test, then catalog-path generations (#36; plan to the director first, it touches activation) | — (done tonight: #71 settlement + replay 1d6be29f, mission_runtime 7a6c596a, lost-item acknowledge e99cd89d, reconciler rescue 292c8e6b) |
 
 ## 2. Ops
 
@@ -257,7 +257,7 @@ missing endpoint or decision; an item with no blocker can start now.
 4c. ~~`mission_runtime` attention source~~ landed (7a6c596a; fe-ops row 751ac5f5; `MissionRuntimeStatus` 292c8e6b; `/counts` runtime api-ops c69f0578). Live on :4011 since 00:57Z (gen 8 applied on boot, so no item open).
 4d. ~~`contact_settlement` journal off and acknowledging a lost item~~ landed (96307ac5, e99cd89d; fe-ops 171ecd43, bbe5e8fe).
 5. ~~#71 `contact_settlement` attention source~~ landed (9e8145fa, 551cb796, 8f7066b1; live on :4011 22:14Z; fe-ops reader 14330a4a). Replay follow-up next.
-6. #71 replay (after 00:30Z): automatic retries back off from 5 min, doubling to 2 h; after 6 failed retries `retry: "manual"` and POST `…/attention/contact_settlement/:id/retry`. fe-ops' copy and Retry action are in (c10265fd), so domain ships it after 00:30Z. Agreed: a retry on a non-manual item gets 409 `retry_not_manual` with the current item in `error.details.item`, no side effect; unknown or resolved gets 404 `attention_item_not_found`; gated by `operate_mission`; `failure_kind`/`failure_message` follow the latest attempt, plus `first_failure_kind` when it differs; every change publishes `attention` on the mission topic.
+6. ~~#71 replay~~ landed (1d6be29f; reloaded on :4011, no restart): one replay per mission, 30 min deadline, backoff 5 min doubling to 2 h, manual after 6 failures, `POST …/retry` (409 `retry_not_manual` / 404 / `operate_mission`); also drains journals on disk that were never inspected (pre-#71). fe-ops copy c10265fd.
 
 ## 9. Deferred by decision (not backlog)
 #2 roles/Cedar · #4 propagation (K0, ground track, umbra, sky plot, max elevation) · #5 procedures ·
