@@ -224,7 +224,14 @@ profile framing feeding ingress (the next P2 steps).
   `%{op_id: nil, kind: "spacecraft_profile", entity_id: profile_id, reason: :framing_mismatch,
   spacecraft_count, profile_value: %{path, value}, transport_value: %{transport: %{id, name},
   path, value}, sentence}`. `submit` needs `acknowledged_holds: true` when the verdict is `:hold`.
-- **Catalog:** changes to `catalog_revision_id` (profile or override) are refused with a
-  validation error until catalog changes produce generations.
+- **Catalog** (#65, `domain/catalog-generations.md`): a `catalog_revision_id` change (profile or
+  override) produces a generation like framing: the apply derives each moved spacecraft's
+  configuration with the new catalog, rebuilds the binding set and cancels commands not yet
+  released on them. All of a set's ops apply as ONE generation, with one compatibility check
+  covering every touched spacecraft. Preview items: `catalog_change` (`from`, `to`, spacecraft,
+  sentence with `rev N`), `catalog_cancels_commands`, and blocking `catalog_command_in_flight`
+  and `catalog_configuration_pending`. A profile op moves only the spacecraft its `rollout`
+  moves (`"all"` = those pinned to the current version); a spacecraft whose override sets its
+  own `catalog_revision_id` keeps it.
 - **Decode:** only entries marked `framing_authority: "profile"` decode with profile framing;
   every other source keeps the transport's ingress metadata.
