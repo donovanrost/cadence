@@ -82,7 +82,8 @@ profile catalogs). Rows are ApOption radio cards:
   - By default the op moves only spacecraft on the profile's **current version** (domain). Under each chosen
     profile, when some are on older versions, an unchecked checkbox reads: "Also move the 499 on older
     versions. They move to v7 with every profile change since their version, not only the catalog." It has a
-    `See what changes` link (Profile History, Compare their version → v7). Checked, the op names them
+    `See its history` link to Profile History. It becomes `See what changes` (their version → v7) once a
+    version compare exists. Checked, the op names them
     (`options.rollout.spacecraft`).
 - **A few spacecraft first:** a spacecraft picker (the Compose C1 select pattern) for a canary. It stages one
   override per spacecraft (P3's op). Use it to try rev 15 before moving a whole profile.
@@ -105,7 +106,9 @@ profile catalogs). Rows are ApOption radio cards:
   tell yet what uses them." It comes with the checkbox "I've checked the 3 breaking changes", which is
   required for Stage. The change-set summary adds `· 3 breaking` so reviewers see it. Once C2 exists, fixing
   replaces the checkbox.
-- Caption mono 11: `REV 14 KEPT FOR ROLLBACK`, shown only if the server keeps it.
+- Caption mono 11: `REV 14 KEPT FOR ROLLBACK`, shown only if the server keeps it. No read says so today, so it's omitted (fe-setup 96256074).
+- Canary overrides get the reason `Canary for rev 15` automatically; C3 has no reason field. Unknown keep
+  reasons read `N stay as they are.` NO-GO is crit. Summary: `Roll out rev 15 to Earendil Block 1 · 3 breaking`.
 
 ## States
 Parsing (live), Valid, Valid with warnings, Failed (diagnostics), Already applied (read-only diff
