@@ -1,7 +1,7 @@
 defmodule Cadence.Catalog.MissionModel.Revision do
   @moduledoc "Resolved immutable Mission Model semantic graph."
 
-  alias Cadence.Catalog.MissionModel.{Canonical, Declaration, Diagnostic, SpaceSystem}
+  alias Cadence.Catalog.MissionModel.{Canonical, Declaration, Diagnostic, Reference, SpaceSystem}
 
   @type status :: :candidate | :approved | :rejected | :retired
 
@@ -82,7 +82,7 @@ defmodule Cadence.Catalog.MissionModel.Revision do
       revision_id: value(attrs, :revision_id),
       organization_id: value(attrs, :organization_id),
       mission_id: value(attrs, :mission_id),
-      status: attrs |> value(:status) |> normalize_atom(),
+      status: attrs |> value(:status) |> normalize_status(),
       compiler_version: value(attrs, :compiler_version),
       layer_ids: value(attrs, :layer_ids, []),
       declarations: declarations,
@@ -110,16 +110,36 @@ defmodule Cadence.Catalog.MissionModel.Revision do
     %{
       from: value(edge, :from),
       to: value(edge, :to),
-      role: edge |> value(:role) |> normalize_optional_atom(),
+      role: edge |> value(:role) |> normalize_edge_role(),
       required: value(edge, :required, true)
     }
   end
 
-  defp normalize_atom(value) when is_atom(value), do: value
-  defp normalize_atom(value) when is_binary(value), do: String.to_existing_atom(value)
+  # Explicit lists, not the atom table (2026-11-12): an edge carries its reference's role, so a
+  # fresh VM must decode `criteria` without an importer loaded.
+  @statuses_by_name Map.new(~w(candidate approved rejected retired)a, &{Atom.to_string(&1), &1})
+  @edge_roles_by_name Map.new(
+                        [:algorithm_dependency | Reference.roles()],
+                        &{Atom.to_string(&1), &1}
+                      )
 
-  defp normalize_optional_atom(nil), do: nil
-  defp normalize_optional_atom(value), do: normalize_atom(value)
+  defp normalize_status(status) when is_atom(status), do: status
+
+  defp normalize_status(status) when is_binary(status),
+    do: known!(@statuses_by_name, status, "status")
+
+  defp normalize_edge_role(nil), do: nil
+  defp normalize_edge_role(role) when is_atom(role), do: role
+
+  defp normalize_edge_role(role) when is_binary(role),
+    do: known!(@edge_roles_by_name, role, "edge role")
+
+  defp known!(names, name, what) do
+    case Map.fetch(names, name) do
+      {:ok, atom} -> atom
+      :error -> raise ArgumentError, "unknown mission model revision #{what}: #{inspect(name)}"
+    end
+  end
 
   defp value(attrs, key, default \\ nil),
     do: Map.get(attrs, key, Map.get(attrs, Atom.to_string(key), default))
