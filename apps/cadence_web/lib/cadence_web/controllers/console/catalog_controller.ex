@@ -1,12 +1,12 @@
 defmodule CadenceWeb.Console.CatalogController do
   @moduledoc """
-  Catalog index (C1) and import-run detail (C3) under
+  Catalog index (C1), import-run detail and rollout (C3) under
   `/api/console/v1/missions/:mission_id/catalog`. Contract: docs/apogee/api/setup.md.
   """
 
   use CadenceWeb, :controller
 
-  alias Cadence.Reads.CatalogOverview
+  alias Cadence.Reads.{CatalogOverview, CatalogRollout}
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
   def index(conn, params) do
@@ -19,6 +19,14 @@ defmodule CadenceWeb.Console.CatalogController do
     case CatalogOverview.import_run(org_id(conn), mission_id(conn), import_run_id) do
       {:ok, run} -> json(conn, %{data: ConfigJSON.encode(run)})
       {:error, :import_run_not_found} -> Problem.respond(conn, :import_run_not_found)
+    end
+  end
+
+  # C3 "Roll out to": per profile, what staging this revision would move.
+  def rollout(conn, %{"revision_id" => revision_id}) do
+    case CatalogRollout.load(org_id(conn), mission_id(conn), revision_id) do
+      {:ok, rollout} -> json(conn, %{data: rollout})
+      {:error, :catalog_revision_not_found} -> Problem.respond(conn, :catalog_revision_not_found)
     end
   end
 

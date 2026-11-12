@@ -12,6 +12,6 @@ defmodule CadenceWeb.Console.ProfileController do
         conn.assigns.current_mission.mission_id
       )
 
-    json(conn, %{data: %{profiles: Enum.map(profiles, &Map.put(&1, :catalog_revision, nil))}})
+    json(conn, %{data: %{profiles: profiles}})
   end
 end

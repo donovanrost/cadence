@@ -70,15 +70,16 @@ with `spacecraft`.
    "downlink_protocol": {"value": "tm", "label": "CCSDS TM"},
    "uplink_protocol": {"value": "tc", "label": "CCSDS TC"},
    "packet_protocol": {"value": "space_packet", "label": "CCSDS Space Packet"},
-   "catalog_revision": null,
+   "catalog_revision": {"id": "catalog_revision_…", "number": 4, "label": "rev 4"},
    "spacecraft_count": 500, "spacecraft_on_older_versions": 3}
 ]}}
 ```
 
 - `spacecraft_count`: spacecraft pinned to any version of this profile. `spacecraft_on_older_versions`
   is the subset pinned below `version`.
-- `catalog_revision`: always `null` for now, because profiles don't carry a catalog yet (it moves
-  onto the profile with domain's profile work, profile-routing.md §3).
+- `catalog_revision`: the catalog the profile's latest version sets (`SpacecraftType.catalog_revision_id`),
+  `{id, number, label}` with `label` "rev N" ("rN" is a change-set revision), or `null` when the
+  profile sets none. `number`/`label` are `null` if the revision can't be found.
 - **Not in v1:** `updated_at`. The profile model has no update timestamp; the History view gets
   version timestamps from PD.
 
@@ -273,6 +274,42 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
     (`truncated: true` beyond that).
 - Errors: `404 import_run_not_found`.
 - Live: refetch on `invalidate` with `catalog`.
+
+## `GET /api/console/v1/missions/:mission_id/catalog/revisions/:revision_id/rollout` (C3 "Roll out to")
+
+What staging this catalog revision on each profile would move, so the options can show
+server-computed effect counts.
+
+```json
+{"data": {
+  "revision": {"id": "catalog_revision_…", "number": 4, "label": "rev 4"},
+  "profiles": [{
+    "id": "profile-…", "name": "Earendil Block 1",
+    "current_revision": {"id": "…", "number": 3, "label": "rev 3"},
+    "spacecraft_count": 500, "on_current_version": 1, "on_older_versions": 499,
+    "override_pinned": 0, "already_on_revision": 1, "moves_default": 0, "moves_all": 499
+  }],
+  "unprofiled_count": 0
+}}
+```
+
+- Spacecraft: every non-archived spacecraft pinned to the profile, at any version. Each counts in
+  exactly one of three buckets, checked in this order:
+  1. `override_pinned`: its override sets its own `catalog_revision_id`, so it keeps it either way.
+  2. `already_on_revision`: its configured catalog (latest configuration) is this revision.
+  3. Movable.
+  `override_pinned + already_on_revision + moves_all = spacecraft_count`.
+- `moves_default`: movable spacecraft on the profile's current version. A profile op with the
+  default rollout moves only those.
+- `moves_all`: movable spacecraft at any version. A profile op with `options: {"rollout":
+  "all_versions"}` (domain, 2ef4ca79) re-pins every spacecraft on the profile. Override-pinned ones
+  keep their catalog, so this is what it moves catalog-wise.
+- `on_current_version + on_older_versions = spacecraft_count`.
+- `current_revision`: the catalog the profile sets today (`null` if none). `unprofiled_count`:
+  spacecraft with no profile; a profile op never moves them.
+- Profiles: active ones, sorted by name. Spacecraft pinned to a deleted profile aren't counted.
+- Errors: `404 catalog_revision_not_found`.
+- Live: refetch on `invalidate` with `catalog` or `spacecraft`.
 
 ## `POST /api/console/v1/missions/:mission_id/catalog/imports` (C2, multipart)
 

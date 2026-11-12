@@ -18,6 +18,7 @@ defmodule CadenceWeb.Console.Problem do
     organization_not_found: {404, "Organization not found."},
     spacecraft_not_found: {404, "Spacecraft not found."},
     profile_not_found: {404, "Profile not found."},
+    catalog_revision_not_found: {404, "Catalog revision not found."},
     transport_not_found: {404, "Transport not found."},
     plan_not_found: {404, "Contact plan not found."},
     draft_not_found: {404, "Draft not found."},

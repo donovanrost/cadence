@@ -5,6 +5,7 @@ defmodule Cadence.Reads.ProfileDirectory do
   version. Callers authorize first.
   """
 
+  alias Cadence.Reads.CatalogRollout
   alias Cadence.SpacecraftType
 
   @protocol_labels %{
@@ -30,13 +31,19 @@ defmodule Cadence.Reads.ProfileDirectory do
   def load(organization_id, mission_id) do
     build(
       Cadence.SpacecraftTypeStore.list_spacecraft_types(organization_id, mission_id),
-      Cadence.SpacecraftStore.fleet_summary(organization_id, mission_id).profile_version_counts
+      Cadence.SpacecraftStore.fleet_summary(organization_id, mission_id).profile_version_counts,
+      organization_id
+      |> Cadence.Catalog.list_revisions(mission_id)
+      |> Map.new(&{&1.catalog_revision_id, &1.revision_number})
     )
   end
 
-  @doc "Pure builder over latest profile versions and per-(profile, version) spacecraft counts."
-  @spec build([SpacecraftType.t()], [map()]) :: [map()]
-  def build(profiles, version_counts) do
+  @doc """
+  Pure builder over latest profile versions, per-(profile, version) spacecraft counts and catalog
+  revision numbers (id => number).
+  """
+  @spec build([SpacecraftType.t()], [map()], %{binary() => pos_integer()}) :: [map()]
+  def build(profiles, version_counts, revision_numbers \\ %{}) do
     counts = Enum.group_by(version_counts, & &1.spacecraft_type_id)
 
     Enum.map(profiles, fn %SpacecraftType{} = profile ->
@@ -49,6 +56,7 @@ defmodule Cadence.Reads.ProfileDirectory do
         downlink_protocol: enum(profile.downlink_protocol),
         uplink_protocol: enum(profile.uplink_protocol),
         packet_protocol: enum(profile.packet_protocol),
+        catalog_revision: CatalogRollout.ref(profile.catalog_revision_id, revision_numbers),
         spacecraft_count: pinned |> Enum.map(& &1.count) |> Enum.sum(),
         spacecraft_on_older_versions:
           pinned

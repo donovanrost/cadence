@@ -146,4 +146,23 @@ defmodule CadenceWeb.Console.CatalogAPITest do
     conn = c.user |> TestFixtures.member_conn() |> get("#{c.base}/imports/nope")
     assert json_response(conn, 404)["error"]["code"] == "import_run_not_found"
   end
+
+  test "C3 rollout: a revision's per-profile effect counts; an unknown revision is 404", c do
+    run =
+      c.mission
+      |> TestFixtures.persist_catalog_database!()
+      |> TestFixtures.start_catalog_revision_import!(revision_label: "FSW 3.1.0")
+      |> TestFixtures.complete_catalog_import_run!()
+
+    detail = get_data(c, "#{c.base}/imports/#{run.import_run_id}")
+    revision_id = detail["revision"]["id"]
+
+    rollout = get_data(c, "#{c.base}/revisions/#{revision_id}/rollout")
+
+    assert %{"revision" => %{"id" => ^revision_id, "number" => 1, "label" => "rev 1"}} = rollout
+    assert is_list(rollout["profiles"]) and is_integer(rollout["unprofiled_count"])
+
+    conn = c.user |> TestFixtures.member_conn() |> get("#{c.base}/revisions/nope/rollout")
+    assert json_response(conn, 404)["error"]["code"] == "catalog_revision_not_found"
+  end
 end
