@@ -255,11 +255,7 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
             declaration(
               :monitoring_policy,
               monitoring_path,
-              %{
-                policy_type: :numeric_thresholds,
-                rules: limits,
-                required: true
-              },
+              %{default_rules: limit_rules(limits)},
               source,
               import_run_id,
               source_path ++ ["limits"],
@@ -279,6 +275,25 @@ defmodule Cadence.Catalog.Importers.CadenceYamlDatabase do
 
     {unit_declarations ++ calibrator_declarations ++ [type, parameter] ++ monitoring_declarations,
      diagnostics}
+  end
+
+  # COSMOS-style limits as monitoring rules, the same `default_rules` shape the XTCE importer
+  # gives (one lowering path). Boundaries are strict, as in COSMOS and Cadence.Limits.Evaluator:
+  # a value exactly at a threshold is in limits. red is critical, yellow a warning; the evaluator
+  # takes the most severe match.
+  @limit_rules [
+    {"red_high", :>, :critical},
+    {"red_low", :<, :critical},
+    {"yellow_high", :>, :warning},
+    {"yellow_low", :<, :warning}
+  ]
+
+  defp limit_rules(limits) do
+    for {key, operator, severity} <- @limit_rules,
+        value = Map.get(limits, key),
+        is_number(value) do
+      %{kind: :comparison, operator: operator, value: value, severity: severity}
+    end
   end
 
   defp command_declarations(parsed, source, import_run_id) do
