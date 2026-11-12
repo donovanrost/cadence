@@ -48,7 +48,7 @@ const checked = (e: Event) => e.target instanceof HTMLInputElement && e.target.c
       <RouterLink
         class="ml-6 text-sm text-readout hover:underline"
         :to="{ name: 'setup.profile', params: { profileId: p.id, section: 'history' } }"
-        >See what changes</RouterLink
+        >See its history</RouterLink
       >
     </div>
   </div>
