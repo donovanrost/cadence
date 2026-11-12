@@ -79,21 +79,32 @@ profile catalogs). Rows are ApOption radio cards:
 - **By profile:** one card per profile whose spacecraft use this catalog, with a checkbox for each. Each card
   reads `Earendil Block 1 · 500 SC · rev 14`. Choosing profiles stages one `spacecraft_profile`
   `catalog_revision_id` op per profile. This option is listed first.
+  - By default the op moves only spacecraft on the profile's **current version** (domain). Under each chosen
+    profile, when some are on older versions, an unchecked checkbox reads: "Also move the 499 on older
+    versions. They move to v7 with every profile change since their version, not only the catalog." It has a
+    `See what changes` link (Profile History, Compare their version → v7). Checked, the op names them
+    (`options.rollout.spacecraft`).
 - **A few spacecraft first:** a spacecraft picker (the Compose C1 select pattern) for a canary. It stages one
   override per spacecraft (P3's op). Use it to try rev 15 before moving a whole profile.
 - **Counts come only from the server's dry run**, shown under the options once the choice is made:
   - `Moves 499 spacecraft to rev 15.`
-  - `1 keeps its own catalog (override, rev 4).` Spacecraft that don't move are grouped by the server's
-    reason. How profile versions count is pending domain; whatever the dry run gives is shown with its
-    reason, and nothing else is inferred.
+  - `1 keeps its own catalog (override, rev 4).` / `499 keep rev 14: they're on an older version of the
+    profile.` Spacecraft that don't move are grouped by the server's reason, and nothing else is inferred.
+  - Spacecraft with no profile aren't reached by a profile op. If the dry run reports them: `12 have no
+    profile, so this doesn't reach them.` Whether overrides reach them is fe-setup's check.
   - `Cancels 23 queued commands.` (caution) This is the `catalog_cancels_commands` hold, which is then
     acknowledged on the Changes review.
   - While the dry run is running: `CHECKING…`. If it fails, the server's sentence; Stage is disabled with that
     reason.
 - **Primary:** `Stage rev 15 for Earendil Block 1`, `Stage rev 15 for 2 profiles` or `Stage rev 15 for 3
-  spacecraft`. It's disabled with a reason until something is chosen, while the dry run hasn't answered, and
-  while breaking items are unfixed ("Needs the 3 breaking items fixed first"). Staging opens Setup › Changes
-  on the change set, where the catalog holds are reviewed.
+  spacecraft`. It's disabled with a reason until something is chosen, and while the dry run hasn't answered.
+  Staging opens Setup › Changes on the change set, where the catalog holds are reviewed. The set applies as
+  one change, with one compatibility check.
+- **Breaking items:** there's no fix path while C2 is hidden, so they don't block. When breaking > 0, a
+  caution callout reads "Rev 15 changes 3 commands or points in ways that break existing use. Cadence can't
+  tell yet what uses them." It comes with the checkbox "I've checked the 3 breaking changes", which is
+  required for Stage. The change-set summary adds `· 3 breaking` so reviewers see it. Once C2 exists, fixing
+  replaces the checkbox.
 - Caption mono 11: `REV 14 KEPT FOR ROLLBACK`, shown only if the server keeps it.
 
 ## States
