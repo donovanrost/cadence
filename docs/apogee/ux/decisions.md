@@ -539,3 +539,28 @@ is still on disk and not in telemetry history. It's always **P2**: the journal i
     `operate_mission`, rows keep `Review` / `Show all N` and add "Operators can retry storing."
 - **Later, not in this step:** contacts showing "settling" after LOS (realized-contact `metadata.settlement`). It
   gets wording when a read carries it.
+
+### U38 · The runtime hasn't applied the active configuration (domain proposal, director: 2026-11-12 outage) (domain / fe-ops / lead)
+A U31 attention source, `mission_runtime` (`generation_not_applied`). It opens after 60 s of mismatch and is
+system-closed. Mission-wide, so it has no spacecraft. **P1**, and it sorts first. No Acknowledge.
+- **Row:**
+  - Title: `EARENDIL · Telemetry isn't being processed.` (the mission name is the subject).
+  - Evidence: "The runtime hasn't applied the configuration activated at 23:10Z; it's still running the
+    earlier one." (when `applied_generation` is null: "…; no configuration is running."). Then the reason, by key:
+    - `mission_runtime_spec_mismatch`: "What's running doesn't match it."
+    - `mission_runtime_not_running`: "The runtime isn't running."
+    - `reconciler_crashed`: "Cadence's apply process stopped: <failure_message>."
+    - Any other key: no reason clause; the key goes in Technical details.
+  - Meta: `GENERATION 8 · RUNNING 7 · SINCE 23:10Z` (mono; `RUNNING —` when null).
+  - Words never used: "generation" in sentences, "reconciler", "spec".
+- **Now header:** while it's open, the h1 reads `Telemetry isn't being processed` (crit) ahead of the computed
+  situation. The stale counts that follow from it stay as they are.
+- **Resolved:** fades for 5 s with `Resolved: configuration applied`.
+- **Open questions for domain** (the copy depends on the answers, U20):
+  1. Is telemetry unprocessed for every reason? With spec_mismatch and generation 7 still running, is TM
+     processed under 7? If it is, the title becomes "The latest configuration isn't applied." and the
+     telemetry claim goes.
+  2. Does commanding stop too? If so, the evidence adds "Commands can't be sent."
+  3. Does Cadence keep retrying the apply? If so, add "Cadence keeps trying." If not, what can a person do?
+  4. The activation's actor and change set (`activated_by`, `change_set_id`), so the evidence can say "activated
+     by Mira K. at 23:10Z" (U29) and `Review` can go to that change set. Without them, the row has no action.
