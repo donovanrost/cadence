@@ -5,11 +5,17 @@ import { useRemoteQuery } from "@/api";
 import { failureOutcome, refreshConfigState, stageChange } from "@/features/changes/index.ts";
 import { useMissionInvalidation } from "@/live";
 import { useMissionScope } from "@/shell";
-import { ApButton, ApCallout, ApPanel, ApRemote, plural } from "@/ui";
+import { ApButton, ApCallout, ApPanel, plural } from "@/ui";
 import RolloutBreaking from "./RolloutBreaking.vue";
 import RolloutChoose from "./RolloutChoose.vue";
 import RolloutDryRun from "./RolloutDryRun.vue";
-import { fetchRollout, rolloutOps, stageLabel, type RolloutChoice } from "./rollout.ts";
+import {
+  fetchRollout,
+  rolloutMoves,
+  rolloutOps,
+  stageLabel,
+  type RolloutChoice,
+} from "./rollout.ts";
 import { useRolloutDryRun } from "./useRolloutDryRun.ts";
 
 /** C3 Roll out to (Catalog.md, #65): stage this revision by profile or on a few spacecraft. */
@@ -68,6 +74,9 @@ const blocked = computed((): string | null => {
   const d = dryRun.value;
   if (d.status !== "ready") return d.status === "failed" ? d.text : "Waiting for the dry run.";
   if (d.noGo) return `NO-GO: ${d.noGo}`;
+  // qa #50: a set that moves nobody isn't worth staging.
+  if (rolloutMoves(d.preview, props.revision.id) === 0)
+    return `Nothing to stage: no spacecraft would move to rev ${props.revision.number}.`;
   if (props.breaking > 0 && !acknowledged.value)
     return `Check the ${plural(props.breaking, "breaking change")} first.`;
   return null;
@@ -97,46 +106,34 @@ async function stage() {
 
 <template>
   <ApPanel index="C3" title="Roll out to">
-    <ApRemote
-      :state="rollout.state.value"
-      loading-label="Loading profiles…"
-      @retry="rollout.refetch"
-    >
-      <template #default="{ value }">
-        <div class="flex flex-col gap-3">
-          <RolloutChoose
-            v-model:mode="mode"
-            v-model:chosen="chosen"
-            v-model:canary="canary"
-            :mission-id="missionId"
-            :revision-number="revision.number"
-            :profiles="value.profiles"
-          />
-          <RolloutDryRun
-            :dry-run="dryRun"
-            :revision="revision"
-            :from="from"
-            :unprofiled="unprofiled"
-          />
-          <RolloutBreaking
-            v-if="breaking > 0"
-            v-model="acknowledged"
-            :revision-number="revision.number"
-            :breaking="breaking"
-          />
-          <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
-          <ApButton
-            variant="primary"
-            :disabled="busy || blocked !== null"
-            :disabled-reason="blocked ?? 'Staging…'"
-            @click="stage"
-            >{{ label }}</ApButton
-          >
-          <p class="m-0 text-sm text-text-3">
-            Everything in this change set applies as one generation, with one compatibility check.
-          </p>
-        </div>
-      </template>
-    </ApRemote>
+    <div class="flex flex-col gap-3">
+      <RolloutChoose
+        v-model:mode="mode"
+        v-model:chosen="chosen"
+        v-model:canary="canary"
+        :mission-id="missionId"
+        :revision-number="revision.number"
+        :rollout="rollout.state.value"
+        @retry="rollout.refetch"
+      />
+      <RolloutDryRun :dry-run="dryRun" :revision="revision" :from="from" :unprofiled="unprofiled" />
+      <RolloutBreaking
+        v-if="breaking > 0"
+        v-model="acknowledged"
+        :revision-number="revision.number"
+        :breaking="breaking"
+      />
+      <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
+      <ApButton
+        variant="primary"
+        :disabled="busy || blocked !== null"
+        :disabled-reason="blocked ?? 'Staging…'"
+        @click="stage"
+        >{{ label }}</ApButton
+      >
+      <p class="m-0 text-sm text-text-3">
+        Everything in this change set applies as one generation, with one compatibility check.
+      </p>
+    </div>
   </ApPanel>
 </template>

@@ -1,11 +1,5 @@
 import { onScopeDispose, ref, watch, type Ref } from "vue";
-import {
-  failureOutcome,
-  itemLine,
-  previewOps,
-  type Preview,
-  type StageOp,
-} from "@/features/changes/index.ts";
+import { itemLine, previewOps, type Preview, type StageOp } from "@/features/changes/index.ts";
 
 export type DryRun =
   | Readonly<{ status: "idle" }>
@@ -25,7 +19,13 @@ export function useRolloutDryRun(missionId: Ref<string>, ops: Ref<readonly Stage
     const r = await previewOps({ missionId: missionId.value, ops: current }, signal);
     if (signal.aborted) return;
     if (!r.ok) {
-      dryRun.value = { status: "failed", text: failureOutcome(r.error, "changed").sentence };
+      // qa #50: a dry run changes nothing, so its failure never reads as an unclear outcome.
+      const e = r.error;
+      const detail =
+        e.kind === "invalid" || e.kind === "conflict" || e.kind === "forbidden"
+          ? ` ${e.message}`
+          : "";
+      dryRun.value = { status: "failed", text: `The dry run failed; nothing was staged.${detail}` };
       return;
     }
     const blocker = r.value.checks.find((c) => c.verdict === "no_go")?.items[0];

@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useRemoteQuery } from "@/api";
+import { useRemoteQuery, type RemoteState } from "@/api";
 import { fetchProfiles } from "@/features/profiles/index.ts";
-import { ApOption } from "@/ui";
+import { ApOption, ApRemote } from "@/ui";
 import RolloutCanary from "./RolloutCanary.vue";
 import RolloutProfiles from "./RolloutProfiles.vue";
-import type { RolloutProfile } from "./rollout.ts";
+import type { Rollout } from "./rollout.ts";
 
 /** C3's two option cards: by profile (listed first) or a few spacecraft first (a canary). */
 const props = defineProps<{
   missionId: string;
   revisionNumber: number;
-  profiles: readonly RolloutProfile[];
+  /** The rollout read: profile cards show once it answers; the options render at once (qa #50). */
+  rollout: RemoteState<Rollout>;
 }>();
+defineEmits<{ retry: [] }>();
 const mode = defineModel<"profiles" | "spacecraft" | null>("mode", { required: true });
 const chosen = defineModel<readonly Readonly<{ id: string; allVersions: boolean }>[]>("chosen", {
   required: true,
@@ -34,12 +36,16 @@ const versions = computed(
   <fieldset class="m-0 flex flex-col gap-2 border-0 p-0">
     <legend class="ap-label mb-2">Roll out to</legend>
     <ApOption v-model="mode" value="profiles" name="rollout" title="By profile" />
-    <RolloutProfiles
+    <ApRemote
       v-if="mode === 'profiles'"
-      v-model="chosen"
-      :profiles="profiles"
-      :versions="versions"
-    />
+      :state="rollout"
+      loading-label="Loading profiles…"
+      @retry="$emit('retry')"
+    >
+      <template #default="{ value }">
+        <RolloutProfiles v-model="chosen" :profiles="value.profiles" :versions="versions" />
+      </template>
+    </ApRemote>
     <ApOption
       v-model="mode"
       value="spacecraft"
