@@ -10,6 +10,17 @@ ux reviews, and a read of the built code (`frontend/apps/console/src/features/`)
 **Owners:** lead · ux · fe-ops · fe-setup · qa · api · api-ops · domain. **Blocked on** names the
 missing endpoint or decision; an item with no blocker can start now.
 
+## 0. Live operations and freezes (read first)
+
+- **qa #65 step 3 rerun: ARMED** (director, 11-12). Command group `3r7djzn3ia_P9CS`: SET_MODE 4 to
+  EARENDIL-001 on 001's own Svalbard pass **11-14 00:33:52-00:41:52Z** (not_before 00:25Z, expires
+  00:42Z; uplink booking confirmed). Negative check: 005 INV 00:27:53-00:35:53Z.
+  - **FREEZE 11-13 23:33Z to 11-14 01:00Z:** no lib saves, no :4011 or simulator restarts, no sim
+    pause, light load (targeted tests only; no full suites, verify runs or builds).
+  - **Until the pass:** don't abort the queued group (it shows as queued in Commanding), and no
+    catalog change may touch 001 (it would cancel the command). Catalog step 4 (the other 499)
+    lands after 11-14 or must not touch 001.
+
 ## 1. Next up, per person (the short version)
 
 | Who | Start now (unblocked) | Waiting on |
