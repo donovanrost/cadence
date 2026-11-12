@@ -36,7 +36,10 @@ const a3Need = computed(() => {
   const rows = snapshot.value ? layoutMatrix(snapshot.value.spacecraft).rows.length : 0;
   return `${matrixNaturalHeight(rows) + A3_CHROME_PX}px`;
 });
-const actionQueue = useActionQueue(computed(() => scope.value.mission.id));
+const actionQueue = useActionQueue(
+  computed(() => scope.value.mission.id),
+  computed(() => scope.value.mission.name),
+);
 const queue = computed(() =>
   actionQueue.items.value.status === "ready" ? actionQueue.items.value.value : [],
 );

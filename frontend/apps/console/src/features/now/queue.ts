@@ -22,6 +22,8 @@ export type QueueItem = Readonly<{
   sentence: string;
   meta: string | null;
   action: QueueAction;
+  /** The action is primary whatever the row's place (U38: a configuration that needs a fix). */
+  primary?: boolean;
   /** Every alarm behind the row is acknowledged (U21): keeps its priority, action 'Open', never primary. */
   acknowledged?: boolean;
   /** A consequence time the row counts down to live, after the meta (`AOS T−01:12:00`). */

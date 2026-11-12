@@ -24,7 +24,7 @@ const command = useQueueCommand(
 /** Static meta, then the live countdown when the row has a consequence time. */
 function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Record<string, never> {
   const due = item.due
-    ? `${item.due.label} ${formatRelative(new Date(item.due.at), now.value)}`
+    ? `${item.due.label ? `${item.due.label} ` : ""}${formatRelative(new Date(item.due.at), now.value)}`
     : null;
   const meta = [item.meta, due].filter((p): p is string => p !== null).join(" · ");
   return meta ? { meta, metaLive: due !== null } : {};
@@ -84,7 +84,9 @@ function metaProps(item: QueueItem): { meta: string; metaLive: boolean } | Recor
                 v-else
                 size="compact"
                 :variant="
-                  i === 0 && item.priority === 1 && !item.acknowledged ? 'primary' : 'secondary'
+                  item.primary || (i === 0 && item.priority === 1 && !item.acknowledged)
+                    ? 'primary'
+                    : 'secondary'
                 "
                 :to="item.action.to"
                 >{{ item.action.label }}</ApButton

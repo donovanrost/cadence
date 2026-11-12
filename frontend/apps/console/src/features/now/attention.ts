@@ -55,6 +55,13 @@ export const attentionReader = d.object({
       }),
     ),
   ),
+  /** mission_runtime (U38): the reason key, generations, and when the mismatch began. */
+  reason: d.optional(d.nullable(d.token)),
+  desired_generation: d.optional(d.nullable(d.integer)),
+  applied_generation: d.optional(d.nullable(d.integer)),
+  since: d.optional(d.nullable(d.timestamp)),
+  change_set_id: d.optional(d.nullable(d.token)),
+  activated_at: d.optional(d.nullable(d.timestamp)),
   /** enabled | disabled: whether the mission keeps a disk copy of incoming telemetry. */
   journal: d.optional(d.nullable(d.token)),
   ends_at: d.optional(d.timestamp),
@@ -263,7 +270,11 @@ export function attentionMeta(a: Attention, now: Date = new Date()): string | nu
 export type Resolved = Decoded<typeof resolvedReader>;
 
 /** Server actions that read better in words: U37's system 'replayed' = the telemetry got stored. */
-const ACTION_WORDS: Readonly<Record<string, string>> = { replayed: "telemetry stored" };
+const ACTION_WORDS: Readonly<Record<string, string>> = {
+  replayed: "telemetry stored",
+  // U38: the runtime caught up with the active configuration.
+  applied: "configuration applied",
+};
 
 /**
  * What closed it (ops.md §resolved, U32): a person reads "Resolved by Mira K."; a provider

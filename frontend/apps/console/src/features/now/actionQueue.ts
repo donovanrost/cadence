@@ -18,6 +18,7 @@ import {
 } from "./sources.ts";
 import { GROUP_AT, type QueueItem } from "./queue.ts";
 import { FOLD_AT, foldedSettlementRow, foldKey, type Settlement } from "./settlement.ts";
+import { runtimeRow } from "./runtime.ts";
 
 /** Contract: docs/apogee/api/ops.md, `GET /missions/:mission_id/action-queue` (M6). Server-ranked. */
 
@@ -253,7 +254,7 @@ function alarmRows(item: ServerItem): QueueItem[] {
   }));
 }
 
-function rowFor(item: ServerItem): QueueItem[] {
+function rowFor(item: ServerItem, missionName: string | null, now: Date): QueueItem[] {
   switch (item.kind) {
     case null:
       // A kind this console doesn't know yet: no row rather than a wrong one.
@@ -348,6 +349,8 @@ function rowFor(item: ServerItem): QueueItem[] {
     case "attention": {
       const a = item.attention;
       if (!a) return [];
+      if (a.source === "mission_runtime")
+        return [runtimeRow(base(item), item.id, a, missionName, now)];
       const w = attentionWords(a);
       const pass = a.reservation_id ?? a.contact_id;
       const to: RouteLocationRaw = pass
@@ -423,7 +426,12 @@ const missedOf = (item: ServerItem): MissedItem | null => {
  * Server order is kept (contract: don't re-sort); small alarm groups expand in place. Missed-pass
  * rows group across items (U35) and sit where the first of them was.
  */
-export function presentQueue(queue: ActionQueue, now: Date = new Date()): QueueItem[] {
+export function presentQueue(
+  queue: ActionQueue,
+  now: Date = new Date(),
+  /** U38's row title names the mission (it has no spacecraft). */
+  missionName: string | null = null,
+): QueueItem[] {
   const missed = queue.items.flatMap((i) => {
     const m = i.kind === "missed_pass" ? missedOf(i) : null;
     return m ? [m] : [];
@@ -445,7 +453,7 @@ export function presentQueue(queue: ActionQueue, now: Date = new Date()): QueueI
       placedFolds.add(foldKey(s));
       return [foldedSettlementRow(fold, now)];
     }
-    if (item.kind !== "missed_pass") return rowFor(item);
+    if (item.kind !== "missed_pass") return rowFor(item, missionName, now);
     if (placed) return [];
     placed = true;
     return missedRows;

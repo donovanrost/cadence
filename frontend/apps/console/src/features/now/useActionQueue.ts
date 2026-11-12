@@ -1,4 +1,4 @@
-import { computed, onScopeDispose, shallowRef, watch, type Ref } from "vue";
+import { computed, onScopeDispose, ref, shallowRef, watch, type Ref } from "vue";
 import { useRemoteQuery, type RemoteState } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { FLEET_REFETCH_GAP_MS, FLEET_TELEMETRY_GAP_MS, throttle } from "@/features/fleet/index.ts";
@@ -14,7 +14,10 @@ import type { QueueItem } from "./queue.ts";
 import type { RetryOutcome } from "./useQueueCommand.ts";
 
 /** The viewer's ranked queue (M6), refetched per the contract: state changes promptly, telemetry every 10 s. */
-export function useActionQueue(missionId: Ref<string | null>) {
+export function useActionQueue(
+  missionId: Ref<string | null>,
+  missionName: Ref<string | null> = ref(null),
+) {
   const query = useRemoteQuery(missionId, (id, signal) => fetchActionQueue(id, signal));
   const prompt = throttle(query.refetch, FLEET_REFETCH_GAP_MS);
   const slow = throttle(prompt.call, FLEET_TELEMETRY_GAP_MS);
@@ -46,12 +49,12 @@ export function useActionQueue(missionId: Ref<string | null>) {
     const s = query.state.value;
     if (s.status !== "ready") return null;
     const p = patches.value;
-    if (p.size === 0) return presentQueue(s.value);
+    if (p.size === 0) return presentQueue(s.value, new Date(), missionName.value);
     const items = s.value.items.map((i) => {
       const a = i.attention ? p.get(i.attention.id) : undefined;
       return a ? { ...i, attention: a } : i;
     });
-    return presentQueue({ ...s.value, items });
+    return presentQueue({ ...s.value, items }, new Date(), missionName.value);
   });
   // U31: a resolved attention row stays 5 s, faded, reading "Resolved by …".
   const fading = shallowRef<Fading[]>([]);

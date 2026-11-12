@@ -747,3 +747,89 @@ describe("contact_settlement retries (ux 294e67c6, domain #71 replay)", () => {
     expect(single?.command?.label).toBe("Retry storing");
   });
 });
+
+describe("mission_runtime (U38; domain 292c8e6b reasons)", () => {
+  const runtime = (o: Record<string, unknown> = {}) =>
+    item({
+      id: "attention:mission_runtime:mission-earendil-demo",
+      priority: 1,
+      kind: "attention",
+      state: "critical",
+      source: "mission_runtime",
+      attention: {
+        id: "mission-earendil-demo",
+        source: "mission_runtime",
+        conflict: "generation_not_applied",
+        state: "open",
+        reason: "spec_mismatch",
+        failure_message: "3 apps differ.",
+        desired_generation: 8,
+        applied_generation: 7,
+        since: "2026-11-11T23:10:00Z",
+        raised_at: "2026-11-11T23:11:00Z",
+        spacecraft_id: null,
+        station: null,
+        provider: null,
+        starts_at: null,
+        contact_id: null,
+        reservation_id: null,
+        acknowledged_by: null,
+        provider_message: null,
+        resolution: null,
+        ...o,
+      },
+    });
+  const rowOf = (o: Record<string, unknown> = {}) => {
+    const r = decode(actionQueueReader, {
+      observed_at: "2026-11-11T23:20:00Z",
+      counts: { p1: 1, p2: 0, p3: 0, spacecraft_p1: 0 },
+      items: [runtime(o)],
+    });
+    if (!r.ok) throw new Error(r.error.message);
+    return presentQueue(r.value, new Date("2026-11-11T23:20:00Z"), "EARENDIL")[0];
+  };
+  const head = "The runtime hasn't applied the active configuration;";
+
+  it("names the mission, says what's running, with meta and the age; no command", () => {
+    const row = rowOf();
+    expect(row?.title).toBe("EARENDIL · Telemetry isn't being processed.");
+    expect(row?.sentence).toBe(
+      `${head} it's still running the earlier one. What's running doesn't match it. Retrying won't fix this. The configuration needs a fix, or a new one needs activating.`,
+    );
+    expect(row?.meta).toBe("GENERATION 8 · RUNNING 7 · SINCE 23:10Z");
+    expect(row?.due).toEqual({ label: "", at: "2026-11-11T23:10:00Z" });
+    expect(row?.action).toEqual({ label: "Review", to: { name: "setup.changes" } });
+    expect(row?.command).toBeUndefined();
+    expect(row?.primary).toBe(true);
+  });
+
+  it("tails by reason key; null or unknown adds none; none running reads so", () => {
+    const tail = (reason: string | null) => rowOf({ reason })?.sentence;
+    expect(tail("runtime_not_running")).toMatch(
+      / The runtime isn't running\. Cadence keeps trying every 30 s\.$/,
+    );
+    expect(tail("apply_failed")).toMatch(
+      / Applying it failed: 3 apps differ\. Cadence keeps trying every 30 s\.$/,
+    );
+    expect(rowOf({ reason: "apply_failed" })?.primary).toBeUndefined();
+    expect(tail("reconcile_crashed")).toMatch(
+      / Cadence's apply process hit an error: 3 apps differ\. Retrying won't fix this\. The configuration needs a fix, or a new one needs activating\.$/,
+    );
+    expect(tail(null)).toBe(`${head} it's still running the earlier one.`);
+    expect(tail("something_new")).toBe(`${head} it's still running the earlier one.`);
+    expect(rowOf({ applied_generation: null })?.sentence).toMatch(
+      /; no configuration is running\./,
+    );
+    expect(rowOf({ applied_generation: null })?.meta).toBe(
+      "GENERATION 8 · RUNNING — · SINCE 23:10Z",
+    );
+    expect(
+      resolvedWords({
+        id: "x",
+        resolved_by: { kind: "system", id: null, name: null },
+        action: "applied",
+        resolved_at: "2026-11-11T23:26:00Z",
+      }),
+    ).toBe("Resolved: configuration applied.");
+  });
+});
