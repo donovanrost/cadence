@@ -11,13 +11,16 @@ export type RuntimeBanner =
 const at = (iso: string) => formatHourMinute(new Date(iso));
 
 /**
- * U38 (ux 4f8b796c): "Telemetry isn't being processed for EARENDIL. The runtime hasn't applied
- * the configuration activated at 23:10Z." The time clause only when the server sends the
- * activation time (U20: `since` is when applying first failed, not when it was activated).
+ * U38 (ux): "Telemetry isn't being processed for EARENDIL since 23:12Z. The runtime hasn't applied
+ * the configuration activated at 23:10Z." Each time only when the server sends it (U20): `since`
+ * is when applying first failed, `activated_at` when the configuration was activated.
  */
 export function outageText(runtime: RuntimeStatus, mission: string): string {
-  const when = runtime.activated_at ? ` activated at ${at(runtime.activated_at)}` : "";
-  return `Telemetry isn't being processed for ${mission}. The runtime hasn't applied the${when ? ` configuration${when}` : " active configuration"}.`;
+  const since = runtime.since ? ` since ${at(runtime.since)}` : "";
+  const what = runtime.activated_at
+    ? `configuration activated at ${at(runtime.activated_at)}`
+    : "active configuration";
+  return `Telemetry isn't being processed for ${mission}${since}. The runtime hasn't applied the ${what}.`;
 }
 
 /** "Telemetry processing resumed at 23:26Z." Null without the server's applied_at (U20). */

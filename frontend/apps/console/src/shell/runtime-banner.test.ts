@@ -15,11 +15,14 @@ const down: RuntimeStatus = {
 const up: RuntimeStatus = { ...down, state: "applied", applied_at: "2026-11-12T23:26:00Z" };
 
 describe("U38 runtime banner words", () => {
-  it("names the activation time only when the server sends it (U20)", () => {
+  it("names each time only when the server sends it (U20)", () => {
     expect(outageText(down, "EARENDIL")).toBe(
-      "Telemetry isn't being processed for EARENDIL. The runtime hasn't applied the configuration activated at 23:10Z.",
+      "Telemetry isn't being processed for EARENDIL since 23:11Z. The runtime hasn't applied the configuration activated at 23:10Z.",
     );
     expect(outageText({ ...down, activated_at: null }, "EARENDIL")).toBe(
+      "Telemetry isn't being processed for EARENDIL since 23:11Z. The runtime hasn't applied the active configuration.",
+    );
+    expect(outageText({ ...down, since: null, activated_at: null }, "EARENDIL")).toBe(
       "Telemetry isn't being processed for EARENDIL. The runtime hasn't applied the active configuration.",
     );
   });
