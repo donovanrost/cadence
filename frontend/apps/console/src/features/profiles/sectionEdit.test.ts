@@ -76,3 +76,35 @@ describe("describePreview error lines (ux)", () => {
     ).toEqual({ tone: "crit", text: "NO-GO: Catalog revision 16 doesn't exist." });
   });
 });
+
+describe("describePreview keeps (ux, Profile.md P4)", () => {
+  it("gives framing-governed spacecraft their own sentence", async () => {
+    const { decode } = await import("@/api");
+    const { previewReader } = await import("@/features/changes/index.ts");
+    const { describePreview } = await import("./sectionEdit.ts");
+    const keep = (id: string, code: string, reason: string) => ({
+      spacecraft: { id, name: id },
+      reason,
+      code,
+    });
+    const p = decode(previewReader, {
+      verdict: "go",
+      checks: [],
+      effects: [
+        {
+          op_id: "o1",
+          changes: 497,
+          keeps: [
+            keep("a", "framing_governed", "framing is governed by its configuration review"),
+            keep("b", "framing_governed", "framing is governed by its configuration review"),
+            keep("c", "older_profile_version", "stays on v3"),
+          ],
+        },
+      ],
+    });
+    if (!p.ok) throw p.error;
+    expect(describePreview(p.value).text).toBe(
+      "Checks pass · changes 497 spacecraft · keeps 1 spacecraft (stays on v3) · 2 keep their framing: it's set in their own configuration review.",
+    );
+  });
+});

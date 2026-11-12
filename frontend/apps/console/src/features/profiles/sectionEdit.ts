@@ -76,16 +76,24 @@ export function describePreview(
     ),
   );
   const changes = p.effects.reduce((n, e) => n + e.changes, 0);
-  const keeps = p.effects.flatMap((e) => e.keeps);
+  const all = p.effects.flatMap((e) => e.keeps);
+  // ux (Profile.md P4): spacecraft whose framing their own configuration review sets get a sentence.
+  const governed = all.filter((k) => k.code === "framing_governed").length;
+  const keeps = all.filter((k) => k.code !== "framing_governed");
   const reasons = [...new Set(keeps.map((k) => k.reason))].slice(0, 2).join("; ");
   const keptText =
-    keeps.length > 0
+    (keeps.length > 0
       ? ` · keeps ${plural(keeps.length, "spacecraft", "spacecraft")} (${reasons})`
-      : "";
+      : "") +
+    (governed === 1
+      ? " · 1 keeps its framing: it's set in its own configuration review."
+      : governed > 1
+        ? ` · ${governed} keep their framing: it's set in their own configuration review.`
+        : "");
   if (p.verdict === "no_go")
     return { tone: "crit", text: `NO-GO: ${issues.slice(0, 3).join(" · ")}` };
   return {
-    tone: p.verdict === "hold" || (changes === 0 && keeps.length > 0) ? "caution" : "nominal",
+    tone: p.verdict === "hold" || (changes === 0 && all.length > 0) ? "caution" : "nominal",
     text: `Checks pass · changes ${plural(changes, "spacecraft", "spacecraft")}${keptText}${issues.length ? ` · ${issues.join(" · ")}` : ""}`,
   };
 }
