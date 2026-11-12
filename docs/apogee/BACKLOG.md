@@ -32,6 +32,9 @@ missing endpoint or decision; an item with no blocker can start now.
 | ~~Queue kinds `missed_pass`, `station` + `Station` → Re-plan~~ done (de131e9b); `flight_event`: source landed (api-ops a02c2cee, 1b3be7f7, e07969bb), fe-ops reader 591bc06c | fe-ops | qa: a flight_event row seen live after the :4011 restart |
 | ~~Attention source `contact_settlement` (#71) reader~~ done (14330a4a, U37 words, no Acknowledge, Review opens Contacts by contact_id); unknown kinds/sources now drop one row, not Now | fe-ops | — (source live 22:14Z) |
 | ~~`contact_settlement` manual retry (#71 replay): needs-operator line, `Retry storing`, 'Next try at HH:MMZ.'~~ done (c10265fd; ux 294e67c6) | fe-ops | — (domain ships the manual state after 00:30Z) |
+| Attention source `mission_runtime` (domain, director): P1 mission-wide row when the runtime hasn't applied the active generation for 60 s; `starts_at: null` (no AOS countdown), no Acknowledge, resolves as system `applied` | fe-ops | ux wording; domain ships after the reader |
+| Mission-wide runtime banner on every ops screen, Now included (one banner, not a separate Now one) from `runtime` on `/counts` | lead | domain: `runtime` on `/counts` (asked); ux wording. Fallback: fe-ops does Now's banner from the queue item |
+| `contact_settlement` with `journal: "disabled"`: `backlog.queued` batches lost (`lost: true`), never 'on disk', no Retry | fe-ops | ux wording; domain: how a lost item closes |
 | Header meta names the worst station issue | fe-ops | — (S7 status exists) |
 | ~~A4 pass bars open the contact drawer~~ done (51cc6133) | fe-ops | — |
 | ~~Approval rows open the request's review~~ done for a single group (a0e33fe1) | fe-ops | — |
@@ -240,6 +243,8 @@ missing endpoint or decision; an item with no blocker can start now.
 3. Catalog-path generations (#36), which unblock Catalog C3 rollout. Plan to the director first.
 4. ~~Spacecraft archive model (#50)~~ done (7dbd3994, e0232291, 5ee6d6e8; rollback of create verified c8526c57).
 4b. URGENT, after 00:30Z, ahead of replay: the mission runtime reconciler has crash-looped since the 22:14Z restart (`binary_to_existing_atom("criteria")` in `MissionModel.Reference.new`). No runtime spec, so no spacecraft ingress. No live remedy during the #65 pass (director). Then one qa restart, plus an `active_spec` check in the runbook.
+4c. `mission_runtime` attention source (director-approved): build now, ship after fe-ops' reader. Asked: `runtime` on `/counts` for the shell banner.
+4d. `contact_settlement` `journal: "disabled"` / `backlog.queued` / `lost`: ship after fe-ops' reader. Asked: how a lost item closes.
 5. ~~#71 `contact_settlement` attention source~~ landed (9e8145fa, 551cb796, 8f7066b1; live on :4011 22:14Z; fe-ops reader 14330a4a). Replay follow-up next.
 6. #71 replay (after 00:30Z): automatic retries back off from 5 min, doubling to 2 h; after 6 failed retries `retry: "manual"` and POST `…/attention/contact_settlement/:id/retry`. fe-ops' copy and Retry action are in (c10265fd), so domain ships it after 00:30Z. Agreed: a retry on a non-manual item gets 409 `retry_not_manual` with the current item in `error.details.item`, no side effect; unknown or resolved gets 404 `attention_item_not_found`; gated by `operate_mission`; `failure_kind`/`failure_message` follow the latest attempt, plus `first_failure_kind` when it differs; every change publishes `attention` on the mission topic.
 
