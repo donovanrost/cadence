@@ -3,9 +3,9 @@ import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { ApButton, ApCallout, ApPanel, ApRemote, plural } from "@/ui";
-import ChecksPanel from "./ChecksPanel.vue";
 import { itemLine } from "./actions.ts";
-import RollbackOps from "./RollbackOps.vue";
+import RollbackActions from "./RollbackActions.vue";
+import RollbackPreviewBody from "./RollbackPreviewBody.vue";
 import { fetchRollback, rollbackErrorText, stageRollback } from "./rollback.ts";
 import { refreshConfigState } from "./useConfigState.ts";
 
@@ -46,6 +46,18 @@ const checks = computed(() => {
     : null;
 });
 
+/** Why Stage rollback is off, or null when it can stage. */
+const stageBlocked = computed(() =>
+  busy.value
+    ? "Staging…"
+    : noGo.value
+      ? "The checks say NO-GO"
+      : checks.value === null
+        ? "Nothing to roll back"
+        : null,
+);
+// U17 (header): the revision id keeps its case (mono, normal-case); the rest is a panel title.
+
 async function stage() {
   busy.value = true;
   failure.value = null;
@@ -63,7 +75,6 @@ async function stage() {
 <template>
   <ApPanel index="V3">
     <template #header>
-      <!-- U17: the revision id keeps its case (mono, normal-case); the rest is a panel title. -->
       <h2 class="m-0 font-display text-base font-semibold tracking-title text-text-2 uppercase">
         Roll back to <span class="font-mono normal-case">r{{ to }}</span>
       </h2>
@@ -72,11 +83,14 @@ async function stage() {
       <p class="m-0 text-md text-text-3">
         A rollback is a new revision that reverses later ones. History isn't rewritten.
       </p>
-      <div v-if="!open">
-        <ApButton :disabled="blocked !== null" :disabled-reason="blocked ?? ''" @click="open = true"
-          >Roll back to <span class="font-mono normal-case">r{{ to }}</span></ApButton
-        >
-      </div>
+      <ApButton
+        v-if="!open"
+        class="self-start"
+        :disabled="blocked !== null"
+        :disabled-reason="blocked ?? ''"
+        @click="open = true"
+        >Roll back to <span class="font-mono normal-case">r{{ to }}</span></ApButton
+      >
       <ApCallout v-else-if="preview.state.value.status === 'failed'" tone="caution">
         {{ rollbackErrorText(preview.state.value.error, to) }}
       </ApCallout>
@@ -87,42 +101,23 @@ async function stage() {
         @retry="preview.refetch"
       >
         <template #default="{ value }">
-          <p class="m-0 font-semibold text-readout">{{ value.summary }}</p>
-          <RollbackOps :ops="value.ops" :diffs="value.preview?.diffs ?? []" />
-          <ApCallout v-if="value.outside.length > 0" tone="caution">
-            {{ plural(value.outside.length, "item") }} changed outside change sets since r{{ to }}.
-            The rollback overwrites them; you'll acknowledge that when you submit.
-          </ApCallout>
-          <ApCallout v-if="value.preview === null" tone="info"
-            >Nothing differs from the live revision.</ApCallout
-          >
-          <ApCallout v-if="noGo" tone="crit"
-            >This rollback can't be staged: {{ noGoReason }}</ApCallout
-          >
-          <ChecksPanel
-            v-if="checks"
-            :preview="checks"
-            :left-by="`r${value.head}`"
+          <RollbackPreviewBody
+            :value="value"
+            :to="to"
+            :no-go-reason="noGo ? noGoReason : null"
+            :checks="checks"
             @retry="preview.refetch"
           />
         </template>
       </ApRemote>
       <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>
-      <div
+      <RollbackActions
         v-if="open && preview.state.value.status === 'ready'"
-        class="flex flex-wrap items-center gap-2"
-      >
-        <ApButton
-          variant="danger"
-          :disabled="busy || noGo || preview.state.value.value.preview === null"
-          :disabled-reason="
-            busy ? 'Staging…' : noGo ? 'The checks say NO-GO' : 'Nothing to roll back'
-          "
-          @click="stage"
-          >Stage rollback to <span class="font-mono normal-case">r{{ to }}</span></ApButton
-        >
-        <ApButton variant="ghost" @click="open = false">Cancel</ApButton>
-      </div>
+        :to="to"
+        :blocked="stageBlocked"
+        @stage="stage"
+        @cancel="open = false"
+      />
     </div>
   </ApPanel>
 </template>

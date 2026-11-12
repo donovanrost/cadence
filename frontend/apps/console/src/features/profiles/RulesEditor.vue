@@ -80,6 +80,10 @@ async function stage() {
     busy.value = false;
   }
 }
+const rolloutOptions = [
+  { value: "all", label: "All spacecraft on this profile" },
+  { value: "none", label: "New version only" },
+] as const;
 </script>
 
 <template>
@@ -102,14 +106,7 @@ async function stage() {
           <div>
             <ApButton size="compact" @click="drafts.push(newRule(drafts))">Add rule</ApButton>
           </div>
-          <ApSegmented
-            v-model="rollout"
-            label="Roll out to"
-            :options="[
-              { value: 'all', label: 'All spacecraft on this profile' },
-              { value: 'none', label: 'New version only' },
-            ]"
-          />
+          <ApSegmented v-model="rollout" label="Roll out to" :options="rolloutOptions" />
           <ApCallout v-if="problems.length > 0" tone="caution">{{ problems.join(" ") }}</ApCallout>
           <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
           <div class="flex flex-wrap gap-2">

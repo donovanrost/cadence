@@ -29,6 +29,19 @@ const unitLabel = (f: SchemaField) =>
       : f.unit === "ratio"
         ? "%"
         : (f.unit ?? undefined);
+const selectOptions = (f: SchemaField) =>
+  isCurrency(f)
+    ? currencies.map((c) => ({ value: c, label: c }))
+    : (f.enum ?? []).map((o) => ({ value: option(o.value), label: o.label }));
+/** Numbers, times and lists read in mono (ids and figures). */
+const isMono = (f: SchemaField) =>
+  ["integer", "number", "datetime", "time", "list"].includes(f.type);
+const inputMode = (f: SchemaField) =>
+  f.unit === "micros" || f.type === "number"
+    ? ("decimal" as const)
+    : f.type === "integer" && f.unit !== "s"
+      ? ("numeric" as const)
+      : undefined;
 const yesNo = (f: SchemaField) => {
   const def = f.default === true ? "true" : f.default === false ? "false" : null;
   return [
@@ -66,11 +79,7 @@ const hint = (f: SchemaField) =>
           v-else-if="isSelect(f)"
           :label="f.label"
           :model-value="values[f.path] ?? ''"
-          :options="
-            isCurrency(f)
-              ? currencies.map((c) => ({ value: c, label: c }))
-              : (f.enum ?? []).map((o) => ({ value: option(o.value), label: o.label }))
-          "
+          :options="selectOptions(f)"
           placeholder="Choose…"
           :hint="hint(f)"
           :error="errors[f.path] ?? null"
@@ -80,21 +89,9 @@ const hint = (f: SchemaField) =>
           v-else
           :label="f.label"
           :model-value="values[f.path] ?? ''"
-          :mono="
-            f.type === 'integer' ||
-            f.type === 'number' ||
-            f.type === 'datetime' ||
-            f.type === 'time' ||
-            f.type === 'list'
-          "
+          :mono="isMono(f)"
           :unit="unitLabel(f)"
-          :inputmode="
-            f.unit === 'micros' || f.type === 'number'
-              ? 'decimal'
-              : f.type === 'integer' && f.unit !== 's'
-                ? 'numeric'
-                : undefined
-          "
+          :inputmode="inputMode(f)"
           :hint="hint(f)"
           :error="errors[f.path] ?? null"
           :required="f.required"
