@@ -153,7 +153,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | --- | --- | --- |
 | `setup/catalog/:databaseId` route (pending) | fe-setup | — |
 | ~~C1 diff + stat strip~~ done (30b69efc, live on r3) | fe-setup | — |
-| C3 Roll out to: stage one `spacecraft_profile` `catalog_revision_id` op per profile in the option through `POST /config/stage` (`options.rollout: "all_versions"` to include older profile versions, domain 2ef4ca79), then the Changes review with the `catalog_*` holds; counts from api's rollout read and the preview's `catalog_change` | fe-setup | — (api 34b8cc27: `GET …/catalog/revisions/:revision_id/rollout` + profiles `catalog_revision`); ux: re-spec the commit as 'Stage rev N for <profiles>' |
+| ~~C3 Roll out to~~ built (96256074, 1d5335e6, 0391a9a5; api 34b8cc27, domain 2ef4ca79). 'Request activation' is gone after #65 (ux re-spec: 'Stage rev N for <profiles>') | fe-setup | qa: live check (no catalog change touching 001 before the 11-14 00:33Z pass) |
 | ~~Commands vs Telemetry split~~ done (30b69efc); `Replace file`; warnings disclosure *(unverified)* | fe-setup | — |
 
 ### Profile (`Profile.md`, S4): partial
