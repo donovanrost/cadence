@@ -218,6 +218,9 @@ defmodule Cadence.Control.Contacts do
   def realized_contact_journal_backlog(mission_id, realized_contact_id),
     do: RuntimeContacts.backlog(mission_id, realized_contact_id)
 
+  @spec ingress_journal_enabled?() :: boolean()
+  def ingress_journal_enabled?, do: RuntimeContacts.journal_enabled?()
+
   @spec running_realized_contact_ids(binary()) :: [binary()]
   def running_realized_contact_ids(mission_id), do: RuntimeContacts.running_ids(mission_id)
 

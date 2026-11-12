@@ -18,11 +18,14 @@ defmodule Cadence.Runtime.ContactBacklog do
         }
 
   @spec read(ProcessNamespace.t(), binary(), binary()) ::
-          %{journals: [journal()], persistence_errors: [binary()]}
+          %{journals: [journal()], persistence_errors: [binary()], queued: non_neg_integer()}
   def read(%ProcessNamespace{} = namespace, mission_id, realized_contact_id) do
+    projectors = projectors(namespace, mission_id, realized_contact_id)
+
     %{
       journals: journals(namespace, mission_id, realized_contact_id),
-      persistence_errors: persistence_errors(namespace, mission_id, realized_contact_id)
+      persistence_errors: for(%{last_error: e} <- projectors, is_binary(e), do: e),
+      queued: projectors |> Enum.map(&Map.get(&1, :queue_depth, 0)) |> Enum.sum()
     }
   end
 
@@ -43,13 +46,15 @@ defmodule Cadence.Runtime.ContactBacklog do
     :exit, _reason -> []
   end
 
-  defp persistence_errors(namespace, mission_id, realized_contact_id) do
+  # Each projector's snapshot: its last error, and the batches still queued in memory (with the
+  # journal off, those are all that's left of what the contact received).
+  defp projectors(namespace, mission_id, realized_contact_id) do
     namespace
     |> registered(:provider_persistence_projector, mission_id, realized_contact_id)
     |> Enum.flat_map(fn {_path_id, _provider_binding_id, pid} ->
       case IngressPersistenceProjector.snapshot(pid) do
-        {:ok, %{last_error: error}} when is_binary(error) -> [error]
-        _ok_or_gone -> []
+        {:ok, snapshot} -> [snapshot]
+        _gone -> []
       end
     end)
   catch

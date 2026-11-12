@@ -15,6 +15,7 @@ defmodule Cadence.Contacts.ContactSettlement do
 
   alias Cadence.Contacts.{ContactStore, RealizedContact}
   alias Cadence.Contacts.ContactStore.RealizedContactRow
+  alias Cadence.Control.Contacts, as: Runtime
   alias Cadence.Repo
 
   @storage_failure "telemetry_storage_unavailable"
@@ -39,6 +40,8 @@ defmodule Cadence.Contacts.ContactSettlement do
       "settlement" => %{
         "state" => "settling",
         "started_at" => DateTime.to_iso8601(now),
+        # Director (2026-11-12): with the journal off, nothing survives a stop; say so.
+        "journal" => if(Runtime.ingress_journal_enabled?(), do: "enabled", else: "disabled"),
         "deadline_at" => now |> DateTime.add(deadline_ms, :millisecond) |> DateTime.to_iso8601()
       }
     }
@@ -120,7 +123,10 @@ defmodule Cadence.Contacts.ContactSettlement do
       "backlog" => %{
         "entries" => journals |> Enum.map(& &1["entries"]) |> Enum.sum(),
         "bytes" => journals |> Enum.map(& &1["bytes"]) |> Enum.sum(),
-        "journals" => length(journals)
+        "journals" => length(journals),
+        "queued" => Map.get(backlog, :queued, 0),
+        # Without a journal, the queued batches lived only in memory and went with the runtime.
+        "lost" => not Runtime.ingress_journal_enabled?()
       }
     }
   end

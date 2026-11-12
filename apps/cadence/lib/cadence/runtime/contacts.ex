@@ -30,6 +30,10 @@ defmodule Cadence.Runtime.Contacts do
   def backlog(mission_id, realized_contact_id),
     do: ContactBacklog.read(ProcessNamespace.default(), mission_id, realized_contact_id)
 
+  @doc "Whether downlink ingress is journaled to disk (DECISIONS #71 holds only when it is)."
+  @spec journal_enabled?() :: boolean()
+  def journal_enabled?, do: Cadence.IngressJournal.FileSystem.configured_policy().enabled?
+
   @spec running_ids(binary()) :: [binary()]
   def running_ids(mission_id), do: Runtime.running_realized_contact_ids(mission_id)
 

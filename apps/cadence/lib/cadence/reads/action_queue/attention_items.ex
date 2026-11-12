@@ -166,6 +166,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
     :spacecraft_id,
     :ends_at,
     :deadline_at,
+    :journal,
     :backlog,
     :expires_at,
     :retry,

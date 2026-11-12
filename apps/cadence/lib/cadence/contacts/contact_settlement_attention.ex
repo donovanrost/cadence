@@ -104,6 +104,7 @@ defmodule Cadence.Contacts.ContactSettlementAttention do
       realized_contact_id: contact.realized_contact_id,
       raised_at: timestamp(settlement["unsettled_at"]),
       deadline_at: timestamp(settlement["deadline_at"]),
+      journal: settlement["journal"] || "enabled",
       backlog: backlog(settlement["backlog"] || %{}),
       expires_at: nil,
       retry: "automatic",
@@ -119,7 +120,9 @@ defmodule Cadence.Contacts.ContactSettlementAttention do
     %{
       entries: Map.get(backlog, "entries", 0),
       bytes: Map.get(backlog, "bytes", 0),
-      journals: Map.get(backlog, "journals", 0)
+      journals: Map.get(backlog, "journals", 0),
+      queued: Map.get(backlog, "queued", 0),
+      lost: Map.get(backlog, "lost", false)
     }
   end
 

@@ -118,7 +118,11 @@ defmodule Cadence.Contacts.ContactSettlementTest do
 
     assert {path_id, binding_id} == {downlink_path_id(a), provider_binding_id(a)}
     assert entries > 0 and bytes == 2 * @frame_size
-    assert settled["backlog"] == %{"entries" => entries, "bytes" => bytes, "journals" => 1}
+
+    assert %{"entries" => ^entries, "bytes" => ^bytes, "journals" => 1, "lost" => false} =
+             settled["backlog"]
+
+    assert settled["journal"] == "enabled"
 
     # Still on disk, every byte: the journal never reclaims past the processing cursor.
     on_disk =
@@ -135,7 +139,8 @@ defmodule Cadence.Contacts.ContactSettlementTest do
     assert item.contact_id == a.scheduled_contact_id
     assert item.conflict == "unsettled"
     assert item.reason == "settle_deadline"
-    assert item.backlog == %{entries: entries, bytes: bytes, journals: 1}
+    assert %{entries: ^entries, bytes: ^bytes, journals: 1, lost: false} = item.backlog
+    assert item.journal == "enabled"
     assert item.retry == "automatic" and is_nil(item.expires_at)
 
     assert %{open: 1, acknowledged: 0} =
