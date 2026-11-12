@@ -150,7 +150,8 @@ Header (not a takeover): back · mono `PASS REVIEW · PLAN R39 · 3 PROVIDERS` o
   billed > flown).
 - **R1 By station** (table): station, provider, planned, realized (meter + %), partial, missed, minutes
   flown, minutes billed; sorted by realization ascending.
-- **R2 Why passes were lost:** cause bars (red = missed, amber = partial), "OWNER DECIDES WHO PAYS".
+- **R2 Why passes were lost** (`Why passes fell short` when nothing was missed): cause bars (red = missed,
+  amber = partial), meta `BY WHO OWNS THE CAUSE` (no payment wording, U34).
 - **R3 Realization · 30 days:** daily bars vs a dashed target line, annotated dips (`8 OCT · AWA
   RAIN`).
 - **R4 Missed and partial passes** (table): AOS, spacecraft, antenna, outcome tag (mark + word),

@@ -43,7 +43,7 @@ filters: actor (select) · mission (select) · kind chips (Config · Commanding 
 ## Provider accounts (`O/org/provider-accounts[/:accountId]`, org admins)
 **Question:** "Which ground-network providers can this org book, and are the credentials healthy?"
 - **List** (ApTable): Provider (display name + mono provider type) · Account name · Status tag
-  (`■ CONNECTED` only when the provider was actually contacted / `REFERENCE OK · PROVIDER NOT CONTACTED` neutral / `▲ REFERENCE MISSING` / `◆ AUTH FAILED` / hatched `NOT CHECKED`) ·
+  (`■ CONNECTED` only when the provider was actually contacted / `REFERENCE OK · PROVIDER NOT CONTACTED` neutral, only when there has never been a successful call; with one, `REFERENCE OK` and the last-call column says when / `▲ REFERENCE MISSING` / `◆ AUTH FAILED` / hatched `NOT CHECKED`) ·
   Missions using it (count, link) · Last successful call (`T+04:12`) · Added (by, when). Primary `Add
   provider account`.
 - **Add / detail (revised per api's design note: Cadence never receives secret values):** fields from the
