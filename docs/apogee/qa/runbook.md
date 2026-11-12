@@ -90,6 +90,13 @@ CADENCE_DEV_DATABASE=cadence_apogee_dev CADENCE_QUESTDB_HTTP_ENDPOINT=http://127
 #    If var/qa-server.log grows past a few GB, truncate it in place: : > var/qa-server.log
 #    Check after any restart (expect 9200/8822; nil means restart again with the line above):
 #    rpc System.get_env("CADENCE_QUESTDB_HTTP_ENDPOINT") on cadence_apogee
+#    Then (director, 2026-11-12) check the mission runtime was admitted, ~1 min after boot:
+#      rpc Cadence.Runtime.MissionCoordinator.active_spec("mission-earendil-demo")
+#        -> {:ok, spec} with spec.generation == the live config generation (GET …/config head)
+#      grep -c "mission_runtime_reconciler.*terminating" in the new part of var/qa-server.log -> 0
+#    :code.modified_modules() == [] does NOT catch this: on 11-11 the 22:14Z restart came up clean,
+#    but the reconciler crash-looped (binary_to_existing_atom "criteria", then a binding-set hash
+#    mismatch for r9's v3), so every spacecraft's TM failed ingress with no_active_binding_set.
 
 # 5. Seed (once; both are rerunnable)
 CADENCE_DEV_DATABASE=cadence_apogee_dev EARENDIL_PROVIDER_URL=http://127.0.0.1:4111 \
