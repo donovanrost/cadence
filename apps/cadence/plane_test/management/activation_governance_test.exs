@@ -8,13 +8,14 @@ defmodule Cadence.Management.ActivationGovernanceTest do
   alias Cadence.Management.Activations
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
+  alias Ecto.Adapters.SQL.Sandbox
 
   setup do
     {:ok, _started_apps} = Application.ensure_all_started(:ecto_sql)
     start_supervised!(Cadence.Repo)
-    Ecto.Adapters.SQL.Sandbox.mode(Cadence.Repo, :manual)
-    owner = Ecto.Adapters.SQL.Sandbox.start_owner!(Cadence.Repo, shared: false)
-    on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(owner) end)
+    Sandbox.mode(Cadence.Repo, :manual)
+    owner = Sandbox.start_owner!(Cadence.Repo, shared: false)
+    on_exit(fn -> Sandbox.stop_owner(owner) end)
     :ok
   end
 

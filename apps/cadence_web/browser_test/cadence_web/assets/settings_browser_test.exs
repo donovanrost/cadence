@@ -2,9 +2,13 @@ Code.require_file(Path.expand("../../support/dashboard_rendered_viewport_runner.
 
 defmodule CadenceWeb.Assets.SettingsBrowserTest do
   use CadenceWeb.ConnCase, async: false
-  alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
+  alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
+  alias Cadence.Auth.Scope
   alias Cadence.Catalog.SpacecraftConfigurationInput
+  alias Cadence.Governance.ActivationPolicy
+  alias Cadence.Management.Commanding.WorkspaceSettings
+  alias Cadence.Runtime.Missions
   alias CadenceWeb.Assets.DashboardRenderedViewportRunner, as: Runner
   alias CadenceWeb.TestFixtures
 
@@ -18,7 +22,7 @@ defmodule CadenceWeb.Assets.SettingsBrowserTest do
     reviewer = TestFixtures.persist_user!(display_name: "Eli Navarro")
     membership = TestFixtures.grant_membership!(requester, org)
     TestFixtures.grant_membership!(reviewer, org)
-    scope = Cadence.Auth.Scope.new(%{user: requester, organization_membership: membership})
+    scope = Scope.new(%{user: requester, organization_membership: membership})
     revision = Fixtures.persist_imported_revision!(org.organization_id, mission.mission_id)
 
     craft =
@@ -66,14 +70,12 @@ defmodule CadenceWeb.Assets.SettingsBrowserTest do
 
     assert status == 0, output
     assert output =~ "SETTINGS_BROWSER_OK"
-    assert {:ok, %{generation: 2}} = Cadence.Runtime.Missions.applied_spec(mission.mission_id)
+    assert {:ok, %{generation: 2}} = Missions.applied_spec(mission.mission_id)
 
-    assert Cadence.Governance.ActivationPolicy.load(org.organization_id, mission.mission_id).source ==
+    assert ActivationPolicy.load(org.organization_id, mission.mission_id).source ==
              "enforced"
 
-    assert Cadence.Management.Commanding.WorkspaceSettings.load(
-             org.organization_id,
-             mission.mission_id
-           ).effective["shelf"] == "minimized"
+    assert WorkspaceSettings.load(org.organization_id, mission.mission_id).effective["shelf"] ==
+             "minimized"
   end
 end

@@ -11,7 +11,9 @@
           "packages/*/mix.exs",
           "packages/*/lib/",
           "packages/*/test/",
-          "dev/otp_cluster/"
+          "apps/cadence/plane_test/",
+          "apps/cadence_web/browser_test/",
+          "dev/"
         ],
         excluded: [~r"/_build/", ~r"/deps/", ~r"/node_modules/", ~r"/cover/"]
       }

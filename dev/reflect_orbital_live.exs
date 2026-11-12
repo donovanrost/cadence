@@ -89,12 +89,14 @@ feeds =
 Process.sleep(3_000)
 
 Enum.each(feeds, fn {pid, contact} ->
-  IO.inspect(%{
+  feed = %{
     spacecraft: contact.spacecraft_id,
     site: contact.ground_site,
     expires_at: contact.ends_at,
     stats: Map.take(CadenceSimulator.simulator_stats(pid), [:rate_hz, :packet_count, :step])
-  })
+  }
+
+  IO.puts(inspect(feed, pretty: true))
 end)
 
 remaining_ms =

@@ -4,6 +4,7 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
   alias Cadence.Catalog
   alias Cadence.Catalog.Artifact
   alias Cadence.Catalog.SpacecraftConfigurationInput
+  alias Cadence.Contacts.ProviderScheduling
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
   alias Cadence.MissionModels.TelemetryProjection
 
@@ -20,7 +21,7 @@ defmodule Cadence.Dev.ReflectOrbital.Configuration do
     |> Enum.with_index(1)
     |> Enum.each(fn {craft, index} ->
       {:ok, %{routes: routes, findings: []}} =
-        Cadence.Contacts.ProviderScheduling.list_ready_downlink_routes(
+        ProviderScheduling.list_ready_downlink_routes(
           F.organization_id(),
           F.mission_id(),
           craft.spacecraft_id
