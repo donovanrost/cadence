@@ -12,6 +12,8 @@ import { bindPaletteShortcut } from "./palette.ts";
 import { useConsoleScope } from "./scope.ts";
 import { canAdministerOrganization, useSession } from "./session.ts";
 import { useOpsCounts } from "./counts.ts";
+import RuntimeBanner from "./RuntimeBanner.vue";
+import { useRuntimeBanner } from "./runtime-banner.ts";
 import { useAdminOrgSelect } from "./admin-org.ts";
 
 const route = useRoute();
@@ -41,12 +43,13 @@ const unknownScope = computed(() => {
     return `${s.organization.name} has no mission “${s.slug}” you can open.`;
   return null;
 });
-/** Ops screens fit the viewport and scroll their panes; reading views scroll main. */
-const { counts } = useOpsCounts(
-  computed(() =>
-    mode.value === "ops" && missionScope.value ? missionScope.value.mission.id : null,
-  ),
+/** Read on every mission page: the Ops rail's counts, and U38's runtime banner (Ops and Setup). */
+const { counts } = useOpsCounts(computed(() => missionScope.value?.mission.id ?? null));
+const runtimeBanner = useRuntimeBanner(
+  computed(() => (counts.value ? (counts.value.runtime ?? null) : undefined)),
+  computed(() => missionScope.value?.mission.name ?? null),
 );
+/** Ops screens fit the viewport and scroll their panes; reading views scroll main. */
 const consoleLayout = computed(() => mode.value === "ops");
 
 watch(
@@ -83,6 +86,7 @@ const mainScrolls = useScrollable(main);
       <template #status><slot name="topbar-status" /></template>
       <template #setup-status><slot name="topbar-setup-status" /></template>
     </TopBar>
+    <RuntimeBanner v-if="runtimeBanner && missionScope" :banner="runtimeBanner" />
     <div class="flex min-h-0 flex-1">
       <OpsRail
         v-if="mode === 'ops' && missionScope"

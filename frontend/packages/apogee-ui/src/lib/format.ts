@@ -23,6 +23,12 @@ export function formatClock(date: Date): string {
   return `${p.h}:${p.mi}:${p.s}`;
 }
 
+/** `02:41Z`: a time of day in a sentence ("activated at 02:41Z"). */
+export function formatHourMinute(date: Date): string {
+  const p = parts(date);
+  return `${p.h}:${p.mi}Z`;
+}
+
 /** `2026-10-23 02:41:17Z` */
 export function formatAbsolute(date: Date): string {
   const p = parts(date);

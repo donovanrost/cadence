@@ -20,7 +20,29 @@ export const countsReader = d.object({
   // U31 (3d891b4b): open "needs acknowledgment" items, for the mobile Now badge. Optional so an
   // older server's /counts still decodes.
   attention: d.optional(d.nullable(d.object({ open: d.integer, acknowledged: d.integer }))),
+  /**
+   * U38: whether the mission runtime applied the active configuration (domain
+   * MissionRuntimeStatus, same source and 60 s debounce as the mission_runtime attention item).
+   * Optional until api-ops ships it; null = nothing to say.
+   */
+  runtime: d.optional(
+    d.nullable(
+      d.object({
+        state: d.token,
+        reason: d.optional(d.nullable(d.token)),
+        desired_generation: d.optional(d.nullable(d.integer)),
+        applied_generation: d.optional(d.nullable(d.integer)),
+        /** When the reconciler first failed for the desired generation. */
+        since: d.optional(d.nullable(d.timestamp)),
+        /** When it last applied a generation (the "resumed at" time). */
+        applied_at: d.optional(d.nullable(d.timestamp)),
+        /** When the desired generation was activated (asked of domain). */
+        activated_at: d.optional(d.nullable(d.timestamp)),
+      }),
+    ),
+  ),
 });
+export type RuntimeStatus = NonNullable<OpsCounts["runtime"]>;
 export type OpsCounts = Decoded<typeof countsReader>;
 
 function fetchCounts(missionId: string, signal: AbortSignal): Promise<ApiResult<OpsCounts>> {
