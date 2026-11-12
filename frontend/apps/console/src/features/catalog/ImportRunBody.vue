@@ -1,14 +1,20 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
 import { ApCallout, plural } from "@/ui";
 import DiagnosticsPanel from "./DiagnosticsPanel.vue";
 import DiffPanel from "./DiffPanel.vue";
 import DiffStrip from "./DiffStrip.vue";
+import RolloutPanel from "./RolloutPanel.vue";
 import { formatBytes, severityCounts, type ImportRunDetail } from "./importRun.ts";
 
 /** File line, verdict, stats, diff (when available) and diagnostics for one import run. */
 const props = defineProps<{ run: ImportRunDetail }>();
 const counts = computed(() => severityCounts(props.run.diagnostics));
+// Staging a rollout needs manage_mission, which the server grants to organization admins (qa #4).
+const scope = useMissionScope();
+const session = useSession();
+const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
 const fileLine = computed(() =>
   [
     props.run.file.name,
@@ -49,8 +55,13 @@ const fileLine = computed(() =>
   <DiffPanel v-if="run.diff" :diff="run.diff" :base-number="run.base_revision?.number ?? null" />
   <ApCallout v-else-if="run.status === 'succeeded'" tone="info">{{
     run.base_revision
-      ? `This revision couldn't be compared with r${run.base_revision.number}, so there's no diff.`
+      ? `This revision couldn't be compared with rev ${run.base_revision.number}, so there's no diff.`
       : "This is the database's first revision, so there's nothing to compare it with."
   }}</ApCallout>
+  <RolloutPanel
+    v-if="canStage && run.status === 'succeeded' && run.revision"
+    :revision="run.revision"
+    :breaking="run.diff?.summary.breaking ?? 0"
+  />
   <DiagnosticsPanel v-if="run.diagnostics.length > 0" :diagnostics="run.diagnostics" index="C4" />
 </template>
