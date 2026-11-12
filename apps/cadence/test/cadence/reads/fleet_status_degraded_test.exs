@@ -7,7 +7,14 @@ defmodule Cadence.Reads.FleetStatusDegradedTest do
 
   setup do
     previous = Application.get_env(:cadence, :fleet_durable_receipts_timeout_ms)
-    on_exit(fn -> Application.put_env(:cadence, :fleet_durable_receipts_timeout_ms, previous) end)
+    # Unset it again when it wasn't set: put_env(..., nil) would leave nil, and the read would
+    # get nil instead of its default (an order-dependent Task.yield/2 failure elsewhere).
+    on_exit(fn ->
+      if previous == nil,
+        do: Application.delete_env(:cadence, :fleet_durable_receipts_timeout_ms),
+        else: Application.put_env(:cadence, :fleet_durable_receipts_timeout_ms, previous)
+    end)
+
     CommandReviewFixtures.scope!()
   end
 
