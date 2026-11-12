@@ -561,7 +561,7 @@ A U31 attention source, `mission_runtime` (`generation_not_applied`). It opens a
 system-closed. Mission-wide, so it has no spacecraft. **P1**, and it sorts first. No Acknowledge.
 - **Row:**
   - Title: `EARENDIL · Telemetry isn't being processed.` (the mission name is the subject).
-  - Evidence: "The runtime hasn't applied the latest configuration; it's still running the earlier one."
+  - Evidence: "The runtime hasn't applied the active configuration; it's still running the earlier one."
     (when `applied_generation` is null: "…; no configuration is running."). `since` (domain: when applying
     the current configuration first failed) appears only in the meta and the banner. Then the reason, by key:
     - `mission_runtime_spec_mismatch`: "What's running doesn't match it."
@@ -573,8 +573,9 @@ system-closed. Mission-wide, so it has no spacecraft. **P1**, and it sorts first
 - **Banner (lead's proposal, domain's ask: yes):** a crit strip under the top bar on every mission page, Ops and
   Setup, while the item is open. Every live value is stale, not only Now's. Organization and account pages don't
   show it.
-  - Text: "Telemetry isn't being processed for EARENDIL since 23:10Z. The runtime hasn't applied the latest
-    configuration." followed by the link `Details`, which goes to the queue row on Now. The banner reads
+  - Text: "Telemetry isn't being processed for EARENDIL since 23:10Z. The runtime hasn't applied the active
+    configuration." (with `activated_at`: "…the configuration activated at 23:00Z"). `since 23:10Z` is shown
+    only when the server sends `since`. followed by the link `Details`, which goes to the queue row on Now. The banner reads
     `/counts.runtime` (api-ops), which shares its source and its 60 s debounce with the attention item.
   - One line; truncated at 390 with `Details` kept visible. It can't be dismissed.
   - When the item resolves, the strip turns nominal for 5 s ("Telemetry processing resumed at 23:26Z."), then
