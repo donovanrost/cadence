@@ -537,6 +537,21 @@ is still on disk and not in telemetry history. It's always **P2**: the journal i
     fold was retried, the emptied fold stays for 5 s with "Retried 37." and fades like a resolved row. On a
     partial result, the remaining fold keeps "Retried 35 of 37. 2 failed: …" in its evidence. Without
     `operate_mission`, rows keep `Review` / `Show all N` and add "Operators can retry storing."
+- **Journal off, telemetry lost** (`journal: "disabled"`, `lost: true`; director-approved): there's no on-disk copy,
+  so the UI never says "on disk" or offers Retry.
+  - Row title: `EARENDIL-001 · Telemetry from the SVA 18:49Z pass was lost.`
+  - Evidence: "412 telemetry batches were in memory when the runtime stopped and weren't stored. This mission
+    doesn't keep a disk copy, so they can't be recovered."
+  - The drawer shows the same text in a caution block. Caution, not crit: the loss is past and final, and
+    there's nothing to do now.
+  - The fold key adds `lost`: "Telemetry from 37 passes was lost." / "1,912 batches weren't stored and can't be
+    recovered." A lost item never folds with on-disk items.
+  - **Closing (pending domain):** it can't close as replayed. The proposal: a person closes it with `Mark as
+    seen` (`operate_mission`), recorded as {action: "loss_acknowledged", actor}, fading with "Resolved by
+    Mira K.". Until someone does, it stays P2. If domain prefers a system close (say after 24 h), the fade
+    reads `Resolved: closed after 24 h`.
+  - If the mission has a setting that turns the disk copy on, the drawer links to it ("Keep a disk copy of
+    incoming telemetry"). It isn't shown unless the setting exists.
 - **Later, not in this step:** contacts showing "settling" after LOS (realized-contact `metadata.settlement`). It
   gets wording when a read carries it.
 
@@ -553,14 +568,22 @@ system-closed. Mission-wide, so it has no spacecraft. **P1**, and it sorts first
     - Any other key: no reason clause; the key goes in Technical details.
   - Meta: `GENERATION 8 · RUNNING 7 · SINCE 23:10Z` (mono; `RUNNING —` when null).
   - Words never used: "generation" in sentences, "reconciler", "spec".
-- **Now header:** while it's open, the h1 reads `Telemetry isn't being processed` (crit) ahead of the computed
-  situation. The stale counts that follow from it stay as they are.
-- **Resolved:** fades for 5 s with `Resolved: configuration applied`.
-- **Open questions for domain** (the copy depends on the answers, U20):
-  1. Is telemetry unprocessed for every reason? With spec_mismatch and generation 7 still running, is TM
-     processed under 7? If it is, the title becomes "The latest configuration isn't applied." and the
-     telemetry claim goes.
-  2. Does commanding stop too? If so, the evidence adds "Commands can't be sent."
-  3. Does Cadence keep retrying the apply? If so, add "Cadence keeps trying." If not, what can a person do?
-  4. The activation's actor and change set (`activated_by`, `change_set_id`), so the evidence can say "activated
-     by Mira K. at 23:10Z" (U29) and `Review` can go to that change set. Without them, the row has no action.
+- **Banner (lead's proposal, domain's ask: yes):** a crit strip under the top bar on every mission page, Ops and
+  Setup, while the item is open. Every live value is stale, not only Now's. Organization and account pages don't
+  show it.
+  - Text: "Telemetry isn't being processed for EARENDIL. The runtime hasn't applied the configuration activated
+    at 23:10Z." followed by the link `Details`, which goes to the queue row on Now.
+  - One line; truncated at 390 with `Details` kept visible. It can't be dismissed.
+  - When the item resolves, the strip turns nominal for 5 s ("Telemetry processing resumed at 23:26Z."), then
+    goes.
+  - Now shows the banner and the P1 row. Its h1 stays computed, so there's no third copy.
+- **Meta:** the age replaces the AOS countdown: `GENERATION 8 · RUNNING 7 · SINCE 23:10Z · T+00:14:02`.
+- **Review:** goes to Setup › Changes, opened on the change set that activated it when the item carries
+  `change_set_id`, otherwise the Changes list. Readiness can't show it (domain).
+- **Resolved:** the row fades for 5 s with `Resolved: configuration applied`.
+- **Optional fields** (a clause is added only when the server says so, U20):
+  - `activated_by`: "activated by Mira K. at 23:10Z" (U29).
+  - Commanding also stopped: the evidence adds "Commands can't be sent."
+  - Cadence retries the apply: the evidence adds "Cadence keeps trying."
+- Domain states that no spacecraft's telemetry is processed while the item is open, for every reason. The title
+  relies on that.
