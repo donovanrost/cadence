@@ -23,6 +23,10 @@ const base: PreviewItem = {
   cause: undefined,
   entity_name: undefined,
   paths: undefined,
+  spacecraft_ids: undefined,
+  from: undefined,
+  to: undefined,
+  requests: undefined,
 };
 
 describe("preview compatibility HOLD (DECISIONS #33)", () => {
