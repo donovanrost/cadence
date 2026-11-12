@@ -13,7 +13,8 @@ export const FOLD_AT = 2;
 export type Settlement = Readonly<{
   itemId: string;
   spacecraft: Readonly<{ id: string; name: string }> | null;
-  attention: Attention & { backlog: NonNullable<Attention["backlog"]> };
+  /** A settlement is about a pass: it always has a backlog and an AOS. */
+  attention: Attention & { backlog: NonNullable<Attention["backlog"]>; starts_at: string };
 }>;
 
 /** ux 294e67c6: cause + retry, so manual items never hide inside an automatic fold. */
@@ -87,7 +88,7 @@ export function foldedSettlementRow(
       title: `Telemetry from ${plural(n, "pass", "passes")} isn't stored yet`,
       rows: sorted.map((m) => {
         const a = m.attention;
-        const station = a.station.code ?? a.station.name;
+        const station = a.station?.code ?? a.station?.name;
         const one = a.backlog.entries === 1;
         return {
           key: m.itemId,

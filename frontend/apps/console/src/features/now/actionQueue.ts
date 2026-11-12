@@ -37,6 +37,19 @@ const tolerantOneOf =
     return values.find((candidate) => candidate === v) ?? null;
   };
 
+/** Reads with `read`, or null (logged) when the value doesn't fit: for per-row objects. */
+const lenient =
+  <T>(read: d.Reader<T>): d.Reader<T | null> =>
+  (value, path = "") => {
+    try {
+      return read(value, path);
+    } catch (e) {
+      if (!(e instanceof d.DecodeError)) throw e;
+      console.warn("Dropped an unreadable queue row", e.message);
+      return null;
+    }
+  };
+
 const member = d.object({
   id: d.token,
   name: d.string,
@@ -135,7 +148,8 @@ const itemReader = d.object({
   command_groups: d.optional(d.array(commandGroup, 1_000)),
   finding: d.nullable(d.object({ id: d.token, title: d.string, body: d.nullable(d.string) })),
   // U31 (fafe581a): null on other kinds; optional until api ships it.
-  attention: d.optional(d.nullable(attentionReader)),
+  // An attention object this console can't read drops its own row, never the whole queue.
+  attention: d.optional(d.nullable(lenient(attentionReader))),
   // Queue sources (ops.md b7008dd6): null on other kinds; optional until api-ops ships them.
   missed_passes: d.optional(d.nullable(d.array(missedPassReader, 100))),
   next_contact: d.optional(d.nullable(nextContactReader)),
@@ -349,7 +363,7 @@ function rowFor(item: ServerItem): QueueItem[] {
           meta: attentionMeta(a),
           acknowledged: a.state === "acknowledged",
           // A settlement is about a past pass: no AOS countdown.
-          ...(a.backlog ? {} : { due: { label: "AOS", at: a.starts_at } }),
+          ...(a.backlog || !a.starts_at ? {} : { due: { label: "AOS", at: a.starts_at } }),
           ...(a.backlog && a.retry === "manual"
             ? { command: { label: "Retry storing", targets: [a] } }
             : {}),
@@ -437,11 +451,11 @@ export function presentQueue(queue: ActionQueue, now: Date = new Date()): QueueI
 
 function settlementOf(item: ServerItem): Settlement | null {
   const a = item.attention;
-  if (item.kind !== "attention" || !a?.backlog) return null;
+  if (item.kind !== "attention" || !a?.backlog || !a.starts_at) return null;
   const sc = item.spacecraft[0];
   return {
     itemId: item.id,
     spacecraft: sc ? { id: sc.id, name: sc.name } : null,
-    attention: { ...a, backlog: a.backlog },
+    attention: { ...a, backlog: a.backlog, starts_at: a.starts_at },
   };
 }

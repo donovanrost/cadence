@@ -589,6 +589,40 @@ describe("contact_settlement (U37, #71)", () => {
     ).toHaveLength(1);
   });
 
+  it("an unreadable attention object drops its row, and pass-less items read (mission_runtime)", () => {
+    const r = decode(actionQueueReader, {
+      observed_at: "2026-11-11T22:00:00Z",
+      counts: { p1: 1, p2: 1, p3: 1, spacecraft_p1: 0 },
+      items: [
+        item({ id: "attention:broken", kind: "attention", priority: 2, attention: { id: 7 } }),
+        item({
+          id: "attention:mission_runtime:m",
+          kind: "attention",
+          priority: 1,
+          attention: {
+            ...settlementSample,
+            source: "mission_runtime",
+            conflict: "generation_not_applied",
+            station: null,
+            provider: null,
+            starts_at: null,
+            ends_at: undefined,
+            contact_id: null,
+            reservation_id: null,
+            backlog: undefined,
+          },
+        }),
+        item({ id: "setup:a", kind: "setup", priority: 3 }),
+      ],
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.items[0]?.attention).toBeNull();
+    const rows = presentQueue(r.value);
+    expect(rows.map((q) => q.key)).toContain("setup:a");
+    expect(rows.find((q) => q.key === "attention:mission_runtime:m")?.due).toBeUndefined();
+  });
+
   it("an unknown kind or source drops one row, not the whole read", () => {
     const r = decode(actionQueueReader, {
       observed_at: "2026-11-11T22:00:00Z",

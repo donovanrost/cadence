@@ -24,14 +24,17 @@ export const attentionReader = d.object({
   contact_id: d.nullable(d.token),
   // Null when a contact has no provider booking (domain, #71).
   reservation_id: d.optional(d.nullable(d.token)),
-  station: d.object({
-    ref: d.nullable(d.string),
-    id: d.nullable(d.token),
-    code: d.nullable(d.string),
-    name: d.nullable(d.string),
-  }),
-  provider: d.object({ id: d.nullable(d.token), name: d.nullable(d.string) }),
-  starts_at: d.timestamp,
+  // Null on mission-wide sources (mission_runtime: no station, provider or pass).
+  station: d.nullable(
+    d.object({
+      ref: d.nullable(d.string),
+      id: d.nullable(d.token),
+      code: d.nullable(d.string),
+      name: d.nullable(d.string),
+    }),
+  ),
+  provider: d.nullable(d.object({ id: d.nullable(d.token), name: d.nullable(d.string) })),
+  starts_at: d.nullable(d.timestamp),
   raised_at: d.timestamp,
   provider_message: d.nullable(d.string),
   /** U33 uplink_blocked only; null (or absent) on pass_resolution. */
@@ -148,7 +151,7 @@ export function attentionWords(
   a: Attention,
   now: Date = new Date(),
 ): Readonly<{ what: string; evidence: string }> {
-  const provider = a.provider.name ?? "The provider";
+  const provider = a.provider?.name ?? "The provider";
   if (a.release) {
     // A Release whose cancel the provider refused or didn't answer: the booking may still stand.
     const what =
@@ -165,19 +168,19 @@ export function attentionWords(
   }
   if (a.backlog) {
     // U37 (#71 contact_settlement): system-closed, no person action, no Acknowledge.
-    const station = a.station.code ?? a.station.name;
+    const station = a.station?.code ?? a.station?.name;
     return {
-      what: `Telemetry from the ${station ? `${station} ` : ""}${short(a.starts_at, now)} pass isn't stored yet.`,
+      what: `Telemetry from the ${station ? `${station} ` : ""}${a.starts_at ? `${short(a.starts_at, now)} ` : ""}pass isn't stored yet.`,
       evidence: settlementEvidence(settlementFacts({ ...a, backlog: a.backlog }), now),
     };
   }
   if (a.uplink) {
     // U33: "EARENDIL-001 · Can't command on the SVB-1 pass." / "<reason>. 2 command groups are queued for it."
     const n = a.uplink.command_group_ids.length;
-    const station = a.station.code ?? a.station.name ?? "this";
+    const station = a.station?.code ?? a.station?.name ?? "this";
     return {
       what: `Can't command on the ${station} pass.`,
-      evidence: `${reasonSentence(a.uplink.reason, { provider: a.provider.name })}.${n ? ` ${plural(n, "command group")} ${n === 1 ? "is" : "are"} queued for it.` : ""}`,
+      evidence: `${reasonSentence(a.uplink.reason, { provider: a.provider?.name ?? null })}.${n ? ` ${plural(n, "command group")} ${n === 1 ? "is" : "are"} queued for it.` : ""}`,
     };
   }
   const r = a.resolution;
@@ -214,14 +217,16 @@ export function attentionWords(
 export function attentionMeta(a: Attention, now: Date = new Date()): string | null {
   // U37: `SVA · Northlight · 18:49Z–18:57Z`, dropping any null part (U20).
   if (a.backlog) {
-    const window = `${short(a.starts_at, now)}${a.ends_at ? `–${short(a.ends_at, now)}` : ""}`;
-    return [a.station.code ?? a.station.name, a.provider.name, window]
+    const window = a.starts_at
+      ? `${short(a.starts_at, now)}${a.ends_at ? `–${short(a.ends_at, now)}` : ""}`
+      : null;
+    return [a.station?.code ?? a.station?.name, a.provider?.name, window]
       .filter((p): p is string => Boolean(p))
       .join(" · ")
       .toUpperCase();
   }
   const parts = [
-    a.station.code ?? a.station.name,
+    a.station?.code ?? a.station?.name,
     a.state === "acknowledged" ? `Ack ${a.acknowledged_by?.name ?? ""}`.trim() : null,
   ].filter((p): p is string => Boolean(p));
   return parts.length ? parts.join(" · ").toUpperCase() : null;

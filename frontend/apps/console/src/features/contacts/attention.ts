@@ -73,7 +73,7 @@ export function resolutionRecord(a: Attention): string | null {
 
 /** One "what to do" line per conflict (U32). */
 export function whatToDo(a: Attention): Readonly<{ text: string; plan: boolean }> {
-  const provider = a.provider.name ?? "the provider";
+  const provider = a.provider?.name ?? "the provider";
   switch (a.conflict) {
     case "cancel_failed":
       return {

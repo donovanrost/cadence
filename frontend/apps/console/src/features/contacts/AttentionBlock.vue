@@ -24,7 +24,8 @@ const words = computed(() => attentionWords(props.attention));
 const record = computed(() => resolutionRecord(props.attention));
 const todo = computed(() => whatToDo(props.attention));
 const acknowledged = computed(() => props.attention.state === "acknowledged");
-const planDay = computed(() => props.attention.starts_at.slice(0, 10));
+/** The plan day of the pass; pass_resolution items always carry starts_at. */
+const planDay = computed(() => props.attention.starts_at?.slice(0, 10));
 
 const busy = ref(false);
 const notice = ref<{ tone: "caution" | "info"; text: string } | null>(null);
