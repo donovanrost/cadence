@@ -120,8 +120,8 @@ Header meta `3 OF 500 DIFFER FROM THE PROFILE`. Rows `ov` (`150px | 1fr | auto`)
 ### P4 · Staged edit (aside; only while there are dirty fields)
 As `Changes.md` §1: field path (mono), `− old` / `+ new`, tiles `Changes 499 SC` / `Keeps 1 SC`
 (server dry-run), check callouts (compatibility, readiness), keeps explanation (which overrides
-survive) (a framing edit's `framing_governed` keeps read "2 keep their framing: it's set in their own
-configuration review." (DECISIONS #45), primary `Stage edit` (v1: `Create version v5`, then "pinned spacecraft move to v5 when
+survive; a framing edit's `framing_governed` keeps read "2 keep their framing: it's set in their own
+configuration review.", DECISIONS #45), primary `Stage edit` (v1: `Create version v5`, then "pinned spacecraft move to v5 when
 you apply it" per the model's answer), secondary `Discard`. Multiple dirty fields list one block
 each; one Stage for all.
 
