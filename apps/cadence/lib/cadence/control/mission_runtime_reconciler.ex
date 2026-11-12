@@ -6,11 +6,14 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
 
   use GenServer
 
+  require Logger
+
   alias Cadence.Activations.BindingSetActivation
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Control.Activations
   alias Cadence.Control.MissionModelPromotion
   alias Cadence.Control.MissionRuntime
+  alias Cadence.Control.MissionRuntimeStatus
   alias Cadence.Control.ProcessNamespace
   alias Cadence.Governance
   alias Cadence.Runtime.GenerationApplied
@@ -118,6 +121,10 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
       applied_generation: nil,
       last_observation: nil,
       last_error: nil,
+      # 2026-11-12: when applying the desired generation started failing, and when the runtime
+      # last applied one (MissionRuntimeStatus; the console's runtime banner).
+      failing_since: nil,
+      applied_at: nil,
       applied_basis: nil,
       safety_poll_interval_ms:
         Keyword.get(opts, :safety_poll_interval_ms, @default_safety_poll_interval_ms),
@@ -134,7 +141,7 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
 
   @impl true
   def handle_continue(:reconcile, state) do
-    {_reply, state} = reconcile_state(state)
+    {_reply, state} = reconcile_and_record(state)
     {:noreply, schedule_safety_poll(state)}
   end
 
@@ -149,7 +156,7 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   end
 
   def handle_call(:reconcile, _from, state) do
-    {reply, state} = reconcile_state(state)
+    {reply, state} = reconcile_and_record(state)
     {:reply, reply, state}
   end
 
@@ -163,8 +170,30 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
 
   @impl true
   def handle_info(:safety_reconcile, state) do
-    {_reply, state} = reconcile_state(%{state | safety_timer: nil})
+    {_reply, state} = reconcile_and_record(%{state | safety_timer: nil})
     {:noreply, schedule_safety_poll(state)}
+  end
+
+  # Every reconcile records the mission's runtime status (MissionRuntimeStatus), so /counts and
+  # the attention read never call this process.
+  defp reconcile_and_record(state) do
+    {reply, next} = reconcile_state(state)
+    :ok = MissionRuntimeStatus.record(next, desired_activation(state, next))
+    {reply, next}
+  end
+
+  # The activation's time and change set, read only when the desired generation is new.
+  defp desired_activation(%{desired_generation: generation}, %{desired_generation: generation})
+       when is_integer(generation),
+       do: nil
+
+  defp desired_activation(_previous, next) do
+    case Activations.fetch_active_basis_for_reconciliation(next.mission_id) do
+      {:ok, %BindingSetActivation{} = activation} -> activation
+      _none -> nil
+    end
+  rescue
+    _exception -> nil
   end
 
   defp reconcile_state(state) do
@@ -172,7 +201,8 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
       {:ok, identity} ->
         case confirm_unchanged(state, identity) do
           {:ok, observation} ->
-            {{:ok, observation}, %{state | last_observation: observation, last_error: nil}}
+            {{:ok, observation},
+             %{state | last_observation: observation, last_error: nil, failing_since: nil}}
 
           :rebuild ->
             materialize_and_apply(state)
@@ -181,7 +211,22 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
       {:error, reason} = error ->
         reconciliation_error(state, error, reason)
     end
+  rescue
+    # A generation that can't be built (2026-11-12: a stored model that wouldn't decode) is a
+    # reconciliation error, not a crash: crashing lost the state, then the supervisor gave up
+    # after 128 restarts and nothing said so. Keep polling and report it.
+    exception ->
+      Logger.error(
+        "Mission runtime reconcile failed for #{state.mission_id}: " <>
+          Exception.format(:error, exception, __STACKTRACE__)
+      )
+
+      reason = {:reconcile_crashed, Exception.message(exception)}
+      {{:error, reason}, failing(%{state | last_error: reason, applied_basis: nil})}
   end
+
+  defp failing(%{failing_since: nil} = state), do: %{state | failing_since: DateTime.utc_now()}
+  defp failing(state), do: state
 
   defp confirm_unchanged(%{applied_basis: %{durable: identity, runtime: guard}} = state, identity) do
     if MissionRuntimeSpec.reconciliation_guard_current?(guard) do
@@ -210,10 +255,11 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
     end
   end
 
-  defp reconciliation_error(state, error, reason) do
-    last_error = if reason == :no_active_binding_set, do: nil, else: reason
-    {error, %{state | last_error: last_error, applied_basis: nil}}
-  end
+  defp reconciliation_error(state, error, :no_active_binding_set),
+    do: {error, %{state | last_error: nil, applied_basis: nil, failing_since: nil}}
+
+  defp reconciliation_error(state, error, reason),
+    do: {error, failing(%{state | last_error: reason, applied_basis: nil})}
 
   defp apply_state(state, activation, binding_set) do
     with :ok <- matching_mission(state.mission_id, activation.mission_id),
@@ -227,6 +273,8 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
            applied_generation: observation.generation,
            last_observation: observation,
            last_error: nil,
+           failing_since: nil,
+           applied_at: DateTime.utc_now(),
            applied_basis: %{
              durable: BindingSetActivation.identity(activation),
              runtime: MissionRuntimeSpec.reconciliation_guard(runtime_spec)
@@ -235,12 +283,12 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
     else
       {:error, reason} = error ->
         {error,
-         %{
+         failing(%{
            state
            | desired_generation: activation.generation,
              applied_basis: nil,
              last_error: reason
-         }}
+         })}
     end
   end
 

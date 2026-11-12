@@ -517,6 +517,8 @@ defmodule Cadence.Architecture.PlaneBoundary do
                               "lib/cadence/management/managed_resources/managed_resource_request.ex",
                               "lib/cadence/management/data_sources.ex",
                               "lib/cadence/control/managed_resources.ex",
+                              # Recorded runtime status, read by /counts (2026-11-12 outage).
+                              "lib/cadence/control/mission_runtime_status.ex",
                               "lib/cadence/projections/data_sources/health.ex",
                               "lib/cadence/projections/data_sources/watermarks.ex",
                               "lib/cadence/projections/data_source_bindings.ex",

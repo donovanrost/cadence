@@ -5,7 +5,7 @@ defmodule Cadence.Control.MissionRuntimeReconcilerTest do
   alias Cadence.Activations.ActiveBindingSetRow
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Catalog.MissionModel.Layer
-  alias Cadence.Control.{MissionModelPromotion, MissionRuntimeReconciler}
+  alias Cadence.Control.{MissionModelPromotion, MissionRuntimeReconciler, MissionRuntimeStatus}
   alias Cadence.MissionModels
   alias Cadence.Platform.ContentHash
   alias Cadence.Runtime
@@ -158,6 +158,59 @@ defmodule Cadence.Control.MissionRuntimeReconcilerTest do
     assert MissionRuntimeSpec.reconciliation_guard_current?(guard)
     Application.put_env(:cadence, :semantic_algorithm_implementations, %{})
     refute MissionRuntimeSpec.reconciliation_guard_current?(guard)
+  end
+
+  # 2026-11-12: an active generation the runtime can't apply is visible (MissionRuntimeStatus),
+  # after a debounce, and clears when the runtime applies it.
+  test "a generation the runtime can't apply reads not_applied after the debounce, then applied" do
+    %{mission: mission, bindings: bindings} = fixture()
+    good = MissionRuntimeSpec.content_sha256(bindings)
+    set_hash!(mission, "wrong")
+
+    assert {:error, {:mission_runtime_spec_mismatch, :binding_set_content_sha256}} =
+             MissionRuntimeReconciler.reconcile(mission)
+
+    snapshot = MissionRuntimeReconciler.snapshot(mission)
+    assert %DateTime{} = snapshot.failing_since
+    later = DateTime.add(snapshot.failing_since, 61, :second)
+
+    assert MissionRuntimeStatus.status(mission, snapshot.failing_since) == nil
+
+    assert %{state: "not_applied", reason: "spec_mismatch", desired_generation: 1} =
+             status = MissionRuntimeStatus.status(mission, later)
+
+    assert status.since == snapshot.failing_since
+    assert %DateTime{} = status.activated_at
+    assert "spec_mismatch" in MissionRuntimeStatus.reasons()
+
+    set_hash!(mission, good)
+    assert {:ok, _observation} = MissionRuntimeReconciler.reconcile(mission)
+
+    assert %{state: "applied", applied_generation: 1, applied_at: %DateTime{}} =
+             MissionRuntimeStatus.status(mission, later)
+  end
+
+  test "a reconcile that raises is recorded and the reconciler keeps running" do
+    %{mission: mission, reconciler: reconciler} = fixture(registered?: true)
+    Application.put_env(:cadence, :semantic_algorithm_implementations, :not_a_registry)
+
+    assert {:error, {:reconcile_crashed, _message}} = MissionRuntimeReconciler.reconcile(mission)
+    assert Process.alive?(reconciler)
+    assert %{last_error: {:reconcile_crashed, _}} = MissionRuntimeReconciler.snapshot(mission)
+
+    later = DateTime.add(DateTime.utc_now(), 61, :second)
+
+    assert %{state: "not_applied", reason: "reconcile_crashed"} =
+             MissionRuntimeStatus.status(mission, later)
+  end
+
+  defp set_hash!(mission, hash) do
+    for table <- ~w(mission_binding_set_activations mission_active_binding_sets) do
+      Repo.query!(
+        "UPDATE #{table} SET binding_set_content_sha256 = $1 WHERE mission_id = $2",
+        [hash, mission]
+      )
+    end
   end
 
   defp fixture(opts \\ []) do
