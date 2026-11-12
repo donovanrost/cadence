@@ -85,6 +85,73 @@ defmodule Cadence.Catalog.CadenceYamlDatabaseTest do
              argument["argument_id"]
   end
 
+  # 2026-11-12: YAML limits lower to the same default_rules the XTCE importer gives, so they
+  # reach the monitoring plan (before, they lowered to no rules and never alarmed).
+  test "limits become COSMOS-style monitoring rules in the monitoring plan" do
+    database = """
+    version: "1.0.0"
+    packets:
+      - name: HK
+        apid: 42
+        items:
+          - name: error_count
+            bit_offset: 0
+            bit_size: 16
+            data_type: uint
+            limits:
+              red_low: -1
+              yellow_low: 0
+              yellow_high: 5
+              red_high: 20
+    commands: []
+    """
+
+    source =
+      Source.new(%{
+        artifact_id: "limits-database",
+        organization_id: "org-alpha",
+        mission_id: "mission-alpha",
+        catalog_family: :combined,
+        artifact_name: "limits.yaml",
+        format_key: "cadence_yaml",
+        media_type: "application/yaml",
+        source_artifact: database
+      })
+
+    assert {:ok, import_result} =
+             CadenceYamlDatabase.import(source, %{import_run_id: "limits-import"})
+
+    assert [layer] = import_result.bundle.declaration_layers
+    assert {:ok, compilation} = Compiler.compile([layer])
+    assert [policy] = compilation.plans.monitoring.plan["policies"]
+
+    # The stored plan is JSON (string keys and values); compare in that form.
+    rules =
+      policy["default_rules"]
+      |> Enum.map(fn rule -> Map.new(rule, fn {k, v} -> {to_string(k), json_value(v)} end) end)
+      |> Enum.sort_by(&{&1["severity"], &1["value"]})
+
+    assert rules == [
+             %{
+               "kind" => "comparison",
+               "operator" => "<",
+               "value" => -1,
+               "severity" => "critical"
+             },
+             %{
+               "kind" => "comparison",
+               "operator" => ">",
+               "value" => 20,
+               "severity" => "critical"
+             },
+             %{"kind" => "comparison", "operator" => "<", "value" => 0, "severity" => "warning"},
+             %{"kind" => "comparison", "operator" => ">", "value" => 5, "severity" => "warning"}
+           ]
+  end
+
+  defp json_value(value) when is_atom(value), do: Atom.to_string(value)
+  defp json_value(value), do: value
+
   test "rejects command APIDs outside the Space Packet field" do
     source =
       Source.new(%{
