@@ -7,9 +7,9 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   alias Cadence.Catalog.{FleetSnapshot, SpacecraftConfigurationInput}
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.{Configuration, ConfigurationRollback}
+  alias Cadence.Control.MissionRuntime, as: ControlMissionRuntime
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
-  alias Cadence.Control.MissionRuntime, as: ControlMissionRuntime
   alias Cadence.Runtime.{MissionCoordinator, MissionRuntimeSpec}
 
   setup do
