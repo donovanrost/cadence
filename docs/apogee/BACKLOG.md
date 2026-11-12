@@ -32,9 +32,9 @@ missing endpoint or decision; an item with no blocker can start now.
 | ~~Queue kinds `missed_pass`, `station` + `Station` → Re-plan~~ done (de131e9b); `flight_event`: source landed (api-ops a02c2cee, 1b3be7f7, e07969bb), fe-ops reader 591bc06c | fe-ops | qa: a flight_event row seen live after the :4011 restart |
 | ~~Attention source `contact_settlement` (#71) reader~~ done (14330a4a, U37 words, no Acknowledge, Review opens Contacts by contact_id); unknown kinds/sources now drop one row, not Now | fe-ops | — (source live 22:14Z) |
 | ~~`contact_settlement` manual retry (#71 replay): needs-operator line, `Retry storing`, 'Next try at HH:MMZ.'~~ done (c10265fd; ux 294e67c6) | fe-ops | — (domain ships the manual state after 00:30Z) |
-| Attention source `mission_runtime` (domain, director): P1 mission-wide row when the runtime hasn't applied the active generation for 60 s; `starts_at: null` (no AOS countdown), no Acknowledge, resolves as system `applied` | fe-ops | ux wording; domain ships after the reader |
-| Mission-wide runtime banner on every ops screen, Now included (one banner, not a separate Now one) from `runtime` on `/counts` | lead | domain: `runtime` on `/counts` (asked); ux wording. Fallback: fe-ops does Now's banner from the queue item |
-| `contact_settlement` with `journal: "disabled"`: `backlog.queued` batches lost (`lost: true`), never 'on disk', no Retry | fe-ops | ux wording; domain: how a lost item closes |
+| Attention source `mission_runtime` (domain, director): P1 mission-wide row when the runtime hasn't applied the active generation for 60 s; `starts_at: null` (no AOS countdown), no Acknowledge, resolves as system `applied` | fe-ops | — (ux U38 4f8b796c); domain ships after the reader |
+| Mission-wide runtime banner (U38 4f8b796c): crit strip under the top bar on every mission page, Ops and Setup, not dismissable, `Details` → Now's row; turns nominal for 5 s on resolve ('Telemetry processing resumed at HH:MMZ.') | lead | domain: `runtime` on `/counts` incl. `applied_at` (asked) |
+| `contact_settlement` with `journal: "disabled"`: `backlog.queued` batches lost (`lost: true`), never 'on disk', no Retry | fe-ops | ux wording done (U37 lost, 4f8b796c); domain: how a lost item closes (ux proposes a person's `Mark as seen`, else a system close after 24 h) |
 | Header meta names the worst station issue | fe-ops | — (S7 status exists) |
 | ~~A4 pass bars open the contact drawer~~ done (51cc6133) | fe-ops | — |
 | ~~Approval rows open the request's review~~ done for a single group (a0e33fe1) | fe-ops | — |
