@@ -5,17 +5,25 @@ defmodule Cadence.Contacts.ContactSettlementAttention do
   (`settlement.state` `"unsettled"`). Conflict `unsettled`; `reason` is `settle_deadline` or
   `settle_failed`, and `failure_kind` groups same-cause items.
 
-  Derived from the durable settlement, so there's nothing to acknowledge. The journal is never
-  pruned past its processing cursor, so the item has no expiry (`expires_at` nil, always P2).
-  Cadence retries by itself (`retry` `"automatic"`): the item resolves (`resolved_by` kind
-  `system`, action `replayed`) when replaying the journal settles the contact.
+  Derived from the durable settlement. The journal is never pruned past its processing cursor,
+  so the item has no expiry (`expires_at` nil, always P2). Cadence retries by itself (`retry`
+  `"automatic"`): the item resolves (`resolved_by` kind `system`, action `replayed`) when
+  replaying the journal settles the contact.
+
+  With the ingress journal off, an unsettled backlog was only in memory and is gone
+  (`backlog.lost`). Nothing can replay it, so only an operator closes that item: `acknowledge/3`
+  (ux U37 "Mark as seen"; director 2026-11-12), recorded with who and when. It is the only
+  operator action; acknowledging a recoverable item, and `resolve/4`, are not found.
   """
 
   import Ecto.Query
 
+  alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Contacts.ContactStore
   alias Cadence.Contacts.ContactStore.RealizedContactRow
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Control.Contacts.Store.ProviderReservationRow
+  alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Repo
 
   @source "contact_settlement"
@@ -25,7 +33,9 @@ defmodule Cadence.Contacts.ContactSettlementAttention do
 
   @spec items(binary(), binary()) :: [map()]
   def items(org, mission) do
-    contacts = in_state(org, mission, "unsettled")
+    contacts =
+      org |> open_query(mission) |> Repo.all() |> Enum.map(&RealizedContactRow.to_domain/1)
+
     reservations = reservations(org, mission, contacts)
 
     contacts
@@ -35,16 +45,102 @@ defmodule Cadence.Contacts.ContactSettlementAttention do
 
   @spec resolved_since(binary(), binary(), DateTime.t()) :: [map()]
   def resolved_since(org, mission, %DateTime{} = since) do
-    for contact <- in_state(org, mission, "settled"),
-        replayed_at = timestamp(contact.metadata["settlement"]["replayed_at"]),
-        replayed_at != nil and DateTime.compare(replayed_at, since) != :lt do
-      %{
-        id: contact.realized_contact_id,
-        source: @source,
-        resolved_by: %{"kind" => "system"},
-        action: "replayed",
-        resolved_at: replayed_at
-      }
+    replayed =
+      for contact <- in_state(org, mission, "settled"),
+          replayed_at = timestamp(contact.metadata["settlement"]["replayed_at"]),
+          replayed_at != nil and DateTime.compare(replayed_at, since) != :lt do
+        %{
+          id: contact.realized_contact_id,
+          source: @source,
+          resolved_by: %{"kind" => "system"},
+          action: "replayed",
+          resolved_at: replayed_at
+        }
+      end
+
+    acknowledged =
+      for contact <- in_state(org, mission, "unsettled"),
+          settlement = contact.metadata["settlement"],
+          at = timestamp(settlement["acknowledged_at"]),
+          at != nil and DateTime.compare(at, since) != :lt do
+        %{
+          id: contact.realized_contact_id,
+          source: @source,
+          resolved_by: settlement["acknowledged_by"],
+          action: "acknowledged",
+          resolved_at: at
+        }
+      end
+
+    replayed ++ acknowledged
+  end
+
+  @doc """
+  Closes a lost item (journal off: the backlog is gone) as seen by the operator. Anything else,
+  including a recoverable item, is `{:error, :attention_item_not_found}`.
+  """
+  @spec acknowledge(Scope.t(), binary(), binary()) :: {:ok, map()} | {:error, term()}
+  def acknowledge(%Scope{} = scope, mission, id) do
+    with {:ok, actor} <- actor(scope, mission),
+         {:ok, contact} <- fetch_lost(scope.organization_id, mission, id),
+         at = DateTime.utc_now(),
+         settlement =
+           Map.merge(contact.metadata["settlement"], %{
+             "acknowledged_at" => DateTime.to_iso8601(at),
+             "acknowledged_by" => actor
+           }),
+         {:ok, updated} <-
+           ContactStore.update_realized_lifecycle(contact, contact.lifecycle_state, %{
+             "settlement" => settlement
+           }) do
+      ScopedReadUpdates.publish(:attention_changed, scope.organization_id, mission)
+
+      {:ok,
+       updated
+       |> item(nil)
+       |> Map.merge(%{
+         state: "resolved",
+         acknowledged_by: actor,
+         resolution: %{
+           action: "acknowledged",
+           actor: actor,
+           at: at,
+           note: nil,
+           provider_reference: nil
+         }
+       })}
+    end
+  end
+
+  @doc "Not an operator action for this source."
+  @spec resolve(Scope.t(), binary(), binary(), String.t()) :: {:error, :attention_item_not_found}
+  def resolve(_scope, _mission, _id, _action), do: {:error, :attention_item_not_found}
+
+  # todo(authz): Cedar should decide who may mark lost telemetry as seen (any operator today).
+  defp actor(%Scope{user: %{user_id: id, display_name: name}} = scope, mission) do
+    with :ok <-
+           Policy.authorize(scope, :operate_mission, %{
+             organization_id: scope.organization_id,
+             mission_id: mission
+           }),
+         do: {:ok, %{"kind" => "user", "id" => id, "name" => name}}
+  end
+
+  defp actor(%Scope{}, _mission), do: {:error, :forbidden}
+
+  defp fetch_lost(org, mission, id) do
+    case ContactStore.fetch_realized(org, mission, id) do
+      {:ok,
+       %RealizedContact{
+         metadata: %{
+           "settlement" => %{"state" => "unsettled", "backlog" => %{"lost" => true}} = s
+         }
+       } = contact}
+      when not is_map_key(s, "acknowledged_at") ->
+        {:ok, contact}
+
+      _other ->
+        {:error, :attention_item_not_found}
     end
   end
 
@@ -52,11 +148,20 @@ defmodule Cadence.Contacts.ContactSettlementAttention do
   def counts(org, mission) do
     open =
       org
-      |> state_query(mission, "unsettled")
+      |> open_query(mission)
       |> select([row], count(row.realized_contact_id))
       |> Repo.one()
 
     %{open: open, acknowledged: 0}
+  end
+
+  defp open_query(org, mission) do
+    org
+    |> state_query(mission, "unsettled")
+    |> where(
+      [row],
+      fragment("? -> 'value' -> 'settlement' -> 'acknowledged_at' IS NULL", row.metadata)
+    )
   end
 
   defp in_state(org, mission, state) do

@@ -5,9 +5,18 @@ defmodule Cadence.Contacts.ContactSettlementTest do
   import Ecto.Query
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
+  alias Cadence.Applications.TelemetryDecomFixtures
   alias Cadence.Contacts
   alias Cadence.Contacts.{ContactSettlementAttention, ContactStore}
-  alias Cadence.Contacts.{Path, ProviderBinding, ScheduledContact, TransportBinding}
+
+  alias Cadence.Contacts.{
+    Path,
+    ProviderBinding,
+    RealizedContact,
+    ScheduledContact,
+    TransportBinding
+  }
+
   alias Cadence.OutageTelemetryWriter
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
@@ -171,7 +180,63 @@ defmodule Cadence.Contacts.ContactSettlementTest do
              Contacts.reconcile(ctx.mission_id, DateTime.add(now, 20))
   end
 
+  test "a lost backlog (journal off) closes only when an operator marks it seen", ctx do
+    lost = settled_contact!(ctx, %{"lost" => true, "queued" => 3})
+    kept = settled_contact!(ctx, %{"lost" => false})
+    scope = TelemetryDecomFixtures.user_scope(ctx.organization_id, "op")
+
+    assert {:error, :attention_item_not_found} =
+             ContactSettlementAttention.acknowledge(scope, ctx.mission_id, kept)
+
+    assert {:ok, %{state: "resolved", resolution: %{action: "acknowledged", actor: actor}}} =
+             ContactSettlementAttention.acknowledge(scope, ctx.mission_id, lost)
+
+    assert actor["id"] == scope.user.user_id
+
+    assert {:error, :attention_item_not_found} =
+             ContactSettlementAttention.acknowledge(scope, ctx.mission_id, lost)
+
+    assert [%{id: ^kept}] = ContactSettlementAttention.items(ctx.organization_id, ctx.mission_id)
+
+    assert [%{id: ^lost, action: "acknowledged", resolved_by: %{"kind" => "user"}}] =
+             ContactSettlementAttention.resolved_since(
+               ctx.organization_id,
+               ctx.mission_id,
+               DateTime.add(DateTime.utc_now(), -60)
+             )
+
+    assert {:error, :attention_item_not_found} =
+             ContactSettlementAttention.resolve(scope, ctx.mission_id, lost, "x")
+  end
+
   ## Fixture
+
+  defp settled_contact!(ctx, backlog) do
+    id = "realized-#{System.unique_integer([:positive])}"
+
+    {:ok, _contact} =
+      ContactStore.persist_realized(
+        RealizedContact.new(%{
+          realized_contact_id: id,
+          organization_id: ctx.organization_id,
+          mission_id: ctx.mission_id,
+          source_endpoint_refs: [ctx.endpoint_id],
+          clock_mode: :live,
+          initial_time: DateTime.utc_now(),
+          lifecycle_state: :completed,
+          metadata: %{
+            "settlement" => %{
+              "state" => "unsettled",
+              "reason" => "settle_deadline",
+              "unsettled_at" => DateTime.to_iso8601(DateTime.utc_now()),
+              "backlog" => Map.merge(%{"entries" => 0, "bytes" => 0, "journals" => 0}, backlog)
+            }
+          }
+        })
+      )
+
+    id
+  end
 
   defp fixture! do
     organization_id = "org-settlement-#{System.unique_integer([:positive])}"

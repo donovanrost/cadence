@@ -8,6 +8,7 @@ defmodule CadenceWeb.Console.AttentionController do
   use CadenceWeb, :controller
 
   alias Cadence.Contacts.BookingResolutions.Attention, as: PassResolutions
+  alias Cadence.Contacts.ContactSettlementAttention
   alias Cadence.Reads.ActionQueue.AttentionItems
   alias CadenceWeb.Console.Problem
 
@@ -35,8 +36,9 @@ defmodule CadenceWeb.Console.AttentionController do
     end
   end
 
-  # Only pass-resolution conflicts exist today; other sources join here.
+  # Sources with operator actions. contact_settlement: only a lost item can be acknowledged.
   defp source("pass_resolution"), do: {:ok, PassResolutions}
+  defp source("contact_settlement"), do: {:ok, ContactSettlementAttention}
   defp source(_unknown), do: {:error, :attention_item_not_found}
 
   defp no_actor(params) do
