@@ -564,9 +564,11 @@ system-closed. Mission-wide, so it has no spacecraft. **P1**, and it sorts first
   - Evidence: "The runtime hasn't applied the active configuration; it's still running the earlier one."
     (when `applied_generation` is null: "…; no configuration is running."). `since` (domain: when applying
     the current configuration first failed) appears only in the meta and the banner. Then the reason, by key:
-    - `mission_runtime_spec_mismatch`: "What's running doesn't match it."
-    - `mission_runtime_not_running`: "The runtime isn't running."
-    - `reconciler_crashed`: "Cadence's apply process stopped: <failure_message>."
+    - `spec_mismatch`: "What's running doesn't match it."
+    - `runtime_not_running`: "The runtime isn't running."
+    - `apply_failed`: "Applying it failed: <failure_message>."
+    - `reconcile_crashed`: "Cadence's apply process hit an error: <failure_message>."
+    - null: no clause. (These are the keys in domain 292c8e6b, `Control.MissionRuntimeStatus.reasons/0`.)
     - Any other key: no reason clause; the key goes in Technical details.
   - Meta: `GENERATION 8 · RUNNING 7 · SINCE 23:10Z` (mono; `RUNNING —` when null).
   - Words never used: "generation" in sentences, "reconciler", "spec".
