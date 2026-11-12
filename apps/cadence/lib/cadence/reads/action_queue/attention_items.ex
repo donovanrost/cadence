@@ -173,8 +173,22 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
     :next_attempt_at
   ]
 
+  # 2026-11-12 / ux U38: the mission's runtime hasn't applied its active generation.
+  @mission_runtime_keys [
+    :reason,
+    :failure_message,
+    :desired_generation,
+    :applied_generation,
+    :since,
+    :activated_at,
+    :change_set_id
+  ]
+
   defp settlement(%{source: "contact_settlement"} = attention),
     do: Map.take(attention, @settlement_keys)
+
+  defp settlement(%{source: "mission_runtime"} = attention),
+    do: Map.take(attention, @mission_runtime_keys)
 
   defp settlement(_attention), do: %{}
 
@@ -198,6 +212,8 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
 
   # Within 2 h of the pass start, or the pass is under way (started, not ended).
   defp p1?(%{source: "contact_settlement"}, _now), do: false
+  # No spacecraft's telemetry is processed while it's open.
+  defp p1?(%{source: "mission_runtime"}, _now), do: true
 
   defp p1?(%{starts_at: %DateTime{} = starts_at} = attention, now) do
     horizon = DateTime.add(now, @p1_horizon_s, :second)

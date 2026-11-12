@@ -47,7 +47,7 @@ defmodule Cadence.Control.MissionRuntimeStatus do
   @spec record(map(), map() | nil) :: :ok
   def record(%{mission_id: mission_id} = reconciler_state, activation) do
     previous = :persistent_term.get(key(mission_id), nil)
-    record = record_from(reconciler_state, activation, previous)
+    record = reconciler_state |> record_from(activation, previous) |> recovered(previous)
 
     if record != previous do
       :persistent_term.put(key(mission_id), record)
@@ -70,6 +70,16 @@ defmodule Cadence.Control.MissionRuntimeStatus do
       activated_at: activation_field(activation, previous, :activated_at),
       change_set_id: activation_field(activation, previous, :change_set_id)
     }
+  end
+
+  # When a visible not_applied turned applied: the mission_runtime item's resolution time (a
+  # normal apply, never shown as failing, isn't a recovery).
+  defp recovered(record, previous) do
+    now = DateTime.utc_now()
+
+    if visible(previous, now) == "not_applied" and visible(record, now) == "applied",
+      do: Map.put(record, :recovered_at, now),
+      else: Map.put(record, :recovered_at, previous && Map.get(previous, :recovered_at))
   end
 
   defp activation_field(nil, nil, _field), do: nil
@@ -121,6 +131,7 @@ defmodule Cadence.Control.MissionRuntimeStatus do
       desired_generation: Map.get(record, :desired_generation),
       applied_generation: Map.get(record, :applied_generation),
       applied_at: Map.get(record, :applied_at),
+      recovered_at: Map.get(record, :recovered_at),
       activated_at: Map.get(record, :activated_at),
       change_set_id: Map.get(record, :change_set_id)
     }

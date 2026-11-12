@@ -3,7 +3,8 @@ defmodule Cadence.Reads.Attention do
   A mission's "needs acknowledgment" items (DECISIONS #54), across sources: `pass_resolution`
   (booking-resolution conflicts, #53), `uplink_blocked` (a blocked pass holding command
   groups back, #58), `pass_release` (a pass whose cancel failed, so it may still be booked) and
-  `contact_settlement` (an ended contact whose telemetry isn't stored yet, #71). Other
+  `contact_settlement` (an ended contact whose telemetry isn't stored yet, #71) and
+  `mission_runtime` (the active generation isn't applied; 2026-11-12). Other
   mission-level sources (provider changes, for example) join by implementing the same four
   functions:
   `source/0`, `items/2`, `resolved_since/3` and `counts/2`.
@@ -17,8 +18,9 @@ defmodule Cadence.Reads.Attention do
   alias Cadence.Contacts.ContactSettlementAttention, as: ContactSettlement
   alias Cadence.Contacts.PassReleaseAttention, as: PassRelease
   alias Cadence.Control.UplinkReadiness.Attention, as: UplinkBlocked
+  alias Cadence.Reads.MissionRuntimeAttention, as: MissionRuntime
 
-  @sources [PassResolutions, UplinkBlocked, PassRelease, ContactSettlement]
+  @sources [PassResolutions, UplinkBlocked, PassRelease, ContactSettlement, MissionRuntime]
   @resolved_window_s 60
 
   @doc """
