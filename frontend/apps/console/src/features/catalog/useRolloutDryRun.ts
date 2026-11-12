@@ -16,7 +16,14 @@ export function useRolloutDryRun(missionId: Ref<string>, ops: Ref<readonly Stage
     controller?.abort();
     controller = new AbortController();
     const signal = controller.signal;
-    const r = await previewOps({ missionId: missionId.value, ops: current }, signal);
+    let r: Awaited<ReturnType<typeof previewOps>>;
+    try {
+      r = await previewOps({ missionId: missionId.value, ops: current }, signal);
+    } catch (error) {
+      // qa #50: a newer choice aborts the older dry run; that rejection is expected, not an error.
+      if (signal.aborted) return;
+      throw error;
+    }
     if (signal.aborted) return;
     if (!r.ok) {
       // qa #50: a dry run changes nothing, so its failure never reads as an unclear outcome.
