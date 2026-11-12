@@ -231,17 +231,8 @@ defmodule Cadence.Commanding.LaneDispatcher do
         {:quiescent, Summary.quiescence(:waiting_for_not_before, released_count, next_not_before),
          state}
 
-      {:error, {:uplink_busy, busy}} ->
-        emit(:dispatch_result, state, %{count: 1}, %{result: :uplink_busy})
-
-        state =
-          state
-          |> waiting({:uplink_busy, busy}, fn ->
-            "command lane #{state.queue_lane_key}: waiting, uplink busy (#{busy}); " <>
-              "retrying every #{@uplink_busy_retry_ms}ms"
-          end)
-          |> schedule_dispatch(@uplink_busy_retry_ms, :uplink_busy)
-
+      {:error, {:uplink_busy, _busy} = wait} ->
+        state = uplink_wait(state, wait, attempted_at)
         {:quiescent, Summary.quiescence(:waiting_for_release_target, released_count), state}
 
       # The uplink refused it before sending (#33): it failed and closed; go on to the next,
@@ -262,13 +253,6 @@ defmodule Cadence.Commanding.LaneDispatcher do
         emit(:dispatch_result, state, %{count: 1}, %{result: reason})
         drain_available(state, :continuation, released_count)
 
-      # Expected before qualification, not a failure (023 and 001, 11-11): retried like a busy
-      # uplink until the session recovers, logged once at info.
-      {:error, {:uplink_session_blocked, :protocol_recovery_required}} ->
-        emit(:dispatch_result, state, %{count: 1}, %{result: :session_recovering})
-        state = session_recovering(state, attempted_at)
-        {:quiescent, Summary.quiescence(:waiting_for_release_target, released_count), state}
-
       {:error, {:command_queue_lane_no_release_target, source_endpoint_ref, _mission_id}} =
           _result ->
         emit(:dispatch_result, state, %{count: 1}, %{result: :no_release_target})
@@ -284,15 +268,43 @@ defmodule Cadence.Commanding.LaneDispatcher do
         {:quiescent, Summary.quiescence(:waiting_for_release_target, released_count), state}
 
       {:error, reason} ->
-        emit(:dispatch_result, state, %{count: 1}, %{result: :error})
-
-        Logger.warning(
-          "command lane #{state.queue_lane_key}: dispatch failed: #{inspect(reason)}"
-        )
-
-        state = schedule_dispatch(state, state.safety_poll_interval_ms, :safety)
-        {:error, %{released_count: released_count, reason: reason}, state}
+        failed_or_waiting(state, reason, released_count, attempted_at)
     end
+  end
+
+  defp failed_or_waiting(
+         state,
+         {:uplink_session_blocked, :protocol_recovery_required} = wait,
+         released_count,
+         attempted_at
+       ) do
+    state = uplink_wait(state, wait, attempted_at)
+    {:quiescent, Summary.quiescence(:waiting_for_release_target, released_count), state}
+  end
+
+  defp failed_or_waiting(state, reason, released_count, _attempted_at) do
+    emit(:dispatch_result, state, %{count: 1}, %{result: :error})
+    Logger.warning("command lane #{state.queue_lane_key}: dispatch failed: #{inspect(reason)}")
+    state = schedule_dispatch(state, state.safety_poll_interval_ms, :safety)
+    {:error, %{released_count: released_count, reason: reason}, state}
+  end
+
+  defp uplink_wait(state, {:uplink_busy, busy}, _attempted_at) do
+    emit(:dispatch_result, state, %{count: 1}, %{result: :uplink_busy})
+
+    state
+    |> waiting({:uplink_busy, busy}, fn ->
+      "command lane #{state.queue_lane_key}: waiting, uplink busy (#{busy}); " <>
+        "retrying every #{@uplink_busy_retry_ms}ms"
+    end)
+    |> schedule_dispatch(@uplink_busy_retry_ms, :uplink_busy)
+  end
+
+  # Expected before qualification, not a failure (023 and 001, 11-11): retried like a busy
+  # uplink until the session recovers, logged once at info.
+  defp uplink_wait(state, {:uplink_session_blocked, :protocol_recovery_required}, attempted_at) do
+    emit(:dispatch_result, state, %{count: 1}, %{result: :session_recovering})
+    session_recovering(state, attempted_at)
   end
 
   defp session_recovering(state, attempted_at) do
