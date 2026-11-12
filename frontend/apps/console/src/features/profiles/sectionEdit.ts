@@ -60,6 +60,14 @@ function errorLine(
   return `${label}: ${e.message}`;
 }
 
+export type PreviewCounts = Readonly<{ changes: number; keeps: number }>;
+
+/** P4's tiles (`Changes 499 SC` / `Keeps 1 SC`): spacecraft the dry run changes and keeps. */
+export const previewCounts = (p: Preview): PreviewCounts => ({
+  changes: p.effects.reduce((n, e) => n + e.changes, 0),
+  keeps: p.effects.reduce((n, e) => n + e.keeps.length, 0),
+});
+
 /** The server's dry run in one line (Changes.md §1): verdict, spacecraft changed / kept and why. */
 export function describePreview(
   p: Preview,

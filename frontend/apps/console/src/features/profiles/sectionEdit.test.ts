@@ -106,5 +106,7 @@ describe("describePreview keeps (ux, Profile.md P4)", () => {
     expect(describePreview(p.value).text).toBe(
       "Checks pass · changes 497 spacecraft · keeps 1 spacecraft (stays on v3) · 2 keep their framing: it's set in their own configuration review.",
     );
+    const { previewCounts } = await import("./sectionEdit.ts");
+    expect(previewCounts(p.value)).toEqual({ changes: 497, keeps: 3 });
   });
 });

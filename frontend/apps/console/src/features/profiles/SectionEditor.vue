@@ -9,9 +9,17 @@ import {
   SchemaForm,
   stageChange,
 } from "@/features/changes/index.ts";
-import { ApButton, ApCallout, ApPanel, plural } from "@/ui";
+import { ApPanel, plural } from "@/ui";
 import type { ProfileSection } from "./detail.ts";
-import { describePreview, schemaFieldsOf, sectionOp, sectionValues } from "./sectionEdit.ts";
+import {
+  describePreview,
+  previewCounts,
+  schemaFieldsOf,
+  sectionOp,
+  sectionValues,
+  type PreviewCounts,
+} from "./sectionEdit.ts";
+import StagedEditAside from "./StagedEditAside.vue";
 
 /** Profile.md P1 edit + P4 staged edit: one section's form, its dry run, and Stage edit. */
 const props = defineProps<{
@@ -27,6 +35,7 @@ const before = sectionValues(props.section, fields);
 const values = ref({ ...before });
 const busy = ref(false);
 const outcome = ref<{ tone: "nominal" | "caution" | "crit"; text: string } | null>(null);
+const counts = ref<PreviewCounts | null>(null);
 const edits = computed(() => diffEdits(schema, before, values.value));
 const dirty = computed(() =>
   fields.filter((f) => (values.value[f.path] ?? "") !== (before[f.path] ?? "")),
@@ -35,7 +44,16 @@ const errors = computed(() => (edits.value.ok ? {} : edits.value.errors));
 const labels = Object.fromEntries(fields.map((f) => [f.path, f.label]));
 /** ux: Stage edit is disabled while the last Check said NO-GO, with that line as the reason. */
 const noGo = computed(() => (outcome.value?.tone === "crit" ? outcome.value.text : null));
-watch(values, () => (outcome.value = null), { deep: true });
+const invalid = computed(() => (edits.value.ok ? null : "Fix the fields first"));
+const blocked = computed(() => invalid.value ?? noGo.value);
+watch(
+  values,
+  () => {
+    outcome.value = null;
+    counts.value = null;
+  },
+  { deep: true },
+);
 
 async function check() {
   if (!edits.value.ok || busy.value) return;
@@ -48,6 +66,7 @@ async function check() {
     outcome.value = r.ok
       ? describePreview(r.value, labels, values.value)
       : { tone: "crit", text: failureOutcome(r.error, "changed").sentence };
+    counts.value = r.ok ? previewCounts(r.value) : null;
   } finally {
     busy.value = false;
   }
@@ -76,39 +95,24 @@ async function stage() {
 </script>
 
 <template>
-  <ApPanel index="P1" :title="`Edit ${section.label}`">
-    <SchemaForm v-model="values" :schema="schema" :errors="errors" />
-  </ApPanel>
-  <ApPanel
-    v-if="dirty.length > 0"
-    index="P4"
-    title="Staged edit"
-    :meta="plural(dirty.length, 'field')"
-  >
-    <div class="flex flex-col gap-3">
-      <ul class="m-0 list-none p-0 font-mono text-sm">
-        <li v-for="f in dirty" :key="f.path" class="py-0.5 text-text-2">
-          {{ f.label }} <span class="text-text-4 line-through">{{ before[f.path] || "—" }}</span> →
-          <span class="text-readout">{{ values[f.path] || "—" }}</span>
-        </li>
-      </ul>
-      <ApCallout v-if="outcome" :tone="outcome.tone">{{ outcome.text }}</ApCallout>
-      <div class="flex flex-wrap gap-3">
-        <ApButton
-          :disabled="busy || !edits.ok"
-          disabled-reason="Fix the fields first"
-          @click="check"
-          >Check</ApButton
-        >
-        <ApButton
-          variant="primary"
-          :disabled="busy || !edits.ok || noGo !== null"
-          :disabled-reason="noGo ?? 'Fix the fields first'"
-          @click="stage"
-          >Stage edit</ApButton
-        >
-        <ApButton variant="ghost" @click="emit('cancel')">Discard</ApButton>
-      </div>
-    </div>
-  </ApPanel>
+  <div class="flex flex-wrap items-start gap-4">
+    <ApPanel index="P1" :title="`Edit ${section.label}`" class="min-w-0 flex-[999_1_560px]">
+      <SchemaForm v-model="values" :schema="schema" :errors="errors" />
+    </ApPanel>
+    <StagedEditAside
+      v-if="dirty.length > 0"
+      class="sticky top-0 min-w-0 flex-[1_1_340px]"
+      :dirty="dirty"
+      :before="before"
+      :values="values"
+      :outcome="outcome"
+      :counts="counts"
+      :busy="busy"
+      :invalid="invalid"
+      :blocked="blocked"
+      @check="check"
+      @stage="stage"
+      @discard="emit('cancel')"
+    />
+  </div>
 </template>
