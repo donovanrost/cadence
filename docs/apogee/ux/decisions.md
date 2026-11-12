@@ -546,10 +546,11 @@ is still on disk and not in telemetry history. It's always **P2**: the journal i
     there's nothing to do now.
   - The fold key adds `lost`: "Telemetry from 37 passes was lost." / "1,912 batches weren't stored and can't be
     recovered." A lost item never folds with on-disk items.
-  - **Closing (pending domain):** it can't close as replayed. The proposal: a person closes it with `Mark as
-    seen` (`operate_mission`), recorded as {action: "loss_acknowledged", actor}, fading with "Resolved by
-    Mira K.". Until someone does, it stays P2. If domain prefers a system close (say after 24 h), the fade
-    reads `Resolved: closed after 24 h`.
+  - **Closing (domain: acknowledge closes it, unless the director vetoes):** a person closes it with `Mark as
+    seen` (POST …/acknowledge, allowed only when lost, needs `operate_mission`). The resolution is {action:
+    "acknowledged", actor: user}, and the row fades with "Resolved by Mira K.". Until then it stays P2.
+    Without the capability: "Operators mark lost telemetry as seen." This acknowledge closes the item,
+    unlike U31's, which only sorts it last; the label `Mark as seen` keeps the two apart.
   - If the mission has a setting that turns the disk copy on, the drawer links to it ("Keep a disk copy of
     incoming telemetry"). It isn't shown unless the setting exists.
 - **Later, not in this step:** contacts showing "settling" after LOS (realized-contact `metadata.settlement`). It
@@ -560,8 +561,9 @@ A U31 attention source, `mission_runtime` (`generation_not_applied`). It opens a
 system-closed. Mission-wide, so it has no spacecraft. **P1**, and it sorts first. No Acknowledge.
 - **Row:**
   - Title: `EARENDIL · Telemetry isn't being processed.` (the mission name is the subject).
-  - Evidence: "The runtime hasn't applied the configuration activated at 23:10Z; it's still running the
-    earlier one." (when `applied_generation` is null: "…; no configuration is running."). Then the reason, by key:
+  - Evidence: "The runtime hasn't applied the latest configuration; it's still running the earlier one."
+    (when `applied_generation` is null: "…; no configuration is running."). `since` (domain: when applying
+    the current configuration first failed) appears only in the meta and the banner. Then the reason, by key:
     - `mission_runtime_spec_mismatch`: "What's running doesn't match it."
     - `mission_runtime_not_running`: "The runtime isn't running."
     - `reconciler_crashed`: "Cadence's apply process stopped: <failure_message>."
@@ -571,8 +573,9 @@ system-closed. Mission-wide, so it has no spacecraft. **P1**, and it sorts first
 - **Banner (lead's proposal, domain's ask: yes):** a crit strip under the top bar on every mission page, Ops and
   Setup, while the item is open. Every live value is stale, not only Now's. Organization and account pages don't
   show it.
-  - Text: "Telemetry isn't being processed for EARENDIL. The runtime hasn't applied the configuration activated
-    at 23:10Z." followed by the link `Details`, which goes to the queue row on Now.
+  - Text: "Telemetry isn't being processed for EARENDIL since 23:10Z. The runtime hasn't applied the latest
+    configuration." followed by the link `Details`, which goes to the queue row on Now. The banner reads
+    `/counts.runtime` (api-ops), which shares its source and its 60 s debounce with the attention item.
   - One line; truncated at 390 with `Details` kept visible. It can't be dismissed.
   - When the item resolves, the strip turns nominal for 5 s ("Telemetry processing resumed at 23:26Z."), then
     goes.
@@ -582,7 +585,8 @@ system-closed. Mission-wide, so it has no spacecraft. **P1**, and it sorts first
   `change_set_id`, otherwise the Changes list. Readiness can't show it (domain).
 - **Resolved:** the row fades for 5 s with `Resolved: configuration applied`.
 - **Optional fields** (a clause is added only when the server says so, U20):
-  - `activated_by`: "activated by Mira K. at 23:10Z" (U29).
+  - `activated_by` together with `activated_at`: the evidence adds "Mira K. activated it at 23:00Z." (U29: the
+    actor and the time of the same event, never `since`). With no `activated_at`, the actor isn't shown.
   - Commanding also stopped: the evidence adds "Commands can't be sent."
   - Cadence retries the apply: the evidence adds "Cadence keeps trying."
 - Domain states that no spacecraft's telemetry is processed while the item is open, for every reason. The title
