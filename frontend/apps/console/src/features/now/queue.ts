@@ -34,7 +34,7 @@ export type QueueItem = Readonly<{
    * A write in place of the route action (U37 Retry storing): POST per target. The panel shows it
    * only with operate access, else "Operators can retry storing."
    */
-  command?: Readonly<{ label: string; targets: readonly Attention[] }>;
+  command?: Readonly<{ label: string; kind: "retry" | "seen"; targets: readonly Attention[] }>;
   /** A folded row's members: its action opens them in a sheet (U30 pattern) instead of routing. */
   list?: Readonly<{ title: string; rows: readonly QueueListRow[] }>;
 }>;

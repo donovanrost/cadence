@@ -5,4 +5,4 @@
 export { deriveQueue, GROUP_AT, nowHeadline, type QueueAction, type QueueItem } from "./queue.ts";
 export { attentionMeta, attentionReader, attentionWords, type Attention } from "./attention.ts";
 export { useSettlement } from "./useSettlement.ts";
-export { NO_ACCESS, retryTargets } from "./useQueueCommand.ts";
+export { NO_ACCESS, NO_ACCESS_SEEN, retryTargets, seenTargets } from "./useQueueCommand.ts";

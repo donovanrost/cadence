@@ -90,7 +90,13 @@ export function foldedSettlementRow(
     meta: first && last ? span(first.starts_at, last.starts_at, now).toUpperCase() : null,
     action: { label: `Show all ${n}`, to: { name: "ops.contacts" } },
     ...(manual
-      ? { command: { label: `Retry all ${n}`, targets: sorted.map((m) => m.attention) } }
+      ? {
+          command: {
+            label: `Retry all ${n}`,
+            kind: "retry" as const,
+            targets: sorted.map((m) => m.attention),
+          },
+        }
       : {}),
     spacecraftIds: [...new Set(sorted.flatMap((m) => (m.spacecraft ? [m.spacecraft.id] : [])))],
     memberKeys: sorted.map((m) => m.itemId),

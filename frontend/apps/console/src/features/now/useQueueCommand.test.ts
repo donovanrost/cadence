@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { attentionReader, type Attention } from "./attention.ts";
-import { NO_ACCESS, retryTargets } from "./useQueueCommand.ts";
+import { NO_ACCESS, NO_ACCESS_SEEN, retryTargets, seenTargets } from "./useQueueCommand.ts";
 
 // domain's #71 sample item (refs shortened), as the queue and the retry endpoint send it.
 const sample = (id: string, retry: string) => ({
@@ -78,5 +78,16 @@ describe("Retry storing (domain #71 final contract, ux c10265fd review)", () => 
     stub(reply(200, { data: sample("a", "automatic") }));
     const single = await retryTargets("m", [manual("a")]);
     expect([single.text, single.emptied, single.items.length]).toEqual([null, false, 1]);
+  });
+
+  it("Mark as seen takes the returned item; 404 is silent; 403 reads the operators line", async () => {
+    const seen = { ...sample("a", "manual"), resolution: null, state: "acknowledged" };
+    stub(reply(200, { data: seen }));
+    const ok = await seenTargets("m", [manual("a")]);
+    expect([ok.text, ok.items.map((a) => a.state)]).toEqual([null, ["acknowledged"]]);
+    stub(reply(404, err("attention_item_not_found", "Gone.")));
+    expect((await seenTargets("m", [manual("a")])).text).toBeNull();
+    stub(reply(403, err("forbidden", "No.")));
+    expect((await seenTargets("m", [manual("a")])).text).toBe(NO_ACCESS_SEEN);
   });
 });

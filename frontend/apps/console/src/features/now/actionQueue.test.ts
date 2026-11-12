@@ -623,7 +623,7 @@ describe("contact_settlement (U37, #71)", () => {
     expect(rows.find((q) => q.key === "attention:mission_runtime:m")?.due).toBeUndefined();
   });
 
-  it("journal off: a lost item never says on disk, never offers Retry, folds apart (ux 4f8b796c)", () => {
+  it("journal off: a lost item never says on disk, offers Mark as seen, folds apart (ux 4f8b796c)", () => {
     const lostOne = (id: string) => ({
       ...item({
         id: `attention:contact_settlement:${id}`,
@@ -646,7 +646,7 @@ describe("contact_settlement (U37, #71)", () => {
     expect(row?.sentence).toBe(
       "412 telemetry batches were in memory when the runtime stopped and weren't stored. This mission doesn't keep a disk copy, so they can't be recovered.",
     );
-    expect(row?.command).toBeUndefined();
+    expect([row?.command?.label, row?.command?.kind]).toEqual(["Mark as seen", "seen"]);
     const [fold] = present([lostOne("a"), lostOne("b")]);
     expect([fold?.key, fold?.title, fold?.sentence, fold?.command]).toEqual([
       "settlement:lost",

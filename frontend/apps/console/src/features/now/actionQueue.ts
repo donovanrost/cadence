@@ -364,9 +364,12 @@ function rowFor(item: ServerItem): QueueItem[] {
           acknowledged: a.state === "acknowledged",
           // A settlement is about a past pass: no AOS countdown.
           ...(a.backlog || !a.starts_at ? {} : { due: { label: "AOS", at: a.starts_at } }),
-          ...(a.backlog && !a.backlog.lost && a.retry === "manual"
-            ? { command: { label: "Retry storing", targets: [a] } }
-            : {}),
+          // U37: Retry storing once replay stopped; Mark as seen closes lost telemetry (bda6f91d).
+          ...(a.backlog?.lost
+            ? { command: { label: "Mark as seen", kind: "seen" as const, targets: [a] } }
+            : a.backlog && a.retry === "manual"
+              ? { command: { label: "Retry storing", kind: "retry" as const, targets: [a] } }
+              : {}),
           action: { label: "Review", to },
         },
       ];

@@ -4,6 +4,36 @@ import { attentionReader, type Attention } from "./attention.ts";
 import type { QueueItem } from "./queue.ts";
 
 export const NO_ACCESS = "Operators can retry storing.";
+/** ux bda6f91d: lost telemetry closes with Mark as seen (acknowledge, operate_mission). */
+export const NO_ACCESS_SEEN = "Operators mark lost telemetry as seen.";
+
+export type CommandKind = "retry" | "seen";
+export const noAccessText = (kind: CommandKind) => (kind === "seen" ? NO_ACCESS_SEEN : NO_ACCESS);
+
+/** POST …/acknowledge on a lost settlement (domain: allowed only when backlog.lost). */
+export function markSeen(missionId: string, a: Attention) {
+  return request(
+    `/missions/${encodeURIComponent(missionId)}/attention/${encodeURIComponent(a.source)}/${encodeURIComponent(a.id)}/acknowledge`,
+    attentionReader,
+    { method: "POST" },
+  );
+}
+
+/** Mark as seen: the returned item (resolved) shows at once; 404 = already closed, silently. */
+export async function seenTargets(
+  missionId: string,
+  targets: readonly Attention[],
+): Promise<RetryOutcome> {
+  const items: Attention[] = [];
+  for (const a of targets) {
+    const r = await markSeen(missionId, a);
+    if (r.ok) items.push(r.value);
+    else if (r.error.kind === "forbidden") return { text: NO_ACCESS_SEEN, items, emptied: false };
+    else if (r.error.kind !== "not_found")
+      return { text: describeApiError(r.error), items, emptied: false };
+  }
+  return { text: null, items, emptied: false };
+}
 
 /** POST …/attention/contact_settlement/:id/retry (domain #71; operate_mission). */
 export function retrySettlement(missionId: string, a: Attention) {
@@ -74,7 +104,11 @@ export function useQueueCommand(
     if (!item.command || running.value.has(item.key)) return;
     running.value = new Set([...running.value, item.key]);
     try {
-      const outcome = await retryTargets(missionId.value, item.command.targets);
+      const { kind, targets } = item.command;
+      const outcome = await (kind === "seen" ? seenTargets : retryTargets)(
+        missionId.value,
+        targets,
+      );
       const { [item.key]: _old, ...rest } = notes.value;
       notes.value = outcome.text && !outcome.emptied ? { ...rest, [item.key]: outcome.text } : rest;
       onDone(item, outcome);
@@ -84,8 +118,12 @@ export function useQueueCommand(
   }
 
   function sentenceFor(item: QueueItem, canRun: boolean): string {
-    if (running.value.has(item.key)) return "Retrying…";
-    const base = item.command && !canRun ? `${item.sentence} ${NO_ACCESS}` : item.sentence;
+    if (running.value.has(item.key))
+      return item.command?.kind === "seen" ? "Marking…" : "Retrying…";
+    const base =
+      item.command && !canRun
+        ? `${item.sentence} ${noAccessText(item.command.kind)}`
+        : item.sentence;
     const note = notes.value[item.key];
     return note ? `${base} ${note}` : base;
   }
