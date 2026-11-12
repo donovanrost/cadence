@@ -10,7 +10,7 @@ defmodule Cadence.Reads.OpsCounts do
   alias Cadence.Auth.Scope
   alias Cadence.Control.Alarms
   alias Cadence.Control.Contacts
-  alias Cadence.Reads.{Attention, CommandCounts}
+  alias Cadence.Reads.{Attention, CommandCounts, MissionRuntimeStatus}
 
   @spec load(Scope.t(), binary()) :: map()
   def load(%Scope{} = scope, mission_id) do
@@ -33,7 +33,9 @@ defmodule Cadence.Reads.OpsCounts do
           )
         ),
       # Open "needs acknowledgment" items (DECISIONS #54): Now's queue header and mobile badge.
-      attention: Attention.counts(organization_id, mission_id)
+      attention: Attention.counts(organization_id, mission_id),
+      # Whether the runtime applied its active generation (ux U38 banner); a recorded lookup.
+      runtime: MissionRuntimeStatus.status(organization_id, mission_id)
     }
   end
 

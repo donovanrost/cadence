@@ -192,7 +192,12 @@ Small counts for the shell (Ops rail, mobile on-call tabs), so the shell doesn't
   "commands": {"open": 25, "awaiting_viewer": 2},
   "fleet": {"total": 500},
   "contacts": {"in_contact": 4},
-  "attention": {"open": 2, "acknowledged": 1}
+  "attention": {"open": 2, "acknowledged": 1},
+  "runtime": {
+    "state": "not_applied", "since": "2026-11-11T22:14:31Z", "reason": "spec_mismatch",
+    "failure_message": "…", "desired_generation": 8, "applied_generation": null,
+    "applied_at": null, "activated_at": "2026-11-11T21:58:02Z", "change_set_id": "…"
+  }
 }}
 ```
 
@@ -209,6 +214,22 @@ Small counts for the shell (Ops rail, mobile on-call tabs), so the shell doesn't
 - `attention` (DECISIONS #54, U31): `{open, acknowledged}`, counting the mission's
   open "needs acknowledgment" items (pass-resolution conflicts for now). It feeds Now's queue header
   and the mobile Now badge, not a rail count. Refetch on `invalidate` with `attention`.
+- `runtime` (ux U38, the mission-wide banner): whether the mission's runtime has applied its active
+  generation, from `Cadence.Reads.MissionRuntimeStatus` (the same record as the `mission_runtime`
+  attention item; a recorded lookup, never a call into the runtime).
+  - `null`: nothing to say (no active generation yet, or the server just started). No banner.
+  - `state: "applied"`: running the active generation. `since` is `null`; `applied_at` is when it
+    last applied. No banner.
+  - `state: "not_applied"`: applying `desired_generation` has failed for 60 s or more (a normal
+    apply never shows). `since` is the first failure, `applied_generation` what the runtime
+    last applied (`null` if nothing since the server started). Show the banner.
+  - `reason`: `spec_mismatch | reconcile_crashed | runtime_not_running | apply_failed` (any other
+    failure reads `apply_failed`), `null` when applied. `failure_message`: short diagnostic text,
+    for a details line, not for the headline.
+  - `activated_at`, `change_set_id`: the desired generation's activation and the change set that
+    made it, when known; `null` otherwise.
+  - Times are ISO-8601 UTC; generations are integers. A flip between `applied` and `not_applied`
+    publishes `attention`, so refetch on `invalidate` with `attention` (no new topic).
 
 Errors: `404 mission_not_found`.
 

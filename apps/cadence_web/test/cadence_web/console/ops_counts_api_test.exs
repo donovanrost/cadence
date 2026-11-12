@@ -1,6 +1,7 @@
 defmodule CadenceWeb.Console.OpsCountsAPITest do
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.Control.MissionRuntimeStatus
   alias CadenceWeb.ControlPlaneApiFixtures
   alias CadenceWeb.TestFixtures
 
@@ -33,7 +34,38 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
     assert data["fleet"] == %{"total" => 0}
     assert data["contacts"] == nil
     assert data["attention"] == %{"open" => 0, "acknowledged" => 0}
+    assert data["runtime"] == nil
     assert is_binary(data["observed_at"])
+  end
+
+  test "runtime reports a generation the runtime has failed to apply (U38)", c do
+    mission_id = c.mission.mission_id
+    since = DateTime.add(DateTime.utc_now(), -120, :second) |> DateTime.truncate(:second)
+    on_exit(fn -> :persistent_term.erase({MissionRuntimeStatus, mission_id}) end)
+
+    :ok =
+      MissionRuntimeStatus.record(
+        %{
+          mission_id: mission_id,
+          desired_generation: 8,
+          applied_generation: 7,
+          last_error: {:mission_runtime_spec_mismatch, :binding_set_content_sha256},
+          failing_since: since,
+          applied_at: nil
+        },
+        nil
+      )
+
+    runtime = c |> counts() |> json_response(200) |> get_in(["data", "runtime"])
+
+    assert %{
+             "state" => "not_applied",
+             "reason" => "spec_mismatch",
+             "desired_generation" => 8,
+             "applied_generation" => 7
+           } = runtime
+
+    assert runtime["since"] == DateTime.to_iso8601(since)
   end
 
   test "counts an active alarm episode and the fleet", c do
