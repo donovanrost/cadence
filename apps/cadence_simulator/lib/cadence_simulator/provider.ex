@@ -124,7 +124,6 @@ defmodule CadenceSimulator.Provider do
         {:ok, run}
       end
     else
-      value when is_number(value) -> {:error, {:invalid, "speed"}}
       error -> error
     end
   end
