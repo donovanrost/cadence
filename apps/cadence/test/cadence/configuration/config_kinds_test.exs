@@ -8,6 +8,7 @@ defmodule Cadence.Configuration.ConfigKindsTest do
   alias Cadence.Platform.ConfigurationSettings
   alias Cadence.Spacecraft.ConfigKinds.Spacecraft, as: SpacecraftKind
   alias Cadence.SpacecraftStore
+  alias Cadence.SpacecraftStore.Overrides
   alias Cadence.SpacecraftTypeStore
 
   setup do
@@ -202,6 +203,67 @@ defmodule Cadence.Configuration.ConfigKindsTest do
 
       assert {:ok, %{effects: [%{changes: 1, keeps: []}]}} =
                Configuration.preview(ctx.alice, ctx.mission, {:ops, [edit]})
+    end
+
+    # C3 (fe-setup): keeps carry a code, and only reasons that bear on the paths the op changes.
+    test "older pins keep their version unless rollout is all_versions", ctx do
+      {profile_id, [sc_a, sc_b]} = block(ctx, 2)
+      rename = update("spacecraft_profile", profile_id, "display_name", "Block 1b")
+      apply_ops(ctx, "v2, no rollout", [Map.put(rename, :options, %{rollout: "none"})])
+
+      edit = update("spacecraft_profile", profile_id, "display_name", "Block 1c")
+
+      assert {:ok, %{effects: [%{changes: 0, keeps: keeps}]}} =
+               Configuration.preview(ctx.alice, ctx.mission, {:ops, [edit]})
+
+      assert Enum.map(keeps, & &1.code) == ["older_profile_version", "older_profile_version"]
+      assert Enum.all?(keeps, &(&1.reason == "stays on v1"))
+
+      all_versions = Map.put(edit, :options, %{rollout: "all_versions"})
+
+      assert {:ok, %{effects: [%{changes: 2, keeps: []}]}} =
+               Configuration.preview(ctx.alice, ctx.mission, {:ops, [all_versions]})
+
+      apply_ops(ctx, "v3 to all", [all_versions])
+
+      for id <- [sc_a, sc_b] do
+        assert {:ok, %{spacecraft_type_version: 3}} =
+                 SpacecraftStore.fetch_spacecraft(ctx.org, ctx.mission, id)
+      end
+    end
+
+    test "a governed spacecraft is listed as kept only when the op changes framing", ctx do
+      {:ok, _} =
+        ConfigurationSettings.put_profile_framing_generations(ctx.org, ctx.mission, false, %{
+          id: "test",
+          name: "Test"
+        })
+
+      {profile_id, [sc]} = block(ctx, 1)
+      {:ok, spacecraft} = SpacecraftStore.fetch_spacecraft(ctx.org, ctx.mission, sc)
+      governed = %{spacecraft | metadata: %{"spacecraft_configuration_revision_id" => "rev-1"}}
+      {:ok, _} = SpacecraftStore.update_spacecraft(ctx.org, governed)
+
+      rename = update("spacecraft_profile", profile_id, "display_name", "Block 1b")
+
+      assert {:ok, %{effects: [%{changes: 0, keeps: []}]}} =
+               Configuration.preview(ctx.alice, ctx.mission, {:ops, [rename]})
+
+      frame = update("spacecraft_profile", profile_id, "frame_parameters.frame_size", 1000)
+
+      assert {:ok, %{effects: [%{changes: 0, keeps: [%{code: "framing_governed"}]}]}} =
+               Configuration.preview(ctx.alice, ctx.mission, {:ops, [frame]})
+    end
+
+    test "a catalog-only edit keeps a spacecraft whose override sets its catalog", ctx do
+      {profile_id, [sc_a, _sc_b]} = block(ctx, 2)
+      {:ok, _} = Overrides.put(ctx.org, ctx.mission, sc_a, "catalog_revision_id", "cat-own")
+      edit = update("spacecraft_profile", profile_id, "catalog_revision_id", "cat-new")
+
+      assert {:ok, %{effects: [%{changes: 1, keeps: [keep]}]}} =
+               Configuration.preview(ctx.alice, ctx.mission, {:ops, [edit]})
+
+      assert %{code: "catalog_override", spacecraft: %{id: ^sc_a}} = keep
     end
 
     test "framing and SCIDs are validated", ctx do

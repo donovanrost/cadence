@@ -4,8 +4,9 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
 
   Profiles are versioned. Every applied edit writes version v+1, and delete writes a `deleted`
   version. The op option `rollout` decides which pinned spacecraft move to the new version:
-  `"all"` (default: every spacecraft pinned to the current version), `"none"`, or
-  `%{"spacecraft" => [id]}`. Moved spacecraft enter the revision as their own entries.
+  `"all"` (default: every spacecraft pinned to the current version), `"all_versions"` (every
+  spacecraft pinned to the profile at any version; C3 "include older versions", expanded when
+  the set applies so it can't go stale), `"none"`, or `%{"spacecraft" => [id]}`. Moved spacecraft enter the revision as their own entries.
   Spacecraft whose framing is governed by a configuration review keep their pin and are
   reported as kept.
 
@@ -19,6 +20,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
   alias Cadence.Platform.ConfigurationSettings
   alias Cadence.Spacecraft.ConfigKinds.Spacecraft, as: SpacecraftKind
   alias Cadence.SpacecraftStore
+  alias Cadence.SpacecraftStore.Overrides
   alias Cadence.SpacecraftType
   alias Cadence.SpacecraftType.RoutingRule, as: ProfileRule
   alias Cadence.SpacecraftTypeStore
@@ -30,6 +32,8 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
   @frame_fields ~w(frame_size secondary_header_length insert_zone_length ocf_length
                    truncated_primary_header fecf)
   @governed_key "spacecraft_configuration_revision_id"
+  # The profile paths a framing-governed spacecraft keeps from its configuration review.
+  @framing_paths ~w(downlink_protocol uplink_protocol packet_protocol frame_parameters)
   @synthetic_prefix "spacecraft_configuration_profile_"
 
   @impl true
@@ -95,7 +99,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
   @impl true
   def normalize_options(:update, %{"rollout" => rollout} = options) when map_size(options) == 1 do
     case rollout do
-      mode when mode in ["all", "none"] ->
+      mode when mode in ["all", "all_versions", "none"] ->
         {:ok, options}
 
       %{"spacecraft" => ids} when is_list(ids) and length(ids) in 1..1_000 ->
@@ -104,7 +108,13 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
           else: {:error, [F.error("options.rollout", "List spacecraft ids")]}
 
       _other ->
-        {:error, [F.error("options.rollout", "Roll out to all, none, or a list of spacecraft")]}
+        {:error,
+         [
+           F.error(
+             "options.rollout",
+             "Roll out to all, all_versions, none, or a list of spacecraft"
+           )
+         ]}
     end
   end
 
@@ -157,34 +167,79 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
   end
 
   @impl true
-  def effect(organization_id, mission_id, :update, entity_id, _previous, _proposed, options) do
+  def effect(organization_id, mission_id, :update, entity_id, previous, proposed, options) do
     case SpacecraftTypeStore.fetch_spacecraft_type(organization_id, mission_id, entity_id) do
-      {:ok, current} -> rollout_effect(organization_id, mission_id, entity_id, current, options)
-      {:error, _missing} -> nil
+      {:ok, current} ->
+        changed = changed_paths(previous, proposed)
+        rollout_effect(organization_id, mission_id, entity_id, current, options, changed)
+
+      {:error, _missing} ->
+        nil
     end
   end
 
   def effect(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed, _options),
     do: nil
 
-  defp rollout_effect(organization_id, mission_id, entity_id, current, options) do
+  # The dry run's count and why the rest don't change, each keep with a `code` (fe-setup C3),
+  # listing only reasons that bear on the paths the op changes.
+  defp rollout_effect(organization_id, mission_id, entity_id, current, options, changed) do
     targets = rollout_targets(organization_id, mission_id, current, rollout(options))
     kept? = kept_fn(organization_id, mission_id)
     {governed, moving} = Enum.split_with(targets, kept?)
-    moving_ids = MapSet.new(targets, & &1.spacecraft_id)
+    target_ids = MapSet.new(targets, & &1.spacecraft_id)
+
+    {catalog_pinned, moving} =
+      if changed == ["catalog_revision_id"],
+        do: split_catalog_pinned(organization_id, mission_id, moving),
+        else: {[], moving}
 
     older =
       organization_id
       |> SpacecraftStore.list_pinned_to_profile(mission_id, entity_id)
-      |> Enum.reject(&MapSet.member?(moving_ids, &1.spacecraft_id))
+      |> Enum.reject(&MapSet.member?(target_ids, &1.spacecraft_id))
+
+    governed = if Enum.any?(changed, &(&1 in @framing_paths)), do: governed, else: []
 
     %{
       changes: length(moving),
       keeps:
-        Enum.map(governed, &keep(&1, "framing is governed by its configuration review")) ++
-          Enum.map(older, &keep(&1, "stays on v#{&1.spacecraft_type_version}"))
+        Enum.map(
+          governed,
+          &keep(&1, "framing is governed by its configuration review", "framing_governed")
+        ) ++
+          Enum.map(
+            catalog_pinned,
+            &keep(&1, "its own override sets its catalog", "catalog_override")
+          ) ++
+          Enum.map(
+            older,
+            &keep(&1, "stays on v#{&1.spacecraft_type_version}", "older_profile_version")
+          )
     }
   end
+
+  # An override at catalog_revision_id keeps the spacecraft's own catalog whatever the profile
+  # says (CatalogAuthority), so a catalog-only edit changes nothing for it.
+  defp split_catalog_pinned(_organization_id, _mission_id, []), do: {[], []}
+
+  defp split_catalog_pinned(organization_id, mission_id, spacecraft) do
+    overrides =
+      Overrides.list(organization_id, mission_id, Enum.map(spacecraft, & &1.spacecraft_id))
+
+    Enum.split_with(spacecraft, fn craft ->
+      overrides |> Map.get(craft.spacecraft_id, %{}) |> Map.has_key?("catalog_revision_id")
+    end)
+  end
+
+  defp changed_paths(previous, proposed) when is_map(previous) and is_map(proposed) do
+    (Map.keys(previous) ++ Map.keys(proposed))
+    |> Enum.uniq()
+    |> Enum.reject(&(Map.get(previous, &1) == Map.get(proposed, &1)))
+    |> Enum.sort()
+  end
+
+  defp changed_paths(_previous, _proposed), do: []
 
   @impl true
   def summary(:create, nil, proposed), do: "Add profile #{proposed["display_name"]}"
@@ -254,6 +309,14 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
 
   defp rollout_targets(_organization_id, _mission_id, _current, "none"), do: []
 
+  defp rollout_targets(organization_id, mission_id, current, "all_versions"),
+    do:
+      SpacecraftStore.list_pinned_to_profile(
+        organization_id,
+        mission_id,
+        current.spacecraft_type_id
+      )
+
   defp rollout_targets(organization_id, mission_id, current, "all") do
     SpacecraftStore.list_pinned_to_profile(
       organization_id,
@@ -274,10 +337,11 @@ defmodule Cadence.Spacecraft.ConfigKinds.SpacecraftProfile do
 
   defp rollout(options), do: Map.get(options, "rollout", "all")
 
-  defp keep(spacecraft, reason),
+  defp keep(spacecraft, reason, code),
     do: %{
       spacecraft: %{id: spacecraft.spacecraft_id, name: spacecraft.display_name},
-      reason: reason
+      reason: reason,
+      code: code
     }
 
   # With profile framing generations on, the profile takes framing authority for every moved
