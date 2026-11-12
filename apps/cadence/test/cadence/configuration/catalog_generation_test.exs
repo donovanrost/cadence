@@ -9,6 +9,8 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   alias Cadence.Control.{Configuration, ConfigurationRollback}
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
+  alias Cadence.Control.MissionRuntime, as: ControlMissionRuntime
+  alias Cadence.Runtime.{MissionCoordinator, MissionRuntimeSpec}
 
   setup do
     org = "org-catalog-gen-#{System.unique_integer([:positive])}"
@@ -67,6 +69,19 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
     {:ok, active} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
     assert {:ok, entry} = FleetSnapshot.entry(active.metadata, c.craft.spacecraft_id)
     assert entry["catalog_revision_id"] == c.rev2
+
+    # 2026-11-12: the generation's hash is the persisted binding set's, so a restart can
+    # re-admit it (the in-memory build carries field ids the store doesn't keep).
+    assert {:ok, persisted} =
+             Cadence.Governance.fetch_binding_set(
+               c.org,
+               c.mission.mission_id,
+               active.binding_set_id,
+               active.binding_set_version
+             )
+
+    assert active.binding_set_content_sha256 == MissionRuntimeSpec.content_sha256(persisted)
+    assert_readmitted(c)
 
     latest = Drafts.latest(c.org, c.mission.mission_id, c.craft.spacecraft_id)
     assert latest.catalog_revision_id == c.rev2
@@ -211,6 +226,40 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   end
 
   ## Helpers
+
+  # As after a restart: the reconciler rebuilds the generation from the store, and a sample
+  # still reaches the semantic runtime with its parameter id (from the mission-model plan).
+  defp assert_readmitted(c) do
+    reconciler = ControlMissionRuntime.reconciler_name(c.mission.mission_id)
+    old = GenServer.whereis(reconciler)
+    Process.exit(old, :kill)
+
+    assert_eventually(fn ->
+      pid = GenServer.whereis(reconciler)
+
+      pid not in [nil, old] and
+        match?(
+          %{applied_generation: g, last_error: nil} when is_integer(g),
+          GenServer.call(pid, :snapshot)
+        )
+    end)
+
+    assert {:ok, spec} = MissionCoordinator.active_spec(c.mission.mission_id)
+    {:ok, active} = Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
+    assert spec.generation == active.generation
+  end
+
+  defp assert_eventually(fun, attempts \\ 100)
+  defp assert_eventually(_fun, 0), do: flunk("condition was not satisfied in time")
+
+  defp assert_eventually(fun, attempts) do
+    if fun.() do
+      :ok
+    else
+      Process.sleep(50)
+      assert_eventually(fun, attempts - 1)
+    end
+  end
 
   # A profile with `catalog`, the craft pinned to it.
   defp profile!(c, catalog) do

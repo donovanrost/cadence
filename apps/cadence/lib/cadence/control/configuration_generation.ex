@@ -233,10 +233,22 @@ defmodule Cadence.Control.ConfigurationGeneration do
 
   defp next_binding_set(_mission, active, []), do: {:ok, active.binding_set}
 
+  # Hashed and applied as it reads back, like Control.Activations: the in-memory build carries
+  # packet field ids the store doesn't keep, so its hash could never re-admit after a restart
+  # (2026-11-12, catalog-generations.md).
   defp next_binding_set(mission, active, items) do
-    mission
-    |> Review.binding_set(active, items)
-    |> then(&Governance.persist_binding_set(mission.organization_id, &1))
+    with {:ok, persisted} <-
+           Governance.persist_binding_set(
+             mission.organization_id,
+             Review.binding_set(mission, active, items)
+           ) do
+      Governance.fetch_binding_set(
+        mission.organization_id,
+        mission.mission_id,
+        persisted.binding_set_id,
+        persisted.version
+      )
+    end
   end
 
   # #65: commands not yet released on a spacecraft whose catalog changes are canceled with the
