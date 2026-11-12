@@ -55,8 +55,15 @@ defmodule Cadence.Telemetry.FieldDefinition do
 
   defp normalize_data_type(data_type) when is_atom(data_type), do: data_type
 
-  defp normalize_data_type(data_type) when is_binary(data_type),
-    do: String.to_existing_atom(data_type)
+  # An explicit list, not the atom table (2026-11-12 sweep): stored definitions decode in any VM.
+  @data_types_by_name Map.new(~w(uint int bool float binary string)a, &{Atom.to_string(&1), &1})
+
+  defp normalize_data_type(data_type) when is_binary(data_type) do
+    case Map.fetch(@data_types_by_name, data_type) do
+      {:ok, atom} -> atom
+      :error -> raise ArgumentError, "unknown telemetry field data_type: #{inspect(data_type)}"
+    end
+  end
 
   defp normalize_byte_order(:big_endian), do: :big_endian
   defp normalize_byte_order("big_endian"), do: :big_endian
