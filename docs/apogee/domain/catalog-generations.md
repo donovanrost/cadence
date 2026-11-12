@@ -42,6 +42,13 @@ the apply does the following inside its transaction:
 
 Rollback takes the same path back.
 
+The binding set's governed packet definitions don't persist each field's `parameter_id` /
+`qualified_name` (they read back nil). That's by design: at runtime they are lookup keys only.
+`PartitionOwner` resolves each packet against the mission-model telemetry plan
+(`MissionModelPlanDecoder.resolve_telemetry_configuration/2`), whose fields carry the ids, so
+samples keep their semantic identity. Don't "fix" the nils. Do hash the binding set as it reads
+back, never the in-memory build (2026-11-12 outage, below).
+
 One apply is one generation. The #65 canary (r9, 2026-11-11) went 7 to 8; its "6 to 8" read
 the previous change set's generation and missed 7, the Nov 9 activation of all 500 spacecraft
 configurations, which was made through per-spacecraft review rather than a change set.
