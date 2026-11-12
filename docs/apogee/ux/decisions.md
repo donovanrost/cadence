@@ -569,6 +569,14 @@ system-closed. Mission-wide, so it has no spacecraft. **P1**, and it sorts first
     - `apply_failed`: "Applying it failed: <failure_message>."
     - `reconcile_crashed`: "Cadence's apply process hit an error: <failure_message>."
     - null: no clause. (These are the keys in domain 292c8e6b, `Control.MissionRuntimeStatus.reasons/0`.)
+  - **Retry sentence by group** (domain: every 30 s poll retries the apply, for all reasons):
+    - `runtime_not_running`, `apply_failed` (these can clear on their own): "Cadence keeps trying every 30 s."
+    - `spec_mismatch`, `reconcile_crashed` (they come from the stored configuration, so retrying won't fix
+      them): "Retrying won't fix this. The configuration needs a fix, or a new one needs activating."
+      `Review` is the primary on this row.
+    - null: no retry sentence.
+    - The banner adds " It needs a configuration fix." only for the second group, and stays reason-free
+      otherwise.
     - Any other key: no reason clause; the key goes in Technical details.
   - Meta: `GENERATION 8 · RUNNING 7 · SINCE 23:10Z` (mono; `RUNNING —` when null).
   - Words never used: "generation" in sentences, "reconciler", "spec".
@@ -591,6 +599,5 @@ system-closed. Mission-wide, so it has no spacecraft. **P1**, and it sorts first
   - `activated_by` together with `activated_at`: the evidence adds "Mira K. activated it at 23:00Z." (U29: the
     actor and the time of the same event, never `since`). With no `activated_at`, the actor isn't shown.
   - Commanding also stopped: the evidence adds "Commands can't be sent."
-  - Cadence retries the apply: the evidence adds "Cadence keeps trying."
 - Domain states that no spacecraft's telemetry is processed while the item is open, for every reason. The title
   relies on that.
