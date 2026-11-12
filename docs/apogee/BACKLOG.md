@@ -30,7 +30,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | **fe-setup** | In order: P4 Changes N / Keeps M tiles; Audit actor select; New profile + Duplicate as new profile; `setup/catalog/:databaseId`; then Readiness R2 from revisions. Already built: P1 edit + P4 Stage edit (217feb23), Changes Compare (8b58f513), Keep mine / Take live (3ced6cea, 433bcd0f), People Command policies tab (11374b5a). fe-setup updates the §4 rows as each lands | qa: C3 live check. (api's People, Account and provider-history writes are in and built: f9e79c71, 19b2ba55, a3df522d, 2fdd2692; qa #19 copy c16546c4) |
 | **ux** | In progress: §7 visual review of the unreviewed boards (read-only browser pass, load-gated). Done: Compose C1 accepted as built (#64, reviews/2026-11-09-compose-ruling.md; fe-ops b8fe16e0) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
-| **api** | Done: C3 rollout read + profiles `catalog_revision` (34b8cc27). Done: #42 port to `develop` (f9d89f83). Done: #42 verify race 32b945f3 (advisory lock, mission-then-attempt order, timeout reconcile, call-site tests; api-ops reviewed); Compose drafts a4d19e69 (`GET/PUT/DELETE /missions/:id/command-draft`, migration). Next with the director | — |
+| **api** | Port the lane fix (b7cc12de, 4ae3fd8e) to `develop`; then §8 8d (Now P3 stale-change-set source, Timeline `config` applied events). Done: C3 rollout read + profiles `catalog_revision` (34b8cc27). Done: #42 port to `develop` (f9d89f83). Done: #42 verify race 32b945f3 (advisory lock, mission-then-attempt order, timeout reconcile, call-site tests; api-ops reviewed); Compose drafts a4d19e69 (`GET/PUT/DELETE /missions/:id/command-draft`, migration). Next with the director | — |
 | **api-ops** | queue empty; next with the director. Done: qa #46 simulator Orchestrator survives Store timeouts (3ea527b2: ETS-mirrored Store reads, guarded tick steps, linked-stream sweep; live after qa's sim restart); flight_event v1 (a02c2cee, 1b3be7f7, e07969bb, docs 291744b7); #42 review (32b945f3) | flight_event: qa sees a row live; #46: qa sim restart |
 | **domain** | the monitoring-enabled fixture with the end-to-end catalog-rule test, then catalog-path generations (#36; plan to the director first, it touches activation) | — (done tonight: #71 settlement + replay 1d6be29f, mission_runtime 7a6c596a, lost-item acknowledge e99cd89d, reconciler rescue 292c8e6b) |
 
@@ -171,7 +171,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | `Keep mine` / `Take live` on conflicts | fe-setup | — (`POST /ops/:op_id/rebase`) |
 | Staged bar conflict / applying / apply-failed states; top bar `CONVERGING` / `RUNTIME DEGRADED`; live apply steps | fe-setup | apply progress source *(unverified)* |
 | ~~qa #19: a 5xx on submit reads "Nothing was applied"; should read "unclear, check now"~~ copy done (c16546c4; domain 33529f29) | qa closes | — |
-| Now P3 row when a set sits > 24 h; Timeline `Config r6 applied` | fe-ops | *(unverified)* |
+| Now P3 row when a set sits > 24 h; Timeline `Config r6 applied` | fe-ops | api: §8 8d |
 
 ### Contact planning (`ContactPlanning.md`): built. Money policy fields hidden (d50ca428, #63). Review 6/7 in progress (sort is in; uppercase rule line *(unverified)*). Owner fe-setup.
 
@@ -229,7 +229,9 @@ missing endpoint or decision; an item with no blocker can start now.
 5b. ~~Events read: a `plane` filter (Timeline)~~ done.
 6. ~~Billing terms + budgets~~ out of scope (#63).
 7. ~~K3 Export CSV / Monthly close~~ not needed: CSV is client-side; Monthly close dropped (#63, ux af1c78d1).
-8. qa #19: map domain's `:apply_interrupted` (33529f29), in progress (api).
+8. ~~qa #19: map domain's `:apply_interrupted` (33529f29)~~ done (config_json 503; fe copy c16546c4). qa closes.
+8c. Port the lane fix (b7cc12de, 4ae3fd8e: `protocol_recovery_required` is a bounded wait) to `develop`, in a develop worktree (lead, 11-12).
+8d. Now P3 "change set staged > 24 h" attention source, and Timeline `config` events for applied revisions ("Applied r6 · 2 changes", "Rolled back to r4"; the Audit read has them, organization_audit.ex). Check first what exists; send fe-ops the shape before shipping (lead, 11-12).
 8b. ~~qa #42 verify race~~ done (32b945f3, DECISIONS #72; api-ops reviewed; both follow-ups in: call-site lock tests and the global mission-then-attempt order). Ported to `develop` (f9d89f83). Waiting: qa's 'Accepted on board' rerun on 023's next pass. (#38 release targeting verified live 21:15Z, issues 3953f19e.)
 
 **api-ops** (director, in this order)
