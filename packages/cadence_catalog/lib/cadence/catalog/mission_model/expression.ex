@@ -18,8 +18,20 @@ defmodule Cadence.Catalog.MissionModel.Expression do
     }
   end
 
+  # An explicit list, not the atom table (2026-11-12 sweep).
+  @value_types_by_name Map.new(~w(number boolean string any)a, &{Atom.to_string(&1), &1})
+
   defp normalize_atom(value) when is_atom(value), do: value
-  defp normalize_atom(value) when is_binary(value), do: String.to_existing_atom(value)
+
+  defp normalize_atom(value) when is_binary(value) do
+    case Map.fetch(@value_types_by_name, value) do
+      {:ok, atom} ->
+        atom
+
+      :error ->
+        raise ArgumentError, "unknown mission model expression result_type: #{inspect(value)}"
+    end
+  end
 
   defp decode_node(%{"tuple" => items}) when is_list(items) do
     items
