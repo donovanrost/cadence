@@ -142,6 +142,36 @@ defmodule Cadence.IngressJournal.FileSystem do
     end
   end
 
+  @doc """
+  The journal streams on disk under `base_path`, as their contexts (`mission_id`,
+  `realized_contact_id`, `path_id`, `provider_binding_id`), read from each stream's metadata
+  without opening it. Replay finds ended contacts with journals this way (DECISIONS #71).
+  """
+  @spec stored_streams(binary()) :: [map()]
+  def stored_streams(base_path) when is_binary(base_path) do
+    case File.ls(base_path) do
+      {:ok, names} ->
+        names
+        |> Enum.sort()
+        |> Enum.flat_map(&stored_stream(Path.join([base_path, &1, "stream.term"])))
+
+      {:error, _reason} ->
+        []
+    end
+  end
+
+  defp stored_stream(path) do
+    with {:ok, binary} <- File.read(path),
+         %{context: %{mission_id: _, realized_contact_id: _} = context} <-
+           :erlang.binary_to_term(binary, [:safe]) do
+      [context]
+    else
+      _other -> []
+    end
+  rescue
+    ArgumentError -> []
+  end
+
   @doc false
   @spec policy(keyword() | map()) :: policy()
   def policy(config) when is_list(config) or is_map(config) do

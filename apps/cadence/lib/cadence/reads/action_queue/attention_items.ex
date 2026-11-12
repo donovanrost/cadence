@@ -123,7 +123,7 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
       state: if(p1?, do: :critical, else: :caution),
       source: attention.source,
       since: attention.raised_at,
-      due_at: attention.starts_at,
+      due_at: due_at(attention),
       count: 1,
       spacecraft: spacecraft(attention.spacecraft_id, names),
       attention: object(attention, names)
@@ -170,7 +170,10 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
     :backlog,
     :expires_at,
     :retry,
-    :next_attempt_at
+    :attempts,
+    :next_attempt_at,
+    :last_attempt_at,
+    :first_failure_kind
   ]
 
   # 2026-11-12 / ux U38: the mission's runtime hasn't applied its active generation.
@@ -209,6 +212,17 @@ defmodule Cadence.Reads.ActionQueue.AttentionItems do
   end
 
   defp uplink(_attention), do: nil
+
+  # The queue sorts within a priority by due_at. A settlement Cadence is still retrying is due at
+  # its next attempt (future); one handed to an operator at its last attempt (past), so those
+  # rank first (fe-ops, ux U37). Other sources: the pass start.
+  defp due_at(%{source: "contact_settlement", retry: "manual"} = attention),
+    do: Map.get(attention, :last_attempt_at) || attention.raised_at
+
+  defp due_at(%{source: "contact_settlement"} = attention),
+    do: Map.get(attention, :next_attempt_at) || attention.starts_at
+
+  defp due_at(attention), do: attention.starts_at
 
   # Within 2 h of the pass start, or the pass is under way (started, not ended).
   defp p1?(%{source: "contact_settlement"}, _now), do: false

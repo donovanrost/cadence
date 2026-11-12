@@ -36,6 +36,26 @@ defmodule CadenceWeb.Console.AttentionController do
     end
   end
 
+  # #71 replay stopped after 6 attempts: an operator starts it again (contact_settlement only).
+  def retry(conn, %{"source" => "contact_settlement", "id" => id} = params) do
+    case no_actor(params) do
+      :ok ->
+        respond_retry(conn, ContactSettlementAttention.retry(scope(conn), mission_id(conn), id))
+
+      {:error, reason} ->
+        problem(conn, reason)
+    end
+  end
+
+  def retry(conn, _params), do: problem(conn, :attention_item_not_found)
+
+  defp respond_retry(conn, {:error, {:retry_not_manual, item}}) do
+    names = AttentionItems.lookups(scope(conn).organization_id, mission_id(conn))
+    Problem.respond(conn, :retry_not_manual, %{"item" => AttentionItems.object(item, names)})
+  end
+
+  defp respond_retry(conn, result), do: respond(conn, result)
+
   # Sources with operator actions. contact_settlement: only a lost item can be acknowledged.
   defp source("pass_resolution"), do: {:ok, PassResolutions}
   defp source("contact_settlement"), do: {:ok, ContactSettlementAttention}

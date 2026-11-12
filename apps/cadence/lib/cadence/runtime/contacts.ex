@@ -34,6 +34,23 @@ defmodule Cadence.Runtime.Contacts do
   @spec journal_enabled?() :: boolean()
   def journal_enabled?, do: Cadence.IngressJournal.FileSystem.configured_policy().enabled?
 
+  @doc "The mission's realized contacts with an ingress journal on disk (replay, #71)."
+  @spec journaled_ids(binary()) :: MapSet.t(binary())
+  def journaled_ids(mission_id) do
+    policy = Cadence.IngressJournal.FileSystem.configured_policy()
+
+    case {policy.enabled?, Keyword.get(policy.file_system_opts, :base_path)} do
+      {true, base_path} when is_binary(base_path) ->
+        base_path
+        |> Cadence.IngressJournal.FileSystem.stored_streams()
+        |> Enum.filter(&(&1.mission_id == mission_id))
+        |> MapSet.new(& &1.realized_contact_id)
+
+      _off ->
+        MapSet.new()
+    end
+  end
+
   @spec running_ids(binary()) :: [binary()]
   def running_ids(mission_id), do: Runtime.running_realized_contact_ids(mission_id)
 

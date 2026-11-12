@@ -18,6 +18,11 @@ defmodule Cadence.Contacts.ContactSettler do
 
   One settler per contact (registered); temporary. A node restart leaves the contact
   `settling` with no settler, which reconcile's sweep finds.
+
+  **Replay** (`replay/2`, the #71 follow-up): the same settler, on an ended contact whose journal
+  still holds telemetry. It starts the contact's runtime without intake (journals and their
+  drain only), then quiesces it with a shorter deadline. One replay per mission at a time: a
+  replaying settler is registered by mission.
   """
 
   use GenServer, restart: :temporary
@@ -40,10 +45,32 @@ defmodule Cadence.Contacts.ContactSettler do
   def settle(contact, opts \\ [])
 
   def settle(%RealizedContact{} = contact, opts) do
-    if ContactSettlement.state(contact) in [nil, "settling"],
-      do: start_settler(contact, opts),
-      else: :ok
+    if ContactSettlement.state(contact) in [nil, "settling"] do
+      case start_settler(contact, opts) do
+        {:error, {:already_started, _pid}} -> :ok
+        other -> other
+      end
+    else
+      :ok
+    end
   end
+
+  @doc """
+  Replays an ended contact's journal (#71 follow-up) and returns without waiting. `:ok` when
+  started, `{:error, :replay_running}` when the mission already has one.
+  """
+  @spec replay(RealizedContact.t(), keyword()) :: :ok | {:error, term()}
+  def replay(%RealizedContact{} = contact, opts \\ []) do
+    case start_settler(contact, Keyword.put(opts, :mode, :replay)) do
+      {:error, {:already_started, _pid}} -> {:error, :replay_running}
+      other -> other
+    end
+  end
+
+  @doc "Whether the mission has a replay running."
+  @spec replaying?(binary(), ProcessNamespace.t()) :: boolean()
+  def replaying?(mission_id, namespace \\ ProcessNamespace.default()),
+    do: GenServer.whereis(replay_name(namespace, mission_id)) != nil
 
   defp start_settler(contact, opts) do
     namespace = Keyword.get_lazy(opts, :process_namespace, &ProcessNamespace.default/0)
@@ -61,15 +88,11 @@ defmodule Cadence.Contacts.ContactSettler do
     %RealizedContact{} = contact = Keyword.fetch!(opts, :contact)
     namespace = Keyword.fetch!(opts, :process_namespace)
 
-    started(
-      GenServer.start(__MODULE__, opts,
-        name: name(namespace, contact.mission_id, contact.realized_contact_id)
-      )
-    )
+    started(GenServer.start(__MODULE__, opts, name: process_name(namespace, contact, opts)))
   end
 
   defp started({:ok, _pid}), do: :ok
-  defp started({:error, {:already_started, _pid}}), do: :ok
+  defp started({:error, {:already_started, _pid}} = error), do: error
   defp started({:error, reason}), do: {:error, reason}
 
   @doc "Whether a settler is settling the contact now."
@@ -82,21 +105,38 @@ defmodule Cadence.Contacts.ContactSettler do
     %RealizedContact{} = contact = Keyword.fetch!(opts, :contact)
     namespace = Keyword.fetch!(opts, :process_namespace)
 
-    GenServer.start_link(__MODULE__, opts,
-      name: name(namespace, contact.mission_id, contact.realized_contact_id)
-    )
+    GenServer.start_link(__MODULE__, opts, name: process_name(namespace, contact, opts))
   end
 
   @impl true
   def init(opts) do
     contact = Keyword.fetch!(opts, :contact)
-    deadline_ms = Keyword.get_lazy(opts, :deadline_ms, &ContactSettlement.deadline_ms/0)
+    mode = Keyword.get(opts, :mode, :settle)
 
-    {:ok, %{contact: contact, deadline_ms: deadline_ms, worker: nil, deadline: nil},
+    default_deadline =
+      if mode == :replay,
+        do: &ContactSettlement.replay_deadline_ms/0,
+        else: &ContactSettlement.deadline_ms/0
+
+    deadline_ms = Keyword.get_lazy(opts, :deadline_ms, default_deadline)
+
+    {:ok, %{contact: contact, mode: mode, deadline_ms: deadline_ms, worker: nil, deadline: nil},
      {:continue, :quiesce}}
   end
 
   @impl true
+  def handle_continue(:quiesce, %{mode: :replay, contact: contact} = state) do
+    {:ok, contact} = ContactSettlement.replay_started(contact)
+
+    case Runtime.start_replay(contact) do
+      {:ok, _pid} ->
+        start_quiesce(%{state | contact: contact})
+
+      {:error, reason} ->
+        finish(%{state | contact: contact}, {:unsettled, "settle_failed", reason})
+    end
+  end
+
   def handle_continue(:quiesce, %{contact: contact} = state) do
     %{mission_id: mission_id, realized_contact_id: id} = contact
 
@@ -144,10 +184,24 @@ defmodule Cadence.Contacts.ContactSettler do
       end
 
     stop = Runtime.terminate_realized_contact(mission_id, id)
-    _ = ContactSettlement.record(contact, outcome, backlog, stop)
+
+    _ =
+      if state.mode == :replay,
+        do: ContactSettlement.record_replay(contact, outcome, backlog, stop),
+        else: ContactSettlement.record(contact, outcome, backlog, stop)
+
     {:stop, :normal, state}
+  end
+
+  defp process_name(namespace, contact, opts) do
+    if Keyword.get(opts, :mode) == :replay,
+      do: replay_name(namespace, contact.mission_id),
+      else: name(namespace, contact.mission_id, contact.realized_contact_id)
   end
 
   defp name(namespace, mission_id, realized_contact_id),
     do: ProcessNamespace.via(namespace, {:contact_settler, mission_id, realized_contact_id})
+
+  defp replay_name(namespace, mission_id),
+    do: ProcessNamespace.via(namespace, {:contact_replay, mission_id})
 end

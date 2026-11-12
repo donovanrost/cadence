@@ -73,6 +73,8 @@ defmodule CadenceWeb.Console.Problem do
     uplink_not_blocked: {409, "The uplink on that pass isn't blocked."},
     uplink_recovery_refused: {409, "Recovery was refused."},
     attention_item_not_open: {409, "That attention item was already resolved."},
+    retry_not_manual:
+      {409, "Cadence is already retrying this; there is nothing to retry by hand."},
     actor_not_assignable: {422, "The actor is always the signed-in user."},
     holds_unacknowledged:
       {422,

@@ -19,7 +19,7 @@ defmodule Cadence.Contacts.ContactSettlementAttention do
   import Ecto.Query
 
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.Contacts.ContactStore
+  alias Cadence.Contacts.{ContactSettlement, ContactStore}
   alias Cadence.Contacts.ContactStore.RealizedContactRow
   alias Cadence.Contacts.RealizedContact
   alias Cadence.Control.Contacts.Store.ProviderReservationRow
@@ -109,6 +109,47 @@ defmodule Cadence.Contacts.ContactSettlementAttention do
            provider_reference: nil
          }
        })}
+    end
+  end
+
+  @doc """
+  Starts replay again for a contact whose replay stopped after 6 failed attempts (`retry`
+  `manual`): attempts reset, due at the next reconcile. `{:error, {:retry_not_manual, item}}`
+  while Cadence is still retrying (a double click or a stale screen gets the item back).
+  """
+  @spec retry(Scope.t(), binary(), binary()) :: {:ok, map()} | {:error, term()}
+  def retry(%Scope{} = scope, mission, id) do
+    with {:ok, _actor} <- actor(scope, mission),
+         {:ok, contact} <- fetch_open(scope.organization_id, mission, id) do
+      reservation =
+        Map.get(
+          reservations(scope.organization_id, mission, [contact]),
+          contact.scheduled_contact_id
+        )
+
+      case ContactSettlement.retry(contact) do
+        {:ok, updated} ->
+          ScopedReadUpdates.publish(:attention_changed, scope.organization_id, mission)
+          {:ok, item(updated, reservation)}
+
+        {:error, :retry_not_manual} ->
+          {:error, {:retry_not_manual, item(contact, reservation)}}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  defp fetch_open(org, mission, id) do
+    case ContactStore.fetch_realized(org, mission, id) do
+      {:ok,
+       %RealizedContact{metadata: %{"settlement" => %{"state" => "unsettled"} = s}} = contact}
+      when not is_map_key(s, "acknowledged_at") ->
+        {:ok, contact}
+
+      _other ->
+        {:error, :attention_item_not_found}
     end
   end
 
@@ -212,14 +253,24 @@ defmodule Cadence.Contacts.ContactSettlementAttention do
       journal: settlement["journal"] || "enabled",
       backlog: backlog(settlement["backlog"] || %{}),
       expires_at: nil,
-      retry: "automatic",
-      next_attempt_at: nil,
+      # Replay (#71 follow-up): attempts so far, automatic until 6 fail, then manual.
+      retry: settlement["retry"] || "automatic",
+      attempts: settlement["attempts"] || 0,
+      next_attempt_at: timestamp(settlement["next_attempt_at"]),
+      last_attempt_at: timestamp(settlement["last_attempt_at"]),
+      first_failure_kind: first_failure_kind(settlement),
       acknowledged_by: nil,
       provider_message: nil,
       resolution: nil
     }
     |> Map.merge(pass(reservation))
   end
+
+  defp first_failure_kind(%{"first_failure_kind" => first, "failure_kind" => latest})
+       when first != latest,
+       do: first
+
+  defp first_failure_kind(_settlement), do: nil
 
   defp backlog(backlog) do
     %{

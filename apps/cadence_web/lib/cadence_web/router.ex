@@ -854,6 +854,7 @@ defmodule CadenceWeb.Router do
       get("/spacecraft/:spacecraft_id/passes", SpacecraftPassesController, :show)
       post("/attention/:source/:id/acknowledge", AttentionController, :acknowledge)
       post("/attention/:source/:id/resolve", AttentionController, :resolve)
+      post("/attention/:source/:id/retry", AttentionController, :retry)
 
       # -- Setup (owner: api). Contracts: docs/apogee/api/setup.md
       get("/spacecraft", SpacecraftController, :index)

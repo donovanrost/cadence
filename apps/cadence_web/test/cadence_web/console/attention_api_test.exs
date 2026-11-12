@@ -133,6 +133,15 @@ defmodule CadenceWeb.Console.AttentionAPITest do
                c |> conn() |> post(c.base <> missing <> "/acknowledge") |> json_response(404)
     end
 
+    # Retry exists only for contact_settlement, and only on an open item (#71 replay).
+    for path <- [
+          "/attention/contact_settlement/realized-1/retry",
+          "/attention/pass_resolution/br-1/retry"
+        ] do
+      assert %{"error" => %{"code" => "attention_item_not_found"}} =
+               c |> conn() |> post(c.base <> path) |> json_response(404)
+    end
+
     assert %{"error" => %{"code" => "attention_item_not_found"}} =
              c
              |> conn()

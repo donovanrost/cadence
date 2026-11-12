@@ -209,6 +209,147 @@ defmodule Cadence.Contacts.ContactSettlementTest do
              ContactSettlementAttention.resolve(scope, ctx.mission_id, lost, "x")
   end
 
+  describe "replay (#71 follow-up)" do
+    test "an unsettled contact replays when storage is back; nothing is lost or doubled", ctx do
+      {a_run, _a} = unsettled_contact!(ctx)
+      OutageTelemetryWriter.outage(false)
+
+      assert {:ok, %{replaying_realized_contact_ids: [^a_run], errors: []}} =
+               Contacts.reconcile(ctx.mission_id, DateTime.utc_now())
+
+      assert_eventually(fn -> settlement(ctx, a_run)["state"] == "settled" end)
+      assert settlement(ctx, a_run)["replayed_at"]
+      refute Cadence.Runtime.realized_contact_running?(ctx.mission_id, a_run)
+      assert samples(ctx) == 1
+      assert ContactSettlementAttention.items(ctx.organization_id, ctx.mission_id) == []
+
+      assert [%{id: ^a_run, action: "replayed"}] =
+               ContactSettlementAttention.resolved_since(
+                 ctx.organization_id,
+                 ctx.mission_id,
+                 DateTime.add(DateTime.utc_now(), -60)
+               )
+
+      assert {:ok, %{replaying_realized_contact_ids: []}} =
+               Contacts.reconcile(ctx.mission_id, DateTime.utc_now())
+    end
+
+    test "a failing replay backs off, stops after 6 for an operator, who can retry", ctx do
+      Application.put_env(:cadence, :contact_settlement,
+        deadline_ms: 300,
+        replay_deadline_ms: 300
+      )
+
+      {a_run, _a} = unsettled_contact!(ctx)
+
+      for attempt <- 1..6 do
+        assert {:ok, %{replaying_realized_contact_ids: [^a_run]}} =
+                 Contacts.reconcile(ctx.mission_id, DateTime.utc_now())
+
+        assert_eventually(fn ->
+          settlement(ctx, a_run)["attempts"] == attempt and
+            not Cadence.Contacts.ContactSettler.replaying?(ctx.mission_id)
+        end)
+
+        if attempt < 6 do
+          assert %{"retry" => "automatic", "next_attempt_at" => next} = settlement(ctx, a_run)
+          {:ok, next, _} = DateTime.from_iso8601(next)
+          assert DateTime.diff(next, DateTime.utc_now()) > 4 * 60
+
+          # Not due yet: nothing replays until the backoff passes.
+          assert {:ok, %{replaying_realized_contact_ids: []}} =
+                   Contacts.reconcile(ctx.mission_id, DateTime.utc_now())
+
+          make_due!(ctx, a_run)
+        end
+      end
+
+      assert %{"retry" => "manual", "next_attempt_at" => nil} = settlement(ctx, a_run)
+
+      assert {:ok, %{replaying_realized_contact_ids: []}} =
+               Contacts.reconcile(ctx.mission_id, DateTime.utc_now())
+
+      scope = TelemetryDecomFixtures.user_scope(ctx.organization_id, "op")
+
+      assert {:ok, %{retry: "automatic", attempts: 0}} =
+               ContactSettlementAttention.retry(scope, ctx.mission_id, a_run)
+
+      assert {:error, {:retry_not_manual, %{id: ^a_run}}} =
+               ContactSettlementAttention.retry(scope, ctx.mission_id, a_run)
+
+      OutageTelemetryWriter.outage(false)
+
+      assert {:ok, %{replaying_realized_contact_ids: [^a_run]}} =
+               Contacts.reconcile(ctx.mission_id, DateTime.utc_now())
+
+      assert_eventually(fn -> settlement(ctx, a_run)["state"] == "settled" end)
+      assert samples(ctx) == 1
+    end
+
+    test "a contact that ended before #71 with a journal backlog is found and drained", ctx do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+      a = schedule!(ctx, "a", DateTime.add(now, -60), DateTime.add(now, 600), downlink: true)
+
+      assert {:ok, %{realized_scheduled_contact_ids: [a_run]}} =
+               Contacts.reconcile(ctx.mission_id, now)
+
+      OutageTelemetryWriter.outage(true)
+      send_telemetry!(ctx, a_run, a)
+      assert_eventually(fn -> projector(ctx, a_run, a).failed_count > 0 end)
+
+      # As before #71: the runtime died with its contact ended and no settlement recorded.
+      :ok = Cadence.Runtime.terminate_realized_contact(ctx.mission_id, a_run)
+      {:ok, contact} = ContactStore.fetch_realized(ctx.mission_id, a_run)
+      {:ok, _} = ContactStore.update_realized_lifecycle(contact, :completed, %{})
+      OutageTelemetryWriter.outage(false)
+
+      assert {:ok, %{replaying_realized_contact_ids: [^a_run], errors: []}} =
+               Contacts.reconcile(ctx.mission_id, DateTime.add(now, 10))
+
+      assert_eventually(fn -> settlement(ctx, a_run)["state"] == "settled" end)
+      assert settlement(ctx, a_run)["inspected_at"]
+      refute settlement(ctx, a_run)["replayed_at"]
+      assert samples(ctx) == 1
+    end
+  end
+
+  defp unsettled_contact!(ctx) do
+    if Application.get_env(:cadence, :contact_settlement) == nil,
+      do: Application.put_env(:cadence, :contact_settlement, deadline_ms: 300)
+
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    a = schedule!(ctx, "a", DateTime.add(now, -60), DateTime.add(now, 60), downlink: true)
+
+    assert {:ok, %{realized_scheduled_contact_ids: [a_run]}} =
+             Contacts.reconcile(ctx.mission_id, now)
+
+    OutageTelemetryWriter.outage(true)
+    send_telemetry!(ctx, a_run, a)
+    assert_eventually(fn -> projector(ctx, a_run, a).failed_count > 0 end)
+
+    assert {:ok, %{completed_realized_contact_ids: [^a_run]}} =
+             Contacts.reconcile(ctx.mission_id, DateTime.add(now, 130))
+
+    assert_eventually(fn -> settlement(ctx, a_run)["state"] == "unsettled" end)
+    {a_run, a}
+  end
+
+  defp make_due!(ctx, realized_contact_id) do
+    {:ok, contact} = ContactStore.fetch_realized(ctx.mission_id, realized_contact_id)
+
+    settlement =
+      Map.put(
+        contact.metadata["settlement"],
+        "next_attempt_at",
+        DateTime.to_iso8601(DateTime.add(DateTime.utc_now(), -1))
+      )
+
+    {:ok, _} =
+      ContactStore.update_realized_lifecycle(contact, contact.lifecycle_state, %{
+        "settlement" => settlement
+      })
+  end
+
   ## Fixture
 
   defp settled_contact!(ctx, backlog) do

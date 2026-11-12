@@ -33,6 +33,130 @@ defmodule Cadence.Contacts.ContactSettlement do
     |> Keyword.get(:deadline_ms, @default_deadline_ms)
   end
 
+  @default_replay_deadline_ms 30 * 60 * 1000
+  @replay_backoff_ms 5 * 60 * 1000
+  @replay_backoff_max_ms 2 * 60 * 60 * 1000
+  @replay_attempts 6
+
+  @doc "A replay's drain deadline (director 2026-11-11: 30 min; config `:replay_deadline_ms`)."
+  @spec replay_deadline_ms() :: pos_integer()
+  def replay_deadline_ms do
+    :cadence
+    |> Application.get_env(:contact_settlement, [])
+    |> Keyword.get(:replay_deadline_ms, @default_replay_deadline_ms)
+  end
+
+  @doc "Marks a replay as running on the contact (its attention item shows the attempt)."
+  @spec replay_started(RealizedContact.t()) :: {:ok, RealizedContact.t()} | {:error, term()}
+  def replay_started(%RealizedContact{} = contact) do
+    with {:ok, current} <-
+           ContactStore.fetch_realized(contact.mission_id, contact.realized_contact_id) do
+      # A contact ended before #71 has no settlement: "inspecting" keeps the settle sweep (which
+      # takes ended contacts with none and a running runtime) off it while its replay runs.
+      settlement =
+        current.metadata
+        |> Map.get("settlement", %{})
+        |> Map.put_new("state", "inspecting")
+        |> Map.merge(%{
+          "replay" => "running",
+          "last_attempt_at" => DateTime.to_iso8601(DateTime.utc_now())
+        })
+
+      ContactStore.update_realized_lifecycle(current, current.lifecycle_state, %{
+        "settlement" => settlement
+      })
+    end
+  end
+
+  @doc """
+  Records a replay's outcome. Drained: `settled`, with `replayed_at` when it had been
+  `unsettled` (its attention item resolves as replayed), else `inspected_at` (a contact whose
+  journal wasn't inspected when it ended). Not drained: `unsettled` again, the backlog re-read,
+  `attempts` + 1 and `next_attempt_at` backing off 5 min doubling to 2 h; after 6 failed replays,
+  `retry` turns `manual` and only an operator's retry starts another (director 2026-11-12).
+  """
+  @spec record_replay(RealizedContact.t(), term(), map(), term()) ::
+          {:ok, RealizedContact.t()} | {:error, term()}
+  def record_replay(%RealizedContact{} = contact, outcome, backlog, stop) do
+    with {:ok, current} <-
+           ContactStore.fetch_realized(contact.mission_id, contact.realized_contact_id) do
+      previous = Map.get(current.metadata, "settlement", %{})
+      now = DateTime.utc_now()
+
+      settlement =
+        previous
+        |> Map.merge(replay_fields(outcome, previous, backlog, now))
+        |> put_stop(stop)
+
+      ContactStore.update_realized_lifecycle(current, current.lifecycle_state, %{
+        "settlement" => settlement
+      })
+    end
+  end
+
+  defp replay_fields(:settled, previous, _backlog, now) do
+    at = DateTime.to_iso8601(now)
+    drained = if previous["state"] == "unsettled", do: "replayed_at", else: "inspected_at"
+
+    %{
+      "state" => "settled",
+      "settled_at" => at,
+      drained => at,
+      "replay" => "done",
+      "retry" => nil,
+      "next_attempt_at" => nil
+    }
+  end
+
+  defp replay_fields(outcome, previous, backlog, now) do
+    {:unsettled, _reason, _error} = unsettled = normalize_replay_outcome(outcome)
+    fields = outcome_fields(unsettled, backlog, now)
+    attempts = (previous["attempts"] || 0) + 1
+    manual? = attempts >= @replay_attempts
+
+    fields
+    |> Map.merge(%{
+      "attempts" => attempts,
+      "replay" => if(manual?, do: "stopped", else: "waiting"),
+      "retry" => if(manual?, do: "manual", else: "automatic"),
+      "next_attempt_at" =>
+        if(manual?,
+          do: nil,
+          else: now |> DateTime.add(backoff_ms(attempts), :millisecond) |> DateTime.to_iso8601()
+        ),
+      "first_failure_kind" =>
+        previous["first_failure_kind"] || previous["failure_kind"] || fields["failure_kind"]
+    })
+  end
+
+  defp normalize_replay_outcome({:unsettled, _reason, _error} = outcome), do: outcome
+  defp normalize_replay_outcome(other), do: {:unsettled, "settle_failed", other}
+
+  defp backoff_ms(attempts),
+    do: min(@replay_backoff_ms * Integer.pow(2, attempts - 1), @replay_backoff_max_ms)
+
+  @doc """
+  An operator's retry of a contact whose replay stopped (`retry` `manual`): attempts reset, due
+  now. `{:error, :retry_not_manual}` otherwise.
+  """
+  @spec retry(RealizedContact.t()) :: {:ok, RealizedContact.t()} | {:error, term()}
+  def retry(
+        %RealizedContact{metadata: %{"settlement" => %{"retry" => "manual"} = settlement}} =
+          contact
+      ) do
+    ContactStore.update_realized_lifecycle(contact, contact.lifecycle_state, %{
+      "settlement" =>
+        Map.merge(settlement, %{
+          "attempts" => 0,
+          "retry" => "automatic",
+          "replay" => "waiting",
+          "next_attempt_at" => DateTime.to_iso8601(DateTime.utc_now())
+        })
+    })
+  end
+
+  def retry(%RealizedContact{}), do: {:error, :retry_not_manual}
+
   @doc "The settlement patch `ContactLifecycle` records with the end."
   @spec settling(DateTime.t(), pos_integer()) :: map()
   def settling(%DateTime{} = now, deadline_ms \\ deadline_ms()) do
@@ -70,6 +194,67 @@ defmodule Cadence.Contacts.ContactSettlement do
     |> order_by([row], asc: row.realized_contact_id)
     |> Repo.all()
     |> Enum.map(&RealizedContactRow.to_domain/1)
+  end
+
+  @doc """
+  The next contact to replay, if any (reconcile runs one per mission at a time): an `unsettled`
+  contact whose replay is due, oldest first; else an ended contact whose journal is on disk
+  (`journaled_ids`) but wasn't inspected: settled with `runtime: "absent"`, or ended before #71.
+  Never one whose runtime is in `running_ids`.
+  """
+  @spec next_replay(binary(), MapSet.t(binary()), [binary()], DateTime.t()) ::
+          RealizedContact.t() | nil
+  def next_replay(mission_id, journaled_ids, running_ids, %DateTime{} = now) do
+    running = MapSet.new(running_ids)
+
+    (due_replays(mission_id, now) ++ uninspected(mission_id, MapSet.to_list(journaled_ids)))
+    |> Enum.find(&(not MapSet.member?(running, &1.realized_contact_id)))
+  end
+
+  defp due_replays(mission_id, now) do
+    from(row in RealizedContactRow,
+      where:
+        row.mission_id == ^mission_id and
+          fragment("? -> 'value' -> 'settlement' ->> 'state' = 'unsettled'", row.metadata),
+      order_by: [asc: row.realized_contact_id]
+    )
+    |> Repo.all()
+    |> Enum.map(&RealizedContactRow.to_domain/1)
+    |> Enum.filter(&replay_due?(&1, now))
+  end
+
+  defp uninspected(_mission_id, []), do: []
+
+  defp uninspected(mission_id, ids) do
+    from(row in RealizedContactRow,
+      where:
+        row.mission_id == ^mission_id and row.realized_contact_id in ^ids and
+          row.lifecycle_state in ["stopped", "completed"] and
+          (fragment("? -> 'value' -> 'settlement' IS NULL", row.metadata) or
+             fragment("? -> 'value' -> 'settlement' ->> 'state' = 'inspecting'", row.metadata) or
+             (fragment("? -> 'value' -> 'settlement' ->> 'runtime' = 'absent'", row.metadata) and
+                fragment("? -> 'value' -> 'settlement' -> 'inspected_at' IS NULL", row.metadata))),
+      order_by: [asc: row.realized_contact_id]
+    )
+    |> Repo.all()
+    |> Enum.map(&RealizedContactRow.to_domain/1)
+  end
+
+  # Due: journal on, not lost, not handed to an operator, and its backoff has passed.
+  defp replay_due?(%RealizedContact{metadata: %{"settlement" => settlement}}, now) do
+    settlement["journal"] != "disabled" and
+      not get_in(settlement, ["backlog", "lost"]) == true and
+      settlement["retry"] != "manual" and
+      due_at?(settlement["next_attempt_at"], now)
+  end
+
+  defp due_at?(nil, _now), do: true
+
+  defp due_at?(at, now) do
+    case DateTime.from_iso8601(at) do
+      {:ok, at, _offset} -> DateTime.compare(at, now) != :gt
+      _invalid -> true
+    end
   end
 
   defp filter_mission(query, nil), do: query

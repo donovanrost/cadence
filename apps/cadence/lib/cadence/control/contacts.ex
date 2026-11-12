@@ -198,6 +198,18 @@ defmodule Cadence.Control.Contacts do
     end
   end
 
+  @doc """
+  Starts an ended contact's runtime without intake, to store what its ingress journal kept
+  (DECISIONS #71 replay): journals, executor and projector only; no provider adapter or transport.
+  """
+  @spec start_replay(RealizedContact.t()) :: {:ok, pid()} | {:error, term()}
+  def start_replay(%RealizedContact{} = realized_contact) do
+    with {:ok, %RealizedContactRuntimeSpec{} = spec} <-
+           runtime_spec(realized_contact, intake?: false) do
+      RuntimeContacts.start(spec)
+    end
+  end
+
   @spec stop_realized_contact(binary(), binary()) :: :ok | {:error, term()}
   def stop_realized_contact(mission_id, realized_contact_id),
     do: RuntimeContacts.stop(mission_id, realized_contact_id)
@@ -221,6 +233,9 @@ defmodule Cadence.Control.Contacts do
   @spec ingress_journal_enabled?() :: boolean()
   def ingress_journal_enabled?, do: RuntimeContacts.journal_enabled?()
 
+  @spec journaled_realized_contact_ids(binary()) :: MapSet.t(binary())
+  def journaled_realized_contact_ids(mission_id), do: RuntimeContacts.journaled_ids(mission_id)
+
   @spec running_realized_contact_ids(binary()) :: [binary()]
   def running_realized_contact_ids(mission_id), do: RuntimeContacts.running_ids(mission_id)
 
@@ -232,8 +247,9 @@ defmodule Cadence.Control.Contacts do
   def realized_contact_snapshot(mission_id, realized_contact_id),
     do: RuntimeContacts.snapshot(mission_id, realized_contact_id)
 
-  defp runtime_spec(realized_contact) do
+  defp runtime_spec(realized_contact, opts \\ []) do
     RealizedContactRuntimeSpec.new(%{
+      intake?: Keyword.get(opts, :intake?, true),
       runtime_spec_id: "realized_contact_runtime:#{realized_contact.realized_contact_id}",
       generation: 1,
       realized_contact_id: realized_contact.realized_contact_id,

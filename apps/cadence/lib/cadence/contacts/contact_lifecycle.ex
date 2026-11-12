@@ -169,6 +169,11 @@ defmodule Cadence.Contacts.ContactLifecycle do
       |> ContactSettlement.sweep_candidates(running_realized_contact_ids(mission_id))
       |> collect_reconcile_results(&settle_realized_for_reconcile/1)
 
+    {replaying_realized_contact_ids, replay_errors} =
+      mission_id
+      |> replay_candidates(reference_time)
+      |> collect_reconcile_results(&replay_realized_for_reconcile/1)
+
     {:ok,
      %{
        reference_time: reference_time,
@@ -178,12 +183,14 @@ defmodule Cadence.Contacts.ContactLifecycle do
        completed_realized_contact_ids: Enum.reverse(completed_realized_contact_ids),
        restarted_realized_contact_ids: Enum.reverse(restarted_realized_contact_ids),
        settling_realized_contact_ids: Enum.reverse(settling_realized_contact_ids),
+       replaying_realized_contact_ids: Enum.reverse(replaying_realized_contact_ids),
        errors:
          Enum.reverse(expiration_errors) ++
            Enum.reverse(scheduled_completion_errors) ++
            Enum.reverse(realization_errors) ++
            Enum.reverse(completion_errors) ++
-           Enum.reverse(restart_errors) ++ Enum.reverse(settle_errors)
+           Enum.reverse(restart_errors) ++
+           Enum.reverse(settle_errors) ++ Enum.reverse(replay_errors)
      }}
   end
 
@@ -202,6 +209,37 @@ defmodule Cadence.Contacts.ContactLifecycle do
         {:error, reason} ->
           {:error, reconcile_error(:realized_contact_settlement, realized_contact, reason)}
       end
+    end
+  end
+
+  # #71 follow-up: one replay per mission at a time, so a backlog of ended contacts drains in
+  # turn and doesn't swamp the TSDB as it comes back.
+  defp replay_candidates(nil, _reference_time), do: []
+
+  defp replay_candidates(mission_id, reference_time) do
+    if ContactSettler.replaying?(mission_id) do
+      []
+    else
+      mission_id
+      |> ContactSettlement.next_replay(
+        Runtime.journaled_realized_contact_ids(mission_id),
+        running_realized_contact_ids(mission_id),
+        Enum.max([reference_time, DateTime.utc_now()], DateTime)
+      )
+      |> List.wrap()
+    end
+  end
+
+  defp replay_realized_for_reconcile(%RealizedContact{} = realized_contact) do
+    case ContactSettler.replay(realized_contact) do
+      :ok ->
+        {:ok, realized_contact.realized_contact_id}
+
+      {:error, :replay_running} ->
+        :skip
+
+      {:error, reason} ->
+        {:error, reconcile_error(:realized_contact_replay, realized_contact, reason)}
     end
   end
 
