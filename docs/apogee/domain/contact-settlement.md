@@ -159,6 +159,31 @@ cursor.
 Director (2026-11-11): 30 min deadline per replay, backoff 5 min doubling to 2 h, one replay
 per mission at a time, stop after 6 failures.
 
+**Built 2026-11-12 (1d6be29f).** As designed, with these specifics:
+`RealizedContactRuntimeSpec.intake?`; `ContactSettler.replay/2` (registered per mission);
+`ContactSettlement.next_replay/4` and `record_replay/4`; `IngressJournal.FileSystem.stored_streams/1`
+reads each stream's `stream.term` context without opening it. A contact ended before #71 reads
+`state: "inspecting"` while its replay runs, so the settle sweep leaves it alone; a drained one
+reads `settled` with `inspected_at` (`replayed_at` only when it had been `unsettled`). Journal
+stream directories are never deleted, so `stored_streams/1` grows with every journaled contact;
+fine at this scale, a cleanup policy is future work.
+
+## Journal off (2026-11-12)
+
+The ingress journal is opt-in (`config.exs`: `enabled?: false`; `CADENCE_INGRESS_JOURNAL_ENABLED`
+in `runtime.exs`). With it off there is nothing on disk: a frame that fails processing is
+dropped, and a TSDB outage's backlog lives only in the projector's memory, lost when the runtime
+stops. Settlements record `journal: "disabled"`, and an unsettled one carries `backlog.queued`
+and `backlog.lost: true`; such an item closes only by an operator's acknowledge (ux "Mark as
+seen", recorded with who and when), never by replay. qa's dev stack runs with it on since
+2026-11-12 00:57Z.
+
+Trade-off for the prod default (the user's call): on costs disk (bounded by `max_bytes`, 8 GiB per
+stream by default) and a synchronous append per received chunk (`durability: :sync`, an fsync
+per batch; `:page_cache` trades a host crash's last writes for less IO). Off loses whatever
+didn't reach the TSDB when processing fails or a node stops mid-outage, and #71's
+nothing-dropped guarantee doesn't hold.
+
 ## Not covered by c732a2ba
 
 c732a2ba is partition-owner initialization backoff in `MissionCoordinator`. It doesn't touch
