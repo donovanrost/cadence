@@ -74,14 +74,27 @@ sentence. Footer `Fix all 3 before staging` (secondary). **Hidden until cross-re
 (plan: phase 2); the aside then starts with C3.
 
 ### C3 · Roll out to (panel)
-ApOption radio cards: the recommended subset first ("Earendil Block 2 first · 50 SC" +
-"Recommended. Runs rev 15 on the new batch while Block 1 stays on rev 14.") and "All spacecraft ·
-550 SC" (disabled with reason when breaking items are unfixed: "Needs the 3 breaking items fixed
-first"). Options are generated from profiles (grouping spacecraft by profile) since catalogs are set
-per spacecraft today. Primary commit button: `Stage rev 15 for Block 2` under option A, or
-**`Request activation for 50 spacecraft`** under option B (U2: goes through the existing
-draft/review/activate flow per spacecraft configuration). Caption mono 11: `REV 14 KEPT FOR
-ROLLBACK`.
+**Rollout is a change set** (#65; fe-setup). There's no per-spacecraft activation (U2's option B is gone for
+profile catalogs). Rows are ApOption radio cards:
+- **By profile:** one card per profile whose spacecraft use this catalog, with a checkbox for each. Each card
+  reads `Earendil Block 1 · 500 SC · rev 14`. Choosing profiles stages one `spacecraft_profile`
+  `catalog_revision_id` op per profile. This option is listed first.
+- **A few spacecraft first:** a spacecraft picker (the Compose C1 select pattern) for a canary. It stages one
+  override per spacecraft (P3's op). Use it to try rev 15 before moving a whole profile.
+- **Counts come only from the server's dry run**, shown under the options once the choice is made:
+  - `Moves 499 spacecraft to rev 15.`
+  - `1 keeps its own catalog (override, rev 4).` Spacecraft that don't move are grouped by the server's
+    reason. How profile versions count is pending domain; whatever the dry run gives is shown with its
+    reason, and nothing else is inferred.
+  - `Cancels 23 queued commands.` (caution) This is the `catalog_cancels_commands` hold, which is then
+    acknowledged on the Changes review.
+  - While the dry run is running: `CHECKING…`. If it fails, the server's sentence; Stage is disabled with that
+    reason.
+- **Primary:** `Stage rev 15 for Earendil Block 1`, `Stage rev 15 for 2 profiles` or `Stage rev 15 for 3
+  spacecraft`. It's disabled with a reason until something is chosen, while the dry run hasn't answered, and
+  while breaking items are unfixed ("Needs the 3 breaking items fixed first"). Staging opens Setup › Changes
+  on the change set, where the catalog holds are reviewed.
+- Caption mono 11: `REV 14 KEPT FOR ROLLBACK`, shown only if the server keeps it.
 
 ## States
 Parsing (live), Valid, Valid with warnings, Failed (diagnostics), Already applied (read-only diff
