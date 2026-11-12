@@ -243,8 +243,8 @@ missing endpoint or decision; an item with no blocker can start now.
 3. Catalog-path generations (#36), which unblock Catalog C3 rollout. Plan to the director first.
 4. ~~Spacecraft archive model (#50)~~ done (7dbd3994, e0232291, 5ee6d6e8; rollback of create verified c8526c57).
 4b. ~~Reconciler give-up~~ fixed (292c8e6b: a raising reconcile is rescued as `reconcile_crashed`, polling continues). Original: the mission runtime reconciler has crash-looped since the 22:14Z restart (`binary_to_existing_atom("criteria")` in `MissionModel.Reference.new`). No runtime spec, so no spacecraft ingress. No live remedy during the #65 pass (director). Then one qa restart, plus an `active_spec` check in the runbook.
-4c. `mission_runtime` attention source: fe-ops' row in (751ac5f5), cleared to ship. `MissionRuntimeStatus` 292c8e6b; `/counts` runtime api-ops c69f0578.
-4d. `contact_settlement` journal off (96307ac5) and acknowledging a lost item: fe-ops' copy and Mark as seen are in (171ecd43, bbe5e8fe).
+4c. ~~`mission_runtime` attention source~~ landed (7a6c596a; fe-ops row 751ac5f5; `MissionRuntimeStatus` 292c8e6b; `/counts` runtime api-ops c69f0578). Live after qa's next restart.
+4d. ~~`contact_settlement` journal off and acknowledging a lost item~~ landed (96307ac5, e99cd89d; fe-ops 171ecd43, bbe5e8fe).
 5. ~~#71 `contact_settlement` attention source~~ landed (9e8145fa, 551cb796, 8f7066b1; live on :4011 22:14Z; fe-ops reader 14330a4a). Replay follow-up next.
 6. #71 replay (after 00:30Z): automatic retries back off from 5 min, doubling to 2 h; after 6 failed retries `retry: "manual"` and POST `…/attention/contact_settlement/:id/retry`. fe-ops' copy and Retry action are in (c10265fd), so domain ships it after 00:30Z. Agreed: a retry on a non-manual item gets 409 `retry_not_manual` with the current item in `error.details.item`, no side effect; unknown or resolved gets 404 `attention_item_not_found`; gated by `operate_mission`; `failure_kind`/`failure_message` follow the latest attempt, plus `first_failure_kind` when it differs; every change publishes `attention` on the mission topic.
 
