@@ -20,7 +20,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | **ux** | Visual review of the unreviewed boards (§7); Compose C1 layout ruling (default: accept as built, #64) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
 | **api** | Port the #42 fix to `develop` (DECISIONS #72). Done: #42 verify race 32b945f3 (advisory lock, mission-then-attempt order, timeout reconcile, call-site tests; api-ops reviewed); Compose drafts a4d19e69 (`GET/PUT/DELETE /missions/:id/command-draft`, migration). Next with the director | — |
-| **api-ops** | qa #46 (director): the simulator Orchestrator survives a Provider.Store timeout on its tick path (skip and retry next tick), a test that the Orchestrator stays up, and the cause of the 5 s Store calls under load (fix it if handle_call does heavy work). Build in a scratch worktree; lands after the 00:30Z freeze with a sim restart. Done: flight_event v1 (a02c2cee, 1b3be7f7, e07969bb, docs 291744b7); #42 review (32b945f3) | flight_event: qa sees a row live |
+| **api-ops** | queue empty; next with the director. Done: qa #46 simulator Orchestrator survives Store timeouts (3ea527b2: ETS-mirrored Store reads, guarded tick steps, linked-stream sweep; live after qa's sim restart); flight_event v1 (a02c2cee, 1b3be7f7, e07969bb, docs 291744b7); #42 review (32b945f3) | flight_event: qa sees a row live; #46: qa sim restart |
 | **domain** | catalog-path generations (#36; plan to the director first, it touches activation) | — (done: qa #34 #59 e683b3e2; qa #19 server side 33529f29; #50 archive) |
 
 ## 2. Ops
