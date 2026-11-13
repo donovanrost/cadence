@@ -6,6 +6,8 @@ const sc = (id: string, have: number, need: number | null, met: boolean) => ({
   rule_met: met,
   contacts: { have, need },
   reasons: [],
+  longest_gap: null,
+  uplink_passes: null,
 });
 
 describe("coverage (ux U23)", () => {
@@ -39,7 +41,12 @@ describe("distinctWindows (ux K1 #5)", () => {
       starts_at: "2026-11-11T12:09:00Z",
       ends_at: "2026-11-11T12:17:00Z",
       synthetic: true,
-      effect: { rule_met_after: false, contacts_after: { have: 5, need: 8 }, clashes_with: [] },
+      effect: {
+        rule_met_after: false,
+        contacts_after: { have: 5, need: 8 },
+        clashes_with: [],
+        longest_gap_after_seconds: null,
+      },
     });
     expect(distinctWindows([alt("s1", "r1"), alt("s2", "r2")]).map((a) => a.snapshot_id)).toEqual([
       "s1",

@@ -20,6 +20,7 @@ const plan = (over: Partial<PlanDetail>): PlanDetail => ({
   unconfirmed: null,
   chain: null,
   execution: null,
+  provider_freeze: null,
   approval: null,
   submission: null,
   previous_round: null,

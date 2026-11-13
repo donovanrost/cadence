@@ -38,6 +38,9 @@ const request = (id: string, title: string, extra: Partial<GroupRow> = {}): Grou
   second_go_required: false,
   awaiting_me: false,
   operation_id: null,
+  progress: null,
+  finished: null,
+  uplink: null,
   ...extra,
 });
 

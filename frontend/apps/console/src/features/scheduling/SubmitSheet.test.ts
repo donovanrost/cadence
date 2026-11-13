@@ -28,6 +28,7 @@ const plan: PlanDetail = {
   unconfirmed: null,
   chain: null,
   execution: null,
+  provider_freeze: null,
   approval: null,
   submission: null,
   previous_round: null,
@@ -182,6 +183,8 @@ describe("SubmitSheet at-risk passes (ux #13)", () => {
           ends_at: "2026-11-11T00:20:00Z",
           synthetic: true,
           locked: false,
+          expires_at: null,
+          booking: null,
         },
       ],
       at_risk: [

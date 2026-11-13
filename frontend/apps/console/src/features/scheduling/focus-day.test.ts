@@ -11,6 +11,8 @@ const pass = (id: string, sc: string, from: string, to: string) => ({
   ends_at: `2026-11-13T${to}:00Z`,
   synthetic: false,
   locked: false,
+  expires_at: null,
+  booking: null,
 });
 const plan = {
   passes: [
@@ -23,7 +25,14 @@ const plan = {
     rule_met: 0,
     rule_total: 1,
     spacecraft: [
-      { spacecraft_id: "sc1", rule_met: false, contacts: { have: 3, need: 4 }, reasons: [] },
+      {
+        spacecraft_id: "sc1",
+        rule_met: false,
+        contacts: { have: 3, need: 4 },
+        reasons: [],
+        longest_gap: null,
+        uplink_passes: null,
+      },
     ],
     rules: [],
   },

@@ -11,6 +11,8 @@ const pass = (id: string, sc: string, start: string) => ({
   ends_at: start,
   synthetic: true,
   locked: false,
+  expires_at: null,
+  booking: null,
 });
 const plan = (state: PlanDetail["state"], providers: readonly string[]): PlanDetail => ({
   id: "plan_1",
@@ -35,6 +37,7 @@ const plan = (state: PlanDetail["state"], providers: readonly string[]): PlanDet
   at_risk: [],
   chain: null,
   execution: null,
+  provider_freeze: null,
   approval: null,
   submission: null,
   previous_round: null,
