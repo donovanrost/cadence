@@ -5,7 +5,8 @@ fe-ops, 2026-11-13, for api (cc dashboards, lead, domain). Spec: ux `screens/Das
 inserts are editor commands, saved through `CurrentVersions`), Q6 (update and delete are new domain functions),
 Q10 (refuse while used, then retire; never a hard delete; audited).
 
-All paths under `/api/console/v1/missions/:mission_id/dashboards/library`. Errors use the console Problem
+All paths under `/api/console/v1/missions/:mission_id/dashboard-library`: a sibling of `/dashboards` (like slice 6's
+`/dashboard-playlists`), so `library` never reads as a `:dashboard_id` (dashboards' review). Errors use the console Problem
 envelope (`{error: {code, message, details}}`). Invalidation: `dashboards`.
 
 ## What exists (read of the domain, 2026-11-13)
@@ -18,7 +19,7 @@ envelope (`{error: {code, message, details}}`). Invalidation: `dashboards`.
 
 ## Proposed shapes
 
-### D21 `GET /library?q=&page=` (mission member)
+### D21 `GET /dashboard-library?q=&page=` (mission member)
 ```
 {items: [{id, name, description, kind, latest_version, used_by_count,
           updated_at, updated_by: {id, name} | null}],
@@ -29,7 +30,7 @@ envelope (`{error: {code, message, details}}`). Invalidation: `dashboards`.
 - `used_by_count`: dashboards whose **current** version places it (the same rule Delete uses).
 - Retired items are left out. `q` matches name and description.
 
-### D21 `GET /library/:item?version=n` (mission member)
+### D21 `GET /dashboard-library/:item?version=n` (mission member)
 ```
 {item: {id, name, description, kind, latest_version, updated_at, updated_by},
  version: {version, definition_json, summary, saved_at, saved_by: {id, name} | null},
@@ -42,12 +43,12 @@ envelope (`{error: {code, message, details}}`). Invalidation: `dashboards`.
 - A retired item is `404 library_item_not_found` (its versions stay stored for old dashboard versions).
 
 ### D22 writes (author: the editor's `:edit` access)
-- `POST /library {name, description, definition_json, summary}` → `201 {id, version: 1}`.
-- `POST /library/:item/versions {definition_json, summary, expected_version}` → `{version}`;
+- `POST /dashboard-library {name, description, definition_json, summary}` → `201 {id, version: 1}`.
+- `POST /dashboard-library/:item/versions {definition_json, summary, expected_version}` → `{version}`;
   `409 library_item_changed` with `details {latest_version}`.
-- `PATCH /library/:item {name?, description?, expected_version}` → the D21 item; `409 library_item_changed`;
+- `PATCH /dashboard-library/:item {name?, description?, expected_version}` → the D21 item; `409 library_item_changed`;
   `422 invalid_params` (name blank or over 120 characters).
-- `DELETE /library/:item?expected_version=n` → `204`, which **retires** the item (Q10).
+- `DELETE /dashboard-library/:item?expected_version=n` → `204`, which **retires** the item (Q10).
   `409 library_item_in_use` with `details {used_by: {dashboards: [{id, name, placements}]}}` while any
   current dashboard version places it; `409 library_item_changed` if it moved. Writes the audit record
   "Retired library widget Battery tile" (`target {kind: library_item, id, label}`).
@@ -61,7 +62,7 @@ envelope (`{error: {code, message, details}}`). Invalidation: `dashboards`.
   WidgetSheet's `From library` tab by dashboards.
 - **Live preview.** v1 previews the definition (kind, title, bound points, display options) from
   `definition_json`. A rendered preview needs the widget evaluated at a context, so it would be a later read
-  (`POST /library/:item/preview {version, context}` → one widget frame). Say if it's cheap to reuse the
+  (`POST /dashboard-library/:item/preview {version, context}` → one widget frame). Say if it's cheap to reuse the
   dashboard preview path.
 
 ## Domain (Q6)
