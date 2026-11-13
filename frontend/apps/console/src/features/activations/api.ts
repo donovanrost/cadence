@@ -17,8 +17,8 @@ import { formatShort, type OpState } from "@/ui";
  */
 const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/activations`;
 
-/** api served L10 in be59d4f32; flips on with qa (a 404 on Setup › Changes trips qa's e2e guard). */
-export const ACTIVATIONS_LIVE = false;
+/** api serves L10 (be59d4f32); on since qa's go 11-13. */
+export const ACTIVATIONS_LIVE = true;
 /** Withdraw waits on domain (api activations.md: withdrawn isn't a state yet). */
 export const WITHDRAW_LIVE = false;
 
@@ -240,7 +240,11 @@ export function decisionLine(r: ActivationRequest): string | null {
     withdrawn: "Withdrawn",
     unrecognized: "Decided",
   }[dcs.state];
-  return `${word} by ${dcs.by?.name ?? "someone"} on ${formatShort(new Date(dcs.at))}: ${dcs.reason}`;
+  const by = dcs.by?.name ?? "someone";
+  // ux U41: "Withdrawn by Mira K. at 11-13 02:20Z: <reason>." (§4 short time, one closing period).
+  if (dcs.state === "withdrawn")
+    return `Withdrawn by ${by} at ${formatShort(new Date(dcs.at))}: ${dcs.reason.replace(/\.$/, "")}.`;
+  return `${word} by ${by} on ${formatShort(new Date(dcs.at))}: ${dcs.reason}`;
 }
 
 /** lead 11-13: a superseded request names the one that replaced it (the link is the caller's). */

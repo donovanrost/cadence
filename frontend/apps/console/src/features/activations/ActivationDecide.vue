@@ -63,6 +63,7 @@ async function go(verb: Verb) {
         label="Reason"
         required
         :maxlength="4096"
+        :placeholder="isRequester ? 'Why you\'re withdrawing it' : undefined"
         :error="error"
       />
       <ApCallout v-if="failure" tone="crit">{{ failure }}</ApCallout>

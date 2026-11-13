@@ -68,6 +68,12 @@ describe("app activation approvals (L10)", () => {
       },
     };
     expect(decisionLine(decided)).toMatch(/^Approved by Ada L\. on 11-13.*: looks right$/);
+    const withdrawn = {
+      ...decided,
+      state: "withdrawn" as const,
+      decision: { ...decided.decision, state: "withdrawn" as const, reason: "not needed." },
+    };
+    expect(decisionLine(withdrawn)).toBe("Withdrawn by Ada L. at 11-13 02:20Z: not needed.");
   });
 
   it("explains a refused decision", () => {
