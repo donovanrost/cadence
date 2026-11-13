@@ -1,0 +1,94 @@
+<script setup lang="ts">
+import { computed, ref } from "vue";
+import { useRoute } from "vue-router";
+import { useRemoteQuery } from "@/api";
+import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote } from "@/ui";
+import RequirementEditor from "./RequirementEditor.vue";
+import RequirementView from "./RequirementView.vue";
+import { fetchRequirement, windowText } from "./requirements.ts";
+
+/** Contact planning › one one-off requirement (ux ContactPlanning.md P4; api fb7510be). */
+const route = useRoute();
+const scope = useMissionScope();
+const missionId = computed(() => scope.value.mission.id);
+const requirementId = computed(() =>
+  typeof route.params.requirementId === "string" ? route.params.requirementId : null,
+);
+const isNew = computed(() => requirementId.value === "new");
+const { state, refetch } = useRemoteQuery(
+  () =>
+    requirementId.value && !isNew.value
+      ? { missionId: missionId.value, requirementId: requirementId.value }
+      : null,
+  fetchRequirement,
+);
+const session = useSession();
+// Requirement writes need organization admin (api 8g, 403 otherwise).
+const canEdit = computed(() => canAdministerOrganization(session, scope.value.organization));
+const editing = ref(false);
+function closed() {
+  editing.value = false;
+  refetch();
+}
+const title = computed(() => {
+  if (isNew.value) return "New requirement";
+  const s = state.value;
+  return s.status === "ready"
+    ? `${s.value.spacecraft.name ?? s.value.spacecraft.id} · ${windowText(s.value.content)}`
+    : "Requirement";
+});
+const crumbs = computed(() => [
+  { label: "Contact planning", to: { name: "setup.contact-planning" } },
+  { label: isNew.value ? "New requirement" : "Requirement" },
+]);
+/** Only an active one-off requirement changes here; a template's changes in its template. */
+const editable = computed(
+  () =>
+    canEdit.value &&
+    state.value.status === "ready" &&
+    state.value.value.state === "active" &&
+    state.value.value.template_id === null,
+);
+</script>
+
+<template>
+  <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
+    <ApBreadcrumb :crumbs="crumbs" />
+    <ApPageHeader :title="title" size="reading">
+      <template v-if="!isNew && state.status === 'ready'" #subtitle
+        ><span class="font-mono text-sm text-text-3">v{{ state.value.version }}</span></template
+      >
+      <ApButton v-if="editable && !editing" @click="editing = true">Edit</ApButton>
+    </ApPageHeader>
+    <RequirementEditor
+      v-if="isNew && canEdit"
+      :mission-id="missionId"
+      :requirement="null"
+      @close="$router.push({ name: 'setup.contact-planning' })"
+    />
+    <ApRemote
+      v-else-if="!isNew"
+      :state="state"
+      loading-label="Loading requirement…"
+      @retry="refetch"
+    >
+      <template #default="{ value }">
+        <RequirementEditor
+          v-if="editing"
+          :mission-id="missionId"
+          :requirement="value"
+          @close="closed"
+        />
+        <RequirementView
+          v-else
+          :mission-id="missionId"
+          :requirement="value"
+          :editable="editable"
+          :can-edit="canEdit"
+          @ended="refetch"
+        />
+      </template>
+    </ApRemote>
+  </div>
+</template>

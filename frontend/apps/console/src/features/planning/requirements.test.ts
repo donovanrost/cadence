@@ -1,0 +1,116 @@
+import { describe, expect, it } from "vite-plus/test";
+import { decode } from "@/api";
+import {
+  endedLine,
+  fetchRequirements,
+  fieldErrors,
+  notActiveLine,
+  requirementFacts,
+  withSpacecraftChoices,
+} from "./requirements.ts";
+import { templateSchemaReader } from "./templates.ts";
+
+const schema = decode(templateSchemaReader, {
+  fields: [
+    field("spacecraft_id", "Spacecraft", "reference", "window"),
+    field("earliest_start", "Window opens", "datetime", "window"),
+    field("latest_end", "Window closes", "datetime", "window"),
+    field("contact_count", "Contacts", "integer", "requirement"),
+    {
+      ...field("max_gap_seconds", "Longest time without a contact", "integer", "requirement", true),
+      unit: "s",
+    },
+  ],
+  defaults: { contact_count: 1, max_gap_seconds: null },
+});
+function field(path: string, label: string, type: string, group: string, advanced = false) {
+  return {
+    path,
+    label,
+    type,
+    unit: null,
+    enum: null,
+    range: null,
+    default: null,
+    required: false,
+    help: null,
+    visible_when: null,
+    group,
+    advanced,
+  };
+}
+const byMira = {
+  at: "2026-11-12T10:00:00Z",
+  by: { kind: "user", id: "u1", name: "Mira K." },
+  reason: "Pass met",
+};
+
+describe("one-off requirements (ux P4, api fb7510be)", () => {
+  it("reads a list page, with or without rule_summary", async () => {
+    const row = {
+      id: "req_1",
+      state: "closed",
+      version: 2,
+      spacecraft: { id: "sc1", name: "EARENDIL-001" },
+      template_id: null,
+      content: { earliest_start: "2026-11-14T00:00:00Z", latest_end: "2026-11-15T00:00:00Z" },
+      updated_at: "2026-11-12T10:00:00Z",
+      state_changed: byMira,
+    };
+    const fetchMock = async () =>
+      new Response(JSON.stringify({ data: { requirements: [row], page: 1, next_page: null } }), {
+        status: 200,
+      });
+    const original = globalThis.fetch;
+    globalThis.fetch = fetchMock as typeof fetch;
+    try {
+      const r = await fetchRequirements(
+        { missionId: "m", source: "one_off", page: 1 },
+        new AbortController().signal,
+      );
+      expect(r.ok && r.value.requirements[0]?.rule_summary).toBeNull();
+      expect(r.ok && endedLine(r.value.requirements[0] ?? (row as never))).toBe(
+        "Closed by Mira K. on 11-12: Pass met",
+      );
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("says who ended it from a 409, without a refetch", () => {
+    expect(
+      notActiveLine({
+        kind: "conflict",
+        code: "requirement_not_active",
+        message: "x",
+        details: { state: "canceled", state_changed: byMira },
+      }),
+    ).toBe("Already canceled by Mira K. on 11-12: Pass met.");
+  });
+
+  it("puts 422 details under their fields", () => {
+    expect(
+      fieldErrors({
+        kind: "invalid",
+        code: "invalid_params",
+        message: "x",
+        details: {
+          max_gap_seconds: "must not be longer than the window",
+          "content.foo": "unknown field",
+        },
+      }),
+    ).toEqual({ max_gap_seconds: "must not be longer than the window", foo: "unknown field" });
+  });
+
+  it("offers spacecraft by name and reads an empty gap limit as 'No limit'", () => {
+    if (!schema.ok) throw schema.error;
+    const s = withSpacecraftChoices(schema.value, [{ id: "sc1", name: "EARENDIL-001" }]);
+    expect(s.fields[0]?.enum).toEqual([{ value: "sc1", label: "EARENDIL-001" }]);
+    const facts = requirementFacts(s, {
+      spacecraft: { id: "sc1", name: "EARENDIL-001" },
+      content: { contact_count: 2, max_gap_seconds: null },
+    });
+    expect(facts.find((f) => f.key === "max_gap_seconds")?.value).toBe("No limit");
+    expect(facts.find((f) => f.key === "contact_count")?.value).toBe("2");
+  });
+});

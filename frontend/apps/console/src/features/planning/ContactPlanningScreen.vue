@@ -54,7 +54,7 @@ const subline = (s: PlanningSummary) =>
         <ApCallout v-if="value.policy === null" tone="off">
           The scheduler needs a policy and at least one contact rule before it can draft a day.
         </ApCallout>
-        <RequirementsTab :summary="value" />
+        <RequirementsTab :summary="value" :mission-id="scope.mission.id" />
       </template>
     </ApRemote>
   </div>

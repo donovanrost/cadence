@@ -1,0 +1,127 @@
+<script setup lang="ts">
+import { computed, ref, watch } from "vue";
+import { useRouter } from "vue-router";
+import { useRemoteQuery } from "@/api";
+import { failureOutcome, fromDocument, type FormValues } from "@/features/changes/index.ts";
+import { fetchSpacecraftDirectory } from "@/features/spacecraft/index.ts";
+import { useSession } from "@/shell";
+import { ApButton, ApCallout, ApRemote, plural } from "@/ui";
+import RequirementGroups from "./RequirementGroups.vue";
+import {
+  fetchRequirementSchema,
+  fieldErrors,
+  notActiveLine,
+  saveRequirement,
+  withSpacecraftChoices,
+  type RequirementDetail,
+} from "./requirements.ts";
+import { fetchRequirementSupersedes, supersedeSentence } from "./supersedes.ts";
+import { buildNested } from "./templates.ts";
+
+/** P4 one-off requirement: new, or a new version (ux ContactPlanning.md; api fb7510be). */
+const props = defineProps<{ missionId: string; requirement: RequirementDetail | null }>();
+const emit = defineEmits<{ close: [] }>();
+const router = useRouter();
+const session = useSession();
+const rawSchema = useRemoteQuery(() => props.missionId, fetchRequirementSchema);
+const directory = useRemoteQuery(() => props.missionId, fetchSpacecraftDirectory);
+const schema = computed(() => {
+  const s = rawSchema.state.value;
+  if (s.status !== "ready") return s;
+  const d = directory.state.value;
+  const rows = d.status === "ready" ? d.value.spacecraft : [];
+  return { ...s, value: withSpacecraftChoices(s.value, rows) };
+});
+const supersedes = useRemoteQuery(
+  () =>
+    props.requirement ? { missionId: props.missionId, requirementId: props.requirement.id } : null,
+  fetchRequirementSupersedes,
+);
+const drafts = computed(() =>
+  supersedes.state.value.status === "ready"
+    ? supersedes.state.value.value.filter((d) => d.state !== "superseded")
+    : [],
+);
+const values = ref<FormValues>({});
+const errors = ref<Readonly<Record<string, string>>>({});
+const note = ref<{ tone: "caution" | "crit"; text: string } | null>(null);
+const busy = ref(false);
+watch(
+  () => rawSchema.state.value,
+  (s) => {
+    if (s.status === "ready")
+      values.value = fromDocument(
+        { kind: "requirement", fields: s.value.fields },
+        props.requirement?.content ?? s.value.defaults ?? {},
+      );
+  },
+  { immediate: true },
+);
+const saveLabel = computed(() => {
+  if (!props.requirement) return "Create requirement";
+  const next = `Save v${props.requirement.version + 1}`;
+  return drafts.value.length > 0
+    ? `${next} · supersede ${plural(drafts.value.length, "draft")}`
+    : next;
+});
+
+async function save() {
+  const s = rawSchema.state.value;
+  if (s.status !== "ready" || busy.value) return;
+  // Every field is sent: an explicit null clears (e.g. no gap limit), the rest restate the version.
+  const built = buildNested(
+    s.value.fields,
+    values.value,
+    props.requirement?.content ?? s.value.defaults,
+  );
+  if (!built.ok) {
+    errors.value = built.errors;
+    note.value = {
+      tone: "caution",
+      text: `Fix ${plural(Object.keys(built.errors).length, "highlighted field")} first.`,
+    };
+    return;
+  }
+  errors.value = {};
+  busy.value = true;
+  try {
+    const r = await saveRequirement(props.missionId, props.requirement?.id ?? null, {
+      content: built.document,
+      ...(props.requirement ? { expected_version: props.requirement.version } : {}),
+    });
+    if (!r.ok) {
+      errors.value = fieldErrors(r.error);
+      return void (note.value = {
+        tone: "crit",
+        text: notActiveLine(r.error) ?? failureOutcome(r.error, "changed").sentence,
+      });
+    }
+    if (props.requirement) emit("close");
+    else
+      await router.push({
+        name: "setup.contact-planning.requirement",
+        params: { requirementId: r.value.id },
+      });
+  } finally {
+    busy.value = false;
+  }
+}
+</script>
+
+<template>
+  <ApRemote :state="schema" loading-label="Loading requirement fields…" @retry="rawSchema.refetch">
+    <template #default="{ value: s }">
+      <RequirementGroups v-model="values" :schema="s" :errors="errors" />
+      <ApCallout v-if="requirement && drafts.length > 0" tone="caution">{{
+        supersedeSentence(drafts, requirement.version + 1, session.user.id)
+      }}</ApCallout>
+      <ApCallout v-if="note" :tone="note.tone">{{ note.text }}</ApCallout>
+      <div class="flex flex-wrap gap-2">
+        <ApButton variant="primary" :disabled="busy" disabled-reason="Saving…" @click="save">{{
+          saveLabel
+        }}</ApButton>
+        <ApButton variant="ghost" @click="emit('close')">Cancel</ApButton>
+      </div>
+    </template>
+  </ApRemote>
+</template>

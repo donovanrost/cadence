@@ -28,6 +28,19 @@ export async function fetchTemplateSupersedes(
   return r.ok ? { ok: true, value: r.value.drafts } : r;
 }
 
+/** One-off requirements: the drafts a new version, close or cancel supersedes (same row shape). */
+export async function fetchRequirementSupersedes(
+  key: Readonly<{ missionId: string; requirementId: string }>,
+  signal: AbortSignal,
+): Promise<ApiResult<readonly SupersededDraft[]>> {
+  const r = await request(
+    `/missions/${encodeURIComponent(key.missionId)}/contact-planning/requirements/${encodeURIComponent(key.requirementId)}/supersedes`,
+    reader,
+    { signal },
+  );
+  return r.ok ? { ok: true, value: r.value.drafts } : r;
+}
+
 /** "2026-11-15" → "Sun 15 Nov" (sentence case inside prose). */
 function dayText(day: string): string {
   return new Date(`${day}T00:00:00Z`)
@@ -48,6 +61,8 @@ export function supersedeSentence(
   drafts: readonly SupersededDraft[],
   nextVersion: number,
   userId: string,
+  /** What supersedes them: "Saving v3" by default; "Closing it" / "Canceling it" for requirements. */
+  doing = `Saving v${nextVersion}`,
 ): string {
   const n = drafts.length;
   const list = drafts
@@ -56,5 +71,5 @@ export function supersedeSentence(
       return `${dayText(d.day)} (r${d.plan.version}${who ? `, ${who}` : ""})`;
     })
     .join(", ");
-  return `Saving v${nextVersion} supersedes ${n === 1 ? "1 open draft" : `${n} open drafts`}: ${list}. ${n === 1 ? "It'll" : "They'll"} need drafting again.`;
+  return `${doing} supersedes ${n === 1 ? "1 open draft" : `${n} open drafts`}: ${list}. ${n === 1 ? "It'll" : "They'll"} need drafting again.`;
 }
