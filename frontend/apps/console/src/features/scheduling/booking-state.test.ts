@@ -25,7 +25,7 @@ describe("K1 per-contact booking (api 8e)", () => {
     expect(bookingLook(booking("uncertain", null))?.kind).toBe("unconfirmed");
     expect(bookingLook(booking("never_sent", "sending"))?.word).toBe("Requested · sending");
     expect(bookingLook(null)).toBeNull();
-    expect(bookingLook(booking("teleported", null))).toBeNull();
+    expect(bookingLook(booking({ unrecognized: "teleported" }, null))).toBeNull();
   });
 
   it("turns rejected and failed bookings into Demand rows, with the server's reason when it has one", () => {

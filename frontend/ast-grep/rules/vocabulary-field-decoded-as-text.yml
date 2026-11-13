@@ -48,7 +48,6 @@
       "ast-grep/fixtures/**",
       # Not migrated yet (BACKLOG §12B, 178 sites on 11-13): each owner removes their file as they migrate.
       "apps/console/src/api/http.ts",
-      "apps/console/src/api/session.ts",
       "apps/console/src/features/account/invitations.ts",
       "apps/console/src/features/alarms/api.ts",
       "apps/console/src/features/alarms/episodes.ts",
@@ -93,12 +92,9 @@
       "apps/console/src/features/replan/useReplan.ts",
       "apps/console/src/features/resolutions/api.ts",
       "apps/console/src/features/review/api.ts",
-      "apps/console/src/features/scheduling/api.ts",
-      "apps/console/src/features/scheduling/usePlanDay.ts",
       "apps/console/src/features/sources/api.ts",
       "apps/console/src/features/stations/api.ts",
       "apps/console/src/features/telemetry/api.ts",
       "apps/console/src/features/timeline/api.ts",
-      "apps/console/src/shell/counts.ts",
     ],
 }

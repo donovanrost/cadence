@@ -66,7 +66,7 @@ describe("draftedByOther (ux K1 drafter line)", () => {
         superseded: null,
         repair_of: null,
       }) as const;
-    const mira = { kind: "user", id: "user_mira", name: "Mira K." };
+    const mira = { kind: "user" as const, id: "user_mira", name: "Mira K." };
     expect(draftedByOther(row(mira), "user_me")).toBe("Drafted by Mira K. · updated 10:52Z");
     const created = (at: string) => ({ ...row(mira), created_at: at });
     expect(draftedByOther(created("2026-11-10T10:40:00Z"), "user_me")).toBe(
@@ -76,9 +76,9 @@ describe("draftedByOther (ux K1 drafter line)", () => {
       "Drafted 10:52Z by Mira K.",
     );
     expect(draftedByOther(row(mira), "user_mira")).toBeNull();
-    expect(draftedByOther(row({ kind: "system", id: undefined, name: "Cadence" }), "user_me")).toBe(
-      "Drafted by Cadence (automatic draft) · updated 10:52Z",
-    );
+    expect(
+      draftedByOther(row({ kind: "system" as const, id: undefined, name: "Cadence" }), "user_me"),
+    ).toBe("Drafted by Cadence (automatic draft) · updated 10:52Z");
     expect(draftedByOther(row(null), "user_me")).toBeNull();
   });
 });

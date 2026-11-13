@@ -189,12 +189,12 @@ describe("SubmitSheet at-risk passes (ux #13)", () => {
       ],
       at_risk: [
         {
-          code: "station_degraded",
+          code: "station_degraded" as const,
           snapshot_ids: ["p1"],
           spacecraft_id: undefined,
           ground_station_id: "gs-kir",
           window_id: "w",
-          kind: "degraded",
+          kind: "degraded" as const,
         },
       ],
     };
@@ -220,7 +220,7 @@ describe("SubmitSheet resubmission (U36)", () => {
       ...plan,
       approval: {
         decision: "rejected" as const,
-        actor: { kind: "user", id: "u", name: "Mira K." },
+        actor: { kind: "user" as const, id: "u", name: "Mira K." },
         at: "2026-11-09T10:52:00Z",
         reason: "Move 004 off HBK",
         exceptions: [],

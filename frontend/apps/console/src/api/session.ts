@@ -10,6 +10,7 @@ import {
   token,
   type Decoded,
 } from "./decode.ts";
+import { role } from "./entities.ts";
 import { request, type ApiResult } from "./http.ts";
 
 /** Contract: docs/apogee/api/session.md (GET /api/console/v1/session). */
@@ -18,7 +19,7 @@ const organization = object({
   id: token,
   slug: token,
   name: string,
-  role: nullable(token),
+  role: nullable(role),
   capabilities: array(token),
   missions: array(mission),
 });

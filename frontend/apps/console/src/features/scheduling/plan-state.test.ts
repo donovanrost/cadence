@@ -88,7 +88,12 @@ describe("planOfDay (superseded state)", () => {
       superseded,
       repair_of: null,
     });
-    const why = { at: "2026-11-10T11:00:00Z", by: null, reason: "template_changed", changes: [] };
+    const why = {
+      at: "2026-11-10T11:00:00Z",
+      by: null,
+      reason: "template_changed" as const,
+      changes: [],
+    };
     expect(planOfDay([row("old", "superseded", why)])?.id).toBe("old");
     expect(planOfDay([row("new", "draft", null), row("old", "superseded", why)])?.id).toBe("new");
     expect(planOfDay([row("gone", "canceled", null)])).toBeNull();

@@ -1,5 +1,5 @@
 import type { ApiError, RemoteState } from "@/api";
-import type { DayDemand, Draft, PlanDetail, PlanSummary } from "./api.ts";
+import type { DayDemand, Draft, PlanDetail, PlanSummary, RunPhase } from "./api.ts";
 
 /**
  * K1 view state (plans/scheduling.md "K1 state model", ux ScheduleFlow "K1 plan states").
@@ -10,9 +10,9 @@ export type PlanView =
   | { kind: "failed"; error: ApiError }
   | { kind: "not_set_up"; missing: readonly string[] }
   | { kind: "no_draft"; last: PlanSummary | null; demand: DayDemand | null }
-  | { kind: "drafting"; phase: string | null; startedAt: string | null }
+  | { kind: "drafting"; phase: RunPhase | null; startedAt: string | null }
   /** `stoppedAt`: last recorded progress, so "stopped at or after" (api 413c8e18). */
-  | { kind: "interrupted"; phase: string | null; stoppedAt?: string | null | undefined }
+  | { kind: "interrupted"; phase: RunPhase | null; stoppedAt?: string | null | undefined }
   | { kind: "draft_failed"; message: string }
   | { kind: "plan"; plan: PlanDetail; fromRun: boolean };
 

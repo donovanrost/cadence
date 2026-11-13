@@ -21,7 +21,12 @@ import {
 } from "./api.ts";
 import { openProposal, planOfDay, planView } from "./plan-state.ts";
 
-const progressReader = d.object({ kind: d.string, id: d.token, state: d.string });
+const progressReader = d.object({
+  kind: d.known(["draft", "execute"]),
+  id: d.token,
+  // free-text: only triggers a refetch; never shown or compared
+  state: d.string,
+});
 
 /**
  * K1 data owner: the day's plans (S6), the draft run named by `?run=` (S3, followed by

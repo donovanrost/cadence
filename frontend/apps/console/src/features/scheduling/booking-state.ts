@@ -1,5 +1,6 @@
+import { isKnown } from "@/api";
 import { formatHourMinute, type GanttBarKind } from "@/ui";
-import { stationCode, type PlanPass, type PlanState } from "./api.ts";
+import { stationCode, type BookingState, type PlanPass, type PlanState } from "./api.ts";
 
 /**
  * K1 executing: each drafted bar shows its own booking (api 8e), Requested → Confirmed /
@@ -7,7 +8,7 @@ import { stationCode, type PlanPass, type PlanState } from "./api.ts";
  */
 export type BookingLook = Readonly<{ kind: GanttBarKind; word: string }>;
 
-const LOOKS: Readonly<Record<string, BookingLook>> = {
+const LOOKS: Readonly<Record<BookingState, BookingLook>> = {
   never_sent: { kind: "scheduled", word: "Requested" },
   confirmed: { kind: "own", word: "Confirmed" },
   uncertain: { kind: "unconfirmed", word: "Unconfirmed" },
@@ -17,9 +18,8 @@ const LOOKS: Readonly<Record<string, BookingLook>> = {
 
 /** Null before execution, and for a state this console doesn't know (drawn as drafted). */
 export function bookingLook(booking: PlanPass["booking"]): BookingLook | null {
-  if (!booking) return null;
+  if (!booking || !isKnown(booking.state)) return null;
   const look = LOOKS[booking.state];
-  if (!look) return null;
   return booking.state === "never_sent" && booking.reason === "sending"
     ? { ...look, word: "Requested · sending" }
     : look;
@@ -133,7 +133,7 @@ export function retryWords(booking: Booking): string | null {
 }
 
 /** The row's word is the bar's state (ux): Rejected, Failed, Lost, Not sent. */
-function rowWord(state: string, reason: string | null | undefined): string | null {
+function rowWord(state: BookingState, reason: string | null | undefined): string | null {
   if (state === "rejected") return "Rejected";
   if (state === "failed") return reason && LOST.has(reason) ? "Lost" : "Failed";
   if (state === "never_sent" && reason && reason !== "sending") return "Not sent";
@@ -147,7 +147,7 @@ function rowWord(state: string, reason: string | null | undefined): string | nul
 export function rejectedRows(passes: readonly PlanPass[]) {
   return passes.flatMap((p) => {
     const b = p.booking;
-    const word = b ? rowWord(b.state, b.reason) : null;
+    const word = b && isKnown(b.state) ? rowWord(b.state, b.reason) : null;
     if (!b || !word) return [];
     const { text, next } = reasonWords(b.reason, b);
     const retry = next === null ? retryWords(b) : null;

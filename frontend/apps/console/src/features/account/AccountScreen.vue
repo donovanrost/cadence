@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { roleText } from "@/api";
 import { computed, ref } from "vue";
 import { useSession } from "@/shell/index.ts";
 import { ApKeyValue, ApPageHeader, ApPanel, ApTable, type ApColumn } from "@/ui";
@@ -21,7 +22,7 @@ const memberships = computed<Membership[]>(() =>
   session.organizations.map((org) => ({
     id: org.id,
     name: org.name,
-    role: org.role === null ? "—" : org.role.replaceAll("_", " "),
+    role: org.role === null ? "—" : roleText(org.role),
     missions: org.missions.length === 0 ? "None" : org.missions.map((m) => m.name).join(", "),
   })),
 );

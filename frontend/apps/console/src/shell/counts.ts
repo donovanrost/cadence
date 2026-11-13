@@ -28,8 +28,13 @@ export const countsReader = d.object({
   runtime: d.optional(
     d.nullable(
       d.object({
-        state: d.token,
-        reason: d.optional(d.nullable(d.token)),
+        // An unknown state reads as nothing to say (U38); an unknown reason gets no fix line.
+        state: d.known(["applied", "not_applied"]),
+        reason: d.optional(
+          d.nullable(
+            d.known(["spec_mismatch", "reconcile_crashed", "runtime_not_running", "apply_failed"]),
+          ),
+        ),
         desired_generation: d.optional(d.nullable(d.integer)),
         applied_generation: d.optional(d.nullable(d.integer)),
         /** When the reconciler first failed for the desired generation. */

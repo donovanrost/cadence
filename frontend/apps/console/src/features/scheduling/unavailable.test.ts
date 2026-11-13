@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { Availability, PlanIssue } from "./api.ts";
 import { stationHits } from "./unavailable.ts";
 
-const issue = (code: string, ids: string[], kind?: string): PlanIssue => ({
+const issue = (code: PlanIssue["code"], ids: string[], kind?: PlanIssue["kind"]): PlanIssue => ({
   code,
   snapshot_ids: ids,
   spacecraft_id: undefined,

@@ -1,4 +1,13 @@
-import { decoders as d, request, type ApiResult, type Decoded, type Reader } from "@/api";
+import {
+  actor,
+  actorKinds,
+  decoders as d,
+  request,
+  stationRef,
+  type ApiResult,
+  type Decoded,
+  type Reader,
+} from "@/api";
 
 /** Contracts: docs/apogee/api/scheduling.md §4 (S3 drafts, S6 plans, plan detail with S2 demand). */
 const base = (missionId: string) => `/missions/${encodeURIComponent(missionId)}/contact-plans`;
@@ -27,14 +36,7 @@ const planState: Reader<PlanState> = (value, path) => {
 };
 
 /** Station identity joined by the server (Reads.StationRefs); ids/codes are null when unmatched. */
-export const stationReader = d.nullable(
-  d.object({
-    ref: d.nullable(d.string),
-    id: d.nullable(d.token),
-    code: d.nullable(d.string),
-    name: d.nullable(d.string),
-  }),
-);
+export const stationReader = d.nullable(stationRef);
 export type StationRef = Decoded<typeof stationReader>;
 
 /** Why a draft / pending plan was overtaken (DECISIONS: superseded state; scheduling.md). */
@@ -42,10 +44,10 @@ export const supersededReader = d.nullable(
   d.object({
     at: d.timestamp,
     by: d.nullable(d.object({ name: d.string })),
-    reason: d.string,
+    reason: d.knownText(["template_changed", "requirement_changed", "requirement_closed"]),
     changes: d.array(
       d.object({
-        kind: d.string,
+        kind: d.known(["requirement", "template"]),
         id: d.token,
         name: d.nullable(d.string),
         from_version: d.nullable(d.integer),
@@ -69,7 +71,11 @@ const planRow = {
   window: d.object({ from: d.nullable(d.timestamp), to: d.nullable(d.timestamp) }),
   /** `kind: system` = an automatic run ("Cadence"); null only when unknown (api af0279d1). */
   author: d.nullable(
-    d.object({ kind: d.optional(d.string), id: d.optional(d.token), name: d.string }),
+    d.object({
+      kind: d.optional(d.knownText(actorKinds)),
+      id: d.optional(d.token),
+      name: d.string,
+    }),
   ),
   counts: d.object({
     passes: d.integer,
@@ -128,30 +134,27 @@ export type PlanList = Decoded<typeof plansReader>;
 
 /** One conflict / at-risk entry; fields depend on `code`, so the code-specific ones are optional. */
 const planIssue = d.object({
-  code: d.string,
+  code: d.known(["selected_contacts_overlap", "station_unavailable", "station_degraded"]),
   snapshot_ids: d.array(d.token),
   spacecraft_id: d.optional(d.nullable(d.token)),
   ground_station_id: d.optional(d.token),
   window_id: d.optional(d.token),
-  kind: d.optional(d.string),
+  kind: d.optional(d.known(["outage", "maintenance", "degraded"])),
 });
 
 const planRef = d.object({ id: d.token, version: d.integer });
-const actorReader = d.object({
-  kind: d.string,
-  id: d.nullable(d.token),
-  name: d.nullable(d.string),
-});
 const approvalReader = d.nullable(
   d.object({
     decision: d.oneOf(["approved", "rejected"] as const),
-    actor: actorReader,
+    actor,
     at: d.timestamp,
+    // free-text: the reviewer's note
     reason: d.nullable(d.string),
     exceptions: d.array(
       d.object({
         requirement_id: d.token,
         requirement_version: d.nullable(d.integer),
+        // free-text: why the admin accepted this gap
         reason: d.string,
       }),
       5_000,
@@ -161,7 +164,7 @@ const approvalReader = d.nullable(
 const submissionReader = d.nullable(
   d.object({
     round: d.integer,
-    actor: actorReader,
+    actor,
     at: d.timestamp,
     note: d.nullable(d.string),
     unchanged: d.boolean,
@@ -172,7 +175,14 @@ const previousRoundReader = d.nullable(
     round: d.integer,
     version: d.integer,
     approval: approvalReader,
-    acknowledgements: d.array(d.object({ requirement_id: d.token, reason: d.string }), 5_000),
+    acknowledgements: d.array(
+      d.object({
+        requirement_id: d.token,
+        // free-text: the approver's reason for accepting the gap
+        reason: d.string,
+      }),
+      5_000,
+    ),
   }),
 );
 const executionReader = d.nullable(
@@ -229,6 +239,16 @@ const providerFreezeReader = d.optional(
   ),
 );
 
+/** Per-pass booking states (api 8e); they add up to the plan's `execution` counts. */
+export const bookingStates = [
+  "never_sent",
+  "confirmed",
+  "uncertain",
+  "rejected",
+  "failed",
+] as const;
+export type BookingState = (typeof bookingStates)[number];
+
 export const planDetailReader = d.object({
   ...planRow,
   passes: d.array(
@@ -250,7 +270,8 @@ export const planDetailReader = d.object({
       booking: d.optional(
         d.nullable(
           d.object({
-            state: d.token,
+            state: d.knownText(bookingStates),
+            // free-text: an open vocabulary (provider codes); words in booking-state.ts with a fallback
             reason: d.optional(d.nullable(d.token)),
             at: d.optional(d.nullable(d.timestamp)),
             /** The provider's own text (ux: appended in quotes). */
@@ -261,12 +282,8 @@ export const planDetailReader = d.object({
             resolved: d.optional(
               d.nullable(
                 d.object({
-                  // api a6aaa60a: kind comes from the error document and may be absent.
-                  by: d.object({
-                    kind: d.nullable(d.token),
-                    id: d.nullable(d.token),
-                    name: d.nullable(d.string),
-                  }),
+                  // api a6aaa60a: kind comes from the error document and may be absent (shared actor).
+                  by: actor,
                   at: d.timestamp,
                 }),
               ),
@@ -300,7 +317,7 @@ export const planDetailReader = d.object({
         version: d.integer,
         spacecraft_id: d.nullable(d.token),
         text: d.string,
-        source: d.string,
+        source: d.known(["requirement", "template"]),
         window: d.object({ from: d.nullable(d.timestamp), to: d.nullable(d.timestamp) }),
       }),
       5_000,
@@ -377,10 +394,22 @@ const failure: Reader<{ code: string | null; message: string | null } | null> = 
   return { code: pick("code"), message: pick("message") };
 };
 
+/** Drafting phases in order (ScheduleFlow K1: MATERIALIZING → SEARCHING → OPTIMIZING → PLAN). */
+export const runPhases = [
+  "materializing",
+  "searching",
+  "optimizing",
+  "materializing_plan",
+] as const;
+export type RunPhase = (typeof runPhases)[number] | Readonly<{ unrecognized: string }>;
+/** The phase in words; an unknown one shows the server's word (typing §12). */
+export const runPhaseText = (p: RunPhase): string =>
+  (typeof p === "string" ? p : p.unrecognized).replaceAll("_", " ");
+
 const draftRunReader = d.object({
   id: d.token,
   state: d.oneOf(runStates),
-  phase: d.nullable(d.string),
+  phase: d.nullable(d.knownText(runPhases)),
   horizon: d.object({ from: d.timestamp, to: d.timestamp }),
   failure,
   started_at: d.nullable(d.timestamp),
@@ -399,7 +428,7 @@ export type Draft = Decoded<typeof draftReader>;
 const startReader = d.object({
   run_id: d.token,
   outcome: d.oneOf(["created", "replayed"]),
-  state: d.string,
+  state: d.known(runStates),
 });
 
 export function fetchPlans(
@@ -449,7 +478,7 @@ export function startDraft(missionId: string, day: string, operationId: string) 
 export function continueDraft(missionId: string, runId: string) {
   return request(
     `${base(missionId)}/drafts/${encodeURIComponent(runId)}/continue`,
-    d.object({ run_id: d.token, state: d.string }),
+    d.object({ run_id: d.token, state: d.known(runStates) }),
     {
       method: "POST",
       body: {},
@@ -520,7 +549,7 @@ export type Acknowledgement = Readonly<{ requirement_id: string; reason: string 
 
 const submitReader = d.object({
   plan_id: d.token,
-  state: d.string,
+  state: planState,
   outcome: d.oneOf(["pending_approval", "executing", "replayed"]),
 });
 export type SubmitResult = Decoded<typeof submitReader>;
@@ -549,7 +578,7 @@ export function submitPlan(
 export function executePlan(missionId: string, planId: string) {
   return request(
     `${base(missionId)}/${encodeURIComponent(planId)}/execute`,
-    d.object({ plan_id: d.token, state: d.string }),
+    d.object({ plan_id: d.token, state: planState }),
     {
       method: "POST",
       body: {},
@@ -740,8 +769,10 @@ const availabilityWindow = d.object({
   from: d.timestamp,
   to: d.nullable(d.timestamp),
   eta: d.nullable(d.timestamp),
+  // free-text: who reported it, shown as the server words it (no closed list in the contract)
   source: d.string,
   reported_at: d.nullable(d.timestamp),
+  // free-text: the operator's or provider's own explanation
   reason: d.nullable(d.string),
   cleared_at: d.nullable(d.timestamp),
 });

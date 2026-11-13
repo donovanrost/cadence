@@ -3,12 +3,13 @@ import { linkByName, type ParamlessRouteName } from "@/shell";
 import { computed } from "vue";
 import { describeApiError } from "@/api";
 import { ApCallout, ApPanel, ApStatusMark, formatCount, formatRelative, useNow } from "@/ui";
+import { runPhases, runPhaseText } from "./api.ts";
 import type { PlanView } from "./plan-state.ts";
 
 /** K1 body for every state that isn't a plan (ScheduleFlow "K1 plan states"). */
 const props = defineProps<{ view: Exclude<PlanView, { kind: "plan" }> }>();
 const now = useNow();
-const PHASES = ["materializing", "searching", "optimizing", "materializing_plan"] as const;
+const PHASES = runPhases;
 const MISSING: Readonly<Record<string, { text: string; link: string; route: ParamlessRouteName }>> =
   {
     fleet_planning_policy: {
@@ -101,11 +102,11 @@ const elapsed = computed(() =>
            progress (scheduling.md), not the moment it stopped. -->
       <template v-if="view.stoppedAt"
         >Drafting stopped. Last progress {{ view.stoppedAt.slice(11, 16) }}Z<span v-if="view.phase">
-          during {{ view.phase.replaceAll("_", " ") }}</span
+          during {{ runPhaseText(view.phase) }}</span
         >. Nothing was submitted.</template
       >
       <template v-else
-        >Drafting stopped<span v-if="view.phase"> during {{ view.phase.replaceAll("_", " ") }}</span
+        >Drafting stopped<span v-if="view.phase"> during {{ runPhaseText(view.phase) }}</span
         >. Nothing was submitted.</template
       >
     </ApCallout>

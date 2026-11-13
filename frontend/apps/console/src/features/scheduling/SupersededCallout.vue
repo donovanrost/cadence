@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ApCallout, formatAbsolute } from "@/ui";
+import { isKnown } from "@/api";
 import type { Superseded } from "./api.ts";
+
+type SupersededReason = Exclude<Superseded["reason"], Readonly<{ unrecognized: string }>>;
 
 /** Why this draft is no longer current (ux: superseded state): what changed, when, by whom. */
 const props = defineProps<{ superseded: Superseded }>();
-const REASONS: Readonly<Record<string, string>> = {
+const REASONS: Readonly<Record<SupersededReason, string>> = {
   template_changed: "A contact rule template changed",
   requirement_changed: "A contact rule changed",
   requirement_closed: "A contact rule was closed",
@@ -13,7 +16,9 @@ const REASONS: Readonly<Record<string, string>> = {
 const sentence = computed(() => {
   const s = props.superseded;
   const who = s.by ? ` by ${s.by.name}` : "";
-  return `${REASONS[s.reason] ?? "The contact rules changed"}${who} at ${formatAbsolute(new Date(s.at))}, so this draft no longer matches the current rules. Nothing was submitted.`;
+  // An unknown reason still says the rules changed (the server's own word isn't a sentence).
+  const why = isKnown(s.reason) ? REASONS[s.reason] : "The contact rules changed";
+  return `${why}${who} at ${formatAbsolute(new Date(s.at))}, so this draft no longer matches the current rules. Nothing was submitted.`;
 });
 const changes = computed(() =>
   props.superseded.changes.map((c) => {

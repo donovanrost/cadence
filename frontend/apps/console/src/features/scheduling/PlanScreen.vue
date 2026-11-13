@@ -5,7 +5,7 @@ import { useRoute, type RouteLocationRaw } from "vue-router";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
 import type { ApiError } from "@/api";
 import { ApButton, ApCallout, ApStationBar, useNow } from "@/ui";
-import { draftedByOther, editableStates, type Acknowledgement } from "./api.ts";
+import { draftedByOther, editableStates, runPhaseText, type Acknowledgement } from "./api.ts";
 import DayNav from "./DayNav.vue";
 import DemandPanel from "./DemandPanel.vue";
 import FocusPanel from "./FocusPanel.vue";
@@ -170,7 +170,7 @@ function headerFor(v: PlanView, d: string): string {
     case "no_draft":
       return `Contact plan · ${d} · no draft`;
     case "drafting":
-      return `Drafting · ${(v.phase ?? "queued").replaceAll("_", " ")}`;
+      return `Drafting · ${v.phase ? runPhaseText(v.phase) : "queued"}`;
     case "interrupted":
       return "Drafting stopped";
     case "draft_failed":

@@ -28,11 +28,11 @@ describe("U38 runtime banner words", () => {
   });
 
   it("adds the fix line only where retrying can't clear it", () => {
-    for (const reason of ["spec_mismatch", "reconcile_crashed"])
+    for (const reason of ["spec_mismatch", "reconcile_crashed"] as const)
       expect(outageText({ ...down, reason }, "EARENDIL")).toMatch(
         / at 23:10Z\. It needs a configuration fix\.$/,
       );
-    for (const reason of ["runtime_not_running", "apply_failed", null])
+    for (const reason of ["runtime_not_running", "apply_failed", null] as const)
       expect(outageText({ ...down, reason }, "EARENDIL")).not.toMatch(/configuration fix/);
   });
 
