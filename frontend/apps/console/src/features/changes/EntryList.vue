@@ -2,7 +2,7 @@
 import { ApPanel, plural } from "@/ui";
 import { humanize } from "./actions.ts";
 import { configKindText } from "./shapes.ts";
-import { showValue } from "./api.ts";
+import FieldRows from "./FieldRows.vue";
 import type { RevisionEntry } from "./shapes.ts";
 
 /** What a revision changed: per entity, `path  − before  + after` rows (Changes.md §4). */
@@ -34,24 +34,7 @@ const verb = (op: string) => verbs[op] ?? humanize(op);
           {{ " "
           }}<span class="text-readout">{{ entry.entity_name ?? entry.entity_id ?? "new" }}</span>
         </p>
-        <ul
-          v-if="entry.fields.length > 0"
-          class="m-0 mt-1.5 flex list-none flex-col gap-0.5 p-0 text-sm"
-        >
-          <li
-            v-for="f in entry.fields"
-            :key="f.path"
-            class="grid grid-cols-[minmax(0,240px)_1fr] gap-3"
-          >
-            <span class="truncate text-text-3" :title="f.path">{{ f.label ?? f.path }}</span>
-            <span
-              class="truncate font-mono"
-              :title="`${showValue(f.before, f.unit, f.format)} → ${showValue(f.after, f.unit, f.format)}`"
-              ><span class="text-text-3">{{ showValue(f.before, f.unit, f.format) }}</span> →
-              <span class="text-readout">{{ showValue(f.after, f.unit, f.format) }}</span></span
-            >
-          </li>
-        </ul>
+        <FieldRows v-if="entry.fields.length > 0" :fields="entry.fields" />
       </li>
     </ul>
   </ApPanel>

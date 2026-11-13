@@ -1,18 +1,23 @@
 <script setup lang="ts">
-import { ApPanel, ApTable, formatAbsolute, type ApColumn } from "@/ui";
+import { ApPanel, ApTable, formatAbsolute, formatCount, type ApColumn } from "@/ui";
 import type { ProfileDetail } from "./detail.ts";
+import ProfileRevisions from "./ProfileRevisions.vue";
 
-/** History (v1): profile versions. Field diffs and authors arrive with change-set revisions. */
+/**
+ * Profile.md History: versions with how many spacecraft are on each (drift is visible), then the
+ * revisions that touched the profile with their field diffs.
+ */
 defineProps<{ detail: ProfileDetail }>();
 const columns: readonly ApColumn[] = [
   { key: "version", label: "Version", mono: true },
+  { key: "on", label: "Spacecraft on it", align: "end", mono: true },
   { key: "created", label: "Created", mono: true },
   { key: "by", label: "By" },
 ];
 </script>
 
 <template>
-  <ApPanel index="P5" title="History" :meta="`${detail.versions.length} versions`" flush>
+  <ApPanel index="P5" title="Versions" :meta="`${detail.versions.length} versions`" flush>
     <ApTable
       :columns="columns"
       :rows="detail.versions"
@@ -25,6 +30,9 @@ const columns: readonly ApColumn[] = [
           · latest</span
         >
       </template>
+      <template #cell-on="{ row }">{{
+        row.spacecraft_count === undefined ? "—" : formatCount(row.spacecraft_count)
+      }}</template>
       <template #cell-created="{ row }">{{ formatAbsolute(new Date(row.created_at)) }}</template>
       <template #cell-by="{ row }">
         <span :class="row.actor ? 'text-readout' : 'text-text-3'">{{
@@ -33,4 +41,5 @@ const columns: readonly ApColumn[] = [
       </template>
     </ApTable>
   </ApPanel>
+  <ProfileRevisions :profile-id="detail.profile.id" />
 </template>

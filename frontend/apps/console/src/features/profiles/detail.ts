@@ -88,7 +88,16 @@ export const profileDetailReader = object({
   rules: array(rule, 200),
   overrides: array(override, 5000),
   routing_model: oneOf(["per_spacecraft", "profile"]),
-  versions: array(object({ version: integer, created_at: timestamp, actor: actorName }), 500),
+  versions: array(
+    object({
+      version: integer,
+      created_at: timestamp,
+      actor: actorName,
+      /** api c3b07440d: spacecraft on this version ("12 spacecraft on v5"); optional for older servers. */
+      spacecraft_count: decoders.optional(integer),
+    }),
+    500,
+  ),
 });
 
 export type ProfileDetail = Decoded<typeof profileDetailReader>;

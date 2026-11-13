@@ -1,4 +1,4 @@
-import { request, type ApiResult } from "@/api";
+import { decoders, request, type ApiResult } from "@/api";
 import {
   configStateReader,
   revisionDetailReader,
@@ -49,4 +49,22 @@ export function showValue(value: unknown, unit?: string | null, format?: string 
         ? value
         : JSON.stringify(value);
   return unit && typeof value === "number" ? `${text} ${unit}` : text;
+}
+
+/**
+ * The revisions touching one entity, newest first, each with just that entity's labelled entries
+ * (api c3b07440d; Profile History). An unknown kind is 422 details.entity_kind.
+ */
+export async function fetchEntityRevisions(
+  key: Readonly<{ missionId: string; kind: string; entityId: string; limit?: number }>,
+  signal: AbortSignal,
+): Promise<ApiResult<readonly RevisionDetail[]>> {
+  const q = new URLSearchParams({ entity_kind: key.kind, entity_id: key.entityId });
+  if (key.limit) q.set("limit", String(key.limit));
+  const r = await request(
+    `${base(key.missionId)}/revisions?${q.toString()}`,
+    decoders.object({ revisions: decoders.array(revisionDetailReader, 200) }),
+    { signal },
+  );
+  return r.ok ? { ok: true, value: r.value.revisions } : r;
 }

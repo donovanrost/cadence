@@ -32,4 +32,6 @@ export {
   type FormValues,
   type KindSchema,
 } from "./kindSchema.ts";
-export type { ChangeSet } from "./shapes.ts";
+export type { ChangeSet, RevisionDetail } from "./shapes.ts";
+export { fetchEntityRevisions } from "./api.ts";
+export { default as FieldRows } from "./FieldRows.vue";
