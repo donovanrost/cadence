@@ -294,10 +294,11 @@ their params, and library, playlists, new, settings, activity and diagnostics st
   and settings.
 - **Host contributions** (`ops-workspace/features/module-pages/contributions.ts:126-169`): only the directory,
   workspace and creation contributions.
-- **`frontend/modules/dashboards-and-exploration`:** delete `directory.ts`, `creation.ts` and `workspace.ts`, and
-  `features/{directory,creation,workspace,dashboard}`. Keep `shared/`, `charts.ts`, `workspace.css`,
-  `charts.css`, `gridstack` and `uplot` until L8b. Re-grep first: library and settings may import
-  `features/dashboard` widgets.
+- **`frontend/modules/dashboards-and-exploration`:** nothing in L8a (fe-setup 11-14). `directory.ts`,
+  `creation.ts`, `workspace.ts` and `features/{directory,creation,workspace,dashboard}` are still imported by the
+  federated `OpsDashboard{Directory,New,Show}.vue`, `OpsConsoleApplication.vue`, `chart-runtime-compatibility.test.ts`
+  and storybook's `TelemetryChart`/`DashboardWidgetDrawer` stories (`charts.ts` re-exports `features/workspace`).
+  The L8b pages don't import them. They go with the federated batch below.
 - **`frontend/tools/phoenix/ops_initial_state_browser.mjs`:** the dashboard routes (:44-52) and assertions
   (:135-167). Also its driver's `draft-dashboard` seed (`browser_test/…/ops_initial_state_browser_test.exs`
   :33-91). CI runs it in `ci.yml`'s "Federation browser (2/2)" job (#73; this branch's `frontend.yml` predates
@@ -355,6 +356,9 @@ their params, and library, playlists, new, settings, activity and diagnostics st
   - `applications/ops_console/actions/dashboard_workflows.ex` (1175 lines) and `dashboard_deep_actions.ex`,
     trimming `action_provider.ex:11-12,26-27`;
   - `Reads.Dashboards.Creation` (only `reads/application_surfaces/ops_console.ex:31,580` uses it);
+  - then the module entries L8a kept: `directory.ts`, `creation.ts`, `workspace.ts`,
+    `features/{directory,creation,workspace,dashboard}` and their `ownership.test.ts`, plus storybook's
+    `TelemetryChart`/`DashboardWidgetDrawer` stories. Re-grep: `charts.ts` re-exports `features/workspace`.
   - Explore's `add_to_dashboard` action in `telemetry_explore.ex`: its dispatch (:132-150) and the helpers only it
     uses: `widget_type/1` (:177-180), `dashboard_target/3` (:192+), `candidate_query/4` (:244-260),
     `default_title/1` (:263) and `dashboard_path/3`. Keep `explore_path`, `navigation_result` and
