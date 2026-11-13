@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { ApButton, ApSheet, ApTextarea } from "@/ui";
 import ChangeList from "./ChangeList.vue";
 import type { VersionChange } from "./contracts.ts";
@@ -34,6 +34,23 @@ function open() {
   scope.value = false;
   sheet.value?.open();
 }
+/** Under load a save can take a minute (qa: 58 s): after 3 s, say it's still going. */
+const SLOW_MS = 3_000;
+const slow = ref(false);
+let timer: ReturnType<typeof setTimeout> | null = null;
+function stopTimer() {
+  if (timer !== null) clearTimeout(timer);
+  timer = null;
+}
+watch(
+  () => props.busy,
+  (busy) => {
+    stopTimer();
+    slow.value = false;
+    if (busy) timer = setTimeout(() => (slow.value = true), SLOW_MS);
+  },
+);
+onBeforeUnmount(stopTimer);
 defineExpose({ open, close: () => sheet.value?.close() });
 </script>
 
@@ -62,6 +79,9 @@ defineExpose({ open, close: () => sheet.value?.close() });
         Save the current spacecraft as the default
       </label>
       <p class="m-0 text-sm text-text-3">Saving makes a new version that's current for everyone.</p>
+      <p v-if="slow" role="status" class="m-0 text-sm text-caution-text">
+        Still saving. The server is slow right now; your edits stay in this browser until it's done.
+      </p>
     </div>
     <template #footer>
       <ApButton variant="secondary" class="mr-auto" @click="sheet?.close()">Cancel</ApButton>

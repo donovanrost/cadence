@@ -202,6 +202,15 @@ export function useEditSession(
     }
   }
 
+  /**
+   * Someone saved (the channel's `version` event): remember who and when, so the callout names
+   * them before any save of mine is refused (qa: the pushed callout said "Someone").
+   */
+  function noteSaved(saved: Conflict) {
+    const d = draft.value;
+    if (d && saved.currentVersion > d.baseVersion) conflictBy.value = saved;
+  }
+
   /** Discard mine: drop the draft and keep editing on the newest version. */
   function discardMine() {
     clearDraft(missionId.value, dashboardId.value);
@@ -233,6 +242,7 @@ export function useEditSession(
     leave,
     continueEditing,
     discardMine,
+    noteSaved,
   };
 }
 

@@ -108,4 +108,19 @@ describe("edit session previews", () => {
     expect(s.staged.value).toBeNull();
     stop();
   });
+
+  it("names who saved from the channel's version event, before any save is refused (qa)", () => {
+    const { s, stop } = session();
+    s.enter();
+    s.stage(removeSection(1));
+    s.noteSaved({ currentVersion: 1, savedBy: "Me", savedAt: null }); // not newer than my base
+    expect(s.conflict.value).toBeNull();
+    s.noteSaved({ currentVersion: 4, savedBy: "Ana P.", savedAt: "2026-11-14T11:55:00Z" });
+    expect(s.conflict.value).toEqual({
+      currentVersion: 4,
+      savedBy: "Ana P.",
+      savedAt: "2026-11-14T11:55:00Z",
+    });
+    stop();
+  });
 });

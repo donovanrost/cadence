@@ -79,6 +79,14 @@ watch(
 );
 const currentVersion = computed(() => view.value?.dashboard.current_version ?? null);
 const session = useEditSession(missionId, dashboardId, runtime, currentVersion);
+watch(live.version, (v) => {
+  if (v)
+    session.noteSaved({
+      currentVersion: v.current_version,
+      savedBy: v.saved_by?.name ?? null,
+      savedAt: v.saved_at,
+    });
+});
 /** Phone is view-only (ux). */
 const small = useSmallScreen();
 const canEdit = computed(() => view.value?.can_edit === true && !small.value);
