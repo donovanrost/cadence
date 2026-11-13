@@ -297,7 +297,7 @@ Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy 
 | L2 | Requirement templates (`/ops/requirement-templates`): pause, activate, close | Lifecycle verbs (create/edit exist) | api + fe-setup → `setup.contact-planning.template` | open |
 | L3 | Fleet planning policy (`/ops/planning/policy`): automation grant issue/revoke | Grant verbs (policy save/decide exist) | api + fe-setup → `setup.contact-planning.policy` | open |
 | L4 | Mission creation (`/missions/new`) | Console endpoint + screen (`org.missions` links out today) | api (endpoint; `POST /api/organizations/:id/missions` exists outside the console API) + fe-setup → `org.missions.new` | open |
-| L5 | Sign-in (`/sign-in`), invitation acceptance (`/invitations/:token`), no-organization landing | Still LiveView | **fe-ops** (screens, handed over by lead 11-13; architecture: public routes `/console/sign-in`, `/console/invitations/:token`, `/console/no-organization` outside SessionProvider) + api-ops (JSON under `/api/console/v1/auth`, attempt limit; serves the SPA unauthenticated at those paths and 302s the old ones) | open (fe-ops building on agreed shapes; api-ops after L6) |
+| L5 | Sign-in (`/sign-in`), invitation acceptance (`/invitations/:token`), no-organization landing | ~~SPA screens~~ built (fe-ops da5eabe6: public routes under `/console/`, outside SessionProvider) | api-ops (JSON under `/api/console/v1/auth` + serving the SPA at `/console/sign-in` etc. + 302s from the old paths) | screens done; endpoints next (api-ops) |
 | L6 | Admin mode step-up (`/admin-mode`) | ~~Enter/leave admin mode~~ done: api-ops a3cf61b0 (session.md §Admin mode) + lead's client 3b819ce1, ebfa4b93 (sheet, countdown chip, account menu) | — | done |
 | L7 | Platform admin (`/admin/**`): create org, invite into any org, service identity, runtime diagnostics | Whole area | **User (DECISIONS #75): console admin area behind admin mode.** api (admin endpoints) + fe-setup (screens); needs L6 admin mode | open |
 | L8 | Dashboards (spec `ux/Dashboards.md`; `/ops/dashboards/**`, shares, snapshots, playlists, export) | Everything | **User (#75, reverses #11): rebuild in the console, starting now.** Owner: **dashboards** (w0R:pG, brief `briefs/dashboards.md`). Plans first, reports to lead; endpoints via api/api-ops, layout via ux | in progress (planning) |
@@ -356,7 +356,7 @@ The plumbing is clean (0 `any`, everything crosses a decoder). The debt is vocab
 ### 12A. Infrastructure (one owner per area, so the api layer isn't edited by seven people)
 | # | Item | Owner | Status |
 | --- | --- | --- | --- |
-| A0 | `known()` keeps the raw word: `T[number] \| Unrecognized` with `Unrecognized = { unrecognized: string }` (an object, so it can never widen back to `string`; a misspelled literal stays TS2367, proven by a `@ts-expect-error` test); a `vocabularyText(value, words)` helper for display; migrate the current `"unrecognized"` comparisons | lead | first (people are adopting `known()` now) |
+| A0 | ~~Raw word for unknown values~~ done (d9dc435a): `known()` unchanged (`"unrecognized"` literal; 50 adopted sites stay), plus `knownText()` → `T \| { unrecognized: string }` (an object, can't widen to `string`; a typo literal is TS2367, proven by a `@ts-expect-error` test), `isKnown`, `vocabularyText`. Owners move display fields to `knownText` in 12B | lead | done |
 | A1 | `typescript/no-unsafe-type-assertion: error` in `vite.config.ts`; fix the ~45–50 hits with decoders; scoped disables with a reason only inside decoder adapters | lead | after A0 |
 | A2 | `ErrorCode` union (codes from `docs/apogee/api`), `isError(e, kind, code)`, per-code details decoding, one `fieldErrors()`; ast-grep rule against `.code ===` / `"code" in` outside `api/` | lead | after A1 |
 | A3 | Typed routes: `TypesConfig.RouteNamedMap` for the 66 routes (hand-written or by extending `generate-route-types.mjs`), `useRoute("name").params` instead of hand reads, the Investigate `tab` union; rename setup's `:scId` to `:spacecraftId`; fix the two dangling names (`ops.dashboard.settings`, `ops.dashboards.playlists`: register or rename) | **dashboards** (router area) | parallel with A0–A2 |
@@ -367,7 +367,7 @@ The plumbing is clean (0 `any`, everything crosses a decoder). The debt is vocab
 ### 12B. Owners migrate their own features (normal queue, gated by A's rules), worst first
 | Order | Area (audit §2) | Owner |
 | --- | --- | --- |
-| 1 | `features/contacts/readiness.ts` + `useStationCodes.ts` (shared by Now, Contacts, Commands) | fe-ops |
+| 1 | `features/contacts/readiness.ts` + `useStationCodes.ts` (shared by Now, Contacts, Commands); plus fe-ops' own `d.token` list: library kind, single-bookings availability / overlaps.reason / not_ready.code / reason, change_set.state, groups target.blocked.reason | fe-ops |
 | 2 | `features/scheduling/*` (booking state and reason, plan issue codes, actor kinds) | lead |
 | 3 | `features/dashboards/chart/*` (the `ChartMarker` string bag; Fix 10 marker union) | dashboards |
 | 4 | Router link sites (comes with A3) | dashboards |
