@@ -68,7 +68,7 @@ const crumbs = computed((): readonly ApCrumb[] => [
     <ApRemote :state="state" loading-label="Loading spacecraft…" @retry="refetch">
       <template #default="{ value }">
         <SpacecraftEditor v-if="editing" :mission-id="scope.mission.id" :detail="value" />
-        <SpacecraftPanels v-else :detail="value" />
+        <SpacecraftPanels v-else :mission-id="scope.mission.id" :detail="value" />
       </template>
     </ApRemote>
     <SpacecraftApps

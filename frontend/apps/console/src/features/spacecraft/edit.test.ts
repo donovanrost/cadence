@@ -9,7 +9,7 @@ import {
   spacecraftDocument,
   withPinnedProfile,
 } from "./edit.ts";
-import { operationRows } from "./operation.ts";
+import { operationRows, switchHelp } from "./operation.ts";
 
 /** Fixtures: api setup.md "Spacecraft edits" (8243895f1). */
 function detail(extra: Record<string, unknown> = {}): SpacecraftDetail {
@@ -130,6 +130,15 @@ describe("spacecraft edits (L17)", () => {
       "No new requests or releases for EARENDIL-312.",
       "Cadence decodes telemetry from EARENDIL-312.",
     ]);
-    expect(operationRows(detail())[0]?.on).toBeNull();
+    const field = { ...profileField([]), path: "commanding_enabled", help: "Lets operators…" };
+    expect(switchHelp({ kind: "spacecraft", fields: [field] }, "commanding_enabled")).toBe(
+      "Lets operators…",
+    );
+    expect(switchHelp(null, "telemetry_enabled")).toBeNull();
+    const unset = operationRows(detail())[0];
+    expect(unset?.on).toBeNull();
+    expect(unset?.sentence).toBe(
+      "No active configuration covers EARENDIL-312 yet, so this isn't set.",
+    );
   });
 });

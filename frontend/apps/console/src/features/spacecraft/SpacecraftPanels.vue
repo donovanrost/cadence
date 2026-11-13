@@ -6,7 +6,7 @@ import RoutingRulesPanel from "./RoutingRulesPanel.vue";
 import { identityFacts, type SpacecraftDetail } from "./detail.ts";
 
 /** Readiness, identity, pinned profile, routing and operation switches for one spacecraft. */
-defineProps<{ detail: SpacecraftDetail }>();
+defineProps<{ missionId: string; detail: SpacecraftDetail }>();
 const now = useNow();
 </script>
 
@@ -47,6 +47,6 @@ const now = useNow();
       </ApPanel>
     </div>
     <RoutingRulesPanel :rules="detail.routing_rules" class="xl:col-span-2" />
-    <OperationPanel :detail="detail" class="xl:col-span-2" />
+    <OperationPanel :mission-id="missionId" :detail="detail" class="xl:col-span-2" />
   </div>
 </template>
