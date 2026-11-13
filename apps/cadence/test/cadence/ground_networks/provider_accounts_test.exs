@@ -5,6 +5,7 @@ defmodule Cadence.GroundNetworks.ProviderAccountsTest do
   alias Cadence.Auth.Scope
 
   alias Cadence.GroundNetworks.{
+    ProviderAccountGrants,
     ProviderAccountOperations,
     ProviderAccounts,
     ProviderAudit,
@@ -170,6 +171,32 @@ defmodule Cadence.GroundNetworks.ProviderAccountsTest do
              ),
              & &1.action
            )
+  end
+
+  test "a grant revoke records the reason the admin gave (L13 defect 4)", %{
+    admin_scope: admin_scope
+  } do
+    credential = persist_credential!()
+
+    {:ok, _account, version} =
+      ProviderAccounts.create(admin_scope, account_attrs(),
+        validate_credential?: false,
+        now: @now
+      )
+
+    {:ok, grant} =
+      ProviderAccountGrants.grant(admin_scope, @mission_id, @account_id, %{}, now: @now)
+
+    assert {:ok, %{revoke_reason: "Contract ended", lifecycle_state: :revoked}} =
+             ProviderAccountOperations.execute(admin_scope, "revoke_provider_account_mission", %{
+               "provider_account_id" => @account_id,
+               "expected_account_version" => version.version,
+               "credential_ref" => @credential_ref,
+               "expected_credential_version" => credential.registry_version,
+               "grant-id" => grant.provider_account_grant_id,
+               "expected_grant_version" => grant.version,
+               "reason" => "  Contract ended "
+             })
   end
 
   defp persist_credential! do

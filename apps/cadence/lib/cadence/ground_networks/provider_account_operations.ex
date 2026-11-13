@@ -82,7 +82,7 @@ defmodule Cadence.GroundNetworks.ProviderAccountOperations do
       ControlProviders.revoke_account_grant(
         scope,
         grant_id,
-        "Revoked by organization administrator"
+        optional_text(value(params, "reason")) || "Revoked by organization administrator"
       )
     else
       false ->
@@ -203,6 +203,7 @@ defmodule Cadence.GroundNetworks.ProviderAccountOperations do
   defp atom_key("allowed_stations"), do: :allowed_stations
   defp atom_key("max_quota"), do: :max_quota
   defp atom_key("grant_reason"), do: :grant_reason
+  defp atom_key("reason"), do: :reason
   defp atom_key("email"), do: :email
   defp atom_key("membership_role"), do: :membership_role
   defp atom_key("grant_platform_admin"), do: :grant_platform_admin
