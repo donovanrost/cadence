@@ -326,7 +326,7 @@ Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy 
 | --- | --- | --- | --- |
 | 1 Read-only viewer · 2 Live (step 1) + directory | D5 viewer read, D0 `dashboard.author` in the session; D1–D4, D6 directory, star, archive/restore, create/import/duplicate, record view (`binding_summary` new) | **api-ops** | right after the invitation security fix, before L6 |
 | 3 Edit in place · 4 Versions + conflict | domain: Q1 fix (settings + library through `CurrentVersions`) and the stateless entry (open at version + replay); then api: D7 preview, D9 save, D8 observable search, D10–D13 rebase, copy, versions, restore | **domain** (core) → **api** (endpoints) | domain: after #74 and the booking fixes, before L22 (api is blocked on it). api: after requirement close/cancel, before 8f |
-| 5 Settings, sharing, activity, diagnostics, export | D14–D19 | **api** | after D7–D13 |
+| 5 Settings, sharing, activity, diagnostics, export | D14–D19 (fe-setup proposes the shapes to api, cc dashboards) | **api**; UI **fe-setup** (dashboards hands it over 11-13: `features/dashboards/settings/`, dashboards reviews) | after D7–D13 |
 | 6 Shares, snapshots, playlists | D20, D23, D24; Q6 playlist and library update/delete (domain functions) | **domain** (functions) → **api** | after slice 5 |
 | 7 Channel push | C1 `dashboard:<m>:<d>` | **api-ops** | after L6/L5 |
 | 8 Library | D21, D22 | **api** | last |
