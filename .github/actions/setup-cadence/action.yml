@@ -1,0 +1,86 @@
+name: Set up Cadence (Elixir workspace)
+description: >-
+  BEAM from mise.toml, Node + the frontend workspace (Elixir tests run node producer/consumer
+  probes), restored deps/_build caches and fetched deps for the root and every child project.
+  Exports CADENCE_DEPS_PATHS / CADENCE_BUILD_PATHS / CADENCE_*_KEY so a job can save the caches
+  with exactly the paths and keys used to restore them.
+inputs:
+  node:
+    description: Install Node 24.16.0 and the frontend pnpm workspace
+    default: "true"
+outputs:
+  build-cache-hit:
+    description: '"true" when _build was restored from an exact key'
+    value: ${{ steps.build-cache.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - id: beam
+      uses: ./.github/actions/setup-beam
+
+    - name: Cache keys and paths
+      shell: bash
+      env:
+        VERSIONS: otp${{ steps.beam.outputs.otp-version }}-ex${{ steps.beam.outputs.elixir-version }}
+        LOCKS: ${{ hashFiles('mix.lock', 'apps/*/mix.lock', 'packages/*/mix.lock') }}
+      run: |
+        prefix="${RUNNER_OS}-${VERSIONS}"
+        {
+          echo "CADENCE_DEPS_KEY=deps-v1-${prefix}-${LOCKS}"
+          echo "CADENCE_BUILD_PREFIX=build-${MIX_ENV}-v1-${prefix}"
+          echo "CADENCE_BUILD_KEY=build-${MIX_ENV}-v1-${prefix}-${LOCKS}-${GITHUB_SHA}"
+          echo "CADENCE_LOCKS=${LOCKS}"
+          echo "CADENCE_DEPS_PATHS<<EOF"
+          printf '%s\n' deps 'apps/*/deps' 'packages/*/deps'
+          echo "EOF"
+          echo "CADENCE_BUILD_PATHS<<EOF"
+          printf '%s\n' "_build/${MIX_ENV}" "apps/*/_build/${MIX_ENV}" "packages/*/_build/${MIX_ENV}"
+          echo "EOF"
+        } >> "$GITHUB_ENV"
+
+    - name: Restore deps
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ env.CADENCE_DEPS_PATHS }}
+        key: ${{ env.CADENCE_DEPS_KEY }}
+
+    - name: Restore _build
+      id: build-cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ env.CADENCE_BUILD_PATHS }}
+        key: ${{ env.CADENCE_BUILD_KEY }}
+        restore-keys: |
+          ${{ env.CADENCE_BUILD_PREFIX }}-${{ env.CADENCE_LOCKS }}-
+          ${{ env.CADENCE_BUILD_PREFIX }}-
+
+    - name: Fetch deps (root and every child project)
+      shell: bash
+      run: mix setup --check-locked
+
+    - if: inputs.node == 'true'
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      with:
+        node-version: "24.16.0"
+
+    - if: inputs.node == 'true'
+      name: pnpm store path
+      shell: bash
+      working-directory: frontend
+      run: |
+        corepack enable
+        echo "CADENCE_PNPM_STORE=$(corepack pnpm store path --silent)" >> "$GITHUB_ENV"
+
+    - if: inputs.node == 'true'
+      name: Restore pnpm store
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ env.CADENCE_PNPM_STORE }}
+        key: pnpm-v1-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+        restore-keys: pnpm-v1-${{ runner.os }}-
+
+    - if: inputs.node == 'true'
+      name: Install the frontend workspace
+      shell: bash
+      working-directory: frontend
+      run: corepack pnpm install --frozen-lockfile
