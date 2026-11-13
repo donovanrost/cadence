@@ -19,8 +19,10 @@ export function producerFixture(
     available,
     read(): string {
       if (!available || value === undefined) throw Error(`Missing producer fixture: ${name}`);
-      if (required) {
-        const ledger = environment.CADENCE_PRODUCER_FIXTURE_LEDGER;
+      // The gate requires a ledger. Outside it, a ledger is still written when one is named, so
+      // CI's test shards can prove coverage without making every fixture mandatory there.
+      const ledger = environment.CADENCE_PRODUCER_FIXTURE_LEDGER;
+      if (required || ledger) {
         if (!ledger) throw Error("Missing producer fixture execution ledger");
         const consumer = relative(frontendRoot, fileURLToPath(testModule));
         if (consumer.startsWith(`..${sep}`) || !consumer.endsWith(".test.ts")) {
