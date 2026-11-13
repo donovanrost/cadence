@@ -1,4 +1,14 @@
-import { array, boolean, nullable, object, string, token, type Decoded } from "./decode.ts";
+import {
+  array,
+  boolean,
+  nullable,
+  object,
+  optional,
+  string,
+  timestamp,
+  token,
+  type Decoded,
+} from "./decode.ts";
 import { request, type ApiResult } from "./http.ts";
 
 /** Contract: docs/apogee/api/session.md (GET /api/console/v1/session). */
@@ -16,6 +26,8 @@ export const sessionReader = object({
   user: object({ id: token, email: string, display_name: nullable(string) }),
   current_organization_id: nullable(token),
   admin_mode: boolean,
+  /** api-ops L6: when admin mode ends (ISO); null when off or unknown. */
+  admin_mode_expires_at: optional(nullable(timestamp)),
   platform_admin_eligible: boolean,
   capabilities: array(token),
   organizations: array(organization),

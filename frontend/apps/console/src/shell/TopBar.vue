@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import AccountMenu from "./AccountMenu.vue";
 import BrandMark from "./BrandMark.vue";
+import AdminChip from "./AdminChip.vue";
 import ClockCluster from "./ClockCluster.vue";
 import LinkStatus from "./LinkStatus.vue";
 import MobileHeaderBar from "./MobileHeaderBar.vue";
@@ -61,6 +62,7 @@ const placeholder = computed(() =>
       <div v-if="mode === 'setup' && mission" class="flex max-md:hidden">
         <slot name="setup-status" />
       </div>
+      <AdminChip />
       <ClockCluster />
       <AccountMenu />
     </template>

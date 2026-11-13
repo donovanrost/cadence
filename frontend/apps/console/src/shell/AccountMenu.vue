@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { initials } from "@/ui";
+import { initials, useNow } from "@/ui";
+import AdminModeSheet from "./AdminModeSheet.vue";
+import { leaveAdminMode, useAdminMode } from "./admin-mode.ts";
 import { useDisclosure } from "./disclosure.ts";
 import { hasCapability, useSession } from "./session.ts";
 
@@ -12,7 +14,21 @@ const name = computed(() => session.user.display_name ?? session.user.email);
 const otherOrganizations = computed(() =>
   session.organizations.filter((org) => org.missions.length > 0),
 );
-const platformAdmin = computed(() => hasCapability(session, "platform_admin"));
+/** L6: eligible admins step up from here; while on, the menu offers the area and Leave. */
+const eligible = computed(
+  () => session.platform_admin_eligible || hasCapability(session, "platform_admin"),
+);
+const now = useNow();
+const admin = useAdminMode(() => now.value);
+const adminSheet = ref<InstanceType<typeof AdminModeSheet> | null>(null);
+function enterAdmin() {
+  close();
+  adminSheet.value?.open();
+}
+function leaveAdmin() {
+  close();
+  void leaveAdminMode();
+}
 const itemClass =
   "flex h-10 w-full items-center px-3.5 text-base text-readout no-underline hover:bg-raised-hi";
 </script>
@@ -53,7 +69,27 @@ const itemClass =
           >{{ org.name }}</RouterLink
         >
       </template>
-      <a v-if="platformAdmin" href="/admin" :class="itemClass">Platform admin ↗</a>
+      <template v-if="eligible">
+        <template v-if="admin.active.value">
+          <!-- The console admin area is §11 L7; until it ships, the existing one. -->
+          <a href="/admin" :class="itemClass">Admin area ↗</a>
+          <button
+            type="button"
+            :class="[itemClass, 'cursor-pointer border-0 bg-transparent text-left']"
+            @click="leaveAdmin"
+          >
+            Leave admin mode
+          </button>
+        </template>
+        <button
+          v-else
+          type="button"
+          :class="[itemClass, 'cursor-pointer border-0 bg-transparent text-left']"
+          @click="enterAdmin"
+        >
+          Enter admin mode
+        </button>
+      </template>
       <form method="post" action="/session" class="m-0 border-t border-hairline pt-1.5">
         <input type="hidden" name="_method" value="delete" />
         <input type="hidden" name="_csrf_token" :value="session.csrf_token" />
@@ -66,4 +102,5 @@ const itemClass =
       </form>
     </div>
   </div>
+  <AdminModeSheet ref="adminSheet" />
 </template>

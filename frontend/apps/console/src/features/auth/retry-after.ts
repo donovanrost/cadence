@@ -1,4 +1,5 @@
 import { computed, onScopeDispose, ref } from "vue";
+import type { ApiError } from "@/api";
 
 /**
  * The 429 attempt-limit state every password field shares (Auth.md, api-ops 2ba5cd57): a live
@@ -41,4 +42,13 @@ export function useRetryAfter(now: () => number = Date.now) {
     /** The callout and the disabled primary's reason; null when the form works. */
     text: computed(() => (secondsLeft.value > 0 ? retryText(secondsLeft.value) : null)),
   };
+}
+
+/** The server's wait for a 429 `too_many_attempts` (details.retry_after), else null. */
+export function retryAfterOf(error: ApiError): number | null {
+  if (error.kind !== "invalid" || error.code !== "too_many_attempts") return null;
+  const details = error.details;
+  if (typeof details !== "object" || details === null) return 60;
+  const wait: unknown = Object.entries(details).find(([k]) => k === "retry_after")?.[1];
+  return typeof wait === "number" && wait >= 0 ? wait : 60;
 }
