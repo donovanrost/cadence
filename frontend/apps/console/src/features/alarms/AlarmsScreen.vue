@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
 import {
@@ -17,7 +17,15 @@ import { useFleet } from "@/features/fleet/index.ts";
 import AlarmRowList from "./AlarmRowList.vue";
 import AlarmTable from "./AlarmTable.vue";
 import ByPointPanel from "./ByPointPanel.vue";
-import { ALARM_TABS, alarmRows, byPoint, tabCounts, type AlarmTab } from "./list.ts";
+import {
+  ALARM_TABS,
+  alarmRows,
+  byPoint,
+  groupAlarmRows,
+  lastClearedLine,
+  tabCounts,
+  type AlarmTab,
+} from "./list.ts";
 import { useActiveEpisodes, useClearedEpisodes } from "./useAlarms.ts";
 
 /**
@@ -40,7 +48,12 @@ const tab = computed<AlarmTab>(() => {
 const active = useActiveEpisodes(missionId);
 const cleared = useClearedEpisodes(
   missionId,
-  computed(() => tab.value === "cleared"),
+  // Also read when nothing is active: the empty state names the last clear.
+  computed(
+    () =>
+      tab.value === "cleared" ||
+      (active.state.value.status === "ready" && active.state.value.value.summary.active === 0),
+  ),
 );
 const shown = computed(() => (tab.value === "cleared" ? cleared.state.value : active.state.value));
 
@@ -86,6 +99,23 @@ const tabs = computed(() =>
     };
   }),
 );
+/** Expanded group headers (identical point + condition), by key. Grouping is off under a point filter. */
+const expanded = ref<ReadonlySet<string>>(new Set());
+function toggle(key: string) {
+  const next = new Set(expanded.value);
+  if (!next.delete(key)) next.add(key);
+  expanded.value = next;
+}
+const rowsOf = (episodes: Parameters<typeof alarmRows>[0]) => {
+  const rows = alarmRows(episodes, fleetRows.value, tab.value, point.value, now.value);
+  return point.value === null ? groupAlarmRows(rows, expanded.value) : rows;
+};
+/** OpsLists §Alarms empty: "No active alarms. Last cleared 01:12Z on EARENDIL-047." */
+const lastCleared = computed(() =>
+  cleared.state.value.status === "ready"
+    ? lastClearedLine(cleared.state.value.value.episodes, now.value)
+    : null,
+);
 const empty = computed(() =>
   tab.value === "cleared"
     ? "Nothing cleared in the last 24 h."
@@ -121,19 +151,16 @@ const empty = computed(() =>
           @retry="tab === 'cleared' ? cleared.refetch() : active.refetch()"
         >
           <template #default="{ value }">
-            <ApEmptyState
-              v-if="alarmRows(value.episodes, fleetRows, tab, point, now).length === 0"
-              :headline="empty"
-            />
+            <ApCallout
+              v-if="tab === 'new' && point === null && value.summary.active === 0"
+              tone="nominal"
+            >
+              No active alarms.{{ lastCleared ? ` ${lastCleared}` : "" }}
+            </ApCallout>
+            <ApEmptyState v-else-if="rowsOf(value.episodes).length === 0" :headline="empty" />
             <template v-else>
-              <AlarmTable
-                class="max-md:hidden"
-                :rows="alarmRows(value.episodes, fleetRows, tab, point, now)"
-              />
-              <AlarmRowList
-                class="md:hidden"
-                :rows="alarmRows(value.episodes, fleetRows, tab, point, now)"
-              />
+              <AlarmTable class="max-md:hidden" :rows="rowsOf(value.episodes)" @toggle="toggle" />
+              <AlarmRowList class="md:hidden" :rows="rowsOf(value.episodes)" @toggle="toggle" />
             </template>
           </template>
         </ApRemote>

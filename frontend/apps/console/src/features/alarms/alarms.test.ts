@@ -2,7 +2,14 @@ import { describe, expect, it } from "vite-plus/test";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import { bandFor, conditionWords } from "./api.ts";
 import type { Episode } from "./episodes.ts";
-import { alarmRows, byPoint, ownerText, tabCounts } from "./list.ts";
+import {
+  alarmRows,
+  byPoint,
+  groupAlarmRows,
+  lastClearedLine,
+  ownerText,
+  tabCounts,
+} from "./list.ts";
 
 const now = new Date("2026-11-09T02:00:00Z");
 function ep(id: string, overrides: Partial<Episode> = {}): Episode {
@@ -88,5 +95,46 @@ describe("alarm list on episodes", () => {
       bandFor({ red_low: 24, yellow_low: 25, yellow_high: 33, red_high: 34 }, "red_high"),
     ).toBe(34);
     expect(bandFor(null, "red_low")).toBeNull();
+  });
+});
+
+describe("alarm grouping and the empty state (OpsLists §Alarms)", () => {
+  const at = (n: number) => ({
+    spacecraft_id: `spacecraft-earendil-00${n}`,
+    spacecraft: { id: `spacecraft-earendil-00${n}`, name: `EARENDIL-00${n}`, scid: n },
+  });
+  const fleet = [1, 2, 3, 4].map((n) => spacecraftRow(n, { plane: 7 }));
+  const eps = [
+    ep("a", at(1)),
+    ep("x", { ...at(4), point: { id: "P2", name: "TEMP", unit: "°C" } }),
+    ep("b", at(2)),
+    ep("c", at(3)),
+  ];
+
+  it("folds 3+ identical point + condition into one header; expanding lists them", () => {
+    const rows = alarmRows(eps, fleet, "new", null, now);
+    const closed = groupAlarmRows(rows, new Set());
+    expect(closed.map((r) => [r.key, r.group?.where ?? null])).toEqual([
+      ["group:EPS.VBAT|red_low", "3 spacecraft in plane 07"],
+      ["x", null],
+    ]);
+    expect(closed[0]?.group?.unassigned).toBe(3);
+    const open = groupAlarmRows(rows, new Set(["group:EPS.VBAT|red_low"]));
+    expect(open.map((r) => [r.key, r.member ?? false])).toEqual([
+      ["group:EPS.VBAT|red_low", false],
+      ["a", true],
+      ["b", true],
+      ["c", true],
+      ["x", false],
+    ]);
+  });
+
+  it("names the last clear", () => {
+    const cleared = [
+      ep("c1", { ...at(2), status: "cleared", cleared_at: "2026-11-09T01:12:00Z" }),
+      ep("c2", { ...at(3), status: "cleared", cleared_at: "2026-11-08T23:00:00Z" }),
+    ];
+    expect(lastClearedLine(cleared, now)).toBe("Last cleared 01:12Z on EARENDIL-002.");
+    expect(lastClearedLine([], now)).toBeNull();
   });
 });

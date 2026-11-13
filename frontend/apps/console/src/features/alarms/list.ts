@@ -18,7 +18,71 @@ export type AlarmListRow = Readonly<{
   limit: number | null;
   /** "ACK MIRA K. · → TOMÁS R." / "UNASSIGNED" / "CLEARED UNACKNOWLEDGED". */
   owner: string;
+  /**
+   * A group header (OpsLists §Alarms: identical point + condition across GROUP_AT or more
+   * spacecraft): `episode` is its first (most severe) member's; the members follow when expanded.
+   */
+  group?: Readonly<{ size: number; where: string; expanded: boolean; unassigned: number }>;
+  /** A row shown under its expanded group. */
+  member?: boolean;
 }>;
+
+export const GROUP_AT = 3;
+
+/** "plane 07", "planes 03, 07", or "" when no member has a plane. */
+function planesOf(rows: readonly AlarmListRow[]): string {
+  const planes = [...new Set(rows.flatMap((r) => (r.sc?.plane == null ? [] : [r.sc.plane])))]
+    .sort((a, b) => a - b)
+    .map((p) => String(p).padStart(2, "0"));
+  if (planes.length === 0) return "";
+  return planes.length === 1 ? `plane ${planes[0]}` : `planes ${planes.join(", ")}`;
+}
+
+/**
+ * Folds rows with the same point and condition (GROUP_AT or more) into a header row where the
+ * first of them was, members after it when `expanded` has its key. Order is otherwise kept.
+ */
+export function groupAlarmRows(
+  rows: readonly AlarmListRow[],
+  expanded: ReadonlySet<string>,
+): AlarmListRow[] {
+  const keyOf = (r: AlarmListRow) => `group:${r.episode.point.id}|${r.episode.source_state ?? ""}`;
+  const groups = new Map<string, AlarmListRow[]>();
+  for (const r of rows) groups.set(keyOf(r), [...(groups.get(keyOf(r)) ?? []), r]);
+  const done = new Set<string>();
+  return rows.flatMap((r) => {
+    const key = keyOf(r);
+    const members = groups.get(key) ?? [r];
+    if (members.length < GROUP_AT) return [r];
+    if (done.has(key)) return [];
+    done.add(key);
+    const open = expanded.has(key);
+    const where = planesOf(members);
+    const header: AlarmListRow = {
+      ...r,
+      key,
+      group: {
+        size: members.length,
+        where: `${members.length} spacecraft${where ? ` in ${where}` : ""}`,
+        expanded: open,
+        unassigned: members.filter((m) => m.owner === "Unassigned").length,
+      },
+    };
+    return open ? [header, ...members.map((m) => ({ ...m, member: true }))] : [header];
+  });
+}
+
+/** Empty New tab (OpsLists §Alarms): "Last cleared 01:12Z on EARENDIL-047.", or null. */
+export function lastClearedLine(cleared: readonly Episode[], now: Date): string | null {
+  let last: Episode | null = null;
+  for (const e of cleared)
+    if (e.cleared_at && (!last?.cleared_at || e.cleared_at > last.cleared_at)) last = e;
+  if (!last?.cleared_at) return null;
+  const iso = last.cleared_at;
+  const today = iso.slice(0, 10) === now.toISOString().slice(0, 10);
+  const when = `${today ? "" : `${iso.slice(5, 10)} `}${iso.slice(11, 16)}Z`;
+  return `Last cleared ${when} on ${last.spacecraft?.name ?? "the mission"}.`;
+}
 
 export function ownerText(e: Episode): string {
   if (e.status === "cleared") return e.cleared_unacknowledged ? "Cleared unacknowledged" : "—";

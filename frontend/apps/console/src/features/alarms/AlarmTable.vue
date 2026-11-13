@@ -15,6 +15,8 @@ import type { AlarmListRow } from "./list.ts";
 
 /** L1 · Alarm episodes. The Spacecraft cell links to Investigate on that point (name-cell link). */
 defineProps<{ rows: readonly AlarmListRow[] }>();
+/** A group header's disclosure (identical point + condition across spacecraft). */
+defineEmits<{ toggle: [key: string] }>();
 const now = useNow();
 const columns: readonly ApColumn[] = [
   { key: "severity", label: "Severity" },
@@ -59,8 +61,19 @@ const to = (row: AlarmListRow) => ({
       </span>
     </template>
     <template #cell-spacecraft="{ row }">
+      <button
+        v-if="row.group"
+        type="button"
+        class="max-md:hit-44 inline-flex cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 whitespace-nowrap text-readout hover:underline"
+        :aria-expanded="row.group.expanded"
+        @click="$emit('toggle', row.key)"
+      >
+        <span aria-hidden="true" class="text-text-3">{{ row.group.expanded ? "▾" : "▸" }}</span
+        >{{ row.group.where }}
+      </button>
       <RouterLink
-        v-if="row.sc"
+        v-else-if="row.sc"
+        :class="{ 'pl-5': row.member }"
         :to="to(row)"
         class="max-md:hit-44 whitespace-nowrap text-readout no-underline hover:text-bright hover:underline"
         >{{ row.sc.name }}</RouterLink
@@ -74,16 +87,19 @@ const to = (row: AlarmListRow) => ({
       >
     </template>
     <template #cell-value="{ row }">
-      <span :class="tint(row)">{{
-        withUnit(formatValue(row.episode.last_value), row.episode.point.unit) ?? "—"
-      }}</span>
-      <span class="text-text-4">
-        /
-        {{
-          withUnit(formatLimitLike(row.limit, row.episode.last_value), row.episode.point.unit) ??
-          "—"
-        }}</span
-      >
+      <span v-if="row.group" class="text-text-4">—</span>
+      <template v-else>
+        <span :class="tint(row)">{{
+          withUnit(formatValue(row.episode.last_value), row.episode.point.unit) ?? "—"
+        }}</span>
+        <span class="text-text-4">
+          /
+          {{
+            withUnit(formatLimitLike(row.limit, row.episode.last_value), row.episode.point.unit) ??
+            "—"
+          }}</span
+        >
+      </template>
     </template>
     <template #cell-since="{ row }">
       <time
@@ -93,7 +109,10 @@ const to = (row: AlarmListRow) => ({
       >
     </template>
     <template #cell-owner="{ row }">
-      <span class="flex flex-col gap-0.5 font-mono text-xs uppercase">
+      <span v-if="row.group" class="font-mono text-xs text-text-3 uppercase">{{
+        row.group.unassigned ? `${row.group.unassigned} unassigned` : "—"
+      }}</span>
+      <span v-else class="flex flex-col gap-0.5 font-mono text-xs uppercase">
         <span :class="row.owner === 'Unassigned' ? 'text-text-4' : 'text-text-2'">{{
           row.owner
         }}</span>
@@ -103,8 +122,8 @@ const to = (row: AlarmListRow) => ({
       </span>
     </template>
     <template #cell-contact="{ row }"
-      ><span :class="row.sc?.in_contact ? 'text-readout' : 'text-text-3'">{{
-        (row.sc && nextContact(row.sc, now)) ?? "—"
+      ><span :class="row.sc?.in_contact && !row.group ? 'text-readout' : 'text-text-3'">{{
+        (!row.group && row.sc && nextContact(row.sc, now)) || "—"
       }}</span></template
     >
   </ApTable>
