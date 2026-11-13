@@ -55,7 +55,6 @@ const at = (v: number | null) => (v === null ? undefined : String(v));
       :gs-min-h="String(p.constraints.min_h)"
       :gs-max-w="String(p.constraints.max_w)"
       :gs-max-h="String(p.constraints.max_h)"
-      :gs-no-move="p.editable ? undefined : 'true'"
     >
       <div class="grid-stack-item-content">
         <ApPanel
