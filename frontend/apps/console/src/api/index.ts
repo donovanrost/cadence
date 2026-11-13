@@ -49,6 +49,21 @@ export {
   type SpacecraftRef,
   type StationRef,
 } from "./entities.ts";
+/** Branded resource ids (typing §12C): minted only by these decoders and param readers. */
+export {
+  missionId,
+  scid,
+  scidParam,
+  scidText,
+  spacecraftId,
+  spacecraftIdParam,
+  stationId,
+  stationIdParam,
+  type MissionId,
+  type Scid,
+  type SpacecraftId,
+  type StationId,
+} from "./ids.ts";
 /** Typed server error codes (typing §12 A2): isError, codeOf, detailsOf, fieldErrors. */
 export {
   codeOf,
