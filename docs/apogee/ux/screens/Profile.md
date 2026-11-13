@@ -128,8 +128,10 @@ each; one Stage for all.
 
 ## History (`…/history`)
 Versions (v1) or revisions (change sets) touching this profile: rev/version, when, who, why, the
-field diffs. `Compare` two. In v1, also `Pin spacecraft to v5` per version if the model keeps
-version pinning.
+field diffs. `Compare` two (→ `revisions/rA...rB`). **No per-version "Pin spacecraft to vN"** (ruled after
+fe-setup's question): pinning back multiplies version drift (499 of 500 are already on older versions). The tools
+are a change-set rollback for everyone, and a P3 override for a few. Each version row says how many spacecraft
+are on it (`12 spacecraft on v5`), so drift is visible.
 
 ## States
 Loading per panel (`LOADING…`). Read-only (no capability): inputs render as text, the Stage aside
