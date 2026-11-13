@@ -348,3 +348,35 @@ Telemetry Explore and Investigate `Dashboards ↗` (L8); account menu `Platform 
 - Redirect-only controllers (`LegacyOpsRedirect`, `LegacyApplicationRedirect`, 17 `LegacyCommsRedirect` aliases): point at console routes or delete with the pages (api-ops).
 - Keep: DELETE `/session`, PUT `/session/organization` (plain controllers the console uses); the downloads `/catalog/artifacts/:id/download` and `/ops/dashboards/:id/export` until L18/L8 decide.
 - Covered already (no work): org home, missions, timeline, settings, spacecraft create, profiles, routing (replacement model), transports, stations, catalog import, planning runs, commanding (replacement model), alarms, app install, people.
+
+## 12. Typing (director 11-13; audit `typing-audit.md`, 7025e879)
+
+The plumbing is clean (0 `any`, everything crosses a decoder). The debt is vocabulary and identity: 140 enum-like fields decoded as text, 0 branded ids, string error codes, untyped routes, 52 `string`-keyed word maps. Rules in force for all new and touched code (lead broadcast 11-13): enum-like fields decode with `known()`/`oneOf`, word maps are `Record<Union, string>` or exhaustive, no new `as X` on decoded data. About a day of A; parity work keeps moving.
+
+### 12A. Infrastructure (one owner per area, so the api layer isn't edited by seven people)
+| # | Item | Owner | Status |
+| --- | --- | --- | --- |
+| A0 | `known()` keeps the raw word: `T[number] \| Unrecognized` with `Unrecognized = { unrecognized: string }` (an object, so it can never widen back to `string`; a misspelled literal stays TS2367, proven by a `@ts-expect-error` test); a `vocabularyText(value, words)` helper for display; migrate the current `"unrecognized"` comparisons | lead | first (people are adopting `known()` now) |
+| A1 | `typescript/no-unsafe-type-assertion: error` in `vite.config.ts`; fix the ~45–50 hits with decoders; scoped disables with a reason only inside decoder adapters | lead | after A0 |
+| A2 | `ErrorCode` union (codes from `docs/apogee/api`), `isError(e, kind, code)`, per-code details decoding, one `fieldErrors()`; ast-grep rule against `.code ===` / `"code" in` outside `api/` | lead | after A1 |
+| A3 | Typed routes: `TypesConfig.RouteNamedMap` for the 66 routes (hand-written or by extending `generate-route-types.mjs`), `useRoute("name").params` instead of hand reads, the Investigate `tab` union; rename setup's `:scId` to `:spacecraftId`; fix the two dangling names (`ops.dashboard.settings`, `ops.dashboards.playlists`: register or rename) | **dashboards** (router area) | parallel with A0–A2 |
+| A4 | `useRemoteQuery` compares keys structurally so callers pass typed object keys (deletes 27 `split("\|")` reparse sites, 12 assertions) | lead | after A2 |
+| A5 | Shared entity decoders in `api/`: actor, spacecraft ref, station ref, role, invitation | lead | after A4 |
+| A6 | ast-grep `vocabulary-field-decoded-as-text` (blocking per directory as features migrate) and `requireDefaultForNonUnion` | lead | with A2 |
+
+### 12B. Owners migrate their own features (normal queue, gated by A's rules), worst first
+| Order | Area (audit §2) | Owner |
+| --- | --- | --- |
+| 1 | `features/contacts/readiness.ts` + `useStationCodes.ts` (shared by Now, Contacts, Commands) | fe-ops |
+| 2 | `features/scheduling/*` (booking state and reason, plan issue codes, actor kinds) | lead |
+| 3 | `features/dashboards/chart/*` (the `ChartMarker` string bag; Fix 10 marker union) | dashboards |
+| 4 | Router link sites (comes with A3) | dashboards |
+| 5 | `features/commands/groups/*` | fe-ops |
+| 6 | `features/now/*` | fe-ops |
+| 7 | Auth and roles (`features/auth`, `api/session.ts`, `features/account/invitations.ts`) | fe-ops (auth) + lead (session) |
+| 8 | Error-details handling (comes with A2) | lead, then each owner switches to `fieldErrors()` |
+| 9 | Query-key reparsing (comes with A4) | each owner |
+| 10 | `features/planning/*`, `features/profiles/newProfile.ts`: a shared `JsonObject` type and path helper | fe-setup |
+
+### 12C. Branded ids, last and phased
+`api/ids.ts`: `MissionId`, `SpacecraftId`, `Scid`, `StationId` first (decoders mint them, so no assertions outside `api/`), then the rest by audit §1.2. Lead owns `ids.ts`; owners adopt it per feature.
