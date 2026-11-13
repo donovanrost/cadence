@@ -47,7 +47,8 @@ const blocked = computed(() => {
   const f = fields.value;
   if (f.title.trim() === "") return "Give it a title.";
   if (f.mode === "fixed" && f.spacecraft_id === "") return "Pick the spacecraft.";
-  if (bindsObservables(f.type) && observables.value.length === 0) return "Choose at least one point.";
+  if (bindsObservables(f.type) && observables.value.length === 0)
+    return "Choose at least one point.";
   return null;
 });
 
