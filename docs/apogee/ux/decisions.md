@@ -740,8 +740,12 @@ more than 24 h old.
     above.
   - Priority: P1 when `runtime_not_applied` (add the line "Telemetry isn't being processed until this applies."),
     else P2. This is domain's suggestion, accepted.
-  - Resolved: applied reads "Applied at 02:20Z."; superseded reads "A newer activation replaced this one." The
+  - Resolved: applied reads "Applied at 02:20Z."; superseded reads "Replaced by a newer request." (the review page's words, lead, fe-setup 1de70ac18) The
     row fades as other resolved items do.
 - **Audit `activation_resumed`** (mission event log): "Mira K. retried applying “Decom composition for 3
   spacecraft”." Without a summary: "Mira K. retried applying an approved activation." The binding set and its
   version go in Technical details.
+- **Withdraw** (requester, once domain ships it; fe-setup 1de70ac18): `Withdraw request`, with the reason inline on
+  the review page (required, placeholder "Why you're withdrawing it"). There's no sheet, so the label has no `…`.
+  After it: the decision line "Withdrawn by Mira K. at 02:20Z: <reason>." Superseded: "Replaced by a newer
+  request.", where `newer request` links to it.
