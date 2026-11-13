@@ -6,6 +6,8 @@
  */
 const UNIT_MS = { h: 3_600_000, m: 60_000, s: 1_000, d: 86_400_000 } as const;
 
+const isUnit = (u: string): u is keyof typeof UNIT_MS => Object.hasOwn(UNIT_MS, u);
+
 export function parseTime(text: string, now: number): number | null {
   const q = text.trim().toLowerCase().replaceAll("−", "-");
   if (q === "") return null;
@@ -13,8 +15,8 @@ export function parseTime(text: string, now: number): number | null {
   const relative = /^(?:now|t)\s*([+-])\s*(\d+(?:\.\d+)?)\s*([dhms])$/.exec(q);
   if (relative) {
     const [, sign, amount, unit] = relative;
-    if (!sign || !amount || !unit) return null;
-    const ms = Number(amount) * UNIT_MS[unit as keyof typeof UNIT_MS];
+    if (!sign || !amount || !unit || !isUnit(unit)) return null;
+    const ms = Number(amount) * UNIT_MS[unit];
     return Math.round(now + (sign === "+" ? ms : -ms));
   }
   const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(q);

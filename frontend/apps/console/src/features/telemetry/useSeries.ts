@@ -33,12 +33,10 @@ export function useSeries(
     });
     if (resolved.length === 0) return null;
     const request: Request = { m: missionId.value, w: window.value, series: resolved };
-    return JSON.stringify(request);
+    return request;
   });
 
-  const query = useRemoteQuery(key, async (k, signal): Promise<ApiResult<SeriesData[]>> => {
-    // Sound: k was produced by JSON.stringify(Request) above.
-    const request = JSON.parse(k) as Request;
+  const query = useRemoteQuery(key, async (request, signal): Promise<ApiResult<SeriesData[]>> => {
     const range = resolveWindow(request.w, new Date());
     const span = { from: new Date(range.from), to: new Date(range.to) };
     const results = await Promise.all(

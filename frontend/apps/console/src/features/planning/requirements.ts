@@ -1,16 +1,19 @@
-import { decoders, request, type ApiError, type ApiResult, type Decoded, type Reader } from "@/api";
+import {
+  decoders,
+  jsonObject,
+  request,
+  type ApiError,
+  type ApiResult,
+  type Decoded,
+  type Reader,
+} from "@/api";
 import { displayValue } from "@/features/changes/index.ts";
 import { formatCount, formatShort } from "@/ui";
 import { readPath, templateSchemaReader, type TemplateSchema } from "./templates.ts";
 
 /** Contract: docs/apogee/api/scheduling.md "Requirements (one-off; BACKLOG §8 8g)", api fb7510be. */
 const { array, integer, nullable, object, optional, string, timestamp, token } = decoders;
-const doc: Reader<Readonly<Record<string, unknown>>> = (value, path = "") => {
-  if (value === null || typeof value !== "object" || Array.isArray(value))
-    throw new decoders.DecodeError(path, "object");
-  // Sound: a plain JSON object; read through the schema's paths.
-  return value as Readonly<Record<string, unknown>>;
-};
+const doc: Reader<Readonly<Record<string, unknown>>> = jsonObject;
 
 const actor = nullable(
   object({ kind: optional(token), id: optional(nullable(token)), name: nullable(string) }),

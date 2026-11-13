@@ -120,12 +120,11 @@ const CROSSED_BAND = {
   yellow_high: "yellow_high",
 } as const satisfies Record<string, keyof Thresholds>;
 
+const isCrossedBand = (c: string): c is keyof typeof CROSSED_BAND => Object.hasOwn(CROSSED_BAND, c);
+
 /** The threshold for a raw condition (`red_low` → thresholds.red_low); null when unknown. */
 export function bandFor(thresholds: Thresholds | null, condition: string | null): number | null {
-  const band =
-    condition !== null && Object.hasOwn(CROSSED_BAND, condition)
-      ? CROSSED_BAND[condition as keyof typeof CROSSED_BAND]
-      : null;
+  const band = condition !== null && isCrossedBand(condition) ? CROSSED_BAND[condition] : null;
   return band === null || thresholds === null ? null : thresholds[band];
 }
 

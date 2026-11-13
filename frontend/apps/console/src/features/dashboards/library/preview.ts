@@ -1,3 +1,4 @@
+import { recordOf } from "@/api";
 import { kindWord } from "./api.ts";
 
 /**
@@ -23,15 +24,15 @@ export function previewOf(definitionJson: string): DefinitionPreview | null {
   } catch {
     return null;
   }
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
-  const def = raw as Record<string, unknown>;
+  const def = recordOf(raw);
+  if (def === null) return null;
   const kind = typeof def.type === "string" ? kindWord(def.type) : "Widget";
   const title = typeof def.title === "string" && def.title.trim() ? def.title : null;
   const observables = Array.isArray(def.observables) ? def.observables : [];
   const reads = observables.flatMap((o): string[] => {
     if (typeof o === "string") return [o];
-    if (typeof o === "object" && o !== null) {
-      const r = o as Record<string, unknown>;
+    const r = recordOf(o);
+    if (r !== null) {
       const name = r.name ?? r.point_id ?? r.id;
       return typeof name === "string" ? [name] : [];
     }

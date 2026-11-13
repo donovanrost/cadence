@@ -44,4 +44,30 @@ describe("useRemoteQuery", () => {
     scope.stop();
     expect(calls[1]?.signal.aborted).toBe(true);
   });
+
+  it("treats a new object with the same contents as the same key, and hands the fetcher the typed key", async () => {
+    const seen: { m: string; page: number }[] = [];
+    const fetcher = (key: { m: string; page: number }) => {
+      seen.push(key);
+      return Promise.resolve<ApiResult<string>>({ ok: true, value: `${key.m}:${key.page}` });
+    };
+    const page = ref(1);
+    const tick = ref(0);
+    const scope = effectScope();
+    const query = scope.run(() =>
+      useRemoteQuery(() => {
+        void tick.value; // an unrelated dependency that rebuilds the key object
+        return { m: "m1", page: page.value };
+      }, fetcher),
+    );
+    await flush();
+    tick.value += 1;
+    await flush();
+    expect(seen).toEqual([{ m: "m1", page: 1 }]);
+    page.value = 2;
+    await flush();
+    expect(seen.at(-1)).toEqual({ m: "m1", page: 2 });
+    expect(query?.state.value).toMatchObject({ status: "ready", value: "m1:2" });
+    scope.stop();
+  });
 });

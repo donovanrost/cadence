@@ -12,7 +12,9 @@ import type { RemoteState } from "./remote-state.ts";
 /**
  * Owns one remote read: fetches when `key` changes (null pauses), aborts the previous request,
  * ignores stale responses, and keeps showing the last value while a refetch is in flight
- * (refetches never flash back to loading). Aborts on scope dispose.
+ * (refetches never flash back to loading). Aborts on scope dispose. Keys compare by value (a
+ * stable JSON signature), so callers pass typed object keys and the fetcher gets them back as
+ * they are: no stringify-and-parse round trip (typing plan §12 A4).
  *
  *   const { state, refetch } = useRemoteQuery(
  *     () => scope.value.mission.id,
@@ -52,16 +54,22 @@ export function useRemoteQuery<K, T>(
     }
   }
 
+  // A new object with the same contents is the same key: watch its signature, not its identity.
+  const signature = () => {
+    const current = toValue(key);
+    return current === null ? null : JSON.stringify(current);
+  };
   watch(
-    () => toValue(key),
-    (current, previous) => {
-      if (current === null) {
+    signature,
+    (sig, previous) => {
+      const current = toValue(key);
+      if (sig === null || current === null) {
         controller?.abort();
         generation += 1;
         state.value = { status: "loading" };
         return;
       }
-      void run(current, previous === current).catch(() => undefined);
+      void run(current, previous === sig).catch(() => undefined);
     },
     { immediate: true },
   );

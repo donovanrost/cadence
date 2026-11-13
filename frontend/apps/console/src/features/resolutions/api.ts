@@ -1,3 +1,4 @@
+import { recordOf } from "@/api";
 import {
   decoders as d,
   request,
@@ -119,17 +120,13 @@ export function failureText(e: ApiError, provider: string): ResolveFailure {
 }
 
 function resolverName(details: unknown): string | null {
-  if (details === null || typeof details !== "object") return null;
-  const a = (details as Record<string, unknown>)["actor"];
-  if (a === null || typeof a !== "object") return null;
-  const name = (a as Record<string, unknown>)["name"];
+  const name = recordOf(recordOf(details)?.["actor"])?.["name"];
   return typeof name === "string" && name ? name : null;
 }
 
 function fieldMessages(details: unknown): Record<string, string> {
-  if (details === null || typeof details !== "object") return {};
   const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(details as Record<string, unknown>)) {
+  for (const [k, v] of Object.entries(recordOf(details) ?? {})) {
     const text = Array.isArray(v) ? v.filter((x) => typeof x === "string").join(" ") : v;
     if (typeof text === "string" && text) out[k] = text;
   }

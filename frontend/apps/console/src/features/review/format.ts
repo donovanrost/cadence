@@ -7,6 +7,7 @@ import type {
   ReviewSummary,
   StationLine,
 } from "./api.ts";
+import { owners } from "./api.ts";
 
 /** 0.985 → "98.5%"; null → "—". */
 export function percent(ratio: number | null): string {
@@ -68,7 +69,7 @@ export const ownerWord: Readonly<Record<Owner, string>> = {
 
 /** Strip caption: "5 provider · 3 on our side" (zeros left out; ux §7 #5). */
 export function ownerCaption(counts: Readonly<Record<Owner, number>>): string | undefined {
-  const parts = (Object.keys(ownerWord) as Owner[])
+  const parts = owners
     .filter((o) => counts[o] > 0)
     .map((o) => `${counts[o]} ${o === "us" ? "on our side" : ownerWord[o].toLowerCase()}`);
   return parts.length > 0 ? parts.join(" · ") : undefined;

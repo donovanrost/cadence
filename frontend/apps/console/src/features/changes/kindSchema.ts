@@ -1,4 +1,4 @@
-import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
+import { decoders, pathGet, request, type ApiResult, type Decoded, type Reader } from "@/api";
 
 /** Contract: docs/apogee/api/setup.md, `GET /missions/:id/config/kinds/:kind/schema`. */
 const { array, boolean, nullable, number, object, oneOf, optional, string, token } = decoders;
@@ -53,13 +53,7 @@ export function fromDocument(
 ): FormValues {
   const values: FormValues = {};
   for (const f of schema.fields) {
-    const v = f.path
-      .split(".")
-      .reduce<unknown>(
-        (at, key) =>
-          at !== null && typeof at === "object" ? (at as Record<string, unknown>)[key] : undefined,
-        doc,
-      );
+    const v = pathGet(doc, f.path.split("."));
     values[f.path] = v === null || v === undefined ? "" : displayValue(f, v);
   }
   return values;
@@ -100,7 +94,9 @@ export function parseDuration(text: string): number | null {
   )
     return null;
   const scale = { d: 86_400, h: 3600, m: 60, s: 1 } as const;
-  return parts.reduce((sum, p) => sum + Number(p[1]) * scale[p[2] as keyof typeof scale], 0);
+  const unitSeconds = (u: string | undefined): number =>
+    u === "d" || u === "h" || u === "m" || u === "s" ? scale[u] : 0;
+  return parts.reduce((sum, p) => sum + Number(p[1]) * unitSeconds(p[2]), 0);
 }
 
 export function visible(f: SchemaField, values: FormValues): boolean {

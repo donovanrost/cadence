@@ -45,7 +45,8 @@ const text =
   };
 export const widgetFields: Reader<WidgetFields> = (value, path = "") => {
   const shape = Object.fromEntries(Object.keys(widgetDefaults).map((k) => [k, text(512)]));
-  // Sound: the reader above read exactly the WidgetFieldKey keys, each as a string.
+  // A decoder adapter: the reader above read exactly the WidgetFieldKey keys, each as a string.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- keys built from widgetDefaults (§12 A1)
   return d.object(shape)(value, path) as WidgetFields;
 };
 

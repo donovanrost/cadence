@@ -1,4 +1,12 @@
-import { decoders, request, type ApiResult, type Reader } from "@/api";
+import {
+  childRecord,
+  decoders,
+  jsonObject,
+  recordOf,
+  request,
+  type ApiResult,
+  type Reader,
+} from "@/api";
 import {
   fromDocument,
   schemaFieldReader,
@@ -11,12 +19,7 @@ import {
 /** Contract: docs/apogee/api/scheduling.md "Contact planning setup" (CP2). */
 const { array, boolean, integer, nullable, object, string, timestamp, token } = decoders;
 
-const doc: Reader<Readonly<Record<string, unknown>>> = (value, path = "") => {
-  if (value === null || typeof value !== "object" || Array.isArray(value))
-    throw new decoders.DecodeError(path, "object");
-  // Sound: a plain JSON object; values are read through the schema's paths.
-  return value as Readonly<Record<string, unknown>>;
-};
+const doc: Reader<Readonly<Record<string, unknown>>> = jsonObject;
 const fieldMeta = object({ path: string, group: token, advanced: boolean });
 
 export const policyReader = (value: unknown, path = "") => {
@@ -132,12 +135,11 @@ export function buildDocument(
     const [group, ...rest] = f.path.split(".");
     if (!group || rest.length === 0) continue;
     const put = (v: unknown) => {
-      const section = (document[group] ??= {}) as Record<string, unknown>;
-      section[rest.join(".")] = v;
+      childRecord(document, group)[rest.join(".")] = v;
     };
     // U34: hidden money fields go back exactly as stored; never validated, since no one can see them.
     if (hiddenMoneyPaths.has(f.path)) {
-      const v = (stored[group] as Record<string, unknown> | undefined)?.[rest.join(".")];
+      const v = recordOf(stored[group])?.[rest.join(".")];
       if (v !== undefined) put(v);
       continue;
     }

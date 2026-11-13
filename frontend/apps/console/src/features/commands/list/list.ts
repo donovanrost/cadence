@@ -54,9 +54,6 @@ export function tabCounts(rows: readonly GroupRow[]): Record<CommandTab, number>
 export function tabFromQuery(query: Readonly<Record<string, unknown>>): CommandTab {
   if (query.awaiting === "me") return "awaiting";
   const t = query.tab;
-  return typeof t === "string" &&
-    (COMMAND_TABS as readonly string[]).includes(t) &&
-    t !== "awaiting"
-    ? (t as CommandTab)
-    : "pending";
+  const tab = COMMAND_TABS.find((candidate) => candidate === t);
+  return tab !== undefined && tab !== "awaiting" ? tab : "pending";
 }

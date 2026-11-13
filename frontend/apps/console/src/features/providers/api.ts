@@ -1,4 +1,4 @@
-import { decoders, request, type ApiResult, type Decoded } from "@/api";
+import { decoders, recordOf, request, type ApiResult, type Decoded } from "@/api";
 import { schemaFieldReader, type KindSchema } from "@/features/changes/index.ts";
 import type { OpState } from "@/ui";
 
@@ -122,9 +122,8 @@ export function removeAccount(orgId: string, id: string): Promise<ApiResult<unkn
 
 /** 422 `details` keyed by field path ("credential.key", "settings.base_url", "name"). */
 export function fieldErrors(details: unknown): Record<string, string> {
-  if (details === null || typeof details !== "object") return {};
   const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(details as Record<string, unknown>)) {
+  for (const [k, v] of Object.entries(recordOf(details) ?? {})) {
     const text = Array.isArray(v) ? v.filter((x) => typeof x === "string").join(" ") : v;
     if (typeof text === "string" && text) out[k.replace(/^settings\./, "")] = text;
   }

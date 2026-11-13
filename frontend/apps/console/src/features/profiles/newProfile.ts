@@ -1,3 +1,4 @@
+import { isRecord } from "@/api";
 import {
   displayValue,
   type FormValues,
@@ -59,10 +60,7 @@ function setPath(doc: Record<string, unknown>, path: string, value: unknown) {
   let at = doc;
   for (const k of keys.slice(0, -1)) {
     const next = at[k];
-    const obj: Record<string, unknown> =
-      next !== null && typeof next === "object" && !Array.isArray(next)
-        ? { ...(next as Record<string, unknown>) }
-        : {};
+    const obj: Record<string, unknown> = isRecord(next) ? { ...next } : {};
     at[k] = obj;
     at = obj;
   }

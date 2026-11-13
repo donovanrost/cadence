@@ -1,3 +1,4 @@
+import { recordOf } from "@/api";
 import {
   decoders as d,
   request,
@@ -67,7 +68,7 @@ export function passwordFailure(
       fields: {},
     };
   if (code === "invalid_params" && "details" in e && e.details && typeof e.details === "object") {
-    const v = (e.details as Record<string, unknown>)["new_password"];
+    const v = recordOf(e.details)?.["new_password"];
     const t = Array.isArray(v) ? v.filter((x) => typeof x === "string").join(" ") : v;
     if (typeof t === "string" && t) return { text: null, fields: { next: t } };
   }

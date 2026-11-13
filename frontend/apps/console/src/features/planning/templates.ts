@@ -1,4 +1,14 @@
-import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
+import {
+  decoders,
+  isRecord,
+  jsonObject,
+  pathGet,
+  pathSet,
+  request,
+  type ApiResult,
+  type Decoded,
+  type Reader,
+} from "@/api";
 import {
   schemaFieldReader,
   toValue,
@@ -9,12 +19,7 @@ import {
 
 /** Contract: docs/apogee/api/scheduling.md "Templates (CP3)" + GET /templates/schema. */
 const { array, boolean, integer, nullable, object, string, token } = decoders;
-const doc: Reader<Readonly<Record<string, unknown>>> = (value, path = "") => {
-  if (value === null || typeof value !== "object" || Array.isArray(value))
-    throw new decoders.DecodeError(path, "object");
-  // Sound: a plain JSON object; read through the schema's paths.
-  return value as Readonly<Record<string, unknown>>;
-};
+const doc: Reader<Readonly<Record<string, unknown>>> = jsonObject;
 
 export const templateSchemaReader = (value: unknown, path = "") => {
   const r = object({ fields: array(schemaFieldReader, 500), defaults: nullable(doc) })(value, path);
@@ -74,15 +79,7 @@ export function saveTemplate(
 
 /** Read a dotted path from a nested document. */
 export function readPath(doc: unknown, path: string): unknown {
-  return path
-    .split(".")
-    .reduce<unknown>(
-      (at, key) =>
-        at !== null && typeof at === "object" && !Array.isArray(at)
-          ? (at as Record<string, unknown>)[key]
-          : undefined,
-      doc,
-    );
+  return pathGet(doc, path.split("."));
 }
 
 /**
@@ -96,7 +93,7 @@ export function buildNested(
 ): Readonly<
   { ok: true; document: Record<string, unknown> } | { ok: false; errors: Record<string, string> }
 > {
-  const document = structuredClone((base ?? {}) as Record<string, unknown>);
+  const document: Record<string, unknown> = isRecord(base) ? structuredClone(base) : {};
   const errors: Record<string, string> = {};
   for (const f of fields) {
     // Hidden fields (visible_when false) carry over from `base` unchecked.
@@ -106,17 +103,7 @@ export function buildNested(
       errors[f.path] = checked.message;
       continue;
     }
-    const keys = f.path.split(".");
-    let at = document;
-    for (const k of keys.slice(0, -1)) {
-      const next = at[k];
-      at = (at[k] =
-        next !== null && typeof next === "object" && !Array.isArray(next) ? next : {}) as Record<
-        string,
-        unknown
-      >;
-    }
-    at[keys.at(-1) ?? f.path] = checked.value;
+    pathSet(document, f.path.split("."), checked.value);
   }
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, document };
 }

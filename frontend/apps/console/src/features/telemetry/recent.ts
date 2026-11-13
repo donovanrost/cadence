@@ -1,3 +1,4 @@
+import { recordOf } from "@/api";
 import { computed, ref, watch, type Ref } from "vue";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { seriesOf, type Selection } from "./selection.ts";
@@ -12,8 +13,8 @@ const MAX = 10;
 const keyOf = (missionId: string) => `apogee:recent-plots:${missionId}`;
 
 function isRecent(v: unknown): v is RecentPlot {
-  if (typeof v !== "object" || v === null) return false;
-  const r = v as Record<string, unknown>;
+  const r = recordOf(v);
+  if (r === null) return false;
   return typeof r.scid === "number" && typeof r.name === "string" && typeof r.point === "string";
 }
 

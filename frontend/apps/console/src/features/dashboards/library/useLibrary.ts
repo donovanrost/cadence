@@ -6,12 +6,8 @@ import { fetchLibrary, fetchLibraryItem } from "./api.ts";
 /** The library list (D21), refetched on `dashboards`. */
 export function useLibraryList(missionId: Ref<string>, q: Ref<string>, page: Ref<number>) {
   const query = useRemoteQuery(
-    computed(() => JSON.stringify({ m: missionId.value, q: q.value, p: page.value })),
-    (k, signal) => {
-      // Sound: produced by JSON.stringify above.
-      const { m, q: text, p } = JSON.parse(k) as { m: string; q: string; p: number };
-      return fetchLibrary(m, { q: text, page: p }, signal);
-    },
+    computed(() => ({ m: missionId.value, q: q.value, p: page.value })),
+    ({ m, q: text, p }, signal) => fetchLibrary(m, { q: text, page: p }, signal),
   );
   useMissionInvalidation(missionId, ["dashboards"], query.refetch);
   return query;
@@ -25,15 +21,9 @@ export function useLibraryItem(
 ) {
   const query = useRemoteQuery(
     computed(() =>
-      itemId.value
-        ? JSON.stringify({ m: missionId.value, id: itemId.value, v: version.value })
-        : null,
+      itemId.value ? { m: missionId.value, id: itemId.value, v: version.value } : null,
     ),
-    (k, signal) => {
-      // Sound: produced by JSON.stringify above.
-      const { m, id, v } = JSON.parse(k) as { m: string; id: string; v: number | null };
-      return fetchLibraryItem(m, id, v, signal);
-    },
+    ({ m, id, v }, signal) => fetchLibraryItem(m, id, v, signal),
   );
   useMissionInvalidation(missionId, ["dashboards"], query.refetch);
   return query;

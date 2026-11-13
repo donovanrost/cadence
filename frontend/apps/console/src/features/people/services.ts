@@ -1,3 +1,4 @@
+import { recordOf } from "@/api";
 import {
   decoders as d,
   request,
@@ -60,7 +61,7 @@ export function serviceFailure(e: ApiError): ServiceFailure {
   const code = "code" in e ? e.code : null;
   if (code === "invalid_params" && "details" in e && e.details && typeof e.details === "object") {
     const fields: Record<string, string> = {};
-    for (const [k, v] of Object.entries(e.details as Record<string, unknown>)) {
+    for (const [k, v] of Object.entries(recordOf(e.details) ?? {})) {
       const t = Array.isArray(v) ? v.filter((x) => typeof x === "string").join(" ") : v;
       if (typeof t === "string" && t) fields[k] = t;
     }

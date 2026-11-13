@@ -1,4 +1,4 @@
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api";
+import { decoders as d, recordOf, request, type ApiResult, type Decoded } from "@/api";
 
 /** O4 command policies (api commanding.md): keys + parameters; the console writes the sentences. */
 export const policiesReader = d.object({
@@ -32,7 +32,7 @@ const hintWords: Readonly<Record<string, string>> = {
 
 /** People.md U4: each policy as a title and one sentence, from the server's effective policy. */
 export function policyText(p: CommandPolicy): Readonly<{ title: string; sentence: string }> {
-  const params = p.parameters as Record<string, unknown>;
+  const params = recordOf(p.parameters) ?? {};
   switch (p.key) {
     case "command_classification": {
       const classes = strings(params["classifications"]);

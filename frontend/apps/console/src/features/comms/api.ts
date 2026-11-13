@@ -1,4 +1,4 @@
-import { decoders, request, type ApiResult, type Decoded } from "@/api";
+import { decoders, jsonObject, request, type ApiResult, type Decoded } from "@/api";
 
 /** Requested shapes: docs/apogee/plans/setup-shapes.md §T1/§T2 (final contract in api/setup.md). */
 const { array, boolean, integer, nullable, object, oneOf, string, token } = decoders;
@@ -96,12 +96,8 @@ const transportDetail = object({
   id: token,
   version: integer,
   lifecycle_state: oneOf(["active", "archived"]),
-  document: (value: unknown, path = "") => {
-    if (value === null || typeof value !== "object" || Array.isArray(value))
-      throw new decoders.DecodeError(path, "object");
-    // Sound: a non-array object; field values are read through the kind schema's paths.
-    return value as Readonly<Record<string, unknown>>;
-  },
+  // Field values are read through the kind schema's paths.
+  document: jsonObject,
 });
 export type TransportDetail = Decoded<typeof transportDetail>;
 

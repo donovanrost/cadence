@@ -1,3 +1,4 @@
+import { recordOf } from "@/api";
 import type { Target } from "./templates.ts";
 
 /** Target form state, kept as text until saved. */
@@ -10,8 +11,8 @@ export type TargetDraft = {
 
 export function draftFromTarget(t: unknown): TargetDraft {
   const empty: TargetDraft = { kind: "profile", profileId: "", plane: "", ids: "" };
-  if (t === null || typeof t !== "object") return empty;
-  const r = t as Record<string, unknown>;
+  const r = recordOf(t);
+  if (r === null) return empty;
   if (r.kind === "plane" && typeof r.plane === "number")
     return { ...empty, kind: "plane", plane: String(r.plane) };
   if (r.kind === "spacecraft_ids" && Array.isArray(r.spacecraft_ids))
@@ -55,7 +56,5 @@ export function targetFromDraft(
 
 /** A JSON object document (or empty), for prefilling forms from `unknown` documents. */
 export function asRecord(value: unknown): Readonly<Record<string, unknown>> {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Readonly<Record<string, unknown>>)
-    : {};
+  return recordOf(value) ?? {};
 }

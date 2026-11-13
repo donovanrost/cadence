@@ -151,7 +151,8 @@ export function object<S extends Shape>(shape: S): Reader<FromShape<S>> {
     if (!isRecord(value)) throw new DecodeError(path, "object");
     const result: Record<string, unknown> = {};
     for (const [key, read] of Object.entries(shape)) result[key] = read(value[key], at(path, key));
-    // Sound: every key of S was assigned from its own reader above.
+    // The decoder core: every key of S was assigned from its own reader above.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- sound by construction (§12 A1)
     return result as FromShape<S>;
   };
 }
@@ -174,7 +175,8 @@ export function variant<K extends string, M extends Readonly<Record<string, Read
       typeof tag === "string" && Object.hasOwn(variants, tag) ? variants[tag] : undefined;
     if (read === undefined)
       throw new DecodeError(at(path, key), `one of ${Object.keys(variants).join("|")}`);
-    // Sound: read is one of M's readers, so its output is a member of the union.
+    // The decoder core: read is one of M's readers, so its output is a member of the union.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- sound by construction (§12 A1)
     return read(value, path) as Decoded<M[keyof M]>;
   };
 }
