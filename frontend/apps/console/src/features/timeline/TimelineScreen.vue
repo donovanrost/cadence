@@ -5,9 +5,26 @@ import { useRoute, useRouter } from "vue-router";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
-import { useNow, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented, ApSelect } from "@/ui";
+import {
+  useNow,
+  ApEmptyState,
+  ApPageHeader,
+  ApPanel,
+  ApRemote,
+  ApSelect,
+  ApTimeRange,
+  type TimeRange,
+} from "@/ui";
 import { useFleet } from "@/features/fleet/index.ts";
-import { RANGES, rangeWindow, type RangeKey } from "@/features/investigate/index.ts";
+import {
+  parseWindow,
+  resolveWindow,
+  windowFromRange,
+  windowLabel,
+  windowPresets,
+  windowQuery,
+  type WindowSel,
+} from "@/features/telemetry/index.ts";
 import { DEFAULT_KINDS, eventKinds, fetchDensity, fetchEvents, type EventKind } from "./api.ts";
 import KindToggles from "./KindToggles.vue";
 import DensityStrip from "./DensityStrip.vue";
@@ -28,14 +45,25 @@ const router = useRouter();
 const now = useNow();
 const missionId = computed(() => mission.value.mission.id);
 
-const range = computed<RangeKey>({
-  get: () => (route.query.range === "1h" || route.query.range === "6h" ? route.query.range : "24h"),
-  set: (r) => {
-    router
-      .replace({ query: { ...route.query, range: r === "24h" ? undefined : r } })
-      .catch((e: unknown) => console.error("Navigation failed", e));
-  },
+/**
+ * The window: a preset sliding with now (`?range=6h`, default 24 h) or a fixed custom range
+ * (`?from=…&to=…`), from the picker or an E1 brush (OpsLists §Timeline). Keys use the selection,
+ * not the resolved times, so a preset doesn't refetch every tick.
+ */
+const sel = computed<WindowSel>(() => parseWindow(route.query, "24h"));
+function setWindow(next: WindowSel) {
+  router
+    .replace({ query: windowQuery(next, route.query, "24h") })
+    .catch((e: unknown) => console.error("Navigation failed", e));
+}
+/** The picker's value; `new Date()` unreactive on purpose (it changes only on the user's pick). */
+const pickerWindow = computed<TimeRange>({
+  get: () => resolveWindow(sel.value, new Date()),
+  set: (r) => setWindow(windowFromRange(r, new Date())),
 });
+const presets = windowPresets(new Date());
+/** E1 brush: drag across the strip to narrow the window to that span. */
+const brushTo = (r: TimeRange) => setWindow({ kind: "custom", from: r.from, to: r.to });
 const fleet = useFleet(missionId);
 const fleetRows = computed(() =>
   fleet.state.value.status === "ready" ? fleet.state.value.value.spacecraft : [],
@@ -58,10 +86,7 @@ const scopeWords = computed(() =>
       ? ` · plane ${scope.value.plane}`
       : "",
 );
-const title = computed(
-  () =>
-    `Last ${RANGES.find((r) => r.value === range.value)?.label ?? range.value}${scopeWords.value}`,
-);
+const title = computed(() => `${windowLabel(sel.value)}${scopeWords.value}`);
 /**
  * Selected kinds from ?kind=limit,command. Absent = every kind but `data` (housekeeping), plus any
  * caution/critical data event (ux): failures show by default, routine noise doesn't.
@@ -84,30 +109,30 @@ const key = computed(() =>
     ? null
     : JSON.stringify({
         m: missionId.value,
-        r: range.value,
+        w: sel.value,
         k: kinds.value,
         sc: scope.value.kind === "spacecraft" ? scope.value.id : null,
         p: scope.value.kind === "plane" ? scope.value.plane : null,
       }),
 );
-type Key = { m: string; r: RangeKey; k: EventKind[]; sc: string | null; p: number | null };
+type Key = { m: string; w: WindowSel; k: EventKind[]; sc: string | null; p: number | null };
 const filters = (k: Key) => ({
   kinds: k.k,
   ...(k.sc ? { spacecraftId: k.sc } : {}),
   ...(k.p !== null ? { plane: k.p } : {}),
 });
-const windowOf = (r: RangeKey) => {
-  const w = rangeWindow(r, new Date());
-  return { from: new Date(w.from), to: new Date(w.to) };
+const windowOf = (w: WindowSel) => {
+  const r = resolveWindow(w, new Date());
+  return { from: new Date(r.from), to: new Date(r.to) };
 };
 // Sound: keys are produced by JSON.stringify(Key) above.
 const events = useRemoteQuery(key, (k, signal) => {
   const parsed = JSON.parse(k) as Key;
-  return fetchEvents(parsed.m, { ...windowOf(parsed.r), ...filters(parsed) }, signal);
+  return fetchEvents(parsed.m, { ...windowOf(parsed.w), ...filters(parsed) }, signal);
 });
 const density = useRemoteQuery(key, (k, signal) => {
   const parsed = JSON.parse(k) as Key;
-  const w = windowOf(parsed.r);
+  const w = windowOf(parsed.w);
   return fetchDensity(
     parsed.m,
     { ...w, ...filters(parsed) },
@@ -140,7 +165,7 @@ const dataAlerts = useRemoteQuery(
     const parsed = JSON.parse(k.slice(0, -5)) as Key;
     return fetchEvents(
       parsed.m,
-      { ...windowOf(parsed.r), ...filters({ ...parsed, k: ["data"] }) },
+      { ...windowOf(parsed.w), ...filters({ ...parsed, k: ["data"] }) },
       signal,
     );
   },
@@ -156,7 +181,11 @@ const held = useHeldNewest(shownEvents, scroller);
 const missing = computed(
   () => events.state.value.status === "failed" && events.state.value.error.kind === "not_found",
 );
-const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
+/** OpsLists §Timeline empty range: "No events between 02:00Z and 03:00Z." */
+const short = (iso: string) => {
+  const today = iso.slice(0, 10) === new Date().toISOString().slice(0, 10);
+  return `${today ? "" : `${iso.slice(5, 10)} `}${iso.slice(11, 16)}Z`;
+};
 </script>
 
 <template>
@@ -164,7 +193,7 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
     <ApPageHeader :label="`${mission.mission.name} · timeline`" :title="title">
       <div class="flex flex-wrap items-end gap-3">
         <ApSelect v-model="scopeModel" :options="scopeChoices" label="Scope" />
-        <ApSegmented v-model="range" :options="ranges" label="Window" variant="micro" />
+        <ApTimeRange v-model="pickerWindow" label="Window" :presets="presets" />
       </div>
     </ApPageHeader>
     <KindToggles class="flex-none" :selected="kinds" @change="setKinds" />
@@ -187,6 +216,7 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
             to: Date.parse(events.state.value.value.to),
           }"
           :now="now.getTime()"
+          @brush="brushTo"
         />
       </div>
       <ApPanel index="E2" title="Event log" pane flush class="console:min-h-0 console:flex-1">
@@ -198,7 +228,7 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
           <template #default="{ value }">
             <ApEmptyState
               v-if="(shownEvents ?? value.events).length === 0"
-              :headline="`No events in the ${title.toLowerCase()}`"
+              :headline="`No events between ${short(value.from)} and ${short(value.to)}.`"
             />
             <template v-else>
               <div ref="logAnchor" aria-hidden="true" />

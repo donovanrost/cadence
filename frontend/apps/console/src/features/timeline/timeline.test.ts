@@ -10,6 +10,7 @@ import {
   kindLabel,
   needsSpacecraftPrefix,
   severityState,
+  brushRange,
   subjectLink,
   scopeOptions,
   scopeQuery,
@@ -240,5 +241,13 @@ describe("default view shows failing data events (ux)", () => {
       ],
     );
     expect(merged.map((x) => x.id)).toEqual(["d1", "a"]);
+  });
+});
+
+describe("E1 brush (OpsLists §Timeline)", () => {
+  it("turns a drag into a window; a click isn't one", () => {
+    const w = { from: 0, to: 1000 };
+    expect(brushRange(w, 0.6, 0.2)).toEqual({ from: 200, to: 600 });
+    expect(brushRange(w, 0.5, 0.505)).toBeNull();
   });
 });

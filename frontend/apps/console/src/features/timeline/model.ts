@@ -278,3 +278,18 @@ export function withAlertingData<T extends { id: string; at: string; severity: s
   );
   return [...main, ...alerting].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 }
+
+/**
+ * E1 brush: a drag from fraction `a` to `b` of the strip as a window; null under 1% of the
+ * strip (a click, not a brush).
+ */
+export function brushRange(
+  window: Readonly<{ from: number; to: number }>,
+  a: number,
+  b: number,
+): { from: number; to: number } | null {
+  if (Math.abs(b - a) < 0.01) return null;
+  const span = window.to - window.from;
+  const t = (f: number) => Math.round(window.from + Math.min(1, Math.max(0, f)) * span);
+  return { from: t(Math.min(a, b)), to: t(Math.max(a, b)) };
+}
