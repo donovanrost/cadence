@@ -3,7 +3,9 @@ import { ref, useId } from "vue";
 import { useDisclosure } from "@/shell";
 
 /** The viewer's ⋯ menu (ux): a disclosure of actions, in AccountMenu's pattern. */
-defineProps<{ items: readonly { id: Id; label: string }[] }>();
+withDefaults(defineProps<{ items: readonly { id: Id; label: string }[]; label?: string }>(), {
+  label: "More dashboard actions",
+});
 const emit = defineEmits<{ select: [id: Id] }>();
 const root = ref<HTMLElement | null>(null);
 const { open, toggle, close } = useDisclosure(root);
@@ -21,7 +23,7 @@ function choose(id: Id) {
     <button
       type="button"
       class="h-8 w-9 cursor-pointer border border-line bg-raised font-mono text-base text-readout hover:bg-raised-hi max-md:hit-44"
-      aria-label="More dashboard actions"
+      :aria-label="label"
       :aria-expanded="open"
       aria-haspopup="true"
       :aria-controls="menuId"
