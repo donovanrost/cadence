@@ -3,13 +3,20 @@ import { schemaFieldReader, type KindSchema } from "@/features/changes/index.ts"
 import type { OpState } from "@/ui";
 
 /** Contract: docs/apogee/api/setup.md, `GET /organizations/:id/provider-accounts` (PA1). */
-const { array, integer, nullable, object, oneOf, string, timestamp, token } = decoders;
+const { array, integer, nullable, object, string, timestamp, token } = decoders;
 
 const account = object({
   id: token,
   name: string,
   provider: object({ key: token, label: string }),
-  status: oneOf(["connected", "expiring", "auth_failed", "not_checked"]),
+  // known: one new status mustn't fail the whole list (api-ops L13 adds credential_revoked).
+  status: decoders.known([
+    "connected",
+    "expiring",
+    "auth_failed",
+    "credential_revoked",
+    "not_checked",
+  ] as const),
   status_detail: nullable(string),
   expires_at: nullable(timestamp),
   last_success_at: nullable(timestamp),
@@ -144,7 +151,11 @@ export function statusTag(a: ProviderAccount): { state: OpState; label: string }
       return { state: "caution", label: "Credentials expiring" };
     case "auth_failed":
       return { state: "crit", label: "Auth failed" };
+    case "credential_revoked":
+      return { state: "crit", label: "Credential revoked" };
     case "not_checked":
       return { state: "stale", label: "Not checked" };
+    case "unrecognized":
+      return { state: "neutral", label: "Status not known" };
   }
 }
