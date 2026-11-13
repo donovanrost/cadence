@@ -54,11 +54,14 @@ defmodule Cadence.Dashboards.Sources.Events.Presentation do
     |> Enum.join(" ")
   end
 
+  # Only the event's own mission's job: run ids are unique per job type across every tenant, and
+  # this frame shows the job's id, status and failure (main's late-data reveal went through here).
   def default_telemetry_backfill_workflow_job(event) do
-    with run_id when is_binary(run_id) and run_id != "" <-
+    with mission_id when is_binary(mission_id) <- Map.get(event, :mission_id),
+         run_id when is_binary(run_id) and run_id != "" <-
            telemetry_backfill_workflow_run_id(event),
          {:ok, %Jobs.Job{} = job} <-
-           Jobs.fetch_job_for_run(:telemetry_historical_data_workflow, run_id) do
+           Jobs.fetch_mission_job_for_run(:telemetry_historical_data_workflow, mission_id, run_id) do
       job
     else
       _other -> nil
