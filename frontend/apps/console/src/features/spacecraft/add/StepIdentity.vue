@@ -5,7 +5,7 @@ import { useDraft } from "./context.ts";
 import { rangeLabel } from "./batch.ts";
 import type { FieldErrors } from "./draft.ts";
 
-/** A2 Identity (profile path): count, naming pattern, SCID range; clashes shown inline. */
+/** A2 Identity (profile path): count, naming pattern, SCID range, NORAD ids; clashes inline. */
 const { draft, set, proposal } = useDraft();
 
 const errors = computed((): FieldErrors => {
@@ -62,6 +62,14 @@ const scidEnd = computed(() => {
         :hint="`Last SCID ${scidEnd} · prefilled with the next free SCID`"
         :error="errors.scidStart ?? null"
         @update:model-value="set('scidStart', $event)"
+      />
+      <ApField
+        :model-value="draft.norad"
+        label="NORAD ids"
+        mono
+        hint="Optional: one per spacecraft, in order, separated by commas. Leave empty to add later."
+        :error="errors.norad ?? null"
+        @update:model-value="set('norad', $event)"
       />
       <div class="flex flex-col gap-1.5">
         <span class="ap-label">Names</span>

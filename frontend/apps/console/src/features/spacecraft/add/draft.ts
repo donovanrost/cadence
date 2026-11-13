@@ -22,6 +22,8 @@ export type Draft = {
   count: string;
   pattern: string;
   scidStart: string;
+  /** Optional, one per spacecraft in order (AddSpacecraft.md step 02: "add later" by default). */
+  norad: string;
   planeMode: "fill" | "manifest" | "none";
   firstPlane: string;
   perPlane: string;
@@ -42,6 +44,7 @@ export function emptyDraft(pattern: string): Draft {
     count: "1",
     pattern,
     scidStart: "",
+    norad: "",
     planeMode: "none",
     firstPlane: "",
     perPlane: "25",
@@ -66,6 +69,8 @@ const draftReader: Reader<Draft> = (value, path = "") => {
     count: string,
     pattern: string,
     scidStart: string,
+    // Drafts saved before NORAD ids existed read as "add later".
+    norad: (value: unknown, at?: string) => (value === undefined ? "" : string(value, at)),
     planeMode: oneOf(["fill", "manifest", "none"]),
     firstPlane: string,
     perPlane: string,
@@ -180,7 +185,15 @@ export function propose(
   if (start === null) errors.scidStart = `Enter a SCID from 0 to ${MAX_SCID}.`;
   else if (count !== null && start + count - 1 > MAX_SCID)
     errors.scidStart = `The range passes ${MAX_SCID}, the largest SCID.`;
-  if (Object.keys(errors).length > 0 || count === null || start === null || !pattern.ok)
+  const norads = count === null ? null : noradList(draft.norad, count);
+  if (norads && !norads.ok) errors.norad = norads.message;
+  if (
+    Object.keys(errors).length > 0 ||
+    count === null ||
+    start === null ||
+    !pattern.ok ||
+    !norads?.ok
+  )
     return { status: "incomplete", step: "identity", errors };
 
   let planes = null;
@@ -198,7 +211,7 @@ export function propose(
       };
     planes = { firstPlane: first, perPlane: per };
   }
-  const rows = generateRows(pattern.pattern, count, start, planes);
+  const rows = generateRows(pattern.pattern, count, start, planes, norads.ids);
   return {
     status: "ready",
     report: checkClashes(rows, directory.spacecraft),
@@ -207,3 +220,32 @@ export function propose(
 }
 
 export const mappableFields = manifestFields;
+
+/** NORAD catalog numbers are positive integers (9 digits leaves room past Alpha-5). */
+const MAX_NORAD = 999_999_999;
+
+/**
+ * NORAD ids typed for a generated batch: empty = add later (all null); otherwise one per
+ * spacecraft, in order, separated by commas or spaces, no repeats.
+ */
+export function noradList(
+  text: string,
+  count: number,
+): Readonly<{ ok: true; ids: readonly (number | null)[] } | { ok: false; message: string }> {
+  const parts = text.split(/[\s,]+/).filter((p) => p !== "");
+  if (parts.length === 0) return { ok: true, ids: Array.from({ length: count }, () => null) };
+  const ids = parts.map((p) => (/^\d+$/.test(p) ? Number(p) : NaN));
+  const bad = parts.find((_, i) => {
+    const n = ids[i];
+    return n === undefined || !(n >= 1 && n <= MAX_NORAD);
+  });
+  if (bad !== undefined) return { ok: false, message: `“${bad}” isn't a NORAD id.` };
+  if (ids.length !== count)
+    return {
+      ok: false,
+      message: `Enter ${count} NORAD ids, one per spacecraft (you entered ${ids.length}), or leave it empty.`,
+    };
+  const repeat = ids.find((id, i) => ids.indexOf(id) !== i);
+  if (repeat !== undefined) return { ok: false, message: `NORAD id ${repeat} is listed twice.` };
+  return { ok: true, ids };
+}

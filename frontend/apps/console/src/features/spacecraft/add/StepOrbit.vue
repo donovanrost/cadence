@@ -1,11 +1,22 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApCallout, ApField, ApPanel, ApSegmented, type ApSegment } from "@/ui";
+import { useMissionScope } from "@/shell";
+import { ApField, ApPanel, ApSegmented, type ApSegment } from "@/ui";
 import { useDraft } from "./context.ts";
 import type { Draft, FieldErrors } from "./draft.ts";
+import RoutingSummary from "./RoutingSummary.vue";
 
 /** A3 Orbit & routing. Plane and slot are spacecraft metadata today (plan gap). */
 const { draft, set, proposal } = useDraft();
+const scope = useMissionScope();
+const missionId = computed(() => scope.value.mission.id);
+/** The batch size: the generated rows once identity is valid, else the typed count. */
+const count = computed(() => {
+  const p = proposal();
+  if (p.status === "ready") return p.report.rows.length;
+  const n = Number(draft.count);
+  return Number.isInteger(n) && n > 0 ? n : 1;
+});
 
 const modes = computed((): readonly ApSegment<Draft["planeMode"]>[] => [
   ...(draft.source === "manifest"
@@ -48,11 +59,15 @@ const errors = computed((): FieldErrors => {
           @update:model-value="set('perPlane', $event)"
         />
       </div>
-      <ApCallout tone="info">
-        Routing moves to the profile (each profile's rules generate routes for its spacecraft).
-        Until that lands, add routing rules for new spacecraft in Comms &amp; routing after creating
-        them.
-      </ApCallout>
+      <RoutingSummary
+        v-if="draft.source === 'profile' && draft.profileId"
+        :mission-id="missionId"
+        :profile-id="draft.profileId"
+        :count="count"
+      />
+      <p v-else class="m-0 text-md text-text-3">
+        Each spacecraft gets the routes its profile's rules generate.
+      </p>
     </div>
   </ApPanel>
 </template>

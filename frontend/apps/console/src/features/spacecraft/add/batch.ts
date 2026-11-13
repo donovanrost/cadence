@@ -27,6 +27,8 @@ export function generateRows(
   count: number,
   scidStart: number,
   planes: PlaneFill | null,
+  /** One per row, in order; null = add later. */
+  norads: readonly (number | null)[] = [],
 ): readonly ProposedSpacecraft[] {
   return Array.from({ length: count }, (_, i) => {
     const scid = scidStart + i;
@@ -34,7 +36,7 @@ export function generateRows(
       key: `gen-${i}`,
       name: expandName(pattern, { scid, n: i + 1 }),
       scid,
-      norad: null,
+      norad: norads[i] ?? null,
       plane: planes ? planes.firstPlane + Math.floor(i / planes.perPlane) : null,
       slot: planes ? (i % planes.perPlane) + 1 : null,
       profileName: null,
