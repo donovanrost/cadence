@@ -14,7 +14,8 @@ import { filterCounts, pointMark, pointsFrom, toCsv, visiblePoints } from "./tel
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api/index.ts";
 import { formatLimitLike, formatValue, type Alarm } from "@/features/alarms/index.ts";
-import { spacecraftRow } from "@/features/fleet/index.ts";
+import { spacecraftRow, type FleetSpacecraft } from "@/features/fleet/index.ts";
+import { aosShort, ringDots, sparkPoints } from "./sisters.ts";
 import { historyReader, type LimitIntervals } from "./api.ts";
 import {
   formatRate,
@@ -497,5 +498,39 @@ describe("B1 no active alarm (§B1)", () => {
       ])?.id,
     ).toBe("c");
     expect(lastCleared([e("b", null)])).toBeNull();
+  });
+});
+
+describe("B4 drawing (§B4)", () => {
+  const sc = (id: string, over: Partial<FleetSpacecraft> = {}): FleetSpacecraft => ({
+    ...spacecraftRow(1),
+    id,
+    name: id.toUpperCase(),
+    plane: 7,
+    ...over,
+  });
+  it("rings the plane by phase, else evenly by slot; marks self and sisters", () => {
+    const fleet = [
+      sc("a", { phase_deg: 0, slot: 1 }),
+      sc("b", { phase_deg: 90, slot: 2 }),
+      sc("c", { phase_deg: 180, slot: 3, plane: 8 }),
+    ];
+    const dots = ringDots(fleet, fleet[0] ?? sc("x"), new Map([["b", "caution" as const]]));
+    expect(dots.map((d) => [d.id, d.x, d.y, d.tone])).toEqual([
+      ["a", 50, 10, "self"],
+      ["b", 90, 50, "caution"],
+    ]);
+  });
+  it("draws a sparkline and says the next AOS", () => {
+    const pts = [
+      { t: 0, min: 1, mean: 1, max: 1 },
+      { t: 10, min: 3, mean: 3, max: 3 },
+    ];
+    expect(sparkPoints(pts)).toBe("0.0,23.0 80.0,1.0");
+    expect(sparkPoints(pts.slice(0, 1))).toBeNull();
+    const now = new Date("2026-11-12T00:00:00Z");
+    expect(aosShort(sc("a", { next_aos_at: "2026-11-12T00:52:00Z" }), now)).toBe("AOS T−52m");
+    expect(aosShort(sc("a", { next_aos_at: "2026-11-12T03:10:00Z" }), now)).toBe("AOS T−3h 10m");
+    expect(aosShort(sc("a", { in_contact: true }), now)).toBe("IN CONTACT");
   });
 });
