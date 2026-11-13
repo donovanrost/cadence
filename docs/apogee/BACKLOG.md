@@ -164,7 +164,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | ~~P1 edit + P4 staged aside (`Stage edit`, `Changes N / Keeps M`)~~ done (217feb23, b136754d) | fe-setup | — |
 | The #19 read-only framing callout is stale: #19 is lifted (domain: `profile_framing_generations` defaults on, #45). Drop it; show a note only when a mission has turned that setting off in ST1 (profile framing then doesn't reach ingress) | fe-setup | — |
 | `New profile`, `Duplicate as new profile` (create op exists) | fe-setup | — |
-| List: Overrides, Last changed columns; Limits notice; History field diffs, `Compare`, pin; conflict chip | fe-setup | — |
+| List: ~~Overrides, Last changed columns~~ built (2646dcf5; show when api's read carries them, api queue); ~~Limits notice~~ done (2646dcf5); History field diffs and per-version counts (api queue item 3); ~~`Compare`~~; ~~pin~~ dropped (ux); ~~conflict chip~~ done (2f0d5d08) | fe-setup | api: override_count/last_change, revisions by entity |
 
 ### Staged changes / revisions (`Changes.md`): mostly built
 | Item | Owner | Blocked on |
@@ -309,7 +309,7 @@ Drafted by lead, 11-12, from a read of `router.ex` (lines 89–745), the legacy 
 | L18 | Catalog extras: reimport, artifact page, download | Those | api + fe-setup → `setup.catalog` | open |
 | L19 | Spacecraft-scope apps (`/spacecraft/:sid/applications`) | Spacecraft scope | fe-setup, with L9 | after L9 (unblocked by the #75 ruling) |
 | L20 | Telemetry explore canned questions | The feature | **Parked (#75):** the legacy page stays until the user revisits. ux's four empty-state links to console homes may still ship (fe-ops, no api); they don't replace the feature | parked |
-| L21 | Accept an invitation as a signed-in user (`/notifications` and the bell) | A home: **Account** (ux 11-12, People.md Account). Pending invitations first ('Acme Space · Member · invited by Mira K. on 11-10' [Accept] [Decline (confirm)]); Accept adds the org to the switcher and opens it; the org switcher footer shows '1 invitation' | api (a 'my pending invitations' read + accept / decline for a signed-in user) → fe-setup (Account) + lead (switcher footer) | open |
+| L21 | Accept an invitation as a signed-in user | ~~Account invitations + switcher footer~~ built (api cfdf79f7; fe-setup f147dea3; lead 0bb33f80) | api + fe-setup + lead | done |
 | L22 | Per-spacecraft runtime switches from the old spacecraft config workspace. All four still feed the runtime and survive in change sets, but can't be edited in the console (domain 11-13) | (1) `commanding_enabled` (safety: authoring and release refuse with `spacecraft_commanding_not_active`) and (2) `telemetry_enabled` (installs telemetry_decom, toggles packet bindings) → **spacecraft-level settings changed through a change set** (with L17's spacecraft kind). (3) `handled_apids` → an **overridable profile field** next to `catalog_revision_id`, default 'all the catalog's APIDs'. (4) `telemetry_source_endpoint_id` → **no field**: derived; the ambiguous multi-endpoint case becomes a Readiness finding pointing at Data sources (L11) | domain (kinds/fields + finding, after #74, before L15) → api (with L17's spacecraft kind) → fe-setup (spacecraft page section; profile field) · ux: wording for turning commanding off | planned |
 
 ### 11d. Hand-out order (lead, 11-13; after each person's current items)
