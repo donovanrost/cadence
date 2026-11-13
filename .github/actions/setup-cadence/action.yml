@@ -38,6 +38,7 @@ runs:
           echo "CADENCE_BUILD_PREFIX=build-${MIX_ENV}-v1-${prefix}"
           echo "CADENCE_BUILD_KEY=build-${MIX_ENV}-v1-${prefix}-${LOCKS}-${GITHUB_SHA}"
           echo "CADENCE_LOCKS=${LOCKS}"
+          echo "CADENCE_SOURCE_INDEX=_build/${MIX_ENV}/.ci-source-index"
           echo "CADENCE_DEPS_PATHS<<EOF"
           printf '%s\n' deps 'apps/*/deps' 'packages/*/deps'
           echo "EOF"
@@ -61,6 +62,12 @@ runs:
         restore-keys: |
           ${{ env.CADENCE_BUILD_PREFIX }}-${{ env.CADENCE_LOCKS }}-
           ${{ env.CADENCE_BUILD_PREFIX }}-
+
+    # Without this, fresh checkout mtimes make Mix recompile all of cadence (scripts/ci/source_index.sh).
+    - if: steps.build-cache.outputs.cache-matched-key != ''
+      name: Backdate files unchanged since the cached build
+      shell: bash
+      run: scripts/ci/source_index.sh backdate "$CADENCE_SOURCE_INDEX"
 
     - name: Fetch deps (root and every child project)
       shell: bash
