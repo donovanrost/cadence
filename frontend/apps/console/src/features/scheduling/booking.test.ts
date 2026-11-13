@@ -9,6 +9,8 @@ const pass = (id: string, start: string, locked = false) => ({
   ends_at: start,
   synthetic: true,
   locked,
+  expires_at: null,
+  booking: null,
 });
 const plan = {
   id: "plan_1",

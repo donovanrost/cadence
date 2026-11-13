@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PlanPass } from "./api.ts";
+import { booking } from "./fixtures.ts";
 import { expiredRows, offerClock, unsentPasses } from "./offer-clock.ts";
 
 const now = new Date("2026-11-13T01:00:00Z");
@@ -8,7 +9,7 @@ const pass = (
   id: string,
   start: string,
   expires: string | null,
-  booking: PlanPass["booking"] = null,
+  b: PlanPass["booking"] = null,
 ): PlanPass => ({
   snapshot_id: id,
   spacecraft_id: "sc12",
@@ -18,7 +19,7 @@ const pass = (
   synthetic: false,
   locked: false,
   expires_at: expires === null ? null : `2026-11-13T${expires}:00Z`,
-  booking,
+  booking: b,
 });
 const ksat = { id: "p-ksat", name: "KSAT" };
 type Plan = Parameters<typeof offerClock>[0];
@@ -80,8 +81,8 @@ describe("K1 offer clock (ux)", () => {
     expect(offerClock({ ...plan([], "01:00"), provider_freeze: null }, nameOf, now)).toBeNull();
     const executing = plan(
       [
-        pass("s1", "03:00", "00:30", { state: "confirmed", reason: null, at: null }),
-        pass("s2", "03:20", "02:00", { state: "never_sent", reason: null, at: null }),
+        pass("s1", "03:00", "00:30", booking("confirmed", null)),
+        pass("s2", "03:20", "02:00", booking("never_sent", null)),
       ],
       "02:00",
       { state: "executing" },

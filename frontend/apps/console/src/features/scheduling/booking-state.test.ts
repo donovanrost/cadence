@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { PlanPass } from "./api.ts";
+import { booking } from "./fixtures.ts";
 import { bookingLook, reasonWords, rejectedRows } from "./booking-state.ts";
 
-const pass = (id: string, booking: PlanPass["booking"]): PlanPass => ({
+const pass = (id: string, b: PlanPass["booking"]): PlanPass => ({
   snapshot_id: id,
   spacecraft_id: "sc1",
   station: { ref: "svb", id: "gs_svb", code: "SVB-1", name: "Svalbard" },
@@ -10,29 +11,28 @@ const pass = (id: string, booking: PlanPass["booking"]): PlanPass => ({
   ends_at: "2026-11-13T03:08:00Z",
   synthetic: false,
   locked: false,
-  booking,
+  expires_at: null,
+  booking: b,
 });
 
 describe("K1 per-contact booking (api 8e)", () => {
   it("draws each state with a word, and nothing special before execution or for an unknown state", () => {
-    expect(bookingLook({ state: "confirmed", reason: null, at: null })).toEqual({
+    expect(bookingLook(booking("confirmed", null))).toEqual({
       kind: "own",
       word: "Confirmed",
     });
-    expect(bookingLook({ state: "rejected", reason: "no_capacity", at: null })?.kind).toBe("clash");
-    expect(bookingLook({ state: "uncertain", reason: null, at: null })?.kind).toBe("unconfirmed");
-    expect(bookingLook({ state: "never_sent", reason: "sending", at: null })?.word).toBe(
-      "Requested · sending",
-    );
+    expect(bookingLook(booking("rejected", "no_capacity"))?.kind).toBe("clash");
+    expect(bookingLook(booking("uncertain", null))?.kind).toBe("unconfirmed");
+    expect(bookingLook(booking("never_sent", "sending"))?.word).toBe("Requested · sending");
     expect(bookingLook(null)).toBeNull();
-    expect(bookingLook({ state: "teleported", reason: null, at: null })).toBeNull();
+    expect(bookingLook(booking("teleported", null))).toBeNull();
   });
 
   it("turns rejected and failed bookings into Demand rows, with the server's reason when it has one", () => {
     const rows = rejectedRows([
-      pass("a", { state: "confirmed", reason: null, at: null }),
-      pass("b", { state: "rejected", reason: "antenna_fault", at: null }),
-      pass("c", { state: "failed", reason: null, at: null }),
+      pass("a", booking("confirmed", null)),
+      pass("b", booking("rejected", "antenna_fault")),
+      pass("c", booking("failed", null)),
       pass("d", null),
     ]);
     expect(rows.map((r) => r.sentence)).toEqual([
@@ -43,11 +43,11 @@ describe("K1 per-contact booking (api 8e)", () => {
 
   it("uses ux's reason words and next steps, Lost and Not sent included", () => {
     const rows = rejectedRows([
-      pass("a", { state: "rejected", reason: "no_capacity", at: null }),
-      pass("b", { state: "failed", reason: "booking_lost", at: null }),
-      pass("c", { state: "never_sent", reason: "mission_provider_not_found", at: null }),
-      pass("d", { state: "never_sent", reason: "sending", at: null }),
-      pass("e", { state: "failed", reason: "invalid_contact_interval", at: null }),
+      pass("a", booking("rejected", "no_capacity")),
+      pass("b", booking("failed", "booking_lost")),
+      pass("c", booking("never_sent", "mission_provider_not_found")),
+      pass("d", booking("never_sent", "sending")),
+      pass("e", booking("failed", "invalid_contact_interval")),
     ]);
     expect(rows.map((r) => [r.sentence, r.next])).toEqual([
       ["Rejected · SVB-1 03:00Z: the station has no capacity then.", "replan"],

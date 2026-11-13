@@ -261,8 +261,9 @@ export const planDetailReader = d.object({
             resolved: d.optional(
               d.nullable(
                 d.object({
+                  // api a6aaa60a: kind comes from the error document and may be absent.
                   by: d.object({
-                    kind: d.token,
+                    kind: d.nullable(d.token),
                     id: d.nullable(d.token),
                     name: d.nullable(d.string),
                   }),
