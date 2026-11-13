@@ -797,8 +797,8 @@ configuration failure P3. The amendments to fe-ops' drafts:
     is `Review`.
 - **Evidence:** the changed fields, as in `Start 03:10Z → 03:12Z · Antenna 2 → 4`.
   - At most 3, then "and 2 more".
-  - Labels come from the server's `label` when it isn't null, else from a console word map of known field keys,
-    else the key in sentence case. Never show raw JSON quoting.
+  - Labels are the server's `label` (see Field labels below; no console map is needed). Never show raw JSON
+    quoting.
   - Times use the §4 format. A value that's absent or null reads `none`.
   - Approval adds "Decide by 02:40Z. After that, Northlight decides." At the deadline Cadence does nothing by
     itself (api 84f58b73d).
