@@ -343,12 +343,18 @@ api-ops' cutover (uncommitted on 11-14) replaces the first three live routes wit
   Playlists}`, `LibraryAuthoring`, `PlaylistAuthoring`. The console endpoints wrap them.
   `Playlists.present/search` can go.
 
-### Open (for lead)
-- `RuntimeCoordinator` and `RuntimeInvalidationRelevance` have no callers in lib, legacy pages included.
-  `plans/dashboards-live.md` named them for the channel, but C1 shipped without them. Delete them in L8a unless
-  api-ops plans to use them.
-- `test/support/dashboard_review_fixtures.ex` has no users: delete it in L8a.
-- The storybook `dashboard-directory-study/` is a design study (ux's call).
+### Answers (lead 11-14)
+- **Explore's `add_to_dashboard`:** api-ops exempts `/ops/dashboards/:id/edit?candidate_*` from the redirect,
+  so the legacy editor keeps serving that flow for now. Dashboards' queue: the console editor accepts the
+  candidate (`candidate_source=explore`, `candidate_point_id`, `_widget_type`, `_title`, `_spacecraft_id`,
+  `_realm`, `_data_view`, `_data_source_id`, `_source_binding_id`; built by
+  `telemetry_explore.ex` `candidate_query/4`) and stages it as a new widget in the draft. Then the exemption goes,
+  and L8a can delete the legacy editor.
+- **`RuntimeCoordinator` / `RuntimeInvalidationRelevance`:** delete them in L8a unless api-ops objects (asked).
+- **Federation smoke:** devops moves its canonical ops_console surface off `dashboard_directory` (asked).
+- **Gate:** L8a goes to the director once qa confirms New live.
+- Still open: `test/support/dashboard_review_fixtures.ex` has no users, so delete it in L8a. The storybook
+  `dashboard-directory-study/` is ux's call.
 
 ## L10 activation approvals (blocked: no console API)
 **Routes:** R:563.
