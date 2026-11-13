@@ -24,6 +24,8 @@ import {
 } from "../groups/words.ts";
 import AbortPanel from "./AbortPanel.vue";
 import NeedsYouPanel from "./NeedsYouPanel.vue";
+import TargetMatrix from "./TargetMatrix.vue";
+import { useFleet } from "@/features/fleet/index.ts";
 import VerifierPanel from "./VerifierPanel.vue";
 import { abortable, pipeline } from "./uplink.ts";
 import { useVerifierSeries } from "./useVerifierSeries.ts";
@@ -42,6 +44,11 @@ const props = defineProps<{
 }>();
 defineEmits<{ changed: [] }>();
 const tiles = computed(() => pipeline(props.group));
+/** U1 matrix places targets by plane and slot from the fleet read. */
+const fleet = useFleet(computed(() => props.missionId));
+const fleetRows = computed(() =>
+  fleet.state.value.status === "ready" ? fleet.state.value.value.spacecraft : [],
+);
 const series = useVerifierSeries(
   computed(() => props.missionId),
   computed(() => props.group.id),
@@ -111,7 +118,8 @@ const blocked = computed(() =>
     <NeedsYouPanel :group="group" :series="series.ready.value" />
     <VerifierPanel :series="series" />
     <ApPanel index="U1" title="Targets" :meta="`${group.target_count}`" flush>
-      <ul class="m-0 list-none p-0">
+      <TargetMatrix :group="group" :fleet="fleetRows" />
+      <ul class="m-0 list-none border-t border-hairline p-0">
         <li
           v-for="t in group.targets"
           :key="t.spacecraft_id"

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { LOOK_OF, legendLooks } from "../groups/matrix.ts";
 import { decode } from "@/api/index.ts";
 import { preflightReader, type Preflight } from "../groups/api.ts";
 import { groupOf, showBody } from "../groups/fixtures.ts";
@@ -617,5 +618,16 @@ describe("A1 value changes (brief)", () => {
         (id) => id,
       ),
     ).toEqual([]);
+  });
+});
+
+describe("U1 targets matrix looks (CommandFlow C3)", () => {
+  it("maps stages to looks and lists only the looks present, in pipeline order", () => {
+    expect(LOOK_OF.indeterminate).toBe("no_ack");
+    expect(legendLooks(["verified", "verify_failed", "queued_for_contact", "verified"])).toEqual([
+      "queued",
+      "verified",
+      "failed",
+    ]);
   });
 });
