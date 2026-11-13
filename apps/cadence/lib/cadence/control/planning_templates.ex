@@ -56,11 +56,91 @@ defmodule Cadence.Control.PlanningTemplates do
         {:ok,
          template
          |> row(version, names)
-         |> Map.merge(%{document: document(version), versions: versions})}
+         |> Map.merge(%{
+           document: document(version),
+           versions: versions,
+           state_changed: state_changed(template)
+         })}
 
       {:error, _missing} ->
         {:error, :template_not_found}
     end
+  end
+
+  @doc """
+  Pauses, resumes (`:activate`) or closes a template (§11 L2) at `params["expected_version"]`,
+  with a required `params["reason"]`. A lifecycle move doesn't bump the version; requirements the
+  template already made stay. `{:ok, %{id, state, version}}`.
+  """
+  @spec transition(Scope.t(), binary(), binary(), :pause | :activate | :close, map()) ::
+          {:ok, map()} | {:error, term()}
+  def transition(%Scope{} = scope, mission_id, template_id, action, params)
+      when action in [:pause, :activate, :close] do
+    with {:ok, expected} <- expected_version(params["expected_version"]),
+         {:ok, reason} <- reason(params["reason"]),
+         {:ok, template} <-
+           apply(ContactRequirementTemplates, action, [
+             scope,
+             mission_id,
+             template_id,
+             expected,
+             reason
+           ]) do
+      {:ok,
+       %{
+         id: template.contact_requirement_template_id,
+         state: template.lifecycle_state,
+         version: template.current_version
+       }}
+    else
+      {:error, :stale_contact_requirement_template_version} ->
+        {:error, {:version_conflict, current(scope, mission_id, template_id, :current_version)}}
+
+      {:error, :invalid_template_lifecycle_transition} ->
+        {:error,
+         {:template_transition_not_allowed,
+          current(scope, mission_id, template_id, :lifecycle_state)}}
+
+      {:error, :contact_requirement_template_transition_reason_required} ->
+        {:error, {:invalid_params, %{reason: "Say why."}}}
+
+      other ->
+        other
+    end
+  end
+
+  defp current(scope, mission_id, template_id, field) do
+    case ContactRequirementTemplates.fetch(scope.organization_id, mission_id, template_id) do
+      {:ok, template, _version} -> Map.get(template, field)
+      _missing -> nil
+    end
+  end
+
+  defp reason(reason) when is_binary(reason) do
+    case String.trim(reason) do
+      "" ->
+        reason(nil)
+
+      trimmed ->
+        if String.length(trimmed) <= 2_000,
+          do: {:ok, trimmed},
+          else: {:error, {:invalid_params, %{reason: "must be at most 2000 characters"}}}
+    end
+  end
+
+  defp reason(_reason), do: {:error, {:invalid_params, %{reason: "Say why."}}}
+
+  # The last lifecycle move a person made; creating and versioning record system reasons.
+  defp state_changed(%{lifecycle_reason: reason}) when reason in [nil, "created", "versioned"],
+    do: nil
+
+  defp state_changed(template) do
+    %{
+      state: template.lifecycle_state,
+      at: template.lifecycle_changed_at,
+      actor: template.lifecycle_changed_by && actor(template.lifecycle_changed_by),
+      reason: template.lifecycle_reason
+    }
   end
 
   @doc """

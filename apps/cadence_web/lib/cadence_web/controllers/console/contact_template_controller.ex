@@ -64,6 +64,24 @@ defmodule CadenceWeb.Console.ContactTemplateController do
     end
   end
 
+  # §11 L2: pause, resume and close a template (reason required; the version doesn't move).
+  def pause(conn, %{"template_id" => id} = params), do: transition(conn, id, :pause, params)
+  def activate(conn, %{"template_id" => id} = params), do: transition(conn, id, :activate, params)
+  def close(conn, %{"template_id" => id} = params), do: transition(conn, id, :close, params)
+
+  defp transition(conn, id, action, params) do
+    case PlanningTemplates.transition(
+           conn.assigns.current_scope,
+           mission_id(conn),
+           id,
+           action,
+           params
+         ) do
+      {:ok, result} -> ok(conn, result)
+      {:error, reason} -> error(conn, reason)
+    end
+  end
+
   defp save(conn, id, params) do
     case PlanningTemplates.save(conn.assigns.current_scope, mission_id(conn), id, params) do
       {:ok, result} -> conn |> put_status(:created) |> json(%{data: ConfigJSON.encode(result)})
@@ -92,6 +110,12 @@ defmodule CadenceWeb.Console.ContactTemplateController do
 
   defp error(conn, :contact_requirement_template_spacecraft_not_found),
     do: Problem.respond(conn, :invalid_params, %{target: "unknown spacecraft"})
+
+  defp error(conn, {:version_conflict, current}),
+    do: Problem.respond(conn, :version_conflict, %{expected_version: current})
+
+  defp error(conn, {:template_transition_not_allowed, state}),
+    do: Problem.respond(conn, :template_transition_not_allowed, %{state: state})
 
   defp error(conn, :stale_contact_requirement_template_version),
     do: Problem.respond(conn, :version_conflict)

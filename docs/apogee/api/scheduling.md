@@ -519,6 +519,14 @@ schedule, the requirement content each occurrence generates, and the catch-up bo
   {kind, id, name}}]` (newest first). `404 template_not_found`.
 - `POST /templates` `{name, target, document}` → `201 {id, version: 1}`. The template is active
   at once.
+- **L2** `POST /templates/:id/pause | /activate | /close` `{expected_version, reason}` → `200 {id,
+  state: "active" | "paused" | "closed", version}`. Moves: active ↔ paused, active | paused → closed
+  (final). The version doesn't change; requirements the template already made stay (only active
+  templates make new ones). `409 version_conflict` (`details.expected_version` = current),
+  `409 template_transition_not_allowed` (`details.state` = current), `422 details.reason` (required,
+  ≤ 2000), `403 forbidden` (the same check as template writes: `planning.edit`). The template detail
+  carries `state_changed: {state, at, actor {kind, id, name}, reason} | null`, the last move a person
+  made (`null` while it's active since create).
 - `POST /templates/:id` `{name?, target?, document?, expected_version}` → `201 {id, version}`.
   Omitted parts carry over. `409 version_conflict` on a stale `expected_version`.
 - `POST /templates/preview` `{name?, target, document, days?}` (days 1–31, default 1) → `{spacecraft_count,

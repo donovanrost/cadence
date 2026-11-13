@@ -1044,6 +1044,16 @@ defmodule CadenceWeb.Router do
 
       get("/contact-planning/templates/:template_id", ContactTemplateController, :show)
       post("/contact-planning/templates/:template_id", ContactTemplateController, :update)
+      # L2: template lifecycle (owner: api).
+      post("/contact-planning/templates/:template_id/pause", ContactTemplateController, :pause)
+
+      post(
+        "/contact-planning/templates/:template_id/activate",
+        ContactTemplateController,
+        :activate
+      )
+
+      post("/contact-planning/templates/:template_id/close", ContactTemplateController, :close)
 
       post("/contact-plans/:plan_id/execute", ContactPlanController, :execute)
 

@@ -70,6 +70,73 @@ defmodule CadenceWeb.Console.ContactTemplateAPITest do
     )
   end
 
+  test "L2: pause, resume and close a template; the version stays, the detail says who and why",
+       c do
+    plane = %{"kind" => "plane", "plane" => 1}
+
+    %{"id" => id} =
+      c.admin
+      |> call(:post, c.base <> "/templates", body(plane))
+      |> json_response(201)
+      |> Map.fetch!("data")
+
+    move = fn verb, body -> call(c.admin, :post, "#{c.base}/templates/#{id}/#{verb}", body) end
+
+    detail =
+      c.member
+      |> call(:get, c.base <> "/templates/" <> id)
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert detail["state_changed"] == nil
+
+    assert %{"details" => %{"reason" => _}} =
+             json_response(move.("pause", %{"expected_version" => 1, "reason" => " "}), 422)[
+               "error"
+             ]
+
+    assert %{"id" => ^id, "state" => "paused", "version" => 1} =
+             json_response(
+               move.("pause", %{"expected_version" => 1, "reason" => "Provider outage"}),
+               200
+             )["data"]
+
+    detail =
+      c.member
+      |> call(:get, c.base <> "/templates/" <> id)
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert %{
+             "state" => "paused",
+             "reason" => "Provider outage",
+             "actor" => %{"name" => "Ada"},
+             "at" => _
+           } =
+             detail["state_changed"]
+
+    assert %{"state" => "active"} =
+             json_response(move.("activate", %{"expected_version" => 1, "reason" => "Back"}), 200)[
+               "data"
+             ]
+
+    assert %{"details" => %{"expected_version" => 1}} =
+             json_response(move.("close", %{"expected_version" => 7, "reason" => "Done"}), 409)[
+               "error"
+             ]
+
+    assert %{"state" => "closed"} =
+             json_response(move.("close", %{"expected_version" => 1, "reason" => "Done"}), 200)[
+               "data"
+             ]
+
+    assert %{"code" => "template_transition_not_allowed", "details" => %{"state" => "closed"}} =
+             json_response(
+               move.("activate", %{"expected_version" => 1, "reason" => "Again"}),
+               409
+             )["error"]
+  end
+
   test "preview, create, read, version and summarize a plane template", c do
     plane = %{"kind" => "plane", "plane" => 1}
 
