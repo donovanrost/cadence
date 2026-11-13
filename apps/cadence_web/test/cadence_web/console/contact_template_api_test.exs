@@ -70,6 +70,23 @@ defmodule CadenceWeb.Console.ContactTemplateAPITest do
     )
   end
 
+  test "a replayed operation_id answers 409 duplicate_operation with the template it made", c do
+    request = body(%{"kind" => "plane", "plane" => 1}, %{"operation_id" => "op-template-1"})
+    created = c.admin |> call(:post, c.base <> "/templates", request) |> json_response(201)
+
+    assert %{"error" => %{"code" => "duplicate_operation", "details" => details}} =
+             c.admin |> call(:post, c.base <> "/templates", request) |> json_response(409)
+
+    assert details == %{"template_id" => created["data"]["id"]}
+
+    other = Map.put(request, "operation_id", "op-template-2")
+
+    assert %{"data" => %{"id" => id2}} =
+             c.admin |> call(:post, c.base <> "/templates", other) |> json_response(201)
+
+    assert id2 != created["data"]["id"]
+  end
+
   test "L2: pause, resume and close a template; the version stays, the detail says who and why",
        c do
     plane = %{"kind" => "plane", "plane" => 1}

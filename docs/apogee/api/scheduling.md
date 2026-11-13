@@ -517,8 +517,10 @@ schedule, the requirement content each occurrence generates, and the catch-up bo
   and the duration / volume fields to `requirement.success_measure`. Units are `s` and `bytes`.
 - `GET /templates/:id` → the row plus `document` and `versions: [{version, created_at, actor:
   {kind, id, name}}]` (newest first). `404 template_not_found`.
-- `POST /templates` `{name, target, document}` → `201 {id, version: 1}`. The template is active
-  at once.
+- `POST /templates` `{name, target, document, operation_id?}` → `201 {id, version: 1}`. The
+  template is active at once. Optional `operation_id` (client idempotency key, 1–200 characters, the same contract as
+  command groups): a replay answers `409 duplicate_operation` with `details.template_id` (the one
+  it made) and creates nothing. Without it, every create is new.
 - **L2** `POST /templates/:id/pause | /activate | /close` `{expected_version, reason}` → `200 {id,
   state: "active" | "paused" | "closed", version}`. Moves: active ↔ paused, active | paused → closed
   (final). The version doesn't change; requirements the template already made stay (only active
@@ -608,8 +610,10 @@ rationale, provider_constraints_document {allowed, excluded}, station_constraint
   date.
 - `GET /requirements/:id` → the row plus `versions: [{version, created_at, actor {kind, id,
   name}}]` (newest first). `404 requirement_not_found`.
-- `POST /requirements` `{content}` → `201 {id, version: 1}`. Omitted fields take the schema's
-  `defaults`.
+- `POST /requirements` `{content, operation_id?}` → `201 {id, version: 1}`. Omitted fields take
+  the schema's `defaults`. Optional `operation_id` (client idempotency key, 1–200 characters, the same contract as
+  command groups): a replay answers `409 duplicate_operation` with `details.requirement_id` (the one
+  it made) and creates nothing. Without it, every create is new.
 - `POST /requirements/:id` `{content, expected_version}` → `201 {id, version}`. An **omitted** key
   carries over from the current version; an explicit **`null` clears** a nullable field
   (`max_gap_seconds: null` = no limit). `409 version_conflict` with `details.expected_version` =

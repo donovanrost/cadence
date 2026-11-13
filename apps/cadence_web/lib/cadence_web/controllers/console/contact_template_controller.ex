@@ -111,6 +111,9 @@ defmodule CadenceWeb.Console.ContactTemplateController do
   defp error(conn, :contact_requirement_template_spacecraft_not_found),
     do: Problem.respond(conn, :invalid_params, %{target: "unknown spacecraft"})
 
+  defp error(conn, {:duplicate_operation, id}),
+    do: Problem.respond(conn, :duplicate_operation, %{template_id: id})
+
   defp error(conn, {:version_conflict, current}),
     do: Problem.respond(conn, :version_conflict, %{expected_version: current})
 

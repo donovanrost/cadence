@@ -19,6 +19,7 @@ defmodule Cadence.Control.PlanningRequirements do
     TemplateDescriptions
   }
 
+  alias Cadence.Control.PlanningOperations
   alias Cadence.Control.PlanningRequirements.Schema
   alias Cadence.SpacecraftStore
 
@@ -123,7 +124,14 @@ defmodule Cadence.Control.PlanningRequirements do
   end
 
   @doc "Creates (`requirement_id` nil) or versions a requirement: `{:ok, %{id, version}}`."
-  @spec save(Scope.t(), binary(), binary() | nil, map()) :: {:ok, map()} | {:error, term()}
+  @spec save(Scope.t(), binary(), binary() | nil | {:new, binary()}, map()) ::
+          {:ok, map()} | {:error, term()}
+  def save(%Scope{} = scope, mission_id, nil, %{"operation_id" => op} = params) when op != nil do
+    PlanningOperations.create_once(scope, mission_id, :requirement, op, fn id ->
+      save(scope, mission_id, {:new, id}, Map.delete(params, "operation_id"))
+    end)
+  end
+
   def save(%Scope{} = scope, mission_id, requirement_id, params) do
     with {:ok, content} <- Schema.admit(params["content"]),
          {:ok, requirement, version} <- write(scope, mission_id, requirement_id, content, params) do
@@ -219,6 +227,11 @@ defmodule Cadence.Control.PlanningRequirements do
   # On create, omitted fields take the schema's defaults (`schema/0`'s `defaults`).
   defp write(scope, mission_id, nil, content, _params),
     do: ContactRequirements.create(scope, mission_id, Map.merge(Schema.defaults(), content))
+
+  defp write(scope, mission_id, {:new, id}, content, _params) do
+    attrs = Schema.defaults() |> Map.merge(content) |> Map.put(:contact_requirement_id, id)
+    ContactRequirements.create(scope, mission_id, attrs)
+  end
 
   defp write(scope, mission_id, requirement_id, content, params) do
     with {:ok, expected} <- expected_version(params["expected_version"]) do

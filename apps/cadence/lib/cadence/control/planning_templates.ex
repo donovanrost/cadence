@@ -22,7 +22,7 @@ defmodule Cadence.Control.PlanningTemplates do
     TemplateTargets
   }
 
-  alias Cadence.Control.PlanningPolicy
+  alias Cadence.Control.{PlanningOperations, PlanningPolicy}
   alias Cadence.{SpacecraftStore, SpacecraftTypeStore}
 
   @day 86_400
@@ -147,17 +147,29 @@ defmodule Cadence.Control.PlanningTemplates do
   Creates (`template_id` nil) or versions a template from wire params
   `%{"name", "document", "target", "expected_version"}`.
   """
-  @spec save(Scope.t(), binary(), binary() | nil, map()) ::
+  @spec save(Scope.t(), binary(), binary() | nil | {:new, binary()}, map()) ::
           {:ok, %{id: binary(), version: pos_integer()}} | {:error, term()}
+  def save(scope, mission_id, nil, %{"operation_id" => op} = params) when op != nil do
+    PlanningOperations.create_once(scope, mission_id, :template, op, fn id ->
+      save(scope, mission_id, {:new, id}, Map.delete(params, "operation_id"))
+    end)
+  end
+
   def save(scope, mission_id, template_id, params) do
     scope
     |> write(mission_id, template_id, params)
     |> target_error(params)
   end
 
-  defp write(%Scope{} = scope, mission_id, nil, params) do
-    with {:ok, _template, version} <-
-           ContactRequirementTemplates.create(scope, mission_id, attrs(params)) do
+  defp write(%Scope{} = scope, mission_id, nil, params),
+    do: write(scope, mission_id, {:new, nil}, params)
+
+  # `id` is the operation's derived id (PlanningOperations), else the store mints one.
+  defp write(%Scope{} = scope, mission_id, {:new, id}, params) do
+    attrs =
+      if id, do: Map.put(attrs(params), :contact_requirement_template_id, id), else: attrs(params)
+
+    with {:ok, _template, version} <- ContactRequirementTemplates.create(scope, mission_id, attrs) do
       {:ok, %{id: version.contact_requirement_template_id, version: version.version}}
     end
   end

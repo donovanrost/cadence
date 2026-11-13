@@ -63,6 +63,9 @@ defmodule CadenceWeb.Console.ContactRequirementController do
   defp error(conn, reason) when reason in [:forbidden, :scope_mismatch],
     do: Problem.respond(conn, :forbidden)
 
+  defp error(conn, {:duplicate_operation, id}),
+    do: Problem.respond(conn, :duplicate_operation, %{requirement_id: id})
+
   defp error(conn, {:version_conflict, current}),
     do: Problem.respond(conn, :version_conflict, %{expected_version: current})
 
