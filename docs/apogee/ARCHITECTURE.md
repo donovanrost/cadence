@@ -186,3 +186,7 @@ Feature engineers compose these; ask lead before adding a new shared primitive.
   `scripts/check-slot.sh <command…>`: it waits for one of 3 shared slots and runs the command under
   `nice -n 10`. Full suites, builds and parallel runs stay gated on load < 16. Save full output to a
   file; never judge a check through `| tail` (the pipe hides the exit status). Freezes still win.
+- **Elixir checks never build the live server's code (2026-11-13 outage):** in the shared tree, run every
+  Elixir check (compile, credo, xref, `mix cadence.architecture.check`, tests) with `MIX_ENV=test`,
+  which builds to `_build/test`. A dev-env build rewrites `_build/dev` under the running :4011 node and
+  can purge modules (`Cadence.Repo`) from running processes. Lib saves reach :4011 through its own reloader.
