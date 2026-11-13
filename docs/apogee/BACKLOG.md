@@ -80,17 +80,17 @@ missing endpoint or decision; an item with no blocker can start now.
 | --- | --- | --- |
 | ~~A1 `5.0 → 8.0` readout, histogram of current values, hand-set overwrite callouts~~ built (512c96f2 on api 4f9cd275, a4c0e807) | fe-ops | — |
 | ~~A3 encoded packet bytes~~ done (90d1c43c) | fe-ops | — |
-| U2 ~~verifier plot, "Needs you" cards with Re-send / Open~~ done (c64fb2d1; per-target sentences and held lane 0ea3b97b); plane matrix, Pause; retry on no ACK out (#69: Re-send through a normal GO) | fe-ops | — (api-ops M26 2b50e7d1) |
+| ~~U2 verifier plot, Needs you cards, plane matrix~~ done (c64fb2d1, 0ea3b97b, 23fa7147); ~~Pause~~ dropped (lead 11-13: no group pause or held state server-side, none planned; Abort covers 'stop the rest'); retry on no ACK out (#69) | fe-ops | — |
 
 ### Contacts (`Contacts.md`, J4): Live built; detail route pending
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | ~~D3 outage / maintenance bands (K1 already draws them from S7)~~ done (181fb5d1) | fe-ops | — |
 | ~~`ops.contact` route~~ done: redirects to the drawer (abc4b36e) | fe-ops | — |
-| `sc any` filter chip, "highlight queued uplinks" | fe-ops | — |
-| D2: queued requests bound to the pass, state trail; ~~`Release`~~ done (a311cc8a); `Swap station` out (#68) | fe-ops | — |
+| ~~`sc any` filter chip, "highlight queued uplinks"~~ done (6e378485 on kit dim/notch ba5d4773) | fe-ops | — |
+| ~~D2: queued requests bound to the pass, state trail~~ done (c5117566); ~~`Release`~~ done (a311cc8a); `Swap station` out (#68) | fe-ops | — |
 | ~~D4 "Needs a decision"~~ done (cab58d3d) | fe-ops | — |
-| `Book passes` | fe-ops | — (K1 Plan covers part) |
+| ~~`Book passes`~~ done: the header shortcut to Plan (8a442858); planned booking is K1, single bookings L15 | fe-ops | — |
 
 ### Query line ⌘K (`Palette.md`, J5): partial
 | Item | Owner | Blocked on |
@@ -102,7 +102,7 @@ missing endpoint or decision; an item with no blocker can start now.
 ### Fleet, Alarms, Telemetry, Timeline (`OpsLists.md`): built; gaps
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| Fleet: ~~"in contact" filter, Next contact column~~ done (3ebcc9f8); virtualization past 200 rows *(unverified)* | fe-ops | — |
+| Fleet: ~~"in contact" filter, Next contact column~~ done (3ebcc9f8); past 200 rows: no virtualization (fe-ops measured, 11-13); the 1 s clock in Last TLM / Next contact moves to a 10 s tick | fe-ops | — |
 | ~~Alarms: group identical point+condition across spacecraft~~ done (784726fc), ~~Next contact~~ done (3ebcc9f8), ~~"Last cleared…" empty state~~ done (784726fc); Cleared tab re-check (investigate review #20) | fe-ops | — |
 | ~~Telemetry `Dashboards ↗` → existing pages (#11)~~ done (718fd269); empty state's three suggested points | fe-ops | — |
 | Timeline: ~~sc scope~~ done (cb5767c9); ~~plane filter~~ done (97e12555); ~~custom range, E1 brush~~ done (6c123796); ~~live prepend + "N new events ↑"~~ done (0521f407) | fe-ops | — |
