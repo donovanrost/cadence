@@ -1,6 +1,6 @@
 # Dashboards plan (L8)
 
-Owner: dashboards (w0R:pG). Status: draft 2, 2026-11-13 (director rulings Q1, Q2, Q5, Q6 folded in). Reports to lead; scope questions go to the director.
+Owner: dashboards (w0R:pG). Status: approved (lead), draft 3, 2026-11-13: DECISIONS #76 rulings, Q10, kit answers. Routing: BACKLOG §11e. Reports to lead; scope questions go to the director.
 Binding inputs: DECISIONS #75 (reverses #11), `briefs/dashboards.md` (the user's 2026-10-08 product decisions),
 ux `screens/Dashboards.md` (aed431cb). Missing server pieces are numbered **D1…** (endpoints) and **C1…**
 (channel) and collected in the [ask list](#ask-list-for-api--api-ops-via-lead). Questions are in [Open questions](#open-questions).
@@ -15,7 +15,9 @@ ux `screens/Dashboards.md` (aed431cb). Missing server pieces are numbered **D1�
   what you saw. ux has the final say on presentation.
 - **Q6:** add update and delete for playlists and library items. Delete must say where the item is used and refuse
   or warn instead of leaving dangling references. My proposal is in [Delete and references](#delete-and-references).
-- Start slice 1 once lead has routed the endpoints.
+- **Q10 confirmed** as proposed (Delete and references). Addition: **retire, delete and archive are recorded in
+  the audit log** like other config changes (see below).
+- Start slice 1 once lead has routed the endpoints (done: BACKLOG §11e). Build it against fixtures until D5 lands.
 
 ## What exists today (inventory, 2026-11-13)
 
@@ -184,6 +186,13 @@ when the reference degrades honestly.**
 `used_by` is computed server-side over current versions (library) or playlist rows (dashboards). It's the same
 shape on every 409, so the client renders one "Used by" list.
 
+**Audit (director):** library retire, playlist delete and dashboard archive/restore each write an audit record. They
+appear in `GET /audit` (setup.md AU1) under kind `config` as server-made sentences, e.g. "Archived dashboard Bus
+overview", "Retired library widget Battery tile", "Deleted playlist Night shift wall". Each sentence carries the
+actor, a `target {kind: dashboard | library_item | playlist, id, label}` and the mission. Dashboard saves and restores
+are already versioned, so whether they also appear in `/audit` is api's call (consistent with config revisions,
+which do).
+
 ## Live data over the Channel
 
 The user's rule is server push, never client polling. Today's legacy viewer re-resolves every 2 s per viewer. I
@@ -250,24 +259,27 @@ Priority order. Each one wraps an existing domain function unless marked **new**
 4. **D10–D13** rebase, copy, versions list/compare, restore.
 5. **D14–D19** settings, shares, snapshots, activity, diagnostics, export. **Domain fix** (Q1 ruling): settings
    save and library add-to-draft go through `CurrentVersions`. Snapshots take a posted runtime (Q5).
-6. **D20–D24** shared views, playlists, library. Update/delete for playlists and library items are **new** domain
+6. **D20–D24** shared views, playlists, library (+ audit records for retire, delete, archive). Update/delete for playlists and library items are **new** domain
    functions (Q6 ruling), with `used_by` and retire-not-delete for library items (see Delete and references).
    D3 archive returns `used_by.playlists`.
 7. **C1** `dashboard:<m>:<d>` channel (step 2). C2 appends only if needed.
 8. Legacy route redirects to console URLs at each cutover.
 
-## Kit asks (lead)
+## Kit (lead's answers)
 
-- **K1** add `uplot` 1.6.32 + `gridstack` 10.3.1 to `@cadence/console`; dashboards-only CSS imports.
-- **K2** where the `--chart-*` tokens live (dashboards stylesheet vs `apogee-ui` tokens); ux supplies values.
-- **K3** `ApSheet` width: ux specifies a 400px widget sheet, and `ApSheet` has `narrow` (560) and `wide` (760).
-  Either a `compact` width or ux accepts 560.
-- Shell: the cockpit status cluster (fleet health chips + UTC) in the takeover header. Does `ClockCluster` and the
-  health counts from the TopBar get promoted for takeover use, or does this header compose them?
+- **K1 yes:** dashboards adds `uplot` 1.6.32 and `gridstack` 10.3.1 to `@cadence/console`, imported only from
+  `features/dashboards` (lazy route chunk). Tell lead the commit.
+- **K2:** the `--chart-*` tokens go in `packages/apogee-ui/src/styles/tokens.css`, dark and light. ux supplies the
+  values. Until then the ported engine reads a temporary map in the dashboards feature that is removed when the
+  tokens land.
+- **K3:** lead adds a side placement to `ApSheet` (400px, right-anchored, non-modal so the grid stays usable).
+- **Cockpit cluster:** composed in the takeover header's `#clocks` slot from `ClockCluster` and `useOpsCounts`,
+  exported by lead from `@/shell`.
+- **Q8:** dashboards edits fe-ops' three Telemetry/Timeline files itself, telling fe-ops first.
 
 ## Open questions
 
-Resolved by the director (see Rulings): Q1, Q2, Q5 (ux owns presentation), Q6.
+Resolved (see Rulings and Kit): Q1, Q2, Q5 (ux owns presentation), Q6, Q8, Q10, K1–K3.
 
 - **Q3 (ux):** dashboards use uPlot, while Investigate uses `ApTimeSeries` (SVG). Should the chart grammar match:
   envelope, limit segments, crit wash, now-line, legend?
@@ -275,10 +287,5 @@ Resolved by the director (see Rulings): Q1, Q2, Q5 (ux owns presentation), Q6.
   folder model exists, or should tags be presented as folders? Also confirm the "Bound to" wording.
 - **Q7 (ux):** spec sections still to come: playlists + present, shares/snapshots (with the frozen window), export,
   library (with the "Used by" refusal), settings tabs, and New (I propose a small page, not a sheet).
-- **Q8 (lead):** for the `ops.dashboards` name change and the Telemetry tab strip, I'd like to touch fe-ops's
-  `TelemetryScreen.vue`, `TelemetryTab.vue` and `timeline/model.ts`, or have fe-ops do it.
 - **Q9 (api):** the live window cap is 24 h (backfill cost not measured). Keep it, so the range picker offers
   ≤24 h sliding ranges plus absolute ranges up to 31 d?
-- **Q10 (director, confirm):** the delete proposal above: refuse library deletes while a current version uses the
-  item and retire instead of hard-deleting; hard-delete playlists; warn on archiving a dashboard that's in
-  playlists.
