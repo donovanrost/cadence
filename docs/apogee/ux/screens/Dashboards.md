@@ -97,7 +97,9 @@ call (K2). The old teal "current" and violet "compare" hues are gone on purpose.
   expiry`). Data visibility: `Definition only` (widgets show "Data isn't shared in this link.") or `With data`.
 - **Settings › Sharing tab:** two tables.
   - Shares: link (copy) · Data · Expires · Created by/when · `Revoke` (confirms).
-  - Snapshots: window · version · taken by/when · open · `Delete` (confirms).
+  - Snapshots: window · version · taken by/when · open. There's no Delete: snapshots are immutable in the domain
+    (fe-setup 294f66b4). If snapshots are ever reachable outside the mission, stopping access becomes a director
+    question.
   - Primary: `Create share link` (sheet: data visibility segmented, expiry date optional).
 
 ## New dashboard (Q7): a small page, as proposed
@@ -111,8 +113,12 @@ Tabs: `General` · `Sharing` · `Activity` · `Diagnostics`.
 - **General:** name, description, tags, defaults (range, spacecraft). Saving creates a current version, with a
   "Saved as v8" line.
 - **Activity:** an event list (save, restore, archive, share, export) with actor and time.
-- **Diagnostics:** per widget, its source requests and their last result (`OK 120 ms` / `◆ Timed out after 5 s`),
-  so you can see which widget is slow or failing.
+- **Diagnostics:** one row per widget, from what's recorded (no timings until domain records them, U20):
+  - status mark and word (`■ OK` / `▲ DEGRADED` / `○ NOT RUN YET` for planned);
+  - cache (`Fresh` / `From cache`);
+  - the operator action as a sentence when there is one;
+  - warnings in words, with codes, severity and retryable in Technical details.
+  - Sorted worst first.
 - `Archive` sits at the foot of General (danger, confirms, "Archived dashboards leave the directory; their links
   stop working.").
 
