@@ -1,10 +1,11 @@
 defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
   use Cadence.DataCase, async: false
 
+  alias Cadence.Accounts.User
   alias Cadence.Applications.{ActionRequest, HostContext}
   alias Cadence.Applications.OpsConsole.Actions.DataSources, as: DataSourcesAction
   alias Cadence.Auth.{Scope, ServiceIdentity}
-  alias Cadence.DataSources.DataSource
+  alias Cadence.DataSources.{DataBinding, DataSource}
   alias Cadence.Management.DataSources
 
   @organization_id "org-ops-data-sources-actions"
@@ -140,6 +141,132 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
                "data_sources",
                request("disable-source", %{"data-source-id" => self()})
              )
+  end
+
+  describe "writes only on the caller's own sources (shared and other-org sources are refused)" do
+    setup do
+      shared = persist_source!("platform-shared-source", nil, nil, :shared)
+      %{shared: shared}
+    end
+
+    test "a mission operator can't disable, enable or probe a platform-shared source", c do
+      for action <- ["disable-source", "probe-source", "provision-tsdb-backend"] do
+        assert {:error, :platform_source} =
+                 execute(request(action, %{"data-source-id" => c.shared.data_source_id}))
+      end
+
+      assert {:ok, source} = DataSources.fetch_data_source(c.shared.data_source_id)
+      assert source.status == :active
+    end
+
+    test "another organization's source isn't reachable at all" do
+      persist_mission_scope("org-other-tenant", "mission-other-tenant")
+
+      persist_source!(
+        "other-tenant-source",
+        "org-other-tenant",
+        "mission-other-tenant",
+        :mission_isolated
+      )
+
+      assert {:error, :scope_mismatch} =
+               execute(request("disable-source", %{"data-source-id" => "other-tenant-source"}))
+    end
+
+    test "registering an existing id never overwrites it", c do
+      request =
+        request("register-source", %{
+          "source" => %{
+            "data_source_id" => c.shared.data_source_id,
+            "logical_source" => "telemetry",
+            "kind" => "managed_tsdb",
+            "isolation_level" => "mission_isolated",
+            "credentials_ref" => "",
+            "credential_provider" => "questdb",
+            "endpoint_ref" => "",
+            "material_env_profile" => "",
+            "http_endpoint_env" => "",
+            "storage" => "questdb"
+          }
+        })
+
+      assert {:error, :data_source_exists} = execute(request)
+      assert {:ok, source} = DataSources.fetch_data_source(c.shared.data_source_id)
+      assert source.organization_id == nil
+    end
+
+    test "a platform-shared binding can't be repointed by a mission operator", c do
+      {:ok, _binding} =
+        DataSources.persist_data_binding(%DataBinding{
+          binding_id: "platform-shared-binding",
+          organization_id: nil,
+          mission_id: nil,
+          realm: "flight",
+          logical_source: :telemetry,
+          data_source_id: c.shared.data_source_id
+        })
+
+      own = persist_source!("own-source", @organization_id, @mission_id, :mission_isolated)
+
+      assert {:error, :platform_source} =
+               execute(
+                 request("change-binding", %{
+                   "binding" => %{
+                     "binding_id" => "platform-shared-binding",
+                     "data_source_id" => own.data_source_id
+                   }
+                 })
+               )
+    end
+
+    test "a platform admin in admin mode may change a shared source", c do
+      admin =
+        Scope.new(%{
+          user:
+            User.new(%{
+              user_id: "user-platform-admin-ds",
+              email: "pa-ds@example.test",
+              display_name: "PA",
+              capabilities: [:platform_admin]
+            }),
+          organization_id: @organization_id,
+          admin_mode?: true
+        })
+
+      assert {:ok, %DataSource{status: :disabled}} =
+               DataSourcesAction.execute(
+                 admin,
+                 HostContext.mission(@mission_id),
+                 "data_sources",
+                 request("disable-source", %{"data-source-id" => c.shared.data_source_id})
+               )
+    end
+  end
+
+  defp execute(request),
+    do:
+      DataSourcesAction.execute(
+        scope(),
+        HostContext.mission(@mission_id),
+        "data_sources",
+        request
+      )
+
+  defp persist_source!(id, organization_id, mission_id, isolation) do
+    {:ok, source} =
+      DataSources.persist_data_source(%DataSource{
+        data_source_id: id,
+        owner: :cadence,
+        kind: :managed_tsdb,
+        adapter: Cadence.Dashboards.Sources.Telemetry,
+        organization_id: organization_id,
+        mission_id: mission_id,
+        isolation_level: isolation,
+        capabilities: %{latest?: true},
+        metadata: %{storage: :questdb}
+      })
+
+    source
   end
 
   defp request(action_id, params) do
