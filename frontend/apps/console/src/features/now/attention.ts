@@ -1,4 +1,10 @@
-import { decoders as d, isKnown, type Decoded, type Unrecognized } from "@/api/index.ts";
+import {
+  decoders as d,
+  isKnown,
+  spacecraftId as spacecraftIdReader,
+  type Decoded,
+  type Unrecognized,
+} from "@/api/index.ts";
 import type { QueueItem } from "./queue.ts";
 import { plural } from "@/ui";
 import { formatBytes } from "@/features/catalog/importRun.ts";
@@ -24,12 +30,20 @@ export const attentionSources = [
   "pass_release",
   "contact_settlement",
   "mission_runtime",
+  // An approved activation whose apply failed or stalled (domain 9b8456132, L10 resume).
+  "activation_apply",
 ] as const;
 /** pass_resolution conflicts (ops.md §attention). */
 export const attentionConflicts = [
   "cancel_failed",
   "late_confirmation",
   "contradicts_attestation",
+  // contact_settlement (#71) and mission_runtime (U38).
+  "unsettled",
+  "generation_not_applied",
+  // activation_apply: execution failed, or in progress >10 min with no live executor.
+  "apply_failed",
+  "apply_stalled",
 ] as const;
 /** U38 mission_runtime reason keys (domain 292c8e6b, final). */
 export const runtimeReasons = [
@@ -118,6 +132,34 @@ export const attentionReader = d.object({
   /** Set while automatic and backing off (5 min doubling to 2 h); null when manual. */
   next_attempt_at: d.optional(d.nullable(d.timestamp)),
   last_attempt_at: d.optional(d.nullable(d.timestamp)),
+  /** activation_apply (domain 9b8456132): the request, in the words its review page uses. */
+  activation_request_id: d.optional(d.nullable(d.token)),
+  error_code: d.optional(
+    d.nullable(
+      d.knownText([
+        "activation_execution_interrupted",
+        "spacecraft_configuration_review_stale",
+        "approved_activation_content_mismatch",
+      ] as const),
+    ),
+  ),
+  // free-text: the server's sentence for the failure (never the raw reason)
+  error: d.optional(d.nullable(d.string)),
+  // free-text: the server's sentence for what it activates ("Decom composition for 3 spacecraft")
+  summary: d.optional(d.nullable(d.string)),
+  kind: d.optional(
+    d.nullable(d.knownText(["telemetry_decom", "spacecraft_configuration"] as const)),
+  ),
+  app: d.optional(d.nullable(d.object({ key: d.token, name: d.nullable(d.string) }))),
+  spacecraft_ids: d.optional(d.nullable(d.array(spacecraftIdReader, 10_000))),
+  spacecraft_count: d.optional(d.nullable(d.integer)),
+  /** false: retrying can't help (review stale, content mismatch); request activation again (U41). */
+  retryable: d.optional(d.nullable(d.boolean)),
+  /** U41 meta: who approved it and when (asked of api; null until sent). */
+  approved_by: d.optional(d.nullable(d.object({ name: d.nullable(d.string) }))),
+  approved_at: d.optional(d.nullable(d.timestamp)),
+  /** true: the runtime isn't running the active configuration either (mission_runtime is left out). */
+  runtime_not_applied: d.optional(d.nullable(d.boolean)),
   resolution: d.nullable(
     d.object({
       // free-text: what the operator recorded doing (resolve's action_text, contacts.md)
@@ -281,6 +323,11 @@ export function attentionWords(
         what: `${provider} didn't accept the cancel.`,
         evidence: `${a.provider_message ? `${noStop(a.provider_message)}. ` : ""}The pass may still be booked and billed.`,
       };
+    // Worded by their own rows (U37, U38, U41), never through here.
+    case "unsettled":
+    case "generation_not_applied":
+    case "apply_failed":
+    case "apply_stalled":
     case null:
     default:
       // A source this console doesn't know yet says only that the contact needs a look.
@@ -327,6 +374,11 @@ const ACTION_WORDS: Readonly<Record<string, string>> = {
  * Never "by Cadence".
  */
 export function resolvedWords(r: Resolved): string {
+  // U41: a stuck activation closes by applying, or by a newer activation replacing it.
+  if (r.id.startsWith("attention:activation_apply:")) {
+    if (r.action === "superseded") return "A newer activation replaced this one.";
+    if (r.action === "applied") return `Applied at ${hhmm(r.resolved_at)}.`;
+  }
   const said = r.action ? (ACTION_WORDS[r.action] ?? r.action.replaceAll("_", " ")) : null;
   const action = said ? noStop(said) : null;
   const name = r.resolved_by.name ? noStop(r.resolved_by.name) : null;

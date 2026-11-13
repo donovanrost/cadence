@@ -28,6 +28,7 @@ import {
 import { GROUP_AT, type QueueItem } from "./queue.ts";
 import { FOLD_AT, foldedSettlementRow, foldKey, type Settlement } from "./settlement.ts";
 import { runtimeRow } from "./runtime.ts";
+import { activationRow } from "./activation.ts";
 import { changeSetReader, changeSetRow } from "./changeSet.ts";
 
 /** Contract: docs/apogee/api/ops.md, `GET /missions/:mission_id/action-queue` (M6). Server-ranked. */
@@ -377,6 +378,7 @@ function rowFor(item: ServerItem, missionName: string | null, now: Date): QueueI
       if (!a) return [];
       if (a.source === "mission_runtime")
         return [runtimeRow(base(item), item.id, a, missionName, now)];
+      if (a.source === "activation_apply") return [activationRow(base(item), item.id, a, now)];
       const w = attentionWords(a);
       const pass = a.reservation_id ?? a.contact_id;
       const to: RouteLocationRaw = pass

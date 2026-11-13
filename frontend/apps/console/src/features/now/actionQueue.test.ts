@@ -837,3 +837,103 @@ describe("mission_runtime (U38; domain 292c8e6b reasons)", () => {
     ).toBe("Resolved: configuration applied.");
   });
 });
+
+describe("activation_apply (domain 9b8456132; ux U41)", () => {
+  const stuck = (o: Record<string, unknown> = {}, spacecraft: unknown[] = []) =>
+    item({
+      id: "attention:activation_apply:act-1",
+      priority: 2,
+      kind: "attention",
+      state: "caution",
+      source: "activation_apply",
+      spacecraft,
+      attention: {
+        id: "act-1",
+        source: "activation_apply",
+        conflict: "apply_failed",
+        state: "open",
+        activation_request_id: "act-1",
+        error_code: null,
+        error: "Applying failed.",
+        summary: "Decom composition for 3 spacecraft",
+        kind: "telemetry_decom",
+        app: { key: "decom", name: "Decom" },
+        spacecraft_ids: [],
+        spacecraft_count: 3,
+        runtime_not_applied: false,
+        since: "2026-11-13T02:14:00Z",
+        raised_at: "2026-11-13T02:14:00Z",
+        station: null,
+        provider: null,
+        starts_at: null,
+        contact_id: null,
+        reservation_id: null,
+        acknowledged_by: null,
+        provider_message: null,
+        resolution: null,
+        ...o,
+      },
+    });
+  const rowOf = (o: Record<string, unknown> = {}, spacecraft: unknown[] = []) => {
+    const r = decode(actionQueueReader, {
+      observed_at: "2026-11-13T02:20:00Z",
+      counts: { p1: 0, p2: 1, p3: 0, spacecraft_p1: 0 },
+      items: [stuck(o, spacecraft)],
+    });
+    if (!r.ok) throw new Error(r.error.message);
+    return presentQueue(r.value, new Date("2026-11-13T02:20:00Z"), "EARENDIL")[0];
+  };
+
+  it("says what didn't apply, why, and links its review page", () => {
+    const row = rowOf({ approved_by: { name: "Mira K." }, approved_at: "2026-11-13T02:10:00Z" });
+    expect(row?.title).toBe("Decom composition for 3 spacecraft · approved, not applied");
+    expect(row?.sentence).toBe("Applying failed.");
+    expect(row?.meta).toBe("APPROVED BY MIRA K. AT 02:10Z · SINCE 02:14Z");
+    expect(row?.action).toEqual({
+      label: "Review",
+      to: { name: "setup.activation", params: { requestId: "act-1" } },
+    });
+    expect(row?.primary).toBeUndefined();
+  });
+
+  it("uses the server's sentence, and asks for a new request when retrying can't help", () => {
+    expect(
+      rowOf({
+        conflict: "apply_stalled",
+        error: "Applying didn't finish, and nothing is working on it now.",
+        retryable: true,
+      })?.sentence,
+    ).toBe("Applying didn't finish, and nothing is working on it now.");
+    expect(
+      rowOf({
+        error_code: "spacecraft_configuration_review_stale",
+        error:
+          "EARENDIL-312's configuration changed after it was reviewed, so the reviewed version can't be applied.",
+        retryable: false,
+      })?.sentence,
+    ).toBe(
+      "EARENDIL-312's configuration changed after it was reviewed, so the reviewed version can't be applied. Request activation again so the current version can be approved.",
+    );
+    expect(rowOf({ error: null })?.sentence).toBe("Applying failed.");
+  });
+
+  it("leads with the fix while telemetry isn't processed", () => {
+    const row = rowOf({ runtime_not_applied: true });
+    expect(row?.sentence).toBe(
+      "Applying failed. Telemetry isn't being processed until this applies.",
+    );
+    expect(row?.primary).toBe(true);
+  });
+
+  it("says how it closed", () => {
+    const closed = (action: string) =>
+      resolvedWords({
+        id: "attention:activation_apply:act-1",
+        resolved_by: { kind: "system", id: null, name: null },
+        action,
+        resolved_at: "2026-11-13T02:20:00Z",
+      });
+    expect(closed("applied")).toBe("Applied at 02:20Z.");
+    expect(closed("superseded")).toBe("A newer activation replaced this one.");
+  });
+});
