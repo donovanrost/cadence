@@ -118,6 +118,9 @@ jobs:
       MIX_TEST_PARTITION: ${{ matrix.partition }}
     services:
       postgres:
+        # Keep the image's default en_US.utf8 collation (glibc, linguistic), as production
+        # databases have; don't switch it to C. It caught a real bug that C-collated local
+        # databases hide (03e701ce: artifact order followed the collation).
         image: postgres:17
         env:
           POSTGRES_USER: postgres
@@ -147,6 +150,98 @@ jobs:
           path: ${{ env.CADENCE_PNPM_STORE }}
           key: pnpm-v1-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
 
+  test-web:
+    name: Web tests (${{ matrix.partition }}/2)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2]
+    env:
+      MIX_TEST_PARTITION: ${{ matrix.partition }}
+    services:
+      postgres:
+        # Keep the image's default en_US.utf8 collation (glibc, linguistic), as production
+        # databases have; don't switch it to C. It caught a real bug that C-collated local
+        # databases hide (03e701ce: artifact order followed the collation).
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Tune Postgres for throwaway test data
+        run: scripts/ci/tune_postgres.sh
+      - uses: ./.github/actions/setup-cadence
+      # cadence_web uses Cadence.Repo but, unlike apps/cadence, has no DB setup alias.
+      - name: Create and migrate the cadence test database
+        working-directory: apps/cadence
+        run: mix db.setup.test
+      # :browser and :browser_smoke stay excluded (test_helper.exs); the Frontend workflow runs
+      # them. :frontend_publication runs in test-web-publication, which builds its input.
+      - name: mix test --partitions 2
+        working-directory: apps/cadence_web
+        run: mix test --partitions 2 --exclude frontend_publication --slowest-modules 10
+
+  test-web-publication:
+    name: Web tests needing the federation publication
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        # Keep the image's default en_US.utf8 collation (glibc, linguistic), as production
+        # databases have; don't switch it to C. It caught a real bug that C-collated local
+        # databases hide (03e701ce: artifact order followed the collation).
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql/data:rw
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Tune Postgres for throwaway test data
+        run: scripts/ci/tune_postgres.sh
+      - uses: ./.github/actions/setup-cadence
+      # cadence_web uses Cadence.Repo but, unlike apps/cadence, has no DB setup alias.
+      - name: Create and migrate the cadence test database
+        working-directory: apps/cadence
+        run: mix db.setup.test
+      - name: Build the federation publication (priv/static/assets/application-host)
+        working-directory: frontend
+        run: corepack pnpm run build:publication
+      - name: mix test --only frontend_publication
+        working-directory: apps/cadence_web
+        shell: bash
+        run: |
+          mix test --only frontend_publication 2>&1 | tee "$RUNNER_TEMP/web-publication.log"
+          # --only passes when nothing matches; these tests must run, never silently skip.
+          grep -Eq '^Result: [1-9][0-9]* passed' "$RUNNER_TEMP/web-publication.log" ||
+            { echo "::error::No :frontend_publication test ran"; exit 1; }
+
   test-packages:
     name: Packages, simulator, planes and cluster tests
     needs: changes
@@ -155,6 +250,9 @@ jobs:
     timeout-minutes: 25
     services:
       postgres:
+        # Keep the image's default en_US.utf8 collation (glibc, linguistic), as production
+        # databases have; don't switch it to C. It caught a real bug that C-collated local
+        # databases hide (03e701ce: artifact order followed the collation).
         image: postgres:17
         env:
           POSTGRES_USER: postgres
@@ -208,7 +306,7 @@ jobs:
 
   ci-ok:
     name: ci-ok
-    needs: [changes, quality, test-core, test-packages]
+    needs: [changes, quality, test-core, test-web, test-web-publication, test-packages]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5

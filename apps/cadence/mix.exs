@@ -16,6 +16,12 @@ defmodule Cadence.MixProject do
     ]
   end
 
+  # db.setup.test only ever means the test database; run bare, it would create and migrate
+  # the dev database instead.
+  def cli do
+    [preferred_envs: ["db.setup.test": :test]]
+  end
+
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
