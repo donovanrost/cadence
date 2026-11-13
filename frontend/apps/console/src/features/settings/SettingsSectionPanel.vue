@@ -4,7 +4,13 @@ import { diffEdits, SchemaForm, type FormValues } from "@/features/changes/index
 import { ApButton, ApCallout, ApPanel, ApTag, formatShort } from "@/ui";
 import MissionSettingsSection from "./MissionSettingsSection.vue";
 import SettingsValues from "./SettingsValues.vue";
-import { initialValues, sectionTag, type SettingsScope, type SettingsSection } from "./api.ts";
+import {
+  initialValues,
+  sectionTag,
+  setHereCount,
+  type SettingsScope,
+  type SettingsSection,
+} from "./api.ts";
 import { useSectionSave } from "./useSectionSave.ts";
 
 /**
@@ -31,6 +37,9 @@ const { busy, note, save } = useSectionSave(
   () => emit("saved"),
 );
 const mission = computed(() => props.scope.kind === "mission");
+const headerTag = computed(() =>
+  mission.value ? setHereCount(props.section) : sectionTag(props.section, props.scope.kind),
+);
 const canChange = computed(() => props.canEdit && props.section.locked !== true);
 /** The organization's form; a mission's fields edit one at a time. */
 const editable = computed(() => !mission.value && canChange.value);
@@ -57,9 +66,8 @@ function submit() {
 
 <template>
   <ApPanel index="S1" :title="section.title" :meta="meta" :flush="!editable">
-    <template v-if="!mission && sectionTag(section, scope.kind)" #header
-      ><ApTag state="off" :label="sectionTag(section, scope.kind) ?? ''"
-    /></template>
+    <!-- ux: a mission's fields carry their own tags; its header counts those set here. -->
+    <template v-if="headerTag" #header><ApTag state="off" :label="headerTag" /></template>
     <p
       v-if="section.purpose"
       class="m-0 mb-3 text-md text-text-3"

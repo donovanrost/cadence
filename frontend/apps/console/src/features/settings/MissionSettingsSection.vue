@@ -1,7 +1,15 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import { useConsoleScope } from "@/shell";
 import { ApCallout } from "@/ui";
 import MissionSettingsField from "./MissionSettingsField.vue";
-import type { SettingsScope, SettingsSection } from "./api.ts";
+import {
+  confirmsReset,
+  resetLine,
+  type SettingsField,
+  type SettingsScope,
+  type SettingsSection,
+} from "./api.ts";
 import { useSectionSave } from "./useSectionSave.ts";
 
 /**
@@ -15,8 +23,14 @@ const { busy, note, save } = useSectionSave(
   () => props.section,
   () => emit("saved"),
 );
-function reset(path: string, label: string) {
-  void save({ [path]: null }, `${label} follows the organization again. Saved`);
+const where = useConsoleScope();
+const orgName = computed(() =>
+  where.value.kind === "organization" || where.value.kind === "mission"
+    ? where.value.organization.name
+    : "the organization",
+);
+function reset(f: SettingsField) {
+  void save({ [f.path]: null }, "Saved", (version) => resetLine(f, version));
 }
 function unchanged() {
   note.value = { tone: "caution", text: "Nothing changed yet." };
@@ -34,8 +48,10 @@ function unchanged() {
       :field="f"
       :can-change="canChange"
       :busy="busy"
+      :confirm-reset="confirmsReset(section.key)"
+      :org-name="orgName"
       @save="(v) => void save(v)"
-      @reset="reset(f.path, f.label)"
+      @reset="reset(f)"
       @unchanged="unchanged"
     />
   </div>

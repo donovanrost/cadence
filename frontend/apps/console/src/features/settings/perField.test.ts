@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "@/api";
-import { fieldTag, sectionSource, settingsReader } from "./api.ts";
+import {
+  confirmsReset,
+  fieldTag,
+  resetConfirm,
+  resetLine,
+  sectionSource,
+  setHereCount,
+  settingsReader,
+} from "./api.ts";
 
 /** api 14455857d: one mission section can mix per-field sources (ux SettingsAuditProviders.md). */
 function section(sources: readonly ("mission" | "organization" | "default")[]) {
@@ -50,5 +58,17 @@ describe("per-field settings sources", () => {
   it("reads a section as the mission's when any field is set for it", () => {
     expect(sectionSource(section(["organization", "mission"]))).toBe("mission");
     expect(sectionSource(section(["organization", "default"]))).toBe("organization");
+  });
+
+  it("words a Reset (the old value), its confirm, and the header count (ux)", () => {
+    const s = section(["mission", "organization", "mission"]);
+    const [f] = s.fields;
+    if (!f) throw new Error("no field");
+    expect(resetLine(f, 5)).toBe("F0 follows the organization again (was x). Saved as v5.");
+    expect(resetConfirm(f, "Acme Space")).toBe("F0 will follow Acme Space: y.");
+    expect(setHereCount(s)).toBe("2 set for this mission");
+    expect(setHereCount(section(["organization"]))).toBeNull();
+    expect(confirmsReset("cadence.governance")).toBe(true);
+    expect(confirmsReset("commanding.defaults")).toBe(false);
   });
 });

@@ -2,13 +2,20 @@
 import { computed, ref } from "vue";
 import { diffEdits, SchemaForm, type FormValues } from "@/features/changes/index.ts";
 import { ApButton, ApTag } from "@/ui";
-import { fieldTag, initialValues, valueText, type SettingsField } from "./api.ts";
+import { fieldTag, initialValues, resetConfirm, valueText, type SettingsField } from "./api.ts";
 
 /**
  * One mission setting (ux per-field overrides, the Profile P3 pattern): its value and source tag;
  * an inherited one can be overridden; one set here can change or reset to inherited.
  */
-const props = defineProps<{ field: SettingsField; canChange: boolean; busy: boolean }>();
+const props = defineProps<{
+  field: SettingsField;
+  canChange: boolean;
+  busy: boolean;
+  /** Governance/approval: Reset confirms first, naming the organization's value (ux). */
+  confirmReset: boolean;
+  orgName: string;
+}>();
 const emit = defineEmits<{
   save: [values: Readonly<Record<string, unknown>>];
   reset: [];
@@ -17,6 +24,11 @@ const emit = defineEmits<{
 const setHere = computed(() => props.field.source === "mission");
 const schema = computed(() => ({ kind: "settings", fields: [props.field] }));
 const editing = ref(false);
+const confirming = ref(false);
+function askReset() {
+  if (props.confirmReset) confirming.value = true;
+  else emit("reset");
+}
 const before = ref<FormValues>({});
 const values = ref<FormValues>({});
 const errors = ref<Readonly<Record<string, string>>>({});
@@ -46,8 +58,20 @@ function save() {
       valueText(field)
     }}</span>
     <span v-if="field.help && !editing" class="text-sm text-text-3">{{ field.help }}</span>
+    <p v-if="confirming" class="m-0 text-md text-text-2">{{ resetConfirm(field, orgName) }}</p>
     <div v-if="canChange" class="flex flex-wrap gap-2">
-      <template v-if="editing">
+      <template v-if="confirming">
+        <ApButton
+          size="compact"
+          variant="danger"
+          :disabled="busy"
+          disabled-reason="Saving…"
+          @click="((confirming = false), emit('reset'))"
+          >Reset to inherited</ApButton
+        >
+        <ApButton size="compact" variant="ghost" @click="confirming = false">Cancel</ApButton>
+      </template>
+      <template v-else-if="editing">
         <ApButton
           size="compact"
           variant="primary"
@@ -66,7 +90,7 @@ function save() {
           variant="ghost"
           :disabled="busy"
           disabled-reason="Saving…"
-          @click="emit('reset')"
+          @click="askReset"
           >Reset to inherited</ApButton
         >
       </template>

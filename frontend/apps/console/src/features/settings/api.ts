@@ -118,6 +118,23 @@ export function fieldTag(f: SettingsField): string | null {
   }
 }
 
+/** ux: a Reset's outcome keeps the old value so it can be put back. */
+export function resetLine(f: SettingsField, version: number): string {
+  return `${f.label} follows the organization again (was ${valueText(f)}). Saved as v${version}.`;
+}
+
+/** ux: governance and approval fields confirm a Reset (the director treats them as explicit). */
+export const confirmsReset = (sectionKey: string) => sectionKey === "cadence.governance";
+export function resetConfirm(f: SettingsField, orgName: string): string {
+  return `${f.label} will follow ${orgName}: ${valueText(f, f.inherited_value)}.`;
+}
+
+/** The mission section header: how many fields are set here, or null for none (ux). */
+export function setHereCount(s: Pick<SettingsSection, "fields">): string | null {
+  const n = s.fields.filter((f) => f.source === "mission").length;
+  return n > 0 ? `${n} set for this mission` : null;
+}
+
 /** Form text for each field's effective value. */
 export function initialValues(s: Pick<SettingsSection, "fields">): FormValues {
   const values: FormValues = {};
