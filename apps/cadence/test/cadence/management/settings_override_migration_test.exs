@@ -125,6 +125,27 @@ defmodule Cadence.Management.SettingsOverrideMigrationTest do
     assert WorkspaceSettings.load(c.org, c.mission).saved == %{"shelf" => "minimized"}
   end
 
+  # The live :4011 case (director 11-13): only a differing governance field, so the run is a no-op.
+  test "a plan with nothing to rewrite runs without writing a revision or an audit entry", c do
+    quiet = c.mission <> "-quiet"
+    persist_mission_scope(c.org, quiet)
+    save(c.scope, quiet, ActivationPolicy, %{"value" => %{"approval_requirement" => "direct"}})
+    history = ScopedSettings.history(c.org, quiet, "cadence.governance")
+
+    %{plan: plan, report: report} = SettingsOverrideMigration.dry_run()
+
+    assert %{sections: [%{status: :unchanged, kept: ["approval_requirement"]}]} =
+             mission_plan(plan, quiet)
+
+    assert report =~ "No change: nothing is written and no audit entry is made."
+
+    assert [%{mission_id: ^quiet, written: [], stale: []}] =
+             plan |> only(quiet) |> SettingsOverrideMigration.run()
+
+    assert ScopedSettings.history(c.org, quiet, "cadence.governance") == history
+    refute Enum.any?(SettingsEvents.list(c.org, quiet, nil), &is_nil(&1.actor))
+  end
+
   defp mission_plan(plan, mission), do: Enum.find(plan, &(&1.mission_id == mission))
   defp only(plan, mission), do: Enum.filter(plan, &(&1.mission_id == mission))
 
