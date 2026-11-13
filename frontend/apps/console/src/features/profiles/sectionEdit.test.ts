@@ -24,12 +24,12 @@ const section: ProfileSection = {
 };
 
 describe("profile section edit", () => {
-  it("keeps framing and limits read-only", () => {
+  it("keeps limits read-only; framing edits since #19 was lifted", () => {
     expect([
       editableSection("framing"),
       editableSection("limits"),
       editableSection("catalog"),
-    ]).toEqual([false, false, true]);
+    ]).toEqual([true, false, true]);
   });
   it("turns section fields into a form and a profile update op", () => {
     const fields = schemaFieldsOf(section);

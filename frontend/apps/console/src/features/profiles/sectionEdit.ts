@@ -11,9 +11,9 @@ import type { ProfileField, ProfileSection } from "./detail.ts";
 
 /**
  * Profile.md P1/P4: a section's fields come from the server's section schema, so the form is
- * generated. Framing stays read-only until P2 (DECISIONS #19); Limits has no per-profile values.
+ * generated. Limits has no per-profile values. Framing is editable since #19 was lifted (#33/#45).
  */
-export const editableSection = (key: string) => key !== "framing" && key !== "limits";
+export const editableSection = (key: string) => key !== "limits";
 
 export const schemaFieldOf = (f: ProfileField): SchemaField => ({
   path: f.path,

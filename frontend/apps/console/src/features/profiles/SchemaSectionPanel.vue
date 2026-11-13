@@ -3,8 +3,14 @@ import { ApButton, ApCallout, ApChip, ApPanel, ApTag, formatCount } from "@/ui";
 import { fieldText, type ProfileSection } from "./detail.ts";
 import { generationNote } from "./present.ts";
 
-/** P1: one schema section as a read-only key/value grid (DECISIONS #19: framing read-only). */
-defineProps<{ section: ProfileSection; inheritCount: number; canEdit: boolean }>();
+/** P1: one schema section as a key/value grid, with Edit when the section can be staged. */
+defineProps<{
+  section: ProfileSection;
+  inheritCount: number;
+  canEdit: boolean;
+  /** The mission turned profile framing off in ST1 (#45), so framing doesn't reach ingress. */
+  framingOff: boolean;
+}>();
 defineEmits<{ edit: [] }>();
 </script>
 
@@ -22,9 +28,12 @@ defineEmits<{ edit: [] }>();
       A catalog change goes through a change set: when it's applied, spacecraft on this profile move
       to the new revision. Spacecraft still running another catalog show in Readiness.
     </ApCallout>
-    <ApCallout v-else-if="section.key === 'framing'" tone="info">
-      Decode uses each transport's frame settings today. Profile framing takes effect when the
-      pipeline reads it.
+    <ApCallout v-else-if="section.key === 'framing' && framingOff" tone="info">
+      This mission's settings keep profile framing out of the runtime, so a framing change here
+      doesn't reach ingress.
+      <RouterLink :to="{ name: 'setup.settings' }" class="text-readout hover:underline"
+        >Mission settings</RouterLink
+      >
     </ApCallout>
     <dl class="m-0 grid grid-cols-1 gap-px bg-hairline md:grid-cols-2">
       <div v-for="f in section.fields" :key="f.path" class="flex flex-col gap-1 bg-panel px-4 py-3">

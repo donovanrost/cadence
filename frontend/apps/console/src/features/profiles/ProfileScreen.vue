@@ -12,8 +12,9 @@ import SectionEditor from "./SectionEditor.vue";
 import { editableSection } from "./sectionEdit.ts";
 import { fetchProfileDetail, type ProfileDetail } from "./detail.ts";
 import { profileSubline } from "./present.ts";
+import { useFramingOff } from "./useFramingOff.ts";
 
-/** S4 · Profile (read-only until P2, DECISIONS #19). Spec: docs/apogee/ux/screens/Profile.md. */
+/** S4 · Profile. Spec: docs/apogee/ux/screens/Profile.md. */
 const route = useRoute();
 const scope = useMissionScope();
 const profileId = computed(() =>
@@ -50,6 +51,10 @@ function links(detail: ProfileDetail) {
 }
 const active = (detail: ProfileDetail) =>
   sectionParam.value ?? detail.sections[0]?.key ?? "routing";
+const framingOff = useFramingOff(
+  computed(() => scope.value.mission.id),
+  computed(() => (state.value.status === "ready" ? active(state.value.value) : null)),
+);
 const title = computed(() =>
   state.value.status === "ready" ? state.value.value.profile.name : "Profile",
 );
@@ -92,6 +97,7 @@ const crumbs = computed(() => [
               v-else
               :section="section"
               :inherit-count="value.inherit_count"
+              :framing-off="framingOff"
               :can-edit="canStage && editableSection(section.key)"
               @edit="editing = section.key"
             />
