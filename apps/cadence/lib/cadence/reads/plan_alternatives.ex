@@ -8,8 +8,9 @@ defmodule Cadence.Reads.PlanAlternatives do
   Effect: `rule_met_after` (every requirement of the spacecraft satisfied with
   the pass added), `contacts_after` (`%{have, need}` for the spacecraft),
   `clashes_with` (selected passes of the same spacecraft that overlap it), and
-  `longest_gap_after_seconds` (`PlanMeasures.longest_gap/2` over the plan's day with
-  the pass added; clashing passes stay in). The top-level `longest_gap` is the
+  `longest_gap_after_seconds` (`PlanMeasures.spacecraft_gap/3` with the pass added;
+  clashing passes stay in: the limited requirement's gap when one has a limit, else
+  the plan-day measure). The top-level `longest_gap` is the
   spacecraft's today.
   """
 
@@ -55,7 +56,7 @@ defmodule Cadence.Reads.PlanAlternatives do
       spacecraft_id: spacecraft_id,
       rule_met: rule_met?(requirements, mine),
       contacts: contacts(requirements, mine),
-      longest_gap: PlanMeasures.longest_gap(mine, day),
+      longest_gap: PlanMeasures.spacecraft_gap(requirements, mine, day),
       alternatives:
         Enum.map(candidates, fn candidate ->
           after_selection = [candidate | mine]
@@ -75,7 +76,7 @@ defmodule Cadence.Reads.PlanAlternatives do
                 |> Enum.filter(&overlap?(&1, candidate))
                 |> Enum.map(& &1.contact_opportunity_snapshot_id),
               longest_gap_after_seconds:
-                gap_seconds(PlanMeasures.longest_gap(after_selection, day))
+                gap_seconds(PlanMeasures.spacecraft_gap(requirements, after_selection, day))
             }
           }
         end)

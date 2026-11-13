@@ -157,7 +157,7 @@ defmodule Cadence.Reads.ContactPlanOverview do
         spacecraft_id
         |> spacecraft_demand(items)
         |> Map.merge(%{
-          longest_gap: PlanMeasures.longest_gap(mine, day),
+          longest_gap: items |> Enum.map(&elem(&1, 0)) |> PlanMeasures.spacecraft_gap(mine, day),
           uplink_passes: PlanMeasures.uplink_passes(organization_id, mission_id, mine)
         })
       end)

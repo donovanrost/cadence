@@ -530,6 +530,68 @@ defmodule Cadence.ContactPlanning.FleetOptimizerTest do
              )
   end
 
+  describe "max_gap_seconds (DECISIONS #74)" do
+    test "without a limit, selection is unchanged: score order, exactly the contact count" do
+      requirement = requirement("gap")
+
+      assert {:ok, result} =
+               FleetOptimizer.optimize([requirement], gap_snapshots(requirement), policy(),
+                 now: @now
+               )
+
+      assert result.selected_snapshot_ids == ["snapshot-a"]
+
+      for id <- ["snapshot-b", "snapshot-c"] do
+        assert decision(result, id).explanation_document["code"] ==
+                 "requirement_already_satisfied"
+      end
+    end
+
+    test "with a limit, the pick that shortens the gap most comes first" do
+      requirement = requirement("gap", max_gap_seconds: 3_600)
+
+      assert {:ok, result} =
+               FleetOptimizer.optimize([requirement], gap_snapshots(requirement), policy(),
+                 now: @now
+               )
+
+      # C leaves 45 min before it and 1 h after: within the limit with one contact.
+      assert result.selected_snapshot_ids == ["snapshot-c"]
+      assert result.coverage_by_requirement["requirement-gap"]["satisfied"]
+    end
+
+    test "past the contact count, a pick is taken only if it shortens the gap" do
+      requirement = requirement("gap", max_gap_seconds: 2_400)
+
+      assert {:ok, result} =
+               FleetOptimizer.optimize([requirement], gap_snapshots(requirement), policy(),
+                 now: @now
+               )
+
+      # C (longest 1 h), then B (45 min each side); A shortens nothing more.
+      assert Enum.sort(result.selected_snapshot_ids) == ["snapshot-b", "snapshot-c"]
+      assert decision(result, "snapshot-a").explanation_document["code"] == "does_not_shorten_gap"
+
+      coverage = result.coverage_by_requirement["requirement-gap"]
+      refute coverage["satisfied"]
+
+      assert [%{"code" => "max_gap_exceeded", "longest_gap_seconds" => 2_700}] =
+               Enum.filter(
+                 coverage["selection"]["hard_failures"],
+                 &(&1["code"] == "max_gap_exceeded")
+               )
+    end
+  end
+
+  # Window is +1h to +3h. A sits at its start, C in the middle, B at its end.
+  defp gap_snapshots(requirement) do
+    [
+      snapshot(requirement, "a", 3_600, 4_500, provider: "provider-a", station: "station-a"),
+      snapshot(requirement, "b", 9_900, 10_800, provider: "provider-a", station: "station-b"),
+      snapshot(requirement, "c", 6_300, 7_200, provider: "provider-a", station: "station-c")
+    ]
+  end
+
   defp decision(result, snapshot_id) do
     Enum.find(result.decisions, &(&1.contact_opportunity_snapshot_id == snapshot_id))
   end

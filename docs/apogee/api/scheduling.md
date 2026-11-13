@@ -363,8 +363,8 @@ spacecraft but didn't select, oldest first. Effects come from the same requireme
 plan uses, and nothing is written. The top level also carries `longest_gap` (as in plan detail's
 demand, below), and each effect `longest_gap_after_seconds`: the same measure with that pass
 added (clashing passes stay in), so D can say "6h10 → 3h05". A plan with nothing selected takes
-its day from the candidates. `limit_seconds` is `null` until requirements carry
-`max_gap_seconds` (director go, 2026-11-13), so no gap verdict yet.
+its day from the candidates. With a gap limit (DECISIONS #74), it's the limited requirement's
+number, as below.
 
 ### Plan detail measures (K1 C panel, lead; `GET /contact-plans/:id`)
 
@@ -376,7 +376,12 @@ Additive, optional fields:
   AOS, last LOS → 24:00Z). Only this plan's passes count (not earlier chain bookings or the
   previous day's last pass). No pass all day reads 86400; `null` when the plan has no passes.
   `from`/`to` are ISO timestamps (whole seconds), `null` only when the day is fully covered
-  (`seconds: 0`). `limit_seconds` is `null` today.
+  (`seconds: 0`). **With a gap limit (DECISIONS #74):** when any of the spacecraft's
+  requirements has `max_gap_seconds`, `longest_gap` is the evaluator's number for the limited
+  requirement with the largest excess (`seconds - limit_seconds`): over that requirement's window,
+  its own eligible selected passes, and `limit_seconds` is its limit. Over the limit, the
+  requirement is unmet with reason `max_gap_exceeded` (facts `{longest_gap_seconds, from, to,
+  max_gap_seconds}`). Without a limit, `limit_seconds` is `null` and this is the plan-day measure.
 - `demand.spacecraft[].uplink_passes`: `{have, need}`. `have` counts selected passes whose
   booking will **request** an uplink leg (the spacecraft's primary uplink route lands at that
   station on the same provider); confirmation shows later as the passes read's

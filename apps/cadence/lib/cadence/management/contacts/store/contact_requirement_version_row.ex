@@ -26,6 +26,8 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementVersionRow do
     field(:minimum_data_volume_bytes, :integer)
     field(:contact_count, :integer)
     field(:minimum_separation_seconds, :integer)
+    # DECISIONS #74: optional gap limit; nil means none.
+    field(:max_gap_seconds, :integer)
     field(:priority, :string)
     field(:provider_constraints_document, :map, default: %{})
     field(:station_constraints_document, :map, default: %{})
@@ -75,6 +77,7 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementVersionRow do
     |> validate_optional_positive(:minimum_duration_seconds)
     |> validate_optional_positive(:preferred_duration_seconds)
     |> validate_optional_positive(:minimum_data_volume_bytes)
+    |> validate_optional_positive(:max_gap_seconds)
     |> validate_length(:contact_intent, max: 120)
     |> validate_length(:rationale, max: 2_000)
     |> validate_format(:content_sha256, ~r/\A[0-9a-f]{64}\z/)
@@ -106,6 +109,7 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementVersionRow do
       minimum_data_volume_bytes: row.minimum_data_volume_bytes,
       contact_count: row.contact_count,
       minimum_separation_seconds: row.minimum_separation_seconds,
+      max_gap_seconds: row.max_gap_seconds,
       priority: row.priority,
       provider_constraints_document: JsonDocument.unwrap_value(row.provider_constraints_document),
       station_constraints_document: JsonDocument.unwrap_value(row.station_constraints_document),
@@ -137,6 +141,7 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementVersionRow do
       minimum_data_volume_bytes: version.minimum_data_volume_bytes,
       contact_count: version.contact_count,
       minimum_separation_seconds: version.minimum_separation_seconds,
+      max_gap_seconds: version.max_gap_seconds,
       priority: Atom.to_string(version.priority),
       provider_constraints_document:
         JsonDocument.wrap_value(version.provider_constraints_document),
@@ -156,7 +161,8 @@ defmodule Cadence.Management.Contacts.Store.ContactRequirementVersionRow do
       [
         :minimum_duration_seconds,
         :preferred_duration_seconds,
-        :minimum_data_volume_bytes
+        :minimum_data_volume_bytes,
+        :max_gap_seconds
       ]
   end
 

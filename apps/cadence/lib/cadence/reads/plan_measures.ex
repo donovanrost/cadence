@@ -13,7 +13,7 @@ defmodule Cadence.Reads.PlanMeasures do
     offer) among passes not yet sent to the provider, overall and per provider.
   """
 
-  alias Cadence.ContactPlanning.ContactOpportunitySnapshot
+  alias Cadence.ContactPlanning.{ContactGaps, ContactOpportunitySnapshot}
   alias Cadence.Contacts.UplinkLegs
 
   @day_s 86_400
@@ -37,43 +37,41 @@ defmodule Cadence.Reads.PlanMeasures do
           map() | nil
   def longest_gap(_passes, nil), do: nil
 
-  def longest_gap(passes, {from, to}) do
-    case passes |> gaps(from, to) |> Enum.max_by(&gap_seconds/1, fn -> nil end) do
-      nil ->
-        %{seconds: 0, limit_seconds: nil, from: nil, to: nil}
+  def longest_gap(passes, {from, to}),
+    do: passes |> ContactGaps.longest(from, to) |> Map.put(:limit_seconds, nil)
 
-      {gap_from, gap_to} = gap ->
-        %{
-          seconds: gap_seconds(gap),
-          limit_seconds: nil,
-          from: DateTime.truncate(gap_from, :second),
-          to: DateTime.truncate(gap_to, :second)
-        }
+  @doc """
+  One spacecraft's `longest_gap` given its `requirements` (DECISIONS #74). With a gap limit on
+  any of them, it's the evaluator's number for the limited requirement with the largest excess
+  (`seconds - limit_seconds`): its window, its own eligible selected passes. Otherwise, the
+  plan-day measure (`longest_gap/2`).
+  """
+  @spec spacecraft_gap(
+          list(),
+          [ContactOpportunitySnapshot.t()],
+          {DateTime.t(), DateTime.t()} | nil
+        ) ::
+          map() | nil
+  def spacecraft_gap(requirements, passes, day) do
+    case Enum.filter(requirements, &is_integer(&1.max_gap_seconds)) do
+      [] ->
+        longest_gap(passes, day)
+
+      limited ->
+        limited
+        |> Enum.map(&requirement_gap(&1, passes))
+        |> Enum.max_by(&(&1.seconds - &1.limit_seconds))
     end
   end
 
-  # LOS to next AOS within [from, to), the edges included; earliest first, so ties keep the first.
-  defp gaps(passes, from, to) do
-    {gaps, cursor} =
-      passes
-      |> Enum.filter(&(DateTime.before?(&1.starts_at, to) and DateTime.after?(&1.ends_at, from)))
-      |> Enum.sort_by(& &1.starts_at, DateTime)
-      |> Enum.reduce({[], from}, fn pass, {acc, cursor} ->
-        acc =
-          if DateTime.after?(pass.starts_at, cursor),
-            do: [{cursor, pass.starts_at} | acc],
-            else: acc
-
-        {acc, later(cursor, pass.ends_at)}
-      end)
-
-    gaps = if DateTime.before?(cursor, to), do: [{cursor, to} | gaps], else: gaps
-    Enum.reverse(gaps)
+  defp requirement_gap(requirement, passes) do
+    passes
+    |> Enum.filter(
+      &(&1.eligible and &1.contact_requirement_id == requirement.contact_requirement_id)
+    )
+    |> ContactGaps.longest(requirement.earliest_start, requirement.latest_end)
+    |> Map.put(:limit_seconds, requirement.max_gap_seconds)
   end
-
-  defp gap_seconds({gap_from, gap_to}), do: DateTime.diff(gap_to, gap_from)
-
-  defp later(a, b), do: if(DateTime.after?(b, a), do: b, else: a)
 
   @doc """
   `%{have, need: nil}`: how many of `passes` (one spacecraft's) will be booked with an uplink

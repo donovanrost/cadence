@@ -1,7 +1,11 @@
 defmodule Cadence.ContactPlanning.RequirementEvaluator do
   @moduledoc "Pure, deterministic Contact Requirement opportunity and coverage evaluation."
 
-  alias Cadence.ContactPlanning.{ContactOpportunitySnapshot, ContactRequirementVersion}
+  alias Cadence.ContactPlanning.{
+    ContactGaps,
+    ContactOpportunitySnapshot,
+    ContactRequirementVersion
+  }
 
   @spec evaluate_opportunity(ContactRequirementVersion.t(), map(), map(), keyword()) :: map()
   def evaluate_opportunity(
@@ -190,6 +194,7 @@ defmodule Cadence.ContactPlanning.RequirementEvaluator do
       ]
       |> Enum.reject(&is_nil/1)
       |> Kernel.++(separation_failures)
+      |> Kernel.++(max_gap_failures(requirement, eligible))
 
     # One failure per requirement, naming the routes whose search failed (qa #26).
     search_failures =
@@ -251,6 +256,29 @@ defmodule Cadence.ContactPlanning.RequirementEvaluator do
   defp failure(false, _code, _message), do: nil
   defp warning(condition, code, message), do: failure(condition, code, message)
   defp selection_failure(condition, code, message), do: failure(condition, code, message)
+
+  # DECISIONS #74: the longest stretch of the window without one of the requirement's eligible
+  # selected passes (`ContactGaps`, edges included) may not exceed `max_gap_seconds`.
+  defp max_gap_failures(%{max_gap_seconds: nil}, _eligible), do: []
+
+  defp max_gap_failures(%{max_gap_seconds: limit} = requirement, eligible) do
+    gap = ContactGaps.longest(eligible, requirement.earliest_start, requirement.latest_end)
+
+    if gap.seconds > limit do
+      [
+        %{
+          "code" => "max_gap_exceeded",
+          "message" => "The selection leaves a longer stretch without a contact than allowed.",
+          "longest_gap_seconds" => gap.seconds,
+          "from" => DateTime.to_iso8601(gap.from),
+          "to" => DateTime.to_iso8601(gap.to),
+          "max_gap_seconds" => limit
+        }
+      ]
+    else
+      []
+    end
+  end
 
   defp separation_failures([_one_or_none], _minimum), do: []
   defp separation_failures([], _minimum), do: []

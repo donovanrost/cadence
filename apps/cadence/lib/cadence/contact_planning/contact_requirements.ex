@@ -36,6 +36,7 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
     :minimum_data_volume_bytes,
     :contact_count,
     :minimum_separation_seconds,
+    :max_gap_seconds,
     :priority,
     :provider_constraints_document,
     :station_constraints_document,
@@ -50,7 +51,8 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
     :preferred_duration_seconds,
     :minimum_data_volume_bytes,
     :contact_count,
-    :minimum_separation_seconds
+    :minimum_separation_seconds,
+    :max_gap_seconds
   ]
 
   @spec create(Scope.t(), binary(), map(), keyword()) ::
@@ -616,8 +618,19 @@ defmodule Cadence.ContactPlanning.ContactRequirements do
          :ok <- validate_document(version.approval_policy_document, 8_192),
          :ok <- validate_document(version.metadata, 32_768),
          :ok <- validate_reference_constraints(version.provider_constraints_document),
-         :ok <- validate_reference_constraints(version.station_constraints_document) do
+         :ok <- validate_reference_constraints(version.station_constraints_document),
+         :ok <- validate_max_gap(version) do
       validate_approval_policy(version.approval_policy_document)
+    end
+  end
+
+  defp validate_max_gap(version) do
+    case ContactRequirementVersion.max_gap_error(version) do
+      :ok ->
+        :ok
+
+      {:error, message} ->
+        {:error, {:contact_requirement_field_invalid, :max_gap_seconds, message}}
     end
   end
 
