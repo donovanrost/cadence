@@ -48,10 +48,10 @@ missing endpoint or decision; an item with no blocker can start now.
 | ~~Attention source `mission_runtime` row (U38)~~ done (751ac5f5; reasons spec_mismatch, reconcile_crashed, runtime_not_running, apply_failed) | fe-ops | — (domain cleared to ship) |
 | ~~Mission-wide runtime banner (U38 4f8b796c): crit strip under the top bar on every mission page, Ops and Setup, not dismissable, `Details` → Now's row; turns nominal for 5 s on resolve~~ done (e585d19c, d8102e0d, f21e8aa1) | lead | — (`/counts` runtime api-ops c69f0578; live on :4011 since 00:57Z) |
 | ~~`contact_settlement` journal off (U37 lost) and `Mark as seen`~~ done (171ecd43, bbe5e8fe) | fe-ops | — |
-| Header meta names the worst station issue | fe-ops | — (S7 status exists) |
+| ~~Header meta names the worst station issue~~ done ('SVA down since 01:10Z (+1)', 06b2abcd) | fe-ops | — |
 | ~~A4 pass bars open the contact drawer~~ done (51cc6133) | fe-ops | — |
 | ~~Approval rows open the request's review~~ done for a single group (a0e33fe1) | fe-ops | — |
-| New P1 rows slide in / flash (the 5 s "Resolved by" fade exists) | fe-ops | — |
+| ~~New P1 rows slide in / flash~~ done: a new crit P1 flashes once, no slide (06b2abcd; design-language §6) | fe-ops | — |
 
 ### Investigate (`Investigate.md`, J2): J2 tab built; five tabs not started
 | Item | Owner | Blocked on |
@@ -70,10 +70,10 @@ missing endpoint or decision; an item with no blocker can start now.
 | ~~Draft autosave / `Save draft` / `DRAFT SAVED`~~ done (c0510343, e262c233; ux 601a32f9; api a4d19e69) | fe-ops | — |
 | Per-target values (Same for all / Per target, Paste CSV, Now column) | fe-ops | api: the group create body has one argument set per command (fe-ops sent api a proposal) |
 | ~~Verifier line / "No verifier: this command can't turn green"~~ done (b8fe16e0) | fe-ops | — |
-| Keep/Drop callout when a target leaves a live query | fe-ops | — |
-| Reorder: ~~move up / down~~ built (f2085bfd); drag and Alt+↑/↓ | fe-ops | — |
+| ~~Keep/Drop callout when a target leaves a live query~~ done (fd776880) | fe-ops | — |
+| ~~Reorder: move up / down, drag and Alt+↑/↓~~ done (f2085bfd, fd776880) | fe-ops | — |
 | ~~`CATALOG rev N` meta~~ done (531715e4) | fe-ops | — |
-| `ABORT AVAILABLE UNTIL…` caption *(unverified)* | fe-ops | — |
+| ~~`ABORT AVAILABLE UNTIL…` caption~~ done: 'Abort available until each uplink starts' (fd776880) | fe-ops | — |
 
 ### Approve and Uplink (`CommandFlow.md` C2/C3): partial
 | Item | Owner | Blocked on |
@@ -105,7 +105,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Fleet: ~~"in contact" filter, Next contact column~~ done (3ebcc9f8); virtualization past 200 rows *(unverified)* | fe-ops | — |
 | ~~Alarms: group identical point+condition across spacecraft~~ done (784726fc), ~~Next contact~~ done (3ebcc9f8), ~~"Last cleared…" empty state~~ done (784726fc); Cleared tab re-check (investigate review #20) | fe-ops | — |
 | ~~Telemetry `Dashboards ↗` → existing pages (#11)~~ done (718fd269); empty state's three suggested points | fe-ops | — |
-| Timeline: ~~sc scope~~ done (cb5767c9); ~~plane filter~~ done (97e12555); custom range, E1 brush; ~~live prepend + "N new events ↑"~~ done (0521f407) | fe-ops | — |
+| Timeline: ~~sc scope~~ done (cb5767c9); ~~plane filter~~ done (97e12555); ~~custom range, E1 brush~~ done (6c123796); ~~live prepend + "N new events ↑"~~ done (0521f407) | fe-ops | — |
 
 ## 3. Scheduling (`ScheduleFlow.md`)
 
