@@ -186,6 +186,18 @@ when the reference degrades honestly.**
 `used_by` is computed server-side over current versions (library) or playlist rows (dashboards). It's the same
 shape on every 409, so the client renders one "Used by" list.
 
+**Retired library items (as built, domain dd757dae0 / a594da7ec; qa 11-14):**
+- **What counts as use:** only active dashboards' current versions. An archived dashboard doesn't block a retire.
+  The item page's "Used in" and the retire check use the same rule.
+- **New references are refused:** `CurrentVersions.save` and `create` run `LibraryLifecycle.live_items`, so an
+  edit that places a retired item is refused with field `library_item_id`. The editor reads "That library widget
+  was retired or removed. Remove it from this dashboard to save." A retire that races a save comes back with a
+  null command index.
+- **Restore is exempt by design (domain 11-14):** `CurrentVersions.restore` copies a stored version as it was,
+  so Versions keeps working for any dashboard whose history placed a retired item. Unarchiving a dashboard is
+  exempt too. The restored version renders from the stored library version, and its next edit and save is
+  refused until the placement is removed.
+
 **Audit (director):** library retire, playlist delete and dashboard archive/restore each write an audit record. They
 appear in `GET /audit` (setup.md AU1) under kind `config` as server-made sentences, e.g. "Archived dashboard Bus
 overview", "Retired library widget Battery tile", "Deleted playlist Night shift wall". Each sentence carries the
