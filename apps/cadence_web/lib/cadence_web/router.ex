@@ -219,6 +219,14 @@ defmodule CadenceWeb.Router do
     get("/missions", LegacyAdminRedirectController, :missions)
     get("/missions/new", LegacyAdminRedirectController, :new_mission)
 
+    # L7 cutover (owner: api; DECISIONS #79): platform admin moved to /console/admin.
+    get("/admin", LegacyAdminRedirectController, :admin)
+    get("/admin/runtime", LegacyAdminRedirectController, :runtime)
+    get("/admin/organizations", LegacyAdminRedirectController, :organizations)
+    get("/admin/organizations/new", LegacyAdminRedirectController, :organizations)
+    get("/admin/organizations/:org_id", LegacyAdminRedirectController, :organization)
+    get("/admin/organizations/:org_id/invite", LegacyAdminRedirectController, :organization)
+
     live_session :application,
       on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
       layout: {CadenceWeb.Layouts, :host} do
@@ -498,16 +506,6 @@ defmodule CadenceWeb.Router do
 
       live("/missions/:mission_id/spacecraft/:spacecraft_id/applications", HostPageLive, :index,
         metadata: %{host_policy: :spacecraft_show}
-      )
-
-      live("/admin", HostPageLive, :index, metadata: %{host_policy: :admin})
-      live("/admin/runtime", HostPageLive, :index, metadata: %{host_policy: :admin})
-      live("/admin/organizations", HostPageLive, :index, metadata: %{host_policy: :admin})
-      live("/admin/organizations/new", HostPageLive, :new, metadata: %{host_policy: :admin})
-      live("/admin/organizations/:org_id", HostPageLive, :show, metadata: %{host_policy: :admin})
-
-      live("/admin/organizations/:org_id/invite", HostPageLive, :invite,
-        metadata: %{host_policy: :admin}
       )
     end
 

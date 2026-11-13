@@ -17,4 +17,22 @@ defmodule CadenceWeb.LegacyAdminRedirectControllerTest do
     assert redirected_to(get(c.conn, "/missions/new")) ==
              "/console/#{c.org.slug}/org/missions/new"
   end
+
+  test "L7: platform admin pages go to /console/admin; New and Invite to the list or the org",
+       c do
+    assert redirected_to(get(c.conn, "/admin")) == "/console/admin"
+    assert redirected_to(get(c.conn, "/admin/runtime")) == "/console/admin/runtime"
+    assert redirected_to(get(c.conn, "/admin/organizations")) == "/console/admin/organizations"
+
+    assert redirected_to(get(c.conn, "/admin/organizations/new")) ==
+             "/console/admin/organizations"
+
+    id = c.org.organization_id
+
+    assert redirected_to(get(c.conn, "/admin/organizations/#{id}")) ==
+             "/console/admin/organizations/#{id}"
+
+    assert redirected_to(get(c.conn, "/admin/organizations/#{id}/invite")) ==
+             "/console/admin/organizations/#{id}"
+  end
 end
