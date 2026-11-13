@@ -47,6 +47,7 @@ defmodule Cadence.Dashboards.SettingsStore do
       data_visibility: s.data_visibility,
       expires_at: s.expires_at,
       revoked_at: s.revoked_at,
+      revoked_by: s.revoked_by,
       created_at: s.inserted_at,
       created_by: s.created_by
     })
@@ -81,7 +82,7 @@ defmodule Cadence.Dashboards.SettingsStore do
     |> page(:dashboard_deployment_id, cursor)
   end
 
-  def revoke_share(org, mission, dashboard, id) do
+  def revoke_share(org, mission, dashboard, id, actor_id \\ nil) do
     share =
       scoped(DashboardShare, org, mission, dashboard)
       |> where([s], s.dashboard_share_id == ^id)
@@ -93,7 +94,9 @@ defmodule Cadence.Dashboards.SettingsStore do
         {:error, :unavailable}
 
       %DashboardShare{revoked_at: nil} ->
-        share |> DashboardShare.changeset(%{revoked_at: DateTime.utc_now()}) |> Repo.update()
+        share
+        |> DashboardShare.changeset(%{revoked_at: DateTime.utc_now(), revoked_by: actor_id})
+        |> Repo.update()
 
       _ ->
         {:error, :conflict}

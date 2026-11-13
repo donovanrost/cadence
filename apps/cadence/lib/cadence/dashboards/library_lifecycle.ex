@@ -25,11 +25,20 @@ defmodule Cadence.Dashboards.LibraryLifecycle do
   version). `{:ok, item}` or `{:error, :not_found | :invalid_input |
   {:library_item_changed, latest_version} | :forbidden}`.
   """
-  def update_item(%Scope{} = scope, mission, item_id, input, expected_version) do
+  def update_item(
+        %Scope{} = scope,
+        mission,
+        item_id,
+        input,
+        expected_version,
+        expected_updated_at \\ nil
+      ) do
     with :ok <- Authoring.authorize(scope, mission),
-         {:ok, changes} <- changes(input) do
+         {:ok, changes} <- changes(input),
+         {:ok, observed} <- observed_at(expected_updated_at) do
       transaction(fn ->
-        item = locked_item!(scope.organization_id, mission, item_id, expected_version)
+        item =
+          locked_item!(scope.organization_id, mission, item_id, {expected_version, observed})
 
         item
         |> Ecto.Changeset.change(Map.put(changes, :updated_by, scope.user.user_id))
@@ -43,14 +52,21 @@ defmodule Cadence.Dashboards.LibraryLifecycle do
   {:library_item_in_use, %{used_by: %{dashboards: [%{id, name, placements,
   pinned_versions}]}, consumer_count}} | :forbidden}`.
   """
-  def retire_item(%Scope{} = scope, mission, item_id, expected_version) do
-    with :ok <- Authoring.authorize(scope, mission) do
-      transaction(fn -> retire_locked(scope, mission, item_id, expected_version) end)
+  def retire_item(
+        %Scope{} = scope,
+        mission,
+        item_id,
+        expected_version,
+        expected_updated_at \\ nil
+      ) do
+    with :ok <- Authoring.authorize(scope, mission),
+         {:ok, observed} <- observed_at(expected_updated_at) do
+      transaction(fn -> retire_locked(scope, mission, item_id, {expected_version, observed}) end)
     end
   end
 
-  defp retire_locked(scope, mission, item_id, expected_version) do
-    item = locked_item!(scope.organization_id, mission, item_id, expected_version)
+  defp retire_locked(scope, mission, item_id, expected) do
+    item = locked_item!(scope.organization_id, mission, item_id, expected)
 
     case used_by(scope.organization_id, mission, item_id) do
       [] ->
@@ -159,7 +175,9 @@ defmodule Cadence.Dashboards.LibraryLifecycle do
     |> Repo.all()
   end
 
-  defp locked_item!(organization_id, mission_id, item_id, expected_version) do
+  # Stale when the version moved, or (given the row as read) its updated_at did: a rename or
+  # description change adds no version, so a second tab's stale edit is caught by updated_at.
+  defp locked_item!(organization_id, mission_id, item_id, {expected_version, observed_at}) do
     item =
       live_query(organization_id, mission_id)
       |> where([i], i.dashboard_library_item_id == ^item_id)
@@ -170,13 +188,28 @@ defmodule Cadence.Dashboards.LibraryLifecycle do
       is_nil(item) ->
         Repo.rollback(:not_found)
 
-      item.latest_version != expected_version ->
+      item.latest_version != expected_version or moved?(item.updated_at, observed_at) ->
         Repo.rollback({:library_item_changed, item.latest_version})
 
       true ->
         item
     end
   end
+
+  defp moved?(_updated_at, nil), do: false
+  defp moved?(updated_at, observed), do: DateTime.compare(updated_at, observed) != :eq
+
+  defp observed_at(nil), do: {:ok, nil}
+  defp observed_at(%DateTime{} = at), do: {:ok, at}
+
+  defp observed_at(text) when is_binary(text) do
+    case DateTime.from_iso8601(text) do
+      {:ok, at, _offset} -> {:ok, at}
+      _invalid -> {:error, :invalid_input}
+    end
+  end
+
+  defp observed_at(_other), do: {:error, :invalid_input}
 
   defp changes(input) when is_map(input) do
     name = input["name"]

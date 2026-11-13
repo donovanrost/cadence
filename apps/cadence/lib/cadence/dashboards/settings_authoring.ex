@@ -118,7 +118,8 @@ defmodule Cadence.Dashboards.SettingsAuthoring do
         scope.organization_id,
         row.mission_id,
         row.dashboard_id,
-        fields["share_id"]
+        fields["share_id"],
+        scope.user.user_id
       )
 
   defp receipt(row, event, resource) do

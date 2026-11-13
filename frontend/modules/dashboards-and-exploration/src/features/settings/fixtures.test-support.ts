@@ -29,6 +29,7 @@ export function settingsModel(): SettingsModel {
           expires_at: null,
           created_at: "2026-09-07T11:00:00Z",
           created_by: { id: "user-1", name: "Ada", kind: "user" },
+          revoked_by: null,
         },
       ],
       next: null,

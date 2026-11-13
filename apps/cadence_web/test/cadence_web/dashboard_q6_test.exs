@@ -128,6 +128,65 @@ defmodule CadenceWeb.DashboardQ6Test do
     end
   end
 
+  describe "library: two writers (qa's stale rename)" do
+    test "a second tab's stale rename or retire is refused once the first renamed", c do
+      {:ok, %{item_id: item}} = library(c, "create_item", creation(c))
+
+      read = fn ->
+        Enum.find(
+          Management.list_library_items(c.org, c.mission),
+          &(&1.dashboard_library_item_id == item)
+        )
+      end
+
+      # Both tabs read version 1 and the same updated_at.
+      seen = read.().updated_at
+
+      assert {:ok, %{name: "Tab A"}} =
+               LibraryLifecycle.update_item(
+                 c.scope,
+                 c.mission,
+                 item,
+                 %{"name" => "Tab A"},
+                 1,
+                 seen
+               )
+
+      assert {:error, {:library_item_changed, 1}} =
+               LibraryLifecycle.update_item(
+                 c.scope,
+                 c.mission,
+                 item,
+                 %{"name" => "Tab B"},
+                 1,
+                 DateTime.to_iso8601(seen)
+               )
+
+      assert {:error, {:library_item_changed, 1}} =
+               LibraryLifecycle.retire_item(c.scope, c.mission, item, 1, seen)
+
+      assert read.().name == "Tab A"
+
+      # With the row as read now, both go through.
+      fresh = read.().updated_at
+
+      assert {:ok, %{name: "Tab B"}} =
+               LibraryLifecycle.update_item(
+                 c.scope,
+                 c.mission,
+                 item,
+                 %{"name" => "Tab B"},
+                 1,
+                 fresh
+               )
+
+      assert {:error, :invalid_input} =
+               LibraryLifecycle.retire_item(c.scope, c.mission, item, 1, "not a time")
+
+      assert :ok = LibraryLifecycle.retire_item(c.scope, c.mission, item, 1, read.().updated_at)
+    end
+  end
+
   describe "playlists" do
     test "update guards on updated_at, checks dashboards, and delete is audited", c do
       {:ok, %{id: id}} =
@@ -224,6 +283,46 @@ defmodule CadenceWeb.DashboardQ6Test do
       assert model.snapshots.rows == []
 
       assert [%{action: "Deleted snapshot of " <> _}] = ConfigAudit.list(c.org, c.mission)
+    end
+  end
+
+  describe "a share with the viewer's range (D20)" do
+    test "a live share takes the viewer's range and spacecraft; a scoped one keeps its scope",
+         c do
+      {:ok, open} =
+        Management.create_share(c.org, c.mission, c.document.dashboard_id, %{},
+          data_visibility: "definition_only"
+        )
+
+      viewer = %{"from" => "now-6h", "to" => "now", "spacecraft_id" => "sc-viewer"}
+
+      assert {:ok, %{runtime_context: context}} =
+               SharedViews.load(c.scope, c.mission, :share, open.dashboard_share_id,
+                 runtime: viewer
+               )
+
+      assert %{"time_mode" => "range", "spacecraft_id" => "sc-viewer", "from" => from} = context
+      {:ok, from, 0} = DateTime.from_iso8601(from)
+      assert_in_delta DateTime.diff(DateTime.utc_now(), from), 21_600, 5
+
+      {:ok, scoped} =
+        Management.create_share(
+          c.org,
+          c.mission,
+          c.document.dashboard_id,
+          %{"spacecraft_id" => "sc-share"},
+          data_visibility: "definition_only"
+        )
+
+      assert {:ok, %{runtime_context: %{"spacecraft_id" => "sc-share"}}} =
+               SharedViews.load(c.scope, c.mission, :share, scoped.dashboard_share_id,
+                 runtime: viewer
+               )
+
+      assert {:error, {:invalid, %{"runtime.from" => _}}} =
+               SharedViews.load(c.scope, c.mission, :share, open.dashboard_share_id,
+                 runtime: %{"from" => "now-6h"}
+               )
     end
   end
 

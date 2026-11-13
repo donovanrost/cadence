@@ -13,6 +13,7 @@ export type SettingsShare = {
   expires_at: string | null;
   created_at: string;
   created_by: SettingsCreator | null;
+  revoked_by: SettingsCreator | null;
 };
 export type SettingsSnapshot = {
   id: string;

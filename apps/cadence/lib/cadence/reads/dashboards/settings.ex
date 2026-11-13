@@ -115,7 +115,8 @@ defmodule Cadence.Reads.Dashboards.Settings do
       state: state,
       expires_at: timestamp(share.expires_at),
       created_at: timestamp(share.created_at),
-      created_by: share.created_by
+      created_by: share.created_by,
+      revoked_by: share.revoked_by
     }
   end
 
@@ -137,7 +138,7 @@ defmodule Cadence.Reads.Dashboards.Settings do
   defp with_creators(%{rows: rows} = page) do
     names =
       rows
-      |> Enum.map(& &1.created_by)
+      |> Enum.flat_map(&[&1.created_by, Map.get(&1, :revoked_by)])
       |> Enum.filter(&is_binary/1)
       |> Enum.uniq()
       |> Map.new(fn id ->
@@ -147,7 +148,16 @@ defmodule Cadence.Reads.Dashboards.Settings do
         end
       end)
 
-    %{page | rows: Enum.map(rows, &%{&1 | created_by: creator(&1.created_by, names)})}
+    %{page | rows: Enum.map(rows, &actors(&1, names))}
+  end
+
+  # D20: a share row also says who revoked it.
+  defp actors(row, names) do
+    row = %{row | created_by: creator(row.created_by, names)}
+
+    if Map.has_key?(row, :revoked_by),
+      do: %{row | revoked_by: creator(row.revoked_by, names)},
+      else: row
   end
 
   defp creator(id, names) when is_binary(id),

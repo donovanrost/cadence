@@ -148,6 +148,7 @@ export function readSettingsModel(value: unknown, context: OpsPageContext): Sett
       "expires_at",
       "created_at",
       "created_by",
+      "revoked_by",
     ]);
     visibility(s.data_visibility);
     choice(s.state, ["active", "expired", "revoked"]);
@@ -155,6 +156,7 @@ export function readSettingsModel(value: unknown, context: OpsPageContext): Sett
     if (s.state === "expired" && s.expires_at === null) fail();
     timestamp(s.created_at);
     optional(s.created_by, creator);
+    optional(s.revoked_by, creator);
   });
   page(m.snapshots, (value) => {
     const s = exact(value, [
