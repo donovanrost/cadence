@@ -25,7 +25,7 @@ missing endpoint or decision; an item with no blocker can start now.
 
 | Who | Start now (unblocked) | Waiting on |
 | --- | --- | --- |
-| **lead** | K1 C panel (focused spacecraft 24 h strip; in progress); Palette recent items on empty query, `SEARCHING…`, Setup-mode ranking; then K1 per-contact Requested → Confirmed / Rejected. Done: `ApSheet` + K1 sheets moved (86187004), `ApStatTile` `to` (86187004), Palette `>` / `@` groups (c45fd134) | — |
+| **lead** | K1 header `NEXT OFFER EXPIRES T−…` (ux wording 11-12) and C's server measures once domain §8 7/8 land; K1 per-contact Requested → Confirmed / Rejected; then the kit a11y fixes and the mobile search sheet. Done: K1 C panel v1 (4ea2e4e7), Palette Recent / Searching… / Setup ranking (b2830045), `ApSheet` + K1 sheets (86187004), `ApStatTile` `to` (86187004), Palette `>` / `@` groups (c45fd134) | domain §8 7, 8 |
 | **fe-ops** | In order: Investigate B1 add-point chips, resolved alarm, B4; Now tile links (`ApStatTile` `to` is in, 86187004); Fleet/Alarms Next contact; Mobile GO block; move QueueListSheet, ReleasePass, ConfirmDialog and ResolveSheet onto `ApSheet`. Done: D4 coverage-gap fold (4ade99dd), Now h1 'needs you' (b94b0163), A4 pass select (51cc6133), approval rows → review (a0e33fe1), Investigate tabs link out (0d05d195), D3 outage bands (181fb5d1), Telemetry `Dashboards ↗` (718fd269), Timeline sc/plane (cb5767c9, 97e12555), palette hooks (63588467, 7807e12b), U2 Needs you per target (0ea3b97b) | — |
 | **fe-setup** | In order: #19 lift (framing editable; callout only when ST1 has `profile_framing_generations` off); ux §7 #3; New profile + Duplicate as new profile; R2 `Compare revisions` link; Audit kind chips + `Export CSV`; when domain §8 7b lands, the `max_gap_seconds` field on the contact requirement form. Done: ux §7 pass 1 fixes incl. the `org.people.invite` and `catalog/:databaseId` redirects (b42b2358, 7fe01991, 02e87cee), P4 tiles (b136754d), Audit actor select (d21aad0b), R2 (d03eea14), P1/P4 (217feb23), Compare (8b58f513), Keep mine / Take live (3ced6cea, 433bcd0f), Command policies (11374b5a) | qa: C3 live check |
 | **ux** | In progress: §7 visual review pass 2: Approve, Uplink, CommandFlow, Palette, Mobile, Audit (load-gated). Done: pass 1 PassReview, Replan, People, Settings/Providers (83ee8a26); Compose C1 accepted as built (#64; fe-ops b8fe16e0) | — |
@@ -94,7 +94,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Item | Owner | Blocked on |
 | --- | --- | --- |
 | ~~Commands (`>`) and Stations (`@`) groups~~ done (c45fd134; fe-ops hooks 63588467, 7807e12b) | lead + fe-ops | — |
-| Recent items on empty query, `SEARCHING…`, Setup-mode ranking | lead | — |
+| ~~Recent items on empty query, `SEARCHING…`, Setup-mode ranking~~ done (b2830045) | lead | — |
 | One server search endpoint instead of client-side fleet search | api-ops | ask when fleets exceed the client list |
 
 ### Fleet, Alarms, Telemetry, Timeline (`OpsLists.md`): built; gaps
@@ -112,12 +112,12 @@ missing endpoint or decision; an item with no blocker can start now.
 ### K1 · Plan the day (`contacts/plan`): built; gaps against the SchedulePlan board
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| C · focused spacecraft 24 h strip (rule chips, pass and gap strip) | lead | v1 built from the plan's passes and `contacts`; server measures from domain §8 7, the gap HOLD after 7b |
+| C · focused spacecraft 24 h strip: v1 built (4ea2e4e7: contacts chip, longest gap as a measure, pass and gap strip) | lead | server measures from domain §8 7; the gap HOLD after 7b |
 | ~~Admin `pending_approval` review: `Send back` with a comment beside `Approve and book`~~ done (cd7b3fcb; api c7c7b277) | lead | — |
 | ~~Accepted gaps as `GAP ACCEPTED · <reason>` rows; a sent-back draft says who and why~~ done (cd7b3fcb, 9df61cc0; api 97523716) | lead | — |
 | Per-contact Requested → Confirmed / Rejected on the Gantt; rejections become Demand rows | lead | — (passes read + `execution`, cf3cd37a) |
 | ~~`Drafting stopped at or after 02:31Z`~~ done (cd7b3fcb, copy 9df61cc0; api 413c8e18) | lead | — |
-| `PROVIDER FREEZE T−…` header clock | lead | domain §8 8 (no provider freeze time in any read) |
+| K1 header clock, now `NEXT OFFER EXPIRES T−15:15:51 · KSAT` (ux 11-12: there's no day-level provider freeze). White, caution under 1 h, absent when nothing is left to send. Hover/focus detail per ux, with the pass linked to its B bar, one line per provider, and '3 more offers expire in the next hour.' | lead | domain §8 8 (`provider_freeze`); the 'N more' line needs `expires_at` per pass |
 | Cost tiles / column: **hidden** (#63). Minutes `/ budget` and D's Link, Max el | lead | a minutes budget setting; Max el only when provider-supplied |
 | Done today: U26, U28, U30, U31, U32, superseded, execution header (live check pending, qa) | — | — |
 
