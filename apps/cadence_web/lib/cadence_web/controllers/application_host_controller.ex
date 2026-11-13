@@ -863,7 +863,13 @@ defmodule CadenceWeb.ApplicationHostController do
   defp not_found_html(conn) do
     conn
     |> put_flash(:error, "Application not found.")
-    |> redirect(to: "/missions")
+    |> redirect(
+      to:
+        CadenceWeb.ConsolePaths.organization(
+          conn.assigns.current_scope && conn.assigns.current_scope.organization_id,
+          "/org/missions"
+        )
+    )
   end
 
   defp problem(conn, status, code, message) do

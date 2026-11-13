@@ -214,12 +214,15 @@ defmodule CadenceWeb.Router do
       :telemetry_explore
     )
 
+    # L4 cutover (owner: api; DECISIONS #79): mission creation moved to the console. Ahead of the
+    # live sessions, so /missions/new isn't read as a mission id.
+    get("/missions", LegacyAdminRedirectController, :missions)
+    get("/missions/new", LegacyAdminRedirectController, :new_mission)
+
     live_session :application,
       on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
       layout: {CadenceWeb.Layouts, :host} do
       live("/", HostPageLive, :show, metadata: %{host_policy: :organization})
-      live("/missions", HostPageLive, :index, metadata: %{host_policy: :organization})
-      live("/missions/new", HostPageLive, :new, metadata: %{host_policy: :organization})
       live("/settings", HostPageLive, :show, metadata: %{host_policy: :organization})
       live("/settings/:section_id", HostPageLive, :show, metadata: %{host_policy: :organization})
 

@@ -19,7 +19,7 @@ defmodule CadenceWeb.MissionAuth do
         {:halt,
          socket
          |> put_flash(:error, "Mission not found.")
-         |> redirect(to: "/missions")}
+         |> redirect(to: CadenceWeb.ConsolePaths.organization(organization_id, "/org/missions"))}
     end
   end
 end
