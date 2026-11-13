@@ -1,5 +1,5 @@
 import type { RouteLocationRaw } from "vue-router";
-import { decoders as d, type Decoded } from "@/api/index.ts";
+import { actor, decoders as d, type Decoded } from "@/api/index.ts";
 import { short } from "./attention.ts";
 import type { QueueItem } from "./queue.ts";
 
@@ -10,16 +10,13 @@ import type { QueueItem } from "./queue.ts";
  */
 export const changeSetReader = d.object({
   id: d.token,
-  state: d.token,
+  state: d.knownText(["open", "in_review"] as const),
   staged_count: d.integer,
   base_revision: d.nullable(d.integer),
   opened_at: d.nullable(d.timestamp),
   oldest_staged_at: d.nullable(d.timestamp),
   submitted_at: d.nullable(d.timestamp),
-  authors: d.array(
-    d.object({ kind: d.token, id: d.nullable(d.token), name: d.nullable(d.string) }),
-    100,
-  ),
+  authors: d.array(actor, 100),
 });
 export type ChangeSet = Decoded<typeof changeSetReader>;
 

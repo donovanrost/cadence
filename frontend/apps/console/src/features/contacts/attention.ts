@@ -1,5 +1,5 @@
 import { isError, request, type ApiError, type ApiResult } from "@/api/index.ts";
-import { attentionReader, type Attention } from "@/features/now/index.ts";
+import { attentionReader, serverKey, type Attention } from "@/features/now/index.ts";
 
 /**
  * Contact drawer attention block (ux U32; contacts.md d2632794): the resolution record, what to do
@@ -25,7 +25,7 @@ function outcome(result: ApiResult<Attention>): AttentionOutcome {
 }
 
 const itemPath = (missionId: string, a: Attention) =>
-  `/missions/${encodeURIComponent(missionId)}/attention/${encodeURIComponent(a.source)}/${encodeURIComponent(a.id)}`;
+  `/missions/${encodeURIComponent(missionId)}/attention/${encodeURIComponent(serverKey(a.source))}/${encodeURIComponent(a.id)}`;
 
 export async function acknowledgeAttention(
   missionId: string,

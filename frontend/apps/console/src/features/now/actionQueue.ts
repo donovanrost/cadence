@@ -1,10 +1,11 @@
 import type { RouteLocationRaw } from "vue-router";
-import { decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
+import { actor, decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
 import { plural, type OpState } from "@/ui";
 import {
   conditionWords,
   engineeringValue,
   formatValue,
+  sourceStates,
   withUnit,
 } from "@/features/alarms/index.ts";
 import { attentionMeta, attentionReader, attentionWords, resolvedReader } from "./attention.ts";
@@ -66,9 +67,7 @@ const member = d.object({
   episode_id: d.nullable(d.token),
   status: d.nullable(d.oneOf(["new", "acknowledged"] as const)),
   assignee: d.nullable(d.object({ id: d.token, name: d.nullable(d.string) })),
-  acknowledged_by: d.nullable(
-    d.object({ kind: d.token, id: d.nullable(d.token), name: d.nullable(d.string) }),
-  ),
+  acknowledged_by: d.nullable(actor),
 });
 type Member = Decoded<typeof member>;
 
@@ -77,7 +76,19 @@ const commandRequest = d.object({
   command_name: d.string,
   target: d.nullable(d.object({ id: d.token, name: d.string })),
   requested_by: d.nullable(d.string),
-  status: d.token,
+  // The command-status vocabulary (ops.md §command_requests; Commanding.CommandRequest).
+  status: d.knownText([
+    "draft",
+    "validated",
+    "approval_pending",
+    "approved",
+    "rejected",
+    "queued",
+    "released",
+    "canceled",
+    "failed",
+    "indeterminate",
+  ] as const),
 });
 
 /** requested_by: a display label, or an actor with a name; read either (ops.md §approval). */
@@ -142,7 +153,8 @@ const itemReader = d.object({
       unit: d.nullable(d.string),
     }),
   ),
-  condition: d.nullable(d.token),
+  // The worst episode's source_state (ops.md §alarm): a limit condition or monitoring level.
+  condition: d.nullable(d.known(sourceStates)),
   plane: d.nullable(d.integer),
   command: d.nullable(d.object({ id: d.token, name: d.string })),
   outcome: d.nullable(d.oneOf(["failed", "indeterminate"] as const)),

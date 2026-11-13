@@ -1,5 +1,5 @@
 import type { RouteLocationRaw } from "vue-router";
-import { decoders as d, type Decoded } from "@/api/index.ts";
+import { decoders as d, isKnown, vocabularyText, type Decoded } from "@/api/index.ts";
 import { plural, type OpState } from "@/ui";
 import { GROUP_AT, type QueueItem } from "./queue.ts";
 
@@ -12,6 +12,7 @@ import { GROUP_AT, type QueueItem } from "./queue.ts";
 const stationRef = d.object({
   ref: d.nullable(d.string),
   id: d.nullable(d.token),
+  // free-text: a station's call sign, not a vocabulary
   code: d.nullable(d.string),
   name: d.nullable(d.string),
 });
@@ -20,9 +21,9 @@ export const missedPassReader = d.object({
   reservation_id: d.token,
   station: stationRef,
   planned_aos: d.timestamp,
-  outcome: d.token,
+  outcome: d.knownText(["missed", "failed"] as const),
   cause: d.nullable(d.string),
-  owner: d.nullable(d.token),
+  owner: d.nullable(d.knownText(["provider", "us", "weather", "unknown"] as const)),
 });
 export const nextContactReader = d.object({
   reservation_id: d.token,
@@ -33,9 +34,10 @@ export const stationIssueReader = d.object({
   station: stationRef,
   window: d.object({
     id: d.token,
-    kind: d.token,
+    kind: d.knownText(["outage", "maintenance", "degraded"] as const),
     starts_at: d.timestamp,
     ends_at: d.nullable(d.timestamp),
+    // free-text: who reported the window (a provider or operator note)
     source: d.nullable(d.string),
   }),
   affected: d.array(
@@ -62,10 +64,16 @@ export function causeWords(cause: string | null): string {
   const w = cause.replaceAll("_", " ").trim();
   return w.charAt(0).toLowerCase() + w.slice(1);
 }
-const OWNER: Readonly<Record<string, string>> = {
+const OWNER: Readonly<Record<"provider" | "us" | "weather" | "unknown", string | null>> = {
   provider: "the provider's side",
   us: "our side",
   weather: "weather",
+  unknown: null,
+};
+const WINDOW: Readonly<Record<"outage" | "maintenance" | "degraded", string>> = {
+  outage: "outage",
+  maintenance: "maintenance",
+  degraded: "degraded",
 };
 
 const hhmm = (iso: string) => `${iso.slice(11, 16)}Z`;
@@ -92,7 +100,7 @@ const reviewTo = (aos: string): RouteLocationRaw => ({
 function oneRow(m: MissedItem, horizonH: number): QueueItem {
   const last = m.missed[0];
   const where = last ? ` at ${code(last.station)} · ${causeWords(last.cause)}` : "";
-  const owner = last?.owner ? OWNER[last.owner] : undefined;
+  const owner = last?.owner && isKnown(last.owner) ? OWNER[last.owner] : null;
   const next = m.next
     ? `Next booked contact at ${code(m.next.station)}.`
     : `No booked contact in the next ${horizonH} h.`;
@@ -162,15 +170,16 @@ export function stationRow(
 ): QueueItem {
   const st = issue.station.code ?? issue.station.name ?? "A station";
   const w = issue.window;
+  const kind = vocabularyText(w.kind, WINDOW).replaceAll("_", " ");
   const until = w.ends_at ? ` until ${hhmm(w.ends_at)}` : " · no end reported";
   const n = issue.affected.length;
   const first = [...issue.affected].sort((a, b) => Date.parse(a.aos) - Date.parse(b.aos))[0];
   return {
     ...base,
     key: id,
-    title: `${st} · ${w.kind} overlaps ${plural(n, "booked pass", "booked passes")}`,
+    title: `${st} · ${kind} overlaps ${plural(n, "booked pass", "booked passes")}`,
     titleTo: null,
-    sentence: `${w.kind.charAt(0).toUpperCase()}${w.kind.slice(1)} from ${hhmm(w.starts_at)}${until}${w.source ? ` (${w.source})` : ""}.`,
+    sentence: `${kind.charAt(0).toUpperCase()}${kind.slice(1)} from ${hhmm(w.starts_at)}${until}${w.source ? ` (${w.source})` : ""}.`,
     meta: null,
     ...(first ? { due: { label: "AOS", at: first.aos } } : {}),
     action: {

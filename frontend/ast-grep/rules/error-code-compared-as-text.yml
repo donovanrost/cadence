@@ -25,7 +25,6 @@
       "apps/console/src/features/apps/hostBridge.ts",
       "apps/console/src/features/auth/InvitationScreen.vue",
       "apps/console/src/features/auth/SignInScreen.vue",
-      "apps/console/src/features/now/useQueueCommand.ts",
       "apps/console/src/features/resolutions/api.ts",
     ],
 }

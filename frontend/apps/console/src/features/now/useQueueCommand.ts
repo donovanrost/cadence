@@ -1,6 +1,6 @@
 import { shallowRef, type Ref } from "vue";
-import { decoders as d, decode, describeApiError, request } from "@/api/index.ts";
-import { attentionReader, type Attention } from "./attention.ts";
+import { decoders as d, describeApiError, detailsOf, isError, request } from "@/api/index.ts";
+import { attentionReader, serverKey, type Attention } from "./attention.ts";
 import type { QueueItem } from "./queue.ts";
 
 export const NO_ACCESS = "Operators can retry storing.";
@@ -13,7 +13,7 @@ export const noAccessText = (kind: CommandKind) => (kind === "seen" ? NO_ACCESS_
 /** POST …/acknowledge on a lost settlement (domain: allowed only when backlog.lost). */
 export function markSeen(missionId: string, a: Attention) {
   return request(
-    `/missions/${encodeURIComponent(missionId)}/attention/${encodeURIComponent(a.source)}/${encodeURIComponent(a.id)}/acknowledge`,
+    `/missions/${encodeURIComponent(missionId)}/attention/${encodeURIComponent(serverKey(a.source))}/${encodeURIComponent(a.id)}/acknowledge`,
     attentionReader,
     { method: "POST" },
   );
@@ -38,7 +38,7 @@ export async function seenTargets(
 /** POST …/attention/contact_settlement/:id/retry (domain #71; operate_mission). */
 export function retrySettlement(missionId: string, a: Attention) {
   return request(
-    `/missions/${encodeURIComponent(missionId)}/attention/${encodeURIComponent(a.source)}/${encodeURIComponent(a.id)}/retry`,
+    `/missions/${encodeURIComponent(missionId)}/attention/${encodeURIComponent(serverKey(a.source))}/${encodeURIComponent(a.id)}/retry`,
     attentionReader,
     { method: "POST" },
   );
@@ -74,9 +74,9 @@ export async function retryTargets(
       continue;
     }
     const e = r.error;
-    if (e.kind === "conflict" && e.code === "retry_not_manual") {
-      const current = decode(conflictItem, e.details);
-      if (current.ok) items.push(current.value.item);
+    if (isError(e, "retry_not_manual")) {
+      const current = detailsOf(e, conflictItem);
+      if (current) items.push(current.item);
     } else if (e.kind === "not_found") dropped += 1;
     else if (e.kind === "forbidden") return { text: NO_ACCESS, items, emptied: false };
     else failed.push(describeApiError(e));

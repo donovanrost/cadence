@@ -4,14 +4,9 @@
     "apps/console/src/features/apps/hostBridge.ts",
     "apps/console/src/features/auth/InvitationScreen.vue",
     "apps/console/src/features/auth/SignInScreen.vue",
-    "apps/console/src/features/now/useQueueCommand.ts",
     "apps/console/src/features/resolutions/api.ts"
   ],
   "vocabulary-field-decoded-as-text": [
-    "apps/console/src/features/now/actionQueue.ts",
-    "apps/console/src/features/now/attention.ts",
-    "apps/console/src/features/now/changeSet.ts",
-    "apps/console/src/features/now/sources.ts",
     "apps/console/src/features/resolutions/api.ts"
   ]
 }

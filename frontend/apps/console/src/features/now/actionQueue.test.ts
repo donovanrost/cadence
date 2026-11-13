@@ -289,7 +289,7 @@ describe("attention rows (U31, fafe581a)", () => {
     const resolved = [
       {
         id: "attention:pass_resolution:at-1",
-        resolved_by: { kind: "user", id: "u-1", name: "Mira K." },
+        resolved_by: { kind: "user" as const, id: "u-1", name: "Mira K." },
         action: "resolved",
         resolved_at: "2026-11-09T11:00:00Z",
       },
@@ -345,7 +345,11 @@ describe("attention rows (U31, fafe581a)", () => {
   });
 
   it("says what closed it, never 'by Cadence'", () => {
-    const r = (kind: string, name: string | null, action: string | null) => ({
+    const r = (
+      kind: "user" | "provider" | "system",
+      name: string | null,
+      action: string | null,
+    ) => ({
       id: "x",
       resolved_by: { kind, id: null, name },
       action,
@@ -572,7 +576,7 @@ describe("contact_settlement (U37, #71)", () => {
     // It fades only when its last member resolves.
     const done = (id: string) => ({
       id: `attention:contact_settlement:${id}`,
-      resolved_by: { kind: "system", id: null, name: null },
+      resolved_by: { kind: "system" as const, id: null, name: null },
       action: "replayed",
       resolved_at: "2026-11-12T01:00:00Z",
     });

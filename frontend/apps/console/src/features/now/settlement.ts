@@ -1,6 +1,6 @@
 import type { RouteLocationRaw } from "vue-router";
 import { plural } from "@/ui";
-import { settlementEvidence, short, type Attention } from "./attention.ts";
+import { serverKey, settlementEvidence, short, type Attention } from "./attention.ts";
 import type { QueueItem } from "./queue.ts";
 
 /**
@@ -21,7 +21,7 @@ export type Settlement = Readonly<{
 export const foldKey = (s: Settlement) =>
   s.attention.backlog.lost
     ? "lost"
-    : `${s.attention.failure_kind ?? "none"}:${s.attention.retry === "manual" ? "manual" : "automatic"}`;
+    : `${s.attention.failure_kind ? serverKey(s.attention.failure_kind) : "none"}:${s.attention.retry === "manual" ? "manual" : "automatic"}`;
 
 const drawer = (a: Attention): RouteLocationRaw => {
   const pass = a.reservation_id ?? a.contact_id;

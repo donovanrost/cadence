@@ -19,7 +19,7 @@ const NEEDS_FIX =
  * an unknown key adds neither.
  */
 export function reasonWords(
-  reason: string | null | undefined,
+  reason: Attention["reason"],
   message: string | null | undefined,
 ): Readonly<{ text: string | null; needsFix: boolean }> {
   const why = message ? `: ${noStop(message)}` : "";

@@ -4,7 +4,7 @@ import { actionQueueReader, presentQueue } from "./actionQueue.ts";
 import { authorWords, changeSetWords, type ChangeSet } from "./changeSet.ts";
 
 const now = new Date("2026-11-13T00:00:00Z");
-const author = (name: string | null) => ({ kind: "user", id: `u-${name}`, name });
+const author = (name: string | null) => ({ kind: "user" as const, id: `u-${name}`, name });
 const cs = (over: Partial<ChangeSet> = {}): ChangeSet => ({
   id: "cs-1",
   state: "open",

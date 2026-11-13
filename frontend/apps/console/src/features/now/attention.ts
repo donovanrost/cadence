@@ -1,4 +1,4 @@
-import { decoders as d, type Decoded } from "@/api/index.ts";
+import { decoders as d, isKnown, type Decoded, type Unrecognized } from "@/api/index.ts";
 import type { QueueItem } from "./queue.ts";
 import { plural } from "@/ui";
 import { formatBytes } from "@/features/catalog/importRun.ts";
@@ -10,13 +10,46 @@ import { attentionUplinkReader, reasonSentence } from "@/features/contacts/readi
  * the pass's contact drawer holds the detail and the actions.
  */
 
-const who = d.object({ kind: d.token, id: d.nullable(d.token), name: d.nullable(d.string) });
+/** U32: who closed or acknowledged it. */
+const who = d.object({
+  kind: d.knownText(["user", "provider", "system"] as const),
+  id: d.nullable(d.token),
+  name: d.nullable(d.string),
+});
+
+/** The attention sources the console words (ops.md §attention, contacts.md U33, #71, U38). */
+export const attentionSources = [
+  "pass_resolution",
+  "uplink_blocked",
+  "pass_release",
+  "contact_settlement",
+  "mission_runtime",
+] as const;
+/** pass_resolution conflicts (ops.md §attention). */
+export const attentionConflicts = [
+  "cancel_failed",
+  "late_confirmation",
+  "contradicts_attestation",
+] as const;
+/** U38 mission_runtime reason keys (domain 292c8e6b, final). */
+export const runtimeReasons = [
+  "spec_mismatch",
+  "reconcile_crashed",
+  "runtime_not_running",
+  "apply_failed",
+] as const;
+/** U37 contact_settlement: why the telemetry isn't stored (null: a slow drain past the deadline). */
+export const settlementFailures = ["telemetry_storage_unavailable", "settle_failed"] as const;
+
+/** The server's own key, known or not: attention routes, fold keys. */
+export const serverKey = <T extends string>(value: T | Unrecognized): string =>
+  isKnown(value) ? value : value.unrecognized;
 
 export const attentionReader = d.object({
   id: d.token,
-  source: d.token,
+  source: d.knownText(attentionSources),
   /** null on uplink_blocked (U33). */
-  conflict: d.nullable(d.token),
+  conflict: d.nullable(d.knownText(attentionConflicts)),
   state: d.oneOf(["open", "acknowledged"] as const),
   acknowledged_by: d.nullable(who),
   // d2632794: cancel_failed/late_confirmation may have no contact; reservation_id is the pass
@@ -29,6 +62,7 @@ export const attentionReader = d.object({
     d.object({
       ref: d.nullable(d.string),
       id: d.nullable(d.token),
+      // free-text: a station's call sign, not a vocabulary
       code: d.nullable(d.string),
       name: d.nullable(d.string),
     }),
@@ -40,7 +74,16 @@ export const attentionReader = d.object({
   /** U33 uplink_blocked only; null (or absent) on pass_resolution. */
   uplink: d.optional(d.nullable(attentionUplinkReader)),
   /** pass_release only (api-ops, ahead of domain): what happened to the Release's cancel. */
-  release: d.optional(d.nullable(d.object({ outcome: d.token, reason: d.nullable(d.string) }))),
+  release: d.optional(
+    d.nullable(
+      d.object({
+        // contacts.md §release: refused | not_sent | unknown (no answer yet).
+        outcome: d.knownText(["refused", "not_sent", "unknown"] as const),
+        // free-text: the provider's own reason sentence
+        reason: d.nullable(d.string),
+      }),
+    ),
+  ),
   /** contact_settlement (#71): telemetry still on disk, not yet in the TSDB; null elsewhere. */
   backlog: d.optional(
     d.nullable(
@@ -56,27 +99,28 @@ export const attentionReader = d.object({
     ),
   ),
   /** mission_runtime (U38): the reason key, generations, and when the mismatch began. */
-  reason: d.optional(d.nullable(d.token)),
+  reason: d.optional(d.nullable(d.knownText(runtimeReasons))),
   desired_generation: d.optional(d.nullable(d.integer)),
   applied_generation: d.optional(d.nullable(d.integer)),
   since: d.optional(d.nullable(d.timestamp)),
   change_set_id: d.optional(d.nullable(d.token)),
   activated_at: d.optional(d.nullable(d.timestamp)),
   /** enabled | disabled: whether the mission keeps a disk copy of incoming telemetry. */
-  journal: d.optional(d.nullable(d.token)),
+  journal: d.optional(d.nullable(d.knownText(["enabled", "disabled"] as const))),
   ends_at: d.optional(d.timestamp),
   deadline_at: d.optional(d.nullable(d.timestamp)),
   /** telemetry_storage_unavailable | settle_failed | null (a slow drain past the deadline). */
-  failure_kind: d.optional(d.nullable(d.token)),
+  failure_kind: d.optional(d.nullable(d.knownText(settlementFailures))),
   failure_message: d.optional(d.nullable(d.string)),
   /** automatic | manual (domain #71 replay: manual after 6 failed replays, operator retries). */
-  retry: d.optional(d.nullable(d.token)),
+  retry: d.optional(d.nullable(d.knownText(["automatic", "manual"] as const))),
   attempts: d.optional(d.nullable(d.integer)),
   /** Set while automatic and backing off (5 min doubling to 2 h); null when manual. */
   next_attempt_at: d.optional(d.nullable(d.timestamp)),
   last_attempt_at: d.optional(d.nullable(d.timestamp)),
   resolution: d.nullable(
     d.object({
+      // free-text: what the operator recorded doing (resolve's action_text, contacts.md)
       action: d.token,
       actor: who,
       at: d.timestamp,
@@ -91,6 +135,7 @@ export type Attention = Decoded<typeof attentionReader>;
 export const resolvedReader = d.object({
   id: d.token,
   resolved_by: who,
+  // free-text: an open phrase or key ("uplink recovered", "replayed"); known keys get words (U32)
   action: d.optional(d.nullable(d.string)),
   resolved_at: d.timestamp,
 });
@@ -154,11 +199,11 @@ export type SettlementFacts = Readonly<{
   /** Journal off: the batches are gone (U37); `queued` counts them. */
   lost: boolean;
   queued: number | null;
-  failureKind: string | null;
+  failureKind: NonNullable<Attention["failure_kind"]> | null;
   failureMessage: string | null;
   /** `00:57Z`; null on a folded line (ux 3f61ef71). */
   deadline: string | null;
-  retry: string | null;
+  retry: NonNullable<Attention["retry"]> | null;
   attempts: number | null;
   nextAttemptAt: string | null;
   lastAttemptAt: string | null;
