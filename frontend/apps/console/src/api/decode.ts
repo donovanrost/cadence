@@ -74,6 +74,20 @@ export const oneOf =
     return found;
   };
 
+/**
+ * A closed vocabulary that tolerates the server growing it: known values decode to the union,
+ * anything else (a string) to `"unrecognized"`, so one new server value never fails a whole
+ * read (the chain_head / #71 lesson). Non-strings still fail. Prefer this over `oneOf` for
+ * state / status / kind / reason fields the server may extend; use `oneOf` only where an
+ * unknown value must be an error. Callers switch exhaustively, with `unrecognized` handled.
+ */
+export const known =
+  <const T extends readonly string[]>(values: T): Reader<T[number] | "unrecognized"> =>
+  (value, path = "") => {
+    const text = string(value, path);
+    return values.find((candidate) => candidate === text) ?? "unrecognized";
+  };
+
 export const nullable =
   <T>(read: Reader<T>): Reader<T | null> =>
   (value, path = "") =>

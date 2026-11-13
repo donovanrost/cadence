@@ -3,6 +3,7 @@ import {
   array,
   DecodeError,
   decode,
+  known,
   nullable,
   object,
   oneOf,
@@ -32,6 +33,13 @@ describe("readers", () => {
   it("enforces array bounds and closed sets", () => {
     expect(() => array(string, 1)(["a", "b"])).toThrow(DecodeError);
     expect(() => oneOf(["a", "b"])("c")).toThrow(DecodeError);
+  });
+
+  it("reads a growing vocabulary as its union, with new values as 'unrecognized'", () => {
+    const state = known(["active", "closed"]);
+    expect(state("closed")).toBe("closed");
+    expect(state("archived")).toBe("unrecognized");
+    expect(() => state(3)).toThrow(DecodeError);
   });
 
   it("dispatches discriminated unions on the tag", () => {
