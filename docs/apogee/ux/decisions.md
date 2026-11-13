@@ -643,6 +643,17 @@ more than 24 h old.
   - On release: "Not released: commanding is off for EARENDIL-312."
 - **Telemetry off:** the header tag `TELEMETRY OFF`. Its live values read "Telemetry is off for this spacecraft." in
   place of stale hatching, so it doesn't look like a fault.
+- **Change-set HOLDs for these switches** (domain puts them in the HOLD's sentence field):
+  - (a) Hard: "Commanding can't be turned off for EARENDIL-312 while “Low power safe” is being sent to it. Abort
+    that request or wait for it to finish." Use the request's title as the server gives it, and the same
+    sentence for releasing and radiating.
+  - (b) Acknowledgeable: "Turning commanding off cancels 3 commands waiting to be sent to EARENDIL-312 when this is
+    applied." (singular: "1 command … waiting"). The ack placeholder: "Why it's safe to cancel them".
+  - (c) Acknowledgeable: "After this is applied, telemetry from EARENDIL-312 isn't decoded: no live values, alarms
+    or new history until it's turned on again."
+  - (d) Hard: "EARENDIL-312 handles APIDs 0x101 and 0x1A0, which rev 15 doesn't define. Change its handled APIDs
+    first." Several spacecraft: "12 spacecraft handle APIDs that rev 15 doesn't define (0x101, 0x1A0). Change
+    their handled APIDs first." List at most 5 APIDs, then "and 3 more".
 - **Handled APIDs** (profile field next to the catalog revision, overridable like P3): label `Handled APIDs`, with
   the default value `All of the catalog's APIDs`. An override is a mono chip list in the catalog's notation:
   `Only 0x101, 0x102, 0x1A0`. Help: "Packets with other APIDs aren't decoded." (domain to confirm the effect).
