@@ -2,7 +2,7 @@
 import { useRoute } from "vue-router";
 import RailLink from "./RailLink.vue";
 
-/** L7 platform admin rail (ux Admin.md): Organizations · Service identities · Runtime. */
+/** L7 platform admin rail (ux Admin.md): Organizations · Service identities · Runtime · Audit. */
 const route = useRoute();
 const items = [
   {
@@ -16,6 +16,7 @@ const items = [
     label: "Service identities",
   },
   { names: ["admin.runtime"], to: "admin.runtime", label: "Runtime" },
+  { names: ["admin.audit"], to: "admin.audit", label: "Audit" },
 ] as const;
 const active = (names: readonly string[]) =>
   typeof route.name === "string" && names.includes(route.name);

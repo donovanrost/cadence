@@ -57,6 +57,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@/features/admin/RuntimeScreen.vue"),
         meta: { mode: "admin", title: "Runtime" },
       },
+      {
+        path: "audit",
+        name: "admin.audit",
+        component: () => import("@/features/admin/AuditScreen.vue"),
+        meta: { mode: "admin", title: "Platform audit" },
+      },
     ],
   },
   {

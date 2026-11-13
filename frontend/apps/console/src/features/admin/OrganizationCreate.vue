@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { decoders as d, detailsOf, fieldErrors, orNull } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApField, ApSheet } from "@/ui";
 import { checkSlug, createOrganization } from "./api.ts";
@@ -52,7 +53,13 @@ async function submit() {
       slug: slug.value,
       first_admin_email: email.value.trim(),
     });
-    if (!r.ok) return void (failure.value = failureOutcome(r.error, "changed").sentence);
+    if (!r.ok) {
+      // api-ops: a slug clash is 422 details.slug plus a free suggestion.
+      const slugError = fieldErrors(r.error)["slug"];
+      const hint = detailsOf(r.error, d.object({ suggestion: orNull(d.string) }))?.suggestion;
+      if (slugError) return void (taken.value = hint ? `${slugError} ${hint} is free.` : slugError);
+      return void (failure.value = failureOutcome(r.error, "changed").sentence);
+    }
     sheet.value?.close();
     emit("created", createdText(r.value));
   } finally {

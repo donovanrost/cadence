@@ -70,6 +70,7 @@ export interface ConsoleRoutes {
   >;
   "admin.service-identities": Plain<"admin.service-identities", "/admin/service-identities">;
   "admin.runtime": Plain<"admin.runtime", "/admin/runtime">;
+  "admin.audit": Plain<"admin.audit", "/admin/audit">;
   "not-found": RouteRecordInfo<
     "not-found",
     "/:pathMatch(.*)*",
@@ -322,6 +323,7 @@ export const consoleRouteNames: Readonly<Record<ConsoleRouteName, true>> = {
   "admin.organization": true,
   "admin.service-identities": true,
   "admin.runtime": true,
+  "admin.audit": true,
   "not-found": true,
   "org.home": true,
   "org.people": true,
@@ -410,6 +412,7 @@ const paramlessRouteNames: Readonly<Record<ParamlessRouteName, true>> = {
   "admin.organizations": true,
   "admin.service-identities": true,
   "admin.runtime": true,
+  "admin.audit": true,
   "org.home": true,
   "org.people": true,
   "org.people.invite": true,

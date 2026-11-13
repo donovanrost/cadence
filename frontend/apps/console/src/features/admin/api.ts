@@ -1,4 +1,13 @@
-import { decoders as d, request, role, type ApiResult, type Decoded, type Role } from "@/api";
+import {
+  actor,
+  decoders as d,
+  orNull,
+  request,
+  role,
+  type ApiResult,
+  type Decoded,
+  type Role,
+} from "@/api";
 
 /**
  * L7 platform admin (ux screens/Admin.md): AD1–AD4 as proposed in docs/apogee/plans/admin.md
@@ -199,4 +208,42 @@ export type AdminRuntime = Decoded<typeof runtimePage>;
 
 export function fetchRuntime(_key: true, signal: AbortSignal): Promise<ApiResult<AdminRuntime>> {
   return request("/admin/runtime", runtimePage, { signal });
+}
+
+/** api-ops: issue and rotate share ServiceIdentityAdministration; rotating shows the new token once. */
+export function rotateServiceIdentity(id: string) {
+  return request(
+    `/admin/service-identities/${encodeURIComponent(id)}/rotate`,
+    d.object({ service_identity: identity, token: d.string }),
+    { method: "POST", body: {} },
+  );
+}
+
+/** Platform audit (api-ops): organization, invitation, service identity and admin-mode events. */
+const auditEvent = d.object({
+  id: d.token,
+  at: d.timestamp,
+  actor: orNull(actor),
+  // free-text: a server sentence ("Created Acme Space"), shown as is.
+  action: d.string,
+  target: d.nullable(
+    d.object({
+      // free-text: the target's kind is technical context; the row shows `label`.
+      kind: d.string,
+      id: d.string,
+      label: d.string,
+    }),
+  ),
+  organization: d.nullable(d.object({ id: d.token, name: d.string })),
+});
+export type PlatformAuditEvent = Decoded<typeof auditEvent>;
+const auditPage = d.object({ events: d.array(auditEvent, 500), next: d.nullable(d.string) });
+
+export type PlatformAuditPage = Decoded<typeof auditPage>;
+export function fetchPlatformAudit(
+  k: Readonly<{ after: string | null }>,
+  signal: AbortSignal,
+): Promise<ApiResult<PlatformAuditPage>> {
+  const q = k.after ? `?after=${encodeURIComponent(k.after)}` : "";
+  return request(`/admin/audit${q}`, auditPage, { signal });
 }

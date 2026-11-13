@@ -15,6 +15,7 @@ import {
 } from "@/ui";
 import { fetchOrganizations } from "./api.ts";
 import OrganizationCreate from "./OrganizationCreate.vue";
+import PlatformCaption from "./PlatformCaption.vue";
 
 /** Admin › Organizations (Admin.md): filter, table, Create organization. */
 const q = ref("");
@@ -78,4 +79,5 @@ function created(text: { tone: "nominal" | "caution"; text: string }) {
     </ApRemote>
   </ApPanel>
   <OrganizationCreate ref="create" @created="created" />
+  <PlatformCaption />
 </template>

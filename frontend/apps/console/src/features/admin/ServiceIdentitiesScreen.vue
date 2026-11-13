@@ -14,7 +14,8 @@ import {
 } from "@/ui";
 import { fetchServiceIdentities, revokeServiceIdentity, type AdminServiceIdentity } from "./api.ts";
 import ServiceIdentityIssue from "./ServiceIdentityIssue.vue";
-import ServiceIdentityRevoke from "./ServiceIdentityRevoke.vue";
+import PlatformCaption from "./PlatformCaption.vue";
+import IdentityActions from "./IdentityActions.vue";
 
 /** Admin › Service identities (Admin.md): Name · Organization · Created · Last used · Revoke; Issue. */
 const list = useRemoteQuery(() => null as string | null, fetchServiceIdentities);
@@ -74,7 +75,7 @@ async function revoke(s: AdminServiceIdentity) {
             row.last_used_at ? formatShort(new Date(row.last_used_at)) : "Not tracked yet"
           }}</template>
           <template #cell-actions="{ row }"
-            ><ServiceIdentityRevoke :name="row.name" @revoke="revoke(row)"
+            ><IdentityActions :identity="row" @rotated="list.refetch" @revoke="revoke(row)"
           /></template>
         </ApTable>
         <ServiceIdentityIssue
@@ -85,4 +86,5 @@ async function revoke(s: AdminServiceIdentity) {
       </template>
     </ApRemote>
   </ApPanel>
+  <PlatformCaption />
 </template>
