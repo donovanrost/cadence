@@ -4,11 +4,13 @@ import { ResolveBookingActions } from "@/features/resolutions/index.ts";
 import { useRoute } from "vue-router";
 import { canAdministerOrganization, TakeoverHeader, useMissionScope, useSession } from "@/shell";
 import type { ApiError } from "@/api";
-import { ApButton, ApCallout, ApStationBar } from "@/ui";
+import { ApButton, ApCallout, ApStationBar, useNow } from "@/ui";
 import { draftedByOther, editableStates, type Acknowledgement } from "./api.ts";
 import DayNav from "./DayNav.vue";
 import DemandPanel from "./DemandPanel.vue";
 import FocusPanel from "./FocusPanel.vue";
+import OfferClock from "./OfferClock.vue";
+import { offerClock } from "./offer-clock.ts";
 import DraftGantt from "./DraftGantt.vue";
 import { dayLabel, useSpacecraftNames } from "./names.ts";
 import PlanFooter from "./PlanFooter.vue";
@@ -178,6 +180,11 @@ function headerFor(v: PlanView, d: string): string {
 }
 const headerLine = computed(() => headerFor(view.value, dayLabel(day.value)));
 const setupLink = computed(() => ({ name: "setup.contact-planning" }));
+/** ux: "NEXT OFFER EXPIRES T−… · KSAT" from the plan's provider_freeze (domain c38bb5de). */
+const clockNow = useNow();
+const clock = computed(() =>
+  view.value.kind === "plan" ? offerClock(view.value.plan, nameOf, clockNow.value) : null,
+);
 </script>
 
 <template>
@@ -189,6 +196,9 @@ const setupLink = computed(() => ({ name: "setup.contact-planning" }));
     title-as="h1"
   >
     <template #steps><ApStationBar :steps="STEPS" :current="step" label="Plan steps" /></template>
+    <template v-if="clock" #clocks
+      ><OfferClock :clock="clock" @select="selected = $event"
+    /></template>
   </TakeoverHeader>
   <DayNav :day="day" />
   <p v-if="draftedBy" class="m-0 font-mono text-sm text-text-3">{{ draftedBy }}</p>
