@@ -28,7 +28,7 @@ missing endpoint or decision; an item with no blocker can start now.
 | Who | Start now (unblocked) | Waiting on |
 | --- | --- | --- |
 | **lead** | BACKLOG §11 legacy-parity inventory (director); then whatever §11 hands lead. Done today: K1 C panel + server measures + gap effect (4ea2e4e7, 4d80d394, 7d7221ff), K1 offer clock (4b58ff8c), K1 per-contact booking (47ef6310, waits on api 8e), phone search sheet (6f7e3f87), Palette groups / Recent / Searching / Setup ranking (c45fd134, b2830045), `ApSheet` + `ApStatTile` `to` (86187004, ffeecd46) | — |
-| **fe-ops** | In order: Investigate B1 add-point chips, resolved alarm, B4; ux §7 pass 2 Lows (Approve key wording, long exclusion titles, decided-request D panel, palette footer on phone, Contacts at 390); Now tile links (`ApStatTile` `to` is in, 86187004); Fleet/Alarms Next contact; Mobile GO block; move QueueListSheet, ReleasePass, ConfirmDialog and ResolveSheet onto `ApSheet`. Done: D4 coverage-gap fold (4ade99dd), Now h1 'needs you' (b94b0163), A4 pass select (51cc6133), approval rows → review (a0e33fe1), Investigate tabs link out (0d05d195), D3 outage bands (181fb5d1), Telemetry `Dashboards ↗` (718fd269), Timeline sc/plane (cb5767c9, 97e12555), palette hooks (63588467, 7807e12b), U2 Needs you per target (0ea3b97b) | — |
+| **fe-ops** | In order: Mobile GO block (§5); §11c checks (`/spacecraft/:sid/commanding` interpretation on the configuration tab; legacy commanding stage-only features); then §11 L14 provider-change decisions (with api) and L20 explore questions (after ux rules). Done today: B1 add points / resolved (e12c5111, 193a6816), B4 (e6865967), U39 stale change sets + Timeline config link (0078e4f6), ux §7 #13–#17 (bfc49b37, 8aa49203), Fleet in-contact + Next contact on Fleet and Alarms (3ebcc9f8), Now tile links (b2792cd9), dialogs on `ApSheet` (a0069f2e), D4 fold (4ade99dd), Now h1 (b94b0163), palette hooks, U2 Needs you | — |
 | **fe-setup** | In order: #19 lift (framing editable; callout only when ST1 has `profile_framing_generations` off); ux §7 #3; New profile + Duplicate as new profile; R2 `Compare revisions` link; Audit kind chips + `Export CSV`; the console contact requirement form (with `max_gap_seconds`) once api 8g lands. Done: ux §7 pass 1 fixes incl. the `org.people.invite` and `catalog/:databaseId` redirects (b42b2358, 7fe01991, 02e87cee), P4 tiles (b136754d), Audit actor select (d21aad0b), R2 (d03eea14), P1/P4 (217feb23), Compare (8b58f513), Keep mine / Take live (3ced6cea, 433bcd0f), Command policies (11374b5a) | qa: C3 live check |
 | **ux** | Review lead's new copy in code (K1 C panel 4ea2e4e7; Palette groups c45fd134, Recent / Searching… b2830045); then rule the mobile search sheet (§5: spacecraft, alarms, requests) before lead builds it. Done: §7 board review passes 1 and 2 (reviews/2026-11-12-s7-boards.md; fixes b42b2358, 7fe01991, 02e87cee, 2d94506d, 4ade99dd, b94b0163); rulings U39 (staged changes left waiting), the K1 clock wording, Profile framing editable; Compose C1 accepted (#64) | — |
 | **qa** | Accessibility pass (§9) once the current fixes land; K1 booking header live check (cf3cd37a); U31 callout clearing on resolve; K2 Propose → Apply after #52/#56 | — |
@@ -41,7 +41,7 @@ missing endpoint or decision; an item with no blocker can start now.
 ### Now (`Now.md`, J1): built; gaps
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| Stat tiles link (Critical/Caution/Stale → Alarms/Fleet, In contact → Contacts, Uplinks → Commands) | fe-ops + lead (`ApStatTile` gets `to`) | — |
+| ~~Stat tiles link (Critical/Caution/Stale → Alarms/Fleet, In contact → Contacts, Uplinks → Commands)~~ done (b2792cd9 on `ApStatTile` `to` 86187004) | fe-ops + lead | — |
 | ~~Queue kinds `missed_pass`, `station` + `Station` → Re-plan~~ done (de131e9b); `flight_event`: source landed (api-ops a02c2cee, 1b3be7f7, e07969bb), fe-ops reader 591bc06c | fe-ops | qa: a flight_event row seen live after the :4011 restart |
 | ~~Attention source `contact_settlement` (#71) reader~~ done (14330a4a, U37 words, no Acknowledge, Review opens Contacts by contact_id); unknown kinds/sources now drop one row, not Now | fe-ops | — (source live 22:14Z) |
 | ~~`contact_settlement` manual retry (#71 replay): needs-operator line, `Retry storing`, 'Next try at HH:MMZ.'~~ done (c10265fd; ux 294e67c6) | fe-ops | — (domain ships the manual state after 00:30Z) |
@@ -102,8 +102,8 @@ missing endpoint or decision; an item with no blocker can start now.
 ### Fleet, Alarms, Telemetry, Timeline (`OpsLists.md`): built; gaps
 | Item | Owner | Blocked on |
 | --- | --- | --- |
-| Fleet: "in contact" filter, Next contact column; virtualization past 200 rows *(unverified)* | fe-ops | — |
-| Alarms: group identical point+condition across spacecraft, Next contact, "Last cleared…" empty state; Cleared tab re-check (investigate review #20) | fe-ops | — |
+| Fleet: ~~"in contact" filter, Next contact column~~ done (3ebcc9f8); virtualization past 200 rows *(unverified)* | fe-ops | — |
+| Alarms: group identical point+condition across spacecraft, ~~Next contact~~ done (3ebcc9f8), "Last cleared…" empty state; Cleared tab re-check (investigate review #20) | fe-ops | — |
 | ~~Telemetry `Dashboards ↗` → existing pages (#11)~~ done (718fd269); empty state's three suggested points | fe-ops | — |
 | Timeline: ~~sc scope~~ done (cb5767c9); ~~plane filter~~ done (97e12555); custom range, E1 brush; ~~live prepend + "N new events ↑"~~ done (0521f407) | fe-ops | — |
 
