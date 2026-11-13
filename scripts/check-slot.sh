@@ -18,6 +18,15 @@ if [ "$#" -eq 0 ]; then
   exit 2
 fi
 
+# A dev-env mix build rewrites _build/dev under the live :4011 node (the 2026-11-13 outage).
+for arg in "$@"; do
+  if [ "$arg" = "mix" ] && [ "${MIX_ENV:-}" != "test" ]; then
+    echo "check-slot: refusing a mix task without MIX_ENV=test (it would rebuild the live server's code)." >&2
+    echo "  run: MIX_ENV=test scripts/check-slot.sh $*" >&2
+    exit 2
+  fi
+done
+
 held=""
 release() { [ -n "$held" ] && rm -rf "$held"; }
 trap release EXIT INT TERM
