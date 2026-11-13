@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
-import { decode, decoders as d, type ApiError } from "@/api";
+import { decoders as d, detailsOf, type ApiError } from "@/api";
 import { useMissionScope } from "@/shell";
 import { ApButton, ApCallout, ApField, ApPageHeader, ApPanel, ApTextarea } from "@/ui";
 import { createDashboard, type NewSpacecraft } from "./api.ts";
@@ -32,13 +32,17 @@ const tagList = computed(() => [
       .filter(Boolean),
   ),
 ]);
-const fieldDetail = d.object({ field: d.string });
-/** 422 details name the field (console Problem convention); its message shows under that field. */
-function fieldError(field: string): string | null {
+const formFields = ["name", "description", "tags", "spacecraft"] as const;
+const fieldDetail = d.object({ field: d.knownText(formFields) });
+/** 422 details name the field (api-ops a8460210a); its message shows under that field. */
+const invalidField = computed(() => {
   const e = error.value;
   if (e?.kind !== "invalid") return null;
-  const detail = decode(fieldDetail, e.details);
-  return detail.ok && detail.value.field === field ? e.message : null;
+  const field = detailsOf(e, fieldDetail)?.field;
+  return typeof field === "string" ? { field, message: e.message } : null;
+});
+function fieldError(field: (typeof formFields)[number]): string | null {
+  return invalidField.value?.field === field ? invalidField.value.message : null;
 }
 
 async function create() {
@@ -73,7 +77,13 @@ async function create() {
   <ApPanel class="max-w-[640px]">
     <form class="flex flex-col gap-4" @submit.prevent="create">
       <ApField v-model="name" label="Name" required :error="fieldError('name')" />
-      <ApTextarea v-model="description" label="Description (optional)" :rows="3" :maxlength="500" />
+      <ApTextarea
+        v-model="description"
+        label="Description (optional)"
+        :rows="3"
+        :maxlength="500"
+        :error="fieldError('description')"
+      />
       <ApField
         v-model="tags"
         label="Tags (optional)"
@@ -81,10 +91,7 @@ async function create() {
         :error="fieldError('tags')"
       />
       <SpacecraftDefault v-model="spacecraft" :error="fieldError('spacecraft')" />
-      <ApCallout
-        v-if="error && !fieldError('name') && !fieldError('tags') && !fieldError('spacecraft')"
-        tone="crit"
-      >
+      <ApCallout v-if="error && !invalidField" tone="crit">
         {{ error.kind === "unauthenticated" ? "Signed out." : error.message }}
       </ApCallout>
       <span class="flex gap-2">
