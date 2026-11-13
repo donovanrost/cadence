@@ -4,6 +4,8 @@ defmodule CadenceWeb.FrontendReleaseActivation do
   import Ecto.Changeset
   import Ecto.Query
 
+  require Logger
+
   alias Cadence.Repo
 
   alias CadenceWeb.FrontendReleaseCatalog
@@ -306,18 +308,25 @@ defmodule CadenceWeb.FrontendReleaseActivation do
       |> lock("FOR UPDATE")
       |> Repo.one()
 
-    with %ReleasePublication{} = row <- row,
-         true <- row.acceptance_state == "accepted",
-         true <- row.release_id == release_id,
-         true <- row.payload_bytes == expected_payload_bytes,
-         true <- row.payload_digest == FrontendReleaseCatalog.digest(expected_payload_bytes),
-         true <- row.signed_document_bytes == expected_document_bytes,
-         true <-
-           row.signed_document_digest == FrontendReleaseCatalog.digest(expected_document_bytes),
-         :ok <- release_identity_matches?(row, release),
-         :ok <- release_security_metadata_matches?(row, envelope, release),
-         :ok <- release_manifest_matches?(row, release),
-         {:ok, artifacts} <- reread_artifacts(row, release, path) do
+    # Each check is tagged so an integrity mismatch logs which one failed (see
+    # reread_mismatch/3); the result is the same {:error, :integrity} as before.
+    with {:row, %ReleasePublication{} = row} <- {:row, row},
+         {:acceptance_state, true} <- {:acceptance_state, row.acceptance_state == "accepted"},
+         {:release_id, true} <- {:release_id, row.release_id == release_id},
+         {:payload_bytes, true} <- {:payload_bytes, row.payload_bytes == expected_payload_bytes},
+         {:payload_digest, true} <-
+           {:payload_digest,
+            row.payload_digest == FrontendReleaseCatalog.digest(expected_payload_bytes)},
+         {:signed_document_bytes, true} <-
+           {:signed_document_bytes, row.signed_document_bytes == expected_document_bytes},
+         {:signed_document_digest, true} <-
+           {:signed_document_digest,
+            row.signed_document_digest == FrontendReleaseCatalog.digest(expected_document_bytes)},
+         {:identity, :ok} <- {:identity, release_identity_matches?(row, release)},
+         {:security_metadata, :ok} <-
+           {:security_metadata, release_security_metadata_matches?(row, envelope, release)},
+         {:manifest, :ok} <- {:manifest, release_manifest_matches?(row, release)},
+         {:artifacts, {:ok, artifacts}} <- {:artifacts, reread_artifacts(row, release, path)} do
       {:ok,
        %{
          row: row,
@@ -328,11 +337,21 @@ defmodule CadenceWeb.FrontendReleaseActivation do
          artifacts: artifacts
        }}
     else
-      nil -> {:error, :integrity}
-      false -> {:error, :integrity}
-      {:error, :integrity} -> {:error, :integrity}
-      {:error, _} = failure -> failure
+      # reread_artifacts logs its own failing check.
+      {:artifacts, {:error, :integrity}} -> {:error, :integrity}
+      {check, {:error, :integrity}} -> reread_mismatch(check, path, release_id)
+      {_check, {:error, _} = failure} -> failure
+      {check, _mismatch} -> reread_mismatch(check, path, release_id)
     end
+  end
+
+  defp reread_mismatch(check, path, release_id) do
+    Logger.warning(
+      "frontend release reread integrity mismatch: #{inspect(check)} at #{path} " <>
+        "(release #{inspect(release_id)})"
+    )
+
+    {:error, :integrity}
   end
 
   defp release_identity_matches?(row, release) do
@@ -402,30 +421,42 @@ defmodule CadenceWeb.FrontendReleaseActivation do
     declarations = Map.new(release["artifacts"], &{&1["path"], &1})
 
     cond do
-      length(persisted) != length(release["artifacts"]) -> {:error, :integrity}
-      Map.keys(declarations) != Enum.map(persisted, & &1.path) -> {:error, :integrity}
-      true -> reread_artifact_rows(persisted, declarations, path, row.release_id)
+      length(persisted) != length(release["artifacts"]) ->
+        reread_mismatch(:artifact_count, path, row.release_id)
+
+      Map.keys(declarations) != Enum.map(persisted, & &1.path) ->
+        reread_mismatch(:artifact_paths, path, row.release_id)
+
+      true ->
+        reread_artifact_rows(persisted, declarations, path, row.release_id)
     end
   end
 
-  defp reread_artifact_rows(rows, declarations, _path, release_id) do
+  defp reread_artifact_rows(rows, declarations, path, release_id) do
     rows
     |> Enum.reduce_while({:ok, []}, fn artifact, {:ok, acc} ->
       declaration = Map.get(declarations, artifact.path)
 
-      with true <- is_map(declaration),
-           true <- artifact.release_id == release_id,
-           true <- artifact.path == declaration["path"],
-           true <- artifact.sha256 == declaration["sha256"],
-           true <- artifact.size == declaration["size"],
-           true <- artifact.media_type == declaration["mediaType"],
-           true <- artifact.object_key == "sha256:" <> artifact.sha256,
-           {:ok, object} <- reread_object(artifact.sha256, artifact.size) do
+      with {:declared, true} <- {:declared, is_map(declaration)},
+           {:artifact_release_id, true} <-
+             {:artifact_release_id, artifact.release_id == release_id},
+           {:artifact_path, true} <- {:artifact_path, artifact.path == declaration["path"]},
+           {:artifact_sha256, true} <-
+             {:artifact_sha256, artifact.sha256 == declaration["sha256"]},
+           {:artifact_size, true} <- {:artifact_size, artifact.size == declaration["size"]},
+           {:artifact_media_type, true} <-
+             {:artifact_media_type, artifact.media_type == declaration["mediaType"]},
+           {:artifact_object_key, true} <-
+             {:artifact_object_key, artifact.object_key == "sha256:" <> artifact.sha256},
+           {:artifact_object, {:ok, object}} <-
+             {:artifact_object, reread_object(artifact.sha256, artifact.size)} do
         {:cont, {:ok, [%{artifact: artifact, object: object} | acc]}}
       else
-        false -> {:halt, {:error, :integrity}}
-        {:error, :integrity} -> {:halt, {:error, :integrity}}
-        {:error, {:transient, _reason} = failure} -> {:halt, {:error, failure}}
+        {_check, {:error, {:transient, _reason} = failure}} ->
+          {:halt, {:error, failure}}
+
+        {check, _mismatch} ->
+          {:halt, reread_mismatch({check, artifact.path}, path, release_id)}
       end
     end)
     |> case do
