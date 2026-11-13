@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { isError } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { ApButton, ApCallout, ApEmptyState, ApPanel, ApTable, type ApColumn } from "@/ui";
 import { revokeShare, type Share, type SettingsKey } from "./api.ts";
@@ -31,7 +32,9 @@ async function revoke(id: string) {
   const r = await revokeShare(props.settingsKey, id);
   note.value = r.ok
     ? { tone: "nominal", text: "Share link revoked. It stops working now." }
-    : { tone: "crit", text: failureOutcome(r.error, "changed").sentence };
+    : isError(r.error, "share_not_active")
+      ? { tone: "nominal", text: "That link was already revoked." }
+      : { tone: "crit", text: failureOutcome(r.error, "changed").sentence };
   emit("changed");
 }
 function created() {

@@ -10,8 +10,8 @@ import {
 } from "@/api";
 
 /**
- * Dashboard settings (slice 5, L8): D14–D19 as proposed in docs/apogee/plans/dashboards-settings.md
- * (api reviewing; fixtures until it ships). Base `/missions/:m/dashboards/:id`.
+ * Dashboard settings (slice 5, L8): D14–D19, api's contract docs/apogee/api/dashboards.md (D14–D16
+ * f4ef739b9). Base `/missions/:m/dashboards/:id`.
  */
 const base = (missionId: string, dashboardId: string) =>
   `/missions/${encodeURIComponent(missionId)}/dashboards/${encodeURIComponent(dashboardId)}`;
@@ -82,8 +82,6 @@ export const settingsReader = d.object({
     lifecycle: d.known(["active", "archived"] as const),
     current_version: d.integer,
     published_version: d.nullable(d.integer),
-    updated_at: d.nullable(d.timestamp),
-    updated_by: actor,
   }),
   defaults: d.object({ time: timeDefault, scope: scopeDefault }),
   limits: d.object({ name: d.integer, description: d.integer, tags: d.integer, tag: d.integer }),
@@ -111,7 +109,7 @@ export type GeneralInput = Readonly<{
 
 /** D15: a current version through CurrentVersions (Q1); 409 version_conflict, 422 by field. */
 export function saveGeneral(k: SettingsKey, body: GeneralInput) {
-  return request(base(k.missionId, k.dashboardId), d.object({ version: d.integer }), {
+  return request(`${base(k.missionId, k.dashboardId)}/settings`, d.object({ version: d.integer }), {
     method: "PATCH",
     body,
   });

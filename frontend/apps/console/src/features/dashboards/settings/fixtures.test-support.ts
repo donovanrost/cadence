@@ -10,8 +10,6 @@ export const settingsWire = {
     lifecycle: "active",
     current_version: 7,
     published_version: 7,
-    updated_at: "2026-11-12T22:40:00Z",
-    updated_by: mira,
   },
   defaults: {
     time: { mode: "relative", range: "now-6h", from: null, to: null },
